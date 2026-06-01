@@ -17,7 +17,8 @@ export const PREDEFINED_CATEGORIES = [
             'Kleinian',
             'AmazingSurf',
             'MandelTerrain',
-            'Claude'
+            'Claude',
+            'Opus'
         ]
     },
     {
@@ -90,6 +91,7 @@ export const PREDEFINED_CATEGORIES = [
             'MandelTerrain',
             'MandelBolic',
             'Claude',
+            'Opus',
             'SineJulia3D',
         ]
     },

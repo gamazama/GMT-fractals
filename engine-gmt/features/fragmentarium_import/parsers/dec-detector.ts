@@ -7,6 +7,8 @@
  * with hardcoded constants and #define macros — no Fragmentarium metadata.
  */
 
+import { PROMOTED_UNIFORM_LINE } from './uniform-annotation';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -112,26 +114,46 @@ function findDEFunctionName(source: string): string | null {
 // Main detector
 // ============================================================================
 
+/**
+ * Strip "promoted" uniform lines — `uniform TYPE name; slider[...]` (or
+ * checkbox/color) on a single line — from the source before DEC scoring.
+ *
+ * Variable-promotion in the Formula Workshop injects exactly these lines into
+ * an otherwise-DEC source. They must NOT defeat DEC detection: a DEC body with
+ * promoted params is still a DEC body. We only strip uniform lines that carry
+ * an annotation (i.e. promoted/Fragmentarium UI uniforms on one line) — a bare
+ * `uniform vec3 foo;` with no annotation is left in place so genuine
+ * hand-written-uniform shaders still read as non-DEC.
+ */
+function stripPromotedUniforms(source: string): string {
+    return source.replace(PROMOTED_UNIFORM_LINE, '');
+}
+
 export function detectDECFormat(source: string): DECDetectionResult {
     const reasons: string[] = [];
     let score = 0;
 
-    const macros = parseMacros(source);
+    // Promoted uniforms (uniform + slider annotation, injected by the Workshop's
+    // variable promotion) must not flip a DEC body to non-DEC. Score on the
+    // source with those lines removed; keep the original `source` untouched.
+    const scored = stripPromotedUniforms(source);
+
+    const macros = parseMacros(scored);
 
     // --- Positive signals ---
 
     // No uniform declarations at all (strongest DEC signal)
-    const hasUniforms = /\buniform\s+(float|int|vec2|vec3|vec4|bool)\s+\w+/.test(source);
+    const hasUniforms = /\buniform\s+(float|int|vec2|vec3|vec4|bool)\s+\w+/.test(scored);
     if (!hasUniforms) {
         score += 0.4;
         reasons.push('No uniform declarations found');
     }
 
     // No Fragmentarium metadata
-    const hasSliders = /slider\[/.test(source);
-    const hasPresets = /#preset\s+/.test(source);
-    const hasGroups = /#group\s+/.test(source);
-    const hasIncludes = /#include\s+/.test(source);
+    const hasSliders = /slider\[/.test(scored);
+    const hasPresets = /#preset\s+/.test(scored);
+    const hasGroups = /#group\s+/.test(scored);
+    const hasIncludes = /#include\s+/.test(scored);
     const hasFragMeta = hasSliders || hasPresets || hasGroups;
 
     if (!hasFragMeta) {
@@ -151,7 +173,7 @@ export function detectDECFormat(source: string): DECDetectionResult {
     }
 
     // Has a lowercase DE function (strong DEC signal)
-    const deFunctionName = findDEFunctionName(source);
+    const deFunctionName = findDEFunctionName(scored);
     if (deFunctionName && DEC_DE_NAMES.has(deFunctionName)) {
         score += 0.25;
         reasons.push(`Lowercase DE function '${deFunctionName}()' found`);

@@ -211,6 +211,9 @@ export interface EngineStoreState extends FeatureStateMap {
   // Formula Workshop
   workshopOpen: boolean;
   workshopEditFormula: string | undefined;
+  /** When opening the Workshop to load a frag/DEC catalog formula, the
+   *  '<source>:<id>' key (e.g. 'frag:3DickUlus/BuffaloBulb.frag'). */
+  workshopCatalogKey: string | undefined;
 
   // New Scene wizard
   newSceneOpen: boolean;
@@ -345,7 +348,12 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     dockTab: (tab: PanelId) => void; // Maps to movePanel(id, 'right')
 
     resetCamera: () => void;
-    
+    // HUD recovery prompt: 'stepback' = camera already at default, so the
+    // Reset button dollies back a unit instead. Set by usePhysicsProbe.
+    cameraRecoveryMode: 'reset' | 'stepback';
+    setCameraRecoveryMode: (mode: 'reset' | 'stepback') => void;
+    stepBackCamera: () => void;
+
     updateCamera: (id: string, updates: Partial<SavedCamera>) => void;
     deleteCamera: (id: string) => void;
     reorderCameras: (fromIndex: number, toIndex: number) => void;
@@ -380,7 +388,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     openContextMenu: (x: number, y: number, items: ContextMenuItem[], targetHelpIds?: string[]) => void;
     closeContextMenu: () => void;
 
-    openWorkshop: (editFormula?: string) => void;
+    openWorkshop: (editFormula?: string, catalogKey?: string) => void;
     closeWorkshop: () => void;
     openNewScene: () => void;
     closeNewScene: () => void;

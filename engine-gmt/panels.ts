@@ -346,7 +346,7 @@ export const GmtPanels: PanelManifest = [
                             { type: 'feature', id: 'texturing', groupFilter: 'transform',
                               showIf: 'texturing.active' },
                             { type: 'feature', id: 'coloring', groupFilter: 'layer1_bottom',
-                              excludeParams: ['twist'],
+                              excludeParams: ['twist', 'twistArms'],
                               showIf: 'texturing.active' },
                         ],
                     },

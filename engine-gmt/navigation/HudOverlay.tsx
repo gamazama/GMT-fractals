@@ -46,6 +46,8 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
     const incrementTabSwitchCount = useFractalStore((s) => (s as any).incrementTabSwitchCount);
     const setNavigation = useFractalStore((s) => (s as any).setNavigation);
     const resetCamera = useFractalStore((s) => (s as any).resetCamera);
+    const stepBackCamera = useFractalStore((s) => (s as any).stepBackCamera);
+    const cameraRecoveryMode = useFractalStore((s) => (s as any).cameraRecoveryMode ?? 'reset');
     const undoCamera = useFractalStore((s) => (s as any).undoCamera);
     const canUndoCamera = useFractalStore((s) => (s as any).canUndo?.('camera') ?? false);
     const state = { tabSwitchCount, cameraMode, navigation, showHints } as unknown as FractalState;
@@ -152,6 +154,9 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
 
     const showTop = region === 'top' || region === 'all';
     const showBottom = region === 'bottom' || region === 'all';
+    // Recovery-prompt button morph: at the formula default a Reset is a no-op,
+    // so the same button offers a one-unit dolly-back instead (see usePhysicsProbe).
+    const isStepBack = cameraRecoveryMode === 'stepback';
 
     return (
         <div className="absolute inset-0 pointer-events-none z-10">
@@ -210,13 +215,23 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                             land on the pill's flat top edge, not over its rounded-full
                             corners; the 1px overlap merges the borders. */}
                         <div className="flex items-end gap-px mb-[-1px] self-stretch mx-5">
+                            {/* Reset / Step Back. Visibility is driven imperatively
+                                by usePhysicsProbe (inline display, off React's render
+                                path); only the label + action morph here. When the
+                                camera is already at the formula default a Reset is a
+                                no-op, so the prompt offers a one-unit dolly-back to
+                                escape a buried / void view instead. */}
                             <button
                                 ref={mergeRefs(hudRefs.reset, resetCameraAnchorRef)}
-                                onClick={() => { actions.resetCamera(); actionBus.fire('camera.reset'); if (navigator.vibrate) navigator.vibrate(30); }}
-                                title="Reset camera to default view"
+                                onClick={() => {
+                                    if (isStepBack) { stepBackCamera?.(); actionBus.fire('camera.stepBack'); }
+                                    else { actions.resetCamera(); actionBus.fire('camera.reset'); }
+                                    if (navigator.vibrate) navigator.vibrate(30);
+                                }}
+                                title={isStepBack ? 'Step the camera back one unit (already at default view)' : 'Reset camera to default view'}
                                 className="flex-1 pointer-events-auto px-2 py-1.5 bg-black/60 hover:bg-cyan-900/80 text-cyan-400 hover:text-white text-[9px] font-bold rounded-tl-lg border-l border-t border-white/10 backdrop-blur-md hidden animate-fade-in shadow-xl whitespace-nowrap"
                             >
-                                Reset
+                                {isStepBack ? 'Step Back' : 'Reset'}
                             </button>
                             <button
                                 data-hud-undo-camera

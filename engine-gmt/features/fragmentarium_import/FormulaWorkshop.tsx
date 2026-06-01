@@ -25,13 +25,16 @@ import { detectFormulaV3, transformFormulaV3 } from './v3/compat';
 import { deriveImportCapabilities } from './import-capabilities';
 import { buildFractalParams, filterDeadParams, slotLabel, componentSlotBase, groupedSlotOptions, buildOccupancyMap, isSlotConflict, getSlotOccupancy } from './workshop/param-builder';
 import { processFormula as v4ProcessFormula } from './v4';
+import {
+    FormulaPicker, useCatalogData, categoryGroups, folderGroups, NO_SPECIAL_ENTRIES,
+} from '../../components/FormulaPicker';
 
 const PREVIEW_ID = 'frag_workshop_preview';
+// Source-site links shown in the catalog picker header (stable refs).
+const FRAG_HEADER_LINKS = [{ label: 'Fragmentarium Source', href: 'https://github.com/3Dickulus/Fragmentarium_Examples_Folder' }];
+const DEC_HEADER_LINKS = [{ label: 'Distance Estimator Compendium', href: 'https://jbaker.graphics/writings/DEC.html' }];
 import {
-    loadLibrary, isLibraryLoaded,
-    getCategories, getFormulasByCategory,
-    getFolders, getFormulasByFolder,
-    getFormulasBySource, searchFormulas, pickRandom,
+    loadLibrary, isLibraryLoaded, pickRandom,
     loadFragSource, loadDECSource,
     getRecommendedPipeline, getFormulaCompat,
 } from './formula-library';
@@ -176,6 +179,39 @@ float DE(vec3 pos) {
 }
 `;
 
+// ─── In-session draft (restore Workshop state on reopen) ──────────────────────
+// The Workshop unmounts when closed (AppGmt renders it conditionally), which
+// would normally destroy all in-progress editing state. We snapshot the
+// meaningful state on unmount into this module-scoped variable and restore it
+// on the next mount. Module scope = lives for the app session, cleared on full
+// page reload — matching the intended "remember within the session" behaviour.
+// Only saved when the user has actual work (source differs from the default
+// template and isn't empty), so a quick peek-and-close still reopens clean.
+//
+// INVARIANT: this single module-scoped slot assumes ONE Workshop instance at a
+// time — true today (AppGmt renders it as a `workshopOpen ? <FormulaWorkshop/>`
+// ternary, the only mount site). If a second concurrent mount is ever added,
+// two instances would clash on this `let`; key it per-instance then.
+interface WorkshopDraft {
+    source: string;
+    selectedFunctionName: string;
+    loopMode: 'loop' | 'single';
+    mappings: WorkshopParam[];
+    formulaName: string;
+    pipelineMode: 'auto' | 'v3' | 'v4';
+    currentEntryId: string | null;
+    sourceCollapsed: boolean;
+    detectVarsActive: boolean;
+}
+let workshopDraft: WorkshopDraft | null = null;
+
+/** A draft is worth keeping only if the user has done real work: the source is
+ *  non-empty and differs from the default template. */
+function isMeaningfulDraft(source: string): boolean {
+    const s = source.trim();
+    return s.length > 0 && s !== DEFAULT_SCRIPT.trim();
+}
+
 // ─── Formula Loading ────────────────────────────────────────────────────────
 
 /** Load a formula entry's source code (frag via fetch, DEC from cached JSON). */
@@ -248,6 +284,10 @@ interface WorkshopProps {
     onClose: () => void;
     /** Pre-populate the Workshop from a previously imported formula for re-editing. */
     editFormula?: string;
+    /** Load a frag/DEC catalog formula into the editor on open. Format:
+     *  '<source>:<id>' (e.g. 'frag:3DickUlus/BuffaloBulb.frag', 'dec:fractal_de8').
+     *  Used when the main formula picker's catalog sections launch the Workshop. */
+    initialCatalogKey?: string;
 }
 
 // ─── Parameter Table ────────────────────────────────────────────────────────
@@ -429,7 +469,7 @@ function ParamTable({ mappings, onMappingChange }: ParamTableProps) {
  * sanitised to valid GLSL identifiers via `rawName.replace(/[^a-zA-Z0-9_]/g, '')`
  * (`v3/compat.ts:125`) — the formula name doubles as the emitted function name.
  */
-export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula }) => {
+export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula, initialCatalogKey }) => {
     // ── State ──
     const [source, setSource]                             = useState(editFormula ? '' : DEFAULT_SCRIPT);
     const [sourceCollapsed, setSourceCollapsed]           = useState(false);
@@ -446,8 +486,6 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
     const [browseDECOpen, setBrowseDECOpen]               = useState(false);
     const [browseMode, setBrowseMode]                     = useState<'category' | 'folder'>('folder');
     const [libraryReady, setLibraryReady]                 = useState(isLibraryLoaded());
-    const [searchQuery, setSearchQuery]                   = useState('');
-    const [searchResults, setSearchResults]               = useState<FormulaEntry[] | null>(null);
     const [detectVarsActive, setDetectVarsActive]         = useState(false);
     const [detectedVars, setDetectedVars]                 = useState<DetectedVariable[]>([]);
     /** Pipeline selector:
@@ -473,6 +511,49 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
     const previousFormulaRef = useRef('');
     const sourceHeightRef    = useRef(sourceHeight);
     sourceHeightRef.current  = sourceHeight;
+
+    // Mirror the live editing state into a ref so the unmount cleanup captures
+    // the latest values (not a stale closure). Updated every render.
+    const liveStateRef = useRef<WorkshopDraft>(null as any);
+    liveStateRef.current = {
+        source, selectedFunctionName, loopMode, mappings, formulaName,
+        pipelineMode, currentEntryId, sourceCollapsed, detectVarsActive,
+    };
+
+    // ── Restore in-session draft on (re)open ──
+    // Skips when opened in re-edit mode (editFormula has its own rehydration
+    // effect below) so editing an existing formula always loads that formula.
+    useEffect(() => {
+        if (editFormula || initialCatalogKey) return;
+        const draft = workshopDraft;
+        if (!draft || !isMeaningfulDraft(draft.source)) return;
+        setSource(draft.source);
+        setSelectedFunctionName(draft.selectedFunctionName);
+        setLoopMode(draft.loopMode);
+        setMappings(draft.mappings);
+        setFormulaName(draft.formulaName);
+        setPipelineMode(draft.pipelineMode);
+        setCurrentEntryId(draft.currentEntryId);
+        setSourceCollapsed(draft.sourceCollapsed);
+        setDetectVarsActive(draft.detectVarsActive);
+        // Re-run detection so the slot-mapping UI + transformed preview repopulate.
+        runDetect(draft.source, draft.formulaName, draft.currentEntryId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ── Snapshot draft on close/unmount ──
+    // Only for free-form sessions. Sessions opened to a specific formula
+    // (re-edit or a catalog-launch from the main picker) load re-openable known
+    // source, so snapshotting them would clobber the user's prior in-progress
+    // draft — skip, leaving any earlier free-form draft intact.
+    useEffect(() => {
+        return () => {
+            if (editFormula || initialCatalogKey) return;
+            const s = liveStateRef.current;
+            workshopDraft = (s && isMeaningfulDraft(s.source)) ? { ...s } : null;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // ── Load formula library on mount ──
     useEffect(() => {
@@ -646,68 +727,25 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         e.target.value = '';
     }, [runDetect]);
 
-    // ── Browse Frag Library ──
-    const fragBrowseCategories: PickerCategory[] = useMemo(() => {
-        if (!libraryReady) return [];
-        if (browseMode === 'folder') {
-            return getFolders().map(f => ({ id: f.id, name: `${f.name} (${f.formulaCount})` }));
-        }
-        return getCategories('frag').map(c => ({ id: c.id, name: `${c.name} (${c.formulaCount})` }));
-    }, [libraryReady, browseMode]);
-
-    /** Build a PickerItem badge from the catalog verdict.
-     *  Green "Iteration" = per-iteration formula, composes with engine features
-     *    like interlace, hybrid fold, burning ship (what V3 emits).
-     *  Cyan "Standalone"  = self-contained DE, renders solo (what V4 emits). */
-    const compatBadge = useCallback((id: string): PickerItem['badge'] | undefined => {
-        const c = getFormulaCompat(id);
-        if (!c || c.recommended === 'none') return undefined;
-        if (c.recommended === 'v3') {
-            return { text: 'Iteration', className: 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/30' };
-        }
-        return { text: 'Standalone', className: 'bg-cyan-900/40 text-cyan-300 border border-cyan-600/30' };
-    }, []);
-
-    const isUnrenderable = useCallback((id: string): boolean => {
-        return getFormulaCompat(id)?.recommended === 'none';
-    }, []);
-
-    const entryToPickerItem = useCallback((entry: FormulaEntry, prefix: 'frag' | 'dec'): PickerItem | null => {
-        const badRender = isUnrenderable(entry.id);
-        if (badRender && !showIncompatible) return null;
-        // When the user has opted into "show broken", let them click entries
-        // the catalog flagged as unrenderable. The harness gates that mark a
-        // formula "broken" (sampleNonConstant / renderNonDegenerate) are
-        // unreliable — the formula may well render in the live engine, and
-        // the user is asking to try.
-        return {
-            key: `${prefix}:${entry.id}`,
-            label: entry.name,
-            description: entry.artist !== 'unknown' ? entry.artist : undefined,
-            badge: compatBadge(entry.id),
-        };
-    }, [isUnrenderable, showIncompatible, compatBadge]);
-
-    const getFragBrowseItems = useCallback((categoryId: string): PickerItem[] => {
-        if (!libraryReady) return [];
-        const entries = browseMode === 'folder'
-            ? getFormulasByFolder(categoryId)
-            : getFormulasByCategory(categoryId, 'frag');
-        return entries.map(e => entryToPickerItem(e, 'frag')).filter((i): i is PickerItem => i !== null);
-    }, [libraryReady, browseMode, entryToPickerItem]);
-
-    // ── Browse DEC Library ──
-    const decBrowseCategories: PickerCategory[] = useMemo(() => {
-        if (!libraryReady) return [];
-        return getCategories('dec').map(c => ({ id: c.id, name: `${c.name} (${c.formulaCount})` }));
-    }, [libraryReady]);
-
-    const getDECBrowseItems = useCallback((categoryId: string): PickerItem[] => {
-        if (!libraryReady) return [];
-        return getFormulasByCategory(categoryId, 'dec')
-            .map(e => entryToPickerItem(e, 'dec'))
-            .filter((i): i is PickerItem => i !== null);
-    }, [libraryReady, entryToPickerItem]);
+    // ── Unified catalog browser (thumbnails, category/folder grouping) ──
+    // The Frag/DEC browse buttons open <FormulaPicker> scoped to that source.
+    // Shows ALL importable formulas (thumbnail where available; respects the
+    // "show broken" toggle), so the import tool isn't limited to the curated set.
+    const catalogData = useCatalogData({ thumbnailedOnly: false });
+    const visibleCatalog = useMemo(() => {
+        if (!catalogData.ready) return catalogData;
+        const keep = (it: { id: string }) =>
+            showIncompatible || getFormulaCompat(it.id)?.recommended !== 'none';
+        return { ...catalogData, frag: catalogData.frag.filter(keep), dec: catalogData.dec.filter(keep) };
+    }, [catalogData, showIncompatible]);
+    const fragCatalogGroups = useMemo(
+        () => (browseMode === 'folder' ? folderGroups(visibleCatalog, 'frag') : categoryGroups(visibleCatalog, 'frag')),
+        [visibleCatalog, browseMode],
+    );
+    const decCatalogGroups = useMemo(
+        () => (browseMode === 'folder' ? folderGroups(visibleCatalog, 'dec') : categoryGroups(visibleCatalog, 'dec')),
+        [visibleCatalog, browseMode],
+    );
 
     const handleBrowseSelect = useCallback(async (key: string) => {
         const [src, ...rest] = key.split(':');
@@ -723,25 +761,18 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         }
     }, [runDetect]);
 
-    // ── Search ──
-    const handleSearch = useCallback((query: string) => {
-        setSearchQuery(query);
-        if (!libraryReady || !query.trim()) { setSearchResults(null); return; }
-        setSearchResults(searchFormulas(query));
-    }, [libraryReady]);
-
-    const handleSearchSelect = useCallback(async (entry: FormulaEntry) => {
-        try {
-            const { label, content } = await loadFormulaSource(entry);
-            setSource(content);
-            setCurrentEntryId(entry.id);
-            runDetect(content, label, entry.id);
-            setSearchQuery('');
-            setSearchResults(null);
-        } catch (e) {
-            setError('Failed to load formula: ' + (e instanceof Error ? e.message : String(e)));
-        }
-    }, [runDetect]);
+    // ── Load a catalog formula on open ──
+    // Fired when the main formula picker's Fragmentarium/DEC sections launch
+    // the Workshop with a chosen catalog entry. Runs once the library is ready;
+    // the ref guards against re-firing when handleBrowseSelect's identity
+    // changes (e.g. on a pipeline-mode switch).
+    const loadedCatalogKeyRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!initialCatalogKey || !libraryReady) return;
+        if (loadedCatalogKeyRef.current === initialCatalogKey) return;
+        loadedCatalogKeyRef.current = initialCatalogKey;
+        handleBrowseSelect(initialCatalogKey);
+    }, [initialCatalogKey, libraryReady, handleBrowseSelect]);
 
     // ── Variable detection (highlight mode) ──
     useEffect(() => {
@@ -1058,16 +1089,18 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                     {browseFragOpen && browseFragRef.current && (() => {
                         const r = browseFragRef.current!.getBoundingClientRect();
                         return (
-                            <CategoryPickerMenu
-                                x={r.left}
-                                y={r.bottom + 4}
-                                anchorRight={r.right}
-                                categories={fragBrowseCategories}
-                                getItems={getFragBrowseItems}
-                                onSelect={handleBrowseSelect}
+                            <FormulaPicker
+                                variant="popover"
+                                anchorRect={r}
+                                showNativeFormulas={false}
+                                specialEntries={NO_SPECIAL_ENTRIES}
+                                headerLinks={FRAG_HEADER_LINKS}
+                                catalogGroups={fragCatalogGroups}
+                                onCommit={(c) => {
+                                    if (c.action === 'catalog') handleBrowseSelect(`${c.source}:${c.id}`);
+                                    setBrowseFragOpen(false);
+                                }}
                                 onClose={() => setBrowseFragOpen(false)}
-                                categoryWidth={180}
-                                itemWidth={260}
                             />
                         );
                     })()}
@@ -1094,61 +1127,37 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                     {browseDECOpen && browseDECRef.current && (() => {
                         const r = browseDECRef.current!.getBoundingClientRect();
                         return (
-                            <CategoryPickerMenu
-                                x={r.left}
-                                y={r.bottom + 4}
-                                anchorRight={r.right}
-                                categories={decBrowseCategories}
-                                getItems={getDECBrowseItems}
-                                onSelect={handleBrowseSelect}
+                            <FormulaPicker
+                                variant="popover"
+                                anchorRect={r}
+                                showNativeFormulas={false}
+                                specialEntries={NO_SPECIAL_ENTRIES}
+                                headerLinks={DEC_HEADER_LINKS}
+                                catalogGroups={decCatalogGroups}
+                                onCommit={(c) => {
+                                    if (c.action === 'catalog') handleBrowseSelect(`${c.source}:${c.id}`);
+                                    setBrowseDECOpen(false);
+                                }}
                                 onClose={() => setBrowseDECOpen(false)}
-                                categoryWidth={180}
-                                itemWidth={240}
                             />
                         );
                     })()}
 
                     <div className="flex-1" />
 
-                    {/* Load + external links */}
+                    {/* Load file — the Frag/DEC source-site links now live in the
+                        catalog picker header (opened from the browse buttons). */}
                     <button
                         onClick={() => fileRef.current?.click()}
                         className="text-[10px] px-2.5 py-1 rounded border border-white/10 hover:border-white/30 text-gray-400 hover:text-white transition-colors"
                     >
                         Load File
                     </button>
-                    <a
-                        href="https://github.com/3Dickulus/Fragmentarium_Examples_Folder"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] px-1.5 py-1 rounded border border-white/5 hover:border-cyan-500/30 text-gray-600 hover:text-cyan-400 transition-colors"
-                        title="Fragmentarium Examples (GitHub)"
-                    >
-                        Frag ↗
-                    </a>
-                    <a
-                        href="https://jbaker.graphics/writings/DEC.html"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] px-1.5 py-1 rounded border border-white/5 hover:border-amber-500/30 text-gray-600 hover:text-amber-400 transition-colors"
-                        title="Distance Estimator Compendium"
-                    >
-                        DEC ↗
-                    </a>
                     <input ref={fileRef} type="file" accept=".frag,.glsl,.txt" className="hidden" onChange={handleLoadFile} />
                 </div>
-                {/* Row 2: Search */}
-                <div className="relative px-3 pb-1.5 flex items-center gap-2">
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => handleSearch(e.target.value)}
-                        placeholder={libraryReady ? 'Search formulas...' : 'Loading library...'}
-                        disabled={!libraryReady}
-                        onBlur={() => setTimeout(() => setSearchResults(null), 150)}
-                        onFocus={() => { if (searchQuery.trim()) handleSearch(searchQuery); }}
-                        className="flex-1 text-[10px] px-2.5 py-1 rounded border border-white/10 bg-black/30 text-gray-300 placeholder-gray-600 focus:border-cyan-500/40 focus:outline-none transition-colors"
-                    />
+                {/* Row 2: catalog filter toggle. (Search moved into the per-source
+                    browse pickers, which search the catalog with thumbnails.) */}
+                <div className="px-3 pb-1.5 flex items-center gap-2">
                     <label
                         title="Show formulas that neither Iteration nor Standalone mode can render (for debugging). Off by default."
                         className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer select-none shrink-0"
@@ -1161,52 +1170,6 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                         />
                         show broken
                     </label>
-                    {searchResults && searchResults.length > 0 && (() => {
-                        // Filter out neither-pipeline-renders formulas unless user opts in.
-                        const visible = showIncompatible ? searchResults : searchResults.filter(e => !isUnrenderable(e.id));
-                        return (
-                            <div className="absolute left-3 right-3 top-full z-50 max-h-[240px] overflow-y-auto bg-[#1a1a1a] border border-white/10 rounded shadow-xl">
-                                {visible.slice(0, 30).map(entry => {
-                                    const badge = compatBadge(entry.id);
-                                    return (
-                                        <button
-                                            key={`${entry.source}:${entry.id}`}
-                                            onClick={() => handleSearchSelect(entry)}
-                                            className="w-full text-left px-2.5 py-1.5 text-[10px] hover:bg-white/5 transition-colors flex items-center gap-2"
-                                        >
-                                            <span className={`shrink-0 text-[8px] px-1 py-0.5 rounded ${entry.source === 'frag' ? 'bg-cyan-900/40 text-cyan-400' : 'bg-amber-900/40 text-amber-400'}`}>
-                                                {entry.source === 'frag' ? 'FRAG' : 'DEC'}
-                                            </span>
-                                            {badge && (
-                                                <span className={`shrink-0 text-[8px] px-1 py-0.5 rounded font-semibold ${badge.className}`}>
-                                                    {badge.text}
-                                                </span>
-                                            )}
-                                            <span className="text-white truncate">{entry.name}</span>
-                                            {entry.artist !== 'unknown' && (
-                                                <span className="text-gray-500 truncate ml-auto">{entry.artist}</span>
-                                            )}
-                                        </button>
-                                    );
-                                })}
-                                {visible.length > 30 && (
-                                    <div className="px-2.5 py-1 text-[9px] text-gray-500 text-center">
-                                        +{visible.length - 30} more results
-                                    </div>
-                                )}
-                                {visible.length === 0 && (
-                                    <div className="px-2.5 py-1.5 text-[10px] text-gray-500 text-center">
-                                        All matches are in the "neither mode renders" bucket. Enable "show broken" to see them.
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })()}
-                    {searchResults && searchResults.length === 0 && searchQuery.trim() && (
-                        <div className="absolute left-3 right-3 top-full z-50 bg-[#1a1a1a] border border-white/10 rounded shadow-xl px-2.5 py-2 text-[10px] text-gray-500">
-                            No formulas found
-                        </div>
-                    )}
                 </div>
             </div>
 

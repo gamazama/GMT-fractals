@@ -1,5 +1,5 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { registry } from '../../../engine/FractalRegistry';
 import { FormulaType } from '../../../../types';
 import { useEngineStore } from '../../../../store/engineStore';
@@ -8,7 +8,7 @@ import { generateGMF, loadGMFScene } from '../../../utils/FormulaFormat';
 import { DownloadIcon, ChevronDown, CodeIcon, MenuIcon, UploadIcon } from '../../../../components/Icons';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../../engine/FractalEvents';
 import { buildFormulaContextMenu } from './FormulaContextMenu';
-import { FormulaPicker, useSceneGroups } from '../../FormulaPicker';
+import { FormulaPicker, useSceneGroups, useCatalogData, sectionGroups } from '../../FormulaPicker';
 import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
 
 export { buildFormulaContextMenu } from './FormulaContextMenu';
@@ -18,6 +18,8 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
     const openWorkshop = useEngineStore(s => s.openWorkshop);
     const togglePanel = useEngineStore(s => s.togglePanel);
     const sceneGroups = useSceneGroups();
+    const catalogData = useCatalogData();
+    const catalogGroups = useMemo(() => sectionGroups(catalogData), [catalogData]);
     const btnRef = useRef<HTMLButtonElement>(null);
     const menuBtnRef = useRef<HTMLButtonElement>(null);
     const hamburgerAnchorRef = useTutorAnchor('formula-hamburger');
@@ -217,6 +219,11 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                     onCommit={(c) => {
                         if (c.action === 'launch' && c.id === 'workshop') {
                             openWorkshop(undefined);
+                        } else if (c.action === 'catalog') {
+                            // Frag/DEC catalog pick → open the Workshop with the
+                            // formula's source loaded into the editor (it isn't a
+                            // registered formula, so we don't switch the live one).
+                            openWorkshop(undefined, `${c.source}:${c.id}`);
                         } else if (c.action === 'select') {
                             onChange(c.id as FormulaType);
                             // Picking Modular: surface the Graph panel on
@@ -227,6 +234,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                         setIsOpen(false);
                     }}
                     extraGroups={sceneGroups}
+                    catalogGroups={catalogGroups}
                     footerSlot={advancedMode ? (
                         <button
                             onClick={() => { fileRef.current?.click(); setIsOpen(false); }}

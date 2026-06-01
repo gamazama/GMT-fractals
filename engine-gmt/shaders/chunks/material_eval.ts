@@ -111,11 +111,8 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
 #endif
     {
         float val1 = getMappingValue(uColorMode, p_fractal, result, n, uColorScale);
-        float twistAngle = 0.0;
-        if (abs(uColorTwist) > 0.001) {
-            twistAngle = atan(p_fractal.y, p_fractal.x) * INV_TAU;
-        }
-        float t1Raw = val1 * uColorScale + uColorOffset + (distFromFractalOrigin + twistAngle) * uColorTwist;
+        float t1Raw = val1 * uColorScale + uColorOffset
+                    + gmt_colorSpiral(p_fractal, uColorTwist, uColorTwistArms);
         float t1 = pow(abs(fract(mod(t1Raw, 1.0))), uGradientBias);
         col1 = textureLod0(uGradientTexture, vec2(t1, 0.5)).rgb;
     }
@@ -127,13 +124,8 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
 
     if (useL2) { 
         float val2 = getMappingValue(uColorMode2, p_fractal, result, n, uColorScale2);
-        
-        float twistAngle2 = 0.0;
-        if (abs(uColorTwist2) > 0.001) {
-            twistAngle2 = atan(p_fractal.y, p_fractal.x) * INV_TAU;
-        }
-        
-        float t2Raw = val2 * uColorScale2 + uColorOffset2 + (distFromFractalOrigin + twistAngle2) * uColorTwist2;
+        float t2Raw = val2 * uColorScale2 + uColorOffset2
+                    + gmt_colorSpiral(p_fractal, uColorTwist2, uColorTwistArms2);
         float t2 = pow(abs(fract(mod(t2Raw, 1.0))), uGradientBias2);
         
         col2 = textureLod0(uGradientTexture2, vec2(t2, 0.5)).rgb;

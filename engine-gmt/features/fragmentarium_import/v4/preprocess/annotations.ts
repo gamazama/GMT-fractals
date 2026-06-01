@@ -17,6 +17,8 @@
  */
 
 import type { ParamAnnotation } from '../types';
+import { isDegreesParam } from '../../parsers/angle-detection';
+import { ANNOTATED_UNIFORM_LINE } from '../../parsers/uniform-annotation';
 
 // Lock-type suffix (optional trailing token on any annotation line).
 // Trailing `;` is tolerated — some .frag files (e.g. 3Dickulus collection)
@@ -63,18 +65,9 @@ const RE_SAMPLER = new RegExp(
     `^\\s*uniform\\s+sampler2D\\s+(\\S+)\\s*;\\s*file\\[(.*?)\\]` + LOCK,
 );
 
-// Degree-detection heuristics per docs/26b §3 / V3 param-builder
-const DEG_NAME_HINTS = /angle|rot|theta|phi|yaw|pitch|roll/i;
-
 function parseNum(s: string): number {
     const n = parseFloat(s);
     return Number.isFinite(n) ? n : 0;
-}
-
-function detectIsDegrees(name: string, rangeMin: number, rangeMax: number): boolean {
-    if (!DEG_NAME_HINTS.test(name)) return false;
-    const span = Math.abs(rangeMax - rangeMin);
-    return span >= 180 || (rangeMin <= -90 && rangeMax >= 90);
 }
 
 export interface ParseResult {
@@ -134,7 +127,7 @@ export function parseAnnotations(source: string): ParseResult {
                 range: [min, def, max], defaultValue: def,
                 tooltip: pendingComment || undefined,
                 group: currentGroup || undefined,
-                isDegrees: detectIsDegrees(m[1], min, max),
+                isDegrees: isDegreesParam(m[1], min, max),
             });
             lines[i] = `uniform float ${m[1]};`;
             matched = true;
@@ -232,7 +225,7 @@ export function parseAnnotations(source: string): ParseResult {
             matched = true;
         }
         // Any annotated-looking uniform that fails to parse is warned about
-        else if (/^\s*uniform\s+\S+\s+\S+\s*;\s*(slider|checkbox|color|file)\[/.test(line)) {
+        else if (ANNOTATED_UNIFORM_LINE.test(line)) {
             warnings.push(`Unparseable annotation on line ${i + 1}: ${trimmed.slice(0, 80)}`);
         }
 

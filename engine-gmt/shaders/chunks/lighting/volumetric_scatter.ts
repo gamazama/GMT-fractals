@@ -95,8 +95,8 @@ export const VOLUMETRIC_SCATTER_BODY = `
                 if (_hasEmissive) {
                     vec3 _pfrac = p + uCameraPosition + uSceneOffsetHigh + uSceneOffsetLow;
                     float _mapVal = getMappingValue(uColorMode, _pfrac, h, vec3(0.0, 1.0, 0.0), uColorScale);
-                    float _distFrac = length(_pfrac);
-                    float _t1Raw = _mapVal * uColorScale + uColorOffset + _distFrac * uColorTwist;
+                    float _t1Raw = _mapVal * uColorScale + uColorOffset
+                                 + gmt_colorSpiral(_pfrac, uColorTwist, uColorTwistArms);
                     float _t1 = pow(abs(fract(mod(_t1Raw, 1.0))), uGradientBias);
                     vec3 _emitCol = textureLod0(uGradientTexture, vec2(_t1, 0.5)).rgb;
                     float _emitAtten = 1.0;

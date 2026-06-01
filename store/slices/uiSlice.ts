@@ -115,7 +115,7 @@ export type UISlice = Pick<EngineStoreState,
     // New Layout Props
     'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' |
     'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot' |
-    'workshopOpen' | 'workshopEditFormula' |
+    'workshopOpen' | 'workshopEditFormula' | 'workshopCatalogKey' |
     'newSceneOpen' |
     // Tutorial
     'tutorialActive' | 'tutorialLessonId' | 'tutorialStepIndex' | 'tutorialCompleted'
@@ -234,6 +234,7 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     workshopOpen: false,
     newSceneOpen: false,
     workshopEditFormula: undefined,
+    workshopCatalogKey: undefined,
 
     // Tutorial System
     tutorialActive: false,
@@ -300,8 +301,8 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     }),
     closeContextMenu: () => set(s => ({ contextMenu: { ...s.contextMenu, visible: false } })),
 
-    openWorkshop: (editFormula) => set({ workshopOpen: true, workshopEditFormula: editFormula }),
-    closeWorkshop: () => set({ workshopOpen: false, workshopEditFormula: undefined }),
+    openWorkshop: (editFormula, catalogKey) => set({ workshopOpen: true, workshopEditFormula: editFormula, workshopCatalogKey: catalogKey }),
+    closeWorkshop: () => set({ workshopOpen: false, workshopEditFormula: undefined, workshopCatalogKey: undefined }),
 
     openNewScene: () => set({ newSceneOpen: true }),
     closeNewScene: () => set({ newSceneOpen: false }),

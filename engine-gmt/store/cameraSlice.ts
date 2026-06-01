@@ -29,6 +29,7 @@
  * out of scope for this factory.
  */
 
+import * as THREE from 'three';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { getProxy } from '../engine/worker/WorkerProxy';
 import { getViewportCamera } from '../engine/worker/ViewportRefs';
@@ -207,11 +208,17 @@ const captureCameraThumbnail = async (): Promise<string | undefined> => {
     }
 };
 
-/** Reset hook — walks the active formula's defaultPreset and pushes
- *  it into the live camera state (sceneOffset, rotation, distance).
- *  Equivalent to the old resetCamera body, minus the active-id clear
- *  (the factory does that). */
-const resetToFormulaDefault = (): void => {
+/** The active formula's default camera, resolved to split-precision
+ *  fields plus the summed (unified) world position. Single source of
+ *  truth for both the Reset teleport and the at-default check below. */
+interface FormulaDefaultCamera {
+    offset: PreciseVector3;
+    rotation: { x: number; y: number; z: number; w: number };
+    targetDistance: number;
+    total: { x: number; y: number; z: number };
+}
+
+const getFormulaDefaultCamera = (): FormulaDefaultCamera => {
     const get = useEngineStore.getState as () => any;
 
     const activeFormula = get().formula;
@@ -223,31 +230,117 @@ const resetToFormulaDefault = (): void => {
     const defRot = preset?.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
     const defDist = preset?.targetDistance || 3.5;
 
-    const totalX = defOffset.x + defOffset.xL + defPos.x;
-    const totalY = defOffset.y + defOffset.yL + defPos.y;
-    const totalZ = defOffset.z + defOffset.zL + defPos.z;
+    const totalX = defOffset.x + (defOffset.xL ?? 0) + defPos.x;
+    const totalY = defOffset.y + (defOffset.yL ?? 0) + defPos.y;
+    const totalZ = defOffset.z + (defOffset.zL ?? 0) + defPos.z;
 
     const sX = VirtualSpace.split(totalX);
     const sY = VirtualSpace.split(totalY);
     const sZ = VirtualSpace.split(totalZ);
 
+    return {
+        offset: { x: sX.high, y: sY.high, z: sZ.high, xL: sX.low, yL: sY.low, zL: sZ.low },
+        rotation: defRot,
+        targetDistance: defDist,
+        total: { x: totalX, y: totalY, z: totalZ },
+    };
+};
+
+/**
+ * Hard-teleport the camera to a fixed split-precision offset + rotation.
+ * Updates the store synchronously (so save / snapshot / share-link read the
+ * new pose immediately), clears accumulation, then warps the R3F camera.
+ *
+ * Unlike CameraUtils.teleportPosition (event-only, no store write / no accum
+ * reset), this is the path GMT's Reset / Step-Back recovery actions need.
+ */
+const teleportToOffset = (offset: PreciseVector3, rotation: { x: number; y: number; z: number; w: number }, targetDistance: number): void => {
+    const get = useEngineStore.getState as () => any;
+
+    get().setSceneOffset(offset);
+    useEngineStore.setState({ cameraRot: rotation, targetDistance } as any);
+
+    FractalEvents.emit(FRACTAL_EVENTS.RESET_ACCUM, undefined);
+    FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, {
+        position: { x: 0, y: 0, z: 0 },
+        rotation,
+        sceneOffset: offset,
+        targetDistance,
+    } as CameraState as any);
+};
+
+/** Reset hook — walks the active formula's defaultPreset and pushes
+ *  it into the live camera state (sceneOffset, rotation, distance).
+ *  Equivalent to the old resetCamera body, minus the active-id clear
+ *  (the factory does that). */
+const resetToFormulaDefault = (): void => {
+    const def = getFormulaDefaultCamera();
+    teleportToOffset(def.offset, def.rotation, def.targetDistance);
+};
+
+/**
+ * True when the live camera is sitting (within tolerance) at the active
+ * formula's default pose — i.e. a Reset would be a visual no-op. Drives
+ * the HUD recovery prompt's Reset → Step Back morph: once you're already
+ * home, Reset can't help, so we offer a nudge instead.
+ *
+ * Compares the summed (unified) world position and the rotation
+ * quaternion. Position tolerance is relative to the coordinate magnitude
+ * so the check stays meaningful at deep zoom (where f32 round-trips
+ * through split-precision carry more absolute error).
+ */
+export const isCameraAtFormulaDefault = (): boolean => {
+    const def = getFormulaDefaultCamera();
+
+    const live = CameraUtils.getUnifiedFromEngine();
+    const mag = Math.abs(def.total.x) + Math.abs(def.total.y) + Math.abs(def.total.z);
+    const posTol = Math.max(0.05, mag * 1e-4);
+    if (Math.abs(live.x - def.total.x) + Math.abs(live.y - def.total.y) + Math.abs(live.z - def.total.z) > posTol) {
+        return false;
+    }
+
+    const lr = CameraUtils.getRotationFromEngine();
+    if (Math.abs(lr.x - def.rotation.x) +
+        Math.abs(lr.y - def.rotation.y) +
+        Math.abs(lr.z - def.rotation.z) +
+        Math.abs(lr.w - def.rotation.w) > 0.001) {
+        return false;
+    }
+    return true;
+};
+
+/** Distance the Step-Back recovery action dollies the camera, in world units. */
+const STEP_BACK_DISTANCE = 1.0;
+
+/**
+ * Step-Back recovery — dolly the camera backward along its current view
+ * direction by one unit, leaving rotation untouched. Surfaced by the HUD
+ * recovery prompt when the user is already at the formula default (so a
+ * Reset would do nothing) yet still buried in a surface or staring into
+ * the void. Mirrors resetToFormulaDefault's teleport machinery so the R3F
+ * camera, worker, and store all stay in sync.
+ */
+const stepBackFromCurrent = (): void => {
+    const live = useEngineStore.getState() as any;
+
+    const rot = CameraUtils.getRotationFromEngine();
+    // Camera looks down local -Z, so local +Z is "backward" (away from view).
+    const back = new THREE.Vector3(0, 0, 1).applyQuaternion(rot);
+    const unified = CameraUtils.getUnifiedFromEngine();
+
+    const sX = VirtualSpace.split(unified.x + back.x * STEP_BACK_DISTANCE);
+    const sY = VirtualSpace.split(unified.y + back.y * STEP_BACK_DISTANCE);
+    const sZ = VirtualSpace.split(unified.z + back.z * STEP_BACK_DISTANCE);
     const newOffset: PreciseVector3 = {
         x: sX.high, y: sY.high, z: sZ.high,
         xL: sX.low, yL: sY.low, zL: sZ.low,
     };
 
-    get().setSceneOffset(newOffset);
-    useEngineStore.setState({ cameraRot: defRot, targetDistance: defDist } as any);
+    // Stepping out of a buried surface leaves a near-zero measured distance;
+    // seed the estimate so fly speed / orbit radius don't stay stuck at ~0.
+    const newDist = Math.max(live.targetDistance ?? 0, STEP_BACK_DISTANCE);
 
-    const resetState: CameraState = {
-        position: { x: 0, y: 0, z: 0 },
-        rotation: defRot,
-        sceneOffset: newOffset,
-        targetDistance: defDist,
-    };
-
-    FractalEvents.emit(FRACTAL_EVENTS.RESET_ACCUM, undefined);
-    FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, resetState as any);
+    teleportToOffset(newOffset, { x: rot.x, y: rot.y, z: rot.z, w: rot.w }, newDist);
 };
 
 /**
@@ -308,6 +401,14 @@ export const installGmtCameraSlice = (): void => {
         },
 
         setCameraMode: (v: string) => set({ cameraMode: v }),
+
+        // HUD recovery-prompt morph. 'reset' = the Reset button teleports to
+        // the formula default; 'stepback' = the user is already at the default
+        // (Reset is a no-op) so the same button nudges the camera back a unit.
+        // Set by usePhysicsProbe as the prompt shows/latches; read by HudOverlay.
+        cameraRecoveryMode: 'reset' as 'reset' | 'stepback',
+        setCameraRecoveryMode: (m: 'reset' | 'stepback') => set({ cameraRecoveryMode: m }),
+        stepBackCamera: stepBackFromCurrent,
 
         // Internal helper used by the undo/redo wrappers below.
         _applyCameraTeleport: () => {

@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { useEngineStore as useFractalStore } from '../../store/engineStore';
+import { isCameraAtFormulaDefault } from '../store/cameraSlice';
 import { MAX_SKY_DISTANCE, isSurfaceHit } from '../../data/constants';
 
 /** Format a distance value for the HUD */
@@ -24,6 +25,14 @@ export const usePhysicsProbe = (
     const frameCount = useRef(0);
     const readBuffer = useRef(new Float32Array(4));
     const resetShownRef = useRef<boolean | null>(null);
+    // Recovery-prompt mode mirrored into the store only on change (cheap;
+    // the prompt shows rarely). Latched per visibility episode — see below.
+    const recoveryModeRef = useRef<'reset' | 'stepback'>('reset');
+    const setRecoveryMode = (m: 'reset' | 'stepback') => {
+        if (recoveryModeRef.current === m) return;
+        recoveryModeRef.current = m;
+        (useFractalStore.getState() as any).setCameraRecoveryMode?.(m);
+    };
 
     const updateSpeedHud = () => {
         if (hudRefs.speed.current && frameCount.current % 10 === 0) {
@@ -43,15 +52,26 @@ export const usePhysicsProbe = (
     const updateResetButton = (dist: number) => {
         if (!hudRefs.reset.current) return;
         const show = dist > MAX_SKY_DISTANCE || dist < 0.001;
-        if (resetShownRef.current === show) return;
-        resetShownRef.current = show;
-        hudRefs.reset.current.style.display = show ? 'block' : 'none';
-        // The "Undo Camera" recovery button is rendered as a sibling of the
-        // reset button and shares its visibility — it's only useful while the
-        // reset prompt is showing. Toggle it via a stable data-attribute so we
-        // stay off React's render path (this runs on every show/hide transition).
-        const undoBtn = hudRefs.reset.current.parentElement?.querySelector<HTMLElement>('[data-hud-undo-camera]');
-        if (undoBtn) undoBtn.style.display = show ? 'block' : 'none';
+        if (resetShownRef.current !== show) {
+            resetShownRef.current = show;
+            hudRefs.reset.current.style.display = show ? 'block' : 'none';
+            // The "Undo Camera" recovery button is rendered as a sibling of the
+            // reset button and shares its visibility — it's only useful while the
+            // reset prompt is showing. Toggle it via a stable data-attribute so we
+            // stay off React's render path (this runs on every show/hide transition).
+            const undoBtn = hudRefs.reset.current.parentElement?.querySelector<HTMLElement>('[data-hud-undo-camera]');
+            if (undoBtn) undoBtn.style.display = show ? 'block' : 'none';
+            // Episode start: if we're already at the formula default a Reset
+            // would do nothing, so offer Step Back. On hide, re-arm to 'reset'.
+            setRecoveryMode(show && isCameraAtFormulaDefault() ? 'stepback' : 'reset');
+            return;
+        }
+        // Still showing in Reset mode: once the camera reaches the default
+        // (e.g. the user just pressed Reset but the prompt persists), latch to
+        // Step Back and hold it there until the prompt disappears.
+        if (show && recoveryModeRef.current === 'reset' && isCameraAtFormulaDefault()) {
+            setRecoveryMode('stepback');
+        }
     };
 
     const processDepthData = (depthValue: number) => {
