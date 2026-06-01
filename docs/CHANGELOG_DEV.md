@@ -4,6 +4,14 @@ Chronological log of significant changes during the v0.9.6 development cycle (en
 
 ## 2026-06-01
 
+### Share & gallery deep-links no longer bounce to the app launcher
+
+**User-facing**
+- On the deployed build, opening a link with a query string — a gallery share link (`…/app-gmt.html?gallery=<slug>`) or any `?`-param deep-link — could land on the "dev preview" launcher menu instead of the app. Those now resolve to the right page. (Only ever affected the deployed PWA; local `npm run dev` has no service worker, so it never reproduced there.)
+
+**Where**
+- [`vite.config.ts`](../vite.config.ts) — Workbox service-worker config. Added `ignoreURLParametersMatching: [/.*/]` so a query-string URL matches its precached HTML entry instead of missing the cache and falling through to `navigateFallback` (the launcher `index.html`). Also widened `navigateFallbackDenylist` from `/\.html$/` to `/\.html(\?|$)/` — the old regex was anchored at end-of-string, so `app-gmt.html?gallery=x` (ending in the slug, not `.html`) slipped past it and got the launcher.
+
 ### Opening a share link no longer crashes the app
 
 **User-facing**

@@ -75,8 +75,18 @@ export default defineConfig({
         // instead of being swapped for the landing — without this,
         // clicking /dev/demo.html on the listing page would route
         // through NavigationRoute and return the cached index.html.
+        //
+        // ignoreURLParametersMatching strips ALL query params before the
+        // precache lookup, so a deep-link like `app-gmt.html?gallery=<slug>`
+        // resolves to the precached `app-gmt.html` instead of missing the
+        // cache and falling through to navigateFallback (the listing page).
+        // Without this, the default only ignores utm_/fbclid, so any
+        // ?-param navigation served the launcher. The denylist regex also
+        // tolerates a trailing query string (`.html?…`) as defence-in-depth
+        // for any .html the precache hasn't covered.
         navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/\.html$/],
+        navigateFallbackDenylist: [/\.html(\?|$)/],
+        ignoreURLParametersMatching: [/.*/],
         runtimeCaching: [
           {
             // CDN assets (Tailwind, jsdelivr) — try network, fall back to cache.
