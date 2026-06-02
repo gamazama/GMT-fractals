@@ -13,6 +13,7 @@ import { useEngineStore } from '../../store/engineStore';
 import { Popover } from '../../components/Popover';
 import { DraggableNumber } from '../../components/Slider';
 import { CheckIcon } from '../../components/Icons';
+import { GmtWordmark } from './GmtWordmark';
 
 export const GmtLogo: React.FC = () => {
     const name = useEngineStore((s) => s.projectSettings.name);
@@ -58,9 +59,7 @@ export const GmtLogo: React.FC = () => {
 
     return (
         <div className="flex flex-col leading-none select-none pr-3 relative">
-            <span className="text-xl font-bold tracking-tighter text-white leading-none">
-                G<span className="text-cyan-400">M</span>T
-            </span>
+            <GmtWordmark className="h-4 w-auto self-start shrink-0" />
             <button
                 onClick={() => setIsRenaming(true)}
                 className="text-[8px] font-mono text-gray-400 underline decoration-white/20 hover:text-cyan-300 hover:decoration-cyan-300/50 transition-colors text-left truncate max-w-[120px] mt-1.5"

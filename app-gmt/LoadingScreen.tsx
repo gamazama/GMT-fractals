@@ -13,11 +13,15 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { LoadingRendererCPU } from './LoadingRendererCPU';
 import { useEngineStore } from '../store/engineStore';
 import { registry } from '../engine-gmt/engine/FractalRegistry';
+import { GmtWordmark } from '../engine-gmt/topbar/GmtWordmark';
 import { ChevronDown, UploadIcon, CubeIcon, NetworkIcon } from '../components/Icons';
 import { loadSceneFile } from '../engine/plugins/SceneIO';
 import type { Preset } from '../types';
 import { useCompileProgress, selectProgress } from '../store/CompileProgressStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+
+// Injected by Vite's `define` from package.json (see vite.config.ts).
+declare const __APP_VERSION__: string;
 
 const GMT_NAMES = [
     'Generative Math Tracer', 'GPU Manifold Tracer', 'GPU Mandelorus Tracer',
@@ -187,9 +191,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
         return (
             <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black" style={{ opacity }}>
                 <div className="text-center mb-8 relative animate-fade-in-up z-10">
-                    <h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_15px_rgba(239,68,68,0.5)] mb-2">
-                        G<span className="text-red-400">M</span>T
-                    </h1>
+                    <GmtWordmark accent="#f87171" className="h-16 w-auto mx-auto block drop-shadow-[0_0_15px_rgba(239,68,68,0.5)] mb-2" />
                     <div className="text-xs text-red-400/80 font-mono uppercase tracking-[0.4em]">Engine failed to start</div>
                 </div>
 
@@ -220,9 +222,13 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
     return (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black transition-opacity duration-1000" style={{ opacity }}>
             <div className="text-center mb-10 relative animate-fade-in-up z-10">
-                <h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_15px_rgba(34,211,238,0.5)] mb-2">
-                    G<span className="text-cyan-400">M</span>T
-                </h1>
+                <div className="relative inline-block mb-2">
+                    <GmtWordmark className="h-16 w-auto block drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]" />
+                    {/* Version badge: left edge anchored to the logo's top-right corner. */}
+                    <span className="absolute top-0 left-full font-mono text-[10px] font-bold leading-none text-white select-none">
+                        {__APP_VERSION__}
+                    </span>
+                </div>
                 <div className="text-xs text-gray-400 font-mono uppercase tracking-[0.4em]">{subtitle}</div>
             </div>
 
