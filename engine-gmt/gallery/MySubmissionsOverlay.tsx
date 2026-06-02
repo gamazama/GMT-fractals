@@ -15,7 +15,7 @@
  * featured). The header shows the live count so users know how many slots
  * they have left.
  */
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useGalleryStore } from './galleryStore';
 import { useAuthStore } from '../auth/authStore';
@@ -59,16 +59,25 @@ export const MySubmissionsOverlay: React.FC = () => {
     const [error, setError]       = useState<string | null>(null);
     const [busyId, setBusyId]     = useState<string | null>(null);
 
+    // Guard async setState: a delete/toggle (or the initial fetch) can resolve
+    // after the overlay has closed and unmounted. Skip the state writes then.
+    const mountedRef = useRef(true);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
+
     const refresh = useCallback(async () => {
         if (!profile) return;
         setLoading(true);
         setError(null);
         try {
-            setItems(await listMySubmissions(profile.id));
+            const rows = await listMySubmissions(profile.id);
+            if (mountedRef.current) setItems(rows);
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            if (mountedRef.current) setError(err instanceof Error ? err.message : String(err));
         } finally {
-            setLoading(false);
+            if (mountedRef.current) setLoading(false);
         }
     }, [profile]);
 
@@ -103,9 +112,9 @@ export const MySubmissionsOverlay: React.FC = () => {
             await refresh();
             bumpRef();
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            if (mountedRef.current) setError(err instanceof Error ? err.message : String(err));
         } finally {
-            setBusyId(null);
+            if (mountedRef.current) setBusyId(null);
         }
     };
 

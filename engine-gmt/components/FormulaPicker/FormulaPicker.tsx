@@ -718,10 +718,13 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
                 onCommitSceneItem={(item) => {
                     // Fire-and-forget — caller's onSelect handles fetch +
                     // loadScene. Picker closes immediately so the user sees
-                    // the new scene appear as soon as it lands.
-                    try { void item.onSelect(); } catch (err) {
-                        console.warn('[FormulaPicker] scene onSelect threw:', err);
-                    }
+                    // the new scene appear as soon as it lands. onSelect is
+                    // async, so catch the rejection on the promise (a bare
+                    // try/catch around `void` would miss it and leave an
+                    // unhandled rejection).
+                    Promise.resolve(item.onSelect()).catch((err) => {
+                        console.warn('[FormulaPicker] scene onSelect failed:', err);
+                    });
                     onClose?.();
                 }}
                 onCommitCatalogItem={commitCatalog}

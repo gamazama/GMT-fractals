@@ -73,7 +73,7 @@ export function useSceneGroups(opts: UseSceneGroupsOptions = {}): SceneGroup[] {
         setCuratedLoading(true);
         setCuratedError(null);
         curatedFetchInFlight.current = true;
-        listGallery({ limit: CURATED_PAGE_SIZE, offset: 0 })
+        listGallery({ limit: CURATED_PAGE_SIZE, offset: 0, publicOnly: true })
             .then(items => {
                 if (cancelled) return;
                 setCurated(items);
@@ -99,7 +99,7 @@ export function useSceneGroups(opts: UseSceneGroupsOptions = {}): SceneGroup[] {
         setCuratedLoadingMore(true);
         try {
             const offset = curated.length;
-            const next = await listGallery({ limit: CURATED_PAGE_SIZE, offset });
+            const next = await listGallery({ limit: CURATED_PAGE_SIZE, offset, publicOnly: true });
             setCurated(prev => [...prev, ...next]);
             setCuratedHasMore(next.length === CURATED_PAGE_SIZE);
         } catch (err) {
@@ -144,6 +144,14 @@ export function useSceneGroups(opts: UseSceneGroupsOptions = {}): SceneGroup[] {
             let effective = item;
             if (!item.gmf_data && profile?.id) {
                 const gmf = await getMySubmissionData(item.id, profile.id);
+                // Null means the row is gone or no longer readable (deleted
+                // between list and click). Fail loudly instead of falling
+                // through to loadGalleryScene, which would chase the public
+                // approved-only refetch and then the iTXt image fallback and
+                // surface a misleading "no scene data in image" error.
+                if (gmf == null) {
+                    throw new Error('Could not load this submission — it may have been removed. Try refreshing.');
+                }
                 effective = { ...item, gmf_data: gmf };
             }
             return pickHandler ? pickHandler(effective) : loadGalleryScene(effective);

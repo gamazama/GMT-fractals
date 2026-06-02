@@ -69,17 +69,24 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
         setTimeout(() => setShareState('idle'), 1800);
     };
 
-    // Prev/next within current view
-    const index = useMemo(() => items.findIndex(i => i.id === item.id), [items, item.id]);
-    const prevItem = index > 0 ? items[index - 1] : null;
-    const nextItem = index >= 0 && index < items.length - 1 ? items[index + 1] : null;
+    // The browse list can include the signed-in owner's own private rows
+    // (GalleryPage groups those into a separate "My Private Scenes" section).
+    // Prev/next, the counter, and the "More from @user" strip are public-browse
+    // surfaces, so they navigate only the public subset — a private row never
+    // shows up in a strip/counter framed as public.
+    const navItems = useMemo(() => items.filter(i => i.visibility === 'public'), [items]);
+
+    // Prev/next within the public browse view.
+    const index = useMemo(() => navItems.findIndex(i => i.id === item.id), [navItems, item.id]);
+    const prevItem = index > 0 ? navItems[index - 1] : null;
+    const nextItem = index >= 0 && index < navItems.length - 1 ? navItems[index + 1] : null;
 
     // Other items by same uploader (excluding the current item). user_id
     // is the correct key — display_name can change, but user_id is stable.
     const moreFromUploader = useMemo(() => {
         if (!item.user_id) return [];
-        return items.filter(i => i.user_id === item.user_id && i.id !== item.id).slice(0, 6);
-    }, [items, item]);
+        return navItems.filter(i => i.user_id === item.user_id && i.id !== item.id).slice(0, 6);
+    }, [navItems, item]);
 
     // Keyboard shortcuts — capture phase so the parent gallery's Esc doesn't
     // also fire. Arrows + Enter only act while this lightbox is mounted.
@@ -130,7 +137,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                     ← Back to gallery
                 </button>
                 <div className="text-[10px] text-gray-500 font-mono">
-                    {index >= 0 && `${index + 1} / ${items.length}`}
+                    {index >= 0 && `${index + 1} / ${navItems.length}`}
                 </div>
             </div>
 

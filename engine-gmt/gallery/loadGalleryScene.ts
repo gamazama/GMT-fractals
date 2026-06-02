@@ -14,7 +14,8 @@ import { loadGMFScene } from '../utils/FormulaFormat';
 import { useEngineStore } from '../../store/engineStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { registry as gmtRegistry } from '../engine/FractalRegistry';
-import { getGalleryItem, GalleryItem } from './GalleryClient';
+import { getGalleryItem, getSharedScene, getMySubmissionData, GalleryItem } from './GalleryClient';
+import { useAuthStore } from '../auth/authStore';
 
 async function gmfFromImageItxt(imageUrl: string): Promise<string> {
   const res = await fetch(imageUrl, { mode: 'cors' });
@@ -32,8 +33,19 @@ export async function loadGalleryScene(item: GalleryItem): Promise<void> {
   // to keep browse responses small.
   let gmf: string | null = item.gmf_data ?? null;
   if (!gmf) {
-    const full = await getGalleryItem(item.slug);
-    gmf = full?.gmf_data ?? null;
+    // getGalleryItem is public-only, so it won't return an owner's private or
+    // pending row. When the current user owns this item, fetch via the
+    // user_id-scoped owner path so loading your own private scene still works.
+    const userId = useAuthStore.getState().profile?.id ?? null;
+    if (userId && item.user_id === userId) {
+      gmf = await getMySubmissionData(item.id, userId);
+    } else {
+      // Public scenes resolve via getGalleryItem; a shared private/unlisted
+      // scene (opened by slug from a share link) falls back to the
+      // shared-scene RPC, which returns it by exact slug.
+      const full = await getGalleryItem(item.slug) ?? await getSharedScene(item.slug);
+      gmf = full?.gmf_data ?? null;
+    }
   }
   if (!gmf) {
     // Legacy row (Phase 1): fall back to extracting from the PNG.

@@ -97,5 +97,6 @@ export const installGallery = (options: InstallGalleryOptions = {}) => {
 
 export const uninstallGallery = (menuId = 'file') => {
     menu.unregisterItem(menuId, 'browse-gallery');
+    menu.unregisterItem(menuId, 'submit-gallery');
     _installed = false;
 };

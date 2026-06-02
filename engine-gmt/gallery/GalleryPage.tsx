@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useGalleryStore } from './galleryStore';
 import { useGalleryItems } from './useGalleryItems';
-import { galleryEnabled, GalleryItem, getGalleryItem } from './GalleryClient';
+import { galleryEnabled, GalleryItem, getGalleryItem, getSharedScene } from './GalleryClient';
 import { loadGalleryScene } from './loadGalleryScene';
 import { GalleryTile } from './GalleryTile';
 import { Lightbox } from './Lightbox';
@@ -16,7 +16,11 @@ export const GalleryPage: React.FC = () => {
   const clearPendingLightbox = useGalleryStore(s => s.clearPendingLightbox);
 
   const { items, loading, error } = useGalleryItems({ ...filter, limit: 60 });
-  const currentUserId = useAuthStore(s => s.profile?.id ?? null);
+  // Key the owner check off `user.id`, not `profile.id`: both equal auth.users.id,
+  // but `user` is populated on session hydration while `profile` only resolves
+  // after an async fetch — using `profile` blanks the "My Private Scenes" group
+  // for a beat right after a reload. (gallery_items.user_id === auth.users.id.)
+  const currentUserId = useAuthStore(s => s.user?.id ?? null);
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
   const [loadingItem, setLoadingItem]   = useState<GalleryItem | null>(null);
   const [loadError, setLoadError]       = useState<string | null>(null);
@@ -39,13 +43,18 @@ export const GalleryPage: React.FC = () => {
   useEffect(() => {
     if (!isOpen || !pendingSlug) return;
     let cancelled = false;
-    getGalleryItem(pendingSlug).then((item) => {
+    // Try the public REST fetch first; fall back to the shared-scene RPC so a
+    // shared link to a PRIVATE (unlisted) scene still opens. Private rows are
+    // invisible to the normal query, so getGalleryItem returns null for them.
+    getGalleryItem(pendingSlug)
+      .then((item) => item ?? getSharedScene(pendingSlug))
+      .then((item) => {
       if (cancelled) return;
       if (item) {
         setSelectedItem(item);
         setLoadError(null);
       } else {
-        setLoadError(`Couldn't find a public gallery scene with slug "${pendingSlug}".`);
+        setLoadError(`Couldn't find a gallery scene with slug "${pendingSlug}".`);
       }
       clearPendingLightbox();
     }).catch((err) => {

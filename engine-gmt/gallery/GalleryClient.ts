@@ -2,8 +2,14 @@
  * Supabase client for the GMT online gallery.
  *
  * Reads VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY at build time. Both are
- * client-safe — Row Level Security on the Supabase side enforces that the
- * anon role can only read approved gallery items.
+ * client-safe — Row Level Security on the Supabase side is the boundary:
+ * an anonymous request can only read rows where status='approved' AND
+ * visibility='public', while a request carrying a session reads ALSO that
+ * user's own rows at any status/visibility (the "owner reads own" policy).
+ * That second policy is why a persisted session must not be conflated with a
+ * public feed: use the `publicOnly` flag below for any feed (e.g. the picker's
+ * Curated Gallery) that should show public rows only, regardless of who is
+ * signed in.
  */
 import { getSupabase, supabaseEnabled } from '../supabase';
 
@@ -62,6 +68,14 @@ export interface ListGalleryOpts {
   formula?: string;
   tag?: string;
   featuredOnly?: boolean;
+  /** Restrict to `visibility = 'public'` rows. Use for any feed that is
+   *  meant to show only the public gallery (e.g. the picker's Curated
+   *  Gallery). Defaults to false: callers that group owner-private rows
+   *  client-side (GalleryPage) leave it off and rely on RLS to scope the
+   *  private rows to the signed-in owner. Defence-in-depth — the SELECT
+   *  RLS policy is the real boundary; this stops a private row from ever
+   *  rendering in a public-only feed even if that policy regresses. */
+  publicOnly?: boolean;
 }
 
 export async function listGallery(opts: ListGalleryOpts = {}): Promise<GalleryItem[]> {
@@ -75,6 +89,7 @@ export async function listGallery(opts: ListGalleryOpts = {}): Promise<GalleryIt
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
+  if (opts.publicOnly) query = query.eq('visibility', 'public');
   if (opts.formula) query = query.eq('formula', opts.formula);
   if (opts.tag) query = query.contains('tags', [opts.tag]);
   if (opts.featuredOnly) query = query.eq('featured', true);
@@ -158,13 +173,47 @@ export async function getMySubmissionData(id: string, userId: string): Promise<s
   return (data?.gmf_data ?? null) as string | null;
 }
 
-export async function getGalleryItem(slug: string): Promise<GalleryItem | null> {
-  const { data, error } = await client()
+/**
+ * Fetch a single approved gallery row by slug, including `gmf_data`.
+ *
+ * `publicOnly` defaults true: this is reached by the public deep-link path
+ * (`?gallery=<slug>`) and the non-owner scene loader, so it must NOT surface
+ * an approved-but-private row to a non-owner just because they know the slug.
+ * Owners load their own private/pending rows via the user_id-scoped
+ * `getMySubmissionData` instead — same defence-in-depth as listGallery's
+ * `publicOnly` flag; RLS is the boundary, this stops a private row rendering
+ * if that policy regresses.
+ */
+export async function getGalleryItem(
+  slug: string,
+  opts: { publicOnly?: boolean } = {},
+): Promise<GalleryItem | null> {
+  const publicOnly = opts.publicOnly ?? true;
+  let query = client()
     .from('gallery_items')
     .select('*')
     .eq('slug', slug)
-    .eq('status', 'approved')
-    .maybeSingle();
+    .eq('status', 'approved');
+  if (publicOnly) query = query.eq('visibility', 'public');
+  const { data, error } = await query.maybeSingle();
   if (error) throw error;
   return (data ?? null) as unknown as GalleryItem | null;
+}
+
+/**
+ * Fetch one approved scene by exact slug for a SHARED LINK — including
+ * private/unlisted scenes. Private rows aren't readable via the normal RLS
+ * path (and must not be: a relaxed policy would let anyone enumerate
+ * `?visibility=eq.private`), so this routes through the `get_shared_scene`
+ * SECURITY DEFINER RPC, which returns a single approved row matched by exact
+ * slug. The slug is the capability — guessable by design: "private" means
+ * unlisted (absent from the feed/search) but freely shareable by link.
+ * Returns the full row incl `gmf_data`. See backend migration
+ * 0002_shared_scene_rpc.sql.
+ */
+export async function getSharedScene(slug: string): Promise<GalleryItem | null> {
+  const { data, error } = await client().rpc('get_shared_scene', { p_slug: slug });
+  if (error) throw error;
+  const rows = (data ?? []) as unknown as GalleryItem[];
+  return rows[0] ?? null;
 }
