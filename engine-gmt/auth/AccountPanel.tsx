@@ -28,6 +28,7 @@ export const AccountPanel: React.FC = () => {
     const isOpen              = useAuthStore((s) => s.isAccountPanelOpen);
     const closeAccountPanel   = useAuthStore((s) => s.closeAccountPanel);
     const refreshProfile      = useAuthStore((s) => s.refreshProfile);
+    const authSignOut         = useAuthStore((s) => s.signOut);
 
     const setupMode = status === 'needs-profile';
     const visible = isOpen || setupMode;
@@ -167,7 +168,10 @@ export const AccountPanel: React.FC = () => {
     const signOut = async () => {
         setBusy(true);
         try {
-            await getSupabase().auth.signOut();
+            // authSignOut guarantees the local session is cleared even if the
+            // server-side revoke fails, so closing the panel here is always
+            // safe — the device is signed out regardless of the network result.
+            await authSignOut();
             closeAccountPanel();
         } finally {
             setBusy(false);
@@ -196,7 +200,7 @@ export const AccountPanel: React.FC = () => {
             if (!data || data.length === 0) {
                 throw new Error('Account deletion blocked. Check RLS: needs "users delete own profile" policy.');
             }
-            await getSupabase().auth.signOut();
+            await authSignOut();
             closeAccountPanel();
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));

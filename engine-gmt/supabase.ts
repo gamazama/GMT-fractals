@@ -13,6 +13,12 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | und
 
 export const supabaseEnabled = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
+/** localStorage key the supabase client persists the session under. Exported
+ *  so the auth store's sign-out fallback can hard-clear it when a failed
+ *  server-side revoke leaves the token behind. Keep in sync with the
+ *  `storageKey` passed to createClient below. */
+export const AUTH_STORAGE_KEY = 'gmt-auth';
+
 let _client: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient {
@@ -26,7 +32,7 @@ export function getSupabase(): SupabaseClient {
                 autoRefreshToken: true,
                 detectSessionInUrl: true,    // OAuth callback handling
                 storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-                storageKey: 'gmt-auth',      // namespaced so it doesn't collide with anything else
+                storageKey: AUTH_STORAGE_KEY,  // namespaced so it doesn't collide with anything else
             },
         });
     }

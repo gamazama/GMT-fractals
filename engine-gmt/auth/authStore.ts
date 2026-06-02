@@ -12,7 +12,7 @@
  */
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
-import { getSupabase, supabaseEnabled } from '../supabase';
+import { getSupabase, supabaseEnabled, AUTH_STORAGE_KEY } from '../supabase';
 
 export type AuthStatus = 'loading' | 'unauthed' | 'needs-profile' | 'authed';
 
@@ -52,6 +52,15 @@ interface AuthState {
     /** Re-fetches the profile + admin flag from Supabase. Called after
      *  signup, profile update, or any change that might affect them. */
     refreshProfile: () => Promise<void>;
+
+    /** Signs the user out. Calls supabase.auth.signOut() (global scope, so
+     *  the refresh token is revoked server-side) but GUARANTEES the local
+     *  session is cleared even when that network revoke fails: auth-js bails
+     *  before clearing localStorage on a non-4xx error, which would leave a
+     *  live JWT on the device after the user asked to sign out. Returns the
+     *  supabase error (if any) so callers can surface it — the local state is
+     *  cleared regardless. */
+    signOut: () => Promise<{ error: Error | null }>;
 
     /** Convenience: returns the JWT for the current session, or null if
      *  unauthed. Used by gallery submission code to set the Authorization
@@ -108,6 +117,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             console.warn('[auth] refreshProfile crashed — falling through to unauthed:', err);
             set({ profile: null, isAdmin: false, status: 'unauthed' });
         }
+    },
+
+    signOut: async () => {
+        let error: Error | null = null;
+        try {
+            const res = await getSupabase().auth.signOut();
+            error = res.error ?? null;
+        } catch (err) {
+            // auth-js re-throws raw transport errors (offline, DNS) instead of
+            // returning them — treat the same as a returned error.
+            error = err instanceof Error ? err : new Error(String(err));
+        }
+        if (error) {
+            // Global-scope signOut bailed before clearing localStorage (network
+            // / 5xx revoke failure) and SIGNED_OUT never fired. Hard-clear the
+            // persisted token and reset state ourselves so the device isn't
+            // left holding a live JWT after the user asked to sign out.
+            console.warn('[auth] signOut failed — forcing local clear:', error);
+            try { window.localStorage.removeItem(AUTH_STORAGE_KEY); } catch {}
+            set({ status: 'unauthed', session: null, user: null, profile: null, isAdmin: false });
+        }
+        // On success the onAuthStateChange(SIGNED_OUT) listener already reset
+        // the store; nothing more to do here.
+        return { error };
     },
 
     getAccessToken: () => get().session?.access_token ?? null,

@@ -9,7 +9,6 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from './authStore';
-import { getSupabase } from '../supabase';
 import { useGalleryStore } from '../gallery/galleryStore';
 
 const PersonIcon: React.FC = () => (
@@ -26,6 +25,7 @@ export const AuthTopbarWidget: React.FC = () => {
     const isAdmin           = useAuthStore((s) => s.isAdmin);
     const openAuthModal     = useAuthStore((s) => s.openAuthModal);
     const openAccountPanel  = useAuthStore((s) => s.openAccountPanel);
+    const signOut           = useAuthStore((s) => s.signOut);
 
     const [open, setOpen]   = useState(false);
     const ref               = useRef<HTMLDivElement>(null);
@@ -119,7 +119,7 @@ export const AuthTopbarWidget: React.FC = () => {
                         muted
                         onClick={async () => {
                             setOpen(false);
-                            await getSupabase().auth.signOut();
+                            await signOut();
                         }}
                     />
                 </div>
