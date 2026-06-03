@@ -13,7 +13,7 @@
  * Mode content is placeholder until the generator/picker/img2grad UIs land.
  */
 
-import React, { useMemo, Suspense } from 'react';
+import React, { useMemo, useEffect, Suspense } from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { useGlobalContextMenu } from '../hooks/useGlobalContextMenu';
 import GlobalContextMenu from '../components/GlobalContextMenu';
@@ -58,16 +58,66 @@ const Stage: React.FC = () => {
         <div className="max-w-md">
           <div className="text-lg font-medium text-zinc-200 mb-2">{active.label}</div>
           <div className="text-sm text-zinc-500">{active.blurb}</div>
-          <div className="mt-6 text-xs text-zinc-600 font-mono">stage UI coming · shell + DDFS panels live</div>
         </div>
       </div>
     </div>
   );
 };
 
+// Two fixed-width docks (Favients shelf left, mode panel right) plus the centre
+// stage don't fit on a narrow window — left alone, both docks keep full width and
+// crush the stage to an unusable sliver. This shrinks the docks toward a compact
+// width as the window narrows, and collapses the left shelf to its rail when very
+// narrow, so the centre stage stays usable. The user's chosen sizes are the upper
+// bound (Math.min — we only ever shrink), and every write goes through the
+// NON-persisting setState so the responsive compaction never overwrites the saved
+// dock-size prefs in localStorage; widening restores the user's real sizes exactly.
+const useResponsiveDocks = (): void => {
+  useEffect(() => {
+    const COMPACT = 1120; // below this, shrink docks toward their compact widths
+    const COLLAPSE = 900; // below this, collapse the left shelf to its rail
+    const RIGHT_COMPACT = 280; // right dock width between COLLAPSE and COMPACT
+    const RIGHT_MIN = 210; // right dock width once the left shelf has collapsed (very narrow)
+    const LEFT_COMPACT = 250;
+
+    const s0 = useEngineStore.getState();
+    // The user's real, persisted sizes — refreshed whenever the window is fully wide
+    // (where the live store reflects their intent, including manual resizes).
+    const real = { right: s0.rightDockSize, left: s0.leftDockSize, leftCollapsed: s0.isLeftDockCollapsed };
+
+    const apply = (): void => {
+      const w = window.innerWidth;
+      const st = useEngineStore.getState();
+      if (w >= COMPACT) {
+        real.right = st.rightDockSize;
+        real.left = st.leftDockSize;
+        real.leftCollapsed = st.isLeftDockCollapsed;
+      }
+      // Once the left shelf collapses to its rail the screen is very narrow, so the
+      // right dock can give up the most width to keep the centre stage usable.
+      const targetRight = w < COLLAPSE ? Math.min(real.right, RIGHT_MIN)
+        : w < COMPACT ? Math.min(real.right, RIGHT_COMPACT)
+        : real.right;
+      const targetLeft = w < COMPACT ? Math.min(real.left, LEFT_COMPACT) : real.left;
+      const targetCollapsed = w < COLLAPSE ? true : real.leftCollapsed;
+
+      const u: Record<string, unknown> = {};
+      if (st.rightDockSize !== targetRight) u.rightDockSize = targetRight;
+      if (st.leftDockSize !== targetLeft) u.leftDockSize = targetLeft;
+      if (st.isLeftDockCollapsed !== targetCollapsed) u.isLeftDockCollapsed = targetCollapsed;
+      if (Object.keys(u).length) useEngineStore.setState(u as never);
+    };
+
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, []);
+};
+
 const GradientExplorerApp: React.FC = () => {
   const state = useEngineStore();
   useGlobalContextMenu();
+  useResponsiveDocks();
 
   const floatingPanels = (Object.values(state.panels) as PanelState[]).filter(
     (p) => p.location === 'float' && p.isOpen,

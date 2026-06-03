@@ -525,12 +525,20 @@ export const FavientsPanel: React.FC = () => {
             <StudioIcon />
           </button>
         )}
-        <span className="text-[10px] text-gray-500 tabular-nums shrink-0">{favients.length}</span>
+        <span
+          className="text-[10px] text-gray-500 tabular-nums shrink-0"
+          title={`${favients.length} saved gradient${favients.length === 1 ? '' : 's'}`}
+        >
+          {favients.length}
+        </span>
         <FavientsSystemMenu onFlash={flash} />
       </div>
 
-      {/* Toggle-gated intro hint (shares the panel Hint chip styling). */}
-      <Hint text="Where your favourite gradients go to die — star or drag a swatch here to keep it." />
+      {/* Toggle-gated intro hint (shares the panel Hint chip styling). Suppressed when
+          the shelf is empty — the empty-state below already carries the same guidance. */}
+      {favients.length > 0 && (
+        <Hint text="Where your favourite gradients go to die — kept here, and shared with the main GMT studio." />
+      )}
 
       <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col">
         {favients.length === 0 ? (
@@ -539,6 +547,7 @@ export const FavientsPanel: React.FC = () => {
               <FavientsIcon className="text-2xl mb-2 opacity-60 block mx-auto" />
               Star a gradient in the Generator or Image, or drag one in from the Picker.
               <div className="mt-1 text-gray-600">Click a swatch to apply · drag to reorder · drag onto a slot.</div>
+              <div className="mt-1.5 text-gray-600">Saved gradients are shared with the main GMT studio.</div>
             </div>
           </div>
         ) : (

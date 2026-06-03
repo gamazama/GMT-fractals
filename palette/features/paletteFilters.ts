@@ -49,6 +49,11 @@ export const rowsByParam = defineEnumParam(
     optionHints: {
       none: 'One row band per group.',
       lightness: 'Sub-rows bucketed by lightness within each group; columns sorted independently.',
+      vividness: 'Sub-rows bucketed by colourfulness — muted up top, vivid below.',
+      complexity: 'Sub-rows bucketed by complexity — simple ramps to busy multi-stop.',
+      rainbow: 'Sub-rows bucketed by hue coverage — single-hue to full rainbow.',
+      warmth: 'Sub-rows bucketed by temperature — cool to warm.',
+      hue: 'Sub-rows bucketed by mean hue, sweeping the colour wheel.',
     },
   },
 );
@@ -59,7 +64,16 @@ export const sortByParam = defineEnumParam(
   ['lightness', 'vividness', 'complexity', 'rainbow', 'warmth', 'hue', 'name'] as const,
   'Sort within',
   { defaultIndex: 5, // Hue
-    optionLabels: { lightness: 'Lightness', vividness: 'Vividness', complexity: 'Complexity', rainbow: 'Rainbow', warmth: 'Warmth', hue: 'Hue', name: 'Name' } },
+    optionLabels: { lightness: 'Lightness', vividness: 'Vividness', complexity: 'Complexity', rainbow: 'Rainbow', warmth: 'Warmth', hue: 'Hue', name: 'Name' },
+    optionHints: {
+      lightness: 'Order each row dark → light.',
+      vividness: 'Order each row muted → vivid.',
+      complexity: 'Order each row simple → complex.',
+      rainbow: 'Order each row single-hue → rainbow.',
+      warmth: 'Order each row cool → warm.',
+      hue: 'Order each row around the colour wheel.',
+      name: 'Order each row alphabetically by name.',
+    } },
 );
 export const SORT_BY = sortByParam.values;
 export const sortByFromIndex = sortByParam.fromIndex;

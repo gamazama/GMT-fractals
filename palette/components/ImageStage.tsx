@@ -454,14 +454,15 @@ export const ImageStage: React.FC = () => {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
-                <div className="text-xs text-gray-400">Gradient <span className="ml-1 text-gray-600">{mode}</span></div>
+                <div className="text-xs text-gray-400">Result <span className="ml-1 text-gray-500 capitalize">{mode}</span></div>
                 {favConfig && <FavStar config={favConfig} name={`Image · ${mode}`} source="Image" />}
               </div>
               <div className="flex items-center gap-1.5">
-                <button onClick={() => send('A')} className="text-[11px] px-2 py-1 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30">
-                  Send to Generator A
+                <span className="text-[10px] uppercase tracking-wide text-gray-500 mr-0.5">Send to</span>
+                <button onClick={() => send('A')} title="Send to Generator slot A" className="text-[11px] px-2 py-1 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 transition-colors">
+                  Generator A
                 </button>
-                <button onClick={() => send('B')} className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10">
+                <button onClick={() => send('B')} title="Send to Generator slot B" className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors">
                   B
                 </button>
               </div>
@@ -485,7 +486,7 @@ export const ImageStage: React.FC = () => {
                   ? drawing
                     ? 'Draw path — drag across the image'
                     : 'Trace path — drag the points'
-                  : 'Source'}
+                  : 'Source image'}
               </div>
               <canvas ref={paneRef} width={640} height={340} className={`w-full rounded-md border border-zinc-800 bg-[#08080c] touch-none block ${mode === 'trace' ? (drawing ? 'cursor-crosshair' : 'cursor-grab') : ''}`} style={{ aspectRatio: '640/340' }} />
               {mode === 'trace' && (
@@ -496,20 +497,21 @@ export const ImageStage: React.FC = () => {
                       drawing ? 'bg-cyan-500/30 text-cyan-100' : 'bg-white/[0.06] text-gray-200 hover:bg-white/10'
                     }`}
                   >
-                    ✏️ {drawing ? 'Drawing…' : 'Draw path'}
+                    {drawing ? 'Drawing…' : 'Draw path'}
                   </button>
                   <button
                     onClick={() => model && (setDrawing(false), setPath(autoPath(model)))}
-                    className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10"
+                    className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors"
                   >
-                    ✨ Auto path
+                    Auto path
                   </button>
                   <button
                     onClick={() => setPath({ x0: path.x0, y0: path.y0, x1: path.x1, y1: path.y1 })}
                     disabled={!path.points}
-                    className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/[0.06]"
+                    title="Reset to a straight line between the endpoints"
+                    className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/[0.06]"
                   >
-                    ↔ Straight
+                    Straight
                   </button>
                 </div>
               )}

@@ -108,16 +108,22 @@ export const GeneratorExtrasPanel: React.FC = () => {
         </pre>
       )}
       <div className="flex items-center gap-1.5 mt-1.5">
-        <button onClick={doCopy} disabled={fmtDef.binary} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 disabled:opacity-40">
+        <button onClick={doCopy} disabled={fmtDef.binary} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/[0.06]">
           Copy
         </button>
-        <button onClick={doDownload} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10">
+        <button onClick={doDownload} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors">
           Download
         </button>
-        <button onClick={doPng} className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10">
+        <button onClick={doPng} className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors">
           PNG
         </button>
-        <button onClick={() => setShowPreview((v) => !v)} className="text-[11px] px-2 py-1 rounded-sm text-gray-400 hover:text-gray-200">
+        <button
+          onClick={() => setShowPreview((v) => !v)}
+          title={showPreview ? 'Hide output preview' : 'Show output preview'}
+          aria-label="Toggle output preview"
+          aria-pressed={showPreview}
+          className="ml-0.5 pl-1.5 border-l border-white/10 text-[11px] px-2 py-1 rounded-sm text-gray-400 hover:text-gray-200 transition-colors"
+        >
           {showPreview ? '▾' : '▸'}
         </button>
       </div>

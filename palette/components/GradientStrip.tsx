@@ -38,7 +38,10 @@ export const GradientStrip: React.FC<GradientStripProps> = ({ ramp, height = 40,
     tctx.putImageData(img, 0, 0);
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(tmp, 0, 0, 256, 1, 0, 0, cv.width, cv.height);
-  }, [ramp]);
+    // `height` is a dep: changing the canvas height attribute (e.g. the result
+    // "enlarge" toggle) resets the bitmap to blank, so we must repaint — without
+    // this the gradient disappears until the ramp next changes.
+  }, [ramp, height]);
 
   return (
     <canvas

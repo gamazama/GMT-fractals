@@ -223,6 +223,7 @@ const GroupRow: React.FC<{
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
+  labelW: number;
   swatchW: number;
   swatchH: number;
   gap: number;
@@ -230,7 +231,7 @@ const GroupRow: React.FC<{
   onHover: (h: Hover | null) => void;
   onPick: (e: CatalogEntry) => void;
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
-}> = ({ group, sprite, cols, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart }) => {
+}> = ({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart }) => {
   const cellH = swatchH + gap;
   const maxRows = Math.max(1, Math.floor(MAX_CANVAS_CSS_H / cellH));
   const chunkLen = Math.max(1, cols * maxRows);
@@ -243,18 +244,26 @@ const GroupRow: React.FC<{
           the per-bucket left gutter so a sparse bucket's gutter is a single short line
           that fits inside the swatch-row height (no leftover vertical gap). */}
       {group.label && (
-        <div className="px-2 py-px text-[11px] leading-tight text-zinc-200 font-medium border-t border-white/10">
+        <div className="px-2 py-px text-[11px] leading-tight text-zinc-200 font-medium border-t border-white/10 truncate">
           {group.label}
         </div>
       )}
       <div className="flex items-stretch">
         {/* Single centered line: "0.8–0.9 (23)" (range + count) — one line so it fits the
-            swatch-row height (no leftover vertical gap on sparse buckets). */}
-        <div className="shrink-0 px-2 flex items-center justify-end text-right leading-tight" style={{ width: LABEL_W }}>
-          <div className="text-[10px] text-zinc-400 truncate w-full">
-            {group.sublabel ? `${group.sublabel} ` : ''}
-            <span className="text-zinc-600 tabular-nums">({group.entries.length})</span>
-          </div>
+            swatch-row height (no leftover vertical gap on sparse buckets). This gutter is
+            the lowest-priority column: on a narrow wall `labelW` shrinks toward 0 so the
+            swatches keep their size; its label truncates (never wraps), and below a legible
+            width the text is dropped entirely. */}
+        <div
+          className="shrink-0 flex items-center justify-end text-right leading-tight overflow-hidden"
+          style={{ width: labelW, paddingLeft: labelW >= 28 ? 8 : 0, paddingRight: labelW >= 28 ? 8 : 0 }}
+        >
+          {labelW >= 28 && (
+            <div className="text-[10px] text-zinc-400 truncate w-full">
+              {group.sublabel ? `${group.sublabel} ` : ''}
+              <span className="text-zinc-600 tabular-nums">({group.entries.length})</span>
+            </div>
+          )}
         </div>
         <div className="flex flex-col">
           {chunks.map((chunk, ci) => (
@@ -301,7 +310,11 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     return () => ro.disconnect();
   }, []);
 
-  const cols = Math.max(1, Math.floor((width - LABEL_W - gap) / (swatchW + gap)));
+  // The left label gutter is the lowest-priority column: full width on a roomy wall,
+  // shrinking linearly to 0 as the wall narrows (≥700 → full, ≤380 → gone), so the
+  // swatches keep their size on narrow screens instead of the gutter stealing space.
+  const labelW = Math.max(0, Math.min(LABEL_W, Math.round((LABEL_W * (width - 380)) / 320)));
+  const cols = Math.max(1, Math.floor((width - labelW - gap) / (swatchW + gap)));
   // Merge sparse adjacent buckets that still fit one row (memoised — hover re-renders
   // the wall, and this walks every group).
   const rows = useMemo(() => mergeRows(groups, cols), [groups, cols]);
@@ -311,13 +324,14 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   const f = hover?.entry.facets;
 
   return (
-    <div ref={scrollRef} className="absolute inset-0 overflow-auto">
+    <div ref={scrollRef} className="absolute inset-0 overflow-auto custom-scroll">
       {rows.map((g) => (
         <GroupRow
           key={g.key}
           group={g}
           sprite={sprite}
           cols={cols}
+          labelW={labelW}
           swatchW={swatchW}
           swatchH={swatchH}
           gap={gap}

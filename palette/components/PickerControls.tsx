@@ -40,7 +40,7 @@ export const PickerThemeChips: React.FC<FeatureComponentProps> = ({ featureId, s
           </button>
         )}
       </div>
-      <div className="flex flex-wrap gap-1 max-h-44 overflow-y-auto">
+      <div className="flex flex-wrap gap-1 max-h-44 overflow-y-auto custom-scroll">
         {themes.map(({ theme, count }) => {
           const on = active.includes(theme);
           return (
@@ -48,7 +48,7 @@ export const PickerThemeChips: React.FC<FeatureComponentProps> = ({ featureId, s
               key={theme}
               onClick={() => toggle(theme)}
               style={chipStyle(theme)}
-              className={`px-1.5 py-0.5 rounded text-[10px] border whitespace-nowrap transition-shadow ${
+              className={`px-1.5 py-0.5 rounded text-[10px] border whitespace-nowrap transition-all ${
                 on ? 'border-white ring-1 ring-white' : 'border-black/30 opacity-80 hover:opacity-100'
               }`}
             >

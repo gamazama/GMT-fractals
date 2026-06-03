@@ -187,7 +187,9 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
         {selected ? (
           <canvas ref={heroRef} className="h-10 w-full rounded-md border border-zinc-700 block" />
         ) : (
-          <div className="h-10 w-full rounded-md border border-zinc-700" style={{ background: 'linear-gradient(90deg,#222,#444)' }} />
+          <div className="h-10 w-full rounded-md border border-dashed border-zinc-700/70 bg-zinc-900/40 flex items-center justify-center">
+            <span className="text-[10px] text-zinc-600">Click a swatch below to preview it here</span>
+          </div>
         )}
         <div className="mt-1.5 flex items-center justify-between text-[11px] gap-2">
           <span className="flex items-center gap-2 min-w-0">
@@ -214,7 +216,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
         ) : count > 0 ? (
           <PickerWall groups={groups} sprite={sprite} onPick={onPick} onEntryDragStart={onEntryDragStart} selectedId={selected?.id} swatchW={swatchW} swatchH={swatchH} gap={gap} />
         ) : (
-          <div className="h-full flex items-center justify-center text-sm text-zinc-600">
+          <div className="h-full flex items-center justify-center text-sm text-zinc-400 px-6 text-center">
             No gradients match — widen the Quality Filters or clear theme/source toggles.
           </div>
         )}

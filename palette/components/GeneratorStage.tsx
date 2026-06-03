@@ -74,8 +74,8 @@ const SourceRow: React.FC<{
     <div className={`relative min-w-0 transition-opacity ${dimmed ? 'opacity-40' : ''}`}>
       <div className="flex items-center gap-2 mb-0.5">
         <span className="text-[10px] uppercase tracking-wide text-gray-500 w-14 shrink-0">Source {which}</span>
-        <span className="text-[11px] text-gray-400 truncate">{name}</span>
-        <span className="ml-auto text-[10px] text-gray-600 shrink-0">{dropping ? 'drop to load' : 'click to change'}</span>
+        <span className="text-[11px] text-gray-200 truncate">{name}</span>
+        <span className={`ml-auto text-[10px] shrink-0 transition-colors ${dropping ? 'text-amber-300/90' : 'text-gray-500'}`}>{dropping ? 'drop to load' : 'click to change'}</span>
       </div>
       {/* gradient + the slot-mods trigger to its RIGHT (panel opens into the gutter) */}
       <div className="flex items-center gap-2">
@@ -84,6 +84,7 @@ const SourceRow: React.FC<{
           onDragOver={onDragOver}
           onDragLeave={() => setDropping(false)}
           onDrop={onDrop}
+          title={`Source ${which} — click to change, or drop a favourite here`}
           className={`block flex-1 min-w-0 rounded-sm ring-1 transition ${dropping ? 'ring-amber-300/80 ring-2' : 'ring-white/10 hover:ring-cyan-500/40'}`}
         >
           <GradientStrip ramp={ramp} height={height} />
@@ -137,7 +138,7 @@ export const GeneratorStage: React.FC = () => {
           below (so the gradients and the curve t-axis share a left/right edge). Takes
           the slack so the graph stays compact with no dead space under it. */}
       <div
-        className="flex-1 min-h-0 overflow-y-auto pt-3 pb-2 flex flex-col gap-1.5"
+        className={`flex-1 min-h-0 overflow-y-auto pt-3 pb-2 flex flex-col gap-1.5 ${tracks ? '' : 'justify-center'}`}
         style={{ paddingLeft: CHANNEL_PLOT_INSET_LEFT, paddingRight: CHANNEL_PLOT_INSET_RIGHT }}
       >
         <SourceRow which="A" ramp={stripA} preset={slotA} onPick={(i) => setSlot('A', i)} height={40} dimmed={curvesOn} />
@@ -157,8 +158,10 @@ export const GeneratorStage: React.FC = () => {
               <span className="text-[11px] text-gray-500">{config.stops.length} stops</span>
               <button
                 onClick={() => setResultTall((t) => !t)}
-                title="Toggle result height"
-                className="text-[11px] px-1.5 py-0.5 rounded-sm bg-white/[0.06] text-gray-400 hover:text-gray-200"
+                title={resultTall ? 'Shrink result' : 'Enlarge result'}
+                aria-label="Toggle result height"
+                aria-pressed={resultTall}
+                className={`text-[11px] px-1.5 py-0.5 rounded-sm transition-colors ${resultTall ? 'bg-cyan-500/20 text-cyan-200' : 'bg-white/[0.06] text-gray-400 hover:text-gray-200'}`}
               >
                 ⬍
               </button>
@@ -180,8 +183,11 @@ export const GeneratorStage: React.FC = () => {
           <button onClick={resetCurves} className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-300 hover:bg-white/10">
             Reset points
           </button>
-          <label className="flex items-center gap-1.5 text-[11px] text-gray-300 cursor-pointer select-none">
-            <input type="checkbox" checked={curvesOn} onChange={(e) => setCurvesOn(e.target.checked)} className="accent-cyan-500" />
+          <label
+            title={tracks ? 'Drive the output from the edited curves (sources are dimmed)' : 'Fit from source first to create editable curves'}
+            className={`flex items-center gap-1.5 text-[11px] select-none ${tracks ? 'text-gray-300 cursor-pointer' : 'text-gray-600 cursor-not-allowed'}`}
+          >
+            <input type="checkbox" checked={curvesOn} disabled={!tracks} onChange={(e) => setCurvesOn(e.target.checked)} className="accent-cyan-500 disabled:opacity-50" />
             use curves
           </label>
           <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
@@ -198,12 +204,12 @@ export const GeneratorStage: React.FC = () => {
         <div
           ref={graphRef}
           className={`overflow-hidden transition-opacity ${tracks && !curvesOn ? 'opacity-50' : ''}`}
-          style={{ height: 264 }}
+          style={{ height: tracks ? 264 : 84 }}
         >
           {tracks ? (
             <ChannelGraphEditor tracks={tracks} onTracksChange={setTracks} width={graphW} height={graphH} previewRamp={ramp} />
           ) : (
-            <div className="h-full flex items-center justify-center text-center text-[11px] text-gray-500">
+            <div className="h-full flex items-center justify-center text-center text-[11px] text-gray-500 px-4">
               No curves yet — click <span className="text-cyan-300 mx-1">Fit from source</span> to decompose the current mix into editable
               Lightness / Chroma / Hue curves.
             </div>
