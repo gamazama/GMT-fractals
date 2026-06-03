@@ -47,8 +47,6 @@ export interface GraphDataSource {
 
   // --- mutations (replace the store actions) ---
   updateKeyframes(updates: { trackId: string; keyId: string; patch: Partial<Keyframe> }[]): void;
-  /** Singular form the original hook referenced. */
-  updateKeyframe(trackId: string, keyId: string, patch: Partial<Keyframe>): void;
   selectKeyframes(ids: string[], additive: boolean): void;
   selectKeyframe(trackId: string, keyId: string, additive: boolean): void;
   deselectAllKeys(): void;
@@ -114,7 +112,6 @@ export const useAnimationStoreDataSource = (): GraphDataSource => {
   const softSelectionType = useAnimationStore((s) => s.softSelectionType);
 
   // Action selectors — stable refs.
-  const updateKeyframe = useAnimationStore((s) => s.updateKeyframe);
   const updateKeyframes = useAnimationStore((s) => s.updateKeyframes);
   const selectKeyframe = useAnimationStore((s) => s.selectKeyframe);
   const selectKeyframes = useAnimationStore((s) => s.selectKeyframes);
@@ -160,7 +157,6 @@ export const useAnimationStoreDataSource = (): GraphDataSource => {
     softSelectionEnabled,
     softSelectionRadius,
     softSelectionType,
-    updateKeyframe,
     updateKeyframes,
     selectKeyframe,
     selectKeyframes,

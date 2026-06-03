@@ -29,7 +29,6 @@ import '../engine-gmt/store/gmtPresetFields';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { PalettePickerButton } from './PalettePickerOverlay';
-import { installGradientLibrary } from './gradientLibrary';
 import { topbar } from '../engine/plugins/TopBar';
 import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
@@ -125,10 +124,11 @@ topbar.register({ id: 'gmt-palette-picker', slot: 'left', order: 22, component: 
 // CameraManagerPanel).
 installGmtCameraSlice();
 
-// Saved-gradient ("favourites") library — savedGradients slice + actions, persisted to
-// localStorage. Drives the Palette Picker overlay's Saved-gradients section. Must land
-// before that panel reads state.savedGradients. No slot hotkeys (cameras own 1..9).
-installGradientLibrary();
+// Gradient favourites are now the cross-app "Favients" shelf (palette/store/favientsStore,
+// localStorage 'gmt.favients'), shown in the Palette Picker overlay sidebar + applied to a
+// coloring layer via the Favients targets registered in registerFeatures. The legacy
+// per-app savedGradients library was retired; its data is migrated once on boot
+// (migrateSavedGradientsToFavients).
 
 // Stash pre-boot texture emits on the proxy so GmtRendererTickDriver can
 // replay them once the worker is boot-ready. loadScene() (below) fires the

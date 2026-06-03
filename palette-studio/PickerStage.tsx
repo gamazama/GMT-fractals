@@ -12,10 +12,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useEngineStore } from '../store/engineStore';
 import { usePickerStore } from '../palette/store/pickerStore';
 import { passesFilters, type FilterWindows } from '../palette/core/facets';
-import { applyEntryToColoring } from '../palette/core/gradientSeam';
+import { applyEntryToColoring, entryToGradientConfig } from '../palette/core/gradientSeam';
 import { GROUP_BY, ROWS_BY, SORT_BY } from '../palette/features/paletteFilters';
 import type { CatalogEntry } from '../palette/core/presetCatalog';
 import { PickerWall, type PickerGroup } from '../palette/components/PickerWall';
+import { FavStar } from '../palette/components/FavStar';
 
 const win = (v: { x?: number; y?: number } | undefined): [number, number] => [v?.x ?? 0, v?.y ?? 1];
 
@@ -53,6 +54,9 @@ export const PickerStage: React.FC = () => {
   useEffect(() => { load(); }, [load]);
 
   const [selected, setSelected] = useState<CatalogEntry | null>(null);
+  // The selected gradient as a GMT config, for the favourite star (presets carry stops;
+  // loaded entries are ramp-only → fitted via the seam).
+  const favConfig = useMemo(() => (selected ? entryToGradientConfig(selected) : null), [selected]);
   // Pick → preview + (when a fractal is present, e.g. in app-gmt) colour it via the seam.
   const onPick = useCallback((e: CatalogEntry) => {
     setSelected(e);
@@ -112,15 +116,15 @@ export const PickerStage: React.FC = () => {
         (map.get(b) ?? map.set(b, []).get(b)!).push(e);
       }
       const order = [...map.keys()].sort((a, b) => b - a); // most on top
+      // Category header carries the bucketing axis, e.g. "kaleidoscope (lightness)".
+      const header = catLabel ? `${catLabel} (${rowsAxis})` : '';
       return order.map((b, i) => {
         const lo = (b / ROW_BUCKETS).toFixed(1), hi = ((b + 1) / ROW_BUCKETS).toFixed(1);
-        const tail = b === ROW_BUCKETS - 1 ? ' (most)' : b === 0 ? ' (least)' : '';
         return {
           key: `${catKey}-b${b}`,
-          label: i === 0 ? catLabel : '',
-          // Axis word omitted — the global "Rows by" control already names the axis;
-          // the gutter stays a single short line (range · count) so it fits the swatch row.
-          sublabel: `${lo}–${hi}${tail}`,
+          label: i === 0 ? header : '',
+          // Range only — count is appended in the gutter as "0.8–0.9 (23)" (one line).
+          sublabel: `${lo}–${hi}`,
           entries: finish(map.get(b)!),
         };
       });
@@ -176,12 +180,15 @@ export const PickerStage: React.FC = () => {
         ) : (
           <div className="h-10 w-full rounded-md border border-zinc-700" style={{ background: 'linear-gradient(90deg,#222,#444)' }} />
         )}
-        <div className="mt-1.5 flex items-center justify-between text-[11px]">
-          <span className="text-zinc-300 font-medium">
-            {selected ? selected.name : 'Pick a gradient'}
-            {selected?.bundle && <span className="ml-2 text-zinc-600">{selected.bundle}</span>}
+        <div className="mt-1.5 flex items-center justify-between text-[11px] gap-2">
+          <span className="flex items-center gap-2 min-w-0">
+            {selected && favConfig && <FavStar config={favConfig} name={selected.name} source="Picker" size="sm" />}
+            <span className="text-zinc-300 font-medium truncate">
+              {selected ? selected.name : 'Pick a gradient'}
+              {selected?.bundle && <span className="ml-2 text-zinc-600">{selected.bundle}</span>}
+            </span>
           </span>
-          <span className="text-zinc-500 tabular-nums">{!loaded ? 'loading…' : `${count} of ${catalog.length}`}</span>
+          <span className="text-zinc-500 tabular-nums shrink-0">{!loaded ? 'loading…' : `${count} of ${catalog.length}`}</span>
         </div>
       </div>
 

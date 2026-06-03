@@ -177,8 +177,7 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
 
     // --- TOOLS CONTROLLER HOOK ---
     const tools = useGraphTools({
-        sequence, trackIds, selectedTrackIds, selectedKeyframeIds, frameWidth,
-        view, normalized, trackRanges, v2p, canvasPixelToFrame
+        sequence, trackIds, selectedTrackIds, selectedKeyframeIds, v2p, canvasPixelToFrame
     }, graphDataSource);
 
     // --- VIEW MANIPULATION (Fit/Normalize) ---

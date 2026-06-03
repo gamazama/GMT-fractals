@@ -19,6 +19,17 @@ registerGmtFeatures();
 import { registerPaletteUI } from '../palette/registerPaletteUI';
 registerPaletteUI();
 
+// Favients (the cross-app gradient-favourites shelf) apply targets for app-gmt: a
+// favourite click/drop lands on a fractal COLORING layer via the gradient seam.
+import { registerFavientTarget } from '../palette/core/favientTargets';
+import { applyGradientConfig } from '../palette/core/gradientSeam';
+registerFavientTarget({ id: 'coloring-1', label: 'Coloring · Layer 1', apply: (c) => applyGradientConfig(c, 1) });
+registerFavientTarget({ id: 'coloring-2', label: 'Coloring · Layer 2', apply: (c) => applyGradientConfig(c, 2) });
+
+// One-time import of the legacy saved-gradient library into Favients (no data loss).
+import { migrateSavedGradientsToFavients } from './favientsMigration';
+migrateSavedGradientsToFavients();
+
 // 42 fractal formulas — self-register into FractalRegistry on module
 // load via their `index.ts` barrel.
 import '../engine-gmt/formulas/index';

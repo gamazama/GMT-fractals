@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { GraphViewTransform, valueToPixel } from '../utils/GraphUtils';
 import { constrainKeyframeHandles, calculateSoftFalloff, scaleKeyframeHandles } from '../utils/timelineUtils';
 import { Keyframe, BezierHandle } from '../types';
-import { GraphDataSource, useAnimationStoreDataSource } from '../utils/GraphDataSource';
+import type { GraphDataSource } from '../utils/GraphDataSource';
 
 interface KeyDragStart {
     trackId: string;
@@ -47,10 +47,10 @@ export const useGraphInteraction = (
     frameToCanvasPixel: (f: number) => number,
     canvasPixelToFrame: (px: number) => number,
     LEFT_GUTTER_WIDTH: number,
-    // Store-agnostic data source. Defaults to the live-timeline animation store;
-    // the palette channel-curve editor supplies a local-state impl (no scrub,
-    // no track selection). See utils/GraphDataSource.ts.
-    dataSource: GraphDataSource = useAnimationStoreDataSource()
+    // Store-agnostic data source — the timeline passes the store source, the
+    // palette its local impl (no scrub, no track selection). Always supplied by
+    // callers. See utils/GraphDataSource.ts.
+    dataSource: GraphDataSource
 ) => {
     // All store reads/writes flow through `ds` — for the timeline this is the
     // default store data source (the same narrow per-field subs + stable action

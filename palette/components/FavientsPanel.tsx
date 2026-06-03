@@ -106,28 +106,22 @@ export const FavientsPanel: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-zinc-900/95 text-gray-200">
-      <div className="px-3 pt-2.5 pb-2 border-b border-white/10 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-amber-300 text-sm leading-none">★</span>
-          <span className="text-xs font-medium tracking-wide">Favients</span>
-          <span className="ml-auto text-[10px] text-gray-500 tabular-nums">{favients.length}</span>
-        </div>
-        <div className="mt-2 flex items-center gap-1.5">
-          <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Applying to</span>
-          {targets.length ? (
-            <GenericDropdown
-              value={activeTarget?.id ?? ''}
-              options={targets.map((t) => ({ label: t.label, value: t.id }))}
-              onChange={(v) => setSelectedTarget(v as string)}
-              fullWidth
-            />
-          ) : (
-            <span className="text-[10px] text-gray-600 italic">no targets in this app</span>
-          )}
-        </div>
+      <div className="px-2.5 py-2 border-b border-white/10 shrink-0 flex items-center gap-1.5">
+        <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Applying to</span>
+        {targets.length ? (
+          <GenericDropdown
+            value={activeTarget?.id ?? ''}
+            options={targets.map((t) => ({ label: t.label, value: t.id }))}
+            onChange={(v) => setSelectedTarget(v as string)}
+            fullWidth
+          />
+        ) : (
+          <span className="text-[10px] text-gray-600 italic">no targets in this app</span>
+        )}
+        <span className="ml-1 text-[10px] text-gray-500 tabular-nums shrink-0">{favients.length}</span>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2.5">
         {favients.length ? (
           <div className="flex flex-wrap gap-2.5">
             {favients.map((f) => (

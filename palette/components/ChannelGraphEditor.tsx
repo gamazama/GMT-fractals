@@ -270,10 +270,6 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     [selectKeyframes],
   );
   const deselectAllKeys = useCallback(() => setSelectedKeyframeIds([]), []);
-  const updateKeyframeSingle = useCallback(
-    (tid: string, kid: string, patch: Partial<Keyframe>) => updateKeyframes([{ trackId: tid, keyId: kid, patch }]),
-    [updateKeyframes],
-  );
   // Wholesale-replace target tracks' keyframe arrays (bake / simplify add and
   // remove keys). Reads the live tracks ref so it composes with an in-flight
   // drag, replaces only the named tracks, leaves the rest intact.
@@ -325,7 +321,6 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     softSelectionRadius: softRadius,
     softSelectionType: softType,
     updateKeyframes,
-    updateKeyframe: updateKeyframeSingle,
     selectKeyframes,
     selectKeyframe,
     deselectAllKeys,
@@ -362,10 +357,6 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       trackIds: displayTrackIds,
       selectedTrackIds: displayTrackIds,
       selectedKeyframeIds,
-      frameWidth,
-      view,
-      normalized,
-      trackRanges,
       v2p,
       canvasPixelToFrame,
     },

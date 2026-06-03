@@ -4,18 +4,13 @@ import { calculateEulerUpdates, calculateSmoothingUpdates, calculateResampleUpda
 import { calculateConstrainedSmoothing } from '../utils/ConstrainedSmoothing';
 import { simplifyTrack } from '../utils/CurveFitting';
 import { Keyframe, AnimationSequence } from '../types';
-import { GraphViewTransform } from '../utils/GraphUtils';
-import { GraphDataSource, useAnimationStoreDataSource } from '../utils/GraphDataSource';
+import type { GraphDataSource } from '../utils/GraphDataSource';
 
 interface GraphToolsProps {
     sequence: AnimationSequence;
     trackIds: string[]; // Visible tracks
     selectedTrackIds: string[];
     selectedKeyframeIds: string[];
-    frameWidth: number;
-    view: GraphViewTransform;
-    normalized: boolean;
-    trackRanges: Record<string, { min: number, max: number, span: number }>;
     v2p: (val: number, tid: string) => number;
     canvasPixelToFrame: (px: number) => number;
 }
@@ -26,16 +21,12 @@ export const useGraphTools = (
         trackIds,
         selectedTrackIds,
         selectedKeyframeIds,
-        frameWidth,
-        view,
-        normalized,
-        trackRanges,
         v2p,
         canvasPixelToFrame
     }: GraphToolsProps,
-    // Store-agnostic data source. Defaults to the live-timeline animation store;
-    // the palette channel-curve editor supplies a local-state impl.
-    dataSource: GraphDataSource = useAnimationStoreDataSource()
+    // Store-agnostic data source — the timeline passes the store source, the
+    // palette its local impl. Always supplied by callers.
+    dataSource: GraphDataSource
 ) => {
     const ds = dataSource;
     // Smoothing physics — store provides these; palette omits → defaults.
@@ -200,8 +191,7 @@ export const useGraphTools = (
             // Apply logic
             if (!originalSequenceRef.current) return;
             const targets = getTargetTracks();
-            let keysToSmooth = selectedKeyframeIds;
-            if (keysToSmooth.length === 0) keysToSmooth = getTargetKeys();
+            const keysToSmooth = getTargetKeys();
 
             let updates: { trackId: string; keyId: string; patch: Partial<Keyframe> }[] = [];
             if (r > 0) {

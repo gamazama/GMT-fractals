@@ -173,9 +173,13 @@ const GroupRow: React.FC<{
         </div>
       )}
       <div className="flex items-stretch border-b border-white/5">
-        <div className="shrink-0 px-2 flex flex-col justify-center items-end text-right leading-tight" style={{ width: LABEL_W }}>
-          {group.sublabel && <div className="text-[10px] text-zinc-400 truncate w-full">{group.sublabel}</div>}
-          <div className="text-[10px] text-zinc-600 tabular-nums">{group.entries.length}</div>
+        {/* Single centered line: "0.8–0.9 (23)" (range + count) — one line so it fits the
+            swatch-row height (no leftover vertical gap on sparse buckets). */}
+        <div className="shrink-0 px-2 flex items-center justify-end text-right leading-tight" style={{ width: LABEL_W }}>
+          <div className="text-[10px] text-zinc-400 truncate w-full">
+            {group.sublabel ? `${group.sublabel} ` : ''}
+            <span className="text-zinc-600 tabular-nums">({group.entries.length})</span>
+          </div>
         </div>
         <div className="flex flex-col">
           {chunks.map((chunk, ci) => (
