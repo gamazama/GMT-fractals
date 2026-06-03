@@ -29,6 +29,8 @@ import '../engine-gmt/store/gmtPresetFields';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { PalettePickerButton } from './PalettePickerOverlay';
+import { FavientsToggleButton } from './FavientsToggleButton';
+import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { topbar } from '../engine/plugins/TopBar';
 import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
@@ -117,6 +119,11 @@ registerGmtUi();
 // sidebar; picking still colours the fractal via the gradientSeam
 // (PickerStage.onPick → applyEntryToColoring → setColoring).
 topbar.register({ id: 'gmt-palette-picker', slot: 'left', order: 22, component: PalettePickerButton });
+
+// Favients — the floating gradient-favourites shelf (toggle button). Sits BEFORE the
+// Palettes button (order 22). The panel itself is registered in the manifest below +
+// floated/persisted after applyPanelManifest.
+topbar.register({ id: 'gmt-favients', slot: 'left', order: 21, component: FavientsToggleButton });
 
 // GMT camera slice — savedCameras / undo / redo / addCamera / resetCamera.
 // Patches the store with actions engine-core doesn't provide. Must land
@@ -564,7 +571,17 @@ applyPanelManifest([
   // Palette picker now lives in a full-width overlay (topbar "Palettes" button →
   // PalettePickerOverlay), which embeds the paletteFilters controls in a sidebar —
   // no cramped right-dock panels.
+  // Favients shelf — registered here so it can float; restoreFavientsPanel() floats it.
+  { id: 'Favients', dock: 'right', order: 90, component: 'panel-favients', isCore: false },
 ]);
+
+// Float the Favients shelf at its remembered (or default MIDDLE-LEFT) spot, open by
+// default, and persist later open/move/resize.
+{
+  const fh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  restoreFavientsPanel({ x: 20, y: Math.max(20, Math.round(fh / 2 - 160)), w: 296, h: 320, open: true });
+  watchFavientsPanel();
+}
 
 // Boot is now driven by LoadingScreen → useAppStartup.bootEngine, which
 // fires after the LoadingScreen's progress reaches 100% (gives

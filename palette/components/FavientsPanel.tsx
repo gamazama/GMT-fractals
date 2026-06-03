@@ -13,7 +13,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { GenericDropdown } from '../../components/GenericDropdown';
 import { useFavientsStore, type Favient } from '../store/favientsStore';
 import { getFavientTargets, getFavientTarget, subscribeFavientTargets } from '../core/favientTargets';
-import { setFavientDrag } from '../core/favientDnd';
+import { setFavientDrag, readFavientDrag, FAVIENT_DND_MIME } from '../core/favientDnd';
 import { renderStopsToRamp } from '../core/gmtGradient';
 
 /** Re-render when hosts (re)register apply targets. */
@@ -58,7 +58,7 @@ const FavientSwatch: React.FC<{
     <div
       className="group relative shrink-0"
       draggable
-      onDragStart={(e) => setFavientDrag(e.dataTransfer, { config: fav.config, name: fav.name })}
+      onDragStart={(e) => setFavientDrag(e.dataTransfer, { config: fav.config, name: fav.name, source: fav.source })}
       title={`${fav.name}${fav.source ? ` · ${fav.source}` : ''}\nClick to apply · drag onto a target`}
     >
       <button
@@ -82,9 +82,12 @@ const FavientSwatch: React.FC<{
 export const FavientsPanel: React.FC = () => {
   const favients = useFavientsStore((s) => s.favients);
   const remove = useFavientsStore((s) => s.remove);
+  const add = useFavientsStore((s) => s.add);
+  const isFav = useFavientsStore((s) => s.isFav);
   const selectedTargetId = useFavientsStore((s) => s.selectedTargetId);
   const setSelectedTarget = useFavientsStore((s) => s.setSelectedTarget);
   const targets = useFavientTargets();
+  const [dropActive, setDropActive] = useState(false);
 
   const [toast, setToast] = useState<string | null>(null);
   const flash = (m: string) => {
@@ -104,8 +107,33 @@ export const FavientsPanel: React.FC = () => {
     flash(`${fav.name} → ${activeTarget.label}`);
   };
 
+  // Drop a gradient (dragged from the Picker wall or another surface) here to favourite it.
+  const onDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!dropActive) setDropActive(true);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    const p = readFavientDrag(e.dataTransfer);
+    setDropActive(false);
+    if (!p) return;
+    e.preventDefault();
+    if (isFav(p.config)) {
+      flash('Already in Favients');
+      return;
+    }
+    add(p.config, p.name, p.source ?? 'Saved');
+    flash(`Added ${p.name}`);
+  };
+
   return (
-    <div className="flex flex-col h-full min-h-0 bg-zinc-900/95 text-gray-200">
+    <div
+      className={`flex flex-col h-full min-h-0 bg-zinc-900/95 text-gray-200 ${dropActive ? 'ring-2 ring-amber-300/70 ring-inset' : ''}`}
+      onDragOver={onDragOver}
+      onDragLeave={() => setDropActive(false)}
+      onDrop={onDrop}
+    >
       <div className="px-2.5 py-2 border-b border-white/10 shrink-0 flex items-center gap-1.5">
         <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Applying to</span>
         {targets.length ? (
@@ -132,7 +160,7 @@ export const FavientsPanel: React.FC = () => {
           <div className="h-full flex items-center justify-center text-center px-4">
             <div className="text-[11px] text-gray-500 leading-relaxed">
               <div className="text-2xl mb-2 opacity-60">★</div>
-              Star a gradient in the Generator, Image, or Picker to keep it here.
+              Star a gradient in the Generator or Image, or drag one in from the Picker.
               <div className="mt-1 text-gray-600">Click a swatch to apply · drag it onto a slot.</div>
             </div>
           </div>

@@ -9,6 +9,7 @@
 
 import { useEngineStore } from '../store/engineStore';
 import { applyPanelManifest } from '../engine/PanelManifest';
+import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
 
 export const wirePaletteStudio = (): void => {
   applyPanelManifest([
@@ -25,10 +26,9 @@ export const wirePaletteStudio = (): void => {
   store.movePanel('Image', 'right', 2);
   store.togglePanel('Generator', true); // default-active tab
 
-  // Favients floats, parked top-right, open by default ("leave it on screen").
-  store.movePanel('Favients', 'float');
-  const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
-  store.setFloatPosition('Favients', Math.max(20, w - 320), 64);
-  store.setFloatSize('Favients', 296, 300);
-  store.togglePanel('Favients', true);
+  // Favients floats, parked MIDDLE-LEFT by default ("leave it on screen") — but its
+  // open-state/position/size are remembered across sessions once the user moves it.
+  const fh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  restoreFavientsPanel({ x: 20, y: Math.max(20, Math.round(fh / 2 - 150)), w: 296, h: 300, open: true });
+  watchFavientsPanel();
 };

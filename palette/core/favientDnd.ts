@@ -11,6 +11,8 @@ export const FAVIENT_DND_MIME = 'application/x-gmt-favient';
 export interface FavientDragPayload {
   config: GradientConfig;
   name: string;
+  /** Provenance, carried so a drop-to-favourite keeps the gradient's origin label. */
+  source?: string;
 }
 
 /** Write a favourite onto a drag event's dataTransfer (custom MIME + text fallback). */

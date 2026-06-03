@@ -18,7 +18,6 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { PickerStage } from '../palette-studio/PickerStage';
 import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
-import { FavientsPanel } from '../palette/components/FavientsPanel';
 
 const SwatchIcon: React.FC = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -43,15 +42,10 @@ const PalettePickerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       </button>
     </div>
     <div className="flex-1 flex min-h-0">
-      <div className="w-[300px] shrink-0 flex flex-col min-h-0 border-r border-white/10 bg-zinc-900/60">
-        {/* Quality filters up top; the Favients shelf fills the rest with its own scroll.
-            A picked/auditioned gradient is favourited via the ★ on the picker hero. */}
-        <div className="shrink-0 max-h-[55%] overflow-y-auto">
-          <AutoFeaturePanel featureId="paletteFilters" />
-        </div>
-        <div className="flex-1 min-h-0 border-t border-white/10">
-          <FavientsPanel />
-        </div>
+      {/* Quality filters only. Favourites live in the FLOATING Favients shelf (topbar ★) —
+          favourite a picked gradient via the ★ on the picker hero. */}
+      <div className="w-[300px] shrink-0 overflow-y-auto border-r border-white/10 bg-zinc-900/60">
+        <AutoFeaturePanel featureId="paletteFilters" />
       </div>
       <div className="flex-1 relative min-w-0">
         {/* PickerStage is flex-1; a relative slot gives it no height, so wrap in an

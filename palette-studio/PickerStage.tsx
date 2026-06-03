@@ -17,6 +17,7 @@ import { GROUP_BY, ROWS_BY, SORT_BY } from '../palette/features/paletteFilters';
 import type { CatalogEntry } from '../palette/core/presetCatalog';
 import { PickerWall, type PickerGroup } from '../palette/components/PickerWall';
 import { FavStar } from '../palette/components/FavStar';
+import { setFavientDrag } from '../palette/core/favientDnd';
 
 const win = (v: { x?: number; y?: number } | undefined): [number, number] => [v?.x ?? 0, v?.y ?? 1];
 
@@ -61,6 +62,10 @@ export const PickerStage: React.FC = () => {
   const onPick = useCallback((e: CatalogEntry) => {
     setSelected(e);
     applyEntryToColoring(e);
+  }, []);
+  // Drag a swatch out of the wall to drop it into the Favients shelf.
+  const onEntryDragStart = useCallback((e: CatalogEntry, dt: DataTransfer) => {
+    setFavientDrag(dt, { config: entryToGradientConfig(e), name: e.name, source: 'Picker' });
   }, []);
 
   // Shared 256×N sprite — each entry's `row` is its sprite row. Built once per catalog.
@@ -119,12 +124,14 @@ export const PickerStage: React.FC = () => {
       // Category header carries the bucketing axis, e.g. "kaleidoscope (lightness)".
       const header = catLabel ? `${catLabel} (${rowsAxis})` : '';
       return order.map((b, i) => {
-        const lo = (b / ROW_BUCKETS).toFixed(1), hi = ((b + 1) / ROW_BUCKETS).toFixed(1);
+        const lo = b / ROW_BUCKETS, hi = (b + 1) / ROW_BUCKETS;
         return {
           key: `${catKey}-b${b}`,
+          cat: catKey, // adjacent buckets in the same category may merge into one row
+          lo, hi, // numeric bounds so the wall can union ranges when merging
           label: i === 0 ? header : '',
           // Range only — count is appended in the gutter as "0.8–0.9 (23)" (one line).
-          sublabel: `${lo}–${hi}`,
+          sublabel: `${lo.toFixed(1)}–${hi.toFixed(1)}`,
           entries: finish(map.get(b)!),
         };
       });
@@ -148,7 +155,7 @@ export const PickerStage: React.FC = () => {
 
   const swatchW = Math.round(pf?.swatchSize?.x ?? 32);
   const swatchH = Math.round(pf?.swatchSize?.y ?? 18);
-  const gap = Math.max(0, Math.round(pf?.paddingSize ?? 1));
+  const gap = Math.max(0, Math.round(pf?.paddingSize ?? 0));
 
   // Crisp hero: upscale the 256-px ramp to the bar's real resolution with HIGH-quality
   // bilinear smoothing (drawImage), rather than letting CSS stretch a 256×1 canvas.
@@ -196,7 +203,7 @@ export const PickerStage: React.FC = () => {
         {!loaded ? (
           <div className="h-full flex items-center justify-center text-sm text-zinc-600">Loading gradient library…</div>
         ) : count > 0 ? (
-          <PickerWall groups={groups} sprite={sprite} onPick={onPick} selectedId={selected?.id} swatchW={swatchW} swatchH={swatchH} gap={gap} />
+          <PickerWall groups={groups} sprite={sprite} onPick={onPick} onEntryDragStart={onEntryDragStart} selectedId={selected?.id} swatchW={swatchW} swatchH={swatchH} gap={gap} />
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-zinc-600">
             No gradients match — widen the Quality Filters or clear theme/source toggles.

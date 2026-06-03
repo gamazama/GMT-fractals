@@ -13,7 +13,7 @@
  * Pure / host-agnostic: groups + sprite in, onPick out.
  */
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogEntry } from '../core/presetCatalog';
 
 export interface PickerGroup {
@@ -23,6 +23,11 @@ export interface PickerGroup {
   /** Secondary label (e.g. the facet row bucket). */
   sublabel?: string;
   entries: CatalogEntry[];
+  /** Category id — adjacent groups sharing it (and a facet range) may merge into one row. */
+  cat?: string;
+  /** Facet bucket bounds (0..1) for a bucketed sub-row; absent = not row-mergeable. */
+  lo?: number;
+  hi?: number;
 }
 
 export interface PickerWallProps {
@@ -30,6 +35,8 @@ export interface PickerWallProps {
   /** Shared 256×N sprite — row N is catalog entry `row`. */
   sprite: HTMLCanvasElement | null;
   onPick: (entry: CatalogEntry) => void;
+  /** Begin an HTML5 drag for the swatch under the pointer (e.g. drag into Favients). */
+  onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
   selectedId?: string;
   swatchW?: number;
   swatchH?: number;
@@ -38,6 +45,37 @@ export interface PickerWallProps {
 
 const LABEL_W = 132;
 const MAX_CANVAS_CSS_H = 8000; // keep backing (×dpr) under the browser canvas max
+
+/**
+ * Merge adjacent bucketed sub-rows within the SAME category while their combined swatch
+ * count still fits one screen-width row (≤ cols) — so sparse facet bands don't each
+ * waste a whole row. Buckets that already overflow a row, and non-bucketed groups (no
+ * lo/hi), pass through untouched. The category header rides the first group of its
+ * category (group.label), so merging the trailing buckets preserves it; the merged
+ * group's range sublabel + key are recomputed from the combined bounds.
+ */
+const mergeRows = (groups: PickerGroup[], cols: number): PickerGroup[] => {
+  const out: PickerGroup[] = [];
+  let acc: PickerGroup | null = null;
+  const flush = () => { if (acc) { out.push(acc); acc = null; } };
+  for (const g of groups) {
+    const mergeable = g.lo != null && g.hi != null && g.entries.length <= cols;
+    if (!mergeable) { flush(); out.push(g); continue; }
+    if (acc && acc.cat === g.cat && acc.entries.length + g.entries.length <= cols) {
+      const a: PickerGroup = acc; // explicit type — narrowing is lost across the `flush` closure
+      acc = { ...a, lo: Math.min(a.lo!, g.lo!), hi: Math.max(a.hi!, g.hi!), entries: a.entries.concat(g.entries) };
+    } else {
+      flush();
+      acc = { ...g };
+    }
+  }
+  flush();
+  return out.map((g) =>
+    g.lo != null && g.hi != null
+      ? { ...g, key: `${g.cat ?? ''}-${g.lo.toFixed(2)}-${g.hi.toFixed(2)}`, sublabel: `${g.lo.toFixed(1)}–${g.hi.toFixed(1)}` }
+      : g,
+  );
+};
 
 type Hover = { entry: CatalogEntry; ex: number; ey: number; ew: number; eh: number };
 
@@ -52,13 +90,17 @@ const SwatchCanvas: React.FC<{
   selectedId?: string;
   onHover: (h: Hover | null) => void;
   onPick: (e: CatalogEntry) => void;
-}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, onHover, onPick }) => {
+  onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
+}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
   const cellW = swatchW + gap;
   const cellH = swatchH + gap;
   const nrows = Math.max(1, Math.ceil(entries.length / cols));
+  // Keep the trailing cell gap: it's what spaces this canvas from the next bucket's rows,
+  // so the `gap` (Padding) is uniform between EVERY row — within a canvas and across bucket
+  // boundaries alike. At gap = 0 it's pixel-flush; raising Padding spaces all rows equally.
   const cssW = cols * cellW;
   const cssH = nrows * cellH;
 
@@ -120,6 +162,37 @@ const SwatchCanvas: React.FC<{
           ref={canvasRef}
           style={{ width: cssW, height: cssH }}
           className="block cursor-pointer"
+          draggable={!!onEntryDragStart}
+          onDragStart={(e) => {
+            const h = hit(e);
+            if (!h || !onEntryDragStart) {
+              e.preventDefault();
+              return;
+            }
+            // Custom drag image = just the hovered swatch (matching the hover zoom), so the
+            // ghost isn't the whole canvas sheet. Drawn into a throwaway off-screen canvas
+            // that setDragImage snapshots synchronously, then removed next tick.
+            const dw = swatchW * 3,
+              dh = swatchH * 2;
+            const di = document.createElement('canvas');
+            const dpr = window.devicePixelRatio || 1;
+            di.width = Math.round(dw * dpr);
+            di.height = Math.round(dh * dpr);
+            di.style.cssText = `position:fixed;top:-9999px;left:0;width:${dw}px;height:${dh}px`;
+            const dctx = di.getContext('2d');
+            if (dctx) {
+              dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+              dctx.imageSmoothingEnabled = false;
+              dctx.drawImage(sprite, 0, h.entry.row, 256, 1, 0, 0, dw, dh);
+              dctx.strokeStyle = '#fff';
+              dctx.lineWidth = 1;
+              dctx.strokeRect(0.5, 0.5, dw - 1, dh - 1);
+            }
+            document.body.appendChild(di);
+            e.dataTransfer.setDragImage(di, dw / 2, dh / 2);
+            setTimeout(() => di.remove(), 0);
+            onEntryDragStart(h.entry, e.dataTransfer);
+          }}
           onMouseMove={(e) => {
             const h = hit(e);
             if (!h) { onHover(null); return; }
@@ -155,7 +228,8 @@ const GroupRow: React.FC<{
   selectedId?: string;
   onHover: (h: Hover | null) => void;
   onPick: (e: CatalogEntry) => void;
-}> = ({ group, sprite, cols, swatchW, swatchH, gap, selectedId, onHover, onPick }) => {
+  onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
+}> = ({ group, sprite, cols, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart }) => {
   const cellH = swatchH + gap;
   const maxRows = Math.max(1, Math.floor(MAX_CANVAS_CSS_H / cellH));
   const chunkLen = Math.max(1, cols * maxRows);
@@ -168,11 +242,11 @@ const GroupRow: React.FC<{
           the per-bucket left gutter so a sparse bucket's gutter is a single short line
           that fits inside the swatch-row height (no leftover vertical gap). */}
       {group.label && (
-        <div className="px-2 pt-2 pb-0.5 text-[11px] text-zinc-200 font-medium border-t border-white/10">
+        <div className="px-2 py-px text-[11px] leading-tight text-zinc-200 font-medium border-t border-white/10">
           {group.label}
         </div>
       )}
-      <div className="flex items-stretch border-b border-white/5">
+      <div className="flex items-stretch">
         {/* Single centered line: "0.8–0.9 (23)" (range + count) — one line so it fits the
             swatch-row height (no leftover vertical gap on sparse buckets). */}
         <div className="shrink-0 px-2 flex items-center justify-end text-right leading-tight" style={{ width: LABEL_W }}>
@@ -194,6 +268,7 @@ const GroupRow: React.FC<{
             selectedId={selectedId}
             onHover={onHover}
             onPick={onPick}
+            onEntryDragStart={onEntryDragStart}
           />
           ))}
         </div>
@@ -206,10 +281,11 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   groups,
   sprite,
   onPick,
+  onEntryDragStart,
   selectedId,
   swatchW = 32,
   swatchH = 18,
-  gap = 1,
+  gap = 0,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef<HTMLCanvasElement>(null);
@@ -226,6 +302,9 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   }, []);
 
   const cols = Math.max(1, Math.floor((width - LABEL_W - gap) / (swatchW + gap)));
+  // Merge sparse adjacent buckets that still fit one row (memoised — hover re-renders
+  // the wall, and this walks every group).
+  const rows = useMemo(() => mergeRows(groups, cols), [groups, cols]);
 
   useEffect(() => {
     const cv = zoomRef.current;
@@ -244,7 +323,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
 
   return (
     <div ref={scrollRef} className="absolute inset-0 overflow-auto">
-      {groups.map((g) => (
+      {rows.map((g) => (
         <GroupRow
           key={g.key}
           group={g}
@@ -256,6 +335,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
           selectedId={selectedId}
           onHover={setHover}
           onPick={onPick}
+          onEntryDragStart={onEntryDragStart}
         />
       ))}
 

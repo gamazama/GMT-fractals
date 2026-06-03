@@ -45,6 +45,18 @@ export const buildPresetCatalog = (): CatalogEntry[] => {
 };
 
 let _adhocSeq = 0;
+/** Content signature → catalog index, so identical ramps dedupe to one entry. */
+const _adhocBySig = new Map<string, number>();
+
+/** FNV-1a hash of the RGBA buffer — a stable content key for ad-hoc ramps. */
+const rampSig = (buf: Uint8Array): string => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < buf.length; i++) {
+    h ^= buf[i];
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+};
 
 /**
  * Register an arbitrary 256-step RGB ramp as an ad-hoc catalog entry and return its
@@ -53,8 +65,13 @@ let _adhocSeq = 0;
  * it here as a first-class CatalogEntry (no `stops`, only a `ramp`), making it
  * visible to both the source picker and `presetRamp()` via the returned index.
  *
- * Entries with the same `name` are REPLACED in place (one slot per repeated send,
- * so the catalog doesn't grow unbounded as the user re-sends from the Image tab).
+ * Deduped by CONTENT (not name): an identical ramp reuses its existing index (a true
+ * no-op — nothing changed), but any different ramp gets a NEW index even if the name
+ * collides (e.g. two "Image · distill" extractions). Keying on content is essential —
+ * the generator memoises its source ramp on the slot INDEX, so replacing a ramp in
+ * place under the same index would leave the slot showing the stale gradient (the
+ * "drop/apply only works once" bug). Distinct contents the user actually sends are
+ * modest, so growth is bounded in practice.
  */
 export const registerCustomRamp = (ramp: RGB[], name: string): number => {
   const cat = buildPresetCatalog(); // ensure _cache exists (returns it)
@@ -65,13 +82,15 @@ export const registerCustomRamp = (ramp: RGB[], name: string): number => {
     buf[i * 4 + 2] = Math.max(0, Math.min(255, Math.round(ramp[i].b)));
     buf[i * 4 + 3] = 255;
   }
-  const facets = computeFacets(ramp);
-  const existing = cat.findIndex((e) => e.id.startsWith('adhoc-') && e.name === name);
-  if (existing >= 0) {
-    cat[existing] = { ...cat[existing], facets, ramp: buf, stops: undefined };
-    return existing;
+  const sig = rampSig(buf);
+  const hit = _adhocBySig.get(sig);
+  if (hit !== undefined && cat[hit]) {
+    // Same colours already registered — reuse the slot (refresh the display name).
+    cat[hit] = { ...cat[hit], name };
+    return hit;
   }
   const row = cat.length;
-  cat.push({ id: `adhoc-${_adhocSeq++}`, name, facets, ramp: buf, row });
+  cat.push({ id: `adhoc-${_adhocSeq++}`, name, facets: computeFacets(ramp), ramp: buf, row });
+  _adhocBySig.set(sig, row);
   return row;
 };

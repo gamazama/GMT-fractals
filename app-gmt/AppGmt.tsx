@@ -25,6 +25,7 @@ import { HudHost } from '../engine/plugins/Hud';
 import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
+import { Z } from '../components/ui/zIndex';
 import { PanelRouter } from '../components/PanelRouter';
 import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
@@ -237,7 +238,9 @@ export const AppGmt: React.FC = () => {
 
                 {floatingPanels.map((p) => (
                     <BenchProfiler key={p.id} id={`FloatingPanel:${p.id}`}>
-                        <DraggableWindow id={p.id} title={p.id}>
+                        {/* Favients floats ABOVE the Palettes overlay (Z.modal) so the user can
+                            drag picker swatches onto it while browsing. */}
+                        <DraggableWindow id={p.id} title={p.id} zIndex={p.id === 'Favients' ? Z.modal + 50 : undefined}>
                             <PanelRouter
                                 activeTab={p.id as PanelId}
                                 state={useEngineStore.getState()}
