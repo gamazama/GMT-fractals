@@ -83,7 +83,7 @@ export const Mandelbulb: FractalDefinition = {
             coreMath: { iterations: 16, paramA: 8, paramD: 0, vec2A: { x: 0, y: 0 }, vec2B: { x: 0, y: 0.5 } },
             geometry: { hybridMode: false, hybridIter: 0, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1, hybridSkip: 1, hybridSwap: false, juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0 },
             coloring: {
-                mode: 0, repeats: 2, phase: 0, scale: 1, offset: 0, bias: 1, twist: 0, escape: 1.2,
+                mode: 0, repeats: 2, phase: 0, scale: 18.6916, offset: 0.82243, bias: 1, twist: 0, escape: 1.2,
                 mode2: 4, repeats2: 7, phase2: 0, blendMode: 0, blendOpacity: 0, twist2: 0,
                 layer3Color: "#ffffff", layer3Scale: 20, layer3Strength: 0, layer3Bump: 0, layer3Turbulence: 0,
                 gradient: [ { id: "2", position: 1, color: "#FFFFFF", bias: 0.5, interpolation: "linear" } ],
@@ -103,7 +103,7 @@ export const Mandelbulb: FractalDefinition = {
                 aoEnabled: true, aoSamples: 5, aoStochasticCp: true
             },
             materials: {
-                reflection: 0.2, specular: 1, roughness: 0.75, diffuse: 1, envStrength: 0.3,
+                reflection: 0.2, specular: 0.6, roughness: 0.75, diffuse: 1, envStrength: 0.3,
                 rim: 0, rimExponent: 3, emission: 0, emissionMode: 0, emissionColor: "#ffffff",
                 envMapVisible: false, useEnvMap: true, envSource: 1,
                 envGradientStops: [
