@@ -45,3 +45,26 @@ export const subscribeFavientTargets = (l: () => void): (() => void) => {
     _listeners.delete(l);
   };
 };
+
+// --- "browse palettes" action (host-specific) — drives the Favients header's Palettes
+// button. Studio switches to the Picker tab; app-gmt opens the Palettes overlay. ---
+let _browse: (() => void) | null = null;
+
+export const setFavientBrowseAction = (fn: (() => void) | null): void => {
+  _browse = fn;
+  _listeners.forEach((l) => l());
+};
+
+export const getFavientBrowseAction = (): (() => void) | null => _browse;
+
+// --- "open Palette Studio" action (host-specific) — drives the Favients header's
+// studio-launch button. Registered only where launching the standalone studio makes
+// sense (app-gmt); unset inside the studio itself, so the button hides there. ---
+let _studio: (() => void) | null = null;
+
+export const setFavientStudioAction = (fn: (() => void) | null): void => {
+  _studio = fn;
+  _listeners.forEach((l) => l());
+};
+
+export const getFavientStudioAction = (): (() => void) | null => _studio;

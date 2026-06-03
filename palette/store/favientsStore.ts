@@ -15,6 +15,7 @@
 
 import { create } from 'zustand';
 import type { GradientConfig } from '../../types';
+import { lsGet, lsSet, lsRemove, lsGetJson, lsSetJson } from '../core/storage';
 
 export interface Favient {
   id: string;
@@ -23,60 +24,54 @@ export interface Favient {
   source?: string;
   config: GradientConfig;
   createdAt: number;
+  /** Group id this favourite belongs to. '' / undefined = the default (top) group,
+   *  which has no divider. Named groups get an editable divider (groupLabels). */
+  group?: string;
 }
+
+/** The default (un-divided) group id. */
+export const DEFAULT_GROUP = '';
 
 const LS_KEY = 'gmt.favients';
 const LS_TARGET = 'gmt.favients.target';
-
-const hasLS = (): boolean => {
-  try {
-    return typeof window !== 'undefined' && !!window.localStorage;
-  } catch {
-    return false;
-  }
-};
+const LS_GROUPS = 'gmt.favients.groups';
+const LS_SEEDED = 'gmt.favients.seeded';
 
 const loadFavients = (): Favient[] => {
-  if (!hasLS()) return [];
-  try {
-    const raw = window.localStorage.getItem(LS_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    // Keep only well-formed entries (defends against schema drift).
-    return arr.filter((f) => f && typeof f.id === 'string' && f.config && Array.isArray(f.config.stops));
-  } catch {
-    return [];
-  }
+  const arr = lsGetJson<unknown[]>(LS_KEY, []);
+  if (!Array.isArray(arr)) return [];
+  // Keep only well-formed entries (defends against schema drift).
+  return arr.filter(
+    (f): f is Favient =>
+      !!f && typeof (f as Favient).id === 'string' && !!(f as Favient).config && Array.isArray((f as Favient).config.stops),
+  );
 };
 
-const saveFavients = (favients: Favient[]): void => {
-  if (!hasLS()) return;
-  try {
-    window.localStorage.setItem(LS_KEY, JSON.stringify(favients));
-  } catch {
-    /* quota / disabled — silent */
-  }
-};
+const saveFavients = (favients: Favient[]): void => lsSetJson(LS_KEY, favients);
 
-const loadTarget = (): string | null => {
-  if (!hasLS()) return null;
-  try {
-    return window.localStorage.getItem(LS_TARGET);
-  } catch {
-    return null;
-  }
-};
+const loadTarget = (): string | null => lsGet(LS_TARGET);
 
 const saveTarget = (id: string | null): void => {
-  if (!hasLS()) return;
-  try {
-    if (id) window.localStorage.setItem(LS_TARGET, id);
-    else window.localStorage.removeItem(LS_TARGET);
-  } catch {
-    /* silent */
-  }
+  if (id) lsSet(LS_TARGET, id);
+  else lsRemove(LS_TARGET);
 };
+
+const loadGroupLabels = (): Record<string, string> => {
+  const m = lsGetJson<Record<string, string>>(LS_GROUPS, {});
+  return m && typeof m === 'object' ? m : {};
+};
+
+const saveGroupLabels = (m: Record<string, string>): void => lsSetJson(LS_GROUPS, m);
+
+/** Drop labels for groups that no longer have any favourites. */
+const pruneLabels = (favients: Favient[], labels: Record<string, string>): Record<string, string> => {
+  const used = new Set(favients.map((f) => f.group ?? DEFAULT_GROUP));
+  const out: Record<string, string> = {};
+  for (const k of Object.keys(labels)) if (used.has(k)) out[k] = labels[k];
+  return out;
+};
+
+const clamp = (n: number, lo: number, hi: number) => (n < lo ? lo : n > hi ? hi : n);
 
 /**
  * Content signature for dedupe + the star toggle: rounded stop positions + colours +
@@ -89,9 +84,14 @@ export const favientSig = (c: GradientConfig): string =>
 
 let _seq = 0;
 const newId = (): string => `fav-${Date.now().toString(36)}-${_seq++}`;
+let _groupSeq = 0;
+/** Generate a fresh group id (collision-safe across reloads via the timestamp). */
+export const newGroupId = (): string => `grp-${Date.now().toString(36)}-${_groupSeq++}`;
 
 interface FavientsState {
   favients: Favient[];
+  /** Editable labels for named groups (id → label). */
+  groupLabels: Record<string, string>;
   /** The currently selected apply target (id into favientTargets). */
   selectedTargetId: string | null;
 
@@ -102,16 +102,29 @@ interface FavientsState {
   toggle: (config: GradientConfig, name: string, source?: string) => boolean;
   isFav: (config: GradientConfig) => boolean;
   rename: (id: string, name: string) => void;
+  /** Move an existing favourite so it lands at `toIndex` in the array WITH this item
+   *  REMOVED (i.e. the insertion index in the list as rendered without the dragged
+   *  swatch), and set its group. The caller keeps (toIndex, group) contiguous. */
+  moveFavient: (id: string, toIndex: number, group: string) => void;
+  /** Insert a NEW favourite (from an external drag) at flat index `toIndex` in `group`. */
+  insertFavient: (config: GradientConfig, name: string, source: string | undefined, toIndex: number, group: string) => string;
+  /** Rename a group's divider label. */
+  renameGroup: (groupId: string, label: string) => void;
+  /** One-time seed of starter favourites into a named group (e.g. the built-in
+   *  presets). No-op after the first ever call (flagged in localStorage), so the
+   *  user's edits/deletions are never overwritten. */
+  seedPresets: (entries: { name: string; config: GradientConfig }[], group: string, label: string) => void;
   clear: () => void;
   setSelectedTarget: (id: string | null) => void;
 }
 
 export const useFavientsStore = create<FavientsState>((set, get) => ({
   favients: loadFavients(),
+  groupLabels: loadGroupLabels(),
   selectedTargetId: loadTarget(),
 
   add: (config, name, source) => {
-    const fav: Favient = { id: newId(), name, source, config, createdAt: Date.now() };
+    const fav: Favient = { id: newId(), name, source, config, createdAt: Date.now(), group: DEFAULT_GROUP };
     const favients = [fav, ...get().favients];
     saveFavients(favients);
     set({ favients });
@@ -120,8 +133,10 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
 
   remove: (id) => {
     const favients = get().favients.filter((f) => f.id !== id);
+    const groupLabels = pruneLabels(favients, get().groupLabels);
     saveFavients(favients);
-    set({ favients });
+    saveGroupLabels(groupLabels);
+    set({ favients, groupLabels });
   },
 
   toggle: (config, name, source) => {
@@ -149,9 +164,56 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     set({ favients });
   },
 
+  moveFavient: (id, toIndex, group) => {
+    const arr = [...get().favients];
+    const from = arr.findIndex((f) => f.id === id);
+    if (from < 0) return;
+    const [moved] = arr.splice(from, 1);
+    // toIndex is already expressed against the array with `moved` removed.
+    arr.splice(clamp(toIndex, 0, arr.length), 0, { ...moved, group });
+    const groupLabels = pruneLabels(arr, get().groupLabels);
+    saveFavients(arr);
+    saveGroupLabels(groupLabels);
+    set({ favients: arr, groupLabels });
+  },
+
+  insertFavient: (config, name, source, toIndex, group) => {
+    const fav: Favient = { id: newId(), name, source, config, createdAt: Date.now(), group };
+    const arr = [...get().favients];
+    arr.splice(clamp(toIndex, 0, arr.length), 0, fav);
+    saveFavients(arr);
+    set({ favients: arr });
+    return fav.id;
+  },
+
+  renameGroup: (groupId, label) => {
+    const groupLabels = { ...get().groupLabels, [groupId]: label };
+    saveGroupLabels(groupLabels);
+    set({ groupLabels });
+  },
+
+  seedPresets: (entries, group, label) => {
+    if (lsGet(LS_SEEDED)) return;
+    const favs: Favient[] = entries.map((e) => ({
+      id: newId(),
+      name: e.name,
+      source: 'Preset',
+      config: e.config,
+      createdAt: Date.now(),
+      group,
+    }));
+    const favients = [...get().favients, ...favs];
+    const groupLabels = { ...get().groupLabels, [group]: label };
+    saveFavients(favients);
+    saveGroupLabels(groupLabels);
+    lsSet(LS_SEEDED, '1');
+    set({ favients, groupLabels });
+  },
+
   clear: () => {
     saveFavients([]);
-    set({ favients: [] });
+    saveGroupLabels({});
+    set({ favients: [], groupLabels: {} });
   },
 
   setSelectedTarget: (id) => {

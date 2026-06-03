@@ -7,6 +7,7 @@
  */
 
 import { useEngineStore } from '../../store/engineStore';
+import { lsGetJson, lsSetJson } from '../core/storage';
 
 const LS = 'gmt.favients.panel';
 const PANEL_ID = 'Favients';
@@ -27,28 +28,22 @@ interface Stored {
   h: number;
 }
 
-const read = (): Stored | null => {
-  try {
-    const r = typeof localStorage !== 'undefined' ? localStorage.getItem(LS) : null;
-    return r ? (JSON.parse(r) as Stored) : null;
-  } catch {
-    return null;
-  }
-};
+type PanelEntry = { isOpen?: boolean; floatPos?: { x: number; y: number }; floatSize?: { width: number; height: number } };
+type StoreActions = Record<string, (...a: unknown[]) => void>;
 
-const write = (s: Stored): void => {
-  try {
-    localStorage.setItem(LS, JSON.stringify(s));
-  } catch {
-    /* quota / disabled */
-  }
+/** Float + open the Favients panel (bring it up if docked/closed). Shared entrance
+ *  used by the picker link, the overlay header, and the gradient editor. */
+export const openFavientsPanel = (): void => {
+  const st = useEngineStore.getState() as unknown as StoreActions;
+  st.movePanel?.(PANEL_ID, 'float');
+  st.togglePanel?.(PANEL_ID, true);
 };
 
 /** Float the panel at its remembered (or default) spot + open-state. Call after the
  *  host's applyPanelManifest registered the `Favients` panel. */
 export const restoreFavientsPanel = (defaults: FavientsPanelDefaults): void => {
-  const st = useEngineStore.getState() as unknown as Record<string, (...a: unknown[]) => void>;
-  const saved = read();
+  const st = useEngineStore.getState() as unknown as StoreActions;
+  const saved = lsGetJson<Stored | null>(LS, null);
   const x = saved?.x ?? defaults.x;
   const y = saved?.y ?? defaults.y;
   const w = saved?.w ?? defaults.w;
@@ -62,19 +57,18 @@ export const restoreFavientsPanel = (defaults: FavientsPanelDefaults): void => {
 
 /** Mirror later open/move/resize back to storage (debounced). Call once. */
 export const watchFavientsPanel = (): void => {
-  let lo: boolean | undefined, lx: number | undefined, ly: number | undefined, lw: number | undefined, lh: number | undefined;
+  let lastPs: PanelEntry | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   useEngineStore.subscribe(() => {
-    const ps = (useEngineStore.getState() as unknown as { panels?: Record<string, { isOpen?: boolean; floatPos?: { x: number; y: number }; floatSize?: { width: number; height: number } }> }).panels?.[PANEL_ID];
-    if (!ps) return;
-    const o = !!ps.isOpen,
-      x = ps.floatPos?.x,
-      y = ps.floatPos?.y,
-      w = ps.floatSize?.width,
-      h = ps.floatSize?.height;
-    if (o === lo && x === lx && y === ly && w === lw && h === lh) return;
-    lo = o; lx = x; ly = y; lw = w; lh = h;
+    // The subscription fires on every store change; the PanelState object is only
+    // replaced when a panel action runs, so a reference check skips all the rest cheaply.
+    const ps = (useEngineStore.getState() as unknown as { panels?: Record<string, PanelEntry> }).panels?.[PANEL_ID];
+    if (!ps || ps === lastPs) return;
+    lastPs = ps;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => write({ open: o, x: x ?? 0, y: y ?? 0, w: w ?? 296, h: h ?? 300 }), 300);
+    timer = setTimeout(
+      () => lsSetJson(LS, { open: !!ps.isOpen, x: ps.floatPos?.x ?? 0, y: ps.floatPos?.y ?? 0, w: ps.floatSize?.width ?? 296, h: ps.floatSize?.height ?? 300 }),
+      300,
+    );
   });
 };

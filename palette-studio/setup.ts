@@ -10,6 +10,7 @@
 import { useEngineStore } from '../store/engineStore';
 import { applyPanelManifest } from '../engine/PanelManifest';
 import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
+import { restorePaletteFilters, watchPaletteFilters } from '../palette/store/paletteFiltersPersist';
 
 export const wirePaletteStudio = (): void => {
   applyPanelManifest([
@@ -31,4 +32,8 @@ export const wirePaletteStudio = (): void => {
   const fh = typeof window !== 'undefined' ? window.innerHeight : 800;
   restoreFavientsPanel({ x: 20, y: Math.max(20, Math.round(fh / 2 - 150)), w: 296, h: 300, open: true });
   watchFavientsPanel();
+
+  // Remember the picker's swatch-size / padding / arrangement across sessions.
+  restorePaletteFilters();
+  watchPaletteFilters();
 };

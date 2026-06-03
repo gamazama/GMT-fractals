@@ -23,6 +23,9 @@ import { NoiseTargetsControl } from './components/NoiseTargetsControl';
 import { ModifyTogglesControl } from './components/ModifyTogglesControl';
 import { ImageExtrasPanel } from './components/ImageExtrasPanel';
 import { FavientsPanel } from './components/FavientsPanel';
+import { useFavientsStore } from './store/favientsStore';
+import { GRADIENT_PRESETS } from '../data/gradientPresets';
+import type { GradientConfig } from '../types';
 
 export const registerPaletteUI = (): void => {
   // Custom-UI components must be registered before the registries freeze, and
@@ -48,4 +51,15 @@ export const registerPaletteUI = (): void => {
   featureRegistry.register(PaletteGeneratorFeature);
   featureRegistry.register(PaletteFiltersFeature);
   featureRegistry.register(PaletteImageFeature);
+
+  // Seed the Favients shelf with the built-in presets (a "Presets" group) on first
+  // run, so a new user has starter gradients. One-time — never re-seeds after edits.
+  useFavientsStore.getState().seedPresets(
+    GRADIENT_PRESETS.map((p): { name: string; config: GradientConfig } => ({
+      name: p.name,
+      config: { stops: p.stops, colorSpace: 'srgb', blendSpace: 'oklab' },
+    })),
+    'g-presets',
+    'Presets',
+  );
 };

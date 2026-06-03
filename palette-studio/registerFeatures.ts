@@ -8,12 +8,16 @@
  */
 
 import { registerPaletteUI } from '../palette/registerPaletteUI';
-import { registerFavientTarget } from '../palette/core/favientTargets';
+import { registerFavientTarget, setFavientBrowseAction } from '../palette/core/favientTargets';
 import { useGeneratorStore } from '../palette/store/generatorStore';
+import { useEngineStore } from '../store/engineStore';
 import { renderStopsToRamp } from '../palette/core/gmtGradient';
 import type { GradientConfig } from '../types';
 
 registerPaletteUI();
+
+// Favients header "Palettes" button → TOGGLE the studio's Picker tab.
+setFavientBrowseAction(() => useEngineStore.getState().togglePanel('Picker'));
 
 // Studio-specific Favients apply targets: a favourite click/drop loads into a
 // generator source slot (the merge surface). app-gmt will register coloring layers.

@@ -9,6 +9,7 @@
 import React, { useMemo, useState } from 'react';
 import type { GradientConfig } from '../../types';
 import { useFavientsStore, favientSig } from '../store/favientsStore';
+import { FavientsIcon, FAVIENTS_ACCENT } from './FavientsIcon';
 
 interface FavStarProps {
   config: GradientConfig;
@@ -40,11 +41,11 @@ export const FavStar: React.FC<FavStarProps> = ({ config, name, source, size = '
       onClick={onClick}
       title={isFav ? 'Remove from Favients' : 'Add to Favients'}
       aria-pressed={isFav}
-      className={`leading-none ${glyph} transition-transform duration-200 ${
+      className={`leading-none ${glyph} transition-transform duration-200 hover:opacity-100 ${
         pop ? 'scale-150' : 'scale-100'
-      } ${isFav ? 'text-amber-300 drop-shadow-[0_0_4px_rgba(252,211,77,0.5)]' : 'text-gray-500 hover:text-amber-200'} ${className}`}
+      } ${isFav ? FAVIENTS_ACCENT.glow : ''} ${className}`}
     >
-      {isFav ? '★' : '☆'}
+      <FavientsIcon filled={isFav} />
     </button>
   );
 };

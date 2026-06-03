@@ -17,6 +17,8 @@ import { GROUP_BY, ROWS_BY, SORT_BY } from '../palette/features/paletteFilters';
 import type { CatalogEntry } from '../palette/core/presetCatalog';
 import { PickerWall, type PickerGroup } from '../palette/components/PickerWall';
 import { FavStar } from '../palette/components/FavStar';
+import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
+import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { setFavientDrag } from '../palette/core/favientDnd';
 
 const win = (v: { x?: number; y?: number } | undefined): [number, number] => [v?.x ?? 0, v?.y ?? 1];
@@ -45,7 +47,7 @@ const FACET_OF: Record<string, (e: CatalogEntry) => number> = {
 };
 const ROW_BUCKETS = 10;
 
-export const PickerStage: React.FC = () => {
+export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavientsLink }) => {
   const pf = useEngineStore((s) => (s as Record<string, any>).paletteFilters) as Record<string, any> | undefined;
 
   const catalog = usePickerStore((s) => s.catalog);
@@ -195,7 +197,14 @@ export const PickerStage: React.FC = () => {
               {selected?.bundle && <span className="ml-2 text-zinc-600">{selected.bundle}</span>}
             </span>
           </span>
-          <span className="text-zinc-500 tabular-nums shrink-0">{!loaded ? 'loading…' : `${count} of ${catalog.length}`}</span>
+          <span className="flex items-center gap-2 shrink-0">
+            {!hideFavientsLink && (
+              <button onClick={openFavientsPanel} title="Open the Favients shelf" className={FAVIENTS_ACCENT.link}>
+                <FavientsIcon /> Favients
+              </button>
+            )}
+            <span className="text-zinc-500 tabular-nums">{!loaded ? 'loading…' : `${count} of ${catalog.length}`}</span>
+          </span>
         </div>
       </div>
 

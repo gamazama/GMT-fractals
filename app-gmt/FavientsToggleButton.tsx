@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { useEngineStore } from '../store/engineStore';
+import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
 
 export const FavientsToggleButton: React.FC = () => {
   const open = useEngineStore((s) => (s as unknown as { panels?: Record<string, { isOpen?: boolean }> }).panels?.Favients?.isOpen ?? false);
@@ -16,10 +17,10 @@ export const FavientsToggleButton: React.FC = () => {
       onClick={() => togglePanel?.('Favients')}
       title="Toggle the Favients shelf (saved gradients)"
       className={`flex items-center gap-1.5 px-2 h-7 rounded text-[12px] transition-colors ${
-        open ? 'text-amber-300 bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/10'
+        open ? `${FAVIENTS_ACCENT.text} bg-white/10` : 'text-gray-400 hover:text-white hover:bg-white/10'
       }`}
     >
-      <span className="text-sm leading-none">★</span>
+      <FavientsIcon className="text-sm leading-none" />
       <span className="hidden md:inline">Favients</span>
     </button>
   );

@@ -28,9 +28,10 @@ import '../engine-gmt/store/gmtPresetFields';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { PalettePickerButton } from './PalettePickerOverlay';
+import { usePaletteOverlayStore } from './paletteOverlayStore';
 import { FavientsToggleButton } from './FavientsToggleButton';
 import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
+import { restorePaletteFilters, watchPaletteFilters } from '../palette/store/paletteFiltersPersist';
 import { topbar } from '../engine/plugins/TopBar';
 import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
@@ -114,15 +115,18 @@ registerUI();
 // componentIds for `component:` panels and `widgets:` slots).
 registerGmtUi();
 
-// Palette Picker — a full-width overlay (topbar button → modal) instead of the
-// cramped right-dock panel. The wall gets real width + the Quality filters in a
-// sidebar; picking still colours the fractal via the gradientSeam
-// (PickerStage.onPick → applyEntryToColoring → setColoring).
-topbar.register({ id: 'gmt-palette-picker', slot: 'left', order: 22, component: PalettePickerButton });
+// Palette Picker (Gradient Library) — a full-width overlay opened from the System menu
+// ("Gradient Library…") or the Favients panel's Palettes button (both flip
+// usePaletteOverlayStore). The overlay host is mounted in AppGmt. No topbar button.
+menu.registerItem('system', {
+  id: 'gradient-library',
+  type: 'button',
+  label: 'Gradient Library…',
+  title: 'Browse + pick gradients (full-width palette wall).',
+  onSelect: () => usePaletteOverlayStore.getState().setOpen(true),
+});
 
-// Favients — the floating gradient-favourites shelf (toggle button). Sits BEFORE the
-// Palettes button (order 22). The panel itself is registered in the manifest below +
-// floated/persisted after applyPanelManifest.
+// Favients — the floating gradient-favourites shelf (topbar toggle button).
 topbar.register({ id: 'gmt-favients', slot: 'left', order: 21, component: FavientsToggleButton });
 
 // GMT camera slice — savedCameras / undo / redo / addCamera / resetCamera.
@@ -581,6 +585,9 @@ applyPanelManifest([
   const fh = typeof window !== 'undefined' ? window.innerHeight : 800;
   restoreFavientsPanel({ x: 20, y: Math.max(20, Math.round(fh / 2 - 160)), w: 296, h: 320, open: true });
   watchFavientsPanel();
+  // Remember the picker's swatch-size / padding / arrangement across sessions.
+  restorePaletteFilters();
+  watchPaletteFilters();
 }
 
 // Boot is now driven by LoadingScreen → useAppStartup.bootEngine, which

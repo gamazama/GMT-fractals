@@ -116,12 +116,12 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
                 ) : undefined
             }
             className="glass-panel flex flex-col overflow-hidden animate-pop-in shadow-[0_10px_40px_rgba(0,0,0,0.5)]"
-            // Vertical padding only, no extra background: the panel rows own
-            // their horizontal padding (AutoFeaturePanel `px-3`) and the
-            // `glass-panel` root already supplies the dark bg + blur. Mirrors
-            // the dock content area (Dock.tsx) — a `p-3 bg-black/80` body here
-            // stacked a second black layer + doubled inset = black gutter.
-            bodyClassName="py-2 overflow-y-auto overflow-x-hidden custom-scroll flex-1 relative"
+            // No body padding or background: the panel rows own their own
+            // padding (AutoFeaturePanel `px-3`, sections `py-1.5`) and the
+            // `glass-panel` root already supplies the dark bg + blur. A
+            // `p-3 bg-black/80` body here stacked a second black layer and
+            // added inset on every side → black gutter/bands around content.
+            bodyClassName="overflow-y-auto overflow-x-hidden custom-scroll flex-1 relative"
         >
             {children}
         </FloatingPanel>

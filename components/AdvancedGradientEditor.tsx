@@ -5,8 +5,10 @@ import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } fr
 import { hexToRgb, rgbToHex, getGradientCssString, blendLerp } from '../utils/colorUtils';
 import Slider from './Slider';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
-import { GRADIENT_PRESETS } from '../data/gradientPresets';
 import Dropdown from './Dropdown';
+import { useEngineStore } from '../store/engineStore';
+import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
+import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { useInteractionGesture } from '../engine/hooks/useInteractionDrag';
 import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
@@ -248,31 +250,17 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         }
     }, [emitChange, handleInteractionStart, handleInteractionEnd]);
 
-    const loadPreset = useCallback((presetStops: GradientStop[]) => {
-        handleInteractionStart('param');
-        const newKnots: AdvancedGradientKnot[] = presetStops.map((s, i) => ({
-             id: `${Date.now()}_${i}`,
-             position: s.position,
-             color: s.color,
-             bias: s.bias ?? 0.5,
-             interpolation: (s.interpolation as InterpolationMode) ?? 'linear'
-        }));
-        emitChange(newKnots, 'linear');
-        setSelectedIds(new Set());
-        handleInteractionEnd();
-    }, [emitChange, handleInteractionStart, handleInteractionEnd]);
-
+    // Gradient presets now live in the Favients shelf (a "Presets" group, seeded on
+    // first run) — pick/apply from there instead of this menu. This menu keeps the
+    // clipboard utilities.
     const presetMenuOptions = useMemo(() => [
         { label: 'Clipboard', action: () => {}, isHeader: true },
         { label: 'Copy Gradient', action: handleCopy },
         { label: 'Paste Gradient', action: handlePaste },
-        { label: 'Presets', action: () => {}, isHeader: true },
-        ...GRADIENT_PRESETS.map(p => ({
-            label: p.name,
-            action: () => loadPreset(p.stops),
-            stops: p.stops
-        }))
-    ], [handleCopy, handlePaste, loadPreset]);
+    ], [handleCopy, handlePaste]);
+
+    // Favients entrance — only when the shelf exists in this app (app-gmt; not fluid-toy).
+    const hasFavients = useEngineStore((s) => !!(s as unknown as { panels?: Record<string, unknown> }).panels?.Favients);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         const payload = dragPayloadRef.current;
@@ -674,16 +662,26 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                         {colorSpace === 'srgb' ? 'sRGB' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
                     </div>
 
-                    {/* Presets Button */}
+                    {/* Favients entrance — opens the saved-gradients shelf (presets live there now) */}
+                    {hasFavients && (
+                        <button
+                            className={`gradient-interactive-element flex items-center px-1.5 py-0.5 rounded border border-white/10 ${FAVIENTS_ACCENT.border} hover:bg-white/10 text-[11px] leading-none transition-colors active:scale-95`}
+                            onClick={openFavientsPanel}
+                            title="Favients — saved gradients & presets"
+                        >
+                            <FavientsIcon />
+                        </button>
+                    )}
+
+                    {/* Utility menu (clipboard) */}
                     <button
-                        className="gradient-interactive-element flex items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 hover:border-white/25 hover:bg-white/10 text-gray-500 hover:text-white text-[9px] font-medium transition-colors active:scale-95"
+                        className="gradient-interactive-element flex items-center px-1.5 py-0.5 rounded border border-white/10 hover:border-white/25 hover:bg-white/10 text-gray-500 hover:text-white text-[9px] font-medium transition-colors active:scale-95"
                         onClick={handlePresetsClick}
-                        title="Presets"
+                        title="Menu"
                     >
                         <MenuIcon />
-                        <span>Presets</span>
                     </button>
-                    
+
                     {presetMenu && (
                         <PresetMenu
                             x={presetMenu.x}

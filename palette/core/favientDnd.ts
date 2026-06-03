@@ -7,12 +7,19 @@
 import type { GradientConfig } from '../../types';
 
 export const FAVIENT_DND_MIME = 'application/x-gmt-favient';
+/** Marker MIME present ONLY on drags that started from an existing Favients swatch.
+ *  Readable during `dragover` (where getData is blocked), so a swatch can show the
+ *  reorder indicator for internal drags but not external ones (picker → add). */
+export const FAVIENT_INTERNAL_MIME = 'application/x-gmt-favient-internal';
 
 export interface FavientDragPayload {
   config: GradientConfig;
   name: string;
   /** Provenance, carried so a drop-to-favourite keeps the gradient's origin label. */
   source?: string;
+  /** Set when the drag originates from an existing Favients swatch — enables
+   *  drop-on-another-swatch reordering (and tells the shelf not to re-add it). */
+  favId?: string;
 }
 
 /** Write a favourite onto a drag event's dataTransfer (custom MIME + text fallback). */
@@ -20,6 +27,7 @@ export const setFavientDrag = (dt: DataTransfer, payload: FavientDragPayload): v
   const json = JSON.stringify(payload);
   try {
     dt.setData(FAVIENT_DND_MIME, json);
+    if (payload.favId) dt.setData(FAVIENT_INTERNAL_MIME, '1');
   } catch {
     /* some browsers restrict custom MIME on certain elements */
   }

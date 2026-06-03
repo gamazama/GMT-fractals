@@ -41,6 +41,7 @@ import { FirstRunHint } from '../engine-gmt/components/FirstRunHint';
 import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubmissionsOverlay } from '../engine-gmt/gallery';
 import { NewSceneModal } from '../components/NewSceneModal';
 import { LoadFilterPanel } from '../components/LoadFilterPanel';
+import { PalettePickerOverlayHost } from './PalettePickerOverlay';
 import { AuthOverlayHost, AccountPanelHost } from '../engine-gmt/auth';
 import { TutorialOverlay, TutorialRunner } from '../engine/plugins/Tutorial';
 import { CompilingIndicator } from '../components/CompilingIndicator';
@@ -410,6 +411,7 @@ export const AppGmt: React.FC = () => {
                 <AccountPanelHost />
                 <NewSceneModal />
                 <LoadFilterPanel />
+                <PalettePickerOverlayHost />
 
                 <TutorialRunner />
                 <TutorialOverlay />

@@ -21,10 +21,20 @@ registerPaletteUI();
 
 // Favients (the cross-app gradient-favourites shelf) apply targets for app-gmt: a
 // favourite click/drop lands on a fractal COLORING layer via the gradient seam.
-import { registerFavientTarget } from '../palette/core/favientTargets';
+import { registerFavientTarget, setFavientBrowseAction, setFavientStudioAction } from '../palette/core/favientTargets';
 import { applyGradientConfig } from '../palette/core/gradientSeam';
+import { usePaletteOverlayStore } from './paletteOverlayStore';
 registerFavientTarget({ id: 'coloring-1', label: 'Coloring · Layer 1', apply: (c) => applyGradientConfig(c, 1) });
 registerFavientTarget({ id: 'coloring-2', label: 'Coloring · Layer 2', apply: (c) => applyGradientConfig(c, 2) });
+
+// Favients header "Palettes" button → TOGGLE the full-width Palette Picker overlay.
+setFavientBrowseAction(() => {
+  const s = usePaletteOverlayStore.getState();
+  s.setOpen(!s.open);
+});
+
+// Favients header studio button → open the standalone Palette Studio app (new tab).
+setFavientStudioAction(() => window.open('palette-studio.html', '_blank', 'noopener'));
 
 // One-time import of the legacy saved-gradient library into Favients (no data loss).
 import { migrateSavedGradientsToFavients } from './favientsMigration';
