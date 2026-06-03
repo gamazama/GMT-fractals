@@ -76,17 +76,44 @@ vec3 Mul3(vec3 a, vec3 b) {
 
 
 vec3 mul3(vec3 a, vec3 b) {
-	// Originally an abdf-form optimization of Mul3, but the reachable return had
-	// an operator-precedence typo (`r*(a1*d1)+(a2*d2)` instead of distributing
-	// `r` across the addition), and the dead code below it conflated theta+phi
-	// pre-trig. Both render as wiggly noise. Delegate to Mul3 — same result,
-	// canonical polar form, no abdf bookkeeping. If the abdf form ever needs to
-	// be restored for performance, the correct expansion is:
-	//   r = r1 * r2;
-	//   ct = a1*a2 - b1*b2;  st = b1*a2 + a1*b2;     // cos/sin(thetaa+thetab)
-	//   cp = d1*d2 - f1*f2;  sp = d1*f2 + f1*d2;     // cos/sin(phia+phib)
-	//   return r * vec3(ct*cp, st*cp, sp);
-	return Mul3(a, b);
+
+	// Conversion of Cartesian form into abdf form
+
+	float x=a.x, y=a.y, z=a.z;
+	//=================================================
+	float xy1 = x*x+y*y;
+	float rxy1 = sqrt(xy1);
+	float r1 = sqrt(xy1 + z*z);
+	
+	float a1 = x/rxy1;
+	float b1 = y/rxy1;
+	float d1 = rxy1/r1;
+	float f1 = z/r1;
+
+	x=b.x, y=b.y, z=b.z;
+	//=================================================
+	float xy2 = x*x+y*y;
+	float rxy2 = sqrt(xy2);
+	float r2 = sqrt(xy2 + z*z);
+	
+	float a2 = x/rxy2;
+	float b2 = y/rxy2;
+	float d2 = rxy2/r2;
+	float f2 = z/r2;
+
+	float r = sqrt(r1*r2);
+
+	return vec3( r*(a1*d1)+(a2*d2),
+				 r*(b1*d1)+(b2*d2),
+				 r*(f1*f2));
+
+	float theta = (a1*a2-b1*b2)+(b1*a2+a1*b2);
+	float phi   = (d1*d2-f1*f2)+(f1*d2+d1*f2);
+
+// Conversion of abdf form to Cartesian form
+	return r1*r2 * vec3(cos(theta)*cos(phi),
+				sin(theta)*cos(phi),
+				sin(phi));
 }
 
 vec3 div3(vec3 a, vec3 b) {
