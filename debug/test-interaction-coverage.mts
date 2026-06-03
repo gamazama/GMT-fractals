@@ -79,7 +79,11 @@ const SLIDER_CUSTOM = [
 ];
 const SCRUB_PRODUCERS = [
     'components/timeline/TimelineRuler.tsx',
-    'components/graph/GraphSelectionBBox.tsx',
+    // The graph-editor unification moved the BBox scale-drag's scrub gesture out of
+    // GraphSelectionBBox and into the shared GraphDataSource provider, which owns the
+    // useInteractionGesture(INTERACTION_SOURCES.scrub) call. The BBox now delegates via
+    // ds.scrub.begin(); see SCRUB_EXCEPTION below.
+    'utils/GraphDataSource.ts',
 ];
 const DRAWING_PRODUCERS = [
     'engine-gmt/features/drawing/DrawingOverlay.tsx',
@@ -144,6 +148,10 @@ for (const f of dragValueConsumers) {
 // so tagging 'scrub' there too would double-token one gesture.
 const SCRUB_EXCEPTION = new Set([
     'components/timeline/KeyframeInspector.tsx',
+    // GraphSelectionBBox starts the scrub but delegates the InteractionSession gesture
+    // to the GraphDataSource provider (the wired scrub producer above) via ds.scrub.begin();
+    // tagging 'scrub' here too would double-token the one BBox gesture.
+    'components/graph/GraphSelectionBBox.tsx',
 ]);
 const writesScrubStart = (src: string) => /setIsScrubbing\(\s*true\s*\)/.test(src);
 const scrubWriters = allFiles.filter(f => writesScrubStart(read(f)));
