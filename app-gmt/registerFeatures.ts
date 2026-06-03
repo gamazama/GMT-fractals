@@ -14,6 +14,11 @@
 import { registerFeatures as registerGmtFeatures } from '../engine-gmt/features/index';
 registerGmtFeatures();
 
+// Palette tools (picker/generator/image) — features + custom-UI components. The
+// Picker's "apply" seam (palette/core/gradientSeam) sets the coloring gradient.
+import { registerPaletteUI } from '../palette/registerPaletteUI';
+registerPaletteUI();
+
 // 42 fractal formulas — self-register into FractalRegistry on module
 // load via their `index.ts` barrel.
 import '../engine-gmt/formulas/index';

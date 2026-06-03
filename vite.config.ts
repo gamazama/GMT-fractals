@@ -129,6 +129,7 @@ export default defineConfig({
         demo: path.resolve(__dirname, 'demo.html'),
         'fractal-toy': path.resolve(__dirname, 'fractal-toy.html'),
         'fluid-toy': path.resolve(__dirname, 'fluid-toy.html'),
+        'palette-studio': path.resolve(__dirname, 'palette-studio.html'),
         'app-gmt': path.resolve(__dirname, 'app-gmt.html'),
         'mesh-export': path.resolve(__dirname, 'mesh-export.html'),
       },

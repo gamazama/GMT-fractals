@@ -1,3 +1,14 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// This is the engine's SIMPLEST shell — UI chrome (TopBar + Dock + AutoFeaturePanel
+// + timeline) with no raymarcher boot. STARTING A NEW STANDALONE SHELL APP whose
+// centre is its own surface (a tool/editor/catalog, not a single fractal canvas)?
+// Copy this file's boot, not fluid-toy/fractal-toy. Full step-by-step recipe +
+// gotchas (boot freeze-order, EngineBridge+RenderLoopDriver for timeline playback,
+// tabs-drive-the-centre, hints/keyframes/input reuse) is in:
+//     demo/README.md  →  "Starting a NEW standalone shell app"
+// Worked example built from that recipe: palette-studio/.
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Side-effect import — registers DemoFeature with the engine BEFORE
 // anything touches the store (createFeatureSlice freezes the registry
 // on first store access).

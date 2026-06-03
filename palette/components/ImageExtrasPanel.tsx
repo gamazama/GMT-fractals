@@ -1,0 +1,133 @@
+/**
+ * ImageExtrasPanel — the custom-UI block pinned at the bottom of the Image dock tab
+ * (registered `palette-image-extras`). The export suite for the extracted gradient:
+ * format dropdown (GMT GenericDropdown) + Copy / Download / PNG, plus a collapsible
+ * preview. Mirrors GeneratorExtrasPanel; reads the imageStore export format + the
+ * derived ramp (useImageDerived). The "Send to Generator A/B" merge lives on the
+ * canvas (next to the result), where the gradient is.
+ */
+
+import React, { useCallback, useMemo, useState } from 'react';
+import { GenericDropdown } from '../../components/GenericDropdown';
+import { EXPORT_FORMATS, getExportFormat, grdStopCount } from '../core/exportFormats';
+import { useImageStore, useImageDerived } from '../store/imageStore';
+
+export const ImageExtrasPanel: React.FC = () => {
+  const exportFmt = useImageStore((s) => s.exportFmt);
+  const setExportFmt = useImageStore((s) => s.setExportFmt);
+  const derived = useImageDerived();
+  const ramp = derived?.ramp ?? null;
+
+  const [toast, setToast] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const flash = useCallback((m: string) => {
+    setToast(m);
+    window.setTimeout(() => setToast(null), 1400);
+  }, []);
+
+  const fmtDef = useMemo(() => getExportFormat(exportFmt) ?? EXPORT_FORMATS[0], [exportFmt]);
+  const previewText = useMemo(() => {
+    if (!ramp) return 'Load an image to extract a gradient.';
+    if (fmtDef.binary) return `.${fmtDef.ext} is a binary format — use Download (${grdStopCount(ramp)} stops).`;
+    const t = fmtDef.build(ramp) as string;
+    return t.length > 1800 ? t.slice(0, 1800) + '\n…' : t;
+  }, [fmtDef, ramp]);
+
+  const guard = useCallback((): boolean => {
+    if (!ramp) { flash('load an image first'); return false; }
+    return true;
+  }, [ramp, flash]);
+
+  const doCopy = useCallback(() => {
+    if (!guard() || !ramp) return;
+    if (fmtDef.binary) { flash(`.${fmtDef.ext} is binary — use Download`); return; }
+    navigator.clipboard?.writeText(fmtDef.build(ramp) as string).then(() => flash(`Copied ${fmtDef.label}`), () => flash('Copy failed'));
+  }, [fmtDef, ramp, flash, guard]);
+
+  const doDownload = useCallback(() => {
+    if (!guard() || !ramp) return;
+    const out = fmtDef.build(ramp);
+    const blob = fmtDef.binary
+      ? new Blob([out as unknown as BlobPart], { type: 'application/octet-stream' })
+      : new Blob([out as string], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gradient.${fmtDef.ext}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 800);
+    flash(fmtDef.key === 'grd' ? `Downloaded .grd (${grdStopCount(ramp)} stops)` : `Downloaded .${fmtDef.ext}`);
+  }, [fmtDef, ramp, flash, guard]);
+
+  const doPng = useCallback(() => {
+    if (!guard() || !ramp) return;
+    const o = document.createElement('canvas');
+    o.width = 512;
+    o.height = 64;
+    const x = o.getContext('2d');
+    if (!x) return;
+    const r = document.createElement('canvas');
+    r.width = 256;
+    r.height = 1;
+    const rc = r.getContext('2d');
+    if (!rc) return;
+    const img = rc.createImageData(256, 1);
+    for (let i = 0; i < 256; i++) {
+      img.data[i * 4] = Math.round(ramp[i].r);
+      img.data[i * 4 + 1] = Math.round(ramp[i].g);
+      img.data[i * 4 + 2] = Math.round(ramp[i].b);
+      img.data[i * 4 + 3] = 255;
+    }
+    rc.putImageData(img, 0, 0);
+    x.imageSmoothingEnabled = true;
+    x.drawImage(r, 0, 0, 256, 1, 0, 0, 512, 64);
+    o.toBlob((bl) => {
+      if (!bl) return;
+      const u = URL.createObjectURL(bl);
+      const a = document.createElement('a');
+      a.href = u;
+      a.download = 'gradient.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(u), 800);
+    });
+    flash('Downloaded PNG');
+  }, [ramp, flash, guard]);
+
+  return (
+    <div className="px-1 pt-2 mt-1 border-t border-white/10">
+      <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Export</div>
+      <GenericDropdown
+        value={exportFmt}
+        options={EXPORT_FORMATS.map((f) => ({ label: f.label, value: f.key }))}
+        onChange={(v) => setExportFmt(v)}
+        fullWidth
+      />
+      {showPreview && (
+        <pre className="mt-1.5 max-h-32 overflow-auto text-[10px] leading-tight text-gray-400 bg-black/50 rounded-sm p-2 border border-white/5 whitespace-pre">
+          {previewText}
+        </pre>
+      )}
+      <div className="flex items-center gap-1.5 mt-1.5">
+        <button onClick={doCopy} disabled={fmtDef.binary} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 disabled:opacity-40">
+          Copy
+        </button>
+        <button onClick={doDownload} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10">
+          Download
+        </button>
+        <button onClick={doPng} className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10">
+          PNG
+        </button>
+        <button onClick={() => setShowPreview((v) => !v)} className="text-[11px] px-2 py-1 rounded-sm text-gray-400 hover:text-gray-200">
+          {showPreview ? '▾' : '▸'}
+        </button>
+      </div>
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/85 text-gray-100 text-xs px-3 py-1.5 rounded-full border border-white/10 shadow-xl z-50">
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ImageExtrasPanel;

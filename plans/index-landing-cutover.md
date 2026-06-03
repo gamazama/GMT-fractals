@@ -1,0 +1,169 @@
+# Index / Landing arrangement + dev→prod cutover prep
+
+> Status: **DRAFT — for review.** No structural changes made yet. The urgent
+> service-worker bug is already fixed separately (commit `f006d27`); this
+> plan is about arranging the entry pages so the bug *class* is gone and the
+> cutover to `app.gmt-fractals.com` is clean.
+> Author: pairing session, 2026-06-01.
+
+---
+
+## 1. The problem this solves
+
+Two unrelated things both get called "the landing page":
+
+- **(A) the dev *launcher*** — `dev/index.html`, the "GMT — dev preview" menu
+  listing the 6 apps. This is what the service worker was wrongly serving for
+  `app-gmt.html?gallery=<slug>`.
+- **(B) the *marketing* site** — the Astro repo (`landing/`) served at
+  `gmt-fractals.com` via Cloudflare. Separate host, separate repo, **not**
+  involved in the bug. Leave it alone except for the one APP_URL swap (§5).
+
+Two root causes, both pointing at the same place:
+
+1. **The SW `navigateFallback` target is a launcher, not the app.** Any
+   navigation the precache can't match (query-string deep-link, typo, cold
+   cache) falls back to `index.html` = the launcher menu. Commit `f006d27`
+   stopped the *query-string* case (`ignoreURLParametersMatching` + a fixed
+   denylist), but the fallback still *points at a launcher*, so the class of
+   "unknown URL → launcher menu" remains latent.
+2. **dev and stable disagree about what lives at the root**, and the cutover
+   would ship dev's answer:
+
+   | | root `index.html` is… | SW `navigateFallbackDenylist` |
+   |---|---|---|
+   | **stable** (today's prod) | the **app** (React entry) | *missing* |
+   | **dev** (about to overwrite it) | the **launcher menu** | now fixed (`f006d27`) |
+
+   Promote dev as-is and `app.gmt-fractals.com/` flips from "the app" to "a
+   menu" — a surprising regression for production users, and it keeps the SW
+   fallback pointed at a menu.
+
+**Goal:** make the GMT app the canonical root in the app build, demote the
+launcher to its own page, and point the SW fallback at the app. Then the
+launcher can never be served in place of the app, and the cutover is a
+no-surprise (prod root stays "the app", matching stable today).
+
+---
+
+## 2. Current topology (from the deploy/host map)
+
+| URL | Serves today | Repo / branch | Host |
+|---|---|---|---|
+| `gmt-fractals.com` (apex) | Astro marketing site | `landing` / main | Cloudflare Pages |
+| `app.gmt-fractals.com` | *(planned)* the app | `GMT-fractals` / main (stable) | GH Pages (custom domain) — **confirm; INPUT_NEEDED.md treats it as a Cloudflare project** |
+| `gamazama.github.io/GMT-fractals` | prod app (`index.html` = app) | main (stable build) | GH Pages root |
+| `gamazama.github.io/GMT-fractals/dev` | dev launcher + 6 apps | dev branch | GH Pages `/dev/` |
+
+`dev` and `stable` are two working copies of the **same** `gamazama/GMT-fractals`
+repo on different branches. `dev/.github/workflows/deploy.yml` already handles
+**both** `main`→root and `dev`→`/dev` from one build (`base: './'`).
+
+---
+
+## 3. Recommended arrangement
+
+**`index.html` = the GMT app. Launcher → `launcher.html` (dev-preview only).**
+SW `navigateFallback` then resolves to the app, not a menu.
+
+### Concrete changes (app repo, all on the `dev` branch)
+
+1. **Rename** `index.html` → `launcher.html` (the 6-app menu, unchanged content).
+2. **New `index.html`** = a copy of `app-gmt.html` (same `<div id="root">` +
+   `<script type="module" src="/app-gmt/main.tsx">`). Now `/` loads the app.
+3. **Keep `app-gmt.html` as-is** so existing share/gallery links that carry
+   `app-gmt.html` in their path keep working — both `/` and `/app-gmt.html`
+   serve the same GMT app.
+4. **`vite.config.ts` → `rollupOptions.input`**: `main` now points at the app
+   `index.html`; add a `launcher: launcher.html` entry; keep `app-gmt`. (Refs:
+   [`vite.config.ts:120`](../vite.config.ts#L120).)
+5. **SW** ([`vite.config.ts:78`](../vite.config.ts#L78)): `navigateFallback:
+   'index.html'` now targets the app — keep it. Keep the `f006d27` hardening
+   (`ignoreURLParametersMatching`, widened denylist). Net effect: every
+   navigation resolves to the app, which reads its own `?gallery=`/`#s=`.
+6. **Launcher discoverability in dev**: the dev app shows nothing pointing at
+   the toys anymore. Options: a tiny "dev builds ▸" link in the app shell shown
+   only on the `/dev/` path, or just rely on `/dev/launcher.html`. Low stakes.
+
+No change needed to the deep-link *builder* — `Lightbox`/`copyShareLink` use
+`window.location.pathname`, so links stay valid whether the user is on `/` or
+`/app-gmt.html`.
+
+### Why not the alternatives
+- *Keep index = launcher, redirect `/` → app-gmt.html*: redirect + SW interplay
+  is exactly the fragile combination we're trying to leave behind.
+- *Hash-only deep links*: already mitigated by `f006d27`; doesn't fix the
+  root=launcher problem the cutover introduces.
+- *Build-time branching of `index.html` per deploy target*: more machinery than
+  "app at root everywhere," which is simpler and matches stable.
+
+---
+
+## 4. Migration landmines (independent of §3, fix before/at cutover)
+
+- **Stable's stale `/dev` deploy step.** `stable`'s `deploy.yml` has a second
+  step that also publishes to `/dev`, which would clobber the dev-preview
+  subfolder on a `main` push. **Resolved automatically if the dev→main merge
+  takes dev's `deploy.yml`** (dev's has no such step) — verify the merge does
+  not keep stable's version.
+- **Stable's missing `navigateFallbackDenylist`.** Moot once dev's
+  `vite.config.ts` becomes the prod config via the merge. Flagged so it isn't
+  re-introduced.
+- **Landing APP_URL still points at dev.** `landing/src/pages/index.astro`
+  (~line 286, `TODO(dev→prod promotion)`) points "Launch App"/gallery tiles at
+  the dev URL until the `?gallery=` handler is in prod. **Swap to
+  `app.gmt-fractals.com` only *after* dev is promoted** (ordering dep below).
+- **CORS is already fine** — `backend/.../_shared/cors.ts` already allows
+  `app.gmt-fractals.com`.
+
+---
+
+## 5. Cutover sequence (proposed order)
+
+1. **(this plan, §3)** Land the index=app / launcher restructure on `dev`;
+   verify on `gamazama.github.io/GMT-fractals/dev` (§7).
+2. Merge `dev` → `main` (brings the app, the `?gallery=` handler, the good
+   `deploy.yml`, the SW fix). Confirm the merge keeps **dev's** `deploy.yml`
+   and `vite.config.ts`.
+3. Push `main` → GH Pages root rebuilds; `gamazama.github.io/GMT-fractals/`
+   now serves the new app at root.
+4. **Cloudflare domain swap** (INPUT_NEEDED.md steps 2–6): point
+   `app.gmt-fractals.com` at the app, attach `gmt-fractals.com` + `www` to the
+   Astro landing project. *(Dashboard ops — needs owner.)*
+5. **Only now** swap the landing's APP_URL → `https://app.gmt-fractals.com`
+   and redeploy the landing. (If done before step 3, gallery tiles 404.)
+6. Verify: app at `app.gmt-fractals.com/` and `/?gallery=<slug>`; landing at
+   `gmt-fractals.com`; a gallery share link round-trips end to end.
+
+---
+
+## 6. Open decisions (need your call)
+
+1. **Launcher in prod?** Ship `launcher.html` to prod (harmless, unlinked) or
+   exclude it from the prod build? Recommend: ship it, leave it unlinked.
+2. **Which toys are "prod" vs "dev-only"?** stable ships only app + mesh-export
+   (+ toy-fluid). Keep fractal-toy/fluid-toy/demo dev-only?
+3. **Host of `app.gmt-fractals.com`** — GH Pages custom domain (needs a `CNAME`
+   file in the build) or the Cloudflare `gmt-fractals` project? The map was
+   ambiguous; this decides whether we add a `CNAME` to the repo.
+4. **Dev launcher discoverability** — add a `/dev`-only "other builds" link, or
+   leave `launcher.html` as a known URL?
+
+---
+
+## 7. Verification (the SW only runs in the built app)
+
+The service worker is disabled in `npm run dev` (`devOptions.enabled:false`),
+so this can't be tested against the dev server — that's why the share-link /
+gallery smokes didn't catch the launcher bug. To verify the restructure:
+
+```
+npm run build
+npx vite preview --port 4173      # serves dist/ WITH the service worker
+```
+Then in a browser: load `/`, `/?gallery=<slug>`, `/app-gmt.html?gallery=<slug>`
+— all should land in the app (approve the SW update prompt / hard-reload, since
+`registerType: 'prompt'`). A first visit installs the SW; the *second* load is
+SW-controlled — test both. Optionally add a `preview`-mode smoke later that
+drives this, to lock the SW behavior into CI.
+```

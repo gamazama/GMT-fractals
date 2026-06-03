@@ -77,5 +77,15 @@ debug/thumbnails/
 # Deep zoom perturbation experiment
 prototype/deep-zoom/
 
+# Palette library — baked by `npm run bake:palette` from H:/GMT/stuff/palette-lab
+# (NOT in this repo, so a clean checkout / CI cannot regenerate these).
+#  • core.*       = TRACKED — clean, redistributable (MIT/Apache/BSD/CC0), ~0.5 MB. Ships always.
+#  • softology.*  = ignored — provenance-unverified aggregate. Lazy-loaded; serve from R2 or omit.
+#  • cptcity.*    = ignored — per-collection redistribution-bound. Lazy-loaded; serve from R2 or omit.
+public/palette/softology.bin.gz
+public/palette/softology.json.gz
+public/palette/cptcity.bin.gz
+public/palette/cptcity.json.gz
+
 # Claude Code personal config
 .claude/

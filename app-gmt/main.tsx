@@ -28,6 +28,9 @@ import '../engine-gmt/store/gmtPresetFields';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { PalettePickerButton } from './PalettePickerOverlay';
+import { installGradientLibrary } from './gradientLibrary';
+import { topbar } from '../engine/plugins/TopBar';
 import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
 import { registerGmtUi } from '../engine-gmt/features/ui';
@@ -110,11 +113,22 @@ registerUI();
 // componentIds for `component:` panels and `widgets:` slots).
 registerGmtUi();
 
+// Palette Picker — a full-width overlay (topbar button → modal) instead of the
+// cramped right-dock panel. The wall gets real width + the Quality filters in a
+// sidebar; picking still colours the fractal via the gradientSeam
+// (PickerStage.onPick → applyEntryToColoring → setColoring).
+topbar.register({ id: 'gmt-palette-picker', slot: 'left', order: 22, component: PalettePickerButton });
+
 // GMT camera slice — savedCameras / undo / redo / addCamera / resetCamera.
 // Patches the store with actions engine-core doesn't provide. Must land
 // before any component that reads `state.savedCameras.length` (e.g.
 // CameraManagerPanel).
 installGmtCameraSlice();
+
+// Saved-gradient ("favourites") library — savedGradients slice + actions, persisted to
+// localStorage. Drives the Palette Picker overlay's Saved-gradients section. Must land
+// before that panel reads state.savedGradients. No slot hotkeys (cameras own 1..9).
+installGradientLibrary();
 
 // Stash pre-boot texture emits on the proxy so GmtRendererTickDriver can
 // replay them once the worker is boot-ready. loadScene() (below) fires the
@@ -545,7 +559,12 @@ if (bootPreset) {
     console.warn('[app-gmt] No boot preset available — worker may boot un-hydrated');
 }
 
-applyPanelManifest(GmtPanels);
+applyPanelManifest([
+  ...GmtPanels,
+  // Palette picker now lives in a full-width overlay (topbar "Palettes" button →
+  // PalettePickerOverlay), which embeds the paletteFilters controls in a sidebar —
+  // no cramped right-dock panels.
+]);
 
 // Boot is now driven by LoadingScreen → useAppStartup.bootEngine, which
 // fires after the LoadingScreen's progress reaches 100% (gives
