@@ -12,17 +12,60 @@
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
     </style>
-    <link rel="icon" type="image/x-icon" href="./assets/favicon-CTPQsXcS.ico" />
-    <script type="module" crossorigin src="./assets/mesh-export-ByK5f-PG.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/three-DZB2NGqN.js">
-    <link rel="modulepreload" crossorigin href="./assets/three-fiber-C5DkfiAm.js">
-    <link rel="modulepreload" crossorigin href="./assets/three-drei-hqOrdlmR.js">
+    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+    <script type="module" crossorigin src="./assets/mesh-export-D9JzMdvQ.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/three-DQWx7qFd.js">
+    <link rel="modulepreload" crossorigin href="./assets/three-fiber-GKfjny8F.js">
+    <link rel="modulepreload" crossorigin href="./assets/three-drei-D6d-dyvY.js">
     <link rel="modulepreload" crossorigin href="./assets/pako-DwGzBETv.js">
-    <link rel="modulepreload" crossorigin href="./assets/GenericDropdown-fot1Yo5k.js">
-    <link rel="modulepreload" crossorigin href="./assets/FormulaFormat-C7ew8Ocr.js">
-    <link rel="modulepreload" crossorigin href="./assets/index-BTxOaw1P.js">
+    <link rel="modulepreload" crossorigin href="./assets/FractalRegistry-BiAseehE.js">
+    <link rel="modulepreload" crossorigin href="./assets/FormulaFormat-CbtHxV5P.js">
   <link rel="manifest" href="./manifest.webmanifest"></head>
   <body>
     <div id="root"></div>
+    <!-- PWA auto-update: mesh-export has no topbar, so it can't host the
+         engine's "Update" pill. Instead, run the full SW update contract
+         inline on every page load.
+         The four-step contract (skipping any one of these breaks staleness
+         recovery):
+           1. Force registration.update() to fetch any new SW script.
+           2. Watch BOTH already-waiting SWs AND ones that finish installing
+              later (updatefound → statechange === 'installed').
+           3. postMessage SKIP_WAITING so the new SW activates immediately
+              instead of waiting for all clients to release the old one.
+           4. Reload on 'controllerchange' so this page actually starts
+              using the new bundle — without this the page keeps its old
+              JS references even though the SW has rotated. Guard against
+              double-reload (the event fires once per controller swap). -->
+    <script>
+      (function() {
+        if (!('serviceWorker' in navigator)) return;
+
+        let reloadedOnce = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (reloadedOnce) return;
+          reloadedOnce = true;
+          window.location.reload();
+        });
+
+        const applyWaiting = (reg) => {
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        };
+
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((reg) => {
+            applyWaiting(reg);
+            reg.addEventListener('updatefound', () => {
+              const sw = reg.installing;
+              if (!sw) return;
+              sw.addEventListener('statechange', () => {
+                if (sw.state === 'installed' && reg.waiting) applyWaiting(reg);
+              });
+            });
+            reg.update().catch(() => {});
+          });
+        });
+      })();
+    </script>
   </body>
 </html>
