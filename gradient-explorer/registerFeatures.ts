@@ -1,5 +1,5 @@
 /**
- * Palette Studio — side-effect feature/component registration.
+ * GMT Gradient Explorer — side-effect feature/component registration.
  *
  * Imported at the very top of main.tsx, BEFORE anything touches the engine store
  * (createFeatureSlice freezes the registries on first store access). registerPaletteUI()

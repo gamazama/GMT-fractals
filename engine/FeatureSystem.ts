@@ -71,6 +71,11 @@ export interface CustomUIConfig {
     props?: Record<string, any>;
     condition?: ParamCondition | ParamCondition[];
     parentId?: string;
+    /** Where the item renders relative to the feature's params. Default
+     *  'bottom' (after all param widgets — the historical behaviour).
+     *  'top' lifts it above the params, for controls that read as the
+     *  panel's primary input (e.g. the Picker's Source toggles). */
+    placement?: 'top' | 'bottom';
 }
 
 export interface ParamConfig {

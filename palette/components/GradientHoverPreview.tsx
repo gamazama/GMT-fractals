@@ -9,8 +9,11 @@
  * row for the Picker, a config ramp for Favients).
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+
+// Keep the preview + tooltip this many px clear of the viewport edges.
+const EDGE_MARGIN = 8;
 
 export interface GradientHover {
   /** Screen rect for the zoomed preview (fixed-position CSS px). */
@@ -29,6 +32,7 @@ const Z_PREVIEW = 9500; // above floating panels / overlays; pointer-events-none
 
 export const GradientHoverPreview: React.FC<{ hover: GradientHover | null }> = ({ hover }) => {
   const ref = useRef<HTMLCanvasElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const cv = ref.current;
@@ -43,6 +47,38 @@ export const GradientHoverPreview: React.FC<{ hover: GradientHover | null }> = (
     hover.paint(ctx, hover.ew, hover.eh);
   }, [hover]);
 
+  // Clamp the preview + its tooltip inside the viewport. The caller anchors the
+  // preview centred on the swatch, which overflows when the swatch sits near an
+  // edge (e.g. the narrow docked Favients shelf). Done in a layout effect so the
+  // corrected position is committed before the browser paints — no flash at the
+  // unclamped spot. Centralised here so both the Picker wall and Favients shelf
+  // (the two callers) get edge-safe previews for free.
+  useLayoutEffect(() => {
+    if (!hover) return;
+    const cv = ref.current;
+    if (!cv) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    const left = Math.max(EDGE_MARGIN, Math.min(hover.ex, vw - hover.ew - EDGE_MARGIN));
+    const top = Math.max(EDGE_MARGIN, Math.min(hover.ey, vh - hover.eh - EDGE_MARGIN));
+    cv.style.left = `${left}px`;
+    cv.style.top = `${top}px`;
+
+    const tip = tipRef.current;
+    if (tip) {
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      // Prefer below the preview; flip above when it would run off the bottom.
+      let tipTop = top + hover.eh + 8;
+      if (tipTop + th + EDGE_MARGIN > vh) tipTop = top - th - 8;
+      tipTop = Math.max(EDGE_MARGIN, Math.min(tipTop, vh - th - EDGE_MARGIN));
+      const tipLeft = Math.max(EDGE_MARGIN, Math.min(left, vw - tw - EDGE_MARGIN));
+      tip.style.left = `${tipLeft}px`;
+      tip.style.top = `${tipTop}px`;
+    }
+  }, [hover]);
+
   if (!hover || typeof document === 'undefined') return null;
 
   return createPortal(
@@ -53,6 +89,7 @@ export const GradientHoverPreview: React.FC<{ hover: GradientHover | null }> = (
         style={{ left: hover.ex, top: hover.ey, width: hover.ew, height: hover.eh, zIndex: Z_PREVIEW, boxShadow: '0 0 28px rgba(0,0,0,0.92)' }}
       />
       <div
+        ref={tipRef}
         className="fixed pointer-events-none px-2 py-1 rounded bg-zinc-900/95 border border-zinc-700 text-[11px] text-zinc-200 shadow-xl whitespace-nowrap"
         style={{ left: hover.ex, top: hover.ey + hover.eh + 8, zIndex: Z_PREVIEW }}
       >

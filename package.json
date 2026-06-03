@@ -93,6 +93,7 @@
     "@supabase/supabase-js": "^2.105.1",
     "codemirror": "^6.0.2",
     "cross-env": "^7.0.3",
+    "fflate": "^0.8.3",
     "mediabunny": "^1.40.1",
     "nanoid": "^5.0.6",
     "pako": "^2.1.0",

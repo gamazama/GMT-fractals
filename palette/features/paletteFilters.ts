@@ -113,7 +113,9 @@ export const PaletteFiltersFeature: FeatureDefinition = {
       componentId: 'palette-quality-pad',
       props: { axis, loLabel, hiLabel, track, hint },
     })),
+    // Sources (which libraries are loaded) is the panel's primary input, so
+    // lift it above the params/quality pads to the top of the Filters panel.
+    { componentId: 'palette-bundle-toggles', placement: 'top' },
     { componentId: 'palette-theme-chips' },
-    { componentId: 'palette-bundle-toggles' },
   ],
 };

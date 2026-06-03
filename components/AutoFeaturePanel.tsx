@@ -379,11 +379,10 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                             fullWidth
                             labelSuffix={compileIndicator}
                         />
-                        {currentHint && (
-                            <div className="px-2 py-1 text-[9px] leading-tight text-gray-500 italic break-words">
-                                {currentHint}
-                            </div>
-                        )}
+                        {/* Per-option hint uses the shared <Hint> chip so enum
+                            captions match every other panel hint (and self-gate
+                            on showHints) instead of a bespoke italic caption. */}
+                        {currentHint && <Hint text={currentHint} />}
                     </div>
                 );
             }
@@ -625,6 +624,34 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
 
     const renderItems: React.ReactNode[] = [];
 
+    // Build a single customUI entry into a node (or null if filtered out).
+    // Shared by the top-placement pass below and the bottom pass that
+    // follows the params, so both honour the same visibility rules.
+    const buildCustomItem = (c: CustomUIConfig, idx: number): React.ReactNode | null => {
+        // Prevent CustomUI leakage when using whitelist params (e.g. inserting single slider)
+        if (whitelistParams && whitelistParams.length > 0) return null;
+        // Skip entries handled by renderNode tree-nesting — UNLESS the parent
+        // is being lifted (its toggle lives in the section header, so its
+        // customUI children also need to surface here at root).
+        if (c.parentId && c.parentId !== liftChildrenOf) return null;
+        if (groupFilter && c.group !== groupFilter) return null;
+        if (!checkParamActive(c.condition, sliceState, globalState)) return null;
+        const Component = componentRegistry.get(c.componentId);
+        if (!Component) return null;
+        return (
+            <div key={`custom-${c.componentId}-${c.group ?? idx}`} className={`flex flex-col mb-px ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}>
+                <Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} />
+            </div>
+        );
+    };
+
+    // Top-placed customUI renders ABOVE the params.
+    feature.customUI?.forEach((c, idx) => {
+        if (c.placement !== 'top') return;
+        const node = buildCustomItem(c, idx);
+        if (node) renderItems.push(node);
+    });
+
     if (hasCollapsibleGroups && groupConfigs) {
         // Group paramRoots by their group property, preserving order
         const groupOrder: string[] = [];
@@ -693,17 +720,11 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         renderItems.push(...buildFlatItems(paramRoots));
     }
 
+    // Bottom-placed customUI (the default) renders AFTER the params.
     feature.customUI?.forEach((c, idx) => {
-        // Prevent CustomUI leakage when using whitelist params (e.g. inserting single slider)
-        if (whitelistParams && whitelistParams.length > 0) return;
-        // Skip entries handled by renderNode tree-nesting — UNLESS the parent
-        // is being lifted (its toggle lives in the section header, so its
-        // customUI children also need to surface here at root).
-        if (c.parentId && c.parentId !== liftChildrenOf) return;
-        if (groupFilter && c.group !== groupFilter) return;
-        if (!checkParamActive(c.condition, sliceState, globalState)) return;
-        const Component = componentRegistry.get(c.componentId);
-        if (Component) renderItems.push(<div key={`custom-${c.componentId}-${c.group ?? idx}`} className={`flex flex-col mb-px ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
+        if (c.placement === 'top') return; // already rendered above
+        const node = buildCustomItem(c, idx);
+        if (node) renderItems.push(node);
     });
 
     // When the panel is rendering a single group via groupFilter, surface

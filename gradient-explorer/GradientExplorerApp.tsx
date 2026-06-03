@@ -1,5 +1,5 @@
 /**
- * PaletteStudioApp — the standalone Palette Studio shell.
+ * GradientExplorerApp — the standalone GMT Gradient Explorer shell.
  *
  * Reuses the engine UI chrome (TopBar + Dock + AutoFeaturePanel + context menu +
  * floating panels) but has NO raymarcher viewport: unlike fluid/fractal toys, the
@@ -25,6 +25,7 @@ import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
 import { PanelRouter } from '../components/PanelRouter';
 import { TimelineHost } from '../components/TimelineHost';
+import { ToastHost } from '../engine/components/ToastHost';
 import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import { PickerStage } from './PickerStage';
@@ -38,7 +39,11 @@ const HelpBrowser = React.lazy(() => import('../components/HelpBrowser'));
 
 // The centre stage mirrors the active right-dock tab (the studio "mode"). The
 // dock tab strip IS the mode selector — no bespoke tab bar.
-const STAGE_BLURB: Record<string, { label: string; blurb: string }> = {};
+const STAGE_BLURB: Record<string, { label: string; blurb: string }> = {
+  // Favients is a shelf, not a centre-stage mode — its tab shows the saved-gradient
+  // shelf in the left dock, so the centre just invites you back to a working mode.
+  Favients: { label: 'Favients shelf', blurb: 'Your saved gradients live in the left dock. Pick Generator, Picker, or Image to keep working.' },
+};
 
 const Stage: React.FC = () => {
   const activeTab = useEngineStore((s) => s.activeRightTab) as string | null;
@@ -46,7 +51,7 @@ const Stage: React.FC = () => {
   if (activeTab === 'Generator') return <GeneratorStage />;
   if (activeTab === 'Image') return <ImageStage />;
 
-  const active = (activeTab && STAGE_BLURB[activeTab]) || { label: 'Palette Studio', blurb: 'Select a tab' };
+  const active = (activeTab && STAGE_BLURB[activeTab]) || { label: 'GMT Gradient Explorer', blurb: 'Select a tab' };
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-zinc-950">
       <div className="flex-1 flex items-center justify-center p-8 text-center">
@@ -60,7 +65,7 @@ const Stage: React.FC = () => {
   );
 };
 
-const PaletteStudioApp: React.FC = () => {
+const GradientExplorerApp: React.FC = () => {
   const state = useEngineStore();
   useGlobalContextMenu();
 
@@ -134,10 +139,13 @@ const PaletteStudioApp: React.FC = () => {
 
           {/* Timeline — params keyed via the slider diamonds animate here. */}
           <TimelineHost />
+
+          {/* Toasts — save/load + Favients feedback surface here. */}
+          <ToastHost />
         </div>
       </div>
     </StoreCallbacksProvider>
   );
 };
 
-export default PaletteStudioApp;
+export default GradientExplorerApp;

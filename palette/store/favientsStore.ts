@@ -116,7 +116,34 @@ interface FavientsState {
   seedPresets: (entries: { name: string; config: GradientConfig }[], group: string, label: string) => void;
   clear: () => void;
   setSelectedTarget: (id: string | null) => void;
+  /** Serialize the whole collection (favourites + group labels) to a portable
+   *  JSON string — the backup/share file written by the panel's "Save". */
+  exportCollection: () => string;
+  /** Load a collection JSON. 'replace' overwrites the current collection;
+   *  'merge' appends entries whose gradient isn't already present (by content
+   *  signature), keeping existing group labels on conflict. Returns how many
+   *  favourites were added (merge) or set (replace), or null if the file was
+   *  unreadable / not a collection. */
+  importCollection: (json: string, mode: 'merge' | 'replace') => number | null;
 }
+
+/** On-disk shape of an exported collection. */
+export interface FavientsCollection {
+  version: 1;
+  favients: Favient[];
+  groupLabels: Record<string, string>;
+}
+
+const COLLECTION_VERSION = 1 as const;
+
+/** Keep only well-formed favourites (same guard as loadFavients, reused for imports). */
+const validFavients = (arr: unknown): Favient[] =>
+  Array.isArray(arr)
+    ? arr.filter(
+        (f): f is Favient =>
+          !!f && typeof (f as Favient).id === 'string' && !!(f as Favient).config && Array.isArray((f as Favient).config?.stops),
+      )
+    : [];
 
 export const useFavientsStore = create<FavientsState>((set, get) => ({
   favients: loadFavients(),
@@ -219,5 +246,47 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
   setSelectedTarget: (id) => {
     saveTarget(id);
     set({ selectedTargetId: id });
+  },
+
+  exportCollection: () => {
+    const { favients, groupLabels } = get();
+    const payload: FavientsCollection = { version: COLLECTION_VERSION, favients, groupLabels };
+    return JSON.stringify(payload, null, 2);
+  },
+
+  importCollection: (json, mode) => {
+    let parsed: Partial<FavientsCollection>;
+    try {
+      parsed = JSON.parse(json) as Partial<FavientsCollection>;
+    } catch {
+      return null;
+    }
+    // A collection file must carry a favients array (even if empty). Reject
+    // anything that doesn't look like one so a stray JSON doesn't wipe the shelf.
+    // Optional-chaining covers null/primitive parses (JSON "null", "5", etc.).
+    if (!Array.isArray(parsed?.favients)) return null;
+    const incoming = validFavients(parsed.favients);
+    const incomingLabels = parsed.groupLabels && typeof parsed.groupLabels === 'object' ? parsed.groupLabels : {};
+
+    if (mode === 'replace') {
+      // Fresh ids so re-importing the same file twice can't collide with itself.
+      const favients = incoming.map((f) => ({ ...f, id: newId() }));
+      const groupLabels = pruneLabels(favients, { ...incomingLabels });
+      saveFavients(favients);
+      saveGroupLabels(groupLabels);
+      set({ favients, groupLabels });
+      return favients.length;
+    }
+
+    // merge: skip favourites already present by content signature; fresh ids for the rest.
+    const have = new Set(get().favients.map((f) => favientSig(f.config)));
+    const fresh = incoming.filter((f) => !have.has(favientSig(f.config))).map((f) => ({ ...f, id: newId() }));
+    const favients = [...get().favients, ...fresh];
+    // Existing labels win on conflict; imported labels fill in new groups.
+    const groupLabels = pruneLabels(favients, { ...incomingLabels, ...get().groupLabels });
+    saveFavients(favients);
+    saveGroupLabels(groupLabels);
+    set({ favients, groupLabels });
+    return fresh.length;
   },
 }));

@@ -1,16 +1,24 @@
 /**
- * favientsPanelPersist — remembers the Favients floating panel's open-state, position,
- * and size across sessions (and across GMT apps; same-origin `localStorage`). The panel
- * itself lives in the engine store's PanelState, which isn't persisted by default, so
- * each host calls `restoreFavientsPanel()` after its manifest is applied and
- * `watchFavientsPanel()` once to mirror later changes back to storage.
+ * favientsPanelPersist — remembers the Favients panel's open-state, location (float /
+ * docked side), position, and size across sessions. The panel itself lives in the engine
+ * store's PanelState, which isn't persisted by default, so each host calls
+ * `restoreFavientsPanel()` after its manifest is applied and `watchFavientsPanel()` once
+ * to mirror later changes back to storage.
+ *
+ * The storage key is per-host (`opts.storageKey`): app-gmt floats the shelf and persists
+ * under the default `gmt.favients.panel`, while the standalone Gradient Explorer docks it
+ * right by default and persists under its OWN key — so the two apps don't read each
+ * other's docking state through same-origin `localStorage`.
  */
 
 import { useEngineStore } from '../../store/engineStore';
 import { lsGetJson, lsSetJson } from '../core/storage';
 
-const LS = 'gmt.favients.panel';
+const DEFAULT_LS = 'gmt.favients.panel';
 const PANEL_ID = 'Favients';
+
+/** Where the panel lives: a free-floating window, or docked into a side tab strip. */
+export type FavientsLocation = 'float' | 'left' | 'right';
 
 export interface FavientsPanelDefaults {
   x: number;
@@ -18,6 +26,16 @@ export interface FavientsPanelDefaults {
   w: number;
   h: number;
   open: boolean;
+  /** First-run location when nothing is saved yet. Defaults to 'float'. */
+  location?: FavientsLocation;
+  /** Tab order when `location` is a dock side. Defaults to 0. */
+  order?: number;
+}
+
+/** Per-host persistence options. */
+export interface FavientsPersistOptions {
+  /** localStorage key. Defaults to the shared `gmt.favients.panel`. */
+  storageKey?: string;
 }
 
 interface Stored {
@@ -26,9 +44,17 @@ interface Stored {
   y: number;
   w: number;
   h: number;
+  location?: FavientsLocation;
+  order?: number;
 }
 
-type PanelEntry = { isOpen?: boolean; floatPos?: { x: number; y: number }; floatSize?: { width: number; height: number } };
+type PanelEntry = {
+  isOpen?: boolean;
+  location?: FavientsLocation;
+  order?: number;
+  floatPos?: { x: number; y: number };
+  floatSize?: { width: number; height: number };
+};
 type StoreActions = Record<string, (...a: unknown[]) => void>;
 
 /** Float + open the Favients panel (bring it up if docked/closed). Shared entrance
@@ -39,24 +65,31 @@ export const openFavientsPanel = (): void => {
   st.togglePanel?.(PANEL_ID, true);
 };
 
-/** Float the panel at its remembered (or default) spot + open-state. Call after the
- *  host's applyPanelManifest registered the `Favients` panel. */
-export const restoreFavientsPanel = (defaults: FavientsPanelDefaults): void => {
+/** Restore the panel at its remembered (or default) location + open-state. Call after
+ *  the host's applyPanelManifest registered the `Favients` panel. */
+export const restoreFavientsPanel = (defaults: FavientsPanelDefaults, opts?: FavientsPersistOptions): void => {
   const st = useEngineStore.getState() as unknown as StoreActions;
-  const saved = lsGetJson<Stored | null>(LS, null);
+  const key = opts?.storageKey ?? DEFAULT_LS;
+  const saved = lsGetJson<Stored | null>(key, null);
   const x = saved?.x ?? defaults.x;
   const y = saved?.y ?? defaults.y;
   const w = saved?.w ?? defaults.w;
   const h = saved?.h ?? defaults.h;
   const open = saved ? saved.open : defaults.open;
-  st.movePanel?.(PANEL_ID, 'float');
+  const location = saved?.location ?? defaults.location ?? 'float';
+
+  // Always remember the float spot/size so a later undock returns the panel to
+  // its last floating position, regardless of where it starts.
   st.setFloatPosition?.(PANEL_ID, x, y);
   st.setFloatSize?.(PANEL_ID, w, h);
+  if (location === 'float') st.movePanel?.(PANEL_ID, 'float');
+  else st.movePanel?.(PANEL_ID, location, saved?.order ?? defaults.order ?? 0);
   st.togglePanel?.(PANEL_ID, open);
 };
 
-/** Mirror later open/move/resize back to storage (debounced). Call once. */
-export const watchFavientsPanel = (): void => {
+/** Mirror later open/move/resize/dock back to storage (debounced). Call once. */
+export const watchFavientsPanel = (opts?: FavientsPersistOptions): void => {
+  const key = opts?.storageKey ?? DEFAULT_LS;
   let lastPs: PanelEntry | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   useEngineStore.subscribe(() => {
@@ -67,7 +100,15 @@ export const watchFavientsPanel = (): void => {
     lastPs = ps;
     if (timer) clearTimeout(timer);
     timer = setTimeout(
-      () => lsSetJson(LS, { open: !!ps.isOpen, x: ps.floatPos?.x ?? 0, y: ps.floatPos?.y ?? 0, w: ps.floatSize?.width ?? 296, h: ps.floatSize?.height ?? 300 }),
+      () => lsSetJson(key, {
+        open: !!ps.isOpen,
+        location: ps.location ?? 'float',
+        order: ps.order ?? 0,
+        x: ps.floatPos?.x ?? 0,
+        y: ps.floatPos?.y ?? 0,
+        w: ps.floatSize?.width ?? 296,
+        h: ps.floatSize?.height ?? 300,
+      }),
       300,
     );
   });

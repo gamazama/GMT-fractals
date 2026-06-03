@@ -15,6 +15,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { GenericDropdown } from '../../components/GenericDropdown';
+import { Hint } from '../../components/Hint';
 import {
   useFavientsStore,
   favientSig,
@@ -35,12 +36,156 @@ import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview
 import { FavientsIcon } from './FavientsIcon';
 import type { RGB } from '../core/oklab';
 import { useEngineStore } from '../../store/engineStore';
+import { useDismiss } from '../../hooks/useDismiss';
+import { downloadBlob } from '../../utils/SceneFormat';
+import { EXPORT_FORMATS } from '../core/exportFormats';
+import { buildCollectionZip, buildContactSheet } from '../core/favientsExport';
 
 /** Re-render when hosts (re)register apply targets or the browse action. */
 const useFavientTargets = () => {
   const [, force] = useState(0);
   useEffect(() => subscribeFavientTargets(() => force((n) => n + 1)), []);
   return getFavientTargets();
+};
+
+const KebabIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <circle cx="5" cy="12" r="1.8" />
+    <circle cx="12" cy="12" r="1.8" />
+    <circle cx="19" cy="12" r="1.8" />
+  </svg>
+);
+
+const menuItemCls =
+  'w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-gray-300 hover:text-white hover:bg-white/10 transition-colors';
+
+/**
+ * FavientsSystemMenu — collection-management popover in the panel header. Saves the
+ * collection to a re-importable JSON, loads (merge) / replaces it from a file, clears
+ * it, and exports the gradients as a per-format .zip or a PNG contact sheet. Styled to
+ * match the engine's system-menu popovers.
+ */
+const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlash }) => {
+  const favients = useFavientsStore((s) => s.favients);
+  const exportCollection = useFavientsStore((s) => s.exportCollection);
+  const importCollection = useFavientsStore((s) => s.importCollection);
+  const clear = useFavientsStore((s) => s.clear);
+
+  const [open, setOpen] = useState(false);
+  const [zipFmt, setZipFmt] = useState(EXPORT_FORMATS[0].key);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const importMode = useRef<'merge' | 'replace'>('merge');
+
+  useDismiss(rootRef, { onClose: () => setOpen(false), enabled: open, escape: true });
+
+  const close = () => setOpen(false);
+  const empty = favients.length === 0;
+
+  const saveCollection = () => {
+    const blob = new Blob([exportCollection()], { type: 'application/json' });
+    downloadBlob(blob, 'favients-collection.json');
+    onFlash('Collection saved (.json)');
+    close();
+  };
+
+  const pickFile = (mode: 'merge' | 'replace') => {
+    if (mode === 'replace' && !empty && !window.confirm('Replace the current Favients collection with the loaded file?')) return;
+    importMode.current = mode;
+    fileRef.current?.click();
+  };
+
+  const onFile = async (file: File) => {
+    const text = await file.text();
+    const n = importCollection(text, importMode.current);
+    if (n == null) onFlash("That file isn't a Favients collection");
+    else onFlash(importMode.current === 'replace' ? `Replaced — ${n} loaded` : n ? `Merged ${n} new` : 'Nothing new to merge');
+    close();
+  };
+
+  const doClear = () => {
+    if (empty) return;
+    if (window.confirm(`Clear all ${favients.length} favourite${favients.length === 1 ? '' : 's'}? This cannot be undone.`)) {
+      clear();
+      onFlash('Collection cleared');
+    }
+    close();
+  };
+
+  const exportZip = () => {
+    if (empty) { onFlash('Nothing to export'); return; }
+    const bytes = buildCollectionZip(favients, zipFmt);
+    downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), 'favients.zip');
+    onFlash(`Exported ${favients.length} as .zip`);
+    close();
+  };
+
+  const exportSheet = async () => {
+    if (empty) { onFlash('Nothing to export'); return; }
+    const blob = await buildContactSheet(favients);
+    if (blob) {
+      downloadBlob(blob, 'favients-contact-sheet.png');
+      onFlash('Contact sheet saved (PNG)');
+    }
+    close();
+  };
+
+  return (
+    <div className="relative shrink-0" ref={rootRef}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json,.json"
+        aria-label="Load Favients collection"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          if (fileRef.current) fileRef.current.value = '';
+        }}
+      />
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="Collection — save, load, export"
+        className={`flex items-center justify-center w-6 h-6 rounded transition-colors ${open ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+      >
+        <KebabIcon />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1 w-52 bg-black/95 border border-white/15 rounded-lg shadow-2xl z-50 p-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button className={menuItemCls} onClick={saveCollection}>Save collection (.json)</button>
+          <button className={menuItemCls} onClick={() => pickFile('merge')}>Load &amp; merge…</button>
+          <button className={menuItemCls} onClick={() => pickFile('replace')}>Replace from file…</button>
+          <button className={`${menuItemCls} hover:!text-red-300`} onClick={doClear}>Clear collection</button>
+
+          <div className="h-px bg-white/10 my-1" />
+          <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider px-2 py-1">Export</div>
+          <div className="flex items-center gap-1 px-2 py-1" onClick={(e) => e.stopPropagation()}>
+            <select
+              value={zipFmt}
+              onChange={(e) => setZipFmt(e.target.value)}
+              title="Per-gradient file format for the .zip"
+              className="flex-1 min-w-0 bg-gray-900 border border-white/10 rounded text-[11px] text-gray-200 px-1 py-0.5 outline-none focus:border-cyan-500"
+            >
+              {EXPORT_FORMATS.map((f) => (
+                <option key={f.key} value={f.key}>{f.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={exportZip}
+              className="shrink-0 text-[11px] px-2 py-0.5 rounded bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors"
+            >
+              .zip
+            </button>
+          </div>
+          <button className={menuItemCls} onClick={exportSheet}>Contact sheet (PNG)</button>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // Swatch size + gap follow the picker's `paletteFilters` controls; fall back to these.
@@ -351,7 +496,7 @@ export const FavientsPanel: React.FC = () => {
       }}
     >
       <div className="px-2.5 py-2 border-b border-white/10 shrink-0 flex items-center gap-1.5">
-        <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Applying to</span>
+        <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Destination</span>
         {targets.length ? (
           <GenericDropdown
             value={activeTarget?.id ?? ''}
@@ -374,14 +519,18 @@ export const FavientsPanel: React.FC = () => {
         {studio && (
           <button
             onClick={() => studio()}
-            title="Open Palette Studio (new tab)"
+            title="Open GMT Gradient Explorer (new tab)"
             className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
           >
             <StudioIcon />
           </button>
         )}
         <span className="text-[10px] text-gray-500 tabular-nums shrink-0">{favients.length}</span>
+        <FavientsSystemMenu onFlash={flash} />
       </div>
+
+      {/* Toggle-gated intro hint (shares the panel Hint chip styling). */}
+      <Hint text="Where your favourite gradients go to die — star or drag a swatch here to keep it." />
 
       <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col">
         {favients.length === 0 ? (
