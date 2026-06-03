@@ -28,6 +28,10 @@ export interface GenericDropdownProps<T> {
     /** Optional context menu handler */
     onContextMenu?: (e: React.MouseEvent) => void;
     disabled?: boolean;
+    /** Optional passthrough handlers spread onto the native <select> (e.g. to
+     *  pause rendering while the dropdown is open). Kept generic so this
+     *  component stays store-free. */
+    selectHandlers?: Pick<React.SelectHTMLAttributes<HTMLSelectElement>, 'onMouseDown' | 'onKeyDown' | 'onBlur'>;
 }
 
 export function GenericDropdown<T extends string | number>({
@@ -41,6 +45,7 @@ export function GenericDropdown<T extends string | number>({
     labelSuffix,
     onContextMenu,
     disabled = false,
+    selectHandlers,
     ...rest
 }: GenericDropdownProps<T>) {
     const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -69,6 +74,7 @@ export function GenericDropdown<T extends string | number>({
                     value={value}
                     onChange={handleChange}
                     disabled={disabled}
+                    {...selectHandlers}
                     className={`w-full h-full bg-transparent text-[10px] font-medium text-gray-200 px-2 pr-6 outline-none cursor-pointer appearance-none text-center ${selectClassName}`}
                 >
                     {options.map((opt) => (

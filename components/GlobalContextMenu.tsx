@@ -6,6 +6,7 @@ import { useHelpTopics } from '../data/help/useHelpTopics';
 import { HelpIcon, CheckIcon, ArrowIcon, ChevronRight } from './Icons';
 import Slider from './Slider';
 import { useDismiss } from '../hooks/useDismiss';
+import { useRenderPause } from '../hooks/useRenderPause';
 
 interface GlobalContextMenuProps {
     x: number;
@@ -23,6 +24,11 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
     const [activeSubmenu, setActiveSubmenu] = useState<{ items: ContextMenuItem[], x: number, y: number } | null>(null);
     const submenuTimerRef = useRef<number | null>(null);
     const HELP_TOPICS = useHelpTopics();
+
+    // Pause the render loop while the context menu is open — same mechanism the
+    // formula picker uses. Only the root arms this (submenus are recursive
+    // descendants); the hook save/restores so a manual pause isn't auto-resumed.
+    useRenderPause(!isSubmenu);
 
     useLayoutEffect(() => {
         if (!menuRef.current) return;

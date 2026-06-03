@@ -14,6 +14,7 @@ import { collectHelpIds } from '../utils/helpUtils';
 import { ContextMenuItem } from '../types/help';
 import { ContextMenu as PresetMenu } from './gradient/GradientContextMenu';
 import { MenuIcon } from './Icons';
+import { useRenderPause } from '../hooks/useRenderPause';
 
 type InterpolationMode = 'linear' | 'step' | 'smooth' | 'cubic';
 
@@ -150,6 +151,9 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     
     const [marqueeRect, setMarqueeRect] = useState<{x:number, y:number, w:number, h:number} | null>(null);
     const [presetMenu, setPresetMenu] = useState<{x:number, y:number} | null>(null);
+
+    // Pause the render loop while the preset menu is open.
+    useRenderPause(presetMenu !== null);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const knotTrackRef = useRef<HTMLDivElement>(null);

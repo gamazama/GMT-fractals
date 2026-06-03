@@ -52,6 +52,7 @@ import { useEngineStore } from '../../store/engineStore';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { CloseIcon } from '../../components/Icons';
 import { useDismiss } from '../../hooks/useDismiss';
+import { useRenderPause } from '../../hooks/useRenderPause';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -333,13 +334,17 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
     // local state so re-toggling back doesn't resurface a stale popover.
     useEffect(() => { if (useSidePanel && open) close(); }, [useSidePanel, open, close]);
 
-    if (!def) return null;
-
-    const items = menu.listItems(menuId).filter((i) => !i.when || i.when());
-
     // Side-panel route: button toggles the global state, no popover.
     // Popover route (desktop, or mobile without a host): local state.
     const isOpenForVisual = useSidePanel ? mobileActive === menuId : open;
+
+    // Pause the render loop while this menu is open — covers both the popover
+    // and mobile side-panel paths via `isOpenForVisual`.
+    useRenderPause(isOpenForVisual);
+
+    if (!def) return null;
+
+    const items = menu.listItems(menuId).filter((i) => !i.when || i.when());
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();

@@ -32,7 +32,7 @@ import { registry } from '../../engine/FractalRegistry';
 import type { FormulaType } from '../../types';
 import { CheckIcon, CloseIcon, CubeIcon, DiceIcon, NetworkIcon, CodeIcon } from '../../../components/Icons';
 import { LazyThumbnail } from './LazyThumbnail';
-import { useRenderPause } from './useRenderPause';
+import { useRenderPause } from '../../../hooks/useRenderPause';
 import { setKeyboardCaptured } from '../../../engine/plugins/Shortcuts';
 import {
     NATIVE_CATEGORIES, FORMULA_TO_CATEGORY, DEFAULT_SPECIAL_ENTRIES,

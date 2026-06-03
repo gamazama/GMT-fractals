@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { Popover } from '../../components/Popover';
+import { useRenderPause } from '../../hooks/useRenderPause';
 import { useTutorAnchor, tutorAnchors } from '../../engine/plugins/Tutorial';
 import {
     ALL_SUBSYSTEMS,
@@ -41,6 +42,10 @@ export const ViewportQuality: React.FC = () => {
     const ptEnvNEE = useEngineStore(s => (s as any).lighting?.ptEnvNEE ?? false);
 
     const [isOpen, setIsOpen] = useState(false);
+
+    // Pause the render loop while the dropdown is open — same mechanism the
+    // formula picker uses (save/restore so a manual pause isn't auto-resumed).
+    useRenderPause(isOpen);
 
     // Sync to store so tutorial triggers can observe panel open state
     useEffect(() => { setVpQualityOpen(isOpen); }, [isOpen]);
