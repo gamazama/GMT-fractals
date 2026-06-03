@@ -49,6 +49,7 @@ import { installShortcuts, shortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
 import { installCamera } from '../engine/plugins/Camera';
 import { installGmtCameraBinders } from '../engine-gmt/animation/cameraBinders';
+import { installGmtColoringBinders } from '../engine-gmt/animation/coloringBinders';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { useAnimationStore } from '../store/animationStore';
 import { installRenderDialog } from '../engine/plugins/RenderDialog';
@@ -358,6 +359,13 @@ installHud();
 // out as part of F5 (see docs/engine/20_Fragility_Audit.md).
 installGmtCameraBinders();
 
+// GMT gradient (coloring) animation binders — keyframed phase/repeats are
+// user knobs without uniforms; these binders write the derived
+// offset/scale (which carry uColorOffset/uColorScale) so the gradient
+// animates whether or not the gradient panel is mounted. Without them the
+// phase→offset conversion only ran inside the open ColoringHistogram.
+installGmtColoringBinders();
+
 // Camera tracks the Key Cam button (in TimelineToolbar) captures into
 // keyframes. Without this registration the button hides itself
 // (tracks.length === 0 short-circuit). GMT's camera is split-precision
@@ -394,7 +402,7 @@ installRenderDialog<AppGmtExtra>({
     // Taller setup window than the 320×460 default — GMT adds passes, depth
     // range, internal-scale and the sample estimator, which the short default
     // obscured. (expandedSize is the compact rendering view.)
-    baseSize:            { width: 340, height: 624 },
+    baseSize:            { width: 340, height: 644 },
     expandedSize:        { width: 400, height: 450 },
 });
 

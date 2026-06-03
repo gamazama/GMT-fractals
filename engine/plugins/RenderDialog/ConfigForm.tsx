@@ -89,7 +89,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
     const durationSec = totalFrames / cfg.fps;
 
     return (
-        <div className="flex flex-col -m-3 h-[calc(100%+20px)]">
+        <div className="flex flex-col h-full">
             <div className="px-3 py-1 bg-black/20 border-b border-white/5 flex justify-between items-center shrink-0">
                 <span className="t-label">{currentFormat.container.toUpperCase()} • {currentFormat.codec.toUpperCase()} • {cfg.fps} FPS</span>
                 <span
