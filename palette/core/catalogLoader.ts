@@ -47,8 +47,14 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
 export const groupOfBundle = (bundleId: string): string | undefined =>
   PALETTE_GROUPS.find((g) => g.bundles.includes(bundleId))?.id;
 
-/** Local base — the always-shipped core lives here; in dev the licensed bundles are here too. */
-export const PALETTE_LOCAL_BASE = '/palette/';
+/** Vite's configured base — '/' at the domain root, './' for subpath deploys (e.g.
+ *  GitHub Pages at /GMT-fractals/dev/). Guarded for the node/tsx harness, where
+ *  `import.meta.env` is absent, so it falls back to the root. */
+const VITE_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+/** Local base — the always-shipped core lives here; in dev the licensed bundles are here
+ *  too. BASE-RELATIVE (not an absolute `/palette/`) so the packs resolve under a subpath
+ *  deploy. An absolute path would hit the origin root (e.g. github.io/palette/ → 404). */
+export const PALETTE_LOCAL_BASE = `${VITE_BASE}palette/`;
 /** Canonical CDN base for the licence-encumbered / long-tail bundles (Cloudflare R2). */
 export const PALETTE_CDN_BASE = 'https://cdn.gmt-fractals.com/palette/';
 
