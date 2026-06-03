@@ -27,12 +27,17 @@ export const entryToGradientConfig = (entry: CatalogEntry): GradientConfig =>
     : { ...fitRampToStops(bufferToRamp(entry.ramp), { targetDE: 0.02, maxStops: SEAM_MAX_STOPS }), colorSpace: 'linear' };
 
 /** Apply a gradient to GMT's coloring feature. Layer 1 = `gradient`, 2 = `gradient2`.
- *  Returns false when no coloring feature is present (the studio has none). */
+ *  Forced to colorSpace 'linear': the coloring gradient is LINEAR radiance for the
+ *  fractal shader (generateGradientTextureBuffer linearises the sRGB stops when baking).
+ *  A favourite stores its own colorSpace (often 'srgb' from the generator/presets), so
+ *  applying it verbatim would bake srgb into the linear slot — force it here, the same
+ *  way entryToGradientConfig does for picked entries. Returns false when no coloring
+ *  feature is present (the studio has none). */
 export const applyGradientConfig = (config: GradientConfig, layer: 1 | 2 = 1): boolean => {
   const st = useEngineStore.getState() as unknown as Record<string, unknown>;
   const setColoring = st.setColoring as ((u: Record<string, unknown>) => void) | undefined;
   if (typeof setColoring !== 'function') return false;
-  setColoring({ [layer === 2 ? 'gradient2' : 'gradient']: config });
+  setColoring({ [layer === 2 ? 'gradient2' : 'gradient']: { ...config, colorSpace: 'linear' } });
   return true;
 };
 
