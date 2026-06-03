@@ -15,6 +15,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogEntry } from '../core/presetCatalog';
+import { GradientHoverPreview } from './GradientHoverPreview';
 
 export interface PickerGroup {
   key: string;
@@ -288,7 +289,6 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   gap = 0,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const zoomRef = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
 
@@ -305,17 +305,6 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // Merge sparse adjacent buckets that still fit one row (memoised — hover re-renders
   // the wall, and this walks every group).
   const rows = useMemo(() => mergeRows(groups, cols), [groups, cols]);
-
-  useEffect(() => {
-    const cv = zoomRef.current;
-    if (!cv || !hover || !sprite) return;
-    const dpr = window.devicePixelRatio || 1;
-    cv.width = Math.round(hover.ew * dpr);
-    cv.height = Math.round(hover.eh * dpr);
-    const ctx = cv.getContext('2d')!;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(sprite, 0, hover.entry.row, 256, 1, 0, 0, cv.width, cv.height);
-  }, [hover, sprite]);
 
   if (!sprite || width === 0) return <div ref={scrollRef} className="absolute inset-0" />;
 
@@ -339,27 +328,26 @@ export const PickerWall: React.FC<PickerWallProps> = ({
         />
       ))}
 
-      {hover && (
-        <>
-          <canvas
-            ref={zoomRef}
-            className="fixed z-50 pointer-events-none border border-white"
-            style={{ left: hover.ex, top: hover.ey, width: hover.ew, height: hover.eh, boxShadow: '0 0 28px rgba(0,0,0,0.92)' }}
-          />
-          {f && (
-            <div
-              className="fixed z-50 pointer-events-none px-2 py-1 rounded bg-zinc-900/95 border border-zinc-700 text-[11px] text-zinc-200 shadow-xl whitespace-nowrap"
-              style={{ left: hover.ex, top: hover.ey + hover.eh + 8 }}
-            >
-              <span className="font-medium">{hover.entry.name}</span>
-              <span className="text-zinc-500">
-                {' · '}{hover.entry.theme ?? '—'}{' · '}{hover.entry.bundle ?? '—'}{' · L '}{f.lightness.toFixed(2)}
-                {' · vivid '}{f.chroma.toFixed(2)}{' · '}{Math.round(f.raw.hueSpreadDeg)}°
-              </span>
-            </div>
-          )}
-        </>
-      )}
+      <GradientHoverPreview
+        hover={
+          hover
+            ? {
+                ex: hover.ex,
+                ey: hover.ey,
+                ew: hover.ew,
+                eh: hover.eh,
+                paint: (ctx, w, h) => {
+                  ctx.imageSmoothingEnabled = false;
+                  ctx.drawImage(sprite, 0, hover.entry.row, 256, 1, 0, 0, w, h);
+                },
+                name: hover.entry.name,
+                sub: f
+                  ? `· ${hover.entry.theme ?? '—'} · ${hover.entry.bundle ?? '—'} · L ${f.lightness.toFixed(2)} · vivid ${f.chroma.toFixed(2)} · ${Math.round(f.raw.hueSpreadDeg)}°`
+                  : undefined,
+              }
+            : null
+        }
+      />
     </div>
   );
 };

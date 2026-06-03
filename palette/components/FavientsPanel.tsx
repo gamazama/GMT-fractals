@@ -15,6 +15,8 @@ import { useFavientsStore, type Favient } from '../store/favientsStore';
 import { getFavientTargets, getFavientTarget, subscribeFavientTargets } from '../core/favientTargets';
 import { setFavientDrag, readFavientDrag, FAVIENT_DND_MIME } from '../core/favientDnd';
 import { renderStopsToRamp } from '../core/gmtGradient';
+import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
+import type { RGB } from '../core/oklab';
 
 /** Re-render when hosts (re)register apply targets. */
 const useFavientTargets = () => {
@@ -23,55 +25,97 @@ const useFavientTargets = () => {
   return getFavientTargets();
 };
 
-const FavientSwatch: React.FC<{
-  fav: Favient;
-  onApply: (fav: Favient) => void;
-  onRemove: (id: string) => void;
-}> = ({ fav, onApply, onRemove }) => {
-  const ref = useRef<HTMLCanvasElement>(null);
-  const ramp = useMemo(() => renderStopsToRamp(fav.config.stops, fav.config.blendSpace, fav.config.colorSpace), [fav.config]);
+// Dense, label-less swatches in the picker-wall idiom (small + tightly packed).
+const SWATCH_W = 46;
+const SWATCH_H = 22;
 
-  useEffect(() => {
-    const cv = ref.current;
-    if (!cv) return;
-    const ctx = cv.getContext('2d');
-    if (!ctx) return;
-    const src = document.createElement('canvas');
-    src.width = 256;
-    src.height = 1;
-    const sc = src.getContext('2d');
-    if (!sc) return;
-    const img = sc.createImageData(256, 1);
+/** A 256×1 canvas of an RGB ramp — the source the swatch + hover zoom both blit from. */
+const ramp256Canvas = (ramp: RGB[]): HTMLCanvasElement => {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 1;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    const img = ctx.createImageData(256, 1);
     for (let i = 0; i < 256; i++) {
       img.data[i * 4] = Math.round(ramp[i].r);
       img.data[i * 4 + 1] = Math.round(ramp[i].g);
       img.data[i * 4 + 2] = Math.round(ramp[i].b);
       img.data[i * 4 + 3] = 255;
     }
-    sc.putImageData(img, 0, 0);
+    ctx.putImageData(img, 0, 0);
+  }
+  return c;
+};
+
+const FavientSwatch: React.FC<{
+  fav: Favient;
+  onApply: (fav: Favient) => void;
+  onRemove: (id: string) => void;
+  onHover: (h: GradientHover | null) => void;
+}> = ({ fav, onApply, onRemove, onHover }) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  // Render the swatch in DISPLAY sRGB (always) — the picker wall does too. The stored
+  // colorSpace describes how the gradient bakes for the SHADER (often 'linear'); honouring
+  // it here would show linear values raw and look dull. blendSpace stays as authored.
+  const ramp = useMemo(() => renderStopsToRamp(fav.config.stops, fav.config.blendSpace ?? 'oklab', 'srgb'), [fav.config]);
+
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(SWATCH_W * dpr);
+    cv.height = Math.round(SWATCH_H * dpr);
     ctx.imageSmoothingEnabled = true;
     ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.drawImage(src, 0, 0, 256, 1, 0, 0, cv.width, cv.height);
+    ctx.drawImage(ramp256Canvas(ramp), 0, 0, 256, 1, 0, 0, cv.width, cv.height);
   }, [ramp]);
+
+  // Grow + name on hover (shared GradientHoverPreview, like the picker wall).
+  const showHover = () => {
+    const cv = ref.current;
+    if (!cv) return;
+    const r = cv.getBoundingClientRect();
+    const ew = SWATCH_W * 3,
+      eh = SWATCH_H * 2;
+    onHover({
+      ex: r.left + r.width / 2 - ew / 2,
+      ey: r.top + r.height / 2 - eh / 2,
+      ew,
+      eh,
+      paint: (ctx, w, h) => {
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(ramp256Canvas(ramp), 0, 0, 256, 1, 0, 0, w, h);
+      },
+      name: fav.name,
+      sub: fav.source ? `· ${fav.source}` : undefined,
+    });
+  };
 
   return (
     <div
       className="group relative shrink-0"
       draggable
-      onDragStart={(e) => setFavientDrag(e.dataTransfer, { config: fav.config, name: fav.name, source: fav.source })}
+      onDragStart={(e) => {
+        onHover(null);
+        setFavientDrag(e.dataTransfer, { config: fav.config, name: fav.name, source: fav.source });
+      }}
+      onMouseEnter={showHover}
+      onMouseLeave={() => onHover(null)}
       title={`${fav.name}${fav.source ? ` · ${fav.source}` : ''}\nClick to apply · drag onto a target`}
     >
       <button
         onClick={() => onApply(fav)}
-        className="block w-[76px] rounded-md ring-1 ring-white/10 hover:ring-amber-300/60 transition cursor-grab active:cursor-grabbing overflow-hidden"
+        className="block rounded-[2px] ring-1 ring-white/10 hover:ring-amber-300/80 transition cursor-grab active:cursor-grabbing overflow-hidden"
       >
-        <canvas ref={ref} width={152} height={36} className="block w-full h-7" />
+        <canvas ref={ref} style={{ width: SWATCH_W, height: SWATCH_H }} className="block" />
       </button>
-      <div className="mt-0.5 w-[76px] truncate text-[9px] text-gray-500 leading-tight px-0.5">{fav.name}</div>
       <button
         onClick={() => onRemove(fav.id)}
         title="Remove"
-        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-black/80 text-gray-300 text-[10px] leading-none opacity-0 group-hover:opacity-100 hover:bg-red-500/80 hover:text-white transition flex items-center justify-center"
+        className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-black/85 text-gray-300 text-[9px] leading-none opacity-0 group-hover:opacity-100 hover:bg-red-500/80 hover:text-white transition flex items-center justify-center z-20"
       >
         ×
       </button>
@@ -88,6 +132,7 @@ export const FavientsPanel: React.FC = () => {
   const setSelectedTarget = useFavientsStore((s) => s.setSelectedTarget);
   const targets = useFavientTargets();
   const [dropActive, setDropActive] = useState(false);
+  const [hover, setHover] = useState<GradientHover | null>(null);
 
   const [toast, setToast] = useState<string | null>(null);
   const flash = (m: string) => {
@@ -149,11 +194,11 @@ export const FavientsPanel: React.FC = () => {
         <span className="ml-1 text-[10px] text-gray-500 tabular-nums shrink-0">{favients.length}</span>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-2.5">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2">
         {favients.length ? (
-          <div className="flex flex-wrap gap-2.5">
+          <div className="flex flex-wrap gap-[3px] content-start">
             {favients.map((f) => (
-              <FavientSwatch key={f.id} fav={f} onApply={onApply} onRemove={remove} />
+              <FavientSwatch key={f.id} fav={f} onApply={onApply} onRemove={remove} onHover={setHover} />
             ))}
           </div>
         ) : (
@@ -172,6 +217,8 @@ export const FavientsPanel: React.FC = () => {
           {toast}
         </div>
       )}
+
+      <GradientHoverPreview hover={hover} />
     </div>
   );
 };
