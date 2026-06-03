@@ -7,6 +7,7 @@ import { Keyframe, AnimationSequence, SoftSelectionType } from '../types';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { nanoid } from 'nanoid';
 import { AnimationMath } from '../engine/math/AnimationMath';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
 
 /** Checks if a track ID represents a rotation-like parameter (needs euler unwrapping) */
 export const isRotationTrack = (trackId: string): boolean =>
@@ -181,6 +182,96 @@ export const updateTangentFromStats = (isLeft: boolean, angle: number, lenPct: n
     const y = Math.abs(x) * Math.tan(rad) * (isLeft ? -1 : 1);
     
     return { x, y };
+};
+
+// --- TANGENT-MODE / GLOBAL-INTERP UPDATE BUILDERS ---
+// Pure per-key/per-track transforms shared by the animation store's setTangents /
+// setGlobalInterpolation actions AND the palette channel editor's GraphDataSource,
+// so the "make a key Auto/Ease/Aligned/Unified/Split" and "set every key's
+// interpolation" logic lives in ONE place. The store applies these via its
+// clone-and-set; the palette applies via updateKeyframes / replaceKeyframes.
+
+/** Per-key patches for a tangent-mode change over the current selection. */
+export const calculateTangentModeUpdates = (
+    sequence: AnimationSequence,
+    selectedKeyframeIds: string[],
+    mode: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease'
+): { trackId: string, keyId: string, patch: Partial<Keyframe> }[] => {
+    const updates: { trackId: string, keyId: string, patch: Partial<Keyframe> }[] = [];
+    selectedKeyframeIds.forEach(cid => {
+        const [tid, kid] = cid.split('::');
+        const track = sequence.tracks[tid];
+        if (!track) return;
+        const idx = track.keyframes.findIndex(k => k.id === kid);
+        if (idx === -1) return;
+        const k = track.keyframes[idx];
+
+        if (mode === 'Split') {
+            updates.push({ trackId: tid, keyId: kid, patch: { brokenTangents: true, autoTangent: false, tangentMode: undefined } });
+        } else if (mode === 'Unified' || mode === 'Aligned') {
+            // Lock both handles to a shared through-direction (average of current
+            // left/right) so the result is order-independent. Unified shares
+            // magnitude across both; Aligned keeps each side's own length.
+            const rt = k.rightTangent;
+            const lt = k.leftTangent;
+            let newLt = lt;
+            let newRt = rt;
+            if (rt && lt) {
+                const tx = rt.x - lt.x;
+                const ty = rt.y - lt.y;
+                const tlen = Math.hypot(tx, ty);
+                if (tlen > 1e-6) {
+                    const ux = tx / tlen;
+                    const uy = ty / tlen;
+                    const lLen = Math.hypot(lt.x, lt.y);
+                    const rLen = Math.hypot(rt.x, rt.y);
+                    const sharedLen = (lLen + rLen) * 0.5;
+                    const useL = mode === 'Unified' ? sharedLen : lLen;
+                    const useR = mode === 'Unified' ? sharedLen : rLen;
+                    newLt = { x: -ux * useL, y: -uy * useL };
+                    newRt = { x:  ux * useR, y:  uy * useR };
+                }
+            }
+            updates.push({
+                trackId: tid, keyId: kid,
+                patch: { leftTangent: newLt, rightTangent: newRt, brokenTangents: false, autoTangent: false, tangentMode: mode === 'Unified' ? 'Unified' : undefined },
+            });
+        } else if (mode === 'Auto' || mode === 'Ease') {
+            const prev = track.keyframes[idx - 1];
+            const next = track.keyframes[idx + 1];
+            const { l, r } = AnimationMath.calculateTangents(k, prev, next, mode, isLogTrack(tid));
+            updates.push({ trackId: tid, keyId: kid, patch: { autoTangent: mode === 'Auto', brokenTangents: false, leftTangent: l, rightTangent: r } });
+        }
+    });
+    return updates;
+};
+
+/** New keyframe arrays per track for a global interpolation change (all keys). */
+export const calculateGlobalInterpolationUpdates = (
+    sequence: AnimationSequence,
+    type: 'Linear' | 'Step' | 'Bezier',
+    tangentMode?: 'Auto' | 'Ease'
+): { trackId: string, newKeys: Keyframe[] }[] => {
+    const updates: { trackId: string, newKeys: Keyframe[] }[] = [];
+    Object.keys(sequence.tracks).forEach(tid => {
+        const track = sequence.tracks[tid];
+        if (track.keyframes.length === 0) return;
+        const trackIsLog = isLogTrack(tid);
+        const clonedKeys = track.keyframes.map(k => ({ ...k, interpolation: type }));
+        if (type === 'Bezier' && tangentMode) {
+            clonedKeys.forEach((k, i) => {
+                const prev = clonedKeys[i - 1];
+                const next = clonedKeys[i + 1];
+                const { l, r } = AnimationMath.calculateTangents(k, prev, next, tangentMode, trackIsLog);
+                k.leftTangent = l;
+                k.rightTangent = r;
+                k.autoTangent = (tangentMode === 'Auto');
+                k.brokenTangents = false;
+            });
+        }
+        updates.push({ trackId: tid, newKeys: clonedKeys });
+    });
+    return updates;
 };
 
 // --- KEYFRAME CONSTRAINT UTILITY ---

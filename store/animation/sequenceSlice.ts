@@ -8,6 +8,7 @@ import { AnimationMath } from '../../engine/math/AnimationMath';
 import { TrackUtils } from '../../engine/algorithms/TrackUtils';
 import { splitCubicBezier, solveCubicBezierT } from '../../engine/BezierMath';
 import { isLogTrack } from '../../engine/animation/logTrackRegistry';
+import { calculateTangentModeUpdates, calculateGlobalInterpolationUpdates } from '../../utils/timelineUtils';
 
 const DEFAULT_SEQUENCE: AnimationSequence = {
     durationFrames: 300,
@@ -487,80 +488,27 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
 
     setTangents: (mode) => {
         get().snapshot();
+        // Per-key patch computation lives in the shared helper (timelineUtils) so
+        // the palette channel editor applies the SAME logic. Apply via the clone-
+        // and-set path below — touched tracks + their keyframe arrays are cloned so
+        // memoising consumers (GraphRenderer's polyline cache, keyed by array
+        // referential equality) invalidate correctly.
+        const updates = calculateTangentModeUpdates(get().sequence, get().selectedKeyframeIds, mode);
+        if (updates.length === 0) return;
         set(state => {
             const newTracks = { ...state.sequence.tracks };
-            // Clone touched tracks + their keyframes arrays so memoising consumers
-            // (e.g. GraphRenderer's polyline cache) invalidate correctly via array
-            // referential equality. Same fix pattern as updateKeyframes.
             const touchedTracks = new Set<string>();
-            state.selectedKeyframeIds.forEach(cid => {
-                const [tid] = cid.split('::');
-                if (!touchedTracks.has(tid) && newTracks[tid]) {
-                    touchedTracks.add(tid);
-                    newTracks[tid] = {
-                        ...newTracks[tid],
-                        keyframes: [...newTracks[tid].keyframes],
-                    };
+            updates.forEach(({ trackId }) => {
+                if (!touchedTracks.has(trackId) && newTracks[trackId]) {
+                    touchedTracks.add(trackId);
+                    newTracks[trackId] = { ...newTracks[trackId], keyframes: [...newTracks[trackId].keyframes] };
                 }
             });
-            state.selectedKeyframeIds.forEach(cid => {
-                const [tid, kid] = cid.split('::');
-                const track = newTracks[tid];
-                if (track) {
-                    const idx = track.keyframes.findIndex(k => k.id === kid);
-                    if (idx === -1) return;
-                    const k = track.keyframes[idx];
-
-                    if (mode === 'Split') {
-                        track.keyframes[idx] = { ...k, brokenTangents: true, autoTangent: false, tangentMode: undefined };
-                    } else if (mode === 'Unified' || mode === 'Aligned') {
-                        // Lock both handles to a shared through-direction (average of current
-                        // left/right) so the result is order-independent — neither side "wins".
-                        // Unified shares magnitude across both handles; Aligned keeps each side's
-                        // own length, only locking the angle.
-                        const rt = k.rightTangent;
-                        const lt = k.leftTangent;
-                        let newLt = lt;
-                        let newRt = rt;
-                        if (rt && lt) {
-                            // Through-vector points from left handle tip to right handle tip
-                            const tx = rt.x - lt.x;
-                            const ty = rt.y - lt.y;
-                            const tlen = Math.hypot(tx, ty);
-                            if (tlen > 1e-6) {
-                                const ux = tx / tlen;
-                                const uy = ty / tlen;
-                                const lLen = Math.hypot(lt.x, lt.y);
-                                const rLen = Math.hypot(rt.x, rt.y);
-                                const sharedLen = (lLen + rLen) * 0.5;
-                                const useL = mode === 'Unified' ? sharedLen : lLen;
-                                const useR = mode === 'Unified' ? sharedLen : rLen;
-                                newLt = { x: -ux * useL, y: -uy * useL };
-                                newRt = { x:  ux * useR, y:  uy * useR };
-                            }
-                        }
-                        track.keyframes[idx] = {
-                            ...k,
-                            leftTangent: newLt,
-                            rightTangent: newRt,
-                            brokenTangents: false,
-                            autoTangent: false,
-                            // Aligned is the default; only flag explicit Unified.
-                            tangentMode: mode === 'Unified' ? 'Unified' : undefined,
-                        };
-                    } else if (mode === 'Auto' || mode === 'Ease') {
-                        const prev = track.keyframes[idx - 1];
-                        const next = track.keyframes[idx + 1];
-                        const { l, r } = AnimationMath.calculateTangents(k, prev, next, mode, isLogTrack(tid));
-                        track.keyframes[idx] = {
-                            ...k,
-                            autoTangent: mode === 'Auto',
-                            brokenTangents: false,
-                            leftTangent: l,
-                            rightTangent: r
-                        };
-                    }
-                }
+            updates.forEach(({ trackId, keyId, patch }) => {
+                const track = newTracks[trackId];
+                if (!track) return;
+                const idx = track.keyframes.findIndex(k => k.id === keyId);
+                if (idx !== -1) track.keyframes[idx] = { ...track.keyframes[idx], ...patch };
             });
             return { sequence: { ...state.sequence, tracks: newTracks } };
         });
@@ -568,31 +516,14 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
 
     setGlobalInterpolation: (type, tangentMode) => {
         get().snapshot();
+        // Shared helper builds the new keyframe arrays (interpolation + tangents);
+        // installing them as fresh track + array objects keeps memoising consumers
+        // (GraphRenderer's polyline cache) from rendering stale curves.
+        const updates = calculateGlobalInterpolationUpdates(get().sequence, type, tangentMode);
         set(state => {
             const newTracks = { ...state.sequence.tracks };
-            // Clone every track that has keyframes, clone its keyframes array, and
-            // replace each keyframe object with a fresh spread. The original
-            // implementation mutated keyframe.interpolation / leftTangent / rightTangent
-            // on the same objects held by memoising consumers (GraphRenderer's
-            // polyline cache) — stale curve renders until the user moves a key.
-            Object.keys(newTracks).forEach(tid => {
-                const track = newTracks[tid];
-                if (track.keyframes.length === 0) return;
-
-                const trackIsLog = isLogTrack(tid);
-                const clonedKeys = track.keyframes.map(k => ({ ...k, interpolation: type }));
-                if (type === 'Bezier' && tangentMode) {
-                    clonedKeys.forEach((k, i) => {
-                        const prev = clonedKeys[i - 1];
-                        const next = clonedKeys[i + 1];
-                        const { l, r } = AnimationMath.calculateTangents(k, prev, next, tangentMode, trackIsLog);
-                        k.leftTangent = l;
-                        k.rightTangent = r;
-                        k.autoTangent = (tangentMode === 'Auto');
-                        k.brokenTangents = false;
-                    });
-                }
-                newTracks[tid] = { ...track, keyframes: clonedKeys };
+            updates.forEach(({ trackId, newKeys }) => {
+                if (newTracks[trackId]) newTracks[trackId] = { ...newTracks[trackId], keyframes: newKeys };
             });
             return { sequence: { ...state.sequence, tracks: newTracks } };
         });

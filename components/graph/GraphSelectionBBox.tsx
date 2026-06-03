@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { useAnimationStore } from '../../store/animationStore';
-import { animationEngine } from '../../engine/AnimationEngine';
 import { AnimationSequence, Keyframe, BezierHandle } from '../../types';
 import { GraphViewTransform } from '../../utils/GraphUtils';
-import { useInteractionGesture } from '../../engine/hooks/useInteractionDrag';
-import { INTERACTION_SOURCES } from '../../engine-gmt/interaction/interactionSources';
+import { GraphDataSource } from '../../utils/GraphDataSource';
 
 interface GraphSelectionBBoxProps {
     sequence: AnimationSequence;
@@ -13,6 +10,10 @@ interface GraphSelectionBBoxProps {
     normalized: boolean;
     frameToCanvasPixel: (f: number) => number;
     v2p: (val: number, tid: string) => number;
+    // Store-agnostic data source — the timeline passes the store data source
+    // (snapshot + updateKeyframes + the ADR-0061 scrub gesture); the palette
+    // passes a local-state impl (no scrub gesture, no-op onAfterMutate).
+    dataSource: GraphDataSource;
 }
 
 interface InitialKey {
@@ -49,14 +50,9 @@ interface DragState {
  *  different value ranges); tangent Y scales by the same ratio. Hidden in
  *  normalised mode since the per-track inverse isn't a single equation. */
 export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
-    sequence, selectedKeyframeIds, view, normalized, frameToCanvasPixel, v2p
+    sequence, selectedKeyframeIds, view, normalized, frameToCanvasPixel, v2p, dataSource
 }) => {
-    const updateKeyframes = useAnimationStore(s => s.updateKeyframes);
-    const snapshot        = useAnimationStore(s => s.snapshot);
-    const setIsScrubbing  = useAnimationStore(s => s.setIsScrubbing);
-    // Session 'scrub' for the keyframe bbox-scale drag, anchored to the
-    // setIsScrubbing boundary (ADR-0061 P3b). Window mouse-listener gesture.
-    const scrub = useInteractionGesture(INTERACTION_SOURCES.scrub);
+    const ds = dataSource;
 
     const dragRef = useRef<DragState | null>(null);
 
@@ -105,16 +101,16 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
     // Latest-render values made available to the global mouse listener without
     // forcing the effect to re-run (and reattach the listeners) on every prop
     // change. Same propsRef pattern as useDopeSheetInteraction.
-    const latest = useRef({ view });
-    latest.current = { view };
+    const latest = useRef({ view, ds });
+    latest.current = { view, ds };
 
     const startDrag = (e: React.MouseEvent, type: DragType) => {
         if (!bounds) return;
         e.preventDefault();
         e.stopPropagation();
-        snapshot();
-        setIsScrubbing(true);
-        scrub.begin();
+        ds.snapshot?.();
+        ds.scrub?.setIsScrubbing(true);
+        ds.scrub?.begin();
         dragRef.current = {
             type,
             startClientX: e.clientX,
@@ -174,13 +170,18 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
             }
 
             if (updates.length > 0) {
-                updateKeyframes(updates);
-                animationEngine.scrub(useAnimationStore.getState().currentFrame);
+                const cur = latest.current.ds;
+                cur.updateKeyframes(updates);
+                cur.onAfterMutate?.(cur.currentFrame);
             }
         };
 
         const onUp = () => {
-            if (dragRef.current) { scrub.end(); setIsScrubbing(false); }
+            if (dragRef.current) {
+                const cur = latest.current.ds;
+                cur.scrub?.end();
+                cur.scrub?.setIsScrubbing(false);
+            }
             dragRef.current = null;
         };
 
@@ -190,7 +191,7 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('mouseup', onUp);
         };
-    }, [updateKeyframes, setIsScrubbing, scrub]);
+    }, []);
 
     if (!bounds) return null;
 

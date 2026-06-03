@@ -1,13 +1,12 @@
 
-import React, { useMemo } from 'react';
-import { useAnimationStore } from '../../store/animationStore';
+import React, { useMemo, useState } from 'react';
 import Slider, { DraggableNumber } from '../Slider';
-import { animationEngine } from '../../engine/AnimationEngine';
 import { Keyframe, SoftSelectionType } from '../../types';
 import * as THREE from 'three';
 import { getTangentStats, updateTangentFromStats } from '../../utils/timelineUtils';
+import { GraphDataSource, useAnimationStoreDataSource } from '../../utils/GraphDataSource';
 import { formatTimelineValue } from '../inputs/primitives/FormatUtils';
-import { TrashIcon, LinkIcon, BrokenIcon } from '../Icons';
+import { TrashIcon, LinkIcon, BrokenIcon, ChevronRight, ChevronLeft } from '../Icons';
 
 interface ActionBtnProps {
     label: string;
@@ -58,23 +57,44 @@ const InspectorRow = ({ label, children }: { label: string, children?: React.Rea
     </div>
 );
 
-export const KeyframeInspector: React.FC = () => {
-    // Narrow per-field subs — `useAnimationStore()` (full sub) was re-rendering
-    // every RAF due to no-op set() calls. Reactive values get selectors;
-    // actions read lazily via getState().
-    const selectedKeyframeIds  = useAnimationStore((s) => s.selectedKeyframeIds);
-    const sequence             = useAnimationStore((s) => s.sequence);
-    const softSelectionEnabled = useAnimationStore((s) => s.softSelectionEnabled);
-    const softSelectionRadius  = useAnimationStore((s) => s.softSelectionRadius);
-    const softSelectionType    = useAnimationStore((s) => s.softSelectionType);
-    const updateKeyframes        = useAnimationStore((s) => s.updateKeyframes);
-    const setTangents            = useAnimationStore((s) => s.setTangents);
-    const deleteSelectedKeyframes = useAnimationStore((s) => s.deleteSelectedKeyframes);
-    const snapshot               = useAnimationStore((s) => s.snapshot);
-    const setIsScrubbing         = useAnimationStore((s) => s.setIsScrubbing);
-    const setSoftSelection       = useAnimationStore((s) => s.setSoftSelection);
-    const setSoftSelectionType   = useAnimationStore((s) => s.setSoftSelectionType);
-    const setGlobalInterpolation = useAnimationStore((s) => s.setGlobalInterpolation);
+interface KeyframeInspectorProps {
+    /** Store-agnostic source. Omitted on the live timeline → defaults to the
+     *  animation store; the palette channel editor passes a local impl. Optional
+     *  actions it omits (e.g. setTangents) hide the corresponding controls. */
+    dataSource?: GraphDataSource;
+    /** Fired when the user collapses/expands the panel — hosts that size the
+     *  inspector with a fixed width (the palette) reclaim the space; flex hosts
+     *  (the timeline) reflow automatically and can ignore it. */
+    onCollapsedChange?: (collapsed: boolean) => void;
+}
+
+export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource, onCollapsedChange }) => {
+    // Default to the live-timeline store data source (narrow per-field subs +
+    // stable action refs). A provided dataSource (palette) is used as-is and the
+    // store hook is skipped — each call site is consistent, so this is safe.
+    const ds = dataSource ?? useAnimationStoreDataSource();
+
+    const selectedKeyframeIds  = ds.selectedKeyframeIds;
+    const sequence             = ds.sequence;
+    const softSelectionEnabled = ds.softSelectionEnabled;
+    const softSelectionRadius  = ds.softSelectionRadius;
+    const softSelectionType    = ds.softSelectionType;
+    const updateKeyframes        = ds.updateKeyframes;
+    const setSoftSelection       = ds.setSoftSelection;
+
+    // Optional inspector actions — a source that omits one hides its control.
+    const canQuickActions = !!(ds.setTangents && ds.setGlobalInterpolation);
+    const canTangentMode  = !!ds.setTangents;
+    const canDelete       = !!ds.deleteSelectedKeyframes;
+    const canSoftType     = !!ds.setSoftSelectionType;
+
+    // Collapse to a thin rail. Internal state; hosts learn of it via onCollapsedChange.
+    const [collapsed, setCollapsed] = useState(false);
+    const toggleCollapsed = () => {
+        const next = !collapsed;
+        setCollapsed(next);
+        onCollapsedChange?.(next);
+    };
 
     // Analyze selection
     const selectedKeys = useMemo<{ tid: string, kid: string, key: Keyframe, prevKey?: Keyframe, nextKey?: Keyframe, isRotation: boolean }[]>(() => {
@@ -114,33 +134,33 @@ export const KeyframeInspector: React.FC = () => {
     const handleQuickAction = (type: 'Linear' | 'Auto' | 'Ease') => {
         if (!hasSelection) {
             // Global Mode: Apply to ALL keys
-            if (type === 'Linear') setGlobalInterpolation('Linear');
-            else if (type === 'Auto') setGlobalInterpolation('Bezier', 'Auto');
-            else if (type === 'Ease') setGlobalInterpolation('Bezier', 'Ease');
+            if (type === 'Linear') ds.setGlobalInterpolation?.('Linear');
+            else if (type === 'Auto') ds.setGlobalInterpolation?.('Bezier', 'Auto');
+            else if (type === 'Ease') ds.setGlobalInterpolation?.('Bezier', 'Ease');
             return;
         }
 
         // Selection Mode
-        snapshot();
-        
+        ds.snapshot?.();
+
         if (type === 'Linear') {
-            const updates = selectedKeys.map(item => ({ 
-                trackId: item.tid!, 
-                keyId: item.kid!, 
-                patch: { interpolation: 'Linear' as const } 
+            const updates = selectedKeys.map(item => ({
+                trackId: item.tid!,
+                keyId: item.kid!,
+                patch: { interpolation: 'Linear' as const }
             }));
             updateKeyframes(updates);
         } else {
             const needsConversion = selectedKeys.some(k => k.key!.interpolation !== 'Bezier');
             if (needsConversion) {
-                const updates = selectedKeys.map(item => ({ 
-                    trackId: item.tid!, 
-                    keyId: item.kid!, 
-                    patch: { interpolation: 'Bezier' as const } 
+                const updates = selectedKeys.map(item => ({
+                    trackId: item.tid!,
+                    keyId: item.kid!,
+                    patch: { interpolation: 'Bezier' as const }
                 }));
                 updateKeyframes(updates);
             }
-            setTangents(type);
+            ds.setTangents?.(type);
         }
     };
 
@@ -154,19 +174,18 @@ export const KeyframeInspector: React.FC = () => {
     const handleFrameChange = (v: number) => {
         if (!hasSelection) return;
         updateKeyframes(selectedKeys.map(x => ({ trackId: x.tid!, keyId: x.kid!, patch: { frame: Math.max(0, Math.round(v)) } })));
-        animationEngine.scrub(Math.max(0, Math.round(v))); 
+        ds.onAfterMutate?.(Math.max(0, Math.round(v)));
     };
 
     const handleValueChange = (v: number) => {
         if (!hasSelection) return;
         const valToStore = isAllRotation ? THREE.MathUtils.degToRad(v) : v;
         updateKeyframes(selectedKeys.map(x => ({ trackId: x.tid!, keyId: x.kid!, patch: { value: valToStore } })));
-        const { currentFrame } = useAnimationStore.getState();
-        animationEngine.scrub(currentFrame);
+        ds.onAfterMutate?.(ds.currentFrame);
     };
-    
+
     const handleBrokenToggle = (broken: boolean) => {
-        if (broken) setTangents('Split'); else setTangents('Unified');
+        if (broken) ds.setTangents?.('Split'); else ds.setTangents?.('Unified');
     };
     
     const handleTangentChange = (side: 'left' | 'right', field: 'angle' | 'length', val: number) => {
@@ -213,15 +232,15 @@ export const KeyframeInspector: React.FC = () => {
             };
         });
         updateKeyframes(updates);
-        animationEngine.scrub(useAnimationStore.getState().currentFrame);
+        ds.onAfterMutate?.(ds.currentFrame);
     };
 
     const handleDragStart = () => {
-        snapshot();
-        setIsScrubbing(true);
+        ds.snapshot?.();
+        ds.scrub?.setIsScrubbing(true);
     };
-    
-    const handleDragEnd = () => setIsScrubbing(false);
+
+    const handleDragEnd = () => ds.scrub?.setIsScrubbing(false);
 
     const displayValue = (hasSelection && firstKey) ? (isAllRotation ? THREE.MathUtils.radToDeg(firstKey.value) : firstKey.value) : 0;
 
@@ -234,43 +253,73 @@ export const KeyframeInspector: React.FC = () => {
             : `Attributes (${selectedKeys.length})`)
         : "Global Properties";
 
+    // Collapsed: a thin rail with an expand chevron + vertical label.
+    if (collapsed) {
+        return (
+            <div
+                className="w-7 bg-[#111] border-l border-white/10 flex flex-col items-center shrink-0 select-none h-full pt-1.5 gap-2"
+                data-help-id="anim.keyframes"
+            >
+                <button
+                    onClick={toggleCollapsed}
+                    title="Show keyframe inspector"
+                    className="text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded"
+                >
+                    <ChevronLeft />
+                </button>
+                <span className="text-[9px] font-bold text-gray-500 tracking-wide [writing-mode:vertical-rl]">
+                    Keyframe
+                </span>
+            </div>
+        );
+    }
+
     return (
-        <div 
+        <div
             className="w-64 bg-[#111] border-l border-white/10 flex flex-col shrink-0 overflow-y-auto animate-fade-in-left select-none h-full"
             data-help-id="anim.keyframes"
         >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/5 shrink-0 h-8">
-                <span className="text-[10px] font-bold text-gray-400 truncate mr-2" title={headerTitle}>
+            <div className="flex items-center gap-1 px-2 py-2 border-b border-white/10 bg-white/5 shrink-0 h-8">
+                <button
+                    onClick={toggleCollapsed}
+                    title="Hide keyframe inspector"
+                    className="text-gray-400 hover:text-white p-0.5 hover:bg-white/10 rounded shrink-0"
+                >
+                    <ChevronRight />
+                </button>
+                <span className="text-[10px] font-bold text-gray-400 truncate flex-1" title={headerTitle}>
                     {headerTitle}
                 </span>
-                {hasSelection && (
-                    <button onClick={deleteSelectedKeyframes} className="text-red-400 hover:text-red-300 p-1 hover:bg-white/10 rounded">
+                {hasSelection && canDelete && (
+                    <button onClick={() => ds.deleteSelectedKeyframes?.()} className="text-red-400 hover:text-red-300 p-1 hover:bg-white/10 rounded shrink-0">
                         <TrashIcon />
                     </button>
                 )}
             </div>
 
-            {/* Quick Actions (Always Visible - Context Sensitive) */}
+            {/* Quick Actions (Context Sensitive) — needs setTangents + setGlobalInterpolation */}
+            {canQuickActions && (
             <div className="flex gap-1 px-2 py-2 border-b border-white/5 bg-black/20">
-                <ActionBtn 
-                    label="Linear" 
-                    onClick={() => handleQuickAction('Linear')} 
-                    title={hasSelection ? "Set Selected Linear" : "Set All Keys Linear"} 
+                <ActionBtn
+                    label="Linear"
+                    onClick={() => handleQuickAction('Linear')}
+                    title={hasSelection ? "Set Selected Linear" : "Set All Keys Linear"}
                     active={hasSelection && sameInterp && firstKey!.interpolation === 'Linear'}
                 />
-                <ActionBtn 
-                    label="Smooth" 
-                    onClick={() => handleQuickAction('Auto')} 
-                    title={hasSelection ? "Set Selected Auto-Bezier" : "Set All Keys Auto-Bezier"} 
+                <ActionBtn
+                    label="Smooth"
+                    onClick={() => handleQuickAction('Auto')}
+                    title={hasSelection ? "Set Selected Auto-Bezier" : "Set All Keys Auto-Bezier"}
                     active={hasSelection && sameInterp && firstKey!.interpolation === 'Bezier' && sameAuto && firstKey!.autoTangent}
                 />
-                <ActionBtn 
-                    label="Flat" 
-                    onClick={() => handleQuickAction('Ease')} 
-                    title={hasSelection ? "Set Selected Flat-Bezier" : "Set All Keys Flat-Bezier"} 
+                <ActionBtn
+                    label="Flat"
+                    onClick={() => handleQuickAction('Ease')}
+                    title={hasSelection ? "Set Selected Flat-Bezier" : "Set All Keys Flat-Bezier"}
                 />
             </div>
-            
+            )}
+
             {hasSelection ? (
                 <div className="flex flex-col">
                     <InspectorRow label="Frame">
@@ -293,7 +342,7 @@ export const KeyframeInspector: React.FC = () => {
                         <select 
                             value={sameInterp ? firstKey!.interpolation : 'Mixed'}
                             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                                snapshot();
+                                ds.snapshot?.();
                                 const val = e.target.value as 'Linear' | 'Step' | 'Bezier';
                                 updateKeyframes(selectedKeys.map(x => ({ trackId: x.tid, keyId: x.kid, patch: { interpolation: val } })));
                             }}
@@ -314,11 +363,12 @@ export const KeyframeInspector: React.FC = () => {
                         </div>
                         {softSelectionEnabled && (
                             <div className="px-3 pb-2 pt-1 animate-fade-in space-y-2">
+                                {canSoftType && (
                                 <div className="flex items-center justify-between">
                                     <label className="text-[9px] text-gray-400 font-medium">Falloff</label>
-                                    <select 
+                                    <select
                                         value={softSelectionType}
-                                        onChange={(e) => setSoftSelectionType(e.target.value as SoftSelectionType)}
+                                        onChange={(e) => ds.setSoftSelectionType?.(e.target.value as SoftSelectionType)}
                                         className="t-select text-purple-300"
                                     >
                                         <option value="Linear">Linear</option>
@@ -327,8 +377,9 @@ export const KeyframeInspector: React.FC = () => {
                                         <option value="Pinpoint">Pinpoint</option>
                                     </select>
                                 </div>
-                                <Slider 
-                                    label="Radius (Frames)" 
+                                )}
+                                <Slider
+                                    label="Radius (Frames)"
                                     value={softSelectionRadius} 
                                     min={0} max={100} step={1} 
                                     onChange={(v) => setSoftSelection(v, true)}
@@ -387,7 +438,8 @@ export const KeyframeInspector: React.FC = () => {
                                     </div>
                                 </div>
                                 
-                                <ToggleGroup 
+                                {canTangentMode && (
+                                <ToggleGroup
                                     value={sameBroken ? !!firstKey!.brokenTangents : false}
                                     onChange={handleBrokenToggle}
                                     options={[
@@ -395,6 +447,7 @@ export const KeyframeInspector: React.FC = () => {
                                         { label: 'Broken', value: true }
                                     ]}
                                 />
+                                )}
                             </div>
                         </>
                     )}

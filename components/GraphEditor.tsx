@@ -6,6 +6,7 @@ import { calculateViewBounds } from '../utils/keyframeViewBounds';
 import { useEngineStore } from '../store/engineStore';
 import { useGraphInteraction } from '../hooks/useGraphInteraction';
 import { useGraphTools } from '../hooks/useGraphTools';
+import { useAnimationStoreDataSource } from '../utils/GraphDataSource';
 import { GraphSidebar } from './graph/GraphSidebar';
 import { GraphToolbar } from './graph/GraphToolbar';
 import { GraphCanvas } from './graph/GraphCanvas';
@@ -156,24 +157,29 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + GRAPH_LEFT_GUTTER_WIDTH;
     const canvasPixelToFrame = (px: number) => pixelToFrame(px - GRAPH_LEFT_GUTTER_WIDTH, view);
 
+    // Live-timeline data source — one store-backed GraphDataSource shared by the
+    // interaction hook, the tools hook and the selection bbox (the three pieces
+    // that were store-coupled before the palette/timeline unification).
+    const graphDataSource = useAnimationStoreDataSource();
+
     // --- INTERACTION HOOK ---
     // Now passing the DIV ref instead of canvas ref
-    const { 
-        handleMouseDown: onGraphMouseDown, 
-        getHit, 
-        selectionBox, 
+    const {
+        handleMouseDown: onGraphMouseDown,
+        getHit,
+        selectionBox,
         softInteraction,
         shouldSuppressContextMenu
     } = useGraphInteraction(
         interactionRef, view, displayTrackIds, normalized, trackRanges, v2p, onSetScroll, onSetFrameWidth, setViewY,
-        frameToCanvasPixel, canvasPixelToFrame, GRAPH_LEFT_GUTTER_WIDTH
+        frameToCanvasPixel, canvasPixelToFrame, GRAPH_LEFT_GUTTER_WIDTH, graphDataSource
     );
 
     // --- TOOLS CONTROLLER HOOK ---
     const tools = useGraphTools({
         sequence, trackIds, selectedTrackIds, selectedKeyframeIds, frameWidth,
         view, normalized, trackRanges, v2p, canvasPixelToFrame
-    });
+    }, graphDataSource);
 
     // --- VIEW MANIPULATION (Fit/Normalize) ---
     const applyFit = (bounds: { minV: number, maxV: number, minF: number, maxF: number } | null) => {
@@ -261,7 +267,24 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
              const timer = setTimeout(() => { fitView(); hasFitted.current = true; }, 50);
              return () => clearTimeout(timer);
         }
-    }, [trackIds, width]); 
+    }, [trackIds, width]);
+
+    // Re-anchor the vertical view when the editor is resized. valueToPixel maps
+    // values relative to centerY = height/2, so a raw height change would slide
+    // every curve by Δheight/2 (the "curves jump on resize" bug). Shift panY by
+    // the matching value delta (Δheight / 2·scaleY) so the curves stay put at the
+    // user's current zoom — the extra/removed space appears at the edge rather
+    // than dragging the content. (ChannelGraphEditor re-fits on resize instead,
+    // which is fine there since it has no persistent user pan/zoom to preserve.)
+    const prevHeightRef = useRef(height);
+    useEffect(() => {
+        const prevH = prevHeightRef.current;
+        prevHeightRef.current = height;
+        // Only after the initial fit owns the layout, and only on a real change.
+        if (!hasFitted.current || prevH <= 0 || height <= 0 || prevH === height) return;
+        const deltaH = height - prevH;
+        setViewY(prev => (prev.scale > 0 ? { ...prev, pan: prev.pan - deltaH / (2 * prev.scale) } : prev));
+    }, [height]);
     
     // --- KEYBOARD SHORTCUTS ---
     useEffect(() => {
@@ -418,6 +441,7 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
                         normalized={normalized}
                         frameToCanvasPixel={frameToCanvasPixel}
                         v2p={v2p}
+                        dataSource={graphDataSource}
                     />
                 </div>
                 

@@ -1,10 +1,9 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { useAnimationStore } from '../store/animationStore';
-import { animationEngine } from '../engine/AnimationEngine';
-import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame } from '../utils/GraphUtils';
+import { GraphViewTransform, valueToPixel } from '../utils/GraphUtils';
 import { constrainKeyframeHandles, calculateSoftFalloff, scaleKeyframeHandles } from '../utils/timelineUtils';
 import { Keyframe, BezierHandle } from '../types';
+import { GraphDataSource, useAnimationStoreDataSource } from '../utils/GraphDataSource';
 
 interface KeyDragStart {
     trackId: string;
@@ -19,11 +18,11 @@ interface KeyDragStart {
 interface NeighborKeyData {
     trackId: string;
     keyId: string;
-    frame: number; 
-    startLeftTan?: BezierHandle;  
-    startRightTan?: BezierHandle; 
-    leftReferenceKeyId?: string;  
-    rightReferenceKeyId?: string; 
+    frame: number;
+    startLeftTan?: BezierHandle;
+    startRightTan?: BezierHandle;
+    leftReferenceKeyId?: string;
+    rightReferenceKeyId?: string;
 }
 
 // Maps TrackID::KeyID -> Original Frame/Value at drag start
@@ -47,50 +46,32 @@ export const useGraphInteraction = (
     // New coordinate mappers
     frameToCanvasPixel: (f: number) => number,
     canvasPixelToFrame: (px: number) => number,
-    LEFT_GUTTER_WIDTH: number
+    LEFT_GUTTER_WIDTH: number,
+    // Store-agnostic data source. Defaults to the live-timeline animation store;
+    // the palette channel-curve editor supplies a local-state impl (no scrub,
+    // no track selection). See utils/GraphDataSource.ts.
+    dataSource: GraphDataSource = useAnimationStoreDataSource()
 ) => {
-    // Narrow per-field subs — destructuring `useAnimationStore()` (full sub)
-    // forced GraphEditor to re-render every RAF on the no-op set() flood.
-    const sequence              = useAnimationStore((s) => s.sequence);
-    const currentFrame          = useAnimationStore((s) => s.currentFrame);
-    const selectedKeyframeIds   = useAnimationStore((s) => s.selectedKeyframeIds);
-    const softSelectionEnabled  = useAnimationStore((s) => s.softSelectionEnabled);
-    const softSelectionRadius   = useAnimationStore((s) => s.softSelectionRadius);
-    const softSelectionType     = useAnimationStore((s) => s.softSelectionType);
-    // Action selectors — read via `useAnimationStore((s) => s.fn)` so the
-    // returned reference is stable across renders (Zustand bails on Object.is).
-    // The earlier wrapper-closure form `(...a) => getState().fn(...a)` returned
-    // a NEW function each render, breaking useCallback dep stability —
-    // handleGlobalMove was re-created every render, the effect at the end of
-    // this hook removed the in-flight mousemove listener mid-drag, and key
-    // movement / scrub silently failed.
-    const updateKeyframe         = useAnimationStore((s) => s.updateKeyframe);
-    const updateKeyframes        = useAnimationStore((s) => s.updateKeyframes);
-    const selectKeyframe         = useAnimationStore((s) => s.selectKeyframe);
-    const selectKeyframes        = useAnimationStore((s) => s.selectKeyframes);
-    const deselectAllKeys        = useAnimationStore((s) => s.deselectAllKeys);
-    const setTrackSelection      = useAnimationStore((s) => s.setTrackSelection);
-    const addTracksToSelection   = useAnimationStore((s) => s.addTracksToSelection);
-    const snapshot               = useAnimationStore((s) => s.snapshot);
-    const setIsScrubbing         = useAnimationStore((s) => s.setIsScrubbing);
-    const seek                   = useAnimationStore((s) => s.seek);
-    const setSoftSelection       = useAnimationStore((s) => s.setSoftSelection);
+    // All store reads/writes flow through `ds` — for the timeline this is the
+    // default store data source (the same narrow per-field subs + stable action
+    // refs as before); for the palette it's a local-state impl.
+    const ds = dataSource;
 
     const isDraggingRef = useRef(false);
     const lastMousePos = useRef({ x: 0, y: 0 });
-    const dragStartMousePos = useRef({ x: 0, y: 0 }); 
+    const dragStartMousePos = useRef({ x: 0, y: 0 });
     const dragStartView = useRef<{ panX: number, panY: number }>({ panX: 0, panY: 0 });
     const dragMode = useRef<DragMode | null>(null);
-    
+
     // New ref to track if drag distance was significant enough to block context menu
     const suppressContextMenuRef = useRef(false);
-    
+
     const draggedKeysRef = useRef<KeyDragStart[]>([]);
     const draggedNeighborsRef = useRef<Map<string, NeighborKeyData>>(new Map());
-    
+
     // Store ALL affected keys' initial values for soft selection to prevent drift/explosion
     const softSelectInitialStateRef = useRef<KeyStateMap>({});
-    
+
     // Updated to store initial handle state for Angle Locking
     const dragHandleRef = useRef<{
         trackId: string,
@@ -110,41 +91,42 @@ export const useGraphInteraction = (
             brokenTangents: boolean,
         }[]
     } | null>(null);
-    
+
     const boxStartRef = useRef({ x: 0, y: 0 });
     const [selectionBox, setSelectionBox] = useState<{x:number, y:number, w:number, h:number} | null>(null);
-    
+
     // Soft Selection Interaction State
     const [softInteraction, setSoftInteraction] = useState<{ isAdjusting: boolean, anchorKey: string | null }>({ isAdjusting: false, anchorKey: null });
 
-    // Capture latest props in ref to avoid recreating event handlers
+    // Capture latest props + data source in a ref to avoid recreating event
+    // handlers (the window listeners read everything from here so they never go
+    // stale, regardless of how the memoized callbacks are bound).
     const latestProps = useRef({
-        view, normalized, trackRanges, sequence, currentFrame, 
-        selectedKeyframeIds, trackIds, v2p,
+        view, normalized, trackRanges, trackIds, v2p,
         canvasPixelToFrame, frameToCanvasPixel,
         onSetScroll, onSetFrameWidth, setViewY,
-        softSelectionEnabled, softSelectionRadius, setSoftSelection, softSelectionType
+        ds
     });
 
     useEffect(() => {
-        latestProps.current = { 
-            view, normalized, trackRanges, sequence, currentFrame, 
-            selectedKeyframeIds, trackIds, v2p,
+        latestProps.current = {
+            view, normalized, trackRanges, trackIds, v2p,
             canvasPixelToFrame, frameToCanvasPixel,
             onSetScroll, onSetFrameWidth, setViewY,
-            softSelectionEnabled, softSelectionRadius, setSoftSelection, softSelectionType
+            ds
         };
-    }, [view, normalized, trackRanges, sequence, currentFrame, selectedKeyframeIds, trackIds, v2p, canvasPixelToFrame, frameToCanvasPixel, onSetScroll, onSetFrameWidth, setViewY, softSelectionEnabled, softSelectionRadius, setSoftSelection, softSelectionType]);
+    });
 
     const getHit = (mx: number, my: number) => {
+        const { sequence, selectedKeyframeIds } = ds;
         for (const tid of trackIds) {
             const track = sequence.tracks[tid];
             if (!track) continue;
-            
+
             for (const k of track.keyframes) {
                 const isSelected = selectedKeyframeIds.includes(`${tid}::${k.id}`);
                 if (!isSelected || k.interpolation !== 'Bezier') continue;
-                
+
                 // Left Handle
                 if (k.leftTangent) {
                     const hxVal = k.frame + k.leftTangent.x;
@@ -155,7 +137,7 @@ export const useGraphInteraction = (
                         return { type: 'handle', trackId: tid, keyId: k.id, side: 'left', key: k } as const;
                     }
                 }
-                
+
                 // Right Handle
                 if (k.rightTangent) {
                     const hxVal = k.frame + k.rightTangent.x;
@@ -176,44 +158,49 @@ export const useGraphInteraction = (
             for (const k of track.keyframes) {
                 const kx = frameToCanvasPixel(k.frame);
                 const ky = v2p(k.value, tid);
-                
+
                 if (Math.abs(mx - kx) < HIT_TOLERANCE && Math.abs(my - ky) < HIT_TOLERANCE) {
                     return { type: 'key', trackId: tid, keyId: k.id, key: k } as const;
                 }
             }
         }
-        
+
         return null;
     };
 
-    // Helper to sync track selection to key selection
+    // Helper to sync track selection to key selection (timeline only — gated on
+    // the data source exposing track-selection actions). Reads the fresh ds so
+    // it works whether called from the memoized up-handler or a fresh handler.
     const syncTrackSelection = (keyIds: string[]) => {
+        const cur = latestProps.current.ds;
+        if (!cur.setTrackSelection) return;
         const uniqueTracks = new Set<string>();
         keyIds.forEach(id => {
             if (id) uniqueTracks.add(id.split('::')[0]);
         });
-        
+
         const tracksArray = Array.from(uniqueTracks);
         if (tracksArray.length > 0) {
-            setTrackSelection(tracksArray[0]);
+            cur.setTrackSelection(tracksArray[0]);
             if (tracksArray.length > 1) {
-                addTracksToSelection(tracksArray.slice(1));
+                cur.addTracksToSelection?.(tracksArray.slice(1));
             }
         }
     };
 
     const handleGlobalMove = useCallback((e: MouseEvent) => {
         if (!isDraggingRef.current) return;
-        
+
         const props = latestProps.current;
+        const ds = props.ds;
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
 
         const mx = e.clientX - rect.left;
-        
+
         const dx = e.clientX - lastMousePos.current.x;
         const dy = e.clientY - lastMousePos.current.y;
-        
+
         const totalDx = e.clientX - dragStartMousePos.current.x;
         const totalDy = e.clientY - dragStartMousePos.current.y;
 
@@ -225,20 +212,20 @@ export const useGraphInteraction = (
         if (dragMode.current === 'scrub') {
             const f = props.canvasPixelToFrame(mx);
             const safeFrame = Math.max(0, Math.round(f));
-            seek(safeFrame);
-            animationEngine.scrub(safeFrame);
+            ds.scrub?.seek(safeFrame);
+            ds.onAfterMutate?.(safeFrame);
         }
         else if (dragMode.current === 'scrub_passive') {
             const f = props.canvasPixelToFrame(mx);
             const safeFrame = Math.max(0, Math.round(f));
-            seek(safeFrame);
+            ds.scrub?.seek(safeFrame);
             // No scrub call - just updates timeline UI
         }
         else if (dragMode.current === 'pan') {
             // Absolute panning using total delta to avoid state drift during heavy load
             const valDelta = totalDy / props.view.scaleY;
             const scrollPixels = (dragStartView.current.panX * props.view.scaleX) - totalDx;
-            
+
             props.onSetScroll(scrollPixels);
             props.setViewY(prev => ({ ...prev, pan: dragStartView.current.panY + valDelta }));
         }
@@ -258,22 +245,36 @@ export const useGraphInteraction = (
             props.setViewY({ pan: newPanY, scale: newScaleY });
         }
         else if (dragMode.current === 'soft_radius') {
-             const newRadius = Math.max(0, props.softSelectionRadius + (dx / props.view.scaleX));
-             props.setSoftSelection(newRadius, true);
+             const newRadius = Math.max(0, ds.softSelectionRadius + (dx / props.view.scaleX));
+             ds.setSoftSelection(newRadius, true);
         }
         else if (dragMode.current === 'key') {
             const dFrame = totalDx / props.view.scaleX;
-            const dVal = -totalDy / props.view.scaleY;
+            const dValRaw = -totalDy / props.view.scaleY;
+            // In normalized mode the value axis is scaled per-track by `span`
+            // ((val-min)/span), so a pixel of mouse travel maps to `span` value
+            // units — same correction the handle drag applies. Computed per track
+            // because a multi-track selection can mix spans.
+            const valDeltaFor = (tid: string) => {
+                if (props.normalized) {
+                    const r = props.trackRanges[tid];
+                    if (r) return dValRaw * r.span;
+                }
+                return dValRaw;
+            };
             const updates: any[] = [];
-            
+
             // Soft Select Logic
-            if (props.softSelectionEnabled && props.softSelectionRadius > 0) {
+            if (ds.softSelectionEnabled && ds.softSelectionRadius > 0) {
                  const tracksToProcess = new Set<string>();
                  draggedKeysRef.current.forEach(k => tracksToProcess.add(k.trackId));
-                 
+
                  tracksToProcess.forEach(tid => {
-                     const track = props.sequence.tracks[tid];
+                     const track = ds.sequence.tracks[tid];
                      if (!track) return;
+
+                     // Per-track value delta (normalized-aware).
+                     const dVal = valDeltaFor(tid);
 
                      // Filter dragged keys that belong to this specific track for distance calculation
                      const selectionOnThisTrack = draggedKeysRef.current.filter(k => k.trackId === tid);
@@ -282,7 +283,7 @@ export const useGraphInteraction = (
                          const keyId = k.id;
                          const compositeId = `${tid}::${keyId}`;
                          const init = softSelectInitialStateRef.current[compositeId];
-                         
+
                          // If not in our initial map, it wasn't captured (shouldn't happen if logic works)
                          if (!init) return;
 
@@ -298,11 +299,11 @@ export const useGraphInteraction = (
                          // 2. Calculate Max Weight from nearby selected keys
                          // To match the visual renderer, we find the closest selected key and use its weight.
                          let maxWeight = 0;
-                         
+
                          for (const sel of selectionOnThisTrack) {
                              const dist = Math.abs(init.f - sel.startFrame);
-                             if (dist < props.softSelectionRadius) {
-                                 const w = calculateSoftFalloff(dist, props.softSelectionRadius, props.softSelectionType);
+                             if (dist < ds.softSelectionRadius) {
+                                 const w = calculateSoftFalloff(dist, ds.softSelectionRadius, ds.softSelectionType);
                                  if (w > maxWeight) maxWeight = w;
                              }
                          }
@@ -311,20 +312,20 @@ export const useGraphInteraction = (
                          if (maxWeight > 0) {
                              const neighborNewVal = init.v + (dVal * maxWeight);
                              const neighborNewFrame = Math.max(0, init.f + (dFrame * maxWeight));
-                             updates.push({ 
-                                 trackId: tid, 
-                                 keyId: k.id, 
-                                 patch: { 
+                             updates.push({
+                                 trackId: tid,
+                                 keyId: k.id,
+                                 patch: {
                                      value: neighborNewVal,
-                                     frame: Math.round(neighborNewFrame * 100) / 100 
-                                 } 
+                                     frame: Math.round(neighborNewFrame * 100) / 100
+                                 }
                              });
                          }
                      });
                  });
             } else {
                 // Standard Drag
-                
+
                 // 1. Cache new positions for neighbor lookups
                 const draggedPositions = new Map<string, number>();
                 draggedKeysRef.current.forEach(k => {
@@ -333,10 +334,10 @@ export const useGraphInteraction = (
 
                 draggedKeysRef.current.forEach(k => {
                     let newFrame = Math.max(0, Math.round(k.startFrame + dFrame));
-                    let newVal = k.startVal + dVal;
+                    let newVal = k.startVal + valDeltaFor(k.trackId);
                     const patch: Partial<Keyframe> = { frame: newFrame, value: newVal };
-                    
-                    const track = props.sequence.tracks[k.trackId];
+
+                    const track = ds.sequence.tracks[k.trackId];
                     if (track) {
                         const keysSorted = [...track.keyframes].sort((a,b) => a.frame - b.frame);
                         const currentKey = keysSorted.find(key => key.id === k.keyId);
@@ -344,13 +345,13 @@ export const useGraphInteraction = (
                              const idx = keysSorted.indexOf(currentKey);
                              const prev = idx > 0 ? keysSorted[idx - 1] : undefined;
                              const next = idx < keysSorted.length - 1 ? keysSorted[idx + 1] : undefined;
-                             
+
                              // Scale handles proportionally to time change
                              // Use INITIAL tangent state to prevent compounding errors
-                             const initialKeySnapshot = { 
-                                 ...currentKey, 
-                                 leftTangent: k.startLeftTan, 
-                                 rightTangent: k.startRightTan 
+                             const initialKeySnapshot = {
+                                 ...currentKey,
+                                 leftTangent: k.startLeftTan,
+                                 rightTangent: k.startRightTan
                              };
 
                              const scalePatch = scaleKeyframeHandles(initialKeySnapshot, prev, next, k.startFrame, newFrame);
@@ -385,11 +386,11 @@ export const useGraphInteraction = (
                             }
                         }
                     }
-                    
+
                     if (neighbor.leftReferenceKeyId && neighbor.startLeftTan) {
                         const draggedPos = draggedPositions.get(neighbor.leftReferenceKeyId);
                         const draggedStartFrame = draggedKeysRef.current.find(k => k.keyId === neighbor.leftReferenceKeyId)?.startFrame;
-                        
+
                         if (draggedPos !== undefined && draggedStartFrame !== undefined) {
                             const oldDist = neighbor.frame - draggedStartFrame;
                             const newDist = neighbor.frame - draggedPos;
@@ -408,15 +409,15 @@ export const useGraphInteraction = (
                     }
                 });
             }
-            
-            updateKeyframes(updates);
-            animationEngine.scrub(props.currentFrame); 
+
+            ds.updateKeyframes(updates);
+            ds.onAfterMutate?.(ds.currentFrame);
         }
         else if (dragMode.current === 'handle') {
             if (!dragHandleRef.current) return;
             const { trackId, keyId, side, initialHandle, peers } = dragHandleRef.current;
 
-            const track = props.sequence.tracks[trackId];
+            const track = ds.sequence.tracks[trackId];
             if (!track) return;
             const currentKey = track.keyframes.find(k => k.id === keyId);
             if (!currentKey) return;
@@ -515,8 +516,8 @@ export const useGraphInteraction = (
                 updates.push({ trackId: p.trackId, keyId: p.keyId, patch: peerPatch });
             });
 
-            updateKeyframes(updates);
-            animationEngine.scrub(props.currentFrame);
+            ds.updateKeyframes(updates);
+            ds.onAfterMutate?.(ds.currentFrame);
         }
         else if (dragMode.current === 'box') {
             if (boxStartRef.current) {
@@ -529,62 +530,64 @@ export const useGraphInteraction = (
                 });
             }
         }
-        
+
         lastMousePos.current = { x: e.clientX, y: e.clientY };
-    }, [seek, updateKeyframe, updateKeyframes, LEFT_GUTTER_WIDTH]); 
+    }, [canvasRef, LEFT_GUTTER_WIDTH]);
 
     const handleGlobalUp = useCallback((e: MouseEvent) => {
-        if (dragMode.current === 'scrub' || dragMode.current === 'scrub_passive') {
-            setIsScrubbing(false);
-        }
-        
-        isDraggingRef.current = false;
         const props = latestProps.current;
-        
+        const ds = props.ds;
+
+        if (dragMode.current === 'scrub' || dragMode.current === 'scrub_passive') {
+            ds.scrub?.setIsScrubbing(false);
+        }
+
+        isDraggingRef.current = false;
+
         if (dragMode.current === 'box' && boxStartRef.current) {
             const rect = canvasRef.current?.getBoundingClientRect();
             if (rect) {
                 const mx = e.clientX - rect.left;
                 const my = e.clientY - rect.top;
-                
+
                 const x = Math.min(mx, boxStartRef.current.x);
                 const y = Math.min(my, boxStartRef.current.y);
                 const w = Math.abs(mx - boxStartRef.current.x);
                 const h = Math.abs(my - boxStartRef.current.y);
-                
+
                 const newSelection: string[] = [];
                 const isMulti = e.shiftKey || e.ctrlKey;
-                
-                (props.trackIds as string[]).forEach(tid => {
-                    const track = props.sequence.tracks[tid];
+
+                props.trackIds.forEach(tid => {
+                    const track = ds.sequence.tracks[tid];
                     if (!track) return;
                     track.keyframes.forEach(k => {
                         const kx = props.frameToCanvasPixel(k.frame);
                         const ky = props.v2p(k.value, tid);
-                        
+
                         if (kx >= x && kx <= x + w &&
                             ky >= y && ky <= y + h) {
                             newSelection.push(`${tid}::${k.id}`);
                         }
                     });
                 });
-                
-                selectKeyframes(newSelection, isMulti);
-                
+
+                ds.selectKeyframes(newSelection, isMulti);
+
                 // SYNC TRACK SELECTION TO KEYS
-                const prevSet = new Set(props.selectedKeyframeIds as string[]);
+                const prevSet = new Set(ds.selectedKeyframeIds);
                 const resultingSet = new Set(isMulti ? prevSet : []);
                 newSelection.forEach(id => resultingSet.add(id));
-                
+
                 const resultingArray = Array.from(resultingSet);
-                
+
                 if (resultingArray.length > 0) {
                     syncTrackSelection(resultingArray as string[]);
                 }
             }
             setSelectionBox(null);
         }
-        
+
         dragMode.current = null;
         draggedKeysRef.current = [];
         draggedNeighborsRef.current = new Map();
@@ -596,10 +599,10 @@ export const useGraphInteraction = (
         setTimeout(() => {
             suppressContextMenuRef.current = false;
         }, 100);
-        
+
         window.removeEventListener('mousemove', handleGlobalMove);
         window.removeEventListener('mouseup', handleGlobalUp);
-    }, [setIsScrubbing, selectKeyframes, handleGlobalMove]);
+    }, [canvasRef, handleGlobalMove]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
         // Reset suppression immediately on new click
@@ -609,44 +612,47 @@ export const useGraphInteraction = (
         if (!rect) return;
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
-        
-        const props = latestProps.current;
 
         lastMousePos.current = { x: e.clientX, y: e.clientY };
         dragStartMousePos.current = { x: e.clientX, y: e.clientY };
-        
+
         // Capture initial view for absolute panning math
-        dragStartView.current = { panX: props.view.panX, panY: props.view.panY };
-        
+        dragStartView.current = { panX: view.panX, panY: view.panY };
+
+        // The ruler-scrub region only exists when the data source exposes a
+        // playhead (timeline). The palette curve editor has no playhead, so the
+        // ruler check is skipped and clicks fall straight through to the canvas.
+        const inRuler = !!ds.scrub && my < RULER_HEIGHT;
+
         if (e.altKey) {
             if (e.button === 0) { dragMode.current = 'pan'; isDraggingRef.current = true; }
             if (e.button === 2) { dragMode.current = 'zoom'; isDraggingRef.current = true; }
         }
-        else if (e.button === 1) { 
+        else if (e.button === 1) {
              e.preventDefault();
              // Middle Click: Pan on canvas, Scrub on Ruler
-             if (my < RULER_HEIGHT) {
-                 dragMode.current = 'scrub_passive'; 
+             if (inRuler) {
+                 dragMode.current = 'scrub_passive';
                  isDraggingRef.current = true;
-                 setIsScrubbing(true); 
-                 const f = props.canvasPixelToFrame(mx);
-                 seek(Math.max(0, Math.round(f)));
+                 ds.scrub!.setIsScrubbing(true);
+                 const f = canvasPixelToFrame(mx);
+                 ds.scrub!.seek(Math.max(0, Math.round(f)));
              } else {
                  dragMode.current = 'pan';
                  isDraggingRef.current = true;
              }
         }
         else if (e.button === 0) {
-            if (my < RULER_HEIGHT) {
+            if (inRuler) {
                 dragMode.current = 'scrub';
                 isDraggingRef.current = true;
-                setIsScrubbing(true);
-                const f = props.canvasPixelToFrame(mx);
-                seek(Math.max(0, Math.round(f)));
-                animationEngine.scrub(Math.max(0, Math.round(f)));
+                ds.scrub!.setIsScrubbing(true);
+                const f = canvasPixelToFrame(mx);
+                ds.scrub!.seek(Math.max(0, Math.round(f)));
+                ds.onAfterMutate?.(Math.max(0, Math.round(f)));
             } else {
                 const hit = getHit(mx, my);
-                
+
                 if (hit) {
                     if (hit.type === 'handle') {
                         dragMode.current = 'handle';
@@ -662,10 +668,10 @@ export const useGraphInteraction = (
                         // doesn't have a matching-side tangent.
                         const peers: NonNullable<typeof dragHandleRef.current>['peers'] = [];
                         const draggedComposite = `${hit.trackId}::${hit.keyId}`;
-                        (props.selectedKeyframeIds as string[]).forEach(cid => {
+                        ds.selectedKeyframeIds.forEach(cid => {
                             if (cid === draggedComposite) return;
                             const [tid, kid] = cid.split('::');
-                            const t = props.sequence.tracks[tid];
+                            const t = ds.sequence.tracks[tid];
                             const k = t?.keyframes.find(kf => kf.id === kid);
                             if (!k) return;
                             const sameSide  = hit.side === 'left' ? k.leftTangent  : k.rightTangent;
@@ -690,57 +696,57 @@ export const useGraphInteraction = (
                             peers,
                         };
                         isDraggingRef.current = true;
-                        snapshot();
+                        ds.snapshot?.();
                     }
                     else if (hit.type === 'key') {
                         const composite = `${hit.trackId}::${hit.key.id}`;
-                        
-                        if (e.ctrlKey && !dragHandleRef.current) { 
-                             if (isDraggingRef.current) return; 
-                             
+
+                        if (e.ctrlKey && !dragHandleRef.current) {
+                             if (isDraggingRef.current) return;
+
                              dragMode.current = 'soft_radius';
                              isDraggingRef.current = true;
                              setSoftInteraction({ isAdjusting: true, anchorKey: composite });
-                             
-                             if (!props.softSelectionEnabled) props.setSoftSelection(props.softSelectionRadius || 10, true);
-                             if (!(props.selectedKeyframeIds as string[]).includes(composite)) {
-                                 selectKeyframe(hit.trackId, hit.keyId, false);
+
+                             if (!ds.softSelectionEnabled) ds.setSoftSelection(ds.softSelectionRadius || 10, true);
+                             if (!ds.selectedKeyframeIds.includes(composite)) {
+                                 ds.selectKeyframe(hit.trackId, hit.keyId, false);
                                  syncTrackSelection([composite]);
                              }
                         } else {
                             dragMode.current = 'key';
-                            const isMulti = e.shiftKey || e.metaKey; 
-                            
-                            if (!(props.selectedKeyframeIds as string[]).includes(composite)) {
-                                if (!isMulti) deselectAllKeys();
-                                selectKeyframe(hit.trackId, hit.keyId, true);
-                            } 
-                            
+                            const isMulti = e.shiftKey || e.metaKey;
+
+                            if (!ds.selectedKeyframeIds.includes(composite)) {
+                                if (!isMulti) ds.deselectAllKeys();
+                                ds.selectKeyframe(hit.trackId, hit.keyId, true);
+                            }
+
                             // SYNC TRACKS
-                            const currentSelectedIds = props.selectedKeyframeIds as string[];
-                            const effectiveSelection = currentSelectedIds.includes(composite) || isMulti 
+                            const currentSelectedIds = ds.selectedKeyframeIds;
+                            const effectiveSelection = currentSelectedIds.includes(composite) || isMulti
                                 ? (currentSelectedIds.includes(composite) ? currentSelectedIds : [...currentSelectedIds, composite])
                                 : [composite];
-                                
+
                             syncTrackSelection(effectiveSelection);
 
                             const keysToDrag: KeyDragStart[] = [];
                             const initialStates: KeyStateMap = {};
                             const neighbors = new Map<string, NeighborKeyData>();
-                            
+
                             // Identify all involved tracks for initial state capture
                             const involvedTracks = new Set<string>();
 
                             effectiveSelection.forEach(id => {
                                 if (!id) return;
                                 const [tid, kid] = id.split('::');
-                                const t = sequence.tracks[tid];
+                                const t = ds.sequence.tracks[tid];
                                 const k = t?.keyframes.find(kf => kf.id === kid);
                                 if(k) {
-                                   keysToDrag.push({ 
-                                       trackId: tid, 
-                                       keyId: k.id, 
-                                       startFrame: k.frame, 
+                                   keysToDrag.push({
+                                       trackId: tid,
+                                       keyId: k.id,
+                                       startFrame: k.frame,
                                        startVal: k.value,
                                        // Capture initial tangents for correct scaling
                                        startLeftTan: k.leftTangent ? { ...k.leftTangent } : undefined,
@@ -750,17 +756,17 @@ export const useGraphInteraction = (
                                    involvedTracks.add(tid);
                                }
                             });
-                            
+
                             // Identify neighbors for handle adjustment
                             const draggedSet = new Set(effectiveSelection);
-                            
+
                             keysToDrag.forEach(draggedKey => {
-                                const track = sequence.tracks[draggedKey.trackId];
+                                const track = ds.sequence.tracks[draggedKey.trackId];
                                 if (!track) return;
                                 const sortedKeys = [...track.keyframes].sort((a,b) => a.frame - b.frame);
                                 const idx = sortedKeys.findIndex(k => k.id === draggedKey.keyId);
                                 if (idx === -1) return;
-                                
+
                                 if (idx > 0) {
                                     const prev = sortedKeys[idx-1];
                                     const prevId = `${draggedKey.trackId}::${prev.id}`;
@@ -776,7 +782,7 @@ export const useGraphInteraction = (
                                         neighbors.get(prevId)!.rightReferenceKeyId = draggedKey.keyId;
                                     }
                                 }
-                                
+
                                 if (idx < sortedKeys.length - 1) {
                                     const next = sortedKeys[idx+1];
                                     const nextId = `${draggedKey.trackId}::${next.id}`;
@@ -793,11 +799,11 @@ export const useGraphInteraction = (
                                     }
                                 }
                             });
-                            
+
                             // If soft selection enabled, capture initial states of ALL neighbors on involved tracks
-                            if (props.softSelectionEnabled && props.softSelectionRadius > 0) {
+                            if (ds.softSelectionEnabled && ds.softSelectionRadius > 0) {
                                 involvedTracks.forEach(tid => {
-                                    const track = sequence.tracks[tid];
+                                    const track = ds.sequence.tracks[tid];
                                     if (track) {
                                         track.keyframes.forEach(k => {
                                             const id = `${tid}::${k.id}`;
@@ -808,12 +814,12 @@ export const useGraphInteraction = (
                                     }
                                 });
                             }
-                            
+
                             draggedKeysRef.current = keysToDrag;
                             draggedNeighborsRef.current = neighbors;
                             softSelectInitialStateRef.current = initialStates;
                             isDraggingRef.current = true;
-                            snapshot();
+                            ds.snapshot?.();
                         }
                     }
                 } else {
@@ -822,7 +828,7 @@ export const useGraphInteraction = (
                     setSelectionBox({ x: mx, y: my, w: 0, h: 0 });
                     isDraggingRef.current = true;
                     if (!e.shiftKey && !e.ctrlKey) {
-                        deselectAllKeys();
+                        ds.deselectAllKeys();
                     }
                 }
             }
@@ -833,7 +839,7 @@ export const useGraphInteraction = (
             window.addEventListener('mouseup', handleGlobalUp);
         }
     };
-    
+
     useEffect(() => {
         return () => {
             window.removeEventListener('mousemove', handleGlobalMove);
