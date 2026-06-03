@@ -1,64 +1,72 @@
 /**
  * GeneratorSlotMods — the per-slot source modifiers (hue / chroma / contrast /
- * reverse), rendered on the CANVAS next to each source gradient (not in the dock
- * panel). The four values are hidden DDFS params on paletteGenerator
- * (a/bHueRotate, a/bChroma, a/bContrast, a/bReverse) so they still ride
- * undo/preset; this binds them via useGenParam. Compact inline layout to sit
- * beside the strip.
+ * repeats / phase / reverse / mirror). Rendered as a small ⚙ trigger on the source
+ * row that opens a SEMI-FLOATING panel beside the gradient (absolute-positioned, so
+ * it never expands the layout). The panel uses the SAME full GenParamSlider the dock
+ * uses, with keyframe diamonds, plus Bake (fold mods into the source ramp + reset)
+ * and Reset buttons. The values are hidden DDFS params (ride undo/preset/animation).
  */
 
-import React, { useState } from 'react';
-import { ScalarInput } from '../../components/inputs/ScalarInput';
+import React, { useEffect, useRef, useState } from 'react';
 import { InlineToggleButtons } from './InlineToggleButtons';
-import { useGenParam } from '../store/generatorStore';
-
-const CompactMod: React.FC<{ param: string; label: string; min: number; max: number; step: number; def: number }> = ({
-  param,
-  label,
-  min,
-  max,
-  step,
-  def,
-}) => {
-  const [v, setV] = useGenParam<number>(param);
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] text-gray-500 w-12 shrink-0">{label}</span>
-      <ScalarInput
-        value={v ?? def}
-        onChange={setV}
-        min={min}
-        max={max}
-        step={step}
-        defaultValue={def}
-        variant="compact"
-        className="flex-1"
-      />
-    </div>
-  );
-};
+import { GenParamSlider } from './GenParamSlider';
+import { useGenParam, useGeneratorStore } from '../store/generatorStore';
 
 export const GeneratorSlotMods: React.FC<{ which: 'A' | 'B' }> = ({ which }) => {
   const p = which.toLowerCase();
   const [rev, setRev] = useGenParam<boolean>(`${p}Reverse`);
   const [mir, setMir] = useGenParam<boolean>(`${p}Mirror`);
-  const [open, setOpen] = useState(true);
+  const bakeSlot = useGeneratorStore((s) => s.bakeSlot);
+  const resetSlot = useGeneratorStore((s) => s.resetSlot);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
+  }, [open]);
+
   return (
-    <div className="flex flex-col gap-1">
+    <div ref={ref} className="relative shrink-0">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-gray-500 hover:text-gray-300 self-start"
+        title={`Slot ${which} modifiers`}
+        className={`text-[10px] px-1.5 py-0.5 rounded-sm transition-colors ${
+          open ? 'bg-cyan-500/25 text-cyan-100' : 'bg-white/[0.06] text-gray-400 hover:text-gray-200'
+        }`}
       >
-        <span className="inline-block w-3 text-center">{open ? '▾' : '▸'}</span>
-        Slot {which} mods
+        ⚙ mods
       </button>
       {open && (
-        <div className="flex flex-col gap-1">
-          <CompactMod param={`${p}HueRotate`} label="hue" min={-180} max={180} step={1} def={0} />
-          <CompactMod param={`${p}Chroma`} label="chroma" min={0} max={2.5} step={0.01} def={1} />
-          <CompactMod param={`${p}Contrast`} label="contrast" min={0.2} max={2.5} step={0.01} def={1} />
-          <CompactMod param={`${p}Repeats`} label="repeats" min={1} max={8} step={1} def={1} />
-          <CompactMod param={`${p}Phase`} label="phase" min={0} max={1} step={0.01} def={0} />
+        <div className="absolute left-full top-0 ml-2 z-30 w-56 rounded-md border border-white/15 bg-zinc-900/95 backdrop-blur-sm shadow-xl p-2 flex flex-col gap-1">
+          <div className="flex items-center gap-1 mb-0.5">
+            <span className="text-[10px] uppercase tracking-wide text-gray-500">Slot {which}</span>
+            <div className="ml-auto flex gap-1">
+              <button
+                onClick={() => bakeSlot(which)}
+                title="Bake the modifiers into the source ramp and reset the dials"
+                className="text-[10px] px-1.5 py-0.5 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30"
+              >
+                Bake
+              </button>
+              <button
+                onClick={() => resetSlot(which)}
+                title="Reset the slot modifiers to neutral"
+                className="text-[10px] px-1.5 py-0.5 rounded-sm bg-white/[0.06] text-gray-300 hover:bg-white/10"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+          <GenParamSlider param={`${p}HueRotate`} label="Hue rotate" min={-180} max={180} step={1} def={0} />
+          <GenParamSlider param={`${p}Chroma`} label="Chroma" min={0} max={2.5} step={0.01} def={1} />
+          <GenParamSlider param={`${p}Contrast`} label="Contrast" min={0.2} max={2.5} step={0.01} def={1} />
+          <GenParamSlider param={`${p}Repeats`} label="Repeats" min={1} max={8} step={1} def={1} />
+          <GenParamSlider param={`${p}Phase`} label="Phase" min={0} max={1} step={0.01} def={0} />
           <InlineToggleButtons
             items={[
               { key: 'rev', label: 'reverse', active: !!rev },

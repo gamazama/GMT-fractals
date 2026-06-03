@@ -141,5 +141,40 @@ console.log('[4] saliency / golden-hour change the result (and stay deterministi
   ok(!eqRamp(g.ramp, g2.ramp), 'golden-hour shadows vs highlights differ');
 }
 
+console.log('[5] freehand trace path: determinism + Catmull-Rom stability');
+{
+  const tp = baseParams('trace');
+  // A 2-point `points` polyline must reproduce the equivalent 2-handle straight line.
+  const straight: TracePath = { x0: 0.1, y0: 0.2, x1: 0.85, y1: 0.7 };
+  const asPoints: TracePath = {
+    ...straight,
+    points: [{ x: 0.1, y: 0.2 }, { x: 0.85, y: 0.7 }],
+  };
+  const a = extract(m1, straight, tp);
+  const b = extract(m1, asPoints, tp);
+  ok(eqRamp(a.ramp, b.ramp), 'trace: 2-point polyline == 2-handle straight line');
+
+  // A multi-point freehand path is deterministic across re-ingest.
+  const freehand: TracePath = {
+    x0: 0.1, y0: 0.5, x1: 0.9, y1: 0.5,
+    points: [{ x: 0.1, y: 0.5 }, { x: 0.35, y: 0.2 }, { x: 0.6, y: 0.8 }, { x: 0.9, y: 0.5 }],
+  };
+  const f1 = extract(m1, freehand, tp);
+  const f2 = extract(ingestPixels(makeImage(), W, H), freehand, tp);
+  ok(f1.ramp.length === 256 && f1.ribbon.length === 256, 'trace freehand: 256 stops + ribbon');
+  ok(inGamut(f1.ramp), 'trace freehand: in gamut');
+  ok(eqRamp(f1.ramp, f2.ramp), 'trace freehand: identical image+settings ⇒ identical ramp');
+
+  // Catmull-Rom smoothing changes the curve but stays deterministic.
+  const s1 = extract(m1, freehand, { ...tp, catmullRom: true });
+  const s2 = extract(ingestPixels(makeImage(), W, H), freehand, { ...tp, catmullRom: true });
+  ok(eqRamp(s1.ramp, s2.ramp), 'trace spline: deterministic across re-ingest');
+  ok(!eqRamp(f1.ramp, s1.ramp), 'trace spline: Catmull-Rom differs from the polyline');
+
+  // With only 2 control points the spline toggle is a no-op (degenerates to the line).
+  const sp2 = extract(m1, asPoints, { ...tp, catmullRom: true });
+  ok(eqRamp(b.ramp, sp2.ramp), 'trace spline: 2 points ⇒ identical to straight (no-op)');
+}
+
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

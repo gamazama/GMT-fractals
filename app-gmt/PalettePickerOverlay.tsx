@@ -15,7 +15,7 @@
 
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { PickerStage } from '../palette-studio/PickerStage';
+import { PickerStage } from '../gradient-explorer/PickerStage';
 import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
 import { usePaletteOverlayStore } from './paletteOverlayStore';
 import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';

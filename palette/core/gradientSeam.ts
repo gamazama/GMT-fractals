@@ -39,3 +39,17 @@ export const applyGradientConfig = (config: GradientConfig, layer: 1 | 2 = 1): b
 /** Convenience: pick a catalog entry straight into the fractal's colour. */
 export const applyEntryToColoring = (entry: CatalogEntry, layer: 1 | 2 = 1): boolean =>
   applyGradientConfig(entryToGradientConfig(entry), layer);
+
+/**
+ * Apply a gradient to GMT's environment (sky) gradient — `materials.envGradientStops`.
+ * Forced to colorSpace 'srgb': the env gradient is a DISPLAYED sky colour (sampled
+ * directly in the env shader, default-baked as srgb), unlike the LINEAR coloring
+ * radiance. Returns false when the host has no materials feature (the studio has none).
+ */
+export const applyEnvGradient = (config: GradientConfig): boolean => {
+  const st = useEngineStore.getState() as unknown as Record<string, unknown>;
+  const setMaterials = st.setMaterials as ((u: Record<string, unknown>) => void) | undefined;
+  if (typeof setMaterials !== 'function') return false;
+  setMaterials({ envGradientStops: { ...config, colorSpace: 'srgb' } });
+  return true;
+};

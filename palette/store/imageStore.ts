@@ -30,6 +30,7 @@ interface ImageSlice {
   chromaBoost: number;
   bandWidth: number;
   smoothing: number;
+  catmullRom: boolean;
 }
 
 export const IMAGE_PARAM_DEFAULTS: ImageSlice = {
@@ -43,6 +44,7 @@ export const IMAGE_PARAM_DEFAULTS: ImageSlice = {
   chromaBoost: 1,
   bandWidth: 8,
   smoothing: 3,
+  catmullRom: false,
 };
 
 const sliceToParams = (s: ImageSlice): Img2GradParams => ({
@@ -56,6 +58,7 @@ const sliceToParams = (s: ImageSlice): Img2GradParams => ({
   chromaBoost: s.chromaBoost,
   bandWidth: s.bandWidth,
   smoothing: s.smoothing,
+  catmullRom: s.catmullRom,
 });
 
 interface ImageState {

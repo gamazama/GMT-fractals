@@ -2,7 +2,7 @@
  * Host-agnostic registration seam for the palette tools.
  *
  * Call this from a host app's side-effect `registerFeatures.ts` (the standalone
- * Palette Studio OR an app-gmt panel) BEFORE the engine store is constructed —
+ * GMT Gradient Explorer OR an app-gmt panel) BEFORE the engine store is constructed —
  * the feature + component registries freeze on first store access.
  *
  * Keeping registration in one exported function (rather than module side-effects)
@@ -19,11 +19,14 @@ import { PaletteImageFeature } from './features/paletteImage';
 import { QualityRangePadConnected } from './components/QualityRangePadConnected';
 import { PickerThemeChips, PickerBundleToggles } from './components/PickerControls';
 import { GeneratorExtrasPanel } from './components/GeneratorExtrasPanel';
+import { GeneratorModifierActions } from './components/GeneratorModifierActions';
 import { NoiseTargetsControl } from './components/NoiseTargetsControl';
 import { ModifyTogglesControl } from './components/ModifyTogglesControl';
 import { ImageExtrasPanel } from './components/ImageExtrasPanel';
 import { FavientsPanel } from './components/FavientsPanel';
 import { useFavientsStore } from './store/favientsStore';
+import { captureGeneratorHistory, restoreGeneratorHistory } from './store/generatorStore';
+import { registerHistoryProvider } from '../store/slices/historySlice';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
 import type { GradientConfig } from '../types';
 
@@ -38,6 +41,7 @@ export const registerPaletteUI = (): void => {
   // Generator dock tab: the dials are native DDFS params; this is the bottom
   // actions + export block (uses the shared generatorStore, not the slice).
   componentRegistry.register('palette-generator-extras', GeneratorExtrasPanel);
+  componentRegistry.register('palette-modifier-actions', GeneratorModifierActions);
   componentRegistry.register('palette-noise-targets', NoiseTargetsControl);
   componentRegistry.register('palette-modify-toggles', ModifyTogglesControl);
   // Image dock tab: export suite (the dials are native DDFS params).
@@ -46,8 +50,13 @@ export const registerPaletteUI = (): void => {
   // component is host-agnostic; each host registers its own apply targets.
   componentRegistry.register('panel-favients', FavientsPanel);
 
+  // The generator's non-DDFS state (curve Track[], slot selection, fit dials) lives in
+  // its own store, so register it as a PARAM-undo history provider — curves + slots now
+  // ride Ctrl+Z alongside the DDFS dials. Idempotent (Map keyed by id).
+  registerHistoryProvider('paletteGenerator', { capture: captureGeneratorHistory, restore: restoreGeneratorHistory });
+
   // One feature per studio mode — each owns a dock tab; the centre stage mirrors
-  // whichever tab is active (see PaletteStudioApp).
+  // whichever tab is active (see GradientExplorerApp).
   featureRegistry.register(PaletteGeneratorFeature);
   featureRegistry.register(PaletteFiltersFeature);
   featureRegistry.register(PaletteImageFeature);

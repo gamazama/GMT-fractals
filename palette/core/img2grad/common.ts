@@ -54,12 +54,24 @@ export interface ColorNode extends Lab {
   mass: number;
 }
 
+/** A point in normalised image coords [0..1]. */
+export interface Pt {
+  x: number;
+  y: number;
+}
+
 /** Trace path in normalised image coords [0..1]. */
 export interface TracePath {
   x0: number;
   y0: number;
   x1: number;
   y1: number;
+  /**
+   * Freehand polyline (normalised). When present with ≥2 points it supersedes the
+   * 2-handle straight line; x0/y0/x1/y1 stay synced to the first/last point as the
+   * fallback representation (so the 2-handle path is always valid).
+   */
+  points?: Pt[];
 }
 
 export const clamp = (x: number, a: number, b: number): number => (x < a ? a : x > b ? b : x);

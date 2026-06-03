@@ -29,6 +29,8 @@ interface UseDragValueOptions {
     disabled?: boolean;
     /** Minimum pixel movement before drag starts (default: 2) */
     dragThreshold?: number;
+    /** Drag axis: 'x' = horizontal (default), 'y' = vertical (drag down to increase). */
+    axis?: 'x' | 'y';
 }
 
 interface UseDragValueReturn {
@@ -59,6 +61,7 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         mapping,
         disabled,
         dragThreshold = 2,
+        axis = 'x',
     } = options;
 
     const [isDragging, setIsDragging] = useState(false);
@@ -98,8 +101,8 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         e.currentTarget.setPointerCapture(e.pointerId);
         currentPointerId.current = e.pointerId;
 
-        // Initialize drag state
-        dragStartX.current = e.clientX;
+        // Initialize drag state (store the coordinate along the active axis)
+        dragStartX.current = axis === 'y' ? e.clientY : e.clientX;
         const displayValue = mapping ? mapping.toDisplay(value) : value;
         dragStartValue.current = isNaN(displayValue) ? 0 : displayValue;
         hasMoved.current = false;
@@ -108,7 +111,7 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
 
         setIsDragging(true);
         onDragStart?.();
-    }, [value, mapping, disabled, onDragStart]);
+    }, [value, mapping, disabled, onDragStart, axis]);
 
     /**
      * Handle pointer move - update value
@@ -117,7 +120,10 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         if (disabled || !isDragging) return;
         if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
 
-        const dx = e.clientX - dragStartX.current;
+        // Delta along the active axis. For 'y' we DON'T invert: dragging down increases,
+        // so a top-to-bottom slider's thumb follows the pointer (top = min, bottom = max).
+        const cur = axis === 'y' ? e.clientY : e.clientX;
+        const dx = cur - dragStartX.current;
 
         // Check if we've moved enough to start dragging
         if (Math.abs(dx) > dragThreshold) {
@@ -140,7 +146,7 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
 
             // "Bake" the current value as the new start
             dragStartValue.current = currentValue;
-            dragStartX.current = e.clientX;
+            dragStartX.current = cur;
 
             // Update modifier tracking
             lastShift.current = e.shiftKey;
@@ -162,7 +168,7 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
             immediateValueRef.current = finalValue;
             onChange(finalValue);
         }
-    }, [isDragging, disabled, step, hardMin, hardMax, mapping, onChange, getSensitivity, dragThreshold]);
+    }, [isDragging, disabled, step, hardMin, hardMax, mapping, onChange, getSensitivity, dragThreshold, axis]);
 
     /**
      * Handle pointer up - end drag

@@ -1,6 +1,6 @@
 /**
  * favientTargets — the registry of "where a favourite applies". Each host populates
- * this at boot: the Palette Studio registers the generator slots; app-gmt registers
+ * this at boot: the GMT Gradient Explorer registers the generator slots; app-gmt registers
  * its coloring layers. The Favients panel reads it for the "Applying to ▾" dropdown
  * and for drag-and-drop, so one panel component works in every host without knowing
  * what the host can do with a gradient.
@@ -57,9 +57,9 @@ export const setFavientBrowseAction = (fn: (() => void) | null): void => {
 
 export const getFavientBrowseAction = (): (() => void) | null => _browse;
 
-// --- "open Palette Studio" action (host-specific) — drives the Favients header's
-// studio-launch button. Registered only where launching the standalone studio makes
-// sense (app-gmt); unset inside the studio itself, so the button hides there. ---
+// --- "open GMT Gradient Explorer" action (host-specific) — drives the Favients header's
+// studio-launch button. Registered only where launching the standalone explorer makes
+// sense (app-gmt); unset inside the explorer itself, so the button hides there. ---
 let _studio: (() => void) | null = null;
 
 export const setFavientStudioAction = (fn: (() => void) | null): void => {

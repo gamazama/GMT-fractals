@@ -17,7 +17,6 @@ import { useGeneratorStore, useGeneratorDerived } from '../store/generatorStore'
 export const GeneratorExtrasPanel: React.FC = () => {
   const exportFmt = useGeneratorStore((s) => s.exportFmt);
   const setExportFmt = useGeneratorStore((s) => s.setExportFmt);
-  const reseedNoise = useGeneratorStore((s) => s.reseedNoise);
   const resetAll = useGeneratorStore((s) => s.resetAll);
   const { ramp } = useGeneratorDerived();
 
@@ -92,14 +91,9 @@ export const GeneratorExtrasPanel: React.FC = () => {
 
   return (
     <div className="px-1 pt-2 mt-1 border-t border-white/10">
-      <div className="flex items-center gap-1.5 mb-2">
-        <button onClick={resetAll} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10">
-          Reset all
-        </button>
-        <button onClick={reseedNoise} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10">
-          Reseed noise
-        </button>
-      </div>
+      <button onClick={resetAll} className="w-full text-[11px] px-2 py-1 mb-2 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10">
+        Reset all
+      </button>
 
       <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Export</div>
       <GenericDropdown

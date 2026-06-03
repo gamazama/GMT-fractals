@@ -6,7 +6,7 @@
 // gotchas (boot freeze-order, EngineBridge+RenderLoopDriver for timeline playback,
 // tabs-drive-the-centre, hints/keyframes/input reuse) is in:
 //     demo/README.md  →  "Starting a NEW standalone shell app"
-// Worked example built from that recipe: palette-studio/.
+// Worked example built from that recipe: gradient-explorer/.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Side-effect import — registers DemoFeature with the engine BEFORE

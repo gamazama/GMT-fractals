@@ -22,6 +22,8 @@ export interface DraggableNumberProps {
     step?: number;
     /** Base sensitivity multiplier (default: 1) */
     sensitivity?: number;
+    /** Drag axis: 'x' = horizontal (default), 'y' = vertical (drag down to increase). */
+    axis?: 'x' | 'y';
     
     /** Soft min for UI display (not enforced) */
     min?: number;

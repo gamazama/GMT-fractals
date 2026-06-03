@@ -15,12 +15,13 @@
  */
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { useGeneratorStore, useGeneratorDerived } from '../store/generatorStore';
+import { useGeneratorStore, useGeneratorDerived, genEdit } from '../store/generatorStore';
 import { buildPresetCatalog } from '../core/presetCatalog';
-import { ChannelGraphEditor } from './ChannelGraphEditor';
+import { ChannelGraphEditor, CHANNEL_PLOT_INSET_LEFT, CHANNEL_PLOT_INSET_RIGHT } from './ChannelGraphEditor';
 import { GradientStrip } from './GradientStrip';
 import { GradientSourcePicker } from './GradientSourcePicker';
 import { GeneratorSlotMods } from './GeneratorSlotMods';
+import { MixBlend } from './MixBlend';
 import { FavStar } from './FavStar';
 import { readFavientDrag, FAVIENT_DND_MIME } from '../core/favientDnd';
 import { renderStopsToRamp } from '../core/gmtGradient';
@@ -40,14 +41,16 @@ const useContainerSize = () => {
   return { ref, ...size };
 };
 
-// One source: its gradient (click to open the searchable picker) with the slot's
-// modifiers right beside it.
+// One source: its gradient (click to open the searchable picker). The slot's modifiers
+// open in a semi-floating panel from the ⚙ button (so they don't expand the layout).
 const SourceRow: React.FC<{
   which: 'A' | 'B';
   ramp: { r: number; g: number; b: number }[];
   preset: number;
   onPick: (idx: number) => void;
-}> = ({ which, ramp, preset, onPick }) => {
+  height: number;
+  dimmed?: boolean;
+}> = ({ which, ramp, preset, onPick, height, dimmed }) => {
   const [open, setOpen] = useState(false);
   const [dropping, setDropping] = useState(false);
   const sendRampToSlot = useGeneratorStore((s) => s.sendRampToSlot);
@@ -68,29 +71,26 @@ const SourceRow: React.FC<{
   };
 
   return (
-    <div className="flex gap-3 items-start">
-      {/* Gradient + name (click to change; drop a favourite here to load it) */}
-      <div className="relative flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-[10px] uppercase tracking-wide text-gray-500 w-14">Source {which}</span>
-          <span className="text-[11px] text-gray-400 truncate">{name}</span>
-          <span className="ml-auto text-[10px] text-gray-600">{dropping ? 'drop to load' : 'click to change'}</span>
-        </div>
+    <div className={`relative min-w-0 transition-opacity ${dimmed ? 'opacity-40' : ''}`}>
+      <div className="flex items-center gap-2 mb-0.5">
+        <span className="text-[10px] uppercase tracking-wide text-gray-500 w-14 shrink-0">Source {which}</span>
+        <span className="text-[11px] text-gray-400 truncate">{name}</span>
+        <span className="ml-auto text-[10px] text-gray-600 shrink-0">{dropping ? 'drop to load' : 'click to change'}</span>
+      </div>
+      {/* gradient + the slot-mods trigger to its RIGHT (panel opens into the gutter) */}
+      <div className="flex items-center gap-2">
         <button
           onClick={() => setOpen((o) => !o)}
           onDragOver={onDragOver}
           onDragLeave={() => setDropping(false)}
           onDrop={onDrop}
-          className={`block w-full rounded-sm ring-1 transition ${dropping ? 'ring-amber-300/80 ring-2' : 'ring-white/10 hover:ring-cyan-500/40'}`}
+          className={`block flex-1 min-w-0 rounded-sm ring-1 transition ${dropping ? 'ring-amber-300/80 ring-2' : 'ring-white/10 hover:ring-cyan-500/40'}`}
         >
-          <GradientStrip ramp={ramp} height={56} />
+          <GradientStrip ramp={ramp} height={height} />
         </button>
-        {open && <GradientSourcePicker title={`Source ${which}`} value={preset} onChange={onPick} onClose={() => setOpen(false)} placement="left" />}
-      </div>
-      {/* Slot modifiers, beside the gradient */}
-      <div className="w-52 shrink-0 pt-5">
         <GeneratorSlotMods which={which} />
       </div>
+      {open && <GradientSourcePicker title={`Source ${which}`} value={preset} onChange={onPick} onClose={() => setOpen(false)} placement="left" />}
     </div>
   );
 };
@@ -111,45 +111,70 @@ export const GeneratorStage: React.FC = () => {
   const setSmooth = useGeneratorStore((s) => s.setSmooth);
   const fitFromSource = useGeneratorStore((s) => s.fitFromSource);
   const resetCurves = useGeneratorStore((s) => s.resetCurves);
+  const [resultTall, setResultTall] = useState(false);
+
+  // Live re-fit: while curves are ON, dragging detail/smooth re-runs the fit (debounced),
+  // so the channel curves re-shape as you drag instead of only on "Fit from source".
+  // We track the last-seen detail|smooth so the effect ignores the curvesOn flip itself
+  // (Fit already produced those curves) and only re-fits on a genuine slider change.
+  const fitRef = useRef(fitFromSource);
+  fitRef.current = fitFromSource;
+  const lastFitKey = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${detail}|${smooth}`;
+    if (!curvesOn) { lastFitKey.current = key; return; } // nothing to fit when curves are off
+    if (lastFitKey.current === key) return; // unchanged (e.g. the Fit that turned curves on)
+    lastFitKey.current = key;
+    const t = window.setTimeout(() => genEdit(() => fitRef.current()), 120);
+    return () => window.clearTimeout(t);
+  }, [detail, smooth, curvesOn]);
 
   const { ref: graphRef, w: graphW, h: graphH } = useContainerSize();
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">
-      {/* Upper ~2/3: sources at top, result vertically centred */}
-      <div className="flex-[2] min-h-0 overflow-y-auto flex flex-col px-5 pt-4">
-        <div className="w-full max-w-3xl mx-auto flex flex-col gap-2 shrink-0">
-          <SourceRow which="A" ramp={stripA} preset={slotA} onPick={(i) => setSlot('A', i)} />
-          <div className="flex justify-center">
-            <button onClick={swap} title="Swap A/B" className="text-[11px] text-gray-300 px-2 py-0.5 rounded-sm bg-white/[0.06] hover:bg-white/10">
-              ⇅ Swap A/B
-            </button>
-          </div>
-          <SourceRow which="B" ramp={stripB} preset={slotB} onPick={(i) => setSlot('B', i)} />
-        </div>
+      {/* Top: sources → blend → source → result, inset to line up with the graph PLOT
+          below (so the gradients and the curve t-axis share a left/right edge). Takes
+          the slack so the graph stays compact with no dead space under it. */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto pt-3 pb-2 flex flex-col gap-1.5"
+        style={{ paddingLeft: CHANNEL_PLOT_INSET_LEFT, paddingRight: CHANNEL_PLOT_INSET_RIGHT }}
+      >
+        <SourceRow which="A" ramp={stripA} preset={slotA} onPick={(i) => setSlot('A', i)} height={40} dimmed={curvesOn} />
+        {/* The L/C/h blend sits BETWEEN A and B as vertical sliders bridging A→B. */}
+        <MixBlend onSwap={swap} dimmed={curvesOn} />
+        <SourceRow which="B" ramp={stripB} preset={slotB} onPick={(i) => setSlot('B', i)} height={40} dimmed={curvesOn} />
 
-        {/* Result — vertically centred in the remaining space, bordered */}
-        <div className="flex-1 min-h-0 flex items-center py-4">
-          <div className="w-full max-w-3xl mx-auto">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
-                <div className="text-xs text-gray-400">Result</div>
-                <FavStar config={config} name="Generated" source="Generator" />
-              </div>
-              <div className="text-[11px] text-gray-500">{config.stops.length} stops</div>
+        {/* Result — same width as the graph plot, no bordered holder */}
+        <div className="mt-1">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="text-xs text-gray-400 shrink-0">Result</div>
+              <FavStar config={config} name="Generated" source="Generator" />
+              {curvesOn && <span className="text-[10px] text-cyan-400/70 truncate">curves drive the output — sources dimmed</span>}
             </div>
-            <div className="rounded-md border border-white/15 bg-black/30 p-2 shadow-lg">
-              <GradientStrip ramp={ramp} height={104} />
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[11px] text-gray-500">{config.stops.length} stops</span>
+              <button
+                onClick={() => setResultTall((t) => !t)}
+                title="Toggle result height"
+                className="text-[11px] px-1.5 py-0.5 rounded-sm bg-white/[0.06] text-gray-400 hover:text-gray-200"
+              >
+                ⬍
+              </button>
             </div>
           </div>
+          <GradientStrip ramp={ramp} height={resultTall ? 96 : 44} />
         </div>
       </div>
 
-      {/* Lower ~1/3: channel curve graph (full width) with centred controls */}
-      <div className="flex-[1] min-h-0 flex flex-col border-t border-white/10 bg-zinc-950">
-        <div className="flex items-center justify-center gap-3 flex-wrap px-5 py-1.5 shrink-0">
-          <span className="text-[10px] uppercase tracking-wide text-gray-500">Channel curves</span>
-          <button onClick={fitFromSource} className="text-[11px] px-2 py-1 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30">
+      {/* Channel curve graph (full width) with its controls. Fixed-height at the bottom
+          — the keyframe inspector is about as tall as the editor ever needs to be, so the
+          slack goes to the gradients above rather than dead space below the graph. */}
+      <div className="shrink-0 flex flex-col border-t border-white/10 bg-zinc-950">
+        <div className="flex items-center gap-2 flex-wrap px-3 py-1.5 shrink-0">
+          <span className="text-[10px] uppercase tracking-wide text-gray-500">Curves</span>
+          <button onClick={() => genEdit(fitFromSource)} className="text-[11px] px-2 py-1 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30">
             Fit from source
           </button>
           <button onClick={resetCurves} className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-300 hover:bg-white/10">
@@ -170,13 +195,17 @@ export const GeneratorStage: React.FC = () => {
             <span className="w-4 text-gray-300">{smooth}</span>
           </div>
         </div>
-        <div ref={graphRef} className="flex-1 min-h-0 overflow-hidden">
+        <div
+          ref={graphRef}
+          className={`overflow-hidden transition-opacity ${tracks && !curvesOn ? 'opacity-50' : ''}`}
+          style={{ height: 264 }}
+        >
           {tracks ? (
             <ChannelGraphEditor tracks={tracks} onTracksChange={setTracks} width={graphW} height={graphH} previewRamp={ramp} />
           ) : (
             <div className="h-full flex items-center justify-center text-center text-[11px] text-gray-500">
               No curves yet — click <span className="text-cyan-300 mx-1">Fit from source</span> to decompose the current mix into editable
-              L / C / h curves.
+              Lightness / Chroma / Hue curves.
             </div>
           )}
         </div>

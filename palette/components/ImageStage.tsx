@@ -13,7 +13,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useImageStore, useImageDerived, useImageMode, useImageParam } from '../store/imageStore';
-import { ingestPixels, INGEST_MAX_EDGE, autoPath, type Img2GradMode } from '../core/img2grad';
+import { ingestPixels, INGEST_MAX_EDGE, autoPath, tracePolyline, type Img2GradMode } from '../core/img2grad';
+import type { Pt, TracePath } from '../core/img2grad/common';
 import { GradientStrip } from './GradientStrip';
 import { useGeneratorStore } from '../store/generatorStore';
 import { useEngineStore } from '../../store/engineStore';
@@ -36,6 +37,19 @@ const proj = (L: number, a: number, b: number, W: number, H: number, yaw: number
   return [W / 2 + x1 * sc, H / 2 - y1 * sc * 1.05, z2];
 };
 
+const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/** Keep x0/y0/x1/y1 synced to the first/last freehand point (the 2-handle fallback). */
+const syncEnds = (p: TracePath): TracePath => {
+  if (!p.points || p.points.length < 2) return p;
+  const f = p.points[0], l = p.points[p.points.length - 1];
+  return { ...p, x0: f.x, y0: f.y, x1: l.x, y1: l.y };
+};
+
+/** The path's control points (freehand polyline, or the two endpoint handles). */
+const pathControls = (p: TracePath): Pt[] =>
+  p.points && p.points.length >= 2 ? p.points : [{ x: p.x0, y: p.y0 }, { x: p.x1, y: p.y1 }];
+
 export const ImageStage: React.FC = () => {
   const model = useImageStore((s) => s.model);
   const thumb = useImageStore((s) => s.thumb);
@@ -47,6 +61,8 @@ export const ImageStage: React.FC = () => {
 
   const mode = useImageMode();
   const [, setModeIdx] = useImageParam<number>('mode');
+  const [catmull] = useImageParam<boolean>('catmullRom');
+  const [drawing, setDrawing] = useState(false);
   const derived = useImageDerived();
   // Image extraction is ramp-only; fit to GMT stops once so it can be favourited as a
   // GradientConfig (the shelf's interchange representation).
@@ -243,15 +259,24 @@ export const ImageStage: React.FC = () => {
     x.imageSmoothingEnabled = true;
     x.drawImage(thumb, R.ox, R.oy, R.w, R.h);
     if (mode === 'trace') {
-      const ax = R.ox + path.x0 * R.w, ay = R.oy + path.y0 * R.h, bx = R.ox + path.x1 * R.w, by = R.oy + path.y1 * R.h;
-      x.strokeStyle = 'rgba(0,0,0,.55)'; x.lineWidth = 5; x.beginPath(); x.moveTo(ax, ay); x.lineTo(bx, by); x.stroke();
-      x.strokeStyle = '#fff'; x.lineWidth = 2; x.beginPath(); x.moveTo(ax, ay); x.lineTo(bx, by); x.stroke();
-      ([[ax, ay, '#6cf'], [bx, by, '#fc6']] as [number, number, string][]).forEach((p) => {
-        x.fillStyle = p[2]; x.strokeStyle = '#000'; x.lineWidth = 2;
-        x.beginPath(); x.arc(p[0], p[1], 7, 0, 7); x.fill(); x.stroke();
+      // Dense curve in image px (same geometry the sampler walks) → pane coords.
+      const poly = tracePolyline(path, model.w, model.h, catmull);
+      const toPane = (p: Pt): [number, number] => [R.ox + (p.x / (model.w - 1)) * R.w, R.oy + (p.y / (model.h - 1)) * R.h];
+      const line = () => { x.beginPath(); poly.forEach((p, i) => { const [X, Y] = toPane(p); i ? x.lineTo(X, Y) : x.moveTo(X, Y); }); };
+      x.lineJoin = 'round'; x.lineCap = 'round';
+      x.strokeStyle = 'rgba(0,0,0,.55)'; x.lineWidth = 5; line(); x.stroke();
+      x.strokeStyle = '#fff'; x.lineWidth = 2; line(); x.stroke();
+      // Control-point handles: first cyan, last amber, interior white.
+      const ctrl = pathControls(path);
+      ctrl.forEach((c, i) => {
+        const cx = R.ox + c.x * R.w, cy = R.oy + c.y * R.h;
+        x.fillStyle = i === 0 ? '#6cf' : i === ctrl.length - 1 ? '#fc6' : '#fff';
+        x.strokeStyle = '#000'; x.lineWidth = 2;
+        const r = i === 0 || i === ctrl.length - 1 ? 7 : 4.5;
+        x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); x.stroke();
       });
     }
-  }, [thumb, model, mode, path, paneRect]);
+  }, [thumb, model, mode, path, catmull, paneRect]);
   useEffect(() => { drawPane(); }, [drawPane]);
 
   // Live refs so the pointer listeners can stay attached for the whole drag. If the
@@ -262,8 +287,13 @@ export const ImageStage: React.FC = () => {
   modeRef.current = mode;
   const pathRef = useRef(path);
   pathRef.current = path;
+  const drawingRef = useRef(drawing);
+  drawingRef.current = drawing;
+  // Freehand recording buffer (non-null while a draw stroke is in progress).
+  const recordRef = useRef<Pt[] | null>(null);
 
-  // trace handle drag (attached once per image load; reads live mode/path via refs)
+  // trace handle drag / freehand draw (attached once per image load; reads live mode /
+  // path / draw-mode via refs so listeners never tear down mid-interaction)
   const hasModel = !!model;
   useEffect(() => {
     const cv = paneRef.current;
@@ -273,32 +303,78 @@ export const ImageStage: React.FC = () => {
       const r = cv.getBoundingClientRect();
       return [((e.clientX - r.left) / r.width) * cv.width, ((e.clientY - r.top) / r.height) * cv.height];
     };
+    // canvas→CSS scale, so hit radii / point spacing match what the user sees.
+    const scaleOf = (): number => cv.width / Math.max(1, cv.getBoundingClientRect().width);
+    const norm = (mx: number, my: number, R: ReturnType<typeof paneRect>): Pt => ({
+      x: clamp01((mx - R.ox) / R.w),
+      y: clamp01((my - R.oy) / R.h),
+    });
+
     const down = (e: PointerEvent) => {
       if (modeRef.current !== 'trace') return;
-      const p = pathRef.current;
       const [mx, my] = loc(e), R = paneRect();
-      const ax = R.ox + p.x0 * R.w, ay = R.oy + p.y0 * R.h, bx = R.ox + p.x1 * R.w, by = R.oy + p.y1 * R.h;
-      const da = Math.hypot(mx - ax, my - ay), db = Math.hypot(mx - bx, my - by);
-      grab = da < db ? 0 : 1;
-      // Generous hit radius (handles are 7px; scale by the canvas→CSS ratio so the
-      // grab zone matches what the user sees even when the pane is scaled down).
-      const r = cv.getBoundingClientRect();
-      const scale = cv.width / Math.max(1, r.width);
-      if (Math.min(da, db) > 28 * scale) grab = null;
-      else {
+      // Draw mode: begin a fresh freehand stroke.
+      if (drawingRef.current) {
+        recordRef.current = [norm(mx, my, R)];
+        cv.setPointerCapture(e.pointerId);
+        cv.classList.add('cursor-crosshair');
+        e.preventDefault();
+        return;
+      }
+      // Otherwise grab the nearest control point.
+      const p = pathRef.current;
+      const ctrl = pathControls(p);
+      let best = -1, bestD = Infinity;
+      ctrl.forEach((c, i) => {
+        const d = Math.hypot(mx - (R.ox + c.x * R.w), my - (R.oy + c.y * R.h));
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      grab = bestD <= 28 * scaleOf() ? best : null;
+      if (grab !== null) {
         cv.setPointerCapture(e.pointerId);
         cv.classList.add('cursor-grabbing');
         e.preventDefault();
       }
     };
+
     const move = (e: PointerEvent) => {
-      if (grab === null || modeRef.current !== 'trace') return;
-      const p = pathRef.current;
+      if (modeRef.current !== 'trace') return;
       const [mx, my] = loc(e), R = paneRect();
-      const nx = Math.max(0, Math.min(1, (mx - R.ox) / R.w)), ny = Math.max(0, Math.min(1, (my - R.oy) / R.h));
-      setPath(grab === 0 ? { ...p, x0: nx, y0: ny } : { ...p, x1: nx, y1: ny });
+      // Recording a freehand stroke: append points spaced ~8 CSS-px apart.
+      if (recordRef.current) {
+        const buf = recordRef.current;
+        const last = buf[buf.length - 1];
+        if (Math.hypot(mx - (R.ox + last.x * R.w), my - (R.oy + last.y * R.h)) >= 8 * scaleOf()) {
+          buf.push(norm(mx, my, R));
+          setPath(syncEnds({ x0: 0, y0: 0, x1: 0, y1: 0, points: buf.slice() }));
+        }
+        return;
+      }
+      if (grab === null) return;
+      const p = pathRef.current;
+      const np = norm(mx, my, R);
+      if (p.points && p.points.length >= 2) {
+        const pts = p.points.slice();
+        pts[grab] = np;
+        setPath(syncEnds({ ...p, points: pts }));
+      } else {
+        setPath(grab === 0 ? { ...p, x0: np.x, y0: np.y } : { ...p, x1: np.x, y1: np.y });
+      }
     };
-    const up = () => { grab = null; cv.classList.remove('cursor-grabbing'); };
+
+    const up = () => {
+      if (recordRef.current) {
+        const buf = recordRef.current;
+        recordRef.current = null;
+        cv.classList.remove('cursor-crosshair');
+        // Need ≥2 points for a path; a tap leaves the previous path untouched.
+        if (buf.length >= 2) setPath(syncEnds({ x0: 0, y0: 0, x1: 0, y1: 0, points: buf }));
+        setDrawing(false);
+        return;
+      }
+      grab = null;
+      cv.classList.remove('cursor-grabbing');
+    };
     cv.addEventListener('pointerdown', down);
     cv.addEventListener('pointermove', move);
     cv.addEventListener('pointerup', up);
@@ -315,6 +391,7 @@ export const ImageStage: React.FC = () => {
 
   const switchMode = (id: Img2GradMode, idx: number) => {
     setModeIdx(idx);
+    setDrawing(false);
     if (id === 'trace' && model) setPath(autoPath(model));
   };
 
@@ -404,16 +481,37 @@ export const ImageStage: React.FC = () => {
             </div>
             <div className="flex-1 min-w-[280px]">
               <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">
-                {mode === 'trace' ? 'Trace path — drag the handles' : 'Source'}
+                {mode === 'trace'
+                  ? drawing
+                    ? 'Draw path — drag across the image'
+                    : 'Trace path — drag the points'
+                  : 'Source'}
               </div>
-              <canvas ref={paneRef} width={640} height={340} className={`w-full rounded-md border border-zinc-800 bg-[#08080c] touch-none block ${mode === 'trace' ? 'cursor-grab' : ''}`} style={{ aspectRatio: '640/340' }} />
+              <canvas ref={paneRef} width={640} height={340} className={`w-full rounded-md border border-zinc-800 bg-[#08080c] touch-none block ${mode === 'trace' ? (drawing ? 'cursor-crosshair' : 'cursor-grab') : ''}`} style={{ aspectRatio: '640/340' }} />
               {mode === 'trace' && (
-                <button
-                  onClick={() => model && setPath(autoPath(model))}
-                  className="mt-1.5 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10"
-                >
-                  ✨ Auto-find best path
-                </button>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setDrawing((d) => !d)}
+                    className={`text-[11px] px-2 py-1 rounded-sm ${
+                      drawing ? 'bg-cyan-500/30 text-cyan-100' : 'bg-white/[0.06] text-gray-200 hover:bg-white/10'
+                    }`}
+                  >
+                    ✏️ {drawing ? 'Drawing…' : 'Draw path'}
+                  </button>
+                  <button
+                    onClick={() => model && (setDrawing(false), setPath(autoPath(model)))}
+                    className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10"
+                  >
+                    ✨ Auto path
+                  </button>
+                  <button
+                    onClick={() => setPath({ x0: path.x0, y0: path.y0, x1: path.x1, y1: path.y1 })}
+                    disabled={!path.points}
+                    className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/[0.06]"
+                  >
+                    ↔ Straight
+                  </button>
+                </div>
               )}
             </div>
           </div>

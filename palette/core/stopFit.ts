@@ -92,7 +92,16 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
   //    the left side of each jump as a STEP edge for crisp bands.
   if (o.seedCorners) {
     const { seeds, stepLeft } = detectCorners(ramp, o.cornerDE);
-    for (const idx of seeds) {
+    // If the corners alone exceed the budget, subsample them EVENLY across positions
+    // rather than letting the earliest ones fill maxStops — otherwise a region dense
+    // with edges (heavy posterize / noise) starves every later position of a stop and
+    // the gradient truncates spatially. Under budget (the usual case) all are kept.
+    const budget = Math.max(0, o.maxStops - stops.length);
+    const chosen =
+      seeds.length > budget
+        ? Array.from({ length: budget }, (_, j) => seeds[Math.floor((j * seeds.length) / budget)])
+        : seeds;
+    for (const idx of chosen) {
       if (used.has(idx) || stops.length >= o.maxStops) continue;
       used.add(idx);
       stops.push(mkStop(idx, ramp, nextId++, stepLeft.has(idx) ? 'step' : 'linear'));

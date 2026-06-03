@@ -40,15 +40,16 @@ import { GraphSelectionBBox } from '../../components/graph/GraphSelectionBBox';
 import type { GraphDataSource } from '../../utils/GraphDataSource';
 import { KeyframeInspector } from '../../components/timeline/KeyframeInspector';
 import { ChannelTrackSidebar, type ChannelInfo } from './ChannelTrackSidebar';
+import { genEdit, genEditStart, genEditEnd } from '../store/generatorStore';
 
 export type ChannelKey = 'L' | 'C' | 'h';
 export type ChannelTracks = Record<ChannelKey, Track>;
 
 // Colours match GraphRenderer.TRACK_COLORS by index (L cyan, C purple, h green).
 const CHANNELS: ChannelInfo[] = [
-  { key: 'L', label: 'L', color: '#22d3ee' },
-  { key: 'C', label: 'C', color: '#a855f7' },
-  { key: 'h', label: 'hue', color: '#22c55e' },
+  { key: 'L', label: 'Lightness', color: '#22d3ee' },
+  { key: 'C', label: 'Chroma', color: '#a855f7' },
+  { key: 'h', label: 'Hue', color: '#22c55e' },
 ];
 
 const SIDEBAR_W = 112;
@@ -56,6 +57,14 @@ const SIDEBAR_W = 112;
 const INSPECTOR_W = 256;
 const INSPECTOR_W_COLLAPSED = 28;
 const STRIP_H = 12;
+
+/**
+ * Left/right insets of the graph's PLOT area within the editor's full width, so the
+ * Generator can align its gradient strips with the curve plot (t-axis lines up). The
+ * right inset assumes the inspector is expanded; it collapses to a rail at runtime.
+ */
+export const CHANNEL_PLOT_INSET_LEFT = SIDEBAR_W + GRAPH_LEFT_GUTTER_WIDTH;
+export const CHANNEL_PLOT_INSET_RIGHT = INSPECTOR_W;
 
 // Keep the playhead arrow off-screen — a gradient curve has no time-playhead.
 const HIDDEN_FRAME = -1e6;
@@ -302,7 +311,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       const kept = tr.keyframes.filter((k) => !kids.has(k.id));
       if (kept.length >= 2) next[tid as ChannelKey] = { ...tr, keyframes: kept };
     });
-    onTracksChange(next);
+    genEdit(() => onTracksChange(next)); // discrete delete — one undo entry
     setSelectedKeyframeIds([]);
   }, [selectedKeyframeIds, tracks, onTracksChange]);
 
@@ -326,8 +335,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     deselectAllKeys,
     setSoftSelection: setSoft,
     setSoftSelectionType: setSoftType,
-    setTangents: (mode) => updateKeyframes(calculateTangentModeUpdates(sequence, selectedKeyframeIds, mode)),
-    setGlobalInterpolation: (type, tm) => replaceKeyframes(calculateGlobalInterpolationUpdates(sequence, type, tm)),
+    // Inspector actions are discrete clicks — self-bracket so each is one undo entry.
+    setTangents: (mode) => genEdit(() => updateKeyframes(calculateTangentModeUpdates(sequence, selectedKeyframeIds, mode))),
+    setGlobalInterpolation: (type, tm) => genEdit(() => replaceKeyframes(calculateGlobalInterpolationUpdates(sequence, type, tm))),
     deleteSelectedKeyframes: deleteSelected,
     replaceKeyframes,
   };
@@ -385,7 +395,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
         const { l, r: rt } = AnimationMath.calculateTangents(k, prev, next, 'Auto');
         return { ...k, leftTangent: l, rightTangent: rt, tangentMode: 'Aligned' as const, autoTangent: true };
       });
-      onTracksChange({ ...tracks, [activeChannel]: { ...tr, keyframes: withTangents } });
+      genEdit(() => onTracksChange({ ...tracks, [activeChannel]: { ...tr, keyframes: withTangents } })); // discrete add
       setSelectedKeyframeIds([`${activeChannel}::${id}`]);
     },
     [activeChannel, tracks, trackRanges, canvasPixelToFrame, view, onTracksChange, normalized],
@@ -407,10 +417,12 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       // Right-click a key removes it (down to the two endpoints).
       const tr = tracks[hit.trackId as ChannelKey];
       if (tr && tr.keyframes.length > 2) {
-        onTracksChange({
-          ...tracks,
-          [hit.trackId]: { ...tr, keyframes: tr.keyframes.filter((k) => k.id !== hit.keyId) },
-        });
+        genEdit(() => // discrete right-click remove — one undo entry
+          onTracksChange({
+            ...tracks,
+            [hit.trackId]: { ...tr, keyframes: tr.keyframes.filter((k) => k.id !== hit.keyId) },
+          }),
+        );
         setSelectedKeyframeIds((prev) => prev.filter((id) => id !== `${hit.trackId}::${hit.keyId}`));
       }
     }
@@ -473,8 +485,30 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
 
   const highlightedTracks = useMemo(() => new Set([activeChannel]), [activeChannel]);
 
+  // Undo bracketing for DRAGS: a pointerdown in the editor opens a param transaction,
+  // the window pointerup closes it — so a handle/key/tool drag is ONE undo entry (the
+  // net tracks change). endParamTransaction no-ops when nothing changed, so clicks that
+  // self-bracket via genEdit (inspector actions, add/remove key) just see an empty outer
+  // transaction. The graph's own mutations (updateKeyframes during drag) are unbracketed
+  // so they fall inside this window rather than spamming one entry per pointermove.
+  useEffect(() => {
+    const end = () => genEditEnd();
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    return () => {
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+  }, []);
+
   return (
-    <div ref={focusRef} tabIndex={0} className="flex w-full outline-none select-none" style={{ height }}>
+    <div
+      ref={focusRef}
+      tabIndex={0}
+      onPointerDownCapture={() => genEditStart()}
+      className="flex w-full outline-none select-none"
+      style={{ height }}
+    >
       <ChannelTrackSidebar
         channels={CHANNELS}
         visible={visible}

@@ -2,9 +2,13 @@
  * catalogLoader — loads the baked palette library from the SEPARABLE bundle assets
  * produced by debug/bake-palette-catalog.mts. The library is split so a public build
  * can ship the clean core alone and fetch the licence-encumbered sources on demand:
- *   /palette/core.bin.gz / core.json.gz        — always-shipped, redistributable
- *   /palette/softology.bin.gz / softology.json.gz  — lazy (provenance-unverified)
- *   /palette/cptcity.bin.gz / cptcity.json.gz      — lazy (redistribution-bound)
+ *   core.bin.gz / core.json.gz        — always-shipped local (/palette/), redistributable
+ *   softology.bin.gz / softology.json.gz  — lazy, from the CDN (provenance-unverified)
+ *   cptcity.bin.gz / cptcity.json.gz      — lazy, from the CDN (redistribution-bound)
+ *
+ * The licensed groups are gitignored out of the public deploy, so they lazy-load from the
+ * R2 CDN (cdn.gmt-fractals.com/palette/) first, falling back to a local copy (which is
+ * present in dev) if the CDN 404s — so a toggle works whether or not the bundle is published.
  *
  * Each .bin is Sub-filtered RGB ramps, gzipped; each .json is metadata + facets.
  * Decompresses with pako (already a dep), undoes the Sub filter (cumulative sum),
@@ -43,6 +47,26 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
 export const groupOfBundle = (bundleId: string): string | undefined =>
   PALETTE_GROUPS.find((g) => g.bundles.includes(bundleId))?.id;
 
+/** Local base — the always-shipped core lives here; in dev the licensed bundles are here too. */
+export const PALETTE_LOCAL_BASE = '/palette/';
+/** Canonical CDN base for the licence-encumbered / long-tail bundles (Cloudflare R2). */
+export const PALETTE_CDN_BASE = 'https://cdn.gmt-fractals.com/palette/';
+
+// Overridable at runtime (e.g. a self-hosted mirror) without rebuilding.
+let _cdnBase = PALETTE_CDN_BASE;
+const withSlash = (b: string): string => (b.endsWith('/') ? b : b + '/');
+export const setPaletteCdnBase = (base: string): void => { _cdnBase = withSlash(base); };
+
+/**
+ * Bases to try, in order, for a group: the redistributable `core` ships locally; the
+ * licensed groups come from the CDN first, falling back to a local copy (present in dev)
+ * on a 404 / network error — so the toggle works whether or not the bundle is published.
+ */
+const basesForGroup = (groupId: string): string[] => {
+  const g = PALETTE_GROUPS.find((x) => x.id === groupId);
+  return g && !g.core ? [_cdnBase, PALETTE_LOCAL_BASE] : [PALETTE_LOCAL_BASE];
+};
+
 interface RawCatalog {
   group: string;
   count: number;
@@ -61,6 +85,13 @@ const _groupCache: Record<string, CatalogEntry[]> = {};
 
 export const getCatalogBundles = (): Record<string, BundleInfo> => _bundles;
 export const getBundleCounts = (): Record<string, number> => _counts;
+
+/** Fetch a URL, treating a non-2xx (e.g. CDN 404) as an error so the caller can fall back. */
+const fetchOk = async (url: string): Promise<ArrayBuffer> => {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText} for ${url}`);
+  return r.arrayBuffer();
+};
 
 /** Inflate a fetched buffer; tolerate the transport having already gunzipped it. */
 const inflate = (buf: ArrayBuffer): Uint8Array => {
@@ -82,13 +113,32 @@ const facetsFrom = (f: number[], hueSpreadDeg: number, meanHue: number): Facets 
  * unloading then re-toggling a source re-fetches nothing. `row` is the file-local
  * index here — pickerStore reassigns rows across the merged catalog.
  */
-export const loadGroup = async (groupId: string, base = '/palette/'): Promise<CatalogEntry[]> => {
+export const loadGroup = async (groupId: string, base?: string): Promise<CatalogEntry[]> => {
   if (_groupCache[groupId]) return _groupCache[groupId];
 
-  const [binBuf, jsonBuf] = await Promise.all([
-    fetch(`${base}${groupId}.bin.gz`).then((r) => r.arrayBuffer()),
-    fetch(`${base}${groupId}.json.gz`).then((r) => r.arrayBuffer()),
-  ]);
+  // An explicit base overrides the chain (one source, no fallback); otherwise try the
+  // group's bases in order (CDN → local for licensed groups).
+  const bases = base ? [withSlash(base)] : basesForGroup(groupId);
+  let binBuf: ArrayBuffer | undefined;
+  let jsonBuf: ArrayBuffer | undefined;
+  let lastErr: unknown;
+  for (const b of bases) {
+    try {
+      [binBuf, jsonBuf] = await Promise.all([
+        fetchOk(`${b}${groupId}.bin.gz`),
+        fetchOk(`${b}${groupId}.json.gz`),
+      ]);
+      break;
+    } catch (err) {
+      lastErr = err;
+      // Graceful: a CDN 404 just means this bundle isn't published there yet — fall
+      // through to the next base (the local dev copy). Only warn while alternatives remain.
+      if (b !== bases[bases.length - 1])
+        console.warn(`[catalogLoader] "${groupId}" not at ${b} (${(err as Error).message}); trying next source`);
+    }
+  }
+  if (!binBuf || !jsonBuf)
+    throw new Error(`[catalogLoader] could not load group "${groupId}" from any source: ${String(lastErr)}`);
 
   const filtered = inflate(binBuf);
   const meta: RawCatalog = JSON.parse(new TextDecoder().decode(inflate(jsonBuf)));

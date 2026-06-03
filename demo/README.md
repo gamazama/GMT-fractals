@@ -67,7 +67,7 @@ AutoFeaturePanel + timeline) without the heavy raymarcher boot that fluid-toy /
 fractal-toy carry. If your app's centre is its own surface (a tool, an editor, a
 catalog) rather than a single fractal canvas, copy THIS, not the toys.
 
-**Worked example:** `palette-studio/` (a 3-mode gradient tool). Mirror its files.
+**Worked example:** `gradient-explorer/` (a 3-mode gradient tool). Mirror its files.
 
 ### Files + entry
 1. `myapp.html` — copy `fluid-toy.html`, point the script at `/myapp/main.tsx`.

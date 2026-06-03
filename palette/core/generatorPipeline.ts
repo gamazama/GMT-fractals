@@ -247,6 +247,13 @@ export interface BuildResult {
   ramp: RGB[];
   /** The post-mix, pre-curve channels — the source for "Fit curves from source". */
   base: Channels;
+  /**
+   * The post-global-chain OKLCh channels per OUTPUT texel, BEFORE the lightness
+   * clamp / chroma floor / sRGB gamut conversion. This is the un-clipped transform:
+   * baking the curve from `final` (not the clipped RGB ramp) keeps the curve faithful
+   * even at extreme values (L past [0,1], out-of-gamut chroma, extrapolated mixes).
+   */
+  final: Channels;
 }
 
 /**
@@ -308,6 +315,10 @@ export const buildGradientRamp = (
 
   const tiling = reps !== 1 || pha !== 0 || mir;
   const ramp: RGB[] = new Array(256);
+  // Un-clipped post-global channels per output texel (for faithful curve baking).
+  const fL = new Array<number>(256);
+  const fC = new Array<number>(256);
+  const fH = new Array<number>(256);
   for (let i = 0; i < 256; i++) {
     let t = (i / 255) * reps + pha; // repeats + phase
     // Wrap into [0,1) only when tiling/phasing/mirroring. The prototype always
@@ -328,10 +339,14 @@ export const buildGradientRamp = (
       if (params.noiseC && RC) c += RC[i] * nz * 0.06;
       if (params.noiseH && RH) h += RH[i] * nz * 0.6;
     }
+    // Capture the raw transform BEFORE clipping, so a bake stays faithful at extremes.
+    fL[i] = l;
+    fC[i] = c;
+    fH[i] = h;
     l = clamp01(l);
     if (c < 0) c = 0;
     ramp[i] = oklabToRgb({ L: l, a: c * Math.cos(h), b: c * Math.sin(h) });
   }
 
-  return { ramp, base };
+  return { ramp, base, final: { L: fL, C: fC, h: fH } };
 };

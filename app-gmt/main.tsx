@@ -29,7 +29,6 @@ import '../engine-gmt/store/gmtPresetFields';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { usePaletteOverlayStore } from './paletteOverlayStore';
-import { FavientsToggleButton } from './FavientsToggleButton';
 import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { restorePaletteFilters, watchPaletteFilters } from '../palette/store/paletteFiltersPersist';
 import { topbar } from '../engine/plugins/TopBar';
@@ -126,8 +125,8 @@ menu.registerItem('system', {
   onSelect: () => usePaletteOverlayStore.getState().setOpen(true),
 });
 
-// Favients — the floating gradient-favourites shelf (topbar toggle button).
-topbar.register({ id: 'gmt-favients', slot: 'left', order: 21, component: FavientsToggleButton });
+// Favients — the floating gradient-favourites shelf. No topbar toggle in app-gmt; the
+// shelf floats by default and is reachable from the gradient editor's ★ + the picker.
 
 // GMT camera slice — savedCameras / undo / redo / addCamera / resetCamera.
 // Patches the store with actions engine-core doesn't provide. Must land

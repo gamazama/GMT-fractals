@@ -45,6 +45,26 @@ import { featureRegistry } from '../../engine/FeatureSystem';
 
 export type UndoScope = 'param' | 'camera';
 
+/**
+ * External history providers — non-engine-store state that should ride the PARAM undo
+ * stack (e.g. the palette generator's curve Track[] + slot selection, which live in a
+ * separate zustand store the snapshot loop can't see). Generic + opt-in: each provider
+ * captures/restores its own plain-JSON snapshot, stored in the transaction diff under
+ * `__ext__<key>`. Empty by default, so apps that register none are unaffected.
+ */
+export interface HistoryProvider {
+    capture: () => unknown;
+    restore: (snapshot: unknown) => void;
+}
+const EXT_PREFIX = '__ext__';
+const _historyProviders = new Map<string, HistoryProvider>();
+export const registerHistoryProvider = (key: string, provider: HistoryProvider): void => {
+    _historyProviders.set(key, provider);
+};
+export const unregisterHistoryProvider = (key: string): void => {
+    _historyProviders.delete(key);
+};
+
 export interface Transaction {
     scope: UndoScope;
     label?: string;
@@ -120,25 +140,44 @@ const getParamSnapshot = (s: EngineStoreState): Partial<EngineStoreState> => {
     if ((s as any).animations !== undefined) {
         (snap as any).animations = JSON.parse(JSON.stringify((s as any).animations));
     }
+    // External providers (e.g. the palette generator's curves/slots in their own store).
+    for (const [key, p] of _historyProviders) {
+        (snap as any)[EXT_PREFIX + key] = JSON.parse(JSON.stringify(p.capture()));
+    }
     return snap;
 };
 
 const captureStateForKeys = (keys: string[], current: EngineStoreState): Partial<EngineStoreState> => {
     const snap: Partial<EngineStoreState> = {};
     for (const k of keys) {
-        (snap as any)[k] = (current as any)[k];
+        if (k.startsWith(EXT_PREFIX)) {
+            const p = _historyProviders.get(k.slice(EXT_PREFIX.length));
+            (snap as any)[k] = p ? JSON.parse(JSON.stringify(p.capture())) : undefined;
+        } else {
+            (snap as any)[k] = (current as any)[k];
+        }
     }
     return snap;
 };
 
 const applyStateRestore = (data: Partial<EngineStoreState>, set: any, get: any) => {
     const actions = get();
-    set(data);
+    // Split engine-store keys from external-provider keys (the latter aren't store fields).
+    const engineData: Record<string, any> = {};
+    const extKeys: string[] = [];
     for (const k of Object.keys(data)) {
-        const val = (data as any)[k];
+        if (k.startsWith(EXT_PREFIX)) extKeys.push(k);
+        else engineData[k] = (data as any)[k];
+    }
+    set(engineData);
+    for (const k of Object.keys(engineData)) {
+        const val = engineData[k];
         if (k === 'formula') { FractalEvents.emit('config', { formula: val }); continue; }
         const setterName = 'set' + k.charAt(0).toUpperCase() + k.slice(1);
         if (typeof actions[setterName] === 'function') actions[setterName](val);
+    }
+    for (const k of extKeys) {
+        _historyProviders.get(k.slice(EXT_PREFIX.length))?.restore((data as any)[k]);
     }
     engine.resetAccumulation();
 };

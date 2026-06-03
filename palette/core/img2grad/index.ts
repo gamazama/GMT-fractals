@@ -37,6 +37,8 @@ export interface Img2GradParams {
   // trace
   bandWidth: number;
   smoothing: number;
+  /** Fit a Catmull-Rom spline through the freehand path points (Trace only). */
+  catmullRom?: boolean;
 }
 
 export interface Img2GradResult {
@@ -51,7 +53,7 @@ export const extract = (model: ImageModel, path: TracePath, p: Img2GradParams): 
 
   let ribbon: Lab[];
   if (p.mode === 'trace') {
-    ribbon = sampleTrace(model, path, { bandWidth: p.bandWidth, smoothing: p.smoothing });
+    ribbon = sampleTrace(model, path, { bandWidth: p.bandWidth, smoothing: p.smoothing, catmullRom: p.catmullRom });
   } else {
     const nodes =
       p.mode === 'tone'
@@ -66,5 +68,5 @@ export const extract = (model: ImageModel, path: TracePath, p: Img2GradParams): 
 };
 
 export { ingestPixels, INGEST_MAX_EDGE } from './ingest';
-export { autoPath } from './trace';
-export type { ImageModel, TracePath, ColorNode, Bin, CloudPoint } from './common';
+export { autoPath, tracePolyline } from './trace';
+export type { ImageModel, TracePath, Pt, ColorNode, Bin, CloudPoint } from './common';

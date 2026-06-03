@@ -42,7 +42,6 @@ export const PaletteGeneratorFeature: FeatureDefinition = {
   tabConfig: { label: 'Generator' },
 
   groups: {
-    Mix: { label: 'Mix A ↔ B', collapsible: true, description: 'Per-channel blend: take lightness from one source, hue from another.' },
     Modify: { label: 'Modify', collapsible: true, description: 'Global modifier chain applied to the mixed result.' },
     Noise: { label: 'Noise', collapsible: true, description: 'High-frequency grain added to the result.' },
   },
@@ -51,10 +50,12 @@ export const PaletteGeneratorFeature: FeatureDefinition = {
     ...slotMods('A'),
     ...slotMods('B'),
 
-    // Mix A ↔ B (0 = all A, 1 = all B)
-    mixL: { type: 'float', default: 0, min: 0, max: 1, step: 0.01, group: 'Mix', label: 'Lightness (L)', description: 'Blend the light/dark structure A↔B.' },
-    mixC: { type: 'float', default: 0, min: 0, max: 1, step: 0.01, group: 'Mix', label: 'Chroma (C)', description: 'Blend the vividness A↔B.' },
-    mixH: { type: 'float', default: 0, min: 0, max: 1, step: 0.01, group: 'Mix', label: 'Hue (h)', description: 'Blend the colours A↔B.' },
+    // Mix A ↔ B (0 = all A, 1 = all B) — HIDDEN: rendered on the canvas BETWEEN
+    // Source A and Source B (MixBlend) so the blend reads visually as A↔B, with
+    // keyframe diamonds; still real DDFS params (ride undo/preset/animation).
+    mixL: { type: 'float', default: 0, min: 0, max: 1, step: 0.01, hidden: true, label: 'Lightness (L)', description: 'Blend the light/dark structure A↔B.' },
+    mixC: { type: 'float', default: 0, min: 0, max: 1, step: 0.01, hidden: true, label: 'Chroma (C)', description: 'Blend the vividness A↔B.' },
+    mixH: { type: 'float', default: 0, min: 0, max: 1, step: 0.01, hidden: true, label: 'Hue (h)', description: 'Blend the colours A↔B.' },
 
     // Global modifiers
     hueRotate: { type: 'float', default: 0, min: -180, max: 180, step: 1, group: 'Modify', label: 'Hue rotate', description: 'Rotate the whole gradient hue (degrees).' },
@@ -82,7 +83,9 @@ export const PaletteGeneratorFeature: FeatureDefinition = {
     { componentId: 'palette-modify-toggles', group: 'Modify', parentId: 'phase' },
     // Inline lightness/chroma/hue toggles, nested in the Noise group under Frequency.
     { componentId: 'palette-noise-targets', group: 'Noise', parentId: 'noiseFreq' },
-    // Bottom block: Reset all / Reseed / Export.
+    // Modify+Noise actions (Bake → curve / Reset mods / Reseed), grouped under the mods.
+    { componentId: 'palette-modifier-actions' },
+    // Bottom block: Reset all / Export.
     { componentId: 'palette-generator-extras' },
   ],
 };

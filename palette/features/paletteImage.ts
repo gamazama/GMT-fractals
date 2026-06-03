@@ -72,6 +72,11 @@ export const PaletteImageFeature: FeatureDefinition = {
       description: 'Smooth the sampled colour journey along its length.',
       dynamicVisible: (s) => (s.mode ?? 0) === 2,
     },
+    catmullRom: {
+      type: 'boolean', default: false, label: 'Smooth path',
+      description: 'Fit a Catmull-Rom curve through the freehand points instead of straight segments.',
+      dynamicVisible: (s) => (s.mode ?? 0) === 2,
+    },
 
     // Shared shape (golden hour + even↔dwell are no-ops in Trace → hidden there)
     goldenHour: {
@@ -100,5 +105,5 @@ export const PaletteImageFeature: FeatureDefinition = {
 /** Param defaults (mirrors the values above) for any reset path. */
 export const IMAGE_PARAM_DEFAULTS_FEATURE: Record<string, number | boolean> = {
   mode: 0, colours: 8, saliency: 0.45, tonalDetail: 48, chromaBoost: 1,
-  bandWidth: 8, smoothing: 3, goldenHour: 0, spacing: 0.35, reverse: false,
+  bandWidth: 8, smoothing: 3, catmullRom: false, goldenHour: 0, spacing: 0.35, reverse: false,
 };
