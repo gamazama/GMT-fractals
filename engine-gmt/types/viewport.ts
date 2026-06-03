@@ -248,9 +248,9 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
     {
         id: 'fastest',
         label: 'Fastest',
-        description: 'Path traced lighting with fast glow.',
+        description: 'Hard shadows, path traced lighting with fast glow.',
         subsystems: {
-            shadows: 0,              // Off
+            shadows: 1,              // Hard
             reflections: 0,          // Off
             lighting_quality: 1,     // Path Traced
             atmosphere_quality: 1,   // Fast Glow
@@ -259,9 +259,9 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
     {
         id: 'lite',
         label: 'Lite',
-        description: 'Hard shadows, env map reflections, color glow.',
+        description: 'Soft shadows, env map reflections, color glow.',
         subsystems: {
-            shadows: 1,              // Hard
+            shadows: 2,              // Soft
             reflections: 1,          // Env Map
             lighting_quality: 1,     // Path Traced
             atmosphere_quality: 2,   // Color Glow
@@ -270,9 +270,9 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
     {
         id: 'balanced',
         label: 'Balanced',
-        description: 'Soft shadows, env map reflections, color glow.',
+        description: 'Full shadows, env map reflections, color glow.',
         subsystems: {
-            shadows: 2,              // Soft
+            shadows: 3,              // Full
             reflections: 1,          // Env Map
             lighting_quality: 1,     // Path Traced
             atmosphere_quality: 2,   // Color Glow
