@@ -57,6 +57,19 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   useEffect(() => { load(); }, [load]);
 
   const [selected, setSelected] = useState<CatalogEntry | null>(null);
+
+  // One-time gesture-discovery hint in the hero: show "middle-drag to zoom" until the
+  // user zooms, then "right-drag to pan" until they pan, then hide forever (persisted).
+  const [hintPhase, setHintPhase] = useState<'zoom' | 'pan' | 'done'>(() => {
+    try { const v = localStorage.getItem('gx.picker.gestureHint'); return v === 'pan' || v === 'done' ? v : 'zoom'; } catch { return 'zoom'; }
+  });
+  const advanceHint = useCallback((type: 'zoom' | 'pan') => {
+    setHintPhase((p) => {
+      const next = p === 'zoom' && type === 'zoom' ? 'pan' : p === 'pan' && type === 'pan' ? 'done' : p;
+      if (next !== p) { try { localStorage.setItem('gx.picker.gestureHint', next); } catch { /* ignore */ } }
+      return next;
+    });
+  }, []);
   // The selected gradient as a GMT config, for the favourite star (presets carry stops;
   // loaded entries are ramp-only → fitted via the seam).
   const favConfig = useMemo(() => (selected ? entryToGradientConfig(selected) : null), [selected]);
@@ -200,6 +213,11 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
             </span>
           </span>
           <span className="flex items-center gap-2 shrink-0">
+            {hintPhase !== 'done' && (
+              <span className="hidden md:inline-flex items-center text-[10px] text-cyan-300/80 bg-cyan-500/10 px-1.5 py-0.5 rounded whitespace-nowrap">
+                {hintPhase === 'zoom' ? 'Middle-drag to zoom' : 'Right-drag to pan'}
+              </span>
+            )}
             {!hideFavientsLink && (
               <button onClick={openFavientsPanel} title="Open the Favients shelf" className={FAVIENTS_ACCENT.link}>
                 <FavientsIcon /> Favients
@@ -214,7 +232,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
         {!loaded ? (
           <div className="h-full flex items-center justify-center text-sm text-zinc-600">Loading gradient library…</div>
         ) : count > 0 ? (
-          <PickerWall groups={groups} sprite={sprite} onPick={onPick} onEntryDragStart={onEntryDragStart} selectedId={selected?.id} swatchW={swatchW} swatchH={swatchH} gap={gap} />
+          <PickerWall groups={groups} sprite={sprite} onPick={onPick} onEntryDragStart={onEntryDragStart} selectedId={selected?.id} swatchW={swatchW} swatchH={swatchH} gap={gap} onGesture={advanceHint} />
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-zinc-400 px-6 text-center">
             No gradients match — widen the Quality Filters or clear theme/source toggles.

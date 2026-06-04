@@ -42,6 +42,8 @@ export interface PickerWallProps {
   swatchW?: number;
   swatchH?: number;
   gap?: number;
+  /** Fires when the user completes a zoom or pan gesture (drives the discovery hint). */
+  onGesture?: (type: 'zoom' | 'pan') => void;
 }
 
 const LABEL_W = 132;
@@ -310,6 +312,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   swatchW = 32,
   swatchH = 18,
   gap = 0,
+  onGesture,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -364,15 +367,21 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   const applyLiveZoom = (clientX: number, clientY: number) => {
     const d = drag.current;
     const cw = contentRef.current;
-    if (!d || d.mode !== 'zoom' || !cw) return;
+    const el = scrollRef.current;
+    if (!d || d.mode !== 'zoom' || !cw || !el) return;
     const lzx = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.czx * Math.pow(2, (clientX - d.sx) / ZOOM_PX_PER_DOUBLE)));
     // Y: drag UP to zoom in (taller swatches) — screen-y grows downward, so negate.
     const lzy = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.czy * Math.pow(2, (d.sy - clientY) / ZOOM_PX_PER_DOUBLE)));
     d.lzx = lzx; d.lzy = lzy;
     const sx = lzx / d.czx, sy = lzy / d.czy;
-    // Scale around the grabbed content point (origin 0,0 + a compensating translate) so it
-    // stays pinned to the cursor's start spot — no real scroll change.
-    cw.style.transform = `translate(${d.ax * (1 - sx)}px, ${d.ay * (1 - sy)}px) scale(${sx}, ${sy})`;
+    // Scale around the grabbed point (origin 0,0 + a compensating translate), then clamp the
+    // pan like a bounded scroll: the effective offset stays in [0, scaledContent − viewport].
+    // Without this, zooming OUT leaves an empty gutter on the left/top that the (clamped)
+    // commit then snaps away — the "pop". sl0/st0 are the real scroll at grab (unchanged here).
+    const sl0 = d.ax - d.relX, st0 = d.ay - d.relY;
+    const effX = Math.min(Math.max(sl0 - d.ax * (1 - sx), 0), Math.max(0, contentWidth * sx - el.clientWidth));
+    const effY = Math.min(Math.max(st0 - d.ay * (1 - sy), 0), Math.max(0, el.scrollHeight * sy - el.clientHeight));
+    cw.style.transform = `translate(${sl0 - effX}px, ${st0 - effY}px) scale(${sx}, ${sy})`;
   };
 
   // Commit: once the swatches have re-rendered at the new size, drop the live transform and
@@ -456,8 +465,11 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     rafCoords.current = null;
     const el = scrollRef.current;
     if (el) { el.releasePointerCapture?.(e.pointerId); el.style.cursor = ''; }
-    if (d.mode !== 'zoom') return;
     const moved = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
+    if (d.mode === 'pan') {
+      if (moved > 5) onGesture?.('pan');
+      return;
+    }
     const nzx = moved < 5 ? 1 : d.lzx; // middle-click (no drag) resets to 1:1
     const nzy = moved < 5 ? 1 : d.lzy;
     if (nzx === d.czx && nzy === d.czy) {
@@ -468,6 +480,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     // Commit: re-render at the new size; the layout effect drops the transform + re-pins.
     commit.current = { relX: d.relX, relY: d.relY, ax: d.ax, czx: d.czx, czy: d.czy, headerAbove: d.headerAbove, swatchAbove: d.swatchAbove };
     setZoom({ x: nzx, y: nzy });
+    if (moved >= 5) onGesture?.('zoom');
   };
 
   // Suppress hover while dragging (pointer capture still lets the canvas mousemove fire).
