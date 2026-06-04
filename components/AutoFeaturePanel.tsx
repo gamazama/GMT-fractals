@@ -511,7 +511,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             if (groupFilter && c.group !== groupFilter) return;
             if (!checkParamActive(c.condition, sliceState, globalState, c.parentId)) return;
             const Component = componentRegistry.get(c.componentId);
-            if (Component) renderedChildren.push(<div key={`custom-${c.componentId}-${c.group ?? idx}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
+            if (Component) renderedChildren.push(<div key={`custom-${c.componentId}-${c.group != null ? c.group + '-' + idx : idx}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
         });
         const containerClass = isHalfWidth ? "flex-1 min-w-0" : "flex flex-col";
         const hasCustomUIChildren = feature.customUI?.some(c => c.parentId === id) ?? false;
@@ -639,7 +639,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         const Component = componentRegistry.get(c.componentId);
         if (!Component) return null;
         return (
-            <div key={`custom-${c.componentId}-${c.group ?? idx}`} className={`flex flex-col mb-px ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}>
+            <div key={`custom-${c.componentId}-${c.group != null ? c.group + '-' + idx : idx}`} className={`flex flex-col mb-px ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}>
                 <Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} />
             </div>
         );
