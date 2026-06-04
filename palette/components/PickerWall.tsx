@@ -13,7 +13,7 @@
  * Pure / host-agnostic: groups + sprite in, onPick out.
  */
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogEntry } from '../core/presetCatalog';
 import { GradientHoverPreview } from './GradientHoverPreview';
 
@@ -45,7 +45,10 @@ export interface PickerWallProps {
 }
 
 const LABEL_W = 132;
-const MAX_CANVAS_CSS_H = 8000; // keep backing (×dpr) under the browser canvas max
+// Chunk height cap. Smaller chunks = finer windowing: only the ~viewport-worth of chunks
+// stay mounted, so a zoom step redraws a small area instead of one giant canvas. (Also
+// keeps the backing ×dpr well under the browser's max canvas dimension.)
+const MAX_CANVAS_CSS_H = 2200;
 
 /**
  * Merge adjacent bucketed sub-rows within the SAME category while their combined swatch
@@ -105,12 +108,14 @@ const SwatchCanvas: React.FC<{
   const cssW = cols * cellW;
   const cssH = nrows * cellH;
 
-  // Virtualize: only mount + draw this chunk's canvas when it's near the viewport.
-  // Off-screen chunks are empty divs that still reserve their scroll space.
+  // Virtualize: only mount + draw this chunk's canvas while it's near the viewport, and
+  // UNMOUNT it once it scrolls away. Toggling (not latching) is what keeps zooming cheap —
+  // otherwise every chunk ever seen stays mounted and redraws on each zoom step. The
+  // wrapper div keeps its width/height so scroll space is reserved either way.
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) setVisible(true); }, { rootMargin: '800px' });
+    const io = new IntersectionObserver((es) => setVisible(es.some((e) => e.isIntersecting)), { rootMargin: '500px' });
     io.observe(el);
     return () => io.disconnect();
   }, []);
@@ -219,7 +224,9 @@ const SwatchCanvas: React.FC<{
   );
 };
 
-const GroupRow: React.FC<{
+// memo: with stable callbacks + a memoised `rows` array, hovering a swatch (which
+// re-renders the wall to move the preview) skips re-rendering every group.
+const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart }: {
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
@@ -231,7 +238,7 @@ const GroupRow: React.FC<{
   onHover: (h: Hover | null) => void;
   onPick: (e: CatalogEntry) => void;
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
-}> = ({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart }) => {
+}) {
   const cellH = swatchH + gap;
   const maxRows = Math.max(1, Math.floor(MAX_CANVAS_CSS_H / cellH));
   const chunkLen = Math.max(1, cols * maxRows);
@@ -285,7 +292,7 @@ const GroupRow: React.FC<{
       </div>
     </>
   );
-};
+});
 
 /** Drag-per-doubling: pixels of pointer travel that double the zoom. */
 const ZOOM_PX_PER_DOUBLE = 260;
@@ -353,7 +360,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     const rect = el.getBoundingClientRect();
     const relX = clientX - rect.left, relY = clientY - rect.top;
     const nx = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zx * Math.pow(2, (clientX - d.sx) / ZOOM_PX_PER_DOUBLE)));
-    const ny = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zy * Math.pow(2, (clientY - d.sy) / ZOOM_PX_PER_DOUBLE)));
+    // Y: drag UP to zoom in (taller swatches) — screen-y grows downward, so negate.
+    const ny = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zy * Math.pow(2, (d.sy - clientY) / ZOOM_PX_PER_DOUBLE)));
     anchor.current = {
       relX, relY,
       cx: el.scrollLeft + relX,
@@ -434,7 +442,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   };
 
   // Suppress hover while dragging (pointer capture still lets the canvas mousemove fire).
-  const handleHover = (h: Hover | null) => { if (!dragging.current) setHover(h); };
+  // Stable identity so memoised GroupRows don't re-render on every hover.
+  const handleHover = useCallback((h: Hover | null) => { if (!dragging.current) setHover(h); }, []);
 
   if (!sprite || width === 0) return <div ref={scrollRef} className="absolute inset-0" />;
 
