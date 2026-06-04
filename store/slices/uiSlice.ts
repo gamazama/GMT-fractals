@@ -392,24 +392,25 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
         const panels = { ...state.panels };
         if (!panels[id]) return {};
 
-        const p = panels[id];
-        const nextState = forceState !== undefined ? forceState : !p.isOpen;
-        
-        if (p.location === 'float') {
-            p.isOpen = nextState;
-        } else {
+        const nextState = forceState !== undefined ? forceState : !panels[id].isOpen;
+
+        // Replace the entry with a NEW object rather than mutating isOpen in
+        // place. Subscribers that detect panel changes by reference equality
+        // (e.g. favientsPanelPersist's open-state watcher) would otherwise miss
+        // a pure open/close toggle, since the entry reference stayed identical —
+        // that's why a closed Favients shelf reopened on reload.
+        const p = panels[id] = { ...panels[id], isOpen: nextState };
+
+        if (p.location !== 'float') {
             if (nextState) {
                 (Object.values(panels) as PanelState[]).forEach((other) => {
                     if (other.location === p.location && other.id !== id) {
                         other.isOpen = false;
                     }
                 });
-                p.isOpen = true;
-                
+
                 if (p.location === 'left') return { panels, activeLeftTab: id as PanelId, isLeftDockCollapsed: false };
                 if (p.location === 'right') return { panels, activeRightTab: id as PanelId, isRightDockCollapsed: false };
-            } else {
-                p.isOpen = false;
             }
         }
         
