@@ -126,7 +126,9 @@ const SwatchCanvas: React.FC<{
     if (!cv) return;
     const ctx = cv.getContext('2d');
     if (!ctx) return;
-    const dpr = window.devicePixelRatio || 1;
+    // Cap DPR: the swatches are smooth gradients, so a 1.5× backing is plenty crisp and
+    // halves the per-frame draw + reallocation cost vs 2× on a retina screen (zoom perf).
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     cv.width = Math.round(cssW * dpr);
     cv.height = Math.round(cssH * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -251,7 +253,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
           the per-bucket left gutter so a sparse bucket's gutter is a single short line
           that fits inside the swatch-row height (no leftover vertical gap). */}
       {group.label && (
-        <div className="px-2 py-px text-[11px] leading-tight text-zinc-200 font-medium border-t border-white/10 truncate">
+        <div data-wall-header className="px-2 py-px text-[11px] leading-tight text-zinc-200 font-medium border-t border-white/10 truncate">
           {group.label}
         </div>
       )}
@@ -341,52 +343,57 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // the wall, and this walks every group).
   const rows = useMemo(() => mergeRows(groups, cols), [groups, cols]);
 
-  // --- middle-drag zoom · right-drag pan -------------------------------------
-  const drag = useRef<null | {
-    mode: 'zoom' | 'pan';
-    sx: number; sy: number; zx: number; zy: number; scrollLeft: number; scrollTop: number;
-  }>(null);
+  // --- middle-drag zoom (live GPU transform, commit on release) · right-drag pan -----
+  // Per-frame re-render + canvas redraw + scroll-set was laggy AND shaky. Instead, during
+  // a zoom drag the content wrapper is scaled with a CSS transform around the grabbed point
+  // — cheap (GPU), exact, and it touches neither React state nor scroll. On release we
+  // commit ONCE: re-render the swatches crisp at the new size and set the real scroll so
+  // the grabbed swatch lands exactly where it was, accounting for the fixed-height category
+  // headers (which don't scale, so the swatch content above the cursor scales but they don't).
+  const contentRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<
+    | { mode: 'zoom'; sx: number; sy: number; czx: number; czy: number; ax: number; ay: number; relX: number; relY: number; headerAbove: number; swatchAbove: number; lzx: number; lzy: number }
+    | { mode: 'pan'; sx: number; sy: number; scrollLeft: number; scrollTop: number }
+    | null
+  >(null);
   const dragging = useRef(false);
-  // Captured at each zoom step so the layout effect (post-resize) can keep the content
-  // point under the cursor fixed — "zoom from the cursor".
-  const anchor = useRef<null | { relX: number; relY: number; cx: number; cy: number; strideBefore: number; heightBefore: number }>(null);
+  const commit = useRef<null | { relX: number; relY: number; ax: number; czx: number; czy: number; headerAbove: number; swatchAbove: number }>(null);
   const rafCoords = useRef<{ x: number; y: number } | null>(null);
   const rafId = useRef(0);
 
-  const zoomToPointer = (clientX: number, clientY: number) => {
+  const applyLiveZoom = (clientX: number, clientY: number) => {
     const d = drag.current;
-    const el = scrollRef.current;
-    if (!d || d.mode !== 'zoom' || !el) return;
-    const rect = el.getBoundingClientRect();
-    const relX = clientX - rect.left, relY = clientY - rect.top;
-    const nx = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zx * Math.pow(2, (clientX - d.sx) / ZOOM_PX_PER_DOUBLE)));
+    const cw = contentRef.current;
+    if (!d || d.mode !== 'zoom' || !cw) return;
+    const lzx = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.czx * Math.pow(2, (clientX - d.sx) / ZOOM_PX_PER_DOUBLE)));
     // Y: drag UP to zoom in (taller swatches) — screen-y grows downward, so negate.
-    const ny = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zy * Math.pow(2, (d.sy - clientY) / ZOOM_PX_PER_DOUBLE)));
-    anchor.current = {
-      relX, relY,
-      cx: el.scrollLeft + relX,
-      cy: el.scrollTop + relY,
-      strideBefore: swatchW * zoom.x + gap,
-      heightBefore: el.scrollHeight,
-    };
-    setZoom({ x: nx, y: ny });
+    const lzy = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.czy * Math.pow(2, (d.sy - clientY) / ZOOM_PX_PER_DOUBLE)));
+    d.lzx = lzx; d.lzy = lzy;
+    const sx = lzx / d.czx, sy = lzy / d.czy;
+    // Scale around the grabbed content point (origin 0,0 + a compensating translate) so it
+    // stays pinned to the cursor's start spot — no real scroll change.
+    cw.style.transform = `translate(${d.ax * (1 - sx)}px, ${d.ay * (1 - sy)}px) scale(${sx}, ${sy})`;
   };
 
-  // Re-anchor scroll once the zoomed sizes have laid out (only when a zoom step set an
-  // anchor; resizing/sliders change ewW too but leave `anchor` null → no-op).
+  // Commit: once the swatches have re-rendered at the new size, drop the live transform and
+  // set the real scroll so the grabbed swatch is exactly where it was (header-aware).
   useLayoutEffect(() => {
-    const a = anchor.current;
-    if (!a) return;
-    anchor.current = null;
+    const c = commit.current;
+    if (!c) return;
+    commit.current = null;
+    const cw = contentRef.current;
+    if (cw) cw.style.transform = '';
     const el = scrollRef.current;
     if (!el) return;
-    const ratioX = a.strideBefore > 0 ? (ewW + gap) / a.strideBefore : 1;
-    const newLeft = labelW + Math.max(0, a.cx - labelW) * ratioX - a.relX;
-    const heightAfter = el.scrollHeight;
-    const ratioY = a.heightBefore > 0 ? heightAfter / a.heightBefore : 1;
-    const newTop = a.cy * ratioY - a.relY;
-    el.scrollLeft = Math.max(0, Math.min(newLeft, contentWidth - el.clientWidth));
-    el.scrollTop = Math.max(0, Math.min(newTop, heightAfter - el.clientHeight));
+    // Scale by the ACTUAL rounded rendered swatch sizes (ewW/ewH vs the committed-start
+    // equivalents) — the layout rounds every swatch, and using the unrounded zoom ratio
+    // instead lets that rounding accumulate into visible drift over many rows.
+    const ewWStart = Math.max(1, Math.round(swatchW * c.czx));
+    const ewHStart = Math.max(1, Math.round(swatchH * c.czy));
+    const contentX = labelW + (c.ax - labelW) * ((ewW + gap) / (ewWStart + gap));
+    const contentY = c.headerAbove + c.swatchAbove * ((ewH + gap) / (ewHStart + gap));
+    el.scrollLeft = Math.max(0, Math.min(contentX - c.relX, contentWidth - el.clientWidth));
+    el.scrollTop = Math.max(0, Math.min(contentY - c.relY, el.scrollHeight - el.clientHeight));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ewW, ewH]);
 
@@ -395,15 +402,28 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     const el = scrollRef.current;
     if (!el) return;
     e.preventDefault();
-    drag.current = {
-      mode: e.button === 1 ? 'zoom' : 'pan',
-      sx: e.clientX, sy: e.clientY, zx: zoom.x, zy: zoom.y,
-      scrollLeft: el.scrollLeft, scrollTop: el.scrollTop,
-    };
+    commit.current = null;
     dragging.current = true;
     setHover(null);
+    if (e.button === 2) {
+      drag.current = { mode: 'pan', sx: e.clientX, sy: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+      el.style.cursor = 'grabbing';
+    } else {
+      const rect = el.getBoundingClientRect();
+      const relX = e.clientX - rect.left, relY = e.clientY - rect.top;
+      const ax = el.scrollLeft + relX, ay = el.scrollTop + relY;
+      // Sum the fixed-height category-header bands above the cursor (one-time, at grab).
+      let headerAbove = 0;
+      el.querySelectorAll('[data-wall-header]').forEach((h) => {
+        const r = (h as HTMLElement).getBoundingClientRect();
+        const top = r.top - rect.top + el.scrollTop;
+        if (top + r.height <= ay) headerAbove += r.height;
+        else if (top < ay) headerAbove += ay - top;
+      });
+      drag.current = { mode: 'zoom', sx: e.clientX, sy: e.clientY, czx: zoom.x, czy: zoom.y, ax, ay, relX, relY, headerAbove, swatchAbove: ay - headerAbove, lzx: zoom.x, lzy: zoom.y };
+      el.style.cursor = 'move';
+    }
     el.setPointerCapture(e.pointerId);
-    el.style.cursor = e.button === 1 ? 'move' : 'grabbing';
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -416,13 +436,13 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       el.scrollTop = d.scrollTop - (e.clientY - d.sy);
       return;
     }
-    // zoom — coalesce to one update per frame
+    // zoom — coalesce to one transform update per frame
     rafCoords.current = { x: e.clientX, y: e.clientY };
     if (!rafId.current) {
       rafId.current = requestAnimationFrame(() => {
         rafId.current = 0;
         const c = rafCoords.current;
-        if (c) zoomToPointer(c.x, c.y);
+        if (c) applyLiveZoom(c.x, c.y);
       });
     }
   };
@@ -430,15 +450,24 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   const endDrag = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
-    const moved = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
     drag.current = null;
     dragging.current = false;
     if (rafId.current) { cancelAnimationFrame(rafId.current); rafId.current = 0; }
     rafCoords.current = null;
     const el = scrollRef.current;
     if (el) { el.releasePointerCapture?.(e.pointerId); el.style.cursor = ''; }
-    // A middle-CLICK (no drag) resets the zoom to 1:1.
-    if (d.mode === 'zoom' && moved < 5) setZoom({ x: 1, y: 1 });
+    if (d.mode !== 'zoom') return;
+    const moved = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
+    const nzx = moved < 5 ? 1 : d.lzx; // middle-click (no drag) resets to 1:1
+    const nzy = moved < 5 ? 1 : d.lzy;
+    if (nzx === d.czx && nzy === d.czy) {
+      // no net change — the live transform is identity, just clear it
+      if (contentRef.current) contentRef.current.style.transform = '';
+      return;
+    }
+    // Commit: re-render at the new size; the layout effect drops the transform + re-pins.
+    commit.current = { relX: d.relX, relY: d.relY, ax: d.ax, czx: d.czx, czy: d.czy, headerAbove: d.headerAbove, swatchAbove: d.swatchAbove };
+    setZoom({ x: nzx, y: nzy });
   };
 
   // Suppress hover while dragging (pointer capture still lets the canvas mousemove fire).
@@ -460,7 +489,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       onContextMenu={(e) => e.preventDefault()}
       onMouseDown={(e) => { if (e.button === 1 || e.button === 2) e.preventDefault(); }}
     >
-      <div style={{ width: contentWidth }}>
+      <div ref={contentRef} style={{ width: contentWidth, transformOrigin: '0 0' }}>
         {rows.map((g) => (
           <GroupRow
             key={g.key}
