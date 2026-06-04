@@ -65,7 +65,9 @@ export const FavientsTopBarButton: React.FC = () => {
     <button
       onClick={onClick}
       title="Toggle the Favients shelf (saved gradients)"
-      className={`flex items-center gap-1.5 px-2 h-7 rounded text-[12px] transition-colors ${
+      // Desktop-only: on a phone the Favients shelf is a dedicated tab (hidden md:flex),
+      // so this top-bar toggle would be redundant there.
+      className={`hidden md:flex items-center gap-1.5 px-2 h-7 rounded text-[12px] transition-colors ${
         shown ? `${FAVIENTS_ACCENT.text} bg-white/10` : 'text-gray-400 hover:text-white hover:bg-white/10'
       }`}
     >
