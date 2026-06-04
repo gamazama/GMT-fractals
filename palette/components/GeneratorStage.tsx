@@ -131,15 +131,23 @@ export const GeneratorStage: React.FC = () => {
   }, [detail, smooth, curvesOn]);
 
   const { ref: graphRef, w: graphW, h: graphH } = useContainerSize();
+  // The gradients above the curve editor are inset to line up with its plot area
+  // (track sidebar + inspector). On a narrow stage (phone) those desktop insets
+  // (~400px) exceed the whole width and crush the strips — fall back to a small
+  // padding so the gradients use the full width instead.
+  const { ref: rootRef, w: stageW } = useContainerSize();
+  const tightInset = stageW < CHANNEL_PLOT_INSET_LEFT + CHANNEL_PLOT_INSET_RIGHT + 140;
+  const padLeft = tightInset ? 12 : CHANNEL_PLOT_INSET_LEFT;
+  const padRight = tightInset ? 12 : CHANNEL_PLOT_INSET_RIGHT;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">
+    <div ref={rootRef} className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">
       {/* Top: sources → blend → source → result, inset to line up with the graph PLOT
           below (so the gradients and the curve t-axis share a left/right edge). Takes
           the slack so the graph stays compact with no dead space under it. */}
       <div
         className={`flex-1 min-h-0 overflow-y-auto pt-3 pb-2 flex flex-col gap-1.5 ${tracks ? '' : 'justify-center'}`}
-        style={{ paddingLeft: CHANNEL_PLOT_INSET_LEFT, paddingRight: CHANNEL_PLOT_INSET_RIGHT }}
+        style={{ paddingLeft: padLeft, paddingRight: padRight }}
       >
         <SourceRow which="A" ramp={stripA} preset={slotA} onPick={(i) => setSlot('A', i)} height={40} dimmed={curvesOn} />
         {/* The L/C/h blend sits BETWEEN A and B as vertical sliders bridging A→B. */}

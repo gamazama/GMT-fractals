@@ -111,6 +111,13 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   const [activeChannel, setActiveChannel] = useState<ChannelKey>('L');
   const [selectedKeyframeIds, setSelectedKeyframeIds] = useState<string[]>([]);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  // The sidebar (112) + inspector (256) + a usable canvas don't fit on a narrow
+  // (phone) editor, so the inspector overflows over the graph. Auto-collapse it to
+  // its rail when the area is narrow; only fires on a width change, so the user can
+  // still expand it manually at that size.
+  useEffect(() => {
+    if (width > 0 && width < 560) setInspectorCollapsed(true);
+  }, [width]);
   const [normalized, setNormalized] = useState(true);
   const [visible, setVisible] = useState<Record<string, boolean>>({ L: true, C: true, h: true });
   // Soft selection (proportional editing) — local state mirroring the animation

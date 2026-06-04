@@ -13,7 +13,7 @@
  * Mode content is placeholder until the generator/picker/img2grad UIs land.
  */
 
-import React, { useMemo, useEffect, Suspense } from 'react';
+import React, { useMemo, useEffect, useState, Suspense } from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { useGlobalContextMenu } from '../hooks/useGlobalContextMenu';
 import GlobalContextMenu from '../components/GlobalContextMenu';
@@ -31,6 +31,7 @@ import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import { PickerStage } from './PickerStage';
 import { GeneratorStage } from '../palette/components/GeneratorStage';
 import { ImageStage } from '../palette/components/ImageStage';
+import { FavientsPanel } from '../palette/components/FavientsPanel';
 import type { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
@@ -114,10 +115,54 @@ const useResponsiveDocks = (): void => {
   }, []);
 };
 
+// Below this width the side-dock layout (Favients shelf + mode panel flanking the
+// stage) can't fit — we switch to a single-column phone layout instead.
+const MOBILE_BREAKPOINT = 768;
+const useIsMobile = (): boolean => {
+  const [mobile, setMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT,
+  );
+  useEffect(() => {
+    const on = () => setMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    on();
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  return mobile;
+};
+
+// Phone mode selector — the three studio modes as a full-width tab bar (the desktop
+// right-dock tab strip is the mode selector; on a phone that strip isn't shown).
+const MOBILE_MODES: PanelId[] = ['Picker', 'Generator', 'Image'] as PanelId[];
+const MobileModeTabs: React.FC = () => {
+  const active = useEngineStore((s) => s.activeRightTab) as string | null;
+  const togglePanel = useEngineStore((s) => s.togglePanel);
+  return (
+    <div className="shrink-0 flex border-b border-white/10 bg-zinc-950">
+      {MOBILE_MODES.map((id) => (
+        <button
+          key={id}
+          onClick={() => togglePanel(id, true)}
+          className={`flex-1 py-2.5 text-[13px] font-medium transition-colors border-b-2 ${
+            active === id ? 'text-cyan-200 border-cyan-400 bg-white/[0.04]' : 'text-gray-400 border-transparent hover:text-gray-200'
+          }`}
+        >
+          {id}
+        </button>
+      ))}
+    </div>
+  );
+};
+
 const GradientExplorerApp: React.FC = () => {
   const state = useEngineStore();
   useGlobalContextMenu();
   useResponsiveDocks();
+  const isMobile = useIsMobile();
+  // The Favients shelf has no side dock on a phone; reuse the same open-state the
+  // top-bar Favients button already toggles, surfaced as a slide-in drawer instead.
+  const favShown = !state.isLeftDockCollapsed && (state.panels.Favients?.isOpen ?? false);
+  const closeFav = () => state.setDockCollapsed('left', true);
 
   const floatingPanels = (Object.values(state.panels) as PanelState[]).filter(
     (p) => p.location === 'float' && p.isOpen,
@@ -158,12 +203,53 @@ const GradientExplorerApp: React.FC = () => {
         >
           <TopBarHost />
 
-          <div className="flex-1 flex overflow-hidden relative">
-            <Dock side="left" />
-            <Stage />
-            <HudHost />
-            <Dock side="right" />
-          </div>
+          {isMobile ? (
+            // Phone: full-width stage stacked above the active mode's controls in one
+            // vertical scroll, with a persistent mode tab bar. No side docks. The
+            // wrapper is `relative` so the Favients drawer overlays the stage/controls
+            // but leaves the top bar reachable (to toggle the drawer back off).
+            <div className="flex-1 min-h-0 relative flex flex-col">
+              <MobileModeTabs />
+              <div className="flex-1 min-h-0 overflow-y-auto custom-scroll relative flex flex-col">
+                <div className="shrink-0 h-[62vh] min-h-[340px] flex flex-col">
+                  <Stage />
+                </div>
+                <div className="shrink-0 border-t border-white/10 bg-zinc-950">
+                  <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-gray-500 bg-black/30 border-b border-white/5">
+                    {(state.activeRightTab as string) ?? 'Mode'} controls
+                  </div>
+                  <PanelRouter
+                    activeTab={state.activeRightTab as PanelId}
+                    state={state}
+                    actions={state}
+                    onSwitchTab={(t) => state.togglePanel(t, true)}
+                  />
+                </div>
+              </div>
+              <HudHost />
+              {favShown && (
+                <div className="absolute inset-0 z-50 flex">
+                  <div className="w-[86%] max-w-sm h-full bg-zinc-950 border-r border-white/10 shadow-2xl flex flex-col">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 shrink-0">
+                      <span className="text-[11px] uppercase tracking-wide text-gray-400">Favients</span>
+                      <button onClick={closeFav} aria-label="Close Favients" className="text-gray-400 hover:text-white px-2 py-0.5 rounded text-sm">✕</button>
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      <FavientsPanel />
+                    </div>
+                  </div>
+                  <div className="flex-1 bg-black/50" onClick={closeFav} />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex overflow-hidden relative">
+              <Dock side="left" />
+              <Stage />
+              <HudHost />
+              <Dock side="right" />
+            </div>
+          )}
 
           <HelpOverlay />
 
