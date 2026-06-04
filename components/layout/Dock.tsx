@@ -186,16 +186,8 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
             {/* Dock content area — vertical padding only. Horizontal
                 padding is owned by each panel's internal rows (AutoFeaturePanel
                 already applies px-3 on every param row), so compound padding
-                was wasting ~32px of dock width.
-                `scrollbar-gutter: stable` reserves the (classic) scrollbar's width
-                always, so the content box doesn't change width when the scrollbar
-                appears/disappears. Without it, width-dependent content (e.g. the
-                Picker's flex-wrap theme chips) reflows on every toggle, which the
-                ScrollSpaceReserver turns into a scrollbar flicker loop. */}
-            <div
-                className={`flex-1 overflow-y-auto py-2 relative ${isMobile ? 'mobile-scroll' : 'custom-scroll'}`}
-                style={{ scrollbarGutter: 'stable' }}
-            >
+                was wasting ~32px of dock width. */}
+            <div className={`flex-1 overflow-y-auto py-2 relative ${isMobile ? 'mobile-scroll' : 'custom-scroll'}`}>
                 {activeTabId ? (
                      <BenchProfiler id={`Dock:${side}/PanelRouter:${activeTabId}`}>
                         {/* `ScrollSpaceReserver` keyed by activeTabId so it
