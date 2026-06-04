@@ -91,9 +91,17 @@ const padParams = Object.fromEntries(
       step: 0.01,
       label: `${loLabel} ↔ ${hiLabel}`,
       hidden: true, // rendered by the custom pad, not the default vec2 input
+      group: 'quality',
     },
   ]),
 );
+
+// Section groups (used by the mobile Picker controls to render three collapsible
+// sections). No `groupConfigs` on the feature, so the desktop dock panel still
+// renders flat — these tags only take effect when an AutoFeaturePanel passes a
+// matching `groupFilter` (see GradientExplorerApp's MobilePickerControls).
+const G_ARRANGE = 'arrange';
+const G_SOURCES = 'sources';
 
 export const PaletteFiltersFeature: FeatureDefinition = {
   id: 'paletteFilters',
@@ -103,15 +111,15 @@ export const PaletteFiltersFeature: FeatureDefinition = {
   tabConfig: { label: 'Filters' },
 
   params: {
-    groupBy: groupByParam.config,
-    rowsBy: rowsByParam.config,
-    sortBy: sortByParam.config,
-    reverse: { type: 'boolean', default: false, label: 'Reverse order' },
+    groupBy: { ...groupByParam.config, group: G_ARRANGE },
+    rowsBy: { ...rowsByParam.config, group: G_ARRANGE },
+    sortBy: { ...sortByParam.config, group: G_ARRANGE },
+    reverse: { type: 'boolean', default: false, label: 'Reverse order', group: G_ARRANGE },
     swatchSize: {
       type: 'vec2', default: { x: 32, y: 18 }, min: 8, max: 320, step: 2,
-      label: 'Swatch size', description: 'Width × height of each gradient swatch (px).',
+      label: 'Swatch size', description: 'Width × height of each gradient swatch (px).', group: G_ARRANGE,
     },
-    paddingSize: { type: 'float', default: 0, min: 0, max: 40, step: 1, label: 'Padding', description: 'Gap between swatches (px). 0 = flush.' },
+    paddingSize: { type: 'float', default: 0, min: 0, max: 40, step: 1, label: 'Padding', description: 'Gap between swatches (px). 0 = flush.', group: G_ARRANGE },
     ...padParams,
   },
 
@@ -126,10 +134,11 @@ export const PaletteFiltersFeature: FeatureDefinition = {
     ...QUALITY_AXES.map(({ axis, loLabel, hiLabel, track, hint }) => ({
       componentId: 'palette-quality-pad',
       props: { axis, loLabel, hiLabel, track, hint },
+      group: 'quality',
     })),
     // Sources (which libraries are loaded) is the panel's primary input, so
     // lift it above the params/quality pads to the top of the Filters panel.
-    { componentId: 'palette-bundle-toggles', placement: 'top' },
-    { componentId: 'palette-theme-chips' },
+    { componentId: 'palette-bundle-toggles', placement: 'top', group: G_SOURCES },
+    { componentId: 'palette-theme-chips', group: G_SOURCES },
   ],
 };

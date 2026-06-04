@@ -24,6 +24,7 @@ import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
 import { PanelRouter } from '../components/PanelRouter';
+import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
 import { TimelineHost } from '../components/TimelineHost';
 import { ToastHost } from '../engine/components/ToastHost';
 import { EngineBridge } from '../components/EngineBridge';
@@ -154,6 +155,52 @@ const MobileModeTabs: React.FC = () => {
   );
 };
 
+// The Picker's controls are one long scroll (sources, arrange, quality pads, themes).
+// On a phone that means scrolling far past the canvas to reach a section, then back up
+// to see the result. Split them into three collapsible sections (accordion — opening
+// one closes the others) so any section is one tap away and the canvas stays in view.
+// The groups are tagged on the paletteFilters feature (no `groupConfigs`, so the
+// desktop dock panel is unaffected — it still renders flat).
+const PICKER_SECTIONS: { id: string; label: string; group: string }[] = [
+  { id: 'sources', label: 'Sources & themes', group: 'sources' },
+  { id: 'arrange', label: 'Arrange', group: 'arrange' },
+  { id: 'quality', label: 'Quality filters', group: 'quality' },
+];
+
+const SectionChevron: React.FC<{ open: boolean }> = ({ open }) => (
+  <svg className={`w-2.5 h-2.5 shrink-0 text-gray-500 transition-transform ${open ? 'rotate-90' : ''}`} viewBox="0 0 6 10" fill="currentColor">
+    <path d="M0 0l6 5-6 5z" />
+  </svg>
+);
+
+const MobilePickerControls: React.FC = () => {
+  const [open, setOpen] = useState<string>('arrange');
+  return (
+    <div>
+      {PICKER_SECTIONS.map((s) => {
+        const isOpen = open === s.id;
+        return (
+          <div key={s.id} className="border-b border-white/5">
+            <button
+              onClick={() => setOpen((o) => (o === s.id ? '' : s.id))}
+              aria-expanded={isOpen}
+              className="w-full flex items-center gap-2 px-3 py-3 text-left text-[13px] font-medium text-gray-200 hover:bg-white/[0.03] transition-colors"
+            >
+              <SectionChevron open={isOpen} />
+              {s.label}
+            </button>
+            {isOpen && (
+              <div className="pb-2">
+                <AutoFeaturePanel featureId="paletteFilters" groupFilter={s.group} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const GradientExplorerApp: React.FC = () => {
   const state = useEngineStore();
   useGlobalContextMenu();
@@ -218,12 +265,16 @@ const GradientExplorerApp: React.FC = () => {
                   <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-gray-500 bg-black/30 border-b border-white/5">
                     {(state.activeRightTab as string) ?? 'Mode'} controls
                   </div>
-                  <PanelRouter
-                    activeTab={state.activeRightTab as PanelId}
-                    state={state}
-                    actions={state}
-                    onSwitchTab={(t) => state.togglePanel(t, true)}
-                  />
+                  {state.activeRightTab === 'Picker' ? (
+                    <MobilePickerControls />
+                  ) : (
+                    <PanelRouter
+                      activeTab={state.activeRightTab as PanelId}
+                      state={state}
+                      actions={state}
+                      onSwitchTab={(t) => state.togglePanel(t, true)}
+                    />
+                  )}
                 </div>
               </div>
               <HudHost />
