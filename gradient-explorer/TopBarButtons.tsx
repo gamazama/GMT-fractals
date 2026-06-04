@@ -12,7 +12,17 @@
 
 import React from 'react';
 import { useEngineStore } from '../store/engineStore';
+import { FpsCounter } from '../engine/plugins/TopBar';
 import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
+
+/** FPS readout, desktop-only. The top bar is tight on phones and an FPS number is
+ *  noise on a palette tool there, so hide it below the mobile breakpoint (md = 768px,
+ *  matching the single-column layout switch). */
+export const FpsCounterDesktopOnly: React.FC = () => (
+  <div className="hidden md:flex items-center">
+    <FpsCounter />
+  </div>
+);
 
 const BackArrowIcon: React.FC = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

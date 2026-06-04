@@ -24,7 +24,7 @@ import { installHud } from '../engine/plugins/Hud';
 import { installModulation } from '../engine/animation/modulationTick';
 import { installModulationUI } from '../engine/components/modulation';
 import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
-import { BackToGmtButton, FavientsTopBarButton } from './TopBarButtons';
+import { BackToGmtButton, FavientsTopBarButton, FpsCounterDesktopOnly } from './TopBarButtons';
 
 // Boots the engine's UI registry (AutoFeaturePanel + built-in widgets).
 registerUI();
@@ -47,6 +47,13 @@ installHud();
 // order 0 is the default ProjectName; place Back leftmost, Favients just after.
 topbar.register({ id: 'back-to-gmt', slot: 'left', order: -10, component: BackToGmtButton });
 topbar.register({ id: 'gx-favients', slot: 'left', order: 21, component: FavientsTopBarButton });
+
+// This studio has no raymarch viewport, so the adaptive-resolution toggle doesn't
+// apply — drop the default badge entirely. And keep the FPS readout on desktop but
+// hide it on phones (FpsCounterDesktopOnly).
+topbar.unregister('adaptive');
+topbar.unregister('fps');
+topbar.register({ id: 'fps', slot: 'right', order: -10, component: FpsCounterDesktopOnly });
 
 // Animation glue — param sliders show the keyframe diamond and key onto the
 // timeline (TimelineHost is mounted in GradientExplorerApp). installModulation
