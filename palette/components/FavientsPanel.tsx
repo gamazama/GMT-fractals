@@ -38,7 +38,7 @@ import type { RGB } from '../core/oklab';
 import { useEngineStore } from '../../store/engineStore';
 import { useDismiss } from '../../hooks/useDismiss';
 import { downloadBlob } from '../../utils/SceneFormat';
-import { EXPORT_FORMATS, getExportFormat } from '../core/exportFormats';
+import { EXPORT_FORMATS, getExportFormat, AI_STOP_LIMIT } from '../core/exportFormats';
 import { buildCollectionZip, buildCollectionFile, buildContactSheet, collectionQualityWarnings } from '../core/favientsExport';
 
 /** Re-render when hosts (re)register apply targets or the browse action. */
@@ -117,21 +117,17 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
   const selFmt = getExportFormat(zipFmt);
   const isCollection = !!selFmt?.collection;
 
+  // Collection swatch formats (.ai/.idml) hold a limited number of colour stops, so the
+  // most complex gradients are simplified on export. This is a normal format limitation,
+  // not an error — surface it as an inline notice, never a blocking prompt.
+  const lossy = useMemo(
+    () => (isCollection ? collectionQualityWarnings(favients, zipFmt) : []),
+    [isCollection, favients, zipFmt],
+  );
+
   const exportFmt = () => {
     if (empty) { onFlash('Nothing to export'); return; }
     if (isCollection) {
-      // Format-limitation warning: gradients too complex for the .ai stop budget
-      // get flattened and lose visible detail — let the user opt out before saving.
-      const lossy = collectionQualityWarnings(favients, zipFmt);
-      if (lossy.length) {
-        const list = lossy.slice(0, 8).map((w) => `  • ${w.name}  (Δ${Math.round(w.delta)})`).join('\n');
-        const more = lossy.length > 8 ? `\n  …and ${lossy.length - 8} more` : '';
-        const ok = window.confirm(
-          `⚠ Illustrator format limitation\n\n${lossy.length} of ${favients.length} gradient${lossy.length === 1 ? '' : 's'} ` +
-            `lose visible detail when flattened to the .ai colour-stop limit:\n\n${list}${more}\n\nExport anyway?`,
-        );
-        if (!ok) { close(); return; }
-      }
       const file = buildCollectionFile(favients, zipFmt)!;
       const data = typeof file.data === 'string' ? file.data : (file.data as unknown as BlobPart);
       downloadBlob(new Blob([data], { type: 'application/octet-stream' }), `favients.${file.ext}`);
@@ -206,6 +202,11 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
               {isCollection ? `.${selFmt!.ext}` : '.zip'}
             </button>
           </div>
+          {lossy.length > 0 && (
+            <div className="px-2 pb-1 text-[10px] leading-snug text-gray-400">
+              {lossy.length} of {favients.length} use more than {AI_STOP_LIMIT} colour stops, so they export simplified to .{selFmt!.ext}. Most apps cap stops similarly.
+            </div>
+          )}
           <button className={menuItemCls} onClick={exportSheet}>Contact sheet (PNG)</button>
         </div>
       )}

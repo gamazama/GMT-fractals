@@ -108,8 +108,8 @@ export const GeneratorExtrasPanel: React.FC = () => {
         fullWidth
       />
       {aiWarn > 0 && (
-        <div className="mt-1 text-[10px] leading-snug text-amber-300/90">
-          ⚠ This gradient is complex — swatch libraries (.ai/.idml) cap at {AI_STOP_LIMIT} colour stops, so it’s flattened to {aiWarn} and loses some detail.
+        <div className="mt-1 text-[10px] leading-snug text-gray-400">
+          Heads up: swatch libraries (.ai/.idml) hold up to {AI_STOP_LIMIT} colour stops, so this one exports with {aiWarn}. Most apps cap stops similarly.
         </div>
       )}
       {showPreview && (

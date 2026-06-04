@@ -158,6 +158,11 @@ const buildGRD = (ramp: RGB[]): Uint8Array => {
 
 const AI_MAX = 40;
 
+// SVG/CSS gradients have no spec limit, but every consumer truncates: Figma keeps
+// ~32 stops, and other apps cap similarly. So we reduce smartly (Douglas-Peucker)
+// to a budget that survives import everywhere, rather than dumping a fixed sample.
+const SVG_MAX = 32;
+
 const aiNum = (n: number, dp = 6): string => {
   if (!isFinite(n)) n = 0;
   let s = n.toFixed(dp);
@@ -304,7 +309,7 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     ext: 'svg',
     build: (r) =>
       '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="32"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0">' +
-      Array.from({ length: 33 }, (_, k) => '<stop offset="' + ((k / 32) * 100).toFixed(1) + '%" stop-color="' + hx2(ri(r[Math.round((k / 32) * 255)])) + '"/>').join('') +
+      reduceStopIndices(r, SVG_MAX).map((i) => '<stop offset="' + ((i / 255) * 100).toFixed(1) + '%" stop-color="' + hx2(ri(r[i])) + '"/>').join('') +
       '</linearGradient></defs><rect width="256" height="32" fill="url(#g)"/></svg>',
   },
   { key: 'json', label: 'JSON', ext: 'json', build: (r) => JSON.stringify({ name: 'gradient', colors: seq((i) => hx2(ri(r[i]))) }) },
