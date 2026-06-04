@@ -121,13 +121,22 @@ function MeshDonateButton() {
           style={{ transform: 'scale(0)', transformOrigin: 'bottom center' }}
         />
       </div>
+      {/* Both donate links — matches the engine apps' Support GMT widget. */}
       <a
         href="https://ko-fi.com/gmtfractals"
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 px-3 py-1 rounded bg-[#13C3FF] hover:bg-[#00b0f0] text-white text-[11px] font-bold transition-colors"
+        className="inline-flex items-center justify-center gap-2 px-3 py-1 rounded bg-[#13C3FF] hover:bg-[#00b0f0] text-white text-[11px] font-bold transition-colors"
       >
-        Support GMT
+        Support on Ko-fi
+      </a>
+      <a
+        href="https://www.paypal.com/ncp/payment/WHMZWATKN6GEY"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-1 inline-flex items-center justify-center gap-2 px-3 py-1 rounded bg-[#0070ba] hover:bg-[#005ea6] text-white text-[11px] font-bold transition-colors"
+      >
+        Support via PayPal
       </a>
     </div>
   );

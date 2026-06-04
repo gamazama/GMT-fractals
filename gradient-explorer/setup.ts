@@ -11,6 +11,7 @@ import { useEngineStore } from '../store/engineStore';
 import { applyPanelManifest } from '../engine/PanelManifest';
 import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { restorePaletteFilters, watchPaletteFilters } from '../palette/store/paletteFiltersPersist';
+import { feedbackPanelEntry } from '../engine-gmt/feedback';
 
 export const wireGradientExplorer = (): void => {
   applyPanelManifest([
@@ -19,6 +20,8 @@ export const wireGradientExplorer = (): void => {
     { id: 'Image', dock: 'right', order: 2, features: ['paletteImage'] },
     // Favients shelf — docked into the left tab strip by default here.
     { id: 'Favients', dock: 'left', order: 0, component: 'panel-favients', isCore: false },
+    // Feedback — shared GMT Help-menu plumbing ("Send Feedback"), floats on demand.
+    feedbackPanelEntry(),
   ]);
 
   const store = useEngineStore.getState();

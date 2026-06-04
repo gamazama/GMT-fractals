@@ -119,21 +119,28 @@ interface SupportItemProps {
     intro?: string;
     body: React.ReactNode | React.FC;
     accent: 'pink' | 'cyan' | 'purple';
+    hoverReveal?: React.ReactNode | React.FC;
     onAfterOpen: () => void;
 }
 
-const SupportItem: React.FC<SupportItemProps> = ({ label, modalTitle, intro, body, accent, onAfterOpen }) => (
-    <button
-        onClick={(e) => {
-            e.stopPropagation();
-            _setSupportModal({ modalTitle, intro, body, accent });
-            onAfterOpen();
-        }}
-        className={`group w-full flex items-center justify-between p-2 rounded transition-colors ${ACCENT_HOVER[accent]}`}
-    >
-        <span className="text-xs font-bold">{label}</span>
-        <HeartIcon />
-    </button>
+const SupportItem: React.FC<SupportItemProps> = ({ label, modalTitle, intro, body, accent, hoverReveal, onAfterOpen }) => (
+    // The wrapper is the `.group` so an optional app-supplied hover reveal
+    // (e.g. a photo that slides up) animates when the menu item is hovered,
+    // while the heart/label still get their group-hover accent.
+    <div className="group">
+        {hoverReveal && <div className="px-2 pt-1">{renderBody(hoverReveal)}</div>}
+        <button
+            onClick={(e) => {
+                e.stopPropagation();
+                _setSupportModal({ modalTitle, intro, body, accent });
+                onAfterOpen();
+            }}
+            className={`w-full flex items-center justify-between p-2 rounded transition-colors ${ACCENT_HOVER[accent]}`}
+        >
+            <span className="text-xs font-bold">{label}</span>
+            <HeartIcon />
+        </button>
+    </div>
 );
 
 const SupportModalHost: React.FC = () => {
@@ -275,6 +282,10 @@ export interface SupportConfig {
     body: React.ReactNode | React.FC;
     /** Accent color for label + modal title. Default 'pink'. */
     accent?: 'pink' | 'cyan' | 'purple';
+    /** Optional content revealed on hover of the menu item itself (above the
+     *  label) — e.g. a photo that slides up. App-supplied; the plugin just
+     *  renders it inside the item's `.group`. */
+    hoverReveal?: React.ReactNode | React.FC;
 }
 
 export interface AboutConfig {
@@ -375,6 +386,7 @@ export const installHelp = (options: InstallHelpOptions = {}) => {
                     intro={cfg.intro}
                     body={cfg.body}
                     accent={accent}
+                    hoverReveal={cfg.hoverReveal}
                     onAfterOpen={close}
                 />
             ),

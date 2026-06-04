@@ -14,8 +14,12 @@
 import { applyPanelManifest } from '../engine/PanelManifest';
 import { useEngineStore } from '../store/engineStore';
 import { FluidToyPanels } from './panels';
+import { feedbackPanelEntry } from '../engine-gmt/feedback';
 
 export const setupFluidToy = () => {
-    applyPanelManifest(FluidToyPanels);
+    // Feedback panel is shared GMT plumbing (Help-menu "Send Feedback"); spread
+    // it in rather than baking it into FluidToyPanels so panels.ts stays free
+    // of engine-gmt imports.
+    applyPanelManifest([...FluidToyPanels, feedbackPanelEntry()]);
     useEngineStore.getState().setDockCollapsed('left', false);
 };

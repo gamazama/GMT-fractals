@@ -69,7 +69,8 @@ import { installGallery } from '../engine-gmt/gallery';
 import { useGalleryStore } from '../engine-gmt/gallery/galleryStore';
 import { installAuth } from '../engine-gmt/auth';
 import { feedbackMenuItem } from '../engine-gmt/feedback';
-import { SupportGmtBody, AboutGmtBody } from './HelpExtras';
+import { AboutGmtBody } from './HelpExtras';
+import { gmtSupportConfig } from '../engine-gmt/support';
 import { installTutorial, registerLessons } from '../engine/plugins/Tutorial';
 import { GMT_LESSONS } from './tutorial/lessons';
 import { registerGmtTriggers } from './tutorial/triggers';
@@ -338,13 +339,7 @@ registerLessons(GMT_LESSONS);
 installHelp({
     tutorials: { label: 'Tutorials' },
     extraItems: [feedbackMenuItem()],
-    support: {
-        label: 'Support GMT',
-        modalTitle: 'Support GMT',
-        intro: 'GMT is free & open source. With your support I could spend more time developing it!',
-        body: SupportGmtBody,
-        accent: 'pink',
-    },
+    support: gmtSupportConfig(),
     about: {
         label: 'About GMT',
         body: AboutGmtBody,

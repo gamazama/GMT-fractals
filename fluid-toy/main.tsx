@@ -48,6 +48,8 @@ import { installUndo } from '../engine/plugins/Undo';
 import { installCamera, camera } from '../engine/plugins/Camera';
 import { installMenu } from '../engine/plugins/Menu';
 import { installHelp, help } from '../engine/plugins/Help';
+import { gmtSupportConfig } from '../engine-gmt/support';
+import { feedbackMenuItem, registerFeedbackUI } from '../engine-gmt/feedback';
 import { installHud, hud } from '../engine/plugins/Hud';
 import { QualityBadge } from './components/QualityBadge';
 import { HotkeysCheatsheet } from './components/HotkeysCheatsheet';
@@ -229,7 +231,13 @@ installMenu();
 // Started, Keyboard Shortcuts, and the "Show Hints" toggle. Also
 // registers the H shortcut and provides <HelpOverlay /> (mounted in
 // FluidToyApp) which renders the lazy HelpBrowser when opened.
-installHelp();
+// `support` + `feedbackMenuItem` are shared GMT-brand entries so every
+// engine app surfaces the same Support GMT / Send Feedback options.
+registerFeedbackUI();
+installHelp({
+    support: gmtSupportConfig(),
+    extraItems: [feedbackMenuItem()],
+});
 
 // @engine/hud — generic slot-based overlay host. <HudHost /> is mounted
 // inside FluidToyApp's ViewportFrame. Apps register whatever widgets

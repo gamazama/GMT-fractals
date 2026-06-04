@@ -21,6 +21,8 @@ import { installMenu } from '../engine/plugins/Menu';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installHelp } from '../engine/plugins/Help';
 import { installHud } from '../engine/plugins/Hud';
+import { gmtSupportConfig } from '../engine-gmt/support';
+import { feedbackMenuItem, registerFeedbackUI } from '../engine-gmt/feedback';
 import { installModulation } from '../engine/animation/modulationTick';
 import { installModulationUI } from '../engine/components/modulation';
 import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
@@ -40,7 +42,12 @@ installMenu();
 // DDFS feature slices, so the engine-standard getPreset()/loadScene() round-trips
 // them — no canvas (no fractal viewport here) means JSON download, no PNG export.
 installSceneIO({ fileExtension: 'json' });
-installHelp();
+// Help menu + shared GMT Support / Send Feedback entries (same as every engine app).
+registerFeedbackUI();
+installHelp({
+  support: gmtSupportConfig(),
+  extraItems: [feedbackMenuItem()],
+});
 installHud();
 
 // Left-slot topbar affordances: back to the GMT studio + a Favients shelf toggle.

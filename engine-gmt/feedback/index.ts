@@ -13,6 +13,6 @@
  *       ...
  *   });
  */
-export { openFeedback, closeFeedback, feedbackMenuItem } from './installFeedback';
+export { openFeedback, closeFeedback, feedbackMenuItem, registerFeedbackUI, feedbackPanelEntry } from './installFeedback';
 export { submitFeedback, FeedbackError } from './FeedbackClient';
 export type { FeedbackCategory, FeedbackInput } from './FeedbackClient';

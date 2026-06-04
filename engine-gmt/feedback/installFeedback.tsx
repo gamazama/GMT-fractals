@@ -1,6 +1,9 @@
 import React from 'react';
 import type { MenuItem } from '../../engine/plugins/Menu';
+import type { PanelDefinition } from '../../engine/PanelManifest';
+import { componentRegistry } from '../../components/registry/ComponentRegistry';
 import { useEngineStore } from '../../store/engineStore';
+import { FeedbackPanel } from './FeedbackPanel';
 
 // Feedback is a dockable panel ('Feedback' in the panel manifest), opened on
 // demand from the Help menu. No singleton/overlay — the panel renders through
@@ -51,3 +54,33 @@ export const feedbackMenuItem = (opts: { id?: string; label?: string } = {}): Me
     title: 'Report a bug, request a feature, or ask for help',
     onSelect: () => openFeedback(),
 });
+
+// ── Cross-app wiring helpers ───────────────────────────────────────────
+//
+// app-gmt registers 'panel-feedback' as part of its full registerGmtUi()
+// pass. Lighter apps (fluid-toy, gradient-explorer) don't want the whole GMT
+// panel set, so they call registerFeedbackUI() to register just the Feedback
+// panel component, and spread feedbackPanelEntry() into their panel manifest.
+
+/** Manifest entry for the floating Feedback panel — spread into the app's
+ *  applyPanelManifest([...]) call. Mirrors the entry baked into GmtPanels. */
+export const feedbackPanelEntry = (): PanelDefinition => ({
+    id: 'Feedback',
+    dock: 'float',
+    order: 100,
+    component: 'panel-feedback',
+    isCore: false,
+});
+
+let _feedbackUiRegistered = false;
+
+/** Register the 'panel-feedback' component so feedbackPanelEntry() resolves.
+ *  Idempotent — safe to call alongside an app that already registers it via
+ *  registerGmtUi(). Call once at app boot (componentRegistry registrations may
+ *  run after store construction, so placement among the install*() calls is
+ *  flexible). */
+export const registerFeedbackUI = () => {
+    if (_feedbackUiRegistered) return;
+    _feedbackUiRegistered = true;
+    componentRegistry.register('panel-feedback', FeedbackPanel);
+};

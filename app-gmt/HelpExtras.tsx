@@ -1,16 +1,15 @@
 /**
- * GMT-specific bodies for the engine Help plugin's `support` and `about`
- * slots. The plugin owns the menu items + modal/expand scaffolds; these
- * components own the GMT content (donate buttons, version, GPU info,
- * credits, links).
+ * GMT-specific body for the engine Help plugin's `about` slot. The plugin
+ * owns the menu item + expand scaffold; this component owns the GMT content
+ * (version, GPU info, credits, links).
+ *
+ * The "Support GMT" body lives in `engine-gmt/support.ts` (gmtSupportConfig)
+ * so every engine app shares one definition.
  */
 
 import React, { useEffect, useState } from 'react';
-import { DonateButton } from '../engine-gmt/components/DonateButton';
 import { getProxy } from '../engine-gmt';
 import pkg from '../package.json';
-
-export const SupportGmtBody: React.FC = () => <DonateButton />;
 
 export const AboutGmtBody: React.FC = () => {
     const [gpuInfo, setGpuInfo] = useState<string>('');

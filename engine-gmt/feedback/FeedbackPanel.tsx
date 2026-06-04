@@ -61,7 +61,7 @@ export const FeedbackPanel: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col text-left" {...stopNavKeys()}>
+        <div className="flex flex-col text-left p-4" {...stopNavKeys()}>
             {done ? (
                 <>
                     <p className="text-xs text-gray-300 leading-relaxed mb-1">
