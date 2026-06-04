@@ -50,6 +50,40 @@ const syncEnds = (p: TracePath): TracePath => {
 const pathControls = (p: TracePath): Pt[] =>
   p.points && p.points.length >= 2 ? p.points : [{ x: p.x0, y: p.y0 }, { x: p.x1, y: p.y1 }];
 
+/**
+ * Size a canvas's backing store to its displayed CSS box × devicePixelRatio (capped
+ * at 2) so 2-D drawing stays crisp instead of being upscaled from a fixed 640px
+ * buffer. Returns a generation counter that bumps whenever the backing is resized —
+ * callers add it to their draw effect deps (setting canvas.width clears the bitmap,
+ * so a redraw is required after each resize). A ResizeObserver tracks layout changes
+ * (responsive docks, window resize) with nothing to re-attach.
+ */
+const useHiDPICanvas = (ref: React.RefObject<HTMLCanvasElement>, active = true): number => {
+  const [gen, setGen] = useState(0);
+  // `active` re-runs the effect when the canvas mounts (these canvases only exist once
+  // an image is loaded) so the observer attaches and the first fit runs post-mount.
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const fit = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const rect = cv.getBoundingClientRect();
+      const w = Math.max(1, Math.round(rect.width * dpr));
+      const h = Math.max(1, Math.round(rect.height * dpr));
+      if (cv.width !== w || cv.height !== h) {
+        cv.width = w;
+        cv.height = h;
+        setGen((g) => g + 1);
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(cv);
+    return () => ro.disconnect();
+  }, [ref, active]);
+  return gen;
+};
+
 export const ImageStage: React.FC = () => {
   const model = useImageStore((s) => s.model);
   const thumb = useImageStore((s) => s.thumb);
@@ -97,12 +131,17 @@ export const ImageStage: React.FC = () => {
           const data = cx.getImageData(0, 0, w, h).data;
           const m = ingestPixels(data, w, h);
 
-          // thumbnail (≤300×150)
+          // Display thumbnail — kept at near-full resolution (≤1920px longest edge) so
+          // the source pane stays crisp; the DPR-aware pane canvas downscales it cleanly.
+          // (ingest above keeps its own ≤160px copy for the colour maths — separate.)
+          const THUMB_MAX = 1920;
+          const ts = Math.min(1, THUMB_MAX / Math.max(im.width, im.height));
+          const tw = Math.max(1, Math.round(im.width * ts));
+          const th = Math.max(1, Math.round(im.height * ts));
           const t = document.createElement('canvas');
-          let tw = 300, th = Math.round((300 * h) / w);
-          if (th > 150) { th = 150; tw = Math.round((150 * w) / h); }
           t.width = tw; t.height = th;
-          t.getContext('2d')?.drawImage(im, 0, 0, tw, th);
+          const tctx = t.getContext('2d');
+          if (tctx) { tctx.imageSmoothingEnabled = true; tctx.imageSmoothingQuality = 'high'; tctx.drawImage(im, 0, 0, tw, th); }
 
           setModel(m, t);
           if (mode === 'trace') setPath(autoPath(m));
@@ -161,6 +200,7 @@ export const ImageStage: React.FC = () => {
 
   // --- cloud ---
   const cloudRef = useRef<HTMLCanvasElement>(null);
+  const cloudGen = useHiDPICanvas(cloudRef, !!model);
   const yawRef = useRef(-0.6);
   const pitchRef = useRef(0.5);
   const drawCloud = useCallback(() => {
@@ -169,6 +209,8 @@ export const ImageStage: React.FC = () => {
     const x = cv.getContext('2d');
     if (!x) return;
     const W = cv.width, H = cv.height, yaw = yawRef.current, pitch = pitchRef.current;
+    // backing-px per CSS-px, so dot/line sizes stay visually constant across DPR
+    const dpr = W / Math.max(1, cv.getBoundingClientRect().width);
     x.clearRect(0, 0, W, H);
     x.fillStyle = '#08080c';
     x.fillRect(0, 0, W, H);
@@ -179,7 +221,7 @@ export const ImageStage: React.FC = () => {
     const zr = (pts.length ? pts[pts.length - 1].z - zmn : 1) || 1;
     for (const q of pts) {
       const nz = (q.z - zmn) / zr;
-      const r = (2 + Math.min(4, Math.sqrt(q.p.cnt / model.maxcnt) * 9)) * (0.7 + 0.55 * nz);
+      const r = (2 + Math.min(4, Math.sqrt(q.p.cnt / model.maxcnt) * 9)) * (0.7 + 0.55 * nz) * dpr;
       x.beginPath();
       x.globalAlpha = 0.4 + 0.5 * nz;
       x.fillStyle = `rgb(${q.p.r},${q.p.g},${q.p.bl})`;
@@ -189,7 +231,7 @@ export const ImageStage: React.FC = () => {
     x.globalAlpha = 1;
     const ribbon = derived?.ribbon, ramp = derived?.ramp;
     if (ribbon && ramp) {
-      x.lineWidth = 4;
+      x.lineWidth = 4 * dpr;
       x.lineCap = 'round';
       for (let i = 1; i < 256; i++) {
         const a = proj(ribbon[i - 1].L, ribbon[i - 1].a, ribbon[i - 1].b, W, H, yaw, pitch);
@@ -203,11 +245,11 @@ export const ImageStage: React.FC = () => {
       const e0 = proj(ribbon[0].L, ribbon[0].a, ribbon[0].b, W, H, yaw, pitch);
       const e1 = proj(ribbon[255].L, ribbon[255].a, ribbon[255].b, W, H, yaw, pitch);
       x.fillStyle = '#fff';
-      [e0, e1].forEach((e) => { x.beginPath(); x.arc(e[0], e[1], 3, 0, 7); x.fill(); });
+      [e0, e1].forEach((e) => { x.beginPath(); x.arc(e[0], e[1], 3 * dpr, 0, 7); x.fill(); });
     }
   }, [model, derived]);
 
-  useEffect(() => { drawCloud(); }, [drawCloud]);
+  useEffect(() => { drawCloud(); }, [drawCloud, cloudGen]);
 
   // cloud drag → rotate
   useEffect(() => {
@@ -239,6 +281,7 @@ export const ImageStage: React.FC = () => {
 
   // --- image pane (source / trace path) ---
   const paneRef = useRef<HTMLCanvasElement>(null);
+  const paneGen = useHiDPICanvas(paneRef, !!model);
   const paneRect = useCallback(() => {
     const cv = paneRef.current!;
     const ar = model ? model.w / model.h : 16 / 9;
@@ -256,7 +299,11 @@ export const ImageStage: React.FC = () => {
     x.fillRect(0, 0, cv.width, cv.height);
     if (!thumb || !model) return;
     const R = paneRect();
+    // backing-px per CSS-px, so the overlay strokes/handles keep a constant visual
+    // size while the photo itself draws at the full backing resolution.
+    const dpr = cv.width / Math.max(1, cv.getBoundingClientRect().width);
     x.imageSmoothingEnabled = true;
+    x.imageSmoothingQuality = 'high';
     x.drawImage(thumb, R.ox, R.oy, R.w, R.h);
     if (mode === 'trace') {
       // Dense curve in image px (same geometry the sampler walks) → pane coords.
@@ -264,20 +311,20 @@ export const ImageStage: React.FC = () => {
       const toPane = (p: Pt): [number, number] => [R.ox + (p.x / (model.w - 1)) * R.w, R.oy + (p.y / (model.h - 1)) * R.h];
       const line = () => { x.beginPath(); poly.forEach((p, i) => { const [X, Y] = toPane(p); i ? x.lineTo(X, Y) : x.moveTo(X, Y); }); };
       x.lineJoin = 'round'; x.lineCap = 'round';
-      x.strokeStyle = 'rgba(0,0,0,.55)'; x.lineWidth = 5; line(); x.stroke();
-      x.strokeStyle = '#fff'; x.lineWidth = 2; line(); x.stroke();
+      x.strokeStyle = 'rgba(0,0,0,.55)'; x.lineWidth = 5 * dpr; line(); x.stroke();
+      x.strokeStyle = '#fff'; x.lineWidth = 2 * dpr; line(); x.stroke();
       // Control-point handles: first cyan, last amber, interior white.
       const ctrl = pathControls(path);
       ctrl.forEach((c, i) => {
         const cx = R.ox + c.x * R.w, cy = R.oy + c.y * R.h;
         x.fillStyle = i === 0 ? '#6cf' : i === ctrl.length - 1 ? '#fc6' : '#fff';
-        x.strokeStyle = '#000'; x.lineWidth = 2;
-        const r = i === 0 || i === ctrl.length - 1 ? 7 : 4.5;
+        x.strokeStyle = '#000'; x.lineWidth = 2 * dpr;
+        const r = (i === 0 || i === ctrl.length - 1 ? 7 : 4.5) * dpr;
         x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); x.stroke();
       });
     }
   }, [thumb, model, mode, path, catmull, paneRect]);
-  useEffect(() => { drawPane(); }, [drawPane]);
+  useEffect(() => { drawPane(); }, [drawPane, paneGen]);
 
   // Live refs so the pointer listeners can stay attached for the whole drag. If the
   // effect depended on `path`, the first `setPath` would tear down + re-attach the
