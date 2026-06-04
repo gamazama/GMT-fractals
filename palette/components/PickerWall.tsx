@@ -287,6 +287,11 @@ const GroupRow: React.FC<{
   );
 };
 
+/** Drag-per-doubling: pixels of pointer travel that double the zoom. */
+const ZOOM_PX_PER_DOUBLE = 260;
+const ZOOM_MIN = 0.3;
+const ZOOM_MAX = 16;
+
 export const PickerWall: React.FC<PickerWallProps> = ({
   groups,
   sprite,
@@ -300,6 +305,10 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
+  // View-only magnification driven by middle-drag (independent of the base swatch size
+  // the "Swatch size" control sets). x widens swatches + the content (horizontal scroll,
+  // no reflow); y makes them taller (vertical scroll).
+  const [zoom, setZoom] = useState({ x: 1, y: 1 });
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -314,33 +323,152 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // shrinking linearly to 0 as the wall narrows (≥700 → full, ≤380 → gone), so the
   // swatches keep their size on narrow screens instead of the gutter stealing space.
   const labelW = Math.max(0, Math.min(LABEL_W, Math.round((LABEL_W * (width - 380)) / 320)));
+  // cols is derived from the BASE swatch width (NOT the zoom), so horizontal zoom never
+  // reflows the grid — it only widens the swatches + the content, which then scrolls.
   const cols = Math.max(1, Math.floor((width - labelW - gap) / (swatchW + gap)));
+  // Effective (zoomed) swatch render size + the resulting content width.
+  const ewW = Math.max(1, Math.round(swatchW * zoom.x));
+  const ewH = Math.max(1, Math.round(swatchH * zoom.y));
+  const contentWidth = labelW + cols * (ewW + gap);
   // Merge sparse adjacent buckets that still fit one row (memoised — hover re-renders
   // the wall, and this walks every group).
   const rows = useMemo(() => mergeRows(groups, cols), [groups, cols]);
+
+  // --- middle-drag zoom · right-drag pan -------------------------------------
+  const drag = useRef<null | {
+    mode: 'zoom' | 'pan';
+    sx: number; sy: number; zx: number; zy: number; scrollLeft: number; scrollTop: number;
+  }>(null);
+  const dragging = useRef(false);
+  // Captured at each zoom step so the layout effect (post-resize) can keep the content
+  // point under the cursor fixed — "zoom from the cursor".
+  const anchor = useRef<null | { relX: number; relY: number; cx: number; cy: number; strideBefore: number; heightBefore: number }>(null);
+  const rafCoords = useRef<{ x: number; y: number } | null>(null);
+  const rafId = useRef(0);
+
+  const zoomToPointer = (clientX: number, clientY: number) => {
+    const d = drag.current;
+    const el = scrollRef.current;
+    if (!d || d.mode !== 'zoom' || !el) return;
+    const rect = el.getBoundingClientRect();
+    const relX = clientX - rect.left, relY = clientY - rect.top;
+    const nx = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zx * Math.pow(2, (clientX - d.sx) / ZOOM_PX_PER_DOUBLE)));
+    const ny = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zy * Math.pow(2, (clientY - d.sy) / ZOOM_PX_PER_DOUBLE)));
+    anchor.current = {
+      relX, relY,
+      cx: el.scrollLeft + relX,
+      cy: el.scrollTop + relY,
+      strideBefore: swatchW * zoom.x + gap,
+      heightBefore: el.scrollHeight,
+    };
+    setZoom({ x: nx, y: ny });
+  };
+
+  // Re-anchor scroll once the zoomed sizes have laid out (only when a zoom step set an
+  // anchor; resizing/sliders change ewW too but leave `anchor` null → no-op).
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    if (!a) return;
+    anchor.current = null;
+    const el = scrollRef.current;
+    if (!el) return;
+    const ratioX = a.strideBefore > 0 ? (ewW + gap) / a.strideBefore : 1;
+    const newLeft = labelW + Math.max(0, a.cx - labelW) * ratioX - a.relX;
+    const heightAfter = el.scrollHeight;
+    const ratioY = a.heightBefore > 0 ? heightAfter / a.heightBefore : 1;
+    const newTop = a.cy * ratioY - a.relY;
+    el.scrollLeft = Math.max(0, Math.min(newLeft, contentWidth - el.clientWidth));
+    el.scrollTop = Math.max(0, Math.min(newTop, heightAfter - el.clientHeight));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ewW, ewH]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 1 && e.button !== 2) return; // 1 = middle (zoom), 2 = right (pan)
+    const el = scrollRef.current;
+    if (!el) return;
+    e.preventDefault();
+    drag.current = {
+      mode: e.button === 1 ? 'zoom' : 'pan',
+      sx: e.clientX, sy: e.clientY, zx: zoom.x, zy: zoom.y,
+      scrollLeft: el.scrollLeft, scrollTop: el.scrollTop,
+    };
+    dragging.current = true;
+    setHover(null);
+    el.setPointerCapture(e.pointerId);
+    el.style.cursor = e.button === 1 ? 'move' : 'grabbing';
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    e.preventDefault();
+    if (d.mode === 'pan') {
+      const el = scrollRef.current!;
+      el.scrollLeft = d.scrollLeft - (e.clientX - d.sx);
+      el.scrollTop = d.scrollTop - (e.clientY - d.sy);
+      return;
+    }
+    // zoom — coalesce to one update per frame
+    rafCoords.current = { x: e.clientX, y: e.clientY };
+    if (!rafId.current) {
+      rafId.current = requestAnimationFrame(() => {
+        rafId.current = 0;
+        const c = rafCoords.current;
+        if (c) zoomToPointer(c.x, c.y);
+      });
+    }
+  };
+
+  const endDrag = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const moved = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
+    drag.current = null;
+    dragging.current = false;
+    if (rafId.current) { cancelAnimationFrame(rafId.current); rafId.current = 0; }
+    rafCoords.current = null;
+    const el = scrollRef.current;
+    if (el) { el.releasePointerCapture?.(e.pointerId); el.style.cursor = ''; }
+    // A middle-CLICK (no drag) resets the zoom to 1:1.
+    if (d.mode === 'zoom' && moved < 5) setZoom({ x: 1, y: 1 });
+  };
+
+  // Suppress hover while dragging (pointer capture still lets the canvas mousemove fire).
+  const handleHover = (h: Hover | null) => { if (!dragging.current) setHover(h); };
 
   if (!sprite || width === 0) return <div ref={scrollRef} className="absolute inset-0" />;
 
   const f = hover?.entry.facets;
 
   return (
-    <div ref={scrollRef} className="absolute inset-0 overflow-auto custom-scroll">
-      {rows.map((g) => (
-        <GroupRow
-          key={g.key}
-          group={g}
-          sprite={sprite}
-          cols={cols}
-          labelW={labelW}
-          swatchW={swatchW}
-          swatchH={swatchH}
-          gap={gap}
-          selectedId={selectedId}
-          onHover={setHover}
-          onPick={onPick}
-          onEntryDragStart={onEntryDragStart}
-        />
-      ))}
+    <div
+      ref={scrollRef}
+      className="absolute inset-0 overflow-auto custom-scroll"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onContextMenu={(e) => e.preventDefault()}
+      onMouseDown={(e) => { if (e.button === 1 || e.button === 2) e.preventDefault(); }}
+    >
+      <div style={{ width: contentWidth }}>
+        {rows.map((g) => (
+          <GroupRow
+            key={g.key}
+            group={g}
+            sprite={sprite}
+            cols={cols}
+            labelW={labelW}
+            swatchW={ewW}
+            swatchH={ewH}
+            gap={gap}
+            selectedId={selectedId}
+            onHover={handleHover}
+            onPick={onPick}
+            onEntryDragStart={onEntryDragStart}
+          />
+        ))}
+      </div>
 
       <GradientHoverPreview
         hover={
