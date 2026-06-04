@@ -602,12 +602,18 @@ export class RenderPipeline {
      * @invariant `render()` is a no-op when `isHolding=true` OR `sampleCap`
      *   is reached. `clearTargets` / `resetAccumulation` / `resize` still
      *   function — the gate is only on the draw call.
+     * @invariant The `sampleCap` gate is the LIVE-VIEWPORT auto-stop only
+     *   (topbar "Auto-Stop (Samples)"). It must NOT apply during a bucket /
+     *   high-res render: there the BucketRunner is the sole authority on
+     *   per-bucket sample count (`samplesPerBucket` + convergence), so a low
+     *   viewport cap would otherwise stop each bucket early and starve the
+     *   render of its target samples.
      */
     public render(renderer: THREE.WebGLRenderer, uniforms?: { [key: string]: THREE.IUniform }, scene?: THREE.Scene, camera?: THREE.Camera) {
         if (!this.mrtTargetA || !this.mrtTargetB) return;
         if (this.isHolding) return;
 
-        if (this.sampleCap > 0 && this.accumulationCount >= this.sampleCap) {
+        if (!this._isBucketRendering && this.sampleCap > 0 && this.accumulationCount >= this.sampleCap) {
             return;
         }
 
