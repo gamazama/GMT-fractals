@@ -32,7 +32,14 @@ export const resample = (nodes: ColorNode[], spacing: number): Lab[] => {
   const at = (coords: Float64Array, target: number): Lab => {
     let i = 0;
     while (i < n - 1 && coords[i + 1] < target) i++;
-    const u = (target - coords[i]) / ((coords[i + 1] - coords[i]) || 1e-9);
+    // Clamp to a valid segment. A target just past the last coordinate (floating-point
+    // overshoot at t=1, or mass-coordinate rounding — exposed by Golden hour reweighting
+    // the node masses) leaves i at n-1, so nodes[i+1] reads nodes[n] (undefined) and the
+    // whole ramp poisons downstream with an undefined Lab → ".L of undefined". Hold the
+    // last node instead by pinning to the final segment with a clamped fraction.
+    if (i > n - 2) i = n - 2;
+    let u = (target - coords[i]) / ((coords[i + 1] - coords[i]) || 1e-9);
+    u = u < 0 ? 0 : u > 1 ? 1 : u;
     return {
       L: lerp(nodes[i].L, nodes[i + 1].L, u),
       a: lerp(nodes[i].a, nodes[i + 1].a, u),
