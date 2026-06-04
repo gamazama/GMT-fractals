@@ -146,6 +146,17 @@ export const GeneratorStage: React.FC = () => {
         <MixBlend onSwap={swap} dimmed={curvesOn} />
         <SourceRow which="B" ramp={stripB} preset={slotB} onPick={(i) => setSlot('B', i)} height={40} dimmed={curvesOn} />
 
+        {/* When curves drive the output the A/B sources are de-emphasised, so let the
+            result glide down to sit beside the curve editor. The spacer grows via an
+            animatable max-height (flex-grow can't transition smoothly as the sole
+            grower); the negative margin cancels the parent gap when collapsed so the
+            curves-off layout is unchanged. */}
+        <div
+          aria-hidden
+          className="transition-[max-height] duration-300 ease-out"
+          style={{ flexGrow: 1, flexBasis: 0, maxHeight: curvesOn ? 800 : 0, marginBottom: -6 }}
+        />
+
         {/* Result — same width as the graph plot, no bordered holder */}
         <div className="mt-1">
           <div className="flex items-center justify-between mb-1">

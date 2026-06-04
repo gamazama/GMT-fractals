@@ -40,7 +40,7 @@ export const PickerThemeChips: React.FC<FeatureComponentProps> = ({ featureId, s
           </button>
         )}
       </div>
-      <div className="flex flex-wrap gap-1 max-h-44 overflow-y-auto custom-scroll">
+      <div className="flex flex-wrap gap-1">
         {themes.map(({ theme, count }) => {
           const on = active.includes(theme);
           return (
