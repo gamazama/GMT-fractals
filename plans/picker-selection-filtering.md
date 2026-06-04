@@ -257,3 +257,45 @@ Also `onContextMenu` is already `preventDefault`'d so no browser menu appears.
 **Start by confirming the §4 decisions, then build the pure geometry + the kept-set filter
 (smallest end-to-end slice: Rect tool → keep-inside → wall re-filters), and grow Lasso/Paint
 + the dim preview from there.**
+
+---
+
+## 9. SHIPPED (implemented this session)
+
+All three tools (Rect / Lasso / Paint), the dim preview, and the carve filter are live.
+
+**§4 decisions (as confirmed by the user):**
+1. **Intersect** — each carve narrows; `clear` resets. (Implemented via the kept-set: isolate
+   sets `keptIds = inside`, cut sets `keptIds = displayed − inside`, so re-carving naturally
+   narrows.)
+2. **Paint** uses the same keep-click step, **plus Shift = add to the set, Ctrl = erase**.
+3. **Transient** — `keptIds` is NOT persisted (not in `paletteFiltersPersist` KEYS).
+4. Operates on **what you see**: keep-inside = **isolate**, keep-outside = **cut**. **Zoom/pan
+   cancels** an in-progress selection. A **`▣ N kept · clear`** button appears in the hero
+   toolbar whenever a carve is active.
+
+**Key design choice — the wall reports the *inside set* + `'isolate' | 'cut'`, not a final
+kept-set.** `PickerStage.onSelectionCommit` does the set math against the true displayed id
+list (`idsRef`), so **cut** drops the selected swatches from the WHOLE displayed wall, not
+just the on-screen ones. (Inside-set membership is still visible-only — you can only lasso
+what's mounted — but the cut complement is full-wall correct.)
+
+**Files:**
+- `palette/core/selectionGeometry.ts` *(new)* — `pointInBox`, `pointInPolygon`, `rectFromDrag`,
+  `swatchesInShape`, `SelShape`/`Box`/`Pt`/`SwatchCenter` types. Unit-tested.
+- `palette/components/SelectionOverlay.tsx` *(new)* — SVG outline + clip-mask dim scrim
+  (sibling of the scroller, viewport-pinned, `pointer-events:none`).
+- `palette/components/PickerWall.tsx` — `selectionTool` / `onSelectionCommit` / `onSelectionCancel`
+  props; left-button selection state machine (`sel` ref + `selOverlay` render mirror); a chunk
+  **registry** (visible `SwatchCanvas`es register for hit-testing); zoom/pan-cancels; right-click
+  cancel; picks + Favients-drag + hover suppressed while a tool is active.
+- `gradient-explorer/PickerStage.tsx` — `keptIds` applied in the `list` filter; hero tool row
+  (Rect/Lasso/Paint + kept/clear); owns `tool` state; Esc + outside-pointerdown cancel.
+- `palette/features/paletteFilters.ts` — added `keptIds: null` to `state`.
+- `debug/test-palette-selection.mts` *(new)* — wired into `npm run test:palette`.
+
+**Verified:** `npm run typecheck` clean; `npm run test:palette` (incl. the new geometry test)
+all-pass. Interaction/visual left for the user's own pass (the usual workflow).
+
+**Not done (deferred, noted in §4/§5):** off-screen swatches still can't be *added* to a
+selection (windowing unmounts them); no "send all kept → Favients" downstream action.

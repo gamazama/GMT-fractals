@@ -128,6 +128,13 @@ export const PaletteFiltersFeature: FeatureDefinition = {
     activeThemes: [] as string[],
     /** Bundles toggled off (empty = all loaded). */
     hiddenBundles: [] as string[],
+    /**
+     * Spatial-selection carve: the surviving entry ids, or null for no carve filter.
+     * Transient by design (NOT persisted — see paletteFiltersPersist) so a stale id-set
+     * never silently hides gradients after a catalog reload. Set via the Picker wall's
+     * Lasso/Rect/Paint tools; cleared from the hero "kept · clear" button.
+     */
+    keptIds: null as string[] | null,
   },
 
   customUI: [

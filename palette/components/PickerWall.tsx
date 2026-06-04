@@ -10,12 +10,29 @@
  *     scrolls in the DOM — no per-frame redraw.
  *   • hover draws the swatch ZOOMED in place (3×w · 2×h, crisp) + a stats tooltip.
  *
- * Pure / host-agnostic: groups + sprite in, onPick out.
+ * Spatial selection (Lasso/Rect/Paint) co-exists with the pointer gestures: when a tool
+ * is active the LEFT button draws a carve region, then a click inside (isolate) / outside
+ * (cut) commits; middle-drag zoom + right-drag pan are unchanged (and either cancels an
+ * in-progress selection — zoom/pan move the wall out from under viewport-pinned coords).
+ *
+ * Pure / host-agnostic: groups + sprite in, onPick + selection callbacks out.
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogEntry } from '../core/presetCatalog';
 import { GradientHoverPreview } from './GradientHoverPreview';
+import {
+  pointInBox,
+  pointInPolygon,
+  rectFromDrag,
+  swatchesInShape,
+  type Box,
+  type Pt,
+  type SelShape,
+  type SwatchCenter,
+} from '../core/selectionGeometry';
+import { SelectionOverlay, type SelectionOverlayState } from './SelectionOverlay';
+import { shouldSquare, squareCols } from '../core/wallLayout';
 
 export interface PickerGroup {
   key: string;
@@ -31,6 +48,9 @@ export interface PickerGroup {
   hi?: number;
 }
 
+/** Spatial-selection tool active on the wall. */
+export type SelectionTool = 'rect' | 'lasso' | 'paint';
+
 export interface PickerWallProps {
   groups: PickerGroup[];
   /** Shared 256×N sprite — row N is catalog entry `row`. */
@@ -42,8 +62,18 @@ export interface PickerWallProps {
   swatchW?: number;
   swatchH?: number;
   gap?: number;
-  /** Fires when the user completes a zoom or pan gesture (drives the discovery hint). */
-  onGesture?: (type: 'zoom' | 'pan') => void;
+  /** Fires when the user completes a zoom / pan / middle-click-reset gesture (drives the hint). */
+  onGesture?: (type: 'zoom' | 'pan' | 'reset') => void;
+  /** Reports the committed zoom level (for a header readout). */
+  onZoomChange?: (zoom: { x: number; y: number }) => void;
+  /** Increment to reset the zoom to 1:1 (e.g. a header "reset" button). */
+  resetZoomSignal?: number;
+  /** Active spatial-selection tool (null = normal pick/drag interaction). */
+  selectionTool?: SelectionTool | null;
+  /** Carve committed: the INSIDE id-set + whether to isolate (keep inside) or cut (drop inside). */
+  onSelectionCommit?: (insideIds: string[], op: 'isolate' | 'cut') => void;
+  /** User cancelled (right-click / Esc-equivalent) — the host should deselect the tool. */
+  onSelectionCancel?: () => void;
 }
 
 const LABEL_W = 132;
@@ -51,6 +81,25 @@ const LABEL_W = 132;
 // stay mounted, so a zoom step redraws a small area instead of one giant canvas. (Also
 // keeps the backing ×dpr well under the browser's max canvas dimension.)
 const MAX_CANVAS_CSS_H = 2200;
+
+// Selection gesture tuning.
+const MOVE_THRESH = 5; // px of travel before a left-press counts as a drag (vs a click)
+const LASSO_MIN_DIST = 4; // px between recorded lasso vertices (throttle)
+const PAINT_STEP = 6; // px stride when interpolating the brush path between moves
+
+type SelPhase = 'idle' | 'drawing' | 'chosen';
+
+/** A mounted swatch chunk registered for selection hit-testing (visible chunks only). */
+interface ChunkDesc {
+  el: HTMLCanvasElement;
+  entries: CatalogEntry[];
+  cols: number;
+  nrows: number;
+  cellW: number;
+  cellH: number;
+  swatchW: number;
+  swatchH: number;
+}
 
 /**
  * Merge adjacent bucketed sub-rows within the SAME category while their combined swatch
@@ -94,10 +143,12 @@ const SwatchCanvas: React.FC<{
   swatchH: number;
   gap: number;
   selectedId?: string;
+  chunkKey: string;
   onHover: (h: Hover | null) => void;
   onPick: (e: CatalogEntry) => void;
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
-}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart }) => {
+  onRegister: (key: string, desc: ChunkDesc | null) => void;
+}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, chunkKey, onHover, onPick, onEntryDragStart, onRegister }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
@@ -149,6 +200,17 @@ const SwatchCanvas: React.FC<{
       }
     }
   }, [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId]);
+
+  // Register this chunk for selection hit-testing while it's mounted; deregister on unmount
+  // / when it scrolls away. The registry therefore only ever holds on-screen chunks → the
+  // selection sees exactly what the user sees (off-screen swatches are unmounted).
+  useEffect(() => {
+    if (!visible) return;
+    const el = canvasRef.current;
+    if (!el) return;
+    onRegister(chunkKey, { el, entries, cols, nrows, cellW, cellH, swatchW, swatchH });
+    return () => onRegister(chunkKey, null);
+  }, [visible, chunkKey, entries, cols, nrows, cellW, cellH, swatchW, swatchH, onRegister]);
 
   // Use getBoundingClientRect + clientX/Y (NOT offsetX/Y): under a CSS-transformed
   // ancestor (floating DraggableWindow uses translate), offsetX/Y is reported against
@@ -230,7 +292,7 @@ const SwatchCanvas: React.FC<{
 
 // memo: with stable callbacks + a memoised `rows` array, hovering a swatch (which
 // re-renders the wall to move the preview) skips re-rendering every group.
-const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart }: {
+const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart, onRegister }: {
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
@@ -242,6 +304,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
   onHover: (h: Hover | null) => void;
   onPick: (e: CatalogEntry) => void;
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
+  onRegister: (key: string, desc: ChunkDesc | null) => void;
 }) {
   const cellH = swatchH + gap;
   const maxRows = Math.max(1, Math.floor(MAX_CANVAS_CSS_H / cellH));
@@ -261,7 +324,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
       )}
       <div className="flex items-stretch">
         {/* Single centered line: "0.8–0.9 (23)" (range + count) — one line so it fits the
-            swatch-row height (no leftover vertical gap on sparse buckets). This gutter is
+            swatch-row height (no leftover vertical gap). This gutter is
             the lowest-priority column: on a narrow wall `labelW` shrinks toward 0 so the
             swatches keep their size; its label truncates (never wraps), and below a legible
             width the text is dropped entirely. */}
@@ -280,6 +343,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
           {chunks.map((chunk, ci) => (
           <SwatchCanvas
             key={ci}
+            chunkKey={`${group.key}#${ci}`}
             entries={chunk}
             sprite={sprite}
             cols={cols}
@@ -290,6 +354,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
             onHover={onHover}
             onPick={onPick}
             onEntryDragStart={onEntryDragStart}
+            onRegister={onRegister}
           />
           ))}
         </div>
@@ -313,6 +378,11 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   swatchH = 18,
   gap = 0,
   onGesture,
+  onZoomChange,
+  resetZoomSignal,
+  selectionTool = null,
+  onSelectionCommit,
+  onSelectionCancel,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -321,6 +391,13 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // the "Swatch size" control sets). x widens swatches + the content (horizontal scroll,
   // no reflow); y makes them taller (vertical scroll).
   const [zoom, setZoom] = useState({ x: 1, y: 1 });
+
+  // Report the committed zoom up (header readout); reset to 1:1 on the host's reset signal.
+  useEffect(() => { onZoomChange?.(zoom); }, [zoom, onZoomChange]);
+  useEffect(() => {
+    // Reset is only triggered when no drag is in flight, so there's no live transform to clear.
+    if (resetZoomSignal) setZoom({ x: 1, y: 1 });
+  }, [resetZoomSignal]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -341,10 +418,18 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // Effective (zoomed) swatch render size + the resulting content width.
   const ewW = Math.max(1, Math.round(swatchW * zoom.x));
   const ewH = Math.max(1, Math.round(swatchH * zoom.y));
-  const contentWidth = labelW + cols * (ewW + gap);
-  // Merge sparse adjacent buckets that still fit one row (memoised — hover re-renders
-  // the wall, and this walks every group).
-  const rows = useMemo(() => mergeRows(groups, cols), [groups, cols]);
+  // Global squarish reflow: when the WHOLE wall is small enough to otherwise be just a few
+  // full-width strips, drop the (global) column count so the overall layout is squarish.
+  // It's a single count for the wall — many small blocks each a couple of rows still tile
+  // uniformly (and a content-heavy wall is a no-op: it stays full width).
+  const totalEntries = groups.reduce((s, g) => s + g.entries.length, 0);
+  const effCols = shouldSquare(totalEntries, cols, ewW + gap, ewH + gap)
+    ? squareCols(totalEntries, ewW + gap, ewH + gap, cols)
+    : cols;
+  const contentWidth = labelW + effCols * (ewW + gap);
+  // Merge sparse adjacent buckets that still fit one row (memoised — hover re-renders the
+  // wall, and this walks every group).
+  const rows = useMemo(() => mergeRows(groups, effCols), [groups, effCols]);
 
   // --- middle-drag zoom (live GPU transform, commit on release) · right-drag pan -----
   // Per-frame re-render + canvas redraw + scroll-set was laggy AND shaky. Instead, during
@@ -363,6 +448,263 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   const commit = useRef<null | { relX: number; relY: number; ax: number; czx: number; czy: number; headerAbove: number; swatchAbove: number }>(null);
   const rafCoords = useRef<{ x: number; y: number } | null>(null);
   const rafId = useRef(0);
+
+  // --- spatial selection (Lasso / Rect / Paint) ------------------------------------
+  const [selOverlay, setSelOverlay] = useState<SelectionOverlayState | null>(null);
+  // Paint brush radius (px) + the live cursor position (local coords) that draws the ring.
+  const [brushRadius, setBrushRadius] = useState(22);
+  const brushRadiusRef = useRef(brushRadius);
+  brushRadiusRef.current = brushRadius;
+  const [brushCursor, setBrushCursor] = useState<Pt | null>(null);
+  // Mirror the active tool into a ref so the canvas-level pick/hover handlers (which keep
+  // stable identities for the memoised GroupRows) can read it without re-binding.
+  const selToolRef = useRef(selectionTool);
+  selToolRef.current = selectionTool;
+  // Registry of on-screen swatch chunks for hit-testing the carve region.
+  const registry = useRef(new Map<string, ChunkDesc>());
+  const registerChunk = useCallback((key: string, desc: ChunkDesc | null) => {
+    if (desc) registry.current.set(key, desc);
+    else registry.current.delete(key);
+  }, []);
+  // Authoritative selection state lives in a ref (mutated synchronously in pointer
+  // handlers); `selOverlay` is the render-only mirror that drives SelectionOverlay.
+  const sel = useRef({
+    active: false,
+    moved: false,
+    phase: 'idle' as SelPhase,
+    downX: 0,
+    downY: 0,
+    lastX: 0,
+    lastY: 0,
+    pts: [] as Pt[],
+    paint: new Map<string, Box>(),
+    eraser: false,
+    /** Paint: a no-modifier press whose role (keep-click vs fresh stroke) isn't decided
+     *  until we know whether it became a drag. */
+    paintPending: false,
+    shape: null as SelShape | null,
+    insideIds: new Set<string>(),
+  });
+
+  const toLocal = (cx: number, cy: number): Pt => {
+    const r = scrollRef.current!.getBoundingClientRect();
+    return { x: cx - r.left, y: cy - r.top };
+  };
+
+  const clearSelectionState = useCallback(() => {
+    const s = sel.current;
+    s.active = false;
+    s.moved = false;
+    s.phase = 'idle';
+    s.pts = [];
+    s.paint = new Map();
+    s.eraser = false;
+    s.paintPending = false;
+    s.shape = null;
+    s.insideIds = new Set();
+    setSelOverlay(null);
+  }, []);
+
+  // Changing tool (or turning it off via the host's Esc / outside-click cancel) discards
+  // any in-progress carve and clears the hover preview.
+  useEffect(() => {
+    clearSelectionState();
+    setHover(null);
+    setBrushCursor(null);
+  }, [selectionTool, clearSelectionState]);
+
+  // [ / ] resize the paint brush (Photoshop convention), clamped to a sane range.
+  useEffect(() => {
+    if (selectionTool !== 'paint') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === '[') setBrushRadius((r) => Math.max(6, r - 4));
+      else if (e.key === ']') setBrushRadius((r) => Math.min(80, r + 4));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectionTool]);
+
+  // Every on-screen swatch centre in local coords (for rect/lasso membership).
+  const collectCenters = (): SwatchCenter[] => {
+    const el = scrollRef.current;
+    if (!el) return [];
+    const host = el.getBoundingClientRect();
+    const out: SwatchCenter[] = [];
+    for (const d of registry.current.values()) {
+      const r = d.el.getBoundingClientRect();
+      const baseX = r.left - host.left;
+      const baseY = r.top - host.top;
+      for (let k = 0; k < d.entries.length; k++) {
+        const col = Math.floor(k / d.nrows);
+        const row = k % d.nrows;
+        out.push({ id: d.entries[k].id, cx: baseX + col * d.cellW + d.swatchW / 2, cy: baseY + row * d.cellH + d.swatchH / 2 });
+      }
+    }
+    return out;
+  };
+
+  // The swatch under a screen point (for the paint brush + paint keep-click) → id + local box.
+  const entryHitAtPoint = (cx: number, cy: number): { id: string; box: Box } | null => {
+    const el = scrollRef.current;
+    if (!el) return null;
+    const host = el.getBoundingClientRect();
+    for (const d of registry.current.values()) {
+      const r = d.el.getBoundingClientRect();
+      if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) continue;
+      const col = Math.floor((cx - r.left) / d.cellW);
+      const row = Math.floor((cy - r.top) / d.cellH);
+      if (col < 0 || row < 0 || row >= d.nrows) continue;
+      const k = col * d.nrows + row;
+      if (k < 0 || k >= d.entries.length) continue;
+      return { id: d.entries[k].id, box: { x: r.left - host.left + col * d.cellW, y: r.top - host.top + row * d.cellH, w: d.swatchW, h: d.swatchH } };
+    }
+    return null;
+  };
+
+  // Stamp the brush at one screen point: every swatch whose centre is within `r` px is
+  // added (or, in eraser mode, removed). Only the cells in the circle's bbox per chunk are
+  // tested, so it stays cheap regardless of how many swatches are mounted.
+  const addBrushAt = (cx: number, cy: number, r: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const host = el.getBoundingClientRect();
+    const s = sel.current;
+    for (const d of registry.current.values()) {
+      const rect = d.el.getBoundingClientRect();
+      if (cx + r < rect.left || cx - r > rect.right || cy + r < rect.top || cy - r > rect.bottom) continue;
+      const lx = cx - rect.left, ly = cy - rect.top;
+      const colMin = Math.max(0, Math.floor((lx - r) / d.cellW));
+      const colMax = Math.min(d.cols - 1, Math.floor((lx + r) / d.cellW));
+      const rowMin = Math.max(0, Math.floor((ly - r) / d.cellH));
+      const rowMax = Math.min(d.nrows - 1, Math.floor((ly + r) / d.cellH));
+      for (let col = colMin; col <= colMax; col++) {
+        for (let row = rowMin; row <= rowMax; row++) {
+          const k = col * d.nrows + row;
+          if (k < 0 || k >= d.entries.length) continue;
+          const ccx = col * d.cellW + d.swatchW / 2;
+          const ccy = row * d.cellH + d.swatchH / 2;
+          if (Math.hypot(lx - ccx, ly - ccy) > r) continue;
+          const id = d.entries[k].id;
+          if (s.eraser) s.paint.delete(id);
+          else s.paint.set(id, { x: rect.left - host.left + col * d.cellW, y: rect.top - host.top + row * d.cellH, w: d.swatchW, h: d.swatchH });
+        }
+      }
+    }
+  };
+  const addPaintPath = (fromX: number, fromY: number, toX: number, toY: number) => {
+    const r = brushRadiusRef.current;
+    const dist = Math.hypot(toX - fromX, toY - fromY);
+    const steps = Math.max(1, Math.ceil(dist / Math.max(PAINT_STEP, r * 0.5)));
+    for (let i = 1; i <= steps; i++) addBrushAt(fromX + ((toX - fromX) * i) / steps, fromY + ((toY - fromY) * i) / steps, r);
+  };
+
+  const overlayDrawing = (shape: SelShape) => setSelOverlay({ shape, phase: 'drawing', dimInside: false });
+
+  // True if a screen point falls inside the current chosen shape (paint = over a brushed swatch).
+  const isPointInside = (cx: number, cy: number): boolean => {
+    const s = sel.current;
+    if (!s.shape) return false;
+    if (s.shape.kind === 'paint') {
+      const h = entryHitAtPoint(cx, cy);
+      return !!h && s.insideIds.has(h.id);
+    }
+    const p = toLocal(cx, cy);
+    return s.shape.kind === 'rect' ? pointInBox(p, s.shape.box) : pointInPolygon(p, s.shape.pts);
+  };
+
+  const finalizeChosen = (shape: SelShape, presetInside?: Set<string>) => {
+    const s = sel.current;
+    s.shape = shape;
+    s.insideIds = presetInside ?? swatchesInShape(shape, collectCenters());
+    s.phase = 'chosen';
+    setSelOverlay({ shape, phase: 'chosen', dimInside: !isPointInside(s.lastX, s.lastY) });
+  };
+
+  const keepClickCommit = (cx: number, cy: number) => {
+    const s = sel.current;
+    const inside = isPointInside(cx, cy);
+    const ids = [...s.insideIds];
+    clearSelectionState();
+    onSelectionCommit?.(ids, inside ? 'isolate' : 'cut');
+  };
+
+  const updateDim = (cx: number, cy: number) => {
+    const want = !isPointInside(cx, cy);
+    setSelOverlay((prev) => (prev && prev.dimInside !== want ? { ...prev, dimInside: want } : prev));
+  };
+
+  const onSelMove = (e: React.PointerEvent) => {
+    const s = sel.current;
+    e.preventDefault();
+    if (Math.hypot(e.clientX - s.downX, e.clientY - s.downY) > MOVE_THRESH) s.moved = true;
+    if (selectionTool === 'rect') {
+      if (s.moved) {
+        s.phase = 'drawing';
+        const a = toLocal(s.downX, s.downY);
+        const b = toLocal(e.clientX, e.clientY);
+        overlayDrawing({ kind: 'rect', box: rectFromDrag(a.x, a.y, b.x, b.y) });
+      }
+    } else if (selectionTool === 'lasso') {
+      if (s.moved) {
+        s.phase = 'drawing';
+        if (!s.pts.length) s.pts.push(toLocal(s.downX, s.downY));
+        const lp = toLocal(e.clientX, e.clientY);
+        const last = s.pts[s.pts.length - 1];
+        if (Math.hypot(lp.x - last.x, lp.y - last.y) >= LASSO_MIN_DIST) s.pts.push(lp);
+        overlayDrawing({ kind: 'lasso', pts: [...s.pts] });
+      }
+    } else if (selectionTool === 'paint') {
+      if (s.moved) {
+        // A deferred no-modifier press that turned into a drag starts a FRESH stroke
+        // (replacing any prior chosen set), matching how rect/lasso redraw replaces.
+        if (s.paintPending) { s.paint = new Map(); s.paintPending = false; }
+        addPaintPath(s.lastX, s.lastY, e.clientX, e.clientY);
+        s.phase = 'drawing';
+        overlayDrawing({ kind: 'paint', rects: [...s.paint.values()] });
+      }
+    }
+    s.lastX = e.clientX;
+    s.lastY = e.clientY;
+  };
+
+  const onSelUp = (e: React.PointerEvent) => {
+    const s = sel.current;
+    s.active = false;
+    scrollRef.current?.releasePointerCapture?.(e.pointerId);
+    s.lastX = e.clientX;
+    s.lastY = e.clientY;
+    if (s.moved) {
+      // Finished drawing a fresh region.
+      if (selectionTool === 'rect') {
+        const a = toLocal(s.downX, s.downY);
+        const b = toLocal(e.clientX, e.clientY);
+        finalizeChosen({ kind: 'rect', box: rectFromDrag(a.x, a.y, b.x, b.y) });
+      } else if (selectionTool === 'lasso') {
+        if (s.pts.length >= 3) finalizeChosen({ kind: 'lasso', pts: [...s.pts] });
+        else clearSelectionState();
+      } else if (selectionTool === 'paint') {
+        if (s.paint.size) finalizeChosen({ kind: 'paint', rects: [...s.paint.values()] }, new Set(s.paint.keys()));
+        else clearSelectionState();
+      }
+    } else if (s.phase === 'chosen' && s.shape) {
+      // A click (no drag) while a region is chosen = the keep-click. For deferred paint
+      // taps this is exactly the keep-click case (paintPending, no move). isolate/cut by side.
+      keepClickCommit(e.clientX, e.clientY);
+    } else if (selectionTool === 'paint') {
+      if (s.phase === 'drawing') {
+        // A modifier tap (Shift/Ctrl) edited the set without moving — keep what's there.
+        if (s.paint.size) finalizeChosen({ kind: 'paint', rects: [...s.paint.values()] }, new Set(s.paint.keys()));
+        else clearSelectionState();
+      } else {
+        // A no-modifier paint tap with nothing chosen → stamp the brush once at the tap.
+        s.paint = new Map();
+        addBrushAt(e.clientX, e.clientY, brushRadiusRef.current);
+        if (s.paint.size) finalizeChosen({ kind: 'paint', rects: [...s.paint.values()] }, new Set(s.paint.keys()));
+        else clearSelectionState();
+      }
+    }
+    // else: a stray click with nothing selected — ignore.
+  };
 
   const applyLiveZoom = (clientX: number, clientY: number) => {
     const d = drag.current;
@@ -407,10 +749,42 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   }, [ewW, ewH]);
 
   const onPointerDown = (e: React.PointerEvent) => {
+    // Selection (left button) takes over while a tool is active.
+    if (selectionTool && e.button === 0) {
+      const el = scrollRef.current;
+      if (!el) return;
+      e.preventDefault();
+      setHover(null);
+      el.setPointerCapture(e.pointerId);
+      const s = sel.current;
+      s.active = true;
+      s.moved = false;
+      s.downX = e.clientX; s.downY = e.clientY;
+      s.lastX = e.clientX; s.lastY = e.clientY;
+      if (selectionTool === 'lasso') s.pts = [];
+      if (selectionTool === 'paint') {
+        s.eraser = e.ctrlKey;
+        s.paintPending = false;
+        if (e.shiftKey || e.ctrlKey) {
+          // Shift = keep adding to the set, Ctrl = erase from it — edit immediately.
+          addBrushAt(e.clientX, e.clientY, brushRadiusRef.current);
+          s.phase = 'drawing';
+          overlayDrawing({ kind: 'paint', rects: [...s.paint.values()] });
+        } else {
+          // No modifier: defer — a drag starts a fresh stroke, a tap is a keep-click
+          // (when a region is already chosen) or a single-swatch selection (when idle).
+          s.paintPending = true;
+        }
+      }
+      return;
+    }
     if (e.button !== 1 && e.button !== 2) return; // 1 = middle (zoom), 2 = right (pan)
     const el = scrollRef.current;
     if (!el) return;
     e.preventDefault();
+    // Zoom moves the wall out from under the viewport-pinned carve coords → cancel it
+    // (keep the tool active so the user can re-draw at the new zoom).
+    if (e.button === 1 && (sel.current.active || sel.current.phase !== 'idle')) clearSelectionState();
     commit.current = null;
     dragging.current = true;
     setHover(null);
@@ -436,6 +810,10 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (selectionTool === 'paint') setBrushCursor(toLocal(e.clientX, e.clientY));
+    if (sel.current.active) { onSelMove(e); return; }
+    // Live dim flip while a region is chosen and the cursor hovers inside vs outside.
+    if (selectionTool && sel.current.phase === 'chosen') { updateDim(e.clientX, e.clientY); return; }
     const d = drag.current;
     if (!d) return;
     e.preventDefault();
@@ -467,7 +845,14 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     if (el) { el.releasePointerCapture?.(e.pointerId); el.style.cursor = ''; }
     const moved = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
     if (d.mode === 'pan') {
-      if (moved > 5) onGesture?.('pan');
+      if (moved > 5) {
+        onGesture?.('pan');
+        if (sel.current.active || sel.current.phase !== 'idle') clearSelectionState(); // pan desyncs the overlay
+      } else if (selectionTool) {
+        // Right-click (no drag) = cancel the selection AND deselect the tool.
+        clearSelectionState();
+        onSelectionCancel?.();
+      }
       return;
     }
     const nzx = moved < 5 ? 1 : d.lzx; // middle-click (no drag) resets to 1:1
@@ -480,67 +865,106 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     // Commit: re-render at the new size; the layout effect drops the transform + re-pins.
     commit.current = { relX: d.relX, relY: d.relY, ax: d.ax, czx: d.czx, czy: d.czy, headerAbove: d.headerAbove, swatchAbove: d.swatchAbove };
     setZoom({ x: nzx, y: nzy });
-    if (moved >= 5) onGesture?.('zoom');
+    // moved → a zoom drag; otherwise we only reach here on a middle-click that actually
+    // reset a non-1:1 zoom (the no-change case early-returned above).
+    onGesture?.(moved >= 5 ? 'zoom' : 'reset');
   };
 
-  // Suppress hover while dragging (pointer capture still lets the canvas mousemove fire).
-  // Stable identity so memoised GroupRows don't re-render on every hover.
-  const handleHover = useCallback((h: Hover | null) => { if (!dragging.current) setHover(h); }, []);
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (sel.current.active) { onSelUp(e); return; }
+    endDrag(e);
+  };
+  const onPointerCancel = (e: React.PointerEvent) => {
+    if (sel.current.active) { sel.current.active = false; clearSelectionState(); return; }
+    endDrag(e);
+  };
+
+  // Suppress hover while dragging OR while a selection tool is active (the carve overlay,
+  // not the zoom preview, is the relevant feedback then). Stable identity so memoised
+  // GroupRows don't re-render on every hover.
+  const handleHover = useCallback((h: Hover | null) => {
+    if (!dragging.current && !selToolRef.current) setHover(h);
+  }, []);
+  // Picks are suppressed while a tool is active (left-click is the carve keep-click).
+  const handlePick = useCallback((entry: CatalogEntry) => {
+    if (!selToolRef.current) onPick(entry);
+  }, [onPick]);
 
   if (!sprite || width === 0) return <div ref={scrollRef} className="absolute inset-0" />;
 
   const f = hover?.entry.facets;
 
   return (
-    <div
-      ref={scrollRef}
-      className="absolute inset-0 overflow-auto custom-scroll"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseDown={(e) => { if (e.button === 1 || e.button === 2) e.preventDefault(); }}
-    >
-      <div ref={contentRef} style={{ width: contentWidth, transformOrigin: '0 0' }}>
-        {rows.map((g) => (
-          <GroupRow
-            key={g.key}
-            group={g}
-            sprite={sprite}
-            cols={cols}
-            labelW={labelW}
-            swatchW={ewW}
-            swatchH={ewH}
-            gap={gap}
-            selectedId={selectedId}
-            onHover={handleHover}
-            onPick={onPick}
-            onEntryDragStart={onEntryDragStart}
-          />
-        ))}
+    <div className="absolute inset-0">
+      <div
+        ref={scrollRef}
+        className={`absolute inset-0 overflow-auto custom-scroll ${selectionTool === 'paint' ? 'cursor-none' : selectionTool ? 'cursor-crosshair' : ''}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onPointerLeave={() => setBrushCursor(null)}
+        onContextMenu={(e) => e.preventDefault()}
+        onMouseDown={(e) => { if (e.button === 1 || e.button === 2) e.preventDefault(); }}
+      >
+        <div ref={contentRef} style={{ width: contentWidth, transformOrigin: '0 0' }}>
+          {rows.map((g) => (
+            <GroupRow
+              key={g.key}
+              group={g}
+              sprite={sprite}
+              cols={effCols}
+              labelW={labelW}
+              swatchW={ewW}
+              swatchH={ewH}
+              gap={gap}
+              selectedId={selectedId}
+              onHover={handleHover}
+              onPick={handlePick}
+              onEntryDragStart={selectionTool ? undefined : onEntryDragStart}
+              onRegister={registerChunk}
+            />
+          ))}
+        </div>
+
+        <GradientHoverPreview
+          hover={
+            hover
+              ? {
+                  ex: hover.ex,
+                  ey: hover.ey,
+                  ew: hover.ew,
+                  eh: hover.eh,
+                  paint: (ctx, w, h) => {
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(sprite, 0, hover.entry.row, 256, 1, 0, 0, w, h);
+                  },
+                  name: hover.entry.name,
+                  sub: f
+                    ? `· ${hover.entry.theme ?? '—'} · ${hover.entry.bundle ?? '—'} · L ${f.lightness.toFixed(2)} · vivid ${f.chroma.toFixed(2)} · ${Math.round(f.raw.hueSpreadDeg)}°`
+                    : undefined,
+                }
+              : null
+          }
+        />
       </div>
 
-      <GradientHoverPreview
-        hover={
-          hover
-            ? {
-                ex: hover.ex,
-                ey: hover.ey,
-                ew: hover.ew,
-                eh: hover.eh,
-                paint: (ctx, w, h) => {
-                  ctx.imageSmoothingEnabled = false;
-                  ctx.drawImage(sprite, 0, hover.entry.row, 256, 1, 0, 0, w, h);
-                },
-                name: hover.entry.name,
-                sub: f
-                  ? `· ${hover.entry.theme ?? '—'} · ${hover.entry.bundle ?? '—'} · L ${f.lightness.toFixed(2)} · vivid ${f.chroma.toFixed(2)} · ${Math.round(f.raw.hueSpreadDeg)}°`
-                  : undefined,
-              }
-            : null
-        }
-      />
+      {selOverlay && <SelectionOverlay overlay={selOverlay} />}
+
+      {selectionTool === 'paint' && brushCursor && (
+        <div
+          className="absolute pointer-events-none rounded-full border border-cyan-300/90"
+          style={{
+            left: brushCursor.x - brushRadius,
+            top: brushCursor.y - brushRadius,
+            width: brushRadius * 2,
+            height: brushRadius * 2,
+            zIndex: 6,
+            background: 'rgba(34,211,238,0.10)',
+            boxShadow: '0 0 0 1px rgba(0,0,0,0.5)',
+          }}
+        />
+      )}
     </div>
   );
 };

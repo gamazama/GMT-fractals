@@ -15,7 +15,7 @@ import { passesFilters, type FilterWindows } from '../palette/core/facets';
 import { applyEntryToColoring, entryToGradientConfig } from '../palette/core/gradientSeam';
 import { GROUP_BY, ROWS_BY, SORT_BY } from '../palette/features/paletteFilters';
 import type { CatalogEntry } from '../palette/core/presetCatalog';
-import { PickerWall, type PickerGroup } from '../palette/components/PickerWall';
+import { PickerWall, type PickerGroup, type SelectionTool } from '../palette/components/PickerWall';
 import { FavStar } from '../palette/components/FavStar';
 import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
 import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
@@ -49,6 +49,9 @@ const ROW_BUCKETS = 10;
 
 export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavientsLink }) => {
   const pf = useEngineStore((s) => (s as Record<string, any>).paletteFilters) as Record<string, any> | undefined;
+  const setPaletteFilters = useEngineStore(
+    (s) => (s as Record<string, any>).setPaletteFilters as ((u: Record<string, unknown>) => void) | undefined,
+  );
 
   const catalog = usePickerStore((s) => s.catalog);
   const loaded = usePickerStore((s) => s.loaded);
@@ -58,14 +61,32 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
 
   const [selected, setSelected] = useState<CatalogEntry | null>(null);
 
-  // One-time gesture-discovery hint in the hero: show "middle-drag to zoom" until the
-  // user zooms, then "right-drag to pan" until they pan, then hide forever (persisted).
-  const [hintPhase, setHintPhase] = useState<'zoom' | 'pan' | 'done'>(() => {
-    try { const v = localStorage.getItem('gx.picker.gestureHint'); return v === 'pan' || v === 'done' ? v : 'zoom'; } catch { return 'zoom'; }
+  // Spatial-selection carve: the active wall tool + the surviving id-set (transient).
+  const [tool, setTool] = useState<SelectionTool | null>(null);
+  const keptIds: string[] | null = pf?.keptIds ?? null;
+  // Live mirror of the currently-displayed ids, so a "cut" carve can drop the selected
+  // ones from the WHOLE displayed wall (not just the on-screen swatches the wall sees).
+  const idsRef = useRef<string[]>([]);
+  const wallHostRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  // Wall view zoom (reported up from PickerWall for the header readout) + a reset signal.
+  const [wallZoom, setWallZoom] = useState({ x: 1, y: 1 });
+  const [resetZoomSignal, setResetZoomSignal] = useState(0);
+  const zoomed = wallZoom.x !== 1 || wallZoom.y !== 1;
+
+  // One-time gesture-discovery hint in the hero: middle-drag to zoom → right-drag to pan →
+  // middle-click to reset, then hide forever (persisted).
+  const [hintPhase, setHintPhase] = useState<'zoom' | 'pan' | 'reset' | 'done'>(() => {
+    try { const v = localStorage.getItem('gx.picker.gestureHint'); return v === 'pan' || v === 'reset' || v === 'done' ? v : 'zoom'; } catch { return 'zoom'; }
   });
-  const advanceHint = useCallback((type: 'zoom' | 'pan') => {
+  const advanceHint = useCallback((type: 'zoom' | 'pan' | 'reset') => {
     setHintPhase((p) => {
-      const next = p === 'zoom' && type === 'zoom' ? 'pan' : p === 'pan' && type === 'pan' ? 'done' : p;
+      const next =
+        p === 'zoom' && type === 'zoom' ? 'pan'
+        : p === 'pan' && type === 'pan' ? 'reset'
+        : p === 'reset' && type === 'reset' ? 'done'
+        : p;
       if (next !== p) { try { localStorage.setItem('gx.picker.gestureHint', next); } catch { /* ignore */ } }
       return next;
     });
@@ -107,14 +128,16 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   const sortAxis = SORT_BY[pf?.sortBy ?? 0] ?? 'lightness';
   const reverse = !!pf?.reverse;
 
-  const key = JSON.stringify([windows, activeThemes, hiddenBundles, groupAxis, rowsAxis, sortAxis, reverse]);
-  const { groups, count } = useMemo(() => {
+  const key = JSON.stringify([windows, activeThemes, hiddenBundles, groupAxis, rowsAxis, sortAxis, reverse, keptIds]);
+  const { groups, count, ids } = useMemo(() => {
     const themeSet = activeThemes.length ? new Set(activeThemes) : null;
     const hiddenSet = new Set(hiddenBundles);
+    const kept = keptIds ? new Set(keptIds) : null;
     const list = catalog.filter(
       (e) =>
         (!hiddenSet.size || !e.bundle || !hiddenSet.has(e.bundle)) &&
         (!themeSet || (e.theme != null && themeSet.has(e.theme))) &&
+        (!kept || kept.has(e.id)) &&
         passesFilters(e.facets, windows),
     );
 
@@ -164,9 +187,39 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
     } else {
       result = buildBands(list, '', 'all');
     }
-    return { groups: result, count: list.length };
+    return { groups: result, count: list.length, ids: list.map((e) => e.id) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalog, key]);
+  idsRef.current = ids;
+
+  // --- carve commit / clear / cancel ------------------------------------------------
+  const onSelectionCommit = useCallback(
+    (insideIds: string[], op: 'isolate' | 'cut') => {
+      if (!setPaletteFilters) return;
+      if (op === 'isolate') {
+        setPaletteFilters({ keptIds: insideIds });
+      } else {
+        const drop = new Set(insideIds);
+        setPaletteFilters({ keptIds: idsRef.current.filter((id) => !drop.has(id)) });
+      }
+    },
+    [setPaletteFilters],
+  );
+  const clearCarve = useCallback(() => setPaletteFilters?.({ keptIds: null }), [setPaletteFilters]);
+
+  // Esc, or a pointerdown on any non-wall / non-toolbar UI, cancels the active tool.
+  useEffect(() => {
+    if (!tool) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setTool(null); };
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (wallHostRef.current?.contains(t) || toolbarRef.current?.contains(t)) return;
+      setTool(null);
+    };
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown, true);
+    return () => { window.removeEventListener('keydown', onKey); document.removeEventListener('pointerdown', onDown, true); };
+  }, [tool]);
 
   const swatchW = Math.round(pf?.swatchSize?.x ?? 32);
   const swatchH = Math.round(pf?.swatchSize?.y ?? 18);
@@ -215,7 +268,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
           <span className="flex items-center gap-2 shrink-0">
             {hintPhase !== 'done' && (
               <span className="hidden md:inline-flex items-center text-[10px] text-cyan-300/80 bg-cyan-500/10 px-1.5 py-0.5 rounded whitespace-nowrap">
-                {hintPhase === 'zoom' ? 'Middle-drag to zoom' : 'Right-drag to pan'}
+                {hintPhase === 'zoom' ? 'Middle-drag to zoom' : hintPhase === 'pan' ? 'Right-drag to pan' : 'Middle-click to reset zoom'}
               </span>
             )}
             {!hideFavientsLink && (
@@ -226,16 +279,89 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
             <span className="text-zinc-500 tabular-nums">{!loaded ? 'loading…' : `${count} of ${catalog.length}`}</span>
           </span>
         </div>
+
+        {/* Spatial selection tools — carve the wall by drawing a region, then click inside
+            (isolate) or outside (cut). Desktop affordance (pointer-driven). */}
+        <div ref={toolbarRef} className="mt-1.5 hidden md:flex items-center gap-1.5 text-[11px]">
+          <span className="text-zinc-600">Select</span>
+          {(['rect', 'lasso', 'paint'] as const).map((t) => {
+            const on = tool === t;
+            const label = t === 'rect' ? 'Rect' : t === 'lasso' ? 'Lasso' : 'Paint';
+            return (
+              <button
+                key={t}
+                onClick={() => setTool((p) => (p === t ? null : t))}
+                className={`px-1.5 py-0.5 rounded border transition-colors ${
+                  on ? 'border-cyan-400 text-cyan-300 bg-cyan-500/10' : 'border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+          {keptIds && (
+            <button
+              onClick={clearCarve}
+              className="px-1.5 py-0.5 rounded border border-cyan-500/40 text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20"
+              title="Clear the selection filter and show the full wall"
+            >
+              ▣ {keptIds.length} kept · clear
+            </button>
+          )}
+          {tool && (
+            <span className="text-zinc-500">
+              drag to select · click <span className="text-zinc-300">inside</span> isolates ·{' '}
+              <span className="text-zinc-300">outside</span> cuts
+              {tool === 'paint' && <span className="text-zinc-600"> · Shift add · Ctrl erase · [ ] size</span>}
+              <span className="text-zinc-600"> · Esc cancels</span>
+            </span>
+          )}
+          <span className="ml-auto flex items-center gap-1.5">
+            <span className="text-zinc-500 tabular-nums" title="Wall zoom (×horizontal · ×vertical)">
+              zoom {wallZoom.x.toFixed(1)}×{wallZoom.y.toFixed(1)}
+            </span>
+            {zoomed && (
+              <button
+                onClick={() => setResetZoomSignal((n) => n + 1)}
+                className="px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500"
+                title="Reset zoom to 1:1 (or middle-click the wall)"
+              >
+                reset
+              </button>
+            )}
+          </span>
+        </div>
       </div>
 
-      <div className="flex-1 min-h-0 relative">
+      <div ref={wallHostRef} className="flex-1 min-h-0 relative">
         {!loaded ? (
           <div className="h-full flex items-center justify-center text-sm text-zinc-600">Loading gradient library…</div>
         ) : count > 0 ? (
-          <PickerWall groups={groups} sprite={sprite} onPick={onPick} onEntryDragStart={onEntryDragStart} selectedId={selected?.id} swatchW={swatchW} swatchH={swatchH} gap={gap} onGesture={advanceHint} />
+          <PickerWall
+            groups={groups}
+            sprite={sprite}
+            onPick={onPick}
+            onEntryDragStart={onEntryDragStart}
+            selectedId={selected?.id}
+            swatchW={swatchW}
+            swatchH={swatchH}
+            gap={gap}
+            onGesture={advanceHint}
+            onZoomChange={setWallZoom}
+            resetZoomSignal={resetZoomSignal}
+            selectionTool={tool}
+            onSelectionCommit={onSelectionCommit}
+            onSelectionCancel={() => setTool(null)}
+          />
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-zinc-400 px-6 text-center">
-            No gradients match — widen the Quality Filters or clear theme/source toggles.
+            {keptIds ? (
+              <span>
+                No gradients in the current carve — <button onClick={clearCarve} className="text-cyan-300 underline">clear the selection filter</button>.
+              </span>
+            ) : (
+              'No gradients match — widen the Quality Filters or clear theme/source toggles.'
+            )}
           </div>
         )}
       </div>
