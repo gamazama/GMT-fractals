@@ -5,7 +5,8 @@
  * exporter ("port once", per the integration plan).
  *
  * Text formats: Fractint .map, hex list, CSS, SVG, JSON, JS, Python, CSV,
- * GIMP .gpl + .ggr, GMT .cpt, Paint.NET. Binary: Photoshop .grd v3.
+ * GIMP .gpl + .ggr, .cpt colour palette table (the Generic Mapping Tools /
+ * QGIS scientific-colormap format — NOT this app), Paint.NET. Binary: Photoshop .grd v3.
  * PNG export is a canvas op and lives in the component (not pure).
  *
  * The .grd writer reduces the ramp to ≤GRD_MAX stops via Douglas-Peucker (linear
@@ -15,6 +16,7 @@
  */
 
 import type { RGB } from './oklab';
+import { buildIdmlSwatchLibrary } from './indesignIdml';
 
 export interface ExportFormatDef {
   key: string;
@@ -23,6 +25,12 @@ export interface ExportFormatDef {
   /** Binary formats return a Uint8Array (download only — Copy is disabled). */
   binary?: boolean;
   build: (ramp: RGB[]) => string | Uint8Array;
+  /**
+   * Collection formats can bundle MANY named gradients into ONE file (e.g. an
+   * Illustrator swatch library). When present, the Favients export emits a single
+   * combined file instead of a per-gradient .zip.
+   */
+  collection?: (items: { name: string; ramp: RGB[] }[]) => string | Uint8Array;
 }
 
 const ri = (c: RGB): [number, number, number] => [Math.round(c.r), Math.round(c.g), Math.round(c.b)];
@@ -69,16 +77,20 @@ const rdpIdx = (ramp: RGB[], tol: number): number[] => {
   return idx;
 };
 
-const grdStops = (ramp: RGB[]): number[] => {
+/** Reduce a 256-step ramp to ≤`max` representative stop indices (Douglas-Peucker,
+ *  escalating tolerance until the budget is met). Shared by .grd, .ai and .idml. */
+export const reduceStopIndices = (ramp: RGB[], max: number): number[] => {
   let tol = 1.5;
   let idx = rdpIdx(ramp, tol);
   let g = 0;
-  while (idx.length > GRD_MAX && g++ < 40) {
+  while (idx.length > max && g++ < 40) {
     tol *= 1.35;
     idx = rdpIdx(ramp, tol);
   }
   return idx;
 };
+
+const grdStops = (ramp: RGB[]): number[] => reduceStopIndices(ramp, GRD_MAX);
 
 /** Number of colour stops the .grd writer will emit for this ramp. */
 export const grdStopCount = (ramp: RGB[]): number => grdStops(ramp).length;
@@ -129,6 +141,142 @@ const buildGRD = (ramp: RGB[]): Uint8Array => {
   u16(255);
   for (let k = 0; k < 6; k++) u8(0); // reserved
   return new Uint8Array(dv.buffer);
+};
+
+// ---- Adobe Illustrator (.ai) gradient-swatch library ----
+//
+// A GMT addition (not from the prototypes). Emits a plain-text legacy
+// `%!PS-Adobe-3.0` Illustrator 8 document — modern Illustrator (24.0+) opens it
+// directly and every gradient lands in the Swatches panel as a real RGB gradient
+// swatch. No PDF/Zstd container needed. Each 256-step ramp is reduced to ≤AI_MAX
+// stops (shared Douglas-Peucker) so the swatch matches the displayed ramp.
+//
+// Stop grammar (RGB document, reverse-engineered from a real AI 24.0 export):
+//   C M Y K  R G B  2 1 6 50 <rampPoint>     ← RGB authoritative, 2 = "RGB present"
+// written as a dual line (data `… %_BS`, then commented twin `%_… Bs`). One ramp
+// segment (`%_Br`, rampType 4 = RGB) per (nStops-1); AI regenerates the real ramp.
+
+const AI_MAX = 40;
+
+const aiNum = (n: number, dp = 6): string => {
+  if (!isFinite(n)) n = 0;
+  let s = n.toFixed(dp);
+  if (s.indexOf('.') !== -1) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  return s === '-0' ? '0' : s;
+};
+
+/** Escape a PostScript literal-string body for `(...)`. */
+const psStr = (s: string): string => (s || 'gradient').replace(/([\\()])/g, '\\$1');
+
+/** RGB (0-255) -> CMYK (0-1) process fallback (RGB stays authoritative in the file). */
+const rgbToCmyk = (r: number, g: number, b: number) => {
+  const rf = r / 255, gf = g / 255, bf = b / 255;
+  const k = 1 - Math.max(rf, gf, bf);
+  if (k >= 1) return { c: 0, m: 0, y: 0, k: 1 };
+  return { c: (1 - rf - k) / (1 - k), m: (1 - gf - k) / (1 - k), y: (1 - bf - k) / (1 - k), k };
+};
+
+/** `C M Y K R G B` colour spec shared by ramp segments and stops. */
+const aiColorSpec = (c: RGB): string => {
+  const [r, g, b] = ri(c);
+  const { c: cy, m, y, k } = rgbToCmyk(r, g, b);
+  return `${aiNum(cy)} ${aiNum(m)} ${aiNum(y)} ${aiNum(k)} ${aiNum(r / 255)} ${aiNum(g / 255)} ${aiNum(b / 255)}`;
+};
+
+const aiGradientDef = (name: string, ramp: RGB[]): string => {
+  // Illustrator lists gradient stops in DESCENDING rampPoint order (100 → 0); the
+  // reducer returns ascending positions, so reverse before emitting. Getting this
+  // wrong reverses + collapses the stops on import.
+  const idx = reduceStopIndices(ramp, AI_MAX).reverse();
+  const n = psStr(name);
+  const lines: string[] = [`%AI5_BeginGradient: (${n})`, `(${n}) 0 ${idx.length} Bd`, '['];
+  for (let i = 0; i < idx.length - 1; i++) lines.push(`${aiColorSpec(ramp[idx[i]])} 4 %_Br`);
+  lines.push('[');
+  for (let i = 0; i < idx.length; i++) {
+    const rampPt = aiNum((idx[i] / 255) * 100);
+    const tok = `${aiColorSpec(ramp[idx[i]])} 2 1 6 50 ${rampPt}`;
+    lines.push(`${tok} %_BS`);
+    lines.push(`%_${tok} Bs`);
+  }
+  lines.push('BD', '%AI5_EndGradient');
+  return lines.join('\n');
+};
+
+const aiSwatchCell = (name: string): string =>
+  `Bb\n2 (${psStr(name)}) 0 0 0 1 1 0 0 1 0 0 1 Bg\n0 BB\n(${psStr(name)})\nPc`;
+
+/** Number of stops the .ai writer keeps for this ramp (after reduction). */
+export const aiStopCount = (ramp: RGB[]): number => reduceStopIndices(ramp, AI_MAX).length;
+
+/**
+ * Worst-case colour error (0..~441, RGB euclidean) between the original 256-step
+ * ramp and its ≤AI_MAX-stop Illustrator reduction — i.e. how much detail the
+ * format limitation costs THIS gradient. ~24+ is visibly lossy.
+ */
+export const aiReductionError = (ramp: RGB[]): number => {
+  const idx = reduceStopIndices(ramp, AI_MAX);
+  let maxd = 0;
+  for (let s = 0; s < idx.length - 1; s++) {
+    const a = idx[s];
+    const b = idx[s + 1];
+    const ca = ri(ramp[a]);
+    const cb = ri(ramp[b]);
+    const span = b - a || 1;
+    for (let i = a; i <= b; i++) {
+      const t = (i - a) / span;
+      const c = ri(ramp[i]);
+      const d = Math.hypot(c[0] - (ca[0] + (cb[0] - ca[0]) * t), c[1] - (ca[1] + (cb[1] - ca[1]) * t), c[2] - (ca[2] + (cb[2] - ca[2]) * t));
+      if (d > maxd) maxd = d;
+    }
+  }
+  return maxd;
+};
+
+/** Max-stop budget + the "visibly lossy" threshold for the .ai reduction warning. */
+export const AI_STOP_LIMIT = AI_MAX;
+export const AI_LOSSY_DELTA = 24;
+
+/** Named gradients whose .ai reduction exceeds `threshold` (the ones to warn about). */
+export const aiLossyGradients = (
+  items: { name: string; ramp: RGB[] }[],
+  threshold = AI_LOSSY_DELTA,
+): { name: string; delta: number }[] =>
+  items.map((it) => ({ name: it.name, delta: aiReductionError(it.ramp) })).filter((x) => x.delta > threshold);
+
+/** Build a complete Illustrator `.ai` swatch library from one or more named ramps. */
+export const buildAiSwatchLibrary = (items: { name: string; ramp: RGB[] }[]): string => {
+  // De-dupe swatch names so Illustrator keeps same-named gradients distinct.
+  const seen = new Map<string, number>();
+  const named = items.map((it) => {
+    const base = it.name || 'gradient';
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return { name: n ? `${base} ${n + 1}` : base, ramp: it.ramp };
+  });
+  const header = [
+    '%!PS-Adobe-3.0',
+    '%%Creator: GMT Fractal Explorer',
+    '%%AI8_CreatorVersion: 29.1.0',
+    '%%Title: (GMT Gradients)',
+    '%%BoundingBox: 0 0 0 0',
+    '%%HiResBoundingBox: 0 0 0 0',
+    '%AI5_FileFormat 14.0',
+    '%AI3_ColorUsage: Color',
+    '%%RGBProcessColor: 0 0 0 ([Registration])',
+    '%AI9_ColorModel: 1',
+    '%AI5_ArtSize: 14400 14400',
+    '%AI5_NumLayers: 1',
+    '%%EndComments',
+    '%%BeginProlog',
+    '%%EndProlog',
+    '%%BeginSetup',
+    '%AI5_Begin_NonPrinting',
+    'Np',
+    `${named.length} Bn`,
+  ];
+  const defs = named.map((it) => aiGradientDef(it.name, it.ramp));
+  const palette = ['%AI5_BeginPalette', '0 0 Pb', ...named.map((it) => aiSwatchCell(it.name)), 'PB', '%AI5_EndPalette'];
+  return [...header, ...defs, '%AI5_End_NonPrinting--', '%%EndSetup', ...palette, '%%Trailer', '%%EOF', ''].join('\n');
 };
 
 // ---- the suite ----
@@ -185,7 +333,7 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
   },
   {
     key: 'cpt',
-    label: 'GMT .cpt',
+    label: 'Color palette table .cpt',
     ext: 'cpt',
     build: (r) => {
       let s = '# COLOR_MODEL = RGB\n# gradient\n';
@@ -202,6 +350,21 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
       Array.from({ length: 96 }, (_, k) => 'FF' + ri(r[Math.round((k / 95) * 255)]).map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase()).join('\n'),
   },
   { key: 'grd', label: 'Photoshop .grd (binary)', ext: 'grd', binary: true, build: (r) => buildGRD(r) },
+  {
+    key: 'ai',
+    label: 'Illustrator swatches .ai',
+    ext: 'ai',
+    build: (r) => buildAiSwatchLibrary([{ name: 'gradient', ramp: r }]),
+    collection: (items) => buildAiSwatchLibrary(items),
+  },
+  {
+    key: 'idml',
+    label: 'InDesign swatches .idml',
+    ext: 'idml',
+    binary: true,
+    build: (r) => buildIdmlSwatchLibrary([{ name: 'gradient', ramp: r }]),
+    collection: (items) => buildIdmlSwatchLibrary(items),
+  },
 ];
 
 export const getExportFormat = (key: string): ExportFormatDef | undefined => EXPORT_FORMATS.find((f) => f.key === key);

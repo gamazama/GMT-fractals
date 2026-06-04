@@ -12,7 +12,7 @@
 import { zipSync, strToU8 } from 'fflate';
 import type { Favient } from '../store/favientsStore';
 import { renderStopsToRamp } from './gmtGradient';
-import { getExportFormat, EXPORT_FORMATS } from './exportFormats';
+import { getExportFormat, EXPORT_FORMATS, aiLossyGradients, AI_LOSSY_DELTA } from './exportFormats';
 import { canvasToPngBlob } from '../../utils/SceneFormat';
 import type { RGB } from './oklab';
 
@@ -36,6 +36,35 @@ export const buildCollectionZip = (favients: Favient[], fmtKey: string): Uint8Ar
     files[fname] = typeof out === 'string' ? strToU8(out) : out;
   });
   return zipSync(files, { level: 6 });
+};
+
+/**
+ * Build a single combined file for a *collection* format (e.g. an Illustrator
+ * swatch library that holds every favourite as one importable .ai). Returns null
+ * when `fmtKey` is a plain per-gradient format (use buildCollectionZip instead).
+ */
+export const buildCollectionFile = (
+  favients: Favient[],
+  fmtKey: string,
+): { data: string | Uint8Array; ext: string } | null => {
+  const fmt = getExportFormat(fmtKey);
+  if (!fmt?.collection) return null;
+  const items = favients.map((f) => ({ name: f.name, ramp: rampOf(f) }));
+  return { data: fmt.collection(items), ext: fmt.ext };
+};
+
+/**
+ * Quality warnings for a collection export: favourites that lose visible detail
+ * under the format's stop limit (currently only the Illustrator `.ai` reduction).
+ * Empty for lossless / non-collection formats.
+ */
+export const collectionQualityWarnings = (
+  favients: Favient[],
+  fmtKey: string,
+  threshold = AI_LOSSY_DELTA,
+): { name: string; delta: number }[] => {
+  if (fmtKey !== 'ai' && fmtKey !== 'idml') return []; // both reduce to the stop budget
+  return aiLossyGradients(favients.map((f) => ({ name: f.name, ramp: rampOf(f) })), threshold);
 };
 
 /** A reusable 256×1 scratch canvas + buffer for painting ramps — one allocation

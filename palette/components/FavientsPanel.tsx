@@ -38,8 +38,8 @@ import type { RGB } from '../core/oklab';
 import { useEngineStore } from '../../store/engineStore';
 import { useDismiss } from '../../hooks/useDismiss';
 import { downloadBlob } from '../../utils/SceneFormat';
-import { EXPORT_FORMATS } from '../core/exportFormats';
-import { buildCollectionZip, buildContactSheet } from '../core/favientsExport';
+import { EXPORT_FORMATS, getExportFormat } from '../core/exportFormats';
+import { buildCollectionZip, buildCollectionFile, buildContactSheet, collectionQualityWarnings } from '../core/favientsExport';
 
 /** Re-render when hosts (re)register apply targets or the browse action. */
 const useFavientTargets = () => {
@@ -112,11 +112,35 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
     close();
   };
 
-  const exportZip = () => {
+  // Collection formats (e.g. Illustrator .ai) bundle every favourite into ONE
+  // importable file; everything else exports one file per gradient inside a .zip.
+  const selFmt = getExportFormat(zipFmt);
+  const isCollection = !!selFmt?.collection;
+
+  const exportFmt = () => {
     if (empty) { onFlash('Nothing to export'); return; }
-    const bytes = buildCollectionZip(favients, zipFmt);
-    downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), 'favients.zip');
-    onFlash(`Exported ${favients.length} as .zip`);
+    if (isCollection) {
+      // Format-limitation warning: gradients too complex for the .ai stop budget
+      // get flattened and lose visible detail — let the user opt out before saving.
+      const lossy = collectionQualityWarnings(favients, zipFmt);
+      if (lossy.length) {
+        const list = lossy.slice(0, 8).map((w) => `  • ${w.name}  (Δ${Math.round(w.delta)})`).join('\n');
+        const more = lossy.length > 8 ? `\n  …and ${lossy.length - 8} more` : '';
+        const ok = window.confirm(
+          `⚠ Illustrator format limitation\n\n${lossy.length} of ${favients.length} gradient${lossy.length === 1 ? '' : 's'} ` +
+            `lose visible detail when flattened to the .ai colour-stop limit:\n\n${list}${more}\n\nExport anyway?`,
+        );
+        if (!ok) { close(); return; }
+      }
+      const file = buildCollectionFile(favients, zipFmt)!;
+      const data = typeof file.data === 'string' ? file.data : (file.data as unknown as BlobPart);
+      downloadBlob(new Blob([data], { type: 'application/octet-stream' }), `favients.${file.ext}`);
+      onFlash(`Exported ${favients.length} → .${file.ext}`);
+    } else {
+      const bytes = buildCollectionZip(favients, zipFmt);
+      downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), 'favients.zip');
+      onFlash(`Exported ${favients.length} as .zip`);
+    }
     close();
   };
 
@@ -167,7 +191,7 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
             <select
               value={zipFmt}
               onChange={(e) => setZipFmt(e.target.value)}
-              title="Per-gradient file format for the .zip"
+              title={isCollection ? 'Bundles every favourite into one file' : 'Per-gradient file format for the .zip'}
               className="flex-1 min-w-0 bg-gray-900 border border-white/10 rounded text-[11px] text-gray-200 px-1 py-0.5 outline-none focus:border-cyan-500"
             >
               {EXPORT_FORMATS.map((f) => (
@@ -175,10 +199,11 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
               ))}
             </select>
             <button
-              onClick={exportZip}
+              onClick={exportFmt}
+              title={isCollection ? `Export all ${favients.length} as one .${selFmt!.ext}` : `Export ${favients.length} files in a .zip`}
               className="shrink-0 text-[11px] px-2 py-0.5 rounded bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors"
             >
-              .zip
+              {isCollection ? `.${selFmt!.ext}` : '.zip'}
             </button>
           </div>
           <button className={menuItemCls} onClick={exportSheet}>Contact sheet (PNG)</button>

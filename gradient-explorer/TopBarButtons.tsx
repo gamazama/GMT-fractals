@@ -14,6 +14,7 @@ import React from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { FpsCounter } from '../engine/plugins/TopBar';
 import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
+import { GmtWordmark } from '../engine-gmt/topbar/GmtWordmark';
 
 /** FPS readout, desktop-only. The top bar is tight on phones and an FPS number is
  *  noise on a palette tool there, so hide it below the mobile breakpoint (md = 768px,
@@ -31,16 +32,19 @@ const BackArrowIcon: React.FC = () => (
   </svg>
 );
 
-/** Return to the main GMT studio. An <a> (not a button) so middle-click /
+/** Brand mark + return-to-studio link. The GMT wordmark doubles as the "home"
+ *  affordance (clicking a logo to go home is the expected gesture), matching the
+ *  logo app-gmt shows in its topbar. An <a> (not a button) so middle-click /
  *  open-in-new-tab work; relative href resolves to the sibling page. */
 export const BackToGmtButton: React.FC = () => (
   <a
     href="app-gmt.html"
     title="Back to the GMT fractal studio"
-    className="flex items-center gap-1.5 px-2 h-7 rounded text-[12px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors no-underline"
+    aria-label="Back to the GMT fractal studio"
+    className="group flex items-center gap-1.5 pl-1.5 pr-2 h-7 rounded text-gray-400 hover:bg-white/10 transition-colors no-underline"
   >
     <BackArrowIcon />
-    <span className="hidden md:inline font-medium">GMT</span>
+    <GmtWordmark className="h-3.5 w-auto opacity-80 group-hover:opacity-100 transition-opacity" />
   </a>
 );
 

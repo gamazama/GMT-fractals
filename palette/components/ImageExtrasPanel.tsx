@@ -9,7 +9,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import { GenericDropdown } from '../../components/GenericDropdown';
-import { EXPORT_FORMATS, getExportFormat, grdStopCount } from '../core/exportFormats';
+import { EXPORT_FORMATS, getExportFormat, grdStopCount, aiReductionError, aiStopCount, AI_LOSSY_DELTA, AI_STOP_LIMIT } from '../core/exportFormats';
 import { useImageStore, useImageDerived } from '../store/imageStore';
 
 export const ImageExtrasPanel: React.FC = () => {
@@ -26,6 +26,11 @@ export const ImageExtrasPanel: React.FC = () => {
   }, []);
 
   const fmtDef = useMemo(() => getExportFormat(exportFmt) ?? EXPORT_FORMATS[0], [exportFmt]);
+  // .ai / .idml flatten the ramp to ≤AI_STOP_LIMIT stops; warn if this one loses detail.
+  const aiWarn = useMemo(
+    () => (ramp && (fmtDef.key === 'ai' || fmtDef.key === 'idml') && aiReductionError(ramp) > AI_LOSSY_DELTA ? aiStopCount(ramp) : 0),
+    [fmtDef, ramp],
+  );
   const previewText = useMemo(() => {
     if (!ramp) return 'Load an image to extract a gradient.';
     if (fmtDef.binary) return `.${fmtDef.ext} is a binary format — use Download (${grdStopCount(ramp)} stops).`;
@@ -102,6 +107,11 @@ export const ImageExtrasPanel: React.FC = () => {
         onChange={(v) => setExportFmt(v)}
         fullWidth
       />
+      {aiWarn > 0 && (
+        <div className="mt-1 text-[10px] leading-snug text-amber-300/90">
+          ⚠ This gradient is complex — swatch libraries (.ai/.idml) cap at {AI_STOP_LIMIT} colour stops, so it’s flattened to {aiWarn} and loses some detail.
+        </div>
+      )}
       {showPreview && (
         <pre className="mt-1.5 max-h-32 overflow-auto text-[10px] leading-tight text-gray-400 bg-black/50 rounded-sm p-2 border border-white/5 whitespace-pre">
           {previewText}
