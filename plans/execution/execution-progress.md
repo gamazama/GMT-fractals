@@ -13,18 +13,23 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
 
 - **P0a** — engine gradient + colour CORE — ✅ DONE (in-review, **uncommitted**; gates green;
   interfaces (e)+(f) FROZEN below).
-- **P0b** — colour picker UI (consumes (f)) ← **ISSUED**
-- P0c — Stops editor genericize-in-place + undo contract (consumes (e); freezes (d))
+- **P0b** — colour picker UI (consumes (f)) — ✅ DONE (in-review; user visually confirmed;
+  **uncommitted**). Rich picker + NEW shared `usePrecisionTrackDrag` primitive; ScalarInput
+  refactored onto it (cross-cutting — see WATCH item below).
+- **P0c** — Stops editor genericize-in-place + undo contract (consumes (e); freezes (d)) ←
+  **ISSUED** (high review effort; **orchestrator runs an independent review on the diff pre-merge**).
 - P0d — document-provider registry (freezes (a))
 - P0e — drag/drop-wells + send-target kernels (freezes (b)+(c))
 
-Next action: await P0b summary → issue P0c.
+Next action: await P0c summary → independent review → issue P0d.
 
 **Carry-forward for P0c:** the editor's buggy `getInterpolatedColor`
 (`components/AdvancedGradientEditor.tsx:51-69`) is **STILL LIVE** — the engine `sampleStops` fix
 exists but the editor isn't bound to it yet (P0c binds it + replaces the inline lambdas with
 `stopOps`; re-key `double`'s `-dup` ids on adoption). **`stopOps.setBias(stops, index, …)` takes an
 array index into a POSITION-SORTED array — pass the sorted array, not store order** (noted in stopOps.ts).
+P0c **inherits the rich picker for free** where it mounts `EmbeddedColorPicker`, and the shared GMT
+slider feel; it may reuse `components/inputs/usePrecisionTrackDrag.ts` for the 1-D stop bar drag.
 **Orphan caution:** `utils/stopOps.ts` + `sampleStops` are intentionally unconsumed until P0b/P0c
 — `npm run orphans` will flag them; **DO NOT delete** (frozen-ahead interfaces).
 **Recommend:** commit P0a on `exec/phase-0-foundations` as a checkpoint before P0b.
@@ -40,7 +45,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 
 | ID | Workstream | Phase | Status | Branch / worktree | Notes |
 |----|------------|-------|--------|-------------------|-------|
-| P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | **in-flight (P0a✅ → P0b)** | `exec/phase-0-foundations` | P0a done (e+f frozen); P0b issued; freeze §4 before Phase 1 |
+| P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | **in-flight (P0a✅ P0b✅ → P0c)** | `exec/phase-0-foundations` | P0a+P0b done (e+f frozen); P0c issued; freeze §4 before Phase 1 |
 | S1 | W6 Picker text search | 1 | not-started | `exec/s1-picker-search` | depends: P0 |
 | S2 | W5 Favients undo/list/search | 1 | not-started | `exec/s2-favients` | depends: P0 (doc+history provider); shared: registerPaletteUI.ts |
 | S3 | W3 ghost curves + Generator coherence | 1 | not-started | `exec/s3-generator` | depends: P0 |
@@ -101,6 +106,16 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 
 ---
 
+## Cross-cutting watch items
+
+- **`ScalarInput` refactored onto `usePrecisionTrackDrag` (P0b).** `ScalarInput` backs **every
+  slider/vector input app-wide** and has **no unit tests**. The extraction is behavior-preserving
+  (monorepo tsc 0, faithful-extraction self-review tracing every branch). **User visually confirmed
+  both a normal dock slider AND vector/multi-axis inputs (2026-06-05) — safety net complete.** Still
+  no unit tests, so **any later slider/vector work should glance at this** and re-confirm feel. New canonical primitive: `components/inputs/usePrecisionTrackDrag.ts`
+  (click-to-position, delta-drag, Shift×10 / Alt×0.1, re-anchor) — single source of truth for
+  ScalarInput + the picker; reusable by future track controls.
+
 ## Backlog / deferred debt
 
 - **oklab/blend math duplicated across `utils/colorUtils.ts` and `palette/core/oklab.ts`** (P0a).
@@ -114,6 +129,17 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-05 — **P0b DONE** (in-review, uncommitted; user visually confirmed "all looks good"):
+  rich `EmbeddedColorPicker` in place — 2D sat×bright field + hue strip, RGB+HSB sliders, **opt-in
+  Alpha**, hex/copy/**eyedropper** (EyeDropper API + fallback), harmony rows, **shared capped
+  Recents** (`gmt.colorpicker.recents`), **fixed default Palette** (+ optional `palette?` seam).
+  Consumes (f) only — no interface moved. Additive back-compat props: `alpha?`/`onAlphaChange?`/
+  `palette?`. **Design call:** `onColorChange` always emits `#RRGGBB` (6-digit; stop renderer's
+  hexToRgb only matches 6) — **alpha is opt-in/gated**, no host wires it (stops are RGB); true-alpha
+  gradients = a separate future stream. Quality pass: `/code-review medium` + `/simplify` + perf —
+  fixed undo-transaction leak on capture-loss/unmount, invalid-hex revert-on-blur, greyscale hue
+  preservation, harmonies recompute gated on open. **Scope-expansion (accepted):** extracted shared
+  `usePrecisionTrackDrag` + refactored ScalarInput onto it (→ WATCH item). **P0c issued.**
 - 2026-06-05 — **P0a quality pass DONE** (`/code-review high` + `/simplify`, gates re-green):
   hardening — `double` now collision-safe; `normalizePaste` tolerates no-`#`/3-digit hex; `sampleStops`
   clamps `pos` on empty stops; harmony docstrings fixed. Simplify — `wrapHue` dedup (−2 copies),

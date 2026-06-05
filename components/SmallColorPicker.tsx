@@ -30,8 +30,8 @@ const PickerPortal = ({
             const rect = targetRef.current.getBoundingClientRect();
             const winW = window.innerWidth;
             const winH = window.innerHeight;
-            const popupW = 240; // Approx width
-            const popupH = 150; // Approx height
+            const popupW = 256; // Approx width (rich picker)
+            const popupH = 280; // Approx height (rich picker; sliders/swatches collapse by default)
 
             let x = rect.right + 5;
             let y = rect.top;
@@ -66,7 +66,7 @@ const PickerPortal = ({
 
     return createPortal(
         <div 
-            className="picker-popup fixed z-[9999] bg-black border border-white/20 p-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-56 animate-fade-in"
+            className="picker-popup fixed z-[9999] bg-black border border-white/20 p-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-64 animate-fade-in"
             style={{ left: coords.x, top: coords.y }}
             onMouseDown={(e) => e.stopPropagation()} 
         >

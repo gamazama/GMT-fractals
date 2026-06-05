@@ -14,6 +14,7 @@ import React from 'react';
 import { ScalarInputProps } from './types';
 import { DraggableNumber } from './primitives';
 import { computePercentage } from './primitives/FormatUtils';
+import { usePrecisionTrackDrag } from './usePrecisionTrackDrag';
 
 export const ScalarInput: React.FC<ScalarInputProps> = ({
     // Value props
@@ -64,15 +65,6 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     const fullTrackFillRef = React.useRef<HTMLDivElement>(null);
     const trackContainerRef = React.useRef<HTMLDivElement>(null);
 
-    // Track drag state (delta-based with Alt/Shift precision)
-    const trackDrag = React.useRef({
-        active: false,
-        startX: 0,
-        startValue: 0, // display-space value at drag start
-        lastShift: false,
-        lastAlt: false,
-    });
-
     // Calculate track percentage
     const hasBounds = min !== undefined && max !== undefined && min !== max;
     
@@ -117,105 +109,22 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         if (thumb) thumb.style.left = `calc(${pct}% - 8px)`;
     }, [computePct]);
 
-    // Snap a value to the nearest step multiple
-    const quantize = React.useCallback((v: number): number => {
-        if (!step) return v;
-        return Math.round(v / step) * step;
-    }, [step]);
-
-    // Track pointer handlers — delta-based drag with Alt/Shift precision modifiers
-    const handleTrackPointerDown = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-        if (disabled || !hasBounds) return;
-        if (e.button !== 0) return;
-
-        e.preventDefault();
-        e.stopPropagation();
-        e.currentTarget.setPointerCapture(e.pointerId);
-
-        // Calculate value from click position
-        const rect = e.currentTarget.getBoundingClientRect();
-        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const displayMin = mapping ? mapping.toDisplay(min!) : min!;
-        const displayMax = mapping ? mapping.toDisplay(max!) : max!;
-        const clickedDisplayValue = quantize(displayMin + pct * (displayMax - displayMin));
-
-        // Set value to clicked position immediately
-        let clickedValue = mapping ? mapping.fromDisplay(clickedDisplayValue) : clickedDisplayValue;
-        if (hardMin !== undefined) clickedValue = Math.max(hardMin, clickedValue);
-        if (hardMax !== undefined) clickedValue = Math.min(hardMax, clickedValue);
-
-        // Begin the interaction (undo snapshot / session / auto-keyframe) BEFORE the
-        // first value change. A track click jumps the value on pointer-down; if the
-        // snapshot were taken after, the transaction would record the just-clicked
-        // value as its undo baseline, so undo would "restore" the post-click value
-        // instead of the pre-interaction one. The number-drag path (useDragValue)
-        // already fires onDragStart before any onChange — keep this consistent.
-        onDragStart?.();
-        onChange(clickedValue);
-        handleImmediateChange(clickedValue);
-
-        // Init drag state for subsequent movement
-        const drag = trackDrag.current;
-        drag.active = true;
-        drag.startX = e.clientX;
-        drag.startValue = clickedDisplayValue;
-        drag.lastShift = e.shiftKey;
-        drag.lastAlt = e.altKey;
-    }, [disabled, hasBounds, min, max, mapping, hardMin, hardMax, onChange, onDragStart, handleImmediateChange, quantize]);
-
-    const handleTrackPointerMove = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-        const drag = trackDrag.current;
-        if (!drag.active || disabled || !hasBounds) return;
-
-        e.preventDefault();
-
-        const rect = e.currentTarget.getBoundingClientRect();
-        const trackWidth = rect.width;
-        const displayMin = mapping ? mapping.toDisplay(min!) : min!;
-        const displayMax = mapping ? mapping.toDisplay(max!) : max!;
-        const displayRange = displayMax - displayMin;
-
-        // Base sensitivity: full track width = full range
-        const baseSens = displayRange / trackWidth;
-
-        // Check if modifiers changed — bake current value as new anchor
-        if (drag.lastShift !== e.shiftKey || drag.lastAlt !== e.altKey) {
-            const oldSens = baseSens * (drag.lastShift ? 10 : 1) * (drag.lastAlt ? 0.1 : 1);
-            const dx = e.clientX - drag.startX;
-            drag.startValue = drag.startValue + dx * oldSens;
-            drag.startX = e.clientX;
-            drag.lastShift = e.shiftKey;
-            drag.lastAlt = e.altKey;
-        }
-
-        let sens = baseSens;
-        if (e.shiftKey) sens *= 10;
-        if (e.altKey) sens *= 0.1;
-
-        const dx = e.clientX - drag.startX;
-        let nextDisplayValue = quantize(drag.startValue + dx * sens);
-
-        // Clamp to display range
-        nextDisplayValue = Math.max(displayMin, Math.min(displayMax, nextDisplayValue));
-
-        let finalValue = mapping ? mapping.fromDisplay(nextDisplayValue) : nextDisplayValue;
-        if (hardMin !== undefined) finalValue = Math.max(hardMin, finalValue);
-        if (hardMax !== undefined) finalValue = Math.min(hardMax, finalValue);
-
-        if (!isNaN(finalValue)) {
-            onChange(finalValue);
-            handleImmediateChange(finalValue);
-        }
-    }, [disabled, hasBounds, min, max, mapping, hardMin, hardMax, onChange, handleImmediateChange, quantize]);
-
-    const handleTrackPointerUp = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-        const drag = trackDrag.current;
-        if (!drag.active) return;
-
-        drag.active = false;
-        e.currentTarget.releasePointerCapture(e.pointerId);
-        onDragEnd?.();
-    }, [onDragEnd]);
+    // Track pointer handlers — the shared GMT precision-drag (click-to-position,
+    // delta-drag, Shift ×10 / Alt ×0.1). Extracted to usePrecisionTrackDrag so the
+    // colour picker's slider feels identical.
+    const track = usePrecisionTrackDrag({
+        min,
+        max,
+        step,
+        mapping,
+        hardMin,
+        hardMax,
+        disabled,
+        onChange,
+        onDragStart,
+        onDragEnd,
+        onImmediate: handleImmediateChange,
+    });
     
     // Handle reset
     const handleReset = React.useCallback(() => {
@@ -374,9 +283,11 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                     ref={trackContainerRef}
                     className={`relative flex items-center touch-none overflow-hidden ${disabled ? 'cursor-not-allowed' : 'cursor-ew-resize'}`}
                     style={{ touchAction: 'none', height: trackHeight }}
-                    onPointerDown={handleTrackPointerDown}
-                    onPointerMove={handleTrackPointerMove}
-                    onPointerUp={handleTrackPointerUp}
+                    onPointerDown={track.onPointerDown}
+                    onPointerMove={track.onPointerMove}
+                    onPointerUp={track.onPointerUp}
+                    onPointerCancel={track.onPointerUp}
+                    onLostPointerCapture={track.onPointerUp}
                 >
                     {/* Background track */}
                     <div className="absolute inset-0 bg-white/10">
