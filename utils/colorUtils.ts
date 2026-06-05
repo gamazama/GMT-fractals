@@ -1,6 +1,8 @@
 
 import { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
-import * as THREE from 'three';
+
+/** Plain sRGB triple, 0–255 floats (pre-truncation). Structurally identical to palette `RGB`. */
+export type RGB = { r: number; g: number; b: number };
 
 export const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -57,6 +59,9 @@ export const hsvToRgb = (h: number, s: number, v: number) => {
   return { r: r * 255, g: g * 255, b: b * 255 };
 };
 
+/** Normalise a hue (degrees) into [0,360). */
+export const wrapHue = (h: number): number => ((h % 360) + 360) % 360;
+
 export const lerpRGB = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number) => {
   return {
     r: c1.r + (c2.r - c1.r) * t,
@@ -72,7 +77,7 @@ export const lerpHSV = (c1: {r:number, g:number, b:number}, c2: {r:number, g:num
     let dh = hsv2.h - hsv1.h;
     if (dh > 180) dh -= 360;
     if (dh < -180) dh += 360;
-    const h = ((hsv1.h + dh * t) % 360 + 360) % 360;
+    const h = wrapHue(hsv1.h + dh * t);
     const s = hsv1.s + (hsv2.s - hsv1.s) * t;
     const v = hsv1.v + (hsv2.v - hsv1.v) * t;
     return hsvToRgb(h, s, v);
@@ -86,7 +91,7 @@ export const lerpHSVFar = (c1: {r:number, g:number, b:number}, c2: {r:number, g:
     // Take the LONG way around
     if (dh >= 0 && dh <= 180) dh -= 360;
     if (dh < 0 && dh >= -180) dh += 360;
-    const h = ((hsv1.h + dh * t) % 360 + 360) % 360;
+    const h = wrapHue(hsv1.h + dh * t);
     const s = hsv1.s + (hsv2.s - hsv1.s) * t;
     const v = hsv1.v + (hsv2.v - hsv1.v) * t;
     return hsvToRgb(h, s, v);
@@ -259,103 +264,142 @@ const inverseACES = (c: number) => {
     return Math.max(0, x) * 255.0;
 };
 
-// Generates a Uint8Array representing the gradient 256x1
-// Polymorphic: Accepts legacy array OR new object
-export const generateGradientTextureBuffer = (input: GradientStop[] | GradientConfig): Uint8Array => {
+/**
+ * Sample a PRE-SORTED stop list at a single position — the per-texel core that
+ * `renderStopsToRamp` / `generateGradientTextureBuffer` loop over. Kept private so
+ * the ramp renderer and the single-position `sampleStops` share ONE code path and
+ * stay byte-identical by construction. Honours bias + step/smooth/cubic easing +
+ * the colorSpace output transform.
+ */
+const sampleSorted = (
+  sorted: GradientStop[],
+  pos: number,
+  blendSpace: BlendColorSpace,
+  colorSpace: ColorSpaceMode,
+): RGB => {
+  let raw: RGB = { r: 0, g: 0, b: 0 };
+
+  if (pos <= sorted[0].position) {
+    raw = hexToRgb(sorted[0].color) || { r: 0, g: 0, b: 0 };
+  } else if (pos >= sorted[sorted.length - 1].position) {
+    raw = hexToRgb(sorted[sorted.length - 1].color) || { r: 0, g: 0, b: 0 };
+  } else {
+    for (let i = 0; i < sorted.length - 1; i++) {
+      if (pos >= sorted[i].position && pos <= sorted[i + 1].position) {
+        const s1 = sorted[i];
+        const s2 = sorted[i + 1];
+        let t = (pos - s1.position) / (s2.position - s1.position);
+        const bias = s1.bias ?? 0.5;
+        if (Math.abs(bias - 0.5) > 0.001) t = applyBias(t, bias);
+        const mode = s1.interpolation || 'linear';
+        if (mode === 'step') {
+          // Hold left color for full segment — switch happens at boundary.
+          t = 0.0;
+        } else if (mode === 'smooth' || mode === 'cubic') {
+          t = t * t * (3 - 2 * t);
+        }
+        const c1 = hexToRgb(s1.color) || { r: 0, g: 0, b: 0 };
+        const c2 = hexToRgb(s2.color) || { r: 0, g: 0, b: 0 };
+        raw = blendLerp(c1, c2, t, blendSpace);
+        break;
+      }
+    }
+  }
+
+  if (colorSpace === 'linear') return { r: sRGBToLinear(raw.r), g: sRGBToLinear(raw.g), b: sRGBToLinear(raw.b) };
+  if (colorSpace === 'aces_inverse') return { r: inverseACES(raw.r), g: inverseACES(raw.g), b: inverseACES(raw.b) };
+  return raw;
+};
+
+/**
+ * @invariant The CANONICAL single-position gradient sampler (engine-core). It is
+ * the per-texel function `renderStopsToRamp` loops over — sampling at `i/255`
+ * for `i in [0,256)` reproduces the ramp byte-for-byte. Bias + step/smooth/cubic
+ * aware, so a colour read from here matches the baked ramp exactly (this fixes the
+ * latent drift in AdvancedGradientEditor's old `getInterpolatedColor`, which omitted
+ * bias/smooth). Pure: no DOM, no THREE. Returns un-truncated 0–255 floats.
+ *
+ * For a SINGLE read (eyedropper, new-knot colour). To fill a ramp do NOT loop this —
+ * it sorts on every call; use `renderStopsToRamp`, which sorts once.
+ * @see palette/core/gmtGradient.ts (re-exports this; the byte-exact mirror was collapsed)
+ */
+export const sampleStops = (
+  stops: GradientStop[],
+  pos: number,
+  blendSpace: BlendColorSpace = 'oklab',
+  colorSpace: ColorSpaceMode = 'srgb',
+): RGB => {
+  if (!stops || stops.length === 0) {
+    const v = Math.floor(Math.max(0, Math.min(1, pos)) * 255); // public API: clamp pos so an out-of-range read can't overflow a channel
+    return { r: v, g: v, b: v };
+  }
+  const sorted = [...stops].sort((a, b) => a.position - b.position);
+  return sampleSorted(sorted, pos, blendSpace, colorSpace);
+};
+
+/**
+ * Render stops to a 256-step colour ramp (RGB floats, pre-truncation). Engine
+ * canonical — `palette/core/gmtGradient.ts` re-exports this. Use
+ * `renderStopsToBuffer` for the byte-exact RGBA Uint8Array.
+ */
+export const renderStopsToRamp = (
+  stops: GradientStop[],
+  blendSpace: BlendColorSpace = 'oklab',
+  colorSpace: ColorSpaceMode = 'srgb',
+): RGB[] => {
   const width = 256;
-  const data = new Uint8Array(width * 4);
-  
+  const out: RGB[] = new Array(width);
+  if (!stops || stops.length === 0) {
+    for (let i = 0; i < width; i++) {
+      const v = Math.floor((i / 255) * 255);
+      out[i] = { r: v, g: v, b: v };
+    }
+    return out;
+  }
+  const sorted = [...stops].sort((a, b) => a.position - b.position);
+  for (let i = 0; i < width; i++) out[i] = sampleSorted(sorted, i / (width - 1), blendSpace, colorSpace);
+  return out;
+};
+
+/** Byte-exact RGBA Uint8Array (256×1). Float→Uint8 truncation matches GMT's renderer. */
+export const renderStopsToBuffer = (
+  stops: GradientStop[],
+  blendSpace: BlendColorSpace = 'oklab',
+  colorSpace: ColorSpaceMode = 'srgb',
+): Uint8Array => {
+  const ramp = renderStopsToRamp(stops, blendSpace, colorSpace);
+  const data = new Uint8Array(256 * 4);
+  for (let i = 0; i < 256; i++) {
+    data[i * 4] = ramp[i].r; // float→Uint8 truncation matches GMT
+    data[i * 4 + 1] = ramp[i].g;
+    data[i * 4 + 2] = ramp[i].b;
+    data[i * 4 + 3] = 255;
+  }
+  return data;
+};
+
+/**
+ * Generates a Uint8Array representing the gradient 256×1. Polymorphic: accepts a
+ * legacy `GradientStop[]` or a `GradientConfig`. Thin wrapper over the canonical
+ * `renderStopsToBuffer` so the real GMT renderer and the palette mirror share ONE
+ * sampler (they can no longer drift).
+ */
+export const generateGradientTextureBuffer = (input: GradientStop[] | GradientConfig): Uint8Array => {
   let stops: GradientStop[];
   let colorSpace: ColorSpaceMode = 'srgb';
-
   let blendSpace: BlendColorSpace = 'oklab';
 
-  // Polymorphic Handling
   if (Array.isArray(input)) {
-      stops = input;
+    stops = input;
   } else if (input && Array.isArray(input.stops)) {
-      stops = input.stops;
-      colorSpace = input.colorSpace || 'srgb';
-      blendSpace = input.blendSpace || 'oklab';
+    stops = input.stops;
+    colorSpace = input.colorSpace || 'srgb';
+    blendSpace = input.blendSpace || 'oklab';
   } else {
-      // Fallback
-      return data;
-  }
-  
-  if (stops.length === 0) {
-      for (let i = 0; i < width; i++) {
-        const v = Math.floor((i / 255) * 255);
-        data[i * 4] = v; data[i * 4 + 1] = v; data[i * 4 + 2] = v; data[i * 4 + 3] = 255;
-      }
-      return data;
+    return new Uint8Array(256 * 4); // malformed input → transparent buffer (unchanged)
   }
 
-  const sorted = [...stops].sort((a, b) => a.position - b.position);
-
-  const getColorAt = (pos: number): {r:number, g:number, b:number} => {
-    let rawColor = {r:0, g:0, b:0};
-    
-    if (pos <= sorted[0].position) {
-        rawColor = hexToRgb(sorted[0].color) || {r:0,g:0,b:0};
-    } else if (pos >= sorted[sorted.length-1].position) {
-        rawColor = hexToRgb(sorted[sorted.length-1].color) || {r:0,g:0,b:0};
-    } else {
-        for (let i = 0; i < sorted.length - 1; i++) {
-            if (pos >= sorted[i].position && pos <= sorted[i+1].position) {
-                const s1 = sorted[i];
-                const s2 = sorted[i+1];
-                
-                let t = (pos - s1.position) / (s2.position - s1.position);
-                const bias = s1.bias ?? 0.5;
-                if (Math.abs(bias - 0.5) > 0.001) {
-                    t = applyBias(t, bias);
-                }
-
-                const mode = s1.interpolation || 'linear';
-                if (mode === 'step') {
-                    // Hold left color for full segment — switch happens at boundary
-                    // Must match CSS preview (getGradientCssString step behavior)
-                    t = 0.0;
-                } else if (mode === 'smooth' || mode === 'cubic') {
-                    t = t * t * (3 - 2 * t);
-                }
-
-                const c1 = hexToRgb(s1.color) || {r:0,g:0,b:0};
-                const c2 = hexToRgb(s2.color) || {r:0,g:0,b:0};
-                rawColor = blendLerp(c1, c2, t, blendSpace);
-                break;
-            }
-        }
-    }
-    
-    // Apply Output Transform based on stored profile
-    if (colorSpace === 'linear') {
-        return {
-            r: sRGBToLinear(rawColor.r),
-            g: sRGBToLinear(rawColor.g),
-            b: sRGBToLinear(rawColor.b)
-        };
-    } else if (colorSpace === 'aces_inverse') {
-        return {
-            r: inverseACES(rawColor.r),
-            g: inverseACES(rawColor.g),
-            b: inverseACES(rawColor.b)
-        };
-    }
-    
-    return rawColor;
-  };
-
-  for (let i = 0; i < width; i++) {
-    const t = i / (width - 1);
-    const col = getColorAt(t);
-    data[i * 4] = col.r;
-    data[i * 4 + 1] = col.g;
-    data[i * 4 + 2] = col.b;
-    data[i * 4 + 3] = 255; 
-  }
-  
-  return data;
+  return renderStopsToBuffer(stops, blendSpace, colorSpace);
 };
 
 /**
@@ -428,3 +472,60 @@ export const COLOR_TEMPERATURE_PRESETS = [
   { label: 'Overcast', value: 7500 },
   { label: 'Blue Sky', value: 10000 },
 ] as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Colour core for the W10 picker upgrade (RGB + HSB only — locked, no HSL).
+// HSB is the SAME model as HSV (Brightness === Value); these are honest aliases of
+// the existing rgbToHsv/hsvToRgb so there is no second representation to drift.
+// Harmony generators rotate hue in HSB and return hex[] (directly mountable as
+// swatches / passed to onColorChange). All pure + deterministic — no DOM, no random.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** RGB(0–255) → HSB. `{ h: 0–360, s: 0–100, v: 0–100 }` (v == brightness). */
+export const rgbToHsb = rgbToHsv;
+/** HSB → RGB(0–255). Args `(h: 0–360, s: 0–100, b: 0–100)`. */
+export const hsbToRgb = hsvToRgb;
+
+/** Rotate a hex colour's hue by `deg` in HSB (saturation/brightness preserved). */
+export const rotateHue = (hex: string, deg: number): string => {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex.toUpperCase();
+  const { h, s, v } = rgbToHsv(rgb);
+  return rgbToHex(hsvToRgb(wrapHue(h + deg), s, v));
+};
+
+/**
+ * `n` swatches centred on `base`, each `stepDeg` apart in hue. The base hue itself is
+ * included only for ODD `n` (the centre swatch); for even `n` the set straddles the base.
+ */
+export const analogous = (base: string, n = 5, stepDeg = 30): string[] => {
+  const rgb = hexToRgb(base);
+  if (!rgb) return Array.from({ length: n }, () => base.toUpperCase());
+  const { h, s, v } = rgbToHsv(rgb);
+  const half = (n - 1) / 2;
+  return Array.from({ length: n }, (_, i) => rgbToHex(hsvToRgb(wrapHue(h + (i - half) * stepDeg), s, v)));
+};
+
+/**
+ * `n` swatches sharing `base`'s hue/saturation, sweeping brightness evenly 15→100.
+ * (A fixed lightness ramp of the base hue — it does not re-emit the base's own value.)
+ */
+export const monochromatic = (base: string, n = 5): string[] => {
+  const rgb = hexToRgb(base);
+  if (!rgb) return [base.toUpperCase()];
+  const { h, s } = rgbToHsv(rgb);
+  return Array.from({ length: n }, (_, i) => {
+    const t = n === 1 ? 1 : i / (n - 1);
+    return rgbToHex(hsvToRgb(h, s, 15 + t * 85));
+  });
+};
+
+/** `[base, opposite]` — hue + 180°. */
+export const complementary = (base: string): string[] => [base.toUpperCase(), rotateHue(base, 180)];
+
+/** `[base, base+150°, base+210°]` — the two neighbours of the complement. */
+export const splitComplementary = (base: string): string[] => [
+  base.toUpperCase(),
+  rotateHue(base, 150),
+  rotateHue(base, 210),
+];

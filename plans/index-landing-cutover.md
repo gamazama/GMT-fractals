@@ -115,6 +115,17 @@ No change needed to the deep-link *builder* — `Lightbox`/`copyShareLink` use
   `app.gmt-fractals.com` only *after* dev is promoted** (ordering dep below).
 - **CORS is already fine** — `backend/.../_shared/cors.ts` already allows
   `app.gmt-fractals.com`.
+- **Gradient packs are split across the build + R2.** The picker's `core.*`
+  packs ship in the build (tracked; loader path is now base-relative via
+  `import.meta.env.BASE_URL`, so it resolves at root *or* subpath). The licensed
+  `softology.*` / `cptcity.*` are **gitignored**, so CI never bundles them — they
+  live only on R2 at `cdn.gmt-fractals.com/palette/` (**uploaded 2026-06-03**;
+  the bucket's live CORS already allows `app.gmt-fractals.com` *and* the
+  `gamazama.github.io` Pages origin). **Nothing to do at cutover** unless the
+  packs get re-baked — then re-run `backend/upload-palette-r2.mjs` (reads `R2_*`
+  from `backend/.env`). Caveat: that scoped S3 token can PUT objects but
+  **cannot** edit bucket CORS (`GetBucketCors`/`PutBucketCors` → AccessDenied) —
+  any CORS change is a Cloudflare-dashboard / R2-admin-token job.
 
 ---
 

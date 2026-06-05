@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-05T14:16:25.946Z",
+  "generated_at": "2026-06-05T16:05:56.030Z",
   "repo_root": "H:/GMT/workspace-gmt/dev",
   "heavy_token_threshold": 4000,
   "estimator": "char-ratio-per-filetype (see scripts/tokens.mjs)",
   "totals": {
     "files": 2845,
-    "bytes": 99604667,
-    "tokens": 9635705,
-    "loadable_tokens": 9503903,
-    "context_worthy_tokens": 3721149,
+    "bytes": 99606261,
+    "tokens": 9636200,
+    "loadable_tokens": 9504398,
+    "context_worthy_tokens": 3721297,
     "source_of_truth_tokens": 2464666,
-    "orientation_tokens": 31519,
-    "architecture_tokens": 1224964,
+    "orientation_tokens": 31609,
+    "architecture_tokens": 1225022,
     "reachable_union_files": 834,
     "reachable_union_tokens": 2100762,
     "dead_context_files": 15,
@@ -141,7 +141,7 @@
       "files": 195
     },
     "tooling": {
-      "tokens": 4032034,
+      "tokens": 4032471,
       "files": 356
     },
     "demo": {
@@ -149,7 +149,7 @@
       "files": 8
     },
     "docs": {
-      "tokens": 924289,
+      "tokens": 924347,
       "files": 233
     },
     "engine-gmt": {
@@ -179,7 +179,7 @@
   },
   "by_context_class": {
     "orient": {
-      "tokens": 31519,
+      "tokens": 31609,
       "files": 15
     },
     "source": {
@@ -187,7 +187,7 @@
       "files": 859
     },
     "data": {
-      "tokens": 5617912,
+      "tokens": 5618259,
       "files": 871
     },
     "config": {
@@ -195,7 +195,7 @@
       "files": 9
     },
     "architecture": {
-      "tokens": 1224964,
+      "tokens": 1225022,
       "files": 386
     },
     "asset": {
@@ -217,7 +217,7 @@
   },
   "by_load_policy": {
     "read-first": {
-      "tokens": 31519,
+      "tokens": 31609,
       "files": 15
     },
     "on-demand": {
@@ -225,11 +225,11 @@
       "files": 988
     },
     "skip": {
-      "tokens": 4079926,
+      "tokens": 4080273,
       "files": 258
     },
     "read-for-area": {
-      "tokens": 1224964,
+      "tokens": 1225022,
       "files": 386
     },
     "never": {
@@ -257,16 +257,16 @@
     },
     "tooling": {
       "on-demand": 267378,
-      "skip": 3269064,
+      "skip": 3269411,
       "read-for-area": 492926,
-      "read-first": 2666
+      "read-first": 2756
     },
     "demo": {
       "on-demand": 7453,
       "read-first": 1542
     },
     "docs": {
-      "read-for-area": 702880,
+      "read-for-area": 702938,
       "read-first": 5327,
       "reference-only": 164842,
       "skip": 51240
@@ -1618,6 +1618,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "docs/modules/palette/palette-suite.md",
+      "tokens": 4675,
+      "tier": "docs",
+      "loadPolicy": "read-for-area"
+    },
+    {
       "path": "engine-gmt/navigation/useInputController.ts",
       "tokens": 4673,
       "tier": "engine-gmt",
@@ -1646,12 +1652,6 @@
       "tokens": 4637,
       "tier": "engine-gmt",
       "loadPolicy": "on-demand"
-    },
-    {
-      "path": "docs/modules/palette/palette-suite.md",
-      "tokens": 4634,
-      "tier": "docs",
-      "loadPolicy": "read-for-area"
     },
     {
       "path": "engine-gmt/data/nodes/definitions.ts",
@@ -10483,10 +10483,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 12780,
-      "lines": 189,
-      "tokens": 3256,
-      "structuralTokens": 4280,
+      "bytes": 12843,
+      "lines": 190,
+      "tokens": 3273,
+      "structuralTokens": 4304,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -10513,10 +10513,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 18239,
-      "lines": 305,
-      "tokens": 4634,
-      "structuralTokens": 6112,
+      "bytes": 18406,
+      "lines": 307,
+      "tokens": 4675,
+      "structuralTokens": 6160,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -32771,10 +32771,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 1212891,
-      "lines": 47868,
-      "tokens": 418239,
-      "structuralTokens": 400977,
+      "bytes": 1213806,
+      "lines": 47904,
+      "tokens": 418554,
+      "structuralTokens": 401286,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -32816,10 +32816,10 @@
       "loadPolicy": "read-first",
       "ext": ".md",
       "reason": "orient:app-readme",
-      "bytes": 6085,
-      "lines": 116,
-      "tokens": 1525,
-      "structuralTokens": 1797,
+      "bytes": 6442,
+      "lines": 123,
+      "tokens": 1615,
+      "structuralTokens": 1909,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -33206,10 +33206,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 42329,
+      "bytes": 42421,
       "lines": 1045,
-      "tokens": 14588,
-      "structuralTokens": 15042,
+      "tokens": 14620,
+      "structuralTokens": 15092,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
