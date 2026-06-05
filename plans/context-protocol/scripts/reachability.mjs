@@ -24,6 +24,7 @@ export const APP_ENTRYPOINTS = {
   'fluid-toy': ['fluid-toy/main.tsx'],
   'fractal-toy': ['fractal-toy/main.tsx'],
   'mesh-export': ['mesh-export/main.tsx'],
+  'gradient-explorer': ['gradient-explorer/main.tsx'],
   'demo': ['index.tsx'],
 };
 

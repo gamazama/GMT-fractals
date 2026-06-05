@@ -54,6 +54,13 @@ expensive) — each with a running token total and a cheap-path-vs-full-path
 ratio. Stop at the cheapest layer that answers your question; heavy files come
 with line-range slice anchors so you read sections, not the whole file.
 
+## Gotchas
+
+- **New files are invisible until tracked.** `build-context-map.mjs` enumerates via
+  `git ls-files`, so a freshly written doc (or any new file) won't appear in a load
+  plan — and a subsystem's `module_doc_path` will still read as a "⚠ doc-coverage gap"
+  — until you `git add` it. Stage new files *before* `npm run context:map`.
+
 ## Snapshot (regenerate with `npm run context:map`)
 
 | Metric | Tokens | Files |
