@@ -106,10 +106,10 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 |----|------------|-------|--------|-------------------|-------|
 | P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | ✅ **COMPLETE (P0a–P0e)** | `exec/phase-0-foundations` | ALL 6 interfaces (a)-(f) frozen; merging to integration → Phase 1 fan-out |
 | S1 | W6 Picker text search | 1 | ✅ **merged `065fa72`** | `exec/s1-picker-search` | search only; pick-semantics + hero send/export → P2; +mobile-search additive edit to GradientExplorerApp (S5/S6 rebase) |
-| S2 | W5 Favients undo/list/search | 1 | **in-review (round 3 — rename-UX fix)** | `exec/s2-favients` | undo/list/search + favourite rename (undoable) + drag-attempt clutter fix all DONE & verified. Round-3 finding: rename awkward — hover-enlarge obscures the name + grid click=apply blocks text-click. Final contained fix routed back: **rename = list-mode only; no hover-enlarge in list mode**. Big "what does click do" (select+options vs apply) → **P2** |
+| S2 | W5 Favients undo/list/search | 1 | ✅ **merged `39ad6a2`** | `exec/s2-favients` | undo/list/search + favourite rename (single-click, list-mode, no-enlarge, undoable) + engine-core historySlice fix + shared paramUndoBracket. User visual confirm; full integration gate green. Deferred→P2: click=select-vs-apply model, cross-tab undo focus |
 | S3 | W3 ghost curves + Generator coherence | 1 | ✅ **merged `cd4c469`** | `exec/s3-generator` | indep review PASS; 2 cleanups applied (ghost-fold gated on `ghostVisible`; `genEditEnd` gated on `interactive` = restores pre-S3 undo-arming) + 2 optional one-liners; gates green; user confirm (fixes invisible/strictly-improving) |
 | S4 | W7 Import | 1 | ✅ **merged `8945a9c`** | `exec/s4-import` | Import in Favients kebab menu → parseGradientText → fitRampToStops → favientsStore.add (persisted, deduped); pure parsers + `/security-review` clean. Touched **FavientsPanel.tsx (S2's file)** — S2 rebases + folds import into its undo provider |
-| S5 | W1 Stops *mode* | 1 | **queued (wave 2b — after S2+S6)** | `exec/s5-stops-mode` | run LAST: rebase over S2 (registerPaletteUI) + S1/S6 (GradientExplorerApp); mounts the engine Stops editor; shared: registerPaletteUI, GradientExplorerApp, setup |
+| S5 | W1 Stops *mode* | 1 | **in-flight (wave 2b)** | `exec/s5-stops-mode` | mounts engine editor (P0c) as 4th mode; NEW paletteEditorStore (+ W8 doc-provider + history-provider via (d) seam); EditorStage + Stage/MOBILE_MODES + setup manifest + paletteEditor feature. Branches off current integration → rebases over S1/S6 (App) + S2 (registerPaletteUI) for free |
 | S6 | W11 Fullscreen configs | 1 | ✅ **merged `94e8e5d`** | `exec/s6-fullscreen` | foundation + fixes: drop-race in W4 kernel (capture→bubble reset — ratified into (b)) + isotropic geometries (radial/conic round). User visual confirm (drop opens fullscreen; shapes round). Integration gate green. FUTURE: richer options (backlog "fullscreen v2") |
 | S7 | W12 ColorBox generator mode (v1 addition) | 1 | **queued (wave 3)** | `exec/s7-colorbox` | NEW easings.ts + buildColorBoxRamp (parallel builder) + generatorMode enum + DDFS/UI; additive, collision-free w/ wave 2. **LOCKED: shortest hue-path only; no Leonardo (modes = mixed+colorbox)** |
 | S8 | W13 interpolation bases (v1 addition) | 1 | **queued (wave 3)** | `exec/s8-interp` | **Tier A monotone-cubic ONLY** (Tier B deferred): engine `sampleSorted` branch + union + AdvancedGradientEditor picker + JSON field. **ENGINE-CORE** (test:interlace + test:baseline gate, P0-level care) + touches the editor → run **AFTER S5** |
@@ -290,6 +290,10 @@ merges, plan amendments. Newest first.)_
   verified. New finding: rename UX awkward (hover-enlarge obscures name; grid click=apply). Interim fix
   routed back (list-mode rename, no hover-enlarge in list). The deeper "click=select+options vs apply"
   question → **P2** (key canonical-interaction input; see finding above). S2 merges after this fix.
+- 2026-06-06 — **S2 MERGED `39ad6a2` → WAVE 2a COMPLETE** (S6+S2). Full integration gate green (tsc 0 +
+  ALL test:palette incl. the 2 previously worktree-unrunnable scripts; engine-core historySlice fix
+  verified alongside the merged generator provider). S2 = undo provider + list + search + favourite
+  rename (single-click/list-mode) + paramUndoBracket + historySlice fix. **Wave 2b: S5 (Stops mode) issued.**
 - 2026-06-06 — **S6 RE-MERGED `94e8e5d`** (fixes, visually confirmed FIRST this time): drop-race in W4
   kernel (useDragInFlight capture→bubble reset — ratified into frozen (b); P2 inherits) + isotropic
   radial/conic/arched. Integration gate green. **Wave 2a: S6 ✅; S2 in-review (feedback round).**
