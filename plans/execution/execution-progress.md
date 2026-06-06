@@ -298,6 +298,15 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 
 ## Backlog / deferred debt
 
+- **Deep-zoom fractal coloring mode (extract from fluid-toy) — INITIATIVE, research probe out
+  (2026-06-06).** `dev/fluid-toy` has a deep-zoom Mandelbrot zoomer with high-quality AA + gradient
+  mapping. Idea: extract the **deep-zoom + gradient-mapping as an engine-core library** (same
+  promotion pattern as W8/W10/W4) and add it as a **Gradient Explorer fullscreen coloring mode** (the
+  ultimate "see your 256-ramp in action" preview) — feeds the "fullscreen v2" item. Research probe →
+  `plans/fluid-toy-deepzoom-coloring-scope.md`. NOT v1-critical; lands post-P2 / own initiative. Note:
+  GX deliberately has no viewport/raymarch — this adds a *scoped, opt-in* GL fractal canvas only in the
+  fullscreen overlay.
+
 - **oklab/blend math duplicated across `utils/colorUtils.ts` and `palette/core/oklab.ts`** (P0a).
   The byte-exact stopfit regression went tautological after the gmtGradient collapse; now guarded by
   an explicit drift-pin (`test-palette-stopops §4`: `colorUtils.lerpOklab === palette/core/oklab.lerpOklab`,
