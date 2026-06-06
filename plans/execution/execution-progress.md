@@ -135,7 +135,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | S5 | W1 Stops *mode* | 1 | ✅ **merged `73bcd08`** | `exec/s5-stops-mode` | 4th mode: mounts engine editor (P0c) as-is; paletteEditorStore + (d) seam + history & 'stops' doc providers; EditorStage + StopsDockPanel (doc-level inspector, T5) + Stage/MOBILE_MODES + setup. **Also: EmbeddedColorPicker responsive reflow (see watch) + blank-canvas fix.** User visual confirm; full gate green. **WAVE 2 COMPLETE — studio is now 4-mode.** |
 | S6 | W11 Fullscreen configs | 1 | ✅ **merged `94e8e5d`** | `exec/s6-fullscreen` | foundation + fixes: drop-race in W4 kernel (capture→bubble reset — ratified into (b)) + isotropic geometries (radial/conic round). User visual confirm (drop opens fullscreen; shapes round). Integration gate green. FUTURE: richer options (backlog "fullscreen v2") |
 | S7 | W12 ColorBox generator mode (v1 addition) | 1 | **queued (wave 3)** | `exec/s7-colorbox` | NEW easings.ts + buildColorBoxRamp (parallel builder) + generatorMode enum + DDFS/UI; additive, collision-free w/ wave 2. **LOCKED: shortest hue-path only; no Leonardo (modes = mixed+colorbox)** |
-| S8 | W13 interpolation bases (v1 addition) | 1 | **queued (wave 3)** | `exec/s8-interp` | **Tier A monotone-cubic ONLY** (Tier B deferred): engine `sampleSorted` branch + union + AdvancedGradientEditor picker + JSON field. **ENGINE-CORE** (test:interlace + test:baseline gate, P0-level care) + touches the editor → run **AFTER S5** |
+| S8 | W13 interpolation bases | 1 | ✅ **resolved — DEFERRED, no code** | `exec/s8-interp` | S8 REFUTED Tier A: 2-point `sampleSorted` can't overshoot → monotone-cubic degenerates to smoothstep (already ships as smooth/cubic); the no-overshoot win needs **multi-point = Tier B**. **W13 entirely deferred to Tier B**; v1 ships nothing from it. Zero code (sampler byte-unchanged). Good catch (flawed scope-doc premise). Rationale → project memory |
 | P2 | W2 portability integration + W9 snapshot | 2 | not-started | `exec/p2-portability` | depends: ALL Phase 1; touches every hero. **THE global-gradient-DnD phase:** every result/swatch becomes a drag SOURCE + the export/PNG/fullscreen wells wired + drag↔Send-to share ONE target list + canonical hero. Accumulated P2 inputs: click=select-vs-apply model, cross-tab undo focus, hero-resize state-loss, facet-naming, ImageStage coexist, favientTargets→engine-registry migration, fold ⛶ into hero. *(grown large — consolidate into a P2 scope doc before launch)* |
 | P3 | `/polish` pass | 3 | deferred | — | after structure lands |
 
@@ -342,6 +342,12 @@ merges, plan amendments. Newest first.)_
   verified. New finding: rename UX awkward (hover-enlarge obscures name; grid click=apply). Interim fix
   routed back (list-mode rename, no hover-enlarge in list). The deeper "click=select+options vs apply"
   question → **P2** (key canonical-interaction input; see finding above). S2 merges after this fix.
+- 2026-06-06 — **S8 RESOLVED — DEFERRED (no code).** Execution session REFUTED the W13 Tier-A premise:
+  monotone-cubic's no-overshoot benefit is a MULTI-POINT property; `sampleSorted` is per-segment 2-point
+  (can't overshoot by construction), so a faithful 2-point monotone = smoothstep (already ships). No cheap
+  Tier-A win → **W13 entirely deferred to Tier B** (where monotone actually pays off). Orchestrator ratified
+  (don't force a relabeled-smoothstep change into the byte-exact engine bake sampler). Zero diff. Wave 3
+  now = **S7 only** (still in flight).
 - 2026-06-06 — **S5 MERGED `73bcd08` → WAVE 2 COMPLETE.** Stops mode = 4th authoring mode (studio is now
   Picker/Generator/Image/Stops). Full integration gate green (tsc 0 + test:palette 13). Reuses P0c editor
   + (d) seam + paramUndoBracket + W8 doc registry — all frozen interfaces consumed cleanly. Also: shared

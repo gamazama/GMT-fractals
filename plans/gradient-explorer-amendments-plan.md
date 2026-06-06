@@ -528,9 +528,14 @@ sequence after S5.
 ### Where state lives
 `interpolation` is already a per-stop field (no new state). New modes round-trip only in GMT-native JSON.
 
-### Decision (LOCKED 2026-06-06)
-**Tier B = STRETCH (deferred).** v1 ships **monotone-cubic only** (Tier A) — no `sampleSorted` 4-point
-refactor in v1.
+### Decision (LOCKED 2026-06-06; REVISED same day per S8 finding)
+**Tier A is VOID — W13 is entirely DEFERRED to Tier B; v1 ships NOTHING from W13.** S8 traced it against
+the real sampler: `sampleSorted` is strictly per-segment (2-point), which **cannot overshoot by
+construction**, so monotone-cubic's no-overshoot benefit only exists with **multi-point** fitting (≥3
+stops) = Tier B's 4-control-point refactor. A faithful 2-point monotone degenerates to **smoothstep** —
+already shipping as `smooth`/`cubic`. So there was no cheap Tier-A win (the scope doc conflated "2-point
+can't overshoot" with "monotone gives a benefit"). Re-scope monotone-cubic INTO the Tier-B neighbour-aware
+refactor if/when Tier B is undeferred. (Rationale + the sampler bake-parity invariant saved to project memory.)
 
 ## Cross-cutting notes
 
