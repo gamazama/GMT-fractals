@@ -26,6 +26,16 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
   Gates green; nothing visible (kernels unconsumed = expected frozen-ahead). ✅ **committed `0e04e8d`;
   Phase 0 COMPLETE.** Integration branch `exec/gradient-explorer` established at this HEAD.
 
+**S4↔S2 overlap (wave-2 sequencing):** S4 (import) now writes into the Favients menu + favientsStore;
+S2 (favients undo/list/search) owns those. When S2 runs: it must rebase over S4's import action, AND
+S4's imported-favient writes should go through S2's new history provider so imports are undoable. Land
+S4 first (wave 1), then S2 rebases + folds import into its undo coverage.
+
+**NEW-FINDING → backlog (knip false positives):** `gradient-explorer/main.tsx` is missing from knip's
+entry list, so the whole gradient-explorer subtree (TopBarButtons, GradientExplorerApp, setup, …) reads
+as orphaned. One-line `knip.json` fix in a cleanup pass — but it may surface real unused exports in that
+tree, so do it deliberately (not mid-stream).
+
 **NEW-FINDING → P2 (hero state-loss on resize):** in the Picker, resizing to a small/mobile viewport
 flips the layout and the **hero gradient goes blank** — the desktop↔mobile branch swap remounts the
 Picker subtree and drops the hero's local preview state. Likely pre-existing (polish flagged
@@ -39,13 +49,18 @@ well-accepted MIME is present** (documented in dropWellRegistry.ts, not solved i
 drop-payload parsing needs a `/security-review`** (and W7 import too); (3) migrate
 `palette/core/favientTargets.ts` onto the engine send-target registry + `createListRegistry`.
 
-**PHASE 1 — Wave 1 LAUNCHED (parallel worktrees off `exec/gradient-explorer`):** S1 (picker search),
-S3 (generator coherence + ghost), S4 (import) — collision-free file sets. Wave 2 (S2/S5/S6, shared-shell)
-after. **Convention: Phase-1 sessions DO NOT edit `execution-progress.md`** (orchestrator-owned — avoids
-log merge battles across worktrees); they report via summary, orchestrator updates the canonical log.
+**PHASE 1 — Wave 1 COMPLETE ✅** (S1 `065fa72`, S4 `8945a9c`, S3 `cd4c469` all merged; **integration
+gate green** — tsc 0 + test:palette all-pass on the combined branch @ `5525534`).
 
-Next action: ingest S1/S3/S4 summaries as they land → review (S3 gets an independent review — ghost
-alignment is fiddly) → merge each to integration → then Wave 2.
+**PHASE 1 — Wave 2 PLAN (shared-shell — sequenced, not free-for-all):** run **S2 + S6 in parallel**
+(largely disjoint: S2 = FavientsPanel/favientsStore/registerPaletteUI-history; S6 = App-overlay +
+ramp-mappings + W4-wells-consumer), **then S5 alone** (Stops mode — touches registerPaletteUI [rebase
+over S2], GradientExplorerApp [rebase over S1+S6], setup; running last absorbs all shared-shell edits
+cleanly). **S2 must:** rebase over S4's FavientsPanel Import menu item AND fold imported-favient writes
+into its new history provider (imports become undoable). **Convention still holds: sessions DO NOT edit
+execution-progress.md.**
+
+Next action: launch S2 + S6 worktrees → ingest/review/merge → then S5.
 
 **Document round-trip coverage (W8) — track as streams register their providers:**
 favients (P0d, reference consumer) · generator (S3) · image (its stream) · stops/paletteEditorStore (S5).
@@ -76,11 +91,11 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 |----|------------|-------|--------|-------------------|-------|
 | P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | ✅ **COMPLETE (P0a–P0e)** | `exec/phase-0-foundations` | ALL 6 interfaces (a)-(f) frozen; merging to integration → Phase 1 fan-out |
 | S1 | W6 Picker text search | 1 | ✅ **merged `065fa72`** | `exec/s1-picker-search` | search only; pick-semantics + hero send/export → P2; +mobile-search additive edit to GradientExplorerApp (S5/S6 rebase) |
-| S2 | W5 Favients undo/list/search | 1 | not-started | `exec/s2-favients` | depends: P0 (doc+history provider); shared: registerPaletteUI.ts |
-| S3 | W3 ghost curves + Generator coherence | 1 | **in-flight (wave 1)** | `exec/s3-generator` | merges Decision 3 (ghost-previewed bake-to-commit) + T1 fixes; orchestrator independent review on return |
-| S4 | W7 Import | 1 | **in-flight (wave 1)** | `exec/s4-import` | text formats first; /security-review (untrusted parsing); Import button (wells = P2) |
-| S5 | W1 Stops *mode* | 1 | not-started | `exec/s5-stops-mode` | depends: P0 (engine Stops editor + sampleStops); shared: registerPaletteUI.ts, GradientExplorerApp.tsx, setup.ts |
-| S6 | W11 Fullscreen configs | 1 | not-started | `exec/s6-fullscreen` | depends: P0 (W4 wells kernel); shared: GradientExplorerApp.tsx |
+| S2 | W5 Favients undo/list/search | 1 | **in-flight (wave 2a)** | `exec/s2-favients` | rebase over S4's FavientsPanel Import menu; fold imported-favient writes into the new history provider (undoable); shared: registerPaletteUI.ts |
+| S3 | W3 ghost curves + Generator coherence | 1 | ✅ **merged `cd4c469`** | `exec/s3-generator` | indep review PASS; 2 cleanups applied (ghost-fold gated on `ghostVisible`; `genEditEnd` gated on `interactive` = restores pre-S3 undo-arming) + 2 optional one-liners; gates green; user confirm (fixes invisible/strictly-improving) |
+| S4 | W7 Import | 1 | ✅ **merged `8945a9c`** | `exec/s4-import` | Import in Favients kebab menu → parseGradientText → fitRampToStops → favientsStore.add (persisted, deduped); pure parsers + `/security-review` clean. Touched **FavientsPanel.tsx (S2's file)** — S2 rebases + folds import into its undo provider |
+| S5 | W1 Stops *mode* | 1 | **queued (wave 2b — after S2+S6)** | `exec/s5-stops-mode` | run LAST: rebase over S2 (registerPaletteUI) + S1/S6 (GradientExplorerApp); mounts the engine Stops editor; shared: registerPaletteUI, GradientExplorerApp, setup |
+| S6 | W11 Fullscreen configs | 1 | **in-flight (wave 2a)** | `exec/s6-fullscreen` | consumes W4 wells kernel (b) — gradient wells/payload; ramp-geometry configs exportable + reroll/amount; shared: GradientExplorerApp (overlay mount) |
 | P2 | W2 portability integration + W9 snapshot | 2 | not-started | `exec/p2-portability` | depends: ALL Phase 1; touches every hero |
 | P3 | `/polish` pass | 3 | deferred | — | after structure lands |
 
@@ -244,6 +259,14 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-06 — **WAVE 1 COMPLETE** (S3 merged `cd4c469` via `5525534`). Integration gate green: tsc 0 +
+  test:palette all-pass on the combined branch. S3's 2 review cleanups applied (ghost-fold/ghostVisible,
+  genEditEnd/interactive) + 2 optional one-liners; merged without re-visual (fixes invisible /
+  strictly-improving; #2 restores pre-S3 undo-arming). **Opening Wave 2: S2+S6 parallel → S5.**
+- 2026-06-06 — **S4 (Import → Favients) MERGED `8945a9c`** (merge `e1e1735`; clean, disjoint from S1).
+  User re-scoped (live) from wall→Favients kebab: pure parsers (.map/.gpl/.ggr/.cpt/.css/.json,
+  security-clean) → fitRampToStops → favientsStore.add. Touched FavientsPanel (S2 rebases). User visual
+  confirm. **Wave 1: S1✅ S4✅; S3 finishing its 2-cleanup fix pass.**
 - 2026-06-06 — **S1 (Picker search) MERGED `065fa72`** (FF into integration; dev/ now on
   `exec/gradient-explorer`). User visual confirm. Gates green. Token-AND search + transient
   `pickerSearch` store + self-explaining count readout + mobile parity. Additive `GradientExplorerApp`
