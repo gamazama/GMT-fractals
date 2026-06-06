@@ -91,7 +91,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 |----|------------|-------|--------|-------------------|-------|
 | P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | ✅ **COMPLETE (P0a–P0e)** | `exec/phase-0-foundations` | ALL 6 interfaces (a)-(f) frozen; merging to integration → Phase 1 fan-out |
 | S1 | W6 Picker text search | 1 | ✅ **merged `065fa72`** | `exec/s1-picker-search` | search only; pick-semantics + hero send/export → P2; +mobile-search additive edit to GradientExplorerApp (S5/S6 rebase) |
-| S2 | W5 Favients undo/list/search | 1 | **in-flight (wave 2a)** | `exec/s2-favients` | rebase over S4's FavientsPanel Import menu; fold imported-favient writes into the new history provider (undoable); shared: registerPaletteUI.ts |
+| S2 | W5 Favients undo/list/search | 1 | **in-review (code done; verify unblocked)** | `exec/s2-favients` | undo provider + list view + search delivered; folds S4 import into undo. **ENGINE-CORE fix:** historySlice `endParamTransaction` pushed spurious no-op undo entries for ALL providers (also hit merged S3 gen-provider) → now reads ext-key via `provider.capture()`. New shared `paramUndoBracket.ts`. dev/node_modules was partial → `npm install` repaired. **Pending: full gate + visual in wt-s2 (incl. GENERATOR-undo regression check)** |
 | S3 | W3 ghost curves + Generator coherence | 1 | ✅ **merged `cd4c469`** | `exec/s3-generator` | indep review PASS; 2 cleanups applied (ghost-fold gated on `ghostVisible`; `genEditEnd` gated on `interactive` = restores pre-S3 undo-arming) + 2 optional one-liners; gates green; user confirm (fixes invisible/strictly-improving) |
 | S4 | W7 Import | 1 | ✅ **merged `8945a9c`** | `exec/s4-import` | Import in Favients kebab menu → parseGradientText → fitRampToStops → favientsStore.add (persisted, deduped); pure parsers + `/security-review` clean. Touched **FavientsPanel.tsx (S2's file)** — S2 rebases + folds import into its undo provider |
 | S5 | W1 Stops *mode* | 1 | **queued (wave 2b — after S2+S6)** | `exec/s5-stops-mode` | run LAST: rebase over S2 (registerPaletteUI) + S1/S6 (GradientExplorerApp); mounts the engine Stops editor; shared: registerPaletteUI, GradientExplorerApp, setup |
@@ -267,6 +267,15 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-06 — **dev/node_modules repaired** (partial-install: three/fflate/vite/.bin/tsc missing →
+  blocked the app + 2 test scripts in every worktree via the junction). `npm install` in dev (637 pkgs)
+  fixed it; worktrees junction to it so all now whole. (Matches the project_dev_toolchain_global_tsc note.)
+- 2026-06-06 — **S2 code DONE (pending verify).** Undo provider (favients capture/restore + write-through),
+  list view (per-host viewMode persist), search (transient, reorder disabled while filtered); folds S4
+  import into undo. **Engine-core fix:** historySlice was pushing spurious no-op undo entries for any
+  registered provider (incl. merged S3) → reads ext-key via provider.capture(); shared `paramUndoBracket.ts`
+  extracted (gen+fav). Visual was env-blocked (deps) → unblocked now. NOT merged until full gate + visual
+  (incl. generator-undo regression) confirm.
 - 2026-06-06 — **S6 PREMATURE MERGE → BACKED OUT.** Orchestrator merged S6 on the user's "ok as a
   concept" comment, but that was a SCOPE note, not a works-confirmation — the user then found
   **fullscreen doesn't actually work at runtime** (tsc + test:palette had passed; visual-only break).
