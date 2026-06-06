@@ -26,6 +26,13 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
   Gates green; nothing visible (kernels unconsumed = expected frozen-ahead). ✅ **committed `0e04e8d`;
   Phase 0 COMPLETE.** Integration branch `exec/gradient-explorer` established at this HEAD.
 
+**NEW-FINDING → P2 (hero state-loss on resize):** in the Picker, resizing to a small/mobile viewport
+flips the layout and the **hero gradient goes blank** — the desktop↔mobile branch swap remounts the
+Picker subtree and drops the hero's local preview state. Likely pre-existing (polish flagged
+state-loss-on-mode-switch); confirmed on the S1 branch but not S1's doing. **P2 owns the canonical hero
+— lift its preview state to a transient store (same pattern as `pickerSearch`) so it survives the
+remount.** (User reported 2026-06-06; "fix wherever convenient" → P2.)
+
 **Carry-forward for P2 (portability integration):** (1) the DragWellsOverlay must coexist with
 ImageStage's window dragover/drop file-import listener — **ImageStage must early-return when a
 well-accepted MIME is present** (documented in dropWellRegistry.ts, not solved in P0e); (2) **real
@@ -68,7 +75,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | ID | Workstream | Phase | Status | Branch / worktree | Notes |
 |----|------------|-------|--------|-------------------|-------|
 | P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | ✅ **COMPLETE (P0a–P0e)** | `exec/phase-0-foundations` | ALL 6 interfaces (a)-(f) frozen; merging to integration → Phase 1 fan-out |
-| S1 | W6 Picker text search | 1 | **in-flight (wave 1)** | `exec/s1-picker-search` | search only; pick-semantics + hero send/export deferred to P2 |
+| S1 | W6 Picker text search | 1 | ✅ **merged `065fa72`** | `exec/s1-picker-search` | search only; pick-semantics + hero send/export → P2; +mobile-search additive edit to GradientExplorerApp (S5/S6 rebase) |
 | S2 | W5 Favients undo/list/search | 1 | not-started | `exec/s2-favients` | depends: P0 (doc+history provider); shared: registerPaletteUI.ts |
 | S3 | W3 ghost curves + Generator coherence | 1 | **in-flight (wave 1)** | `exec/s3-generator` | merges Decision 3 (ghost-previewed bake-to-commit) + T1 fixes; orchestrator independent review on return |
 | S4 | W7 Import | 1 | **in-flight (wave 1)** | `exec/s4-import` | text formats first; /security-review (untrusted parsing); Import button (wells = P2) |
@@ -237,6 +244,11 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-06 — **S1 (Picker search) MERGED `065fa72`** (FF into integration; dev/ now on
+  `exec/gradient-explorer`). User visual confirm. Gates green. Token-AND search + transient
+  `pickerSearch` store + self-explaining count readout + mobile parity. Additive `GradientExplorerApp`
+  edit flagged for S5/S6 rebase. NEW-FINDING logged → P2: hero blank on resize-to-mobile (remount
+  state-loss). Wave 1 remaining: S3, S4 (summaries pending).
 - 2026-06-06 — **P0e DONE → PHASE 0 COMPLETE.** Generic engine kernels: (b) drop-wells
   (`dropWellRegistry` + `dragFlight` reducer + `useDragInFlight` + `<DragWellsOverlay/>`) and (c)
   send-targets (`sendTargetRegistry` + `<SendToMenu/>`), backed by a shared `createListRegistry`.
