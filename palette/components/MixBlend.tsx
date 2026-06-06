@@ -52,7 +52,7 @@ export const MixBlend: React.FC<{ onSwap: () => void; height?: number; dimmed?: 
   height = 78,
   dimmed = false,
 }) => (
-  <div className={`flex items-stretch justify-center gap-5 py-1 transition-opacity ${dimmed ? 'opacity-40' : ''}`}>
+  <div className={`flex items-stretch justify-center gap-5 py-1 transition-opacity ${dimmed ? 'opacity-40 pointer-events-none select-none' : ''}`} aria-disabled={dimmed || undefined}>
     {/* A↔B end markers, aligned to the slider track */}
     <div className="flex flex-col justify-between items-end text-sm font-semibold uppercase tracking-wide text-gray-500 py-5">
       <span>A</span>

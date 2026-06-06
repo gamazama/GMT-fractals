@@ -30,9 +30,10 @@ import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../../data/constant
 import { AnimationMath } from '../../engine/math/AnimationMath';
 import { calculateViewBounds } from '../../utils/keyframeViewBounds';
 import { calculateTangentModeUpdates, calculateGlobalInterpolationUpdates } from '../../utils/timelineUtils';
-import { FitIcon, FitSelectionIcon, NormIcon, WaveIcon, BakeIcon, MagicIcon } from '../../components/Icons';
+import { FitIcon, FitSelectionIcon, NormIcon, WaveIcon, BakeIcon, MagicIcon, EyeIcon } from '../../components/Icons';
 import type { Track, Keyframe, AnimationSequence, SoftSelectionType } from '../../types';
 import type { RGB } from '../core/oklab';
+import type { Channels } from '../core/generatorPipeline';
 import { CURVE_FRAMES } from '../core/channelCurve';
 import { useGraphInteraction } from '../../hooks/useGraphInteraction';
 import { useGraphTools } from '../../hooks/useGraphTools';
@@ -96,6 +97,20 @@ interface ChannelGraphEditorProps {
   height: number;
   /** Optional result ramp, drawn as a thin strip under the graph for context. */
   previewRamp?: RGB[];
+  /**
+   * The PROSPECTIVE-FIT source channels (256 values each, hue unwrapped) at the
+   * host's current detail/smooth — painted as a faint dashed "ghost" behind the
+   * editable bezier so the user sees what a re-fit/bake would commit BEFORE
+   * committing it. detail/smooth move this ghost, never the live curve.
+   * (Decision 3 — see generatorStore.prospectiveFitChannels.)
+   */
+  ghost?: Channels | null;
+  /**
+   * When false the editor is a read-only SCOPE: no keyframe edits, the editing tools are
+   * hidden, but the axes + ghost still render. Used before any curves are fit so the
+   * channel scope (and the Modify chain's effect) is always visible. Default true.
+   */
+  interactive?: boolean;
 }
 
 export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
@@ -104,9 +119,12 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   width,
   height,
   previewRamp,
+  ghost,
+  interactive = true,
 }) => {
   const interactionRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLCanvasElement>(null);
+  const ghostRef = useRef<HTMLCanvasElement>(null);
 
   const [activeChannel, setActiveChannel] = useState<ChannelKey>('L');
   const [selectedKeyframeIds, setSelectedKeyframeIds] = useState<string[]>([]);
@@ -120,6 +138,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   }, [width]);
   const [normalized, setNormalized] = useState(true);
   const [visible, setVisible] = useState<Record<string, boolean>>({ L: true, C: true, h: true });
+  // Source-ghost visibility — a transient local UI flag (like `normalized` / `visible`),
+  // NOT a DDFS param. Default on so the prospective fit is visible the moment curves exist.
+  const [ghostVisible, setGhostVisible] = useState(true);
   // Soft selection (proportional editing) — local state mirroring the animation
   // store's softSelection fields.
   const [softEnabled, setSoftEnabled] = useState(false);
@@ -165,30 +186,39 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     return { panX, panY: viewY.pan, scaleX: frameWidth, scaleY: viewY.scale, width: canvasWidth, height: canvasHeight };
   }, [scrollLeft, frameWidth, viewY, canvasWidth, canvasHeight]);
 
-  // Per-channel value range (min/max of keyframes), padded — same shape as
-  // GraphEditor's trackRanges. Normalized rendering maps each to [0,1].
+  // Per-channel value range (min/max of keyframes), padded — same shape as GraphEditor's
+  // trackRanges. Normalized rendering maps each to [0,1]. The GHOST extent is folded in so
+  // the result ghost (which can swing outside the keyframe band under the Modify chain, or
+  // be the only data when there are no keyframes yet) always stays in view AND shares the
+  // editable curve's scale — they overlay where equal and diverge to show what Modify did.
+  // Gated on `ghostVisible`: hiding the ghost must also drop its range contribution, else
+  // the editable bezier would stay compressed with no visible cause.
   const trackRanges = useMemo(() => {
     const ranges: Record<string, { min: number; max: number; span: number }> = {};
     trackIds.forEach((tid) => {
-      const track = tracks[tid as ChannelKey];
-      if (!track || track.keyframes.length === 0) {
-        ranges[tid] = { min: 0, max: 1, span: 1 };
-        return;
-      }
       let min = Infinity;
       let max = -Infinity;
-      track.keyframes.forEach((k) => {
+      const track = tracks[tid as ChannelKey];
+      track?.keyframes.forEach((k) => {
         if (k.value < min) min = k.value;
         if (k.value > max) max = k.value;
       });
-      if (max - min < 0.00001) {
+      const g = ghostVisible ? ghost?.[tid as ChannelKey] : undefined;
+      if (g) for (let i = 0; i < g.length; i++) {
+        if (g[i] < min) min = g[i];
+        if (g[i] > max) max = g[i];
+      }
+      if (!isFinite(min) || !isFinite(max)) {
+        min = 0;
+        max = 1;
+      } else if (max - min < 0.00001) {
         min -= 0.5;
         max += 0.5;
       }
       ranges[tid] = { min, max, span: max - min };
     });
     return ranges;
-  }, [tracks, trackIds]);
+  }, [tracks, trackIds, ghost, ghostVisible]);
 
   const getLocalY = useCallback(
     (val: number, tid: string) => {
@@ -409,6 +439,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   );
 
   const handleDoubleClick = (e: React.MouseEvent) => {
+    if (!interactive) return;
     const rect = interactionRef.current?.getBoundingClientRect();
     if (!rect) return;
     addKeyAtMouse(e.clientX - rect.left, e.clientY - rect.top);
@@ -416,7 +447,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (shouldSuppressContextMenu()) return;
+    if (!interactive || shouldSuppressContextMenu()) return;
     const rect = interactionRef.current?.getBoundingClientRect();
     if (!rect) return;
     const hit = getHit(e.clientX - rect.left, e.clientY - rect.top);
@@ -436,6 +467,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   };
 
   const handleMouseDownWrapped = (e: React.MouseEvent) => {
+    if (!interactive) return; // read-only scope: no drag / pan / add
     // Ctrl+click on empty space adds a keyframe (matches GraphEditor).
     if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
       const rect = interactionRef.current?.getBoundingClientRect();
@@ -457,6 +489,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     const el = focusRef.current;
     if (!el) return;
     const onKey = (e: KeyboardEvent) => {
+      if (!interactive) return;
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
@@ -465,7 +498,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     };
     el.addEventListener('keydown', onKey);
     return () => el.removeEventListener('keydown', onKey);
-  }, [deleteSelected]);
+  }, [deleteSelected, interactive]);
 
   // Result strip under the graph.
   useEffect(() => {
@@ -490,6 +523,49 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     ctx.drawImage(tmp, 0, 0, 256, 1, GRAPH_LEFT_GUTTER_WIDTH, 0, cv.width - GRAPH_LEFT_GUTTER_WIDTH, cv.height);
   }, [previewRamp, canvasWidth]);
 
+  // The "source ghost" — faint dashed per-channel polylines of the RESULT channels
+  // (`ghost`, post-global Modify chain) behind the editable bezier. Drawn with the
+  // editor's OWN transform — `frameToCanvasPixel` (x) + `v2p` (y, honouring `normalized` +
+  // `trackRanges`) — the exact pair the live curve uses. `trackRanges` folds in the ghost
+  // extent (above), so the ghost never clips and shares the bezier's scale: with the
+  // Modify chain neutral the ghost overlays the curve; under active Modify (hue rotate,
+  // chroma, contrast, posterize…) it diverges to show what the dials did. Hue is already
+  // unwrapped upstream to share the h track's continuous space.
+  //
+  // NOTE: this canvas is OVERLAID (not a true z-behind child) — GraphCanvas's back layer
+  // paints an opaque background (THEME.backgroundColor), so a child behind it would be
+  // hidden; a faint, pointer-events-none overlay reads as a ghost without forking the
+  // read-only GraphCanvas.
+  useEffect(() => {
+    const cv = ghostRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!ghostVisible || !ghost) return;
+    const N = 256;
+    for (const ch of CHANNELS) {
+      if (visible[ch.key] === false) continue;
+      const vals = ghost[ch.key];
+      if (!vals || vals.length === 0) continue;
+      ctx.beginPath();
+      for (let i = 0; i < N; i++) {
+        const x = frameToCanvasPixel((i / (N - 1)) * CURVE_FRAMES);
+        const y = v2p(vals[i], ch.key);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      const active = ch.key === activeChannel;
+      ctx.strokeStyle = ch.color;
+      ctx.globalAlpha = active ? 0.5 : 0.28;
+      ctx.lineWidth = active ? 2 : 1.25;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+  }, [ghost, ghostVisible, visible, v2p, frameToCanvasPixel, activeChannel, canvasWidth, canvasHeight]);
+
   const highlightedTracks = useMemo(() => new Set([activeChannel]), [activeChannel]);
 
   // Undo bracketing for DRAGS: a pointerdown in the editor opens a param transaction,
@@ -498,7 +574,11 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   // self-bracket via genEdit (inspector actions, add/remove key) just see an empty outer
   // transaction. The graph's own mutations (updateKeyframes during drag) are unbracketed
   // so they fall inside this window rather than spamming one entry per pointermove.
+  // Gated on `interactive`: a read-only scope never opens a bracket, and since the editor
+  // is now always-mounted this avoids firing endParamTransaction on every app-wide
+  // pointerup while the Generator panel is just showing the scope.
   useEffect(() => {
+    if (!interactive) return;
     const end = () => genEditEnd();
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
@@ -506,13 +586,13 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
     };
-  }, []);
+  }, [interactive]);
 
   return (
     <div
       ref={focusRef}
       tabIndex={0}
-      onPointerDownCapture={() => genEditStart()}
+      onPointerDownCapture={interactive ? () => genEditStart() : undefined}
       className="flex w-full outline-none select-none"
       style={{ height }}
     >
@@ -536,14 +616,22 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
 
       <div className="flex-1 min-w-0 flex flex-col">
         <div ref={interactionRef} className="relative" style={{ width: canvasWidth, height: canvasHeight }}>
-          {/* Graph tools: fit all, fit selection, normalize, simplify, bake, smooth */}
+          {/* Graph tools: fit all, fit selection, normalize, simplify, bake, smooth, ghost.
+              In read-only scope mode only the view tools (fit-all, normalize) + the ghost
+              toggle are shown — the keyframe-editing tools need editable curves. */}
           <div className="absolute top-7 left-1 flex flex-col gap-1 z-20">
             <ToolButton onClick={fitAll} icon={<FitIcon />} tooltip="Fit all" />
-            <ToolButton onClick={fitSelection} icon={<FitSelectionIcon />} tooltip="Fit selection" />
+            {interactive && <ToolButton onClick={fitSelection} icon={<FitSelectionIcon />} tooltip="Fit selection" />}
             <ToolButton onClick={toggleNormalize} active={normalized} icon={<NormIcon active={normalized} />} tooltip="Normalize (0–1)" />
-            <ToolButton onPointerDown={tools.handleSimplifyDown} active={tools.isSimplifying} icon={<MagicIcon active={tools.isSimplifying} />} tooltip="Simplify (drag L/R)" />
-            <ToolButton onPointerDown={tools.handleBakeDown} active={tools.isBaking} icon={<BakeIcon active={tools.isBaking} />} tooltip="Bake / resample (drag)" />
-            <ToolButton onPointerDown={tools.handleSmoothDown} active={tools.isSmoothing} icon={<WaveIcon active={tools.isSmoothing} />} tooltip="Smooth (right) / bounce (left)" />
+            {interactive && <ToolButton onPointerDown={tools.handleSimplifyDown} active={tools.isSimplifying} icon={<MagicIcon active={tools.isSimplifying} />} tooltip="Simplify (drag L/R)" />}
+            {interactive && <ToolButton onPointerDown={tools.handleBakeDown} active={tools.isBaking} icon={<BakeIcon active={tools.isBaking} />} tooltip="Bake / resample (drag)" />}
+            {interactive && <ToolButton onPointerDown={tools.handleSmoothDown} active={tools.isSmoothing} icon={<WaveIcon active={tools.isSmoothing} />} tooltip="Smooth (right) / bounce (left)" />}
+            <ToolButton
+              onClick={() => setGhostVisible((g) => !g)}
+              active={ghostVisible}
+              icon={<EyeIcon active={ghostVisible} />}
+              tooltip="Result ghost — faint dashed = the gradient's actual channels (follows the Modify dials)"
+            />
           </div>
           <GraphCanvas
             width={canvasWidth}
@@ -565,6 +653,14 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             onMouseDown={handleMouseDownWrapped}
             onContextMenu={handleContextMenu}
             onDoubleClick={handleDoubleClick}
+          />
+          {/* Source ghost — overlays the graph, faint + pointer-events-none (see effect). */}
+          <canvas
+            ref={ghostRef}
+            width={canvasWidth}
+            height={canvasHeight}
+            className="absolute top-0 left-0 pointer-events-none"
+            style={{ width: canvasWidth, height: canvasHeight }}
           />
           <GraphSelectionBBox
             sequence={sequence}
