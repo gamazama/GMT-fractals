@@ -21,8 +21,9 @@
  *     img2grad port and letting "reseed" be an explicit integer bump.
  */
 
-import { rgbToOklab, oklabToRgb, type RGB } from './oklab';
+import { rgbToOklab, oklabToRgb, oklabToRgbSafe, type RGB } from './oklab';
 import { mulberry32 } from './rampGeometry';
+import { getEasing, type EasingName } from './easings';
 
 /** OKLCh channels of a 256-step gradient: L∈[0,1], C (chroma) ≥0, h in radians. */
 export interface Channels {
@@ -344,4 +345,79 @@ export const buildGradientRamp = (
   }
 
   return { ramp, base, final: { L: fL, C: fC, h: fH } };
+};
+
+// --- ColorBox mode (parallel builder) --------------------------------------------
+// A second, independent generator mode. Where buildGradientRamp MIXES two source
+// gradients, ColorBox SWEEPS each OKLCh channel directly from a start to an end
+// value, each channel driven by its own easing curve — Lyft's ColorBox idea, but
+// in OKLCh (perceptual) instead of HSV. It is a SEPARATE function, not a branch
+// inside buildGradientRamp, so the (load-bearing) mix pipeline order is untouched.
+// Returns the SAME BuildResult shape (ramp + base + final channels) so stopFit,
+// the texture bake, the editor ghost and S3's coherence work are all unchanged.
+
+/** One channel's sweep: a start→end value driven by a named easing curve. */
+export interface ChannelSweep {
+  start: number;
+  end: number;
+  easing: EasingName;
+}
+
+/**
+ * ColorBox parameters. Per-channel OKLCh sweeps:
+ *   • L — lightness, [0,1].
+ *   • C — chroma (OKLab radius), ≥0 (sRGB-gamut chroma tops out ~0.37).
+ *   • h — hue in DEGREES (start/end). The sweep takes the SHORTEST angular path.
+ */
+export interface ColorBoxParams {
+  L: ChannelSweep;
+  C: ChannelSweep;
+  h: ChannelSweep;
+}
+
+export const DEFAULT_COLORBOX_PARAMS: ColorBoxParams = {
+  L: { start: 0.2, end: 0.92, easing: 'linear' },
+  C: { start: 0.12, end: 0.18, easing: 'linear' },
+  h: { start: 30, end: 290, easing: 'linear' },
+};
+
+const DEG2RAD = Math.PI / 180;
+
+/** Shortest signed angular delta start→end, in degrees, result in (-180, 180]. */
+const shortestHueDeltaDeg = (start: number, end: number): number =>
+  (((end - start) % 360) + 540) % 360 - 180;
+
+/**
+ * Build a 256-step ramp by sweeping each OKLCh channel independently start→end
+ * under its easing curve, recomposing OKLCh→Lab and gamut-mapping with
+ * oklabToRgbSafe (reduces chroma at constant L,h on overflow — preserves hue, so
+ * a high-chroma sweep doesn't hue-shift on clamp). Hue follows the SHORTEST path.
+ *
+ * The returned channels (base/final) carry h in RADIANS — matching the Channels
+ * convention from decomposeRamp — so the curve editor / ghost read them uniformly.
+ */
+export const buildColorBoxRamp = (params: ColorBoxParams): BuildResult => {
+  const easeL = getEasing(params.L.easing);
+  const easeC = getEasing(params.C.easing);
+  const easeH = getEasing(params.h.easing);
+  const dh = shortestHueDeltaDeg(params.h.start, params.h.end);
+
+  const L = new Array<number>(256);
+  const C = new Array<number>(256);
+  const H = new Array<number>(256); // radians, to match Channels
+  const ramp: RGB[] = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255;
+    const l = lerp(params.L.start, params.L.end, easeL(t));
+    let c = lerp(params.C.start, params.C.end, easeC(t));
+    if (c < 0) c = 0;
+    const hRad = (params.h.start + dh * easeH(t)) * DEG2RAD;
+    L[i] = l;
+    C[i] = c;
+    H[i] = hRad;
+    ramp[i] = oklabToRgbSafe({ L: clamp01(l), a: c * Math.cos(hRad), b: c * Math.sin(hRad) });
+  }
+  // base (curve-fit source) and final (un-clipped transform) are identical here:
+  // there is no mix, curve-override or global modify chain in ColorBox mode.
+  return { ramp, base: { L: L.slice(), C: C.slice(), h: H.slice() }, final: { L, C, h: H } };
 };

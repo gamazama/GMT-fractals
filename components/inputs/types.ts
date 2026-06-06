@@ -72,6 +72,11 @@ export interface ScalarInputProps extends DraggableNumberProps {
     trackPosition?: 'inline' | 'below';
     /** Height of the track in pixels (default: 20) */
     trackHeight?: number;
+    /** Optional CSS `background` for the track (e.g. a `linear-gradient(...)`), making
+     *  the track itself meaningful — a hue rainbow, a lightness or chroma ramp, etc.
+     *  When set, the default cyan progress-fill is suppressed (the gradient + thumb
+     *  convey position). Full variant only. Omit for the standard cyan-fill track. */
+    trackBackground?: string;
     
     /** Default value for reset functionality */
     defaultValue?: number;

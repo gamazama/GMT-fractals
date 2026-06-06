@@ -21,7 +21,9 @@ export const GenParamSlider: React.FC<{
   max: number;
   step: number;
   def: number;
-}> = ({ param, label, min, max, step, def }) => {
+  /** Optional meaningful track background (e.g. a hue/lightness/chroma ramp). */
+  trackBackground?: string;
+}> = ({ param, label, min, max, step, def, trackBackground }) => {
   const [v, setV] = useGenParam<number>(param);
   const value = v ?? def;
   const { status, toggleKey } = useTrackAnimation(`paletteGenerator.${param}`, value, label);
@@ -38,6 +40,7 @@ export const GenParamSlider: React.FC<{
       label={label}
       headerRight={<KeyframeButton status={status} onClick={toggleKey} />}
       trackHeight={14}
+      trackBackground={trackBackground}
     />
   );
 };

@@ -16,13 +16,19 @@
 import {
   decomposeRamp,
   buildGradientRamp,
+  buildColorBoxRamp,
   DEFAULT_GENERATOR_PARAMS,
   DEFAULT_SLOT_MODS,
+  DEFAULT_COLORBOX_PARAMS,
   type GeneratorParams,
   type SlotModifiers,
+  type ColorBoxParams,
 } from '../palette/core/generatorPipeline';
 import { fitRampToStops, measureFit } from '../palette/core/stopFit';
-import type { RGB } from '../palette/core/oklab';
+import { rgbToOklab, type RGB } from '../palette/core/oklab';
+import { PaletteGeneratorFeature } from '../palette/features/paletteGenerator';
+import { EASING_NAMES, type EasingName } from '../palette/core/easings';
+import { fitColorBoxToRamp } from '../palette/core/colorBoxFit';
 
 let failures = 0;
 const ok = (cond: boolean, msg: string) => {
@@ -110,6 +116,149 @@ console.log('Generator pipeline:');
   const cfg = fitRampToStops(ramp, { targetDE: 0.02 });
   const fit = measureFit(cfg, ramp);
   ok(fit.maxDE < 0.06, `seam fit maxΔE ${fit.maxDE.toFixed(3)} < 0.06 with ${fit.stops} stops`);
+}
+
+// --- ColorBox mode (parallel builder) --------------------------------------------
+console.log('\nColorBox mode:');
+
+const CB = (patch: Partial<ColorBoxParams> = {}): ColorBoxParams => ({ ...DEFAULT_COLORBOX_PARAMS, ...patch });
+
+// 8) Shape — full 256-length ramp + channels, h carried in radians.
+{
+  const r = buildColorBoxRamp(CB());
+  ok(r.ramp.length === 256, 'ColorBox ramp is 256 texels');
+  ok(r.base.L.length === 256 && r.base.C.length === 256 && r.base.h.length === 256, 'ColorBox base channels are 256-long');
+  ok(r.final === r.final && r.final.L.length === 256, 'ColorBox final channels present (BuildResult shape preserved)');
+  // h channel is radians (within ±2π of the start/end in radians).
+  ok(r.base.h.every((h) => h >= -7 && h <= 7), 'ColorBox h channel is in radians');
+}
+
+// 9) Determinism — same params ⇒ byte-identical ramp.
+{
+  const a = buildColorBoxRamp(CB({ L: { start: 0.1, end: 0.9, easing: 'inOutCubic' } }));
+  const b = buildColorBoxRamp(CB({ L: { start: 0.1, end: 0.9, easing: 'inOutCubic' } }));
+  ok(maxChannelDiff(a.ramp, b.ramp) === 0, 'same params ⇒ identical ColorBox ramp');
+}
+
+// 10) Lightness endpoints — the OKLab L of texel 0/255 matches the L sweep ends.
+{
+  const r = buildColorBoxRamp(CB({ L: { start: 0.25, end: 0.85, easing: 'linear' }, C: { start: 0.05, end: 0.05, easing: 'linear' } }));
+  const l0 = rgbToOklab(r.ramp[0]).L;
+  const l255 = rgbToOklab(r.ramp[255]).L;
+  ok(Math.abs(l0 - 0.25) < 0.02, `L start respected (got ${l0.toFixed(3)})`);
+  ok(Math.abs(l255 - 0.85) < 0.02, `L end respected (got ${l255.toFixed(3)})`);
+  ok(l255 > l0, 'lightness rises start→end');
+}
+
+// 11) Chroma=0 ⇒ greyscale (achromatic sweep is neutral at every texel).
+{
+  const r = buildColorBoxRamp(CB({ C: { start: 0, end: 0, easing: 'linear' } }));
+  let grey = true;
+  for (let i = 0; i < 256; i++) {
+    if (Math.abs(r.ramp[i].r - r.ramp[i].g) > 2 || Math.abs(r.ramp[i].g - r.ramp[i].b) > 2) grey = false;
+  }
+  ok(grey, 'C=0 sweep yields greyscale');
+}
+
+// 12) Gamut safety — a high-chroma sweep never produces NaN / out-of-range bytes.
+{
+  const r = buildColorBoxRamp(CB({ C: { start: 0.35, end: 0.35, easing: 'linear' }, h: { start: 0, end: 360, easing: 'linear' } }));
+  let inRange = true;
+  for (const c of r.ramp) {
+    if (!Number.isFinite(c.r) || !Number.isFinite(c.g) || !Number.isFinite(c.b)) inRange = false;
+    if (c.r < -0.01 || c.r > 255.01 || c.g < -0.01 || c.g > 255.01 || c.b < -0.01 || c.b > 255.01) inRange = false;
+  }
+  ok(inRange, 'high-chroma full-hue sweep stays gamut-safe (finite, 0..255)');
+}
+
+// 13) Easing actually bends the curve — a strong ease differs from linear.
+{
+  const lin = buildColorBoxRamp(CB({ L: { start: 0, end: 1, easing: 'linear' } }));
+  const eased = buildColorBoxRamp(CB({ L: { start: 0, end: 1, easing: 'inOutExpo' } }));
+  ok(maxChannelDiff(lin.ramp, eased.ramp) > 5, 'a non-linear easing changes the ramp vs linear');
+  // ...but the endpoints still coincide (easing endpoints are exact).
+  const colDiff = (a: RGB, b: RGB) => Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b));
+  ok(colDiff(lin.ramp[0], eased.ramp[0]) < 1 && colDiff(lin.ramp[255], eased.ramp[255]) < 1, 'easing preserves both endpoints');
+}
+
+// 14) Seam — the ColorBox ramp fits to GMT stops within the fidelity dial.
+{
+  const { ramp } = buildColorBoxRamp(CB());
+  const cfg = fitRampToStops(ramp, { targetDE: 0.02 });
+  const fit = measureFit(cfg, ramp);
+  ok(fit.maxDE < 0.06, `ColorBox seam fit maxΔE ${fit.maxDE.toFixed(3)} < 0.06 with ${fit.stops} stops`);
+}
+
+// 15) WIRING — the live path: DDFS param defaults → sliceToColorBox-shaped read →
+//     builder. Guards the key-casing contract between paletteGenerator.ts (registers
+//     cbLStart/cbCStart/cbHStart) and the store read. A casing mismatch (e.g. cbhStart)
+//     would feed `undefined` → NaN → an all-black ramp, which earlier slipped past the
+//     explicit-params golden tests above.
+{
+  const slice: Record<string, number> = {};
+  for (const [k, p] of Object.entries(PaletteGeneratorFeature.params)) {
+    const def = (p as { default: unknown }).default;
+    if (typeof def === 'number') slice[k] = def;
+  }
+  const ef = (i: number): EasingName => EASING_NAMES[i] ?? EASING_NAMES[0];
+  // Mirror generatorStore.sliceToColorBox exactly (uppercase channel keys).
+  const cb: ColorBoxParams = {
+    L: { start: slice.cbLStart, end: slice.cbLEnd, easing: ef(slice.cbLEasing) },
+    C: { start: slice.cbCStart, end: slice.cbCEnd, easing: ef(slice.cbCEasing) },
+    h: { start: slice.cbHStart, end: slice.cbHEnd, easing: ef(slice.cbHEasing) },
+  };
+  const everyKey = ['cbLStart', 'cbLEnd', 'cbLEasing', 'cbCStart', 'cbCEnd', 'cbCEasing', 'cbHStart', 'cbHEnd', 'cbHEasing'];
+  ok(everyKey.every((k) => slice[k] !== undefined), 'every cb* param is registered with the key the store reads');
+  const { ramp } = buildColorBoxRamp(cb);
+  const anyNaN = ramp.some((c) => !Number.isFinite(c.r) || !Number.isFinite(c.g) || !Number.isFinite(c.b));
+  const allBlack = ramp.every((c) => c.r < 1 && c.g < 1 && c.b < 1);
+  ok(!anyNaN, 'live default params → no NaN texels');
+  ok(!allBlack, 'live default params → ramp is not all-black');
+}
+
+// --- ColorBox fit (gradient → sweep params, for the P2 drop path) ----------------
+console.log('\nColorBox fit:');
+
+// 16) Round-trip: build an IN-GAMUT ColorBox ramp with known easings, fit it back,
+//     recover them. (oklabToRgbSafe preserves L+h but clips chroma, so an out-of-gamut
+//     C sweep wouldn't decode faithfully — kept low here so decompose is exact.)
+{
+  const known: ColorBoxParams = {
+    L: { start: 0.35, end: 0.72, easing: 'inOutCubic' },
+    C: { start: 0.04, end: 0.09, easing: 'outQuad' },
+    h: { start: 60, end: 150, easing: 'inSine' },
+  };
+  const { ramp } = buildColorBoxRamp(known);
+  const fit = fitColorBoxToRamp(ramp);
+  ok(fit.L.easing === 'inOutCubic', `L easing recovered (got ${fit.L.easing})`);
+  ok(fit.C.easing === 'outQuad', `C easing recovered (got ${fit.C.easing})`);
+  ok(fit.h.easing === 'inSine', `h easing recovered (got ${fit.h.easing})`);
+  ok(Math.abs(fit.L.start - 0.35) < 0.02 && Math.abs(fit.L.end - 0.72) < 0.02, 'L endpoints recovered');
+  // Re-building from the fit reproduces the original ramp closely.
+  const rebuilt = buildColorBoxRamp(fit).ramp;
+  ok(maxChannelDiff(rebuilt, ramp) < 6, `rebuild from fit ≈ original (maxΔ ${maxChannelDiff(rebuilt, ramp).toFixed(1)})`);
+}
+
+// 17) Flat channels (a solid colour) → linear easing, equal endpoints, no crash/NaN.
+{
+  const solid: RGB[] = new Array(256).fill(0).map(() => ({ r: 120, g: 80, b: 200 }));
+  const fit = fitColorBoxToRamp(solid);
+  ok(fit.L.easing === 'linear' && fit.C.easing === 'linear', 'flat ramp ⇒ linear easings');
+  ok(Math.abs(fit.L.start - fit.L.end) < 0.01, 'flat ramp ⇒ equal L endpoints');
+  const rebuilt = buildColorBoxRamp(fit).ramp;
+  const anyNaN = rebuilt.some((c) => !Number.isFinite(c.r) || !Number.isFinite(c.g) || !Number.isFinite(c.b));
+  ok(!anyNaN, 'fit of a solid colour never produces NaN');
+}
+
+// 18) Fit an arbitrary (non-ColorBox) gradient — never throws, params in valid ranges.
+{
+  const fit = fitColorBoxToRamp(A); // the synthetic blue→orange ramp from above
+  const valid =
+    Number.isFinite(fit.L.start) && Number.isFinite(fit.L.end) &&
+    Number.isFinite(fit.C.start) && Number.isFinite(fit.C.end) &&
+    fit.h.start >= 0 && fit.h.start < 360 && fit.h.end >= 0 && fit.h.end < 360 &&
+    EASING_NAMES.includes(fit.L.easing) && EASING_NAMES.includes(fit.h.easing);
+  ok(valid, 'arbitrary gradient fits to finite, in-range ColorBox params');
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);
