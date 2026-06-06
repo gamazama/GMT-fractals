@@ -33,7 +33,7 @@
     "test:hybrid": "tsx debug/native-config-sweep.mts --mode=hybrid --fresh",
     "test:hybrid-adv": "tsx debug/native-config-sweep.mts --mode=hybrid-adv --fresh",
     "test:interlace": "tsx debug/native-interlace-sweep.mts --fresh",
-    "test:palette": "tsx debug/test-palette-stopfit.mts && tsx debug/test-palette-stopops.mts && tsx debug/test-palette-channelcurve.mts && tsx debug/test-palette-facets.mts && tsx debug/test-palette-generator.mts && tsx debug/test-palette-img2grad.mts && tsx debug/test-palette-img2grad-overshoot.mts && tsx debug/test-palette-selection.mts && tsx debug/test-palette-walllayout.mts",
+    "test:palette": "tsx debug/test-palette-stopfit.mts && tsx debug/test-palette-stopops.mts && tsx debug/test-palette-channelcurve.mts && tsx debug/test-palette-facets.mts && tsx debug/test-palette-generator.mts && tsx debug/test-palette-img2grad.mts && tsx debug/test-palette-img2grad-overshoot.mts && tsx debug/test-palette-selection.mts && tsx debug/test-palette-walllayout.mts && tsx debug/test-engine-dnd-kernels.mts",
     "bake:palette": "tsx debug/bake-palette-catalog.mts",
     "test:shader": "npm run test:baseline && npm run test:hybrid && npm run test:hybrid-adv && npm run test:interlace",
     "smoke:boot": "tsx debug/smoke-boot.mts",

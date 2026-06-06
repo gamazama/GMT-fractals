@@ -18,12 +18,21 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
   ScalarInput refactored onto it (cross-cutting — see WATCH item below).
 - **P0c** — Stops editor genericize-in-place + undo contract — ✅ **committed `ae449b8`** (independent
   review PASS, 2 lenses; user app-gmt visual confirm). (d) frozen + signed off. 3 hosts preserved.
-- **P0d** — document-provider registry — ✅ DONE (in-review, **uncommitted**; gates green; (a)
-  FROZEN below; quality pass HIGH+simplify+security applied, security verdict safe-to-ship) ←
-  **user visual round-trip confirm ✅; holding commit on orchestrator independent security review (running)**
-- P0e — drag/drop-wells + send-target kernels (freezes (b)+(c))
+- **P0d** — document-provider registry — ✅ **committed `45506c5`** (independent security review PASS;
+  user visual round-trip confirm). (a) frozen + signed off. W8 correctness hole CLOSED (favients
+  round-trips; heavy stores register their providers in Phase 1).
+- **P0e** — drag/drop-wells + send-target kernels — ✅ DONE ((b)+(c) FROZEN; `/code-review high`
+  (2 finders) + `/simplify`; fixed a generic `useSyncExternalStore` infinite-loop bug at the root).
+  Gates green; nothing visible (kernels unconsumed = expected frozen-ahead). **Committing → Phase 0 COMPLETE.**
 
-Next action: orchestrator independent security review (running) → commit P0d → issue P0e (last Phase-0 step).
+**Carry-forward for P2 (portability integration):** (1) the DragWellsOverlay must coexist with
+ImageStage's window dragover/drop file-import listener — **ImageStage must early-return when a
+well-accepted MIME is present** (documented in dropWellRegistry.ts, not solved in P0e); (2) **real
+drop-payload parsing needs a `/security-review`** (and W7 import too); (3) migrate
+`palette/core/favientTargets.ts` onto the engine send-target registry + `createListRegistry`.
+
+Next action: commit P0e → merge `exec/phase-0-foundations` → integration `exec/gradient-explorer` →
+open Phase 1 fan-out (**await user: how many concurrent streams** — visual-QA bandwidth is the constraint).
 
 **Document round-trip coverage (W8) — track as streams register their providers:**
 favients (P0d, reference consumer) · generator (S3) · image (its stream) · stops/paletteEditorStore (S5).
@@ -52,7 +61,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 
 | ID | Workstream | Phase | Status | Branch / worktree | Notes |
 |----|------------|-------|--------|-------------------|-------|
-| P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | **in-flight (P0a✅ P0b✅ P0c✅ → P0d)** | `exec/phase-0-foundations` | P0a→P0c committed (e/f/d frozen); P0d issued; freeze §4 before Phase 1 |
+| P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | ✅ **COMPLETE (P0a–P0e)** | `exec/phase-0-foundations` | ALL 6 interfaces (a)-(f) frozen; merging to integration → Phase 1 fan-out |
 | S1 | W6 Picker text search | 1 | not-started | `exec/s1-picker-search` | depends: P0 |
 | S2 | W5 Favients undo/list/search | 1 | not-started | `exec/s2-favients` | depends: P0 (doc+history provider); shared: registerPaletteUI.ts |
 | S3 | W3 ghost curves + Generator coherence | 1 | not-started | `exec/s3-generator` | depends: P0 |
@@ -113,8 +122,25 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
       stays generic — the choice UX is entirely palette-side.
     - **S5 coverage note:** `paletteEditorStore` (stops doc) doesn't exist yet — it registers its own
       provider in S5. generator/image register theirs in their Phase-1 streams. (NOT wired here.)
-- (b) Drag + drop-wells kernel — _pending (P0e)_
-- (c) Send-target registry — _pending (P0e)_
+- (b) **Drag + drop-wells kernel — FROZEN (P0e)** (engine-core: `store/dropWellRegistry.ts` +
+  `store/dragFlight.ts` + `hooks/useDragInFlight.ts` + `components/DragWellsOverlay.tsx`):
+    - `interface DropWell { id; label; accepts(types: string[]): boolean; onDrop(dt: DataTransfer): void; render?(s:{active:boolean}): ReactNode }` (**`render?` optional — §4(b) refinement, additive, ratified**).
+    - `registerDropWell(well): () => void` (idempotent by id; returns unregister thunk) ·
+      `unregisterDropWell(id)` · `getDropWells(): DropWell[]` (stable ref) · `subscribeDropWells(l)` ·
+      `wellsForTypes(types): DropWell[]`.
+    - `interface DragPayloadBase { kind: string }` (payload discriminator; kernel routes raw
+      DataTransfer — visibility keys off `dataTransfer.types` only, getData blocked mid-drag).
+    - `useDragInFlight(enabled=true): { inFlight: boolean; types: string[] }` · `<DragWellsOverlay z? className? />`.
+- (c) **Send-target registry kernel — FROZEN (P0e)** (engine-core: `store/sendTargetRegistry.ts` +
+  `components/SendToMenu.tsx`):
+    - `interface SendTarget<P=unknown> { id; label; group: 'host'|'mode'; accepts?(payload: P): boolean; apply(payload: P): void }` — **§4(c) RATIFIED CHANGE: `apply(config: GradientConfig)` → generic `apply(payload: P)`** (engine-core can't reference GradientConfig; this IS Decision #8's genericization). **S2/S6/P2 register gradient targets/wells with their own payload type P = {GradientConfig + kind}.**
+    - `registerSendTarget<P>(t): () => void` · `unregisterSendTarget(id)` · `getSendTargets()` ·
+      `subscribeSendTargets(l)` · `targetsForPayload<P>(payload, opts?:{selfId?}): SendTarget<P>[]`.
+    - `<SendToMenu<P> payload selfId? label? onSent? className? disabled? />`.
+    - Shared primitive `createListRegistry<T extends {id:string}>()` (`store/createListRegistry.ts`) —
+      id-keyed registry + React-safe cached snapshot (fixes a `useSyncExternalStore` infinite-loop
+      class bug; backs both kernels). **`palette/core/favientTargets.ts` is a natural migration
+      candidate → fold into P2's favient-target re-home.**
 - (d) **Reusable-editor undo contract — FROZEN + SIGNED OFF (P0c; independent review PASS, 2 lenses).**
   Matches playbook §4(d). Optional props on engine `AdvancedGradientEditor`
   (`components/`):
@@ -205,6 +231,16 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-06 — **P0e DONE → PHASE 0 COMPLETE.** Generic engine kernels: (b) drop-wells
+  (`dropWellRegistry` + `dragFlight` reducer + `useDragInFlight` + `<DragWellsOverlay/>`) and (c)
+  send-targets (`sendTargetRegistry` + `<SendToMenu/>`), backed by a shared `createListRegistry`.
+  Pure engine-core, no consumers yet (frozen-ahead; 3 React shells orphan-flagged = expected).
+  Ratified 2 interface refinements: §4(c) `apply` → generic `apply(payload:P)` (Decision #8
+  genericization; S2/S6/P2 supply gradient payload), §4(b) `render?` optional. `/code-review high`
+  (2 finders) fixed a generic `useSyncExternalStore` infinite-loop bug at the root in
+  `createListRegistry`. Gates: tsc 0, test:palette (10 scripts), smoke:boot. P2 carry-forwards logged
+  (ImageStage coexistence, drop-payload security-review, favientTargets migration). **All 6 interfaces
+  (a)-(f) frozen. Committing → merge to integration → Phase 1.**
 - 2026-06-06 — **P0d DONE** (in-review, uncommitted): engine **document-provider registry**
   (`store/documentRegistry.ts`) parallel to `registerHistoryProvider`; SceneIO Save/Load wiring via a
   `Preset.documents` key (opt-in `getPreset({includeDocuments})` on file/PNG/autosave saves; restore
