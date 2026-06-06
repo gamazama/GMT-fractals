@@ -17,6 +17,7 @@ import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { PaletteFiltersFeature } from './features/paletteFilters';
 import { PaletteGeneratorFeature } from './features/paletteGenerator';
 import { PaletteImageFeature } from './features/paletteImage';
+import { PaletteEditorFeature } from './features/paletteEditor';
 import { QualityRangePadConnected } from './components/QualityRangePadConnected';
 import { PickerThemeChips, PickerBundleToggles } from './components/PickerControls';
 import { GeneratorExtrasPanel } from './components/GeneratorExtrasPanel';
@@ -26,8 +27,10 @@ import { ModifyTogglesControl } from './components/ModifyTogglesControl';
 import { ImageExtrasPanel } from './components/ImageExtrasPanel';
 import { FavientsPanel } from './components/FavientsPanel';
 import { FavientsEditorEntrance } from './components/FavientsEditorEntrance';
+import { StopsDockPanel } from './components/StopsDockPanel';
 import { useFavientsStore, captureFavientsHistory, restoreFavientsHistory } from './store/favientsStore';
 import { captureGeneratorHistory, restoreGeneratorHistory } from './store/generatorStore';
+import { captureEditorConfig, applyEditorConfig } from './store/paletteEditorStore';
 import { serializeFavientsDocument, restoreFavientsDocument } from './store/favientsDocument';
 import { registerHistoryProvider } from '../store/slices/historySlice';
 import { registerDocumentProvider } from '../store/documentRegistry';
@@ -54,6 +57,10 @@ export const registerPaletteUI = (): void => {
   // Favients — the persistent gradient-favourites shelf (floating panel). The
   // component is host-agnostic; each host registers its own apply targets.
   componentRegistry.register('panel-favients', FavientsPanel);
+  // Stops mode dock content: the document-level inspector (blend / output space /
+  // count / favourite / reset). The per-stop inspector is the engine editor on
+  // the centre stage; this keeps the "Stops" tab from being a dead empty panel.
+  componentRegistry.register('palette-editor-dock', StopsDockPanel);
 
   // The Stops editor's header Favients entrance (engine-core can't import palette,
   // so it renders whatever a host injects through this seam). Registering it here
@@ -75,6 +82,14 @@ export const registerPaletteUI = (): void => {
   // DOCUMENT provider below (different registry — scene save/load, not undo).
   registerHistoryProvider('favients', { capture: captureFavientsHistory, restore: restoreFavientsHistory });
 
+  // The Stops mode's edited GradientConfig lives in paletteEditorStore (non-DDFS —
+  // a stop document, not scalar dials). Register it as a PARAM-undo history
+  // provider so stop edits ride Ctrl+Z: the engine editor brackets each gesture
+  // via the (d) seam (onEditStart/onEditEnd/edit → paramUndoBracket), and the
+  // bracket snapshots this provider's config. Additive + idempotent (Map keyed by
+  // id). SEPARATE from the 'stops' DOCUMENT provider below (undo vs scene I/O).
+  registerHistoryProvider('paletteEditor', { capture: captureEditorConfig, restore: applyEditorConfig });
+
   // The favients shelf rides Save/Load via the engine document-provider registry
   // (W8). serialize = the current collection; restore = prompt Replace/Append,
   // then merge-or-overwrite + write through to localStorage (gmt.favients) so a
@@ -83,11 +98,20 @@ export const registerPaletteUI = (): void => {
   // in their Phase-1 streams. Idempotent (Map keyed by id).
   registerDocumentProvider('favients', { serialize: serializeFavientsDocument, restore: restoreFavientsDocument });
 
+  // The Stops mode's gradient rides Save/Load via the document registry (W8).
+  // serialize = the current config; restore validates an untrusted scene doc
+  // (coerceGradientConfig — never throws, no-op on garbage) and applies it
+  // silently (it's the scene's own authoring state, not a shared library, so no
+  // Replace/Append prompt). Same capture/restore pair as the history provider
+  // above. Idempotent (Map keyed by id).
+  registerDocumentProvider('stops', { serialize: captureEditorConfig, restore: applyEditorConfig });
+
   // One feature per studio mode — each owns a dock tab; the centre stage mirrors
   // whichever tab is active (see GradientExplorerApp).
   featureRegistry.register(PaletteGeneratorFeature);
   featureRegistry.register(PaletteFiltersFeature);
   featureRegistry.register(PaletteImageFeature);
+  featureRegistry.register(PaletteEditorFeature);
 
   // Seed the Favients shelf with the built-in presets (a "Presets" group) on first
   // run, so a new user has starter gradients. One-time — never re-seeds after edits.
