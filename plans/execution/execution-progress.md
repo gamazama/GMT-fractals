@@ -43,6 +43,16 @@ state-loss-on-mode-switch); confirmed on the S1 branch but not S1's doing. **P2 
 — lift its preview state to a transient store (same pattern as `pickerSearch`) so it survives the
 remount.** (User reported 2026-06-06; "fix wherever convenient" → P2.)
 
+**NEW-FINDING → P2 (drag interaction = MAJOR selling point; polish bar HIGH) + ARCHITECTURAL FORK:**
+User vision: a **lifted swatch that hovers smoothly near the cursor** while dragging (custom animated
+avatar, not the static browser drag image), and **cross-tab drag-to-reveal** (drag from Picker → hover a
+mode tab → it switches → drop onto e.g. a Generator slot). **The P0e W4 kernel is HTML5 `dataTransfer`**
+(good for cross-app + file drops + wells, but the drag visual = static browser image; cross-tab is
+possible but clunky). The smooth-avatar + cross-tab vision points to **pointer-based custom drag**. So a
+real P2 paradigm decision: **HTML5 vs pointer-based custom-drag-layer vs HYBRID** (pointer avatar in-app
+for feel; keep HTML5 only for cross-app/file). This determines whether the W4 kernel is sufficient or
+must evolve. **Being scoped via a design-research probe (2026-06-06) → output folds into P2.**
+
 **NEW-FINDING → P2 (what does clicking a gradient DO — key design input):** surfaced via S2 — currently
 click=apply everywhere, but (a) it blocks clicking the name to rename, and (b) applying makes no sense when
 the destination isn't on screen. User direction (up for discussion, but converging): **click should
