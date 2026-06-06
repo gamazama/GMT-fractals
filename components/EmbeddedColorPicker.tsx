@@ -204,8 +204,31 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const [detailsOpen, setDetailsOpen] = useState<boolean>(() => loadDetailsOpen());
 
     const lastOutputHex = useRef(color.toUpperCase());
+    const rootRef = useRef<HTMLDivElement>(null);
     const fieldRef = useRef<HTMLCanvasElement>(null);
     const hueRef = useRef<HTMLCanvasElement>(null);
+
+    // Container-responsive layout (NOT viewport — the picker is mounted both in a
+    // ~260px dock and, since the Stops mode, on a very wide centre stage). Measure
+    // our own width and reflow the three groups (colour pads / channels / swatches):
+    //   wide  → pads | channels | swatches  (3 columns)
+    //   mid   → pads, then channels | swatches  (2 columns under the pads)
+    //   narrow→ stacked, channels+swatches behind the collapse toggle (unchanged
+    //           dock behaviour). Defaults to narrow until measured (no layout flash
+    //           for the common dock case).
+    const [width, setWidth] = useState(0);
+    useEffect(() => {
+        const el = rootRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver((entries) => setWidth(entries[0].contentRect.width));
+        ro.observe(el);
+        setWidth(el.clientWidth);
+        return () => ro.disconnect();
+    }, []);
+    const layout: 'cols' | 'rows' | 'stack' = width >= 600 ? 'cols' : width >= 400 ? 'rows' : 'stack';
+    // In the wide layouts there's ample room, so channels + swatches are always shown
+    // (the collapse toggle only exists to keep the narrow dock compact).
+    const showDetails = layout !== 'stack' || detailsOpen;
 
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
     // Single shared gesture for every field/strip/slider drag — anchored to the param
@@ -295,7 +318,10 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         val.addColorStop(1, '#000000');
         ctx.fillStyle = val;
         ctx.fillRect(0, 0, w, h);
-    }, [hsb.h]);
+        // `layout` is a dep: switching layout (e.g. stack→cols once measured) renders a
+        // different branch, which REMOUNTS this canvas to a fresh blank backing store —
+        // repaint it (the effect runs post-commit, so the ref is the new canvas).
+    }, [hsb.h, layout]);
 
     // --- vertical hue strip ---
     useEffect(() => {
@@ -308,7 +334,9 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, hsbToHex({ h: (i / 6) * 360, s: 100, v: 100 }));
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
-    }, []);
+        // `layout` is a dep so the strip repaints after a layout-driven remount (see
+        // the field effect above) — the gradient itself is static.
+    }, [layout]);
 
     // Field / hue dragging: ABSOLUTE when unmodified (the colour under the cursor, like
     // any colour pad), and PRECISION (relative, scaled) only while Shift (×10 coarse) or
@@ -410,13 +438,13 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     };
 
     // Only computed while the swatch rows are visible (skips 4 generator arrays per
-    // drag tick when the section is collapsed — the default).
-    const harmonies = useMemo(() => (detailsOpen ? {
+    // drag tick when the section is hidden — the collapsed dock default).
+    const harmonies = useMemo(() => (showDetails ? {
         analogous: analogous(hex, 5, 30),
         monochromatic: monochromatic(hex, 5),
         complementary: complementary(hex),
         split: splitComplementary(hex),
-    } : null), [hex, detailsOpen]);
+    } : null), [hex, showDetails]);
 
     const handleContainerContextMenu = (e: React.MouseEvent) => {
         const ids = collectHelpIds(e.currentTarget as HTMLElement);
@@ -427,12 +455,11 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         }
     };
 
-    return (
-        <div
-            className="flex flex-col gap-1.5 w-full bg-black/40 border border-white/5 rounded p-2 gradient-interactive-element"
-            data-help-id="ui.colorpicker"
-            onContextMenu={handleContainerContextMenu}
-        >
+    // --- The three responsive groups (laid out per `layout` below) ---------------
+
+    // Group 1 — colour pads: the 2D field + hue strip, then hex / copy / eyedropper.
+    const padsBlock = (
+        <>
             {/* Field + hue strip (shrinks on narrow/mobile; Shift/Alt = coarse/fine) */}
             <div className="flex gap-1.5">
                 <div className="relative flex-1">
@@ -489,50 +516,92 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     ⦿
                 </button>
             </div>
+        </>
+    );
 
-            {/* One collapsible header reveals BOTH the sliders and the swatch rows. */}
-            <div className="flex flex-col gap-1 pt-0.5 border-t border-white/5">
-                <button
-                    onClick={toggleDetails}
-                    className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-gray-500 hover:text-gray-300 font-bold select-none"
-                >
-                    <span className="inline-block w-2 text-center">{detailsOpen ? '▾' : '▸'}</span>
-                    Channels &amp; swatches
-                </button>
+    // Group 2 — channels: the RGB + HSB (+ alpha) gradient sliders.
+    const channelsBlock = (
+        <>
+            <GradientSlider label="R" value={rgb.r} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(0, rgb.g, rgb.b)}, ${rgbToHex(255, rgb.g, rgb.b)})`}
+                onChange={(r) => rgbEdit({ r })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            <GradientSlider label="G" value={rgb.g} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, 0, rgb.b)}, ${rgbToHex(rgb.r, 255, rgb.b)})`}
+                onChange={(g) => rgbEdit({ g })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
+                onChange={(b) => rgbEdit({ b })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            <div className="h-px bg-white/5 my-0.5" />
+            <GradientSlider label="H" value={hsb.h} min={0} max={360} step={1} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
+                onChange={(h) => emit(clampHsb(h, hsb.s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            <GradientSlider label="S" value={hsb.s} min={0} max={100} step={1} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
+                onChange={(s) => emit(clampHsb(hsb.h, s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            <GradientSlider label="B" value={hsb.v} min={0} max={100} step={1} trackBg={`linear-gradient(to right, #000, ${hsbToHex({ h: hsb.h, s: hsb.s, v: 100 })})`}
+                onChange={(v) => emit(clampHsb(hsb.h, hsb.s, v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            {alphaEnabled && (
+                <GradientSlider label="A" value={a} min={0} max={100} step={1}
+                    trackBg={`linear-gradient(to right, rgba(${rgb.r},${rgb.g},${rgb.b},0), rgb(${rgb.r},${rgb.g},${rgb.b}))`}
+                    onChange={(v) => onAlphaChange!(v)} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            )}
+        </>
+    );
 
-                {detailsOpen && (
-                    <div className="flex flex-col gap-1">
-                        <GradientSlider label="R" value={rgb.r} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(0, rgb.g, rgb.b)}, ${rgbToHex(255, rgb.g, rgb.b)})`}
-                            onChange={(r) => rgbEdit({ r })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-                        <GradientSlider label="G" value={rgb.g} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, 0, rgb.b)}, ${rgbToHex(rgb.r, 255, rgb.b)})`}
-                            onChange={(g) => rgbEdit({ g })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-                        <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
-                            onChange={(b) => rgbEdit({ b })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-                        <div className="h-px bg-white/5 my-0.5" />
-                        <GradientSlider label="H" value={hsb.h} min={0} max={360} step={1} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
-                            onChange={(h) => emit(clampHsb(h, hsb.s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-                        <GradientSlider label="S" value={hsb.s} min={0} max={100} step={1} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
-                            onChange={(s) => emit(clampHsb(hsb.h, s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-                        <GradientSlider label="B" value={hsb.v} min={0} max={100} step={1} trackBg={`linear-gradient(to right, #000, ${hsbToHex({ h: hsb.h, s: hsb.s, v: 100 })})`}
-                            onChange={(v) => emit(clampHsb(hsb.h, hsb.s, v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-                        {alphaEnabled && (
-                            <GradientSlider label="A" value={a} min={0} max={100} step={1}
-                                trackBg={`linear-gradient(to right, rgba(${rgb.r},${rgb.g},${rgb.b},0), rgb(${rgb.r},${rgb.g},${rgb.b}))`}
-                                onChange={(v) => onAlphaChange!(v)} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-                        )}
+    // Group 3 — swatches: harmony rows + recents + palette.
+    const swatchesBlock = (
+        <>
+            <SwatchRow label="Analog" colors={harmonies?.analogous ?? []} onPick={(c) => setFromHex(c)} current={hex} />
+            <SwatchRow label="Mono" colors={harmonies?.monochromatic ?? []} onPick={(c) => setFromHex(c)} current={hex} />
+            <SwatchRow label="Comp" colors={harmonies?.complementary ?? []} onPick={(c) => setFromHex(c)} current={hex} />
+            <SwatchRow label="Split" colors={harmonies?.split ?? []} onPick={(c) => setFromHex(c)} current={hex} />
+            <div className="h-px bg-white/5 my-0.5" />
+            <SwatchRow label="Recent" colors={recents} onPick={(c) => setFromHex(c)} current={hex} />
+            <SwatchRow label="Palette" colors={palette} onPick={(c) => setFromHex(c)} current={hex} />
+        </>
+    );
 
-                        <div className="h-px bg-white/10 my-1" />
-
-                        <SwatchRow label="Analog" colors={harmonies?.analogous ?? []} onPick={(c) => setFromHex(c)} current={hex} />
-                        <SwatchRow label="Mono" colors={harmonies?.monochromatic ?? []} onPick={(c) => setFromHex(c)} current={hex} />
-                        <SwatchRow label="Comp" colors={harmonies?.complementary ?? []} onPick={(c) => setFromHex(c)} current={hex} />
-                        <SwatchRow label="Split" colors={harmonies?.split ?? []} onPick={(c) => setFromHex(c)} current={hex} />
-                        <div className="h-px bg-white/5 my-0.5" />
-                        <SwatchRow label="Recent" colors={recents} onPick={(c) => setFromHex(c)} current={hex} />
-                        <SwatchRow label="Palette" colors={palette} onPick={(c) => setFromHex(c)} current={hex} />
+    return (
+        <div
+            ref={rootRef}
+            className="flex flex-col gap-1.5 w-full bg-black/40 border border-white/5 rounded p-2 gradient-interactive-element"
+            data-help-id="ui.colorpicker"
+            onContextMenu={handleContainerContextMenu}
+        >
+            {layout === 'cols' ? (
+                // Widest — pads | channels | swatches, three columns side by side.
+                <div className="flex gap-3 items-start">
+                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">{padsBlock}</div>
+                    <div className="flex-1 min-w-0 flex flex-col gap-1">{channelsBlock}</div>
+                    <div className="flex-1 min-w-0 flex flex-col gap-1">{swatchesBlock}</div>
+                </div>
+            ) : layout === 'rows' ? (
+                // Medium — pads on top, channels | swatches side by side below.
+                <>
+                    <div className="flex flex-col gap-1.5">{padsBlock}</div>
+                    <div className="flex gap-3 items-start pt-0.5 border-t border-white/5">
+                        <div className="flex-1 min-w-0 flex flex-col gap-1">{channelsBlock}</div>
+                        <div className="flex-1 min-w-0 flex flex-col gap-1">{swatchesBlock}</div>
                     </div>
-                )}
-            </div>
+                </>
+            ) : (
+                // Narrow (dock default) — stacked; channels + swatches behind the
+                // persisted collapse toggle to keep the footprint small.
+                <>
+                    {padsBlock}
+                    <div className="flex flex-col gap-1 pt-0.5 border-t border-white/5">
+                        <button
+                            onClick={toggleDetails}
+                            className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-gray-500 hover:text-gray-300 font-bold select-none"
+                        >
+                            <span className="inline-block w-2 text-center">{detailsOpen ? '▾' : '▸'}</span>
+                            Channels &amp; swatches
+                        </button>
+                        {detailsOpen && (
+                            <div className="flex flex-col gap-1">
+                                {channelsBlock}
+                                <div className="h-px bg-white/10 my-1" />
+                                {swatchesBlock}
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
         </div>
     );
 };

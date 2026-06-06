@@ -18,6 +18,9 @@ export const wireGradientExplorer = (): void => {
     { id: 'Picker', dock: 'right', order: 0, active: true, features: ['paletteFilters'] },
     { id: 'Generator', dock: 'right', order: 1, features: ['paletteGenerator'] },
     { id: 'Image', dock: 'right', order: 2, features: ['paletteImage'] },
+    // Stops — the 4th authoring mode: the engine stop editor on the stage, its
+    // document-level inspector (paletteEditor feature) in this dock tab.
+    { id: 'Stops', dock: 'right', order: 3, features: ['paletteEditor'] },
     // Favients shelf — docked into the left tab strip by default here.
     { id: 'Favients', dock: 'left', order: 0, component: 'panel-favients', isCore: false },
     // Feedback — shared GMT Help-menu plumbing ("Send Feedback"), floats on demand.
@@ -28,6 +31,7 @@ export const wireGradientExplorer = (): void => {
   store.movePanel('Picker', 'right', 0);
   store.movePanel('Generator', 'right', 1);
   store.movePanel('Image', 'right', 2);
+  store.movePanel('Stops', 'right', 3);
   store.togglePanel('Picker', true); // default-active tab
 
   // Favients docks into the left tab strip by default in the standalone Explorer (in
