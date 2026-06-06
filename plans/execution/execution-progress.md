@@ -95,7 +95,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | S3 | W3 ghost curves + Generator coherence | 1 | ✅ **merged `cd4c469`** | `exec/s3-generator` | indep review PASS; 2 cleanups applied (ghost-fold gated on `ghostVisible`; `genEditEnd` gated on `interactive` = restores pre-S3 undo-arming) + 2 optional one-liners; gates green; user confirm (fixes invisible/strictly-improving) |
 | S4 | W7 Import | 1 | ✅ **merged `8945a9c`** | `exec/s4-import` | Import in Favients kebab menu → parseGradientText → fitRampToStops → favientsStore.add (persisted, deduped); pure parsers + `/security-review` clean. Touched **FavientsPanel.tsx (S2's file)** — S2 rebases + folds import into its undo provider |
 | S5 | W1 Stops *mode* | 1 | **queued (wave 2b — after S2+S6)** | `exec/s5-stops-mode` | run LAST: rebase over S2 (registerPaletteUI) + S1/S6 (GradientExplorerApp); mounts the engine Stops editor; shared: registerPaletteUI, GradientExplorerApp, setup |
-| S6 | W11 Fullscreen configs | 1 | **in-flight (wave 2a)** | `exec/s6-fullscreen` | consumes W4 wells kernel (b) — gradient wells/payload; ramp-geometry configs exportable + reroll/amount; shared: GradientExplorerApp (overlay mount) |
+| S6 | W11 Fullscreen configs | 1 | **in-flight (wave 2a — runtime bug; BACKED OUT)** | `exec/s6-fullscreen` | foundation built (6 geometries/overlay/export/reroll/well+⛶) but **FULLSCREEN NOT WORKING at runtime** (tsc+test:palette passed; visual gate caught it). Was merged then **reset out** of integration → back to `96cfa51`. User fixing in wt-s6 (`3cfb400`); re-merge when it works. FUTURE: richer options (backlog) |
 | S7 | W12 ColorBox generator mode (v1 addition) | 1 | **queued (wave 3)** | `exec/s7-colorbox` | NEW easings.ts + buildColorBoxRamp (parallel builder) + generatorMode enum + DDFS/UI; additive, collision-free w/ wave 2. **LOCKED: shortest hue-path only; no Leonardo (modes = mixed+colorbox)** |
 | S8 | W13 interpolation bases (v1 addition) | 1 | **queued (wave 3)** | `exec/s8-interp` | **Tier A monotone-cubic ONLY** (Tier B deferred): engine `sampleSorted` branch + union + AdvancedGradientEditor picker + JSON field. **ENGINE-CORE** (test:interlace + test:baseline gate, P0-level care) + touches the editor → run **AFTER S5** |
 | P2 | W2 portability integration + W9 snapshot | 2 | not-started | `exec/p2-portability` | depends: ALL Phase 1; touches every hero |
@@ -256,10 +256,23 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   work. Needs a separate `--write`/investigation pass (not a Phase-0 blocker; Phase-0 gates are tsc +
   test:palette + smoke:boot + orphans, all green).
 
+- **Fullscreen mode v2 — "make it awesome" (user, 2026-06-06).** Even once S6 works, its foundation
+  (6 static geometry renders) is too thin. Needs its own scoping pass: per-geometry parametric controls
+  (radial centre, conic angle, S-curve shape, arch radius), more geometries (Diamond/Mirror/Bands/
+  tiling), live/animated preview, apply-to-content previews, comparison/grid, zoom-pan. Scope with the
+  user after S6 is fixed. (P2: fold the ⛶ open into the canonical hero + add gradient drag sources.)
+
 ## Changelog / decisions made during execution
 
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
+
+- 2026-06-06 — **S6 PREMATURE MERGE → BACKED OUT.** Orchestrator merged S6 on the user's "ok as a
+  concept" comment, but that was a SCOPE note, not a works-confirmation — the user then found
+  **fullscreen doesn't actually work at runtime** (tsc + test:palette had passed; visual-only break).
+  Reset integration `cc2efbf` → `96cfa51` (S6 removed; work safe on `exec/s6-fullscreen` @ `3cfb400`).
+  **PROCESS FIX: a merge requires an explicit "it works" visual confirm — never "concept ok."** S6
+  stays in-flight; user fixing in wt-s6 → re-merge when working + confirmed. Wave 2a: S6 (fixing), S2 (in-flight).
 
 - 2026-06-06 — **v1 additions folded in** (competitive-research probe → `gradient-v1-additions-scope.md`):
   W12 ColorBox-in-OKLCh generator mode (new easings.ts + parallel builder + generatorMode enum) and
