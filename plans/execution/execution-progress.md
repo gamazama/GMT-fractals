@@ -298,14 +298,19 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 
 ## Backlog / deferred debt
 
-- **Deep-zoom fractal coloring mode (extract from fluid-toy) — INITIATIVE, research probe out
-  (2026-06-06).** `dev/fluid-toy` has a deep-zoom Mandelbrot zoomer with high-quality AA + gradient
-  mapping. Idea: extract the **deep-zoom + gradient-mapping as an engine-core library** (same
-  promotion pattern as W8/W10/W4) and add it as a **Gradient Explorer fullscreen coloring mode** (the
-  ultimate "see your 256-ramp in action" preview) — feeds the "fullscreen v2" item. Research probe →
-  `plans/fluid-toy-deepzoom-coloring-scope.md`. NOT v1-critical; lands post-P2 / own initiative. Note:
-  GX deliberately has no viewport/raymarch — this adds a *scoped, opt-in* GL fractal canvas only in the
-  fullscreen overlay.
+- **Live-fractal coloring mode (extract from fluid-toy) — INITIATIVE, SCOPED 2026-06-06**
+  (`plans/gx-live-fractal-coloring-scope.md`). Add a GX fullscreen mode where the current 256-ramp colors
+  a live Mandelbrot. **KEY DE-RISK: no gradient seam needed** — fluid-toy samples a 256×1 RGBA8 LUT and
+  GX `renderStopsToBuffer()` is byte-identical; `engine.setGradientBuffer(buf)` = the colormap setter.
+  **Carve:** the renderer is decoupled from the fluid sim but welded to the 1.8k-line FluidEngine — lift
+  the fractal/gradient/deep-zoom passes out (deepZoom/* perturbation+LA+AT+BigInt-worker stack copies
+  as-is). **Integration:** 5 insertion points in FullscreenGradientOverlay + rampGeometry; existing
+  PNG export works on a WebGL canvas unchanged. **Phasing (ACCEPTED — no throwaway, shallow ⊂ deep):**
+  shallow f32 MVP first (≈M/L, ~90% of the wow) → deep-zoom as +L follow-on. **Risks:** FluidEngine carve
+  must not regress fluid-toy (gate smoke:fluid-toy/smoke:orbit); GPU precision variance (shallow must
+  bound zoom so it never visibly quantizes — ties to render_4k_gap/ANGLE). **OPEN DECISION:** live-update
+  the fullscreen preview as stops are edited (today it's a frozen-at-open snapshot) — fractal-only (probe
+  rec) vs all modes vs keep-frozen. NOT v1-critical; post-P2 / own initiative.
 
 - **oklab/blend math duplicated across `utils/colorUtils.ts` and `palette/core/oklab.ts`** (P0a).
   The byte-exact stopfit regression went tautological after the gmtGradient collapse; now guarded by
