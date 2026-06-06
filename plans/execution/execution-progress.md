@@ -18,8 +18,16 @@ All Phase-0 foundations + all Phase-1 streams merged & gate-green.
   fractal+gradient renderer to engine-core + add a GX fullscreen "Fractal" coloring mode (frozen gradient
   + live phase/repeats/mapping). Shallow f32 only; deep-zoom deferred. Risky (FluidEngine carve) → gated on
   smoke:fluid-toy/orbit + orchestrator independent review.
-- **(b) OVERNIGHT SCOPING (autonomous workflow, read-only → docs):** `p2-scope.md` (consolidated +
-  sequenced P2 plan) + `fullscreen-v2-scope.md`. No code, no merges — a morning review queue.
+- **(b) OVERNIGHT SCOPING (read-only → docs):** `p2-scope.md` (P2-scope probe RUNNING in a fresh
+  session) + `fullscreen-v2-scope.md` (NOT yet run — new orchestrator's first autonomous unit). No code,
+  no merges — a morning review queue.
+
+**🔁 ORCHESTRATOR HANDOFF (2026-06-07):** the bootstrap orchestrator session got heavy → handing the role
+to a FRESH orchestrator (doc-anchored, this file is the memory). In-flight to ingest: the live-fractal
+carve (wt-lf, exec/livefractal — needs independent review + human visual confirm of fluid-toy AND the
+fractal mode before merge); the P2-scope probe doc; then run fullscreen-v2 scope; then P2. **New
+orchestrator: run autonomous SAFE units (scoping + low-ambiguity cleanups) overnight, paced, NO MERGES;
+everything waits for human visual confirm to merge.**
 
 - **P0a** — engine gradient + colour CORE — ✅ DONE (in-review, **uncommitted**; gates green;
   interfaces (e)+(f) FROZEN below).
