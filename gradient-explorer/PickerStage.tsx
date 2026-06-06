@@ -20,8 +20,17 @@ import { FavStar } from '../palette/components/FavStar';
 import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
 import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { setFavientDrag } from '../palette/core/favientDnd';
+import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
 
 const win = (v: { x?: number; y?: number } | undefined): [number, number] => [v?.x ?? 0, v?.y ?? 1];
+
+/** Magnifier glyph for the catalog search affordance (shared with the mobile controls). */
+export const SearchIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+    <circle cx="7" cy="7" r="4.5" />
+    <path d="M11 11l3.6 3.6" strokeLinecap="round" />
+  </svg>
+);
 
 const sortValue = (axis: string, e: CatalogEntry): number | string => {
   switch (axis) {
@@ -60,6 +69,12 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   useEffect(() => { load(); }, [load]);
 
   const [selected, setSelected] = useState<CatalogEntry | null>(null);
+
+  // Free-text catalog search (transient, session-only — see pickerSearch). `searchOpen`
+  // is purely the hero affordance's expanded/collapsed UI; the query itself is shared
+  // with the mobile Picker controls via the store.
+  const search = usePickerSearch();
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // Spatial-selection carve: the active wall tool + the surviving id-set (transient).
   const [tool, setTool] = useState<SelectionTool | null>(null);
@@ -104,6 +119,18 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
     setFavientDrag(dt, { config: entryToGradientConfig(e), name: e.name, source: 'Picker' });
   }, []);
 
+  // Per-entry lowercased search haystack = name + theme + bundle LABEL (not the synthetic
+  // preset-N/adhoc-N id, not the bundle id). Precomputed once per catalog so each keystroke
+  // is a cheap token.includes over a ready string rather than 11k re-concatenations.
+  const searchIndex = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of catalog) {
+      const label = e.bundle ? bundles[e.bundle]?.label : undefined;
+      m.set(e.id, `${e.name} ${e.theme ?? ''} ${label ?? ''}`.toLowerCase());
+    }
+    return m;
+  }, [catalog, bundles]);
+
   // Shared 256×N sprite — each entry's `row` is its sprite row. Built once per catalog.
   const sprite = useMemo(() => {
     if (!catalog.length || typeof document === 'undefined') return null;
@@ -128,13 +155,17 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   const sortAxis = SORT_BY[pf?.sortBy ?? 0] ?? 'lightness';
   const reverse = !!pf?.reverse;
 
-  const key = JSON.stringify([windows, activeThemes, hiddenBundles, groupAxis, rowsAxis, sortAxis, reverse, keptIds]);
+  const q = search.trim().toLowerCase();
+  const key = JSON.stringify([windows, activeThemes, hiddenBundles, groupAxis, rowsAxis, sortAxis, reverse, keptIds, q]);
   const { groups, count, ids } = useMemo(() => {
     const themeSet = activeThemes.length ? new Set(activeThemes) : null;
     const hiddenSet = new Set(hiddenBundles);
     const kept = keptIds ? new Set(keptIds) : null;
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : null;
     const list = catalog.filter(
       (e) =>
+        // Token-AND search (cheapest rejecter first) over name · theme · source label.
+        (!tokens || tokens.every((t) => (searchIndex.get(e.id) ?? '').includes(t))) &&
         (!hiddenSet.size || !e.bundle || !hiddenSet.has(e.bundle)) &&
         (!themeSet || (e.theme != null && themeSet.has(e.theme))) &&
         (!kept || kept.has(e.id)) &&
@@ -206,6 +237,16 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
     [setPaletteFilters],
   );
   const clearCarve = useCallback(() => setPaletteFilters?.({ keptIds: null }), [setPaletteFilters]);
+  // The unified "clear" in the count readout: reset every active narrower at once
+  // (transient search + carve, plus the DDFS quality windows / theme / source toggles)
+  // so "why is my wall small?" has one button as well as one answer.
+  const clearAll = useCallback(() => {
+    setPickerSearch('');
+    setPaletteFilters?.({
+      keptIds: null, activeThemes: [], hiddenBundles: [],
+      qL: { x: 0, y: 1 }, qC: { x: 0, y: 1 }, qCov: { x: 0, y: 1 }, qRb: { x: 0, y: 1 }, qWarm: { x: 0, y: 1 },
+    });
+  }, [setPaletteFilters]);
 
   // Esc, or a pointerdown on any non-wall / non-toolbar UI, cancels the active tool.
   useEffect(() => {
@@ -247,6 +288,18 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
     ctx.drawImage(src, 0, 0, 256, 1, 0, 0, bw, bh);
   }, [selected]);
 
+  // Self-explaining active-filter readout: which narrowers are shrinking the wall right
+  // now. Surfaces carve on mobile too (the carve chip is desktop-only), so a small wall
+  // always has one visible answer regardless of viewport.
+  const qualityActive = [windows.qL, windows.qC, windows.qCov, windows.qRb, windows.qWarm]
+    .some((w) => !!w && (w[0] > 0 || w[1] < 1));
+  const narrowers: string[] = [];
+  if (q) narrowers.push('search');
+  if (keptIds) narrowers.push('carved');
+  if (qualityActive) narrowers.push('quality');
+  if (activeThemes.length) narrowers.push('themes');
+  if (hiddenBundles.length) narrowers.push('sources');
+
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-zinc-950">
       <div className="px-4 pt-3 pb-2 border-b border-zinc-800 shrink-0">
@@ -276,7 +329,55 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
                 <FavientsIcon /> Favients
               </button>
             )}
-            <span className="text-zinc-500 tabular-nums">{!loaded ? 'loading…' : `${count} of ${catalog.length}`}</span>
+            {/* Free-text search over name · theme · source — a collapsed icon that
+                expands to one inline input (stays expanded while a query is active). */}
+            {searchOpen || search ? (
+              <span className="inline-flex items-center gap-1 h-[22px] rounded border border-zinc-700 bg-zinc-900 pl-1.5 pr-1">
+                <SearchIcon className="w-3 h-3 text-zinc-500 shrink-0" />
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') { setPickerSearch(''); setSearchOpen(false); (e.target as HTMLInputElement).blur(); }
+                  }}
+                  placeholder="name · theme · source"
+                  className="w-28 md:w-32 bg-transparent outline-none text-[11px] text-zinc-200 placeholder-zinc-600"
+                />
+                <button
+                  onClick={() => { setPickerSearch(''); setSearchOpen(false); }}
+                  title={search ? 'Clear search' : 'Close search'}
+                  className="px-0.5 text-zinc-500 hover:text-zinc-200"
+                >
+                  ×
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setSearchOpen(true)}
+                title="Search the catalog by name, theme, or source"
+                className="p-0.5 text-zinc-500 hover:text-zinc-200"
+              >
+                <SearchIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <span className="text-zinc-500 tabular-nums">
+              {!loaded ? 'loading…' : (
+                <>
+                  {count} of {catalog.length}
+                  {narrowers.length > 0 && (
+                    <>
+                      {' — '}
+                      <span className="text-zinc-400">{narrowers.join(' · ')}</span>
+                      {' · '}
+                      <button onClick={clearAll} className="text-cyan-300 hover:text-cyan-200 underline" title="Clear every active filter (search, carve, quality, themes, sources)">
+                        clear
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </span>
           </span>
         </div>
 
@@ -355,7 +456,13 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
           />
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-zinc-400 px-6 text-center">
-            {keptIds ? (
+            {search.trim() ? (
+              <span>
+                No gradients match “{search.trim()}”{keptIds ? ' in the current carve' : ''} —{' '}
+                <button onClick={() => setPickerSearch('')} className="text-cyan-300 underline">clear search</button>
+                {keptIds && <> · <button onClick={clearCarve} className="text-cyan-300 underline">clear carve</button></>}.
+              </span>
+            ) : keptIds ? (
               <span>
                 No gradients in the current carve — <button onClick={clearCarve} className="text-cyan-300 underline">clear the selection filter</button>.
               </span>

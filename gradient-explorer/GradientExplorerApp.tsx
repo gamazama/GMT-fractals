@@ -29,11 +29,12 @@ import { TimelineHost } from '../components/TimelineHost';
 import { ToastHost } from '../engine/components/ToastHost';
 import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
-import { PickerStage } from './PickerStage';
+import { PickerStage, SearchIcon } from './PickerStage';
 import { GeneratorStage } from '../palette/components/GeneratorStage';
 import { ImageStage } from '../palette/components/ImageStage';
 import { FavientsPanel } from '../palette/components/FavientsPanel';
 import { FavientsIcon } from '../palette/components/FavientsIcon';
+import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
 import type { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
@@ -191,8 +192,26 @@ const SectionChevron: React.FC<{ open: boolean }> = ({ open }) => (
 
 const MobilePickerControls: React.FC = () => {
   const [open, setOpen] = useState<string>('arrange');
+  // Search is the primary mobile narrower (the desktop carve/zoom tools are pointer-only),
+  // so surface it full-width above the collapsible sections. Shares the transient query
+  // with the PickerStage hero field via the pickerSearch store.
+  const search = usePickerSearch();
   return (
     <div>
+      <div className="px-3 py-2 border-b border-white/5">
+        <div className="flex items-center gap-2 h-9 rounded border border-white/10 bg-black/30 px-2">
+          <SearchIcon className="w-3.5 h-3.5 shrink-0 text-gray-500" />
+          <input
+            value={search}
+            onChange={(e) => setPickerSearch(e.target.value)}
+            placeholder="Search name · theme · source"
+            className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-gray-200 placeholder-gray-500"
+          />
+          {search && (
+            <button onClick={() => setPickerSearch('')} title="Clear search" className="px-1 text-gray-500 hover:text-gray-200">×</button>
+          )}
+        </div>
+      </div>
       {PICKER_SECTIONS.map((s) => {
         const isOpen = open === s.id;
         return (
