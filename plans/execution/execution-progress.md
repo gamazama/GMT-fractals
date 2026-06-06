@@ -9,7 +9,7 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
 
 ---
 
-## Current phase: **Phase 0 — in-flight** (chunked P0a→P0e on branch `exec/phase-0-foundations`)
+## Current phase: **Phase 0 COMPLETE ✅ → opening Phase 1** (integration branch `exec/gradient-explorer` @ `0e04e8d`)
 
 - **P0a** — engine gradient + colour CORE — ✅ DONE (in-review, **uncommitted**; gates green;
   interfaces (e)+(f) FROZEN below).
@@ -23,7 +23,8 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
   round-trips; heavy stores register their providers in Phase 1).
 - **P0e** — drag/drop-wells + send-target kernels — ✅ DONE ((b)+(c) FROZEN; `/code-review high`
   (2 finders) + `/simplify`; fixed a generic `useSyncExternalStore` infinite-loop bug at the root).
-  Gates green; nothing visible (kernels unconsumed = expected frozen-ahead). **Committing → Phase 0 COMPLETE.**
+  Gates green; nothing visible (kernels unconsumed = expected frozen-ahead). ✅ **committed `0e04e8d`;
+  Phase 0 COMPLETE.** Integration branch `exec/gradient-explorer` established at this HEAD.
 
 **Carry-forward for P2 (portability integration):** (1) the DragWellsOverlay must coexist with
 ImageStage's window dragover/drop file-import listener — **ImageStage must early-return when a
