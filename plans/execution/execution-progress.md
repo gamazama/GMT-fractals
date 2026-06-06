@@ -11,8 +11,15 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
 
 ## Current phase: **PHASE 1 COMPLETE ✅ → P2 (integration pass)** (integration branch `exec/gradient-explorer` @ `cb421c5`)
 
-All Phase-0 foundations + all Phase-1 streams merged & gate-green. Next: write the consolidated **P2
-scope doc**, then launch P2 (the cross-mode integration: global drag, canonical hero, etc.).
+All Phase-0 foundations + all Phase-1 streams merged & gate-green.
+
+**RUNNING IN PARALLEL (2026-06-07, non-blocking):**
+- **(a) LIVE-FRACTAL CARVE + shallow MVP** — human-in-loop (wt-lf, `exec/livefractal`). Extract fluid-toy's
+  fractal+gradient renderer to engine-core + add a GX fullscreen "Fractal" coloring mode (frozen gradient
+  + live phase/repeats/mapping). Shallow f32 only; deep-zoom deferred. Risky (FluidEngine carve) → gated on
+  smoke:fluid-toy/orbit + orchestrator independent review.
+- **(b) OVERNIGHT SCOPING (autonomous workflow, read-only → docs):** `p2-scope.md` (consolidated +
+  sequenced P2 plan) + `fullscreen-v2-scope.md`. No code, no merges — a morning review queue.
 
 - **P0a** — engine gradient + colour CORE — ✅ DONE (in-review, **uncommitted**; gates green;
   interfaces (e)+(f) FROZEN below).
