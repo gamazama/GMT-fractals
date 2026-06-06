@@ -54,7 +54,13 @@ export const useDragInFlight = (enabled = true): DragInFlight => {
 
         window.addEventListener('dragenter', onEnter, true);
         window.addEventListener('dragleave', onLeave, true);
-        window.addEventListener('drop', onEnd, true);
+        // `drop` resets in the BUBBLE phase, NOT capture: a well tile's own
+        // (bubble-phase) `onDrop` must run BEFORE we flip `inFlight` false, or the
+        // overlay unmounts the tile mid-event and the drop is lost. A well's onDrop
+        // `stopPropagation`s, so for a well-drop this window listener is skipped and
+        // `dragend` (capture, fires on the source right after) does the reset; a drop
+        // on empty space bubbles here and resets normally.
+        window.addEventListener('drop', onEnd, false);
         window.addEventListener('dragend', onEnd, true);
         // Safety net: a native file drag that leaves the window never fires
         // drop/dragend on us — blur (the OS drag stealing focus) un-sticks it.
@@ -62,7 +68,7 @@ export const useDragInFlight = (enabled = true): DragInFlight => {
         return () => {
             window.removeEventListener('dragenter', onEnter, true);
             window.removeEventListener('dragleave', onLeave, true);
-            window.removeEventListener('drop', onEnd, true);
+            window.removeEventListener('drop', onEnd, false);
             window.removeEventListener('dragend', onEnd, true);
             window.removeEventListener('blur', onEnd);
         };

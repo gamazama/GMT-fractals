@@ -157,20 +157,27 @@ export const sampleGeometry = (
   }
 
   // ── continuous geometries: every pixel is covered (cov = 1) unless a band masks it.
-  const cx = 0.5;
-  const cy = 0.5;
-  const cornerR = Math.SQRT1_2; // centre→corner distance for a 1×1 unit square
-  // Arched band geometry (a circular arc sweeping across the top of the frame).
-  const archCx = 0.5;
-  const archCy = 1.25; // centre well below the frame → a shallow arc up top
-  const archR = 1.0;
-  const archHalfWidth = 0.16;
-  const archSpan = 0.9; // ± angle (radians) the band sweeps through
+  // Shape geometries (radial/conic/arched) work in CENTRED, ISOTROPIC units — pixel
+  // offsets divided by half the SHORTER side — so a circle stays a circle on a wide
+  // canvas instead of stretching into an ellipse. Linear/S-curve stay on nx (they're
+  // horizontal, aspect-independent).
+  const cxp = (width - 1) / 2;
+  const cyp = (height - 1) / 2;
+  const half = Math.max(1e-6, Math.min(cxp, cyp));
+  const radialNorm = 1 / Math.max(1e-6, Math.hypot(cxp, cyp) / half); // corner → 1
+  // Arched band: a circular arc whose centre sits below the frame so the band sweeps
+  // across the top. Tuned in isotropic units (uy = −1 at the top edge).
+  const archCy = 1.35;
+  const archR = 2.3;
+  const archHalfWidth = 0.3;
+  const archSpan = 1.15; // ± angle (radians) the band sweeps through
 
   for (let y = 0; y < height; y++) {
     const ny = height > 1 ? y / (height - 1) : 0;
+    const uy = (y - cyp) / half;
     for (let x = 0; x < width; x++) {
       const nx = width > 1 ? x / (width - 1) : 0;
+      const ux = (x - cxp) / half;
       const i = y * width + x;
       let p = 0;
       let c = 1;
@@ -179,10 +186,10 @@ export const sampleGeometry = (
           p = nx;
           break;
         case 'radial':
-          p = clamp01(Math.hypot(nx - cx, ny - cy) / cornerR);
+          p = clamp01(Math.hypot(ux, uy) * radialNorm);
           break;
         case 'conic': {
-          const ang = Math.atan2(ny - cy, nx - cx); // -π..π
+          const ang = Math.atan2(uy, ux); // -π..π, true angle (aspect-correct)
           p = (ang + Math.PI) / (2 * Math.PI);
           break;
         }
@@ -190,14 +197,14 @@ export const sampleGeometry = (
           p = smootherstep(nx);
           break;
         case 'arched': {
-          const d = Math.hypot(nx - archCx, ny - archCy);
+          const d = Math.hypot(ux, uy - archCy);
           const band = archHalfWidth - Math.abs(d - archR);
           if (band <= 0) {
             c = 0; // outside the band → background
             p = 0;
           } else {
             // Position runs along the arc by angle from straight-up.
-            const ang = Math.atan2(nx - archCx, archCy - ny); // 0 at top, ± toward sides
+            const ang = Math.atan2(ux, archCy - uy); // 0 at top, ± toward sides
             p = clamp01((ang + archSpan) / (2 * archSpan));
             // Soft edge over the outer ~25% of the half-width for an anti-aliased band.
             c = clamp01(band / (archHalfWidth * 0.25));

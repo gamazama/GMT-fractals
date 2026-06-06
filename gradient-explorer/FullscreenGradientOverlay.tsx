@@ -159,14 +159,14 @@ export const FullscreenGradientOverlay: React.FC = () => {
       <div className="shrink-0 flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-white/10 bg-zinc-950/80">
         <div className="text-sm font-medium text-zinc-200 mr-1 truncate max-w-[28ch]">{fs.name}</div>
 
-        <div className="flex items-center rounded-md border border-white/10 overflow-hidden">
+        <div className="flex items-center rounded-md border border-white/10 overflow-hidden divide-x divide-white/10">
           {GEOMETRIES.map((g) => (
             <button
               key={g.id}
               onClick={() => setFullscreenGeom(g.id)}
-              className={`px-2.5 py-1 text-[12px] transition-colors ${
+              className={`px-3 py-1.5 text-[12px] transition-colors ${
                 fs.geom === g.id
-                  ? 'bg-cyan-500/25 text-cyan-100'
+                  ? 'bg-cyan-500/25 text-cyan-100 font-medium'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.05]'
               }`}
             >
