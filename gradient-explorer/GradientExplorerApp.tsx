@@ -27,6 +27,8 @@ import { PanelRouter } from '../components/PanelRouter';
 import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
 import { TimelineHost } from '../components/TimelineHost';
 import { ToastHost } from '../engine/components/ToastHost';
+import { DragWellsOverlay } from '../components/DragWellsOverlay';
+import { FullscreenGradientOverlay } from './FullscreenGradientOverlay';
 import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import { PickerStage, SearchIcon } from './PickerStage';
@@ -354,6 +356,11 @@ const GradientExplorerApp: React.FC = () => {
 
           {/* Toasts — save/load + Favients feedback surface here. */}
           <ToastHost />
+
+          {/* W4 drop-wells (Fullscreen well registered by the overlay below) — fade in
+              while a gradient drag is in flight. W11 fullscreen config gallery overlay. */}
+          <DragWellsOverlay />
+          <FullscreenGradientOverlay />
         </div>
       </div>
     </StoreCallbacksProvider>

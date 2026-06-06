@@ -22,6 +22,7 @@
  */
 
 import { rgbToOklab, oklabToRgb, type RGB } from './oklab';
+import { mulberry32 } from './rampGeometry';
 
 /** OKLCh channels of a 256-step gradient: L∈[0,1], C (chroma) ≥0, h in radians. */
 export interface Channels {
@@ -216,17 +217,11 @@ export const unwrapHue = (a: number[]): number[] => {
   return o;
 };
 
-/** Deterministic [-1,1] noise array of length 256, seeded (mulberry32). */
+/** Deterministic [-1,1] noise array of length 256, seeded via the shared mulberry32. */
 const seededNoise = (seed: number): number[] => {
-  let s = (seed | 0) || 1;
+  const rng = mulberry32((seed | 0) || 1);
   const out: number[] = new Array(256);
-  for (let i = 0; i < 256; i++) {
-    s |= 0;
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    out[i] = (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1;
-  }
+  for (let i = 0; i < 256; i++) out[i] = rng() * 2 - 1;
   return out;
 };
 

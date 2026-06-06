@@ -27,6 +27,7 @@ import { MixBlend } from './MixBlend';
 import { FavStar } from './FavStar';
 import { readFavientDrag, FAVIENT_DND_MIME } from '../core/favientDnd';
 import { renderStopsToRamp } from '../core/gmtGradient';
+import { openFullscreen } from '../store/fullscreenStore';
 
 const useContainerSize = () => {
   const ref = useRef<HTMLDivElement>(null);
@@ -195,6 +196,14 @@ export const GeneratorStage: React.FC = () => {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-[11px] text-gray-500">{config.stops.length} stops</span>
+              <button
+                onClick={() => openFullscreen(config, 'Generated')}
+                title="Open the fullscreen config gallery"
+                aria-label="Open fullscreen preview"
+                className="text-[11px] px-1.5 py-0.5 rounded-sm bg-white/[0.06] text-gray-400 hover:text-gray-200 transition-colors"
+              >
+                ⛶
+              </button>
               <button
                 onClick={() => setResultTall((t) => !t)}
                 title={resultTall ? 'Shrink result' : 'Enlarge result'}
