@@ -7,6 +7,19 @@ declare const __APP_VERSION__: string;
 export type FormulaType = string;
 export type CameraMode = 'Orbit' | 'Fly';
 
+/**
+ * A JSON-serialisable value — the interchange type for the document-provider
+ * registry (see store/documentRegistry.ts). Document snapshots are embedded
+ * verbatim in saved scenes, so they must survive `JSON.stringify`/`parse`.
+ */
+export type JsonValue =
+    | null
+    | boolean
+    | number
+    | string
+    | JsonValue[]
+    | { [key: string]: JsonValue };
+
 export interface PreciseVector3 {
     x: number;
     y: number;

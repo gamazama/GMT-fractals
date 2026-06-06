@@ -16,15 +16,19 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
 - **P0b** — colour picker UI (consumes (f)) — ✅ DONE + **committed `018b63b`** (user visually
   confirmed incl. vector inputs). Rich picker + NEW shared `usePrecisionTrackDrag` primitive;
   ScalarInput refactored onto it (cross-cutting — see WATCH item below).
-- **P0c** — Stops editor genericize-in-place + undo contract — ✅ DONE (in-review, **uncommitted**;
-  (d) FROZEN + signed off). **Independent review PASS** — 2 parallel lenses (correctness + layering),
-  both **MERGE-READY**, no real bugs (2 benign nits, no fix). Confirmed editor is mounted by 3 hosts
-  (app-gmt, fluid-toy, future Explorer S5) — all preserved. Gates green. **Pending user app-gmt visual
-  confirm → then commit.**
-- P0d — document-provider registry (freezes (a))
+- **P0c** — Stops editor genericize-in-place + undo contract — ✅ **committed `ae449b8`** (independent
+  review PASS, 2 lenses; user app-gmt visual confirm). (d) frozen + signed off. 3 hosts preserved.
+- **P0d** — document-provider registry — ✅ DONE (in-review, **uncommitted**; gates green; (a)
+  FROZEN below; quality pass HIGH+simplify+security applied, security verdict safe-to-ship) ←
+  **user visual round-trip confirm ✅; holding commit on orchestrator independent security review (running)**
 - P0e — drag/drop-wells + send-target kernels (freezes (b)+(c))
 
-Next action: user app-gmt visual check → commit P0c → issue P0d.
+Next action: orchestrator independent security review (running) → commit P0d → issue P0e (last Phase-0 step).
+
+**Document round-trip coverage (W8) — track as streams register their providers:**
+favients (P0d, reference consumer) · generator (S3) · image (its stream) · stops/paletteEditorStore (S5).
+The engine registry + SceneIO wiring + the Replace/Append favients-load prompt land in P0d; heavy
+stores register their own `{serialize,restore}` in their Phase-1 streams.
 
 **Carry-forward for P0c:** the editor's buggy `getInterpolatedColor`
 (`components/AdvancedGradientEditor.tsx:51-69`) is **STILL LIVE** — the engine `sampleStops` fix
@@ -48,7 +52,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 
 | ID | Workstream | Phase | Status | Branch / worktree | Notes |
 |----|------------|-------|--------|-------------------|-------|
-| P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | **in-flight (P0a✅ P0b✅ → P0c)** | `exec/phase-0-foundations` | P0a+P0b done (e+f frozen); P0c issued; freeze §4 before Phase 1 |
+| P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | **in-flight (P0a✅ P0b✅ P0c✅ → P0d)** | `exec/phase-0-foundations` | P0a→P0c committed (e/f/d frozen); P0d issued; freeze §4 before Phase 1 |
 | S1 | W6 Picker text search | 1 | not-started | `exec/s1-picker-search` | depends: P0 |
 | S2 | W5 Favients undo/list/search | 1 | not-started | `exec/s2-favients` | depends: P0 (doc+history provider); shared: registerPaletteUI.ts |
 | S3 | W3 ghost curves + Generator coherence | 1 | not-started | `exec/s3-generator` | depends: P0 |
@@ -65,7 +69,50 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 > Until Phase 0 writes the final signatures here, the **proposed** ones in playbook §4 stand.
 > Downstream streams must read THIS block, not the playbook, once it is populated.
 
-- (a) Document-provider registry — _pending (P0d)_
+- (a) **Document-provider registry — FROZEN + SIGNED OFF (P0d).** In-session HIGH `/code-review` +
+  `/simplify` + dedicated deserialization security agent (2 real bugs found + fixed), THEN
+  **orchestrator independent security review PASS** (reproduced the prototype-pollution edge in Node +
+  confirmed closed; verified `includeDocuments` opt-in across every `getPreset` caller incl. the
+  gallery/share privacy paths; trusted-id-only iteration; no leaked roots). 3 non-blocking nits.
+  Matches playbook §4(a) (registry signature unchanged); one behaviour refinement (opt-in save flag)
+  noted below — NOT an interface change.
+    - **Engine registry** (`store/documentRegistry.ts`, pure engine-core, host-agnostic; parallels
+      `registerHistoryProvider`):
+      - `registerDocumentProvider(id: string, provider: DocumentProvider): void`
+      - `unregisterDocumentProvider(id: string): void`
+      - `interface DocumentProvider { serialize(): JsonValue; restore(snap: JsonValue): void }`
+      - `serializeDocuments(): Record<string, JsonValue>` (collects all; each wrapped try/catch; `{}` if none)
+      - `restoreDocuments(docs: unknown): void` (validates/ dispatches; **iterates only the TRUSTED
+        registered ids via `hasOwnProperty` — never the untrusted snapshot keys**; each restore
+        wrapped try/catch; no-op on absent/garbage `docs`).
+      - `JsonValue` added to `types/common.ts` (exported via the `types` barrel).
+    - **Scene-shape contract:** snapshots live on the `Preset` under a top-level
+      `documents?: Record<string, JsonValue>` key (`types/preset.ts`), ALONGSIDE the DDFS
+      `features`/scene fields — DDFS path untouched. Round-trips through JSON **and** GMF
+      (`<Scene>` block) **and** PNG iTXt automatically (all serialise the whole `Preset`).
+    - **Save/Load wiring:** `getPreset(options?: { includeScene?; includeDocuments? })` — when
+      `includeDocuments`, attaches `documents` (omitted if empty, keeping legacy files byte-clean).
+      `loadPreset` calls `restoreDocuments(p.documents)` after `applyPresetState` (back-compat:
+      pre-`documents` scenes → no-op). **Opt-in by save path (the one §4(a) refinement):** only the
+      file/PNG/autosave saves pass `includeDocuments:true` (`engine/plugins/SceneIO.tsx`
+      `saveScene`/`saveScenePng`/`serializeCurrentScene`). Deliberately **NOT** on `getShareString`
+      (favients library would bloat the URL) nor the dirty-hash/`lastSavedHash` paths (favouriting
+      must not mark the scene dirty). Downstream streams that want a doc in the file just register a
+      provider — no save-path change needed.
+    - **Reference consumer = favients** (`palette/store/favientsDocument.ts`, registered in
+      `registerPaletteUI` — additive shared-shell): `serialize` = the collection
+      (`JSON.parse(exportCollection())`); `restore` compares the scene's gradients against the live
+      shelf and branches: **identical** (nothing new, no extras) → **toast**, no dialog; **nothing
+      new but shelf has extras** → **Replace/Omit** dialog (no Append); **something new** →
+      **Append/Replace/Omit** dialog. Chosen action routes through `importCollection` (validates,
+      fresh ids, content-sig dedupe, writes through to `localStorage gmt.favients` + store) + a result
+      toast. The 3-way dialog is an **async, self-mounting** modal
+      (`palette/components/favientsRestoreDialog.tsx`, lazy `react-dom/client` root on
+      document.body) — host-agnostic, **zero app-shell edits** (works in the Gradient Explorer AND
+      app-gmt), and non-blocking (scene finishes loading, dialog appears over it). Engine registry
+      stays generic — the choice UX is entirely palette-side.
+    - **S5 coverage note:** `paletteEditorStore` (stops doc) doesn't exist yet — it registers its own
+      provider in S5. generator/image register theirs in their Phase-1 streams. (NOT wired here.)
 - (b) Drag + drop-wells kernel — _pending (P0e)_
 - (c) Send-target registry — _pending (P0e)_
 - (d) **Reusable-editor undo contract — FROZEN + SIGNED OFF (P0c; independent review PASS, 2 lenses).**
@@ -142,11 +189,48 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   preserved verbatim by P0c, NOT introduced). Possibly an unintended default — revisit when the
   Stops mode (S5) / app-gmt coloring semantics are touched.
 
+- **P0d security nits (3, non-blocking, follow-up):** (1) rapid double scene-load leaves the first
+  restore Promise dangling (harmless, no state mutated); (2) no hard upper bound on imported favients
+  count / snapshot size (scene-file size is the de-facto cap; matters only if scene files ever come
+  from a fully-hostile remote feed — note: gallery submit excludes documents, so N/A today); (3)
+  `favientsDocument.ts:72` re-stringifies then `importCollection` re-parses (minor double-work).
+
+- **`npm run test:compat` FAILS — PRE-EXISTING, not P0d.** Confirmed identical on a clean tree
+  (P0d changes stashed). It's a formula capability-gating snapshot drift, unrelated to the gradient
+  work. Needs a separate `--write`/investigation pass (not a Phase-0 blocker; Phase-0 gates are tsc +
+  test:palette + smoke:boot + orphans, all green).
+
 ## Changelog / decisions made during execution
 
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-06 — **P0d DONE** (in-review, uncommitted): engine **document-provider registry**
+  (`store/documentRegistry.ts`) parallel to `registerHistoryProvider`; SceneIO Save/Load wiring via a
+  `Preset.documents` key (opt-in `getPreset({includeDocuments})` on file/PNG/autosave saves; restore
+  in `loadPreset`; back-compat for pre-`documents` scenes). **(a) FROZEN** above (signature matches
+  §4(a); one opt-in-save refinement, not an interface change). Reference consumer = **favients**
+  (`palette/store/favientsDocument.ts`, registered in `registerPaletteUI`): scene-restore is a 3-way
+  **Append/Replace/Omit** dialog (async, self-mounting modal — `favientsRestoreDialog.tsx`; zero
+  app-shell edits, works in both hosts) — identical shelf⇄scene → toast (no dialog); shelf-superset →
+  Replace/Omit (no Append); new content → all three; routes through `importCollection` (validates +
+  localStorage write-through) + result toasts. **(User-feedback revision: upgraded from a 2-way
+  `window.confirm` to the 3-way dialog + toast.)** **Quality pass:** `/code-review high` + `/simplify` +
+  dedicated deserialization `/security-review` (the skill's auto-diff errored on a missing origin
+  ref → ran as a dedicated agent). **2 real bugs found + FIXED:** (1) persistent poison-pill —
+  malformed stops from an untrusted scene survived `validFavients` then crashed `favientSig` on every
+  star/toggle, bricking the shelf across sessions → hardened `isWellFormedFavient` (shared by load +
+  import) + made `favientSig` total; (2) autosave "Restore Last Session" popped a pointless
+  Replace/Append modal that mutated the global library → `newCount===0` short-circuit. Plus a
+  low-sev defense-in-depth `pruneLabels` `__proto__` hardening (`UNSAFE_KEYS` skip). **Security
+  verdict: safe to ship** (prototype-pollution INERT — registry iterates trusted ids only; no
+  DoS/eval). Simplify: dropped now-dead per-entry guard + over-engineered `Parameters<>` cast. Gates:
+  tsc 0 (monorepo), test:palette 9/9, smoke:boot clean, orphans clean (new modules consumed).
+  Shared-shell: `registerPaletteUI` additive only. **Coverage note:** app-gmt's GMF save path
+  (`engine-gmt/topbar.tsx` `saveGMFScene(getPreset())`) does NOT yet opt into `includeDocuments` —
+  fine for P0d (reference = Gradient Explorer JSON); fold into app-gmt integration later. S5
+  `paletteEditorStore` doc not stubbed (registers its own provider in S5). Awaiting user visual
+  round-trip confirm → commit.
 - 2026-06-06 — **P0c independent review PASS** (orchestrator-run, 2 parallel lenses: correctness +
   layering; primary review since the author's automated /code-review was declined). Both MERGE-READY,
   no REAL-BUG/SUSPICIOUS. Verified: undo brackets leak-free, echo-guard byte-identical, sampleStops

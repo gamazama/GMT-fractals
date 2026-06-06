@@ -28,7 +28,9 @@ import { FavientsPanel } from './components/FavientsPanel';
 import { FavientsEditorEntrance } from './components/FavientsEditorEntrance';
 import { useFavientsStore } from './store/favientsStore';
 import { captureGeneratorHistory, restoreGeneratorHistory } from './store/generatorStore';
+import { serializeFavientsDocument, restoreFavientsDocument } from './store/favientsDocument';
 import { registerHistoryProvider } from '../store/slices/historySlice';
+import { registerDocumentProvider } from '../store/documentRegistry';
 import { setGradientEditorEntrance } from '../components/gradient/gradientEditorEntrance';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
 import type { GradientConfig } from '../types';
@@ -63,6 +65,14 @@ export const registerPaletteUI = (): void => {
   // its own store, so register it as a PARAM-undo history provider — curves + slots now
   // ride Ctrl+Z alongside the DDFS dials. Idempotent (Map keyed by id).
   registerHistoryProvider('paletteGenerator', { capture: captureGeneratorHistory, restore: restoreGeneratorHistory });
+
+  // The favients shelf rides Save/Load via the engine document-provider registry
+  // (W8). serialize = the current collection; restore = prompt Replace/Append,
+  // then merge-or-overwrite + write through to localStorage (gmt.favients) so a
+  // loaded scene's palette is preserved. The reference consumer of the registry —
+  // heavy authoring stores (generator/image/stops) register their own providers
+  // in their Phase-1 streams. Idempotent (Map keyed by id).
+  registerDocumentProvider('favients', { serialize: serializeFavientsDocument, restore: restoreFavientsDocument });
 
   // One feature per studio mode — each owns a dock tab; the centre stage mirrors
   // whichever tab is active (see GradientExplorerApp).

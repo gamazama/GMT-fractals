@@ -413,7 +413,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     loadPreset: (p: Preset) => void;
     loadScene: (args: { def?: FractalDefinition; preset: Preset }) => void;
 
-    getPreset: (options?: { includeScene?: boolean }) => Preset;
+    getPreset: (options?: { includeScene?: boolean; includeDocuments?: boolean }) => Preset;
     getShareString: (options?: { includeAnimations?: boolean }) => string;
     
     setHistogramData: (d: Float32Array | null) => void;

@@ -37,14 +37,32 @@ const LS_TARGET = 'gmt.favients.target';
 const LS_GROUPS = 'gmt.favients.groups';
 const LS_SEEDED = 'gmt.favients.seeded';
 
+/**
+ * Strict well-formedness gate for a favourite. Beyond "has a stops array", it
+ * requires every stop to carry a string `color` and finite numeric `position`.
+ *
+ * This is a deserialization defense, not mere schema-drift tolerance: favients
+ * now arrive from untrusted shared scene files (W8 document restore → this
+ * store's importCollection), and `favientSig` (the dedupe/star signature)
+ * assumes `stop.color` is a string. A favourite with a malformed stop that
+ * slipped through would make `favientSig` throw — and because that signature is
+ * computed on every star/toggle and on load, one bad entry persisted to
+ * localStorage would brick the shelf across sessions. Filtering here (used by
+ * BOTH load and import) keeps malformed stops out of memory and disk entirely.
+ */
+const isWellFormedFavient = (f: unknown): f is Favient => {
+  if (!f || typeof f !== 'object') return false;
+  const fav = f as Favient;
+  if (typeof fav.id !== 'string' || !fav.config || !Array.isArray(fav.config.stops)) return false;
+  return fav.config.stops.every(
+    (s) => !!s && typeof s === 'object' && typeof (s as { color?: unknown }).color === 'string' && Number.isFinite((s as { position?: unknown }).position),
+  );
+};
+
 const loadFavients = (): Favient[] => {
   const arr = lsGetJson<unknown[]>(LS_KEY, []);
   if (!Array.isArray(arr)) return [];
-  // Keep only well-formed entries (defends against schema drift).
-  return arr.filter(
-    (f): f is Favient =>
-      !!f && typeof (f as Favient).id === 'string' && !!(f as Favient).config && Array.isArray((f as Favient).config.stops),
-  );
+  return arr.filter(isWellFormedFavient);
 };
 
 const saveFavients = (favients: Favient[]): void => lsSetJson(LS_KEY, favients);
@@ -63,11 +81,16 @@ const loadGroupLabels = (): Record<string, string> => {
 
 const saveGroupLabels = (m: Record<string, string>): void => lsSetJson(LS_GROUPS, m);
 
+/** Keys that must never be written via bracket assignment — `out['__proto__'] = …`
+ *  invokes the prototype setter rather than creating an own property. Group ids
+ *  arrive from untrusted scene files (W8 import), so skip them defensively. */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 /** Drop labels for groups that no longer have any favourites. */
 const pruneLabels = (favients: Favient[], labels: Record<string, string>): Record<string, string> => {
   const used = new Set(favients.map((f) => f.group ?? DEFAULT_GROUP));
   const out: Record<string, string> = {};
-  for (const k of Object.keys(labels)) if (used.has(k)) out[k] = labels[k];
+  for (const k of Object.keys(labels)) if (used.has(k) && !UNSAFE_KEYS.has(k)) out[k] = labels[k];
   return out;
 };
 
@@ -78,8 +101,11 @@ const clamp = (n: number, lo: number, hi: number) => (n < lo ? lo : n > hi ? hi 
  * interpolation. Two gradients with the same stops favourite/unfavourite as one.
  */
 export const favientSig = (c: GradientConfig): string =>
-  c.stops
-    .map((s) => `${Math.round(s.position * 1000)}:${s.color.toUpperCase()}:${s.interpolation ?? 'l'}`)
+  (Array.isArray(c?.stops) ? c.stops : [])
+    // Coerce defensively — favientSig runs on untrusted imported configs (W8
+    // scene restore) and on every star/toggle, so it must never throw on a
+    // malformed stop. A malformed stop just yields a non-matching signature.
+    .map((s) => `${Math.round((Number(s?.position) || 0) * 1000)}:${String(s?.color).toUpperCase()}:${s?.interpolation ?? 'l'}`)
     .join('|');
 
 let _seq = 0;
@@ -136,14 +162,18 @@ export interface FavientsCollection {
 
 const COLLECTION_VERSION = 1 as const;
 
-/** Keep only well-formed favourites (same guard as loadFavients, reused for imports). */
+/** Keep only well-formed favourites (shared strict guard — see isWellFormedFavient). */
 const validFavients = (arr: unknown): Favient[] =>
-  Array.isArray(arr)
-    ? arr.filter(
-        (f): f is Favient =>
-          !!f && typeof (f as Favient).id === 'string' && !!(f as Favient).config && Array.isArray((f as Favient).config?.stops),
-      )
-    : [];
+  Array.isArray(arr) ? arr.filter(isWellFormedFavient) : [];
+
+/**
+ * Read the valid favourites out of a parsed collection object (the same gate
+ * `importCollection` applies). Lets callers preview what an import WOULD admit
+ * — e.g. the scene-restore prompt counting new-vs-duplicate gradients — without
+ * mutating anything. Returns [] for any non-collection / malformed input.
+ */
+export const readCollectionFavients = (raw: unknown): Favient[] =>
+  validFavients((raw as { favients?: unknown } | null)?.favients);
 
 export const useFavientsStore = create<FavientsState>((set, get) => ({
   favients: loadFavients(),

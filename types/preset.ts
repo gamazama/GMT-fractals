@@ -1,4 +1,4 @@
-import { FormulaType, CameraMode, PreciseVector3, CameraState } from './common';
+import { FormulaType, CameraMode, PreciseVector3, CameraState, JsonValue } from './common';
 import { LightParams } from './graphics';
 import { AnimationParams, AnimationSequence } from './animation';
 
@@ -53,6 +53,15 @@ export interface Preset {
   // --- GENERIC FEATURE STORAGE (Primary) ---
   // All module state lives here.
   features?: Record<string, any>;
+
+  // --- NON-DDFS DOCUMENT SNAPSHOTS (W8) ---
+  /** Per-document snapshots collected from the document-provider registry
+   *  (store/documentRegistry.ts) — authoring state that lives outside DDFS
+   *  feature slices (generator curves, image trace, stops doc, favients shelf).
+   *  Keyed by provider id. Written only by save paths that opt in via
+   *  `getPreset({ includeDocuments: true })`; absent on legacy scenes (loads
+   *  fine — providers keep their current state). */
+  documents?: Record<string, JsonValue>;
 }
 
 export interface FractalParameter {

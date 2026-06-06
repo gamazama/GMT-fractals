@@ -254,7 +254,7 @@ export const loadSceneFile = async (file: File): Promise<Preset | null> => {
  */
 export const saveScene = (filename?: string): void => {
     _onBeforeSerialize?.();
-    const preset = useEngineStore.getState().getPreset({ includeScene: true });
+    const preset = useEngineStore.getState().getPreset({ includeScene: true, includeDocuments: true });
     const text = activeSerializer()(preset);
     const blob = new Blob([text], { type: 'application/json' });
     downloadBlob(blob, filename ?? `${defaultFileStem()}.${_fileExtension}`);
@@ -310,7 +310,7 @@ export const saveScenePng = async (filename?: string): Promise<void> => {
     }
     _onBeforeSerialize?.();
     try {
-        const preset = useEngineStore.getState().getPreset({ includeScene: true });
+        const preset = useEngineStore.getState().getPreset({ includeScene: true, includeDocuments: true });
         const blob = await snapshotSceneToPng(canvas, preset, activeSerializer());
         downloadBlob(blob, filename ?? `${defaultFileStem()}.png`);
         noteSceneSavedToFile();
@@ -346,7 +346,7 @@ const noteSceneSavedToFile = (): void => {
  *  otherwise) via the registered serializer. Used by autosave. */
 export const serializeCurrentScene = (): string => {
     _onBeforeSerialize?.();
-    const preset = useEngineStore.getState().getPreset({ includeScene: true });
+    const preset = useEngineStore.getState().getPreset({ includeScene: true, includeDocuments: true });
     return activeSerializer()(preset);
 };
 

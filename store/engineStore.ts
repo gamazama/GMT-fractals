@@ -47,6 +47,7 @@ import { applyMigrations } from '../engine/migrations';
 import { generateShareStringFromPreset } from '../utils/Sharing';
 import { applyPresetState, sanitizeFeatureState } from '../utils/PresetLogic';
 import { presetFieldRegistry } from '../utils/PresetFieldRegistry';
+import { serializeDocuments, restoreDocuments } from './documentRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { animationEngine } from '../engine/AnimationEngine';
 import '../engine/features'; // Ensure features are registered
@@ -296,6 +297,12 @@ const storeFactory: StateCreator<
         set({ projectSettings: { name: newName, version: 0, author: p.author ?? '' }, lastSavedHash: null });
         applyPresetState(p, set as (partial: Record<string, unknown>) => void, get as unknown as () => Record<string, unknown>);
 
+        // Restore non-DDFS document snapshots (W8). No-op when the scene predates
+        // the `documents` key (legacy/back-compat) or carries garbage — each
+        // provider validates its own snapshot. Favients' provider prompts
+        // Replace/Append here (palette owns that UX; the engine stays generic).
+        restoreDocuments(p.documents);
+
         // Emit CAMERA_TELEPORT so apps that drive a 3D camera (GMT-style
         // treadmill nav) warp the viewport to the loaded pose instead of
         // continuing to interpolate from the pre-load position. 2D / no-
@@ -408,6 +415,17 @@ const storeFactory: StateCreator<
 
         p.animations = s.animations;
         p.lfosEnabled = s.lfosEnabled;
+
+        // Non-DDFS document snapshots (W8). Opt-in: only the file/PNG/autosave
+        // save paths request this (see SceneIO), so the dirty-hash + share-string
+        // paths — which call getPreset without the flag — stay unaffected (a
+        // share URL must not carry the user's whole favients library, and
+        // favouriting a gradient must not mark the current scene dirty). Omit the
+        // key entirely when empty to keep legacy/no-provider files byte-clean.
+        if (options?.includeDocuments) {
+            const documents = serializeDocuments();
+            if (Object.keys(documents).length > 0) p.documents = documents;
+        }
 
         try {
             // Imported eagerly at module bottom (line ~383) — no cycle,
