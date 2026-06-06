@@ -49,9 +49,18 @@ avatar, not the static browser drag image), and **cross-tab drag-to-reveal** (dr
 mode tab → it switches → drop onto e.g. a Generator slot). **The P0e W4 kernel is HTML5 `dataTransfer`**
 (good for cross-app + file drops + wells, but the drag visual = static browser image; cross-tab is
 possible but clunky). The smooth-avatar + cross-tab vision points to **pointer-based custom drag**. So a
-real P2 paradigm decision: **HTML5 vs pointer-based custom-drag-layer vs HYBRID** (pointer avatar in-app
-for feel; keep HTML5 only for cross-app/file). This determines whether the W4 kernel is sufficient or
-must evolve. **Being scoped via a design-research probe (2026-06-06) → output folds into P2.**
+real P2 paradigm decision: HTML5 vs pointer vs hybrid.
+**VERDICT (probe `plans/p2-drag-interaction-scope.md`, 2026-06-06): HYBRID** — pointer-primary in-app
+(lifted avatar + cross-tab), HTML5 retained ONLY at the OS boundary (file-drop import + optional
+cross-app export). Key finding: the app is ALREADY pointer-native (dataTransfer in 8 files; pointer-
+capture in 40+), so the pointer controller joins the dominant paradigm; precedents to mirror —
+`usePrecisionTrackDrag`, `Dock` tab-reorder (drag-survives-DOM-change), `GradientHoverPreview`
+(body-portaled animated avatar). **Kernel: WRAP not supersede** — (b) HTML5 well kernel retained for the
+file/cross-app island (scope narrows, no signature change); **S6 fullscreen well MIGRATES to the
+pointer/(c) path → ⚠ RE-VERIFY fullscreen at runtime (concept-ok≠works lesson).** Enabler = the (c)
+`getRect?` amendment (ratified above). Effort ~L (1–2-wk P2 stream): 2 spines [avatar] + [unified target
+list] → then drop-resolution/cross-tab. **Open decisions pending user** (cross-app export drag? mobile
+timing? avatar richness? tab-dwell ~400ms?).
 
 **NEW-FINDING → P2 (what does clicking a gradient DO — key design input):** surfaced via S2 — currently
 click=apply everywhere, but (a) it blocks clicking the name to rename, and (b) applying makes no sense when
@@ -193,6 +202,10 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 - (c) **Send-target registry kernel — FROZEN (P0e)** (engine-core: `store/sendTargetRegistry.ts` +
   `components/SendToMenu.tsx`):
     - `interface SendTarget<P=unknown> { id; label; group: 'host'|'mode'; accepts?(payload: P): boolean; apply(payload: P): void }` — **§4(c) RATIFIED CHANGE: `apply(config: GradientConfig)` → generic `apply(payload: P)`** (engine-core can't reference GradientConfig; this IS Decision #8's genericization). **S2/S6/P2 register gradient targets/wells with their own payload type P = {GradientConfig + kind}.**
+    - **§4(c) AMENDMENT — RATIFIED 2026-06-06 (apply at P2):** add optional `getRect?: () => DOMRect | null`
+      to `SendTarget` (present ⇒ the target is a drop zone for pointer-drag hit-testing; absent ⇒ menu-only).
+      Additive, same pattern as (b)'s `render?`. This is what makes "drag ↔ Send-to share ONE target list"
+      (Decision #2) fall out for free — it gates the P2 drag work. From the p2-drag-interaction probe.
     - `registerSendTarget<P>(t): () => void` · `unregisterSendTarget(id)` · `getSendTargets()` ·
       `subscribeSendTargets(l)` · `targetsForPayload<P>(payload, opts?:{selfId?}): SendTarget<P>[]`.
     - `<SendToMenu<P> payload selfId? label? onSent? className? disabled? />`.
@@ -308,6 +321,12 @@ merges, plan amendments. Newest first.)_
   verified. New finding: rename UX awkward (hover-enlarge obscures name; grid click=apply). Interim fix
   routed back (list-mode rename, no hover-enlarge in list). The deeper "click=select+options vs apply"
   question → **P2** (key canonical-interaction input; see finding above). S2 merges after this fix.
+- 2026-06-06 — **P2 drag-interaction probe complete** → `plans/p2-drag-interaction-scope.md`. Verdict:
+  **HYBRID** (pointer-primary in-app for the lifted avatar + cross-tab; HTML5 only at the OS boundary).
+  App is already pointer-native (8 dataTransfer files vs 40+ pointer-capture). Kernel WRAP-not-supersede;
+  S6 fullscreen well migrates to pointer/(c) (re-verify). **Ratified the (c) `getRect?` amendment**
+  (additive; gates "drag ↔ Send-to share ONE target list"). Effort ~L within P2. Open decisions → user
+  (cross-app export drag / mobile timing / avatar richness / dwell).
 - 2026-06-06 — **S2 MERGED `39ad6a2` → WAVE 2a COMPLETE** (S6+S2). Full integration gate green (tsc 0 +
   ALL test:palette incl. the 2 previously worktree-unrunnable scripts; engine-core historySlice fix
   verified alongside the merged generator provider). S2 = undo provider + list + search + favourite
