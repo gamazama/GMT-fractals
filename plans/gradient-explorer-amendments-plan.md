@@ -493,9 +493,9 @@ easing library exists** (only a stray `engine/math/Easing.ts::easeInOutQuad`).
 `generatorMode` + the `ColorBoxParams` (scalar `start/end` + `easing` enum per channel) = **DDFS
 params** (free undo/keyframes/presets). easings.ts is pure core (deterministic). No new non-scalar state.
 
-### Open decisions (pending user)
-Hue-path default (shortest only vs expose a per-channel "long way round" toggle — reuse the HSV-far
-convention). Leonardo contrast-target export as a *third* mode now vs defer (research marked optional).
+### Decisions (LOCKED 2026-06-06)
+Hue-path = **shortest only** (no long-way toggle). Leonardo contrast-target = **deferred** (not v1) —
+two modes only: `mixed` + `colorbox`.
 
 ## Workstream 13 — Richer per-segment interpolation bases — **scope S (Tier A) / M (Tier B)** (v1 addition)
 *(from [gradient-v1-additions-scope.md](gradient-v1-additions-scope.md))*
@@ -528,9 +528,9 @@ sequence after S5.
 ### Where state lives
 `interpolation` is already a per-stop field (no new state). New modes round-trip only in GMT-native JSON.
 
-### Open decision (pending user)
-**Tier B in v1 or stretch?** (recommend: monotone-cubic in v1; Catmull-Rom/B-spline stretch — it carries
-the only sampler refactor.)
+### Decision (LOCKED 2026-06-06)
+**Tier B = STRETCH (deferred).** v1 ships **monotone-cubic only** (Tier A) — no `sampleSorted` 4-point
+refactor in v1.
 
 ## Cross-cutting notes
 
