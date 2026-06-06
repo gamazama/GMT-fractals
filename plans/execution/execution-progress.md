@@ -96,6 +96,8 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | S4 | W7 Import | 1 | ✅ **merged `8945a9c`** | `exec/s4-import` | Import in Favients kebab menu → parseGradientText → fitRampToStops → favientsStore.add (persisted, deduped); pure parsers + `/security-review` clean. Touched **FavientsPanel.tsx (S2's file)** — S2 rebases + folds import into its undo provider |
 | S5 | W1 Stops *mode* | 1 | **queued (wave 2b — after S2+S6)** | `exec/s5-stops-mode` | run LAST: rebase over S2 (registerPaletteUI) + S1/S6 (GradientExplorerApp); mounts the engine Stops editor; shared: registerPaletteUI, GradientExplorerApp, setup |
 | S6 | W11 Fullscreen configs | 1 | **in-flight (wave 2a)** | `exec/s6-fullscreen` | consumes W4 wells kernel (b) — gradient wells/payload; ramp-geometry configs exportable + reroll/amount; shared: GradientExplorerApp (overlay mount) |
+| S7 | W12 ColorBox generator mode (v1 addition) | 1 | **queued (wave 3)** | `exec/s7-colorbox` | NEW easings.ts + buildColorBoxRamp (parallel builder) + generatorMode enum + DDFS/UI; additive, collision-free w/ wave 2 generator-wise; pending hue-path / Leonardo decisions |
+| S8 | W13 interpolation bases (v1 addition) | 1 | **queued (wave 3)** | `exec/s8-interp` | Tier A monotone-cubic: engine `sampleSorted` branch + union + AdvancedGradientEditor picker + JSON field. **ENGINE-CORE** (test:interlace + test:baseline gate, P0-level care) + touches the editor → run **AFTER S5**. Tier B = stretch (pending decision) |
 | P2 | W2 portability integration + W9 snapshot | 2 | not-started | `exec/p2-portability` | depends: ALL Phase 1; touches every hero |
 | P3 | `/polish` pass | 3 | deferred | — | after structure lands |
 
@@ -259,6 +261,13 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-06 — **v1 additions folded in** (competitive-research probe → `gradient-v1-additions-scope.md`):
+  W12 ColorBox-in-OKLCh generator mode (new easings.ts + parallel builder + generatorMode enum) and
+  W13 richer interpolation bases (Tier A monotone-cubic = engine sampler branch; Tier B Catmull-Rom/
+  B-spline = stretch). Added as streams **S7/S8, wave 3** (after wave 2). **Wave 2 unaffected** (W12 =
+  generator-only, W13 = sampler+editor, both disjoint from S2/S5/S6). 3 scope decisions pending user
+  (interp Tier B v1-vs-stretch; ColorBox hue-path; Leonardo 3rd-mode). Research verdicts: GMT leads on
+  color science; 2D/mesh DEFERRED; stop model VALIDATED; ML-gen dropped.
 - 2026-06-06 — **WAVE 1 COMPLETE** (S3 merged `cd4c469` via `5525534`). Integration gate green: tsc 0 +
   test:palette all-pass on the combined branch. S3's 2 review cleanups applied (ghost-fold/ghostVisible,
   genEditEnd/interactive) + 2 optional one-liners; merged without re-visual (fixes invisible /

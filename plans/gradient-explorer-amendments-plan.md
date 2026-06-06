@@ -466,6 +466,72 @@ seeded with mulberry32 so any given roll is reproducible.
 Still open: which configs ship first vs "useful others"; cap the point-field count for perf at
 full resolution.
 
+## Workstream 12 — ColorBox-in-OKLCh generator mode — **scope M** (v1 addition, 2026-06-06)
+*(from [gradient-v1-additions-scope.md](gradient-v1-additions-scope.md) — competitive-research pass)*
+
+### What
+A second generator mode that builds a ramp by sweeping each **OKLCh** channel (L, C, h) independently
+from start→end, each driven by its **own easing curve** (Lyft's ColorBox, but in OKLCh not HSV →
+perceptually better, dovetails with our per-channel thinking).
+
+### Current state / gap
+No generator-mode concept exists — `generatorPipeline.ts` is one hardwired `buildGradientRamp`. **No
+easing library exists** (only a stray `engine/math/Easing.ts::easeInOutQuad`).
+
+### Approach (additive, low blast radius)
+1. NEW `palette/core/easings.ts` — ~25 named curves (in/out/inout × quad/cubic/sine/expo/quint/circ/
+   back + linear), `EasingName` union + `getEasing(name)`. Pure, unit-testable.
+2. NEW `buildColorBoxRamp(params: ColorBoxParams): BuildResult` (parallel builder, NOT a branch inside
+   buildGradientRamp) — per-channel `{start,end,easing}`, recompose OKLCh→Lab→**`oklabToRgbSafe`**
+   (gamut-safe, so high-chroma sweeps don't hue-shift on clamp). Same `BuildResult` shape → stopFit /
+   bake unchanged.
+3. Add `generatorMode: 'mixed' | 'colorbox'` to the generator slice; build call-site branches.
+4. Register mode + ColorBox params as DDFS params (`paletteGenerator.ts`); `GeneratorStage` shows the
+   ColorBox controls when active.
+
+### Where state lives
+`generatorMode` + the `ColorBoxParams` (scalar `start/end` + `easing` enum per channel) = **DDFS
+params** (free undo/keyframes/presets). easings.ts is pure core (deterministic). No new non-scalar state.
+
+### Open decisions (pending user)
+Hue-path default (shortest only vs expose a per-channel "long way round" toggle — reuse the HSV-far
+convention). Leonardo contrast-target export as a *third* mode now vs defer (research marked optional).
+
+## Workstream 13 — Richer per-segment interpolation bases — **scope S (Tier A) / M (Tier B)** (v1 addition)
+*(from [gradient-v1-additions-scope.md](gradient-v1-additions-scope.md))*
+
+### What
+Extend `GradientStop.interpolation` beyond `linear|step|smooth|cubic` with **monotone-cubic** (Tier A,
+no-overshoot → gamut-safe) and optionally **Catmull-Rom / B-spline** (Tier B).
+
+### Current state / gap
+`utils/colorUtils.ts::sampleSorted` (the canonical, byte-exact-with-the-engine-bake sampler) modulates
+`t` per segment and sees only `(s1, s2)`. Overshoot-prone interpolation can push a perceptual ramp out
+of gamut — monotone-cubic fixes that.
+
+### Approach — two tiers
+- **Tier A (v1): monotone-cubic.** A 2-point scheme → one new branch in `sampleSorted` (operates on `t`
+  exactly like the hermite case). Extend the union in `types/graphics.ts`; add to the Stops-editor
+  interpolation picker (`AdvancedGradientEditor`); add an `interpolation` field to GMT-native **JSON**
+  export (the baked formats are lossy by design — interpolation drops; one-line note in the export UI).
+- **Tier B (stretch): Catmull-Rom / B-spline.** Need 4 control points (segment ± neighbours) — refactor
+  `sampleSorted`'s segment loop to pass `sorted[i-1…i+2]` and spline on the **colour values** (B1).
+  Catmull-Rom can itself overshoot → clamp via the gamut-safe path.
+
+### Risk / gates
+The sampler is **hot + shared with the engine texture bake** — keep the `linear` branch first; bake
+parity (`generateGradientTextureBuffer` byte-identical) MUST hold; gated by **`test:interlace` +
+`test:baseline`** (mandatory). This is an **engine-core** change (touches P0a's sampler) — treat with
+P0-level care; and the editor-picker change touches `AdvancedGradientEditor` (S5's mounted editor) →
+sequence after S5.
+
+### Where state lives
+`interpolation` is already a per-stop field (no new state). New modes round-trip only in GMT-native JSON.
+
+### Open decision (pending user)
+**Tier B in v1 or stretch?** (recommend: monotone-cubic in v1; Catmull-Rom/B-spline stretch — it carries
+the only sampler refactor.)
+
 ## Cross-cutting notes
 
 ### Suggested sequencing (dependencies)
