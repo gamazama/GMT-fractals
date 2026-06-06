@@ -43,6 +43,13 @@ state-loss-on-mode-switch); confirmed on the S1 branch but not S1's doing. **P2 
 — lift its preview state to a transient store (same pattern as `pickerSearch`) so it survives the
 remount.** (User reported 2026-06-06; "fix wherever convenient" → P2.)
 
+**NEW-FINDING → P2 / cross-cutting (undo focus across modes):** Ctrl+Z can undo an action in a mode
+you're not currently viewing (the undo stack is global; actions are per-mode). User wants either (a)
+tab-switches become undo steps, or (b) undo auto-focuses/switches to the mode the undone action belongs
+to. **Orchestrator lean: (b)** (standard "undo focuses the affected context"; (a) pollutes the stack with
+navigation). Out of S2 scope — decide at P2 (which unifies cross-mode UX). (User reported 2026-06-06,
+leans (a).)
+
 **Carry-forward for P2 (portability integration):** (1) the DragWellsOverlay must coexist with
 ImageStage's window dragover/drop file-import listener — **ImageStage must early-return when a
 well-accepted MIME is present** (documented in dropWellRegistry.ts, not solved in P0e); (2) **real
@@ -91,11 +98,11 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 |----|------------|-------|--------|-------------------|-------|
 | P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | ✅ **COMPLETE (P0a–P0e)** | `exec/phase-0-foundations` | ALL 6 interfaces (a)-(f) frozen; merging to integration → Phase 1 fan-out |
 | S1 | W6 Picker text search | 1 | ✅ **merged `065fa72`** | `exec/s1-picker-search` | search only; pick-semantics + hero send/export → P2; +mobile-search additive edit to GradientExplorerApp (S5/S6 rebase) |
-| S2 | W5 Favients undo/list/search | 1 | **in-review (code done; verify unblocked)** | `exec/s2-favients` | undo provider + list view + search delivered; folds S4 import into undo. **ENGINE-CORE fix:** historySlice `endParamTransaction` pushed spurious no-op undo entries for ALL providers (also hit merged S3 gen-provider) → now reads ext-key via `provider.capture()`. New shared `paramUndoBracket.ts`. dev/node_modules was partial → `npm install` repaired. **Pending: full gate + visual in wt-s2 (incl. GENERATOR-undo regression check)** |
+| S2 | W5 Favients undo/list/search | 1 | **in-review (feedback round — 2 fixes routed back)** | `exec/s2-favients` | undo/list/search work + engine-core historySlice fix + shared `paramUndoBracket.ts`. User visual: undo (groups/clear/import) ✅, list ✅, generator-undo regression ✅. Routed back: (4) "clear filter to reorder" only on drag-attempt; (1) add favourite-item rename + undo (currently impossible). By-design: filter undo (transient). Deferred→P2: cross-tab undo focus |
 | S3 | W3 ghost curves + Generator coherence | 1 | ✅ **merged `cd4c469`** | `exec/s3-generator` | indep review PASS; 2 cleanups applied (ghost-fold gated on `ghostVisible`; `genEditEnd` gated on `interactive` = restores pre-S3 undo-arming) + 2 optional one-liners; gates green; user confirm (fixes invisible/strictly-improving) |
 | S4 | W7 Import | 1 | ✅ **merged `8945a9c`** | `exec/s4-import` | Import in Favients kebab menu → parseGradientText → fitRampToStops → favientsStore.add (persisted, deduped); pure parsers + `/security-review` clean. Touched **FavientsPanel.tsx (S2's file)** — S2 rebases + folds import into its undo provider |
 | S5 | W1 Stops *mode* | 1 | **queued (wave 2b — after S2+S6)** | `exec/s5-stops-mode` | run LAST: rebase over S2 (registerPaletteUI) + S1/S6 (GradientExplorerApp); mounts the engine Stops editor; shared: registerPaletteUI, GradientExplorerApp, setup |
-| S6 | W11 Fullscreen configs | 1 | **in-flight (wave 2a — runtime bug; BACKED OUT)** | `exec/s6-fullscreen` | foundation built (6 geometries/overlay/export/reroll/well+⛶) but **FULLSCREEN NOT WORKING at runtime** (tsc+test:palette passed; visual gate caught it). Was merged then **reset out** of integration → back to `96cfa51`. User fixing in wt-s6 (`3cfb400`); re-merge when it works. FUTURE: richer options (backlog) |
+| S6 | W11 Fullscreen configs | 1 | ✅ **merged `94e8e5d`** | `exec/s6-fullscreen` | foundation + fixes: drop-race in W4 kernel (capture→bubble reset — ratified into (b)) + isotropic geometries (radial/conic round). User visual confirm (drop opens fullscreen; shapes round). Integration gate green. FUTURE: richer options (backlog "fullscreen v2") |
 | S7 | W12 ColorBox generator mode (v1 addition) | 1 | **queued (wave 3)** | `exec/s7-colorbox` | NEW easings.ts + buildColorBoxRamp (parallel builder) + generatorMode enum + DDFS/UI; additive, collision-free w/ wave 2. **LOCKED: shortest hue-path only; no Leonardo (modes = mixed+colorbox)** |
 | S8 | W13 interpolation bases (v1 addition) | 1 | **queued (wave 3)** | `exec/s8-interp` | **Tier A monotone-cubic ONLY** (Tier B deferred): engine `sampleSorted` branch + union + AdvancedGradientEditor picker + JSON field. **ENGINE-CORE** (test:interlace + test:baseline gate, P0-level care) + touches the editor → run **AFTER S5** |
 | P2 | W2 portability integration + W9 snapshot | 2 | not-started | `exec/p2-portability` | depends: ALL Phase 1; touches every hero |
@@ -161,6 +168,10 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
     - `interface DragPayloadBase { kind: string }` (payload discriminator; kernel routes raw
       DataTransfer — visibility keys off `dataTransfer.types` only, getData blocked mid-drag).
     - `useDragInFlight(enabled=true): { inFlight: boolean; types: string[] }` · `<DragWellsOverlay z? className? />`.
+    - **RATIFIED FIX (S6, 2026-06-06):** the drop `inFlight`-reset moved **capture→bubble** phase, so a
+      well tile's bubble-phase `onDrop` runs before the overlay unmounts the tile (capture-first /
+      bubble-last ordering; dragenter/leave/end stay capture). Behavior-only — signature unchanged.
+      Was a latent kernel bug (S6 = first consumer to hit it). **P2 (heavy wells consumer) inherits this.**
 - (c) **Send-target registry kernel — FROZEN (P0e)** (engine-core: `store/sendTargetRegistry.ts` +
   `components/SendToMenu.tsx`):
     - `interface SendTarget<P=unknown> { id; label; group: 'host'|'mode'; accepts?(payload: P): boolean; apply(payload: P): void }` — **§4(c) RATIFIED CHANGE: `apply(config: GradientConfig)` → generic `apply(payload: P)`** (engine-core can't reference GradientConfig; this IS Decision #8's genericization). **S2/S6/P2 register gradient targets/wells with their own payload type P = {GradientConfig + kind}.**
@@ -267,6 +278,14 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-06 — **S6 RE-MERGED `94e8e5d`** (fixes, visually confirmed FIRST this time): drop-race in W4
+  kernel (useDragInFlight capture→bubble reset — ratified into frozen (b); P2 inherits) + isotropic
+  radial/conic/arched. Integration gate green. **Wave 2a: S6 ✅; S2 in-review (feedback round).**
+- 2026-06-06 — **S2 feedback triage:** (4) "clear filter to reorder" → show only on drag-attempt (S2
+  fix); (1) favourites can't be renamed at all (group-rename works/undoes) → fold favourite-item rename
+  + undo into S2; (2) search/filter undo "not working" = **by design** (transient view state, like Picker
+  filters — not a document mutation); (3) cross-tab undo UX (undo affecting an unseen tab) → **out of S2
+  scope, logged → P2** (see carry-forward). S2 NOT merged until rename+clutter fix re-verified.
 - 2026-06-06 — **dev/node_modules repaired** (partial-install: three/fflate/vite/.bin/tsc missing →
   blocked the app + 2 test scripts in every worktree via the junction). `npm install` in dev (637 pkgs)
   fixed it; worktrees junction to it so all now whole. (Matches the project_dev_toolchain_global_tsc note.)
