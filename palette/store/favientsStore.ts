@@ -320,3 +320,35 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     return fresh.length;
   },
 }));
+
+/**
+ * History-provider snapshot for the favients shelf (W5 undo). Registered in
+ * registerPaletteUI as a PARAM-undo provider, so favourite mutations bracketed at
+ * the panel gesture boundary (remove, drag reorder/insert, group rename, kebab
+ * Clear, collection load, and the gradient-file Import) ride Ctrl+Z.
+ *
+ * `selectedTargetId` is intentionally EXCLUDED — it's a transient apply-target
+ * preference, not collection content, and shouldn't be churned by undo. The boot
+ * `seedPresets` effect is one-time and never snapshotted.
+ */
+export const captureFavientsHistory = (): { favients: Favient[]; groupLabels: Record<string, string> } => {
+  const s = useFavientsStore.getState();
+  return { favients: s.favients, groupLabels: s.groupLabels };
+};
+
+/**
+ * Restore a favients snapshot. The collection lives ONLY in this store +
+ * localStorage (no engine-store mirror), so an undo/redo must write THROUGH to
+ * disk (saveFavients/saveGroupLabels) as well as the store — otherwise the next
+ * reload would re-read the pre-undo collection from `gmt.favients` and the shelf
+ * would diverge from what undo just showed.
+ */
+export const restoreFavientsHistory = (snap: unknown): void => {
+  const s = snap as { favients?: unknown; groupLabels?: unknown } | null;
+  if (!s || !Array.isArray(s.favients)) return;
+  const favients = s.favients as Favient[];
+  const groupLabels = s.groupLabels && typeof s.groupLabels === 'object' ? (s.groupLabels as Record<string, string>) : {};
+  saveFavients(favients);
+  saveGroupLabels(groupLabels);
+  useFavientsStore.setState({ favients, groupLabels });
+};

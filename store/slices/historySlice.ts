@@ -147,15 +147,23 @@ const getParamSnapshot = (s: EngineStoreState): Partial<EngineStoreState> => {
     return snap;
 };
 
+/** Current value of a snapshot key: external-provider keys (`__ext__*`) read from
+ *  their provider's capture(); everything else from the engine store. The single
+ *  source of the ext-key rule, shared by the redo/undo capture below AND the
+ *  end-of-transaction diff — so they can't disagree on where an ext key's value
+ *  comes from (a mismatch silently pushes spurious undo entries). */
+const readSnapshotKey = (k: string, current: EngineStoreState): unknown =>
+    k.startsWith(EXT_PREFIX)
+        ? _historyProviders.get(k.slice(EXT_PREFIX.length))?.capture()
+        : (current as any)[k];
+
 const captureStateForKeys = (keys: string[], current: EngineStoreState): Partial<EngineStoreState> => {
     const snap: Partial<EngineStoreState> = {};
     for (const k of keys) {
-        if (k.startsWith(EXT_PREFIX)) {
-            const p = _historyProviders.get(k.slice(EXT_PREFIX.length));
-            (snap as any)[k] = p ? JSON.parse(JSON.stringify(p.capture())) : undefined;
-        } else {
-            (snap as any)[k] = (current as any)[k];
-        }
+        const v = readSnapshotKey(k, current);
+        // Clone ext-provider values so the stacked snapshot is stable against later
+        // store mutation (engine-store fields are already replaced by reference on set).
+        (snap as any)[k] = k.startsWith(EXT_PREFIX) && v !== undefined ? JSON.parse(JSON.stringify(v)) : v;
     }
     return snap;
 };
@@ -232,7 +240,10 @@ export const createHistorySlice: StateCreator<
         let hasChanges = false;
         for (const k of Object.keys(interactionSnapshot)) {
             const prev = (interactionSnapshot as any)[k];
-            const curr = (current as any)[k];
+            // readSnapshotKey handles `__ext__*` provider keys, which are NOT engine-store
+            // fields — reading `current[k]` for them would be undefined and make the key
+            // compare unequal on EVERY bracket (a spurious undo entry for no-op gestures).
+            const curr = readSnapshotKey(k, current);
             if (JSON.stringify(prev) !== JSON.stringify(curr)) {
                 (diff as any)[k] = prev;
                 hasChanges = true;

@@ -42,6 +42,18 @@ import { EXPORT_FORMATS, getExportFormat, AI_STOP_LIMIT } from '../core/exportFo
 import { buildCollectionZip, buildCollectionFile, buildContactSheet, collectionQualityWarnings } from '../core/favientsExport';
 import { parseGradientText, IMPORT_EXTENSIONS } from '../core/importFormats';
 import { fitRampToStops } from '../core/stopFit';
+import {
+  getFavientsViewMode,
+  setFavientsViewMode,
+  type FavientsViewMode,
+} from '../store/favientsPanelPersist';
+// Favourite mutations ride the engine's PARAM undo stack via a history PROVIDER
+// (captureFavientsHistory, registered in registerPaletteUI). Bracketing happens HERE
+// at the panel gesture boundary — not in favientsStore, which stays engine-store-
+// agnostic. The shared paramUndoBracket helper is the same one the generator uses.
+// Discrete gestures use favEdit(); the group-rename input coalesces a keystroke burst
+// via focus/blur.
+import { paramEditStart as favEditStart, paramEditEnd as favEditEnd, paramEdit as favEdit } from '../store/paramUndoBracket';
 
 /** Re-render when hosts (re)register apply targets or the browse action. */
 const useFavientTargets = () => {
@@ -118,7 +130,10 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
 
   const onFile = async (file: File) => {
     const text = await file.text();
-    const n = importCollection(text, importMode.current);
+    // Bracket the load as one undo entry (merge OR replace) — the provider snapshot
+    // is taken before importCollection mutates the shelf, so Ctrl+Z restores it.
+    let n: number | null = null;
+    favEdit(() => { n = importCollection(text, importMode.current); });
     if (n == null) onFlash("That file isn't a Favients collection");
     else onFlash(importMode.current === 'replace' ? `Replaced — ${n} loaded` : n ? `Merged ${n} new` : 'Nothing new to merge');
     close();
@@ -128,21 +143,41 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
   // Favients *collection*). The File read lives here; parsing is the pure core. Each
   // gradient is fitted to stops and added to the shelf (content-deduped via isFav).
   const onGradientFiles = async (files: FileList) => {
+    // Read every file FIRST (async), so the undo bracket below stays fully
+    // SYNCHRONOUS. Holding a param transaction open across awaits risks another
+    // gesture's beginParamTransaction clobbering the engine's single
+    // interactionSnapshot mid-import — which would drop the import's undo entry.
+    const reads = await Promise.all(
+      Array.from(files).map(async (f) => {
+        try {
+          return { name: f.name, text: await f.text() };
+        } catch {
+          return null; // read failure on this file — never aborts the rest
+        }
+      }),
+    );
     let imported = 0;
     let skipped = 0;
-    for (const f of Array.from(files)) {
-      try {
-        const res = parseGradientText(await f.text(), extOf(f.name));
-        // parseGradientText guarantees a 256-length ramp, so fitRampToStops won't throw.
-        const config = res && fitRampToStops(res.ramp, { targetDE: 0.02, maxStops: 32 });
-        if (config && !isFav(config)) {
-          add(config, gradientName(f.name), `Import · .${res!.format}`);
-          imported++;
-        } else skipped++; // unreadable, or a duplicate of an existing favourite
-      } catch {
-        skipped++; // read/parse failure on this file — never aborts the rest
+    // Bracket the whole batch as ONE undo entry (empty diff → no entry if nothing added).
+    favEdit(() => {
+      for (const r of reads) {
+        if (!r) {
+          skipped++;
+          continue;
+        }
+        try {
+          const res = parseGradientText(r.text, extOf(r.name));
+          // parseGradientText guarantees a 256-length ramp, so fitRampToStops won't throw.
+          const config = res && fitRampToStops(res.ramp, { targetDE: 0.02, maxStops: 32 });
+          if (config && !isFav(config)) {
+            add(config, gradientName(r.name), `Import · .${res!.format}`);
+            imported++;
+          } else skipped++; // unreadable, or a duplicate of an existing favourite
+        } catch {
+          skipped++; // parse failure on this file
+        }
       }
-    }
+    });
     onFlash(
       imported
         ? `Imported ${imported} gradient${imported > 1 ? 's' : ''}${skipped ? ` · ${skipped} skipped` : ''}`
@@ -153,8 +188,10 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
 
   const doClear = () => {
     if (empty) return;
-    if (window.confirm(`Clear all ${favients.length} favourite${favients.length === 1 ? '' : 's'}? This cannot be undone.`)) {
-      clear();
+    // Clear is undoable now (the history provider snapshots the shelf), so the
+    // confirm no longer warns "cannot be undone" — keep it only as a guard rail.
+    if (window.confirm(`Clear all ${favients.length} favourite${favients.length === 1 ? '' : 's'}? You can undo this.`)) {
+      favEdit(() => clear());
       onFlash('Collection cleared');
     }
     close();
@@ -309,6 +346,9 @@ const insertIndexFromPointer = (container: HTMLElement, x: number, y: number): n
   return slots.length;
 };
 
+/** List-row strip width (px) for the `list` view; height tracks the swatch height. */
+const LIST_STRIP_W = 56;
+
 const FavientSwatch: React.FC<{
   fav: Favient;
   onApply: (fav: Favient) => void;
@@ -316,8 +356,23 @@ const FavientSwatch: React.FC<{
   onDragBegin: (id: string) => void;
   swatchW: number;
   swatchH: number;
-}> = ({ fav, onApply, onHover, onDragBegin, swatchW, swatchH }) => {
+  /** Shelf layout: a compact swatch (grid) or a detail row (list). */
+  view: FavientsViewMode;
+  /** Group divider label for the list-row caption (grid ignores it). */
+  groupLabel?: string;
+  /** Whether this swatch can start a reorder drag (false while a filter is active). */
+  canDrag: boolean;
+  /** Rename this favourite (list view only). Live edit, bracketed for undo by the input. */
+  onRename: (id: string, name: string) => void;
+  /** Called when a reorder drag is attempted while disabled (filter active) — surfaces the cue. */
+  onDragBlocked: () => void;
+}> = ({ fav, onApply, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked }) => {
   const ref = useRef<HTMLCanvasElement>(null);
+  const [editing, setEditing] = useState(false);
+  const list = view === 'list';
+  // Canvas footprint: the compact grid swatch, or a short fixed strip in list rows.
+  const cw = list ? LIST_STRIP_W : swatchW;
+  const ch = list ? Math.max(14, swatchH) : swatchH;
   // Render in DISPLAY sRGB (the stored colorSpace is a bake-for-shader concern; honouring
   // it here — often 'linear' — would look dull). The picker wall renders the same way.
   const ramp = useMemo(() => renderStopsToRamp(fav.config.stops, fav.config.blendSpace ?? 'oklab', 'srgb'), [fav.config]);
@@ -331,19 +386,19 @@ const FavientSwatch: React.FC<{
     const ctx = cv.getContext('2d');
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
-    cv.width = Math.round(swatchW * dpr);
-    cv.height = Math.round(swatchH * dpr);
+    cv.width = Math.round(cw * dpr);
+    cv.height = Math.round(ch * dpr);
     ctx.imageSmoothingEnabled = true;
     ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.drawImage(rampCanvas, 0, 0, 256, 1, 0, 0, cv.width, cv.height);
-  }, [rampCanvas, swatchW, swatchH]);
+  }, [rampCanvas, cw, ch]);
 
   const showHover = () => {
     const cv = ref.current;
     if (!cv) return;
     const r = cv.getBoundingClientRect();
-    const ew = swatchW * 3,
-      eh = swatchH * 2;
+    const ew = cw * 3,
+      eh = ch * 2;
     onHover({
       ex: r.left + r.width / 2 - ew / 2,
       ey: r.top + r.height / 2 - eh / 2,
@@ -358,33 +413,92 @@ const FavientSwatch: React.FC<{
     });
   };
 
+  // The row stays `draggable` even while a filter disables reordering, so a drag
+  // ATTEMPT is detectable (dragstart fires) — we cancel it and surface the cue,
+  // rather than persistently nagging. Editing suppresses drag so the input works.
+  const dragProps = {
+    draggable: !editing,
+    onDragStart: (e: React.DragEvent) => {
+      if (!canDrag) {
+        e.preventDefault(); // reorder disabled while filtered — show the cue instead
+        onDragBlocked();
+        return;
+      }
+      onHover(null);
+      setFavientDrag(e.dataTransfer, { config: fav.config, name: fav.name, source: fav.source, favId: fav.id });
+      onDragBegin(fav.id);
+    },
+    // Hover-enlarge is GRID-only: in list mode the popover would obscure the name and
+    // fight double-click-to-rename, so list rows stay a stable size with no enlarge.
+    ...(list ? {} : { onMouseEnter: showHover, onMouseLeave: () => onHover(null) }),
+    title: `${fav.name}${fav.source ? ` · ${fav.source}` : ''}\nClick to apply${canDrag ? ' · drag to reorder / onto a target' : ''}`,
+  };
+
+  if (list) {
+    // Muted caption: provenance + group label (whichever exist).
+    const caption = [fav.source, groupLabel].filter(Boolean).join(' · ');
+    return (
+      <div
+        data-slot
+        {...dragProps}
+        className={`group flex items-center gap-2 px-1 py-1 rounded hover:bg-white/[0.06] transition ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
+      >
+        {/* Strip applies; name double-click renames (separate targets so renaming
+            doesn't fire an apply). */}
+        <canvas
+          ref={ref}
+          onClick={() => onApply(fav)}
+          style={{ width: cw, height: ch }}
+          className="block shrink-0 rounded-[2px] ring-1 ring-white/10 overflow-hidden cursor-pointer"
+        />
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <input
+              autoFocus
+              value={fav.name}
+              // Live edit bracketed via focus/blur → ONE undo entry (mirrors group rename).
+              onFocus={favEditStart}
+              onBlur={() => { favEditEnd(); setEditing(false); }}
+              onChange={(e) => onRename(fav.id, e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur(); }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              placeholder="Name"
+              className="w-full bg-transparent text-[11px] text-gray-100 outline-none border-b border-white/25"
+            />
+          ) : (
+            <div
+              className="text-[11px] text-gray-200 truncate cursor-text"
+              onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+              title="Click to rename"
+            >
+              {fav.name}
+            </div>
+          )}
+          {caption && <div className="text-[9px] text-gray-500 truncate">{caption}</div>}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      data-slot
-      className="group relative shrink-0"
-      draggable
-      onDragStart={(e) => {
-        onHover(null);
-        setFavientDrag(e.dataTransfer, { config: fav.config, name: fav.name, source: fav.source, favId: fav.id });
-        onDragBegin(fav.id);
-      }}
-      onMouseEnter={showHover}
-      onMouseLeave={() => onHover(null)}
-      title={`${fav.name}${fav.source ? ` · ${fav.source}` : ''}\nClick to apply · drag to reorder / onto a target`}
-    >
+    <div data-slot className="group relative shrink-0" {...dragProps}>
       <button
         onClick={() => onApply(fav)}
         className="block rounded-[2px] ring-1 ring-white/10 hover:ring-amber-300/80 transition cursor-grab active:cursor-grabbing overflow-hidden"
       >
-        <canvas ref={ref} style={{ width: swatchW, height: swatchH }} className="block" />
+        <canvas ref={ref} style={{ width: cw, height: ch }} className="block" />
       </button>
     </div>
   );
 };
 
-const Placeholder: React.FC<{ w: number; h: number }> = ({ w, h }) => (
-  <div className="shrink-0 rounded-[2px] border border-dashed border-cyan-300/70 bg-cyan-300/10" style={{ width: w, height: h }} />
-);
+const Placeholder: React.FC<{ w: number; h: number; list?: boolean }> = ({ w, h, list }) =>
+  list ? (
+    <div className="h-0.5 my-0.5 rounded-full bg-cyan-300/70" />
+  ) : (
+    <div className="shrink-0 rounded-[2px] border border-dashed border-cyan-300/70 bg-cyan-300/10" style={{ width: w, height: h }} />
+  );
 
 const GroupDivider: React.FC<{ label: string; onRename: (v: string) => void; autoFocus: boolean }> = ({ label, onRename, autoFocus }) => {
   const ref = useRef<HTMLInputElement>(null);
@@ -396,6 +510,10 @@ const GroupDivider: React.FC<{ label: string; onRename: (v: string) => void; aut
       <input
         ref={ref}
         value={label}
+        // Coalesce a rename into ONE undo entry: open the bracket on focus, close it
+        // on blur, so the keystroke burst between collapses to a single transaction.
+        onFocus={favEditStart}
+        onBlur={favEditEnd}
         onChange={(e) => onRename(e.target.value)}
         placeholder="Group name"
         className="bg-transparent text-[10px] uppercase tracking-wide text-gray-300 placeholder-gray-600 outline-none border-b border-transparent focus:border-white/25 w-28"
@@ -409,6 +527,30 @@ const PaletteIcon: React.FC = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="3" width="18" height="18" rx="2" />
     <path d="M3 9h18M3 15h18" />
+  </svg>
+);
+
+const SearchIcon: React.FC = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="7" />
+    <path d="m21 21-4.3-4.3" />
+  </svg>
+);
+
+/** Toggle icon: shows the layout you'd switch TO (grid swatches ⇄ list rows). */
+const GridIcon: React.FC = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <rect x="14" y="14" width="7" height="7" rx="1" />
+  </svg>
+);
+
+const ListIcon: React.FC = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 6h13M8 12h13M8 18h13" />
+    <path d="M3 6h.01M3 12h.01M3 18h.01" />
   </svg>
 );
 
@@ -442,6 +584,7 @@ export const FavientsPanel: React.FC = () => {
   const favients = useFavientsStore((s) => s.favients);
   const groupLabels = useFavientsStore((s) => s.groupLabels);
   const remove = useFavientsStore((s) => s.remove);
+  const rename = useFavientsStore((s) => s.rename);
   const moveFavient = useFavientsStore((s) => s.moveFavient);
   const insertFavient = useFavientsStore((s) => s.insertFavient);
   const renameGroup = useFavientsStore((s) => s.renameGroup);
@@ -459,6 +602,34 @@ export const FavientsPanel: React.FC = () => {
   const [toast, setToast] = useState<string | null>(null);
   const depth = useRef(0);
 
+  // Shelf layout (grid|list) — persisted per-host (favientsPanelPersist). Search is
+  // TRANSIENT (local only, never persisted): a collapsible header filter on
+  // name+source+group. While a filter is active, drag-reorder is disabled (the drop
+  // indices are computed against the FULL array, so reordering a filtered subset would
+  // corrupt order) — the panel surfaces a "clear filter to reorder" note instead.
+  const [viewMode, setViewMode] = useState<FavientsViewMode>(() => getFavientsViewMode());
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const toggleViewMode = () => {
+    const next: FavientsViewMode = viewMode === 'grid' ? 'list' : 'grid';
+    setViewMode(next);
+    setFavientsViewMode(next);
+  };
+  const toggleSearch = () => {
+    if (searchOpen) {
+      setSearchOpen(false);
+      setSearch(''); // closing clears the (transient) filter
+    } else {
+      setSearchOpen(true);
+      window.setTimeout(() => searchRef.current?.focus(), 0);
+    }
+  };
+
+  const query = search.trim().toLowerCase();
+  const filterActive = query.length > 0;
+
   const flash = (m: string) => {
     setToast(m);
     window.setTimeout(() => setToast(null), 1300);
@@ -469,12 +640,28 @@ export const FavientsPanel: React.FC = () => {
   const swatchH = Math.max(6, Math.round(pf?.swatchSize?.y ?? DEFAULT_SWATCH_H));
   const gap = Math.max(0, Math.round(pf?.paddingSize ?? 1));
 
+  // Search filter (transient): match name + source + group LABEL (what the user sees),
+  // case-insensitive. Feeds the filtered list into buildBlocks so the grouped layout
+  // collapses to just the hits. Drag is disabled while filtered, so the index math
+  // below (which assumes the full array) is never exercised against the subset.
+  const filtered = useMemo(() => {
+    if (!filterActive) return favients;
+    return favients.filter((f) => {
+      const label = (groupLabels[f.group ?? DEFAULT_GROUP] ?? '').toLowerCase();
+      return (
+        f.name.toLowerCase().includes(query) ||
+        (f.source ?? '').toLowerCase().includes(query) ||
+        label.includes(query)
+      );
+    });
+  }, [favients, groupLabels, filterActive, query]);
+
   // While an internal drag is in flight, hide the dragged swatch so it doesn't appear
   // twice (it + the placeholder). The drop indices are computed against this VISIBLE
   // list, and moveFavient inserts into the with-item-removed array — so they line up.
   const visibleFavients = useMemo(
-    () => (draggingId ? favients.filter((f) => f.id !== draggingId) : favients),
-    [favients, draggingId],
+    () => (draggingId ? filtered.filter((f) => f.id !== draggingId) : filtered),
+    [filtered, draggingId],
   );
   const blocks = useMemo(() => buildBlocks(visibleFavients), [visibleFavients]);
   const lastBlock = blocks[blocks.length - 1];
@@ -543,34 +730,48 @@ export const FavientsPanel: React.FC = () => {
     else insertFavient(p.config, p.name, p.source, flat, group);
   };
 
-  // Apply a drop described by `t`, given the drag payload.
+  // Apply a drop described by `t`, given the drag payload. The mutation is bracketed
+  // as one undo entry (remove / reorder / insert / new-group all ride the favients
+  // history provider). A drop that changes nothing yields an empty diff → no entry.
   const doDrop = (p: FavientDragPayload | null, t: DropTarget) => {
     if (!p || !t) return;
-    if (t.kind === 'trash') {
-      if (p.favId) {
-        remove(p.favId);
-        flash(`Removed ${p.name}`);
+    favEdit(() => {
+      if (t.kind === 'trash') {
+        if (p.favId) {
+          remove(p.favId);
+          flash(`Removed ${p.name}`);
+        }
+        return;
       }
-      return;
-    }
-    if (t.kind === 'newgroup') {
-      const gid = newGroupId();
-      putAt(p, visibleFavients.length, gid);
-      setFocusGroup(gid);
-      return;
-    }
-    // group
-    const block = blocks.find((b) => b.group === t.group);
-    putAt(p, (block ? block.start : visibleFavients.length) + t.index, t.group);
+      if (t.kind === 'newgroup') {
+        const gid = newGroupId();
+        putAt(p, visibleFavients.length, gid);
+        setFocusGroup(gid);
+        return;
+      }
+      // group
+      const block = blocks.find((b) => b.group === t.group);
+      putAt(p, (block ? block.start : visibleFavients.length) + t.index, t.group);
+    });
   };
 
-  const swatchProps = { onApply, onHover: setHover, onDragBegin: beginDrag, swatchW, swatchH };
+  const swatchProps = {
+    onApply,
+    onHover: setHover,
+    onDragBegin: beginDrag,
+    swatchW,
+    swatchH,
+    view: viewMode,
+    canDrag: !filterActive,
+    onRename: rename,
+    onDragBlocked: () => flash('Clear the filter to reorder'),
+  };
 
   return (
     <div
       className="flex flex-col h-full min-h-0 bg-zinc-900/95 text-gray-200 relative"
       onDragEnter={(e) => {
-        if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
+        if (filterActive || !e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
         depth.current++;
         setDragging(true);
       }}
@@ -612,14 +813,60 @@ export const FavientsPanel: React.FC = () => {
             <StudioIcon />
           </button>
         )}
+        <button
+          onClick={toggleSearch}
+          title="Filter favourites by name, source, or group"
+          className={`shrink-0 flex items-center justify-center w-6 h-6 rounded transition-colors ${
+            searchOpen ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/10'
+          }`}
+        >
+          <SearchIcon />
+        </button>
+        <button
+          onClick={toggleViewMode}
+          title={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+          className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          {viewMode === 'grid' ? <ListIcon /> : <GridIcon />}
+        </button>
         <span
           className="text-[10px] text-gray-500 tabular-nums shrink-0"
           title={`${favients.length} saved gradient${favients.length === 1 ? '' : 's'}`}
         >
-          {favients.length}
+          {filterActive ? `${filtered.length}/${favients.length}` : favients.length}
         </span>
         <FavientsSystemMenu onFlash={flash} />
       </div>
+
+      {/* Collapsible transient search filter. Not persisted (each open starts blank).
+          While a query is active, drag-reorder is disabled — the cue surfaces only on a
+          drag ATTEMPT (FavientSwatch onDragBlocked → flash), not persistently here. */}
+      {searchOpen && (
+        <div className="px-2.5 py-1.5 border-b border-white/10 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <SearchIcon />
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') toggleSearch();
+              }}
+              placeholder="Filter by name, source, group…"
+              className="flex-1 min-w-0 bg-transparent text-[11px] text-gray-200 placeholder-gray-600 outline-none"
+            />
+            {filterActive && (
+              <button
+                onClick={() => setSearch('')}
+                title="Clear filter"
+                className="shrink-0 text-[10px] text-gray-500 hover:text-white px-1"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Toggle-gated intro hint (shares the panel Hint chip styling). Suppressed when
           the shelf is empty — the empty-state below already carries the same guidance. */}
@@ -637,28 +884,34 @@ export const FavientsPanel: React.FC = () => {
               <div className="mt-1.5 text-gray-600">Saved gradients are shared with the main GMT studio.</div>
             </div>
           </div>
+        ) : filterActive && filtered.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center text-center px-4">
+            <div className="text-[11px] text-gray-500">No favourites match “{search.trim()}”.</div>
+          </div>
         ) : (
           <>
             {blocks.map((block) => {
               const phIndex = dropTarget?.kind === 'group' && dropTarget.group === block.group ? dropTarget.index : -1;
+              const groupLabel = groupLabels[block.group] ?? '';
               return (
                 <div key={block.group}>
                   {block.group !== DEFAULT_GROUP && (
                     <GroupDivider
-                      label={groupLabels[block.group] ?? ''}
+                      label={groupLabel}
                       onRename={(v) => renameGroup(block.group, v)}
                       autoFocus={focusGroup === block.group}
                     />
                   )}
                   <div
-                    className="flex flex-wrap content-start"
-                    style={{ gap }}
+                    className={viewMode === 'list' ? 'flex flex-col' : 'flex flex-wrap content-start'}
+                    style={viewMode === 'list' ? undefined : { gap }}
                     onDragOver={(e) => {
-                      if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
+                      if (filterActive || !e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
                       e.preventDefault();
                       setDropTarget({ kind: 'group', group: block.group, index: insertIndexFromPointer(e.currentTarget, e.clientX, e.clientY) });
                     }}
                     onDrop={(e) => {
+                      if (filterActive) return;
                       e.preventDefault();
                       e.stopPropagation();
                       const idx = insertIndexFromPointer(e.currentTarget, e.clientX, e.clientY);
@@ -668,47 +921,51 @@ export const FavientsPanel: React.FC = () => {
                   >
                     {block.favs.map((f, i) => (
                       <React.Fragment key={f.id}>
-                        {phIndex === i && <Placeholder w={swatchW} h={swatchH} />}
-                        <FavientSwatch fav={f} {...swatchProps} />
+                        {phIndex === i && <Placeholder w={swatchW} h={swatchH} list={viewMode === 'list'} />}
+                        <FavientSwatch fav={f} {...swatchProps} groupLabel={groupLabel} />
                       </React.Fragment>
                     ))}
-                    {phIndex === block.favs.length && <Placeholder w={swatchW} h={swatchH} />}
+                    {phIndex === block.favs.length && <Placeholder w={swatchW} h={swatchH} list={viewMode === 'list'} />}
                   </div>
                 </div>
               );
             })}
 
-            {/* Empty tail: lower half = new group, upper half = append to the last group. */}
-            <div
-              className={`flex-1 min-h-[44px] mt-1 rounded-md transition-colors ${
-                dropTarget?.kind === 'newgroup' ? 'border border-dashed border-cyan-300/70 bg-cyan-300/5' : dragging ? 'border border-dashed border-white/10' : ''
-              }`}
-              onDragOver={(e) => {
-                if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
-                e.preventDefault();
-                const r = e.currentTarget.getBoundingClientRect();
-                const lower = e.clientY > r.top + r.height / 2;
-                if (lower || !lastBlock) setDropTarget({ kind: 'newgroup' });
-                else setDropTarget({ kind: 'group', group: lastBlock.group, index: lastBlock.favs.length });
-              }}
-              onDrop={(e) => {
-                if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
-                e.preventDefault();
-                e.stopPropagation();
-                const r = e.currentTarget.getBoundingClientRect();
-                const lower = e.clientY > r.top + r.height / 2;
-                const p = readFavientDrag(e.dataTransfer);
-                if (lower || !lastBlock) doDrop(p, { kind: 'newgroup' });
-                else doDrop(p, { kind: 'group', group: lastBlock.group, index: lastBlock.favs.length });
-                endDrag();
-              }}
-            >
-              {dragging && (
-                <div className="h-full flex items-center justify-center text-[10px] text-cyan-300/80 pointer-events-none">
-                  {dropTarget?.kind === 'newgroup' ? 'New group' : 'Drop in the lower area for a new group'}
-                </div>
-              )}
-            </div>
+            {/* Empty tail: lower half = new group, upper half = append to the last group.
+                Suppressed while filtering (drag-reorder disabled — the indices are against
+                the full array). */}
+            {!filterActive && (
+              <div
+                className={`flex-1 min-h-[44px] mt-1 rounded-md transition-colors ${
+                  dropTarget?.kind === 'newgroup' ? 'border border-dashed border-cyan-300/70 bg-cyan-300/5' : dragging ? 'border border-dashed border-white/10' : ''
+                }`}
+                onDragOver={(e) => {
+                  if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  const lower = e.clientY > r.top + r.height / 2;
+                  if (lower || !lastBlock) setDropTarget({ kind: 'newgroup' });
+                  else setDropTarget({ kind: 'group', group: lastBlock.group, index: lastBlock.favs.length });
+                }}
+                onDrop={(e) => {
+                  if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  const lower = e.clientY > r.top + r.height / 2;
+                  const p = readFavientDrag(e.dataTransfer);
+                  if (lower || !lastBlock) doDrop(p, { kind: 'newgroup' });
+                  else doDrop(p, { kind: 'group', group: lastBlock.group, index: lastBlock.favs.length });
+                  endDrag();
+                }}
+              >
+                {dragging && (
+                  <div className="h-full flex items-center justify-center text-[10px] text-cyan-300/80 pointer-events-none">
+                    {dropTarget?.kind === 'newgroup' ? 'New group' : 'Drop in the lower area for a new group'}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

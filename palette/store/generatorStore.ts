@@ -34,6 +34,7 @@ import { buildPresetCatalog, registerCustomRamp, registerCustomChannels } from '
 import { bufferToRamp } from '../core/stopFit';
 import { GENERATOR_PARAM_DEFAULTS } from '../features/paletteGenerator';
 import type { ChannelTracks } from '../components/ChannelGraphEditor';
+import { paramEditStart, paramEditEnd, paramEdit } from './paramUndoBracket';
 
 /** Shape of the paletteGenerator DDFS slice (the dials). */
 interface GeneratorSlice {
@@ -57,15 +58,11 @@ const setSlice = (patch: Partial<GeneratorSlice>) => {
 // curvesOn, detail/smooth, seed) is captured via a history PROVIDER (registered in
 // registerPaletteUI). Discrete actions self-bracket with genEdit(); continuous edits
 // (curve drags, canvas sliders, the live re-fit) bracket at the UI via genEditStart/End.
-const eng = () =>
-  useEngineStore.getState() as unknown as { beginParamTransaction?: () => void; endParamTransaction?: () => void };
-export const genEditStart = (): void => eng().beginParamTransaction?.();
-export const genEditEnd = (): void => eng().endParamTransaction?.();
-export const genEdit = (fn: () => void): void => {
-  genEditStart();
-  fn();
-  genEditEnd();
-};
+// The bracket primitives are shared with favients (paramUndoBracket) so the engine-store
+// cast lives in one place; genEdit* stay exported as the generator's named entry points.
+export const genEditStart = paramEditStart;
+export const genEditEnd = paramEditEnd;
+export const genEdit = paramEdit;
 
 const sliceToModsA = (s: GeneratorSlice): SlotModifiers => ({ hueRotate: s.aHueRotate, chroma: s.aChroma, contrast: s.aContrast, reverse: s.aReverse, repeats: s.aRepeats, phase: s.aPhase, mirror: s.aMirror });
 const sliceToModsB = (s: GeneratorSlice): SlotModifiers => ({ hueRotate: s.bHueRotate, chroma: s.bChroma, contrast: s.bContrast, reverse: s.bReverse, repeats: s.bRepeats, phase: s.bPhase, mirror: s.bMirror });

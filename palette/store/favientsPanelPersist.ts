@@ -20,6 +20,9 @@ const PANEL_ID = 'Favients';
 /** Where the panel lives: a free-floating window, or docked into a side tab strip. */
 export type FavientsLocation = 'float' | 'left' | 'right';
 
+/** Swatch shelf layout: a wrapping swatch grid, or a single-column detail list. */
+export type FavientsViewMode = 'grid' | 'list';
+
 export interface FavientsPanelDefaults {
   x: number;
   y: number;
@@ -46,7 +49,16 @@ interface Stored {
   h: number;
   location?: FavientsLocation;
   order?: number;
+  /** Shelf layout (W5). Optional + absent-means-'grid', so pre-W5 saved blobs
+   *  (which never carried it) read back as the default — backward-compatible. */
+  viewMode?: FavientsViewMode;
 }
+
+/** The per-host storage key in effect, captured from the last restoreFavientsPanel
+ *  call (hosts pass it once at boot, before the panel mounts). The panel reads/writes
+ *  its viewMode under THIS key so the two apps don't share layout through same-origin
+ *  localStorage. Falls back to the shared default until a host registers. */
+let activeStorageKey = DEFAULT_LS;
 
 type PanelEntry = {
   isOpen?: boolean;
@@ -70,6 +82,7 @@ export const openFavientsPanel = (): void => {
 export const restoreFavientsPanel = (defaults: FavientsPanelDefaults, opts?: FavientsPersistOptions): void => {
   const st = useEngineStore.getState() as unknown as StoreActions;
   const key = opts?.storageKey ?? DEFAULT_LS;
+  activeStorageKey = key; // remember it so the panel's viewMode persists per-host
   const saved = lsGetJson<Stored | null>(key, null);
   const x = saved?.x ?? defaults.x;
   const y = saved?.y ?? defaults.y;
@@ -90,6 +103,8 @@ export const restoreFavientsPanel = (defaults: FavientsPanelDefaults, opts?: Fav
 /** Mirror later open/move/resize/dock back to storage (debounced). Call once. */
 export const watchFavientsPanel = (opts?: FavientsPersistOptions): void => {
   const key = opts?.storageKey ?? DEFAULT_LS;
+  activeStorageKey = key; // keep the viewMode key in lockstep with the window writer
+
   let lastPs: PanelEntry | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   useEngineStore.subscribe(() => {
@@ -100,16 +115,34 @@ export const watchFavientsPanel = (opts?: FavientsPersistOptions): void => {
     lastPs = ps;
     if (timer) clearTimeout(timer);
     timer = setTimeout(
-      () => lsSetJson(key, {
-        open: !!ps.isOpen,
-        location: ps.location ?? 'float',
-        order: ps.order ?? 0,
-        x: ps.floatPos?.x ?? 0,
-        y: ps.floatPos?.y ?? 0,
-        w: ps.floatSize?.width ?? 296,
-        h: ps.floatSize?.height ?? 300,
-      }),
+      () => {
+        // Preserve any persisted viewMode — this writer owns only the window
+        // fields, so re-read the blob and carry the panel's layout pref through
+        // (else toggling open/dock would wipe the saved grid/list choice).
+        const prev = lsGetJson<Stored | null>(key, null);
+        lsSetJson(key, {
+          open: !!ps.isOpen,
+          location: ps.location ?? 'float',
+          order: ps.order ?? 0,
+          x: ps.floatPos?.x ?? 0,
+          y: ps.floatPos?.y ?? 0,
+          w: ps.floatSize?.width ?? 296,
+          h: ps.floatSize?.height ?? 300,
+          ...(prev?.viewMode ? { viewMode: prev.viewMode } : {}),
+        });
+      },
       300,
     );
   });
+};
+
+/** Read the persisted shelf layout for the active host (default 'grid'). */
+export const getFavientsViewMode = (): FavientsViewMode =>
+  lsGetJson<Stored | null>(activeStorageKey, null)?.viewMode === 'list' ? 'list' : 'grid';
+
+/** Persist the shelf layout under the active host key, merging into the existing
+ *  window-state blob so the panel's open/dock/position fields survive. */
+export const setFavientsViewMode = (mode: FavientsViewMode): void => {
+  const prev = lsGetJson<Stored | null>(activeStorageKey, null);
+  lsSetJson(activeStorageKey, { ...(prev ?? ({} as Stored)), viewMode: mode });
 };

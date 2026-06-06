@@ -26,7 +26,7 @@ import { ModifyTogglesControl } from './components/ModifyTogglesControl';
 import { ImageExtrasPanel } from './components/ImageExtrasPanel';
 import { FavientsPanel } from './components/FavientsPanel';
 import { FavientsEditorEntrance } from './components/FavientsEditorEntrance';
-import { useFavientsStore } from './store/favientsStore';
+import { useFavientsStore, captureFavientsHistory, restoreFavientsHistory } from './store/favientsStore';
 import { captureGeneratorHistory, restoreGeneratorHistory } from './store/generatorStore';
 import { serializeFavientsDocument, restoreFavientsDocument } from './store/favientsDocument';
 import { registerHistoryProvider } from '../store/slices/historySlice';
@@ -65,6 +65,15 @@ export const registerPaletteUI = (): void => {
   // its own store, so register it as a PARAM-undo history provider — curves + slots now
   // ride Ctrl+Z alongside the DDFS dials. Idempotent (Map keyed by id).
   registerHistoryProvider('paletteGenerator', { capture: captureGeneratorHistory, restore: restoreGeneratorHistory });
+
+  // The favients shelf is a plain zustand store + localStorage (no engine-store
+  // mirror), so register it as a PARAM-undo history provider too — favourite
+  // mutations bracketed at the panel gesture boundary (remove, drag reorder/insert,
+  // group rename, Clear, collection load, gradient-file Import) ride Ctrl+Z. The
+  // provider's restore writes through to localStorage so undo stays coherent with
+  // disk. Additive + idempotent (Map keyed by id); SEPARATE from the favients
+  // DOCUMENT provider below (different registry — scene save/load, not undo).
+  registerHistoryProvider('favients', { capture: captureFavientsHistory, restore: restoreFavientsHistory });
 
   // The favients shelf rides Save/Load via the engine document-provider registry
   // (W8). serialize = the current collection; restore = prompt Replace/Append,
