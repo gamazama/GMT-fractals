@@ -281,6 +281,14 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   tiling), live/animated preview, apply-to-content previews, comparison/grid, zoom-pan. Scope with the
   user after S6 is fixed. (P2: fold the ⛶ open into the canonical hero + add gradient drag sources.)
 
+- **Auto-name generated/extracted favourites from facets (user, 2026-06-06).** Favouriting a Generator
+  result (and Image / future ColorBox) currently yields a flat "Generated" name. Instead derive a
+  descriptive name from the **categorization system** — compute the gradient's perceptual facets
+  (`palette/core/facets.ts`: lightness/chroma/complexity/rainbow/warmth) + theme matches and compose a
+  human label (e.g. "Warm Vivid", "Cool Muted Rainbow"). Applies to any un-named generated/extracted
+  gradient. Mechanism = a small `facets→name` helper. Home: **P2** (favourite/portability pass) or a
+  standalone polish item. Not actioned now.
+
 ## Changelog / decisions made during execution
 
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
