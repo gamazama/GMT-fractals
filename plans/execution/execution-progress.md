@@ -308,9 +308,14 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   PNG export works on a WebGL canvas unchanged. **Phasing (ACCEPTED — no throwaway, shallow ⊂ deep):**
   shallow f32 MVP first (≈M/L, ~90% of the wow) → deep-zoom as +L follow-on. **Risks:** FluidEngine carve
   must not regress fluid-toy (gate smoke:fluid-toy/smoke:orbit); GPU precision variance (shallow must
-  bound zoom so it never visibly quantizes — ties to render_4k_gap/ANGLE). **OPEN DECISION:** live-update
-  the fullscreen preview as stops are edited (today it's a frozen-at-open snapshot) — fractal-only (probe
-  rec) vs all modes vs keep-frozen. NOT v1-critical; post-P2 / own initiative.
+  bound zoom so it never visibly quantizes — ties to render_4k_gap/ANGLE). **DECISION (2026-06-06):** gradient stays
+  **FROZEN** (256-ramp snapshot) in fractal mode — NOT live stop-editing. Instead expose a few **live,
+  animatable ramp modifiers during fractal interaction: phase / repeats / mapping-mode** (cheap
+  ramp-offset / ramp-tiling / iteration→index-remap — in the sampling shader or via a re-uploaded
+  transformed LUT), **keyframeable via the existing timeline → palette-cycling on the fractal.**
+  Rationale: keep it a GRADIENT app (the gradient is the star; don't let it become a fractal-animation
+  app "giving away too much"). S6 static geometries stay frozen-at-open (unchanged). NOT v1-critical;
+  post-P2 / own initiative.
 
 - **oklab/blend math duplicated across `utils/colorUtils.ts` and `palette/core/oklab.ts`** (P0a).
   The byte-exact stopfit regression went tautological after the gmtGradient collapse; now guarded by
