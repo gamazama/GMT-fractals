@@ -13,15 +13,18 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
 
 - **P0a** — engine gradient + colour CORE — ✅ DONE (in-review, **uncommitted**; gates green;
   interfaces (e)+(f) FROZEN below).
-- **P0b** — colour picker UI (consumes (f)) — ✅ DONE (in-review; user visually confirmed;
-  **uncommitted**). Rich picker + NEW shared `usePrecisionTrackDrag` primitive; ScalarInput
-  refactored onto it (cross-cutting — see WATCH item below).
-- **P0c** — Stops editor genericize-in-place + undo contract (consumes (e); freezes (d)) ←
-  **ISSUED** (high review effort; **orchestrator runs an independent review on the diff pre-merge**).
+- **P0b** — colour picker UI (consumes (f)) — ✅ DONE + **committed `018b63b`** (user visually
+  confirmed incl. vector inputs). Rich picker + NEW shared `usePrecisionTrackDrag` primitive;
+  ScalarInput refactored onto it (cross-cutting — see WATCH item below).
+- **P0c** — Stops editor genericize-in-place + undo contract — ✅ DONE (in-review, **uncommitted**;
+  (d) FROZEN + signed off). **Independent review PASS** — 2 parallel lenses (correctness + layering),
+  both **MERGE-READY**, no real bugs (2 benign nits, no fix). Confirmed editor is mounted by 3 hosts
+  (app-gmt, fluid-toy, future Explorer S5) — all preserved. Gates green. **Pending user app-gmt visual
+  confirm → then commit.**
 - P0d — document-provider registry (freezes (a))
 - P0e — drag/drop-wells + send-target kernels (freezes (b)+(c))
 
-Next action: await P0c summary → independent review → issue P0d.
+Next action: user app-gmt visual check → commit P0c → issue P0d.
 
 **Carry-forward for P0c:** the editor's buggy `getInterpolatedColor`
 (`components/AdvancedGradientEditor.tsx:51-69`) is **STILL LIVE** — the engine `sampleStops` fix
@@ -65,7 +68,18 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 - (a) Document-provider registry — _pending (P0d)_
 - (b) Drag + drop-wells kernel — _pending (P0e)_
 - (c) Send-target registry — _pending (P0e)_
-- (d) Reusable-editor undo contract — _pending (P0c)_
+- (d) **Reusable-editor undo contract — FROZEN + SIGNED OFF (P0c; independent review PASS, 2 lenses).**
+  Matches playbook §4(d). Optional props on engine `AdvancedGradientEditor`
+  (`components/`):
+    - `onEditStart?(): void` (open gesture bracket = one undo entry) · `onEditEnd?(): void` (close it).
+    - `edit?(mutate: () => void): void` — discrete one-shot (start+mutate+end).
+    - Default (all omitted) = engine StoreCallbacks `handleInteractionStart('param')` /
+      `handleInteractionEnd()` → app-gmt rides undo unchanged. Palette host (S5) passes
+      `genEditStart`/`genEditEnd`/`genEdit` (driving its `registerHistoryProvider` snapshot).
+    - Supporting engine seam (not an (a)-(f) interface): `setGradientEditorEntrance` /
+      `getGradientEditorEntrance` / `subscribeGradientEditorEntrance` in
+      `components/gradient/gradientEditorEntrance.ts`. **Palette registers a Favients entrance via
+      `registerPaletteUI` (additive shared-shell) — S5/S2 rebase over it, do NOT re-add.**
 - (e) **Engine gradient core — FROZEN (P0a).** Lives in `utils/colorUtils.ts` (pure, no DOM/THREE);
   `palette/core/gmtGradient.ts` re-exports it. `palette/core` RGB ≡ structural `{r,g,b}`.
     - `sampleStops(stops, pos, blendSpace?='oklab', colorSpace?='srgb'): RGB` — canonical per-texel
@@ -124,11 +138,33 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   448 samples). Full de-dup needs a cross-layer move (engine `utils/` ↔ `palette/core/`) — out of P0a
   scope. Candidate: a `/simplify` micro-stream or fold into P3. Guarded, not silent.
 
+- **Context-menu "Reset Default" forces `colorSpace='linear'`** (pre-existing in the editor;
+  preserved verbatim by P0c, NOT introduced). Possibly an unintended default — revisit when the
+  Stops mode (S5) / app-gmt coloring semantics are touched.
+
 ## Changelog / decisions made during execution
 
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-06 — **P0c independent review PASS** (orchestrator-run, 2 parallel lenses: correctness +
+  layering; primary review since the author's automated /code-review was declined). Both MERGE-READY,
+  no REAL-BUG/SUSPICIOUS. Verified: undo brackets leak-free, echo-guard byte-identical, sampleStops
+  bug-fix correct, setBias sorted-array correct, zero forbidden imports, seam pure engine-core
+  (palette→engine), app-gmt + fluid-toy + (future S5) all preserved, isolatedModules clean. 2 benign
+  nits (degenerate-drag no-op emit; safer paste validation) — no fix. (d) signed off. Awaiting user
+  app-gmt visual confirm → commit P0c.
+- 2026-06-06 — **P0c DONE** (in-review, uncommitted): engine `AdvancedGradientEditor` genericized
+  in place — bound to `sampleStops` (bias/smooth bug-fix: new-knot colour now matches the baked ramp)
+  + `stopOps.*` (−~70 lines inline math); exact 256-ramp `<canvas>` preview (LOCKED); severed the
+  `hasFavients`/palette/engine-gmt couplings (editor now imports engine-core only); Favients entrance
+  re-homed onto a new `gradientEditorEntrance` engine seam + palette `FavientsEditorEntrance`. **(d)
+  FROZEN** (matches §4; default = engine StoreCallbacks bracket → app-gmt unchanged; S5 passes
+  genEdit*). Echo-guard + legacy-array input + always-emit preserved. Gates: tsc 0 (monorepo),
+  test:palette 9/9, smoke:boot, orphans clean (resolves the stopOps/sampleStops orphan carry-forward).
+  Author's **`/code-review` skill was DECLINED** → manual review (fixed 2 self-introduced issues:
+  knotSession dep churn, editAction fallback) → **orchestrator independent review now PRIMARY (running).**
+  AutoFeaturePanel untouched (default seam). Shared-shell: registerPaletteUI additive only.
 - 2026-06-05 — **P0b DONE** (in-review, uncommitted; user visually confirmed "all looks good"):
   rich `EmbeddedColorPicker` in place — 2D sat×bright field + hue strip, RGB+HSB sliders, **opt-in
   Alpha**, hex/copy/**eyedropper** (EyeDropper API + fallback), harmony rows, **shared capped

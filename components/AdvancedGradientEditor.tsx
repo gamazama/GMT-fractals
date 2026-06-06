@@ -1,22 +1,29 @@
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
-import { hexToRgb, rgbToHex, getGradientCssString, blendLerp } from '../utils/colorUtils';
+import { rgbToHex, sampleStops, renderStopsToRamp } from '../utils/colorUtils';
+import { stopOps } from '../utils/stopOps';
 import Slider from './Slider';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import Dropdown from './Dropdown';
-import { useEngineStore } from '../store/engineStore';
-import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
-import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { useInteractionGesture } from '../engine/hooks/useInteractionDrag';
-import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
 import { collectHelpIds } from '../utils/helpUtils';
 import { ContextMenuItem } from '../types/help';
 import { ContextMenu as PresetMenu } from './gradient/GradientContextMenu';
 import { MenuIcon } from './Icons';
 import { useRenderPause } from '../hooks/useRenderPause';
+import {
+    getGradientEditorEntrance,
+    subscribeGradientEditorEntrance,
+} from './gradient/gradientEditorEntrance';
+
+// Host-agnostic InteractionSession token (ADR-0061) for the continuous
+// stop/bracket/bias drags. The same string app-gmt's INTERACTION_SOURCES.slider
+// uses — inlined so this engine-core editor doesn't import engine-gmt's
+// app-level token table (the type is the open `InteractionSource = string`).
+const STOP_DRAG_SOURCE = 'slider';
 
 type InterpolationMode = 'linear' | 'step' | 'smooth' | 'cubic';
 
@@ -41,32 +48,29 @@ interface AdvancedGradientEditorProps {
     value: GradientStop[] | GradientConfig;
     onChange: (val: GradientStop[] | GradientConfig) => void;
     helpId?: string;
+    /**
+     * Reusable-editor undo contract (interface (d), FROZEN P0c). A host brackets
+     * the editor's mutations into ITS own history:
+     *   - `onEditStart()` / `onEditEnd()` wrap a continuous gesture (knot / bracket
+     *     / bias drag) so the net change is ONE undo entry.
+     *   - `edit(mutate)` wraps a discrete one-shot action (cycle, paste, menu op,
+     *     keyboard nudge) — start + mutate + end.
+     * All three are OPTIONAL: when omitted they fall back to the engine
+     * StoreCallbacks interaction bracket (`handleInteractionStart('param')` /
+     * `handleInteractionEnd()`), so app-gmt's DDFS gradient param rides undo with
+     * zero host wiring. The palette host passes its `genEditStart/genEditEnd/genEdit`
+     * (which drive its `registerHistoryProvider` snapshot). No host-specific undo
+     * path lives in this shared view — only this contract + the generic default.
+     */
+    onEditStart?: () => void;
+    onEditEnd?: () => void;
+    edit?: (mutate: () => void) => void;
 }
 
 const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
     a.length === b.length && a.every((k, i) =>
         k.id === b[i].id && k.position === b[i].position && k.color === b[i].color && k.bias === b[i].bias && k.interpolation === b[i].interpolation
     );
-
-const getInterpolatedColor = (knots: AdvancedGradientKnot[], pos: number, blend: BlendColorSpace = 'oklab'): string => {
-    const sorted = [...knots].sort((a, b) => a.position - b.position);
-    if (sorted.length === 0) return '#FFFFFF';
-    if (pos <= sorted[0].position) return sorted[0].color;
-    if (pos >= sorted[sorted.length - 1].position) return sorted[sorted.length - 1].color;
-
-    for (let i = 0; i < sorted.length - 1; i++) {
-        if (pos >= sorted[i].position && pos <= sorted[i + 1].position) {
-            if (sorted[i].interpolation === 'step') {
-                return sorted[i].color;
-            }
-            const t = (pos - sorted[i].position) / (sorted[i + 1].position - sorted[i].position);
-            const c1 = hexToRgb(sorted[i].color) || { r: 255, g: 255, b: 255 };
-            const c2 = hexToRgb(sorted[i + 1].color) || { r: 255, g: 255, b: 255 };
-            return rgbToHex(blendLerp(c1, c2, t, blend));
-        }
-    }
-    return '#FFFFFF';
-};
 
 const BiasIcon = () => (
     <svg width="12" height="12" viewBox="0 0 10 10" className="fill-gray-700 hover:fill-white drop-shadow-md stroke-white stroke-[0.5] pointer-events-none">
@@ -85,7 +89,7 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
     </svg>
 );
 
-const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId }) => {
+const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId, onEditStart, onEditEnd, edit }) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -115,12 +119,37 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     const justEmittedRef = useRef(false);
 
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
-    // Session 'slider' for the continuous knot / bracket / bias drags (window
-    // mouse-listener gesture), anchored to the same param-transaction boundary
-    // (ADR-0061 P3b). The marquee select + the discrete menu/keyboard/cycle
-    // handlers deliberately open no session. The <Slider> bias/position controls
-    // are the already-wired connected component.
-    const knotSession = useInteractionGesture(INTERACTION_SOURCES.slider);
+
+    // Interface (d) resolution: prefer the injected host callbacks; default to the
+    // engine StoreCallbacks 'param' interaction bracket (app-gmt's DDFS undo). These
+    // are stable references (host callbacks are stable; the context's are too), so
+    // the window-listener drag callbacks that depend on them keep a stable identity.
+    const editStart = useCallback(
+        () => (onEditStart ?? (() => handleInteractionStart('param')))(),
+        [onEditStart, handleInteractionStart],
+    );
+    const editEnd = useCallback(
+        () => (onEditEnd ?? handleInteractionEnd)(),
+        [onEditEnd, handleInteractionEnd],
+    );
+    const editAction = useCallback(
+        (mutate: () => void) => {
+            if (edit) { edit(mutate); return; }
+            // Fall back through editStart/editEnd (not the raw context) so a host
+            // that supplies only start/end still brackets discrete actions its way.
+            editStart();
+            mutate();
+            editEnd();
+        },
+        [edit, editStart, editEnd],
+    );
+
+    // Session for the continuous knot / bracket / bias drags (window mouse-listener
+    // gesture), anchored to the same edit boundary (ADR-0061 P3b). The marquee
+    // select + the discrete menu/keyboard/cycle handlers deliberately open no
+    // session. The <Slider> bias/position controls are the already-wired connected
+    // component.
+    const knotSession = useInteractionGesture(STOP_DRAG_SOURCE);
 
     useEffect(() => {
         if (justEmittedRef.current) {
@@ -159,14 +188,55 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
     const containerRef = useRef<HTMLDivElement>(null);
     const knotTrackRef = useRef<HTMLDivElement>(null);
+    const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+
+    // Host-injected header entrance (app-gmt / explorer mount the Favients shelf
+    // button here). Engine-core can't import palette, so it renders whatever the
+    // host registered through the gradientEditorEntrance seam — or nothing.
+    const entrance = useSyncExternalStore(subscribeGradientEditorEntrance, getGradientEditorEntrance);
+
+    // Preview strip = the EXACT 256-step ramp (LOCKED P0c decision 2), rendered by
+    // the engine canonical sampler so it matches the baked texture (no CSS-gradient
+    // approximation). colorSpace is the OUTPUT-texture transform, not an authoring
+    // concern — the strip shows the sRGB authoring colours (as the old CSS string
+    // did), so it stays a faithful colour preview. Memoised so unrelated re-renders
+    // (selection / marquee / expand) don't re-sample 256 texels.
+    const previewRamp = useMemo(() => renderStopsToRamp(knots, blendSpace), [knots, blendSpace]);
+
+    useEffect(() => {
+        const cv = previewCanvasRef.current;
+        if (!cv) return;
+        const ctx = cv.getContext('2d');
+        if (!ctx) return;
+        const img = ctx.createImageData(256, 1);
+        for (let i = 0; i < 256; i++) {
+            img.data[i * 4] = previewRamp[i].r;
+            img.data[i * 4 + 1] = previewRamp[i].g;
+            img.data[i * 4 + 2] = previewRamp[i].b;
+            img.data[i * 4 + 3] = 255;
+        }
+        // 256×1 backing store stretched by CSS to the strip's full width/height —
+        // the browser's display scaling smooths it into a continuous gradient.
+        ctx.putImageData(img, 0, 0);
+    }, [previewRamp]);
 
     // --- OUTPUT LOGIC ---
     // Always emits the Object format if we detect we are in "Advanced Mode" (internal check), 
     // or if the input was already an object.
     // For safety, we simply ALWAYS emit the object now. The utils handle it fine.
     // The Store handles saving it.
-    const emitChange = useCallback((newKnots: AdvancedGradientKnot[], newColorSpace?: ColorSpaceMode, newBlendSpace?: BlendColorSpace) => {
-        const sorted = [...newKnots].sort((a, b) => a.position - b.position);
+    // Accepts any GradientStop[] — the generic stopOps preserve the knot shape, but
+    // `stopOps.double`/`default` return bare GradientStop[]; normalising bias/
+    // interpolation here keeps every op funnelling through one place (and any future
+    // host that feeds raw stops works too). Runtime is unchanged for knot inputs.
+    const emitChange = useCallback((newKnots: GradientStop[], newColorSpace?: ColorSpaceMode, newBlendSpace?: BlendColorSpace) => {
+        const sorted: AdvancedGradientKnot[] = [...newKnots]
+            .sort((a, b) => a.position - b.position)
+            .map(({ id, position, color, bias, interpolation }) => ({
+                id, position, color,
+                bias: bias ?? 0.5,
+                interpolation: (interpolation as InterpolationMode) ?? 'linear',
+            }));
         // Mark BEFORE calling setKnots so the prop-sync useEffect skips
         // the redundant sync that fires when the parent's onChange
         // re-flows the value back to us. See justEmittedRef comment.
@@ -185,18 +255,14 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     }, [colorSpace, blendSpace]);
 
     const cycleColorSpace = () => {
-        handleInteractionStart('param');
         const nextMode = colorSpace === 'srgb' ? 'linear' : colorSpace === 'linear' ? 'aces_inverse' : 'srgb';
-        emitChange(knots, nextMode);
-        handleInteractionEnd();
+        editAction(() => emitChange(knots, nextMode));
     };
 
     const cycleBlendSpace = () => {
-        handleInteractionStart('param');
         const order: BlendColorSpace[] = ['rgb', 'hsv', 'hsv-far', 'oklab'];
         const next = order[(order.indexOf(blendSpace) + 1) % order.length];
-        emitChange(knots, undefined, next);
-        handleInteractionEnd();
+        editAction(() => emitChange(knots, undefined, next));
     };
 
     const handleColorChange = useCallback((color: string) => {
@@ -219,36 +285,36 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             const text = await navigator.clipboard.readText();
             const data = JSON.parse(text);
 
-            // Support pasting legacy array OR new object
-            let newStops = [];
+            // Engine-core normalisation: tolerates a legacy array OR a { stops }
+            // wrapper, drops malformed entries, clamps + upper-cases hex, fills ids.
+            const parsed = stopOps.normalizePaste(data);
+            if (!parsed || parsed.length < 2) return;
+
+            // colorSpace/blendSpace ride the wrapper (not the stop array). Preserve
+            // the prior defaults: a bare-array paste blends rgb; an object paste
+            // takes its own spaces or srgb/oklab.
             let newSpace: ColorSpaceMode = 'srgb';
             let newBlend: BlendColorSpace = 'rgb';
-
-            if (Array.isArray(data)) {
-                newStops = data;
-            } else if (data.stops) {
-                newStops = data.stops;
-                newSpace = data.colorSpace || 'srgb';
-                newBlend = data.blendSpace || 'oklab';
+            if (data && typeof data === 'object' && !Array.isArray(data)) {
+                newSpace = (data as GradientConfig).colorSpace || 'srgb';
+                newBlend = (data as GradientConfig).blendSpace || 'oklab';
             }
 
-            if (newStops.length >= 2) {
-                handleInteractionStart('param');
-                const newKnots: AdvancedGradientKnot[] = newStops.map((k: any, i: number) => ({
-                    id: `${Date.now()}_${i}`,
-                    position: k.position,
-                    color: k.color,
-                    bias: k.bias ?? 0.5,
-                    interpolation: (k.interpolation as InterpolationMode) ?? 'linear'
-                }));
+            const newKnots: AdvancedGradientKnot[] = parsed.map((s, i) => ({
+                id: s.id ?? `p${i}`,
+                position: s.position,
+                color: s.color,
+                bias: s.bias ?? 0.5,
+                interpolation: (s.interpolation as InterpolationMode) ?? 'linear',
+            }));
+            editAction(() => {
                 emitChange(newKnots, newSpace, newBlend);
                 setSelectedIds(new Set());
-                handleInteractionEnd();
-            }
+            });
         } catch (e) {
             console.error(e);
         }
-    }, [emitChange, handleInteractionStart, handleInteractionEnd]);
+    }, [emitChange, editAction]);
 
     // Gradient presets now live in the Favients shelf (a "Presets" group, seeded on
     // first run) — pick/apply from there instead of this menu. This menu keeps the
@@ -258,9 +324,6 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         { label: 'Copy Gradient', action: handleCopy },
         { label: 'Paste Gradient', action: handlePaste },
     ], [handleCopy, handlePaste]);
-
-    // Favients entrance — only when the shelf exists in this app (app-gmt; not fluid-toy).
-    const hasFavients = useEngineStore((s) => !!(s as unknown as { panels?: Record<string, unknown> }).panels?.Favients);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         const payload = dragPayloadRef.current;
@@ -294,59 +357,22 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                 document.body.style.cursor = isPullingAway ? 'no-drop' : 'ew-resize';
             }
 
-            const updatedKnots = initialKnots.map(k => {
-                if (ids.includes(k.id)) {
-                    let newPos = Math.max(0, Math.min(1, k.position + deltaXRatio));
-                    if (e.shiftKey) newPos = Math.round(newPos * 20) / 20;
-                    return { ...k, position: newPos };
-                }
-                return k;
-            });
-            
-            emitChange(updatedKnots);
+            // Engine stop-op: move selected stops by the pointer delta (shift-snaps).
+            emitChange(stopOps.move(initialKnots, ids, deltaXRatio, e.shiftKey));
         }
 
         if (type.startsWith('bracket_scale')) {
-             const selectedKnotsInitial = initialKnots.filter(k => ids.includes(k.id));
-             if (selectedKnotsInitial.length < 2) return;
-
-             const initMin = Math.min(...selectedKnotsInitial.map(k => k.position));
-             const initMax = Math.max(...selectedKnotsInitial.map(k => k.position));
-             const initSpan = initMax - initMin;
-             if (initSpan < 0.001) return;
-
-             const pivot = type === 'bracket_scale_left' ? initMax : initMin;
-             const targetEdge = (type === 'bracket_scale_left' ? initMin : initMax) + deltaXRatio;
-
-             // Signed scale — allows inversion when bracket crosses the pivot
-             const scale = (targetEdge - pivot) / (type === 'bracket_scale_left' ? initMin - pivot : initMax - pivot);
-
-             const updatedKnots = initialKnots.map(k => {
-                 if (ids.includes(k.id)) {
-                     let newPos = pivot + ((k.position - pivot) * scale);
-                     return { ...k, position: Math.max(0, Math.min(1, newPos)) };
-                 }
-                 return k;
-             });
-
-             emitChange(updatedKnots);
+             // Engine stop-op: signed scale about the anchored edge (crossing the
+             // pivot inverts the selection). No-op for <2 selected / degenerate span.
+             const side = type === 'bracket_scale_left' ? 'left' : 'right';
+             emitChange(stopOps.scaleAboutPivot(initialKnots, ids, deltaXRatio, side));
         }
 
         if (type === 'bias') {
-            const knotId = ids[0];
-            const knotIndex = initialKnots.findIndex(k => k.id === knotId);
-            if (knotIndex === -1 || knotIndex >= initialKnots.length - 1) return;
-            
-            const segmentWidth = initialKnots[knotIndex + 1].position - initialKnots[knotIndex].position;
-            if (segmentWidth > 0.001) {
-                let newBias = Math.max(0, Math.min(1, initialKnots[knotIndex].bias + (deltaXRatio / segmentWidth)));
-                if (e.shiftKey) newBias = Math.round(newBias * 20) / 20;
-                
-                const newKnots = [...initialKnots];
-                newKnots[knotIndex] = { ...newKnots[knotIndex], bias: newBias };
-                
-                emitChange(newKnots);
-            }
+            // `initialKnots` is position-sorted (snapshot of the sorted `knots`), so
+            // findIndex gives the segment's left index — exactly what setBias wants.
+            const knotIndex = initialKnots.findIndex(k => k.id === ids[0]);
+            emitChange(stopOps.setBias(initialKnots, knotIndex, deltaXRatio, e.shiftKey));
         }
     }, [emitChange]);
 
@@ -379,25 +405,29 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
              isDragRemovingRef.current = false;
              setIsDragRemoving(false);
              knotSession.end();
-             handleInteractionEnd();
+             editEnd();
 
         } else if (payload.type !== 'marquee') {
             emitChange(knotsRef.current);
             knotSession.end();
-            handleInteractionEnd();
+            editEnd();
         }
 
         dragPayloadRef.current = null;
         document.body.style.cursor = '';
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
-    }, [emitChange, handleMouseMove, handleInteractionEnd]);
+        // knotSession intentionally omitted: useInteractionGesture returns a fresh
+        // wrapper object each render, but its end() closes over a stable ref, so a
+        // captured-stale knotSession.end() is correct. Listing it would churn this
+        // callback's identity every render (the original omitted it for the same reason).
+    }, [emitChange, handleMouseMove, editEnd]);
 
     const startDrag = (type: DragPayload['type'], ids: string[], e: React.MouseEvent, overrideKnots?: AdvancedGradientKnot[], skipSnapshot?: boolean) => {
         e.preventDefault(); e.stopPropagation();
-        
+
         if (type !== 'marquee' && !skipSnapshot) {
-            handleInteractionStart('param');
+            editStart();
             knotSession.begin();
         }
 
@@ -413,12 +443,16 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         if (e.button !== 0) return;
         if ((e.target as HTMLElement).closest('.gradient-interactive-element') || !knotTrackRef.current) return;
 
-        handleInteractionStart('param');
+        editStart();
         knotSession.begin();
 
         const rect = knotTrackRef.current.getBoundingClientRect();
         const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const color = getInterpolatedColor(knots, pos, blendSpace);
+        // Bug-fix (LOCKED P0c decision 3): the new-knot colour comes from the engine
+        // bias/smooth-aware sampler, so a knot inserted on a biased/smooth segment
+        // picks the colour the baked ramp actually shows (the old local sampler
+        // ignored bias + smooth and drifted).
+        const color = rgbToHex(sampleStops(knots, pos, blendSpace));
         
         const sortedKnots = [...knots].sort((a, b) => a.position - b.position);
         
@@ -453,22 +487,20 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             if (selectedIds.size === 0 || (e.target as HTMLElement).tagName === 'INPUT') return;
 
             if ((e.key === 'Delete' || e.key === 'Backspace') && knots.length > selectedIds.size) {
-                handleInteractionStart('param');
-                emitChange(knots.filter(k => !selectedIds.has(k.id)));
-                setSelectedIds(new Set<string>());
-                handleInteractionEnd();
+                editAction(() => {
+                    emitChange(stopOps.delete(knots, Array.from(selectedIds)));
+                    setSelectedIds(new Set<string>());
+                });
             } else if (e.key.startsWith('Arrow')) {
                 e.preventDefault();
-                handleInteractionStart('param');
                 const dir = e.key === 'ArrowLeft' ? -1 : 1;
                 const step = e.shiftKey ? 0.05 : 0.01;
-                emitChange(knots.map(k => selectedIds.has(k.id) ? { ...k, position: Math.max(0, Math.min(1, k.position + dir * step)) } : k));
-                handleInteractionEnd();
+                editAction(() => emitChange(stopOps.move(knots, Array.from(selectedIds), dir * step)));
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedIds, knots, emitChange]);
+    }, [selectedIds, knots, emitChange, editAction]);
 
     const selectionRange = useMemo(() => {
         if (selectedIds.size < 2) return null;
@@ -499,10 +531,8 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
     // Discrete change (dropdown, one-shot) — wraps with undo snapshot
     const handleMultiPropertyChange = (prop: keyof AdvancedGradientKnot, value: any) => {
-        handleInteractionStart('param');
         const updatedKnots = knots.map(k => selectedIds.has(k.id) ? { ...k, [prop]: value } as AdvancedGradientKnot : k);
-        emitChange(updatedKnots);
-        handleInteractionEnd();
+        editAction(() => emitChange(updatedKnots));
     };
 
     // Continuous change (slider drag) — no undo wrap, Slider handles its own drag lifecycle
@@ -515,47 +545,40 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         e.preventDefault();
         e.stopPropagation();
         
-        const wrapAction = (fn: () => void) => () => {
-            handleInteractionStart('param');
-            fn();
-            handleInteractionEnd();
-        };
-        
+        const wrapAction = (fn: () => void) => () => editAction(fn);
+        const selectedIdList = Array.from(selectedIds);
+
         const items: ContextMenuItem[] = [
             { label: 'Actions', action: () => {}, isHeader: true },
-            { 
-                label: 'Invert Gradient', 
-                action: wrapAction(() => emitChange(knots.map(k => ({ ...k, position: 1 - k.position })).reverse()))
+            {
+                label: 'Invert Gradient',
+                action: wrapAction(() => emitChange(stopOps.invert(knots)))
             },
-            { 
-                label: 'Double Knots', 
-                action: wrapAction(() => emitChange([...knots.map(k => ({...k, position: k.position * 0.5})), ...knots.map((k, i) => ({...k, id: `${Date.now()}_${i}`, position: 0.5 + k.position * 0.5}))]))
+            {
+                label: 'Double Knots',
+                action: wrapAction(() => emitChange(stopOps.double(knots)))
             },
-            { 
-                label: 'Distribute Selected', 
-                disabled: selectedIds.size < 3, 
-                action: wrapAction(() => {
-                    const targets = knots.filter(k => selectedIds.has(k.id)).sort((a,b)=>a.position-b.position);
-                    const step = (targets[targets.length-1].position - targets[0].position) / (targets.length - 1);
-                    emitChange(knots.map(k => selectedIds.has(k.id) ? { ...k, position: targets[0].position + step * targets.findIndex(t => t.id === k.id) } : k));
-                })
+            {
+                label: 'Distribute Selected',
+                disabled: selectedIds.size < 3,
+                action: wrapAction(() => emitChange(stopOps.distribute(knots, selectedIdList)))
             },
-            { 
-                label: 'Delete Selected', 
-                disabled: selectedIds.size === 0 || knots.length <= 2, 
+            {
+                label: 'Delete Selected',
+                disabled: selectedIds.size === 0 || knots.length <= 2,
                 danger: true,
-                action: wrapAction(() => { emitChange(knots.filter(k => !selectedIds.has(k.id))); setSelectedIds(new Set<string>()); })
+                action: wrapAction(() => { emitChange(stopOps.delete(knots, selectedIdList)); setSelectedIds(new Set<string>()); })
             },
             { label: 'View', action: () => {}, isHeader: true },
-            { 
-                label: 'Bias Handles', 
+            {
+                label: 'Bias Handles',
                 checked: isBiasHandlesVisible,
-                action: () => setIsBiasHandlesVisible(!isBiasHandlesVisible) 
+                action: () => setIsBiasHandlesVisible(!isBiasHandlesVisible)
             },
-            { 
-                label: 'Reset Default', 
-                danger: true, 
-                action: wrapAction(() => { emitChange([{ id: '1', position: 0, color: '#000000', bias: 0.5, interpolation: 'linear' }, { id: '2', position: 1, color: '#FFFFFF', bias: 0.5, interpolation: 'linear' }], 'linear', 'oklab'); setSelectedIds(new Set<string>()); })
+            {
+                label: 'Reset Default',
+                danger: true,
+                action: wrapAction(() => { emitChange(stopOps.default(), 'linear', 'oklab'); setSelectedIds(new Set<string>()); })
             },
             { label: 'Blend Mode', action: () => {}, isHeader: true },
             {
@@ -662,16 +685,10 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                         {colorSpace === 'srgb' ? 'sRGB' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
                     </div>
 
-                    {/* Favients entrance — opens the saved-gradients shelf (presets live there now) */}
-                    {hasFavients && (
-                        <button
-                            className={`gradient-interactive-element flex items-center px-1.5 py-0.5 rounded border border-white/10 ${FAVIENTS_ACCENT.border} hover:bg-white/10 text-[11px] leading-none transition-colors active:scale-95`}
-                            onClick={openFavientsPanel}
-                            title="Favients — saved gradients & presets"
-                        >
-                            <FavientsIcon />
-                        </button>
-                    )}
+                    {/* Host-injected header entrance (app-gmt / explorer mount the
+                        Favients saved-gradients shelf button here; engine-core renders
+                        whatever the host registered, or nothing). */}
+                    {entrance && entrance.render()}
 
                     {/* Utility menu (clipboard) */}
                     <button
@@ -694,12 +711,19 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             </div>
 
             <div className="relative px-2" onContextMenu={openTrackContextMenu}>
-                <div 
-                    className="h-8 w-full rounded-t border border-white/20 relative mb-0 cursor-pointer" 
-                    style={{ background: getGradientCssString({ stops: knots, colorSpace, blendSpace }) }}
-                    onDoubleClick={(e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }} 
+                <div
+                    className="h-8 w-full rounded-t border border-white/20 relative mb-0 cursor-pointer overflow-hidden"
+                    onDoubleClick={(e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }}
                     title="Double-click to select all"
                 >
+                     {/* Exact 256-ramp preview (engine sampler) — pointer-events-none so
+                         the strip's double-click + bias handles still receive events. */}
+                     <canvas
+                        ref={previewCanvasRef}
+                        width={256}
+                        height={1}
+                        className="absolute inset-0 w-full h-full pointer-events-none"
+                     />
                      {isBiasHandlesVisible && [...knots].sort((a, b) => a.position - b.position).map((k, i, arr) => {
                         if (i >= arr.length - 1 || arr[i+1].position - k.position < 0.02 || k.interpolation === 'step') return null;
                         
@@ -737,7 +761,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
                                 // Ctrl+drag: duplicate the knot
                                 if (e.ctrlKey && !isRightClick) {
-                                    handleInteractionStart('param');
+                                    editStart();
                                     const dupeId = `${Date.now()}_dup`;
                                     const dupe: AdvancedGradientKnot = { ...knot, id: dupeId };
                                     const newKnots = [...knots, dupe].sort((a, b) => a.position - b.position);
@@ -778,7 +802,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                                     // Ctrl+drag: duplicate selected knots then drag copies
                                     if (e.ctrlKey) {
                                         e.stopPropagation();
-                                        handleInteractionStart('param');
+                                        editStart();
                                         const dupeMap = new Map<string, string>();
                                         const dupes: AdvancedGradientKnot[] = [];
                                         knots.filter(k => selectedIds.has(k.id)).forEach((k, i) => {

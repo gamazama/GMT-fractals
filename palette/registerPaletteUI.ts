@@ -11,6 +11,7 @@
  * two hosts.
  */
 
+import React from 'react';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { PaletteFiltersFeature } from './features/paletteFilters';
@@ -24,9 +25,11 @@ import { NoiseTargetsControl } from './components/NoiseTargetsControl';
 import { ModifyTogglesControl } from './components/ModifyTogglesControl';
 import { ImageExtrasPanel } from './components/ImageExtrasPanel';
 import { FavientsPanel } from './components/FavientsPanel';
+import { FavientsEditorEntrance } from './components/FavientsEditorEntrance';
 import { useFavientsStore } from './store/favientsStore';
 import { captureGeneratorHistory, restoreGeneratorHistory } from './store/generatorStore';
 import { registerHistoryProvider } from '../store/slices/historySlice';
+import { setGradientEditorEntrance } from '../components/gradient/gradientEditorEntrance';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
 import type { GradientConfig } from '../types';
 
@@ -49,6 +52,12 @@ export const registerPaletteUI = (): void => {
   // Favients — the persistent gradient-favourites shelf (floating panel). The
   // component is host-agnostic; each host registers its own apply targets.
   componentRegistry.register('panel-favients', FavientsPanel);
+
+  // The Stops editor's header Favients entrance (engine-core can't import palette,
+  // so it renders whatever a host injects through this seam). Registering it here
+  // means every host that mounts the palette suite gets the entrance, and hosts
+  // that don't (fluid-toy) leave the slot empty — the old `hasFavients` behaviour.
+  setGradientEditorEntrance({ id: 'favients', render: () => React.createElement(FavientsEditorEntrance) });
 
   // The generator's non-DDFS state (curve Track[], slot selection, fit dials) lives in
   // its own store, so register it as a PARAM-undo history provider — curves + slots now
