@@ -20,15 +20,21 @@ import type { GradientConfig } from '../../types';
 import {
   decomposeRamp,
   buildGradientRamp,
+  buildColorBoxRamp,
   applySlotMods,
   unwrapHue,
   smoothChannel,
   DEFAULT_GENERATOR_PARAMS,
+  DEFAULT_COLORBOX_PARAMS,
   type GeneratorParams,
   type SlotModifiers,
+  type ColorBoxParams,
   type Channels,
   type BuildResult,
 } from '../core/generatorPipeline';
+import { EASING_NAMES, type EasingName } from '../core/easings';
+import { fitColorBoxToRamp } from '../core/colorBoxFit';
+import { showToast } from '../../engine/store/toastStore';
 import { rampToBezierTrack, trackToRamp } from '../core/channelCurve';
 import { buildPresetCatalog, registerCustomRamp, registerCustomChannels } from '../core/presetCatalog';
 import { bufferToRamp } from '../core/stopFit';
@@ -38,13 +44,52 @@ import { paramEditStart, paramEditEnd, paramEdit } from './paramUndoBracket';
 
 /** Shape of the paletteGenerator DDFS slice (the dials). */
 interface GeneratorSlice {
+  /** 0 = mixed (two-source blend), 1 = colorbox (per-channel OKLCh sweep). */
+  generatorMode: number;
   aHueRotate: number; aChroma: number; aContrast: number; aReverse: boolean; aRepeats: number; aPhase: number; aMirror: boolean;
   bHueRotate: number; bChroma: number; bContrast: number; bReverse: boolean; bRepeats: number; bPhase: number; bMirror: boolean;
   mixL: number; mixC: number; mixH: number;
   hueRotate: number; chroma: number; contrast: number;
   bands: number; repeats: number; phase: number; mirror: boolean; reverse: boolean;
   noise: number; noiseFreq: number; noiseL: boolean; noiseC: boolean; noiseH: boolean;
+  // ColorBox per-channel sweeps (start/end scalars + easing index into EASING_NAMES).
+  cbLStart: number; cbLEnd: number; cbLEasing: number;
+  cbCStart: number; cbCEnd: number; cbCEasing: number;
+  cbHStart: number; cbHEnd: number; cbHEasing: number;
 }
+
+/** Two generator modes; the build call-site branches on the slice's generatorMode. */
+export type GeneratorMode = 'mixed' | 'colorbox';
+export const generatorModeOf = (s: GeneratorSlice): GeneratorMode =>
+  (s.generatorMode ?? 0) === 1 ? 'colorbox' : 'mixed';
+
+/** Map a stored easing index → EasingName (clamped; defaults to linear on garbage). */
+const easingFromIndex = (i: number): EasingName => EASING_NAMES[i] ?? EASING_NAMES[0];
+/** Inverse: EasingName → its stored index (0/linear if not found). */
+const easingToIndex = (name: EasingName): number => {
+  const i = EASING_NAMES.indexOf(name);
+  return i < 0 ? 0 : i;
+};
+
+/** Flatten ColorBoxParams back onto the DDFS slice fields (inverse of sliceToColorBox). */
+const colorBoxToSlice = (p: ColorBoxParams): Partial<GeneratorSlice> => ({
+  cbLStart: p.L.start, cbLEnd: p.L.end, cbLEasing: easingToIndex(p.L.easing),
+  cbCStart: p.C.start, cbCEnd: p.C.end, cbCEasing: easingToIndex(p.C.easing),
+  cbHStart: p.h.start, cbHEnd: p.h.end, cbHEasing: easingToIndex(p.h.easing),
+});
+
+/** Read the ColorBox params off the DDFS slice (easing indices → names). Falls back
+ *  to DEFAULT_COLORBOX_PARAMS per-field so a missing key (e.g. a pre-S7 persisted
+ *  slice) can never feed `undefined` → NaN through the builder and black the ramp. */
+const sliceToColorBox = (s: GeneratorSlice): ColorBoxParams => {
+  const d = DEFAULT_COLORBOX_PARAMS;
+  const num = (v: number | undefined, fallback: number) => (Number.isFinite(v) ? (v as number) : fallback);
+  return {
+    L: { start: num(s.cbLStart, d.L.start), end: num(s.cbLEnd, d.L.end), easing: easingFromIndex(s.cbLEasing ?? 0) },
+    C: { start: num(s.cbCStart, d.C.start), end: num(s.cbCEnd, d.C.end), easing: easingFromIndex(s.cbCEasing ?? 0) },
+    h: { start: num(s.cbHStart, d.h.start), end: num(s.cbHEnd, d.h.end), easing: easingFromIndex(s.cbHEasing ?? 0) },
+  };
+};
 
 const readSlice = (): GeneratorSlice => (useEngineStore.getState() as any).paletteGenerator as GeneratorSlice;
 const setSlice = (patch: Partial<GeneratorSlice>) => {
@@ -105,6 +150,9 @@ interface GeneratorState {
   bakeMainToCurve: () => void;
   /** Reset the global Modify + noise dials to neutral. */
   resetMainMods: () => void;
+  /** ColorBox: approximate a catalog gradient as per-channel sweeps and load it into
+   *  the ColorBox params (the interim "fit from a gradient" entry until P2's drop path). */
+  fitColorBoxFromCatalog: (idx: number) => void;
 }
 
 const SLOT_DEFAULTS = (which: 'A' | 'B'): Partial<GeneratorSlice> => {
@@ -136,9 +184,10 @@ const slotChannels = (idx: number): Channels => {
   return decomposeRamp(presetRamp(idx));
 };
 
-/** Pure derive of the post-mix base channels (for "fit from source"). */
+/** Pure derive of the post-mix (or ColorBox) base channels (for "fit from source"). */
 const baseChannelsFrom = (slotA: number, slotB: number, seed: number): Channels => {
   const s = readSlice();
+  if (generatorModeOf(s) === 'colorbox') return buildColorBoxRamp(sliceToColorBox(s)).base;
   return buildGradientRamp(slotChannels(slotA), slotChannels(slotB), sliceToModsA(s), sliceToModsB(s), sliceToParams(s), null, seed).base;
 };
 
@@ -175,9 +224,10 @@ export const prospectiveFitChannels = (base: Channels, detail: number, smooth: n
   return { L: trackToRamp(t.L), C: trackToRamp(t.C), h: trackToRamp(t.h) };
 };
 
-/** Run the full pipeline (slot mods + mix + curves + global chain + noise). */
+/** Run the full pipeline: the two-source mix chain, or the ColorBox sweep. */
 const fullResult = (slotA: number, slotB: number, curves: ReturnType<typeof sampleCurves>, seed: number): BuildResult => {
   const s = readSlice();
+  if (generatorModeOf(s) === 'colorbox') return buildColorBoxRamp(sliceToColorBox(s));
   return buildGradientRamp(slotChannels(slotA), slotChannels(slotB), sliceToModsA(s), sliceToModsB(s), sliceToParams(s), curves, seed);
 };
 
@@ -215,7 +265,9 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
   resetCurves: () => genEdit(() => set({ tracks: null, curvesOn: false })),
   resetAll: () =>
     genEdit(() => {
-      setSlice({ ...GENERATOR_PARAM_DEFAULTS } as Partial<GeneratorSlice>);
+      // Reset every dial to defaults but STAY in the current mode (don't yank the
+      // user out of ColorBox just for resetting its sweeps).
+      setSlice({ ...GENERATOR_PARAM_DEFAULTS, generatorMode: readSlice().generatorMode } as Partial<GeneratorSlice>);
       set({ tracks: null, curvesOn: false });
     }),
 
@@ -253,7 +305,22 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
       setSlice(MAIN_DEFAULTS);
     }),
   resetMainMods: () => genEdit(() => setSlice(MAIN_DEFAULTS)),
+
+  fitColorBoxFromCatalog: (idx) =>
+    genEdit(() => {
+      const params = fitColorBoxToRamp(presetRamp(idx));
+      // Ensure we're in ColorBox mode and load the fitted sweeps (one undo entry).
+      setSlice({ generatorMode: 1, ...colorBoxToSlice(params) } as Partial<GeneratorSlice>);
+      showToast('ColorBox fitted from gradient — tweak the sweeps to taste', 'success');
+    }),
 }));
+
+/** Live ColorBox params off the slice — for UI that reflects the current sweeps (e.g.
+ *  the channel sliders' colour-ramp track backgrounds). */
+export const useColorBoxParams = (): ColorBoxParams => {
+  const slice = useEngineStore((s) => (s as any).paletteGenerator) as GeneratorSlice | undefined;
+  return useMemo(() => sliceToColorBox(slice ?? (GENERATOR_PARAM_DEFAULTS as unknown as GeneratorSlice)), [slice]);
+};
 
 /**
  * History provider snapshot/restore for the generator's NON-DDFS state (the DDFS slice
@@ -298,9 +365,11 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   const smooth = useGeneratorStore((s) => s.smooth);
   const noiseSeed = useGeneratorStore((s) => s.noiseSeed);
 
+  const mode = generatorModeOf(slice);
   const modsA = useMemo(() => sliceToModsA(slice), [slice]);
   const modsB = useMemo(() => sliceToModsB(slice), [slice]);
   const params = useMemo(() => sliceToParams(slice), [slice]);
+  const cbParams = useMemo(() => sliceToColorBox(slice), [slice]);
 
   // Source channels — un-clipped when a baked slot carries them (else decomposed).
   const srcA = useMemo(() => slotChannels(slotA), [slotA]);
@@ -316,8 +385,11 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   }, [curvesOn, tracks]);
 
   const built = useMemo(
-    () => buildGradientRamp(srcA, srcB, modsA, modsB, params, sampledCurves, noiseSeed),
-    [srcA, srcB, modsA, modsB, params, sampledCurves, noiseSeed],
+    () =>
+      mode === 'colorbox'
+        ? buildColorBoxRamp(cbParams)
+        : buildGradientRamp(srcA, srcB, modsA, modsB, params, sampledCurves, noiseSeed),
+    [mode, cbParams, srcA, srcB, modsA, modsB, params, sampledCurves, noiseSeed],
   );
 
   // `base` (post-mix, pre-curve channels) feeds the curve-fit AND the editor's ghost
@@ -326,8 +398,18 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   // changes) even though base is curve-independent. A stable identity keeps the ghost's
   // prospective fit (Douglas-Peucker + bezier resample) from recomputing each drag frame.
   const base = useMemo(
-    () => buildGradientRamp(srcA, srcB, modsA, modsB, params, null, 1).base,
-    [srcA, srcB, modsA, modsB, params],
+    // ColorBox has no curve/mix layer, so `built.base` IS this value — reuse it rather
+    // than building the ramp a second time. `built` is computed just above (so it's
+    // fresh this render) and read directly; it is deliberately NOT in the deps — adding
+    // it would rebuild the MIXED curve-fit source on every keyframe drag (built churns
+    // via sampledCurves). `cbParams` IS in the deps, which is the only input the colorbox
+    // branch depends on; same cbParams ⇒ same built.base content regardless of identity.
+    () =>
+      mode === 'colorbox'
+        ? built.base
+        : buildGradientRamp(srcA, srcB, modsA, modsB, params, null, 1).base,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mode, cbParams, srcA, srcB, modsA, modsB, params],
   );
 
   // The editor's ghost scope: the post-global RESULT channels (so it follows the Modify
@@ -341,10 +423,13 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   // re-bases it — and any extra divergence from the editable h track under a steep curve is
   // expected. It also unwraps the curves-OFF live hue, which genuinely needs it.
   const overrideGhost = useMemo(() => {
-    if (!curvesOn || !hasTracks) return null;
+    // The prospective-fit override is a MIXED-pipeline concept (it re-runs the mix
+    // chain with the fitted curves). ColorBox has no curve override, so fall through
+    // to the live ghost (built.final) there.
+    if (mode === 'colorbox' || !curvesOn || !hasTracks) return null;
     const f = buildGradientRamp(srcA, srcB, modsA, modsB, params, prospectiveFitChannels(base, detail, smooth), noiseSeed).final;
     return { L: f.L, C: f.C, h: unwrapHue(f.h) };
-  }, [curvesOn, hasTracks, base, detail, smooth, srcA, srcB, modsA, modsB, params, noiseSeed]);
+  }, [mode, curvesOn, hasTracks, base, detail, smooth, srcA, srcB, modsA, modsB, params, noiseSeed]);
   const liveGhost = useMemo(() => ({ L: built.final.L, C: built.final.C, h: unwrapHue(built.final.h) }), [built]);
   // When the override supersedes (curves on), the ghost is referentially stable across
   // keyframe edits (which only churn `built`/`liveGhost`), so trackRanges doesn't rebuild.

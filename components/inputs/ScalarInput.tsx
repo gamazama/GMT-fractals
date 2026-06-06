@@ -46,6 +46,8 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     variant = 'full',
     className = '',
 
+    trackBackground,
+
     // Default value
     defaultValue,
     onReset,
@@ -291,7 +293,16 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 >
                     {/* Background track */}
                     <div className="absolute inset-0 bg-white/10">
-                        <div ref={fullTrackFillRef} className={`absolute top-0 bottom-0 left-0 ${disabled ? 'bg-gray-400/20' : 'bg-cyan-500/30'}`} style={{ width: `${valuePct}%` }} />
+                        {/* Optional meaningful track background (hue/lightness/chroma ramp). */}
+                        {trackBackground && <div className="absolute inset-0" style={{ background: trackBackground }} />}
+                        {/* Progress fill — suppressed when a track background carries the meaning,
+                            so a colour ramp reads cleanly (the thumb still marks the value). The ref
+                            stays mounted either way so drag-time DOM updates remain harmless. */}
+                        <div
+                            ref={fullTrackFillRef}
+                            className={`absolute top-0 bottom-0 left-0 ${trackBackground ? 'bg-transparent' : disabled ? 'bg-gray-400/20' : 'bg-cyan-500/30'}`}
+                            style={{ width: `${valuePct}%` }}
+                        />
 
                         {/* Live value indicator */}
                         {showLiveIndicator && liveValue !== undefined && !disabled && (

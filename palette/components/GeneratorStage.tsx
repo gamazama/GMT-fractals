@@ -15,7 +15,12 @@
  */
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { useGeneratorStore, useGeneratorDerived, genEdit } from '../store/generatorStore';
+import { useGeneratorStore, useGeneratorDerived, genEdit, useGenParam, useColorBoxParams } from '../store/generatorStore';
+import { EASING_NAMES } from '../core/easings';
+import { oklabToRgbSafe } from '../core/oklab';
+import { GenParamSlider } from './GenParamSlider';
+import { easingThumb } from './easingThumb';
+import { EasingPicker } from './EasingPicker';
 import { showToast } from '../../engine/store/toastStore';
 import type { ChannelTracks } from './ChannelGraphEditor';
 import { buildPresetCatalog } from '../core/presetCatalog';
@@ -110,6 +115,155 @@ const EMPTY_TRACKS: ChannelTracks = {
   h: { id: 'h', type: 'float', label: 'Hue', keyframes: [], color: '#22c55e' },
 };
 
+// --- ColorBox mode UI ------------------------------------------------------------
+
+/** Segmented Mixed | ColorBox switch, bound to the hidden `generatorMode` DDFS param. */
+const GeneratorModeToggle: React.FC = () => {
+  const [mode, setMode] = useGenParam<number>('generatorMode');
+  const m = mode ?? 0;
+  const opts: { label: string; value: number; title: string }[] = [
+    { label: 'Mixed', value: 0, title: 'Blend two source gradients per channel' },
+    { label: 'ColorBox', value: 1, title: 'Sweep each OKLCh channel start→end under an easing curve' },
+  ];
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] uppercase tracking-wide text-gray-500">Mode</span>
+      <div className="flex rounded-sm overflow-hidden ring-1 ring-white/10">
+        {opts.map((o) => (
+          <button
+            key={o.value}
+            onClick={() => m !== o.value && genEdit(() => setMode(o.value))}
+            title={o.title}
+            aria-pressed={m === o.value}
+            className={`text-[11px] px-2.5 py-0.5 transition-colors ${
+              m === o.value ? 'bg-cyan-500/25 text-cyan-100' : 'bg-white/[0.04] text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/** Easing-curve chooser bound to a cb*Easing int param (index into EASING_NAMES).
+ *  Shows the current curve as a mini graph + name; click opens the visual EasingPicker
+ *  (raw names like "inOutQuint" tell users nothing — the graph does). */
+const EasingSelect: React.FC<{ param: string }> = ({ param }) => {
+  const [v, setV] = useGenParam<number>(param);
+  const idx = v ?? 0;
+  const name = EASING_NAMES[idx] ?? EASING_NAMES[0];
+  const [open, setOpen] = useState(false);
+  const thumb = easingThumb(name, 28, 18);
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        title={`Easing: ${name} — click to change`}
+        className="ml-auto flex items-center gap-1.5 text-[11px] bg-zinc-800 text-gray-200 rounded-sm pl-1 pr-1.5 py-0.5 ring-1 ring-white/10 hover:ring-cyan-500/40 transition"
+      >
+        {thumb && <img src={thumb} width={28} height={18} alt="" className="rounded-[1px]" />}
+        <span className="truncate max-w-[88px]">{name}</span>
+      </button>
+      {open && <EasingPicker value={idx} onChange={(i) => genEdit(() => setV(i))} onClose={() => setOpen(false)} />}
+    </>
+  );
+};
+
+const DEG2RAD_UI = Math.PI / 180;
+const cssRgb = (c: { r: number; g: number; b: number }) => `rgb(${Math.round(c.r)} ${Math.round(c.g)} ${Math.round(c.b)})`;
+
+/**
+ * Build a CSS linear-gradient sweeping ONE OKLCh channel across its slider range while
+ * holding the other two fixed — so the slider track itself shows what the value does
+ * (a hue rainbow, a dark→light ramp, a grey→vivid ramp). Gamut-safe per stop.
+ */
+const channelGradient = (
+  channel: 'L' | 'C' | 'h',
+  range: { min: number; max: number },
+  held: { L: number; C: number; h: number }, // h in degrees
+  steps = 12,
+): string => {
+  const stops: string[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const v = range.min + ((range.max - range.min) * i) / steps;
+    const L = channel === 'L' ? v : held.L;
+    const C = channel === 'C' ? v : held.C;
+    const hRad = (channel === 'h' ? v : held.h) * DEG2RAD_UI;
+    stops.push(cssRgb(oklabToRgbSafe({ L: Math.max(0, Math.min(1, L)), a: C * Math.cos(hRad), b: C * Math.sin(hRad) })));
+  }
+  return `linear-gradient(to right, ${stops.join(', ')})`;
+};
+
+/** One OKLCh channel's sweep controls: start + end sliders (full GMT feel, keyframable)
+ *  with a meaningful colour-ramp track, and the easing chooser. start/end/easing are all
+ *  real DDFS params. `track` is the channel's colour ramp (shared by both sliders). */
+const ColorBoxChannelRow: React.FC<{
+  // Param-name letter — UPPERCASE (cbLStart / cbCStart / cbHStart) to match the keys
+  // registered in paletteGenerator.ts and read in generatorStore.sliceToColorBox.
+  ch: 'L' | 'C' | 'H';
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  def: { start: number; end: number };
+  track: string;
+}> = ({ ch, label, min, max, step, def, track }) => (
+  <div className="flex flex-col gap-1 rounded-md border border-white/10 bg-white/[0.02] p-2">
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] uppercase tracking-wide text-gray-400">{label}</span>
+      <EasingSelect param={`cb${ch}Easing`} />
+    </div>
+    <GenParamSlider param={`cb${ch}Start`} label="start" min={min} max={max} step={step} def={def.start} trackBackground={track} />
+    <GenParamSlider param={`cb${ch}End`} label="end" min={min} max={max} step={step} def={def.end} trackBackground={track} />
+  </div>
+);
+
+/** The ColorBox controls: per-channel L / C / h sweeps with colour-ramp tracks, plus the
+ *  interim "Fit from gradient" entry (until P2's drag-drop). Shown on the canvas when the
+ *  generator is in ColorBox mode (replaces the two-source Sources + Mix section). */
+const ColorBoxControls: React.FC = () => {
+  const cb = useColorBoxParams();
+  const fitFromCatalog = useGeneratorStore((s) => s.fitColorBoxFromCatalog);
+  const [pickOpen, setPickOpen] = useState(false);
+
+  // Each channel's track holds the OTHER two at the midpoint of their sweep, so the ramp
+  // reads as "this channel, in the current colour family". Recomputed only on those mids.
+  const midL = (cb.L.start + cb.L.end) / 2;
+  const midC = (cb.C.start + cb.C.end) / 2;
+  const midH = (cb.h.start + cb.h.end) / 2;
+  const trackL = useMemo(() => channelGradient('L', { min: 0, max: 1 }, { L: 0, C: midC, h: midH }), [midC, midH]);
+  const trackC = useMemo(() => channelGradient('C', { min: 0, max: 0.4 }, { L: midL, C: 0, h: midH }), [midL, midH]);
+  const trackH = useMemo(() => channelGradient('h', { min: 0, max: 360 }, { L: midL, C: midC, h: 0 }), [midL, midC]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-gray-500">Per-channel sweep</span>
+        <button
+          onClick={() => setPickOpen(true)}
+          title="Approximate an existing gradient as ColorBox sweeps (the closest per-channel match)"
+          className="ml-auto text-[11px] px-2 py-0.5 rounded-sm bg-white/[0.06] text-gray-300 hover:text-gray-100 hover:bg-white/10 transition-colors"
+        >
+          Fit from gradient…
+        </button>
+      </div>
+      <ColorBoxChannelRow ch="L" label="Lightness" min={0} max={1} step={0.005} def={{ start: 0.2, end: 0.92 }} track={trackL} />
+      <ColorBoxChannelRow ch="C" label="Chroma" min={0} max={0.4} step={0.005} def={{ start: 0.12, end: 0.18 }} track={trackC} />
+      <ColorBoxChannelRow ch="H" label="Hue°" min={0} max={360} step={1} def={{ start: 30, end: 290 }} track={trackH} />
+      {pickOpen && (
+        <GradientSourcePicker
+          title="Fit ColorBox from…"
+          value={-1}
+          onChange={(idx) => fitFromCatalog(idx)}
+          onClose={() => setPickOpen(false)}
+        />
+      )}
+    </div>
+  );
+};
+
 export const GeneratorStage: React.FC = () => {
   const { stripA, stripB, ramp, config, ghost } = useGeneratorDerived();
   const slotA = useGeneratorStore((s) => s.slotA);
@@ -127,6 +281,8 @@ export const GeneratorStage: React.FC = () => {
   const fitFromSource = useGeneratorStore((s) => s.fitFromSource);
   const resetCurves = useGeneratorStore((s) => s.resetCurves);
   const [resultTall, setResultTall] = useState(false);
+  const [genMode] = useGenParam<number>('generatorMode');
+  const colorbox = (genMode ?? 0) === 1;
 
   // Decision 3: detail/smooth are NON-DESTRUCTIVE. They no longer schedule a live re-fit
   // (which silently discarded hand-edited keyframes). Instead they drive the faint dashed
@@ -162,18 +318,27 @@ export const GeneratorStage: React.FC = () => {
           below (so the gradients and the curve t-axis share a left/right edge). Takes
           the slack so the graph stays compact with no dead space under it. */}
       <div
-        className={`flex-1 min-h-0 overflow-y-auto pt-3 pb-2 flex flex-col gap-1.5 ${tracks ? '' : 'justify-center'}`}
+        className={`flex-1 min-h-0 overflow-y-auto pt-3 pb-2 flex flex-col gap-1.5 ${tracks && !colorbox ? '' : 'justify-center'}`}
         style={{ paddingLeft: padLeft, paddingRight: padRight }}
       >
-        {curvesOn && (
-          <div className="text-[10px] text-cyan-300/70 bg-cyan-500/[0.06] border border-cyan-500/20 rounded-sm px-2 py-1 mb-0.5">
-            Curves drive the output — sources are locked. <span className="text-cyan-200">Re-fit</span> or <span className="text-cyan-200">Reset points</span> below to edit the sources again.
-          </div>
+        <div className="flex items-center mb-0.5">
+          <GeneratorModeToggle />
+        </div>
+        {colorbox ? (
+          <ColorBoxControls />
+        ) : (
+          <>
+            {curvesOn && (
+              <div className="text-[10px] text-cyan-300/70 bg-cyan-500/[0.06] border border-cyan-500/20 rounded-sm px-2 py-1 mb-0.5">
+                Curves drive the output — sources are locked. <span className="text-cyan-200">Re-fit</span> or <span className="text-cyan-200">Reset points</span> below to edit the sources again.
+              </div>
+            )}
+            <SourceRow which="A" ramp={stripA} preset={slotA} onPick={(i) => setSlot('A', i)} height={40} dimmed={curvesOn} />
+            {/* The L/C/h blend sits BETWEEN A and B as vertical sliders bridging A→B. */}
+            <MixBlend onSwap={swap} dimmed={curvesOn} />
+            <SourceRow which="B" ramp={stripB} preset={slotB} onPick={(i) => setSlot('B', i)} height={40} dimmed={curvesOn} />
+          </>
         )}
-        <SourceRow which="A" ramp={stripA} preset={slotA} onPick={(i) => setSlot('A', i)} height={40} dimmed={curvesOn} />
-        {/* The L/C/h blend sits BETWEEN A and B as vertical sliders bridging A→B. */}
-        <MixBlend onSwap={swap} dimmed={curvesOn} />
-        <SourceRow which="B" ramp={stripB} preset={slotB} onPick={(i) => setSlot('B', i)} height={40} dimmed={curvesOn} />
 
         {/* When curves drive the output the A/B sources are de-emphasised, so let the
             result glide down to sit beside the curve editor. The spacer grows via an
@@ -192,7 +357,7 @@ export const GeneratorStage: React.FC = () => {
             <div className="flex items-center gap-2 min-w-0">
               <div className="text-xs text-gray-400 shrink-0">Result</div>
               <FavStar config={config} name="Generated" source="Generator" />
-              {curvesOn && <span className="text-[10px] text-cyan-400/70 truncate">curves drive output — Re-fit / Reset points to edit sources</span>}
+              {curvesOn && !colorbox && <span className="text-[10px] text-cyan-400/70 truncate">curves drive output — Re-fit / Reset points to edit sources</span>}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-[11px] text-gray-500">{config.stops.length} stops</span>
@@ -221,7 +386,10 @@ export const GeneratorStage: React.FC = () => {
 
       {/* Channel curve graph (full width) with its controls. Fixed-height at the bottom
           — the keyframe inspector is about as tall as the editor ever needs to be, so the
-          slack goes to the gradients above rather than dead space below the graph. */}
+          slack goes to the gradients above rather than dead space below the graph.
+          Mixed mode only: the curve editor shapes the two-source mix; ColorBox sweeps the
+          channels directly, so it has no curve surface. */}
+      {!colorbox && (
       <div className="shrink-0 flex flex-col border-t border-white/10 bg-zinc-950">
         <div className="flex items-center gap-2 flex-wrap px-3 py-1.5 shrink-0">
           <span className="text-[10px] uppercase tracking-wide text-gray-500">Curves</span>
@@ -278,6 +446,7 @@ export const GeneratorStage: React.FC = () => {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 };
