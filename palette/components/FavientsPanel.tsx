@@ -40,6 +40,8 @@ import { useDismiss } from '../../hooks/useDismiss';
 import { downloadBlob } from '../../utils/SceneFormat';
 import { EXPORT_FORMATS, getExportFormat, AI_STOP_LIMIT } from '../core/exportFormats';
 import { buildCollectionZip, buildCollectionFile, buildContactSheet, collectionQualityWarnings } from '../core/favientsExport';
+import { parseGradientText, IMPORT_EXTENSIONS } from '../core/importFormats';
+import { fitRampToStops } from '../core/stopFit';
 
 /** Re-render when hosts (re)register apply targets or the browse action. */
 const useFavientTargets = () => {
@@ -59,6 +61,22 @@ const KebabIcon = () => (
 const menuItemCls =
   'w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-gray-300 hover:text-white hover:bg-white/10 transition-colors';
 
+/** `accept` attribute for the gradient-file import picker (the text formats we parse). */
+const GRADIENT_FILE_ACCEPT = IMPORT_EXTENSIONS.map((e) => '.' + e).join(',');
+
+const extOf = (name: string): string => {
+  const dot = name.lastIndexOf('.');
+  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+};
+
+/** Filename without directory or extension — the favourite's display name. */
+const gradientName = (name: string): string => {
+  const cut = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+  const file = cut >= 0 ? name.slice(cut + 1) : name;
+  const dot = file.lastIndexOf('.');
+  return (dot > 0 ? file.slice(0, dot) : file).trim() || 'imported';
+};
+
 /**
  * FavientsSystemMenu — collection-management popover in the panel header. Saves the
  * collection to a re-importable JSON, loads (merge) / replaces it from a file, clears
@@ -69,12 +87,15 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
   const favients = useFavientsStore((s) => s.favients);
   const exportCollection = useFavientsStore((s) => s.exportCollection);
   const importCollection = useFavientsStore((s) => s.importCollection);
+  const add = useFavientsStore((s) => s.add);
+  const isFav = useFavientsStore((s) => s.isFav);
   const clear = useFavientsStore((s) => s.clear);
 
   const [open, setOpen] = useState(false);
   const [zipFmt, setZipFmt] = useState(EXPORT_FORMATS[0].key);
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const gradientFileRef = useRef<HTMLInputElement>(null);
   const importMode = useRef<'merge' | 'replace'>('merge');
 
   useDismiss(rootRef, { onClose: () => setOpen(false), enabled: open, escape: true });
@@ -100,6 +121,33 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
     const n = importCollection(text, importMode.current);
     if (n == null) onFlash("That file isn't a Favients collection");
     else onFlash(importMode.current === 'replace' ? `Replaced — ${n} loaded` : n ? `Merged ${n} new` : 'Nothing new to merge');
+    close();
+  };
+
+  // Import one or more GRADIENT files (.map/.gpl/.ggr/.cpt/.css/.json — distinct from a
+  // Favients *collection*). The File read lives here; parsing is the pure core. Each
+  // gradient is fitted to stops and added to the shelf (content-deduped via isFav).
+  const onGradientFiles = async (files: FileList) => {
+    let imported = 0;
+    let skipped = 0;
+    for (const f of Array.from(files)) {
+      try {
+        const res = parseGradientText(await f.text(), extOf(f.name));
+        // parseGradientText guarantees a 256-length ramp, so fitRampToStops won't throw.
+        const config = res && fitRampToStops(res.ramp, { targetDE: 0.02, maxStops: 32 });
+        if (config && !isFav(config)) {
+          add(config, gradientName(f.name), `Import · .${res!.format}`);
+          imported++;
+        } else skipped++; // unreadable, or a duplicate of an existing favourite
+      } catch {
+        skipped++; // read/parse failure on this file — never aborts the rest
+      }
+    }
+    onFlash(
+      imported
+        ? `Imported ${imported} gradient${imported > 1 ? 's' : ''}${skipped ? ` · ${skipped} skipped` : ''}`
+        : 'No gradient could be read from that file',
+    );
     close();
   };
 
@@ -164,6 +212,18 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
           if (fileRef.current) fileRef.current.value = '';
         }}
       />
+      <input
+        ref={gradientFileRef}
+        type="file"
+        accept={GRADIENT_FILE_ACCEPT}
+        multiple
+        aria-label="Import gradient files"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) onGradientFiles(e.target.files);
+          if (gradientFileRef.current) gradientFileRef.current.value = '';
+        }}
+      />
       <button
         onClick={() => setOpen((o) => !o)}
         title="Collection — save, load, export"
@@ -176,6 +236,7 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
           className="absolute right-0 top-full mt-1 w-52 bg-black/95 border border-white/15 rounded-lg shadow-2xl z-50 p-1"
           onClick={(e) => e.stopPropagation()}
         >
+          <button className={menuItemCls} onClick={() => gradientFileRef.current?.click()}>Import gradient file…</button>
           <button className={menuItemCls} onClick={saveCollection}>Save collection (.json)</button>
           <button className={menuItemCls} onClick={() => pickFile('merge')}>Load &amp; merge…</button>
           <button className={menuItemCls} onClick={() => pickFile('replace')}>Replace from file…</button>
