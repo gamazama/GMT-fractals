@@ -9,7 +9,10 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
 
 ---
 
-## Current phase: **Phase 0 COMPLETE ✅ → opening Phase 1** (integration branch `exec/gradient-explorer` @ `0e04e8d`)
+## Current phase: **PHASE 1 COMPLETE ✅ → P2 (integration pass)** (integration branch `exec/gradient-explorer` @ `cb421c5`)
+
+All Phase-0 foundations + all Phase-1 streams merged & gate-green. Next: write the consolidated **P2
+scope doc**, then launch P2 (the cross-mode integration: global drag, canonical hero, etc.).
 
 - **P0a** — engine gradient + colour CORE — ✅ DONE (in-review, **uncommitted**; gates green;
   interfaces (e)+(f) FROZEN below).
@@ -134,7 +137,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | S4 | W7 Import | 1 | ✅ **merged `8945a9c`** | `exec/s4-import` | Import in Favients kebab menu → parseGradientText → fitRampToStops → favientsStore.add (persisted, deduped); pure parsers + `/security-review` clean. Touched **FavientsPanel.tsx (S2's file)** — S2 rebases + folds import into its undo provider |
 | S5 | W1 Stops *mode* | 1 | ✅ **merged `73bcd08`** | `exec/s5-stops-mode` | 4th mode: mounts engine editor (P0c) as-is; paletteEditorStore + (d) seam + history & 'stops' doc providers; EditorStage + StopsDockPanel (doc-level inspector, T5) + Stage/MOBILE_MODES + setup. **Also: EmbeddedColorPicker responsive reflow (see watch) + blank-canvas fix.** User visual confirm; full gate green. **WAVE 2 COMPLETE — studio is now 4-mode.** |
 | S6 | W11 Fullscreen configs | 1 | ✅ **merged `94e8e5d`** | `exec/s6-fullscreen` | foundation + fixes: drop-race in W4 kernel (capture→bubble reset — ratified into (b)) + isotropic geometries (radial/conic round). User visual confirm (drop opens fullscreen; shapes round). Integration gate green. FUTURE: richer options (backlog "fullscreen v2") |
-| S7 | W12 ColorBox generator mode (v1 addition) | 1 | **queued (wave 3)** | `exec/s7-colorbox` | NEW easings.ts + buildColorBoxRamp (parallel builder) + generatorMode enum + DDFS/UI; additive, collision-free w/ wave 2. **LOCKED: shortest hue-path only; no Leonardo (modes = mixed+colorbox)** |
+| S7 | W12 ColorBox generator mode (v1 addition) | 1 | ✅ **merged `5c2a280`** | `exec/s7-colorbox` | easings.ts + buildColorBoxRamp + generatorMode + visual easing picker + colored L/C/h sliders (NEW additive `ScalarInput.trackBackground`) + colorBoxFit.ts (frozen-ahead for P2 drop) + "Fit from gradient" interim button. Fixed hue-key-casing black-ramp bug. User visual confirm; full gate green |
 | S8 | W13 interpolation bases | 1 | ✅ **resolved — DEFERRED, no code** | `exec/s8-interp` | S8 REFUTED Tier A: 2-point `sampleSorted` can't overshoot → monotone-cubic degenerates to smoothstep (already ships as smooth/cubic); the no-overshoot win needs **multi-point = Tier B**. **W13 entirely deferred to Tier B**; v1 ships nothing from it. Zero code (sampler byte-unchanged). Good catch (flawed scope-doc premise). Rationale → project memory |
 | P2 | W2 portability integration + W9 snapshot | 2 | not-started | `exec/p2-portability` | depends: ALL Phase 1; touches every hero. **THE global-gradient-DnD phase:** every result/swatch becomes a drag SOURCE + the export/PNG/fullscreen wells wired + drag↔Send-to share ONE target list + canonical hero. Accumulated P2 inputs: click=select-vs-apply model, cross-tab undo focus, hero-resize state-loss, facet-naming, ImageStage coexist, favientTargets→engine-registry migration, fold ⛶ into hero. *(grown large — consolidate into a P2 scope doc before launch)* |
 | P3 | `/polish` pass | 3 | deferred | — | after structure lands |
@@ -296,6 +299,26 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   ..\wt-sX\node_modules` (removes the junction only) BEFORE `git worktree remove`.** Never `rm -rf` /
   `Remove-Item -Recurse` a junctioned worktree. If it happens: `npm install` in dev repairs it.
 
+## Cross-cutting watch items (cont. 2)
+
+- **`ScalarInput.trackBackground` (S7).** NEW additive prop on the app-wide slider primitive — renders a
+  custom CSS track (used for the ColorBox colored L/C/h ramps) and suppresses the cyan fill when set;
+  **default-off = byte-identical** for every existing slider (verified by review). Low risk, but it's the
+  3rd cross-cutting touch to ScalarInput/the picker family — any slider work should be aware.
+
+## P2 carry-forwards (fold into the P2 scope doc)
+
+- **colorBoxFit.ts (S7)** — pure gradient→ColorBox fitter, frozen-ahead for P2's drop path; only
+  test-consumed today (may orphan-flag — DO NOT delete). P2 drop-onto-ColorBox calls
+  `fitColorBoxFromCatalog`/`fitColorBoxToRamp` with the dropped ramp + adds start/end sub-range selection
+  UI. (Gamut caveat: oklabToRgbSafe clips chroma → very-high-chroma gradients fit closest in-gamut C.)
+- **Easing-picker ↔ formula-picker consolidation** — S7's `easingThumb`/`EasingPicker` mirror the app-gmt
+  FormulaPicker tile pattern but the formula picker's renderer isn't generic (hardcoded `<img src>`).
+  Future: a shared thumbnail-grid primitive both consume. (S7 reused the generic `GradientHoverPreview`
+  for the enlarge to keep consolidation seamless.)
+- **ColorBox defaults in 3-4 places** (feature def / GENERATOR_PARAM_DEFAULTS / DEFAULT_COLORBOX_PARAMS /
+  UI) — a shared default-object is a micro-simplify candidate (same pattern as GeneratorSlotMods).
+
 ## Backlog / deferred debt
 
 - **Live-fractal coloring mode (extract from fluid-toy) — INITIATIVE, SCOPED 2026-06-06**
@@ -361,6 +384,12 @@ merges, plan amendments. Newest first.)_
   verified. New finding: rename UX awkward (hover-enlarge obscures name; grid click=apply). Interim fix
   routed back (list-mode rename, no hover-enlarge in list). The deeper "click=select+options vs apply"
   question → **P2** (key canonical-interaction input; see finding above). S2 merges after this fix.
+- 2026-06-06 — **S7 MERGED `5c2a280` → PHASE 1 COMPLETE.** ColorBox-OKLCh mode (easings + parallel
+  builder + mode toggle + visual easing picker + colored L/C/h sliders + frozen-ahead colorBoxFit for P2)
+  + the interim "Fit from gradient" button. Caught+fixed a hue-key-casing black-ramp bug (closed a
+  registration↔store-read coverage gap). Full integration gate green (tsc 0 + test:palette 15). Watch:
+  `ScalarInput.trackBackground` (3rd cross-cutting slider touch, additive/default-off). **ALL Phase 0 + 1
+  done. Next: consolidated P2 scope doc → launch P2.**
 - 2026-06-06 — **S8 RESOLVED — DEFERRED (no code).** Execution session REFUTED the W13 Tier-A premise:
   monotone-cubic's no-overshoot benefit is a MULTI-POINT property; `sampleSorted` is per-segment 2-point
   (can't overshoot by construction), so a faithful 2-point monotone = smoothstep (already ships). No cheap
