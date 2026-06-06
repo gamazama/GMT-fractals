@@ -32,8 +32,13 @@ well-accepted MIME is present** (documented in dropWellRegistry.ts, not solved i
 drop-payload parsing needs a `/security-review`** (and W7 import too); (3) migrate
 `palette/core/favientTargets.ts` onto the engine send-target registry + `createListRegistry`.
 
-Next action: commit P0e → merge `exec/phase-0-foundations` → integration `exec/gradient-explorer` →
-open Phase 1 fan-out (**await user: how many concurrent streams** — visual-QA bandwidth is the constraint).
+**PHASE 1 — Wave 1 LAUNCHED (parallel worktrees off `exec/gradient-explorer`):** S1 (picker search),
+S3 (generator coherence + ghost), S4 (import) — collision-free file sets. Wave 2 (S2/S5/S6, shared-shell)
+after. **Convention: Phase-1 sessions DO NOT edit `execution-progress.md`** (orchestrator-owned — avoids
+log merge battles across worktrees); they report via summary, orchestrator updates the canonical log.
+
+Next action: ingest S1/S3/S4 summaries as they land → review (S3 gets an independent review — ghost
+alignment is fiddly) → merge each to integration → then Wave 2.
 
 **Document round-trip coverage (W8) — track as streams register their providers:**
 favients (P0d, reference consumer) · generator (S3) · image (its stream) · stops/paletteEditorStore (S5).
@@ -63,10 +68,10 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | ID | Workstream | Phase | Status | Branch / worktree | Notes |
 |----|------------|-------|--------|-------------------|-------|
 | P0 | Engine foundations (W8 doc-registry, W10 picker, W4 kernel, W1-engine, undo contract, gmtGradient collapse) | 0 | ✅ **COMPLETE (P0a–P0e)** | `exec/phase-0-foundations` | ALL 6 interfaces (a)-(f) frozen; merging to integration → Phase 1 fan-out |
-| S1 | W6 Picker text search | 1 | not-started | `exec/s1-picker-search` | depends: P0 |
+| S1 | W6 Picker text search | 1 | **in-flight (wave 1)** | `exec/s1-picker-search` | search only; pick-semantics + hero send/export deferred to P2 |
 | S2 | W5 Favients undo/list/search | 1 | not-started | `exec/s2-favients` | depends: P0 (doc+history provider); shared: registerPaletteUI.ts |
-| S3 | W3 ghost curves + Generator coherence | 1 | not-started | `exec/s3-generator` | depends: P0 |
-| S4 | W7 Import | 1 | not-started | `exec/s4-import` | depends: P0 (registerCustomRamp seam) |
+| S3 | W3 ghost curves + Generator coherence | 1 | **in-flight (wave 1)** | `exec/s3-generator` | merges Decision 3 (ghost-previewed bake-to-commit) + T1 fixes; orchestrator independent review on return |
+| S4 | W7 Import | 1 | **in-flight (wave 1)** | `exec/s4-import` | text formats first; /security-review (untrusted parsing); Import button (wells = P2) |
 | S5 | W1 Stops *mode* | 1 | not-started | `exec/s5-stops-mode` | depends: P0 (engine Stops editor + sampleStops); shared: registerPaletteUI.ts, GradientExplorerApp.tsx, setup.ts |
 | S6 | W11 Fullscreen configs | 1 | not-started | `exec/s6-fullscreen` | depends: P0 (W4 wells kernel); shared: GradientExplorerApp.tsx |
 | P2 | W2 portability integration + W9 snapshot | 2 | not-started | `exec/p2-portability` | depends: ALL Phase 1; touches every hero |
