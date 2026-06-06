@@ -158,6 +158,11 @@ human may optionally run `/code-review ultra` (cloud) on the whole branch.
 - **Phase 2:** off integration after Phase-1 merges. **Phase 3** last. Integration → `main` when
   the whole thing is green.
 - Throughput is bounded by the human's visual-QA bandwidth, not agent count — **stagger merges**.
+- **Worktree node_modules:** junction to dev's (`cmd /c mklink /J ..\wt-sX\node_modules node_modules`).
+  **⚠️ CLEANUP HAZARD:** `git worktree remove` and `Remove-Item -Recurse` **follow the junction and wipe
+  dev's real node_modules** (caused recurring partial-installs). **SAFE ORDER: `cmd /c rmdir
+  ..\wt-sX\node_modules` (junction only) FIRST, then `git worktree remove ..\wt-sX`.** If wiped:
+  `npm install` in dev repairs it (~637 pkgs).
 
 ---
 
