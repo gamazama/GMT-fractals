@@ -148,6 +148,36 @@ const baseChannelsFrom = (slotA: number, slotB: number, seed: number): Channels 
 const sampleCurves = (tracks: ChannelTracks | null, on: boolean) =>
   on && tracks ? { L: trackToRamp(tracks.L), C: trackToRamp(tracks.C), h: trackToRamp(tracks.h) } : null;
 
+/**
+ * The fit RECIPE: decompose a post-mix BASE into editable channel Tracks at the given
+ * `detail` (Douglas-Peucker eps) + `smooth` (pre-smoothing window). Extracted so the
+ * explicit "Fit from source" COMMIT and the non-destructive ghost PREVIEW share one
+ * recipe — the faint ghost is therefore byte-faithful to what a bake will commit.
+ * (Decision 3: detail/smooth = non-destructive, ghost-previewed, bake-to-commit.)
+ */
+const fitChannelsToTracks = (base: Channels, detail: number, smooth: number): ChannelTracks => {
+  const k = (11 - detail) / 3;
+  return {
+    L: rampToBezierTrack(smoothChannel(base.L, smooth), 'L', 'Lightness', { eps: 0.01 * k }),
+    C: rampToBezierTrack(smoothChannel(base.C, smooth), 'C', 'Chroma', { eps: 0.01 * k }),
+    h: rampToBezierTrack(smoothChannel(unwrapHue(base.h), smooth), 'h', 'Hue', { eps: 0.06 * k }),
+  };
+};
+
+/**
+ * Sample the prospective fit back to 256-value channels — the data the editor paints
+ * as the faint "source ghost" behind the editable bezier. Hue stays UNWRAPPED (the fit
+ * runs on unwrapHue(base.h), and the editable h Track is unwrapped too) so the ghost
+ * shares the h track's continuous space and lines up with it. Source = `base` (the
+ * post-mix pre-curve channels) — the same input "Fit from source" commits from, so the
+ * ghost previews exactly what a bake produces. (`final` is rejected: it is post-curve,
+ * so it would fold the very edits you are comparing against back into the ghost.)
+ */
+export const prospectiveFitChannels = (base: Channels, detail: number, smooth: number): Channels => {
+  const t = fitChannelsToTracks(base, detail, smooth);
+  return { L: trackToRamp(t.L), C: trackToRamp(t.C), h: trackToRamp(t.h) };
+};
+
 /** Run the full pipeline (slot mods + mix + curves + global chain + noise). */
 const fullResult = (slotA: number, slotB: number, curves: ReturnType<typeof sampleCurves>, seed: number): BuildResult => {
   const s = readSlice();
@@ -182,16 +212,8 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
 
   fitFromSource: () => {
     const s = get();
-    const k = (11 - s.detail) / 3;
     const base = baseChannelsFrom(s.slotA, s.slotB, s.noiseSeed);
-    set({
-      tracks: {
-        L: rampToBezierTrack(smoothChannel(base.L, s.smooth), 'L', 'Lightness', { eps: 0.01 * k }),
-        C: rampToBezierTrack(smoothChannel(base.C, s.smooth), 'C', 'Chroma', { eps: 0.01 * k }),
-        h: rampToBezierTrack(smoothChannel(unwrapHue(base.h), s.smooth), 'h', 'Hue', { eps: 0.06 * k }),
-      },
-      curvesOn: true,
-    });
+    set({ tracks: fitChannelsToTracks(base, s.detail, s.smooth), curvesOn: true });
   },
   resetCurves: () => genEdit(() => set({ tracks: null, curvesOn: false })),
   resetAll: () =>
@@ -255,6 +277,13 @@ export interface GeneratorDerived {
   stripB: RGB[];
   ramp: RGB[];
   base: Channels;
+  /**
+   * The editor's "ghost" scope: the RESULT output channels (post-global Modify chain),
+   * hue unwrapped. Tracks the Modify dials and is defined even with curves off (then it
+   * is the live result). With curves ON it is built from the PROSPECTIVE fit instead of
+   * the committed curve, so detail/smooth preview a re-fit before any bake.
+   */
+  ghost: Channels;
   config: GradientConfig;
 }
 
@@ -269,6 +298,7 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   const curvesOn = useGeneratorStore((s) => s.curvesOn);
   const tracks = useGeneratorStore((s) => s.tracks);
   const detail = useGeneratorStore((s) => s.detail);
+  const smooth = useGeneratorStore((s) => s.smooth);
   const noiseSeed = useGeneratorStore((s) => s.noiseSeed);
 
   const modsA = useMemo(() => sliceToModsA(slice), [slice]);
@@ -293,6 +323,36 @@ export const useGeneratorDerived = (): GeneratorDerived => {
     [srcA, srcB, modsA, modsB, params, sampledCurves, noiseSeed],
   );
 
+  // `base` (post-mix, pre-curve channels) feeds the curve-fit AND the editor's ghost
+  // preview. Memoize it on its REAL inputs (sources + slot mods + mix) — not via
+  // built.base, whose object identity churns on every keyframe edit (sampledCurves
+  // changes) even though base is curve-independent. A stable identity keeps the ghost's
+  // prospective fit (Douglas-Peucker + bezier resample) from recomputing each drag frame.
+  const base = useMemo(
+    () => buildGradientRamp(srcA, srcB, modsA, modsB, params, null, 1).base,
+    [srcA, srcB, modsA, modsB, params],
+  );
+
+  // The editor's ghost scope: the post-global RESULT channels (so it follows the Modify
+  // chain), hue unwrapped. Curves ON → build from the PROSPECTIVE fit so detail/smooth
+  // preview a re-fit; curves OFF → the live result. The expensive override build (DP fit +
+  // pipeline) is its OWN memo keyed only on its real inputs (NOT tracks/built), so editing
+  // keyframes — which churns `built` — doesn't re-run the fit every drag frame.
+  const hasTracks = !!tracks;
+  // Note: `unwrapHue` runs on the override's already-unwrapped prospective-fit hue (it was
+  // fit from unwrapHue(base.h)); that's self-consistent — unwrap of a continuous array just
+  // re-bases it — and any extra divergence from the editable h track under a steep curve is
+  // expected. It also unwraps the curves-OFF live hue, which genuinely needs it.
+  const overrideGhost = useMemo(() => {
+    if (!curvesOn || !hasTracks) return null;
+    const f = buildGradientRamp(srcA, srcB, modsA, modsB, params, prospectiveFitChannels(base, detail, smooth), noiseSeed).final;
+    return { L: f.L, C: f.C, h: unwrapHue(f.h) };
+  }, [curvesOn, hasTracks, base, detail, smooth, srcA, srcB, modsA, modsB, params, noiseSeed]);
+  const liveGhost = useMemo(() => ({ L: built.final.L, C: built.final.C, h: unwrapHue(built.final.h) }), [built]);
+  // When the override supersedes (curves on), the ghost is referentially stable across
+  // keyframe edits (which only churn `built`/`liveGhost`), so trackRanges doesn't rebuild.
+  const ghost = overrideGhost ?? liveGhost;
+
   const config = useMemo(() => {
     const k = (11 - detail) / 3;
     // maxStops scales with the detail dial. The default cap (32) truncated rich
@@ -301,7 +361,7 @@ export const useGeneratorDerived = (): GeneratorDerived => {
     return fitRampToStops(built.ramp, { targetDE: Math.max(0.004, 0.012 * k), maxStops: Math.round(32 + detail * 12) });
   }, [built.ramp, detail]);
 
-  return { stripA, stripB, ramp: built.ramp, base: built.base, config };
+  return { stripA, stripB, ramp: built.ramp, base, ghost, config };
 };
 
 /** Catalog accessor for the source picker (memoised in presetCatalog). */

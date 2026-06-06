@@ -16,6 +16,8 @@
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useGeneratorStore, useGeneratorDerived, genEdit } from '../store/generatorStore';
+import { showToast } from '../../engine/store/toastStore';
+import type { ChannelTracks } from './ChannelGraphEditor';
 import { buildPresetCatalog } from '../core/presetCatalog';
 import { ChannelGraphEditor, CHANNEL_PLOT_INSET_LEFT, CHANNEL_PLOT_INSET_RIGHT } from './ChannelGraphEditor';
 import { GradientStrip } from './GradientStrip';
@@ -71,7 +73,10 @@ const SourceRow: React.FC<{
   };
 
   return (
-    <div className={`relative min-w-0 transition-opacity ${dimmed ? 'opacity-40' : ''}`}>
+    // When curves drive the output the source is FROZEN: dimmed AND non-interactive
+    // (pointer-events-none) so a click/drag that would silently do nothing can't read
+    // as broken. The host shows a "bake/reset to edit sources" hint above.
+    <div className={`relative min-w-0 transition-opacity ${dimmed ? 'opacity-40 pointer-events-none select-none' : ''}`} aria-disabled={dimmed || undefined}>
       <div className="flex items-center gap-2 mb-0.5">
         <span className="text-[10px] uppercase tracking-wide text-gray-500 w-14 shrink-0">Source {which}</span>
         <span className="text-[11px] text-gray-200 truncate">{name}</span>
@@ -91,13 +96,21 @@ const SourceRow: React.FC<{
         </button>
         <GeneratorSlotMods which={which} />
       </div>
-      {open && <GradientSourcePicker title={`Source ${which}`} value={preset} onChange={onPick} onClose={() => setOpen(false)} placement="left" />}
+      {open && <GradientSourcePicker title={`Source ${which}`} value={preset} onChange={onPick} onClose={() => setOpen(false)} />}
     </div>
   );
 };
 
+// An empty editable track set — used to render the curve editor as a read-only SCOPE
+// (dimmed, ghost-only) before any curves are fit, so the channels are always visible.
+const EMPTY_TRACKS: ChannelTracks = {
+  L: { id: 'L', type: 'float', label: 'Lightness', keyframes: [], color: '#22d3ee' },
+  C: { id: 'C', type: 'float', label: 'Chroma', keyframes: [], color: '#a855f7' },
+  h: { id: 'h', type: 'float', label: 'Hue', keyframes: [], color: '#22c55e' },
+};
+
 export const GeneratorStage: React.FC = () => {
-  const { stripA, stripB, ramp, config } = useGeneratorDerived();
+  const { stripA, stripB, ramp, config, ghost } = useGeneratorDerived();
   const slotA = useGeneratorStore((s) => s.slotA);
   const slotB = useGeneratorStore((s) => s.slotB);
   const setSlot = useGeneratorStore((s) => s.setSlot);
@@ -114,21 +127,23 @@ export const GeneratorStage: React.FC = () => {
   const resetCurves = useGeneratorStore((s) => s.resetCurves);
   const [resultTall, setResultTall] = useState(false);
 
-  // Live re-fit: while curves are ON, dragging detail/smooth re-runs the fit (debounced),
-  // so the channel curves re-shape as you drag instead of only on "Fit from source".
-  // We track the last-seen detail|smooth so the effect ignores the curvesOn flip itself
-  // (Fit already produced those curves) and only re-fits on a genuine slider change.
-  const fitRef = useRef(fitFromSource);
-  fitRef.current = fitFromSource;
-  const lastFitKey = useRef<string | null>(null);
-  useEffect(() => {
-    const key = `${detail}|${smooth}`;
-    if (!curvesOn) { lastFitKey.current = key; return; } // nothing to fit when curves are off
-    if (lastFitKey.current === key) return; // unchanged (e.g. the Fit that turned curves on)
-    lastFitKey.current = key;
-    const t = window.setTimeout(() => genEdit(() => fitRef.current()), 120);
-    return () => window.clearTimeout(t);
-  }, [detail, smooth, curvesOn]);
+  // Decision 3: detail/smooth are NON-DESTRUCTIVE. They no longer schedule a live re-fit
+  // (which silently discarded hand-edited keyframes). Instead they drive the faint dashed
+  // GHOST (the result scope the editor paints behind the live curve — see
+  // useGeneratorDerived), so the user previews what a re-fit WOULD commit before committing
+  // it. Track replacement happens only on an explicit "Fit / Re-fit from source".
+  // Explicit commit of the prospective fit → the editable curves (one undo entry). When
+  // it overwrites existing curves it warns (the previous edits are replaced but undoable).
+  const commitFit = () => {
+    // Any existing tracks get replaced (fitFromSource is unconditional), even if curves
+    // were toggled off but kept — so warn on tracks presence, not just curvesOn.
+    const overwrote = !!tracks;
+    genEdit(fitFromSource);
+    showToast(
+      overwrote ? 'Curves re-fit from source — previous edits replaced (Ctrl+Z to undo)' : 'Curves fit from source',
+      overwrote ? 'warning' : 'success',
+    );
+  };
 
   const { ref: graphRef, w: graphW, h: graphH } = useContainerSize();
   // The gradients above the curve editor are inset to line up with its plot area
@@ -149,6 +164,11 @@ export const GeneratorStage: React.FC = () => {
         className={`flex-1 min-h-0 overflow-y-auto pt-3 pb-2 flex flex-col gap-1.5 ${tracks ? '' : 'justify-center'}`}
         style={{ paddingLeft: padLeft, paddingRight: padRight }}
       >
+        {curvesOn && (
+          <div className="text-[10px] text-cyan-300/70 bg-cyan-500/[0.06] border border-cyan-500/20 rounded-sm px-2 py-1 mb-0.5">
+            Curves drive the output — sources are locked. <span className="text-cyan-200">Re-fit</span> or <span className="text-cyan-200">Reset points</span> below to edit the sources again.
+          </div>
+        )}
         <SourceRow which="A" ramp={stripA} preset={slotA} onPick={(i) => setSlot('A', i)} height={40} dimmed={curvesOn} />
         {/* The L/C/h blend sits BETWEEN A and B as vertical sliders bridging A→B. */}
         <MixBlend onSwap={swap} dimmed={curvesOn} />
@@ -171,7 +191,7 @@ export const GeneratorStage: React.FC = () => {
             <div className="flex items-center gap-2 min-w-0">
               <div className="text-xs text-gray-400 shrink-0">Result</div>
               <FavStar config={config} name="Generated" source="Generator" />
-              {curvesOn && <span className="text-[10px] text-cyan-400/70 truncate">curves drive the output — sources dimmed</span>}
+              {curvesOn && <span className="text-[10px] text-cyan-400/70 truncate">curves drive output — Re-fit / Reset points to edit sources</span>}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-[11px] text-gray-500">{config.stops.length} stops</span>
@@ -196,8 +216,12 @@ export const GeneratorStage: React.FC = () => {
       <div className="shrink-0 flex flex-col border-t border-white/10 bg-zinc-950">
         <div className="flex items-center gap-2 flex-wrap px-3 py-1.5 shrink-0">
           <span className="text-[10px] uppercase tracking-wide text-gray-500">Curves</span>
-          <button onClick={() => genEdit(fitFromSource)} className="text-[11px] px-2 py-1 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30">
-            Fit from source
+          <button
+            onClick={commitFit}
+            title={curvesOn ? 'Re-fit the curves from the source at the current detail/smooth — replaces the current curves (undoable)' : 'Decompose the current mix into editable Lightness / Chroma / Hue curves'}
+            className="text-[11px] px-2 py-1 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30"
+          >
+            {curvesOn ? 'Re-fit from source' : 'Fit from source'}
           </button>
           <button onClick={resetCurves} className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-300 hover:bg-white/10">
             Reset points
@@ -220,17 +244,27 @@ export const GeneratorStage: React.FC = () => {
             <span className="w-4 text-gray-300">{smooth}</span>
           </div>
         </div>
+        {/* The editor is ALWAYS mounted: editable when curves exist, otherwise a dimmed
+            read-only SCOPE that still shows the ghost (the result channels) so you can
+            watch the Modify dials shape the gradient before fitting. Dimmed whenever the
+            curves aren't driving the output. */}
         <div
           ref={graphRef}
-          className={`overflow-hidden transition-opacity ${tracks && !curvesOn ? 'opacity-50' : ''}`}
-          style={{ height: tracks ? 264 : 84 }}
+          className={`relative overflow-hidden transition-opacity ${curvesOn ? '' : 'opacity-50'}`}
+          style={{ height: curvesOn || tracks ? 264 : 200 }}
         >
-          {tracks ? (
-            <ChannelGraphEditor tracks={tracks} onTracksChange={setTracks} width={graphW} height={graphH} previewRamp={ramp} />
-          ) : (
-            <div className="h-full flex items-center justify-center text-center text-[11px] text-gray-500 px-4">
-              No curves yet — click <span className="text-cyan-300 mx-1">Fit from source</span> to decompose the current mix into editable
-              Lightness / Chroma / Hue curves.
+          <ChannelGraphEditor
+            tracks={tracks ?? EMPTY_TRACKS}
+            onTracksChange={setTracks}
+            width={graphW}
+            height={graphH}
+            previewRamp={ramp}
+            ghost={ghost}
+            interactive={!!tracks}
+          />
+          {!tracks && (
+            <div className="absolute inset-x-0 bottom-1 text-center text-[10px] text-gray-500 pointer-events-none">
+              Channel scope — <span className="text-cyan-300">Fit from source</span> to make these curves editable.
             </div>
           )}
         </div>
