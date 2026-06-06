@@ -59,8 +59,12 @@ capture in 40+), so the pointer controller joins the dominant paradigm; preceden
 file/cross-app island (scope narrows, no signature change); **S6 fullscreen well MIGRATES to the
 pointer/(c) path → ⚠ RE-VERIFY fullscreen at runtime (concept-ok≠works lesson).** Enabler = the (c)
 `getRect?` amendment (ratified above). Effort ~L (1–2-wk P2 stream): 2 spines [avatar] + [unified target
-list] → then drop-resolution/cross-tab. **Open decisions pending user** (cross-app export drag? mobile
-timing? avatar richness? tab-dwell ~400ms?).
+list] → then drop-resolution/cross-tab.
+**P2 DRAG DECISIONS — LOCKED 2026-06-06:** (1) `getRect?` amendment ratified; (2) **KEEP HTML5 cross-app
+export drag** on result sources (drag a gradient out to other apps — manage the avatar/drag-image
+collision); (3) **desktop-first** pointer drag, **mobile uses Send-to menu** (touch-drag = fast-follow);
+(4) avatar = **clean core (lift/follow/settle) + in-flight target hints** (valid/invalid affordance,
+target-action hints, well highlighting — per "polish as hard as possible"); (5) tab-dwell ~400ms (tune live).
 
 **NEW-FINDING → P2 (what does clicking a gradient DO — key design input):** surfaced via S2 — currently
 click=apply everywhere, but (a) it blocks clicking the name to rename, and (b) applying makes no sense when
