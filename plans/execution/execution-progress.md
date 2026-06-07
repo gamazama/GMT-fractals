@@ -167,7 +167,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | S6 | W11 Fullscreen configs | 1 | ✅ **merged `94e8e5d`** | `exec/s6-fullscreen` | foundation + fixes: drop-race in W4 kernel (capture→bubble reset — ratified into (b)) + isotropic geometries (radial/conic round). User visual confirm (drop opens fullscreen; shapes round). Integration gate green. FUTURE: richer options (backlog "fullscreen v2") |
 | S7 | W12 ColorBox generator mode (v1 addition) | 1 | ✅ **merged `5c2a280`** | `exec/s7-colorbox` | easings.ts + buildColorBoxRamp + generatorMode + visual easing picker + colored L/C/h sliders (NEW additive `ScalarInput.trackBackground`) + colorBoxFit.ts (frozen-ahead for P2 drop) + "Fit from gradient" interim button. Fixed hue-key-casing black-ramp bug. User visual confirm; full gate green |
 | S8 | W13 interpolation bases | 1 | ✅ **resolved — DEFERRED, no code** | `exec/s8-interp` | S8 REFUTED Tier A: 2-point `sampleSorted` can't overshoot → monotone-cubic degenerates to smoothstep (already ships as smooth/cubic); the no-overshoot win needs **multi-point = Tier B**. **W13 entirely deferred to Tier B**; v1 ships nothing from it. Zero code (sampler byte-unchanged). Good catch (flawed scope-doc premise). Rationale → project memory |
-| P2 | W2 portability integration + W9 snapshot | 2 | not-started | `exec/p2-portability` | depends: ALL Phase 1; touches every hero. **THE global-gradient-DnD phase:** every result/swatch becomes a drag SOURCE + the export/PNG/fullscreen wells wired + drag↔Send-to share ONE target list + canonical hero. Accumulated P2 inputs: click=select-vs-apply model, cross-tab undo focus, hero-resize state-loss, facet-naming, ImageStage coexist, favientTargets→engine-registry migration, fold ⛶ into hero. *(grown large — consolidate into a P2 scope doc before launch)* |
+| P2 | W2 portability integration + W9 snapshot | 2 | **scoped → ready to fan out** | `exec/p2-portability` (per sub-stream) | ✅ **SCOPED 2026-06-07** → `plans/p2-scope.md` (PENDING-HUMAN-REVIEW). **8 sub-streams** behind one already-ratified gate (the additive (c) `getRect?`): **pre** = P2-F ImageStage coexistence (S); **W1** P2-A canonical hero + select→act (L) ‖ P2-C unified target list + favientTargets→registry (M-L) ‖ P2-E gen+image doc round-trip (M); **W2** P2-B hero state-lift (S, needs A) ‖ P2-G favourite Update-vs-Save-as-new + facetName wiring (M, needs A) ‖ P2-D drag/avatar/cross-tab (L, needs A+C); **W3** P2-D finish → P2-H W9 snapshot v1 (S-M) → close-out + runtime re-verify. ~3-4wk. Only ONE frozen-iface change in all P2 (additive getRect, done). **Decisions for user pending** (see changelog). **Sequencing: after live-fractal merges; fullscreen-v2 P0+P1 lands independently (one planned S6-well re-touch in P2-C).** |
 | P3 | `/polish` pass | 3 | deferred | — | after structure lands |
 
 ---
@@ -422,6 +422,25 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-07 (PM) — **P2 SCOPE DELIVERED** → `plans/p2-scope.md` (309 lines, PENDING-HUMAN-REVIEW;
+  run `w4cu5rnoj`, 5 agents). **Verdict: P2 is fan-outable into 8 ordered sub-streams** behind a single
+  ratification gate (the additive (c) `getRect?`, already ratified) — only ONE frozen-interface change in
+  all of P2; everything else is new additive modules. **Decomposition:** pre = **P2-F** ImageStage
+  coexistence fix (S); **Wave 1** ‖ = **P2-A** canonical hero + select→act (L) · **P2-C** unified target
+  list + favientTargets→registry migration (M-L) · **P2-E** generator+image doc round-trip (M); **Wave 2**
+  ‖ = **P2-B** hero state-lift (S, needs A) · **P2-G** favourite Update-vs-Save-as-new + facetName wiring
+  (M, needs A) · **P2-D** drag/avatar/cross-tab (L, the drag sub-plan, needs A+C); **Wave 3** = P2-D finish
+  → **P2-H** W9 snapshot v1 (S-M leaf) → close-out + runtime re-verify. **~3-4 focused weeks; P2-D is the
+  biggest single piece (~1-2wk).** **Recommended sequencing:** land P2 AFTER the live-fractal carve merges;
+  let fullscreen-v2 P0+P1 land independently and accept ONE planned S6-well re-touch during P2-C (rather
+  than coordinating all three up front). **Biggest risk:** runtime≠gates on the S6 fullscreen well
+  migrating (b)-HTML5 → (c)-SendTarget+getRect (S6 already taught concept-ok≠works — a merge was backed
+  out) → mandatory live re-verify; close second = every-hero blast radius of the P2-A canonical-hero
+  rewrite. **DECISIONS FOR USER:** (1) cross-mode undo focus — auto-focus the affected mode [probe rec:
+  yes] vs current no-switch; (2) W9 snapshot v1 vs defer [rec: v1-minimal, no dependents]; (3) start P2
+  after live-fractal + accept one fullscreen-v2 re-touch [rec: yes]; (4) exact select→act option set +
+  selection affordance + whether Stops stays minimal. **Next: user ratifies decisions → orchestrator
+  fans out P2-F then Wave 1.**
 - 2026-06-07 (PM, **user present, driving toward plan completion**) — **3 OVERNIGHT CLEANUPS MERGED +
   P2 SCOPE PROBE LAUNCHED.** User reviewed the morning queue and authorized: (1) merge all 3 cleanup
   branches; (2) generate the P2 scope doc next; (3) **wait** on live-fractal (still finishing in wt-lf).
