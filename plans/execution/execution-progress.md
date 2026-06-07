@@ -426,6 +426,14 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **✅ P2-F MERGED** (`c817911`; merge of `exec/p2-f-imagestage` rebased over live-fractal;
+  user pre-authorized "visual check happens once merged"). ImageStage file-drop coexists with the
+  DragWellsOverlay via the registry-driven early-return (+11/−8). Post-merge gate green (tsc 0 ·
+  test:palette ALL PASS). **Housekeeping:** retired the live-fractal worktree — git de-registered + pruned
+  `wt-lf`, killed 10 stale `npm run dev`/vite processes the bootstrap session left running (they locked the
+  folder + held ports); the empty `wt-lf` dir lingers on disk (held by an editor/shell, harmless). dev
+  node_modules intact throughout. One `wt-p2a` dev server (from 00:28, pre-rebase/iter2) still up — pending
+  user's call to close. Next: continue P2-A prototype iteration; fan out Wave 1 (P2-C, P2-E).
 - 2026-06-08 — **✅ LIVE-FRACTAL CARVE MERGED into integration `cbfad67`** (merge of `exec/livefractal`
   91ae8f5; 55 files +6196/−1752; NO conflicts). **Focused independent review (run `w14heyn2c`, 2 lenses)
   came back 0 blockers / 0 real-bugs:** Lens A (nucleus correctness) **merge-ready** — traced the
