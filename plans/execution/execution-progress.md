@@ -29,11 +29,11 @@ All Phase-0 foundations + all Phase-1 streams merged & gate-green.
   always co-active; no smoke covers it — the deep-zoom smokes are CPU-builder-only, the GX one only checks
   distinctColours≥50). On clean → merge as-is. Open → backlog (see below). **OWNED BY bootstrap session
   through merge; fresh orchestrator owns overnight cleanups + P2 (avoid double-editing this log).**
-- **(b) OVERNIGHT AUTONOMOUS RUN ✅ COMPLETE 2026-06-07** (see MORNING DIGEST at top of changelog).
-  Produced a morning review queue, **NOTHING MERGED**, integration pristine at `bfc8cba`:
-  `fullscreen-v2-scope.md` (doc, has 3 decisions for you) + 3 gate-green cleanup branches —
-  `exec/cleanup-knip-entry` (`16e740e`), `exec/cleanup-facet-naming` (`121e605`),
-  `exec/cleanup-oklab-dedup` (`a007127`). Human-run `p2-scope.md` probe: still not present on disk.
+- **(b) OVERNIGHT AUTONOMOUS RUN ✅ COMPLETE + ALL 3 CLEANUPS MERGED 2026-06-07** (PM, user-authorized).
+  The 4 overnight units: `fullscreen-v2-scope.md` (doc, → backlog/decisions) + 3 cleanups now **MERGED**
+  into integration (knip `91313d8` · oklab `9a83f0f` · facet `d2227f7` = HEAD; combined gate green).
+  fullscreen-v2 decision (a) resolved (user: S6 live+good). **P2 scope probe launched** → `plans/p2-scope.md`
+  (the human-run probe never landed). Live-fractal still in wt-lf (user: wait).
 
 **🔁 ORCHESTRATOR HANDOFF (2026-06-07):** the bootstrap orchestrator session got heavy → handing the role
 to a FRESH orchestrator (doc-anchored, this file is the memory). In-flight to ingest: the live-fractal
@@ -422,6 +422,22 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-07 (PM, **user present, driving toward plan completion**) — **3 OVERNIGHT CLEANUPS MERGED +
+  P2 SCOPE PROBE LAUNCHED.** User reviewed the morning queue and authorized: (1) merge all 3 cleanup
+  branches; (2) generate the P2 scope doc next; (3) **wait** on live-fractal (still finishing in wt-lf).
+  **Merged --no-ff into integration** (off the moved HEAD `1a91934`, which the bootstrap session had
+  advanced with the live-fractal review entries): knip `91313d8` · oklab `9a83f0f` · facet `d2227f7`
+  (now HEAD). **Combined integration gate GREEN: tsc 0 · test:palette ALL PASS** (incl. the new
+  facetname suite). All 3 merged with zero conflicts (disjoint files; cleanup branches never committed
+  execution-progress.md so no log collision). `fullscreen-v2-scope.md` committed to integration alongside
+  this log update. **User confirmed S6 fullscreen is live + good** (generator-result gradient) → resolves
+  fullscreen-v2 decision (a); v2 itself stays a **post-plan backlog initiative**, not a v1 gate. **P2
+  (portability integration) is now the critical path to completing the plan** — its scope doc never
+  landed (human probe absent on disk), so launching a read-only consolidation probe → `plans/p2-scope.md`
+  (folds the ~7 accumulated P2 inputs: hybrid drag paradigm, click=select-vs-apply, canonical hero,
+  hero-resize state-loss, cross-mode undo-focus, favientTargets→registry migration, ImageStage
+  coexistence). Live-fractal untouched (bootstrap session owns it through merge; gated on the user's
+  targeted **fluid-toy AT+LA deep Mandelbrot vs pre-fix** visual per the Lens-A reservation).
 - 2026-06-07 — **LIVE-FRACTAL CARVE: 2-lens independent review PASS (both MERGE-READY).** Lens B
   (lifecycle/GX/layering): leak-fix solid + regression-guarded (24-cycle smoke), GX scoped/opt-in off the
   one-ramp seam, engine/fractal host-agnostic, all shader loops bounded — clean. Lens A (carve
