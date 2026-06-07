@@ -88,6 +88,30 @@ export class HPReal {
         return new HPReal((this.m * this.m) >> BigInt(this.p), this.p);
     }
 
+    /** this / o, kept in fixed-point: ((this.m << p) / o.m). BigInt
+     *  division truncates toward zero — acceptable given the orbit's
+     *  precision margin. Returns zero on divide-by-zero (caller guards). */
+    div(o: HPReal): HPReal {
+        if (o.m === ZERO) return HPReal.zero(this.p);
+        return new HPReal((this.m << BigInt(this.p)) / o.m, this.p);
+    }
+
+    /** |this| as a fresh HPReal. */
+    abs(): HPReal { return this.m < ZERO ? new HPReal(-this.m, this.p) : this; }
+
+    /** Sign-aware comparison: −1 / 0 / +1 for this <, =, > o. Requires same p. */
+    cmp(o: HPReal): number { return this.m < o.m ? -1 : this.m > o.m ? 1 : 0; }
+
+    /** Recover ~106 bits as a Dekker double-double (hi, lo): `hi + lo`
+     *  approximates the value far past f64's 53-bit mantissa. `hi` is the
+     *  nearest f64; `lo` carries the sub-ulp residual. Used to hand a
+     *  high-precision nucleus centre back to the kernel's DD centre-offset. */
+    toDoubleDouble(): [number, number] {
+        const hi = this.toNumber();
+        const lo = this.sub(HPReal.fromNumber(hi, this.p)).toNumber();
+        return [hi, lo];
+    }
+
     /** True if value² > 4 (escape test). Cheaper than two `.toNumber()` round-trips. */
     isGreaterThanFour(): boolean {
         // (m / 2^p) > 4  ⟺  m > 4 · 2^p  ⟺  m > 1 << (p+2)
@@ -134,6 +158,10 @@ export class HPComplex {
         return new HPComplex(this.re.add(o.re), this.im.add(o.im));
     }
 
+    sub(o: HPComplex): HPComplex {
+        return new HPComplex(this.re.sub(o.re), this.im.sub(o.im));
+    }
+
     /** (a + bi)² = (a² − b²) + 2abi */
     sqr(): HPComplex {
         const a2 = this.re.sqr();
@@ -173,6 +201,25 @@ export class HPComplex {
             if (e > 0) base = base.sqr();
         }
         return result!;
+    }
+
+    /** (a + bi) / (c + di) = (a+bi)(c−di) / (c²+d²). Returns zero when the
+     *  divisor is zero (caller guards — used by Newton's nucleus step). */
+    div(o: HPComplex): HPComplex {
+        const denom = o.re.sqr().add(o.im.sqr());
+        if (denom.m === ZERO) return HPComplex.zero(this.re.p);
+        const re = this.re.mul(o.re).add(this.im.mul(o.im)).div(denom);
+        const im = this.im.mul(o.re).sub(this.re.mul(o.im)).div(denom);
+        return new HPComplex(re, im);
+    }
+
+    /** Chebyshev (L∞) norm max(|re|, |im|) as an HPReal — kept in exact
+     *  fixed point so it stays valid even when the value (e.g. a period
+     *  orbit's derivative) far exceeds f64's range. */
+    chebyNorm(): HPReal {
+        const ar = this.re.abs();
+        const ai = this.im.abs();
+        return ar.cmp(ai) >= 0 ? ar : ai;
     }
 
     /** |z|² (still in HPReal precision). */

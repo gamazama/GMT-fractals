@@ -8,7 +8,7 @@
  * Run: `npm run smoke:deep-zoom-orbit` (or directly: `npx tsx debug/smoke-deep-zoom-orbit.mts`)
  */
 
-import { computeReferenceOrbit } from '../fluid-toy/deepZoom/referenceOrbit.ts';
+import { computeReferenceOrbit } from '../engine/fractal/deepZoom/referenceOrbit.ts';
 
 let failed = 0;
 const check = (name: string, ok: boolean, msg?: string) => {
@@ -35,7 +35,11 @@ console.log('case A: c=(0,0), should stay at zero');
 
 console.log('case B: c=(1,0), should escape fast');
 {
-    const res = computeReferenceOrbit({ centerX: 1, centerY: 0, zoom: 1, maxIter: 50 });
+    // disableAutoReference: this case verifies the raw orbit math at the literal
+    // centre. c=(1,0) escapes, which would otherwise trigger the ADR-0065
+    // auto-reference search and relocate to a non-escaping point. Auto-reference
+    // behaviour is covered by smoke-gx-fractal-glitch.
+    const res = computeReferenceOrbit({ centerX: 1, centerY: 0, zoom: 1, maxIter: 50, disableAutoReference: true });
     check('escaped', res.escaped);
     check('escaped within 5 iters', res.length <= 6, `length was ${res.length}`);
     // Z[0]=0, Z[1]=0²+1=1, Z[2]=1²+1=2, Z[3]=2²+1=5 (|Z[3]|²=25>4 → escape).
@@ -120,7 +124,9 @@ console.log('case F: power=3 Mandelbrot, c=(0,0) — stays at zero');
 
 console.log('case G: power=3 Mandelbrot, c=(0.5, 0) — z=0,0.5,0.625,0.744');
 {
-    const res = computeReferenceOrbit({ centerX: 0.5, centerY: 0, zoom: 1, maxIter: 10, power: 3 });
+    // disableAutoReference: raw orbit-math at the literal centre. c=(0.5,0) escapes
+    // (~iter 6) → would otherwise trigger the ADR-0065 deepest-reference search.
+    const res = computeReferenceOrbit({ centerX: 0.5, centerY: 0, zoom: 1, maxIter: 10, power: 3, disableAutoReference: true });
     check('Z[1] ≈ 0.5 (= 0³ + 0.5)', Math.abs(res.orbit[1 * 4 + 0] - 0.5) < 1e-10);
     check('Z[2] ≈ 0.625 (= 0.5³ + 0.5)', Math.abs(res.orbit[2 * 4 + 0] - 0.625) < 1e-10);
     // Z[3] = 0.625³ + 0.5 = 0.244 + 0.5 = 0.744

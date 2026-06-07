@@ -14,13 +14,13 @@
  * LA prediction within the threshold radius.
  */
 
-import { computeReferenceOrbit } from '../fluid-toy/deepZoom/referenceOrbit.ts';
-import { buildLATable } from '../fluid-toy/deepZoom/laBuilder.ts';
+import { computeReferenceOrbit } from '../engine/fractal/deepZoom/referenceOrbit.ts';
+import { buildLATable } from '../engine/fractal/deepZoom/laBuilder.ts';
 import {
     type Complex,
     cAdd,
     cMul,
-} from '../fluid-toy/deepZoom/LAInfoDeep.ts';
+} from '../engine/fractal/deepZoom/LAInfoDeep.ts';
 
 let failed = 0;
 const check = (name: string, ok: boolean, msg?: string) => {

@@ -27,8 +27,13 @@
 
 import type { RGB } from './oklab';
 
-/** The geometries the gallery cycles. Room left for Diamond / Mirror / Bands. */
-export type GeometryId = 'linear' | 'radial' | 'conic' | 'arched' | 'scurve' | 'random';
+/** The geometries the gallery cycles. Room left for Diamond / Mirror / Bands.
+ *  `fractal` is special: it is GPU-rendered by `engine/fractal`'s
+ *  FractalColorRenderer (a live Mandelbrot coloured by the ramp), NOT one of the
+ *  pure 2D `sampleGeometry` fields — the overlay mounts a WebGL canvas for it and
+ *  bypasses `renderGeometry`. It lives in this union/list only so the selector
+ *  offers it; `sampleGeometry`/`renderGeometry` treat it as a no-op flat field. */
+export type GeometryId = 'linear' | 'radial' | 'conic' | 'arched' | 'scurve' | 'random' | 'fractal';
 
 /** Ordered selector list (id + human label). */
 export const GEOMETRIES: ReadonlyArray<{ id: GeometryId; label: string }> = [
@@ -38,10 +43,15 @@ export const GEOMETRIES: ReadonlyArray<{ id: GeometryId; label: string }> = [
   { id: 'arched', label: 'Arched' },
   { id: 'scurve', label: 'S-curve' },
   { id: 'random', label: 'Randomized' },
+  { id: 'fractal', label: 'Fractal' },
 ];
 
 /** Whether a geometry consumes the seed/amount controls (only `random` does). */
 export const isStochastic = (geom: GeometryId): boolean => geom === 'random';
+
+/** Whether a geometry is the GPU-rendered live fractal (its own WebGL canvas +
+ *  live phase/repeats/mapping controls), not a pure 2D `sampleGeometry` field. */
+export const isFractal = (geom: GeometryId): boolean => geom === 'fractal';
 
 export interface GeometryParams {
   /** Randomization strength 0..1 (point density + colour jitter). Only `random` reads it. */

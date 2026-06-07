@@ -38,8 +38,10 @@ export const PRECISION_ALT_MULT = 0.2;
 export const SPLAT_RADIUS_UV = 0.002;
 
 // ── Rendering ────────────────────────────────────────────────────────────────
-/** 1D LUT width for the gradient texture (256 × 1 RGBA). */
-export const GRADIENT_LUT_WIDTH = 256;
+/** 1D LUT width for the gradient texture (256 × 1 RGBA). Re-exported from the
+ *  carved `engine/fractal` library so the width is defined once and shared by
+ *  fluid-toy + the Gradient Explorer live-fractal renderer. */
+export { FRACTAL_GRADIENT_LUT_WIDTH as GRADIENT_LUT_WIDTH } from '../engine/fractal/GradientLutManager';
 
 /** Bloom extract soft-knee above threshold — controls feather width. */
 export const BLOOM_SOFT_KNEE = 0.5;
