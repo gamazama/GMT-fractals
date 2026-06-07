@@ -426,6 +426,19 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-07 (PM) — **P2-F (ImageStage coexistence) DONE — in-review, gate-green, NOT merged**
+  (commit `4e411d9` on `exec/p2-f-imagestage`, worktree `wt-p2f`, branched off integration `ff13cab`;
+  run `wf_f921d66b-b25`). **Finding:** ImageStage already had a coexistence guard but it HARDCODED the
+  favient MIME (`dataTransfer.types.includes(FAVIENT_DND_MIME)`); P2-F generalized it onto the frozen (b)
+  kernel — `isWellDrag(e)` = `wellsForTypes(types).length>0` — so ImageStage's window dragover/drop
+  early-returns for ANY registered well's MIME (the same query the overlay uses → they agree by
+  construction), and only genuine OS file drops proceed to image import. **Behaviorally identical today**
+  (only the Fullscreen well is registered, accepting exactly FAVIENT_DND_MIME) but auto-defers when
+  P2-C/P2-D register more wells — zero further edits. Diff +11/−8, `ImageStage.tsx` only; (b) consumed
+  read-only (no interface change); no shared-shell touched. Gates green (tsc 0 · test:palette ALL PASS).
+  /code-review +/simplify: 0 findings (the change IS the reuse/altitude fix). **HOLDS for: (1) user visual
+  confirm (drag-gradient→well vs OS-file-drop→import — no double-handling); (2) the live-fractal merge,
+  then rebase P2-F over it (disjoint, clean) before merging.** Then → fan out Wave 1 (P2-A ‖ P2-C ‖ P2-E).
 - 2026-06-07 (PM) — **P2 DECISIONS RATIFIED by user** (locked into `plans/p2-scope.md` top block):
   (1) **cross-mode undo focus = (b) auto-focus the affected mode** — supersedes the earlier user lean
   toward (a) tab-as-undo-step; (2) **W9 snapshot DEFERRED out of P2** → drop sub-stream **P2-H**; **P2 is
