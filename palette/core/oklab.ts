@@ -61,37 +61,20 @@ export const oklabToRgb = (lab: Lab): RGB => {
 };
 
 /**
- * OKLCh polar interpolation between two sRGB colours (verbatim from colorUtils).
- * Polar lerp preserves chroma; rectangular a,b lerp cuts through the achromatic
- * axis producing grey midpoints. Falls back to rectangular for near-greys
- * (hue is undefined). THIS is GMT's `blendSpace: 'oklab'` behaviour — the
- * stop-fitter must reproduce it exactly.
+ * OKLCh polar interpolation between two sRGB colours — GMT's `blendSpace: 'oklab'`
+ * behaviour, which the stop-fitter must reproduce exactly. Re-exported VERBATIM from
+ * the canonical engine copy (`utils/colorUtils.ts`) rather than re-implemented here,
+ * so the renderer and the palette tools can never drift. The local body was
+ * byte/behaviour-identical to the engine's (same coefficients, same 0.005 achromatic
+ * threshold, same polar-vs-rectangular fallback); collapsing it removes the duplicate.
+ * (Layering: palette/core depends on engine utils, never the reverse.)
+ *
+ * Note: `rgbToOklab` / `oklabToRgb` below are NOT re-exported — they are private
+ * (non-exported) in colorUtils, and re-exporting would require editing the frozen
+ * engine-core source. They stay local here (and remain byte-identical to the engine's
+ * private copies; the `lerpOklab` drift-pin still guards the shared math path).
  */
-export const lerpOklab = (c1: RGB, c2: RGB, t: number): RGB => {
-  const lab1 = rgbToOklab(c1);
-  const lab2 = rgbToOklab(c2);
-  const c1Chroma = Math.sqrt(lab1.a * lab1.a + lab1.b * lab1.b);
-  const c2Chroma = Math.sqrt(lab2.a * lab2.a + lab2.b * lab2.b);
-
-  if (c1Chroma < 0.005 || c2Chroma < 0.005) {
-    return oklabToRgb({
-      L: lab1.L + (lab2.L - lab1.L) * t,
-      a: lab1.a + (lab2.a - lab1.a) * t,
-      b: lab1.b + (lab2.b - lab1.b) * t,
-    });
-  }
-
-  const h1 = Math.atan2(lab1.b, lab1.a);
-  const h2 = Math.atan2(lab2.b, lab2.a);
-  let dh = h2 - h1;
-  if (dh > Math.PI) dh -= 2 * Math.PI;
-  if (dh < -Math.PI) dh += 2 * Math.PI;
-
-  const h = h1 + dh * t;
-  const c = c1Chroma + (c2Chroma - c1Chroma) * t;
-  const L = lab1.L + (lab2.L - lab1.L) * t;
-  return oklabToRgb({ L, a: c * Math.cos(h), b: c * Math.sin(h) });
-};
+export { lerpOklab } from '../../utils/colorUtils';
 
 /** Perceptual distance between two sRGB colours (Euclidean in OKLab). */
 export const oklabDistance = (c1: RGB, c2: RGB): number => {
