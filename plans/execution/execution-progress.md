@@ -14,13 +14,23 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
 All Phase-0 foundations + all Phase-1 streams merged & gate-green.
 
 **RUNNING IN PARALLEL (2026-06-07, non-blocking):**
-- **(a) LIVE-FRACTAL CARVE + shallow MVP** — human-in-loop (wt-lf, `exec/livefractal`). Extract fluid-toy's
-  fractal+gradient renderer to engine-core + add a GX fullscreen "Fractal" coloring mode (frozen gradient
-  + live phase/repeats/mapping). Shallow f32 only; deep-zoom deferred. Risky (FluidEngine carve) → gated on
-  smoke:fluid-toy/orbit + orchestrator independent review.
-- **(b) OVERNIGHT SCOPING (read-only → docs):** `p2-scope.md` (P2-scope probe RUNNING in a fresh
-  session) + `fullscreen-v2-scope.md` (NOT yet run — new orchestrator's first autonomous unit). No code,
-  no merges — a morning review queue.
+- **(a) LIVE-FRACTAL CARVE — DELIVERED, IN-REVIEW** (wt-lf, `exec/livefractal`; 36 files +3478/−1617 on
+  b2db36b). Carved fluid-toy's fractal kernel + gradient sampler + TSAA + GradientLutManager + the WHOLE
+  deepZoom/* stack + DeepZoomController → **engine/fractal/** (share-not-fork; fluid-toy via re-export
+  shims). New **FractalColorRenderer** (own WebGL2 ctx). GX "Fractal" mode (frozen ramp colormap + live
+  phase/repeats/mapping + palette-cycle + pan/zoom + PNG + WebGL2 fallback). **SCOPE-EXPANDED: deep zoom
+  INCORPORATED** (was deferred +L) — off-thread orbit/LA/AT, double-double pan, 1e-100 floor; 2822 colors
+  @1e-9. ADR-0063 (carve), ADR-0064 (LA→PO ref-index fix vs FractalShark). Gates green; NO fluid-toy
+  regression. **MERGE GATES: orchestrator independent review (RUNNING, 2 lenses) + USER visual confirm
+  (fluid-toy unchanged + fractal mode ON REAL HARDWARE — CI software-GPU can't assert deep-zoom visuals).**
+  Open → backlog: residual LA-vs-escaping-reference glitch (⚡ toggle workaround; real fix = FractalShark
+  glitch-detection + secondary refs). **OWNED BY bootstrap session through merge; fresh orchestrator owns
+  overnight cleanups + P2 (avoid double-editing this log).**
+- **(b) OVERNIGHT AUTONOMOUS RUN ✅ COMPLETE 2026-06-07** (see MORNING DIGEST at top of changelog).
+  Produced a morning review queue, **NOTHING MERGED**, integration pristine at `bfc8cba`:
+  `fullscreen-v2-scope.md` (doc, has 3 decisions for you) + 3 gate-green cleanup branches —
+  `exec/cleanup-knip-entry` (`16e740e`), `exec/cleanup-facet-naming` (`121e605`),
+  `exec/cleanup-oklab-dedup` (`a007127`). Human-run `p2-scope.md` probe: still not present on disk.
 
 **🔁 ORCHESTRATOR HANDOFF (2026-06-07):** the bootstrap orchestrator session got heavy → handing the role
 to a FRESH orchestrator (doc-anchored, this file is the memory). In-flight to ingest: the live-fractal
@@ -376,11 +386,13 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   work. Needs a separate `--write`/investigation pass (not a Phase-0 blocker; Phase-0 gates are tsc +
   test:palette + smoke:boot + orphans, all green).
 
-- **Fullscreen mode v2 — "make it awesome" (user, 2026-06-06).** Even once S6 works, its foundation
-  (6 static geometry renders) is too thin. Needs its own scoping pass: per-geometry parametric controls
-  (radial centre, conic angle, S-curve shape, arch radius), more geometries (Diamond/Mirror/Bands/
-  tiling), live/animated preview, apply-to-content previews, comparison/grid, zoom-pan. Scope with the
-  user after S6 is fixed. (P2: fold the ⛶ open into the canonical hero + add gradient drag sources.)
+- **Fullscreen mode v2 — "make it awesome" (user, 2026-06-06).** ✅ **SCOPED 2026-06-07** →
+  `plans/fullscreen-v2-scope.md` (autonomous probe, PENDING-HUMAN-REVIEW). Per-geometry parametric
+  controls + new geometries + live/animated preview + comparison grid + zoom-pan. Verdict: additive over
+  pure `rampGeometry.ts`; v1-of-v2 (param contract redesign → conditional sliders) is S/M and stands alone;
+  sharp edge = `FullscreenGradientOverlay.tsx` triple-overlap with P2 well-migration + live-fractal mode.
+  Decisions for user in the doc (confirm S6 live-correct first; v2-vs-P2/live-fractal ordering; v1 geom set).
+  (P2: fold the ⛶ open into the canonical hero + add gradient drag sources.)
 
 - **Auto-name generated/extracted favourites from facets (user, 2026-06-06).** Favouriting a Generator
   result (and Image / future ColorBox) currently yields a flat "Generated" name. Instead derive a
@@ -395,7 +407,97 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
-- 2026-06-06 — **S2 round 3:** clutter fix (drag-attempt cue) + favourite rename (undoable) DONE &
+- 2026-06-07 — **🌅 [AUTONOMOUS] OVERNIGHT RUN COMPLETE — MORNING DIGEST.** Safe backlog EXHAUSTED;
+  scheduling STOPPED. The fresh orchestrator ran 4 paced SAFE units overnight (1 scoping probe + 3
+  low-ambiguity cleanups), **NOTHING MERGED** — all are a clean morning review queue. Integration
+  `exec/gradient-explorer` is **pristine at `bfc8cba`** (every cleanup branched off it, committed, and
+  restored). Each cleanup gate-passed (tsc 0 + test:palette green) before committing; /code-review +
+  /simplify clean on all.
+  **Review queue (suggested order):**
+    1. **fullscreen-v2 scope doc** — `plans/fullscreen-v2-scope.md` (untracked, READ + decide). Has 3
+       decisions for you: (a) confirm S6 fullscreen is actually live+visually-correct before any v2 work
+       (gates≠runtime); (b) v2 before/after P2+live-fractal (probe recommends v2 P0+P1 lands independently,
+       accept one planned re-touch); (c) which geometries are v1 + S-curve control style. **Key risk to
+       weigh:** the `FullscreenGradientOverlay.tsx` triple-overlap (v2 params / P2 well-migration /
+       live-fractal `'fractal'` GeometryId) — v2's param-contract redesign should leave a non-pure escape
+       hatch so live-fractal doesn't force a reshape.
+    2. **knip-entry cleanup** — branch `exec/cleanup-knip-entry` (`16e740e`, +1 line knip.json). Lowest
+       risk; un-blinds `npm run orphans` for the whole gradient-explorer subtree (unused-files 25→6).
+       Merge-ready. Remaining 6 unused files are intentional/pre-existing (incl. the P0e `SendToMenu.tsx`
+       frozen-ahead shell) — flagged, not touched.
+    3. **facet→name helper** — branch `exec/cleanup-facet-naming` (`121e605`). New pure `facetName.ts` +
+       test (in `test:palette`), **unwired/frozen-ahead for P2**. Glance at the naming thresholds/word
+       choice (reasonable default; tweak at P2-wiring time).
+    4. **oklab de-dup** — branch `exec/cleanup-oklab-dedup` (`a007127`, oklab.ts only, +13/-30). Collapsed
+       only `lerpOklab` (re-export). **Follow-up surfaced:** 4 more byte-identical fns
+       (srgbToLinear01/linear01ToSrgb/rgbToOklab/oklabToRgb) could also collapse, but only by adding
+       `export` to the frozen `colorUtils.ts` — left for a deliberate human-nodded unit (touches the frozen
+       file).
+  **Still in flight, NOT mine (await as before):** live-fractal carve (`wt-lf`/`exec/livefractal` — needs
+  independent review + human visual confirm of fluid-toy AND the fractal mode before merge); human-run
+  `p2-scope.md` probe (not yet present on disk). **Then:** P2 execution + fullscreen-v2 execution, both
+  gated on their scope docs + your decisions. No frozen interfaces were changed; no guesses were made; one
+  unit (oklab) deliberately under-collapsed to stay off the frozen file rather than guess.
+- 2026-06-07 — **[AUTONOMOUS] oklab/blend de-dup DONE** (commit `a007127` on branch
+  `exec/cleanup-oklab-dedup`, **NOT merged** — PENDING-HUMAN-REVIEW; run `wx09qfcpy`). De-duped only the
+  ONE safely-collapsible symbol: `lerpOklab` (exported in both files + byte/behaviour-identical) now
+  re-exports from engine `utils/colorUtils.ts` (`palette/core/oklab.ts`, +13/-30; **`colorUtils.ts`
+  untouched** per guardrail; same direction as P0a's gmtGradient collapse). 4 other byte-identical fns
+  (`srgbToLinear01`/`linear01ToSrgb`/`rgbToOklab`/`oklabToRgb`) **KEPT local** — collapsing them would
+  require adding `export` to the frozen `colorUtils.ts` (out of scope → logged as a follow-up). Palette-only
+  symbols (RGB/Lab/oklabDistance/inGamut/oklabToRgbSafe/…) untouched. **Drift-pin** (`test-palette-stopops`
+  §4) now tautological for `lerpOklab` (same fn reference — expected, as with gmtGradient; still documents
+  the contract); byte-exact math guard still meaningfully lives in the renderStopsToRamp==sampleStops §1
+  seam. Gates green (tsc 0 · test:palette ALL PASS incl. the pin). /code-review medium +/simplify: 0
+  findings (this IS the reuse fix). Only oklab.ts staged; orchestrator files untouched; restored to
+  `exec/gradient-explorer`.
+- 2026-06-07 — **[AUTONOMOUS] facet→name helper DONE** (commit `121e605` on branch
+  `exec/cleanup-facet-naming`, **NOT merged** — PENDING-HUMAN-REVIEW; run `wf_df917614-20c`). New PURE,
+  frozen-ahead helper `palette/core/facetName.ts`: `facetsToName(f: Facets): string` + `rampToName(ramp):
+  string` (convenience). **Unwired by design — P2 owns wiring it into the favourite/extract naming flow**
+  (mirrors how colorBoxFit was built ahead of its consumer). `palette/core/facets.ts` API matched the
+  assumption exactly (`computeFacets(ramp: RGB[]) → Facets {lightness,chroma,complexity,rainbow,warmth ∈
+  0..1, higher=light/vivid/complex/rainbow/warm, + raw}`); no theme-match catalog exists (kept simple, not
+  folded in). **Naming scheme** (each part dropped in its neutral band; "Neutral" fallback): lightness
+  Dark(<.3)/Bright(>.72) · warmth Warm(>.62)/Cool(<.38) · chroma Muted(<.18)/Soft(<.4)/Vivid(>.6) ·
+  "Rainbow" suffix when rainbow>.6. E.g. "Warm Vivid", "Cool Vivid Rainbow", "Dark Muted", "Bright Warm
+  Vivid", "Neutral". NEW deterministic test `debug/test-palette-facetname.mts` (8 exact labels + 500
+  seeded-random determinism/totality + an end-to-end rainbow ramp), wired into `test:palette` (package.json
+  +1 line, on-branch only). Gates green (tsc 0 · test:palette incl. new test). /code-review +/simplify
+  clean (0 findings; test's hsv helpers copied per the established self-contained-test convention). Only 3
+  files staged (helper, test, package.json); orchestrator log/scope-doc untouched; restored to
+  `exec/gradient-explorer`. No merge/worktree/node_modules ops. **NOTE:** the naming thresholds/word choice
+  are a reasonable default — open to human tweak at P2-wiring time.
+- 2026-06-07 — **[AUTONOMOUS] knip-entry cleanup DONE** (commit `16e740e` on branch
+  `exec/cleanup-knip-entry`, **NOT merged** — PENDING-HUMAN-REVIEW; run `wf_d96868fb-ff2`). One-line
+  additive `knip.json` edit (registered `gradient-explorer/main.tsx` as an entry, mirroring the sibling
+  `<app>/main.tsx` pattern). **Result:** unused-files 25→6; the ENTIRE gradient-explorer subtree (19
+  files) stopped being flagged. Gates green (tsc 0 · test:palette pass · orphans re-run). /code-review
+  +/simplify clean. **Finding that closes the NEW-FINDING caveat:** knip is configured files-only
+  (`rules.exports/types="off"`), so it reports NO unused *exports* — the fix could only ever change the
+  unused-*files* list, and CANNOT surface dead exports (so the "do it deliberately, may reveal real unused
+  exports" worry is moot; frozen-ahead modules like `colorBoxFit`/`stopOps`/`sampleStops` are unaffected
+  either way). Remaining 6 unused FILES are unrelated/pre-existing & mostly intentional —
+  `components/SendToMenu.tsx` (P0e frozen-ahead shell, expected), `app-gmt/FavientsToggleButton.tsx`,
+  `engine-gmt/.../FormulaGallery.tsx`, `engine-gmt/formulas/categories.ts`, + 2 debug helpers — flagged for
+  the morning, NOT touched. Session correctly left my uncommitted log edits + the scope doc alone; restored
+  to `exec/gradient-explorer`. No worktree/node_modules/merge ops.
+- 2026-06-07 — **[AUTONOMOUS] fullscreen-v2 scope probe DELIVERED** → `plans/fullscreen-v2-scope.md`
+  (295 lines, untracked, **PENDING-HUMAN-REVIEW**; run `wf_ab0fe679-24a`, 5 agents). **Verdict:** v2 is
+  mostly ADDITIVE over the clean pure deterministic `palette/core/rampGeometry.ts` core — geometry-math is
+  the easy part; the **sharp edge is sequencing vs P2 + live-fractal** (triple-overlap on
+  `FullscreenGradientOverlay.tsx`: v2 params + P2 well migration (b)→(c) SendTarget + live-fractal's
+  `'fractal'` GeometryId all edit the same file/union). **Phasing:** P0 redesign `GeometryParams`
+  (stochastic-only → per-geom tagged union, S) → P1 conditional per-geometry sliders (radial centre / conic
+  angle / arch radius / S-curve, S/M — cheapest high-wow slice, stands alone) → opt P2 new geoms
+  (Diamond/Mirror/Bands) → opt P3 comparison grid (M) → opt P4 param animation (M); apply-to-content +
+  zoom-pan deferred. **Effort:** v1-of-v2 (P0+P1) S/M self-contained; full set M-L; no throwaway path.
+  **Top decisions for human (morning queue):** (1) confirm S6 is actually live+visually-correct first
+  (gates-green≠runtime-good — it was premature-merged then backed out); (2) v2 before/after P2+live-fractal
+  (probe recommends v2 P0+P1 lands independently, accept one planned re-touch); (3) which geoms are v1 +
+  S-curve control style (easing-preset picker recommended). **Key risk:** if P0's param contract doesn't
+  leave a non-pure escape hatch for `'fractal'`, live-fractal forces a reshape. NO code, NO merges.
+  Next SAFE unit: knip-entry cleanup. clutter fix (drag-attempt cue) + favourite rename (undoable) DONE &
   verified. New finding: rename UX awkward (hover-enlarge obscures name; grid click=apply). Interim fix
   routed back (list-mode rename, no hover-enlarge in list). The deeper "click=select+options vs apply"
   question → **P2** (key canonical-interaction input; see finding above). S2 merges after this fix.
