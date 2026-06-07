@@ -167,7 +167,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | S6 | W11 Fullscreen configs | 1 | ✅ **merged `94e8e5d`** | `exec/s6-fullscreen` | foundation + fixes: drop-race in W4 kernel (capture→bubble reset — ratified into (b)) + isotropic geometries (radial/conic round). User visual confirm (drop opens fullscreen; shapes round). Integration gate green. FUTURE: richer options (backlog "fullscreen v2") |
 | S7 | W12 ColorBox generator mode (v1 addition) | 1 | ✅ **merged `5c2a280`** | `exec/s7-colorbox` | easings.ts + buildColorBoxRamp + generatorMode + visual easing picker + colored L/C/h sliders (NEW additive `ScalarInput.trackBackground`) + colorBoxFit.ts (frozen-ahead for P2 drop) + "Fit from gradient" interim button. Fixed hue-key-casing black-ramp bug. User visual confirm; full gate green |
 | S8 | W13 interpolation bases | 1 | ✅ **resolved — DEFERRED, no code** | `exec/s8-interp` | S8 REFUTED Tier A: 2-point `sampleSorted` can't overshoot → monotone-cubic degenerates to smoothstep (already ships as smooth/cubic); the no-overshoot win needs **multi-point = Tier B**. **W13 entirely deferred to Tier B**; v1 ships nothing from it. Zero code (sampler byte-unchanged). Good catch (flawed scope-doc premise). Rationale → project memory |
-| P2 | W2 portability integration + W9 snapshot | 2 | **scoped → ready to fan out** | `exec/p2-portability` (per sub-stream) | ✅ **SCOPED 2026-06-07** → `plans/p2-scope.md` (PENDING-HUMAN-REVIEW). **8 sub-streams** behind one already-ratified gate (the additive (c) `getRect?`): **pre** = P2-F ImageStage coexistence (S); **W1** P2-A canonical hero + select→act (L) ‖ P2-C unified target list + favientTargets→registry (M-L) ‖ P2-E gen+image doc round-trip (M); **W2** P2-B hero state-lift (S, needs A) ‖ P2-G favourite Update-vs-Save-as-new + facetName wiring (M, needs A) ‖ P2-D drag/avatar/cross-tab (L, needs A+C); **W3** P2-D finish → P2-H W9 snapshot v1 (S-M) → close-out + runtime re-verify. ~3-4wk. Only ONE frozen-iface change in all P2 (additive getRect, done). **Decisions for user pending** (see changelog). **Sequencing: after live-fractal merges; fullscreen-v2 P0+P1 lands independently (one planned S6-well re-touch in P2-C).** |
+| P2 | W2 portability integration (W9 deferred) | 2 | **scoped + decisions ratified → ready to fan out (gated on live-fractal merge)** | `exec/p2-portability` (per sub-stream) | ✅ **SCOPED + RATIFIED 2026-06-07** → `plans/p2-scope.md`. **7 sub-streams** (P2-H/W9 deferred) behind one already-ratified gate (additive (c) `getRect?`): **pre** = P2-F ImageStage coexistence (S); **W1** P2-A canonical hero + select→act (L) ‖ P2-C unified target list + favientTargets→registry (M-L) ‖ P2-E gen+image doc round-trip (M); **W2** P2-B hero state-lift (S, needs A) ‖ P2-G favourite Update-vs-Save-as-new + facetName wiring (M, needs A) ‖ P2-D drag/avatar/cross-tab (L, needs A+C); **W3** P2-D finish → close-out + **mandatory runtime re-verify (S6 well migration)**. ~3-4wk. **Undo focus = (b) auto-focus affected mode** (ratified). **Sequencing: after live-fractal merges; fullscreen-v2 independent (one S6-well re-touch in P2-C).** Next on live-fractal merge: fan out P2-F → Wave 1. |
 | P3 | `/polish` pass | 3 | deferred | — | after structure lands |
 
 ---
@@ -361,6 +361,10 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   `effectiveMaxIter()` to the kernel's 65536 PO ceiling so extreme `iterMul` doesn't silently stop
   refining. None block merge (carve is byte-faithful; gated on the targeted AT+LA visual check).
 
+- **W9 snapshot (timeline as keying/compare tool + export-snapshots-current-frame) — DEFERRED out of P2**
+  (user ratified 2026-06-07). Was P2 sub-stream P2-H (S-M, leaf, no dependents). Becomes its own post-P2
+  initiative; scope when P2 lands. Decision rationale: keep P2 strictly on portability.
+
 - **Live-fractal coloring mode (extract from fluid-toy) — INITIATIVE, SCOPED 2026-06-06**
   (`plans/gx-live-fractal-coloring-scope.md`). Add a GX fullscreen mode where the current 256-ramp colors
   a live Mandelbrot. **KEY DE-RISK: no gradient seam needed** — fluid-toy samples a 256×1 RGBA8 LUT and
@@ -422,6 +426,15 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-07 (PM) — **P2 DECISIONS RATIFIED by user** (locked into `plans/p2-scope.md` top block):
+  (1) **cross-mode undo focus = (b) auto-focus the affected mode** — supersedes the earlier user lean
+  toward (a) tab-as-undo-step; (2) **W9 snapshot DEFERRED out of P2** → drop sub-stream **P2-H**; **P2 is
+  now 7 sub-streams** (W9 becomes its own post-P2 initiative — log to backlog); (3) **sequencing = land
+  live-fractal FIRST, then fan out P2; fullscreen-v2 independent** (one planned S6-well re-touch in P2-C).
+  Still open (non-blocking, resolved at P2-A prompt): exact select→act option set + selection affordance +
+  whether Stops stays minimal. **GATING NEXT STEP: live-fractal merge** (owned by bootstrap session; needs
+  the user's AT+LA deep-Mandelbrot visual). On that merge → fan out **P2-F** (pre) then **Wave 1**
+  (P2-A ‖ P2-C ‖ P2-E).
 - 2026-06-07 (PM) — **P2 SCOPE DELIVERED** → `plans/p2-scope.md` (309 lines, PENDING-HUMAN-REVIEW;
   run `w4cu5rnoj`, 5 agents). **Verdict: P2 is fan-outable into 8 ordered sub-streams** behind a single
   ratification gate (the additive (c) `getRect?`, already ratified) — only ONE frozen-interface change in

@@ -11,6 +11,20 @@ All paths under `h:/GMT/workspace-gmt/dev/`.
 
 ---
 
+## ✅ RATIFIED by user 2026-06-07 PM (orchestrator-locked)
+
+- **Cross-mode undo focus → (b) AUTO-FOCUS the affected mode** (undo stack stays content-only; UI switches
+  to the undone action's mode). Supersedes the earlier user lean toward (a) tab-as-undo-step.
+- **W9 snapshot → DEFERRED out of P2** (its own post-P2 initiative). **Drop sub-stream P2-H; P2 is now 7
+  sub-streams.** Remove the W9 references from the v1 plan below.
+- **Sequencing → live-fractal carve merges FIRST, then P2 fans out; fullscreen-v2 P0+P1 lands
+  independently** (accept ONE planned S6-well re-touch inside P2-C). P2 execution is gated on the
+  live-fractal merge (awaiting the user's AT+LA deep-Mandelbrot visual).
+- **Still open (not blocking fan-out — resolved when P2-A is prompted):** the exact select→act option set +
+  selection affordance + whether Stops stays minimal.
+
+---
+
 ## Verdict (read this first)
 
 **P2 is a real, fan-outable integration phase — not one giant session.** Phase 1 shipped four working
