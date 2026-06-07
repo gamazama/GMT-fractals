@@ -72,6 +72,7 @@ export const useDeepZoomOrbit = (engineRef: RefObject<FluidEngine | null>): void
             kind,
             juliaCx: liveCx,
             juliaCy: liveCy,
+            aspect,
             // LA / AT presently Mandelbrot-only:
             //   - AT's c' = dc·CCoeff + RefC transform collapses to a
             //     constant when dc = 0 (Julia case).
@@ -83,7 +84,14 @@ export const useDeepZoomOrbit = (engineRef: RefObject<FluidEngine | null>): void
         }).then((res) => {
             if (cancelled) return;
             const dz = engine.deepZoom;
-            dz.setReferenceOrbit(res.orbit, res.length, builtCenter, builtCenterLow);
+            // Use the reference centre the BUILDER chose — the auto-reference
+            // search may relocate it to a deeper (non-escaping) point than the
+            // view centre when the centre orbit escapes early. setReferenceOrbit
+            // must get the actual orbit centre so the kernel's DD centre-offset
+            // (view − ref) stays aligned. @see docs/adr/0065.
+            const refCenter: [number, number] = [res.refCenterX, res.refCenterY];
+            const refLow: [number, number] = [res.refCenterLowX, res.refCenterLowY];
+            dz.setReferenceOrbit(res.orbit, res.length, refCenter, refLow, res.period);
             if (res.laTable && res.laStages && res.laCount > 0) {
                 dz.setLATable(res.laTable, res.laCount, res.laStages);
                 dz.setLAEnabled(true);

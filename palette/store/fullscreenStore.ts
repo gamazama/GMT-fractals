@@ -32,6 +32,24 @@ export interface FullscreenState {
   seed: number;
   /** Randomization strength 0..1. */
   amount: number;
+  // ── Live fractal-mode knobs (geom === 'fractal') ─────────────────────────
+  // The gradient itself stays FROZEN (the snapshot's 256-ramp colours the
+  // fractal); these are the cheap, live, animatable ramp-mapping modifiers the
+  // user drives while the fractal renders. View center/zoom live in the
+  // renderer (gesture-driven, no React render needed), not here.
+  /** Colormap phase offset along the mapped axis, 0..1 wraps (kernel uGradientPhase). */
+  fractalPhase: number;
+  /** Colormap tiling count across the mapped axis (kernel uGradientRepeat). */
+  fractalRepeats: number;
+  /** What fractal quantity drives the colormap lookup (kernel uColorMapping, 0..13). */
+  fractalMapping: number;
+  /** Auto-cycle the phase each frame (palette-cycling "see it animate"). */
+  fractalAnimate: boolean;
+  /** Deep-zoom (perturbation + LA + AT) path — lets zoom dive far past the f32
+   *  quantization floor. Off by default (shallow f32 covers the common range). */
+  fractalDeepZoom: boolean;
+  /** Per-pixel iteration multiplier (1 = auto). Raise to resolve deeper detail. */
+  fractalIterMul: number;
 }
 
 const CLOSED: FullscreenState = {
@@ -41,6 +59,15 @@ const CLOSED: FullscreenState = {
   geom: 'linear',
   seed: 1,
   amount: 0.5,
+  fractalPhase: 0,
+  fractalRepeats: 1,
+  fractalMapping: 0,
+  fractalAnimate: false,
+  // Deep zoom is the default fractal path — perturbation + LA + nucleus
+  // reference is strictly better than the f32 path (no zoom floor, no
+  // quantization), so it's always on and the UI toggle was removed. @see ADR-0066
+  fractalDeepZoom: true,
+  fractalIterMul: 1,
 };
 
 let state: FullscreenState = CLOSED;
@@ -85,6 +112,68 @@ export const setFullscreenAmount = (amount: number): void => {
   const a = amount < 0 ? 0 : amount > 1 ? 1 : amount;
   if (a === state.amount) return;
   emit({ ...state, amount: a });
+};
+
+/** Set the live fractal colormap phase (0..1 wraps). */
+export const setFractalPhase = (phase: number): void => {
+  const p = ((phase % 1) + 1) % 1; // wrap into [0,1)
+  if (p === state.fractalPhase) return;
+  emit({ ...state, fractalPhase: p });
+};
+
+/** Set the live fractal colormap tiling (clamped 0.0001..1024, fractional). The
+ *  useful value varies widely by mapping mode — some modes compress the t-range
+ *  (want large repeats to tile), others stretch it across the whole screen (want
+ *  repeats << 1). The slider's soft track is 0.1..16; typing breaks past it. */
+export const setFractalRepeats = (repeats: number): void => {
+  if (!Number.isFinite(repeats)) return;
+  const r = repeats < 0.0001 ? 0.0001 : repeats > 1024 ? 1024 : repeats;
+  if (r === state.fractalRepeats) return;
+  emit({ ...state, fractalRepeats: r });
+};
+
+/** Sensible starting "Repeats" per colour-mapping mode — the modes compress or
+ *  stretch the mapped t-range very differently, so a value good for one is wrong
+ *  for another. Switching mode re-seeds this so you start near a usable tiling
+ *  instead of carrying the previous mode's (often wildly off) value. Tune from
+ *  there with the (log) Repeats slider; modes not listed fall back to 1. */
+const DEFAULT_REPEATS_BY_MODE: Record<number, number> = {
+  0: 1,    // Iterations
+  4: 4,    // Bands
+  1: 1,    // Angle
+  2: 1,    // Magnitude
+  12: 1,   // Potential
+  9: 4,    // Stripe
+  10: 1,   // Distance
+};
+
+/** Set the live fractal colormap mapping mode (kernel colorMapping index). Also
+ *  re-seeds Repeats to a sane default for the new mode. */
+export const setFractalMapping = (mapping: number): void => {
+  const m = mapping | 0;
+  if (m === state.fractalMapping) return;
+  const repeats = DEFAULT_REPEATS_BY_MODE[m] ?? 1;
+  emit({ ...state, fractalMapping: m, fractalRepeats: repeats });
+};
+
+/** Toggle phase auto-cycling (palette-cycling animation). */
+export const setFractalAnimate = (on: boolean): void => {
+  if (on === state.fractalAnimate) return;
+  emit({ ...state, fractalAnimate: on });
+};
+
+/** Toggle the deep-zoom (perturbation) path. */
+export const setFractalDeepZoom = (on: boolean): void => {
+  if (on === state.fractalDeepZoom) return;
+  emit({ ...state, fractalDeepZoom: on });
+};
+
+/** Set the per-pixel iteration multiplier (clamped 0.25..32). */
+export const setFractalIterMul = (mul: number): void => {
+  if (!Number.isFinite(mul)) return;
+  const m = mul < 0.25 ? 0.25 : mul > 32 ? 32 : mul;
+  if (m === state.fractalIterMul) return;
+  emit({ ...state, fractalIterMul: m });
 };
 
 /** Subscribe a component to the whole fullscreen view state. */

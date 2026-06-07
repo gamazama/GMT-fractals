@@ -23,6 +23,8 @@
 import { computeReferenceOrbit } from './referenceOrbit';
 import { buildLATable, type LATable } from './laBuilder';
 import { buildAT } from './atBuilder';
+import { calibrateLATable } from './epsilonCalibration';
+import { ddSub } from './dd';
 
 export type DeepZoomRequest =
     | {
@@ -49,10 +51,22 @@ export type DeepZoomRequest =
           /** When true, also build the LA merge tree from the orbit and
            *  return packed table buffers in the response. Phase 5+. */
           buildLA?: boolean;
+          /** Auto-epsilon: calibrate the LA validity threshold (default true).
+           *  False = use the fixed 2^-24 scale (faster frames, no calibration). */
+          calibrateLA?: boolean;
           /** Worst-case |dc|² across the screen for AT validity. Skip
            *  if 0 — disables AT. Set to (aspect² + 1) · zoom² for a
            *  rectangular viewport. Phase 7+. */
           screenSqrRadius?: number;
+          /** Viewport aspect (width / height) — sizes the auto-reference
+           *  search region to the actual view. Default 1.5 in the builder. */
+          aspect?: number;
+          /** Opt out of the auto-reference (non-escaping centre) search and
+           *  build at the literal view centre. Default false. */
+          disableAutoReference?: boolean;
+          /** Opt out of the minibrot-nucleus (periodic) reference (ADR-0066),
+           *  forcing the non-periodic fallback. Default false. */
+          disableNucleus?: boolean;
       }
     | {
           type: 'cancel';
@@ -69,12 +83,32 @@ export interface DeepZoomOrbitResponse {
     buildMs: number;
     /** Number of milliseconds spent on the LA table portion (0 if not requested). */
     laBuildMs: number;
+    /** Reference centre actually used (hi + lo words). Equals the input centre
+     *  unless the auto-reference search relocated it to a deeper non-escaping
+     *  point. The caller passes this to DeepZoomController.setReferenceOrbit. */
+    refCenterX: number;
+    refCenterY: number;
+    refCenterLowX: number;
+    refCenterLowY: number;
+    /** True when the auto-reference search relocated the centre (diagnostics). */
+    relocated: boolean;
+    /** True when LA was skipped because the interior reference would mis-accelerate
+     *  an exterior-dominated view (kernel uses pure PO). Diagnostics. */
+    laUnsafe: boolean;
+    /** Period of the minibrot-nucleus reference (0 = non-periodic fallback).
+     *  When > 0 the orbit is exactly one period; the kernel wraps the reference
+     *  index modulo this. @see docs/adr/0066 */
+    period: number;
     /** Packed LA table — present only when `buildLA` was requested.
      *  Each LA fills 3 RGBA32F texels (12 floats); see `packLATable`
      *  for the exact layout. */
     laTable?: ArrayBuffer;
     /** Packed stage table — pairs of [laIndex, macroItCount] as floats. */
     laStages?: ArrayBuffer;
+    /** log2 of the calibrated LA validity-threshold scale (auto-epsilon). Present
+     *  when an LA table was built. -24 = the old fixed default (loose); more
+     *  negative = stricter (the view needed tighter LA to stay glitch-free). */
+    laEpsilonLog2?: number;
     /** Total LA node count (laTable.length / 12 floats / 4 bytes). */
     laCount?: number;
     /** Stage count (laStages.length / 2 / 4 bytes). */
@@ -152,7 +186,7 @@ ctx.onmessage = (event: MessageEvent<DeepZoomRequest>) => {
     }
     if (msg.type !== 'computeOrbit') return;
 
-    const { id, centerX, centerY, centerLowX, centerLowY, zoom, maxIter, buildLA, screenSqrRadius, power, kind, juliaCx, juliaCy } = msg;
+    const { id, centerX, centerY, centerLowX, centerLowY, zoom, maxIter, buildLA, screenSqrRadius, power, kind, juliaCx, juliaCy, aspect, disableAutoReference, disableNucleus, calibrateLA } = msg;
     try {
         const t0 = performance.now();
         const result = computeReferenceOrbit({
@@ -161,6 +195,7 @@ ctx.onmessage = (event: MessageEvent<DeepZoomRequest>) => {
             centerLowY: centerLowY ?? 0,
             zoom, maxIter,
             power, kind, juliaCx, juliaCy,
+            aspect, disableAutoReference, disableNucleus,
         });
         const buildMs = performance.now() - t0;
 
@@ -179,12 +214,48 @@ ctx.onmessage = (event: MessageEvent<DeepZoomRequest>) => {
             precisionBits: result.precisionBits,
             buildMs,
             laBuildMs: 0,
+            refCenterX: result.refCenterX,
+            refCenterY: result.refCenterY,
+            refCenterLowX: result.refCenterLowX,
+            refCenterLowY: result.refCenterLowY,
+            relocated: result.relocated,
+            laUnsafe: result.laUnsafe,
+            period: result.period,
         };
         const transferList: ArrayBuffer[] = [transfer];
 
-        if (buildLA && result.length > 1) {
+        // Skip the LA build when the reference is interior but the view is
+        // exterior-dominated — LA would mis-accelerate the exterior pixels into a
+        // black L∞ square; pure PO (no LA table) renders it correctly. @see ADR-0065
+        if (buildLA && result.length > 1 && !result.laUnsafe) {
             const laT0 = performance.now();
-            const table = buildLATable(result.orbit, result.length);
+            // Auto-epsilon: build the LA table at the LARGEST validity-threshold
+            // scale that still matches pure perturbation across the view (the
+            // fixed 2^-24 is too loose at depth → residual LA squares). dc of the
+            // view centre = viewCentre − referenceCentre (the kernel's
+            // uDeepCenterOffset); test points fan out by ±aspect·zoom / ±zoom.
+            let table: LATable;
+            if (calibrateLA === false || result.period > 0) {
+                // A/B: fixed 2^-24 scale (no calibration) — faster frames, the
+                // pre-auto-epsilon behaviour. Reference-quality fixes still apply.
+                // Also forced for a PERIODIC (nucleus) reference: it's exact by
+                // construction so the loose default is glitch-free (verified), AND
+                // the calibrator's CPU LA walk uses the non-periodic rebase rather
+                // than the kernel's modulo-period wrap, so it would validate a
+                // different trace than the GPU runs. @see docs/adr/0066
+                table = buildLATable(result.orbit, result.length);
+            } else {
+                const [dcReHi, dcReLo] = ddSub(centerX, centerLowX ?? 0, result.refCenterX, result.refCenterLowX);
+                const [dcImHi, dcImLo] = ddSub(centerY, centerLowY ?? 0, result.refCenterY, result.refCenterLowY);
+                const asp = aspect && aspect > 0 ? aspect : 1.5;
+                const calib = calibrateLATable({
+                    orbit: result.orbit, orbitLen: result.length, maxIter,
+                    dcCenterRe: dcReHi + dcReLo, dcCenterIm: dcImHi + dcImLo,
+                    halfW: asp * zoom, halfH: zoom,
+                });
+                table = calib.table;
+                response.laEpsilonLog2 = calib.scaleLog2;
+            }
             response.laBuildMs = performance.now() - laT0;
             if (table.valid && table.las.length > 0) {
                 const packed = packLATable(table);
@@ -195,8 +266,12 @@ ctx.onmessage = (event: MessageEvent<DeepZoomRequest>) => {
                 transferList.push(packed.las, packed.stages);
 
                 // AT: pick the outermost usable stage given the screen
-                // radius. Tiny in size, packed inline.
-                if (screenSqrRadius && screenSqrRadius > 0) {
+                // radius. Tiny in size, packed inline. Skipped for a PERIODIC
+                // reference: the AT front-load advances `iter` without advancing
+                // the orbit reference index, which has no verified interaction
+                // with the kernel's modulo-period wrap — and the periodic LA tree
+                // (cycled via rebase) already covers the depth. @see docs/adr/0066
+                if (screenSqrRadius && screenSqrRadius > 0 && result.period === 0) {
                     const at = buildAT(table, screenSqrRadius);
                     if (at) {
                         response.at = {

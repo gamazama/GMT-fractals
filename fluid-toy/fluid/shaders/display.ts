@@ -333,33 +333,8 @@ void main() {
 // For each pixel under the new camera, compute its world position, then look up
 // where THAT world position was in the old camera's UV, and sample there.
 // -----------------------------------------------------------------------------
-export const FRAG_TSAA_BLEND = /* glsl */ `#version 300 es
-precision highp float;
-in vec2 vUv;
-layout(location=0) out vec4 outMain;
-layout(location=1) out vec4 outFx;
-
-uniform sampler2D uCurrentMain;
-uniform sampler2D uCurrentFx;
-uniform sampler2D uHistoryMain;
-uniform sampler2D uHistoryFx;
-uniform int uSampleIndex;
-
-void main() {
-    vec4 curMain = texture(uCurrentMain, vUv);
-    vec4 curFx   = texture(uCurrentFx,   vUv);
-    // Frame-1 safety: when uSampleIndex is 1 the history texture hasn't
-    // been written yet (MRT FBOs allocate with undefined contents in
-    // WebGL2 — some drivers return NaN for RGBA16F). Skip the history
-    // read entirely and just pass the current sample through.
-    if (uSampleIndex <= 1) {
-        outMain = curMain;
-        outFx   = curFx;
-        return;
-    }
-    vec4 histMain = texture(uHistoryMain, vUv);
-    vec4 histFx   = texture(uHistoryFx,   vUv);
-    float w = 1.0 / float(uSampleIndex);
-    outMain = mix(histMain, curMain, w);
-    outFx   = mix(histFx,   curFx,   w);
-}`;
+// FRAG_TSAA_BLEND was carved into the shared engine/fractal library (it's a
+// generic MRT accumulator blend with no fluid-sim coupling) so the Gradient
+// Explorer's live-fractal renderer reuses it. Re-exported here so FluidEngine
+// + the shaders barrel keep importing it from `./display` unchanged.
+export { FRAG_TSAA_BLEND } from '../../../engine/fractal/shaders/tsaaBlend';

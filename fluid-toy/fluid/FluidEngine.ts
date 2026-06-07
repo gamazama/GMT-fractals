@@ -705,7 +705,7 @@ export class FluidEngine {
        'uColorIter', 'uTrapMode', 'uTrapCenter', 'uTrapRadius', 'uTrapNormal', 'uTrapOffset', 'uStripeFreq',
        'uJitterScale', 'uResolution', 'uBlueNoiseTexture', 'uBlueNoiseResolution', 'uFrameCount', 'uPerFrameSamples', 'uJitterMode', 'uGridSize', 'uTsaaSampleIndex',
        'uImageTileOrigin', 'uImageTileSize', 'uRegionMin', 'uRegionMax',
-       'uDeepZoomEnabled', 'uRefOrbit', 'uRefOrbitTexW', 'uRefOrbitLen', 'uDeepCenterOffset', 'uDeepScale',
+       'uDeepZoomEnabled', 'uRefOrbit', 'uRefOrbitTexW', 'uRefOrbitLen', 'uRefPeriod', 'uDeepCenterOffset', 'uDeepScale',
        'uLATable', 'uLATexW', 'uLATotalCount', 'uLAEnabled', 'uLAStages[0]', 'uLAStageCount',
        'uATEnabled', 'uATStepLength', 'uATThresholdC', 'uATSqrEscapeRadius',
        'uATRefC', 'uATCCoeff', 'uATInvZCoeff',
