@@ -21,11 +21,14 @@ All Phase-0 foundations + all Phase-1 streams merged & gate-green.
   phase/repeats/mapping + palette-cycle + pan/zoom + PNG + WebGL2 fallback). **SCOPE-EXPANDED: deep zoom
   INCORPORATED** (was deferred +L) — off-thread orbit/LA/AT, double-double pan, 1e-100 floor; 2822 colors
   @1e-9. ADR-0063 (carve), ADR-0064 (LA→PO ref-index fix vs FractalShark). Gates green; NO fluid-toy
-  regression. **MERGE GATES: orchestrator independent review (RUNNING, 2 lenses) + USER visual confirm
-  (fluid-toy unchanged + fractal mode ON REAL HARDWARE — CI software-GPU can't assert deep-zoom visuals).**
-  Open → backlog: residual LA-vs-escaping-reference glitch (⚡ toggle workaround; real fix = FractalShark
-  glitch-detection + secondary refs). **OWNED BY bootstrap session through merge; fresh orchestrator owns
-  overnight cleanups + P2 (avoid double-editing this log).**
+  regression. **MERGE GATES: independent review ✅ PASS (2 lenses, both MERGE-READY — carve verified
+  byte-faithful, FluidEngine zero-diff, layering clean, WebGL lifecycle/leak-fix solid, all shader loops
+  bounded) + USER visual confirm.** ⭐ **Lens A flagged ONE smoke-INVISIBLE reservation** → the required
+  visual: **a fluid-toy AT+LA *deep* Mandelbrot view vs the pre-fix build** (ADR-0064 advances `iter` but
+  not `ref` through the AT prepass → handoff index short by the AT-covered count when AT is active; AT+LA
+  always co-active; no smoke covers it — the deep-zoom smokes are CPU-builder-only, the GX one only checks
+  distinctColours≥50). On clean → merge as-is. Open → backlog (see below). **OWNED BY bootstrap session
+  through merge; fresh orchestrator owns overnight cleanups + P2 (avoid double-editing this log).**
 - **(b) OVERNIGHT AUTONOMOUS RUN ✅ COMPLETE 2026-06-07** (see MORNING DIGEST at top of changelog).
   Produced a morning review queue, **NOTHING MERGED**, integration pristine at `bfc8cba`:
   `fullscreen-v2-scope.md` (doc, has 3 decisions for you) + 3 gate-green cleanup branches —
@@ -346,6 +349,18 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 
 ## Backlog / deferred debt
 
+- **Live-fractal carve FOLLOW-UPS (from the 2-lens independent review, 2026-06-07):** (1) **deep-zoom
+  AT-path `ref` threading** — advance `ref` through the AT prepass to match FractalShark's RefIteration
+  model (or add a code comment documenting why AT deliberately doesn't); related to (2) the **residual
+  LA-vs-escaping-reference glitch** (the ⚡ toggle is the workaround; real fix = FractalShark-style glitch
+  detection + secondary references) — both are deep-zoom perturbation-correctness items, best tackled
+  together. (3) **No automated coverage of the deep-zoom kernel `ref`-tracking** — the deep-zoom smokes are
+  CPU-builder-only; the GX smoke only asserts distinctColours≥50. A GLSL-output regression test (or a
+  golden-pixel check on real GPU) would close the gap. (4) NIT: stale `engine/fractal/index.ts` barrel
+  header ("Shallow float32 only…") — update post deep-zoom incorporation. (5) NIT: clamp
+  `effectiveMaxIter()` to the kernel's 65536 PO ceiling so extreme `iterMul` doesn't silently stop
+  refining. None block merge (carve is byte-faithful; gated on the targeted AT+LA visual check).
+
 - **Live-fractal coloring mode (extract from fluid-toy) — INITIATIVE, SCOPED 2026-06-06**
   (`plans/gx-live-fractal-coloring-scope.md`). Add a GX fullscreen mode where the current 256-ramp colors
   a live Mandelbrot. **KEY DE-RISK: no gradient seam needed** — fluid-toy samples a 256×1 RGBA8 LUT and
@@ -406,6 +421,17 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
+
+- 2026-06-07 — **LIVE-FRACTAL CARVE: 2-lens independent review PASS (both MERGE-READY).** Lens B
+  (lifecycle/GX/layering): leak-fix solid + regression-guarded (24-cycle smoke), GX scoped/opt-in off the
+  one-ramp seam, engine/fractal host-agnostic, all shader loops bounded — clean. Lens A (carve
+  faithfulness): shims byte-faithful, FluidEngine zero-diff, worker/asset survived, shallow path provably
+  unchanged. **ONE smoke-invisible reservation (Lens A):** ADR-0064 advances `iter` but not `ref` through
+  the AT prepass → LA→PO handoff index short by the AT-covered count when AT active (AT+LA always
+  co-active); no smoke covers it. **Resolution: a targeted USER visual check (fluid-toy AT+LA deep view vs
+  pre-fix) — not a speculative code fix (may be shifting an already-approximate value).** On clean → merge.
+  5 follow-ups → backlog (AT-ref threading, LA-glitch, deep-zoom-kernel test gap, stale barrel header,
+  iterMul ceiling). Carve remains owned by bootstrap session through merge.
 
 - 2026-06-07 — **🌅 [AUTONOMOUS] OVERNIGHT RUN COMPLETE — MORNING DIGEST.** Safe backlog EXHAUSTED;
   scheduling STOPPED. The fresh orchestrator ran 4 paced SAFE units overnight (1 scoping probe + 3
