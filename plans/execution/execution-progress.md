@@ -426,6 +426,38 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **LIVE-FRACTAL CARVE DELIVERED + ADR-0066 nucleus reference; user visual ✅ "looks
+  fantastic" (both apps); under FINAL focused independent review → then MERGE.** Session summary ingested
+  (commit `91ae8f5` on `exec/livefractal`, wt-lf, clean tree, NOT yet merged). ADR-0066 = minibrot-NUCLEUS
+  periodic reference (atom-domain period detection `detectPeriod` + FractalShark ball criterion in exact
+  fixed-point + Newton refinement to nucleus c*; kernel wraps a 1-period orbit modulo `uRefPeriod`;
+  falls back to ADR-0065 heuristics; ε-calib + AT gated off for periodic refs; interior dives ~48× shorter
+  orbit, render-identical). **Author ran a 5-finder review that CAUGHT A CRITICAL BUG: `uRefPeriod` was
+  never registered in either consumer's uniform list → wrap was inert (smokes/first visual passed on the
+  fallback); fixed + re-verified real path Δ=0.** Verify: tsc 0; CPU smokes deep-zoom-orbit/-la/-nucleus +
+  fluid-toy green; GPU gx-fractal-glitch(3) + gx-nucleus-render green; new `smoke:deep-zoom-nucleus` added
+  to smoke:all. Memory: `project_deep_zoom_nucleus_reference.md`. **Orchestrator gate before merge
+  (lesson #3):** the prior 2-lens independent review predates ADR-0066 + the author's self-review has
+  blind spots → running a FOCUSED independent review on the ADR-0066 delta (nucleus correctness + the
+  uniform fix wired in BOTH consumers + integration/no-regression; run `w14heyn2c`). On clean → merge
+  `exec/livefractal` → integration + combined gate (tsc · test:palette · key smokes) → then **rebase P2-F +
+  the P2-A prototype over the new HEAD.** Known deferred (in the commit, benign): knobs carry across
+  openFullscreen; lastDeepStats not cleared on deep-disable; HPReal.toNumber truncates-not-rounds; frontier
+  wall ~1e-30 (DD view-center cap, independent of this work).
+- 2026-06-07 (PM, interactive design loop) — **P2-A DESIGN VERIFIED WITH USER + PROTOTYPE (2 iters).**
+  P2-A is design-first (user: "verify the exact plan before acting; iterate on what I see"). Design probe →
+  `plans/p2-a-design.md` (untracked). **User-verified interaction model:** click & drag REVEAL THE SAME
+  available target locations ("dropboxes") — one selects, the other drops; CLICK = 3-stop path
+  gradient→tab→result; DRAG mirrors it (grab→~400ms tab-DWELL switches mode→drop). **HARD architecture ask:
+  ONE shared component renders every dropbox** (styleable together) — realized as `TargetDropbox` driven by
+  a registry (prototype-local stand-in for the unbuilt (c) `getRect`; frozen (c) NOT touched). Flagged
+  throwaway prototype in the Picker, branch `exec/p2-a-prototype` (wt-p2a), iters `4a111e4` → **`2c91ec2`**
+  (gate-green, NOT merged). **iter2 applied user feedback:** swatches first-class (click+drag, no rename);
+  removed Apply (no destination in standalone) + Fullscreen (dup of the bottom well); targets narrowed to
+  REAL destinations only — **Generator** (slots) · **Stops** (loads into editor) · **Favients** (saves to
+  shelf, drag-to-favients now works); **Image hidden** (no destination); **rename → Favients only** (off
+  heroes/swatches); de-roughed avatar (lift/scale/shadow). **Awaiting user's next iteration feedback.** When
+  the interaction locks → it's the verified spec for the real P2-A (swap throwaway registry for (c)+getRect).
 - 2026-06-07 (PM) — **P2-F (ImageStage coexistence) DONE — in-review, gate-green, NOT merged**
   (commit `4e411d9` on `exec/p2-f-imagestage`, worktree `wt-p2f`, branched off integration `ff13cab`;
   run `wf_f921d66b-b25`). **Finding:** ImageStage already had a coexistence guard but it HARDCODED the
