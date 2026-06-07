@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useEngineStore } from '../store/engineStore';
 import { usePickerStore } from '../palette/store/pickerStore';
 import { passesFilters, type FilterWindows } from '../palette/core/facets';
-import { applyEntryToColoring, entryToGradientConfig } from '../palette/core/gradientSeam';
+import { entryToGradientConfig } from '../palette/core/gradientSeam';
 import { GROUP_BY, ROWS_BY, SORT_BY } from '../palette/features/paletteFilters';
 import type { CatalogEntry } from '../palette/core/presetCatalog';
 import { PickerWall, type PickerGroup, type SelectionTool } from '../palette/components/PickerWall';
@@ -21,6 +21,7 @@ import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIco
 import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { setFavientDrag } from '../palette/core/favientDnd';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
+import { useHeroSelection, setHeroSelection, clearHeroSelection } from '../palette/store/heroSelection';
 
 const win = (v: { x?: number; y?: number } | undefined): [number, number] => [v?.x ?? 0, v?.y ?? 1];
 
@@ -68,7 +69,14 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   const load = usePickerStore((s) => s.load);
   useEffect(() => { load(); }, [load]);
 
-  const [selected, setSelected] = useState<CatalogEntry | null>(null);
+  // Selection lives in the transient heroSelection store (not local state) so it
+  // survives the desktop↔mobile remount — the old useState blanked the hero on resize —
+  // and drives the shared lower-centre bin dock. Derive the entry back from the catalog.
+  const heroSel = useHeroSelection();
+  const selected = useMemo(
+    () => (heroSel?.mode === 'picker' ? catalog.find((e) => e.id === heroSel.key) ?? null : null),
+    [heroSel, catalog],
+  );
 
   // Free-text catalog search (transient, session-only — see pickerSearch). `searchOpen`
   // is purely the hero affordance's expanded/collapsed UI; the query itself is shared
@@ -109,10 +117,15 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   // The selected gradient as a GMT config, for the favourite star (presets carry stops;
   // loaded entries are ramp-only → fitted via the seam).
   const favConfig = useMemo(() => (selected ? entryToGradientConfig(selected) : null), [selected]);
-  // Pick → preview + (when a fractal is present, e.g. in app-gmt) colour it via the seam.
+  // Pick → SELECT it (drives the hero preview + the bin dock). The standalone studio
+  // has no fractal to colour, so the old no-op applyEntryToColoring is dropped (locked
+  // decision 4); destinations are the dock bins.
   const onPick = useCallback((e: CatalogEntry) => {
-    setSelected(e);
-    applyEntryToColoring(e);
+    setHeroSelection({
+      mode: 'picker',
+      key: e.id,
+      payload: { config: entryToGradientConfig(e), name: e.name, source: 'Picker' },
+    });
   }, []);
   // Drag a swatch out of the wall to drop it into the Favients shelf.
   const onEntryDragStart = useCallback((e: CatalogEntry, dt: DataTransfer) => {
@@ -304,7 +317,22 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
     <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-zinc-950">
       <div className="px-4 pt-3 pb-2 border-b border-zinc-800 shrink-0">
         {selected ? (
-          <canvas ref={heroRef} className="h-10 w-full rounded-md border border-zinc-700 block" />
+          // The preview is a select/drag source too: drag it onto a bin, or click to
+          // deselect. The cyan border is the selection treatment (it only shows when selected).
+          <canvas
+            ref={heroRef}
+            draggable
+            onDragStart={(e) =>
+              setFavientDrag(e.dataTransfer, {
+                config: entryToGradientConfig(selected),
+                name: selected.name,
+                source: 'Picker',
+              })
+            }
+            onClick={clearHeroSelection}
+            title="Selected — pick a destination in the dock below, or click to deselect · drag onto a bin"
+            className="h-10 w-full rounded-md border-2 border-cyan-400 block cursor-grab active:cursor-grabbing"
+          />
         ) : (
           <div className="h-10 w-full rounded-md border border-dashed border-zinc-700/70 bg-zinc-900/40 flex items-center justify-center">
             <span className="text-[10px] text-zinc-600">Click a swatch below to preview it here</span>

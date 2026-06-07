@@ -38,9 +38,15 @@ import { EditorStage } from './EditorStage';
 import { FavientsPanel } from '../palette/components/FavientsPanel';
 import { FavientsIcon } from '../palette/components/FavientsIcon';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
+import { useHeroSelection, clearHeroSelection } from '../palette/store/heroSelection';
+import { FAVIENT_DND_MIME } from '../palette/core/favientDnd';
 import type { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
+
+// MIME a selected gradient "would carry" — picks which bins the dock shows on SELECT
+// (the same predicate as a drag). Module const so the overlay's memo stays stable.
+const SELECT_TYPES = [FAVIENT_DND_MIME];
 
 const HelpBrowser = React.lazy(() => import('../components/HelpBrowser'));
 
@@ -262,6 +268,18 @@ const GradientExplorerApp: React.FC = () => {
     [state.handleInteractionStart, state.handleInteractionEnd, state.openContextMenu],
   );
 
+  // Selecting a gradient (a hero / Picker preview) reveals the lower-centre bin dock;
+  // the dock reads this payload and a bin click sends the gradient there. Esc deselects.
+  const heroSel = useHeroSelection();
+  useEffect(() => {
+    if (!heroSel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clearHeroSelection();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [heroSel]);
+
   return (
     <StoreCallbacksProvider value={storeCallbacks}>
       <div className="fixed inset-0 w-full h-full bg-black select-none overflow-hidden flex flex-col">
@@ -359,9 +377,14 @@ const GradientExplorerApp: React.FC = () => {
           {/* Toasts — save/load + Favients feedback surface here. */}
           <ToastHost />
 
-          {/* W4 drop-wells (Fullscreen well registered by the overlay below) — fade in
-              while a gradient drag is in flight. W11 fullscreen config gallery overlay. */}
-          <DragWellsOverlay />
+          {/* W4 drop-wells / P2-A bin dock (targets registered in gradientBins.ts) —
+              fade in while a gradient DRAG is in flight OR a gradient is SELECTED; a bin
+              click sends the selected gradient there. W11 fullscreen config gallery. */}
+          <DragWellsOverlay
+            selectedPayload={heroSel?.payload}
+            selectedTypes={SELECT_TYPES}
+            onSent={clearHeroSelection}
+          />
           <FullscreenGradientOverlay />
         </div>
       </div>

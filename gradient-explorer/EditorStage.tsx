@@ -5,14 +5,13 @@
  * bound to paletteEditorStore via the (d) reusable-editor undo seam: the editor's
  * value IS the config, onChange commits it, and onEditStart/onEditEnd/edit bracket
  * each gesture into one engine PARAM-undo entry (driving this store's history
- * provider). Above the editor sits a larger result strip rendered with the
- * canonical engine sampler (renderStopsToRamp) so the output reads at a glance,
- * with a favourite toggle.
+ * provider). Above the editor sits the shared CanonicalHero (P2-A): the result
+ * strip is a select/drag source for the bin dock, with the favourite star inline.
  *
- * Deliberately NO canonical hero / send-to / fullscreen-⛶ here — P2 owns the
- * cross-mode hero unification (select → act). The one-ramp seam (inbound bare
- * ramps → fitRampToStops once) is paletteEditorStore.loadRamp, consumed by future
- * send-to-Stops; the stage just renders the config the editor owns.
+ * The Stops mode is the MINIMAL hero — no primary Apply (it is always live-editing);
+ * the dock bins are how its result reaches the other modes. The one-ramp seam for an
+ * inbound BARE ramp (fitRampToStops once) is paletteEditorStore.loadRamp; the Stops
+ * bin itself uses setConfig since a sent gradient already carries stops.
  */
 
 import React, { useMemo } from 'react';
@@ -24,8 +23,7 @@ import {
     editorEditEnd,
     editorEdit,
 } from '../palette/store/paletteEditorStore';
-import { GradientStrip } from '../palette/components/GradientStrip';
-import { FavStar } from '../palette/components/FavStar';
+import { CanonicalHero } from '../palette/components/CanonicalHero';
 import { renderStopsToRamp } from '../palette/core/gmtGradient';
 
 export const EditorStage: React.FC = () => {
@@ -47,17 +45,22 @@ export const EditorStage: React.FC = () => {
     return (
         <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">
             <div className="flex-1 overflow-y-auto custom-scroll p-4 flex flex-col gap-3">
-                {/* Result — the baked output, same sampler the texture uses. */}
-                <div>
-                    <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-xs text-gray-400 shrink-0">Result</span>
-                            <FavStar config={config} name="Stops" source="Stops" />
-                        </div>
-                        <span className="text-[11px] text-gray-500 tabular-nums shrink-0">{config.stops.length} stops</span>
-                    </div>
-                    <GradientStrip ramp={ramp} height={64} />
-                </div>
+                {/* Result — the baked output (same sampler the texture uses), as the
+                    shared select/drag hero. Minimal variant: no primary action — the
+                    dock bins are how the edited gradient reaches other modes. */}
+                <CanonicalHero
+                    config={config}
+                    ramp={ramp}
+                    name="Stops"
+                    source="Stops"
+                    mode="stops"
+                    height={64}
+                    trailing={
+                        <span className="text-[11px] text-gray-500 tabular-nums">
+                            {config.stops.length} stops
+                        </span>
+                    }
+                />
 
                 {/* The engine Stops editor — knot track + per-stop inspector. */}
                 <AdvancedGradientEditor

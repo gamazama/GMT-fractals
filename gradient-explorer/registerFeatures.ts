@@ -12,9 +12,15 @@ import { registerFavientTarget, setFavientBrowseAction } from '../palette/core/f
 import { useGeneratorStore } from '../palette/store/generatorStore';
 import { useEngineStore } from '../store/engineStore';
 import { renderStopsToRamp } from '../palette/core/gmtGradient';
+import { registerGradientBins } from './gradientBins';
 import type { GradientConfig } from '../types';
 
 registerPaletteUI();
+
+// The lower-centre "select → act" bin dock: register every gradient destination
+// (Fullscreen / Stops / Generator A·B / ColorBox / Favients) into the (b) drop-well
+// and (c) send-target kernels from one list. Side-effect, pre-store-freeze safe.
+registerGradientBins();
 
 // Favients header "Palettes" button → TOGGLE the studio's Picker tab.
 setFavientBrowseAction(() => useEngineStore.getState().togglePanel('Picker'));

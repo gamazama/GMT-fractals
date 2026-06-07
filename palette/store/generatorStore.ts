@@ -153,6 +153,9 @@ interface GeneratorState {
   /** ColorBox: approximate a catalog gradient as per-channel sweeps and load it into
    *  the ColorBox params (the interim "fit from a gradient" entry until P2's drop path). */
   fitColorBoxFromCatalog: (idx: number) => void;
+  /** ColorBox: same fit from an arbitrary 256-RGB ramp — the P2 select/drop path (a
+   *  gradient sent from any mode / Favients onto the ColorBox bin). One undo entry. */
+  fitColorBoxFromRamp: (ramp: RGB[]) => void;
 }
 
 const SLOT_DEFAULTS = (which: 'A' | 'B'): Partial<GeneratorSlice> => {
@@ -306,9 +309,10 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
     }),
   resetMainMods: () => genEdit(() => setSlice(MAIN_DEFAULTS)),
 
-  fitColorBoxFromCatalog: (idx) =>
+  fitColorBoxFromCatalog: (idx) => get().fitColorBoxFromRamp(presetRamp(idx)),
+  fitColorBoxFromRamp: (ramp) =>
     genEdit(() => {
-      const params = fitColorBoxToRamp(presetRamp(idx));
+      const params = fitColorBoxToRamp(ramp);
       // Ensure we're in ColorBox mode and load the fitted sweeps (one undo entry).
       setSlice({ generatorMode: 1, ...colorBoxToSlice(params) } as Partial<GeneratorSlice>);
       showToast('ColorBox fitted from gradient — tweak the sweeps to taste', 'success');

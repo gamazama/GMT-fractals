@@ -29,10 +29,9 @@ import { GradientStrip } from './GradientStrip';
 import { GradientSourcePicker } from './GradientSourcePicker';
 import { GeneratorSlotMods } from './GeneratorSlotMods';
 import { MixBlend } from './MixBlend';
-import { FavStar } from './FavStar';
+import { CanonicalHero } from './CanonicalHero';
 import { readFavientDrag, FAVIENT_DND_MIME } from '../core/favientDnd';
 import { renderStopsToRamp } from '../core/gmtGradient';
-import { openFullscreen } from '../store/fullscreenStore';
 
 const useContainerSize = () => {
   const ref = useRef<HTMLDivElement>(null);
@@ -351,36 +350,37 @@ export const GeneratorStage: React.FC = () => {
           style={{ flexGrow: 1, flexBasis: 0, maxHeight: curvesOn ? 800 : 0, marginBottom: -6 }}
         />
 
-        {/* Result — same width as the graph plot, no bordered holder */}
+        {/* Result — the shared select/drag hero. Apply / Fullscreen / Send-to are the
+            lower-centre bin dock now (click the strip to reveal it); only the result's
+            own view controls (enlarge) stay here. */}
         <div className="mt-1">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="text-xs text-gray-400 shrink-0">Result</div>
-              <FavStar config={config} name="Generated" source="Generator" />
-              {curvesOn && !colorbox && <span className="text-[10px] text-cyan-400/70 truncate">curves drive output — Re-fit / Reset points to edit sources</span>}
+          {curvesOn && !colorbox && (
+            <div className="text-[10px] text-cyan-400/70 truncate mb-1">
+              curves drive output — Re-fit / Reset points to edit sources
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-[11px] text-gray-500">{config.stops.length} stops</span>
-              <button
-                onClick={() => openFullscreen(config, 'Generated')}
-                title="Open the fullscreen config gallery"
-                aria-label="Open fullscreen preview"
-                className="text-[11px] px-1.5 py-0.5 rounded-sm bg-white/[0.06] text-gray-400 hover:text-gray-200 transition-colors"
-              >
-                ⛶
-              </button>
-              <button
-                onClick={() => setResultTall((t) => !t)}
-                title={resultTall ? 'Shrink result' : 'Enlarge result'}
-                aria-label="Toggle result height"
-                aria-pressed={resultTall}
-                className={`text-[11px] px-1.5 py-0.5 rounded-sm transition-colors ${resultTall ? 'bg-cyan-500/20 text-cyan-200' : 'bg-white/[0.06] text-gray-400 hover:text-gray-200'}`}
-              >
-                ⬍
-              </button>
-            </div>
-          </div>
-          <GradientStrip ramp={ramp} height={resultTall ? 96 : 44} />
+          )}
+          <CanonicalHero
+            config={config}
+            ramp={ramp}
+            name="Generated"
+            source="Generator"
+            mode="generator"
+            height={resultTall ? 96 : 44}
+            trailing={
+              <>
+                <span className="text-[11px] text-gray-500">{config.stops.length} stops</span>
+                <button
+                  onClick={() => setResultTall((t) => !t)}
+                  title={resultTall ? 'Shrink result' : 'Enlarge result'}
+                  aria-label="Toggle result height"
+                  aria-pressed={resultTall}
+                  className={`text-[11px] px-1.5 py-0.5 rounded-sm transition-colors ${resultTall ? 'bg-cyan-500/20 text-cyan-200' : 'bg-white/[0.06] text-gray-400 hover:text-gray-200'}`}
+                >
+                  ⬍
+                </button>
+              </>
+            }
+          />
         </div>
       </div>
 

@@ -36,7 +36,6 @@ import {
 } from '../palette/core/rampGeometry';
 import {
   closeFullscreen,
-  openFullscreen,
   rerollFullscreen,
   setFullscreenAmount,
   setFullscreenGeom,
@@ -47,8 +46,6 @@ import {
   setFractalIterMul,
   useFullscreenState,
 } from '../palette/store/fullscreenStore';
-import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
-import { registerDropWell } from '../store/dropWellRegistry';
 import { canvasToPngBlob, downloadBlob } from '../utils/SceneFormat';
 import { Z } from '../components/ui/zIndex';
 // Type-only — the engine (perturbation + LA + shaders) is a heavy chunk, lazy-
@@ -95,22 +92,9 @@ export const FullscreenGradientOverlay: React.FC = () => {
 
   const fractal = isFractal(fs.geom);
 
-  // Register the "Fullscreen" drop-well ONCE (drag open path). It accepts the
-  // gradient MIME and opens the gallery on the dropped config. Result-hero drag
-  // sources are P2; today the Favients shelf is the only source carrying this MIME.
-  useEffect(
-    () =>
-      registerDropWell({
-        id: 'fullscreen',
-        label: 'Fullscreen',
-        accepts: (types) => types.includes(FAVIENT_DND_MIME),
-        onDrop: (dt) => {
-          const p = readFavientDrag(dt);
-          if (p) openFullscreen(p.config, p.name);
-        },
-      }),
-    [],
-  );
+  // The "Fullscreen" drop-well + send-target is registered in `gradientBins.ts`
+  // (the one bin list) at boot — not inline here — so the dock has a single source
+  // of truth. `openFullscreen` (below) is the receive path that bin calls.
 
   // Esc dismissal — a direct capture-phase listener so it works regardless of whether
   // the host installed the shortcut registry (the Explorer shell may not have).
