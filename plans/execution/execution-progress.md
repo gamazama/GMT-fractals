@@ -426,6 +426,20 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **✅ LIVE-FRACTAL CARVE MERGED into integration `cbfad67`** (merge of `exec/livefractal`
+  91ae8f5; 55 files +6196/−1752; NO conflicts). **Focused independent review (run `w14heyn2c`, 2 lenses)
+  came back 0 blockers / 0 real-bugs:** Lens A (nucleus correctness) **merge-ready** — traced the
+  dead-`uRefPeriod` fix end-to-end and confirmed it's wired in BOTH consumers (kernel decl → FractalColorRenderer
+  JULIA_UNIFORMS → fluid-toy FluidEngine list → shared DeepZoomController bind), modulo-wrap exact (no
+  off-by-one), period detection can't corrupt orbit (post-Newton z_P verify rejects false periods), ε-calib
+  + AT fully off for periodic refs; Lens B (integration safety) **merge-with-nits** — deferred items
+  confirmed benign; its one flagged item (fluid-toy deep power-2 Mandelbrot path = the only un-render-covered
+  spot) **CLOSED by user: "already did a deep dive."** **Combined integration gate GREEN @ cbfad67:** tsc 0
+  · test:palette ALL PASS · smoke:deep-zoom-orbit/-la/-nucleus ✓ · smoke:fluid-toy ✓ (GPU gx-fractal-glitch/
+  -nucleus-render attested green in the commit). **P2-F (`b0d2574`) + P2-A prototype (`7a1c061`) REBASED onto
+  cbfad67** (both clean, node_modules junctions intact). engine/fractal/ is now the shared home; fluid-toy via
+  re-export shims. **TODO: retire wt-lf** (carefully — `cmd /c rmdir ..\wt-lf\node_modules` junction FIRST,
+  then `git worktree remove`). Next: land P2-F; continue P2-A prototype iteration; fan out the rest of Wave 1.
 - 2026-06-08 — **LIVE-FRACTAL CARVE DELIVERED + ADR-0066 nucleus reference; user visual ✅ "looks
   fantastic" (both apps); under FINAL focused independent review → then MERGE.** Session summary ingested
   (commit `91ae8f5` on `exec/livefractal`, wt-lf, clean tree, NOT yet merged). ADR-0066 = minibrot-NUCLEUS
