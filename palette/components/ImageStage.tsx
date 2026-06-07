@@ -20,7 +20,7 @@ import { useGeneratorStore } from '../store/generatorStore';
 import { useEngineStore } from '../../store/engineStore';
 import { FavStar } from './FavStar';
 import { fitRampToStops } from '../core/stopFit';
-import { FAVIENT_DND_MIME } from '../core/favientDnd';
+import { wellsForTypes } from '../../store/dropWellRegistry';
 
 const MODES: { id: Img2GradMode; label: string }[] = [
   { id: 'distill', label: 'Distill' },
@@ -169,20 +169,23 @@ export const ImageStage: React.FC = () => {
   // whole-window drop target + paste (active while the Image stage is mounted)
   useEffect(() => {
     let dragT: number | undefined;
-    // Coexistence with the W4 drop-wells (dropWellRegistry.ts): a gradient drag carries
-    // the favient MIME and belongs to a well, not the image-file importer — early-return
-    // so the well handles it (and we don't flash the image overlay over it).
-    const isGradientDrag = (e: DragEvent): boolean =>
-      !!e.dataTransfer && Array.from(e.dataTransfer.types).includes(FAVIENT_DND_MIME);
+    // Coexistence with the W4 drop-wells (dropWellRegistry.ts): an in-app drag (a
+    // gradient swatch, etc.) carries a MIME that a registered drop well accepts and
+    // belongs to that well, not the image-file importer — early-return so the well
+    // handles it (and we don't flash the image overlay over it). The drop-well
+    // registry is the single source of truth for "is this a well-accepted drag":
+    // ImageStage proceeds ONLY for genuine OS file drops (no well claims the types).
+    const isWellDrag = (e: DragEvent): boolean =>
+      !!e.dataTransfer && wellsForTypes(Array.from(e.dataTransfer.types)).length > 0;
     const onDragOver = (e: DragEvent) => {
-      if (isGradientDrag(e)) return;
+      if (isWellDrag(e)) return;
       e.preventDefault();
       setOver(true);
       window.clearTimeout(dragT);
       dragT = window.setTimeout(() => setOver(false), 130);
     };
     const onDrop = (e: DragEvent) => {
-      if (isGradientDrag(e)) return;
+      if (isWellDrag(e)) return;
       e.preventDefault();
       setOver(false);
       window.clearTimeout(dragT);
