@@ -159,14 +159,8 @@ export const GradientDropLayer: React.FC = () => {
         };
     }, [active, dragging, dwellStep]);
 
-    if (!active) return null;
-
-    const dwellProgress =
-        dwellStep && dwellStart.current
-            ? Math.min(1, (performance.now() - dwellStart.current) / STEP_DWELL_MS)
-            : 0;
-
     // The dragged ramp — recomputed only when the selection changes (not per rAF frame).
+    // MUST stay above the early return below so the hook order is stable.
     const avatarRamp = useMemo(
         () =>
             sel
@@ -178,6 +172,13 @@ export const GradientDropLayer: React.FC = () => {
                 : null,
         [sel],
     );
+
+    if (!active) return null;
+
+    const dwellProgress =
+        dwellStep && dwellStart.current
+            ? Math.min(1, (performance.now() - dwellStart.current) / STEP_DWELL_MS)
+            : 0;
 
     return (
         <>
