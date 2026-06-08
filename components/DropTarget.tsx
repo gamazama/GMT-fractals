@@ -100,7 +100,10 @@ export const DropTargetTile: React.FC<DropTargetTileProps> = ({
                 </div>
             )}
             {!hideLabel && (
-                <span className="relative truncate px-1.5">
+                // pointer-events-none so dragging over the TEXT doesn't fire a child-boundary
+                // dragleave / land the dragover on the span — that breaks the preventDefault
+                // on the tile div and cancels the drop. All events must hit the tile itself.
+                <span className="relative truncate px-1.5 pointer-events-none">
                     {label}
                     {armed && hint && <span className="ml-1 opacity-75 normal-case">· {hint}</span>}
                 </span>
