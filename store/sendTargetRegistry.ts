@@ -43,8 +43,44 @@ export interface SendTarget<P = unknown> {
      * → always applicable. A throwing predicate is treated as "not applicable".
      */
     accepts?: (payload: P) => boolean;
+    /**
+     * Optional DRAG-visibility predicate over the drag's MIME types — the click-twin of
+     * `accepts(payload)`, usable while `getData` is blocked mid-drag. Absent → shown for
+     * any accepted drag. A drop-target layer hides this target during a drag whose types
+     * it rejects (e.g. a "save to Favients" target stands down during an internal Favients
+     * reorder so the shelf's own drag-and-drop keeps working).
+     */
+    acceptsTypes?: (types: string[]) => boolean;
+    /**
+     * When true, during a DRAG the layer shows this target's anchored dropbox as a
+     * VISUAL affordance only (pointer-events-none) — the drag falls THROUGH to the
+     * element underneath, which handles the drop itself (e.g. the Favients panel's own
+     * insert / group / reorder drag-and-drop). The CLICK (select) path is unaffected.
+     */
+    dragPassthrough?: boolean;
     /** Apply the payload to this destination. */
     apply: (payload: P) => void;
+    /**
+     * Optional live on-screen rect of this target's anchor element. Additive
+     * §4(c) amendment (mirrors `(b)`'s optional `render?`): when present, the
+     * target is a SPATIAL drop zone — a drop-target layer renders its dropbox
+     * anchored over this rect and hit-tests drops against it; when absent, the
+     * target has no on-screen anchor (menu-only, or a bottom-row well). Read at
+     * paint / hit-test time, never cached. Returns null when the anchor is not
+     * currently mounted/visible (the target then shows no anchored dropbox).
+     */
+    getRect?: () => DOMRect | null;
+    /**
+     * Optional ORDERED list of opaque "reveal step" ids that must be satisfied for this
+     * target's anchor to be on screen (e.g. ['tab:Generator', 'gen:colorbox'] — open the
+     * Generator tab, then switch it to ColorBox mode). The registry never interprets the
+     * ids. A host that lays targets out spatially uses this to DERIVE intermediate
+     * affordances purely from the registered set: when a target's `getRect()` is null
+     * (anchor hidden), the host walks `revealPath` and surfaces the FIRST unsatisfied step
+     * as a one-click/dwell "reveal" — so a new target (even behind several steps) auto-
+     * populates its whole path with no host-side map.
+     */
+    revealPath?: string[];
 }
 
 // Stored as the widest payload; registrants narrow `P` at the call site.

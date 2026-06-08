@@ -35,6 +35,27 @@ export const setFavientDrag = (dt: DataTransfer, payload: FavientDragPayload): v
   dt.effectAllowed = 'copy';
 };
 
+// A 1×1 transparent GIF, lazily created (DOM-guarded so pure-core tests don't touch it).
+let _emptyDragImg: HTMLImageElement | null = null;
+
+/**
+ * Suppress the browser's default (frozen-bitmap) drag image so a custom cursor-following
+ * avatar can stand in. Call right after `setFavientDrag` in a gradient drag source.
+ */
+export const suppressNativeDragImage = (dt: DataTransfer): void => {
+  if (typeof document === 'undefined') return;
+  if (!_emptyDragImg) {
+    _emptyDragImg = new Image();
+    _emptyDragImg.src =
+      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  }
+  try {
+    dt.setDragImage(_emptyDragImg, 0, 0);
+  } catch {
+    /* setDragImage unsupported on some elements — fall back to the native image */
+  }
+};
+
 /** Read a favourite from a drop event's dataTransfer, or null if none present. */
 export const readFavientDrag = (dt: DataTransfer): FavientDragPayload | null => {
   const raw = dt.getData(FAVIENT_DND_MIME);

@@ -30,7 +30,8 @@ import {
   getFavientBrowseAction,
   getFavientStudioAction,
 } from '../core/favientTargets';
-import { setFavientDrag, readFavientDrag, FAVIENT_DND_MIME, type FavientDragPayload } from '../core/favientDnd';
+import { setFavientDrag, suppressNativeDragImage, readFavientDrag, FAVIENT_DND_MIME, type FavientDragPayload } from '../core/favientDnd';
+import { setHeroSelection } from '../store/heroSelection';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
 import { FavientsIcon } from './FavientsIcon';
@@ -425,7 +426,12 @@ const FavientSwatch: React.FC<{
         return;
       }
       onHover(null);
-      setFavientDrag(e.dataTransfer, { config: fav.config, name: fav.name, source: fav.source, favId: fav.id });
+      const payload = { config: fav.config, name: fav.name, source: fav.source, favId: fav.id };
+      setFavientDrag(e.dataTransfer, payload);
+      suppressNativeDragImage(e.dataTransfer); // cursor-following avatar stands in
+      // Drag mirrors select — gives the avatar its ramp + lets the favourite be sent to
+      // a dropbox (its own internal reorder still works via the FAVIENT_INTERNAL_MIME).
+      setHeroSelection({ mode: 'favients', key: fav.id, payload });
       onDragBegin(fav.id);
     },
     // Hover-enlarge is GRID-only: in list mode the popover would obscure the name and
@@ -874,7 +880,7 @@ export const FavientsPanel: React.FC = () => {
         <Hint text="Where your favourite gradients go to die — kept here, and shared with the main GMT studio." />
       )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col">
+      <div data-gx-target="favients" className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col">
         {favients.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-center px-4">
             <div className="text-[11px] text-gray-500 leading-relaxed">

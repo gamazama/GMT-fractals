@@ -8,11 +8,9 @@
  * PNG (the canvas snapshot IS the active geometry). It never mutates gradient data —
  * the previewed config is a snapshot handed in via `openFullscreen`.
  *
- * Two open paths (per the W11 mandate):
- *  1. Non-drag: a result-hero "Fullscreen" button calls `openFullscreen(config)`.
- *  2. Drag: a "Fullscreen" drop-well registered into the engine W4 kernel
- *     (`registerDropWell`) opens it from a dropped gradient payload. Today only
- *     Favients swatches carry the gradient MIME; result-hero drag SOURCES are P2.
+ * Opened via `openFullscreen(config, name)` — the receive path of the "Fullscreen"
+ * send-target registered in `gradient-explorer/gradientTargets.ts` (a bottom-row well
+ * in the P2-A "select → reveal → place" dock). Click the well or drop a gradient on it.
  *
  * All view state (geometry / seed / amount / open) is transient + shell-scoped in
  * `fullscreenStore` (not DDFS, not persisted). The mappings are pure; this component
@@ -36,7 +34,6 @@ import {
 } from '../palette/core/rampGeometry';
 import {
   closeFullscreen,
-  openFullscreen,
   rerollFullscreen,
   setFullscreenAmount,
   setFullscreenGeom,
@@ -47,8 +44,6 @@ import {
   setFractalIterMul,
   useFullscreenState,
 } from '../palette/store/fullscreenStore';
-import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
-import { registerDropWell } from '../store/dropWellRegistry';
 import { canvasToPngBlob, downloadBlob } from '../utils/SceneFormat';
 import { Z } from '../components/ui/zIndex';
 // Type-only — the engine (perturbation + LA + shaders) is a heavy chunk, lazy-
@@ -95,22 +90,9 @@ export const FullscreenGradientOverlay: React.FC = () => {
 
   const fractal = isFractal(fs.geom);
 
-  // Register the "Fullscreen" drop-well ONCE (drag open path). It accepts the
-  // gradient MIME and opens the gallery on the dropped config. Result-hero drag
-  // sources are P2; today the Favients shelf is the only source carrying this MIME.
-  useEffect(
-    () =>
-      registerDropWell({
-        id: 'fullscreen',
-        label: 'Fullscreen',
-        accepts: (types) => types.includes(FAVIENT_DND_MIME),
-        onDrop: (dt) => {
-          const p = readFavientDrag(dt);
-          if (p) openFullscreen(p.config, p.name);
-        },
-      }),
-    [],
-  );
+  // The "Fullscreen" target is registered in `gradientTargets.ts` (the one target list)
+  // at boot — not inline here — so the dock has a single source of truth.
+  // `openFullscreen` (below) is the receive path that target calls.
 
   // Esc dismissal — a direct capture-phase listener so it works regardless of whether
   // the host installed the shortcut registry (the Explorer shell may not have).

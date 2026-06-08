@@ -27,7 +27,7 @@ import { PanelRouter } from '../components/PanelRouter';
 import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
 import { TimelineHost } from '../components/TimelineHost';
 import { ToastHost } from '../engine/components/ToastHost';
-import { DragWellsOverlay } from '../components/DragWellsOverlay';
+import { GradientDropLayer } from './GradientDropLayer';
 import { FullscreenGradientOverlay } from './FullscreenGradientOverlay';
 import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
@@ -38,6 +38,7 @@ import { EditorStage } from './EditorStage';
 import { FavientsPanel } from '../palette/components/FavientsPanel';
 import { FavientsIcon } from '../palette/components/FavientsIcon';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
+import { useHeroSelection, clearHeroSelection } from '../palette/store/heroSelection';
 import type { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
@@ -262,6 +263,30 @@ const GradientExplorerApp: React.FC = () => {
     [state.handleInteractionStart, state.handleInteractionEnd, state.openContextMenu],
   );
 
+  // Selecting a gradient (a hero / Picker preview) reveals the lower-centre bin dock;
+  // the dock reads this payload and a bin click sends the gradient there. Esc deselects.
+  const heroSel = useHeroSelection();
+  useEffect(() => {
+    if (!heroSel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clearHeroSelection();
+    };
+    // Click-outside deselects. Skip a dropbox (`data-gx-keepselect` — it needs the live
+    // selection to apply) and a selectable swatch/hero (`data-gx-selectable` — its own
+    // click re-selects/toggles); a pointerdown anywhere else clears.
+    const onDown = (e: PointerEvent) => {
+      const el = e.target as Element | null;
+      if (el?.closest('[data-gx-keepselect],[data-gx-selectable]')) return;
+      clearHeroSelection();
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onDown, true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onDown, true);
+    };
+  }, [heroSel]);
+
   return (
     <StoreCallbacksProvider value={storeCallbacks}>
       <div className="fixed inset-0 w-full h-full bg-black select-none overflow-hidden flex flex-col">
@@ -359,9 +384,10 @@ const GradientExplorerApp: React.FC = () => {
           {/* Toasts — save/load + Favients feedback surface here. */}
           <ToastHost />
 
-          {/* W4 drop-wells (Fullscreen well registered by the overlay below) — fade in
-              while a gradient drag is in flight. W11 fullscreen config gallery overlay. */}
-          <DragWellsOverlay />
+          {/* P2-A "select → reveal → place": final dropboxes (anchored + bottom wells),
+              the derived intermediate tab steps, and the drag avatar. Inert unless a
+              gradient is selected or a gradient drag is in flight. */}
+          <GradientDropLayer />
           <FullscreenGradientOverlay />
         </div>
       </div>

@@ -253,6 +253,7 @@ const DockTab: React.FC<DockTabProps> = ({
     return (
         <button
             ref={tabAnchorRef}
+            data-gx-mode-tab={p.id}
             onClick={() => togglePanel(p.id, true)}
             onContextMenu={(e) => handleContextMenu(e, p.id)}
             onMouseEnter={() => {

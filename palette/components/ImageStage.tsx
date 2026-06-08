@@ -15,10 +15,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useImageStore, useImageDerived, useImageMode, useImageParam } from '../store/imageStore';
 import { ingestPixels, INGEST_MAX_EDGE, autoPath, tracePolyline, type Img2GradMode } from '../core/img2grad';
 import type { Pt, TracePath } from '../core/img2grad/common';
-import { GradientStrip } from './GradientStrip';
-import { useGeneratorStore } from '../store/generatorStore';
-import { useEngineStore } from '../../store/engineStore';
-import { FavStar } from './FavStar';
+import { CanonicalHero } from './CanonicalHero';
 import { fitRampToStops } from '../core/stopFit';
 import { wellsForTypes } from '../../store/dropWellRegistry';
 
@@ -453,15 +450,8 @@ export const ImageStage: React.FC = () => {
     if (id === 'trace' && model) setPath(autoPath(model));
   };
 
-  // --- send to generator ---
-  const sendRampToSlot = useGeneratorStore((s) => s.sendRampToSlot);
-  const togglePanel = useEngineStore((s) => s.togglePanel);
-  const send = (which: 'A' | 'B') => {
-    if (!derived) { flash('load an image first'); return; }
-    sendRampToSlot(which, derived.ramp, `Image · ${mode}`);
-    flash(`Sent to Generator ${which}`);
-    togglePanel('Generator', true);
-  };
+  // Send-to-Generator is now the Generator · A / Generator · B bins in the dock
+  // (select the result or drag it onto a bin) — no hardcoded buttons here.
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-zinc-950 relative overflow-hidden">
@@ -508,27 +498,27 @@ export const ImageStage: React.FC = () => {
             </button>
           </div>
 
-          {/* Result gradient */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
-                <div className="text-xs text-gray-400">Result <span className="ml-1 text-gray-500 capitalize">{mode}</span></div>
-                {favConfig && <FavStar config={favConfig} name={`Image · ${mode}`} source="Image" />}
+          {/* Result gradient — the shared select/drag hero (drag it onto a bin, or
+              click to select then pick a destination: Generator · A/B, ColorBox, …). */}
+          {favConfig && derived ? (
+            <CanonicalHero
+              config={favConfig}
+              ramp={derived.ramp}
+              name={`Image · ${mode}`}
+              source="Image"
+              mode="image"
+              height={96}
+            />
+          ) : (
+            <div>
+              <div className="text-xs text-gray-400 mb-1.5">
+                Result <span className="ml-1 text-gray-500 capitalize">{mode}</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] uppercase tracking-wide text-gray-500 mr-0.5">Send to</span>
-                <button onClick={() => send('A')} title="Send to Generator slot A" className="text-[11px] px-2 py-1 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 transition-colors">
-                  Generator A
-                </button>
-                <button onClick={() => send('B')} title="Send to Generator slot B" className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors">
-                  B
-                </button>
+              <div className="rounded-md border border-white/15 bg-black/30 p-2 shadow-lg">
+                <div className="h-24" />
               </div>
             </div>
-            <div className="rounded-md border border-white/15 bg-black/30 p-2 shadow-lg">
-              {derived ? <GradientStrip ramp={derived.ramp} height={96} /> : <div className="h-24" />}
-            </div>
-          </div>
+          )}
 
           {/* Cloud + image pane */}
           <div className="flex gap-4 flex-wrap">
