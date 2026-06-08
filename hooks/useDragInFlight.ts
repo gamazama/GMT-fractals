@@ -28,6 +28,7 @@
 
 import { useEffect, useReducer } from 'react';
 import { dragFlightInitial, dragFlightReducer } from '../store/dragFlight';
+import { useDragEndSafetyNet } from './useDragEndSafetyNet';
 
 export interface DragInFlight {
     inFlight: boolean;
@@ -73,6 +74,10 @@ export const useDragInFlight = (enabled = true): DragInFlight => {
             window.removeEventListener('blur', onEnd);
         };
     }, [enabled]);
+
+    // Recover from a drag whose source unmounts mid-drag (no drop/dragend reaches us) — see
+    // the hook. Without this the kernel could stay "in flight" with no way to reset.
+    useDragEndSafetyNet(enabled && state.inFlight, () => dispatch({ kind: 'end' }));
 
     return { inFlight: state.inFlight, types: state.types };
 };

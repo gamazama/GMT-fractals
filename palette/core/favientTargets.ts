@@ -46,6 +46,21 @@ export const subscribeFavientTargets = (l: () => void): (() => void) => {
   };
 };
 
+// --- "select mode" (host capability) — a host that provides a select→reveal→place dock
+// (the Gradient Explorer's GradientDropLayer) sets this so the Favients panel flips a
+// swatch CLICK from immediate apply to SELECT (pick → enlarge → dock), and hides its
+// "Destination" dropdown (the dock supersedes it). Hosts WITHOUT a dock (app-gmt, which
+// applies favourites straight to its coloring layers via the dropdown) leave it false. ---
+let _selectMode = false;
+
+export const setFavientSelectMode = (on: boolean): void => {
+  if (_selectMode === on) return;
+  _selectMode = on;
+  _listeners.forEach((l) => l());
+};
+
+export const getFavientSelectMode = (): boolean => _selectMode;
+
 // --- "browse palettes" action (host-specific) — drives the Favients header's Palettes
 // button. Studio switches to the Picker tab; app-gmt opens the Palettes overlay. ---
 let _browse: (() => void) | null = null;

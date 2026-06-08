@@ -9,6 +9,9 @@
  *   • each canvas is drawn ONCE (drawImage from the shared 256×N sprite); the page
  *     scrolls in the DOM — no per-frame redraw.
  *   • hover draws the swatch ZOOMED in place (3×w · 2×h, crisp) + a stats tooltip.
+ *   • the SELECTED swatch (selectedId) is drawn ENLARGED in place — oversized + centred on
+ *     its cell, shadow-lifted above its neighbours, with a thin cyan ring. This is the
+ *     wall's half of the shared pick (the CanonicalHero shows the same gradient full-size).
  *
  * Spatial selection (Lasso/Rect/Paint) co-exists with the pointer gestures: when a tool
  * is active the LEFT button draws a carve region, then a click inside (isolate) / outside
@@ -74,6 +77,9 @@ export interface PickerWallProps {
   onSelectionCommit?: (insideIds: string[], op: 'isolate' | 'cut') => void;
   /** User cancelled (right-click / Esc-equivalent) — the host should deselect the tool. */
   onSelectionCancel?: () => void;
+  /** A click on the wall that did NOT land on a swatch (an "empty-wall click") — the host
+   *  deselects the current pick. Not fired while a selection tool is active. */
+  onDeselect?: () => void;
 }
 
 const LABEL_W = 132;
@@ -190,14 +196,36 @@ const SwatchCanvas: React.FC<{
     for (let k = 0; k < entries.length; k++) {
       const col = Math.floor(k / nrows);
       const row = k % nrows;
-      const x = col * cellW;
-      const y = row * cellH;
-      ctx.drawImage(sprite, 0, entries[k].row, 256, 1, x, y, swatchW, swatchH);
-      if (entries[k].id === selectedId) {
-        ctx.strokeStyle = '#22d3ee';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x + 1, y + 1, swatchW - 2, swatchH - 2);
-      }
+      ctx.drawImage(sprite, 0, entries[k].row, 256, 1, col * cellW, row * cellH, swatchW, swatchH);
+    }
+    // The selected swatch ENLARGES IN PLACE: redrawn last (on top of its neighbours),
+    // oversized + centred on its cell, with a drop-shadow lift + a thin cyan ring. Clamped
+    // to the canvas so a cell at a chunk edge isn't clipped. This is the wall's
+    // rest→enlarge selection treatment — the hero shows the same pick at full size.
+    const selIdx = selectedId ? entries.findIndex((e) => e.id === selectedId) : -1;
+    if (selIdx >= 0) {
+      const col = Math.floor(selIdx / nrows);
+      const row = selIdx % nrows;
+      const ew = Math.max(Math.round(swatchW * 1.8), 40);
+      const eh = Math.max(Math.round(swatchH * 1.8), 24);
+      const cx = col * cellW + swatchW / 2;
+      const cy = row * cellH + swatchH / 2;
+      const ex = Math.max(0, Math.min(cx - ew / 2, cssW - ew));
+      const ey = Math.max(0, Math.min(cy - eh / 2, cssH - eh));
+      ctx.save();
+      ctx.imageSmoothingEnabled = true; // smooth the showcased swatch (neighbours stay crisp)
+      ctx.shadowColor = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
+      ctx.drawImage(sprite, 0, entries[selIdx].row, 256, 1, ex, ey, ew, eh);
+      ctx.restore();
+      // Dark keyline (reads on light ramps) under a thin cyan selection ring.
+      ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(ex + 0.5, ey + 0.5, ew - 1, eh - 1);
+      ctx.strokeStyle = '#22d3ee';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(ex + 1.25, ey + 1.25, ew - 2.5, eh - 2.5);
     }
   }, [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId]);
 
@@ -241,28 +269,10 @@ const SwatchCanvas: React.FC<{
               e.preventDefault();
               return;
             }
-            // Custom drag image = just the hovered swatch (matching the hover zoom), so the
-            // ghost isn't the whole canvas sheet. Drawn into a throwaway off-screen canvas
-            // that setDragImage snapshots synchronously, then removed next tick.
-            const dw = swatchW * 3,
-              dh = swatchH * 2;
-            const di = document.createElement('canvas');
-            const dpr = window.devicePixelRatio || 1;
-            di.width = Math.round(dw * dpr);
-            di.height = Math.round(dh * dpr);
-            di.style.cssText = `position:fixed;top:-9999px;left:0;width:${dw}px;height:${dh}px`;
-            const dctx = di.getContext('2d');
-            if (dctx) {
-              dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-              dctx.imageSmoothingEnabled = false;
-              dctx.drawImage(sprite, 0, h.entry.row, 256, 1, 0, 0, dw, dh);
-              dctx.strokeStyle = '#fff';
-              dctx.lineWidth = 1;
-              dctx.strokeRect(0.5, 0.5, dw - 1, dh - 1);
-            }
-            document.body.appendChild(di);
-            e.dataTransfer.setDragImage(di, dw / 2, dh / 2);
-            setTimeout(() => di.remove(), 0);
+            // The drag visual is the shared cursor-following avatar — onEntryDragStart calls
+            // suppressNativeDragImage, exactly like the hero. (A custom setDragImage here was
+            // dead: suppress overrode it, and it differed the swatch path from the hero's,
+            // which is why swatch→Favients didn't show the avatar/reorder the same way.)
             onEntryDragStart(h.entry, e.dataTransfer);
           }}
           onMouseMove={(e) => {
@@ -282,7 +292,9 @@ const SwatchCanvas: React.FC<{
           onMouseLeave={() => onHover(null)}
           onClick={(e) => {
             const h = hit(e);
-            if (h) onPick(h.entry);
+            // A swatch hit picks (and stops here); a MISS (a gap) bubbles to the wall's
+            // onClick, which deselects — so an empty-wall click clears the pick.
+            if (h) { e.stopPropagation(); onPick(h.entry); }
           }}
         />
       )}
@@ -383,6 +395,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   selectionTool = null,
   onSelectionCommit,
   onSelectionCancel,
+  onDeselect,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -906,6 +919,9 @@ export const PickerWall: React.FC<PickerWallProps> = ({
         onPointerLeave={() => setBrushCursor(null)}
         onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => { if (e.button === 1 || e.button === 2) e.preventDefault(); }}
+        // A left-click that bubbles here didn't land on a swatch (swatch hits stopPropagation)
+        // → empty-wall click → deselect. Suppressed while a carve tool is active.
+        onClick={() => { if (!selectionTool) onDeselect?.(); }}
       >
         <div ref={contentRef} style={{ width: contentWidth, transformOrigin: '0 0' }}>
           {rows.map((g) => (

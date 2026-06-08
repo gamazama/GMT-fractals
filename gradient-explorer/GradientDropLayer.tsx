@@ -23,7 +23,7 @@ import { DropTargetLayer } from '../components/DropTargetLayer';
 import { DropTargetTile } from '../components/DropTarget';
 import { useDragInFlight } from '../hooks/useDragInFlight';
 import { Z } from '../components/ui/zIndex';
-import { useHeroSelection, clearHeroSelection } from '../palette/store/heroSelection';
+import { useActiveHeroSelection, useHeroOptionsOpen, closeHeroOptions } from '../palette/store/heroSelection';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
 import { renderStopsToBuffer } from '../palette/core/gmtGradient';
 import { deriveIntermediates } from './gradientTargets';
@@ -85,10 +85,14 @@ const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number }> = ({ ramp
 };
 
 export const GradientDropLayer: React.FC = () => {
-    const sel = useHeroSelection();
+    const sel = useActiveHeroSelection();
+    const optionsOpen = useHeroOptionsOpen();
     const { inFlight, types } = useDragInFlight(true);
     const dragging = inFlight && acceptsGradient(types);
-    const active = sel != null || dragging;
+    // The dock is shown while the options are open (click path) OR a drag is in flight.
+    // The PICK itself (sel) is sticky and no longer gates the dock — closing options
+    // leaves the pick in hand. (sel-guard so a stray open with no pick can't show empty.)
+    const active = (optionsOpen && sel != null) || dragging;
 
     const pointer = useRef({ x: 0, y: 0 });
     const [, tick] = useReducer((n: number) => n + 1, 0);
@@ -106,10 +110,11 @@ export const GradientDropLayer: React.FC = () => {
         const onOver = (e: DragEvent): void => {
             pointer.current = { x: e.clientX, y: e.clientY };
         };
-        // Clear on a drop that reaches the WINDOW — a drop on a final (already applied) or
-        // on nothing. An intermediate-step drop stopPropagations, so it does NOT clear:
-        // it reveals and leaves the user selected over the now-visible final.
-        const onEnd = (): void => clearHeroSelection();
+        // Close the options on a drop that reaches the WINDOW — a drop on a final (already
+        // applied) or on nothing. The PICK stays in hand. An intermediate-step drop
+        // stopPropagations, so it does NOT close: it reveals and leaves the dock up over
+        // the now-visible final.
+        const onEnd = (): void => closeHeroOptions();
         window.addEventListener('dragover', onOver, true);
         window.addEventListener('drop', onEnd, false);
         return () => {
@@ -193,7 +198,7 @@ export const GradientDropLayer: React.FC = () => {
                 selfId={sel?.selfTargetId}
                 dragAccepts={acceptsGradient}
                 readDragPayload={readFavientDrag}
-                onSent={clearHeroSelection}
+                onSent={closeHeroOptions}
             />
 
             {/* Intermediate reveal steps — derived from the registry, anchored over each

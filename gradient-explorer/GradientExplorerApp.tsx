@@ -38,7 +38,7 @@ import { EditorStage } from './EditorStage';
 import { FavientsPanel } from '../palette/components/FavientsPanel';
 import { FavientsIcon } from '../palette/components/FavientsIcon';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
-import { useHeroSelection, clearHeroSelection } from '../palette/store/heroSelection';
+import { useActiveHeroMode, closeHeroOptions, deselectActiveHero } from '../palette/store/heroSelection';
 import type { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
@@ -263,21 +263,24 @@ const GradientExplorerApp: React.FC = () => {
     [state.handleInteractionStart, state.handleInteractionEnd, state.openContextMenu],
   );
 
-  // Selecting a gradient (a hero / Picker preview) reveals the lower-centre bin dock;
-  // the dock reads this payload and a bin click sends the gradient there. Esc deselects.
-  const heroSel = useHeroSelection();
+  // While a pick is in hand: a click-away CLOSES the dock but KEEPS the pick — the hero is
+  // STICKY (it shows the last picked gradient). Esc DESELECTS (clears the active pick). An
+  // empty-WALL click also deselects, but that's handled in the wall (PickerWall.onDeselect),
+  // which can tell an empty click from a swatch click — here we only close the dock so that
+  // touching other UI doesn't blank the hero.
+  const activeMode = useActiveHeroMode();
   useEffect(() => {
-    if (!heroSel) return;
+    if (!activeMode) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') clearHeroSelection();
+      if (e.key === 'Escape') deselectActiveHero();
     };
-    // Click-outside deselects. Skip a dropbox (`data-gx-keepselect` — it needs the live
-    // selection to apply) and a selectable swatch/hero (`data-gx-selectable` — its own
-    // click re-selects/toggles); a pointerdown anywhere else clears.
+    // Skip a dropbox (`data-gx-keepselect` — it needs the live pick to apply) and a
+    // selectable swatch/hero (`data-gx-selectable`); a pointerdown anywhere else just
+    // closes the dock (the pick survives).
     const onDown = (e: PointerEvent) => {
       const el = e.target as Element | null;
       if (el?.closest('[data-gx-keepselect],[data-gx-selectable]')) return;
-      clearHeroSelection();
+      closeHeroOptions();
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('pointerdown', onDown, true);
@@ -285,7 +288,7 @@ const GradientExplorerApp: React.FC = () => {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('pointerdown', onDown, true);
     };
-  }, [heroSel]);
+  }, [activeMode]);
 
   return (
     <StoreCallbacksProvider value={storeCallbacks}>

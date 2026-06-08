@@ -57,7 +57,6 @@ export const EditorStage: React.FC = () => {
                     source="Stops"
                     mode="stops"
                     targetId="stops"
-                    height={64}
                     trailing={
                         <span className="text-[11px] text-gray-500 tabular-nums">
                             {config.stops.length} stops

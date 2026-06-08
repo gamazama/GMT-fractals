@@ -8,12 +8,9 @@
  */
 
 import { registerPaletteUI } from '../palette/registerPaletteUI';
-import { registerFavientTarget, setFavientBrowseAction } from '../palette/core/favientTargets';
-import { useGeneratorStore } from '../palette/store/generatorStore';
+import { setFavientBrowseAction, setFavientSelectMode } from '../palette/core/favientTargets';
 import { useEngineStore } from '../store/engineStore';
-import { renderStopsToRamp } from '../palette/core/gmtGradient';
 import { registerGradientTargets } from './gradientTargets';
-import type { GradientConfig } from '../types';
 
 registerPaletteUI();
 
@@ -27,12 +24,8 @@ registerGradientTargets();
 // Favients header "Palettes" button → TOGGLE the studio's Picker tab.
 setFavientBrowseAction(() => useEngineStore.getState().togglePanel('Picker'));
 
-// Legacy Favients "Applying to ▾" targets (S2) — kept until P2-C migrates favientTargets
-// onto the (c) registry. The new dropbox model is additive alongside this.
-const applyToSlot = (which: 'A' | 'B') => (config: GradientConfig, name: string) =>
-  useGeneratorStore
-    .getState()
-    .sendRampToSlot(which, renderStopsToRamp(config.stops, config.blendSpace, config.colorSpace), name);
-
-registerFavientTarget({ id: 'gen-a', label: 'Generator · Slot A', apply: applyToSlot('A') });
-registerFavientTarget({ id: 'gen-b', label: 'Generator · Slot B', apply: applyToSlot('B') });
+// This host owns the select→reveal→place dock (GradientDropLayer), so the Favients panel
+// flips a swatch CLICK to SELECT (→ enlarge → dock) and hides its "Destination" dropdown.
+// The dock supersedes the legacy "Applying to ▾" gen-a/gen-b targets, so they're dropped
+// here (the dock already exposes Generator · A / B as drop destinations).
+setFavientSelectMode(true);
