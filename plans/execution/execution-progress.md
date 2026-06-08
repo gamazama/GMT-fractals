@@ -437,6 +437,14 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **Worktree cleanup (moved to in-`dev` branches).** Retired all 5 worktrees (wt-p2a/-p2a2/
+  -p2f/-s7/-s8) — junction-first removal, dev node_modules intact. Deleted merged/throwaway branches
+  exec/{p2-a, p2-f-imagestage, s7-colorbox, s8-interp, p2-a-prototype}. Only `dev` worktree remains.
+  `wt-lf` + `wt-p2a2` folders linger on disk (git-deregistered; held by an editor/shell — harmless, delete
+  when freed). **Process change: serial streams now run on in-`dev` feature branches, not worktrees** (the
+  per-folder write-permission flood made worktrees painful; `additionalDirectories` fix landed for the
+  opt-in parallel case). Older merged branches (exec/cleanup-*, phase-0, s1-s6, livefractal) left for a
+  later branch-tidy if wanted.
 - 2026-06-08 — **✅ P2-A MERGED** into integration `e0240f9` (merge of `exec/p2-a` 7146275; clean, no
   conflicts; 20 files +1440/−125). Combined gate green (tsc 0 · test:palette ALL PASS). User skipped the
   optional independent review (confirmed the interaction live + session ran 2 review passes; (c) additions
