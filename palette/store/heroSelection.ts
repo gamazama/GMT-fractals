@@ -36,6 +36,10 @@ export interface HeroSelection {
   key: string;
   /** The gradient the dock bins act on (config + name + provenance). */
   payload: FavientDragPayload;
+  /** When this gradient IS a drop target's content (e.g. the Stops hero, which is the
+   *  `stops` target itself), that target's id — so the dock self-filters it (you don't
+   *  drop a gradient onto itself, and its dropbox must not cover the source). */
+  selfTargetId?: string;
 }
 
 let selection: HeroSelection | null = null;

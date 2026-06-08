@@ -47,6 +47,15 @@ interface CanonicalHeroProps {
   /** Provenance (favourite source + the hero's small chip; hidden when it duplicates name). */
   source?: string;
   mode: HeroMode;
+  /**
+   * Makes this hero a DROP TARGET as well as a source: it tags its root
+   * `data-gx-target={targetId}` (so the registered (c) target's `getRect` anchors its
+   * dropbox exactly here) AND self-filters (you don't drop a gradient onto itself, and
+   * its own dropbox never covers the source while dragging/selecting it). The host still
+   * registers the target's `apply`/`getRect`/`revealPath` in gradientTargets — this prop
+   * is the ONLY hero-side wiring needed to turn any hero into a source+target.
+   */
+  targetId?: string;
   /** Strip height in px. */
   height?: number;
   /** Surface-specific NON-action controls (stops count, enlarge toggle, …). */
@@ -60,6 +69,7 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
   name,
   source,
   mode,
+  targetId,
   height = 44,
   trailing,
   className = '',
@@ -77,11 +87,12 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
 
   const toggleSelect = (): void => {
     if (isSelected) clearHeroSelection();
-    else setHeroSelection({ mode, key: selectionKey, payload: { config, name, source } });
+    else setHeroSelection({ mode, key: selectionKey, payload: { config, name, source }, selfTargetId: targetId });
   };
 
   return (
-    <div className={className}>
+    // data-gx-target tags this hero as the anchor for its (c) drop target, when it is one.
+    <div className={className} data-gx-target={targetId}>
       <div className="flex items-center justify-between mb-1 gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <FavStar config={config} name={name} source={source} size="sm" />
@@ -104,7 +115,7 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
           setFavientDrag(e.dataTransfer, { config, name, source });
           suppressNativeDragImage(e.dataTransfer);
           // Drag mirrors click: select so the avatar has a ramp + the source stays lit.
-          setHeroSelection({ mode, key: selectionKey, payload: { config, name, source } });
+          setHeroSelection({ mode, key: selectionKey, payload: { config, name, source }, selfTargetId: targetId });
         }}
         onClick={toggleSelect}
         onKeyDown={(e) => {

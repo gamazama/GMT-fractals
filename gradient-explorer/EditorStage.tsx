@@ -48,23 +48,22 @@ export const EditorStage: React.FC = () => {
                 {/* Result — the baked output (same sampler the texture uses), as the
                     shared select/drag hero. Minimal variant: no primary action — the
                     dock bins are how the edited gradient reaches other modes. */}
-                {/* data-gx-target="stops" anchors the Stops drop target here (the final
-                    destination a gradient sent to the Stops mode lands in). */}
-                <div data-gx-target="stops">
-                    <CanonicalHero
-                        config={config}
-                        ramp={ramp}
-                        name="Stops"
-                        source="Stops"
-                        mode="stops"
-                        height={64}
-                        trailing={
-                            <span className="text-[11px] text-gray-500 tabular-nums">
-                                {config.stops.length} stops
-                            </span>
-                        }
-                    />
-                </div>
+                {/* targetId="stops" makes this hero the `stops` drop target's anchor AND a
+                    self-filtering source — the one prop that turns a hero into source+target. */}
+                <CanonicalHero
+                    config={config}
+                    ramp={ramp}
+                    name="Stops"
+                    source="Stops"
+                    mode="stops"
+                    targetId="stops"
+                    height={64}
+                    trailing={
+                        <span className="text-[11px] text-gray-500 tabular-nums">
+                            {config.stops.length} stops
+                        </span>
+                    }
+                />
 
                 {/* The engine Stops editor — knot track + per-stop inspector. */}
                 <AdvancedGradientEditor

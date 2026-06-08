@@ -185,6 +185,7 @@ export const GradientDropLayer: React.FC = () => {
             {/* Final targets (anchored + bottom wells) — engine-core, generic. */}
             <DropTargetLayer
                 selectedPayload={sel?.payload}
+                selfId={sel?.selfTargetId}
                 dragAccepts={acceptsGradient}
                 readDragPayload={readFavientDrag}
                 onSent={clearHeroSelection}

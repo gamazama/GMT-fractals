@@ -36,6 +36,9 @@ import { Z } from './ui/zIndex';
 export interface DropTargetLayerProps {
     /** The selected payload (click path); also filters targets by `accepts`. Null ⇒ no selection. */
     selectedPayload?: unknown;
+    /** Id of the target the selected gradient IS (e.g. the Stops hero is `stops`) — filtered
+     *  out so it doesn't offer a self-drop or cover its own source. */
+    selfId?: string;
     /** Whether an in-flight HTML5 drag carries a payload this layer should resolve. */
     dragAccepts?: (types: string[]) => boolean;
     /** Parse a drop's DataTransfer into a payload (host-injected; keeps engine-core agnostic). */
@@ -47,6 +50,7 @@ export interface DropTargetLayerProps {
 
 export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
     selectedPayload,
+    selfId,
     dragAccepts,
     readDragPayload,
     onSent,
@@ -116,9 +120,11 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
     // Select-mode lists targets that accept the payload; drag-mode can't read the payload
     // mid-flight (getData is blocked) so it offers all that accept the MIME types.
     // (`targetsForPayload` narrows P to the payload type; we route opaquely, so widen back.)
-    const candidates: SendTarget[] = selecting
-        ? (targetsForPayload(selectedPayload) as SendTarget[])
-        : allTargets.filter((t) => !t.acceptsTypes || t.acceptsTypes(types));
+    const candidates: SendTarget[] = (
+        selecting
+            ? (targetsForPayload(selectedPayload) as SendTarget[])
+            : allTargets.filter((t) => !t.acceptsTypes || t.acceptsTypes(types))
+    ).filter((t) => t.id !== selfId);
     const anchored: { target: SendTarget; rect: DOMRect }[] = [];
     const bottom: SendTarget[] = [];
     for (const t of candidates) {
