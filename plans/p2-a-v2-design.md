@@ -37,6 +37,17 @@ Branch `exec/p2-a` (worktree `wt-p2a2`), off integration `90206c6`. Gates: `tsc 
   - `revealPath?: string[]` — ordered opaque reveal-step ids to bring the anchor on screen.
   - `acceptsTypes?(types): boolean` — drag-time visibility (twin of `accepts(payload)`,
     usable while `getData` is blocked).
+  - `dragPassthrough?: boolean` — show the box during a drag but VISUAL-only
+    (pointer-events-none) and FALL AWAY once the cursor is over its rect, so the element
+    underneath handles the drop with its own DnD (Favients insert/group/reorder). The
+    general "this component has its own swatch-drag mechanics" primitive — set the flag.
+- **Hero as source AND target** — a `CanonicalHero` is always a drag source; passing
+  `targetId="X"` also makes it the `X` drop target: it tags its root `data-gx-target={X}`
+  (so `X`'s `getRect` anchors to it) and self-filters (`heroSelection.selfTargetId` →
+  `DropTargetLayer.selfId` drops `X` from the candidate set, so its own box never covers
+  the source / offers a self-drop). The host just registers `X`'s `apply`/`getRect`/
+  `revealPath` in `gradientTargets`. To convert any hero to a target later: one prop +
+  one registration. (Stops is the first; others may follow.)
 - `components/DropTarget.tsx` — the ONE shared dropbox tile (look + states; opaque/translucent,
   label/no-label, armed, dwell ring).
 - `components/DropTargetLayer.tsx` — renders the FINAL targets (anchored via `getRect`,
@@ -74,6 +85,9 @@ switches `data-gx-step="<id>"`.
 - **Only bottom wells are opaque** (no element under them). Anchored/intermediate tiles are
   **translucent** so the tab / slot / strip underneath reads through (and `hideLabel`, so no
   text-on-text).
+- The label `<span>` is **`pointer-events-none`** — a text child with pointer events steals
+  the `dragover` at its boundary and cancels the drop. (Class of bug: drop-target children
+  must not capture pointer/drag events.)
 
 ## 5. Behaviour notes
 - **Session end:** a drop does not `stopPropagation` (so `useDragInFlight` resets), and the
@@ -91,10 +105,24 @@ switches `data-gx-step="<id>"`.
 ## 6. Open / deferred
 - **Picker has two selection concepts now** (the wall's own selected-swatch + the shared
   `heroSelection`) and they get confused. **To be resolved together with swatch enlarge-in-
-  place** — see the Picker handoff (end-of-session protocol).
+  place** — see `plans/p2-a-picker-handoff.md`.
 - **Swatch enlarge-in-place** (Picker canvas wall + Favients DOM swatches) — not yet done.
 - **Favients click = select** — currently click = apply (S2 intact), drag selects.
 - **Mobile** — anchors are on the desktop dock tabs; the mobile tab bar isn't wired.
+
+### Deferred simplify (from the wrap-up review — safe but not done at session end)
+- Extract a shared `paintRamp256(ctx, ramp: RGB[])` for the 3 inline copies
+  (`gradientTargets.downloadGradientPng`, `GradientStrip`, `FavientsPanel.ramp256Canvas`) —
+  SAFE per review, skipped only to avoid touching the hot `GradientStrip` path at EOD.
+- Optional tiny `useStaticRefresh(onChange)` for the *select-mode* scroll/resize branch
+  shared by `DropTargetLayer` + `GradientDropLayer` (the drag branches differ — don't merge).
+- `setGenMode` reveal-step is intentionally **non-undoable navigation** (do NOT bracket it —
+  it would push a mode-flip undo entry ahead of the apply's own bracket). Recorded as intent.
+
+### Contract note (review Finding 3)
+`heroSelection.key` MUST fully determine `payload` + `selfTargetId` — the `setHeroSelection`
+identity guard early-returns on `(mode,key)` match, so a caller that varies payload/selfTargetId
+for the same key would get a silently stale dock.
 
 ## 7. End-of-session protocol (user-set)
 Once visual verification/iteration is complete: **code review → simplify → document →

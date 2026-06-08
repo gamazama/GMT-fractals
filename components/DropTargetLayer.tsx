@@ -89,6 +89,7 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
             return () => {
                 window.removeEventListener('dragover', onMove, true);
                 cancelAnimationFrame(raf);
+                dragPointer.current = { x: -1, y: -1 }; // reset so stale coords don't drive fall-away
             };
         }
         const onChange = (): void => tick();

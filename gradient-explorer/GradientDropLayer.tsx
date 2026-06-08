@@ -115,6 +115,7 @@ export const GradientDropLayer: React.FC = () => {
         return () => {
             window.removeEventListener('dragover', onOver, true);
             window.removeEventListener('drop', onEnd, false);
+            pointer.current = { x: 0, y: 0 }; // so a later drag doesn't flash at the old spot
         };
     }, [dragging]);
 
@@ -180,6 +181,10 @@ export const GradientDropLayer: React.FC = () => {
             ? Math.min(1, (performance.now() - dwellStart.current) / STEP_DWELL_MS)
             : 0;
 
+    // Once per render for the JSX below (the rAF dwell loop re-queries each frame for
+    // live rects as tabs animate in mid-drag, so it keeps its own call).
+    const intermediates = deriveIntermediates();
+
     return (
         <>
             {/* Final targets (anchored + bottom wells) — engine-core, generic. */}
@@ -194,7 +199,7 @@ export const GradientDropLayer: React.FC = () => {
             {/* Intermediate reveal steps — derived from the registry, anchored over each
                 step's element (a tab, a sub-mode switch). No label (the element under it
                 already reads), so it's a clean highlight + dwell ring. */}
-            {deriveIntermediates().map((it) => {
+            {intermediates.map((it) => {
                 const rect = it.getRect();
                 if (!rect) return null;
                 return createPortal(
