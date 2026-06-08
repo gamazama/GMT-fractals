@@ -132,6 +132,7 @@ const GeneratorModeToggle: React.FC = () => {
         {opts.map((o) => (
           <button
             key={o.value}
+            data-gx-step={o.value === 0 ? 'gen:mixed' : 'gen:colorbox'}
             onClick={() => m !== o.value && genEdit(() => setMode(o.value))}
             title={o.title}
             aria-pressed={m === o.value}
@@ -325,7 +326,11 @@ export const GeneratorStage: React.FC = () => {
           <GeneratorModeToggle />
         </div>
         {colorbox ? (
-          <ColorBoxControls />
+          // data-gx-target="colorbox" anchors the ColorBox drop target here (reached via
+          // the Generator tab → ColorBox sub-mode reveal chain).
+          <div data-gx-target="colorbox">
+            <ColorBoxControls />
+          </div>
         ) : (
           <>
             {curvesOn && (

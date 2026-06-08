@@ -64,14 +64,16 @@ export interface SendTarget<P = unknown> {
      */
     getRect?: () => DOMRect | null;
     /**
-     * Optional opaque surface id this target lives in (e.g. a host's tab id). The
-     * registry never interprets it. A host that lays targets out spatially uses it
-     * to DERIVE intermediate "reveal this surface" affordances purely from the
-     * registered set: when a target's `getRect()` is null (its surface is hidden),
-     * the host can group the hidden targets by `zone` and offer one reveal step per
-     * zone — so adding a new target auto-populates its path with no host-side map.
+     * Optional ORDERED list of opaque "reveal step" ids that must be satisfied for this
+     * target's anchor to be on screen (e.g. ['tab:Generator', 'gen:colorbox'] — open the
+     * Generator tab, then switch it to ColorBox mode). The registry never interprets the
+     * ids. A host that lays targets out spatially uses this to DERIVE intermediate
+     * affordances purely from the registered set: when a target's `getRect()` is null
+     * (anchor hidden), the host walks `revealPath` and surfaces the FIRST unsatisfied step
+     * as a one-click/dwell "reveal" — so a new target (even behind several steps) auto-
+     * populates its whole path with no host-side map.
      */
-    zone?: string;
+    revealPath?: string[];
 }
 
 // Stored as the widest payload; registrants narrow `P` at the call site.

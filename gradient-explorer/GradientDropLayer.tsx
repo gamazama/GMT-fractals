@@ -1,26 +1,24 @@
 /**
- * GradientDropLayer — the Gradient Explorer's "select → reveal → place" overlay. It
- * composes three pieces over the same registry, so the whole topology is data-driven:
+ * GradientDropLayer — the Gradient Explorer's "select → reveal → place" overlay,
+ * composed over the same registry so the whole topology is data-driven:
  *
- *  1. <DropTargetLayer> (engine-core) — renders the FINAL targets: anchored dropboxes
- *     over each visible destination (Generator slots, Stops strip, Favients shelf) and
+ *  1. <DropTargetLayer> (engine-core) — the FINAL targets: anchored dropboxes over each
+ *     visible destination (Generator slots, ColorBox, Stops strip, Favients shelf) and
  *     bottom-row wells (Fullscreen, Export). Click applies the selection; drop applies
- *     the dragged payload (parsed via readFavientDrag).
- *  2. Intermediate tab dropboxes — DERIVED from the registry (`deriveIntermediateZones`):
- *     for any zone whose finals are currently hidden, one "reveal" dropbox is anchored
- *     over that mode tab. Click (or ~400 ms drag-dwell) switches to the mode and KEEPS
- *     the gradient in hand, so the now-revealed finals can receive it. Adding a target
- *     in any tab auto-creates its intermediate path — nothing here is hardcoded per tab.
- *  3. The drag avatar — a cursor-following ramp painted while a gradient drag is in
- *     flight (the native drag image is suppressed at the source). Purely visual.
+ *     the dragged payload.
+ *  2. Intermediate dropboxes — DERIVED from the registry (`deriveIntermediates`): the
+ *     first unsatisfied reveal step of every hidden target, anchored over that step's
+ *     element (a mode tab, the Generator Mixed/ColorBox sub-mode switch). Click — or
+ *     ~400 ms drag-dwell — runs the step (switch tab / sub-mode) and KEEPS the gradient
+ *     in hand, so the next step (or the now-revealed final) can take it. Chains to any
+ *     depth (ColorBox sits two steps in); nothing here is hardcoded per tab.
+ *  3. The drag avatar — a cursor-following ramp (native drag image suppressed at source).
  *
- * Mounted once in GradientExplorerApp. Inert unless a gradient is selected or a gradient
- * drag is in flight.
+ * Mounted once in GradientExplorerApp. Inert unless a gradient is selected or in flight.
  */
 
 import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useEngineStore } from '../store/engineStore';
 import { DropTargetLayer } from '../components/DropTargetLayer';
 import { DropTargetTile } from '../components/DropTarget';
 import { useDragInFlight } from '../hooks/useDragInFlight';
@@ -28,23 +26,12 @@ import { Z } from '../components/ui/zIndex';
 import { useHeroSelection, clearHeroSelection } from '../palette/store/heroSelection';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
 import { renderStopsToBuffer } from '../palette/core/gmtGradient';
-import { deriveIntermediateZones, modeTabRect } from './gradientTargets';
-import type { PanelId } from '../types';
+import { deriveIntermediates } from './gradientTargets';
 
-/** Dwell over an intermediate tab for this long (ms) to switch to it mid-drag. */
-const TAB_DWELL_MS = 400;
+/** Dwell over an intermediate for this long (ms) to run its reveal step mid-drag. */
+const STEP_DWELL_MS = 400;
 
 const acceptsGradient = (types: string[]): boolean => types.includes(FAVIENT_DND_MIME);
-
-/** Reveal a zone's surface (switch tab; un-collapse its dock if it's side-docked), keeping
- *  the selection alive so the now-visible finals can receive it. Generic over zones. */
-const revealZone = (zone: string): void => {
-    const s = useEngineStore.getState();
-    const panel = (s.panels as Record<string, { location?: string }>)[zone];
-    if (panel?.location === 'left') s.setDockCollapsed('left', false);
-    if (panel?.location === 'right') s.setDockCollapsed('right', false);
-    s.togglePanel(zone as PanelId, true);
-};
 
 /** The cursor-following avatar of the dragged gradient (visual only; pointer-events-none). */
 const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number }> = ({ ramp, x, y }) => {
@@ -62,7 +49,6 @@ const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number }> = ({ ramp
         cv.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(ramp), 256, 1), 0, 0);
     }, [ramp]);
 
-    // Spring-follow so the avatar trails and settles near the cursor rather than tracking rigidly.
     useEffect(() => {
         let raf = 0;
         const loop = (): void => {
@@ -104,24 +90,22 @@ export const GradientDropLayer: React.FC = () => {
     const dragging = inFlight && acceptsGradient(types);
     const active = sel != null || dragging;
 
-    // Pointer during a drag (for the avatar + dwell hit-test). dragover fires continuously
-    // with coords during an HTML5 drag (pointermove does not), so we track it there.
     const pointer = useRef({ x: 0, y: 0 });
     const [, tick] = useReducer((n: number) => n + 1, 0);
-    const [dwellZone, setDwellZone] = useState<string | null>(null);
+    const [dwellStep, setDwellStep] = useState<string | null>(null);
     const dwellStart = useRef(0);
 
+    // Track the cursor during a drag (dragover fires with coords; pointermove does not),
+    // and end the session when the drag ends — whether it dropped on a target (the target
+    // already applied; this clears the lingering selection) or over nothing.
     useEffect(() => {
         if (!dragging) {
-            setDwellZone(null);
+            setDwellStep(null);
             return;
         }
         const onOver = (e: DragEvent): void => {
             pointer.current = { x: e.clientX, y: e.clientY };
         };
-        // End the session when the drag ends — whether it dropped on a target (the target
-        // already applied via DropTargetLayer; this just clears the lingering selection) or
-        // over nothing. Covers the cross-tab case where the source element has unmounted.
         const onEnd = (): void => clearHeroSelection();
         window.addEventListener('dragover', onOver, true);
         window.addEventListener('drop', onEnd, false);
@@ -133,43 +117,42 @@ export const GradientDropLayer: React.FC = () => {
         };
     }, [dragging]);
 
-    // Refresh tab rects + run the dwell-to-reveal loop while active.
+    // While active, refresh anchored rects each frame + run the dwell-to-reveal loop.
     useEffect(() => {
         if (!active) return;
         let raf = 0;
         const loop = (): void => {
-            tick(); // re-read intermediate tab rects (tab switches / scroll / resize)
+            tick();
             if (dragging) {
                 const { x, y } = pointer.current;
-                const zone = deriveIntermediateZones().find((z) => {
-                    const r = modeTabRect(z);
+                const hit = deriveIntermediates().find((it) => {
+                    const r = it.getRect();
                     return r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
                 });
-                if (zone) {
-                    if (dwellZone !== zone) {
-                        setDwellZone(zone);
+                if (hit) {
+                    if (dwellStep !== hit.id) {
+                        setDwellStep(hit.id);
                         dwellStart.current = performance.now();
-                    } else if (performance.now() - dwellStart.current >= TAB_DWELL_MS) {
-                        revealZone(zone); // switch mid-drag → its finals appear; drag continues
-                        setDwellZone(null);
+                    } else if (performance.now() - dwellStart.current >= STEP_DWELL_MS) {
+                        hit.activate(); // run the step mid-drag → next step / final appears
+                        setDwellStep(null);
                         dwellStart.current = 0;
                     }
-                } else if (dwellZone) {
-                    setDwellZone(null);
+                } else if (dwellStep) {
+                    setDwellStep(null);
                 }
             }
             raf = requestAnimationFrame(loop);
         };
         raf = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(raf);
-    }, [active, dragging, dwellZone]);
+    }, [active, dragging, dwellStep]);
 
     if (!active) return null;
 
-    const intermediates = deriveIntermediateZones();
     const dwellProgress =
-        dwellZone && dwellStart.current
-            ? Math.min(1, (performance.now() - dwellStart.current) / TAB_DWELL_MS)
+        dwellStep && dwellStart.current
+            ? Math.min(1, (performance.now() - dwellStart.current) / STEP_DWELL_MS)
             : 0;
 
     const avatarRamp =
@@ -191,13 +174,15 @@ export const GradientDropLayer: React.FC = () => {
                 onSent={clearHeroSelection}
             />
 
-            {/* Intermediate "reveal a mode" dropboxes — derived from the registry by zone. */}
-            {intermediates.map((zone) => {
-                const rect = modeTabRect(zone);
+            {/* Intermediate reveal steps — derived from the registry, anchored over each
+                step's element (a tab, a sub-mode switch). No label (the element under it
+                already reads), so it's a clean highlight + dwell ring. */}
+            {deriveIntermediates().map((it) => {
+                const rect = it.getRect();
                 if (!rect) return null;
                 return createPortal(
                     <div
-                        key={`intermediate:${zone}`}
+                        key={`intermediate:${it.id}`}
                         className="fixed"
                         style={{
                             left: rect.left - 3,
@@ -208,23 +193,18 @@ export const GradientDropLayer: React.FC = () => {
                         }}
                     >
                         <DropTargetTile
-                            label={zone}
-                            hint="open"
+                            label={it.id}
                             fill
                             hideLabel
-                            dwell={dwellZone === zone ? dwellProgress : 0}
-                            // Click (select path): reveal the mode, keep the gradient in hand.
-                            onActivate={sel ? () => revealZone(zone) : undefined}
-                            // Drag path: dwell (handled in the rAF loop) switches; a drop on the
-                            // tab itself just reveals (the real drop lands on a final inside).
+                            dwell={dwellStep === it.id ? dwellProgress : 0}
+                            onActivate={sel ? it.activate : undefined}
                             onDragOver={(e) => {
                                 e.preventDefault();
                                 if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
                             }}
                             onDrop={(e) => {
                                 e.preventDefault();
-                                e.stopPropagation();
-                                revealZone(zone);
+                                it.activate();
                             }}
                         />
                     </div>,
