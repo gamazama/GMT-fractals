@@ -8,11 +8,9 @@
  * PNG (the canvas snapshot IS the active geometry). It never mutates gradient data —
  * the previewed config is a snapshot handed in via `openFullscreen`.
  *
- * Two open paths (per the W11 mandate):
- *  1. Non-drag: a result-hero "Fullscreen" button calls `openFullscreen(config)`.
- *  2. Drag: a "Fullscreen" drop-well registered into the engine W4 kernel
- *     (`registerDropWell`) opens it from a dropped gradient payload. Today only
- *     Favients swatches carry the gradient MIME; result-hero drag SOURCES are P2.
+ * Opened via `openFullscreen(config, name)` — the receive path of the "Fullscreen"
+ * send-target registered in `gradient-explorer/gradientTargets.ts` (a bottom-row well
+ * in the P2-A "select → reveal → place" dock). Click the well or drop a gradient on it.
  *
  * All view state (geometry / seed / amount / open) is transient + shell-scoped in
  * `fullscreenStore` (not DDFS, not persisted). The mappings are pure; this component
@@ -92,9 +90,9 @@ export const FullscreenGradientOverlay: React.FC = () => {
 
   const fractal = isFractal(fs.geom);
 
-  // The "Fullscreen" drop-well + send-target is registered in `gradientBins.ts`
-  // (the one bin list) at boot — not inline here — so the dock has a single source
-  // of truth. `openFullscreen` (below) is the receive path that bin calls.
+  // The "Fullscreen" target is registered in `gradientTargets.ts` (the one target list)
+  // at boot — not inline here — so the dock has a single source of truth.
+  // `openFullscreen` (below) is the receive path that target calls.
 
   // Esc dismissal — a direct capture-phase listener so it works regardless of whether
   // the host installed the shortcut registry (the Explorer shell may not have).

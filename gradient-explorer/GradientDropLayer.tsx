@@ -17,7 +17,7 @@
  * Mounted once in GradientExplorerApp. Inert unless a gradient is selected or in flight.
  */
 
-import React, { useEffect, useReducer, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DropTargetLayer } from '../components/DropTargetLayer';
 import { DropTargetTile } from '../components/DropTarget';
@@ -106,14 +106,15 @@ export const GradientDropLayer: React.FC = () => {
         const onOver = (e: DragEvent): void => {
             pointer.current = { x: e.clientX, y: e.clientY };
         };
+        // Clear on a drop that reaches the WINDOW — a drop on a final (already applied) or
+        // on nothing. An intermediate-step drop stopPropagations, so it does NOT clear:
+        // it reveals and leaves the user selected over the now-visible final.
         const onEnd = (): void => clearHeroSelection();
         window.addEventListener('dragover', onOver, true);
         window.addEventListener('drop', onEnd, false);
-        window.addEventListener('dragend', onEnd, true);
         return () => {
             window.removeEventListener('dragover', onOver, true);
             window.removeEventListener('drop', onEnd, false);
-            window.removeEventListener('dragend', onEnd, true);
         };
     }, [dragging]);
 
@@ -165,14 +166,18 @@ export const GradientDropLayer: React.FC = () => {
             ? Math.min(1, (performance.now() - dwellStart.current) / STEP_DWELL_MS)
             : 0;
 
-    const avatarRamp =
-        dragging && sel
-            ? renderStopsToBuffer(
-                  sel.payload.config.stops,
-                  sel.payload.config.blendSpace,
-                  sel.payload.config.colorSpace,
-              )
-            : null;
+    // The dragged ramp — recomputed only when the selection changes (not per rAF frame).
+    const avatarRamp = useMemo(
+        () =>
+            sel
+                ? renderStopsToBuffer(
+                      sel.payload.config.stops,
+                      sel.payload.config.blendSpace,
+                      sel.payload.config.colorSpace,
+                  )
+                : null,
+        [sel],
+    );
 
     return (
         <>
@@ -213,7 +218,12 @@ export const GradientDropLayer: React.FC = () => {
                                 if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
                             }}
                             onDrop={(e) => {
+                                // Reveal the surface and KEEP the gradient in hand —
+                                // stopPropagation keeps the drop from reaching the window
+                                // session-end clear, so after the drag the user is in
+                                // select-mode over the now-revealed final.
                                 e.preventDefault();
+                                e.stopPropagation();
                                 it.activate();
                             }}
                         />
@@ -222,7 +232,11 @@ export const GradientDropLayer: React.FC = () => {
                 );
             })}
 
-            {avatarRamp && <DragAvatar ramp={avatarRamp} x={pointer.current.x} y={pointer.current.y} />}
+            {/* Avatar only while dragging AND once the pointer is known (dragover has
+                fired) — otherwise it flashes at the top-left corner for the first frame. */}
+            {dragging && avatarRamp && (pointer.current.x !== 0 || pointer.current.y !== 0) && (
+                <DragAvatar ramp={avatarRamp} x={pointer.current.x} y={pointer.current.y} />
+            )}
         </>
     );
 };
