@@ -60,19 +60,30 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
     const selecting = !inFlight && selectedPayload != null;
     const active = dragActive || selecting;
 
-    // While active, re-read every target's live rect each frame so anchored dropboxes
-    // follow tab switches / scroll / resize. Cheap (small tree, only during an interaction).
+    // Keep anchored dropboxes over their live rects. During a DRAG, refresh each frame
+    // (positions can move as tabs switch mid-drag). During SELECT, positions are static
+    // except on scroll/resize (tab switches re-render via the store), so only listen for
+    // those — a 60fps rAF in select-mode was fighting the bottom-well hover.
     const [, tick] = useReducer((n: number) => n + 1, 0);
     useEffect(() => {
         if (!active) return;
-        let raf = 0;
-        const loop = (): void => {
-            tick();
+        if (inFlight) {
+            let raf = 0;
+            const loop = (): void => {
+                tick();
+                raf = requestAnimationFrame(loop);
+            };
             raf = requestAnimationFrame(loop);
+            return () => cancelAnimationFrame(raf);
+        }
+        const onChange = (): void => tick();
+        window.addEventListener('scroll', onChange, true);
+        window.addEventListener('resize', onChange);
+        return () => {
+            window.removeEventListener('scroll', onChange, true);
+            window.removeEventListener('resize', onChange);
         };
-        raf = requestAnimationFrame(loop);
-        return () => cancelAnimationFrame(raf);
-    }, [active]);
+    }, [active, inFlight]);
 
     if (!active) return null;
 
@@ -149,7 +160,7 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
                         zIndex: z,
                     }}
                 >
-                    <DropTargetTile label={target.label} fill {...tileHandlers(target)} />
+                    <DropTargetTile label={target.label} fill hideLabel {...tileHandlers(target)} />
                 </div>
             ))}
             {/* Bottom-row wells — targets with no on-screen anchor. */}
@@ -160,7 +171,7 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
                     data-testid="drop-target-bottom"
                 >
                     {bottom.map((target) => (
-                        <DropTargetTile key={target.id} label={target.label} {...tileHandlers(target)} />
+                        <DropTargetTile key={target.id} label={target.label} opaque {...tileHandlers(target)} />
                     ))}
                 </div>
             )}

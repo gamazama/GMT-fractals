@@ -117,13 +117,16 @@ export const GradientDropLayer: React.FC = () => {
         };
     }, [dragging]);
 
-    // While active, refresh anchored rects each frame + run the dwell-to-reveal loop.
+    // During a DRAG: rAF to track the cursor over intermediates (dwell-to-reveal) and to
+    // keep anchored rects fresh as tabs switch mid-drag. During SELECT: positions are
+    // static except on scroll/resize (tab switches re-render via the store), so just
+    // listen for those — no 60fps rAF (which fought the dropbox hover).
     useEffect(() => {
         if (!active) return;
-        let raf = 0;
-        const loop = (): void => {
-            tick();
-            if (dragging) {
+        if (dragging) {
+            let raf = 0;
+            const loop = (): void => {
+                tick();
                 const { x, y } = pointer.current;
                 const hit = deriveIntermediates().find((it) => {
                     const r = it.getRect();
@@ -141,11 +144,18 @@ export const GradientDropLayer: React.FC = () => {
                 } else if (dwellStep) {
                     setDwellStep(null);
                 }
-            }
+                raf = requestAnimationFrame(loop);
+            };
             raf = requestAnimationFrame(loop);
+            return () => cancelAnimationFrame(raf);
+        }
+        const onChange = (): void => tick();
+        window.addEventListener('scroll', onChange, true);
+        window.addEventListener('resize', onChange);
+        return () => {
+            window.removeEventListener('scroll', onChange, true);
+            window.removeEventListener('resize', onChange);
         };
-        raf = requestAnimationFrame(loop);
-        return () => cancelAnimationFrame(raf);
     }, [active, dragging, dwellStep]);
 
     if (!active) return null;

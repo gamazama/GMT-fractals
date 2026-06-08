@@ -29,9 +29,12 @@ export interface DropTargetTileProps {
     dwell?: number;
     /** Fill the positioned wrapper (used by anchored tiles); bottom-row tiles size themselves. */
     fill?: boolean;
-    /** Hide the label text (intermediate tab dropboxes cover the tab, which already has its
-     *  own label — overlaying text on text reads badly). */
+    /** Hide the label text (anchored dropboxes sit over an element that already reads —
+     *  overlaying text on text is bad). */
     hideLabel?: boolean;
+    /** Opaque fill (bottom-row wells, which have no element under them). Anchored tiles
+     *  stay translucent so the tab / slot / strip underneath shows through. */
+    opaque?: boolean;
     /** Click affordance (select-path apply, or intermediate reveal). */
     onActivate?: () => void;
     /** Pointer-hover arming (select path). */
@@ -51,6 +54,7 @@ export const DropTargetTile: React.FC<DropTargetTileProps> = ({
     dwell = 0,
     fill = false,
     hideLabel = false,
+    opaque = false,
     onActivate,
     onMouseEnter,
     onMouseLeave,
@@ -74,9 +78,14 @@ export const DropTargetTile: React.FC<DropTargetTileProps> = ({
                 'transition-[background-color,box-shadow,border-color] duration-150',
                 fill ? 'h-full w-full' : 'h-24 w-40',
                 onActivate ? 'cursor-pointer' : '',
+                // Cyan dashed outline throughout; armed brightens + glows. Fill is opaque
+                // only for bottom wells; anchored tiles stay translucent so the element
+                // underneath (tab / slot / strip) reads through them.
                 armed
-                    ? 'border-white bg-white/20 text-white shadow-[0_0_0_2px_rgba(255,255,255,0.5),0_0_22px_rgba(255,255,255,0.22)]'
-                    : 'border-white/45 bg-zinc-800/90 text-zinc-100',
+                    ? 'border-cyan-300 bg-cyan-400/20 text-cyan-50 shadow-[0_0_0_2px_rgba(34,211,238,0.5),0_0_22px_rgba(34,211,238,0.28)]'
+                    : opaque
+                      ? 'border-cyan-400/70 bg-zinc-800/95 text-zinc-100'
+                      : 'border-cyan-400/70 bg-cyan-400/[0.05] text-cyan-100',
             ].join(' ')}
             data-drop-target={label}
             data-gx-keepselect=""
