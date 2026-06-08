@@ -156,7 +156,10 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
           // Drag mirrors click: set the pick so the avatar has a ramp + the source stays lit.
           setHeroDrag({ mode, key, payload: { config, name, source }, selfTargetId: targetId });
         }}
-        onClick={pick}
+        onClick={(e) => {
+          setDragOrigin(e.currentTarget.getBoundingClientRect()); // in-hand avatar morphs from the strip
+          pick();
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();

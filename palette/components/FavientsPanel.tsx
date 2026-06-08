@@ -463,7 +463,7 @@ const FavientSwatch: React.FC<{
             doesn't fire it). */}
         <canvas
           ref={ref}
-          onClick={() => onActivate(fav)}
+          onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
           style={{ width: cw, height: ch }}
           className="block shrink-0 rounded-[2px] ring-1 ring-white/10 overflow-hidden cursor-pointer"
         />
@@ -509,7 +509,7 @@ const FavientSwatch: React.FC<{
       {...dragProps}
     >
       <button
-        onClick={() => onActivate(fav)}
+        onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
         className={`block rounded-[2px] origin-center transition-transform cursor-grab active:cursor-grabbing overflow-hidden ${
           selected ? 'scale-[1.4] ring-2 ring-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.45)]' : 'ring-1 ring-white/10 hover:ring-amber-300/80'
         }`}

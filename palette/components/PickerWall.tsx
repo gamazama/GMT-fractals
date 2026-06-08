@@ -256,6 +256,21 @@ const SwatchCanvas: React.FC<{
     return { entry: entries[k], col, row };
   };
 
+  // The swatch's HOVER-preview rect (3×w·2×h, the enlarged zoom the user is looking at) — the
+  // morph source for the drag/click avatar. Shared by onDragStart + onClick.
+  const setHoverOrigin = (col: number, row: number): void => {
+    const cvr = canvasRef.current?.getBoundingClientRect();
+    if (!cvr) return;
+    const ew = swatchW * 3;
+    const eh = swatchH * 2;
+    setDragOrigin({
+      left: cvr.left + col * cellW + swatchW / 2 - ew / 2,
+      top: cvr.top + row * cellH + swatchH / 2 - eh / 2,
+      width: ew,
+      height: eh,
+    });
+  };
+
   return (
     <div ref={wrapRef} style={{ width: cssW, height: cssH }}>
       {visible && (
@@ -274,20 +289,9 @@ const SwatchCanvas: React.FC<{
             // suppressNativeDragImage, exactly like the hero. (A custom setDragImage here was
             // dead: suppress overrode it, and it differed the swatch path from the hero's,
             // which is why swatch→Favients didn't show the avatar/reorder the same way.)
-            // Morph the avatar out of the HOVER-enlarged preview (the 3×w·2×h zoom the user is
-            // actually looking at, in front of everything) — not the tiny grid cell. Then clear
-            // the hover so it doesn't linger behind the avatar.
-            const cvr = canvasRef.current?.getBoundingClientRect();
-            if (cvr) {
-              const ew = swatchW * 3;
-              const eh = swatchH * 2;
-              setDragOrigin({
-                left: cvr.left + h.col * cellW + swatchW / 2 - ew / 2,
-                top: cvr.top + h.row * cellH + swatchH / 2 - eh / 2,
-                width: ew,
-                height: eh,
-              });
-            }
+            // Morph the avatar out of the HOVER-enlarged preview (the 3×w·2×h zoom in front of
+            // everything) — not the tiny grid cell. Then clear the hover so it doesn't linger.
+            setHoverOrigin(h.col, h.row);
             onHover(null);
             onEntryDragStart(h.entry, e.dataTransfer);
           }}
@@ -310,7 +314,14 @@ const SwatchCanvas: React.FC<{
             const h = hit(e);
             // A swatch hit picks (and stops here); a MISS (a gap) bubbles to the wall's
             // onClick, which deselects — so an empty-wall click clears the pick.
-            if (h) { e.stopPropagation(); onPick(h.entry); }
+            if (h) {
+              e.stopPropagation();
+              // Click-through: the pick goes in-hand and follows the cursor — morph it out of
+              // the hover preview (same source as the drag) and clear the hover.
+              setHoverOrigin(h.col, h.row);
+              onHover(null);
+              onPick(h.entry);
+            }
           }}
         />
       )}

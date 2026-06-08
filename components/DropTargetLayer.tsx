@@ -130,11 +130,6 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
     const anchored: { target: SendTarget; rect: DOMRect }[] = [];
     const bottom: SendTarget[] = [];
     for (const t of candidates) {
-        // A drag-passthrough target (e.g. the Favients shelf) owns its OWN click + drag UI.
-        // During SELECT we don't render any box over it — a visual-only box there is a dead,
-        // unclickable element covering the panel; the component handles its own clicks. It
-        // still shows as a visual-only fall-away hint during a DRAG (handled below).
-        if (selecting && t.dragPassthrough) continue;
         if (t.getRect) {
             const rect = t.getRect();
             if (rect) anchored.push({ target: t, rect });
@@ -175,12 +170,12 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
                 drag-passthrough target (e.g. the Favients shelf) shows a VISUAL-only box
                 during a drag so the element underneath handles the drop itself. */}
             {anchored.map(({ target, rect }) => {
-                // A drag-passthrough target (e.g. the Favients shelf) owns its OWN click +
-                // drag UI, so its dropbox is ALWAYS visual-only (pointer-events-none) — it
-                // never covers the panel, whether we read the gesture as select or drag. So
-                // the panel's bespoke reorder/group mechanics are never blocked, and during a
-                // drag the box additionally FALLS AWAY once the cursor is over its rect.
-                const passive = !!target.dragPassthrough;
+                // A drag-passthrough target (e.g. the Favients shelf): during a DRAG the box is
+                // visual-only and FALLS AWAY once the cursor is over its rect — handing the drop
+                // to the component's OWN DnD (insert/reorder), so the drag path is untouched. On
+                // the CLICK-THROUGH path (select) it's a normal CLICKABLE tile whose click
+                // applies — a flat add to favourites.
+                const passive = dragActive && target.dragPassthrough;
                 // Fall away once the cursor is over a passthrough region, so the component's
                 // OWN drag mechanics (e.g. the Favients panel's insert/reorder) are unobstructed.
                 if (passive) {

@@ -107,15 +107,36 @@ surface at two sizes).
   true); the Explorer's four canvas mode panels are pinned `floatable: false` (the float drop-zone
   stands down + `movePanel` rejects the move), since floating one desyncs the controls from the
   centre stage. Favients stays floatable.
+- **Seamless drag-transform.** The avatar MORPHS out of its source: `setDragOrigin(rect)` is stamped
+  at the start of every drag/click (`CanonicalHero`, `PickerWall` via `setHoverOrigin`,
+  `FavientsPanel`), and `DragAvatar` (`GradientDropLayer`) springs `{left,top,w,h}` from that origin
+  rect toward the cursor-following ramp box (k≈0.22) instead of popping in at the cursor. The avatar
+  ramp renders in **display `'srgb'`** so the in-hand colour matches the gradient (not the dull
+  stored-bake colour space). Avatar sits at `AVATAR_Z=9600`, above the hover preview (9500).
+- **Landing animation.** On a successful send, `triggerLanding(from, to, ramp)` (`dragVisual`) hands
+  a one-shot to `GradientLandingLayer` — a `LandingAvatar` keyed by `landing.id` that eases
+  (`1-(1-t)²`, `LANDING_MS≈240`) from the avatar's last box into the target rect while fading out,
+  then `clearLanding`. `DropTargetLayer.onSent(rect)` feeds the target rect through.
+- **Click-through placing path (Stage 1).** Click a swatch/hero → it goes "in hand" and the avatar
+  FOLLOWS THE CURSOR (a `mousemove` pointer + coalesced tick in `GradientDropLayer`, active while
+  `picked && !dragging`); click a destination to land it. Includes the **Favients drop**: on the
+  click-through the Favients box is a normal CLICKABLE apply tile (flat add to favourites), while
+  during a DRAG it stays passthrough + falls away so the panel's own reorder runs — one flag,
+  `passive = dragActive && dragPassthrough`, keeps the drag path unpolluted.
 
 ## 5. Remaining work (TODO)
 
-- **During-drag gradient visual — seamless transform.** The drag avatar should morph out of its
-  SOURCE (the swatch / hero) — grow/translate from the source rect into the cursor-following ramp —
-  rather than appearing abruptly at the cursor. The big one: it also unblocks the proper
-  click-through placing path (currently half-conceived). Not started.
+- **Click-through Stage 2 — the cancel wipe (the remaining big one).** When an in-hand pick ends
+  WITHOUT a land (empty-wall click / Esc / drop-on-nothing), play the elaborate cancel: alpha masks
+  off **left→right** (`mask-image: linear-gradient(to right, transparent t%, black t%)`) while the
+  whole ramp **shrinks on X** with heavy easing. Plan: add a `cancel` kind to `dragVisual`
+  (mirroring `Landing`), render it in `GradientLandingLayer`, and fire it from the in-hand teardown
+  path (the spots that currently just `closeHeroOptions()` with no target). Not started.
 - **Active padding/frame (§2.5b)** — the specced extra inner padding/frame on the active hero isn't
   built; the current active treatment is ring + glow only.
+- **In-hand hover-preview overlap (minor).** While a gradient is in hand following the cursor, the
+  wall's own hover-preview can still fire — visually busy. Consider suppressing the wall preview
+  while `picked && !dragging`.
 
 **Dropped:** the hero showcase backdrop + settings burger — a whole top-bar settings surface for one
 grey-level slider wasn't worth the scaffolding (the hero reads fine on the dark stage). Cheap to add

@@ -176,6 +176,29 @@ export const GradientDropLayer: React.FC = () => {
         };
     }, [dragging]);
 
+    // CLICK path (a gradient is IN HAND but not being dragged): the avatar follows the cursor
+    // via mousemove (a drag uses dragover, which doesn't fire here). Seed from the clicked
+    // source so it morphs from there; a coalesced tick re-renders so the avatar tracks the
+    // cursor. Clears on click-away / land / cancel (active → false).
+    useEffect(() => {
+        if (!active || dragging) return;
+        const origin = getDragOrigin();
+        if (origin) pointer.current = { x: origin.left + origin.width / 2, y: origin.top + origin.height / 2 };
+        let raf = 0;
+        const onMove = (e: MouseEvent): void => {
+            pointer.current = { x: e.clientX, y: e.clientY };
+            if (!raf) raf = requestAnimationFrame(() => { raf = 0; tick(); });
+        };
+        window.addEventListener('mousemove', onMove);
+        tick(); // show immediately at the seeded source
+        return () => {
+            window.removeEventListener('mousemove', onMove);
+            if (raf) cancelAnimationFrame(raf);
+            pointer.current = { x: 0, y: 0 };
+            setDragOrigin(null);
+        };
+    }, [active, dragging]);
+
     // During a DRAG: rAF to track the cursor over intermediates (dwell-to-reveal) and to
     // keep anchored rects fresh as tabs switch mid-drag. During SELECT: positions are
     // static except on scroll/resize (tab switches re-render via the store), so just
@@ -236,11 +259,11 @@ export const GradientDropLayer: React.FC = () => {
     );
 
     // Apply landed on a target → fly a fading copy from the avatar's last spot INTO the
-    // target's rect (the reverse of the take-off morph). Only on the DRAG path (the avatar
-    // was on screen); a bottom well has no rect, and the click path has no avatar to hand off.
+    // target's rect (the reverse of the take-off morph). Fires whenever the in-hand avatar is
+    // on screen (drag OR click path); a bottom well has no rect, so it just closes.
     const handleSent = (rect: DOMRect | null): void => {
-        if (rect && avatarRamp && dragging) {
-            const p = pointer.current;
+        const p = pointer.current;
+        if (rect && avatarRamp && (p.x !== 0 || p.y !== 0)) {
             triggerLanding(
                 { left: p.x + 14, top: p.y - 14, width: AVATAR_W, height: AVATAR_H },
                 { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
@@ -308,9 +331,10 @@ export const GradientDropLayer: React.FC = () => {
                 );
             })}
 
-            {/* Avatar only while dragging AND once the pointer is known (dragover has
-                fired) — otherwise it flashes at the top-left corner for the first frame. */}
-            {dragging && avatarRamp && (pointer.current.x !== 0 || pointer.current.y !== 0) && (
+            {/* The in-hand avatar — for BOTH a drag and the click path (gradient following the
+                cursor). Shown once the pointer is known (seeded from the source), else it would
+                flash at the top-left for the first frame. */}
+            {avatarRamp && (pointer.current.x !== 0 || pointer.current.y !== 0) && (
                 <DragAvatar ramp={avatarRamp} x={pointer.current.x} y={pointer.current.y} origin={getDragOrigin()} />
             )}
         </>
