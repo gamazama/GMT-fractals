@@ -136,8 +136,9 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                  </button>
                  <div className="flex-1 flex flex-col items-center py-2 gap-2">
                      {dockPanels.map(p => (
-                         <div 
+                         <div
                              key={p.id}
+                             data-gx-mode-tab={p.id}
                              onClick={() => togglePanel(p.id, true)}
                              className={`w-6 h-6 flex items-center justify-center rounded cursor-pointer ${p.id === activeTabId ? collapsedIconActive : collapsedIconInactive}`}
                              title={p.id}

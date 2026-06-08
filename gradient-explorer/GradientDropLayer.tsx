@@ -26,12 +26,36 @@ import { Z } from '../components/ui/zIndex';
 import { useActiveHeroSelection, useHeroOptionsOpen, closeHeroOptions } from '../palette/store/heroSelection';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
 import { renderStopsToBuffer } from '../palette/core/gmtGradient';
-import { deriveIntermediates } from './gradientTargets';
+import { deriveIntermediates, type IntermediateAffordance } from './gradientTargets';
 
 /** Dwell over an intermediate for this long (ms) to run its reveal step mid-drag. */
 const STEP_DWELL_MS = 400;
 
 const acceptsGradient = (types: string[]): boolean => types.includes(FAVIENT_DND_MIME);
+
+/**
+ * Where an intermediate's dropbox actually renders — shared by the render below AND the
+ * drag-dwell hit-test so they agree. For a COLLAPSED dock the anchor (`getRect`) is the tiny
+ * letter-icon at the edge, so the well is a NAMED tile placed NEXT to it (extending into the
+ * stage); otherwise it's a label-less box over the tab.
+ */
+const INTERMEDIATE_WELL_W = 132;
+const intermediateWell = (
+    it: IntermediateAffordance,
+): { left: number; top: number; width: number; height: number } | null => {
+    const rect = it.getRect();
+    if (!rect) return null;
+    const gap = 6;
+    if (it.collapsedSide) {
+        return {
+            left: it.collapsedSide === 'right' ? rect.left - gap - INTERMEDIATE_WELL_W : rect.right + gap,
+            top: rect.top - 3,
+            width: INTERMEDIATE_WELL_W,
+            height: Math.max(rect.height + 6, 26),
+        };
+    }
+    return { left: rect.left - 3, top: rect.top - 3, width: rect.width + 6, height: rect.height + 6 };
+};
 
 /** The cursor-following avatar of the dragged gradient (visual only; pointer-events-none). */
 const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number }> = ({ ramp, x, y }) => {
@@ -136,8 +160,8 @@ export const GradientDropLayer: React.FC = () => {
                 tick();
                 const { x, y } = pointer.current;
                 const hit = deriveIntermediates().find((it) => {
-                    const r = it.getRect();
-                    return r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+                    const w = intermediateWell(it);
+                    return w && x >= w.left && x <= w.left + w.width && y >= w.top && y <= w.top + w.height;
                 });
                 if (hit) {
                     if (dwellStep !== hit.id) {
@@ -205,24 +229,17 @@ export const GradientDropLayer: React.FC = () => {
                 step's element (a tab, a sub-mode switch). No label (the element under it
                 already reads), so it's a clean highlight + dwell ring. */}
             {intermediates.map((it) => {
-                const rect = it.getRect();
-                if (!rect) return null;
+                const w = intermediateWell(it);
+                if (!w) return null;
+                // Collapsed dock → a NAMED well next to the edge icon (shows the page name);
+                // expanded → a label-less box over the tab (the tab's own text reads through).
                 return createPortal(
-                    <div
-                        key={`intermediate:${it.id}`}
-                        className="fixed"
-                        style={{
-                            left: rect.left - 3,
-                            top: rect.top - 3,
-                            width: rect.width + 6,
-                            height: rect.height + 6,
-                            zIndex: Z.overlay,
-                        }}
-                    >
+                    <div key={`intermediate:${it.id}`} className="fixed" style={{ ...w, zIndex: Z.overlay }}>
                         <DropTargetTile
-                            label={it.id}
+                            label={it.label ?? it.id}
                             fill
-                            hideLabel
+                            hideLabel={!it.collapsedSide}
+                            opaque={!!it.collapsedSide}
                             dwell={dwellStep === it.id ? dwellProgress : 0}
                             onActivate={sel ? it.activate : undefined}
                             onDragOver={(e) => {
@@ -230,7 +247,7 @@ export const GradientDropLayer: React.FC = () => {
                                 if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
                             }}
                             onDrop={(e) => {
-                                // Reveal the surface and KEEP the gradient in hand —
+                                // Reveal/navigate to the surface and KEEP the gradient in hand —
                                 // stopPropagation keeps the drop from reaching the window
                                 // session-end clear, so after the drag the user is in
                                 // select-mode over the now-revealed final.

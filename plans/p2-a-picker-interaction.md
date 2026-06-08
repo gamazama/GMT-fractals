@@ -115,6 +115,11 @@ surface at two sizes).
   the `⬍` enlarge toggle moves into the settings panel. (The burger itself is trivial: `topbar.register`.)
 - **Active padding/frame (§2.5b)** — the specced extra inner padding/frame on the active hero isn't
   built; the current active treatment is ring + glow only.
+- **Main tab panels must NOT be floatable.** The engine provides docked + floatable panels (GMT
+  uses both). Favients (DOM-based) floats fine, but the **canvas-based mode stages** (Picker /
+  Generator / Image / Stops) **break the UI when floated** — they assume a docked, full-height
+  stage. The Explorer should pin those panels as docked-only (no float affordance / `location`
+  locked), leaving Favients floatable.
 
 ## 4. Invariants to preserve
 
