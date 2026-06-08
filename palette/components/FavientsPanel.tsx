@@ -29,15 +29,18 @@ import {
   subscribeFavientTargets,
   getFavientBrowseAction,
   getFavientStudioAction,
+  getFavientSelectMode,
 } from '../core/favientTargets';
 import { setFavientDrag, suppressNativeDragImage, readFavientDrag, FAVIENT_DND_MIME, type FavientDragPayload } from '../core/favientDnd';
-import { setHeroSelection } from '../store/heroSelection';
+import { useHeroPick, useActiveHeroMode, setHeroDrag, setHeroPick } from '../store/heroSelection';
+import { setDragOrigin } from '../store/dragVisual';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
 import { FavientsIcon } from './FavientsIcon';
 import type { RGB } from '../core/oklab';
 import { useEngineStore } from '../../store/engineStore';
 import { useDismiss } from '../../hooks/useDismiss';
+import { useDragEndSafetyNet } from '../../hooks/useDragEndSafetyNet';
 import { downloadBlob } from '../../utils/SceneFormat';
 import { EXPORT_FORMATS, getExportFormat, AI_STOP_LIMIT } from '../core/exportFormats';
 import { buildCollectionZip, buildCollectionFile, buildContactSheet, collectionQualityWarnings } from '../core/favientsExport';
@@ -352,7 +355,8 @@ const LIST_STRIP_W = 56;
 
 const FavientSwatch: React.FC<{
   fav: Favient;
-  onApply: (fav: Favient) => void;
+  /** Swatch click: SELECT (select-mode hosts) or APPLY (dropdown hosts) — the parent decides. */
+  onActivate: (fav: Favient) => void;
   onHover: (h: GradientHover | null) => void;
   onDragBegin: (id: string) => void;
   swatchW: number;
@@ -367,7 +371,11 @@ const FavientSwatch: React.FC<{
   onRename: (id: string, name: string) => void;
   /** Called when a reorder drag is attempted while disabled (filter active) — surfaces the cue. */
   onDragBlocked: () => void;
-}> = ({ fav, onApply, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked }) => {
+  /** This swatch is the current pick (select-mode hosts only) → enlarge + cyan ring. */
+  selected?: boolean;
+  /** Host flips click apply→select + enables the enlarge/selectable treatment. */
+  selectMode?: boolean;
+}> = ({ fav, onActivate, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked, selected, selectMode }) => {
   const ref = useRef<HTMLCanvasElement>(null);
   const [editing, setEditing] = useState(false);
   const list = view === 'list';
@@ -429,15 +437,16 @@ const FavientSwatch: React.FC<{
       const payload = { config: fav.config, name: fav.name, source: fav.source, favId: fav.id };
       setFavientDrag(e.dataTransfer, payload);
       suppressNativeDragImage(e.dataTransfer); // cursor-following avatar stands in
+      setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the swatch
       // Drag mirrors select — gives the avatar its ramp + lets the favourite be sent to
       // a dropbox (its own internal reorder still works via the FAVIENT_INTERNAL_MIME).
-      setHeroSelection({ mode: 'favients', key: fav.id, payload });
+      setHeroDrag({ mode: 'favients', key: fav.id, payload });
       onDragBegin(fav.id);
     },
     // Hover-enlarge is GRID-only: in list mode the popover would obscure the name and
     // fight double-click-to-rename, so list rows stay a stable size with no enlarge.
     ...(list ? {} : { onMouseEnter: showHover, onMouseLeave: () => onHover(null) }),
-    title: `${fav.name}${fav.source ? ` · ${fav.source}` : ''}\nClick to apply${canDrag ? ' · drag to reorder / onto a target' : ''}`,
+    title: `${fav.name}${fav.source ? ` · ${fav.source}` : ''}\nClick to ${selectMode ? 'select' : 'apply'}${canDrag ? ' · drag to reorder / onto a target' : ''}`,
   };
 
   if (list) {
@@ -446,14 +455,15 @@ const FavientSwatch: React.FC<{
     return (
       <div
         data-slot
+        {...(selectMode ? { 'data-gx-selectable': '' } : {})}
         {...dragProps}
-        className={`group flex items-center gap-2 px-1 py-1 rounded hover:bg-white/[0.06] transition ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
+        className={`group flex items-center gap-2 px-1 py-1 rounded transition ${selected ? 'bg-cyan-500/10 ring-1 ring-cyan-400/40' : 'hover:bg-white/[0.06]'} ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
       >
-        {/* Strip applies; name double-click renames (separate targets so renaming
-            doesn't fire an apply). */}
+        {/* Strip selects/applies; name double-click renames (separate targets so renaming
+            doesn't fire it). */}
         <canvas
           ref={ref}
-          onClick={() => onApply(fav)}
+          onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
           style={{ width: cw, height: ch }}
           className="block shrink-0 rounded-[2px] ring-1 ring-white/10 overflow-hidden cursor-pointer"
         />
@@ -488,10 +498,21 @@ const FavientSwatch: React.FC<{
   }
 
   return (
-    <div data-slot className="group relative shrink-0" {...dragProps}>
+    // The wrapper (data-slot) keeps its NATURAL size — the enlarge transform lives on the
+    // inner button, not here, so insertIndexFromPointer's getBoundingClientRect reads the
+    // unscaled slot rect (a scaled wrapper threw off the reorder drop index). z-10 lifts the
+    // selected swatch above its neighbours without changing its layout box.
+    <div
+      data-slot
+      {...(selectMode ? { 'data-gx-selectable': '' } : {})}
+      className={`group relative shrink-0 ${selected ? 'z-10' : ''}`}
+      {...dragProps}
+    >
       <button
-        onClick={() => onApply(fav)}
-        className="block rounded-[2px] ring-1 ring-white/10 hover:ring-amber-300/80 transition cursor-grab active:cursor-grabbing overflow-hidden"
+        onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
+        className={`block rounded-[2px] origin-center transition-transform cursor-grab active:cursor-grabbing overflow-hidden ${
+          selected ? 'scale-[1.4] ring-2 ring-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.45)]' : 'ring-1 ring-white/10 hover:ring-amber-300/80'
+        }`}
       >
         <canvas ref={ref} style={{ width: cw, height: ch }} className="block" />
       </button>
@@ -672,6 +693,13 @@ export const FavientsPanel: React.FC = () => {
   const blocks = useMemo(() => buildBlocks(visibleFavients), [visibleFavients]);
   const lastBlock = blocks[blocks.length - 1];
 
+  // Host capability: select-mode hosts (the Gradient Explorer, which owns the dock) flip
+  // click apply→select; dropdown hosts (app-gmt) apply straight to the chosen target.
+  const selectMode = getFavientSelectMode();
+  const favPick = useHeroPick('favients');
+  // The favourite enlarge shows only while Favients is the ACTIVE surface, so deselect
+  // (Esc) clears it (favourites have no persistent hero strip of their own).
+  const favActive = useActiveHeroMode() === 'favients';
   const activeTarget = getFavientTarget(selectedTargetId) ?? targets[0];
 
   const onApply = (fav: Favient) => {
@@ -681,6 +709,16 @@ export const FavientsPanel: React.FC = () => {
     }
     activeTarget.apply(fav.config, fav.name);
     flash(`${fav.name} → ${activeTarget.label}`);
+  };
+
+  // Select-mode click: PICK the favourite (→ enlarge + the shared dock of destinations).
+  // Same payload shape the drag sets, so the (mode,key) identity guard stays consistent.
+  const onSelect = (fav: Favient) => {
+    setHeroPick({
+      mode: 'favients',
+      key: fav.id,
+      payload: { config: fav.config, name: fav.name, source: fav.source, favId: fav.id },
+    });
   };
 
   // --- drag lifecycle ---
@@ -722,6 +760,9 @@ export const FavientsPanel: React.FC = () => {
       window.removeEventListener('drop', onEnd);
     };
   }, []);
+  // A favourite drag hides its source by UNMOUNTING it, so dragend/drop may never reach the
+  // window — recover via the shared mousemove net (else the swatch stays hidden + avatar stuck).
+  useDragEndSafetyNet(dragging, endDrag);
 
   // Put a dragged payload into `group` at flat index `flat`: move the existing
   // favourite (internal drag, or an external gradient that's already a favourite) or
@@ -762,7 +803,7 @@ export const FavientsPanel: React.FC = () => {
   };
 
   const swatchProps = {
-    onApply,
+    onActivate: selectMode ? onSelect : onApply,
     onHover: setHover,
     onDragBegin: beginDrag,
     swatchW,
@@ -771,6 +812,7 @@ export const FavientsPanel: React.FC = () => {
     canDrag: !filterActive,
     onRename: rename,
     onDragBlocked: () => flash('Clear the filter to reorder'),
+    selectMode,
   };
 
   return (
@@ -790,17 +832,22 @@ export const FavientsPanel: React.FC = () => {
       }}
     >
       <div className="px-2.5 py-2 border-b border-white/10 shrink-0 flex items-center gap-1.5">
-        <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Destination</span>
-        {targets.length ? (
-          <GenericDropdown
-            value={activeTarget?.id ?? ''}
-            options={targets.map((t) => ({ label: t.label, value: t.id }))}
-            onChange={(v) => setSelectedTarget(v as string)}
-            fullWidth
-          />
-        ) : (
-          <span className="text-[10px] text-gray-600 italic">no targets in this app</span>
-        )}
+        {/* Destination dropdown — only for dropdown hosts (app-gmt). Select-mode hosts
+            route applies through the dock instead, so the dropdown is hidden there. */}
+        {!selectMode &&
+          (targets.length ? (
+            <>
+              <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Destination</span>
+              <GenericDropdown
+                value={activeTarget?.id ?? ''}
+                options={targets.map((t) => ({ label: t.label, value: t.id }))}
+                onChange={(v) => setSelectedTarget(v as string)}
+                fullWidth
+              />
+            </>
+          ) : (
+            <span className="text-[10px] text-gray-600 italic">no targets in this app</span>
+          ))}
         {browse && (
           <button
             onClick={() => browse()}
@@ -886,7 +933,7 @@ export const FavientsPanel: React.FC = () => {
             <div className="text-[11px] text-gray-500 leading-relaxed">
               <FavientsIcon className="text-2xl mb-2 opacity-60 block mx-auto" />
               Star a gradient in the Generator or Image, or drag one in from the Picker.
-              <div className="mt-1 text-gray-600">Click a swatch to apply · drag to reorder · drag onto a slot.</div>
+              <div className="mt-1 text-gray-600">Click a swatch to {selectMode ? 'select' : 'apply'} · drag to reorder · drag onto a target.</div>
               <div className="mt-1.5 text-gray-600">Saved gradients are shared with the main GMT studio.</div>
             </div>
           </div>
@@ -928,7 +975,12 @@ export const FavientsPanel: React.FC = () => {
                     {block.favs.map((f, i) => (
                       <React.Fragment key={f.id}>
                         {phIndex === i && <Placeholder w={swatchW} h={swatchH} list={viewMode === 'list'} />}
-                        <FavientSwatch fav={f} {...swatchProps} groupLabel={groupLabel} />
+                        <FavientSwatch
+                          fav={f}
+                          {...swatchProps}
+                          groupLabel={groupLabel}
+                          selected={selectMode && favActive && favPick?.key === f.id}
+                        />
                       </React.Fragment>
                     ))}
                     {phIndex === block.favs.length && <Placeholder w={swatchW} h={swatchH} list={viewMode === 'list'} />}

@@ -96,6 +96,32 @@ const revealPanel = (id: string): void => {
     s.togglePanel(id as PanelId, true);
 };
 
+/** The side of a panel's COLLAPSED dock, or null if its dock is expanded / it's floating. */
+const collapsedDockSide = (id: string): 'left' | 'right' | null => {
+    const s = useEngineStore.getState();
+    const loc = panelOf(id)?.location;
+    if (loc === 'left') return s.isLeftDockCollapsed ? 'left' : null;
+    if (loc === 'right') return s.isRightDockCollapsed ? 'right' : null;
+    return null;
+};
+
+/**
+ * Navigate to a panel WITHOUT un-collapsing its dock. Right-dock mode panels mirror to the
+ * centre stage (which reads `activeRightTab`), so switching the active tab navigates the page
+ * while the user keeps their collapsed controls. The left-dock Favients shelf has no centre
+ * mirror, so it must be revealed (un-collapsed) to be usable.
+ */
+const navigateToPanel = (id: string): void => {
+    if (panelOf(id)?.location === 'right') {
+        useEngineStore.setState((st) => ({
+            panels: { ...st.panels, [id]: { ...st.panels[id], isOpen: true } },
+            activeRightTab: id as PanelId,
+        }));
+    } else {
+        revealPanel(id);
+    }
+};
+
 const genMode = (): number =>
     (useEngineStore.getState() as unknown as { paletteGenerator?: { generatorMode?: number } })
         .paletteGenerator?.generatorMode ?? 0;
@@ -107,11 +133,21 @@ interface RevealStep {
     getRect: () => DOMRect | null;
     isActive: () => boolean;
     activate: () => void;
+    /** Human label (the panel name) — shown when the anchor is a collapsed-dock icon. */
+    label?: string;
+    /** The side of the step's dock when it's COLLAPSED (else null) — the host then renders a
+     *  NAMED edge well next to the collapsed icon instead of a box over the (absent) tab. */
+    collapsedSide?: () => 'left' | 'right' | null;
+    /** Collapsed-dock activation: navigate to the page WITHOUT un-collapsing the dock. */
+    navigate?: () => void;
 }
 const tabStep = (id: string): RevealStep => ({
     getRect: () => modeTabRect(id),
     isActive: () => isPanelShown(id),
     activate: () => revealPanel(id),
+    label: id,
+    collapsedSide: () => collapsedDockSide(id),
+    navigate: () => navigateToPanel(id),
 });
 const REVEAL_STEPS: Record<string, RevealStep> = {
     'tab:Generator': tabStep('Generator'),
@@ -185,6 +221,11 @@ export interface IntermediateAffordance {
     id: string;
     getRect: () => DOMRect | null;
     activate: () => void;
+    /** Panel name — shown when the anchor is a collapsed-dock icon (else hideLabel over the tab). */
+    label?: string;
+    /** When the step's dock is COLLAPSED, which side (else null) — the host renders a named
+     *  edge well next to the collapsed icon that navigates to the page. */
+    collapsedSide?: 'left' | 'right' | null;
 }
 
 /**
@@ -205,7 +246,16 @@ export const deriveIntermediates = (): IntermediateAffordance[] => {
             if (step.isActive()) continue; // satisfied → look deeper along the path
             if (!seen.has(stepId)) {
                 seen.add(stepId);
-                out.push({ id: stepId, getRect: step.getRect, activate: step.activate });
+                const collapsedSide = step.collapsedSide?.() ?? null;
+                out.push({
+                    id: stepId,
+                    getRect: step.getRect,
+                    // Collapsed dock: navigate (switch the page, keep the dock collapsed);
+                    // expanded: the normal reveal (open/switch the tab).
+                    activate: collapsedSide && step.navigate ? step.navigate : step.activate,
+                    label: step.label,
+                    collapsedSide,
+                });
             }
             break; // only the first unmet step is this target's current intermediate
         }

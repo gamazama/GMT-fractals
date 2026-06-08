@@ -507,7 +507,6 @@ export const ImageStage: React.FC = () => {
               name={`Image · ${mode}`}
               source="Image"
               mode="image"
-              height={96}
             />
           ) : (
             <div>

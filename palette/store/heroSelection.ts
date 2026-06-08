@@ -1,25 +1,22 @@
 /**
- * heroSelection — the currently "selected" gradient, held as a transient module-level
- * store (mirrors `pickerSearch` / `fullscreenStore`: NOT DDFS, NOT persisted, no undo).
+ * heroSelection — the per-surface "current pick" model for the Gradient Explorer. Each
+ * gradient surface (Picker / Generator / Image / Stops / Favients) keeps its OWN sticky
+ * pick, so selecting a favourite never disturbs the Picker's hero and vice-versa — the
+ * surfaces are fully independent. ONE pick at a time is ACTIVE (the last one clicked): it
+ * drives the dock + the active glow. Transient (NOT DDFS / NOT persisted / no undo); a
+ * pick survives the Picker's desktop↔mobile remount exactly as pickerSearch does.
  *
- * This is the click-path twin of a drag-in-flight: clicking a gradient surface (a mode
- * result hero, the Picker preview) SELECTS it — which reveals the lower-centre bin dock
- * (DragWellsOverlay) so the user can click a destination bin (the same bins a drag drops
- * onto). Selecting is the "what do I want to do with this" gesture; the dock bins are the
- * "where". One active selection at a time across the studio.
+ *   • `picks[mode]`  — that surface's sticky pick (drives its hero + wall/swatch enlarge).
+ *   • `active`       — which surface's pick is "in hand" (the dock acts on `picks[active]`).
+ *   • `optionsOpen`  — whether the dock + drop targets are shown.
  *
- * Why a module store rather than `useState` in each surface: the Picker held its selected
- * entry in local state, so the desktop↔mobile layout flip (which remounts the Picker
- * subtree) blanked the hero (the known resize state-loss bug). A transient external store
- * survives that remount exactly as `pickerSearch` does. It also lets the shell-level dock
- * (DragWellsOverlay, mounted once in GradientExplorerApp) read the selection without
- * prop-drilling through every mode.
+ * Deselect (empty-wall click / Esc) clears the ACTIVE state (the wall/swatch enlarge, gated
+ * on `active`, + the dock) but KEEPS every surface's pick — the hero never blanks. See
+ * `plans/p2-a-picker-interaction.md`.
  *
- * `mode` + `key` identify WHICH surface/item is selected, so only that surface draws its
- * selection ring (selection is per-mode, never a global highlight). `payload` is the
- * frozen `FavientDragPayload` the dock bins act on (same shape a drag carries).
- *
- * @see store/dropWellRegistry.ts / hooks/useDragInFlight.ts (the drag twin)
+ * @invariant `key` MUST fully determine `payload` + `selfTargetId`: the identity guards
+ *   below early-return on a `(mode,key)` match, so varying payload for the same key would
+ *   leave a silently stale dock.
  * @see palette/store/pickerSearch.ts (the transient-store precedent)
  */
 
@@ -29,45 +26,90 @@ import type { FavientDragPayload } from '../core/favientDnd';
 export type HeroMode = 'picker' | 'generator' | 'image' | 'stops' | 'favients';
 
 export interface HeroSelection {
-  /** Which surface owns the selection (so only it lights its ring). */
+  /** Which surface owns this pick. */
   mode: HeroMode;
-  /** Stable identity within the mode — a catalog-entry id (Picker) or content
-   *  signature (single-result heroes). Drives the ring + the Picker wall's selectedId. */
+  /** Stable identity within the mode — a catalog-entry id (Picker) or content signature
+   *  (single-result heroes). Drives the surface's treatment + the wall's selectedId. */
   key: string;
-  /** The gradient the dock bins act on (config + name + provenance). */
+  /** The gradient the dock targets act on (config + name + provenance). */
   payload: FavientDragPayload;
-  /** When this gradient IS a drop target's content (e.g. the Stops hero, which is the
-   *  `stops` target itself), that target's id — so the dock self-filters it (you don't
-   *  drop a gradient onto itself, and its dropbox must not cover the source). */
+  /** When this gradient IS a drop target's content (e.g. the Stops hero), that target's id
+   *  — so the dock self-filters it (you don't drop a gradient onto itself). */
   selfTargetId?: string;
 }
 
-let selection: HeroSelection | null = null;
+let picks: Partial<Record<HeroMode, HeroSelection>> = {};
+let active: HeroMode | null = null;
+let optionsOpen = false;
 const listeners = new Set<() => void>();
+const emit = (): void => listeners.forEach((l) => l());
 const subscribe = (l: () => void): (() => void) => {
   listeners.add(l);
   return () => { listeners.delete(l); };
 };
-const getSnapshot = (): HeroSelection | null => selection;
 
-/** Select a gradient (replaces any prior selection; opens the bin dock). No-ops when
- *  the same item is re-selected (matches pickerSearch's identity guard) so re-picking
- *  an already-selected swatch doesn't re-render the whole dock + every hero. */
-export const setHeroSelection = (sel: HeroSelection): void => {
-  if (selection && selection.mode === sel.mode && selection.key === sel.key) return;
-  selection = sel;
-  listeners.forEach((l) => l());
+const sameItem = (a: HeroSelection | undefined, b: HeroSelection): boolean =>
+  !!a && a.mode === b.mode && a.key === b.key;
+
+/**
+ * PICK (the click path): set the surface's pick, make it active, and open the dock.
+ * Re-picking the same item while it's already active with the dock open is a no-op (avoids
+ * churning the dock + every hero); re-picking while the dock is closed re-opens it.
+ */
+export const setHeroPick = (sel: HeroSelection): void => {
+  if (active === sel.mode && sameItem(picks[sel.mode], sel) && optionsOpen) return;
+  if (!sameItem(picks[sel.mode], sel)) picks = { ...picks, [sel.mode]: sel };
+  active = sel.mode;
+  optionsOpen = true;
+  emit();
 };
 
-/** Clear the selection (closes the bin dock). No-ops when nothing is selected. */
-export const clearHeroSelection = (): void => {
-  if (!selection) return;
-  selection = null;
-  listeners.forEach((l) => l());
+/**
+ * Set the pick for a DRAG (the drag image needs a ramp + the source stays lit). Makes the
+ * surface active but does NOT force the dock open — a drag lights the targets via
+ * useDragInFlight regardless.
+ */
+export const setHeroDrag = (sel: HeroSelection): void => {
+  if (active === sel.mode && sameItem(picks[sel.mode], sel)) return;
+  if (!sameItem(picks[sel.mode], sel)) picks = { ...picks, [sel.mode]: sel };
+  active = sel.mode;
+  emit();
 };
 
-export const getHeroSelection = (): HeroSelection | null => selection;
+/** Close the dock — KEEPS every surface's pick (apply / drop / a deliberate dismiss). */
+export const closeHeroOptions = (): void => {
+  if (!optionsOpen) return;
+  optionsOpen = false;
+  emit();
+};
 
-/** Subscribe a component to the active selection. */
-export const useHeroSelection = (): HeroSelection | null =>
-  useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+/**
+ * DESELECT (empty-wall click / Esc): clear the ACTIVE highlight (the wall/swatch enlarge,
+ * which is gated on `active`) + close the dock — but KEEP every surface's pick, so the
+ * hero NEVER blanks (it shows the last picked gradient until a different one is picked).
+ */
+export const deselectActiveHero = (): void => {
+  if (active === null && !optionsOpen) return;
+  active = null;
+  optionsOpen = false;
+  emit();
+};
+
+const activeSelection = (): HeroSelection | null => (active !== null ? picks[active] ?? null : null);
+
+/** A surface's own sticky pick (drives its hero + enlarge). Stable ref when unchanged, so
+ *  updating one surface doesn't re-render the others. */
+export const useHeroPick = (mode: HeroMode): HeroSelection | null =>
+  useSyncExternalStore(subscribe, () => picks[mode] ?? null, () => picks[mode] ?? null);
+
+/** The pick the dock acts on (the active surface's pick). */
+export const useActiveHeroSelection = (): HeroSelection | null =>
+  useSyncExternalStore(subscribe, activeSelection, activeSelection);
+
+/** Which surface is active — distinguishes the active glow from a dormant (still-shown) pick. */
+export const useActiveHeroMode = (): HeroMode | null =>
+  useSyncExternalStore(subscribe, () => active, () => active);
+
+/** Whether the dock + drop targets are shown. */
+export const useHeroOptionsOpen = (): boolean =>
+  useSyncExternalStore(subscribe, () => optionsOpen, () => optionsOpen);

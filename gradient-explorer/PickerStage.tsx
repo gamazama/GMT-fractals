@@ -15,13 +15,15 @@ import { passesFilters, type FilterWindows } from '../palette/core/facets';
 import { entryToGradientConfig } from '../palette/core/gradientSeam';
 import { GROUP_BY, ROWS_BY, SORT_BY } from '../palette/features/paletteFilters';
 import type { CatalogEntry } from '../palette/core/presetCatalog';
+import { bufferToRamp } from '../palette/core/stopFit';
 import { PickerWall, type PickerGroup, type SelectionTool } from '../palette/components/PickerWall';
-import { FavStar } from '../palette/components/FavStar';
+import { CanonicalHero } from '../palette/components/CanonicalHero';
 import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
 import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { setFavientDrag, suppressNativeDragImage } from '../palette/core/favientDnd';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
-import { useHeroSelection, setHeroSelection, clearHeroSelection } from '../palette/store/heroSelection';
+import { useHeroPick, useActiveHeroMode, setHeroPick, setHeroDrag, deselectActiveHero } from '../palette/store/heroSelection';
+import { useHeroHeight } from '../palette/store/heroPrefs';
 
 const win = (v: { x?: number; y?: number } | undefined): [number, number] => [v?.x ?? 0, v?.y ?? 1];
 
@@ -69,14 +71,18 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   const load = usePickerStore((s) => s.load);
   useEffect(() => { load(); }, [load]);
 
-  // Selection lives in the transient heroSelection store (not local state) so it
-  // survives the desktop↔mobile remount — the old useState blanked the hero on resize —
-  // and drives the shared lower-centre bin dock. Derive the entry back from the catalog.
-  const heroSel = useHeroSelection();
+  // The Picker's OWN pick lives in the per-surface heroSelection store (not local state) so
+  // it survives the desktop↔mobile remount, is independent of Favients (selecting a
+  // favourite never touches it), and drives the shared dock. Derive the entry from the catalog.
+  const pickerPick = useHeroPick('picker');
   const selected = useMemo(
-    () => (heroSel?.mode === 'picker' ? catalog.find((e) => e.id === heroSel.key) ?? null : null),
-    [heroSel, catalog],
+    () => (pickerPick ? catalog.find((e) => e.id === pickerPick.key) ?? null : null),
+    [pickerPick, catalog],
   );
+  // The HERO shows `selected` (the persistent pick — never blanks). The WALL enlarge only
+  // shows while the Picker is the ACTIVE surface, so deselect (empty-wall/Esc) clears the
+  // wall highlight while the hero keeps showing the gradient.
+  const pickerActive = useActiveHeroMode() === 'picker';
 
   // Free-text catalog search (transient, session-only — see pickerSearch). `searchOpen`
   // is purely the hero affordance's expanded/collapsed UI; the query itself is shared
@@ -114,14 +120,17 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
       return next;
     });
   }, []);
-  // The selected gradient as a GMT config, for the favourite star (presets carry stops;
-  // loaded entries are ramp-only → fitted via the seam).
+  // The selected gradient as a GMT config (for the CanonicalHero's favourite star + dock
+  // payload; presets carry stops, loaded entries are ramp-only → fitted via the seam).
   const favConfig = useMemo(() => (selected ? entryToGradientConfig(selected) : null), [selected]);
+  // The hero renders the entry's EXACT 256-step ramp (byte→RGB via the shared bufferToRamp),
+  // so it matches the wall swatch pixel-for-pixel rather than the fitted-stops re-render of favConfig.
+  const heroRamp = useMemo(() => (selected ? bufferToRamp(selected.ramp) : undefined), [selected]);
   // Pick → SELECT it (drives the hero preview + the bin dock). The standalone studio
   // has no fractal to colour, so the old no-op applyEntryToColoring is dropped (locked
   // decision 4); destinations are the dock bins.
   const onPick = useCallback((e: CatalogEntry) => {
-    setHeroSelection({
+    setHeroPick({
       mode: 'picker',
       key: e.id,
       payload: { config: entryToGradientConfig(e), name: e.name, source: 'Picker' },
@@ -132,9 +141,9 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
     const payload = { config: entryToGradientConfig(e), name: e.name, source: 'Picker' };
     setFavientDrag(dt, payload);
     suppressNativeDragImage(dt); // the cursor-following avatar stands in for the drag image
-    // Drag mirrors click — selecting the dragged swatch gives the avatar its ramp and
-    // leaves it selected if dropped over nothing.
-    setHeroSelection({ mode: 'picker', key: e.id, payload });
+    // Drag mirrors click — picking the dragged swatch gives the avatar its ramp and
+    // leaves it the in-hand pick if dropped over nothing.
+    setHeroDrag({ mode: 'picker', key: e.id, payload });
   }, []);
 
   // Per-entry lowercased search haystack = name + theme + bundle LABEL (not the synthetic
@@ -283,28 +292,8 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   const swatchW = Math.round(pf?.swatchSize?.x ?? 32);
   const swatchH = Math.round(pf?.swatchSize?.y ?? 18);
   const gap = Math.max(0, Math.round(pf?.paddingSize ?? 0));
-
-  // Crisp hero: upscale the 256-px ramp to the bar's real resolution with HIGH-quality
-  // bilinear smoothing (drawImage), rather than letting CSS stretch a 256×1 canvas.
-  const heroRef = useRef<HTMLCanvasElement>(null);
-  const heroSrcRef = useRef<HTMLCanvasElement | null>(null);
-  useEffect(() => {
-    const cv = heroRef.current;
-    if (!cv || !selected) return;
-    const dpr = window.devicePixelRatio || 1;
-    const bw = Math.max(1, Math.round((cv.clientWidth || 600) * dpr));
-    const bh = Math.max(1, Math.round(40 * dpr));
-    if (cv.width !== bw) cv.width = bw;
-    if (cv.height !== bh) cv.height = bh;
-    let src = heroSrcRef.current;
-    if (!src) { src = document.createElement('canvas'); src.width = 256; src.height = 1; heroSrcRef.current = src; }
-    src.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(selected.ramp), 256, 1), 0, 0);
-    const ctx = cv.getContext('2d')!;
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.clearRect(0, 0, bw, bh);
-    ctx.drawImage(src, 0, 0, 256, 1, 0, 0, bw, bh);
-  }, [selected]);
+  // Match the deselected placeholder to the hero's footprint so deselect doesn't jump.
+  const heroH = useHeroHeight();
 
   // Self-explaining active-filter readout: which narrowers are shrinking the wall right
   // now. Surfaces carve on mobile too (the carve chip is desktop-only), so a small wall
@@ -321,37 +310,38 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-zinc-950">
       <div className="px-4 pt-3 pb-2 border-b border-zinc-800 shrink-0">
-        {selected ? (
-          // The preview is a select/drag source too: drag it onto a bin, or click to
-          // deselect. The cyan border is the selection treatment (it only shows when selected).
-          <canvas
-            ref={heroRef}
-            data-gx-selectable=""
-            draggable
-            onDragStart={(e) => {
-              setFavientDrag(e.dataTransfer, {
-                config: entryToGradientConfig(selected),
-                name: selected.name,
-                source: 'Picker',
-              });
-              suppressNativeDragImage(e.dataTransfer);
-            }}
-            onClick={clearHeroSelection}
-            title="Selected — pick a destination, or click to deselect · drag onto a target"
-            className="h-10 w-full rounded-md border-2 border-cyan-400 block cursor-grab active:cursor-grabbing"
+        {selected && favConfig ? (
+          // The shared hero: the entry's pixel-exact ramp as a select/drag source — click
+          // to bring up destinations, drag onto a target. selectionKey = the catalog id so
+          // the hero + the wall's selectedId share one key.
+          <CanonicalHero
+            config={favConfig}
+            ramp={heroRamp}
+            name={selected.name}
+            source="Picker"
+            mode="picker"
+            selectionKey={selected.id}
           />
         ) : (
-          <div className="h-10 w-full rounded-md border border-dashed border-zinc-700/70 bg-zinc-900/40 flex items-center justify-center">
-            <span className="text-[10px] text-zinc-600">Click a swatch below to preview it here</span>
+          // Mirror the hero's footprint (a header row + a strip of the shared height) so
+          // deselecting (empty-wall click / Esc) doesn't jump the layout.
+          <div>
+            <div className="flex items-center mb-1 h-[19px]">
+              <span className="text-[10px] text-zinc-600">No gradient picked</span>
+            </div>
+            <div
+              className="w-full rounded-md border border-dashed border-zinc-700/70 bg-zinc-900/40 flex items-center justify-center"
+              style={{ height: heroH }}
+            >
+              <span className="text-[10px] text-zinc-600">Click a swatch below to preview it here</span>
+            </div>
           </div>
         )}
         <div className="mt-1.5 flex items-center justify-between text-[11px] gap-2">
+          {/* The ★ + name now live in the hero above; this row keeps the bundle provenance
+              (when picked) on the left and the search/count/hint controls on the right. */}
           <span className="flex items-center gap-2 min-w-0">
-            {selected && favConfig && <FavStar config={favConfig} name={selected.name} source="Picker" size="sm" />}
-            <span className="text-zinc-300 font-medium truncate">
-              {selected ? selected.name : 'Pick a gradient'}
-              {selected?.bundle && <span className="ml-2 text-zinc-600">{selected.bundle}</span>}
-            </span>
+            {selected?.bundle && <span className="text-[10px] text-zinc-600 truncate">{selected.bundle}</span>}
           </span>
           <span className="flex items-center gap-2 shrink-0">
             {hintPhase !== 'done' && (
@@ -469,7 +459,10 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
         </div>
       </div>
 
-      <div ref={wallHostRef} className="flex-1 min-h-0 relative">
+      {/* data-gx-keepselect: the wall manages its own clicks (swatch → pick, empty → deselect
+          via PickerWall.onDeselect), so the global click-away handler skips it — otherwise
+          every swatch pick would close-then-reopen the dock (a flicker). */}
+      <div ref={wallHostRef} data-gx-keepselect="" className="flex-1 min-h-0 relative">
         {!loaded ? (
           <div className="h-full flex items-center justify-center text-sm text-zinc-600">Loading gradient library…</div>
         ) : count > 0 ? (
@@ -478,7 +471,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
             sprite={sprite}
             onPick={onPick}
             onEntryDragStart={onEntryDragStart}
-            selectedId={selected?.id}
+            selectedId={pickerActive ? selected?.id : undefined}
             swatchW={swatchW}
             swatchH={swatchH}
             gap={gap}
@@ -488,6 +481,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
             selectionTool={tool}
             onSelectionCommit={onSelectionCommit}
             onSelectionCancel={() => setTool(null)}
+            onDeselect={deselectActiveHero}
           />
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-zinc-400 px-6 text-center">

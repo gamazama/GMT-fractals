@@ -281,7 +281,6 @@ export const GeneratorStage: React.FC = () => {
   const setSmooth = useGeneratorStore((s) => s.setSmooth);
   const fitFromSource = useGeneratorStore((s) => s.fitFromSource);
   const resetCurves = useGeneratorStore((s) => s.resetCurves);
-  const [resultTall, setResultTall] = useState(false);
   const [genMode] = useGenParam<number>('generatorMode');
   const colorbox = (genMode ?? 0) === 1;
 
@@ -357,8 +356,8 @@ export const GeneratorStage: React.FC = () => {
         />
 
         {/* Result — the shared select/drag hero. Apply / Fullscreen / Send-to are the
-            lower-centre bin dock now (click the strip to reveal it); only the result's
-            own view controls (enlarge) stay here. */}
+            lower-centre bin dock now (click the strip to reveal it); the vertical-enlarge
+            toggle is built into the hero now (shared + persisted across all modes). */}
         <div className="mt-1">
           {curvesOn && !colorbox && (
             <div className="text-[10px] text-cyan-400/70 truncate mb-1">
@@ -371,21 +370,7 @@ export const GeneratorStage: React.FC = () => {
             name="Generated"
             source="Generator"
             mode="generator"
-            height={resultTall ? 96 : 44}
-            trailing={
-              <>
-                <span className="text-[11px] text-gray-500">{config.stops.length} stops</span>
-                <button
-                  onClick={() => setResultTall((t) => !t)}
-                  title={resultTall ? 'Shrink result' : 'Enlarge result'}
-                  aria-label="Toggle result height"
-                  aria-pressed={resultTall}
-                  className={`text-[11px] px-1.5 py-0.5 rounded-sm transition-colors ${resultTall ? 'bg-cyan-500/20 text-cyan-200' : 'bg-white/[0.06] text-gray-400 hover:text-gray-200'}`}
-                >
-                  ⬍
-                </button>
-              </>
-            }
+            trailing={<span className="text-[11px] text-gray-500">{config.stops.length} stops</span>}
           />
         </div>
       </div>

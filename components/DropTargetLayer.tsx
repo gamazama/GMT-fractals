@@ -43,8 +43,9 @@ export interface DropTargetLayerProps {
     dragAccepts?: (types: string[]) => boolean;
     /** Parse a drop's DataTransfer into a payload (host-injected; keeps engine-core agnostic). */
     readDragPayload?: (dt: DataTransfer) => unknown;
-    /** Called after a final target receives the payload (host clears the selection). */
-    onSent?: () => void;
+    /** Called after a final target receives the payload — with the target's rect (or null for
+     *  an unanchored bottom well), so the host can play a landing animation into it. */
+    onSent?: (landedRect: DOMRect | null) => void;
     z?: number;
 }
 
@@ -112,7 +113,7 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
             console.warn(`[sendTarget] "${target.id}" apply threw`, err);
         } finally {
             setHoverId(null);
-            onSent?.();
+            onSent?.(target.getRect?.() ?? null);
         }
     };
 
@@ -169,6 +170,11 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
                 drag-passthrough target (e.g. the Favients shelf) shows a VISUAL-only box
                 during a drag so the element underneath handles the drop itself. */}
             {anchored.map(({ target, rect }) => {
+                // A drag-passthrough target (e.g. the Favients shelf): during a DRAG the box is
+                // visual-only and FALLS AWAY once the cursor is over its rect — handing the drop
+                // to the component's OWN DnD (insert/reorder), so the drag path is untouched. On
+                // the CLICK-THROUGH path (select) it's a normal CLICKABLE tile whose click
+                // applies — a flat add to favourites.
                 const passive = dragActive && target.dragPassthrough;
                 // Fall away once the cursor is over a passthrough region, so the component's
                 // OWN drag mechanics (e.g. the Favients panel's insert/reorder) are unobstructed.
