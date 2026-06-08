@@ -167,7 +167,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | S6 | W11 Fullscreen configs | 1 | ✅ **merged `94e8e5d`** | `exec/s6-fullscreen` | foundation + fixes: drop-race in W4 kernel (capture→bubble reset — ratified into (b)) + isotropic geometries (radial/conic round). User visual confirm (drop opens fullscreen; shapes round). Integration gate green. FUTURE: richer options (backlog "fullscreen v2") |
 | S7 | W12 ColorBox generator mode (v1 addition) | 1 | ✅ **merged `5c2a280`** | `exec/s7-colorbox` | easings.ts + buildColorBoxRamp + generatorMode + visual easing picker + colored L/C/h sliders (NEW additive `ScalarInput.trackBackground`) + colorBoxFit.ts (frozen-ahead for P2 drop) + "Fit from gradient" interim button. Fixed hue-key-casing black-ramp bug. User visual confirm; full gate green |
 | S8 | W13 interpolation bases | 1 | ✅ **resolved — DEFERRED, no code** | `exec/s8-interp` | S8 REFUTED Tier A: 2-point `sampleSorted` can't overshoot → monotone-cubic degenerates to smoothstep (already ships as smooth/cubic); the no-overshoot win needs **multi-point = Tier B**. **W13 entirely deferred to Tier B**; v1 ships nothing from it. Zero code (sampler byte-unchanged). Good catch (flawed scope-doc premise). Rationale → project memory |
-| P2 | W2 portability integration (W9 deferred) | 2 | **scoped + decisions ratified → ready to fan out (gated on live-fractal merge)** | `exec/p2-portability` (per sub-stream) | ✅ **SCOPED + RATIFIED 2026-06-07** → `plans/p2-scope.md`. **7 sub-streams** (P2-H/W9 deferred) behind one already-ratified gate (additive (c) `getRect?`): **pre** = P2-F ImageStage coexistence (S); **W1** P2-A canonical hero + select→act (L) ‖ P2-C unified target list + favientTargets→registry (M-L) ‖ P2-E gen+image doc round-trip (M); **W2** P2-B hero state-lift (S, needs A) ‖ P2-G favourite Update-vs-Save-as-new + facetName wiring (M, needs A) ‖ P2-D drag/avatar/cross-tab (L, needs A+C); **W3** P2-D finish → close-out + **mandatory runtime re-verify (S6 well migration)**. ~3-4wk. **Undo focus = (b) auto-focus affected mode** (ratified). **Sequencing: after live-fractal merges; fullscreen-v2 independent (one S6-well re-touch in P2-C).** Next on live-fractal merge: fan out P2-F → Wave 1. |
+| P2 | W2 portability integration (W9 deferred) | 2 | **IN FLIGHT** — live-fractal ✅merged · P2-F ✅merged · **P2-A in-review** | `exec/p2-*` (per sub-stream) | **7 sub-streams** (`plans/p2-scope.md`). **pre P2-F** ✅ MERGED `c817911`. **W1: P2-A** ✅ DELIVERED in-review (`exec/p2-a` 7146275) — tab-anchored "select→reveal→place" (NOT a bin dock; spec was wrong → `p2-a-v2-design.md`); brought the canonical hero (`CanonicalHero`, `targetId` prop) + the data-driven dropbox/reveal layer (`DropTarget`/`DropTargetLayer`); **(c) +4 fields ratified** (see frozen block). P2-C/P2-D now build on P2-A's reveal layer + the 4 (c) fields (P2-A productionized the in-app pointer/dropbox part of P2-D). ‖ **P2-E** gen+image doc round-trip (M). **W2:** P2-B hero state-lift (S) ‖ P2-G favourite Update/Save-as-new + facetName (M) ‖ P2-D finish drag/avatar/cross-tab (L). **W3:** close-out + **runtime re-verify (S6 well migration)**. **Undo focus = (b) auto-focus** (ratified). **NEXT (user's pick):** the Picker two-selection-states + swatch enlarge → `plans/p2-a-picker-handoff.md` (fresh in-`dev` branch). **Worktrees now opt-in** — serial streams run in `dev` directly (additionalDirectories fix landed). |
 | P3 | `/polish` pass | 3 | deferred | — | after structure lands |
 
 ---
@@ -237,10 +237,21 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 - (c) **Send-target registry kernel — FROZEN (P0e)** (engine-core: `store/sendTargetRegistry.ts` +
   `components/SendToMenu.tsx`):
     - `interface SendTarget<P=unknown> { id; label; group: 'host'|'mode'; accepts?(payload: P): boolean; apply(payload: P): void }` — **§4(c) RATIFIED CHANGE: `apply(config: GradientConfig)` → generic `apply(payload: P)`** (engine-core can't reference GradientConfig; this IS Decision #8's genericization). **S2/S6/P2 register gradient targets/wells with their own payload type P = {GradientConfig + kind}.**
-    - **§4(c) AMENDMENT — RATIFIED 2026-06-06 (apply at P2):** add optional `getRect?: () => DOMRect | null`
-      to `SendTarget` (present ⇒ the target is a drop zone for pointer-drag hit-testing; absent ⇒ menu-only).
-      Additive, same pattern as (b)'s `render?`. This is what makes "drag ↔ Send-to share ONE target list"
-      (Decision #2) fall out for free — it gates the P2 drag work. From the p2-drag-interaction probe.
+    - **§4(c) AMENDMENT — RATIFIED + SUPERSEDED by P2-A (2026-06-08).** P2-A added **4 optional additive
+      fields** to `SendTarget` (all user-ratified in-session, gate-green at every commit) — these REPLACE
+      the originally-planned single `getRect?` amendment:
+        - `getRect?: () => DOMRect | null` — target's on-screen rect (anchors the dropbox + drag hit-test).
+        - `revealPath?` — the chain of intermediate targets to traverse to reach a hidden target (e.g. mode
+          tab → sub-mode → slot); `deriveIntermediates` walks the registry to build it — **no hardcoded
+          tab→target map** (adding a target anywhere auto-populates its final + intermediate path).
+        - `acceptsTypes?` — payload/MIME gating for what a target will accept.
+        - `dragPassthrough?` — lets a drag fall through the dropbox affordance to a host's own handling
+          (e.g. Favients shelf insert/reorder takes over once the pointer is over the shelf).
+      All additive/optional ⇒ existing (c) consumers unaffected. **The model is TAB-ANCHORED "select →
+      reveal → place"** (dropbox lights over each target via getRect; chained reveal/dwell to reach hidden
+      ones) — **NOT** a bottom-centre bin dock (the p2-a-implementation-spec.md bin-dock framing was WRONG
+      and is superseded by `plans/p2-a-v2-design.md`). Downstream P2 streams (esp. P2-C/P2-D) build on THESE
+      4 fields, not the old single getRect.
     - `registerSendTarget<P>(t): () => void` · `unregisterSendTarget(id)` · `getSendTargets()` ·
       `subscribeSendTargets(l)` · `targetsForPayload<P>(payload, opts?:{selfId?}): SendTarget<P>[]`.
     - `<SendToMenu<P> payload selfId? label? onSent? className? disabled? />`.
@@ -426,6 +437,33 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **P2-A DELIVERED — in-review, gate-green, NOT merged** (branch `exec/p2-a` @ `7146275`,
+  worktree `wt-p2a2`, off integration `90206c6`; net diff 20 files +1440/−125; 13 commits — treat the NET
+  diff as the deliverable, the first bottom-dock commit `0a38f9a` is superseded). **Tab-anchored "select →
+  reveal → place":** select a swatch/hero → drop targets light up over their element (getRect) → click or
+  drag to send; hidden targets reached via a data-driven chained `revealPath` (mode tab → sub-mode), dwell
+  ~400ms or click to traverse (ColorBox = 2 steps proves it; A/B slots reachable from ColorBox mode); drag
+  avatar follows cursor. All topology data-driven (`deriveIntermediates` walks the registry — no hardcoded
+  map). New engine-core `components/DropTarget.tsx` + `DropTargetLayer.tsx`; host `gradientTargets`/
+  `GradientDropLayer`/`heroSelection`/`CanonicalHero` (one `targetId` prop + one (c) registration converts
+  any hero; self-filters when a hero is both source+target). `DragWellsOverlay` reverted to pristine (still
+  the (b) file-drop kernel for other hosts); `gradientBins.ts` removed.
+  **⚠ MY SPEC WAS WRONG (orchestrator accountability):** `p2-a-implementation-spec.md` specified a
+  bottom-centre bin dock and claimed it replaced the tab model — it CONTRADICTED the user's verified
+  prototype + `p2-drag-interaction-scope.md`. User rejected it on sight; stream re-directed live to the
+  verified tab-anchored model. **Lesson: a user-verified prototype/scope doc is the model authority — a
+  fresh spec must not override it.** `p2-a-implementation-spec.md` is **SUPERSEDED** by `plans/p2-a-v2-design.md`.
+  **(c) interface RATIFIED:** +4 optional additive fields (getRect?/revealPath?/acceptsTypes?/dragPassthrough?)
+  — recorded in the frozen (c) block above; supersedes the single getRect? plan. **Review:** session ran 2
+  passes ×2 lenses, fixed 5 real bugs (drag-through, hooks-order crash, label dragover, pointer-events
+  passthrough, avatar flash); no blocking bugs. **Gates green every commit.** Visual: user iterated live +
+  confirmed (chained ColorBox reveal, Favients passthrough, click-away/Esc cancel, Stops source+target
+  self-filter). **MERGE GATING:** orchestrator recommends a focused INDEPENDENT review of the (c) interface
+  design + cross-hero wiring (high-blast-radius + frozen-interface change future streams build on) before
+  merge — then merge on user confirm. **Open: merge P2-A core now vs hold for the Picker follow-up?**
+  **FOLLOW-UPS:** Picker two-selection-states + swatch enlarge-in-place → `plans/p2-a-picker-handoff.md`
+  (user's next item, fresh session); Favients click=select (currently apply); mobile tab-bar anchors;
+  deferred simplify (shared paintRamp256, select-mode refresh hook) → p2-a-v2-design §6.
 - 2026-06-08 — **✅ P2-F MERGED** (`c817911`; merge of `exec/p2-f-imagestage` rebased over live-fractal;
   user pre-authorized "visual check happens once merged"). ImageStage file-drop coexists with the
   DragWellsOverlay via the registry-driven early-return (+11/−8). Post-merge gate green (tsc 0 ·

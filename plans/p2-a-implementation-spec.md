@@ -1,5 +1,11 @@
 # P2-A — Canonical "Select → Act" via the lower-centre bin dock — IMPLEMENTATION SPEC
 
+> **⛔ SUPERSEDED (2026-06-08).** The bottom-centre bin-dock model below was WRONG — it contradicted the
+> user's verified prototype + `p2-drag-interaction-scope.md`. P2-A shipped the **tab-anchored
+> "select → reveal → place"** model instead. **Use [`plans/p2-a-v2-design.md`](p2-a-v2-design.md)** as the
+> source of truth. The §3 receive-paths + §6 frozen-interface notes here are still accurate; the §1–§2
+> spatial model is not. Kept for the record.
+
 **Date:** 2026-06-08  **Status:** ready for a fresh dev implementation session (read this in full first).
 **Supersedes** the throwaway prototype on `exec/p2-a-prototype` (reference only — see §7).
 
