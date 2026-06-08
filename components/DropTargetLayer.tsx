@@ -21,7 +21,7 @@
  * @see components/DropTarget.tsx (the shared tile) · store/sendTargetRegistry.ts (c)
  */
 
-import React, { useEffect, useReducer, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import {
     getSendTargets,
@@ -65,16 +65,27 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
     // except on scroll/resize (tab switches re-render via the store), so only listen for
     // those — a 60fps rAF in select-mode was fighting the bottom-well hover.
     const [, tick] = useReducer((n: number) => n + 1, 0);
+    // The drag cursor (dragover fires with coords; pointermove does not during a drag) —
+    // used to make a drag-passthrough dropbox fall away once the cursor is over its region,
+    // handing off to the component's own drag mechanics.
+    const dragPointer = useRef({ x: -1, y: -1 });
     useEffect(() => {
         if (!active) return;
         if (inFlight) {
             let raf = 0;
+            const onMove = (e: DragEvent): void => {
+                dragPointer.current = { x: e.clientX, y: e.clientY };
+            };
+            window.addEventListener('dragover', onMove, true);
             const loop = (): void => {
                 tick();
                 raf = requestAnimationFrame(loop);
             };
             raf = requestAnimationFrame(loop);
-            return () => cancelAnimationFrame(raf);
+            return () => {
+                window.removeEventListener('dragover', onMove, true);
+                cancelAnimationFrame(raf);
+            };
         }
         const onChange = (): void => tick();
         window.addEventListener('scroll', onChange, true);
@@ -152,10 +163,19 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
                 during a drag so the element underneath handles the drop itself. */}
             {anchored.map(({ target, rect }) => {
                 const passive = dragActive && target.dragPassthrough;
+                // Fall away once the cursor is over a passthrough region, so the component's
+                // OWN drag mechanics (e.g. the Favients panel's insert/reorder) are unobstructed.
+                if (passive) {
+                    const p = dragPointer.current;
+                    if (p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom)
+                        return null;
+                }
                 return (
+                    // Wrapper is pointer-events-none so only the TILE is interactive (and a
+                    // visualOnly tile is none too → the drag falls THROUGH to the element below).
                     <div
                         key={target.id}
-                        className="fixed"
+                        className="fixed pointer-events-none"
                         style={{
                             left: rect.left - 3,
                             top: rect.top - 3,
