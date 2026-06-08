@@ -32,7 +32,7 @@ import { useGeneratorStore } from '../palette/store/generatorStore';
 import { useFavientsStore } from '../palette/store/favientsStore';
 import { rampToName } from '../palette/core/facetName';
 import { canvasToPngBlob, downloadBlob } from '../utils/SceneFormat';
-import { FAVIENT_INTERNAL_MIME, type FavientDragPayload } from '../palette/core/favientDnd';
+import type { FavientDragPayload } from '../palette/core/favientDnd';
 import type { GradientConfig, PanelId } from '../types';
 
 export const GX_TARGET_ATTR = 'data-gx-target';
@@ -156,9 +156,12 @@ export const registerGradientTargets = (): void => {
         revealPath: ['tab:Stops'],
         anchored: true,
     });
-    // Favients shelf — anchored when the shelf is open; intermediate at its tab when not.
-    // Stands down for an item that's already a favourite (accepts) and during the shelf's
-    // own internal reorder drag (acceptsTypes), so its existing DnD keeps working.
+    // Favients shelf. CLICK-to-save only: `acceptsTypes: () => false` means it is NEVER a
+    // DRAG dropbox, so dragging ANY gradient onto the shelf falls through to the Favients
+    // panel's OWN drag-and-drop (insert-at-position, grouping, reorder) instead of a flat
+    // add. (The intermediate Favients tab still derives from `revealPath`, so a drag can
+    // still navigate to and reveal the shelf — the panel then handles the drop.) The click
+    // path stands down for an item that's already a favourite (`accepts`).
     registerSendTarget<FavientDragPayload>({
         id: 'favients',
         label: 'Favients',
@@ -166,7 +169,7 @@ export const registerGradientTargets = (): void => {
         revealPath: ['tab:Favients'],
         getRect: () => rectOf('favients'),
         accepts: (p) => !p.favId,
-        acceptsTypes: (t) => !t.includes(FAVIENT_INTERNAL_MIME),
+        acceptsTypes: () => false,
         apply: (p) =>
             useFavientsStore.getState().add(p.config, p.name?.trim() || rampToName(toRamp(p.config)), p.source),
     });
