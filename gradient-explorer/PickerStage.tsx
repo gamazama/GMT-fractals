@@ -19,7 +19,7 @@ import { PickerWall, type PickerGroup, type SelectionTool } from '../palette/com
 import { FavStar } from '../palette/components/FavStar';
 import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
 import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
-import { setFavientDrag } from '../palette/core/favientDnd';
+import { setFavientDrag, suppressNativeDragImage } from '../palette/core/favientDnd';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
 import { useHeroSelection, setHeroSelection, clearHeroSelection } from '../palette/store/heroSelection';
 
@@ -129,7 +129,12 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   }, []);
   // Drag a swatch out of the wall to drop it into the Favients shelf.
   const onEntryDragStart = useCallback((e: CatalogEntry, dt: DataTransfer) => {
-    setFavientDrag(dt, { config: entryToGradientConfig(e), name: e.name, source: 'Picker' });
+    const payload = { config: entryToGradientConfig(e), name: e.name, source: 'Picker' };
+    setFavientDrag(dt, payload);
+    suppressNativeDragImage(dt); // the cursor-following avatar stands in for the drag image
+    // Drag mirrors click — selecting the dragged swatch gives the avatar its ramp and
+    // leaves it selected if dropped over nothing.
+    setHeroSelection({ mode: 'picker', key: e.id, payload });
   }, []);
 
   // Per-entry lowercased search haystack = name + theme + bundle LABEL (not the synthetic
@@ -321,16 +326,18 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
           // deselect. The cyan border is the selection treatment (it only shows when selected).
           <canvas
             ref={heroRef}
+            data-gx-selectable=""
             draggable
-            onDragStart={(e) =>
+            onDragStart={(e) => {
               setFavientDrag(e.dataTransfer, {
                 config: entryToGradientConfig(selected),
                 name: selected.name,
                 source: 'Picker',
-              })
-            }
+              });
+              suppressNativeDragImage(e.dataTransfer);
+            }}
             onClick={clearHeroSelection}
-            title="Selected — pick a destination in the dock below, or click to deselect · drag onto a bin"
+            title="Selected — pick a destination, or click to deselect · drag onto a target"
             className="h-10 w-full rounded-md border-2 border-cyan-400 block cursor-grab active:cursor-grabbing"
           />
         ) : (
@@ -462,7 +469,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
         </div>
       </div>
 
-      <div ref={wallHostRef} className="flex-1 min-h-0 relative">
+      <div ref={wallHostRef} data-gx-selectable className="flex-1 min-h-0 relative">
         {!loaded ? (
           <div className="h-full flex items-center justify-center text-sm text-zinc-600">Loading gradient library…</div>
         ) : count > 0 ? (

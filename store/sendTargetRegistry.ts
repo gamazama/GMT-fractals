@@ -45,6 +45,25 @@ export interface SendTarget<P = unknown> {
     accepts?: (payload: P) => boolean;
     /** Apply the payload to this destination. */
     apply: (payload: P) => void;
+    /**
+     * Optional live on-screen rect of this target's anchor element. Additive
+     * §4(c) amendment (mirrors `(b)`'s optional `render?`): when present, the
+     * target is a SPATIAL drop zone — a drop-target layer renders its dropbox
+     * anchored over this rect and hit-tests drops against it; when absent, the
+     * target has no on-screen anchor (menu-only, or a bottom-row well). Read at
+     * paint / hit-test time, never cached. Returns null when the anchor is not
+     * currently mounted/visible (the target then shows no anchored dropbox).
+     */
+    getRect?: () => DOMRect | null;
+    /**
+     * Optional opaque surface id this target lives in (e.g. a host's tab id). The
+     * registry never interprets it. A host that lays targets out spatially uses it
+     * to DERIVE intermediate "reveal this surface" affordances purely from the
+     * registered set: when a target's `getRect()` is null (its surface is hidden),
+     * the host can group the hidden targets by `zone` and offer one reveal step per
+     * zone — so adding a new target auto-populates its path with no host-side map.
+     */
+    zone?: string;
 }
 
 // Stored as the widest payload; registrants narrow `P` at the call site.

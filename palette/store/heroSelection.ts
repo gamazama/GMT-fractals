@@ -26,7 +26,7 @@
 import { useSyncExternalStore } from 'react';
 import type { FavientDragPayload } from '../core/favientDnd';
 
-export type HeroMode = 'picker' | 'generator' | 'image' | 'stops';
+export type HeroMode = 'picker' | 'generator' | 'image' | 'stops' | 'favients';
 
 export interface HeroSelection {
   /** Which surface owns the selection (so only it lights its ring). */

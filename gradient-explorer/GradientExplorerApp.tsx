@@ -27,7 +27,7 @@ import { PanelRouter } from '../components/PanelRouter';
 import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
 import { TimelineHost } from '../components/TimelineHost';
 import { ToastHost } from '../engine/components/ToastHost';
-import { DragWellsOverlay } from '../components/DragWellsOverlay';
+import { GradientDropLayer } from './GradientDropLayer';
 import { FullscreenGradientOverlay } from './FullscreenGradientOverlay';
 import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
@@ -39,14 +39,9 @@ import { FavientsPanel } from '../palette/components/FavientsPanel';
 import { FavientsIcon } from '../palette/components/FavientsIcon';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
 import { useHeroSelection, clearHeroSelection } from '../palette/store/heroSelection';
-import { FAVIENT_DND_MIME } from '../palette/core/favientDnd';
 import type { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
-
-// MIME a selected gradient "would carry" — picks which bins the dock shows on SELECT
-// (the same predicate as a drag). Module const so the overlay's memo stays stable.
-const SELECT_TYPES = [FAVIENT_DND_MIME];
 
 const HelpBrowser = React.lazy(() => import('../components/HelpBrowser'));
 
@@ -276,8 +271,20 @@ const GradientExplorerApp: React.FC = () => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') clearHeroSelection();
     };
+    // Click-outside deselects. Skip a dropbox (`data-gx-keepselect` — it needs the live
+    // selection to apply) and a selectable swatch/hero (`data-gx-selectable` — its own
+    // click re-selects/toggles); a pointerdown anywhere else clears.
+    const onDown = (e: PointerEvent) => {
+      const el = e.target as Element | null;
+      if (el?.closest('[data-gx-keepselect],[data-gx-selectable]')) return;
+      clearHeroSelection();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onDown, true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onDown, true);
+    };
   }, [heroSel]);
 
   return (
@@ -377,14 +384,10 @@ const GradientExplorerApp: React.FC = () => {
           {/* Toasts — save/load + Favients feedback surface here. */}
           <ToastHost />
 
-          {/* W4 drop-wells / P2-A bin dock (targets registered in gradientBins.ts) —
-              fade in while a gradient DRAG is in flight OR a gradient is SELECTED; a bin
-              click sends the selected gradient there. W11 fullscreen config gallery. */}
-          <DragWellsOverlay
-            selectedPayload={heroSel?.payload}
-            selectedTypes={SELECT_TYPES}
-            onSent={clearHeroSelection}
-          />
+          {/* P2-A "select → reveal → place": final dropboxes (anchored + bottom wells),
+              the derived intermediate tab steps, and the drag avatar. Inert unless a
+              gradient is selected or a gradient drag is in flight. */}
+          <GradientDropLayer />
           <FullscreenGradientOverlay />
         </div>
       </div>

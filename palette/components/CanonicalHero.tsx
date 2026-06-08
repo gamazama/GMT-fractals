@@ -30,7 +30,7 @@ import { renderStopsToRamp } from '../core/gmtGradient';
 import { GradientStrip } from './GradientStrip';
 import { FavStar } from './FavStar';
 import { favientSig } from '../store/favientsStore';
-import { setFavientDrag } from '../core/favientDnd';
+import { setFavientDrag, suppressNativeDragImage } from '../core/favientDnd';
 import {
   useHeroSelection,
   setHeroSelection,
@@ -98,8 +98,14 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
         role="button"
         tabIndex={0}
         aria-pressed={isSelected}
+        data-gx-selectable=""
         draggable
-        onDragStart={(e) => setFavientDrag(e.dataTransfer, { config, name, source })}
+        onDragStart={(e) => {
+          setFavientDrag(e.dataTransfer, { config, name, source });
+          suppressNativeDragImage(e.dataTransfer);
+          // Drag mirrors click: select so the avatar has a ramp + the source stays lit.
+          setHeroSelection({ mode, key: selectionKey, payload: { config, name, source } });
+        }}
         onClick={toggleSelect}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {

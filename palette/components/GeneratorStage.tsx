@@ -90,6 +90,7 @@ const SourceRow: React.FC<{
       {/* gradient + the slot-mods trigger to its RIGHT (panel opens into the gutter) */}
       <div className="flex items-center gap-2">
         <button
+          data-gx-target={which === 'A' ? 'gen-a' : 'gen-b'}
           onClick={() => setOpen((o) => !o)}
           onDragOver={onDragOver}
           onDragLeave={() => setDropping(false)}
