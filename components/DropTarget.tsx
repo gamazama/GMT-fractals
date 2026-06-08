@@ -35,6 +35,9 @@ export interface DropTargetTileProps {
     /** Opaque fill (bottom-row wells, which have no element under them). Anchored tiles
      *  stay translucent so the tab / slot / strip underneath shows through. */
     opaque?: boolean;
+    /** Visual affordance only: pointer-events-none, so the element underneath receives
+     *  the interaction (used for a drag-passthrough target like the Favients shelf). */
+    visualOnly?: boolean;
     /** Click affordance (select-path apply, or intermediate reveal). */
     onActivate?: () => void;
     /** Pointer-hover arming (select path). */
@@ -55,6 +58,7 @@ export const DropTargetTile: React.FC<DropTargetTileProps> = ({
     fill = false,
     hideLabel = false,
     opaque = false,
+    visualOnly = false,
     onActivate,
     onMouseEnter,
     onMouseLeave,
@@ -73,7 +77,8 @@ export const DropTargetTile: React.FC<DropTargetTileProps> = ({
             onDragLeave={onDragLeave}
             onDrop={onDrop}
             className={[
-                'pointer-events-auto relative select-none flex items-center justify-center',
+                visualOnly ? 'pointer-events-none' : 'pointer-events-auto',
+                'relative select-none flex items-center justify-center',
                 'rounded-lg border-2 border-dashed text-xs font-medium uppercase tracking-wide',
                 'transition-[background-color,box-shadow,border-color] duration-150',
                 fill ? 'h-full w-full' : 'h-24 w-40',

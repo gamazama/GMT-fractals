@@ -156,12 +156,12 @@ export const registerGradientTargets = (): void => {
         revealPath: ['tab:Stops'],
         anchored: true,
     });
-    // Favients shelf. CLICK-to-save only: `acceptsTypes: () => false` means it is NEVER a
-    // DRAG dropbox, so dragging ANY gradient onto the shelf falls through to the Favients
-    // panel's OWN drag-and-drop (insert-at-position, grouping, reorder) instead of a flat
-    // add. (The intermediate Favients tab still derives from `revealPath`, so a drag can
-    // still navigate to and reveal the shelf — the panel then handles the drop.) The click
-    // path stands down for an item that's already a favourite (`accepts`).
+    // Favients shelf. During a DRAG it shows as a VISUAL dropbox (so the shelf reads as a
+    // target) but `dragPassthrough` makes it pointer-events-none, so the drag falls through
+    // to the Favients panel's OWN drag-and-drop (insert-at-position, grouping, reorder)
+    // rather than a flat add. The CLICK path saves (a flat add), standing down for an item
+    // that's already a favourite (`accepts`). The intermediate Favients tab still derives
+    // from `revealPath` (a drag can navigate to / reveal the shelf, then the panel handles it).
     registerSendTarget<FavientDragPayload>({
         id: 'favients',
         label: 'Favients',
@@ -169,7 +169,7 @@ export const registerGradientTargets = (): void => {
         revealPath: ['tab:Favients'],
         getRect: () => rectOf('favients'),
         accepts: (p) => !p.favId,
-        acceptsTypes: () => false,
+        dragPassthrough: true,
         apply: (p) =>
             useFavientsStore.getState().add(p.config, p.name?.trim() || rampToName(toRamp(p.config)), p.source),
     });

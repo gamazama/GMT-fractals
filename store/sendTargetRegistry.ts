@@ -51,6 +51,13 @@ export interface SendTarget<P = unknown> {
      * reorder so the shelf's own drag-and-drop keeps working).
      */
     acceptsTypes?: (types: string[]) => boolean;
+    /**
+     * When true, during a DRAG the layer shows this target's anchored dropbox as a
+     * VISUAL affordance only (pointer-events-none) — the drag falls THROUGH to the
+     * element underneath, which handles the drop itself (e.g. the Favients panel's own
+     * insert / group / reorder drag-and-drop). The CLICK (select) path is unaffected.
+     */
+    dragPassthrough?: boolean;
     /** Apply the payload to this destination. */
     apply: (payload: P) => void;
     /**

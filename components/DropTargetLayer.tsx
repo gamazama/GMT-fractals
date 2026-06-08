@@ -147,22 +147,31 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
 
     return createPortal(
         <>
-            {/* Anchored dropboxes — fixed over each in-mode destination's live rect. */}
-            {anchored.map(({ target, rect }) => (
-                <div
-                    key={target.id}
-                    className="fixed"
-                    style={{
-                        left: rect.left - 3,
-                        top: rect.top - 3,
-                        width: rect.width + 6,
-                        height: rect.height + 6,
-                        zIndex: z,
-                    }}
-                >
-                    <DropTargetTile label={target.label} fill hideLabel {...tileHandlers(target)} />
-                </div>
-            ))}
+            {/* Anchored dropboxes — fixed over each in-mode destination's live rect. A
+                drag-passthrough target (e.g. the Favients shelf) shows a VISUAL-only box
+                during a drag so the element underneath handles the drop itself. */}
+            {anchored.map(({ target, rect }) => {
+                const passive = dragActive && target.dragPassthrough;
+                return (
+                    <div
+                        key={target.id}
+                        className="fixed"
+                        style={{
+                            left: rect.left - 3,
+                            top: rect.top - 3,
+                            width: rect.width + 6,
+                            height: rect.height + 6,
+                            zIndex: z,
+                        }}
+                    >
+                        {passive ? (
+                            <DropTargetTile label={target.label} fill hideLabel visualOnly />
+                        ) : (
+                            <DropTargetTile label={target.label} fill hideLabel {...tileHandlers(target)} />
+                        )}
+                    </div>
+                );
+            })}
             {/* Bottom-row wells — targets with no on-screen anchor. */}
             {bottom.length > 0 && (
                 <div
