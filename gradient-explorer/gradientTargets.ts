@@ -31,7 +31,7 @@ import { useGeneratorStore } from '../palette/store/generatorStore';
 import { useFavientsStore } from '../palette/store/favientsStore';
 import { rampToName } from '../palette/core/facetName';
 import { canvasToPngBlob, downloadBlob } from '../utils/SceneFormat';
-import type { FavientDragPayload } from '../palette/core/favientDnd';
+import { FAVIENT_INTERNAL_MIME, type FavientDragPayload } from '../palette/core/favientDnd';
 import type { GradientConfig } from '../types';
 
 /** The `data-gx-target` attribute a destination element tags itself with. */
@@ -108,15 +108,22 @@ export const registerGradientTargets = (): void => {
         anchored: true,
     });
     // Favients shelf — anchored when the shelf is open; an intermediate at its tab when not.
-    r(
-        'favients',
-        'Favients',
-        (p) =>
+    // It stands down for a gradient that's ALREADY a favourite (`accepts`) and during the
+    // shelf's own internal reorder drag (`acceptsTypes`), so the Favients panel's existing
+    // reorder / grouping / trash drag-and-drop keeps working uninterrupted.
+    registerSendTarget<FavientDragPayload>({
+        id: 'favients',
+        label: 'Favients',
+        group: 'mode',
+        zone: 'Favients',
+        getRect: () => rectOf('favients'),
+        accepts: (p) => !p.favId,
+        acceptsTypes: (t) => !t.includes(FAVIENT_INTERNAL_MIME),
+        apply: (p) =>
             useFavientsStore
                 .getState()
                 .add(p.config, p.name?.trim() || rampToName(toRamp(p.config)), p.source),
-        { zone: 'Favients', anchored: true },
-    );
+    });
 
     // Bottom wells (no on-screen anchor).
     r('fullscreen', 'Fullscreen', (p) => openFullscreen(p.config, p.name));

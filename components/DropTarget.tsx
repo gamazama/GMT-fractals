@@ -29,6 +29,9 @@ export interface DropTargetTileProps {
     dwell?: number;
     /** Fill the positioned wrapper (used by anchored tiles); bottom-row tiles size themselves. */
     fill?: boolean;
+    /** Hide the label text (intermediate tab dropboxes cover the tab, which already has its
+     *  own label — overlaying text on text reads badly). */
+    hideLabel?: boolean;
     /** Click affordance (select-path apply, or intermediate reveal). */
     onActivate?: () => void;
     /** Pointer-hover arming (select path). */
@@ -47,6 +50,7 @@ export const DropTargetTile: React.FC<DropTargetTileProps> = ({
     armed = false,
     dwell = 0,
     fill = false,
+    hideLabel = false,
     onActivate,
     onMouseEnter,
     onMouseLeave,
@@ -71,8 +75,8 @@ export const DropTargetTile: React.FC<DropTargetTileProps> = ({
                 fill ? 'h-full w-full' : 'h-24 w-40',
                 onActivate ? 'cursor-pointer' : '',
                 armed
-                    ? 'border-cyan-300 bg-cyan-400/20 text-cyan-50 shadow-[0_0_0_2px_rgba(34,211,238,0.55),0_0_22px_rgba(34,211,238,0.45)]'
-                    : 'border-cyan-400/55 bg-cyan-400/[0.08] text-cyan-100/90',
+                    ? 'border-white bg-white/20 text-white shadow-[0_0_0_2px_rgba(255,255,255,0.5),0_0_22px_rgba(255,255,255,0.22)]'
+                    : 'border-white/45 bg-zinc-800/90 text-zinc-100',
             ].join(' ')}
             data-drop-target={label}
             data-gx-keepselect=""
@@ -81,15 +85,17 @@ export const DropTargetTile: React.FC<DropTargetTileProps> = ({
             {dwell > 0 && dwell < 1 && (
                 <div className="absolute inset-0 overflow-hidden rounded-md pointer-events-none" aria-hidden>
                     <div
-                        className="absolute left-0 top-0 h-full bg-cyan-300/25"
+                        className="absolute left-0 top-0 h-full bg-white/25"
                         style={{ width: `${Math.round(dwell * 100)}%`, transition: 'width 60ms linear' }}
                     />
                 </div>
             )}
-            <span className="relative truncate px-1.5">
-                {label}
-                {armed && hint && <span className="ml-1 opacity-75 normal-case">· {hint}</span>}
-            </span>
+            {!hideLabel && (
+                <span className="relative truncate px-1.5">
+                    {label}
+                    {armed && hint && <span className="ml-1 opacity-75 normal-case">· {hint}</span>}
+                </span>
+            )}
         </div>
     );
 };

@@ -91,10 +91,12 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
 
     // Select-mode lists only targets that accept the payload; drag-mode can't read the
     // payload mid-flight (getData is blocked), so it offers all and resolves on drop.
-    // `targetsForPayload` narrows P to the payload type; we route opaquely, so widen back.
+    // Select-mode lists targets that accept the payload; drag-mode can't read the payload
+    // mid-flight (getData is blocked) so it offers all that accept the MIME types.
+    // (`targetsForPayload` narrows P to the payload type; we route opaquely, so widen back.)
     const candidates: SendTarget[] = selecting
         ? (targetsForPayload(selectedPayload) as SendTarget[])
-        : allTargets;
+        : allTargets.filter((t) => !t.acceptsTypes || t.acceptsTypes(types));
     const anchored: { target: SendTarget; rect: DOMRect }[] = [];
     const bottom: SendTarget[] = [];
     for (const t of candidates) {
@@ -122,8 +124,10 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
         },
         onDragLeave: () => setHoverId((id) => (id === target.id ? null : id)),
         onDrop: (e: React.DragEvent) => {
+            // preventDefault so the browser accepts the drop; do NOT stopPropagation —
+            // the drop must bubble to the window so `useDragInFlight` resets (else the
+            // session would stay "in flight" and the dropboxes never hide).
             e.preventDefault();
-            e.stopPropagation();
             const payload = readDragPayload?.(e.dataTransfer);
             if (payload != null) send(target, payload);
             else setHoverId(null);

@@ -469,7 +469,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
         </div>
       </div>
 
-      <div ref={wallHostRef} data-gx-selectable className="flex-1 min-h-0 relative">
+      <div ref={wallHostRef} className="flex-1 min-h-0 relative">
         {!loaded ? (
           <div className="h-full flex items-center justify-center text-sm text-zinc-600">Loading gradient library…</div>
         ) : count > 0 ? (

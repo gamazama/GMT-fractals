@@ -119,8 +119,18 @@ export const GradientDropLayer: React.FC = () => {
         const onOver = (e: DragEvent): void => {
             pointer.current = { x: e.clientX, y: e.clientY };
         };
+        // End the session when the drag ends — whether it dropped on a target (the target
+        // already applied via DropTargetLayer; this just clears the lingering selection) or
+        // over nothing. Covers the cross-tab case where the source element has unmounted.
+        const onEnd = (): void => clearHeroSelection();
         window.addEventListener('dragover', onOver, true);
-        return () => window.removeEventListener('dragover', onOver, true);
+        window.addEventListener('drop', onEnd, false);
+        window.addEventListener('dragend', onEnd, true);
+        return () => {
+            window.removeEventListener('dragover', onOver, true);
+            window.removeEventListener('drop', onEnd, false);
+            window.removeEventListener('dragend', onEnd, true);
+        };
     }, [dragging]);
 
     // Refresh tab rects + run the dwell-to-reveal loop while active.
@@ -201,6 +211,7 @@ export const GradientDropLayer: React.FC = () => {
                             label={zone}
                             hint="open"
                             fill
+                            hideLabel
                             dwell={dwellZone === zone ? dwellProgress : 0}
                             // Click (select path): reveal the mode, keep the gradient in hand.
                             onActivate={sel ? () => revealZone(zone) : undefined}

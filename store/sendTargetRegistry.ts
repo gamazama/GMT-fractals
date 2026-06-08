@@ -43,6 +43,14 @@ export interface SendTarget<P = unknown> {
      * → always applicable. A throwing predicate is treated as "not applicable".
      */
     accepts?: (payload: P) => boolean;
+    /**
+     * Optional DRAG-visibility predicate over the drag's MIME types — the click-twin of
+     * `accepts(payload)`, usable while `getData` is blocked mid-drag. Absent → shown for
+     * any accepted drag. A drop-target layer hides this target during a drag whose types
+     * it rejects (e.g. a "save to Favients" target stands down during an internal Favients
+     * reorder so the shelf's own drag-and-drop keeps working).
+     */
+    acceptsTypes?: (types: string[]) => boolean;
     /** Apply the payload to this destination. */
     apply: (payload: P) => void;
     /**
