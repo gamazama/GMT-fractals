@@ -36,6 +36,7 @@ import {
 } from '../core/selectionGeometry';
 import { SelectionOverlay, type SelectionOverlayState } from './SelectionOverlay';
 import { shouldSquare, squareCols } from '../core/wallLayout';
+import { setDragOrigin } from '../store/dragVisual';
 
 export interface PickerGroup {
   key: string;
@@ -273,6 +274,21 @@ const SwatchCanvas: React.FC<{
             // suppressNativeDragImage, exactly like the hero. (A custom setDragImage here was
             // dead: suppress overrode it, and it differed the swatch path from the hero's,
             // which is why swatch→Favients didn't show the avatar/reorder the same way.)
+            // Morph the avatar out of the HOVER-enlarged preview (the 3×w·2×h zoom the user is
+            // actually looking at, in front of everything) — not the tiny grid cell. Then clear
+            // the hover so it doesn't linger behind the avatar.
+            const cvr = canvasRef.current?.getBoundingClientRect();
+            if (cvr) {
+              const ew = swatchW * 3;
+              const eh = swatchH * 2;
+              setDragOrigin({
+                left: cvr.left + h.col * cellW + swatchW / 2 - ew / 2,
+                top: cvr.top + h.row * cellH + swatchH / 2 - eh / 2,
+                width: ew,
+                height: eh,
+              });
+            }
+            onHover(null);
             onEntryDragStart(h.entry, e.dataTransfer);
           }}
           onMouseMove={(e) => {

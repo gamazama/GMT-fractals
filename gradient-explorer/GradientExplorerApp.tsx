@@ -28,6 +28,7 @@ import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
 import { TimelineHost } from '../components/TimelineHost';
 import { ToastHost } from '../engine/components/ToastHost';
 import { GradientDropLayer } from './GradientDropLayer';
+import { GradientLandingLayer } from './GradientLandingLayer';
 import { FullscreenGradientOverlay } from './FullscreenGradientOverlay';
 import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
@@ -391,6 +392,8 @@ const GradientExplorerApp: React.FC = () => {
               the derived intermediate tab steps, and the drag avatar. Inert unless a
               gradient is selected or a gradient drag is in flight. */}
           <GradientDropLayer />
+          {/* The reverse morph — a gradient settling into the target it was applied to. */}
+          <GradientLandingLayer />
           <FullscreenGradientOverlay />
         </div>
       </div>

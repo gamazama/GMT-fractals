@@ -43,8 +43,9 @@ export interface DropTargetLayerProps {
     dragAccepts?: (types: string[]) => boolean;
     /** Parse a drop's DataTransfer into a payload (host-injected; keeps engine-core agnostic). */
     readDragPayload?: (dt: DataTransfer) => unknown;
-    /** Called after a final target receives the payload (host clears the selection). */
-    onSent?: () => void;
+    /** Called after a final target receives the payload — with the target's rect (or null for
+     *  an unanchored bottom well), so the host can play a landing animation into it. */
+    onSent?: (landedRect: DOMRect | null) => void;
     z?: number;
 }
 
@@ -112,7 +113,7 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
             console.warn(`[sendTarget] "${target.id}" apply threw`, err);
         } finally {
             setHoverId(null);
-            onSent?.();
+            onSent?.(target.getRect?.() ?? null);
         }
     };
 

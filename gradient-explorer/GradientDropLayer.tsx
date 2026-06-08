@@ -26,6 +26,7 @@ import { Z } from '../components/ui/zIndex';
 import { useActiveHeroSelection, useHeroOptionsOpen, closeHeroOptions } from '../palette/store/heroSelection';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
 import { renderStopsToBuffer } from '../palette/core/gmtGradient';
+import { getDragOrigin, setDragOrigin, triggerLanding, type DragRect } from '../palette/store/dragVisual';
 import { deriveIntermediates, type IntermediateAffordance } from './gradientTargets';
 
 /** Dwell over an intermediate for this long (ms) to run its reveal step mid-drag. */
@@ -57,12 +58,32 @@ const intermediateWell = (
     return { left: rect.left - 3, top: rect.top - 3, width: rect.width + 6, height: rect.height + 6 };
 };
 
-/** The cursor-following avatar of the dragged gradient (visual only; pointer-events-none). */
-const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number }> = ({ ramp, x, y }) => {
+/** Cursor-following ramp dimensions (the avatar's settled size). */
+const AVATAR_W = 148;
+const AVATAR_H = 30;
+// Above the Picker's hover-zoom preview (z 9500) so the morph is never covered by it.
+const AVATAR_Z = 9600;
+
+/**
+ * The dragged gradient's avatar (visual only; pointer-events-none). It MORPHS out of its
+ * source rect — the grabbed swatch / hero — into a small cursor-following ramp: the whole
+ * box (position AND size) springs from `origin` toward `cursor + offset / AVATAR_W×H`, so it
+ * grows and flies out of the swatch you grabbed instead of popping in at the cursor.
+ */
+const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number; origin: DragRect | null }> = ({
+    ramp,
+    x,
+    y,
+    origin,
+}) => {
     const ref = useRef<HTMLCanvasElement>(null);
-    const pos = useRef({ x, y });
-    const target = useRef({ x, y });
-    target.current = { x, y };
+    const targetBox = (cx: number, cy: number) => ({ left: cx + 14, top: cy - 14, w: AVATAR_W, h: AVATAR_H });
+    // Start AS the grabbed source so it morphs from there; fall back to the settled box.
+    const box = useRef(
+        origin ? { left: origin.left, top: origin.top, w: origin.width, h: origin.height } : targetBox(x, y),
+    );
+    const target = useRef(targetBox(x, y));
+    target.current = targetBox(x, y);
     const [, force] = useReducer((n: number) => n + 1, 0);
 
     useEffect(() => {
@@ -76,9 +97,13 @@ const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number }> = ({ ramp
     useEffect(() => {
         let raf = 0;
         const loop = (): void => {
-            const p = pos.current;
-            p.x += (target.current.x - p.x) * 0.3;
-            p.y += (target.current.y - p.y) * 0.3;
+            const b = box.current;
+            const t = target.current;
+            const k = 0.22;
+            b.left += (t.left - b.left) * k;
+            b.top += (t.top - b.top) * k;
+            b.w += (t.w - b.w) * k;
+            b.h += (t.h - b.h) * k;
             force();
             raf = requestAnimationFrame(loop);
         };
@@ -86,18 +111,16 @@ const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number }> = ({ ramp
         return () => cancelAnimationFrame(raf);
     }, []);
 
-    const p = pos.current;
+    const b = box.current;
     return createPortal(
         <div
-            className="fixed pointer-events-none overflow-hidden rounded-lg border border-white/25"
+            className="fixed pointer-events-none overflow-hidden rounded-md border border-white/25"
             style={{
-                left: p.x + 14,
-                top: p.y - 14,
-                width: 148,
-                height: 30,
-                zIndex: Z.overlay + 50,
-                transform: 'scale(1.06) rotate(-2deg)',
-                transformOrigin: 'top left',
+                left: b.left,
+                top: b.top,
+                width: b.w,
+                height: b.h,
+                zIndex: AVATAR_Z,
                 boxShadow: '0 10px 24px -6px rgba(0,0,0,0.6), 0 0 0 1px rgba(34,211,238,0.35)',
                 background: '#0a0a0b',
             }}
@@ -131,6 +154,10 @@ export const GradientDropLayer: React.FC = () => {
             setDwellStep(null);
             return;
         }
+        // Seed the cursor at the grabbed source's centre so the avatar starts THERE (and the
+        // gate below sees a non-zero pointer immediately) — it then morphs out toward the cursor.
+        const origin = getDragOrigin();
+        if (origin) pointer.current = { x: origin.left + origin.width / 2, y: origin.top + origin.height / 2 };
         const onOver = (e: DragEvent): void => {
             pointer.current = { x: e.clientX, y: e.clientY };
         };
@@ -145,6 +172,7 @@ export const GradientDropLayer: React.FC = () => {
             window.removeEventListener('dragover', onOver, true);
             window.removeEventListener('drop', onEnd, false);
             pointer.current = { x: 0, y: 0 }; // so a later drag doesn't flash at the old spot
+            setDragOrigin(null); // drag over — clear the morph source
         };
     }, [dragging]);
 
@@ -197,11 +225,30 @@ export const GradientDropLayer: React.FC = () => {
                 ? renderStopsToBuffer(
                       sel.payload.config.stops,
                       sel.payload.config.blendSpace,
-                      sel.payload.config.colorSpace,
+                      // DISPLAY sRGB — the stored colorSpace is a bake-for-shader concern
+                      // (often 'linear', which renders dull/dark). The wall swatches + heroes
+                      // all show display sRGB, so the avatar (and the landing, which shares this
+                      // ramp) must match, not honour the stored space.
+                      'srgb',
                   )
                 : null,
         [sel],
     );
+
+    // Apply landed on a target → fly a fading copy from the avatar's last spot INTO the
+    // target's rect (the reverse of the take-off morph). Only on the DRAG path (the avatar
+    // was on screen); a bottom well has no rect, and the click path has no avatar to hand off.
+    const handleSent = (rect: DOMRect | null): void => {
+        if (rect && avatarRamp && dragging) {
+            const p = pointer.current;
+            triggerLanding(
+                { left: p.x + 14, top: p.y - 14, width: AVATAR_W, height: AVATAR_H },
+                { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+                avatarRamp,
+            );
+        }
+        closeHeroOptions();
+    };
 
     if (!active) return null;
 
@@ -222,7 +269,7 @@ export const GradientDropLayer: React.FC = () => {
                 selfId={sel?.selfTargetId}
                 dragAccepts={acceptsGradient}
                 readDragPayload={readFavientDrag}
-                onSent={closeHeroOptions}
+                onSent={handleSent}
             />
 
             {/* Intermediate reveal steps — derived from the registry, anchored over each
@@ -264,7 +311,7 @@ export const GradientDropLayer: React.FC = () => {
             {/* Avatar only while dragging AND once the pointer is known (dragover has
                 fired) — otherwise it flashes at the top-left corner for the first frame. */}
             {dragging && avatarRamp && (pointer.current.x !== 0 || pointer.current.y !== 0) && (
-                <DragAvatar ramp={avatarRamp} x={pointer.current.x} y={pointer.current.y} />
+                <DragAvatar ramp={avatarRamp} x={pointer.current.x} y={pointer.current.y} origin={getDragOrigin()} />
             )}
         </>
     );

@@ -33,6 +33,7 @@ import {
 } from '../core/favientTargets';
 import { setFavientDrag, suppressNativeDragImage, readFavientDrag, FAVIENT_DND_MIME, type FavientDragPayload } from '../core/favientDnd';
 import { useHeroPick, useActiveHeroMode, setHeroDrag, setHeroPick } from '../store/heroSelection';
+import { setDragOrigin } from '../store/dragVisual';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
 import { FavientsIcon } from './FavientsIcon';
@@ -436,6 +437,7 @@ const FavientSwatch: React.FC<{
       const payload = { config: fav.config, name: fav.name, source: fav.source, favId: fav.id };
       setFavientDrag(e.dataTransfer, payload);
       suppressNativeDragImage(e.dataTransfer); // cursor-following avatar stands in
+      setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the swatch
       // Drag mirrors select — gives the avatar its ramp + lets the favourite be sent to
       // a dropbox (its own internal reorder still works via the FAVIENT_INTERNAL_MIME).
       setHeroDrag({ mode: 'favients', key: fav.id, payload });

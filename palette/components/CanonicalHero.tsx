@@ -43,6 +43,7 @@ import {
   type HeroMode,
 } from '../store/heroSelection';
 import { useHeroPrefs, toggleHeroEnlarged, HERO_HEIGHT_TALL, HERO_HEIGHT_BASE } from '../store/heroPrefs';
+import { setDragOrigin } from '../store/dragVisual';
 
 interface CanonicalHeroProps {
   config: GradientConfig;
@@ -151,6 +152,7 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
         onDragStart={(e) => {
           setFavientDrag(e.dataTransfer, { config, name, source });
           suppressNativeDragImage(e.dataTransfer);
+          setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the strip
           // Drag mirrors click: set the pick so the avatar has a ramp + the source stays lit.
           setHeroDrag({ mode, key, payload: { config, name, source }, selfTargetId: targetId });
         }}
