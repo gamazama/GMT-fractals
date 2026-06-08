@@ -99,27 +99,27 @@ surface at two sizes).
   covers the panel and falls away on mouse-over → the shelf's own reorder/group mech runs.
 - **Drag robustness** — a `mousemove` safety net in `useDragInFlight` + the Favients tracker (a drag
   whose source unmounts mid-drag no longer hangs the avatar / drag state).
+- **Collapsed-dock fallback dropwell** — the collapsed dock's letter-icons carry `data-gx-mode-tab`,
+  and the dock layer renders a NAMED edge well that navigates to the page (right-dock modes switch
+  `activeRightTab` *without* un-collapsing via `navigateToPanel`; Favients reveals). Shared
+  `intermediateWell()` geometry between the render + the drag-dwell hit-test.
+- **Non-floatable panels** — a generic `floatable` flag on `PanelDefinition`/`PanelState` (default
+  true); the Explorer's four canvas mode panels are pinned `floatable: false` (the float drop-zone
+  stands down + `movePanel` rejects the move), since floating one desyncs the controls from the
+  centre stage. Favients stays floatable.
 
 ## 5. Remaining work (TODO)
 
-- **Collapsed-dock fallback dropwell** — when a side dock is collapsed, the tab-anchored reveal
-  dropwells vanish (no `data-gx-mode-tab` anchor on screen). Render a NAMED well at the dock's edge
-  (detect left/right from where the dock toggle/icon lives) that NAVIGATES to the page (un-collapse +
-  activate the tab), not just reveals.
 - **During-drag gradient visual — seamless transform.** The drag avatar should morph out of its
   SOURCE (the swatch / hero) — grow/translate from the source rect into the cursor-following ramp —
-  rather than appearing abruptly at the cursor. Not started.
-- **Hero showcase backdrop + settings burger** — an adjustable neutral-grey plate behind the hero
-  gradient, in a settings panel opened by a top-bar burger. OPEN DECISION: backdrop as a global
-  view-pref (in `heroPrefs`) vs a DDFS param; control form (grey slider vs preset swatches); whether
-  the `⬍` enlarge toggle moves into the settings panel. (The burger itself is trivial: `topbar.register`.)
+  rather than appearing abruptly at the cursor. The big one: it also unblocks the proper
+  click-through placing path (currently half-conceived). Not started.
 - **Active padding/frame (§2.5b)** — the specced extra inner padding/frame on the active hero isn't
   built; the current active treatment is ring + glow only.
-- **Main tab panels must NOT be floatable.** The engine provides docked + floatable panels (GMT
-  uses both). Favients (DOM-based) floats fine, but the **canvas-based mode stages** (Picker /
-  Generator / Image / Stops) **break the UI when floated** — they assume a docked, full-height
-  stage. The Explorer should pin those panels as docked-only (no float affordance / `location`
-  locked), leaving Favients floatable.
+
+**Dropped:** the hero showcase backdrop + settings burger — a whole top-bar settings surface for one
+grey-level slider wasn't worth the scaffolding (the hero reads fine on the dark stage). Cheap to add
+to `heroPrefs` later if the need returns.
 
 ## 4. Invariants to preserve
 

@@ -78,6 +78,8 @@ export interface PanelState {
     isOpen: boolean; // For Float visibility OR Dock active tab logic
     order: number;
     isCore: boolean;
+    /** Whether the panel may be undocked into a floating window (default true). */
+    floatable?: boolean;
     floatPos?: { x: number, y: number };
     floatSize?: { width: number, height: number };
 }

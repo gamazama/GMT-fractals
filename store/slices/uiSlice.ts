@@ -311,7 +311,11 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
 
     movePanel: (id, targetZone, order) => set((state) => {
         const panels = { ...state.panels };
-        
+
+        // Non-floatable panels (e.g. the Gradient Explorer's canvas mode stages, which
+        // desync from the centre stage when floated) can't be undocked — reject the move.
+        if (targetZone === 'float' && panels[id]?.floatable === false) return {};
+
         // Create panel dynamically if it doesn't exist (for Engine, Camera Manager, etc.)
         if (!panels[id]) {
             panels[id] = { 

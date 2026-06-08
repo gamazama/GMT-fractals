@@ -15,12 +15,15 @@ import { feedbackPanelEntry } from '../engine-gmt/feedback';
 
 export const wireGradientExplorer = (): void => {
   applyPanelManifest([
-    { id: 'Picker', dock: 'right', order: 0, active: true, features: ['paletteFilters'] },
-    { id: 'Generator', dock: 'right', order: 1, features: ['paletteGenerator'] },
-    { id: 'Image', dock: 'right', order: 2, features: ['paletteImage'] },
+    // The four mode panels are NON-FLOATABLE: their content is the mode's docked controls,
+    // and the centre stage mirrors the active right tab — floating one desyncs the controls
+    // from the stage and breaks the layout. (Favients, a self-contained shelf, floats fine.)
+    { id: 'Picker', dock: 'right', order: 0, active: true, features: ['paletteFilters'], floatable: false },
+    { id: 'Generator', dock: 'right', order: 1, features: ['paletteGenerator'], floatable: false },
+    { id: 'Image', dock: 'right', order: 2, features: ['paletteImage'], floatable: false },
     // Stops — the 4th authoring mode: the engine stop editor on the stage, its
     // document-level inspector (paletteEditor feature) in this dock tab.
-    { id: 'Stops', dock: 'right', order: 3, features: ['paletteEditor'] },
+    { id: 'Stops', dock: 'right', order: 3, features: ['paletteEditor'], floatable: false },
     // Favients shelf — docked into the left tab strip by default here.
     { id: 'Favients', dock: 'left', order: 0, component: 'panel-favients', isCore: false },
     // Feedback — shared GMT Help-menu plumbing ("Send Feedback"), floats on demand.

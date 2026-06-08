@@ -34,6 +34,8 @@ export const DropZones: React.FC = () => {
     
     const panel = panels[draggingPanelId];
     const sourceLocation = panel ? panel.location : null;
+    // A non-floatable panel can't be undocked, so the centre float zone stands down for it.
+    const floatActive = sourceLocation !== 'float' && panel?.floatable !== false;
 
     const handleDrop = (e: React.MouseEvent, zone: 'left' | 'right' | 'float') => {
         e.stopPropagation(); 
@@ -64,16 +66,16 @@ export const DropZones: React.FC = () => {
                 )}
             </div>
             
-            {/* Float Zone (Center) */}
-            <div 
+            {/* Float Zone (Center) — stands down for a non-floatable panel. */}
+            <div
                 className={`flex-1 h-full flex items-center justify-center transition-all duration-200
-                    ${sourceLocation !== 'float' 
-                        ? 'bg-purple-900/20 hover:bg-purple-900/30 border-x-2 border-purple-500/30 pointer-events-auto cursor-copy' 
+                    ${floatActive
+                        ? 'bg-purple-900/20 hover:bg-purple-900/30 border-x-2 border-purple-500/30 pointer-events-auto cursor-copy'
                         : 'pointer-events-none'
                     }`}
-                onMouseUp={(e) => { if(sourceLocation !== 'float') handleDrop(e, 'float'); }}
+                onMouseUp={(e) => { if(floatActive) handleDrop(e, 'float'); }}
             >
-                {sourceLocation !== 'float' && (
+                {floatActive && (
                     <div className="bg-black/80 px-4 py-2 rounded border border-purple-500/50 text-purple-200 font-bold text-sm shadow-xl backdrop-blur-md">
                         Float Window
                     </div>

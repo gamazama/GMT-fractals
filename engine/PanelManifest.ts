@@ -309,6 +309,12 @@ export interface PanelDefinition {
      *  closed via the X button when floating. Defaults to true for
      *  manifest-declared panels. */
     isCore?: boolean;
+
+    /** Whether this panel may be undocked into a FLOATING window. Defaults to true.
+     *  Set false for panels whose layout assumes a docked, full-height home (e.g. the
+     *  Gradient Explorer's canvas mode stages, which desync from the centre stage when
+     *  floated) — the drag-to-float zone then rejects them (reordering still works). */
+    floatable?: boolean;
 }
 
 export type PanelManifest = PanelDefinition[];
@@ -392,6 +398,7 @@ export const applyPanelManifest = (manifest: PanelManifest): void => {
             location: def.dock,
             order: def.order,
             isCore: def.isCore ?? true,
+            floatable: def.floatable ?? true,
             // Preserve existing isOpen if the panel was already mounted;
             // otherwise default to false, resolved later by the active-
             // picker pass.
@@ -468,6 +475,7 @@ export const addPanel = (def: PanelDefinition): void => {
                 location: def.dock,
                 order: def.order,
                 isCore: def.isCore ?? true,
+                floatable: def.floatable ?? true,
                 isOpen: shouldBecomeActive,
             } as never,
         },
