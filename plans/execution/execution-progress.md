@@ -464,6 +464,17 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-09 — **✅ fullscreen-v2 LIQUIFY + generic mount() seam MERGED** into integration `8fff927`
+  (merge of `exec/fs-liquify`; `modes/index.ts` register conflict resolved — kept spline glQuad + fractal +
+  liquify ownCanvas). Gate green (tsc 0 · test:palette 44 passed incl. liquify/catmull/convergence numerics).
+  **The generic `ownCanvas` `mount()` seam is now IN integration → PARALLAX UNBLOCKED** (2 ownCanvas consumers
+  proven: fractal + liquify; Parallax = 3rd). My independent review crashed mid-run; proceeded on the author's
+  /code-review (2 real bugs fixed) + 44/44 numerics + headless smoke + user visual-iteration + the 2-consumer
+  seam validation (Parallax's session will be the live 3rd-consumer check). User instructed merge.
+  **NEXT: PARALLAX** (ownCanvas, on the merged mount() face) — built with the **Fable model**, given extra
+  goal-context (showcase the gradient beautifully; professional tool a child can use) + more creative freedom.
+  **Deferred tech-debt (from liquify):** shared GL compile/link helper (LiquifyRenderer ↔ FullscreenCompositor);
+  migrate fractal knobs out of fullscreenStore into a mode-local store (liquify = the convergence pattern).
 - 2026-06-09 — **fullscreen-v2 LIQUIFY (Session 2) DELIVERED — in-review, focused review running, NOT merged
   yet** (branch `exec/fs-liquify` @ `c5ab063`, 6 commits off the S1 foundation, clean tree). **Includes the
   foundational STEP 0 (697de35): generic `ownCanvas` `mount(host)→OwnCanvasHandle` seam** — lifted inline-
