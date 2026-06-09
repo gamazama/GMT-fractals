@@ -464,6 +464,27 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-09 — **fullscreen-v2 LIQUIFY (Session 2) DELIVERED — in-review, focused review running, NOT merged
+  yet** (branch `exec/fs-liquify` @ `c5ab063`, 6 commits off the S1 foundation, clean tree). **Includes the
+  foundational STEP 0 (697de35): generic `ownCanvas` `mount(host)→OwnCanvasHandle` seam** — lifted inline-
+  fractal hosting out of the overlay into a generic mode-registry face; **fractal migrated verbatim to
+  `modes/fractalMode.tsx`** (claims behaviour-identical); overlay now mode-agnostic; exported
+  `getFullscreenState`/`subscribeFullscreen`; documented in `plans/fullscreen-v2-rescope.md` "The generic
+  mount() face". **→ THIS UNBLOCKS PARALLAX** (a 2nd ownCanvas mode now plugs in with zero overlay edits —
+  Liquify proved it). **LIQUIFY mode** (`modes/liquifyMode.tsx` + `modes/liquify/{LiquifyMesh,LiquifyRenderer,
+  liquifyStore,catmullRom}`): deformable LUT-mesh soft body — MLS-rigid handles + forward-warp brushes + XPBD
+  jiggle (OFF by default) + Taubin smoothing; **art-direction contract enforced** (physics relaxes to the
+  sculpt, never flat; physics-off ⇒ pos===sculpt); child-simple, static signifiers, no wiggle. **Author
+  /code-review fixed 2 REAL bugs** (density-rebuild context-brick via loseContext-on-reused-canvas; XPBD
+  velocity explosion at extreme settings); /simplify (reusable Taubin scratch). Poly-soup fix = Catmull-Rom
+  render-only C1 subdivision (sim stays coarse/stable, ◆ Subdiv toggle). Visual-test feedback addressed
+  (full-screen fill, ~3-4× stronger brushes, smooth-brush, smooth-slider boundary-pinned λ-only + 400-frame
+  convergence test). **Gates green: tsc 0 · test:palette + liquify/catmull/convergence 44/44 · build · headless
+  smoke:liquify.** New scripts: `test:liquify`, `smoke:liquify`. **Orchestrator: focused independent review on
+  the diff (esp. STEP 0 seam + fractal-verbatim + GL lifecycle) → then merge on clean** (user iterated visually
+  + instructed merge). **Deferred tech-debt (noted in plan):** shared GL compile/link helper (LiquifyRenderer ↔
+  FullscreenCompositor); migrate fractal knobs out of fullscreenStore into a mode-local store (liquify = the
+  pattern). Memory: `project_fullscreen_v2_liquify_mount_seam.md`.
 - 2026-06-09 — **✅ fullscreen-v2 SPLINE mode MERGED** into integration `8ca2c9b` (commit `026dd0e`; 3 files
   +642/−2). Gate green (tsc 0 · test:palette). **Independent review = MERGE-WITH-NITS** (no blockers/bugs;
   seam-compliance + GL-robustness + the un-reviewed later changes [ungating complete, param rework
