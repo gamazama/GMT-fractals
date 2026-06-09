@@ -88,6 +88,17 @@ export interface GeometryParams {
   archSpan?: number;
   /** [scurve] eased-shape strength (0 = the legacy Perlin smootherstep; ±drives toe/shoulder bias). */
   scurveShape?: number;
+  // ── spline (path) mode — the gradient flows along an editable Catmull-Rom path ──
+  // Scalar shape controls only; the control-point LIST is mode-private (a variable-length
+  // array can't be a flat scalar key) and lives in the spline mode's own store. These two
+  // are the FS1-forward contract: the spline mode seeds its live band/softness from these
+  // defaults. @see gradient-explorer/fullscreen/modes/splineMode.tsx
+  /** [spline] diffusion SPREAD 0..1 — how broadly each colour bleeds off the path. 0 = tight/crisp
+   *  (colours hug the path), 1 = soft wash (colours blend across the whole field). */
+  splineSpread?: number;
+  /** [spline] DEPTH shading −1..1 — perpendicular dimensionality. 0 = flat full-bleed fill;
+   *  >0 darkens with distance (vignette); <0 lifts near the path (glow). */
+  splineDepth?: number;
 }
 
 /** Default value for every optional {@link GeometryParams} field. Omitting a field in a
@@ -106,6 +117,9 @@ export const GEOM_DEFAULTS = {
   archHalfWidth: 0.3,
   archSpan: 1.15, // ± angle (radians) the band sweeps through
   scurveShape: 0,
+  // Spline path: a gentle diffusion spread, flat depth (full-bleed fill) by default.
+  splineSpread: 0.15,
+  splineDepth: 0,
 } as const;
 
 /**
