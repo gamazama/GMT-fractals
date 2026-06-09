@@ -348,6 +348,15 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   **default-off = byte-identical** for every existing slider (verified by review). Low risk, but it's the
   3rd cross-cutting touch to ScalarInput/the picker family — any slider work should be aware.
 
+- **Shared graph editor is now APP-WIDE (curve-editor refinements, 2026-06-08).** `components/graph/*`
+  (`GraphSelectionBBox`, `GraphCanvas`, `GraphToolbar`) + `components/GraphEditor.tsx` gained the
+  box-selection **centre move + bias handles**, the **pencil tool** (+ overridable cursor), and the **2-col
+  toolbar reflow** — used by BOTH the gradient channel editor AND the main animation timeline curve editor.
+  Shared helpers: `utils/CurveFitting.ts`, `hooks/usePencilTool.ts`, `utils/toolColumn.ts`. **Any future
+  timeline / graph-editor / keyframe work should glance here** (and a regression here hits the whole app's
+  animation editing, not just the gradient explorer). A degenerate-bias `isScrubbing` regression was already
+  found+fixed; broad-blast-radius, so re-confirm timeline feel on related changes.
+
 ## P2 carry-forwards (fold into the P2 scope doc)
 
 - **colorBoxFit.ts (S7)** — pure gradient→ColorBox fitter, frozen-ahead for P2's drop path; only
@@ -455,6 +464,19 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **✅ CURVE-EDITOR REFINEMENTS MERGED** into integration `325a579` (merge of
+  `exec/curve-editor-refinements`, 4 commits, 12 files +690/−78). Gate green (tsc 0 · test:palette all-pass).
+  User visual-confirmed BOTH editors. Shipped all 5 items — box-selection **centre move handle** + **bias
+  handle** (2D time-vs-value, Shift/Alt mods, in-box cyan handle w/ live readout) · **ghost points**
+  (smooth=how-many / detail=where) · **pencil tool** (span-only freehand → clean keyframes, basis frozen at
+  pen-down, pencil cursor) · **2-col toolbar reflow** (balanced). **⚠ WENT GLOBAL: now in the SHARED graph
+  editor** (`components/graph/*`, `components/GraphEditor.tsx`) — the main animation timeline curve editor
+  gained all of these too (per user "global" direction). Consolidated helpers: `utils/CurveFitting.ts`
+  (Douglas-Peucker/auto-tangent/sample→keys), `hooks/usePencilTool.ts`, `utils/toolColumn.ts`; new
+  `PencilIcon`/`BiasIcon`. /code-review fixed a real regression (degenerate bias click left the timeline
+  stuck `isScrubbing` — bias basis now validated before scrub/snapshot). Tradeoffs noted (centre handles
+  can overlap a dense-selection keyframe; log-scale tracks fit tangents in linear space, matching existing
+  tools). **→ WATCH item added (shared graph editor is now app-wide).**
 - 2026-06-08 — **fullscreen-v2 RATIFIED + CONSOLIDATED** (doc committed `5b0bca8`, was untracked — now on
   integration). User gate decisions + 3 corrections folded into a "RATIFIED PLAN + CORRECTIONS" section in
   `plans/fullscreen-v2-rescope.md`: **(a) GeometryParams = FLAT-OPTIONAL** (the gate); **(b) v1 = splashy
