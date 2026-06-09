@@ -38,28 +38,19 @@ void main() {
   gl_Position = vec4(p.x, -p.y, 0.0, 1.0);
 }`;
 
-/** The mesh is letterboxed into the largest centred square — `uFit` scales clip so a unit mesh
- *  stays isotropic (circular brushes) on any aspect. Shared with the mode's pointer mapping. */
-export const computeFit = (w: number, h: number): [number, number] => {
-  const m = Math.min(w, h);
-  return [m / Math.max(w, 1), m / Math.max(h, 1)];
-};
+/** The mesh FILLS the canvas (`uFit = [1,1]`); the gradient is full-bleed, not letterboxed into a
+ *  square. Brushes stay circular because their falloff is measured in screen px (see LiquifyMesh),
+ *  not in the now-anisotropic mesh space. Kept as a function so the vertex transform + the mode's
+ *  pointer mapping share one definition. */
+export const computeFit = (_w: number, _h: number): [number, number] => [1, 1];
 
 /** Screen px (CSS, origin top-left) → mesh [0,1]² (inverse of the vertex transform). */
-export const screenToMesh = (px: number, py: number, w: number, h: number): [number, number] => {
-  const [fx, fy] = computeFit(w, h);
-  const mx = ((px / w * 2 - 1) / fx + 1) / 2;
-  const my = (1 - (1 - py / h * 2) / fy) / 2;
-  return [mx, my];
-};
+export const screenToMesh = (px: number, py: number, w: number, h: number): [number, number] =>
+  [px / Math.max(w, 1), py / Math.max(h, 1)];
 
 /** Mesh [0,1]² → screen px (CSS, origin top-left) — for drawing the signifier overlay. */
-export const meshToScreen = (mx: number, my: number, w: number, h: number): [number, number] => {
-  const [fx, fy] = computeFit(w, h);
-  const px = ((mx * 2 - 1) * fx + 1) / 2 * w;
-  const py = (1 + (my * 2 - 1) * fy) / 2 * h;
-  return [px, py];
-};
+export const meshToScreen = (mx: number, my: number, w: number, h: number): [number, number] =>
+  [mx * w, my * h];
 
 const FRAG = /* glsl */ `#version 300 es
 precision highp float;
@@ -205,23 +196,22 @@ export class LiquifyRenderer {
   private pickSubdiv(pos: Float32Array): number {
     if (!this.subdiv) return 1;
     const n = this.simN;
-    const side = Math.min(this.gl.canvas.width, this.gl.canvas.height);
+    const W = this.gl.canvas.width, H = this.gl.canvas.height; // mesh fills the canvas → per-axis px
     let maxE = 0;
     for (let y = 0; y < n; y++) {
       for (let x = 0; x < n; x++) {
         const k = y * n + x;
         if (x < n - 1) {
-          const dx = pos[2 * k] - pos[2 * (k + 1)], dy = pos[2 * k + 1] - pos[2 * (k + 1) + 1];
+          const dx = (pos[2 * k] - pos[2 * (k + 1)]) * W, dy = (pos[2 * k + 1] - pos[2 * (k + 1) + 1]) * H;
           const e = dx * dx + dy * dy; if (e > maxE) maxE = e;
         }
         if (y < n - 1) {
-          const dx = pos[2 * k] - pos[2 * (k + n)], dy = pos[2 * k + 1] - pos[2 * (k + n) + 1];
+          const dx = (pos[2 * k] - pos[2 * (k + n)]) * W, dy = (pos[2 * k + 1] - pos[2 * (k + n) + 1]) * H;
           const e = dx * dx + dy * dy; if (e > maxE) maxE = e;
         }
       }
     }
-    const maxPx = Math.sqrt(maxE) * side;
-    const S = Math.round(maxPx / TARGET_EDGE_PX);
+    const S = Math.round(Math.sqrt(maxE) / TARGET_EDGE_PX);
     return S < 1 ? 1 : S > MAX_SUBDIV ? MAX_SUBDIV : S;
   }
 

@@ -254,51 +254,58 @@ export class LiquifyMesh {
    */
   applyBrush(
     type: BrushType, bx: number, by: number, radius: number, strength: number,
-    dx: number, dy: number, physicsOn: boolean,
+    dx: number, dy: number, physicsOn: boolean, w: number, h: number,
   ): void {
     if (type === 'grab' || type === 'pin') return; // handle tools, not warp brushes
-    if (type === 'smooth') { this.smoothRegion(bx, by, radius, strength); return; }
-    const r2 = radius * radius;
-    const TWIRL = 2.4 * strength;
-    const RADIAL = 0.6 * radius * strength;
+    if (type === 'smooth') { this.smoothRegion(bx, by, radius, strength, w, h); return; }
+    // Work the falloff in SCREEN pixels (the gradient fills the canvas, which is non-square) so the
+    // brush footprint is a circle on screen regardless of aspect. Displacements are computed in px
+    // then converted back to mesh units (÷w, ÷h). Gains are tuned so full strength is potent.
+    const minWH = Math.min(w, h);
+    const rPx = radius * minWH;
+    const rPx2 = rPx * rPx;
+    const TWIRL = 3.5 * strength;
+    const PULL = 2.0 * strength;
+    const RADIAL_PX = rPx * strength * 1.5; // bloat/pucker outward push at the centre, full strength
     for (let k = 0; k < this.count; k++) {
       const sx = this.sculpt[2 * k], sy = this.sculpt[2 * k + 1];
-      const ddx = sx - bx, ddy = sy - by;
-      const d2 = ddx * ddx + ddy * ddy;
-      if (d2 > r2) continue;
-      const d = Math.sqrt(d2);
-      const w = falloff(d / radius);
-      if (w <= 0) continue;
+      const ddxPx = (sx - bx) * w, ddyPx = (sy - by) * h;
+      const d2 = ddxPx * ddxPx + ddyPx * ddyPx;
+      if (d2 > rPx2) continue;
+      const dPx = Math.sqrt(d2);
+      const wgt = falloff(dPx / rPx);
+      if (wgt <= 0) continue;
       let ox = 0, oy = 0;
       switch (type) {
         case 'push':
-          ox = w * dx; oy = w * dy;
+          ox = wgt * dx; oy = wgt * dy; // dx,dy are the pointer delta in mesh units (cursor-follow)
           break;
         case 'pull': {
-          // gather toward the cursor (proportional to falloff)
-          ox = -ddx * w * 0.5 * strength; oy = -ddy * w * 0.5 * strength;
+          // gather toward the cursor, in mesh units, with the screen-circular falloff
+          ox = -(sx - bx) * wgt * PULL; oy = -(sy - by) * wgt * PULL;
           break;
         }
         case 'twirl': {
-          const a = w * TWIRL;
+          // rotate the SCREEN-space offset, then convert the delta back to mesh units
+          const a = wgt * TWIRL;
           const ca = Math.cos(a), sa = Math.sin(a);
-          ox = (ca * ddx - sa * ddy) - ddx;
-          oy = (sa * ddx + ca * ddy) - ddy;
+          ox = ((ca * ddxPx - sa * ddyPx) - ddxPx) / w;
+          oy = ((sa * ddxPx + ca * ddyPx) - ddyPx) / h;
           break;
         }
         case 'bloat': {
-          const inv = d > 1e-5 ? 1 / d : 0;
-          ox = ddx * inv * w * RADIAL; oy = ddy * inv * w * RADIAL;
+          const inv = dPx > 1e-3 ? 1 / dPx : 0;
+          ox = (ddxPx * inv) * wgt * RADIAL_PX / w; oy = (ddyPx * inv) * wgt * RADIAL_PX / h;
           break;
         }
         case 'pucker': {
-          const inv = d > 1e-5 ? 1 / d : 0;
-          ox = -ddx * inv * w * RADIAL; oy = -ddy * inv * w * RADIAL;
+          const inv = dPx > 1e-3 ? 1 / dPx : 0;
+          ox = -(ddxPx * inv) * wgt * RADIAL_PX / w; oy = -(ddyPx * inv) * wgt * RADIAL_PX / h;
           break;
         }
         case 'restore': {
           // Reconstruct: decay the brush warp back toward none (handles/MLS shape untouched).
-          const decay = w * strength;
+          const decay = wgt * strength;
           this.warp[2 * k] *= (1 - decay);
           this.warp[2 * k + 1] *= (1 - decay);
           this.sculpt[2 * k] = this.mlsBase[2 * k] + this.warp[2 * k];
@@ -322,61 +329,57 @@ export class LiquifyMesh {
   }
 
   /** Taubin λ|μ smoothing of the WARP layer within a region (the smooth brush). Smooths brush
-   *  roughness without shrinking the overall deformation (plain Laplacian would melt it). */
-  private smoothRegion(bx: number, by: number, radius: number, strength: number): void {
-    const lambda = 0.5 * strength;
-    const mu = -0.53 * strength; // |μ| > λ keeps the passband flat (Taubin) → no shrink
-    const r2 = radius * radius;
+   *  roughness without shrinking the overall deformation (plain Laplacian would melt it). Several
+   *  λ|μ cycles per stroke so a single pass over the cursor visibly relaxes a crease; the boundary
+   *  ring is held fixed (free-boundary Taubin inflates → drift). Falloff is screen-circular. */
+  private smoothRegion(bx: number, by: number, radius: number, strength: number, w: number, h: number): void {
+    const lambda = 0.65 * strength;
+    const mu = -0.68 * strength; // |μ| > λ keeps the passband flat (Taubin) → no shrink
+    const minWH = Math.min(w, h);
+    const rPx = radius * minWH, rPx2 = rPx * rPx;
+    const n = this.n;
     const src = this.smoothScratch;
-    for (const factor of [lambda, mu]) {
-      // Snapshot warp so the Laplacian reads pre-pass neighbours (Jacobi) — reused buffer, no alloc.
-      src.set(this.warp);
-      for (let k = 0; k < this.count; k++) {
-        const sx = this.sculpt[2 * k], sy = this.sculpt[2 * k + 1];
-        const dx0 = sx - bx, dy0 = sy - by;
-        const d2 = dx0 * dx0 + dy0 * dy0;
-        if (d2 > r2) continue;
-        const w = falloff(Math.sqrt(d2) / radius);
-        if (w <= 0) continue;
-        const x = k % this.n, y = (k / this.n) | 0;
-        let nx = 0, ny = 0, cnt = 0;
-        if (x > 0) { nx += src[2 * (k - 1)]; ny += src[2 * (k - 1) + 1]; cnt++; }
-        if (x < this.n - 1) { nx += src[2 * (k + 1)]; ny += src[2 * (k + 1) + 1]; cnt++; }
-        if (y > 0) { nx += src[2 * (k - this.n)]; ny += src[2 * (k - this.n) + 1]; cnt++; }
-        if (y < this.n - 1) { nx += src[2 * (k + this.n)]; ny += src[2 * (k + this.n) + 1]; cnt++; }
-        if (!cnt) continue;
-        const lapx = nx / cnt - src[2 * k];
-        const lapy = ny / cnt - src[2 * k + 1];
-        this.warp[2 * k] += factor * w * lapx;
-        this.warp[2 * k + 1] += factor * w * lapy;
-        this.sculpt[2 * k] = this.mlsBase[2 * k] + this.warp[2 * k];
-        this.sculpt[2 * k + 1] = this.mlsBase[2 * k + 1] + this.warp[2 * k + 1];
+    for (let iter = 0; iter < 4; iter++) {
+      for (const factor of [lambda, mu]) {
+        src.set(this.warp); // Jacobi snapshot (reused buffer, no alloc)
+        for (let k = 0; k < this.count; k++) {
+          const x = k % n, y = (k / n) | 0;
+          if (x === 0 || x === n - 1 || y === 0 || y === n - 1) continue; // pin the boundary ring
+          const ddxPx = (this.sculpt[2 * k] - bx) * w, ddyPx = (this.sculpt[2 * k + 1] - by) * h;
+          const d2 = ddxPx * ddxPx + ddyPx * ddyPx;
+          if (d2 > rPx2) continue;
+          const wgt = falloff(Math.sqrt(d2) / rPx);
+          if (wgt <= 0) continue;
+          const lapx = (src[2 * (k - 1)] + src[2 * (k + 1)] + src[2 * (k - n)] + src[2 * (k + n)]) * 0.25 - src[2 * k];
+          const lapy = (src[2 * (k - 1) + 1] + src[2 * (k + 1) + 1] + src[2 * (k - n) + 1] + src[2 * (k + n) + 1]) * 0.25 - src[2 * k + 1];
+          this.warp[2 * k] += factor * wgt * lapx;
+          this.warp[2 * k + 1] += factor * wgt * lapy;
+          this.sculpt[2 * k] = this.mlsBase[2 * k] + this.warp[2 * k];
+          this.sculpt[2 * k + 1] = this.mlsBase[2 * k + 1] + this.warp[2 * k + 1];
+        }
       }
     }
     this.disturb();
   }
 
-  /** Continuous global Taubin λ|μ relaxation of the warp layer (the Smooth slider) — gently
-   *  de-noises the whole deformation each frame without shrinking it. No-op at strength 0. */
+  /** Continuous global relaxation of the warp layer (the Smooth slider). A boundary-PINNED,
+   *  λ-only Laplacian diffusion — unconditionally convergent (heat diffusion toward a harmonic
+   *  interior), so it can't inflate or fold the way free-boundary Taubin λ|μ does when run every
+   *  frame. It gently relaxes wrinkles toward smooth; it does NOT erase the low-frequency push
+   *  (pinned boundary holds the overall shape). No-op at strength 0. */
   smoothAll(strength: number): void {
     if (strength <= 0) return;
-    const lambda = 0.5 * strength * 0.3; // scaled down — this runs EVERY frame
-    const mu = -0.53 * strength * 0.3;
+    const lambda = 0.25 * strength; // per-frame diffusion rate (< 0.5 → stable for a 4-neighbour avg)
     const n = this.n;
     const src = this.smoothScratch;
-    for (const factor of [lambda, mu]) {
-      src.set(this.warp);
-      for (let k = 0; k < this.count; k++) {
-        const x = k % n, y = (k / n) | 0;
-        let nx = 0, ny = 0, cnt = 0;
-        if (x > 0) { nx += src[2 * (k - 1)]; ny += src[2 * (k - 1) + 1]; cnt++; }
-        if (x < n - 1) { nx += src[2 * (k + 1)]; ny += src[2 * (k + 1) + 1]; cnt++; }
-        if (y > 0) { nx += src[2 * (k - n)]; ny += src[2 * (k - n) + 1]; cnt++; }
-        if (y < n - 1) { nx += src[2 * (k + n)]; ny += src[2 * (k + n) + 1]; cnt++; }
-        if (!cnt) continue;
-        this.warp[2 * k] += factor * (nx / cnt - src[2 * k]);
-        this.warp[2 * k + 1] += factor * (ny / cnt - src[2 * k + 1]);
-      }
+    src.set(this.warp);
+    for (let k = 0; k < this.count; k++) {
+      const x = k % n, y = (k / n) | 0;
+      if (x === 0 || x === n - 1 || y === 0 || y === n - 1) continue; // pin the boundary ring
+      const lapx = (src[2 * (k - 1)] + src[2 * (k + 1)] + src[2 * (k - n)] + src[2 * (k + n)]) * 0.25 - src[2 * k];
+      const lapy = (src[2 * (k - 1) + 1] + src[2 * (k + 1) + 1] + src[2 * (k - n) + 1] + src[2 * (k + n) + 1]) * 0.25 - src[2 * k + 1];
+      this.warp[2 * k] += lambda * lapx;
+      this.warp[2 * k + 1] += lambda * lapy;
     }
     for (let i = 0; i < this.sculpt.length; i++) this.sculpt[i] = this.mlsBase[i] + this.warp[i];
     this.disturb();

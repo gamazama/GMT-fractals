@@ -58,7 +58,7 @@ console.log('[3] every forward-warp brush stays finite');
   for (const brush of ['push', 'twirl', 'bloat', 'pucker', 'pull', 'smooth', 'restore'] as const) {
     const m = new LiquifyMesh(48);
     const flat = m.pos.slice();
-    for (let s = 0; s < 8; s++) m.applyBrush(brush, 0.5, 0.5, 0.2, 0.8, 0.03, -0.02, false);
+    for (let s = 0; s < 8; s++) m.applyBrush(brush, 0.5, 0.5, 0.2, 0.8, 0.03, -0.02, false, 800, 600);
     m.syncToSculpt(); // physics-off: the loop reflects sculpt → pos; mirror that before asserting
     ok(finite(m.pos), `${brush}: pos finite after 8 strokes`);
     ok(inBounds(m.pos, -2, 3), `${brush}: pos bounded`);
@@ -80,10 +80,10 @@ console.log('[3b] corrective brushes act on an existing deformation');
   // restore decays an existing warp back toward flat
   const m = new LiquifyMesh(48);
   const flat = m.pos.slice();
-  for (let s = 0; s < 6; s++) m.applyBrush('bloat', 0.5, 0.5, 0.25, 0.9, 0, 0, false);
+  for (let s = 0; s < 6; s++) m.applyBrush('bloat', 0.5, 0.5, 0.25, 0.9, 0, 0, false, 800, 600);
   m.syncToSculpt();
   const before = dev(m, flat);
-  for (let s = 0; s < 10; s++) m.applyBrush('restore', 0.5, 0.5, 0.3, 0.8, 0, 0, false);
+  for (let s = 0; s < 10; s++) m.applyBrush('restore', 0.5, 0.5, 0.3, 0.8, 0, 0, false, 800, 600);
   m.syncToSculpt();
   ok(dev(m, flat) < before * 0.9, 'restore reduces an existing deformation');
 }
@@ -91,7 +91,7 @@ console.log('[3b] corrective brushes act on an existing deformation');
 console.log('[4] art-direction contract — physics relaxes to sculpt, never flat');
 {
   const m = new LiquifyMesh(48);
-  m.applyBrush('push', 0.5, 0.5, 0.25, 1, 0.15, 0.1, true); // sculpt + impart velocity
+  m.applyBrush('push', 0.5, 0.5, 0.25, 1, 0.15, 0.1, true, 800, 600); // sculpt + impart velocity
   // run physics to settlement
   for (let f = 0; f < 600; f++) m.step(1 / 60, 0.6, 0.6);
   ok(finite(m.pos), 'pos finite after 600 physics frames');
@@ -104,7 +104,7 @@ console.log('[4] art-direction contract — physics relaxes to sculpt, never fla
 console.log('[5] physics OFF keeps pos == sculpt');
 {
   const m = new LiquifyMesh(48);
-  m.applyBrush('bloat', 0.4, 0.6, 0.2, 0.9, 0, 0, false);
+  m.applyBrush('bloat', 0.4, 0.6, 0.2, 0.9, 0, 0, false, 800, 600);
   m.syncToSculpt();
   // with physics off, a step must be a no-op (settled), pos unchanged + finite
   const before = m.pos.slice();
@@ -118,7 +118,7 @@ console.log('[6] pins freeze + reset clears');
 {
   const m = new LiquifyMesh(48);
   m.addHandle(0.5, 0.5, true); // a pin
-  m.applyBrush('push', 0.5, 0.5, 0.3, 1, 0.1, 0.1, true);
+  m.applyBrush('push', 0.5, 0.5, 0.3, 1, 0.1, 0.1, true, 800, 600);
   for (let f = 0; f < 120; f++) m.step(1 / 60, 0.5, 0.5);
   ok(finite(m.pos), 'pinned-region physics finite');
   m.reset();
@@ -167,6 +167,21 @@ console.log('[7] Catmull-Rom render upsampling (smooth subdivision)');
   const idx = buildRenderIndices(n, S);
   ok(idx.length === (RN - 1) * (RN - 1) * 6, 'render index count = 6 per fine cell');
   ok(idx.every((v) => v < RN * RN), 'render indices in range');
+}
+
+console.log('[8] global Smooth slider is convergent (no expand/fold) over many frames');
+{
+  const m = new LiquifyMesh(48);
+  const flat = m.pos.slice();
+  for (let s = 0; s < 6; s++) m.applyBrush('bloat', 0.5, 0.5, 0.25, 0.9, 0, 0, false, 800, 600);
+  m.syncToSculpt();
+  let dev0 = 0; for (let i = 0; i < m.pos.length; i++) dev0 += Math.abs(m.pos[i] - flat[i]);
+  // run the continuous global smooth for many frames at full strength
+  for (let f = 0; f < 400; f++) { m.smoothAll(1); m.syncToSculpt(); }
+  ok(m.pos.every(Number.isFinite), 'smoothAll stays finite over 400 frames');
+  ok(inBounds(m.pos, -1, 2), 'smoothAll stays bounded (no runaway expansion)');
+  let dev1 = 0; for (let i = 0; i < m.pos.length; i++) dev1 += Math.abs(m.pos[i] - flat[i]);
+  ok(dev1 <= dev0 + 1e-3, 'smoothAll never INFLATES the deformation (boundary-pinned diffusion)');
 }
 
 console.log(`\n${fail === 0 ? '✓ ALL PASS' : '✗ FAIL'} — ${pass} passed, ${fail} failed`);

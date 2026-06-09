@@ -130,7 +130,8 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
   };
   const onDown = (e: PointerEvent): void => {
     const st = getLiquifyState();
-    const [mx, my] = toMesh(e);
+    const r = overlay.getBoundingClientRect();
+    const [mx, my] = screenToMesh(e.clientX - r.left, e.clientY - r.top, r.width, r.height);
     overlay.setPointerCapture(e.pointerId);
     if (st.brush === 'grab') {
       const i = mesh.nearestHandle(mx, my, GRAB_PICK);
@@ -145,7 +146,7 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
       painting = true;
       lastPt = [mx, my];
       // A single dab on press so click-without-drag still does something for radial brushes.
-      mesh.applyBrush(st.brush, mx, my, st.radius, st.strength, 0, 0, st.physics);
+      mesh.applyBrush(st.brush, mx, my, st.radius, st.strength, 0, 0, st.physics, r.width, r.height);
     }
   };
   const onMove = (e: PointerEvent): void => {
@@ -157,7 +158,7 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
       mesh.moveHandle(dragHandle, mx, my);
     } else if (painting) {
       const st = getLiquifyState();
-      mesh.applyBrush(st.brush, mx, my, st.radius, st.strength, mx - lastPt[0], my - lastPt[1], st.physics);
+      mesh.applyBrush(st.brush, mx, my, st.radius, st.strength, mx - lastPt[0], my - lastPt[1], st.physics, r.width, r.height);
       lastPt = [mx, my];
     }
   };
