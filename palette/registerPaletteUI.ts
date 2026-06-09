@@ -32,6 +32,8 @@ import { useFavientsStore, captureFavientsHistory, restoreFavientsHistory } from
 import { captureGeneratorHistory, restoreGeneratorHistory } from './store/generatorStore';
 import { captureEditorConfig, applyEditorConfig } from './store/paletteEditorStore';
 import { serializeFavientsDocument, restoreFavientsDocument } from './store/favientsDocument';
+import { serializeGeneratorDocument, restoreGeneratorDocument } from './store/generatorDocument';
+import { serializeImageDocument, restoreImageDocument } from './store/imageDocument';
 import { registerHistoryProvider } from '../store/slices/historySlice';
 import { registerDocumentProvider } from '../store/documentRegistry';
 import { setGradientEditorEntrance } from '../components/gradient/gradientEditorEntrance';
@@ -105,6 +107,18 @@ export const registerPaletteUI = (): void => {
   // Replace/Append prompt). Same capture/restore pair as the history provider
   // above. Idempotent (Map keyed by id).
   registerDocumentProvider('stops', { serialize: captureEditorConfig, restore: applyEditorConfig });
+
+  // The Generator's non-DDFS authoring state (slot selection, channel-curve Track[],
+  // curvesOn, detail/smooth, noiseSeed) rides Save/Load via the document registry (W8) —
+  // the dials themselves are DDFS and round-trip through the preset. serialize reuses the
+  // history capture; restore coerces the untrusted scene snapshot (R4). Idempotent.
+  registerDocumentProvider('generator', { serialize: serializeGeneratorDocument, restore: restoreGeneratorDocument });
+
+  // The Image mode's source image (thumbnail re-encoded as a compact data URL) + trace
+  // path ride Save/Load via the document registry (W8); the img2grad dials are DDFS and
+  // round-trip through the preset. restore re-ingests the image async (after the scene
+  // loads) via the shared decodeAndIngest, then reapplies the saved trace (R4). Idempotent.
+  registerDocumentProvider('image', { serialize: serializeImageDocument, restore: restoreImageDocument });
 
   // One feature per studio mode — each owns a dock tab; the centre stage mirrors
   // whichever tab is active (see GradientExplorerApp).

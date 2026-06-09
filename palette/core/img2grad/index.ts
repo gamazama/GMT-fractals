@@ -68,5 +68,6 @@ export const extract = (model: ImageModel, path: TracePath, p: Img2GradParams): 
 };
 
 export { ingestPixels, INGEST_MAX_EDGE } from './ingest';
+export { decodeAndIngest, THUMB_MAX_EDGE } from './decode';
 export { autoPath, tracePolyline } from './trace';
 export type { ImageModel, TracePath, Pt, ColorNode, Bin, CloudPoint } from './common';

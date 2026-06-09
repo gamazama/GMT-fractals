@@ -55,6 +55,37 @@ export interface PickerGroup {
 /** Spatial-selection tool active on the wall. */
 export type SelectionTool = 'rect' | 'lasso' | 'paint';
 
+// --- Per-tool mouse cursors (N2) -------------------------------------------------
+// Each tool gets a distinct cursor so the active mode reads at a glance: a marquee
+// crosshair for rect, a lasso loop for lasso. Inline data-URI SVGs (white stroke +
+// black halo so they show on any swatch colour); the keyword fallback after the url()
+// covers a browser that rejects the asset. Paint keeps `none` — its cyan brush ring
+// overlay (below) already IS the cursor.
+const cursorUrl = (svg: string): string => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+const RECT_CURSOR = cursorUrl(
+  `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'>` +
+    `<g fill='none' stroke='#000' stroke-width='3'><path d='M12 3v18M3 12h18'/>` +
+    `<rect x='14' y='14' width='8' height='6'/></g>` +
+    `<g fill='none' stroke='#fff' stroke-width='1.4'><path d='M12 3v18M3 12h18'/>` +
+    `<rect x='14' y='14' width='8' height='6' stroke-dasharray='2 1.4'/></g></svg>`,
+);
+const LASSO_CURSOR = cursorUrl(
+  `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'>` +
+    `<g fill='none' stroke-linecap='round' stroke-linejoin='round'>` +
+    `<g stroke='#000' stroke-width='3'><ellipse cx='12' cy='9' rx='8' ry='5.5'/><path d='M7 13l-2 7'/></g>` +
+    `<g stroke='#fff' stroke-width='1.4'><ellipse cx='12' cy='9' rx='8' ry='5.5'/><path d='M7 13l-2 7'/></g>` +
+    `</g></svg>`,
+);
+/** CSS `cursor` value for the active selection tool (with a keyword fallback). */
+const toolCursor = (tool: SelectionTool | null | undefined): string | undefined =>
+  tool === 'rect'
+    ? `${RECT_CURSOR} 12 12, crosshair`
+    : tool === 'lasso'
+      ? `${LASSO_CURSOR} 12 12, crosshair`
+      : tool === 'paint'
+        ? 'none'
+        : undefined;
+
 export interface PickerWallProps {
   groups: PickerGroup[];
   /** Shared 256×N sprite — row N is catalog entry `row`. */
@@ -158,7 +189,10 @@ const SwatchCanvas: React.FC<{
   onPick: (e: CatalogEntry) => void;
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
   onRegister: (key: string, desc: ChunkDesc | null) => void;
-}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, chunkKey, onHover, onPick, onEntryDragStart, onRegister }) => {
+  /** A selection tool is active → drop the swatch's hand cursor so the wall's tool cursor
+   *  (set on the scroll container, an inherited CSS property) shows over the swatches too. */
+  toolActive?: boolean;
+}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, chunkKey, onHover, onPick, onEntryDragStart, onRegister, toolActive }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
@@ -280,7 +314,7 @@ const SwatchCanvas: React.FC<{
         <canvas
           ref={canvasRef}
           style={{ width: cssW, height: cssH }}
-          className="block cursor-pointer"
+          className={`block ${toolActive ? '' : 'cursor-pointer'}`}
           draggable={!!onEntryDragStart}
           onDragStart={(e) => {
             const h = hit(e);
@@ -335,7 +369,7 @@ const SwatchCanvas: React.FC<{
 
 // memo: with stable callbacks + a memoised `rows` array, hovering a swatch (which
 // re-renders the wall to move the preview) skips re-rendering every group.
-const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart, onRegister }: {
+const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart, onRegister, toolActive }: {
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
@@ -348,6 +382,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
   onPick: (e: CatalogEntry) => void;
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
   onRegister: (key: string, desc: ChunkDesc | null) => void;
+  toolActive?: boolean;
 }) {
   const cellH = swatchH + gap;
   const maxRows = Math.max(1, Math.floor(MAX_CANVAS_CSS_H / cellH));
@@ -394,6 +429,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
             swatchH={swatchH}
             gap={gap}
             selectedId={selectedId}
+            toolActive={toolActive}
             onHover={onHover}
             onPick={onPick}
             onEntryDragStart={onEntryDragStart}
@@ -950,7 +986,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     <div className="absolute inset-0">
       <div
         ref={scrollRef}
-        className={`absolute inset-0 overflow-auto custom-scroll ${selectionTool === 'paint' ? 'cursor-none' : selectionTool ? 'cursor-crosshair' : ''}`}
+        className="absolute inset-0 overflow-auto custom-scroll"
+        style={{ cursor: toolCursor(selectionTool) }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -974,6 +1011,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
               swatchH={ewH}
               gap={gap}
               selectedId={selectedId}
+              toolActive={!!selectionTool}
               onHover={handleHover}
               onPick={handlePick}
               onEntryDragStart={selectionTool ? undefined : onEntryDragStart}
