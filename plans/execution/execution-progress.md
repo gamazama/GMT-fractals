@@ -455,6 +455,16 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **POST-P2 kickoff: fullscreen-v2 RE-SCOPE (codebase) DONE + WEB-SOTA augmentation running ‖
+  curve-editor refinements build issued in PARALLEL.** Re-scope `w6c10xhvi` → `plans/fullscreen-v2-rescope.md`
+  (supersedes the early scope; codebase-grounded: GeometryParams-contract gate → Wave 1 polish/dithering +
+  live-binding → Wave 2 splitscreen/animated/parallax/spline → Wave 3 mesh+fluid CARVE [gate like
+  live-fractal]; ~3-4wk + mesh/fluid L-XL). **User flagged the re-scope must also research best feature
+  paths online → WEB-SOTA pass `wbjzozfw7`** (dither / spline / mesh / fluid / parallax / splitscreen /
+  child-simple / animated — researched best-in-class, augmenting the doc with recommendations + citations).
+  **Parallel build = curve-editor refinements** (contained; generator-polish deferred to a focused session —
+  its slider work is cross-cutting ScalarInput). Branch `exec/curve-editor-refinements` (in-dev). Re-scope
+  decisions for user pending (GeometryParams shape · v1-of-v2 set · dither approach · mesh+fluid scoping).
 - 2026-06-08 — **✅✅ P2-FINISH MERGED → P2 COMPLETE** (integration `99a02d1`; merge of `exec/p2-finish`
   6260e42; 11 files +452/−42). **Gate green: tsc 0 · test:palette 15/15 ALL PASS** (the session's "14/14"
   was an undercount — no suite dropped; `package.json` test script unchanged). User visual-confirmed.
