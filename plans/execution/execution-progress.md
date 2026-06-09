@@ -437,6 +437,20 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **5 NEW P2 INPUTS (user) + RE-SCOPE kicked off.** Folding into the remaining-P2 plan:
+  (1) **BUG: Favients undock→redock fails** — when the Favients panel is floating, the drag to re-dock it
+  doesn't complete (double-click + drag sometimes works). Dock/undock drag-completion bug on the floating
+  panel.
+  (2) **Rect/lasso/paint selection tools need mouse CURSOR ICONS** (currently no tool-specific cursor).
+  (3) **REMOVE the "starring" favourite method entirely** — drag-to-Favients now makes star-to-favourite
+  obsolete clutter; strip the star affordance/path (genericize-in-place per usual).
+  (4) **Generator Slot A/B → hero-esque** — make each slot a drag SOURCE (like a CanonicalHero) AND remove
+  its click→dropdown-menu behaviour (click should select/drag, consistent with the canonical model).
+  (5) **Curves widget → drag-drop** — the channel-curves widget (ChannelGraphEditor) becomes a drag
+  source/target too.
+  Re-scope (read-only) running to map what P2-A/Picker actually shipped vs the original P2-B/C/D/E/G scope
+  AND place these 5 items → produces the authoritative remaining-P2 task list. P2-C/P2-D suspected largely
+  absorbed by P2-A/Picker.
 - 2026-06-08 — **✅ P2-A PICKER POLISH MERGED** into integration `fdfcbed` (merge of `exec/p2-a-picker-polish`,
   off 98b5cb9; 11 files +389/−66; 3 commits). Combined gate green (tsc 0 · test:palette ALL PASS).
   **User visual-confirmed in BOTH Chrome and Firefox.** **PICKER INTERACTION NOW FULLY CLOSED** — all of
