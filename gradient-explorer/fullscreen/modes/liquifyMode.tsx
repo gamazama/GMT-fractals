@@ -41,6 +41,7 @@ import {
   setLiquifyDamping,
   setLiquifySmooth,
   setLiquifyDensity,
+  setLiquifySubdiv,
   type LiquifyDensity,
 } from './liquify/liquifyStore';
 
@@ -66,11 +67,12 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
   let mesh = new LiquifyMesh(DENSITY_N[getLiquifyState().density]);
   let renderer: LiquifyRenderer;
   try {
-    renderer = new LiquifyRenderer(glCanvas, mesh.indices, mesh.t, () => {/* tile loaded → next frame dithers */});
+    renderer = new LiquifyRenderer(glCanvas, mesh.n, () => {/* tile loaded → next frame dithers */});
   } catch (e) {
     host.onError(e);
     return { dispose: () => { glCanvas.remove(); overlay.remove(); } };
   }
+  renderer.setSubdiv(getLiquifyState().subdiv);
   const ctx0 = host.getContext();
   if (ctx0.lut.length) renderer.setLut(ctx0.lut);
 
@@ -113,8 +115,9 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
     glCanvas.className = 'absolute inset-0 w-full h-full';
     container.insertBefore(glCanvas, overlay); // keep the mesh under the signifier overlay
     mesh = new LiquifyMesh(n);
-    renderer = new LiquifyRenderer(glCanvas, mesh.indices, mesh.t);
+    renderer = new LiquifyRenderer(glCanvas, mesh.n);
     renderer.dither = dither;
+    renderer.setSubdiv(getLiquifyState().subdiv);
     const ctx = host.getContext();
     if (ctx.lut.length) renderer.setLut(ctx.lut);
     resize();
@@ -185,9 +188,11 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
   // ── store subscription (drive the soft body from the UI) ──
   let prevDensity = getLiquifyState().density;
   let prevPhysics = getLiquifyState().physics;
+  let prevSubdiv = getLiquifyState().subdiv;
   unsub = subscribeLiquify(() => {
     const st = getLiquifyState();
     if (st.density !== prevDensity) { prevDensity = st.density; rebuild(DENSITY_N[st.density]); }
+    if (st.subdiv !== prevSubdiv) { prevSubdiv = st.subdiv; renderer.setSubdiv(st.subdiv); }
     if (st.physics !== prevPhysics) {
       prevPhysics = st.physics;
       if (!st.physics) mesh.syncToSculpt(); // toggling off snaps the live mesh back to the sculpt
@@ -369,6 +374,17 @@ const LiquifyControls: React.FC = () => {
           </button>
         ))}
       </div>
+
+      <button
+        onClick={() => setLiquifySubdiv(!st.subdiv)}
+        title="Smooth subdivision — Catmull-Rom upsamples the mesh at render time so heavy warps stay smooth instead of faceting into triangles (off = raw grid, for comparison)"
+        aria-pressed={st.subdiv}
+        className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+          st.subdiv ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100' : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+        }`}
+      >
+        ◆ Subdiv
+      </button>
 
       <button
         onClick={() => activeControl?.reset()}

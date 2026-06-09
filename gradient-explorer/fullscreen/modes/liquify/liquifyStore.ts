@@ -35,6 +35,9 @@ export interface LiquifyState {
   smooth: number;
   /** Mesh density tier (a remount/rebuild on change). */
   density: LiquifyDensity;
+  /** Smooth render subdivision (Catmull-Rom) — decouples render resolution from the sim grid so
+   *  heavy warps don't facet into "poly soup". On by default; off = the raw flat grid (for A/B). */
+  subdiv: boolean;
 }
 
 const INITIAL: LiquifyState = {
@@ -46,6 +49,7 @@ const INITIAL: LiquifyState = {
   damping: 0.5,
   smooth: 0,
   density: 'med',
+  subdiv: true,
 };
 
 let state: LiquifyState = INITIAL;
@@ -85,3 +89,4 @@ export const setLiquifySmooth = (smooth: number): void => {
   if (s !== state.smooth) emit({ smooth: s });
 };
 export const setLiquifyDensity = (density: LiquifyDensity): void => { if (density !== state.density) emit({ density }); };
+export const setLiquifySubdiv = (subdiv: boolean): void => { if (subdiv !== state.subdiv) emit({ subdiv }); };

@@ -18,6 +18,12 @@
 import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../../../engine/utils/createBlueNoiseWebGL2';
 import { DITHER_TAIL_GLSL } from '../../ditherTail';
 import { DEFAULT_BACKGROUND } from '../../../../palette/core/rampGeometry';
+import { renderSide, upsampleCatmullRom, buildRenderT, buildRenderIndices } from './catmullRom';
+
+/** Target on-screen edge length (px) for a render sub-triangle — drives the adaptive subdivision. */
+const TARGET_EDGE_PX = 12;
+/** Max subdivision factor (bounds the per-frame upsample + upload cost). */
+const MAX_SUBDIV = 4;
 
 const VERT = /* glsl */ `#version 300 es
 precision highp float;
@@ -80,14 +86,22 @@ export class LiquifyRenderer {
   private lutTex: WebGLTexture;
   private blueNoise: BlueNoiseTexture;
   private loc: Record<string, WebGLUniformLocation | null> = {};
-  private indexCount: number;
+  private indexCount = 0;
+  /** Sim grid side (the coarse control grid). */
+  private simN: number;
+  /** Current render subdivision factor (1 = draw the coarse grid directly = the flat A/B baseline). */
+  private subdivLevel = 1;
+  /** Whether adaptive smooth subdivision is allowed (the UI toggle); false pins `subdivLevel = 1`. */
+  private subdiv = true;
+  /** Reused render-grid position buffer (Catmull-Rom upsample target), resized on a level change. */
+  private renderPos = new Float32Array(0);
   dither = true;
 
-  constructor(canvas: HTMLCanvasElement, indices: Uint32Array, t: Float32Array, onReady?: () => void) {
+  constructor(canvas: HTMLCanvasElement, simN: number, onReady?: () => void) {
     const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, preserveDrawingBuffer: true });
     if (!gl) throw new Error('[LiquifyRenderer] WebGL2 unavailable');
     this.gl = gl;
-    this.indexCount = indices.length;
+    this.simN = simN;
 
     this.prog = this.link(VERT, FRAG);
     for (const u of ['uLut', 'uBlueNoise', 'uBlueNoiseRes', 'uDither', 'uFit']) {
@@ -96,23 +110,17 @@ export class LiquifyRenderer {
 
     this.vao = gl.createVertexArray()!;
     gl.bindVertexArray(this.vao);
-    // dynamic position buffer (re-uploaded each frame)
-    this.posVbo = gl.createBuffer()!;
+    this.posVbo = gl.createBuffer()!; // dynamic render positions (re-uploaded each frame)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posVbo);
-    gl.bufferData(gl.ARRAY_BUFFER, t.length * 2 * 4, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    // static LUT-coord buffer
-    this.tVbo = gl.createBuffer()!;
+    this.tVbo = gl.createBuffer()!; // static render LUT-coords (rebuilt on a level change)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.tVbo);
-    gl.bufferData(gl.ARRAY_BUFFER, t, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 0, 0);
-    // index buffer
     this.ibo = gl.createBuffer()!;
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
     gl.bindVertexArray(null);
+    this.buildRenderBuffers(1); // start at the flat grid; draw() raises the level on stretch
 
     this.lutTex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, this.lutTex);
@@ -167,9 +175,63 @@ export class LiquifyRenderer {
     this.gl.canvas.height = h;
   }
 
-  /** Draw the mesh with the current deformed positions. */
+  /** Toggle adaptive smooth subdivision. Off pins the render mesh to the coarse grid (`S = 1`),
+   *  the flat-grid baseline for A/B comparison. */
+  setSubdiv(on: boolean): void { this.subdiv = on; }
+
+  /** Allocate the render-grid buffers for subdivision factor `S` and (re)upload the static LUT-coord
+   *  + index buffers. The dynamic position buffer is sized; its data is filled per-frame in draw(). */
+  private buildRenderBuffers(S: number): void {
+    const gl = this.gl;
+    this.subdivLevel = S;
+    const RN = renderSide(this.simN, S);
+    this.renderPos = new Float32Array(RN * RN * 2);
+    const t = buildRenderT(this.simN, S);
+    const idx = buildRenderIndices(this.simN, S);
+    this.indexCount = idx.length;
+    gl.bindVertexArray(this.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.posVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, this.renderPos.byteLength, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.tVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, t, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+  }
+
+  /** Pick the subdivision factor from the worst on-screen stretch of any coarse cell edge — a GLOBAL
+   *  level (uniform fine grid → no T-junction cracks). `S = 1` when subdivision is off or the mesh
+   *  is barely deformed; rises toward MAX_SUBDIV where the warp fans the triangles out. */
+  private pickSubdiv(pos: Float32Array): number {
+    if (!this.subdiv) return 1;
+    const n = this.simN;
+    const side = Math.min(this.gl.canvas.width, this.gl.canvas.height);
+    let maxE = 0;
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const k = y * n + x;
+        if (x < n - 1) {
+          const dx = pos[2 * k] - pos[2 * (k + 1)], dy = pos[2 * k + 1] - pos[2 * (k + 1) + 1];
+          const e = dx * dx + dy * dy; if (e > maxE) maxE = e;
+        }
+        if (y < n - 1) {
+          const dx = pos[2 * k] - pos[2 * (k + n)], dy = pos[2 * k + 1] - pos[2 * (k + n) + 1];
+          const e = dx * dx + dy * dy; if (e > maxE) maxE = e;
+        }
+      }
+    }
+    const maxPx = Math.sqrt(maxE) * side;
+    const S = Math.round(maxPx / TARGET_EDGE_PX);
+    return S < 1 ? 1 : S > MAX_SUBDIV ? MAX_SUBDIV : S;
+  }
+
+  /** Draw the soft body: pick a subdivision level from the stretch, Catmull-Rom upsample the coarse
+   *  deformed grid into the render grid (smooth — no facets), then draw it. */
   draw(pos: Float32Array): void {
     const gl = this.gl;
+    const S = this.pickSubdiv(pos);
+    if (S !== this.subdivLevel) this.buildRenderBuffers(S);
+    upsampleCatmullRom(pos, this.simN, S, this.renderPos);
     const bg = DEFAULT_BACKGROUND;
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     gl.clearColor(bg.r / 255, bg.g / 255, bg.b / 255, 1);
@@ -177,7 +239,7 @@ export class LiquifyRenderer {
     gl.useProgram(this.prog);
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posVbo);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.renderPos);
     const [fx, fy] = computeFit(gl.canvas.width, gl.canvas.height);
     gl.uniform2f(this.loc['uFit'], fx, fy);
     gl.uniform1i(this.loc['uDither'], this.dither ? 1 : 0);

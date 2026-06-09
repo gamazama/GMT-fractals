@@ -11,6 +11,7 @@
  */
 
 import { LiquifyMesh } from '../gradient-explorer/fullscreen/modes/liquify/LiquifyMesh';
+import { upsampleCatmullRom, renderSide, buildRenderIndices } from '../gradient-explorer/fullscreen/modes/liquify/catmullRom';
 
 let pass = 0, fail = 0;
 const ok = (cond: boolean, msg: string): void => {
@@ -123,6 +124,49 @@ console.log('[6] pins freeze + reset clears');
   m.reset();
   ok(m.handles.length === 4, 'reset drops user handles (keeps corners)');
   ok(inBounds(m.pos, 0, 1) && finite(m.pos), 'reset returns a flat in-bounds mesh');
+}
+
+console.log('[7] Catmull-Rom render upsampling (smooth subdivision)');
+{
+  const n = 8;
+  // a deformed grid (so the test isn't trivially linear)
+  const m = new LiquifyMesh(n);
+  m.addHandle(0.5, 0.5, false); m.moveHandle(m.handles.length - 1, 0.65, 0.4); m.syncToSculpt();
+  const pos = m.pos;
+
+  // S=1 reproduces the coarse grid exactly (identity)
+  const out1 = new Float32Array(renderSide(n, 1) ** 2 * 2);
+  upsampleCatmullRom(pos, n, 1, out1);
+  let identical = true;
+  for (let i = 0; i < pos.length; i++) if (Math.abs(out1[i] - pos[i]) > 1e-6) { identical = false; break; }
+  ok(identical, 'S=1 upsample reproduces the coarse grid');
+
+  // S=3 is interpolating: render vertices at control multiples equal the coarse control points
+  const S = 3, RN = renderSide(n, S);
+  const out3 = new Float32Array(RN * RN * 2);
+  upsampleCatmullRom(pos, n, S, out3);
+  let passesThrough = true;
+  for (let cj = 0; cj < n; cj++) for (let ci = 0; ci < n; ci++) {
+    const rk = 2 * ((cj * S) * RN + ci * S), ck = 2 * (cj * n + ci);
+    if (Math.abs(out3[rk] - pos[ck]) > 1e-5 || Math.abs(out3[rk + 1] - pos[ck + 1]) > 1e-5) { passesThrough = false; }
+  }
+  ok(passesThrough, 'S=3 upsample passes through every coarse control point');
+  ok(out3.every(Number.isFinite), 'upsampled positions finite');
+
+  // A flat (rest) grid upsamples to a uniform fine grid for INTERIOR vertices (Catmull-Rom
+  // reproduces linears exactly away from the clamped boundary cells).
+  const flat = new LiquifyMesh(n);
+  const outF = new Float32Array(RN * RN * 2);
+  upsampleCatmullRom(flat.pos, n, S, outF);
+  const ri = 10; // interior render vertex (its 4×4 stencil is fully inside the grid)
+  const probe = 2 * (ri * RN + ri);
+  ok(Math.abs(outF[probe] - ri / (RN - 1)) < 1e-5 && Math.abs(outF[probe + 1] - ri / (RN - 1)) < 1e-5,
+    'flat grid stays a uniform fine grid at interior vertices (no warping artefacts)');
+
+  // index buffer is well-formed (6 per cell, all in range)
+  const idx = buildRenderIndices(n, S);
+  ok(idx.length === (RN - 1) * (RN - 1) * 6, 'render index count = 6 per fine cell');
+  ok(idx.every((v) => v < RN * RN), 'render indices in range');
 }
 
 console.log(`\n${fail === 0 ? '✓ ALL PASS' : '✗ FAIL'} — ${pass} passed, ${fail} failed`);
