@@ -464,6 +464,22 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-09 — **fullscreen-v2 SPLINE mode DELIVERED — in-review, NOT merged** (branch `exec/fs-spline`,
+  wt-spline; gate green tsc 0 · test:palette 14/14). Additive against the frozen seam (`splineMode.tsx` +
+  one register line + 2 additive gate fields) — **proves the seam works for a parallel `glQuad` mode.**
+  Gradient flows along a user-editable **centripetal Catmull-Rom** path; click-add / drag-move / click-line-
+  insert / Delete; editable + live-following in the split docked pane too. **GL robustness:** polyline in a
+  `texelFetch` RGBA32F data texture (ANGLE rejects dynamic uniform-array indexing); imperative fresh canvas
+  per mount (StrictMode + loseContext). **⚠ TECHNIQUE DEVIATION:** built as a **full-bleed diffusion field**
+  (inverse-square Shepard blend of the along-path coord → one LUT sample → fills canvas, no Voronoi seams),
+  NOT the specced sdSegment-band+falloff — session's call, cited vs the competitive-research doc. Controls:
+  Spread (crisp↔soft) + Depth (glow-near-path … vignette-edges). **The "split saga":** the spline was
+  rendering fine in split all along — the session had hidden the handles/curve behind an `interactive=!split`
+  gate then chased a non-existent blank-canvas/context-loss GL bug; fixed (editable in both views) + wrote a
+  "did I hide it before assuming a GL bug?" memory. **MERGE GATING:** (1) user visual confirm (no explicit
+  "passes" line in the summary; + eyeball the diffusion-field look vs a banded path); (2) the later changes
+  (param rework / ungating / debug removal) had NO fresh /code-review → orchestrator running a focused review
+  on the diff. Independent of Liquify (any merge order). execution-progress.md untouched per constraints.
 - 2026-06-08 — **✅ fullscreen-v2 splitscreen ADDENDUM MERGED** into integration `233b5a7` (one commit
   `6dc26bf` — keep the live gradient on split→fullscreen switch; +14/−1 on FullscreenGradientOverlay +
   fullscreenStore; gate green). Merged BEFORE the parallel fan-out so the modes build on the fixed
