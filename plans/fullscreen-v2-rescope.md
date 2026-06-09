@@ -483,3 +483,42 @@ replaces "pick a reasonable algorithm" guesses with the SOTA path so build sub-s
 **CHANGE — child-simple UX (§2.11 / SOTA entry): DROP the idle "wiggle" hint.** Use static signifiers only (cursors, handle dots, faint affordance overlays); everything else in §2.11 stands.
 
 **Net effect on phasing (§3):** FS6 mesh + FS6 fluid → **one LIQUIFY sub-stream** (a new module). Mode count drops; the two carve-risk flags collapse to one new-module build (no fluid-toy/mesh-export carve, so no source-toy regression gate). Spline (FS5) = the path-mode above. Order with v1=splashy-first: gate (flat-optional) → splitscreen + liquify + parallax + spline as the priority waves → polish/dithering/live-binding/animated fold in. **The first sub-stream is still the GeometryParams flat-optional gate** (everything threads through it), then the splashy modes.
+
+---
+
+## Mode plug-in seam (FROZEN — 2026-06-09, Session 1 landed on `exec/fs-gate-splitscreen`)
+
+This is the **interface freeze** the parallel mode streams (Liquify / Spline / Parallax) code against. It is implemented and gate-green (tsc 0, `test:palette` green incl. the extended `rampGeometry` contract). **Consume it read-only / additively — do not edit the overlay core or the compositor to add a mode.**
+
+### Files (the seam lives in `gradient-explorer/fullscreen/`)
+- `modeRegistry.ts` — the `FullscreenMode` type + `registerFullscreenMode` / `getFullscreenMode` / `listFullscreenModes`.
+- `ditherTail.ts` — `DITHER_TAIL_GLSL` (the shared TPDF blue-noise tail), `wrapModeFragment(body, extraUniforms)`, `VERT_QUAD`, `BLIT_MODE_BODY`, `RESERVED_UNIFORMS`.
+- `FullscreenCompositor.ts` — the ONE shared WebGL2 surface; `presentRaster` (cpuRaster) + `presentMode` (glQuad), both ending in the dither tail; `uploadLut`, `setSize`, `dispose`; Canvas-2D fallback (no dither) when WebGL2 is absent.
+- `modes/index.ts` — registers builtins at import; **a parallel mode adds its `import './xMode'` here**.
+- `modes/geometryModes.tsx` — the 6 cpuRaster geometry modes + the `fractal` ownCanvas entry + the `RandomControls` exemplar.
+- GATE: `palette/core/rampGeometry.ts` — `GeometryParams` (flat-optional) + `GEOM_DEFAULTS`.
+
+### How to add a mode (additive — touch only your own module + one import line)
+1. Write `modes/<id>Mode.ts(x)` exporting a `FullscreenMode` and calling `registerFullscreenMode(...)` (or export it and add to `BUILTIN_MODES`).
+2. Add `import './<id>Mode';` to `modes/index.ts`.
+3. That's it — the toolbar (`listFullscreenModes()`), the store (`geom` is a `string` mode id), export (`{stem}-{id}.png`), split, and the dither tail all pick it up.
+
+### The three faces a mode declares
+- **(a) params** — `paramFields: FullscreenParamField[]`: which **flat-optional** `GeometryParams` keys it reads, each with `{key,label,min,max,step,default}` (mirror `GEOM_DEFAULTS[key]`). The gate guarantees an omitted field renders byte-identically to its default.
+- **(b) render** — exactly one `kind`:
+  - `'cpuRaster'` → `raster(ctx) => Uint8ClampedArray`. **MUST stay pure + deterministic** (pinned by `test-palette-rampgeometry.mts`). The harness uploads it + presents through the dither tail. No RAF/DOM/side-effects.
+  - `'glQuad'` → `fragBody` defining `vec3 modeColor(vec2 uv)` (+ optional `fragUniforms` decls, `uniformNames`, `setUniforms(gl, loc, ctx)`). The harness wraps it (preamble + `vec3 sampleLut(float t)` + dither tail), compiles once, renders a fullscreen quad. Read the gradient via `uLut` / `sampleLut`. **This is the path for Spline** (sdSegment over a control polyline → arc-length → `sampleLut`). The glQuad pipeline is proven in-tree (the cpuRaster blit IS a glQuad).
+  - `'ownCanvas'` → the escape hatch: the mode mounts + drives its OWN canvas/renderer/RAF and bakes its own dither (include `DITHER_TAIL_GLSL` in its display shader). **This is the path for Liquify** (CPU mesh sim: MLS + XPBD + Taubin → vertex shader sampling the LUT) and likely **Parallax** (instanced sprites / ping-pong). The live `fractal` mode is the reference `ownCanvas`. NOTE: today the overlay hosts the single known ownCanvas mode (`fractal`) with its lifecycle inline + keyed on `kind === 'ownCanvas'`; a second ownCanvas mode needs the overlay to mount the mode's canvas/controls — coordinate that one overlay touch (it's the only non-additive spot).
+- **(c) controls** — `Controls?: React.FC`: a **self-contained** panel reading ONLY the store + registry (see `RandomControls`). The overlay renders `activeMode.Controls` automatically.
+
+### The render context (a mode reads colour ONLY from here, never the store)
+`FullscreenModeContext = { ramp: RGB[256], lut: Uint8Array(1024), params: GeometryParams, width, height }`. The overlay RESOLVES the colour source: the open-time snapshot normally, or the **last-modified hero** (live) when split is on. Reading from `ctx` is what makes a mode work in both fullscreen and split unchanged.
+
+### Frozen invariants
+- `id` is stable (persisted in `fullscreenStore.geom`, used in export filenames). Don't rename a shipped id.
+- `setUniforms` must NOT touch `RESERVED_UNIFORMS` (`uSrc uLut uResolution uBlueNoise uBlueNoiseRes uDither`).
+- The shared dither is **static-tile TPDF blue-noise @ 1 LSB** at the fragment tail; every cpuRaster/glQuad mode inherits it (and it bakes into PNG export — same canvas, `preserveDrawingBuffer`). ownCanvas modes opt in via `DITHER_TAIL_GLSL`.
+- The gate is **additive**: never change a `GEOM_DEFAULTS` value or make an existing field non-optional (it would break the byte-identical determinism pin).
+
+### ⚠️ Splitscreen — built per USER definition, NOT the §2.5 / SOTA A/B shader-wipe
+The user (twice, explicitly) redefined splitscreen: **the full app stays on TOP; the fullscreen preview docks on the BOTTOM**, with a draggable horizontal divider, and **the preview live-follows the colour of the last-modified hero**. So splitscreen shipped as a **presentation/layout toggle on the overlay** (not an in-quad A/B wipe mode): `fullscreenStore.split` + `splitY`, a WAI-ARIA `role="slider"` divider (oversized hit-strip, pointer-capture full-window drag, ↑/↓ keys), and the colour source switching to `useActiveHeroSelection()` while split is on. The docked pane renders whatever mode is active **through the compositor** (so it still exercises + proves the seam end-to-end + dither + export). The §2.5 two-canvas plan and the "Researched best-in-class … Splitscreen" A/B-wipe entry above are **superseded** by this for v2. Export = the live preview pane as `{stem}-split.png` (the app DOM above can't be rasterised into the composite).
