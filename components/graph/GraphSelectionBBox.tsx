@@ -14,6 +14,18 @@ interface GraphSelectionBBoxProps {
     // (snapshot + updateKeyframes + the ADR-0061 scrub gesture); the palette
     // passes a local-state impl (no scrub gesture, no-op onAfterMutate).
     dataSource: GraphDataSource;
+    /**
+     * Opt-in CENTRE MOVE handle (palette curve editor only; the timeline omits it
+     * and keeps its drag-a-key-to-translate gesture untouched). When true a grab
+     * handle is drawn in the middle of the box that TRANSLATES the whole selection
+     * — a discoverable affordance for "move these points" that the bare key-drag
+     * doesn't advertise. Requires `p2v` so the value axis works in normalised mode
+     * (where a single value↔pixel equation doesn't exist across tracks).
+     */
+    enableMoveHandle?: boolean;
+    /** Inverse of `v2p`: pixel-Y → value for a track (palette supplies it; used by
+     *  the move handle to translate in value space, normalised-mode aware). */
+    p2v?: (py: number, tid: string) => number;
 }
 
 interface InitialKey {
@@ -26,7 +38,7 @@ interface InitialKey {
     startRightTan?: BezierHandle;
 }
 
-type DragType = 'scale_left' | 'scale_right' | 'scale_top' | 'scale_bottom';
+type DragType = 'scale_left' | 'scale_right' | 'scale_top' | 'scale_bottom' | 'move';
 
 interface DragState {
     type: DragType;
@@ -50,7 +62,8 @@ interface DragState {
  *  different value ranges); tangent Y scales by the same ratio. Hidden in
  *  normalised mode since the per-track inverse isn't a single equation. */
 export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
-    sequence, selectedKeyframeIds, view, normalized, frameToCanvasPixel, v2p, dataSource
+    sequence, selectedKeyframeIds, view, normalized, frameToCanvasPixel, v2p, dataSource,
+    enableMoveHandle, p2v
 }) => {
     const ds = dataSource;
 
@@ -101,8 +114,8 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
     // Latest-render values made available to the global mouse listener without
     // forcing the effect to re-run (and reattach the listeners) on every prop
     // change. Same propsRef pattern as useDopeSheetInteraction.
-    const latest = useRef({ view, ds });
-    latest.current = { view, ds };
+    const latest = useRef({ view, ds, p2v });
+    latest.current = { view, ds, p2v };
 
     const startDrag = (e: React.MouseEvent, type: DragType) => {
         if (!bounds) return;
@@ -133,7 +146,23 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
             const dFrame = (e.clientX - ds.startClientX) / v.scaleX;
             const updates: { trackId: string, keyId: string, patch: Partial<Keyframe> }[] = [];
 
-            if (ds.type === 'scale_left' || ds.type === 'scale_right') {
+            if (ds.type === 'move') {
+                // Pure translation of the whole selection: shift every key by the same
+                // pixel delta. Tangents are in frame/value units relative to their key, so
+                // a translation leaves them unchanged. The value DELTA goes through `p2v`
+                // (the per-track, normalised-aware inverse) but is added to the captured
+                // `startValue` — anchoring on startValue (not remapping it) keeps the point
+                // from jumping if the value range shifts mid-drag. Fallback = linear slope.
+                const p2vNow = latest.current.p2v;
+                ds.initialKeys.forEach(k => {
+                    const patch: Partial<Keyframe> = { frame: Math.max(0, Math.round(k.startFrame + dFrame)) };
+                    patch.value = p2vNow
+                        ? k.startValue + (p2vNow(k.startPy + dy, k.trackId) - p2vNow(k.startPy, k.trackId))
+                        : k.startValue - dy / v.scaleY;
+                    updates.push({ trackId: k.trackId, keyId: k.keyId, patch });
+                });
+            }
+            else if (ds.type === 'scale_left' || ds.type === 'scale_right') {
                 const span = Math.max(1, ds.maxFrame - ds.minFrame);
                 const ratio = ds.type === 'scale_right'
                     ? Math.max(0.05, (span + dFrame) / span)
@@ -200,9 +229,22 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
             className="absolute pointer-events-none z-30"
             style={{ left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }}
         >
-            {/* Visual outline only — translation is handled by clicking any
-                selected keyframe (useGraphInteraction's key-drag path). */}
+            {/* Visual outline. Translation is handled by clicking any selected keyframe
+                (useGraphInteraction's key-drag path) AND, when enabled, the centre grab
+                handle below — a clearer "move these points" affordance. */}
             <div className="absolute inset-1 border border-orange-500/50 rounded-sm" />
+            {enableMoveHandle && (
+                <div
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-orange-500/30 border border-orange-400/70 cursor-move flex items-center justify-center pointer-events-auto hover:bg-orange-500/50 group/mv"
+                    onMouseDown={(e) => startDrag(e, 'move')}
+                    title="Move selection (drag)"
+                >
+                    {/* 4-way arrow glyph so the affordance reads at a glance. */}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-200 group-hover/mv:text-white">
+                        <path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" />
+                    </svg>
+                </div>
+            )}
             <div
                 className="absolute top-0 bottom-0 left-0 w-3 cursor-ew-resize flex items-center justify-center pointer-events-auto group/lh"
                 onMouseDown={(e) => startDrag(e, 'scale_left')}

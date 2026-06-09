@@ -84,6 +84,26 @@ export const rampToTrack = (
 };
 
 /**
+ * Recompute Auto (Catmull-Rom) tangents for the Bezier keyframes matched by `pred`
+ * (default: every key), leaving Step/Linear and hand-broken (`autoTangent === false`)
+ * keys untouched. Shared by the initial fit (rampToBezierTrack), the editor's
+ * add-key, and the Bias redistribution — so the "smooth out of the box" convention
+ * lives in one place. Expects `keys` pre-sorted by frame (neighbours are array-adjacent).
+ */
+export const reTangentBezier = (
+  keys: Keyframe[],
+  pred?: (k: Keyframe, i: number) => boolean,
+): Keyframe[] =>
+  keys.map((k, n) => {
+    if (k.interpolation !== 'Bezier' || k.autoTangent === false) return k;
+    if (pred && !pred(k, n)) return k;
+    const prev = n > 0 ? keys[n - 1] : undefined;
+    const next = n < keys.length - 1 ? keys[n + 1] : undefined;
+    const { l, r } = AnimationMath.calculateTangents(k, prev, next, 'Auto');
+    return { ...k, leftTangent: l, rightTangent: r, tangentMode: 'Aligned', autoTangent: true };
+  });
+
+/**
  * Fit a 256-value channel to an editable Track with smooth, DRAGGABLE Bezier
  * keyframes — the curve-editor's authoring representation. Keyframe POSITIONS
  * come from the same Douglas-Peucker placement as rampToTrack (error bounded by
@@ -105,13 +125,7 @@ export const rampToBezierTrack = (
     value: vals[i],
     interpolation: 'Bezier' as const,
   }));
-  const keyframes: Keyframe[] = base.map((k, n) => {
-    const prev = n > 0 ? base[n - 1] : undefined;
-    const next = n < base.length - 1 ? base[n + 1] : undefined;
-    const { l, r } = AnimationMath.calculateTangents(k, prev, next, 'Auto');
-    return { ...k, leftTangent: l, rightTangent: r, tangentMode: 'Aligned', autoTangent: true };
-  });
-  return { id, type: 'float', label, keyframes, color: opts.color };
+  return { id, type: 'float', label, keyframes: reTangentBezier(base), color: opts.color };
 };
 
 /** Sample a Track back to `count` evenly-spaced values over t∈[0,1]. */

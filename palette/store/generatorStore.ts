@@ -232,6 +232,27 @@ export const prospectiveFitChannels = (base: Channels, detail: number, smooth: n
   return { L: trackToRamp(t.L), C: trackToRamp(t.C), h: trackToRamp(t.h) };
 };
 
+/**
+ * The prospective fit's KEYFRAME FRAMES per channel — the control-point positions a
+ * "Fit / Re-fit from source" would create at the current detail/smooth. The editor
+ * paints these as faint "ghost points" on the ghost curve so the detail slider (point
+ * COUNT) and the smooth slider (point PLACEMENT) are legible at a glance: drag detail
+ * → more/fewer dots; drag smooth → the dots shift. Frames are 0..CURVE_FRAMES (== the
+ * 256-sample index), so the editor can read the ghost value straight off the frame.
+ */
+export const prospectiveFitFrames = (
+  base: Channels,
+  detail: number,
+  smooth: number,
+): Record<'L' | 'C' | 'h', number[]> => {
+  const t = fitChannelsToTracks(base, detail, smooth);
+  return {
+    L: t.L.keyframes.map((k) => k.frame),
+    C: t.C.keyframes.map((k) => k.frame),
+    h: t.h.keyframes.map((k) => k.frame),
+  };
+};
+
 /** Run the full pipeline: the two-source mix chain, or the ColorBox sweep. */
 const fullResult = (slotA: number, slotB: number, curves: ReturnType<typeof sampleCurves>, seed: number): BuildResult => {
   const s = readSlice();
@@ -379,6 +400,12 @@ export interface GeneratorDerived {
    * the committed curve, so detail/smooth preview a re-fit before any bake.
    */
   ghost: Channels;
+  /**
+   * Per-channel prospective-fit keyframe FRAMES at the current detail/smooth — the
+   * editor draws these as faint "ghost points" on the ghost curve to explain those two
+   * sliders. Null in ColorBox (no curve-fit layer). (See prospectiveFitFrames.)
+   */
+  ghostPoints: Record<'L' | 'C' | 'h', number[]> | null;
   config: GradientConfig;
 }
 
@@ -466,6 +493,14 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   // keyframe edits (which only churn `built`/`liveGhost`), so trackRanges doesn't rebuild.
   const ghost = overrideGhost ?? liveGhost;
 
+  // Ghost POINTS — the control-point frames a re-fit would place at the current
+  // detail/smooth. Keyed only on the fit's real inputs (NOT tracks/built) so editing
+  // keyframes doesn't re-run the Douglas-Peucker fit each drag frame. Null in ColorBox.
+  const ghostPoints = useMemo(
+    () => (mode === 'colorbox' ? null : prospectiveFitFrames(base, detail, smooth)),
+    [mode, base, detail, smooth],
+  );
+
   const config = useMemo(() => {
     const k = (11 - detail) / 3;
     // maxStops scales with the detail dial. The default cap (32) truncated rich
@@ -474,7 +509,7 @@ export const useGeneratorDerived = (): GeneratorDerived => {
     return fitRampToStops(built.ramp, { targetDE: Math.max(0.004, 0.012 * k), maxStops: Math.round(32 + detail * 12) });
   }, [built.ramp, detail]);
 
-  return { stripA, stripB, ramp: built.ramp, base, ghost, config };
+  return { stripA, stripB, ramp: built.ramp, base, ghost, ghostPoints, config };
 };
 
 /** Catalog accessor for the source picker (memoised in presetCatalog). */
