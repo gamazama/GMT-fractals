@@ -36,7 +36,12 @@ export class FullscreenCompositor {
   private ctx2d: CanvasRenderingContext2D | null = null;
   private quadVbo: WebGLBuffer | null = null;
   private srcTex: WebGLTexture | null = null;
+  private srcW = 0;
+  private srcH = 0;
   private lutTex: WebGLTexture | null = null;
+  // Blue-noise tile + the glQuad/cpuRaster program machinery below are the FROZEN seam
+  // scaffolding the parallel mode streams build on (Spline = glQuad samples uLut + the tail);
+  // the shipped geometry modes are cpuField (CPU error diffusion) so they don't exercise it yet.
   private blueNoise: BlueNoiseTexture | null = null;
   private programs = new Map<string, CompiledProgram>();
   /** Dither on by default; the overlay can toggle (e.g. an A/B "show banding" check). */
@@ -199,7 +204,15 @@ export class FullscreenCompositor {
     }
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.srcTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+    // Reallocate only on a size change; same-size repaints (slider drag, re-roll) just overwrite
+    // the existing storage — no driver-side realloc/orphaning each frame.
+    if (w === this.srcW && h === this.srcH) {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      this.srcW = w;
+      this.srcH = h;
+    }
     const p = this.blitProgram();
     gl.useProgram(p.prog);
     gl.uniform1i(p.loc['uSrc'], 0);

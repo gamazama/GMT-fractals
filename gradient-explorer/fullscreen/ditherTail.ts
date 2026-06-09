@@ -37,9 +37,9 @@ import { DITHER_TAIL_GLSL } from '../../engine/fractal/shaders/ditherTail';
 /** Uniform names the wrapper always declares (the standard fullscreen-mode preamble).
  *  A mode's `setUniforms` must NOT collide with these.
  *
- *  Reserved TEXTURE UNITS the compositor binds: 0 = uSrc, 1 = uLut, 2 = uBlueNoise,
- *  3 = uPos, 4 = uCov (field path). A glQuad mode that binds its OWN textures in
- *  `setUniforms` must use unit ≥ 5 (and declare the sampler via `fragUniforms`). */
+ *  Reserved TEXTURE UNITS the compositor binds: 0 = uSrc, 1 = uLut, 2 = uBlueNoise. A glQuad
+ *  mode that binds its OWN textures in `setUniforms` must use unit ≥ 3 (and declare the sampler
+ *  via `fragUniforms`). */
 export const RESERVED_UNIFORMS = [
   'uSrc', 'uLut', 'uResolution', 'uBlueNoise', 'uBlueNoiseRes', 'uDither',
 ] as const;

@@ -517,7 +517,7 @@ This is the **interface freeze** the parallel mode streams (Liquify / Spline / P
 
 ### Frozen invariants
 - `id` is stable (persisted in `fullscreenStore.geom`, used in export filenames). Don't rename a shipped id.
-- `setUniforms` must NOT touch `RESERVED_UNIFORMS` (`uSrc uLut uResolution uBlueNoise uBlueNoiseRes uDither`). Reserved **texture units**: 0=uSrc, 1=uLut, 2=uBlueNoise, 3=uPos, 4=uCov — a glQuad mode binding its own textures uses unit ≥ 5 (declared via `fragUniforms`).
+- `setUniforms` must NOT touch `RESERVED_UNIFORMS` (`uSrc uLut uResolution uBlueNoise uBlueNoiseRes uDither`). Reserved **texture units**: 0=uSrc, 1=uLut, 2=uBlueNoise — a glQuad mode binding its own textures uses unit ≥ 3 (declared via `fragUniforms`). (The cpuField path samples the LUT + dithers on the CPU — it reserves no GL units.)
 - The shared dither is **static-tile TPDF blue-noise @ 1 LSB** at the fragment tail; every cpuRaster/glQuad mode inherits it (and it bakes into PNG export — same canvas, `preserveDrawingBuffer`). ownCanvas modes opt in via `DITHER_TAIL_GLSL`.
 - The gate is **additive**: never change a `GEOM_DEFAULTS` value or make an existing field non-optional (it would break the byte-identical determinism pin).
 

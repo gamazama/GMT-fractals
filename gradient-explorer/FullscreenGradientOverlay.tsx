@@ -192,11 +192,19 @@ export const FullscreenGradientOverlay: React.FC = () => {
     const h = Math.max(1, Math.round(ch * scale));
     comp.setSize(w, h);
     comp.dither = fs.dither;
-    comp.uploadLut(lut); // cheap (1024 bytes); the field + glQuad paths sample uLut
+    // params beyond amount/seed (radial centre, conic angle, arch r/w/pos, s-curve shape) are
+    // declared in each mode's `paramFields` as the frozen contract for the FS1 polish wave,
+    // which adds the store fields + generic sliders that feed them; until then the modes render
+    // at GEOM_DEFAULTS. @see plans/fullscreen-v2-rescope.md "Mode plug-in seam (FROZEN)".
     const modeCtx = { ramp, lut, params: { amount: fs.amount, seed: fs.seed }, width: w, height: h };
-    if (mode.kind === 'glQuad') comp.presentMode(mode, modeCtx);
-    else if (mode.kind === 'cpuField') comp.presentField(mode.field!(modeCtx), w, h, DEFAULT_BACKGROUND, ramp);
-    else comp.presentRaster(mode.raster!(modeCtx), w, h);
+    if (mode.kind === 'glQuad') {
+      comp.uploadLut(lut); // only glQuad modes sample uLut; cpuField bakes colour on the CPU
+      comp.presentMode(mode, modeCtx);
+    } else if (mode.kind === 'cpuField') {
+      comp.presentField(mode.field!(modeCtx), w, h, DEFAULT_BACKGROUND, ramp);
+    } else {
+      comp.presentRaster(mode.raster!(modeCtx), w, h);
+    }
   }, [ramp, lut, fs.geom, fs.amount, fs.seed, fs.dither]);
 
   // Repaint on open + whenever the geometry / seed / amount / ramp change.
