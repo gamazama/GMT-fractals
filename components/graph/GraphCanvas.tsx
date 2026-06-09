@@ -26,6 +26,9 @@ interface GraphCanvasProps {
     onMouseDown: (e: React.MouseEvent) => void;
     onContextMenu: (e: React.MouseEvent) => void;
     onDoubleClick: (e: React.MouseEvent) => void;
+    /** Overrides the default crosshair cursor on the interactive (overlay) canvas —
+     *  e.g. the pencil cursor while pencil mode is active. */
+    cursor?: string;
 }
 
 /**
@@ -112,7 +115,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = (props) => {
                 width={props.width}
                 height={props.height}
                 className="cursor-crosshair"
-                style={{ position: 'absolute', top: 0, left: 0 }}
+                style={{ position: 'absolute', top: 0, left: 0, cursor: props.cursor }}
                 onMouseDown={props.onMouseDown}
                 onContextMenu={props.onContextMenu}
                 onDoubleClick={props.onDoubleClick}

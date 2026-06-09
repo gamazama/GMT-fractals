@@ -753,6 +753,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             onMouseDown={handleMouseDownWrapped}
             onContextMenu={handleContextMenu}
             onDoubleClick={handleDoubleClick}
+            cursor={pencilMode ? PENCIL_CURSOR : undefined}
           />
           {/* Source ghost — overlays the graph, faint + pointer-events-none (see effect). */}
           <canvas

@@ -490,6 +490,7 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
                         onMouseDown={handleCanvasMouseDown}
                         onContextMenu={handleContextMenu}
                         onDoubleClick={handleDoubleClick}
+                        cursor={pencil.pencilMode ? PENCIL_CURSOR : undefined}
                     />
                     <GraphSelectionBBox
                         sequence={sequence}
