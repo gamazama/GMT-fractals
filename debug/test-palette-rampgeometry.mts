@@ -7,6 +7,7 @@
 
 import {
   GEOMETRIES,
+  GEOM_DEFAULTS,
   mulberry32,
   renderGeometry,
   sampleGeometry,
@@ -106,6 +107,59 @@ console.log('[5] ramp lookup');
   ok(buf[0] === 0 && buf[1] === 0 && buf[2] === 0 && buf[3] === 255, 'left edge = ramp[0]');
   const rx = (W - 1) * 4;
   ok(buf[rx] === 255 && buf[rx + 3] === 255, 'right edge = ramp[255]');
+}
+
+// --- [6] flat-optional GeometryParams contract (the fullscreen-v2 GATE) ----------------
+// The redesigned params object carries optional per-mode fields. Two invariants:
+//   (a) ADDITIVE: omitting a field renders byte-identically to passing its GEOM_DEFAULT
+//       (so the pre-gate code is reproduced exactly — no silent regression).
+//   (b) WIRED + DETERMINISTIC: a non-default field actually changes the output, and the
+//       same params always reproduce the same bytes.
+console.log('[6] flat-optional params contract');
+{
+  // (a) absent field == explicit default, for every field-bearing geometry.
+  const cases: Array<[GeometryId, GeometryParams]> = [
+    ['radial', { radialCx: GEOM_DEFAULTS.radialCx, radialCy: GEOM_DEFAULTS.radialCy }],
+    ['conic', { conicAngle: GEOM_DEFAULTS.conicAngle }],
+    ['arched', {
+      archCy: GEOM_DEFAULTS.archCy, archR: GEOM_DEFAULTS.archR,
+      archHalfWidth: GEOM_DEFAULTS.archHalfWidth, archSpan: GEOM_DEFAULTS.archSpan,
+    }],
+    ['scurve', { scurveShape: GEOM_DEFAULTS.scurveShape }],
+    ['random', { amount: GEOM_DEFAULTS.amount, seed: GEOM_DEFAULTS.seed }],
+  ];
+  for (const [g, explicit] of cases) {
+    const bare = renderGeometry(ramp, g, {}, W, H);
+    const full = renderGeometry(ramp, g, explicit, W, H);
+    ok(hash(bare) === hash(full), `${g}: omitted fields == explicit GEOM_DEFAULTS (additive)`);
+  }
+
+  // (b) a non-default field changes the output AND is deterministic.
+  const variants: Array<[GeometryId, GeometryParams, string]> = [
+    ['radial', { radialCx: 0.6 }, 'radialCx'],
+    ['radial', { radialCy: -0.5 }, 'radialCy'],
+    ['conic', { conicAngle: 1.2 }, 'conicAngle'],
+    ['arched', { archR: 3.1 }, 'archR'],
+    ['arched', { archHalfWidth: 0.6 }, 'archHalfWidth'],
+    ['scurve', { scurveShape: 1.5 }, 'scurveShape'],
+  ];
+  for (const [g, params, field] of variants) {
+    const def = renderGeometry(ramp, g, {}, W, H);
+    const v1 = renderGeometry(ramp, g, params, W, H);
+    const v2 = renderGeometry(ramp, g, params, W, H);
+    ok(hash(v1) !== hash(def), `${g}: ${field} changes the output (wired)`);
+    ok(hash(v1) === hash(v2), `${g}: ${field} is deterministic`);
+  }
+
+  // The default S-curve shape is EXACTLY the legacy Perlin smootherstep (shape 0 path).
+  const sDefault = renderGeometry(ramp, 'scurve', {}, W, H);
+  const sZero = renderGeometry(ramp, 'scurve', { scurveShape: 0 }, W, H);
+  ok(hash(sDefault) === hash(sZero), 'scurve: shape 0 == legacy smootherstep');
+
+  // Conic rotation by a full turn wraps back to the unrotated field (seam handling).
+  const cBase = renderGeometry(ramp, 'conic', {}, W, H);
+  const cTurn = renderGeometry(ramp, 'conic', { conicAngle: Math.PI * 2 }, W, H);
+  ok(hash(cBase) === hash(cTurn), 'conic: +2π rotation wraps to the base field');
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);

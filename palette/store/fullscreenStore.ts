@@ -19,7 +19,7 @@
 
 import { useSyncExternalStore } from 'react';
 import type { GradientConfig } from '../../types';
-import { mulberry32, type GeometryId } from '../core/rampGeometry';
+import { mulberry32 } from '../core/rampGeometry';
 
 export interface FullscreenState {
   open: boolean;
@@ -27,11 +27,23 @@ export interface FullscreenState {
   config: GradientConfig | null;
   /** A label for the source hero, shown in the overlay chrome / export name. */
   name: string;
-  geom: GeometryId;
+  /** Active fullscreen-mode id (a registry key — `gradient-explorer/fullscreen/modeRegistry`).
+   *  A string (not the `GeometryId` union) so parallel mode streams add ids without a store
+   *  edit. */
+  geom: string;
   /** Re-roll seed for the stochastic geometry (a roll mints a new one). */
   seed: number;
   /** Randomization strength 0..1. */
   amount: number;
+  /** Split layout: app on top, fullscreen preview docked on the bottom (the user's
+   *  splitscreen). The preview live-follows the last-modified hero while split is on. */
+  split: boolean;
+  /** Fraction of viewport height given to the TOP (app) region in split layout; the preview
+   *  fills the remaining bottom `(1 − splitY)`. */
+  splitY: number;
+  /** Apply the blue-noise dither render-tail (banding fix). On by default; a toggle lets the
+   *  user A/B the banding. */
+  dither: boolean;
   // ── Live fractal-mode knobs (geom === 'fractal') ─────────────────────────
   // The gradient itself stays FROZEN (the snapshot's 256-ramp colours the
   // fractal); these are the cheap, live, animatable ramp-mapping modifiers the
@@ -59,6 +71,9 @@ const CLOSED: FullscreenState = {
   geom: 'linear',
   seed: 1,
   amount: 0.5,
+  split: false,
+  splitY: 0.55,
+  dither: true,
   fractalPhase: 0,
   fractalRepeats: 1,
   fractalMapping: 0,
@@ -95,9 +110,30 @@ export const closeFullscreen = (): void => {
   emit({ ...state, open: false, config: null });
 };
 
-export const setFullscreenGeom = (geom: GeometryId): void => {
+export const setFullscreenGeom = (geom: string): void => {
   if (geom === state.geom) return;
   emit({ ...state, geom });
+};
+
+/** Toggle the split layout (app on top, preview docked bottom). */
+export const setFullscreenSplit = (on: boolean): void => {
+  if (on === state.split) return;
+  emit({ ...state, split: on });
+};
+
+/** Set the split divider — fraction of viewport height for the TOP (app) region.
+ *  Clamped so neither pane collapses (0.2 ≤ splitY ≤ 0.85). */
+export const setFullscreenSplitY = (frac: number): void => {
+  if (!Number.isFinite(frac)) return;
+  const y = frac < 0.2 ? 0.2 : frac > 0.85 ? 0.85 : frac;
+  if (y === state.splitY) return;
+  emit({ ...state, splitY: y });
+};
+
+/** Toggle the blue-noise dither render-tail (A/B the banding fix). */
+export const setFullscreenDither = (on: boolean): void => {
+  if (on === state.dither) return;
+  emit({ ...state, dither: on });
 };
 
 /** Re-roll the stochastic field with a fresh seed (kept in [1, 2^31)). */

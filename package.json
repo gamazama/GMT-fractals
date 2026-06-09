@@ -35,6 +35,7 @@
     "test:interlace": "tsx debug/native-interlace-sweep.mts --fresh",
     "test:palette": "tsx debug/test-palette-stopfit.mts && tsx debug/test-palette-stopops.mts && tsx debug/test-palette-channelcurve.mts && tsx debug/test-palette-facets.mts && tsx debug/test-palette-facetname.mts && tsx debug/test-palette-easings.mts && tsx debug/test-palette-generator.mts && tsx debug/test-palette-img2grad.mts && tsx debug/test-palette-img2grad-overshoot.mts && tsx debug/test-palette-selection.mts && tsx debug/test-palette-walllayout.mts && tsx debug/test-engine-dnd-kernels.mts && tsx debug/test-palette-importformats.mts && tsx debug/test-palette-rampgeometry.mts && tsx debug/test-palette-editorstore.mts",
     "bake:palette": "tsx debug/bake-palette-catalog.mts",
+    "test:dither": "tsx debug/test-dither.mts",
     "test:shader": "npm run test:baseline && npm run test:hybrid && npm run test:hybrid-adv && npm run test:interlace",
     "smoke:boot": "tsx debug/smoke-boot.mts",
     "smoke:interact": "tsx debug/smoke-interact.mts",

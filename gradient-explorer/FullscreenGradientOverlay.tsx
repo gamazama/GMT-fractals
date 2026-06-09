@@ -26,17 +26,17 @@ import { ScalarInput } from '../components/inputs/ScalarInput';
 import { createLogMapping } from '../components/inputs/primitives/FormatUtils';
 import { renderStopsToRamp, renderStopsToBuffer } from '../palette/core/gmtGradient';
 import {
-  GEOMETRIES,
   RANDOM_MAX_DIM,
+  DEFAULT_BACKGROUND,
   isStochastic,
   isFractal,
-  renderGeometry,
 } from '../palette/core/rampGeometry';
 import {
   closeFullscreen,
-  rerollFullscreen,
-  setFullscreenAmount,
   setFullscreenGeom,
+  setFullscreenSplit,
+  setFullscreenSplitY,
+  setFullscreenDither,
   setFractalPhase,
   setFractalRepeats,
   setFractalMapping,
@@ -44,6 +44,13 @@ import {
   setFractalIterMul,
   useFullscreenState,
 } from '../palette/store/fullscreenStore';
+import { useActiveHeroSelection } from '../palette/store/heroSelection';
+import { usePaletteEditorStore } from '../palette/store/paletteEditorStore';
+import { useGeneratorDerived } from '../palette/store/generatorStore';
+import type { GradientConfig } from '../types';
+import { FullscreenCompositor } from './fullscreen/FullscreenCompositor';
+import { getFullscreenMode, listFullscreenModes } from './fullscreen/modeRegistry';
+import './fullscreen/modes'; // registers the builtin modes at import time
 import { canvasToPngBlob, downloadBlob } from '../utils/SceneFormat';
 import { Z } from '../components/ui/zIndex';
 // Type-only — the engine (perturbation + LA + shaders) is a heavy chunk, lazy-
@@ -51,8 +58,10 @@ import { Z } from '../components/ui/zIndex';
 // bundle and the loading overlay paints first. @see the creation effect below.
 import type { FractalColorRenderer } from '../engine/fractal';
 
-/** Continuous geometries render up to this long edge (CSS stretches to fill). */
-const CONTINUOUS_MAX_DIM = 1440;
+/** Continuous geometries render up to this long edge. Higher than the old 1440 so the preview
+ *  renders at (near-)native device pixels: error-diffusion dither must be at display resolution,
+ *  or the browser's bilinear upscale stretches the step-runs and re-introduces banding. */
+const CONTINUOUS_MAX_DIM = 2560;
 
 /** The colormap-mapping modes the fractal mode offers (kernel `uColorMapping`
  *  indices) — a curated, visually-distinct subset of the 14 kernel modes. */
@@ -73,12 +82,43 @@ const PHASE_ANIM_STEP = 1 / 480;
 // mapping makes each drag a RATIO so dialling 0.05 vs 50 is the same gesture.
 const REPEATS_MAPPING = createLogMapping(0.01, 1024);
 
+/** Resolves the live "working" gradient for split layout and reports it upward. Mounted ONLY
+ *  while split is on, so the (heavy) generator derivation never runs otherwise. For the
+ *  editable surfaces (Stops / Generator) it reads the live store so edits reflect without
+ *  re-selecting the hero; otherwise it follows the active hero's selected payload. */
+const SplitLiveSource: React.FC<{
+  onResolve: (r: { config: GradientConfig; name: string } | null) => void;
+}> = ({ onResolve }) => {
+  const hero = useActiveHeroSelection();
+  const stopsConfig = usePaletteEditorStore((s) => s.config);
+  const generatorConfig = useGeneratorDerived().config;
+  let config: GradientConfig | null = hero?.payload.config ?? null;
+  let name = hero?.payload.name ?? 'Gradient';
+  if (hero?.mode === 'stops') { config = stopsConfig; name = 'Stops'; }
+  else if (hero?.mode === 'generator') { config = generatorConfig; name = hero.payload.name || 'Generator'; }
+  // Push only when the colour CONTENT changes — a value signature (not object identity) so an
+  // unstable store ref can't drive a render loop.
+  const sig = config
+    ? config.stops.map((s) => `${s.color}@${s.position}`).join('|') + `:${config.blendSpace}:${config.colorSpace}:${name}`
+    : '';
+  const lastSig = useRef<string | null>(null);
+  useEffect(() => {
+    if (sig === lastSig.current) return;
+    lastSig.current = sig;
+    onResolve(config ? { config, name } : null);
+  }, [sig, name, config, onResolve]);
+  // Clear on unmount (split toggled off) so the snapshot source resumes cleanly.
+  useEffect(() => () => { lastSig.current = null; onResolve(null); }, [onResolve]);
+  return null;
+};
+
 export const FullscreenGradientOverlay: React.FC = () => {
   const fs = useFullscreenState();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const glCanvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<FractalColorRenderer | null>(null);
+  const compositorRef = useRef<FullscreenCompositor | null>(null);
   // False until the first fractal frame has painted — gates a loading overlay
   // over the (synchronous, blocking) WebGL shader compile + first render.
   const [fractalReady, setFractalReady] = useState(false);
@@ -89,6 +129,14 @@ export const FullscreenGradientOverlay: React.FC = () => {
   const [coordsCopied, setCoordsCopied] = useState(false);
 
   const fractal = isFractal(fs.geom);
+
+  // The colour SOURCE: normally the open-time snapshot; in split layout the preview
+  // live-follows the gradient you're editing (resolved by the split-only <SplitLiveSource>
+  // child below, which reads the live Stops/Generator stores so edits reflect immediately).
+  // All modes read colour from this resolved source — never the store directly.
+  const [liveSplit, setLiveSplit] = useState<{ config: GradientConfig; name: string } | null>(null);
+  const sourceConfig = fs.split && liveSplit ? liveSplit.config : fs.config;
+  const sourceName = fs.split && liveSplit ? liveSplit.name : fs.name;
 
   // The "Fullscreen" target is registered in `gradientTargets.ts` (the one target list)
   // at boot — not inline here — so the dock has a single source of truth.
@@ -111,34 +159,53 @@ export const FullscreenGradientOverlay: React.FC = () => {
 
   const ramp = useMemo(
     () =>
-      fs.config
-        ? renderStopsToRamp(fs.config.stops, fs.config.blendSpace, fs.config.colorSpace)
+      sourceConfig
+        ? renderStopsToRamp(sourceConfig.stops, sourceConfig.blendSpace, sourceConfig.colorSpace)
         : null,
-    [fs.config],
+    [sourceConfig],
+  );
+  // The 256×4 RGBA8 LUT (for glQuad modes' `uLut` upload) — same colours as `ramp`.
+  const lut = useMemo(
+    () =>
+      sourceConfig
+        ? renderStopsToBuffer(sourceConfig.stops, sourceConfig.blendSpace, sourceConfig.colorSpace)
+        : null,
+    [sourceConfig],
   );
 
+  // Paint a compositor mode (cpuRaster / glQuad) through the shared dither tail. `ownCanvas`
+  // modes (fractal) drive their own canvas and are skipped here.
   const paint = useCallback(() => {
-    const canvas = canvasRef.current;
+    const comp = compositorRef.current;
     const stage = stageRef.current;
-    if (!canvas || !stage || !ramp || isFractal(fs.geom)) return;
+    if (!comp || !stage || !ramp || !lut || isFractal(fs.geom)) return;
+    const mode = getFullscreenMode(fs.geom);
+    if (!mode || mode.kind === 'ownCanvas') return;
     const cap = isStochastic(fs.geom) ? RANDOM_MAX_DIM : CONTINUOUS_MAX_DIM;
     const cw = stage.clientWidth;
     const ch = stage.clientHeight;
-    const scale = Math.min(1, cap / Math.max(cw, ch, 1));
+    // Render at native device pixels (×DPR, capped at 2) so the dither lands on real display
+    // pixels — but never exceed `cap` on the long edge (bounds the CPU error-diffusion cost).
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const scale = Math.min(dpr, cap / Math.max(cw, ch, 1));
     const w = Math.max(1, Math.round(cw * scale));
     const h = Math.max(1, Math.round(ch * scale));
-    // Only resize the backing store when the dimensions actually change — assigning
-    // width/height clears the canvas and is wasteful on same-size repaints (the common
-    // case for an Amount-slider drag or a re-roll, where only pixel content changes).
-    if (canvas.width !== w) canvas.width = w;
-    if (canvas.height !== h) canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const buf = renderGeometry(ramp, fs.geom, { amount: fs.amount, seed: fs.seed }, w, h);
-    const img = ctx.createImageData(w, h);
-    img.data.set(buf);
-    ctx.putImageData(img, 0, 0);
-  }, [ramp, fs.geom, fs.amount, fs.seed]);
+    comp.setSize(w, h);
+    comp.dither = fs.dither;
+    // params beyond amount/seed (radial centre, conic angle, arch r/w/pos, s-curve shape) are
+    // declared in each mode's `paramFields` as the frozen contract for the FS1 polish wave,
+    // which adds the store fields + generic sliders that feed them; until then the modes render
+    // at GEOM_DEFAULTS. @see plans/fullscreen-v2-rescope.md "Mode plug-in seam (FROZEN)".
+    const modeCtx = { ramp, lut, params: { amount: fs.amount, seed: fs.seed }, width: w, height: h };
+    if (mode.kind === 'glQuad') {
+      comp.uploadLut(lut); // only glQuad modes sample uLut; cpuField bakes colour on the CPU
+      comp.presentMode(mode, modeCtx);
+    } else if (mode.kind === 'cpuField') {
+      comp.presentField(mode.field!(modeCtx), w, h, DEFAULT_BACKGROUND, ramp);
+    } else {
+      comp.presentRaster(mode.raster!(modeCtx), w, h);
+    }
+  }, [ramp, lut, fs.geom, fs.amount, fs.seed, fs.dither]);
 
   // Repaint on open + whenever the geometry / seed / amount / ramp change.
   useEffect(() => {
@@ -160,6 +227,26 @@ export const FullscreenGradientOverlay: React.FC = () => {
     ro.observe(stage);
     return () => ro.disconnect();
   }, [fs.open]);
+
+  // ── Shared compositor (cpuRaster + glQuad modes) ─────────────────────────
+  // One WebGL2 surface on `canvasRef` that presents every non-fractal mode through the
+  // shared dither tail (and bakes it into the PNG export — preserveDrawingBuffer). Created
+  // when a compositor mode is active, disposed on close / switch to the fractal (ownCanvas)
+  // mode. The blue-noise tile loads async; its onReady repaints so the dither appears once
+  // the tile lands. Mode switches among compositor modes keep the same context (deps don't
+  // change); switching to/from fractal swaps canvases (distinct React keys) → fresh context.
+  useEffect(() => {
+    if (!fs.open || fractal) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const comp = new FullscreenCompositor(canvas, () => paintRef.current());
+    compositorRef.current = comp;
+    paintRef.current();
+    return () => {
+      comp.dispose();
+      compositorRef.current = null;
+    };
+  }, [fs.open, fractal]);
 
   // ── Live-fractal mode (geom === 'fractal') ───────────────────────────────
   // A scoped, opt-in WebGL canvas that renders a live Mandelbrot coloured by
@@ -229,6 +316,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
         iterMul: snap.fractalIterMul,
       });
       if (snap.fractalDeepZoom) renderer.setDeepZoomEnabled(true);
+      renderer.setDither(snap.dither);
 
       // RAF loop. When auto-cycling, advance the phase directly on the renderer
       // (no store write → no per-frame React render); the slider is hidden while
@@ -283,13 +371,13 @@ export const FullscreenGradientOverlay: React.FC = () => {
     };
   }, [fs.open, fractal]);
 
-  // Re-upload the colormap if the (frozen) snapshot is replaced while open
-  // (e.g. a second openFullscreen lands a new gradient without closing first).
+  // Re-upload the colormap when the colour source changes — a replaced snapshot, or (in
+  // split layout) the last-modified hero the preview live-follows.
   useEffect(() => {
     const r = rendererRef.current;
-    if (!r || !fs.config) return;
-    r.setColormap(renderStopsToBuffer(fs.config.stops, fs.config.blendSpace, fs.config.colorSpace));
-  }, [fs.config]);
+    if (!r || !sourceConfig) return;
+    r.setColormap(renderStopsToBuffer(sourceConfig.stops, sourceConfig.blendSpace, sourceConfig.colorSpace));
+  }, [sourceConfig]);
 
   // Push the live knobs to the renderer. While animating, the RAF loop owns
   // (overwrites) gradientPhase next frame, so forwarding the manual phase here
@@ -308,6 +396,12 @@ export const FullscreenGradientOverlay: React.FC = () => {
   useEffect(() => {
     rendererRef.current?.setDeepZoomEnabled(fs.fractalDeepZoom);
   }, [fs.fractalDeepZoom]);
+
+  // The Dither toggle applies to the fractal display pass too (it's an ownCanvas mode).
+  useEffect(() => {
+    rendererRef.current?.setDither(fs.dither);
+    rendererRef.current?.render();
+  }, [fs.dither]);
 
   // At deep zoom, iterMul scales the reference-orbit BUILD length (a longer
   // reference, not a reference reused past its end), so changing it must rebuild
@@ -405,72 +499,92 @@ export const FullscreenGradientOverlay: React.FC = () => {
     const useGl = isFractal(liveRef.current.geom);
     const canvas = useGl ? glCanvasRef.current : canvasRef.current;
     if (!canvas) return;
-    // For the GL canvas, force a fresh render right before capture so toBlob
-    // reads current pixels (belt-and-suspenders alongside preserveDrawingBuffer).
+    // Force a fresh render right before capture so toBlob reads current pixels
+    // (belt-and-suspenders alongside preserveDrawingBuffer): the fractal renderer for the
+    // GL canvas, or a compositor re-present for cpuField/cpuRaster/glQuad modes.
     if (useGl) rendererRef.current?.render();
+    else paintRef.current();
     const blob = await canvasToPngBlob(canvas);
     if (!blob) return;
-    const stem = (fs.name || 'gradient').trim().replace(/\s+/g, '-').toLowerCase() || 'gradient';
-    downloadBlob(blob, `${stem}-${fs.geom}.png`);
-  }, [fs.name, fs.geom]);
+    const stem = (sourceName || 'gradient').trim().replace(/\s+/g, '-').toLowerCase() || 'gradient';
+    // Split exports the live preview pane (the app DOM above can't be rasterised); the
+    // `-split` suffix marks it as captured in the live-follow split layout.
+    downloadBlob(blob, `${stem}-${fs.split ? 'split' : fs.geom}.png`);
+  }, [sourceName, fs.geom, fs.split]);
 
   if (!fs.open || !fs.config) return null;
 
-  const stochastic = isStochastic(fs.geom);
+  const activeMode = getFullscreenMode(fs.geom);
+  const ActiveControls = activeMode?.Controls;
+  // App fraction (0..1) the divider sits at, as a percentage for ARIA + drag math.
+  const appPct = Math.round(fs.splitY * 100);
 
   return createPortal(
     <div
-      className="fixed inset-0 flex flex-col bg-black/95 backdrop-blur-sm select-none"
-      style={{ zIndex: Z.overlay }}
+      className={`fixed flex flex-col select-none ${
+        fs.split
+          ? 'bg-zinc-950/95 border-t border-white/15 shadow-[0_-12px_40px_rgba(0,0,0,0.5)]'
+          : 'inset-0 bg-black/95 backdrop-blur-sm'
+      }`}
+      style={fs.split ? { zIndex: Z.overlay, top: `${fs.splitY * 100}%`, left: 0, right: 0, bottom: 0 } : { zIndex: Z.overlay }}
       data-testid="fullscreen-gradient-overlay"
     >
-      {/* Toolbar: geometry selector + (random) controls + export + close. */}
+      {/* Live source for split — resolves the gradient being edited (Stops/Generator live). */}
+      {fs.split && <SplitLiveSource onResolve={setLiveSplit} />}
+
+      {/* Split divider — drag (or arrow keys) to resize the app/preview split. WAI-ARIA
+          slider semantics; an oversized hit-strip straddles the top edge for easy grabbing;
+          pointer capture lets the drag continue across the whole window. */}
+      {fs.split && (
+        <div
+          role="slider"
+          tabIndex={0}
+          aria-label="Resize split — app on top, preview below"
+          aria-orientation="vertical"
+          aria-valuemin={20}
+          aria-valuemax={85}
+          aria-valuenow={appPct}
+          aria-valuetext={`App ${appPct}%, preview ${100 - appPct}%`}
+          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); }}
+          onPointerMove={(e) => {
+            if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+            setFullscreenSplitY(e.clientY / Math.max(1, window.innerHeight));
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowUp') { e.preventDefault(); setFullscreenSplitY(fs.splitY - 0.02); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); setFullscreenSplitY(fs.splitY + 0.02); }
+          }}
+          className="absolute left-0 right-0 -top-3 h-6 z-10 flex items-center justify-center cursor-row-resize group focus:outline-none touch-none"
+        >
+          <div className="h-1 w-16 rounded-full bg-white/25 group-hover:bg-cyan-400/70 group-focus:bg-cyan-400/70 transition-colors" />
+        </div>
+      )}
+
+      {/* Toolbar: mode selector + mode controls + split/dither/export/close. */}
       <div className="shrink-0 flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-white/10 bg-zinc-950/80">
-        <div className="text-sm font-medium text-zinc-200 mr-1 truncate max-w-[28ch]">{fs.name}</div>
+        <div className="text-sm font-medium text-zinc-200 mr-1 truncate max-w-[28ch] flex items-center gap-1.5">
+          {fs.split && <span className="text-[9px] font-semibold tracking-wide px-1 py-0.5 rounded bg-cyan-500/25 text-cyan-200">LIVE</span>}
+          {sourceName}
+        </div>
 
         <div className="flex items-center rounded-md border border-white/10 overflow-hidden divide-x divide-white/10">
-          {GEOMETRIES.map((g) => (
+          {listFullscreenModes().map((m) => (
             <button
-              key={g.id}
-              onClick={() => setFullscreenGeom(g.id)}
+              key={m.id}
+              onClick={() => setFullscreenGeom(m.id)}
               className={`px-3 py-1.5 text-[12px] transition-colors ${
-                fs.geom === g.id
+                fs.geom === m.id
                   ? 'bg-cyan-500/25 text-cyan-100 font-medium'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.05]'
               }`}
             >
-              {g.label}
+              {m.label}
             </button>
           ))}
         </div>
 
-        {stochastic && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={rerollFullscreen}
-              title="Re-roll the point field (new seed)"
-              className="px-2.5 py-1 text-[12px] rounded-md border border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
-            >
-              ⟳ Re-roll
-            </button>
-            <label className="flex items-center gap-1.5 text-[11px] text-gray-400">
-              Amount
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={fs.amount}
-                onChange={(e) => setFullscreenAmount(parseFloat(e.target.value))}
-                className="w-28 accent-cyan-400"
-                aria-label="Randomization amount"
-              />
-              <span className="tabular-nums w-7 text-right text-gray-500">
-                {Math.round(fs.amount * 100)}
-              </span>
-            </label>
-          </div>
-        )}
+        {/* The active mode's own self-contained controls (e.g. Randomized's amount/re-roll). */}
+        {ActiveControls && <ActiveControls />}
 
         {fractal && (
           <div className="flex flex-wrap items-center gap-3">
@@ -565,6 +679,30 @@ export const FullscreenGradientOverlay: React.FC = () => {
 
         <div className="flex items-center gap-2 ml-auto">
           <button
+            onClick={() => setFullscreenSplit(!fs.split)}
+            title="Split: keep the app on top, dock this preview on the bottom — it live-follows the gradient you last edited"
+            aria-pressed={fs.split}
+            className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+              fs.split
+                ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100'
+                : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+            }`}
+          >
+            ⇅ Split
+          </button>
+          <button
+            onClick={() => setFullscreenDither(!fs.dither)}
+            title="Blue-noise dither — smooths 8-bit banding on the ramp (bakes into the PNG)"
+            aria-pressed={fs.dither}
+            className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+              fs.dither
+                ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100'
+                : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+            }`}
+          >
+            ▦ Dither
+          </button>
+          <button
             onClick={exportPng}
             className="px-3 py-1 text-[12px] rounded-md border border-cyan-500/30 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 transition-colors"
           >
@@ -615,7 +753,11 @@ export const FullscreenGradientOverlay: React.FC = () => {
           </div>
         ) : null}
         <div className="absolute bottom-2 right-3 text-[10px] text-gray-500/80 pointer-events-none">
-          {fractal ? 'Esc to close · drag to pan · scroll to zoom' : 'Esc to close · display-only preview'}
+          {fs.split
+            ? 'Live — follows the gradient you last edited · drag the divider to resize'
+            : fractal
+              ? 'Esc to close · drag to pan · scroll to zoom'
+              : 'Esc to close · display-only preview'}
         </div>
       </div>
     </div>,

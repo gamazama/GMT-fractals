@@ -46,19 +46,67 @@ export const GEOMETRIES: ReadonlyArray<{ id: GeometryId; label: string }> = [
   { id: 'fractal', label: 'Fractal' },
 ];
 
-/** Whether a geometry consumes the seed/amount controls (only `random` does). */
-export const isStochastic = (geom: GeometryId): boolean => geom === 'random';
+/** Whether a geometry consumes the seed/amount controls (only `random` does). Accepts a
+ *  string since the active-mode id is now a registry key (a superset of `GeometryId`). */
+export const isStochastic = (geom: string): boolean => geom === 'random';
 
 /** Whether a geometry is the GPU-rendered live fractal (its own WebGL canvas +
  *  live phase/repeats/mapping controls), not a pure 2D `sampleGeometry` field. */
-export const isFractal = (geom: GeometryId): boolean => geom === 'fractal';
+export const isFractal = (geom: string): boolean => geom === 'fractal';
 
+/**
+ * GeometryParams — the FLAT-OPTIONAL parameter object every fullscreen mode threads
+ * through (the fullscreen-v2 GATE shape). ONE object, all fields optional: a mode reads
+ * only the fields it cares about and an absent field falls back to {@link GEOM_DEFAULTS}.
+ *
+ * Why flat-optional (not a tagged union): the pure mappers below switch on `GeometryId`,
+ * not on a param discriminant, so a flat bag keeps `sampleGeometry` a single signature and
+ * lets a NEW mode (splitscreen / spline / liquify / parallax — built in parallel) add its
+ * own fields here without changing the function shape or disturbing the others. Defaults are
+ * pinned in {@link GEOM_DEFAULTS} so omitting a field reproduces the legacy constant exactly
+ * (the determinism harness pins this — see `debug/test-palette-rampgeometry.mts`).
+ *
+ * @invariant Adding a field is additive: it MUST default such that existing modes render
+ *   byte-identically when the field is absent.
+ */
 export interface GeometryParams {
+  // ── stochastic field (`random`) ────────────────────────────────────────
   /** Randomization strength 0..1 (point density + colour jitter). Only `random` reads it. */
-  amount: number;
+  amount?: number;
   /** PRNG seed — a re-roll mints a new seed; a fixed seed reproduces the field exactly. */
-  seed: number;
+  seed?: number;
+  // ── continuous-geometry shape controls (the formerly hard-coded constants) ──
+  /** [radial] centre offset in isotropic units (0,0 = frame centre). */
+  radialCx?: number;
+  radialCy?: number;
+  /** [conic] sweep rotation in radians (0 = the legacy orientation). */
+  conicAngle?: number;
+  /** [arched] band geometry — centre-Y / radius / half-width / ± sweep span (isotropic units). */
+  archCy?: number;
+  archR?: number;
+  archHalfWidth?: number;
+  archSpan?: number;
+  /** [scurve] eased-shape strength (0 = the legacy Perlin smootherstep; ±drives toe/shoulder bias). */
+  scurveShape?: number;
 }
+
+/** Default value for every optional {@link GeometryParams} field. Omitting a field in a
+ *  params object resolves to the matching entry here — and these are the EXACT legacy
+ *  constants, so a default-valued params renders byte-identically to the pre-gate code. */
+export const GEOM_DEFAULTS = {
+  amount: 0.5,
+  seed: 1,
+  radialCx: 0,
+  radialCy: 0,
+  conicAngle: 0,
+  // Arched band: a circular arc whose centre sits below the frame so the band sweeps
+  // across the top. Tuned in isotropic units (uy = −1 at the top edge).
+  archCy: 1.35,
+  archR: 2.3,
+  archHalfWidth: 0.3,
+  archSpan: 1.15, // ± angle (radians) the band sweeps through
+  scurveShape: 0,
+} as const;
 
 /**
  * A pure per-pixel field: for each pixel `i`, `pos[i]` is the ramp position in
@@ -96,10 +144,22 @@ export const mulberry32 = (seed: number): (() => number) => {
 // ── geometry math ───────────────────────────────────────────────────────────────
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+/** Wrap into [0,1) — used when a rotation can push an angle param past the ±π seam. */
+const wrap01 = (v: number): number => v - Math.floor(v);
 /** smootherstep — Ken Perlin's C2 ease (the S in "S-curve"). */
 const smootherstep = (t: number): number => {
   const x = clamp01(t);
   return x * x * x * (x * (x * 6 - 15) + 10);
+};
+/** Shaped S-curve ease. `shape === 0` is EXACTLY {@link smootherstep} (the legacy
+ *  default, byte-identical); shape ≠ 0 biases the toe/shoulder via a symmetric gamma so
+ *  the curve stays in [0,1] and monotone. Positive = lazier start / harder finish. */
+const easeShaped = (t: number, shape: number): number => {
+  const s = smootherstep(t);
+  if (shape === 0) return s;
+  // gamma in (0,∞): >1 pushes the curve down (slower start), <1 lifts it (faster start).
+  const gamma = Math.exp(-shape);
+  return Math.pow(s, gamma);
 };
 
 /** Stochastic field render-resolution cap (long edge) — keeps the splat loop bounded. */
@@ -162,7 +222,7 @@ export const sampleGeometry = (
   const sample: GeometrySample = { width, height, pos, cov };
 
   if (geom === 'random') {
-    fillRandom(sample, params.amount, params.seed);
+    fillRandom(sample, params.amount ?? GEOM_DEFAULTS.amount, params.seed ?? GEOM_DEFAULTS.seed);
     return sample;
   }
 
@@ -175,12 +235,16 @@ export const sampleGeometry = (
   const cyp = (height - 1) / 2;
   const half = Math.max(1e-6, Math.min(cxp, cyp));
   const radialNorm = 1 / Math.max(1e-6, Math.hypot(cxp, cyp) / half); // corner → 1
-  // Arched band: a circular arc whose centre sits below the frame so the band sweeps
-  // across the top. Tuned in isotropic units (uy = −1 at the top edge).
-  const archCy = 1.35;
-  const archR = 2.3;
-  const archHalfWidth = 0.3;
-  const archSpan = 1.15; // ± angle (radians) the band sweeps through
+  // Per-mode shape params — flat-optional, each falling back to its legacy constant so a
+  // default-valued params renders byte-identically to the pre-gate code.
+  const radialCx = params.radialCx ?? GEOM_DEFAULTS.radialCx;
+  const radialCy = params.radialCy ?? GEOM_DEFAULTS.radialCy;
+  const conicAngle = params.conicAngle ?? GEOM_DEFAULTS.conicAngle;
+  const archCy = params.archCy ?? GEOM_DEFAULTS.archCy;
+  const archR = params.archR ?? GEOM_DEFAULTS.archR;
+  const archHalfWidth = params.archHalfWidth ?? GEOM_DEFAULTS.archHalfWidth;
+  const archSpan = params.archSpan ?? GEOM_DEFAULTS.archSpan;
+  const scurveShape = params.scurveShape ?? GEOM_DEFAULTS.scurveShape;
 
   for (let y = 0; y < height; y++) {
     const ny = height > 1 ? y / (height - 1) : 0;
@@ -196,15 +260,19 @@ export const sampleGeometry = (
           p = nx;
           break;
         case 'radial':
-          p = clamp01(Math.hypot(ux, uy) * radialNorm);
+          p = clamp01(Math.hypot(ux - radialCx, uy - radialCy) * radialNorm);
           break;
         case 'conic': {
           const ang = Math.atan2(uy, ux); // -π..π, true angle (aspect-correct)
-          p = (ang + Math.PI) / (2 * Math.PI);
+          // Default (conicAngle === 0) keeps the EXACT legacy expression; a rotation
+          // wraps into [0,1) so the ±π seam doesn't clip.
+          p = conicAngle === 0
+            ? (ang + Math.PI) / (2 * Math.PI)
+            : wrap01((ang + conicAngle + Math.PI) / (2 * Math.PI));
           break;
         }
         case 'scurve':
-          p = smootherstep(nx);
+          p = easeShaped(nx, scurveShape);
           break;
         case 'arched': {
           const d = Math.hypot(ux, uy - archCy);
@@ -269,6 +337,74 @@ export const renderGeometry = (
       out[o + 2] = bg.b + (col.b - bg.b) * c;
     }
     out[o + 3] = 255;
+  }
+  return out;
+};
+
+/**
+ * Render a pre-computed position+coverage field to RGBA, LINEAR-sampling the ramp at the FLOAT
+ * position (smooth — no 256-step quantisation) and, when `dither`, applying **serpentine
+ * Floyd–Steinberg error diffusion** before the 8-bit write.
+ *
+ * Error diffusion feeds each pixel's quantisation error forward, so the LOCAL average tracks the
+ * input exactly — a smooth gradient reproduces with essentially zero column-average deviation
+ * (WIGGLE→0), the smoothest still-image result and far better than per-pixel noise dither, which
+ * leaves residual banding OR adds visible grain. It also self-limits on flats: a constant region
+ * only toggles between its two bracketing levels (≤1 LSB), so islands don't get noisy. Sequential
+ * (CPU-only — can't run in a parallel fragment shader), which is why the GPU modes (fractal) use
+ * the blue-noise tail instead; the 2D geometry modes are CPU-computed, so they use this.
+ *
+ * Pure + deterministic given `(sample, ramp, dither)`.
+ *
+ * @see debug/test-dither.mts (the harness that picked error diffusion: WIGGLE 0.04 vs 0.24 noise)
+ */
+export const renderFieldDithered = (
+  sample: GeometrySample,
+  ramp: RGB[],
+  dither: boolean,
+  background: RGB = DEFAULT_BACKGROUND,
+): Uint8ClampedArray => {
+  const { width, height, pos, cov } = sample;
+  const last = ramp.length - 1;
+  const bg = [background.r, background.g, background.b];
+  const out = new Uint8ClampedArray(width * height * 4);
+  // Carried error: `cur` for the current row (incl. the horizontal neighbour), `nxt` for the
+  // row below. Padded by 1 px each side so the edge taps never go out of bounds. RGB interleaved.
+  const cur = new Float32Array((width + 2) * 3);
+  const nxt = new Float32Array((width + 2) * 3);
+  // LINEAR ramp lookup blended toward bg by coverage, per channel.
+  const target = (p: number, c: number, ch: number): number => {
+    const cc = c < 0 ? 0 : c > 1 ? 1 : c;
+    const t = (p < 0 ? 0 : p > 1 ? 1 : p) * last;
+    const i0 = Math.floor(t), f = t - i0;
+    const a = ramp[i0] ?? background, b = ramp[i0 < last ? i0 + 1 : last] ?? background;
+    const ca = ch === 0 ? a.r : ch === 1 ? a.g : a.b;
+    const cb = ch === 0 ? b.r : ch === 1 ? b.g : b.b;
+    return bg[ch] + (ca + (cb - ca) * f - bg[ch]) * cc;
+  };
+  for (let y = 0; y < height; y++) {
+    nxt.fill(0);
+    const ltr = (y & 1) === 0; // serpentine: alternate scan direction to break diffusion "worms"
+    const fwd = ltr ? 1 : -1;
+    for (let ii = 0; ii < width; ii++) {
+      const x = ltr ? ii : width - 1 - ii;
+      const i = y * width + x;
+      const o = i * 4;
+      for (let ch = 0; ch < 3; ch++) {
+        const v = target(pos[i], cov[i], ch) + (dither ? cur[(x + 1) * 3 + ch] : 0);
+        const q = v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
+        out[o + ch] = q;
+        if (dither) {
+          const e = v - q;
+          cur[(x + 1 + fwd) * 3 + ch] += (e * 7) / 16;
+          nxt[(x + 1 - fwd) * 3 + ch] += (e * 3) / 16;
+          nxt[(x + 1) * 3 + ch] += (e * 5) / 16;
+          nxt[(x + 1 + fwd) * 3 + ch] += (e * 1) / 16;
+        }
+      }
+      out[o + 3] = 255;
+    }
+    cur.set(nxt);
   }
   return out;
 };

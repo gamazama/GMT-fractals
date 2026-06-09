@@ -206,6 +206,10 @@ export class FractalColorRenderer {
 
   private gradients: GradientLutManager;
   private blueNoise: BlueNoiseTexture | null = null;
+  /** Separate independent-channel RGBA tile for the DISPLAY-pass dither tail (the kernel's
+   *  `blueNoise` may be grayscale, which would degrade the TPDF). Kept apart so the kernel /
+   *  TSAA input is untouched. */
+  private ditherNoise: BlueNoiseTexture | null = null;
   /** Owns the deep-zoom GPU state (reference orbit / LA table / AT payload).
    *  Binds inert OFF defaults until an orbit is uploaded, so the shallow path
    *  is unaffected. Shared with fluid-toy via engine/fractal/DeepZoomController. */
@@ -221,6 +225,10 @@ export class FractalColorRenderer {
    *  warranted). Driving uMaxIter past the orbit length just wastes iterations
    *  rebasing a reference that no longer exists. */
   private deepGpuIter = 2000;
+
+  /** Apply the shared adaptive-dither tail in the display pass (banding fix). On by default;
+   *  the host toggles it in lock-step with the other fullscreen modes. */
+  private ditherEnabled = true;
 
   private simW = 0;
   private simH = 0;
@@ -255,6 +263,11 @@ export class FractalColorRenderer {
     this.compile();
     this.allocate(64, 64);
     this.blueNoise = createBlueNoiseWebGL2(gl);
+    // Display-pass dither tile — independent-channel RGBA, point-sampled (crisp static dither).
+    this.ditherNoise = createBlueNoiseWebGL2(gl, '/blueNoiseRGBA.png');
+    gl.bindTexture(gl.TEXTURE_2D, this.ditherNoise.texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     // Allocate both LUT slots up front so the lazy `ensure()` in the first
     // renderJulia doesn't bump `gradients.version` AFTER that frame's
     // updateHash() already sampled it — which would spuriously reset the TSAA
@@ -330,7 +343,8 @@ export class FractalColorRenderer {
     this.progJulia = this.link(VERT_FULLSCREEN, FRAG_JULIA, JULIA_UNIFORMS);
     this.progTsaa = this.link(VERT_FULLSCREEN, FRAG_TSAA_BLEND,
       ['uCurrentMain', 'uCurrentFx', 'uHistoryMain', 'uHistoryFx', 'uSampleIndex']);
-    this.progDisplay = this.link(VERT_FULLSCREEN, FRAG_FRACTAL_DISPLAY, ['uImage']);
+    this.progDisplay = this.link(VERT_FULLSCREEN, FRAG_FRACTAL_DISPLAY,
+      ['uImage', 'uBlueNoise', 'uBlueNoiseRes', 'uDither']);
   }
 
   private createMrt(w: number, h: number): MrtFbo {
@@ -403,6 +417,11 @@ export class FractalColorRenderer {
    *  (`renderStopsToBuffer`) output goes straight in. Resets TSAA via the hash. */
   setColormap(rgba1024: Uint8Array): void {
     this.gradients.setBuffer('main', rgba1024);
+  }
+
+  /** Toggle the display-pass dither tail. Cheap (a display re-render reflects it). */
+  setDither(on: boolean): void {
+    this.ditherEnabled = on;
   }
 
   setParams(p: Partial<FractalColorParams>): void {
@@ -787,6 +806,13 @@ export class FractalColorRenderer {
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     this.useProgram(this.progDisplay);
     this.bindTex(0, this.juliaTsaa.texFx, this.progDisplay.uniforms['uImage']);
+    // Shared adaptive dither — static tile, so it doesn't shimmer over TSAA accumulation.
+    if (this.ditherNoise) {
+      this.bindTex(1, this.ditherNoise.texture, this.progDisplay.uniforms['uBlueNoise']);
+      const [bw, bh] = this.ditherNoise.getResolution();
+      gl.uniform2f(this.progDisplay.uniforms['uBlueNoiseRes'], bw, bh);
+    }
+    gl.uniform1i(this.progDisplay.uniforms['uDither'], this.ditherEnabled ? 1 : 0);
     this.drawQuad();
   }
 
@@ -803,6 +829,7 @@ export class FractalColorRenderer {
       if (p?.prog) gl.deleteProgram(p.prog);
     }
     if (this.blueNoise) { gl.deleteTexture(this.blueNoise.texture); this.blueNoise = null; }
+    if (this.ditherNoise) { gl.deleteTexture(this.ditherNoise.texture); this.ditherNoise = null; }
     // Explicitly free the GL context so repeated open/close cycles don't leak
     // contexts until GC (browsers hard-cap live WebGL contexts at ~16; relying
     // on GC exhausts the budget and getContext() then returns null → the
