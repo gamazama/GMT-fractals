@@ -67,6 +67,45 @@ export interface FullscreenModeContext {
   height: number;
 }
 
+/**
+ * OwnCanvasHost — the environment the overlay hands an `ownCanvas` mode at {@link FullscreenMode.mount}
+ * time. The mode mounts + drives its OWN canvas/renderer/RAF inside `container`, reads colour ONLY
+ * via `getContext()` (the overlay resolves it — the open-time snapshot in fullscreen, the live
+ * last-modified hero in split), and reports first-frame readiness / a fatal failure through the
+ * callbacks (the overlay shows a generic spinner until `onReady`, an error panel after `onError`).
+ *
+ * This is the seam's escape-hatch face: the overlay knows nothing mode-specific — it just provides
+ * an empty positioned container + the resolved colour source + lifecycle signalling. A mode owns its
+ * canvas DOM, RAF, gestures, and (via a ResizeObserver on `container`) its own resize.
+ */
+export interface OwnCanvasHost {
+  /** An empty, positioned (`absolute inset-0`) element to mount the canvas into. Fills the stage. */
+  container: HTMLElement;
+  /** The current render context (resolved colour source + size). Read at mount + lazily per-frame. */
+  getContext: () => FullscreenModeContext;
+  /** Call once the first frame has painted — clears the overlay's loading spinner. */
+  onReady: () => void;
+  /** Call on a fatal mount failure (e.g. no WebGL2) — shows the overlay's error panel. */
+  onError: (err: unknown) => void;
+}
+
+/**
+ * OwnCanvasHandle — the lifecycle handle a mode returns from {@link FullscreenMode.mount}. The
+ * overlay drives the few cross-cutting events every ownCanvas mode shares; the mode owns everything
+ * else internally. All callbacks are optional except {@link dispose}.
+ */
+export interface OwnCanvasHandle {
+  /** The resolved colour source changed (snapshot replaced, or the live hero updated in split) —
+   *  re-read `ctx.lut` / `ctx.ramp` and re-upload. */
+  onContext?: (ctx: FullscreenModeContext) => void;
+  /** The shared Dither toggle changed. */
+  setDither?: (on: boolean) => void;
+  /** Return the canvas to read for PNG export (the mode should render a fresh frame first). */
+  exportCanvas?: () => HTMLCanvasElement | null;
+  /** Tear down — dispose the renderer, cancel RAF, remove listeners, and remove the canvas. */
+  dispose: () => void;
+}
+
 /** A flat-optional `GeometryParams` field a mode reads, with the metadata a generic panel
  *  needs to render a control for it. `default` should mirror `GEOM_DEFAULTS[key]`. */
 export interface FullscreenParamField {
@@ -115,7 +154,14 @@ export interface FullscreenMode {
   ) => void;
 
   // ── kind: 'ownCanvas' ──
-  // (no extra fields — the mode owns its canvas lifecycle + controls; the overlay hosts it.)
+  /** Mount the mode's OWN canvas/renderer/RAF into `host.container`; returns a lifecycle handle.
+   *  The overlay calls this once when the mode becomes active and `dispose()`s it on exit / mode
+   *  switch. Required for `kind === 'ownCanvas'` (the live Fractal; Liquify; Parallax). The mode
+   *  bakes its own dither (include `DITHER_TAIL_GLSL` in its display shader). */
+  mount?: (host: OwnCanvasHost) => OwnCanvasHandle;
+  /** A one-line hint shown bottom-right of the stage (e.g. 'drag to pan · scroll to zoom'). The
+   *  overlay falls back to a generic display-only hint when absent (and to the split hint in split). */
+  hint?: string;
 
   // ── controls ──
   /** Self-contained controls panel (optional). */

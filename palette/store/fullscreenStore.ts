@@ -222,3 +222,11 @@ export const setFractalIterMul = (mul: number): void => {
 /** Subscribe a component to the whole fullscreen view state. */
 export const useFullscreenState = (): FullscreenState =>
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+/** Non-hook read of the current state — for imperative consumers (an `ownCanvas` mode's RAF loop /
+ *  store-subscription that pushes live knobs to its renderer without a React render). */
+export const getFullscreenState = (): FullscreenState => state;
+
+/** Non-hook subscription — an `ownCanvas` mode's `mount()` subscribes to push the live knobs it
+ *  reads (e.g. the fractal's phase/repeats/mapping) to its renderer. Returns an unsubscribe fn. */
+export const subscribeFullscreen = (l: () => void): (() => void) => subscribe(l);
