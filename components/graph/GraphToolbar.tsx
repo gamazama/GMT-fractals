@@ -5,9 +5,10 @@ import { useAnimationStore } from '../../store/animationStore';
 import { collectHelpIds } from '../../utils/helpUtils';
 import { ContextMenuItem } from '../../types/help';
 import Slider from '../../components/Slider';
-import { 
-    FitIcon, FitSelectionIcon, NormIcon, FilterIcon, WaveIcon, BakeIcon, MagicIcon
+import {
+    FitIcon, FitSelectionIcon, NormIcon, FilterIcon, WaveIcon, BakeIcon, MagicIcon, PencilIcon
 } from '../Icons';
+import { balancedToolColumnMaxHeight } from '../../utils/toolColumn';
 
 interface GraphToolbarProps {
     normalized: boolean;
@@ -24,6 +25,10 @@ interface GraphToolbarProps {
     onSimplifyDown: (e: React.PointerEvent) => void;
     selectedOnly: boolean;
     onToggleSelectedOnly: () => void;
+    pencilMode: boolean;
+    onTogglePencil: () => void;
+    /** Plot height available to the column, so it can reflow into even columns when tall. */
+    availableHeight: number;
 }
 
 const SimpleTooltip = ({ text }: { text: string }) => (
@@ -98,7 +103,8 @@ export const GraphToolbar: React.FC<GraphToolbarProps> = ({
     isBaking, onBakeDown,
     isSmoothing, onSmoothDown,
     isSimplifying, onSimplifyDown,
-    selectedOnly, onToggleSelectedOnly
+    selectedOnly, onToggleSelectedOnly,
+    pencilMode, onTogglePencil, availableHeight
 }) => {
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     
@@ -124,8 +130,9 @@ export const GraphToolbar: React.FC<GraphToolbarProps> = ({
     };
 
     return (
-        <div 
-            className="absolute top-[30px] left-[4px] flex flex-col gap-1 z-20 w-[42px]"
+        <div
+            className="absolute top-[30px] left-[4px] flex flex-col flex-wrap content-start gap-1 z-20"
+            style={{ maxHeight: balancedToolColumnMaxHeight(9, availableHeight) }}
             data-help-id="anim.graph"
             onContextMenu={handleContextMenu}
         >
@@ -146,6 +153,12 @@ export const GraphToolbar: React.FC<GraphToolbarProps> = ({
                 active={normalized}
                 icon={<NormIcon active={normalized} />}
                 tooltip="Normalize (0-1 Range)"
+            />
+            <ToolButton
+                onClick={onTogglePencil}
+                active={pencilMode}
+                icon={<PencilIcon active={pencilMode} />}
+                tooltip="Pencil — draw the selected track's curve (click-drag)"
             />
             <ToolButton
                 onClick={onToggleSelectedOnly}

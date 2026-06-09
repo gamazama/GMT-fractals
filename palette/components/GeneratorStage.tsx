@@ -283,7 +283,7 @@ const ColorBoxControls: React.FC = () => {
 };
 
 export const GeneratorStage: React.FC = () => {
-  const { stripA, stripB, ramp, config, ghost } = useGeneratorDerived();
+  const { stripA, stripB, ramp, config, ghost, ghostPoints } = useGeneratorDerived();
   const slotA = useGeneratorStore((s) => s.slotA);
   const slotB = useGeneratorStore((s) => s.slotB);
   const swap = useGeneratorStore((s) => s.swap);
@@ -450,6 +450,7 @@ export const GeneratorStage: React.FC = () => {
             height={graphH}
             previewRamp={ramp}
             ghost={ghost}
+            ghostPoints={ghostPoints}
             interactive={!!tracks}
           />
           {!tracks && (

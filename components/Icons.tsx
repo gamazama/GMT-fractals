@@ -246,6 +246,24 @@ export const WaveIcon = ({ active }: { active?: boolean }) => (
     </svg>
 );
 
+export const PencilIcon = ({ active }: { active?: boolean }) => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "#22d3ee" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" fill={active ? "#22d3ee33" : "none"} />
+    </svg>
+);
+
+// Bias / redistribute: a 4-way arrow over points pushed off-centre — drag in 2D to
+// bias the selection's time (↔) and value (↕) distribution.
+export const BiasIcon = ({ active }: { active?: boolean }) => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "#22d3ee" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3v18M3 12h18" strokeOpacity="0.5" />
+        <circle cx="8" cy="9" r="1.4" fill={active ? "#22d3ee" : "currentColor"} stroke="none" />
+        <circle cx="15" cy="8" r="1.4" fill={active ? "#22d3ee" : "currentColor"} stroke="none" />
+        <circle cx="17" cy="15" r="1.4" fill={active ? "#22d3ee" : "currentColor"} stroke="none" />
+    </svg>
+);
+
 export const EyeIcon = ({ active }: { active: boolean }) => (
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={active ? 'text-gray-200' : 'text-gray-600'}>
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>

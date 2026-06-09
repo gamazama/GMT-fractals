@@ -6,6 +6,7 @@ import { calculateViewBounds } from '../utils/keyframeViewBounds';
 import { useEngineStore } from '../store/engineStore';
 import { useGraphInteraction } from '../hooks/useGraphInteraction';
 import { useGraphTools } from '../hooks/useGraphTools';
+import { usePencilTool, PENCIL_CURSOR } from '../hooks/usePencilTool';
 import { useAnimationStoreDataSource } from '../utils/GraphDataSource';
 import { GraphSidebar } from './graph/GraphSidebar';
 import { GraphToolbar } from './graph/GraphToolbar';
@@ -157,6 +158,19 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + GRAPH_LEFT_GUTTER_WIDTH;
     const canvasPixelToFrame = (px: number) => pixelToFrame(px - GRAPH_LEFT_GUTTER_WIDTH, view);
 
+    // Inverse of v2p (pixel-Y → value), normalised- and log-track-aware — for the
+    // shared selection-box MOVE handle and the Pencil tool.
+    const p2v = (py: number, tid: string) => {
+        const raw = pixelToValue(py, view);
+        if (!normalized) return raw;
+        const r = trackRanges[tid];
+        if (!r) return raw;
+        return isLogTrack(tid) ? Math.exp(r.min + raw * r.span) : r.min + raw * r.span;
+    };
+
+    // Pencil-stroke preview overlay (drawn imperatively by usePencilTool).
+    const pencilOverlayRef = useRef<HTMLCanvasElement>(null);
+
     // Live-timeline data source — one store-backed GraphDataSource shared by the
     // interaction hook, the tools hook and the selection bbox (the three pieces
     // that were store-coupled before the palette/timeline unification).
@@ -179,6 +193,44 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
     const tools = useGraphTools({
         sequence, trackIds, selectedTrackIds, selectedKeyframeIds, v2p, canvasPixelToFrame
     }, graphDataSource);
+
+    // --- PENCIL TOOL (shared with the gradient editor) ---
+    // Draws onto the SINGLE selected track (or the sole visible track); on release the
+    // stroke is fit to keyframes across the drawn span only. snapshot()+replaceKeyframes
+    // = one undo entry.
+    const pencil = usePencilTool({
+        interactionRef,
+        overlayRef: pencilOverlayRef,
+        view,
+        maxFrame: durationFrames,
+        frameToCanvasPixel,
+        canvasPixelToFrame,
+        getTarget: () => {
+            const sel = selectedTrackIds.filter(id => displayTrackIds.includes(id));
+            const tid = sel.length === 1 ? sel[0] : (displayTrackIds.length === 1 ? displayTrackIds[0] : null);
+            if (!tid) return null;
+            const keys = sequence.tracks[tid]?.keyframes ?? [];
+            let mn = Infinity, mx = -Infinity;
+            keys.forEach(k => { if (k.value < mn) mn = k.value; if (k.value > mx) mx = k.value; });
+            const range = (isFinite(mx - mn) && mx > mn) ? mx - mn : 1;
+            return {
+                trackId: tid,
+                eps: Math.max(1e-6, range * 0.02),
+                toValue: (py: number, vw: GraphViewTransform) => {
+                    const raw = pixelToValue(py, vw);
+                    if (!normalized) return raw;
+                    const r = trackRanges[tid];
+                    if (!r) return raw;
+                    return isLogTrack(tid) ? Math.exp(r.min + raw * r.span) : r.min + raw * r.span;
+                },
+            };
+        },
+        getKeys: (tid) => sequence.tracks[tid]?.keyframes ?? [],
+        commit: (tid, keys) => {
+            graphDataSource.snapshot?.();
+            graphDataSource.replaceKeyframes?.([{ trackId: tid, newKeys: keys }]);
+        },
+    });
 
     // --- VIEW MANIPULATION (Fit/Normalize) ---
     const applyFit = (bounds: { minV: number, maxV: number, minF: number, maxF: number } | null) => {
@@ -316,6 +368,12 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
 
     // --- EVENT HANDLERS ---
     const handleCanvasMouseDown = (e: React.MouseEvent) => {
+        // Pencil mode: a left-drag (no modifiers) sketches the selected track.
+        if (pencil.pencilMode && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            pencil.beginPencil(e);
+            return;
+        }
         // Ctrl + Click on empty space = Create Keyframe
         if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
              const rect = interactionRef.current?.getBoundingClientRect();
@@ -411,7 +469,7 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
 
             <div className="flex-1 relative group overflow-hidden" data-help-id="anim.graph" ref={containerRef}>
                 {/* CANVAS VIEW */}
-                <div ref={interactionRef} className="relative">
+                <div ref={interactionRef} className="relative" style={pencil.pencilMode ? { cursor: PENCIL_CURSOR } : undefined}>
                     <GraphCanvas
                         width={canvasWidth}
                         height={height}
@@ -432,6 +490,7 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
                         onMouseDown={handleCanvasMouseDown}
                         onContextMenu={handleContextMenu}
                         onDoubleClick={handleDoubleClick}
+                        cursor={pencil.pencilMode ? PENCIL_CURSOR : undefined}
                     />
                     <GraphSelectionBBox
                         sequence={sequence}
@@ -441,6 +500,15 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
                         frameToCanvasPixel={frameToCanvasPixel}
                         v2p={v2p}
                         dataSource={graphDataSource}
+                        p2v={p2v}
+                    />
+                    {/* Pencil-stroke preview — paints above the graph, below the toolbar/bbox. */}
+                    <canvas
+                        ref={pencilOverlayRef}
+                        width={canvasWidth}
+                        height={height}
+                        className="absolute top-0 left-0 pointer-events-none"
+                        style={{ width: canvasWidth, height }}
                     />
                 </div>
                 
@@ -480,6 +548,9 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
                     onSimplifyDown={tools.handleSimplifyDown}
                     selectedOnly={selectedOnly}
                     onToggleSelectedOnly={() => setSelectedOnly(s => !s)}
+                    pencilMode={pencil.pencilMode}
+                    onTogglePencil={() => pencil.setPencilMode(p => !p)}
+                    availableHeight={height - 30 - 8}
                 />
             </div>
         </div>
