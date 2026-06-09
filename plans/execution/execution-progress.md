@@ -455,6 +455,19 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **fullscreen-v2 WEB-SOTA augmentation DONE** (`wbjzozfw7`) → appended a researched
+  best-in-class section to `plans/fullscreen-v2-rescope.md`. **SOTA picks:** dither = blue-noise-sourced
+  **TPDF @ 1 LSB at the shader tail** (IGN as zero-asset fallback; ordered-Bayer demoted), **baked into the
+  8-bit PNG export**; spline = **monotone-cubic (Fritsch-Carlson), LUT-baked, NO tangent handles** (Bézier/
+  Catmull overshoot out-of-gamut on colour ramps); mesh = luminance heightfield, vertex-displaced plane +
+  analytic normals + IQ soft-shadow/AO/fog/rim, albedo=LUT; fluid = **Stam Stable Fluids, advect a SCALAR
+  density → index the LUT** (not RGB advection); parallax = 3-6 additive soft-sprite layers (parallax/size/
+  blur/desat by depth, instanced); splitscreen = **single-canvas shader WIPE + draggable ARIA divider**
+  (NOT two canvases); animated = LUT-offset palette cycling via local RAF + prefers-reduced-motion. **3
+  CHANGES vs the codebase-only re-scope (build streams use these):** (1) splitscreen → single-canvas shader
+  wipe (cheaper, resolves the old two-canvas plan); (2) spline → pin monotone-cubic LUT-baked, no
+  tangent-handle UI (lowers FS5 effort/risk); (3) dither → exact recipe blue-noise-TPDF@1LSB, bakes into PNG.
+  **fullscreen-v2 plan is now research-backed + execution-ready** (pending the user's gate decisions below).
 - 2026-06-08 — **POST-P2 kickoff: fullscreen-v2 RE-SCOPE (codebase) DONE + WEB-SOTA augmentation running ‖
   curve-editor refinements build issued in PARALLEL.** Re-scope `w6c10xhvi` → `plans/fullscreen-v2-rescope.md`
   (supersedes the early scope; codebase-grounded: GeometryParams-contract gate → Wave 1 polish/dithering +
