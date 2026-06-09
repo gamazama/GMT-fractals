@@ -17,9 +17,8 @@
  */
 
 import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../engine/utils/createBlueNoiseWebGL2';
-import {
-  VERT_QUAD, BLIT_MODE_BODY, FIELD_MODE_BODY, FIELD_UNIFORMS, RESERVED_UNIFORMS, wrapModeFragment,
-} from './ditherTail';
+import { VERT_QUAD, BLIT_MODE_BODY, RESERVED_UNIFORMS, wrapModeFragment } from './ditherTail';
+import { renderFieldDithered } from '../../palette/core/rampGeometry';
 import type { RGB } from '../../palette/core/oklab';
 import type { FullscreenMode, FullscreenModeContext, GeometryField } from './modeRegistry';
 
@@ -28,27 +27,8 @@ interface CompiledProgram {
   loc: Record<string, WebGLUniformLocation | null>;
 }
 
-/** Reserved ids for the built-in present programs in the program cache. */
+/** Reserved id for the built-in blit program in the program cache. */
 const BLIT_ID = '__blit__';
-const FIELD_ID = '__field__';
-
-/** CPU fallback: rasterize a position+coverage field through the ramp (no dither). Mirrors
- *  the GL field present for the WebGL2-unavailable path. */
-const rasterizeField = (field: { pos: Float32Array; cov: Float32Array }, ramp: RGB[], bg: RGB): Uint8ClampedArray => {
-  const { pos, cov } = field;
-  const out = new Uint8ClampedArray(pos.length * 4);
-  const last = ramp.length - 1;
-  for (let i = 0; i < pos.length; i++) {
-    const c = cov[i];
-    const o = i * 4;
-    const col = c > 0 ? (ramp[Math.round(Math.min(1, Math.max(0, pos[i])) * last)] ?? bg) : bg;
-    out[o] = bg.r + (col.r - bg.r) * c;
-    out[o + 1] = bg.g + (col.g - bg.g) * c;
-    out[o + 2] = bg.b + (col.b - bg.b) * c;
-    out[o + 3] = 255;
-  }
-  return out;
-};
 
 export class FullscreenCompositor {
   private canvas: HTMLCanvasElement;
@@ -57,8 +37,6 @@ export class FullscreenCompositor {
   private quadVbo: WebGLBuffer | null = null;
   private srcTex: WebGLTexture | null = null;
   private lutTex: WebGLTexture | null = null;
-  private posTex: WebGLTexture | null = null;
-  private covTex: WebGLTexture | null = null;
   private blueNoise: BlueNoiseTexture | null = null;
   private programs = new Map<string, CompiledProgram>();
   /** Dither on by default; the overlay can toggle (e.g. an A/B "show banding" check). */
@@ -84,9 +62,7 @@ export class FullscreenCompositor {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
     this.srcTex = this.makeTex(gl.NEAREST);
-    this.lutTex = this.makeTex(gl.LINEAR); // LINEAR so the field path interpolates the 256-LUT (smooth, no step banding)
-    this.posTex = this.makeTex(gl.NEAREST);
-    this.covTex = this.makeTex(gl.NEAREST);
+    this.lutTex = this.makeTex(gl.LINEAR); // for glQuad modes that sample uLut
     // Independent-channel RGBA blue-noise (Christoph Peters free set) — the dither tail sums
     // two independent channels for a true TPDF; a grayscale tile would degrade to uniform-PDF.
     this.blueNoise = createBlueNoiseWebGL2(gl, '/blueNoiseRGBA.png', () => onReady?.());
@@ -170,11 +146,6 @@ export class FullscreenCompositor {
     return this.programs.get(BLIT_ID) ?? this.buildProgram(BLIT_ID, wrapModeFragment(BLIT_MODE_BODY), []);
   }
 
-  private fieldProgram(): CompiledProgram {
-    return this.programs.get(FIELD_ID)
-      ?? this.buildProgram(FIELD_ID, wrapModeFragment(FIELD_MODE_BODY, FIELD_UNIFORMS), ['uPos', 'uCov', 'uBg']);
-  }
-
   /** Upload the active gradient LUT (256×4 RGBA8) for glQuad modes' `uLut`. */
   uploadLut(rgba1024: Uint8Array): void {
     const gl = this.gl;
@@ -184,8 +155,9 @@ export class FullscreenCompositor {
   }
 
   /** Bind the quad, the reserved preamble uniforms (resolution, blue-noise, dither, LUT),
-   *  and issue the draw. Shared by both present paths. */
-  private drawQuad(p: CompiledProgram): void {
+   *  and issue the draw. `dither` overrides the GL tail per-call (the field path pre-dithers on
+   *  the CPU via error diffusion, so it presents with the GL tail OFF). */
+  private drawQuad(p: CompiledProgram, dither: boolean): void {
     const gl = this.gl!;
     gl.useProgram(p.prog);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadVbo);
@@ -193,7 +165,7 @@ export class FullscreenCompositor {
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.uniform2f(p.loc['uResolution'], this.canvas.width, this.canvas.height);
-    gl.uniform1i(p.loc['uDither'], this.dither ? 1 : 0);
+    gl.uniform1i(p.loc['uDither'], dither ? 1 : 0);
     // Blue-noise tile on unit 2.
     if (this.blueNoise) {
       gl.activeTexture(gl.TEXTURE2);
@@ -212,12 +184,12 @@ export class FullscreenCompositor {
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
   }
 
-  /** Present a cpuRaster RGBA buffer (w×h, matching the backing store) through the dither
-   *  tail. Falls back to Canvas-2D `putImageData` (no dither) when WebGL2 is unavailable. */
-  presentRaster(buf: Uint8ClampedArray, w: number, h: number): void {
+  /** Blit a pre-computed RGBA buffer (w×h, matching the backing store) to the canvas. `dither`
+   *  applies the GL tail; pass false for buffers already dithered on the CPU. Falls back to
+   *  Canvas-2D `putImageData` (no dither) when WebGL2 is unavailable. */
+  private blit(buf: Uint8ClampedArray, w: number, h: number, dither: boolean): void {
     const gl = this.gl;
     if (!gl || !this.srcTex) {
-      // 2D fallback — no dither, but the geometry still shows.
       if (this.ctx2d) {
         const img = this.ctx2d.createImageData(w, h);
         img.data.set(buf);
@@ -231,43 +203,32 @@ export class FullscreenCompositor {
     const p = this.blitProgram();
     gl.useProgram(p.prog);
     gl.uniform1i(p.loc['uSrc'], 0);
-    this.drawQuad(p);
+    this.drawQuad(p, dither);
   }
 
-  /** Present a cpuField (position+coverage) mode: sample the LUT at the float position
-   *  (linear-filtered → smooth) and blend toward `bg` by coverage, dithered before the 8-bit
-   *  write. This is where the dither does real work (vs cpuRaster, which is pre-quantised).
-   *  Falls back to a CPU raster of the same field (no dither) when WebGL2 is unavailable. */
+  /** Present a cpuRaster RGBA buffer through the blue-noise GL tail (the buffer is raw pixels). */
+  presentRaster(buf: Uint8ClampedArray, w: number, h: number): void {
+    this.blit(buf, w, h, this.dither);
+  }
+
+  /** Present a cpuField mode: LINEAR-sample the ramp at the float position on the CPU and apply
+   *  serpentine Floyd–Steinberg ERROR DIFFUSION (when dither is on) — the smoothest still-image
+   *  result (column-average tracks the gradient exactly; far less banding than a per-pixel noise
+   *  tail, and self-limiting on flats). Then blit with the GL tail OFF (already dithered). */
   presentField(field: GeometryField, w: number, h: number, bg: RGB, ramp: RGB[]): void {
-    const gl = this.gl;
-    if (!gl || !this.posTex || !this.covTex) {
-      this.presentRaster(rasterizeField(field, ramp, bg), w, h);
-      return;
-    }
-    // R32F point-sampled (1:1 with the backing store) — no float-filter extension needed.
-    gl.activeTexture(gl.TEXTURE3);
-    gl.bindTexture(gl.TEXTURE_2D, this.posTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, w, h, 0, gl.RED, gl.FLOAT, field.pos);
-    gl.activeTexture(gl.TEXTURE4);
-    gl.bindTexture(gl.TEXTURE_2D, this.covTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, w, h, 0, gl.RED, gl.FLOAT, field.cov);
-    const p = this.fieldProgram();
-    gl.useProgram(p.prog);
-    gl.uniform1i(p.loc['uPos'], 3);
-    gl.uniform1i(p.loc['uCov'], 4);
-    gl.uniform3f(p.loc['uBg'], bg.r / 255, bg.g / 255, bg.b / 255);
-    this.drawQuad(p);
+    const rgba = renderFieldDithered({ width: w, height: h, pos: field.pos, cov: field.cov }, ramp, this.dither, bg);
+    this.blit(rgba, w, h, false);
   }
 
   /** Present a glQuad mode: render its wrapped fragment shader (sampling `uLut`) through the
-   *  dither tail. No-op (blank) under the 2D fallback. */
+   *  blue-noise dither tail. No-op (blank) under the 2D fallback. */
   presentMode(mode: FullscreenMode, ctx: FullscreenModeContext): void {
     const gl = this.gl;
     if (!gl) return;
     const p = this.getProgram(mode);
     gl.useProgram(p.prog);
     mode.setUniforms?.(gl, (name) => p.loc[name] ?? null, ctx);
-    this.drawQuad(p);
+    this.drawQuad(p, this.dither);
   }
 
   dispose(): void {
@@ -278,8 +239,6 @@ export class FullscreenCompositor {
     if (this.quadVbo) gl.deleteBuffer(this.quadVbo);
     if (this.srcTex) gl.deleteTexture(this.srcTex);
     if (this.lutTex) gl.deleteTexture(this.lutTex);
-    if (this.posTex) gl.deleteTexture(this.posTex);
-    if (this.covTex) gl.deleteTexture(this.covTex);
     if (this.blueNoise) gl.deleteTexture(this.blueNoise.texture);
     // Free the context promptly — open/close cycles otherwise exhaust the ~16-context cap.
     gl.getExtension('WEBGL_lose_context')?.loseContext();

@@ -87,9 +87,10 @@ export interface FullscreenMode {
   paramFields?: readonly FullscreenParamField[];
 
   // ── kind: 'cpuField' ──
-  /** Pure position+coverage field producer (e.g. `sampleGeometry`). The harness samples the
-   *  LUT at the float position in GL + dithers — so banding is removed, not baked. MUST stay
-   *  pure + deterministic. */
+  /** Pure position+coverage field producer (e.g. `sampleGeometry`). The harness LINEAR-samples
+   *  the LUT at the float position and applies CPU **error-diffusion** dither before the 8-bit
+   *  write (the smoothest still-gradient result — column average tracks the input, WIGGLE→0).
+   *  MUST stay pure + deterministic. */
   field?: (ctx: FullscreenModeContext) => GeometryField;
 
   // ── kind: 'cpuRaster' ──

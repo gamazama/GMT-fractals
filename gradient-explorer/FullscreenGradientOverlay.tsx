@@ -58,8 +58,10 @@ import { Z } from '../components/ui/zIndex';
 // bundle and the loading overlay paints first. @see the creation effect below.
 import type { FractalColorRenderer } from '../engine/fractal';
 
-/** Continuous geometries render up to this long edge (CSS stretches to fill). */
-const CONTINUOUS_MAX_DIM = 1440;
+/** Continuous geometries render up to this long edge. Higher than the old 1440 so the preview
+ *  renders at (near-)native device pixels: error-diffusion dither must be at display resolution,
+ *  or the browser's bilinear upscale stretches the step-runs and re-introduces banding. */
+const CONTINUOUS_MAX_DIM = 2560;
 
 /** The colormap-mapping modes the fractal mode offers (kernel `uColorMapping`
  *  indices) — a curated, visually-distinct subset of the 14 kernel modes. */
@@ -182,7 +184,10 @@ export const FullscreenGradientOverlay: React.FC = () => {
     const cap = isStochastic(fs.geom) ? RANDOM_MAX_DIM : CONTINUOUS_MAX_DIM;
     const cw = stage.clientWidth;
     const ch = stage.clientHeight;
-    const scale = Math.min(1, cap / Math.max(cw, ch, 1));
+    // Render at native device pixels (×DPR, capped at 2) so the dither lands on real display
+    // pixels — but never exceed `cap` on the long edge (bounds the CPU error-diffusion cost).
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const scale = Math.min(dpr, cap / Math.max(cw, ch, 1));
     const w = Math.max(1, Math.round(cw * scale));
     const h = Math.max(1, Math.round(ch * scale));
     comp.setSize(w, h);

@@ -340,3 +340,71 @@ export const renderGeometry = (
   }
   return out;
 };
+
+/**
+ * Render a pre-computed position+coverage field to RGBA, LINEAR-sampling the ramp at the FLOAT
+ * position (smooth — no 256-step quantisation) and, when `dither`, applying **serpentine
+ * Floyd–Steinberg error diffusion** before the 8-bit write.
+ *
+ * Error diffusion feeds each pixel's quantisation error forward, so the LOCAL average tracks the
+ * input exactly — a smooth gradient reproduces with essentially zero column-average deviation
+ * (WIGGLE→0), the smoothest still-image result and far better than per-pixel noise dither, which
+ * leaves residual banding OR adds visible grain. It also self-limits on flats: a constant region
+ * only toggles between its two bracketing levels (≤1 LSB), so islands don't get noisy. Sequential
+ * (CPU-only — can't run in a parallel fragment shader), which is why the GPU modes (fractal) use
+ * the blue-noise tail instead; the 2D geometry modes are CPU-computed, so they use this.
+ *
+ * Pure + deterministic given `(sample, ramp, dither)`.
+ *
+ * @see debug/test-dither.mts (the harness that picked error diffusion: WIGGLE 0.04 vs 0.24 noise)
+ */
+export const renderFieldDithered = (
+  sample: GeometrySample,
+  ramp: RGB[],
+  dither: boolean,
+  background: RGB = DEFAULT_BACKGROUND,
+): Uint8ClampedArray => {
+  const { width, height, pos, cov } = sample;
+  const last = ramp.length - 1;
+  const bg = [background.r, background.g, background.b];
+  const out = new Uint8ClampedArray(width * height * 4);
+  // Carried error: `cur` for the current row (incl. the horizontal neighbour), `nxt` for the
+  // row below. Padded by 1 px each side so the edge taps never go out of bounds. RGB interleaved.
+  const cur = new Float32Array((width + 2) * 3);
+  const nxt = new Float32Array((width + 2) * 3);
+  // LINEAR ramp lookup blended toward bg by coverage, per channel.
+  const target = (p: number, c: number, ch: number): number => {
+    const cc = c < 0 ? 0 : c > 1 ? 1 : c;
+    const t = (p < 0 ? 0 : p > 1 ? 1 : p) * last;
+    const i0 = Math.floor(t), f = t - i0;
+    const a = ramp[i0] ?? background, b = ramp[i0 < last ? i0 + 1 : last] ?? background;
+    const ca = ch === 0 ? a.r : ch === 1 ? a.g : a.b;
+    const cb = ch === 0 ? b.r : ch === 1 ? b.g : b.b;
+    return bg[ch] + (ca + (cb - ca) * f - bg[ch]) * cc;
+  };
+  for (let y = 0; y < height; y++) {
+    nxt.fill(0);
+    const ltr = (y & 1) === 0; // serpentine: alternate scan direction to break diffusion "worms"
+    const fwd = ltr ? 1 : -1;
+    for (let ii = 0; ii < width; ii++) {
+      const x = ltr ? ii : width - 1 - ii;
+      const i = y * width + x;
+      const o = i * 4;
+      for (let ch = 0; ch < 3; ch++) {
+        const v = target(pos[i], cov[i], ch) + (dither ? cur[(x + 1) * 3 + ch] : 0);
+        const q = v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
+        out[o + ch] = q;
+        if (dither) {
+          const e = v - q;
+          cur[(x + 1 + fwd) * 3 + ch] += (e * 7) / 16;
+          nxt[(x + 1 - fwd) * 3 + ch] += (e * 3) / 16;
+          nxt[(x + 1) * 3 + ch] += (e * 5) / 16;
+          nxt[(x + 1 + fwd) * 3 + ch] += (e * 1) / 16;
+        }
+      }
+      out[o + 3] = 255;
+    }
+    cur.set(nxt);
+  }
+  return out;
+};

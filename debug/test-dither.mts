@@ -22,6 +22,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { inflateSync, deflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { renderFieldDithered } from '../palette/core/rampGeometry';
+import type { RGB } from '../palette/core/oklab';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -280,6 +282,69 @@ console.log('  A smooth result has PLATEAU≈1 (no steps) and small WIGGLE.\n');
   }
 }
 
+// ── ERROR DIFFUSION — the WIGGLE→0 reference, via the PRODUCTION renderFieldDithered ─────────
+// Error diffusion feeds the quantisation error forward, so the local average tracks the input
+// almost exactly → a gradient's column averages are essentially perfect (WIGGLE→0). The geometry
+// modes ship this (CPU cpuField path); we test the REAL function here, not a re-impl. We feed a
+// grey ramp (index i → {i,i,i}) so the field position == brightness, and read back the dithered
+// column averages.
+const GREY_RAMP: RGB[] = Array.from({ length: 256 }, (_, i) => ({ r: i, g: i, b: i }));
+const edColAvgs = (colTruth: number[], h: number): number[] => {
+  const w = colTruth.length;
+  const pos = new Float32Array(w * h), cov = new Float32Array(w * h).fill(1);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) pos[y * w + x] = colTruth[x];
+  const rgba = renderFieldDithered({ width: w, height: h, pos, cov }, GREY_RAMP, true);
+  const out = new Array<number>(w).fill(0);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[x] += rgba[(y * w + x) * 4];
+  return out.map((s) => s / h);
+};
+
+// ── RESOLUTION: native vs capped-backing-then-bilinear-upscaled ──────────────────────────────
+// The preview renders at a capped backing width then the browser bilinearly upscales to the
+// display. Dither done at backing res breaks bands at BACKING pixels; upscaling stretches each
+// step-run into more DISPLAY pixels (and low-passes the high-freq noise). Model it on the 1D
+// column-average curve (bilinear-X preserves column means, so this is exact for steps/wiggle).
+const upscale1D = (a: number[], toW: number): number[] => {
+  const out = new Array<number>(toW);
+  for (let x = 0; x < toW; x++) {
+    const sx = (x / (toW - 1)) * (a.length - 1);
+    const i = Math.floor(sx), f = sx - i;
+    out[x] = a[i] + (a[Math.min(i + 1, a.length - 1)] - a[i]) * f;
+  }
+  return out;
+};
+
+console.log('\nWIGGLE→0 reference + RESOLUTION effect — dark 5%→15% gradient, 100px tall:');
+{
+  const ch = 100, b0 = 0.05, b1 = 0.15;
+  const colAvgBlue = (cw: number, cap: number): number[] => {
+    const out: number[] = []; const sl = (b1 - b0) / (cw - 1);
+    for (let x = 0; x < cw; x++) {
+      const t = b0 + (b1 - b0) * (x / (cw - 1)); let sum = 0;
+      for (let y = 0; y < ch; y++) sum += q8(ditherPixel([t, t, t], x, y, [sl, sl, sl], noise, cap)[0]);
+      out.push(sum / ch);
+    }
+    return out;
+  };
+  const truthCol = (cw: number) => Array.from({ length: cw }, (_, x) => b0 + (b1 - b0) * (x / (cw - 1)));
+  const idealLSB = (cw: number) => truthCol(cw).map((t) => t * 255);
+  const maxPlateau = (a: number[]) => { let best = 1, run = 1; for (let i = 1; i < a.length; i++) { if (Math.abs(a[i] - a[i - 1]) <= 0.1) run++; else run = 1; best = Math.max(best, run); } return best; };
+  const wiggle = (a: number[], ideal: number[]) => Math.sqrt(a.reduce((s, v, i) => s + (v - ideal[i]) ** 2, 0) / a.length);
+
+  const DISP = 1920;
+  // (a) blue-noise dithered at NATIVE display width
+  const nat = colAvgBlue(DISP, 8);
+  // (b) blue-noise dithered at capped backing 1440, then bilinear-upscaled to display
+  const up = upscale1D(colAvgBlue(1440, 8), DISP);
+  // (c) error diffusion (the SHIPPING geometry path) at native display width — the WIGGLE→0 ref
+  const ed = edColAvgs(truthCol(DISP), ch);
+  const ideal = idealLSB(DISP);
+  console.log(`  display ${DISP}px; old backing-cap 1440; metrics in DISPLAY pixels:`);
+  console.log(`    blue-noise cap8 @ native ${DISP}:  WIGGLE ${wiggle(nat, ideal).toFixed(3)}  (fractal/glQuad GL-tail path)`);
+  console.log(`    blue-noise cap8 @ 1440→upscaled:   WIGGLE ${wiggle(up, ideal).toFixed(3)}  (← old upscale widened/blurred it)`);
+  console.log(`    error diffusion @ native ${DISP}:   WIGGLE ${wiggle(ed, ideal).toFixed(3)}  (← SHIPPING geometry path, WIGGLE→0)`);
+}
+
 // ── flat-gate assertion: the island region must receive ZERO dither ──────────────────────────
 console.log('\nFLAT-GATE (island must be untouched):');
 let gateFail = 0;
@@ -297,28 +362,32 @@ for (const sc of scenes) {
   console.log(`  ${ok ? '✓' : '✗'} ${sc.name}: flat region max 8-bit delta = ${maxDelta} (want 0)`);
 }
 
-// ── visual montage: rows = scenes, cols = [truth · none · cap4 · cap8 · cap16] ────────────────
-const variants: { label: string; cap: number; dither: boolean }[] = [
-  { label: 'truth', cap: 0, dither: false }, // truth ≈ no-dither here, but shown as the reference column
-  { label: 'no-dither', cap: 0, dither: false },
-  { label: 'cap 4', cap: 4, dither: true },
-  { label: 'cap 8 (ship dark)', cap: 8, dither: true },
-  { label: 'cap 16', cap: 16, dither: true },
-];
+// ── visual montage: rows = scenes, cols = [truth · no-dither · blue-noise · error-diffusion] ──
+// Compares the two SHIPPING paths: blue-noise GL tail (fractal/glQuad) vs error diffusion
+// (geometry). Pre-render the error-diffusion buffer per scene (whole-field; grey ramp, pos=luma).
+const edBuffers = scenes.map((sc) => {
+  const pos = new Float32Array(sc.w * sc.h), cov = new Float32Array(sc.w * sc.h).fill(1);
+  for (let y = 0; y < sc.h; y++) for (let x = 0; x < sc.w; x++) { const c = sc.truth(x, y); pos[y * sc.w + x] = c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722; }
+  return renderFieldDithered({ width: sc.w, height: sc.h, pos, cov }, GREY_RAMP, true);
+});
+const variants = ['truth', 'no-dither', 'blue-noise cap8', 'error-diffusion (ship)'];
+const cellRGB = (si: number, vi: number, x: number, y: number): [number, number, number] => {
+  const sc = scenes[si]; const c = sc.truth(x, y);
+  if (vi === 0) return [c[0] * 255, c[1] * 255, c[2] * 255];
+  if (vi === 1) return [q8(c[0]), q8(c[1]), q8(c[2])];
+  if (vi === 2) { const d = ditherPixel(c, x, y, sc.slope(x, y), noise, 8); return [q8(d[0]), q8(d[1]), q8(d[2])]; }
+  const o = (y * sc.w + x) * 4; const b = edBuffers[si]; return [b[o], b[o + 1], b[o + 2]];
+};
 const GAP = 8, COLS = variants.length;
 const mw = W * COLS + GAP * (COLS + 1);
 const mh = H * scenes.length + GAP * (scenes.length + 1);
 const montage: Image = { w: mw, h: mh, data: new Uint8Array(mw * mh * 4).fill(40) };
 for (let i = 0; i < montage.data.length; i += 4) montage.data[i + 3] = 255;
 scenes.forEach((sc, si) => {
-  variants.forEach((v, vi) => {
+  variants.forEach((_v, vi) => {
     const ox = GAP + vi * (W + GAP), oy = GAP + si * (H + GAP);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const c = sc.truth(x, y);
-      // "truth" column writes the unquantised float (the smooth reference); others quantise.
-      let rgb: [number, number, number];
-      if (vi === 0) rgb = [c[0] * 255, c[1] * 255, c[2] * 255];
-      else { const d = v.dither ? ditherPixel(c, x, y, sc.slope(x, y), noise, v.cap) : c; rgb = [q8(d[0]), q8(d[1]), q8(d[2])]; }
+      const rgb = cellRGB(si, vi, x, y);
       const o = ((oy + y) * mw + (ox + x)) * 4;
       montage.data[o] = rgb[0]; montage.data[o + 1] = rgb[1]; montage.data[o + 2] = rgb[2]; montage.data[o + 3] = 255;
     }
@@ -327,6 +396,6 @@ scenes.forEach((sc, si) => {
 const outPath = join(ROOT, 'debug', 'dither-lab.png');
 writeFileSync(outPath, encodePng(montage));
 console.log(`\nMontage → ${outPath}`);
-console.log('Columns: ' + variants.map((v) => v.label).join(' · '));
+console.log('Columns: ' + variants.join(' · '));
 console.log(`\n${gateFail === 0 ? '✓ flat-gate holds' : `✗ ${gateFail} flat-gate FAILURE(S)`}`);
 process.exit(gateFail === 0 ? 0 : 1);
