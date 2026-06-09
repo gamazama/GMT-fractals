@@ -464,6 +464,33 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **✅ fullscreen-v2 SESSION 1 (FOUNDATION) MERGED** into integration `9fc675a` (merge of
+  `exec/fs-gate-splitscreen`, 9 commits). Gate green (tsc 0 · build · test:palette · **test:dither** flat-gate
+  holds). User visual-confirmed ("perfect smoothness"). **THE SEAM IS FROZEN** (documented in
+  `plans/fullscreen-v2-rescope.md` → "Mode plug-in seam (FROZEN)") — proven by 7 consumers (6 geometries +
+  fractal migrated onto it). **Foundation shipped:** GeometryParams flat-optional + per-geom shape fields
+  (byte-identical at defaults, determinism harness extended); `registerFullscreenMode` registry
+  (`gradient-explorer/fullscreen/`); shared DITHER — geometry uses CPU **error-diffusion** (`renderFieldDithered`,
+  pure/deterministic, WIGGLE 0.04 vs blue-noise 0.24, self-limiting on flats), GL paths use the shared
+  **blue-noise TPDF tail** (`engine/fractal/shaders/ditherTail.ts`), **native-device-pixel render** (dropped
+  the 1440 upscale that blurred dither), export bakes it; **SPLITSCREEN = app-top / live-preview-bottom**
+  (ARIA divider, preview live-follows the edited gradient, `-split.png`) — **the A/B/shader-wipe framing in
+  the doc's §2.5/SOTA/RATIFIED is VOID/historical; shipped = the user's app+preview split.**
+  **★ FROZEN SEAM CONTRACT (parallel modes code against this, read-only/additive):** add a mode = write
+  `gradient-explorer/fullscreen/modes/<id>Mode.ts(x)` exporting a `FullscreenMode` + one import line in
+  `modes/index.ts` (toolbar/store/export/split auto-pick-up). **Three faces:** `paramFields` (flat-optional
+  GeometryParams keys + UI meta) · **render kind** · `Controls` (self-contained React). **Render kinds:**
+  `cpuField` (field→{pos,cov}, CPU linear-LUT + error-diffusion, pure+deterministic — geometry) · `glQuad`
+  (fragBody `vec3 modeColor(vec2 uv)` + uniforms; harness wraps preamble+sampleLut+blue-noise-tail; **reserved
+  tex units 0/1/2 → use ≥3** → **SPLINE**: sdSegment over control polyline → arc-length → sampleLut) ·
+  `ownCanvas` (owns canvas/RAF/dither, include `DITHER_TAIL_GLSL` → **LIQUIFY / PARALLAX**). **Invariants:**
+  read colour only from `ctx`; cpuField/field stay pure+deterministic (harness-pinned); stable `id` (persisted
+  + export filename); `setUniforms` avoids `RESERVED_UNIFORMS`. **⚠ ONE non-additive spot:** the overlay hosts
+  one `ownCanvas` inline (fractal) — **the FIRST ownCanvas session (Liquify or Parallax) must lift a generic
+  `mount()` face onto the contract first**, not add a second inline branch. **Deferred (non-blocking):** wire
+  `paramFields`→store+generic sliders (FS1 polish wave) · extract a shared raw-WebGL2 helper · DPR/cap
+  unify (fractal 1600 DPR-blind still bands on upscale) · lazy-load the compositor blue-noise tile.
+  **→ NOW FANNING OUT IN PARALLEL (worktrees): SPLINE (glQuad) · LIQUIFY (ownCanvas) · PARALLAX (ownCanvas).**
 - 2026-06-08 — **fullscreen-v2 EXECUTION PLAN: gate-first → parallel mode fan-out** (user wants the modes
   "largely in parallel"). Sequencing (mirrors the Phase-0-freeze-then-fan-out pattern that built this app):
   **Session 1 = GeometryParams flat-optional GATE + shared DITHERING render-tail + SPLITSCREEN**, which must
