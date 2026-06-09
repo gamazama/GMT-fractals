@@ -14,22 +14,34 @@
  *     no offset-tap smearing). Each output channel uses a distinct channel pair so the three
  *     are decorrelated. (Requires the tile's channels to be independent — a grayscale tile
  *     would degrade this to uniform-PDF, the classic reason a "1 LSB dither" still bands.)
- *   • AMPLITUDE AUTO-SCALES to the local colour slope: a quantisation step only bands where the
- *     gradient changes by < 1 LSB/pixel (it then spreads into a wide flat band), so amplitude is
- *     raised by 1/slope there (capped) to span the step; steep gradients keep 1 LSB. `fwidth(c)`
- *     is the per-pixel colour change the eye would otherwise read as a band edge.
- *   • The cap is DARK-WEIGHTED: darks band most perceptibly (the eye is most sensitive to
- *     low-luminance steps — Weber) and their gradients are shallow, so the 0–20% range gets a
- *     much higher amplitude ceiling than midtones/brights.
+ *   • AMPLITUDE = NUMBER OF DITHER LEVELS NEEDED = band width: a 1-LSB step spread over an
+ *     N-pixel band (slope 1/N LSB/pixel) needs ~N dithered levels to read smooth, i.e.
+ *     amplitude ≈ 1/slope. `fwidth(c)` is the per-pixel colour change.
+ *   • FLAT-GATED: a region of constant colour (slope ≈ 0 — a fractal island, an intentional
+ *     solid fill) has NO step to interpolate, so it gets ZERO dither — dithering it would be
+ *     adding noise, not removing banding. Only a region that actually varies is dithered.
+ *   • CAPPED + DARK-WEIGHTED: 1/slope is clamped so a near-flat gradient doesn't become
+ *     full-range noise; the ceiling is higher in darks (the eye is most sensitive to
+ *     low-luminance steps — Weber), where banding is worst.
  *   • Tapered to 0 at pure black/white so 0 and 1 are never dithered into noise.
+ *
+ * The four tuning constants are calibrated by `debug/test-dither.mts` (a banding/noise metric
+ * + visual montage); keep them in sync with that harness.
  *
  * Requires the including shader to declare:
  *   `uniform sampler2D uBlueNoise; uniform vec2 uBlueNoiseRes; uniform bool uDither;`
  * and call `ditherTail(color, gl_FragCoord.xy)` immediately before writing the fragment.
  */
 export const DITHER_TAIL_GLSL = /* glsl */ `
-const float DITHER_MAX_DARK = 8.0;  // amplitude ceiling on near-flat DARK bands (LSB)
-const float DITHER_MAX_LIGHT = 2.5; // ceiling on midtone/bright flats (LSB)
+// Calibrated by debug/test-dither.mts: a proper TPDF + blue noise removes banding at ~1 LSB;
+// pushing amplitude higher RE-introduces low-frequency error (over-large swings don't average
+// out under the eye's low-pass) and explodes noise. So the ceiling stays low — the blue noise's
+// spatial density does the interpolation, not the amplitude. (cap1 banding 0.04 = cap2, half
+// the noise; cap8 banding 1.69. See the harness BANDING/NOISE table.)
+const float DITHER_FLAT_LO = 0.006; // slope (LSB/px) below which a region is "flat" → no dither
+const float DITHER_FLAT_HI = 0.030; // slope at/above which the flat-gate is fully open
+const float DITHER_MAX_DARK = 2.0;  // amplitude ceiling on near-flat DARK bands (LSB)
+const float DITHER_MAX_LIGHT = 1.5; // ceiling on midtone/bright flats (LSB)
 vec3 ditherTail(vec3 c, vec2 fragCoord) {
   if (!uDither) return c;
   vec2 res = max(uBlueNoiseRes, vec2(1.0));               // REPEAT wrap tiles over any size
@@ -38,13 +50,16 @@ vec3 ditherTail(vec3 c, vec2 fragCoord) {
   // the blue-noise spectrum preserved (no offset-tap smearing).
   vec4 bn = texture(uBlueNoise, fragCoord / res);
   vec3 tpdf = vec3(bn.r + bn.g, bn.b + bn.a, bn.a + bn.r) - 1.0;
-  // Per-channel local slope in LSB/pixel; shallow slope ⇒ wide band ⇒ boost amplitude.
+  // Local slope in LSB/pixel (max channel). Flat (slope≈0) ⇒ no banding ⇒ gate dither off.
   vec3 slopeLSB = fwidth(c) * 255.0;
+  float s = max(slopeLSB.r, max(slopeLSB.g, slopeLSB.b));
+  float gate = smoothstep(DITHER_FLAT_LO, DITHER_FLAT_HI, s); // 0 on flats, 1 on real gradients
   // Dark-weighted ceiling: value 0 → DARK cap, value ≥ 0.5 → LIGHT cap (linear between).
   float value = max(c.r, max(c.g, c.b));
   float maxLSB = mix(DITHER_MAX_DARK, DITHER_MAX_LIGHT, clamp(value * 2.0, 0.0, 1.0));
-  vec3 amp = clamp(1.0 / max(slopeLSB, 1e-3), vec3(1.0), vec3(maxLSB));
+  // Levels needed = band width = 1/slope, capped; gated to 0 on flats.
+  float ampLSB = clamp(1.0 / max(s, 1e-3), 1.0, maxLSB) * gate;
   vec3 taper = clamp(min(c, 1.0 - c) * 255.0, 0.0, 1.0);  // 0 at extremes, 1 in the interior
-  return c + tpdf * amp * taper * (1.0 / 255.0);
+  return c + tpdf * ampLSB * taper * (1.0 / 255.0);
 }
 `;
