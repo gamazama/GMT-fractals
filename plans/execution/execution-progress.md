@@ -464,6 +464,16 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **fullscreen-v2 EXECUTION PLAN: gate-first → parallel mode fan-out** (user wants the modes
+  "largely in parallel"). Sequencing (mirrors the Phase-0-freeze-then-fan-out pattern that built this app):
+  **Session 1 = GeometryParams flat-optional GATE + SPLITSCREEN**, which must **DEFINE + FREEZE the mode
+  plug-in seam** (the flat-optional `GeometryParams` contract + the mode dispatch/registration seam in
+  `FullscreenGradientOverlay`); splitscreen is the first consumer proving the seam. **THEN fan out in
+  parallel, each in its OWN WORKTREE** (true parallelism; worktrees painless via the additionalDirectories
+  fix): **Liquify · spline-path · parallax** — self-contained mode modules on the frozen seam → minimal
+  shared-overlay/store contention. Parallelizing modes BEFORE the seam is frozen = each guesses the contract
+  + collides on the shared overlay → rework; hence gate-first. Session 1 issued in-`dev`
+  (`exec/fs-gate-splitscreen`); parallel modes branch off integration into worktrees once it merges.
 - 2026-06-08 — **✅ CURVE-EDITOR REFINEMENTS MERGED** into integration `325a579` (merge of
   `exec/curve-editor-refinements`, 4 commits, 12 files +690/−78). Gate green (tsc 0 · test:palette all-pass).
   User visual-confirmed BOTH editors. Shipped all 5 items — box-selection **centre move handle** + **bias
