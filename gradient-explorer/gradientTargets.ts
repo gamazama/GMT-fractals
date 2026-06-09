@@ -80,19 +80,33 @@ type PanelRec = { location?: string; isOpen?: boolean };
 const panelOf = (id: string): PanelRec | undefined =>
     (useEngineStore.getState().panels as Record<string, PanelRec>)[id];
 
-/** Is a mode panel currently shown (its content on screen)? */
+/** The explorer MODE panels (setup.ts) — the centre Stage mirrors whichever is the active
+ *  right tab via `activeRightTab`, so their content stays on screen even when the right dock
+ *  is COLLAPSED. Any other dock panel — the Favients shelf — has NO centre mirror, so it is
+ *  only visible while its dock is expanded, and must be UN-collapsed (not merely navigated) to
+ *  be revealed, on EITHER side. Keying the reveal logic on this set (not on dock side) is what
+ *  lets a right-docked Favients reveal correctly. */
+const CENTRE_MIRRORED_MODES = new Set(['Picker', 'Generator', 'Image', 'Stops']);
+
+/** Is a panel currently shown (its content on screen)? */
 const isPanelShown = (id: string): boolean => {
     const s = useEngineStore.getState();
     const panel = panelOf(id);
     if (!panel) return false;
     if (panel.location === 'left') return !s.isLeftDockCollapsed && !!panel.isOpen;
-    return (s.activeRightTab as string) === id; // right-dock tab
+    // Right dock: a centre-mirrored mode shows whenever it's the active tab (the Stage mirrors
+    // it even while collapsed); a non-mirrored shelf (Favients) needs the dock expanded.
+    const isActiveTab = (s.activeRightTab as string) === id;
+    if (CENTRE_MIRRORED_MODES.has(id)) return isActiveTab;
+    return isActiveTab && !s.isRightDockCollapsed && !!panel.isOpen;
 };
 
-/** Reveal a mode panel (switch/open it; un-collapse a side dock). Keeps the selection. */
+/** Reveal a panel (switch/open it; un-collapse its OWN side dock). Keeps the selection. */
 const revealPanel = (id: string): void => {
     const s = useEngineStore.getState();
-    if (panelOf(id)?.location === 'left') s.setDockCollapsed('left', false);
+    const loc = panelOf(id)?.location;
+    if (loc === 'left') s.setDockCollapsed('left', false);
+    else if (loc === 'right') s.setDockCollapsed('right', false);
     s.togglePanel(id as PanelId, true);
 };
 
@@ -106,13 +120,15 @@ const collapsedDockSide = (id: string): 'left' | 'right' | null => {
 };
 
 /**
- * Navigate to a panel WITHOUT un-collapsing its dock. Right-dock mode panels mirror to the
- * centre stage (which reads `activeRightTab`), so switching the active tab navigates the page
- * while the user keeps their collapsed controls. The left-dock Favients shelf has no centre
- * mirror, so it must be revealed (un-collapsed) to be usable.
+ * Navigate to a panel from its collapsed-dock well. A centre-mirrored MODE panel mirrors to the
+ * stage (which reads `activeRightTab`), so switching the active tab navigates the page while the
+ * user keeps their collapsed controls. The Favients shelf has NO centre mirror — on EITHER dock
+ * side — so it must be REVEALED (un-collapsed) to be usable; navigating its tab alone would
+ * leave the shelf hidden behind the collapsed dock. Keyed on mode membership, not dock side, so
+ * a right-docked Favients reveals correctly.
  */
 const navigateToPanel = (id: string): void => {
-    if (panelOf(id)?.location === 'right') {
+    if (panelOf(id)?.location === 'right' && CENTRE_MIRRORED_MODES.has(id)) {
         useEngineStore.setState((st) => ({
             panels: { ...st.panels, [id]: { ...st.panels[id], isOpen: true } },
             activeRightTab: id as PanelId,
