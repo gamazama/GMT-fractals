@@ -17,43 +17,14 @@
 
 import type { Track, Keyframe } from '../../types';
 import { evaluateTrackValue } from '../../utils/timelineUtils';
-import { AnimationMath } from '../../engine/math/AnimationMath';
+import { dpIndices, reTangentBezier } from '../../utils/CurveFitting';
+
+// reTangentBezier lives in the shared CurveFitting util (so the graph editors'
+// Bias/Pencil tools share it); re-exported here for the palette's existing callers.
+export { reTangentBezier };
 
 /** t∈[0,1] ↔ frame 0..255, so frame index == sample index (clean 1:1). */
 export const CURVE_FRAMES = 255;
-
-/** Douglas-Peucker on the (frame, value) polyline → kept sample indices (incl. ends). */
-const dpIndices = (vals: number[], eps: number): number[] => {
-  const n = vals.length;
-  if (n <= 2) return vals.map((_, i) => i);
-  const keep = new Uint8Array(n);
-  keep[0] = 1;
-  keep[n - 1] = 1;
-  const stack: [number, number][] = [[0, n - 1]];
-  while (stack.length) {
-    const [a, b] = stack.pop()!;
-    if (b - a < 2) continue;
-    // Perpendicular distance of each interior point to the chord a→b (in frame/value space).
-    const x0 = a, y0 = vals[a], x1 = b, y1 = vals[b];
-    const dx = x1 - x0, dy = y1 - y0;
-    const denom = Math.hypot(dx, dy) || 1;
-    let worst = -1, worstD = eps;
-    for (let i = a + 1; i < b; i++) {
-      const d = Math.abs(dy * (i - x0) - dx * (vals[i] - y0)) / denom;
-      if (d > worstD) {
-        worstD = d;
-        worst = i;
-      }
-    }
-    if (worst >= 0) {
-      keep[worst] = 1;
-      stack.push([a, worst], [worst, b]);
-    }
-  }
-  const out: number[] = [];
-  for (let i = 0; i < n; i++) if (keep[i]) out.push(i);
-  return out;
-};
 
 export interface RampToTrackOptions {
   /** Simplification tolerance in value units — smaller = more keyframes, closer fit. */
@@ -82,26 +53,6 @@ export const rampToTrack = (
   }));
   return { id, type: 'float', label, keyframes, color: opts.color };
 };
-
-/**
- * Recompute Auto (Catmull-Rom) tangents for the Bezier keyframes matched by `pred`
- * (default: every key), leaving Step/Linear and hand-broken (`autoTangent === false`)
- * keys untouched. Shared by the initial fit (rampToBezierTrack), the editor's
- * add-key, and the Bias redistribution — so the "smooth out of the box" convention
- * lives in one place. Expects `keys` pre-sorted by frame (neighbours are array-adjacent).
- */
-export const reTangentBezier = (
-  keys: Keyframe[],
-  pred?: (k: Keyframe, i: number) => boolean,
-): Keyframe[] =>
-  keys.map((k, n) => {
-    if (k.interpolation !== 'Bezier' || k.autoTangent === false) return k;
-    if (pred && !pred(k, n)) return k;
-    const prev = n > 0 ? keys[n - 1] : undefined;
-    const next = n < keys.length - 1 ? keys[n + 1] : undefined;
-    const { l, r } = AnimationMath.calculateTangents(k, prev, next, 'Auto');
-    return { ...k, leftTangent: l, rightTangent: r, tangentMode: 'Aligned', autoTangent: true };
-  });
 
 /**
  * Fit a 256-value channel to an editable Track with smooth, DRAGGABLE Bezier
