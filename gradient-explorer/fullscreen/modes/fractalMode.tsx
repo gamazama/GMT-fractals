@@ -25,7 +25,6 @@
 import React, { useCallback, useState } from 'react';
 import { ScalarInput } from '../../../components/inputs/ScalarInput';
 import { createLogMapping } from '../../../components/inputs/primitives/FormatUtils';
-import { renderStopsToBuffer } from '../../../palette/core/gmtGradient';
 import {
   getFullscreenState,
   subscribeFullscreen,

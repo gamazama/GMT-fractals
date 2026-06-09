@@ -53,7 +53,9 @@ let activeControl: { reset: () => void } | null = null;
 
 const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
   const container = host.container;
-  const glCanvas = document.createElement('canvas');
+  // `glCanvas` is reassigned by rebuild() (a fresh element per density change — see below), so it's
+  // a `let`; `overlay` (which owns the pointer listeners) is stable.
+  let glCanvas = document.createElement('canvas');
   glCanvas.className = 'absolute inset-0 w-full h-full';
   const overlay = document.createElement('canvas');
   overlay.className = 'absolute inset-0 w-full h-full touch-none cursor-crosshair';
@@ -99,10 +101,20 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
   resize();
 
   // ── rebuild on a density change (new vert count ⇒ new buffers) ──
+  // `renderer.dispose()` calls `WEBGL_lose_context.loseContext()`, which permanently kills the
+  // context for that canvas element — so we must rebuild on a FRESH canvas (a lost context can't be
+  // re-acquired from the same node). We also carry the current dither state across (a new renderer
+  // defaults dither=true; the overlay only forwards it on a CHANGE), so a user's "off" survives.
   const rebuild = (n: number): void => {
+    const dither = renderer.dither;
     renderer.dispose();
+    glCanvas.remove();
+    glCanvas = document.createElement('canvas');
+    glCanvas.className = 'absolute inset-0 w-full h-full';
+    container.insertBefore(glCanvas, overlay); // keep the mesh under the signifier overlay
     mesh = new LiquifyMesh(n);
     renderer = new LiquifyRenderer(glCanvas, mesh.indices, mesh.t);
+    renderer.dither = dither;
     const ctx = host.getContext();
     if (ctx.lut.length) renderer.setLut(ctx.lut);
     resize();

@@ -84,6 +84,7 @@ export class LiquifyMesh {
   readonly handles: LiquifyHandle[] = [];
 
   private mlsW: Float64Array; // scratch: per-handle weight during an MLS solve
+  private smoothScratch: Float32Array; // reused per-pass snapshot for the Taubin (Jacobi) smoother
   /** True while the soft body still has kinetic energy (or was just disturbed) — gates the solve. */
   private settled = true;
 
@@ -100,6 +101,7 @@ export class LiquifyMesh {
     this.vel = new Float32Array(c2);
     this.t = new Float32Array(this.count);
     this.invMass = new Float32Array(this.count).fill(1);
+    this.smoothScratch = new Float32Array(c2);
 
     for (let y = 0; y < n; y++) {
       for (let x = 0; x < n; x++) {
@@ -301,8 +303,8 @@ export class LiquifyMesh {
           this.warp[2 * k + 1] *= (1 - decay);
           this.sculpt[2 * k] = this.mlsBase[2 * k] + this.warp[2 * k];
           this.sculpt[2 * k + 1] = this.mlsBase[2 * k + 1] + this.warp[2 * k + 1];
+          // (physics-off: the live mesh follows sculpt via the loop's syncToSculpt — no inline write)
           if (physicsOn && this.invMass[k] > 0) { this.vel[2 * k] *= 0.5; this.vel[2 * k + 1] *= 0.5; }
-          else if (!physicsOn) { this.pos[2 * k] = this.sculpt[2 * k]; this.pos[2 * k + 1] = this.sculpt[2 * k + 1]; }
           continue;
         }
       }
@@ -310,11 +312,10 @@ export class LiquifyMesh {
       this.warp[2 * k + 1] += oy;
       this.sculpt[2 * k] = this.mlsBase[2 * k] + this.warp[2 * k];
       this.sculpt[2 * k + 1] = this.mlsBase[2 * k + 1] + this.warp[2 * k + 1];
+      // physics-off: the live mesh follows sculpt via the loop's syncToSculpt (no inline write).
       if (physicsOn && this.invMass[k] > 0) {
         // Impart a little kinetic energy so the body visibly comes alive under the brush.
         this.vel[2 * k] += ox * 6; this.vel[2 * k + 1] += oy * 6;
-      } else if (!physicsOn) {
-        this.pos[2 * k] = this.sculpt[2 * k]; this.pos[2 * k + 1] = this.sculpt[2 * k + 1];
       }
     }
     this.disturb();
@@ -326,9 +327,10 @@ export class LiquifyMesh {
     const lambda = 0.5 * strength;
     const mu = -0.53 * strength; // |μ| > λ keeps the passband flat (Taubin) → no shrink
     const r2 = radius * radius;
+    const src = this.smoothScratch;
     for (const factor of [lambda, mu]) {
-      // Snapshot warp so the Laplacian reads pre-pass neighbours (Jacobi).
-      const src = this.warp.slice();
+      // Snapshot warp so the Laplacian reads pre-pass neighbours (Jacobi) — reused buffer, no alloc.
+      src.set(this.warp);
       for (let k = 0; k < this.count; k++) {
         const sx = this.sculpt[2 * k], sy = this.sculpt[2 * k + 1];
         const dx0 = sx - bx, dy0 = sy - by;
@@ -361,8 +363,9 @@ export class LiquifyMesh {
     const lambda = 0.5 * strength * 0.3; // scaled down — this runs EVERY frame
     const mu = -0.53 * strength * 0.3;
     const n = this.n;
+    const src = this.smoothScratch;
     for (const factor of [lambda, mu]) {
-      const src = this.warp.slice();
+      src.set(this.warp);
       for (let k = 0; k < this.count; k++) {
         const x = k % n, y = (k / n) | 0;
         let nx = 0, ny = 0, cnt = 0;
@@ -418,7 +421,13 @@ export class LiquifyMesh {
     // Direct PBD stiffness (compliance↔stiffness): pin = 1 (snap), low stiffness = weak pull.
     const anchorK = 0.02 + 0.98 * stiffness;
     const edgeK = 0.2 + 0.8 * stiffness;
-    const velDamp = Math.pow(1 - 0.9 * damping, 1 / SUB);
+    // A small damping FLOOR so even at the slider's 0 the spring still loses energy — otherwise an
+    // undamped anchor spring rings forever (and never settles). Caps below 1 at the top end too.
+    const velDamp = Math.pow(1 - Math.min(0.99, 0.06 + 0.9 * damping), 1 / SUB);
+    // Position-based constraints feed their correction back into velocity (= momentum); at high
+    // stiffness + low damping the anchor's large one-step pull, divided by the tiny substep dt, can
+    // briefly spike velocity. Clamp the per-substep speed so a poke can never explode the sheet.
+    const MAXV = 16, MAXV2 = MAXV * MAXV;
     const n = this.n;
     let maxV2 = 0;
     for (let s = 0; s < SUB; s++) {
@@ -453,10 +462,11 @@ export class LiquifyMesh {
       // velocity
       for (let k = 0; k < this.count; k++) {
         if (this.invMass[k] === 0) continue;
-        const vx = (this.pos[2 * k] - this.prev[2 * k]) / sdt;
-        const vy = (this.pos[2 * k + 1] - this.prev[2 * k + 1]) / sdt;
+        let vx = (this.pos[2 * k] - this.prev[2 * k]) / sdt;
+        let vy = (this.pos[2 * k + 1] - this.prev[2 * k + 1]) / sdt;
+        let v2 = vx * vx + vy * vy;
+        if (v2 > MAXV2) { const s = MAXV / Math.sqrt(v2); vx *= s; vy *= s; v2 = MAXV2; }
         this.vel[2 * k] = vx; this.vel[2 * k + 1] = vy;
-        const v2 = vx * vx + vy * vy;
         if (v2 > maxV2) maxV2 = v2;
       }
     }

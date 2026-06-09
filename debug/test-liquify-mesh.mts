@@ -56,10 +56,35 @@ console.log('[3] every forward-warp brush stays finite');
 {
   for (const brush of ['push', 'twirl', 'bloat', 'pucker', 'pull', 'smooth', 'restore'] as const) {
     const m = new LiquifyMesh(48);
+    const flat = m.pos.slice();
     for (let s = 0; s < 8; s++) m.applyBrush(brush, 0.5, 0.5, 0.2, 0.8, 0.03, -0.02, false);
+    m.syncToSculpt(); // physics-off: the loop reflects sculpt → pos; mirror that before asserting
     ok(finite(m.pos), `${brush}: pos finite after 8 strokes`);
     ok(inBounds(m.pos, -2, 3), `${brush}: pos bounded`);
+    // Displacing brushes must move the flat mesh; smooth/restore are CORRECTIVE (they act on an
+    // existing deformation), so on a flat mesh they're correctly no-ops — don't assert movement.
+    if (brush !== 'smooth' && brush !== 'restore') {
+      let moved = false;
+      for (let i = 0; i < m.pos.length; i++) if (Math.abs(m.pos[i] - flat[i]) > 1e-4) { moved = true; break; }
+      ok(moved, `${brush}: actually deformed the mesh`);
+    }
   }
+}
+
+console.log('[3b] corrective brushes act on an existing deformation');
+{
+  const dev = (m: LiquifyMesh, flat: Float32Array): number => {
+    let s = 0; for (let i = 0; i < m.pos.length; i++) s += Math.abs(m.pos[i] - flat[i]); return s;
+  };
+  // restore decays an existing warp back toward flat
+  const m = new LiquifyMesh(48);
+  const flat = m.pos.slice();
+  for (let s = 0; s < 6; s++) m.applyBrush('bloat', 0.5, 0.5, 0.25, 0.9, 0, 0, false);
+  m.syncToSculpt();
+  const before = dev(m, flat);
+  for (let s = 0; s < 10; s++) m.applyBrush('restore', 0.5, 0.5, 0.3, 0.8, 0, 0, false);
+  m.syncToSculpt();
+  ok(dev(m, flat) < before * 0.9, 'restore reduces an existing deformation');
 }
 
 console.log('[4] art-direction contract — physics relaxes to sculpt, never flat');
