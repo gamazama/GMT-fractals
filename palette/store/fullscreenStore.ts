@@ -104,6 +104,13 @@ export const openFullscreen = (config: GradientConfig, name = 'Gradient'): void 
   emit({ ...state, open: true, config, name });
 };
 
+/** Replace the previewed snapshot in place (no open/geom/split change). Used when leaving split
+ *  to PROMOTE the live gradient you were viewing into the fullscreen snapshot, so switching
+ *  split→fullscreen keeps that gradient instead of snapping back to the open-time one. */
+export const setFullscreenConfig = (config: GradientConfig, name: string = state.name): void => {
+  emit({ ...state, config, name });
+};
+
 /** Close the gallery (Esc / backdrop / button). Drops the previewed config. */
 export const closeFullscreen = (): void => {
   if (!state.open) return;
