@@ -9,11 +9,12 @@
  *   • drop in the lower half of the empty tail → a NEW group (editable divider).
  *   • a Trash zone appears while dragging — drop a favourite there to remove it.
  *
- * Host-agnostic: reads its own stores (favientsStore + favientTargets). The header's
- * "Palettes" button calls a host-registered browse action (open the picker).
+ * Host-agnostic: reads its own store (favientsStore) + the shared send-target registry
+ * (host-group destinations) + favientTargets' host-capability flags (select-mode / browse
+ * / studio). The header's "Palettes" button calls a host-registered browse action.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { GenericDropdown } from '../../components/GenericDropdown';
 import { Hint } from '../../components/Hint';
 import {
@@ -24,17 +25,17 @@ import {
   type Favient,
 } from '../store/favientsStore';
 import {
-  getFavientTargets,
-  getFavientTarget,
-  subscribeFavientTargets,
+  subscribeFavientHost,
   getFavientBrowseAction,
   getFavientStudioAction,
   getFavientSelectMode,
 } from '../core/favientTargets';
+import { getSendTargets, subscribeSendTargets, type SendTarget } from '../../store/sendTargetRegistry';
 import { setFavientDrag, beginCustomAvatarDrag, readFavientDrag, FAVIENT_DND_MIME, type FavientDragPayload } from '../core/favientDnd';
 import { useHeroPick, useActiveHeroMode, setHeroDrag, setHeroPick } from '../store/heroSelection';
 import { setDragOrigin, markPickLanded } from '../store/dragVisual';
 import { renderStopsToRamp } from '../core/gmtGradient';
+import { configToName } from '../core/facetName';
 import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
 import { FavientsIcon } from './FavientsIcon';
 import type { RGB } from '../core/oklab';
@@ -59,11 +60,18 @@ import {
 // via focus/blur.
 import { paramEditStart as favEditStart, paramEditEnd as favEditEnd, paramEdit as favEdit } from '../store/paramUndoBracket';
 
-/** Re-render when hosts (re)register apply targets or the browse action. */
-const useFavientTargets = () => {
+/**
+ * Host apply-targets for the "Destination" dropdown (dropdown hosts like app-gmt). They
+ * live in the shared send-target registry now (group 'host'); the Explorer's 'mode'
+ * targets are driven by the dock, not this dropdown, so we filter to the host group.
+ * Re-render on registry changes (useSyncExternalStore) AND on host-capability changes
+ * (select-mode / browse / studio), so a late host registration still surfaces.
+ */
+const useHostTargets = (): SendTarget<FavientDragPayload>[] => {
+  const all = useSyncExternalStore(subscribeSendTargets, getSendTargets, getSendTargets);
   const [, force] = useState(0);
-  useEffect(() => subscribeFavientTargets(() => force((n) => n + 1)), []);
-  return getFavientTargets();
+  useEffect(() => subscribeFavientHost(() => force((n) => n + 1)), []);
+  return useMemo(() => all.filter((t) => t.group === 'host') as SendTarget<FavientDragPayload>[], [all]);
 };
 
 const KebabIcon = () => (
@@ -92,6 +100,16 @@ const gradientName = (name: string): string => {
   const dot = file.lastIndexOf('.');
   return (dot > 0 ? file.slice(0, dot) : file).trim() || 'imported';
 };
+
+/**
+ * The name a dragged-in gradient gets when added. Drag-to-Favients is the sole add-path
+ * now (starring is gone), so a payload with no explicit name auto-derives a perceptual
+ * label (e.g. "Warm Vivid Rainbow") via the shared `configToName` instead of landing
+ * blank — the same fallback the `favients` send-target uses, so the panel's own insert
+ * (an actual drag onto the shelf, which the passthrough dropbox hands off) names exactly
+ * like the click-through flat-add.
+ */
+const addName = (p: FavientDragPayload): string => p.name?.trim() || configToName(p.config);
 
 /**
  * FavientsSystemMenu — collection-management popover in the panel header. Saves the
@@ -617,7 +635,7 @@ export const FavientsPanel: React.FC = () => {
   const renameGroup = useFavientsStore((s) => s.renameGroup);
   const selectedTargetId = useFavientsStore((s) => s.selectedTargetId);
   const setSelectedTarget = useFavientsStore((s) => s.setSelectedTarget);
-  const targets = useFavientTargets();
+  const targets = useHostTargets();
   const browse = getFavientBrowseAction();
   const studio = getFavientStudioAction();
 
@@ -700,14 +718,14 @@ export const FavientsPanel: React.FC = () => {
   // The favourite enlarge shows only while Favients is the ACTIVE surface, so deselect
   // (Esc) clears it (favourites have no persistent hero strip of their own).
   const favActive = useActiveHeroMode() === 'favients';
-  const activeTarget = getFavientTarget(selectedTargetId) ?? targets[0];
+  const activeTarget = targets.find((t) => t.id === selectedTargetId) ?? targets[0];
 
   const onApply = (fav: Favient) => {
     if (!activeTarget) {
       flash('No apply target available here');
       return;
     }
-    activeTarget.apply(fav.config, fav.name);
+    activeTarget.apply({ config: fav.config, name: fav.name, source: fav.source });
     flash(`${fav.name} → ${activeTarget.label}`);
   };
 
@@ -774,7 +792,7 @@ export const FavientsPanel: React.FC = () => {
     }
     const existing = favients.find((f) => favientSig(f.config) === favientSig(p.config));
     if (existing) place(existing.id, flat, group);
-    else insertFavient(p.config, p.name, p.source, flat, group);
+    else insertFavient(p.config, addName(p), p.source, flat, group);
   };
 
   // Apply a drop described by `t`, given the drag payload. The mutation is bracketed
@@ -936,7 +954,7 @@ export const FavientsPanel: React.FC = () => {
           <div className="flex-1 flex items-center justify-center text-center px-4">
             <div className="text-[11px] text-gray-500 leading-relaxed">
               <FavientsIcon className="text-2xl mb-2 opacity-60 block mx-auto" />
-              Star a gradient in the Generator or Image, or drag one in from the Picker.
+              Drag a gradient here from the Picker, Generator, Image, or Stops to save it.
               <div className="mt-1 text-gray-600">Click a swatch to {selectMode ? 'select' : 'apply'} · drag to reorder · drag onto a target.</div>
               <div className="mt-1.5 text-gray-600">Saved gradients are shared with the main GMT studio.</div>
             </div>

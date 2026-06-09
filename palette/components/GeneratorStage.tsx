@@ -30,8 +30,11 @@ import { GradientSourcePicker } from './GradientSourcePicker';
 import { GeneratorSlotMods } from './GeneratorSlotMods';
 import { MixBlend } from './MixBlend';
 import { CanonicalHero } from './CanonicalHero';
-import { readFavientDrag, FAVIENT_DND_MIME } from '../core/favientDnd';
-import { renderStopsToRamp } from '../core/gmtGradient';
+import { setFavientDrag, beginCustomAvatarDrag } from '../core/favientDnd';
+import { fitRampToStops } from '../core/stopFit';
+import { favientSig } from '../store/favientsStore';
+import { setDragOrigin } from '../store/dragVisual';
+import { setHeroPick, setHeroDrag, useHeroPick, useActiveHeroMode, useHeroOptionsOpen } from '../store/heroSelection';
 
 const useContainerSize = () => {
   const ref = useRef<HTMLDivElement>(null);
@@ -48,34 +51,37 @@ const useContainerSize = () => {
   return { ref, ...size };
 };
 
-// One source: its gradient (click to open the searchable picker). The slot's modifiers
-// open in a semi-floating panel from the ⚙ button (so they don't expand the layout).
+// One source slot — a CanonicalHero-style DRAG SOURCE + pick surface (P2 N4). Click PICKS
+// the slot's gradient into the Generator surface's hero selection (opens the dock so it can
+// be sent to another target — the other slot, Stops, Favients…); drag morphs the avatar out
+// onto a target. It is ALSO the registered `gen-a`/`gen-b` DROP target — the canonical
+// dropbox over `data-gx-target` (DropTargetLayer) handles drops, so the slot needs no
+// bespoke drop wiring. The old click→catalog dropdown is GONE: sources are set by dragging /
+// sending a gradient onto the slot (or via the Picker → Generator·A/B), per the canonical
+// model. The slot-mod dials open from the ⚙ button to the right.
 const SourceRow: React.FC<{
   which: 'A' | 'B';
   ramp: { r: number; g: number; b: number }[];
   preset: number;
-  onPick: (idx: number) => void;
   height: number;
   dimmed?: boolean;
-}> = ({ which, ramp, preset, onPick, height, dimmed }) => {
-  const [open, setOpen] = useState(false);
-  const [dropping, setDropping] = useState(false);
-  const sendRampToSlot = useGeneratorStore((s) => s.sendRampToSlot);
+}> = ({ which, ramp, preset, height, dimmed }) => {
   const name = useMemo(() => buildPresetCatalog()[preset]?.name ?? '—', [preset]);
+  const targetId = which === 'A' ? 'gen-a' : 'gen-b';
+  // The slot's current gradient as a config so it can be picked/dragged like any hero.
+  // Derived from the displayed source ramp (covers both catalog presets and ramps loaded
+  // via a drop); favientSig keys the pick so the selected ring is stable across renders.
+  const config = useMemo(() => fitRampToStops(ramp, { maxStops: 24 }), [ramp]);
+  const key = useMemo(() => favientSig(config), [config]);
+  const payload = useMemo(() => ({ config, name, source: `Generator · ${which}` }), [config, name, which]);
 
-  const onDragOver = (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    if (!dropping) setDropping(true);
-  };
-  const onDrop = (e: React.DragEvent) => {
-    const p = readFavientDrag(e.dataTransfer);
-    setDropping(false);
-    if (!p) return;
-    e.preventDefault();
-    sendRampToSlot(which, renderStopsToRamp(p.config.stops, p.config.blendSpace, p.config.colorSpace), p.name);
-  };
+  // Selected when this slot is the Generator surface's ACTIVE pick. The surface pick is
+  // shared with the result hero (one per surface), so picking a slot deselects the result
+  // and vice-versa — exactly one thing is "in hand" in the Generator at a time.
+  const surfacePick = useHeroPick('generator');
+  const activeMode = useActiveHeroMode();
+  const optionsOpen = useHeroOptionsOpen();
+  const selected = surfacePick?.key === key && activeMode === 'generator' && optionsOpen;
 
   return (
     // When curves drive the output the source is FROZEN: dimmed AND non-interactive
@@ -85,24 +91,35 @@ const SourceRow: React.FC<{
       <div className="flex items-center gap-2 mb-0.5">
         <span className="text-[10px] uppercase tracking-wide text-gray-500 w-14 shrink-0">Source {which}</span>
         <span className="text-[11px] text-gray-200 truncate">{name}</span>
-        <span className={`ml-auto text-[10px] shrink-0 transition-colors ${dropping ? 'text-amber-300/90' : 'text-gray-500'}`}>{dropping ? 'drop to load' : 'click to change'}</span>
+        <span className="ml-auto text-[10px] shrink-0 text-gray-500">click to select · drag to place</span>
       </div>
-      {/* gradient + the slot-mods trigger to its RIGHT (panel opens into the gutter) */}
+      {/* gradient (the pick/drag surface + gen-a/gen-b drop anchor) + the slot-mods trigger */}
       <div className="flex items-center gap-2">
+        {/* data-gx-selectable: clicking the slot opens the dock without the global click-away
+            closing it (same as CanonicalHero). draggable: morph an avatar out onto a target. */}
         <button
-          data-gx-target={which === 'A' ? 'gen-a' : 'gen-b'}
-          onClick={() => setOpen((o) => !o)}
-          onDragOver={onDragOver}
-          onDragLeave={() => setDropping(false)}
-          onDrop={onDrop}
-          title={`Source ${which} — click to change, or drop a favourite here`}
-          className={`block flex-1 min-w-0 rounded-sm ring-1 transition ${dropping ? 'ring-amber-300/80 ring-2' : 'ring-white/10 hover:ring-cyan-500/40'}`}
+          data-gx-target={targetId}
+          data-gx-selectable=""
+          draggable
+          onDragStart={(e) => {
+            setFavientDrag(e.dataTransfer, payload);
+            beginCustomAvatarDrag(e.dataTransfer);
+            setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the strip
+            setHeroDrag({ mode: 'generator', key, payload, selfTargetId: targetId });
+          }}
+          onClick={(e) => {
+            setDragOrigin(e.currentTarget.getBoundingClientRect()); // in-hand avatar morphs from the strip
+            setHeroPick({ mode: 'generator', key, payload, selfTargetId: targetId });
+          }}
+          title={`Source ${which} — click to select, drag onto a target, or drop a gradient here to load it`}
+          className={`block flex-1 min-w-0 rounded-sm ring-1 transition cursor-grab active:cursor-grabbing ${
+            selected ? 'ring-2 ring-cyan-400' : 'ring-white/10 hover:ring-cyan-500/40'
+          }`}
         >
           <GradientStrip ramp={ramp} height={height} />
         </button>
         <GeneratorSlotMods which={which} />
       </div>
-      {open && <GradientSourcePicker title={`Source ${which}`} value={preset} onChange={onPick} onClose={() => setOpen(false)} />}
     </div>
   );
 };
@@ -269,7 +286,6 @@ export const GeneratorStage: React.FC = () => {
   const { stripA, stripB, ramp, config, ghost } = useGeneratorDerived();
   const slotA = useGeneratorStore((s) => s.slotA);
   const slotB = useGeneratorStore((s) => s.slotB);
-  const setSlot = useGeneratorStore((s) => s.setSlot);
   const swap = useGeneratorStore((s) => s.swap);
   const tracks = useGeneratorStore((s) => s.tracks);
   const setTracks = useGeneratorStore((s) => s.setTracks);
@@ -337,10 +353,10 @@ export const GeneratorStage: React.FC = () => {
                 Curves drive the output — sources are locked. <span className="text-cyan-200">Re-fit</span> or <span className="text-cyan-200">Reset points</span> below to edit the sources again.
               </div>
             )}
-            <SourceRow which="A" ramp={stripA} preset={slotA} onPick={(i) => setSlot('A', i)} height={40} dimmed={curvesOn} />
+            <SourceRow which="A" ramp={stripA} preset={slotA} height={40} dimmed={curvesOn} />
             {/* The L/C/h blend sits BETWEEN A and B as vertical sliders bridging A→B. */}
             <MixBlend onSwap={swap} dimmed={curvesOn} />
-            <SourceRow which="B" ramp={stripB} preset={slotB} onPick={(i) => setSlot('B', i)} height={40} dimmed={curvesOn} />
+            <SourceRow which="B" ramp={stripB} preset={slotB} height={40} dimmed={curvesOn} />
           </>
         )}
 
@@ -368,6 +384,7 @@ export const GeneratorStage: React.FC = () => {
             config={config}
             ramp={ramp}
             name="Generated"
+            autoName
             source="Generator"
             mode="generator"
             trailing={<span className="text-[11px] text-gray-500">{config.stops.length} stops</span>}
@@ -415,9 +432,14 @@ export const GeneratorStage: React.FC = () => {
         {/* The editor is ALWAYS mounted: editable when curves exist, otherwise a dimmed
             read-only SCOPE that still shows the ghost (the result channels) so you can
             watch the Modify dials shape the gradient before fitting. Dimmed whenever the
-            curves aren't driving the output. */}
+            curves aren't driving the output.
+            data-gx-target="curves" anchors the Curves drop target here (P2 N5): dropping /
+            sending a gradient onto this editor decomposes it into editable L/C/h curves
+            (gradientTargets → generatorStore.fitCurvesFromRamp). Mixed mode only — the
+            div is absent in ColorBox, so the target reveals via tab:Generator → gen:mixed. */}
         <div
           ref={graphRef}
+          data-gx-target="curves"
           className={`relative overflow-hidden transition-opacity ${curvesOn ? '' : 'opacity-50'}`}
           style={{ height: curvesOn || tracks ? 264 : 200 }}
         >

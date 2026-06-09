@@ -54,6 +54,7 @@ export const EditorStage: React.FC = () => {
                     config={config}
                     ramp={ramp}
                     name="Stops"
+                    autoName
                     source="Stops"
                     mode="stops"
                     targetId="stops"

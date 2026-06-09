@@ -1,45 +1,32 @@
 /**
- * favientTargets — the registry of "where a favourite applies". Each host populates
- * this at boot: the GMT Gradient Explorer registers the generator slots; app-gmt registers
- * its coloring layers. The Favients panel reads it for the "Applying to ▾" dropdown
- * and for drag-and-drop, so one panel component works in every host without knowing
- * what the host can do with a gradient.
+ * favientTargets — the Favients panel's per-HOST capability flags.
  *
- * Host-agnostic + side-effect-free at import: hosts call registerFavientTarget() in
- * their own registration step (same place as registerPaletteUI / panel manifest).
+ * The apply-target LIST this module used to own ("where a favourite applies") was folded
+ * onto the engine send-target registry (`store/sendTargetRegistry`) in P2: every gradient
+ * destination is now a `SendTarget` — `group: 'host'` for a host coloring layer, `'mode'`
+ * for an intra-app surface (Generator slot, Stops, …). One registry, not two; the
+ * `createListRegistry` kernel backs it. The panel reads `getSendTargets()` (filtered to
+ * the host group) for its "Destination" dropdown.
+ *
+ * What remains here is host capability the generic registry can't express — the panel
+ * still needs it to adapt to its embedding app:
+ *   • select mode — does this host provide the select→reveal→place dock (the Explorer)?
+ *   • browse / studio actions — the panel header's Palettes + open-studio buttons.
+ *
+ * Host-agnostic + side-effect-free at import: hosts set these in their own registration
+ * step (the same place they register their send targets).
  */
 
-import type { GradientConfig } from '../../types';
-
-export interface FavientTarget {
-  /** Stable id (persisted as the user's selected target). */
-  id: string;
-  /** Dropdown label, e.g. "Generator · Slot A". */
-  label: string;
-  /** Apply this gradient to the target. `name` is the favourite's display name
-   *  (used where the target wants a label, e.g. a generator slot). */
-  apply: (config: GradientConfig, name: string) => void;
-}
-
-const _targets: FavientTarget[] = [];
 const _listeners = new Set<() => void>();
+const notify = (): void => _listeners.forEach((l) => l());
 
-/** Register an apply target (idempotent by id — re-registering replaces). */
-export const registerFavientTarget = (t: FavientTarget): void => {
-  const i = _targets.findIndex((x) => x.id === t.id);
-  if (i >= 0) _targets[i] = t;
-  else _targets.push(t);
-  _listeners.forEach((l) => l());
-};
-
-export const getFavientTargets = (): FavientTarget[] => _targets;
-
-export const getFavientTarget = (id: string | null | undefined): FavientTarget | undefined =>
-  id ? _targets.find((t) => t.id === id) : undefined;
-
-/** Subscribe to target-list changes (targets usually register before first render,
- *  but the panel subscribes defensively in case a host registers later). */
-export const subscribeFavientTargets = (l: () => void): (() => void) => {
+/**
+ * Subscribe to host-capability changes (select-mode / browse / studio). Returns
+ * unsubscribe. These are normally set once at boot, but the panel subscribes defensively
+ * in case a host registers later. (The panel separately subscribes to the send-target
+ * registry for its destination LIST — that's where targets live now.)
+ */
+export const subscribeFavientHost = (l: () => void): (() => void) => {
   _listeners.add(l);
   return () => {
     _listeners.delete(l);
@@ -56,7 +43,7 @@ let _selectMode = false;
 export const setFavientSelectMode = (on: boolean): void => {
   if (_selectMode === on) return;
   _selectMode = on;
-  _listeners.forEach((l) => l());
+  notify();
 };
 
 export const getFavientSelectMode = (): boolean => _selectMode;
@@ -67,7 +54,7 @@ let _browse: (() => void) | null = null;
 
 export const setFavientBrowseAction = (fn: (() => void) | null): void => {
   _browse = fn;
-  _listeners.forEach((l) => l());
+  notify();
 };
 
 export const getFavientBrowseAction = (): (() => void) | null => _browse;
@@ -79,7 +66,7 @@ let _studio: (() => void) | null = null;
 
 export const setFavientStudioAction = (fn: (() => void) | null): void => {
   _studio = fn;
-  _listeners.forEach((l) => l());
+  notify();
 };
 
 export const getFavientStudioAction = (): (() => void) | null => _studio;

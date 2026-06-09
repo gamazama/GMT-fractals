@@ -20,13 +20,17 @@ import { registerPaletteUI } from '../palette/registerPaletteUI';
 registerPaletteUI();
 
 // Favients (the cross-app gradient-favourites shelf) apply targets for app-gmt: a
-// favourite click/drop lands on a fractal COLORING layer via the gradient seam.
-import { registerFavientTarget, setFavientBrowseAction, setFavientStudioAction } from '../palette/core/favientTargets';
+// favourite click/drop lands on a fractal COLORING layer via the gradient seam. These are
+// HOST-group send targets in the shared registry (the panel's "Destination" dropdown lists
+// the host group); the apply payload carries the favourite's GradientConfig.
+import { setFavientBrowseAction, setFavientStudioAction } from '../palette/core/favientTargets';
+import { registerSendTarget } from '../store/sendTargetRegistry';
+import type { FavientDragPayload } from '../palette/core/favientDnd';
 import { applyGradientConfig, applyEnvGradient } from '../palette/core/gradientSeam';
 import { usePaletteOverlayStore } from './paletteOverlayStore';
-registerFavientTarget({ id: 'coloring-1', label: 'Coloring · Layer 1', apply: (c) => applyGradientConfig(c, 1) });
-registerFavientTarget({ id: 'coloring-2', label: 'Coloring · Layer 2', apply: (c) => applyGradientConfig(c, 2) });
-registerFavientTarget({ id: 'env-gradient', label: 'Environment · Sky', apply: (c) => applyEnvGradient(c) });
+registerSendTarget<FavientDragPayload>({ id: 'coloring-1', label: 'Coloring · Layer 1', group: 'host', apply: (p) => applyGradientConfig(p.config, 1) });
+registerSendTarget<FavientDragPayload>({ id: 'coloring-2', label: 'Coloring · Layer 2', group: 'host', apply: (p) => applyGradientConfig(p.config, 2) });
+registerSendTarget<FavientDragPayload>({ id: 'env-gradient', label: 'Environment · Sky', group: 'host', apply: (p) => applyEnvGradient(p.config) });
 
 // Favients header "Palettes" button → TOGGLE the full-width Palette Picker overlay.
 setFavientBrowseAction(() => {

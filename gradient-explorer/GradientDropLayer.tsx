@@ -183,6 +183,9 @@ export const GradientDropLayer: React.FC = () => {
     // tracked in the shared `markPickLanded`/`consumePickLanded` flag (set by handleSent AND
     // by the Favients panel's own drop), so a drop the Favients shelf consumes doesn't wipe.
     const lastAvatar = useRef<{ ramp: Uint8Array; x: number; y: number } | null>(null);
+    // Set by an intermediate-step drop (which reveals a surface + deliberately KEEPS the pick
+    // in hand): tells the dragend handler below NOT to end the session for that one drop.
+    const revealedRef = useRef(false);
 
     // Track the cursor during a drag (dragover fires with coords; pointermove does not),
     // and end the session when the drag ends — whether it dropped on a target (the target
@@ -204,11 +207,28 @@ export const GradientDropLayer: React.FC = () => {
         // stopPropagations, so it does NOT close: it reveals and leaves the dock up over
         // the now-visible final.
         const onEnd = (): void => closeHeroOptions();
+        // A drag can also end WITHOUT a window 'drop' — released over non-droppable chrome,
+        // or Esc-cancelled (only 'dragend' fires). For a fresh drag that's harmless (clearing
+        // `dragging` drops `active`), but if a CLICK pick was open (optionsOpen) when the drag
+        // started, that lingering flag keeps the layer active and the avatar reverts to
+        // following the cursor — the "drag from a hero after selecting one doesn't complete"
+        // bug. Closing on dragend ends the session (→ teardown → cancel wipe). The ONE
+        // exception is an intermediate-step drop, which reveals + keeps the pick in hand on
+        // purpose (revealedRef); consume the flag and leave the dock up.
+        const onDragEnd = (): void => {
+            if (revealedRef.current) {
+                revealedRef.current = false;
+                return;
+            }
+            closeHeroOptions();
+        };
         window.addEventListener('dragover', onOver, true);
         window.addEventListener('drop', onEnd, false);
+        window.addEventListener('dragend', onDragEnd, false);
         return () => {
             window.removeEventListener('dragover', onOver, true);
             window.removeEventListener('drop', onEnd, false);
+            window.removeEventListener('dragend', onDragEnd, false);
             pointer.current = { x: 0, y: 0 }; // so a later drag doesn't flash at the old spot
             setDragOrigin(null); // drag over — clear the morph source
         };
@@ -396,9 +416,11 @@ export const GradientDropLayer: React.FC = () => {
                                 // Reveal/navigate to the surface and KEEP the gradient in hand —
                                 // stopPropagation keeps the drop from reaching the window
                                 // session-end clear, so after the drag the user is in
-                                // select-mode over the now-revealed final.
+                                // select-mode over the now-revealed final. revealedRef tells the
+                                // dragend handler not to end the session for this one drop.
                                 e.preventDefault();
                                 e.stopPropagation();
+                                revealedRef.current = true;
                                 it.activate();
                             }}
                         />

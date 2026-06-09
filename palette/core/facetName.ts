@@ -22,7 +22,9 @@
  */
 
 import { computeFacets, type Facets } from './facets';
+import { renderStopsToRamp } from './gmtGradient';
 import type { RGB } from './oklab';
+import type { GradientConfig } from '../../types';
 
 // Thresholds — chosen against the catalog distribution the facets harness reports
 // (lightness/chroma/warmth typically span ~0.2..0.85 across the real palettes).
@@ -66,3 +68,12 @@ export const facetsToName = (f: Facets): string => {
 
 /** Convenience for callers holding a 256-step ramp instead of precomputed facets. */
 export const rampToName = (ramp: RGB[]): string => facetsToName(computeFacets(ramp));
+
+/**
+ * Auto-name a gradient CONFIG — render it to a ramp, then label by facets. This is the
+ * default favourite name when a gradient is added without an explicit one, so the two
+ * drag-to-Favients add paths (the `favients` send-target's flat-add and the panel's own
+ * insert) name identically from one place.
+ */
+export const configToName = (config: GradientConfig): string =>
+  rampToName(renderStopsToRamp(config.stops, config.blendSpace, config.colorSpace));

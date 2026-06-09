@@ -140,6 +140,11 @@ interface GeneratorState {
   setExportFmt: (k: string) => void;
   swap: () => void;
   fitFromSource: () => void;
+  /** N5: decompose a dropped/sent gradient's 256-RGB ramp into editable L/C/h curves (the
+   *  inverse of the editor) at the current detail/smooth, and switch curves ON so they
+   *  immediately drive the output. The P2 select/drop path onto the Curves widget. One
+   *  undo entry. */
+  fitCurvesFromRamp: (ramp: RGB[]) => void;
   resetCurves: () => void;
   resetAll: () => void;
   /** Bake a slot's modifiers into a new source ramp + reset that slot's dials (picture unchanged). */
@@ -265,6 +270,13 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
     const base = baseChannelsFrom(s.slotA, s.slotB, s.noiseSeed);
     set({ tracks: fitChannelsToTracks(base, s.detail, s.smooth), curvesOn: true });
   },
+  fitCurvesFromRamp: (ramp) =>
+    genEdit(() => {
+      // Decompose the dropped gradient into L/C/h channels, then fit editable bezier curves
+      // at the current detail/smooth — the inverse of "Fit from source", but from any sent
+      // gradient instead of the A/B mix (hue unwrapping happens inside fitChannelsToTracks).
+      set({ tracks: fitChannelsToTracks(decomposeRamp(ramp), get().detail, get().smooth), curvesOn: true });
+    }),
   resetCurves: () => genEdit(() => set({ tracks: null, curvesOn: false })),
   resetAll: () =>
     genEdit(() => {
