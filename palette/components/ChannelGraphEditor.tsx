@@ -36,7 +36,7 @@ import type { Channels } from '../core/generatorPipeline';
 import { CURVE_FRAMES, reTangentBezier } from '../core/channelCurve';
 import { useGraphInteraction } from '../../hooks/useGraphInteraction';
 import { useGraphTools } from '../../hooks/useGraphTools';
-import { usePencilTool } from '../../hooks/usePencilTool';
+import { usePencilTool, PENCIL_CURSOR } from '../../hooks/usePencilTool';
 import { balancedToolColumnMaxHeight } from '../../utils/toolColumn';
 import { GraphSelectionBBox } from '../../components/graph/GraphSelectionBBox';
 import type { GraphDataSource } from '../../utils/GraphDataSource';
@@ -702,7 +702,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <div ref={interactionRef} className={`relative ${pencilMode ? 'cursor-crosshair' : ''}`} style={{ width: canvasWidth, height: canvasHeight }}>
+        <div ref={interactionRef} className="relative" style={{ width: canvasWidth, height: canvasHeight, cursor: pencilMode ? PENCIL_CURSOR : undefined }}>
           {/* Graph tools: fit all, fit selection, normalize, pencil, simplify, bake,
               smooth, ghost. In read-only scope mode only the view tools (fit-all,
               normalize) + the ghost toggle are shown — the editing tools need editable

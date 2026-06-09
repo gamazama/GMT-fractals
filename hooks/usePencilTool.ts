@@ -24,6 +24,15 @@ import type { Keyframe } from '../types';
 import type { GraphViewTransform } from '../utils/GraphUtils';
 import { fitSamplesToKeys } from '../utils/CurveFitting';
 
+/**
+ * A pencil-shaped mouse cursor (white fill + black outline so it reads on any
+ * background) for when pencil mode is ON — the changed cursor makes the changed
+ * click-drag behaviour obvious. Hotspot = the nib (bottom-left). Apply via
+ * `style={{ cursor: pencilMode ? PENCIL_CURSOR : undefined }}`.
+ */
+export const PENCIL_CURSOR =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24'%3E%3Cpath d='M14.5 3.5l6 6L9 21l-6 1.5L4.5 16z' fill='white' stroke='black' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M13 5l6 6' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E\") 2 20, crosshair";
+
 export interface PencilTarget {
   trackId: string;
   /** Stroke-preview colour. */

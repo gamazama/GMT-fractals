@@ -6,7 +6,7 @@ import { calculateViewBounds } from '../utils/keyframeViewBounds';
 import { useEngineStore } from '../store/engineStore';
 import { useGraphInteraction } from '../hooks/useGraphInteraction';
 import { useGraphTools } from '../hooks/useGraphTools';
-import { usePencilTool } from '../hooks/usePencilTool';
+import { usePencilTool, PENCIL_CURSOR } from '../hooks/usePencilTool';
 import { useAnimationStoreDataSource } from '../utils/GraphDataSource';
 import { GraphSidebar } from './graph/GraphSidebar';
 import { GraphToolbar } from './graph/GraphToolbar';
@@ -469,7 +469,7 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
 
             <div className="flex-1 relative group overflow-hidden" data-help-id="anim.graph" ref={containerRef}>
                 {/* CANVAS VIEW */}
-                <div ref={interactionRef} className={`relative ${pencil.pencilMode ? 'cursor-crosshair' : ''}`}>
+                <div ref={interactionRef} className="relative" style={pencil.pencilMode ? { cursor: PENCIL_CURSOR } : undefined}>
                     <GraphCanvas
                         width={canvasWidth}
                         height={height}
