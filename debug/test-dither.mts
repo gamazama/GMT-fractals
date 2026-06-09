@@ -111,7 +111,7 @@ const encodePng = (img: Image): Buffer => {
 };
 
 // ── the dither (MIRRORS engine/fractal/shaders/ditherTail.ts — keep in sync) ───────────────
-const DITHER_FLAT_LO = 0.006, DITHER_FLAT_HI = 0.030, DITHER_MAX_LIGHT = 1.5;
+const DITHER_FLAT_LO = 0.0005, DITHER_FLAT_HI = 0.004, DITHER_MAX_LIGHT = 4.0;
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 const smoothstep = (e0: number, e1: number, x: number) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -239,6 +239,47 @@ for (const sc of scenes) {
   console.log('  ' + sc.name.padEnd(20) + ' ' + row.join(' '));
 }
 
+// ── COLUMN-AVERAGE smoothness (the acceptance test) ──────────────────────────────────────────
+// For a HORIZONTAL gradient every column has a CONSTANT true value, so the dithered column
+// average must reconstruct it smoothly — no plateaus (steps). This is the criterion that
+// matches the eye for band-vs-smooth (the blur metric above is too sensitive to the eye-window).
+// Spec: 100px tall × 100px wide, 5%→15% brightness.
+console.log('\nCOLUMN-AVERAGE smoothness — 100×100, 5%→15% gradient (the acceptance test):');
+console.log('  PLATEAU = longest run of columns whose averages are flat (≤0.1 LSB apart) → a step');
+console.log('  WIGGLE  = RMS deviation of column averages from the ideal straight line (LSB)');
+console.log('  A smooth result has PLATEAU≈1 (no steps) and small WIGGLE.\n');
+{
+  const ch = 100, b0 = 0.05, b1 = 0.15;
+  // Two widths: the spec'd 100px (steep ⇒ ~4px bands) AND a full-screen 1440px (shallow ⇒
+  // ~56px bands) — the latter is where the old over-wide gate suppressed dither.
+  const colAvgs = (cw: number, cap: number, useDither: boolean): number[] => {
+    const out: number[] = [];
+    const sl = (b1 - b0) / (cw - 1);
+    for (let x = 0; x < cw; x++) {
+      const t = b0 + (b1 - b0) * (x / (cw - 1));
+      let sum = 0;
+      for (let y = 0; y < ch; y++) {
+        const d = useDither ? ditherPixel([t, t, t], x, y, [sl, sl, sl], noise, cap) : [t, t, t] as [number, number, number];
+        sum += q8(d[0]);
+      }
+      out.push(sum / ch); // mean column value in LSB (0..255)
+    }
+    return out;
+  };
+  const idealLine = (n: number) => Array.from({ length: n }, (_, x) => (b0 + (b1 - b0) * (x / (n - 1))) * 255);
+  const maxPlateau = (a: number[]) => { let best = 1, run = 1; for (let i = 1; i < a.length; i++) { if (Math.abs(a[i] - a[i - 1]) <= 0.1) run++; else run = 1; best = Math.max(best, run); } return best; };
+  const wiggle = (a: number[], ideal: number[]) => Math.sqrt(a.reduce((s, v, i) => s + (v - ideal[i]) ** 2, 0) / a.length);
+  for (const cw of [100, 1440]) {
+    const ideal = idealLine(cw);
+    console.log(`  ${cw}px wide (slope ${((b1 - b0) / (cw - 1) * 255).toFixed(3)} LSB/px):`);
+    console.log('    cap        PLATEAU   WIGGLE');
+    for (const cap of [0, 1, 2, 4, 8]) {
+      const a = colAvgs(cw, cap, cap !== 0);
+      console.log(`    ${(cap === 0 ? 'none' : `cap${cap}`).padEnd(8)}   ${String(maxPlateau(a)).padStart(7)}   ${wiggle(a, ideal).toFixed(3).padStart(6)}`);
+    }
+  }
+}
+
 // ── flat-gate assertion: the island region must receive ZERO dither ──────────────────────────
 console.log('\nFLAT-GATE (island must be untouched):');
 let gateFail = 0;
@@ -260,9 +301,9 @@ for (const sc of scenes) {
 const variants: { label: string; cap: number; dither: boolean }[] = [
   { label: 'truth', cap: 0, dither: false }, // truth ≈ no-dither here, but shown as the reference column
   { label: 'no-dither', cap: 0, dither: false },
-  { label: 'cap 2', cap: 2, dither: true },
-  { label: 'cap 3', cap: 3, dither: true },
   { label: 'cap 4', cap: 4, dither: true },
+  { label: 'cap 8 (ship dark)', cap: 8, dither: true },
+  { label: 'cap 16', cap: 16, dither: true },
 ];
 const GAP = 8, COLS = variants.length;
 const mw = W * COLS + GAP * (COLS + 1);

@@ -33,15 +33,20 @@
  * and call `ditherTail(color, gl_FragCoord.xy)` immediately before writing the fragment.
  */
 export const DITHER_TAIL_GLSL = /* glsl */ `
-// Calibrated by debug/test-dither.mts: a proper TPDF + blue noise removes banding at ~1 LSB;
-// pushing amplitude higher RE-introduces low-frequency error (over-large swings don't average
-// out under the eye's low-pass) and explodes noise. So the ceiling stays low — the blue noise's
-// spatial density does the interpolation, not the amplitude. (cap1 banding 0.04 = cap2, half
-// the noise; cap8 banding 1.69. See the harness BANDING/NOISE table.)
-const float DITHER_FLAT_LO = 0.006; // slope (LSB/px) below which a region is "flat" → no dither
-const float DITHER_FLAT_HI = 0.030; // slope at/above which the flat-gate is fully open
-const float DITHER_MAX_DARK = 2.0;  // amplitude ceiling on near-flat DARK bands (LSB)
-const float DITHER_MAX_LIGHT = 1.5; // ceiling on midtone/bright flats (LSB)
+// Calibrated by debug/test-dither.mts (the column-average test). On a WIDE band (shallow
+// gradient) a 1-LSB step spans many pixels, so amplitude must ≈ that band width (1/slope) to
+// break the long flat runs the eye reads as steps — a full-screen gradient (~56px bands) has
+// 6px step-runs at cap8 vs 20px at cap2. Higher amplitude costs a little grain, but killing the
+// visible STEP is the goal, so the ceiling is generous and dark-weighted (a dark step is most
+// visible — Weber).
+// The gate must catch ONLY a truly-constant region (an island, slope ≈ 0) — NOT a shallow
+// gradient. A full-screen 5–15% gradient is ~0.018 LSB/px, so the open threshold sits well
+// below that; anything shallower than ~0.004 LSB/px is a gradient >6000px wide for 10%, i.e.
+// effectively flat. (Earlier 0.006/0.030 thresholds wrongly half-gated real gradients → bands.)
+const float DITHER_FLAT_LO = 0.0005; // slope (LSB/px) below which a region is "flat" → no dither
+const float DITHER_FLAT_HI = 0.004;  // slope at/above which the flat-gate is fully open
+const float DITHER_MAX_DARK = 8.0;  // amplitude ceiling on wide DARK bands (LSB)
+const float DITHER_MAX_LIGHT = 4.0; // ceiling on midtone/bright bands (LSB)
 vec3 ditherTail(vec3 c, vec2 fragCoord) {
   if (!uDither) return c;
   vec2 res = max(uBlueNoiseRes, vec2(1.0));               // REPEAT wrap tiles over any size
