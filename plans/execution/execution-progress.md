@@ -455,6 +455,21 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **fullscreen-v2 RATIFIED + CONSOLIDATED** (doc committed `5b0bca8`, was untracked — now on
+  integration). User gate decisions + 3 corrections folded into a "RATIFIED PLAN + CORRECTIONS" section in
+  `plans/fullscreen-v2-rescope.md`: **(a) GeometryParams = FLAT-OPTIONAL** (the gate); **(b) v1 = splashy
+  new modes first** (not polish-first); **(c) dither bakes into PNG export**; **(d) SPLINE CORRECTION —
+  it's a GEOMETRY/PATH mode** (gradient flows along an editable spline path, Illustrator "Lines"; centripetal
+  Catmull-Rom + arc-length + IQ sdSegment → LUT; the earlier monotone-cubic/gamut spline finding is VOID —
+  that answered colour-interpolation, the wrong question); **(e) MESH + FLUID → ONE "LIQUIFY" mode** (a
+  deformable grid mesh warps the gradient: Liquify brushes + MLS-rigid handles + **XPBD** soft-body physics
+  [compliance=stiffness slider, pin=compliance-0] + **Taubin** smoothing; art-direction contract = user's
+  deformation authoritative, physics optional/dampened/reversible-to-sculpt; LUT-follow render on ~128²
+  grid; **fluid = mesh physics, a NEW module — no carve, no source-toy regression gate**; one real risk =
+  JS 60fps on ~16k verts → active-region solve/density tiers/worker); **(f) DROP the idle 'wiggle'** (static
+  signifiers only). **Net: mode count drops (mesh+fluid→1), the two carve-gates collapse to one new-module
+  build; spline de-risked (no tangent-handle UI).** **First sub-stream = the GeometryParams flat-optional
+  gate, then the splashy modes.** Research: spline + liquify done read-only (no working-tree contention).
 - 2026-06-08 — **fullscreen-v2 WEB-SOTA augmentation DONE** (`wbjzozfw7`) → appended a researched
   best-in-class section to `plans/fullscreen-v2-rescope.md`. **SOTA picks:** dither = blue-noise-sourced
   **TPDF @ 1 LSB at the shader tail** (IGN as zero-asset fallback; ordered-Bayer demoted), **baked into the
