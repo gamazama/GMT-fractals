@@ -416,12 +416,27 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   work. Needs a separate `--write`/investigation pass (not a Phase-0 blocker; Phase-0 gates are tsc +
   test:palette + smoke:boot + orphans, all green).
 
-- **Fullscreen mode v2 — "make it awesome" (user, 2026-06-06).** ✅ **SCOPED 2026-06-07** →
-  `plans/fullscreen-v2-scope.md` (autonomous probe, PENDING-HUMAN-REVIEW). Per-geometry parametric
-  controls + new geometries + live/animated preview + comparison grid + zoom-pan. Verdict: additive over
-  pure `rampGeometry.ts`; v1-of-v2 (param contract redesign → conditional sliders) is S/M and stands alone;
-  sharp edge = `FullscreenGradientOverlay.tsx` triple-overlap with P2 well-migration + live-fractal mode.
-  Decisions for user in the doc (confirm S6 live-correct first; v2-vs-P2/live-fractal ordering; v1 geom set).
+- **Fullscreen mode v2 — NOW A MAJOR FEATURE INITIATIVE (user expanded 2026-06-08).** The early
+  `plans/fullscreen-v2-scope.md` (per-geometry parametric controls + new geoms + animated preview +
+  comparison grid + zoom-pan) is **necessary but INSUFFICIENT** — and its triple-overlap blocker is now
+  CLEARED (live-fractal + P2 well-migration both merged). **Added scope:** horizontal **SPLITSCREEN** ·
+  high-quality **SOTA dithering** · **MESH + FLUID modes** · **aesthetic & customizability overhaul of ALL
+  existing modes** · **S-curve → a real SPLINE mode** · **live-binds to the last-updated hero / clicked
+  fav** · **RANDOM mode = layered random dots in pseudo-3D parallax with draw interactivity** · all
+  interactions **neat & professional yet child-simple** (basic click+drag) · + TBD. **→ NEEDS A FULL FRESH
+  RE-SCOPE** on the merged foundation before building (next big feature phase after P2 closes; re-scope first).
+- **Curve-editor refinements (ChannelGraphEditor) — user 2026-06-08.** (a) resizable box-selection needs a
+  **centre handle** for moving the whole selection; (b) a new **'bias' feature** that moves points around;
+  (c) small **ghost points** in the curve to explain the smooth & detail-level sliders; (d) NEW global
+  **pencil tool** — draw keyframes onto the selected track(s), **normalize captured-on-start**; (e) the
+  global tool panel (bake/smooth/normalize/…) reflows to **2 columns** when too tall. Distinct stream;
+  builds on S3 ghost curves + the N5 curves-widget drop target.
+- **Generator polish — user 2026-06-08 (NEW stream).** Rename **'mixed' → 'Mixer'**; reorganize so **Stops
+  sits next to Mixer + ColorBox** as prominent peer sections; **polish the vertical sliders** to be
+  intuitive (keep precision / over-max-min / keyframeable — see the "children can use it" UX bar) — they're
+  currently unclear; **Mixer needs a Reset**.
+- **Favients add-path → last group — user 2026-06-08.** Dropping/adding a favourite should land it in the
+  **last-used / last-created group**, not a default group.
   (P2: fold the ⛶ open into the canonical hero + add gradient drag sources.)
 
 - **Auto-name generated/extracted favourites from facets (user, 2026-06-06).** Favouriting a Generator
@@ -437,6 +452,58 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **P2-FINISH (Batch B+C) DELIVERED — in-review, NOT merged** (branch `exec/p2-finish`,
+  uncommitted; gates green tsc 0 · test:palette **14/14**; /code-review 7-angle + /simplify applied;
+  **AWAITING USER VISUAL CONFIRM → then commit+merge**). **Batch B:** N2 per-tool cursors (rect/lasso
+  data-URI SVG, paint brush-ring; threaded `toolActive` so swatches inherit the wall cursor) · N6 floating
+  kebab clamped on-screen (reused `clampToViewport`) + Explorer header tools right-aligned · N7 picker
+  'Palettes' icon host-gated OFF in GX (app-gmt keeps it). **Batch C (R4):** `generatorDocument` +
+  `imageDocument` providers (registerPaletteUI, parallel to favients); image serializes thumbnail JPEG +
+  trace (async re-ingest, decode-race token guard); **generator slots serialize as resolved 256-RGB ramps,
+  NOT catalog indices** (catalog isn't persisted) + restore via `registerCustomRamp`; shared `decode.ts` +
+  `coerceJson.ts`; hardening (sanitizeTracks valid-keyframes, no-image reset, JPEG-encode cache). Known:
+  baked-slot out-of-gamut extremes lost on round-trip (visible identical); pre-provider scenes load no-op.
+  **⚠ VERIFY at merge:** test:palette reported **14/14** here vs 15/15 earlier — confirm no suite was
+  dropped. Visual checklist: tool cursors across the whole wall incl. swatches · floating ⋮ stays on-screen
+  + header icons right in Explorer · no picker icon in GX (present in app-gmt) · image+trace+slots+curves
+  round-trip on save/reload. **On confirm → this closes P2; finalize the P2 phase summary.**
+- 2026-06-08 — **MORE notes (user) → captured to streams.**
+  - **CURVE EDITOR** (expand the refinements stream): + NEW global **PENCIL tool** — draw keyframes onto the
+    selected track(s), **normalize captured-on-start** · + the global tool panel (bake/smooth/normalize/…)
+    reflows to **2 COLUMNS** when too tall to fit · (+ existing: box-select **centre handle** for move,
+    **bias** feature, **ghost points** for smooth/detail).
+  - **GENERATOR POLISH** (NEW stream): rename **'mixed' → 'MIXER'** · reorganize so **Stops sits next to
+    Mixer + ColorBox** as prominent peer sections (clearer IA) · **polish the vertical sliders** — keep the
+    precision / over-max-min / keyframeable behaviour but make them **intuitive** (the "children can use it"
+    bar — they're currently unclear) · **Mixer section needs a RESET**.
+  - **FAVIENTS:** the click/add-path should **drop into the last-used / last-created GROUP** (not a default).
+  - **FULLSCREEN-V2** (fold into its re-scope): + horizontal **SPLITSCREEN** · live-binds to the
+    **last-updated hero / clicked fav** · **RANDOM mode** = a few layers of random dots in **pseudo-3D
+    parallax** space with **draw interactivity** · all interactions **neat & professional yet child-simple**.
+  - **★ UX BAR (recurring user value):** GX interactions must be intuitive for users with only **basic
+    click+drag understanding** ("my children can use it") — guides the slider polish, fullscreen-v2, and P3.
+- 2026-06-08 — **ROADMAP LOCKED (user) + curve-editor refinements added.** Post-P2 roadmap decisions:
+  - **(1) Finish P2** (Batch B UI + Batch C R4 doc round-trip) — **almost done** → P2 phase summary to follow.
+  - **(2) Fullscreen-v2 — EXPANDED to a MAJOR feature initiative; original `fullscreen-v2-scope.md` now
+    insufficient → needs a FULL FRESH RE-SCOPE on the merged foundation.** New scope = horizontal
+    **SPLITSCREEN** · high-quality **SOTA dithering** · **MESH + FLUID modes** · **aesthetic & customizability
+    overhaul of ALL existing modes** · **S-curve becomes a real SPLINE mode** (not a param) · "+ others we'll
+    find along the way." This is the next big feature phase after P2; re-scope before building.
+  - **(3) W9 snapshot — LOW PRIORITY** (stays deferred).
+  - **(4) W13 Tier-B interpolation — REMOVED** (not building it).
+  - **(5) Live-fractal carve follow-ups — CLOSED** (carve well-completed; the 5 nits not pursued unless they
+    resurface).
+  - **(6) Tech-debt — treat as ANTI-DEBT-ACCRUAL** (may be blocking; don't let it grow): `test:compat`
+    failing (potentially prod-blocking), oklab de-dup remainder (4 fns need a `colorUtils` export), ColorBox
+    sub-range UI, P0d nits, easing↔formula-picker consolidation, ColorBox defaults. Fold a cleanup in rather
+    than accrue more.
+  - **(7) P3 `/polish` — clarified:** it's the whole-app UX coherence sweep (review surface-by-surface +
+    holistically, triage act/ask/avoid, apply) — not just ceremony, but **likely lighter than originally
+    conceived** given the continuous visual polish done throughout P2; scope it when we get there.
+  - **NEW — Curve-editor refinements (ChannelGraphEditor; distinct stream):** (a) the resizable box-selection
+    needs a **CENTRE HANDLE for moving** the selection; (b) a new **'BIAS' feature** that moves points around;
+    (c) small **GHOST POINTS** in the curve to explain the smooth & detail-level sliders. Relates to S3 ghost
+    curves + the N5 curves widget.
 - 2026-06-08 — **✅ P2 BATCH A MERGED** into integration `498d7dd` (commit `c9da379`; 16 files +227/−196,
   FavStar.tsx deleted; gate green; user visual-confirmed Chrome+Firefox incl. the app-gmt Destination-dropdown
   regression). Cleared 6 items + 2 in-session follow-ups: **N4** Generator slots → hero-esque drag sources
