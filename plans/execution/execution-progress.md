@@ -466,9 +466,12 @@ merges, plan amendments. Newest first.)_
 
 - 2026-06-08 — **fullscreen-v2 EXECUTION PLAN: gate-first → parallel mode fan-out** (user wants the modes
   "largely in parallel"). Sequencing (mirrors the Phase-0-freeze-then-fan-out pattern that built this app):
-  **Session 1 = GeometryParams flat-optional GATE + SPLITSCREEN**, which must **DEFINE + FREEZE the mode
-  plug-in seam** (the flat-optional `GeometryParams` contract + the mode dispatch/registration seam in
-  `FullscreenGradientOverlay`); splitscreen is the first consumer proving the seam. **THEN fan out in
+  **Session 1 = GeometryParams flat-optional GATE + shared DITHERING render-tail + SPLITSCREEN**, which must
+  **DEFINE + FREEZE the foundation every mode inherits**: (1) the flat-optional `GeometryParams` contract;
+  (2) the mode dispatch/registration seam in `FullscreenGradientOverlay`; (3) **dithering as a SHARED
+  render-tail** — blue-noise-sourced TPDF @1 LSB applied at the fragment-shader tail to ALL modes' output
+  (reuse `createBlueNoiseWebGL2.ts`, static tile), baked into the PNG export (so every parallel mode gets
+  consistent dithering for free, not per-mode). Splitscreen is the first consumer proving the seam. **THEN fan out in
   parallel, each in its OWN WORKTREE** (true parallelism; worktrees painless via the additionalDirectories
   fix): **Liquify · spline-path · parallax** — self-contained mode modules on the frozen seam → minimal
   shared-overlay/store contention. Parallelizing modes BEFORE the seam is frozen = each guesses the contract
