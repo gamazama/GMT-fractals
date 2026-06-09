@@ -20,6 +20,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { buildPresetCatalog, registerCustomRamp, type CatalogEntry } from '../core/presetCatalog';
 import { renderStopsToRamp, renderStopsToBuffer } from '../core/gmtGradient';
+import { paintRampToCanvas } from '../core/rampCanvas';
 import { useFavientsStore } from '../store/favientsStore';
 
 const MAX_ROWS = 300; // cap until the 11k catalog gets a virtualized list
@@ -32,11 +33,7 @@ const Swatch: React.FC<{ ramp: Uint8Array }> = ({ ramp }) => {
     const ctx = cv.getContext('2d');
     if (!ctx) return;
     const tmp = document.createElement('canvas');
-    tmp.width = 256;
-    tmp.height = 1;
-    const tctx = tmp.getContext('2d');
-    if (!tctx) return;
-    tctx.putImageData(new ImageData(new Uint8ClampedArray(ramp), 256, 1), 0, 0);
+    paintRampToCanvas(tmp, ramp);
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(tmp, 0, 0, 256, 1, 0, 0, cv.width, cv.height);
   }, [ramp]);

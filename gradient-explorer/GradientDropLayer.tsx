@@ -26,7 +26,8 @@ import { Z } from '../components/ui/zIndex';
 import { useActiveHeroSelection, useHeroOptionsOpen, closeHeroOptions } from '../palette/store/heroSelection';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
 import { renderStopsToBuffer } from '../palette/core/gmtGradient';
-import { getDragOrigin, setDragOrigin, triggerLanding, type DragRect } from '../palette/store/dragVisual';
+import { getDragOrigin, setDragOrigin, triggerLanding, triggerCancel, markPickLanded, consumePickLanded, clearPickLanded, useNativeDragging, type DragRect } from '../palette/store/dragVisual';
+import { paintRampToCanvas } from '../palette/core/rampCanvas';
 import { deriveIntermediates, type IntermediateAffordance } from './gradientTargets';
 
 /** Dwell over an intermediate for this long (ms) to run its reveal step mid-drag. */
@@ -64,6 +65,10 @@ const AVATAR_H = 30;
 // Above the Picker's hover-zoom preview (z 9500) so the morph is never covered by it.
 const AVATAR_Z = 9600;
 
+/** The avatar's floating box for a cursor point — the single source for the +14/-14 offset,
+ *  shared by the landing `from` (handleSent) and the cancel `at` (teardown). */
+const avatarBoxAt = (x: number, y: number): DragRect => ({ left: x + 14, top: y - 14, width: AVATAR_W, height: AVATAR_H });
+
 /**
  * The dragged gradient's avatar (visual only; pointer-events-none). It MORPHS out of its
  * source rect — the grabbed swatch / hero — into a small cursor-following ramp: the whole
@@ -87,11 +92,7 @@ const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number; origin: Dra
     const [, force] = useReducer((n: number) => n + 1, 0);
 
     useEffect(() => {
-        const cv = ref.current;
-        if (!cv) return;
-        cv.width = 256;
-        cv.height = 1;
-        cv.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(ramp), 256, 1), 0, 0);
+        if (ref.current) paintRampToCanvas(ref.current, ramp);
     }, [ramp]);
 
     useEffect(() => {
@@ -135,7 +136,12 @@ export const GradientDropLayer: React.FC = () => {
     const sel = useActiveHeroSelection();
     const optionsOpen = useHeroOptionsOpen();
     const { inFlight, types } = useDragInFlight(true);
-    const dragging = inFlight && acceptsGradient(types);
+    // A custom-avatar drag is in flight via the SYNCHRONOUS dragstart→dragend signal (set the
+    // instant a source starts a drag) OR the window dragenter detection. The synchronous signal
+    // is the robust one — it can't be reset mid-drag by dragenter/dragleave imbalance the way
+    // `inFlight` can while the Favients shelf re-renders, so the avatar + passthrough stay live.
+    const nativeDragging = useNativeDragging();
+    const dragging = nativeDragging || (inFlight && acceptsGradient(types));
     // The dock is shown while the options are open (click path) OR a drag is in flight.
     // The PICK itself (sel) is sticky and no longer gates the dock — closing options
     // leaves the pick in hand. (sel-guard so a stray open with no pick can't show empty.)
@@ -145,6 +151,11 @@ export const GradientDropLayer: React.FC = () => {
     const [, tick] = useReducer((n: number) => n + 1, 0);
     const [dwellStep, setDwellStep] = useState<string | null>(null);
     const dwellStart = useRef(0);
+    // The avatar's last on-screen box + ramp, so an in-hand teardown WITHOUT a land can wipe
+    // it from exactly where it floated (the cancel animation). Whether the session LANDED is
+    // tracked in the shared `markPickLanded`/`consumePickLanded` flag (set by handleSent AND
+    // by the Favients panel's own drop), so a drop the Favients shelf consumes doesn't wipe.
+    const lastAvatar = useRef<{ ramp: Uint8Array; x: number; y: number } | null>(null);
 
     // Track the cursor during a drag (dragover fires with coords; pointermove does not),
     // and end the session when the drag ends — whether it dropped on a target (the target
@@ -195,7 +206,12 @@ export const GradientDropLayer: React.FC = () => {
             window.removeEventListener('mousemove', onMove);
             if (raf) cancelAnimationFrame(raf);
             pointer.current = { x: 0, y: 0 };
-            setDragOrigin(null);
+            // NOTE: do NOT clear the drag origin here. When a click-pick transitions INTO a
+            // drag (dragging flips true), this cleanup runs right before the drag effect reads
+            // getDragOrigin() to seed the morph — nulling it would lose the source the drag
+            // JUST set, so the avatar wouldn't morph out of the swatch. Each gesture sets the
+            // origin fresh, so leaving a stale one is harmless (the drag effect's own cleanup
+            // clears it when the drag ends).
         };
     }, [active, dragging]);
 
@@ -240,6 +256,23 @@ export const GradientDropLayer: React.FC = () => {
         };
     }, [active, dragging, dwellStep]);
 
+    // In-hand teardown → the cancel wipe. The avatar's existence is gated on `active`; when it
+    // flips false the pick was let go — by empty-wall click / Esc / click-away (which keep the
+    // sticky pick) or a drop-on-nothing, all of which route through deselect/closeHeroOptions.
+    // Wipe the floating avatar off from its last spot instead of popping it out — UNLESS a
+    // destination CONSUMED the pick: a dock apply (handleSent) OR a Favients-panel drop
+    // (insert/reorder/group), both of which call markPickLanded. consumePickLanded reads +
+    // clears the flag, and the active→true branch clears any stale signal at session start.
+    useEffect(() => {
+        if (active) {
+            clearPickLanded(); // fresh in-hand session — discard any stale land signal
+            return;
+        }
+        const la = lastAvatar.current;
+        lastAvatar.current = null;
+        if (la && !consumePickLanded()) triggerCancel(avatarBoxAt(la.x, la.y), la.ramp);
+    }, [active]);
+
     // The dragged ramp — recomputed only when the selection changes (not per rAF frame).
     // MUST stay above the early return below so the hook order is stable.
     const avatarRamp = useMemo(
@@ -263,9 +296,12 @@ export const GradientDropLayer: React.FC = () => {
     // on screen (drag OR click path); a bottom well has no rect, so it just closes.
     const handleSent = (rect: DOMRect | null): void => {
         const p = pointer.current;
+        // Mark this session as LANDED so the teardown effect skips the cancel wipe (a bottom
+        // well has no rect → no fly-in, but it still landed, so suppress the wipe too).
+        markPickLanded();
         if (rect && avatarRamp && (p.x !== 0 || p.y !== 0)) {
             triggerLanding(
-                { left: p.x + 14, top: p.y - 14, width: AVATAR_W, height: AVATAR_H },
+                avatarBoxAt(p.x, p.y),
                 { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
                 avatarRamp,
             );
@@ -274,6 +310,13 @@ export const GradientDropLayer: React.FC = () => {
     };
 
     if (!active) return null;
+
+    // Remember where the avatar is floating right now (raw cursor + ramp), so an abandon
+    // (active → false) can wipe it from this exact spot via avatarBoxAt — captured here in
+    // render because the dragover/click effects reset pointer.current on their teardown.
+    if (avatarRamp && (pointer.current.x !== 0 || pointer.current.y !== 0)) {
+        lastAvatar.current = { ramp: avatarRamp, x: pointer.current.x, y: pointer.current.y };
+    }
 
     const dwellProgress =
         dwellStep && dwellStart.current
@@ -286,13 +329,16 @@ export const GradientDropLayer: React.FC = () => {
 
     return (
         <>
-            {/* Final targets (anchored + bottom wells) — engine-core, generic. */}
+            {/* Final targets (anchored + bottom wells) — engine-core, generic. The synchronous
+                native-drag signal is fed in so a dragPassthrough target (Favients) stays passive
+                for the WHOLE drag even if dragenter/dragleave bookkeeping briefly drops inFlight. */}
             <DropTargetLayer
                 selectedPayload={sel?.payload}
                 selfId={sel?.selfTargetId}
                 dragAccepts={acceptsGradient}
                 readDragPayload={readFavientDrag}
                 onSent={handleSent}
+                dragActiveOverride={nativeDragging}
             />
 
             {/* Intermediate reveal steps — derived from the registry, anchored over each

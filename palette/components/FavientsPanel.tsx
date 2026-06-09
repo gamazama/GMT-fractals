@@ -31,9 +31,9 @@ import {
   getFavientStudioAction,
   getFavientSelectMode,
 } from '../core/favientTargets';
-import { setFavientDrag, suppressNativeDragImage, readFavientDrag, FAVIENT_DND_MIME, type FavientDragPayload } from '../core/favientDnd';
+import { setFavientDrag, beginCustomAvatarDrag, readFavientDrag, FAVIENT_DND_MIME, type FavientDragPayload } from '../core/favientDnd';
 import { useHeroPick, useActiveHeroMode, setHeroDrag, setHeroPick } from '../store/heroSelection';
-import { setDragOrigin } from '../store/dragVisual';
+import { setDragOrigin, markPickLanded } from '../store/dragVisual';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
 import { FavientsIcon } from './FavientsIcon';
@@ -436,7 +436,7 @@ const FavientSwatch: React.FC<{
       onHover(null);
       const payload = { config: fav.config, name: fav.name, source: fav.source, favId: fav.id };
       setFavientDrag(e.dataTransfer, payload);
-      suppressNativeDragImage(e.dataTransfer); // cursor-following avatar stands in
+      beginCustomAvatarDrag(e.dataTransfer); // register the drag + suppress the native image
       setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the swatch
       // Drag mirrors select — gives the avatar its ramp + lets the favourite be sent to
       // a dropbox (its own internal reorder still works via the FAVIENT_INTERNAL_MIME).
@@ -782,6 +782,10 @@ export const FavientsPanel: React.FC = () => {
   // history provider). A drop that changes nothing yields an empty diff → no entry.
   const doDrop = (p: FavientDragPayload | null, t: DropTarget) => {
     if (!p || !t) return;
+    // The shelf is consuming this drag itself (insert / reorder / group / trash) — tell the
+    // drop layer the in-hand pick LANDED, so its teardown skips the cancel wipe. The shelf's
+    // drop `stopPropagation`s, so it never reaches the dock's apply path that would mark this.
+    markPickLanded();
     favEdit(() => {
       if (t.kind === 'trash') {
         if (p.favId) {

@@ -16,8 +16,9 @@
  * buttons. Surface-specific NON-action controls (stops count) go in `trailing`.
  *
  * Visual tiers (orthogonal): the in-hand pick shows a muted cyan ring; the ACTIVE state
- * (pick + dock open) brightens it + glows. A neutral ring otherwise marks draggability.
- * The vertical-enlarge height is a separate, shared concern (see callers).
+ * (pick + dock open) brightens it + glows AND insets the ramp in a tinted padding frame
+ * (§2.5b). A neutral ring otherwise marks draggability. The vertical-enlarge height is a
+ * separate, shared concern (see callers).
  *
  * Selection is per-mode (the transient `heroSelection` store keyed by `mode` + `key`),
  * so a picked Picker gradient never lights the Generator hero, and it survives the
@@ -33,7 +34,7 @@ import { renderStopsToRamp } from '../core/gmtGradient';
 import { GradientStrip } from './GradientStrip';
 import { FavStar } from './FavStar';
 import { favientSig } from '../store/favientsStore';
-import { setFavientDrag, suppressNativeDragImage } from '../core/favientDnd';
+import { setFavientDrag, beginCustomAvatarDrag } from '../core/favientDnd';
 import {
   useHeroPick,
   useActiveHeroMode,
@@ -143,7 +144,10 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
       </div>
       {/* The strip is the pick + drag affordance: click to pick (opens the dock), drag to
           drop onto a target. Neutral ring = draggable; cyan = the in-hand pick; bright +
-          glow = active (dock open). */}
+          glow = active (dock open). The ACTIVE state also frames the ramp in a tinted
+          padding matte (§2.5b) — the ramp insets by the p-1 so the hero's FOOTPRINT stays
+          constant (a frame, NOT a size change per §2.5). Glow + frame ease in via the
+          box-shadow/bg transition; the ramp inset itself is instant. */}
       <div
         role="button"
         tabIndex={0}
@@ -151,7 +155,7 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
         draggable
         onDragStart={(e) => {
           setFavientDrag(e.dataTransfer, { config, name, source });
-          suppressNativeDragImage(e.dataTransfer);
+          beginCustomAvatarDrag(e.dataTransfer);
           setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the strip
           // Drag mirrors click: set the pick so the avatar has a ramp + the source stays lit.
           setHeroDrag({ mode, key, payload: { config, name, source }, selfTargetId: targetId });
@@ -171,15 +175,17 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
             ? 'In hand — pick a destination, or drag onto a target'
             : 'Click to pick (then choose a destination) · drag onto a target'
         }
-        className={`overflow-hidden rounded-md cursor-grab active:cursor-grabbing transition-shadow ${
+        className={`overflow-hidden rounded-md cursor-grab active:cursor-grabbing transition-[box-shadow,background-color] duration-150 ${
           active
-            ? 'ring-2 ring-cyan-400 shadow-[0_0_16px_rgba(34,211,238,0.30)]'
+            ? 'ring-2 ring-cyan-400 shadow-[0_0_16px_rgba(34,211,238,0.30)] bg-cyan-500/15 p-1'
             : isSelected
               ? 'ring-2 ring-cyan-400/50'
               : 'ring-1 ring-white/15 hover:ring-white/30'
         }`}
       >
-        <GradientStrip ramp={r} height={height} />
+        {/* Shrink the ramp by the p-1 frame (8px) when active so the matte appears WITHOUT
+            growing the hero — keeps the footprint matching the deselected placeholder. */}
+        <GradientStrip ramp={r} height={active ? Math.max(0, height - 8) : height} />
       </div>
     </div>
   );
