@@ -464,6 +464,12 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **✅ fullscreen-v2 splitscreen ADDENDUM MERGED** into integration `233b5a7` (one commit
+  `6dc26bf` — keep the live gradient on split→fullscreen switch; +14/−1 on FullscreenGradientOverlay +
+  fullscreenStore; gate green). Merged BEFORE the parallel fan-out so the modes build on the fixed
+  foundation; **`exec/fs-spline` + `exec/fs-liquify` fast-forwarded onto `233b5a7`** (they include the
+  addendum). Merged branches `exec/fs-gate-splitscreen` + `exec/fs-split-continuity` deleted. Spline +
+  Liquify worktrees ready to run.
 - 2026-06-08 — **✅ fullscreen-v2 SESSION 1 (FOUNDATION) MERGED** into integration `9fc675a` (merge of
   `exec/fs-gate-splitscreen`, 9 commits). Gate green (tsc 0 · build · test:palette · **test:dither** flat-gate
   holds). User visual-confirmed ("perfect smoothness"). **THE SEAM IS FROZEN** (documented in
