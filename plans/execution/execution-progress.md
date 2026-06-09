@@ -167,7 +167,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | S6 | W11 Fullscreen configs | 1 | ✅ **merged `94e8e5d`** | `exec/s6-fullscreen` | foundation + fixes: drop-race in W4 kernel (capture→bubble reset — ratified into (b)) + isotropic geometries (radial/conic round). User visual confirm (drop opens fullscreen; shapes round). Integration gate green. FUTURE: richer options (backlog "fullscreen v2") |
 | S7 | W12 ColorBox generator mode (v1 addition) | 1 | ✅ **merged `5c2a280`** | `exec/s7-colorbox` | easings.ts + buildColorBoxRamp + generatorMode + visual easing picker + colored L/C/h sliders (NEW additive `ScalarInput.trackBackground`) + colorBoxFit.ts (frozen-ahead for P2 drop) + "Fit from gradient" interim button. Fixed hue-key-casing black-ramp bug. User visual confirm; full gate green |
 | S8 | W13 interpolation bases | 1 | ✅ **resolved — DEFERRED, no code** | `exec/s8-interp` | S8 REFUTED Tier A: 2-point `sampleSorted` can't overshoot → monotone-cubic degenerates to smoothstep (already ships as smooth/cubic); the no-overshoot win needs **multi-point = Tier B**. **W13 entirely deferred to Tier B**; v1 ships nothing from it. Zero code (sampler byte-unchanged). Good catch (flawed scope-doc premise). Rationale → project memory |
-| P2 | W2 portability integration (W9 deferred) | 2 | **IN FLIGHT** — live-fractal ✅ · P2-F ✅ · **P2-A ✅ `e0240f9`** · **P2-A-Picker ✅ `1325abf`** (Stage-2 cancel-wipe + 2 minor = tracked follow-ups) | `exec/p2-*` (per sub-stream) | **7 sub-streams** (`plans/p2-scope.md`). **pre P2-F** ✅ MERGED `c817911`. **W1: P2-A** ✅ DELIVERED in-review (`exec/p2-a` 7146275) — tab-anchored "select→reveal→place" (NOT a bin dock; spec was wrong → `p2-a-v2-design.md`); brought the canonical hero (`CanonicalHero`, `targetId` prop) + the data-driven dropbox/reveal layer (`DropTarget`/`DropTargetLayer`); **(c) +4 fields ratified** (see frozen block). P2-C/P2-D now build on P2-A's reveal layer + the 4 (c) fields (P2-A productionized the in-app pointer/dropbox part of P2-D). ‖ **P2-E** gen+image doc round-trip (M). **W2:** P2-B hero state-lift (S) ‖ P2-G favourite Update/Save-as-new + facetName (M) ‖ P2-D finish drag/avatar/cross-tab (L). **W3:** close-out + **runtime re-verify (S6 well migration)**. **Undo focus = (b) auto-focus** (ratified). **NEXT (user's pick):** the Picker two-selection-states + swatch enlarge → `plans/p2-a-picker-handoff.md` (fresh in-`dev` branch). **Worktrees now opt-in** — serial streams run in `dev` directly (additionalDirectories fix landed). |
+| P2 | W2 portability integration (W9 deferred) | 2 | **IN FLIGHT** — live-fractal ✅ · P2-F ✅ · **P2-A ✅** · **P2-A-Picker + polish ✅ `fdfcbed` (interaction FULLY CLOSED, Chrome+FF confirmed)** · next: re-scope P2-C → P2-C/P2-E | `exec/p2-*` (per sub-stream) | **7 sub-streams** (`plans/p2-scope.md`). **pre P2-F** ✅ MERGED `c817911`. **W1: P2-A** ✅ DELIVERED in-review (`exec/p2-a` 7146275) — tab-anchored "select→reveal→place" (NOT a bin dock; spec was wrong → `p2-a-v2-design.md`); brought the canonical hero (`CanonicalHero`, `targetId` prop) + the data-driven dropbox/reveal layer (`DropTarget`/`DropTargetLayer`); **(c) +4 fields ratified** (see frozen block). P2-C/P2-D now build on P2-A's reveal layer + the 4 (c) fields (P2-A productionized the in-app pointer/dropbox part of P2-D). ‖ **P2-E** gen+image doc round-trip (M). **W2:** P2-B hero state-lift (S) ‖ P2-G favourite Update/Save-as-new + facetName (M) ‖ P2-D finish drag/avatar/cross-tab (L). **W3:** close-out + **runtime re-verify (S6 well migration)**. **Undo focus = (b) auto-focus** (ratified). **NEXT (user's pick):** the Picker two-selection-states + swatch enlarge → `plans/p2-a-picker-handoff.md` (fresh in-`dev` branch). **Worktrees now opt-in** — serial streams run in `dev` directly (additionalDirectories fix landed). |
 | P3 | `/polish` pass | 3 | deferred | — | after structure lands |
 
 ---
@@ -437,6 +437,26 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **✅ P2-A PICKER POLISH MERGED** into integration `fdfcbed` (merge of `exec/p2-a-picker-polish`,
+  off 98b5cb9; 11 files +389/−66; 3 commits). Combined gate green (tsc 0 · test:palette ALL PASS).
+  **User visual-confirmed in BOTH Chrome and Firefox.** **PICKER INTERACTION NOW FULLY CLOSED** — all of
+  p2-a-picker-interaction.md §5 cleared: (1) **cancel-wipe** (task #12 — `cancel` one-shot in `dragVisual`
+  + `CancelAvatar` in `GradientLandingLayer`, fired from in-hand teardown in `GradientDropLayer`; L→R alpha
+  + X-shrink); (2) **active padding/frame** (§2.5b — `CanonicalHero` tinted matte + glow, footprint-stable
+  via ramp insets); (3) **hover-preview suppression** (`PickerWall` `inHand` prop). **Plus session-fixed
+  user follow-ups:** Favients cancel-wipe regression (shared `markPickLanded`/`consumePickLanded` gate set
+  by both dock `handleSent` and `FavientsPanel.doDrop`); **cross-browser drag robustness** — synchronous
+  `beginNativeDrag`/`useNativeDragging` signal (replaces fragile dragenter/leave depth counting),
+  `DropTargetLayer.dragActiveOverride` prop, eager transparent drag-image, click→drag origin-null race;
+  **Firefox-specific** mousemove-leak fix (end-backstop gated on dragover-recency ~200ms). **Quality:**
+  `paintRampToCanvas` (new `palette/core/rampCanvas.ts`) dedups packed-ramp→256×1 across avatar/landing/
+  cancel/GradientSourcePicker; `suppressNativeDragImage`→`beginCustomAvatarDrag` (the one chokepoint every
+  custom-drag source funnels through). **NEW public drag surface** (for future drag/reorder components):
+  `dragVisual` {beginNativeDrag/useNativeDragging · markPickLanded/consumePickLanded/clearPickLanded ·
+  triggerCancel/clearCancel/useCancel}, `favientDnd.beginCustomAvatarDrag`, `DropTargetLayer.dragActiveOverride`,
+  `rampCanvas.paintRampToCanvas`. Memory: `project_drag_flight_architecture.md` (foundational for future
+  custom-drag). /code-review extra-high (2 fixed) + /simplify + adversarial verify (9 land-signal + 7
+  drag-flight flows) clean. **Next: re-scope P2-C (P2-A likely absorbed much of it) → then P2-C/P2-E.**
 - 2026-06-08 — **✅ P2-A PICKER follow-up MERGED** into integration `1325abf` (merge of `exec/p2-a-picker`
   9fa34e2; clean — branch was based on current integration; 27 files +1324/−314, 5 commits). Combined gate
   green (tsc 0 · test:palette ALL PASS). User visual pass OK ("fine for now"). **Done:** one selection model
