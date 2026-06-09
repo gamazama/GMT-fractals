@@ -87,7 +87,9 @@ export class FullscreenCompositor {
     this.lutTex = this.makeTex(gl.LINEAR); // LINEAR so the field path interpolates the 256-LUT (smooth, no step banding)
     this.posTex = this.makeTex(gl.NEAREST);
     this.covTex = this.makeTex(gl.NEAREST);
-    this.blueNoise = createBlueNoiseWebGL2(gl, '/blueNoise.png', () => onReady?.());
+    // Independent-channel RGBA blue-noise (Christoph Peters free set) — the dither tail sums
+    // two independent channels for a true TPDF; a grayscale tile would degrade to uniform-PDF.
+    this.blueNoise = createBlueNoiseWebGL2(gl, '/blueNoiseRGBA.png', () => onReady?.());
     // Point-sample the tile so the static dither stays crisp (the loader defaults to LINEAR).
     gl.bindTexture(gl.TEXTURE_2D, this.blueNoise.texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
