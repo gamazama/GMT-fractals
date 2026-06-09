@@ -119,6 +119,12 @@ export const consumePickLanded = (): boolean => {
   return v;
 };
 
+/** Discard any stale landed signal at the start of a fresh in-hand session (≠ the teardown
+ *  read above — same effect, but the intent is "reset", not "decide"). */
+export const clearPickLanded = (): void => {
+  landed = false;
+};
+
 // --- Native (custom-avatar) drag in flight — a SYNCHRONOUS signal set the instant a drag
 // starts (in suppressNativeDragImage, the one chokepoint every custom-avatar drag calls),
 // independent of the dragenter/dragleave DEPTH counting useDragInFlight relies on. That depth
@@ -139,7 +145,8 @@ export const consumePickLanded = (): boolean => {
 // "ended" and cancel the drag the instant it starts. The robust distinguisher: during a live
 // drag `dragover` streams continuously, so a `mousemove` only means "ended" when NO `dragover`
 // has fired in the last grace window. `beginNativeDrag` seeds the timestamp so the dragstart→
-// first-dragover gap is covered too.
+// first-dragover gap is covered too. (Sibling of hooks/useDragEndSafetyNet — same mousemove-
+// means-ended heuristic, but module-level and dragover-grace-gated; keep the two in sync.)
 
 const DRAG_LIVE_GRACE_MS = 200;
 let nativeDrag = false;

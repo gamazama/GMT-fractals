@@ -26,7 +26,7 @@ import { Z } from '../components/ui/zIndex';
 import { useActiveHeroSelection, useHeroOptionsOpen, closeHeroOptions } from '../palette/store/heroSelection';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
 import { renderStopsToBuffer } from '../palette/core/gmtGradient';
-import { getDragOrigin, setDragOrigin, triggerLanding, triggerCancel, markPickLanded, consumePickLanded, useNativeDragging, type DragRect } from '../palette/store/dragVisual';
+import { getDragOrigin, setDragOrigin, triggerLanding, triggerCancel, markPickLanded, consumePickLanded, clearPickLanded, useNativeDragging, type DragRect } from '../palette/store/dragVisual';
 import { deriveIntermediates, type IntermediateAffordance } from './gradientTargets';
 
 /** Dwell over an intermediate for this long (ms) to run its reveal step mid-drag. */
@@ -63,6 +63,10 @@ const AVATAR_W = 148;
 const AVATAR_H = 30;
 // Above the Picker's hover-zoom preview (z 9500) so the morph is never covered by it.
 const AVATAR_Z = 9600;
+
+/** The avatar's floating box for a cursor point — the single source for the +14/-14 offset,
+ *  shared by the landing `from` (handleSent) and the cancel `at` (teardown). */
+const avatarBoxAt = (x: number, y: number): DragRect => ({ left: x + 14, top: y - 14, width: AVATAR_W, height: AVATAR_H });
 
 /**
  * The dragged gradient's avatar (visual only; pointer-events-none). It MORPHS out of its
@@ -154,7 +158,7 @@ export const GradientDropLayer: React.FC = () => {
     // it from exactly where it floated (the cancel animation). Whether the session LANDED is
     // tracked in the shared `markPickLanded`/`consumePickLanded` flag (set by handleSent AND
     // by the Favients panel's own drop), so a drop the Favients shelf consumes doesn't wipe.
-    const lastAvatar = useRef<{ ramp: Uint8Array; box: DragRect } | null>(null);
+    const lastAvatar = useRef<{ ramp: Uint8Array; x: number; y: number } | null>(null);
 
     // Track the cursor during a drag (dragover fires with coords; pointermove does not),
     // and end the session when the drag ends — whether it dropped on a target (the target
@@ -264,12 +268,12 @@ export const GradientDropLayer: React.FC = () => {
     // clears the flag, and the active→true branch clears any stale signal at session start.
     useEffect(() => {
         if (active) {
-            consumePickLanded(); // fresh in-hand session — discard any stale land signal
+            clearPickLanded(); // fresh in-hand session — discard any stale land signal
             return;
         }
         const la = lastAvatar.current;
         lastAvatar.current = null;
-        if (la && !consumePickLanded()) triggerCancel(la.box, la.ramp);
+        if (la && !consumePickLanded()) triggerCancel(avatarBoxAt(la.x, la.y), la.ramp);
     }, [active]);
 
     // The dragged ramp — recomputed only when the selection changes (not per rAF frame).
@@ -300,7 +304,7 @@ export const GradientDropLayer: React.FC = () => {
         markPickLanded();
         if (rect && avatarRamp && (p.x !== 0 || p.y !== 0)) {
             triggerLanding(
-                { left: p.x + 14, top: p.y - 14, width: AVATAR_W, height: AVATAR_H },
+                avatarBoxAt(p.x, p.y),
                 { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
                 avatarRamp,
             );
@@ -310,13 +314,11 @@ export const GradientDropLayer: React.FC = () => {
 
     if (!active) return null;
 
-    // Remember where the avatar is floating right now, so an abandon (active → false) can wipe
-    // it from this exact spot. Mirrors handleSent's `from` box (cursor + the avatar offset).
+    // Remember where the avatar is floating right now (raw cursor + ramp), so an abandon
+    // (active → false) can wipe it from this exact spot via avatarBoxAt — captured here in
+    // render because the dragover/click effects reset pointer.current on their teardown.
     if (avatarRamp && (pointer.current.x !== 0 || pointer.current.y !== 0)) {
-        lastAvatar.current = {
-            ramp: avatarRamp,
-            box: { left: pointer.current.x + 14, top: pointer.current.y - 14, width: AVATAR_W, height: AVATAR_H },
-        };
+        lastAvatar.current = { ramp: avatarRamp, x: pointer.current.x, y: pointer.current.y };
     }
 
     const dwellProgress =
