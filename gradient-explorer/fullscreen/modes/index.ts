@@ -11,10 +11,13 @@
 import { registerFullscreenMode } from '../modeRegistry';
 import { BUILTIN_MODES } from './geometryModes';
 import { splineMode } from './splineMode';
+import { FRACTAL_MODE } from './fractalMode';
+import { LIQUIFY_MODE } from './liquifyMode';
 
 for (const mode of BUILTIN_MODES) registerFullscreenMode(mode);
 
-// Parallel mode streams: register here (after the builtins, so they append to the selector).
-registerFullscreenMode(splineMode); // glQuad — gradient flows along an editable Catmull-Rom path
-//   import './liquifyMode';    // ownCanvas — deformable LUT-mesh (MLS + XPBD + Taubin)
-//   import './parallaxMode';   // ownCanvas — depth-layered parallax dot field
+// Parallel mode streams register after the builtins (append to the selector).
+registerFullscreenMode(splineMode);     // glQuad    — gradient flows along an editable Catmull-Rom path
+registerFullscreenMode(FRACTAL_MODE);   // ownCanvas — live Mandelbrot coloured by the ramp
+registerFullscreenMode(LIQUIFY_MODE);   // ownCanvas — deformable LUT-mesh (MLS + XPBD + Taubin)
+//   import './parallaxMode';   // ownCanvas — depth-layered parallax dot field (next)

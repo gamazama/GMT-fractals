@@ -88,9 +88,7 @@ export const BUILTIN_MODES: readonly FullscreenMode[] = [
     ]),
     Controls: RandomControls,
   },
-  // Live fractal — the `ownCanvas` escape hatch. It mounts + drives its own WebGL renderer
-  // (perturbation/LA/TSAA) and bakes its own dithering (in-kernel blue noise + TSAA
-  // accumulation), so it neither flows through the compositor nor needs the shared tail.
-  // The overlay hosts its canvas + controls specially (keyed on kind === 'ownCanvas').
-  { id: 'fractal', label: 'Fractal', kind: 'ownCanvas' },
+  // The live `fractal` mode (the `ownCanvas` escape hatch) is registered from its own module
+  // (`modes/fractalMode.tsx`) via the generic `mount()` face — it owns its WebGL renderer, RAF,
+  // gestures, knobs, and toolbar with zero overlay coupling. See `modes/index.ts`.
 ];
