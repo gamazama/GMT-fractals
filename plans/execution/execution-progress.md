@@ -464,6 +464,17 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-09 — **✅ fullscreen-v2 SPLINE mode MERGED** into integration `8ca2c9b` (commit `026dd0e`; 3 files
+  +642/−2). Gate green (tsc 0 · test:palette). **Independent review = MERGE-WITH-NITS** (no blockers/bugs;
+  seam-compliance + GL-robustness + the un-reviewed later changes [ungating complete, param rework
+  consistent, debug clean] + correctness all PASS — verified overlay-core untouched, RESERVED_UNIFORMS
+  respected, tex unit ≥3, RGBA32F+NEAREST+texelFetch needs no guard [DeepZoomController precedent], Shepard
+  core regularizer avoids /0). User visual-confirmed (diffusion-field look approved). The reviewer's
+  "−22 execution-progress.md revert" flag was a diff-direction false alarm (branch was behind, never modified
+  the file → merge kept integration's entries; verified). **First of 3 parallel modes done — proves the seam
+  for `glQuad`.** Worktree `wt-spline` retired. **FOLLOW-UP NIT:** stale top-of-file docstring in
+  `splineMode.tsx` (describes the replaced sdSegment model, not the shipped Shepard diffusion) — one-line
+  comment fix, fold into a later polish pass.
 - 2026-06-09 — **fullscreen-v2 SPLINE mode DELIVERED — in-review, NOT merged** (branch `exec/fs-spline`,
   wt-spline; gate green tsc 0 · test:palette 14/14). Additive against the frozen seam (`splineMode.tsx` +
   one register line + 2 additive gate fields) — **proves the seam works for a parallel `glQuad` mode.**
