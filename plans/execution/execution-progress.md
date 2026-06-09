@@ -167,7 +167,7 @@ palette/Favients; a host may pass an optional palette prop later). Recents = **s
 | S6 | W11 Fullscreen configs | 1 | ✅ **merged `94e8e5d`** | `exec/s6-fullscreen` | foundation + fixes: drop-race in W4 kernel (capture→bubble reset — ratified into (b)) + isotropic geometries (radial/conic round). User visual confirm (drop opens fullscreen; shapes round). Integration gate green. FUTURE: richer options (backlog "fullscreen v2") |
 | S7 | W12 ColorBox generator mode (v1 addition) | 1 | ✅ **merged `5c2a280`** | `exec/s7-colorbox` | easings.ts + buildColorBoxRamp + generatorMode + visual easing picker + colored L/C/h sliders (NEW additive `ScalarInput.trackBackground`) + colorBoxFit.ts (frozen-ahead for P2 drop) + "Fit from gradient" interim button. Fixed hue-key-casing black-ramp bug. User visual confirm; full gate green |
 | S8 | W13 interpolation bases | 1 | ✅ **resolved — DEFERRED, no code** | `exec/s8-interp` | S8 REFUTED Tier A: 2-point `sampleSorted` can't overshoot → monotone-cubic degenerates to smoothstep (already ships as smooth/cubic); the no-overshoot win needs **multi-point = Tier B**. **W13 entirely deferred to Tier B**; v1 ships nothing from it. Zero code (sampler byte-unchanged). Good catch (flawed scope-doc premise). Rationale → project memory |
-| P2 | W2 portability integration (W9 deferred) | 2 | **IN FLIGHT — RE-SCOPED** (`plans/p2-remaining-scope.md`) | merged: live-fractal · P2-F · P2-A · P2-A-Picker+polish (`fdfcbed`). **P2-B/C/D mostly ABSORBED** by P2-A/Picker. **Remaining task list:** R1 loadRamp-Stops (S) · R2 facetName wiring (S) · N2 tool cursors (S) · **N1 Favients redock bug (M, NEXT)** · N4 slots hero-esque (M) · N3 remove starring (M) · N5 curves drag (L) · R3 favientTargets→registry (M) · R4 gen/image doc round-trip [old P2-E] (M) · R5 FavientSwatch→CanonicalHero (L, defer). **Q1 RESOLVED: P2-G toggle DROPPED** (starring removed). **N1 in-flight** (`exec/p2-n1-favients-redock`). | `exec/p2-*` (per sub-stream) | **7 sub-streams** (`plans/p2-scope.md`). **pre P2-F** ✅ MERGED `c817911`. **W1: P2-A** ✅ DELIVERED in-review (`exec/p2-a` 7146275) — tab-anchored "select→reveal→place" (NOT a bin dock; spec was wrong → `p2-a-v2-design.md`); brought the canonical hero (`CanonicalHero`, `targetId` prop) + the data-driven dropbox/reveal layer (`DropTarget`/`DropTargetLayer`); **(c) +4 fields ratified** (see frozen block). P2-C/P2-D now build on P2-A's reveal layer + the 4 (c) fields (P2-A productionized the in-app pointer/dropbox part of P2-D). ‖ **P2-E** gen+image doc round-trip (M). **W2:** P2-B hero state-lift (S) ‖ P2-G favourite Update/Save-as-new + facetName (M) ‖ P2-D finish drag/avatar/cross-tab (L). **W3:** close-out + **runtime re-verify (S6 well migration)**. **Undo focus = (b) auto-focus** (ratified). **NEXT (user's pick):** the Picker two-selection-states + swatch enlarge → `plans/p2-a-picker-handoff.md` (fresh in-`dev` branch). **Worktrees now opt-in** — serial streams run in `dev` directly (additionalDirectories fix landed). |
+| P2 | W2 portability integration (W9 deferred) | 2 | **IN FLIGHT — RE-SCOPED** (`plans/p2-remaining-scope.md`) | merged: live-fractal · P2-F · P2-A · P2-A-Picker+polish (`fdfcbed`). **P2-B/C/D mostly ABSORBED** by P2-A/Picker. **Remaining task list:** R1 loadRamp-Stops (S) · R2 facetName wiring (S) · N2 tool cursors (S) · **N1 Favients redock bug (M, NEXT)** · N4 slots hero-esque (M) · N3 remove starring (M) · N5 curves drag (L) · R3 favientTargets→registry (M) · R4 gen/image doc round-trip [old P2-E] (M) · R5 FavientSwatch→CanonicalHero (L, defer). **N1+2 dock fixes ✅ MERGED `2bc4cfb`.** Remaining re-batched into 2 coherent sessions: **Batch A** (N4 slots + N5 curves + N3 remove-starring + R2 facetName + R3 favientTargets→registry + R1 Stops-target — NEXT) · **Batch B** (R4 gen/image doc round-trip + N2 cursors). P2-G toggle dropped. | `exec/p2-*` (per sub-stream) | **7 sub-streams** (`plans/p2-scope.md`). **pre P2-F** ✅ MERGED `c817911`. **W1: P2-A** ✅ DELIVERED in-review (`exec/p2-a` 7146275) — tab-anchored "select→reveal→place" (NOT a bin dock; spec was wrong → `p2-a-v2-design.md`); brought the canonical hero (`CanonicalHero`, `targetId` prop) + the data-driven dropbox/reveal layer (`DropTarget`/`DropTargetLayer`); **(c) +4 fields ratified** (see frozen block). P2-C/P2-D now build on P2-A's reveal layer + the 4 (c) fields (P2-A productionized the in-app pointer/dropbox part of P2-D). ‖ **P2-E** gen+image doc round-trip (M). **W2:** P2-B hero state-lift (S) ‖ P2-G favourite Update/Save-as-new + facetName (M) ‖ P2-D finish drag/avatar/cross-tab (L). **W3:** close-out + **runtime re-verify (S6 well migration)**. **Undo focus = (b) auto-focus** (ratified). **NEXT (user's pick):** the Picker two-selection-states + swatch enlarge → `plans/p2-a-picker-handoff.md` (fresh in-`dev` branch). **Worktrees now opt-in** — serial streams run in `dev` directly (additionalDirectories fix landed). |
 | P3 | `/polish` pass | 3 | deferred | — | after structure lands |
 
 ---
@@ -437,6 +437,29 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-08 — **✅ N1 + 2 dock fixes MERGED** into integration `2bc4cfb` (merge of `exec/p2-n1-favients-redock`,
+  3 commits; gate green; user visual-confirmed Chrome+Firefox). (1) **N1** floating-Favients reliable
+  single-drag redock — root cause was a STUCK `nativeDrag` signal left by a shelf reorder keeping the
+  gradient overlay (Z 2000) live over the redock zones (z 1000), swallowing the drop; fix = gate
+  `GradientDropLayer` off `draggingPanelId` (panel-drag ⇒ whole gradient layer stands down). (2) right-docked
+  Favients reveals from its collapsed-dock well (key reveal on `CENTRE_MIRRORED_MODES`, un-collapse own side
+  — was left-only). (3) centre stage keeps last mode when the non-mode Favients tab opens (was blanking).
+  **The panel-drag↔gradient-drag boundary is now clean + commented → N4/N5 inherit it.** Memory:
+  `project_drag_flight_architecture.md` updated.
+  **PROCESS CHANGE (user feedback): BATCH remaining work into larger coherent sessions** — N1 solved in
+  ~10min but per-session overhead (context-load + review + error-check) dominated; reloading the same
+  drag-flight context per tiny task is waste. New memory `feedback_batch_session_scope.md`. **Re-batched
+  remaining P2 into 2 sessions:**
+    - **Batch A — extend the canonical drag/target/favourite model to all surfaces + consolidate the
+      registry** (one session; shares drag-flight + (c)-registry + CanonicalHero + favients context):
+      **N4** Generator slots → hero-esque drag sources + drop their click-dropdown · **N5** Curves widget →
+      drag-drop · **N3** remove starring entirely (drag-to-Favients sole add-path; P2-G toggle dropped) ·
+      **R2** facetName auto-name on drag-add · **R3** favientTargets→sendTargetRegistry migration · **R1**
+      loadRamp Stops target.
+    - **Batch B — scene round-trip + tool cursors** (separate context): **R4** Generator/Image document
+      round-trip (old P2-E) · **N2** rect/lasso/paint cursor icons.
+    - Defer: R5 FavientSwatch→CanonicalHero, cross-app drag, W9 cue.
+  **Next: Batch A.**
 - 2026-06-08 — **Q1 RESOLVED + N1 issued.** User ratified: **starring removed entirely** ⇒ the P2-G
   "Update vs Save-as-new" favourite toggle is **DROPPED, not built** (R6 favourite-identity folds away;
   drag-to-Favients is the sole add-path). **Next stream = N1 (Favients undock→redock bug)** — prompt issued
