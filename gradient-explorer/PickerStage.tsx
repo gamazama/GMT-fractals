@@ -20,7 +20,7 @@ import { PickerWall, type PickerGroup, type SelectionTool } from '../palette/com
 import { CanonicalHero } from '../palette/components/CanonicalHero';
 import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
 import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
-import { setFavientDrag, suppressNativeDragImage } from '../palette/core/favientDnd';
+import { setFavientDrag, beginCustomAvatarDrag } from '../palette/core/favientDnd';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
 import {
   useHeroPick,
@@ -156,7 +156,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   const onEntryDragStart = useCallback((e: CatalogEntry, dt: DataTransfer) => {
     const payload = { config: entryToGradientConfig(e), name: e.name, source: 'Picker' };
     setFavientDrag(dt, payload);
-    suppressNativeDragImage(dt); // the cursor-following avatar stands in for the drag image
+    beginCustomAvatarDrag(dt); // register the drag + suppress the native image (avatar stands in)
     // Drag mirrors click — picking the dragged swatch gives the avatar its ramp and
     // leaves it the in-hand pick if dropped over nothing.
     setHeroDrag({ mode: 'picker', key: e.id, payload });

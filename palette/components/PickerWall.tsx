@@ -289,9 +289,10 @@ const SwatchCanvas: React.FC<{
               return;
             }
             // The drag visual is the shared cursor-following avatar — onEntryDragStart calls
-            // suppressNativeDragImage, exactly like the hero. (A custom setDragImage here was
-            // dead: suppress overrode it, and it differed the swatch path from the hero's,
-            // which is why swatch→Favients didn't show the avatar/reorder the same way.)
+            // beginCustomAvatarDrag, exactly like the hero. (A custom setDragImage here was
+            // dead: the native-image suppression overrode it, and it differed the swatch path
+            // from the hero's, which is why swatch→Favients didn't show the avatar/reorder the
+            // same way.)
             // Morph the avatar out of the HOVER-enlarged preview (the 3×w·2×h zoom in front of
             // everything) — not the tiny grid cell. Then clear the hover so it doesn't linger.
             setHoverOrigin(h.col, h.row);

@@ -34,7 +34,7 @@ import { renderStopsToRamp } from '../core/gmtGradient';
 import { GradientStrip } from './GradientStrip';
 import { FavStar } from './FavStar';
 import { favientSig } from '../store/favientsStore';
-import { setFavientDrag, suppressNativeDragImage } from '../core/favientDnd';
+import { setFavientDrag, beginCustomAvatarDrag } from '../core/favientDnd';
 import {
   useHeroPick,
   useActiveHeroMode,
@@ -155,7 +155,7 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
         draggable
         onDragStart={(e) => {
           setFavientDrag(e.dataTransfer, { config, name, source });
-          suppressNativeDragImage(e.dataTransfer);
+          beginCustomAvatarDrag(e.dataTransfer);
           setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the strip
           // Drag mirrors click: set the pick so the avatar has a ramp + the source stays lit.
           setHeroDrag({ mode, key, payload: { config, name, source }, selfTargetId: targetId });

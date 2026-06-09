@@ -126,7 +126,7 @@ export const clearPickLanded = (): void => {
 };
 
 // --- Native (custom-avatar) drag in flight — a SYNCHRONOUS signal set the instant a drag
-// starts (in suppressNativeDragImage, the one chokepoint every custom-avatar drag calls),
+// starts (in beginCustomAvatarDrag, the one chokepoint every custom-avatar drag calls),
 // independent of the dragenter/dragleave DEPTH counting useDragInFlight relies on. That depth
 // counting is FRAGILE while a drop surface mounts/unmounts children mid-drag — the Favients
 // shelf inserts placeholders and the dragged swatch unmounts, so enter/leave can imbalance and
@@ -176,7 +176,7 @@ const clearNativeDrag = (): void => {
 };
 
 /** Mark that a custom-avatar drag just started — call synchronously in onDragStart (it is
- *  invoked from suppressNativeDragImage so every source is covered). Idempotent; wires its own
+ *  invoked from beginCustomAvatarDrag so every source is covered). Idempotent; wires its own
  *  reliable end-listeners so callers never have to pair it with an explicit end. */
 export const beginNativeDrag = (): void => {
   if (nativeDrag) return;

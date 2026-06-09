@@ -14,6 +14,7 @@
 import React, { useEffect, useReducer, useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanding, clearLanding, useCancel, clearCancel, type Landing, type Cancel } from '../palette/store/dragVisual';
+import { paintRampToCanvas } from '../palette/core/rampCanvas';
 
 const LANDING_MS = 240;
 // Matches the drag avatar's z (above the Picker hover preview) for a seamless hand-off.
@@ -38,11 +39,7 @@ const useRampOneShot = (
     const [, force] = useReducer((n: number) => n + 1, 0);
 
     useEffect(() => {
-        const cv = ref.current;
-        if (!cv) return;
-        cv.width = 256;
-        cv.height = 1;
-        cv.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(ramp), 256, 1), 0, 0);
+        if (ref.current) paintRampToCanvas(ref.current, ramp);
     }, [ramp]);
 
     useEffect(() => {

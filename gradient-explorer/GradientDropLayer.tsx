@@ -27,6 +27,7 @@ import { useActiveHeroSelection, useHeroOptionsOpen, closeHeroOptions } from '..
 import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
 import { renderStopsToBuffer } from '../palette/core/gmtGradient';
 import { getDragOrigin, setDragOrigin, triggerLanding, triggerCancel, markPickLanded, consumePickLanded, clearPickLanded, useNativeDragging, type DragRect } from '../palette/store/dragVisual';
+import { paintRampToCanvas } from '../palette/core/rampCanvas';
 import { deriveIntermediates, type IntermediateAffordance } from './gradientTargets';
 
 /** Dwell over an intermediate for this long (ms) to run its reveal step mid-drag. */
@@ -91,11 +92,7 @@ const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number; origin: Dra
     const [, force] = useReducer((n: number) => n + 1, 0);
 
     useEffect(() => {
-        const cv = ref.current;
-        if (!cv) return;
-        cv.width = 256;
-        cv.height = 1;
-        cv.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(ramp), 256, 1), 0, 0);
+        if (ref.current) paintRampToCanvas(ref.current, ramp);
     }, [ramp]);
 
     useEffect(() => {

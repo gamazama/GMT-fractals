@@ -49,17 +49,19 @@ const EMPTY_DRAG_IMG: HTMLImageElement | null = (() => {
 })();
 
 /**
- * Suppress the browser's default (frozen-bitmap) drag image so a custom cursor-following
- * avatar can stand in. Call right after `setFavientDrag` in a gradient drag source.
+ * Begin a custom-avatar gradient drag. Two things, which always go together at a drag source:
+ *  1. REGISTER the drag as in flight (`beginNativeDrag`) — the synchronous signal the avatar +
+ *     dropbox passthrough rely on, set the instant a drag starts. This is the one chokepoint
+ *     every custom-avatar source funnels through, so future sources get it for free just by
+ *     calling this; the signal self-clears when the drag ends (drop / dragend / mousemove).
+ *  2. SUPPRESS the browser's default frozen-bitmap drag image so the cursor-following avatar
+ *     can stand in.
  *
- * Also REGISTERS the drag as in flight (`beginNativeDrag`) — this is the one chokepoint every
- * custom-avatar drag source funnels through, so the synchronous drag signal the avatar +
- * passthrough rely on is set the instant ANY source starts a drag (future sources get it for
- * free just by calling this). The signal self-clears on drop/dragend/blur/mousemove.
+ * Call right after `setFavientDrag` in a gradient drag source's `onDragStart`.
  */
-export const suppressNativeDragImage = (dt: DataTransfer): void => {
-  if (!EMPTY_DRAG_IMG) return;
+export const beginCustomAvatarDrag = (dt: DataTransfer): void => {
   beginNativeDrag();
+  if (!EMPTY_DRAG_IMG) return;
   try {
     dt.setDragImage(EMPTY_DRAG_IMG, 0, 0);
   } catch {
