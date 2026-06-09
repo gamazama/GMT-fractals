@@ -13,7 +13,7 @@
  * Mode content is placeholder until the generator/picker/img2grad UIs land.
  */
 
-import React, { useMemo, useEffect, useState, Suspense } from 'react';
+import React, { useMemo, useEffect, useRef, useState, Suspense } from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { useGlobalContextMenu } from '../hooks/useGlobalContextMenu';
 import GlobalContextMenu from '../components/GlobalContextMenu';
@@ -47,31 +47,25 @@ import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContex
 const HelpBrowser = React.lazy(() => import('../components/HelpBrowser'));
 
 // The centre stage mirrors the active right-dock tab (the studio "mode"). The
-// dock tab strip IS the mode selector — no bespoke tab bar.
-const STAGE_BLURB: Record<string, { label: string; blurb: string }> = {
-  // Favients is a shelf, not a centre-stage mode — its tab shows the saved-gradient
-  // shelf in the left dock, so the centre just invites you back to a working mode.
-  Favients: { label: 'Favients shelf', blurb: 'Your saved gradients live in the left dock. Pick Generator, Picker, or Image to keep working.' },
+// dock tab strip IS the mode selector — no bespoke tab bar. The Favients shelf is a
+// tab too but NOT a mode (no centre stage of its own), so it's absent here — opening
+// it keeps the stage on the last mode rather than blanking it (see Stage).
+const MODE_STAGES: Record<string, React.FC> = {
+  Picker: PickerStage,
+  Generator: GeneratorStage,
+  Image: ImageStage,
+  Stops: EditorStage,
 };
 
 const Stage: React.FC = () => {
   const activeTab = useEngineStore((s) => s.activeRightTab) as string | null;
-  if (activeTab === 'Picker') return <PickerStage />;
-  if (activeTab === 'Generator') return <GeneratorStage />;
-  if (activeTab === 'Image') return <ImageStage />;
-  if (activeTab === 'Stops') return <EditorStage />;
-
-  const active = (activeTab && STAGE_BLURB[activeTab]) || { label: 'GMT Gradient Explorer', blurb: 'Select a tab' };
-  return (
-    <div className="flex-1 flex flex-col min-w-0 bg-zinc-950">
-      <div className="flex-1 flex items-center justify-center p-8 text-center">
-        <div className="max-w-md">
-          <div className="text-lg font-medium text-zinc-200 mb-2">{active.label}</div>
-          <div className="text-sm text-zinc-500">{active.blurb}</div>
-        </div>
-      </div>
-    </div>
-  );
+  // Mirror the active MODE tab. The Favients shelf (a non-mode tab, openable in the right
+  // dock) has no stage of its own, so the centre STICKS to the last mode instead of blanking —
+  // opening the shelf never wipes the working stage. Seeded to Picker (the default-open tab).
+  const lastMode = useRef<string>('Picker');
+  if (activeTab && MODE_STAGES[activeTab]) lastMode.current = activeTab;
+  const ModeStage = MODE_STAGES[lastMode.current];
+  return <ModeStage />;
 };
 
 // Two fixed-width docks (Favients shelf left, mode panel right) plus the centre
