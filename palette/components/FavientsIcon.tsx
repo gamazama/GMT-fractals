@@ -23,8 +23,6 @@ export const FAVIENTS_ACCENT = {
   text: 'text-cyan-300',
   /** Hover border accent for compact icon buttons (gradient editor). */
   border: 'hover:border-cyan-300/40',
-  /** Favourited glow (FavStar). */
-  glow: 'drop-shadow-[0_0_4px_rgba(34,211,238,0.6)]',
 } as const;
 
 interface FavientsIconProps {

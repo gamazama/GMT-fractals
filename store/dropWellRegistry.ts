@@ -35,7 +35,7 @@
  *
  * @invariant Host-agnostic: imports nothing app-specific. Hosts register INTO it.
  * @invariant Idempotent by id (re-registering an id replaces) — mirrors
- *   `registerHistoryProvider` / `registerFavientTarget`.
+ *   `registerHistoryProvider` / `registerSendTarget`.
  * @invariant The React overlay derives its visible set from `wellsForTypes`, so
  *   the node harness (`debug/test-engine-dnd-kernels.mts`) covers the overlay's
  *   selection by construction (same pattern as sampleStops ⇄ renderStopsToRamp).

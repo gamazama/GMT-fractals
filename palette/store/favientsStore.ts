@@ -10,7 +10,7 @@
  * caller, so this store never has to know about raw ramps.
  *
  * Host-agnostic: no engine-store dependency. Apps register their apply targets in
- * favientTargets; this store only holds the collection + the chosen target id.
+ * the send-target registry; this store only holds the collection + the chosen target id.
  */
 
 import { create } from 'zustand';
@@ -43,10 +43,10 @@ const LS_SEEDED = 'gmt.favients.seeded';
  *
  * This is a deserialization defense, not mere schema-drift tolerance: favients
  * now arrive from untrusted shared scene files (W8 document restore → this
- * store's importCollection), and `favientSig` (the dedupe/star signature)
- * assumes `stop.color` is a string. A favourite with a malformed stop that
- * slipped through would make `favientSig` throw — and because that signature is
- * computed on every star/toggle and on load, one bad entry persisted to
+ * store's importCollection), and `favientSig` (the dedupe signature) assumes
+ * `stop.color` is a string. A favourite with a malformed stop that slipped
+ * through would make `favientSig` throw — and because that signature is computed
+ * on every dedupe check and on load, one bad entry persisted to
  * localStorage would brick the shelf across sessions. Filtering here (used by
  * BOTH load and import) keeps malformed stops out of memory and disk entirely.
  */
@@ -97,13 +97,13 @@ const pruneLabels = (favients: Favient[], labels: Record<string, string>): Recor
 const clamp = (n: number, lo: number, hi: number) => (n < lo ? lo : n > hi ? hi : n);
 
 /**
- * Content signature for dedupe + the star toggle: rounded stop positions + colours +
- * interpolation. Two gradients with the same stops favourite/unfavourite as one.
+ * Content signature for dedupe: rounded stop positions + colours + interpolation.
+ * Two gradients with the same stops are treated as the same favourite.
  */
 export const favientSig = (c: GradientConfig): string =>
   (Array.isArray(c?.stops) ? c.stops : [])
     // Coerce defensively — favientSig runs on untrusted imported configs (W8
-    // scene restore) and on every star/toggle, so it must never throw on a
+    // scene restore) and on every dedupe check, so it must never throw on a
     // malformed stop. A malformed stop just yields a non-matching signature.
     .map((s) => `${Math.round((Number(s?.position) || 0) * 1000)}:${String(s?.color).toUpperCase()}:${s?.interpolation ?? 'l'}`)
     .join('|');
@@ -118,14 +118,12 @@ interface FavientsState {
   favients: Favient[];
   /** Editable labels for named groups (id → label). */
   groupLabels: Record<string, string>;
-  /** The currently selected apply target (id into favientTargets). */
+  /** The currently selected apply target (id into the send-target registry). */
   selectedTargetId: string | null;
 
   add: (config: GradientConfig, name: string, source?: string) => string;
   remove: (id: string) => void;
-  /** Toggle a gradient by content: add if absent, remove if present. Returns the
-   *  new favourited state (true = now a favourite). */
-  toggle: (config: GradientConfig, name: string, source?: string) => boolean;
+  /** Content-presence query (used by the gradient-file import to skip duplicates). */
   isFav: (config: GradientConfig) => boolean;
   rename: (id: string, name: string) => void;
   /** Move an existing favourite so it lands at `toIndex` in the array WITH this item
@@ -194,20 +192,6 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     saveFavients(favients);
     saveGroupLabels(groupLabels);
     set({ favients, groupLabels });
-  },
-
-  toggle: (config, name, source) => {
-    const sig = favientSig(config);
-    const existing = get().favients.filter((f) => favientSig(f.config) === sig);
-    if (existing.length) {
-      const ids = new Set(existing.map((f) => f.id));
-      const favients = get().favients.filter((f) => !ids.has(f.id));
-      saveFavients(favients);
-      set({ favients });
-      return false;
-    }
-    get().add(config, name, source);
-    return true;
   },
 
   isFav: (config) => {

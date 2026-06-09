@@ -30,7 +30,7 @@ import { openFullscreen } from '../palette/store/fullscreenStore';
 import { usePaletteEditorStore, editorEdit } from '../palette/store/paletteEditorStore';
 import { useGeneratorStore } from '../palette/store/generatorStore';
 import { useFavientsStore } from '../palette/store/favientsStore';
-import { rampToName } from '../palette/core/facetName';
+import { configToName } from '../palette/core/facetName';
 import { canvasToPngBlob, downloadBlob } from '../utils/SceneFormat';
 import type { FavientDragPayload } from '../palette/core/favientDnd';
 import type { GradientConfig, PanelId } from '../types';
@@ -204,6 +204,13 @@ export const registerGradientTargets = (): void => {
         revealPath: ['tab:Generator', 'gen:colorbox'],
         anchored: true,
     });
+    // Curves widget (N5) — dropping/sending a gradient decomposes it into editable L/C/h
+    // curves. Mixed mode only (the editor is absent in ColorBox), reached via the Generator
+    // tab → Mixed sub-mode; anchored over the curve editor's data-gx-target="curves".
+    r('curves', 'Curves', (p) => useGeneratorStore.getState().fitCurvesFromRamp(toRamp(p.config)), {
+        revealPath: ['tab:Generator', 'gen:mixed'],
+        anchored: true,
+    });
     r('stops', 'Stops', (p) => editorEdit(() => usePaletteEditorStore.getState().setConfig(p.config)), {
         revealPath: ['tab:Stops'],
         anchored: true,
@@ -223,7 +230,7 @@ export const registerGradientTargets = (): void => {
         accepts: (p) => !p.favId,
         dragPassthrough: true,
         apply: (p) =>
-            useFavientsStore.getState().add(p.config, p.name?.trim() || rampToName(toRamp(p.config)), p.source),
+            useFavientsStore.getState().add(p.config, p.name?.trim() || configToName(p.config), p.source),
     });
 
     // Bottom wells (no on-screen anchor).

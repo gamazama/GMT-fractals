@@ -505,6 +505,7 @@ export const ImageStage: React.FC = () => {
               config={favConfig}
               ramp={derived.ramp}
               name={`Image · ${mode}`}
+              autoName
               source="Image"
               mode="image"
             />

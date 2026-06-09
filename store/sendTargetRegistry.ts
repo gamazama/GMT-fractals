@@ -7,9 +7,10 @@
  * that knows how to `apply` a payload. This module is the generic registry +
  * selector; `components/SendToMenu.tsx` is the reusable affordance.
  *
- * It generalizes `palette/core/favientTargets.ts` (gradient-specific: `apply
- * (config, name)`) into a payload-generic registry. That existing module is NOT
- * migrated here — it keeps working; P2 re-homes favient targets onto this kernel.
+ * It generalizes the gradient-specific list `palette/core/favientTargets.ts` once
+ * owned (`apply(config, name)`) into a payload-generic registry. P2 FOLDED those
+ * targets here as `SendTarget`s (host coloring layers = `group: 'host'`), so
+ * favientTargets.ts now holds only the panel's host-capability flags — one registry.
  *
  * ── Generic over payload ─────────────────────────────────────────────────────
  *  `apply(payload)` / `accepts?(payload)` take an opaque payload `P`. The Gradient
@@ -20,12 +21,12 @@
  *
  * @invariant Host-agnostic: imports nothing app-specific. Hosts register INTO it.
  * @invariant Idempotent by id (re-registering replaces) — mirrors
- *   `registerFavientTarget` / `registerDropWell`.
+ *   `registerDropWell` / `registerHistoryProvider`.
  * @invariant `<SendToMenu/>` derives its visible set from `targetsForPayload`, so
  *   the node harness covers the menu's contents + self-filtering by construction.
  *
  * @see store/dropWellRegistry.ts (the drag twin — interface (b))
- * @see palette/core/favientTargets.ts (the gradient-specific registry this generalizes)
+ * @see palette/core/favientTargets.ts (host-capability flags; its target list folded here in P2)
  */
 
 import { createListRegistry } from './createListRegistry';

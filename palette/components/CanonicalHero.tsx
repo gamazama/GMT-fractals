@@ -10,10 +10,11 @@
  *     replaces it). Clicking the hero again re-opens the dock. See
  *     `palette/store/heroSelection.ts` + `plans/p2-a-picker-interaction.md`.
  *
- * It owns the strip render, the name + source chip, the embedded ★, and the pick/drag
- * wiring; it embeds — never modifies — `GradientStrip` and `FavStar`. The ACTIONS are the
- * dock targets, not per-hero buttons, so this hero carries no Apply / Send-to / Fullscreen
- * buttons. Surface-specific NON-action controls (stops count) go in `trailing`.
+ * It owns the strip render, the name + source chip, and the pick/drag wiring; it embeds —
+ * never modifies — `GradientStrip`. The ACTIONS are the dock targets, not per-hero buttons,
+ * so this hero carries no Apply / Send-to / Fullscreen buttons, and no favourite star —
+ * dragging the strip onto the Favients shelf is the sole add-to-favourites path. Surface-
+ * specific NON-action controls (stops count) go in `trailing`.
  *
  * Visual tiers (orthogonal): the in-hand pick shows a muted cyan ring; the ACTIVE state
  * (pick + dock open) brightens it + glows AND insets the ramp in a tinted padding frame
@@ -31,8 +32,8 @@ import React, { useMemo } from 'react';
 import type { GradientConfig } from '../../types';
 import type { RGB } from '../core/oklab';
 import { renderStopsToRamp } from '../core/gmtGradient';
+import { configToName } from '../core/facetName';
 import { GradientStrip } from './GradientStrip';
-import { FavStar } from './FavStar';
 import { favientSig } from '../store/favientsStore';
 import { setFavientDrag, beginCustomAvatarDrag } from '../core/favientDnd';
 import {
@@ -50,8 +51,16 @@ interface CanonicalHeroProps {
   config: GradientConfig;
   /** Precomputed ramp (surfaces usually have it); falls back to rendering the config. */
   ramp?: RGB[];
-  /** Display + favourite name. */
+  /** Display name + (by default) the favourite name a drag/send carries. */
   name: string;
+  /**
+   * When set, `name` is a DISPLAY-ONLY label (e.g. "Generated", "Image · distill") — a
+   * computed output with no authored name — so the payload/favourite name AUTO-DERIVES from
+   * the gradient's facets (`configToName`) instead of saving the placeholder. The strip
+   * still shows `name`; only what a drag/send/favourite is NAMED changes. Heroes with a real
+   * name (Picker entry, Generator slot preset) leave this off.
+   */
+  autoName?: boolean;
   /** Provenance (favourite source + the hero's small chip; hidden when it duplicates name). */
   source?: string;
   mode: HeroMode;
@@ -80,6 +89,7 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
   config,
   ramp,
   name,
+  autoName,
   source,
   mode,
   selectionKey,
@@ -108,19 +118,24 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
     [ramp, config],
   );
 
+  // The name a drag/send/favourite carries: the display `name` for an authored gradient, or
+  // an auto-derived perceptual label for a placeholder-named computed output (`autoName`).
+  // Computed at gesture time, not per render — configToName renders+facets the ramp, and the
+  // name isn't shown mid-drag, so deriving it eagerly would burn cycles on every dial frame.
+  const payloadName = (): string => (autoName ? configToName(config) : name);
+
   // Click = PICK + open the dock. No toggle-to-clear: the pick is sticky, and the dock
   // closes via Esc / click-away / apply while the pick stays in hand (re-click re-opens).
   const pick = (): void =>
-    setHeroPick({ mode, key, payload: { config, name, source }, selfTargetId: targetId });
+    setHeroPick({ mode, key, payload: { config, name: payloadName(), source }, selfTargetId: targetId });
 
   return (
     // data-gx-target tags this hero as the anchor for its (c) drop target, when it is one.
     // data-gx-selectable on the ROOT (not just the strip) so clicking a header control —
-    // ★ or the enlarge toggle — doesn't trip the click-away that closes the dock.
+    // the enlarge toggle — doesn't trip the click-away that closes the dock.
     <div className={className} data-gx-target={targetId} data-gx-selectable="">
       <div className="flex items-center justify-between mb-1 gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <FavStar config={config} name={name} source={source} size="sm" />
           <span className="text-xs text-gray-300 font-medium truncate">{name}</span>
           {source && source !== name && (
             <span className="text-[10px] text-gray-500 truncate shrink-0">{source}</span>
@@ -154,11 +169,12 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
         aria-pressed={isSelected}
         draggable
         onDragStart={(e) => {
-          setFavientDrag(e.dataTransfer, { config, name, source });
+          const pn = payloadName();
+          setFavientDrag(e.dataTransfer, { config, name: pn, source });
           beginCustomAvatarDrag(e.dataTransfer);
           setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the strip
           // Drag mirrors click: set the pick so the avatar has a ramp + the source stays lit.
-          setHeroDrag({ mode, key, payload: { config, name, source }, selfTargetId: targetId });
+          setHeroDrag({ mode, key, payload: { config, name: pn, source }, selfTargetId: targetId });
         }}
         onClick={(e) => {
           setDragOrigin(e.currentTarget.getBoundingClientRect()); // in-hand avatar morphs from the strip
