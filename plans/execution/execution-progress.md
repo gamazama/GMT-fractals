@@ -9,41 +9,52 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
 
 ---
 
-## Current phase: **P2 COMPLETE ✅ → post-P2 roadmap** (integration branch `exec/gradient-explorer` @ `99a02d1`)
+## Current phase: **FULLSCREEN-V2 EXECUTION** — splashy-modes fan-out (integration `exec/gradient-explorer` @ `4b3856f`)
 
-Phase 0 + Phase 1 + **P2 portability** all merged & gate-green; live-fractal carve merged. **P2 summary:
-`plans/p2-completion-summary.md`.** Next big item = the **fullscreen-v2 re-scope** (now a major feature
-initiative), then generator-polish / curve-editor / favients-last-group / tech-debt; P3 light polish last.
-See the post-P2 roadmap in the changelog ("ROADMAP LOCKED" + the "MORE notes" entries) + the Backlog section.
+Phase 0 + Phase 1 + **P2 portability** + the **live-fractal carve** are all merged & gate-green (P2 summary:
+`plans/p2-completion-summary.md`). Now building **fullscreen-v2** — re-scoped + web-SOTA-researched in
+`plans/fullscreen-v2-rescope.md` (**the "RATIFIED PLAN + CORRECTIONS" section at the bottom is authoritative**;
+the "Mode plug-in seam (FROZEN)" + "generic mount() face" sections are the contract modes code against).
+Plan = **flat-optional GeometryParams GATE + shared dithering + the mode seam (Session 1 ✅ merged) → splashy
+modes in parallel → fold-in polish.**
 
-**RUNNING IN PARALLEL (2026-06-07, non-blocking):**
-- **(a) LIVE-FRACTAL CARVE — DELIVERED, IN-REVIEW** (wt-lf, `exec/livefractal`; 36 files +3478/−1617 on
-  b2db36b). Carved fluid-toy's fractal kernel + gradient sampler + TSAA + GradientLutManager + the WHOLE
-  deepZoom/* stack + DeepZoomController → **engine/fractal/** (share-not-fork; fluid-toy via re-export
-  shims). New **FractalColorRenderer** (own WebGL2 ctx). GX "Fractal" mode (frozen ramp colormap + live
-  phase/repeats/mapping + palette-cycle + pan/zoom + PNG + WebGL2 fallback). **SCOPE-EXPANDED: deep zoom
-  INCORPORATED** (was deferred +L) — off-thread orbit/LA/AT, double-double pan, 1e-100 floor; 2822 colors
-  @1e-9. ADR-0063 (carve), ADR-0064 (LA→PO ref-index fix vs FractalShark). Gates green; NO fluid-toy
-  regression. **MERGE GATES: independent review ✅ PASS (2 lenses, both MERGE-READY — carve verified
-  byte-faithful, FluidEngine zero-diff, layering clean, WebGL lifecycle/leak-fix solid, all shader loops
-  bounded) + USER visual confirm.** ⭐ **Lens A flagged ONE smoke-INVISIBLE reservation** → the required
-  visual: **a fluid-toy AT+LA *deep* Mandelbrot view vs the pre-fix build** (ADR-0064 advances `iter` but
-  not `ref` through the AT prepass → handoff index short by the AT-covered count when AT is active; AT+LA
-  always co-active; no smoke covers it — the deep-zoom smokes are CPU-builder-only, the GX one only checks
-  distinctColours≥50). On clean → merge as-is. Open → backlog (see below). **OWNED BY bootstrap session
-  through merge; fresh orchestrator owns overnight cleanups + P2 (avoid double-editing this log).**
-- **(b) OVERNIGHT AUTONOMOUS RUN ✅ COMPLETE + ALL 3 CLEANUPS MERGED 2026-06-07** (PM, user-authorized).
-  The 4 overnight units: `fullscreen-v2-scope.md` (doc, → backlog/decisions) + 3 cleanups now **MERGED**
-  into integration (knip `91313d8` · oklab `9a83f0f` · facet `d2227f7` = HEAD; combined gate green).
-  fullscreen-v2 decision (a) resolved (user: S6 live+good). **P2 scope probe launched** → `plans/p2-scope.md`
-  (the human-run probe never landed). Live-fractal still in wt-lf (user: wait).
+**FULLSCREEN-V2 PROGRESS:**
+- **Session 1 (FOUNDATION) ✅ merged `9fc675a`** + splitscreen addendum `233b5a7`: GeometryParams gate +
+  `registerFullscreenMode` seam + shared dither (CPU error-diffusion for geometry, blue-noise TPDF tail for
+  GL, native-res) + **splitscreen = app-top/live-preview-bottom**. The seam has **3 render kinds — `cpuField`
+  (geometry), `glQuad` (spline), `ownCanvas` (fractal/liquify/parallax, via the generic `mount()` face)**.
+- **SPLINE (glQuad) ✅ merged `8ca2c9b`** — gradient flows along an editable Catmull-Rom path (diffusion field).
+- **LIQUIFY (ownCanvas) + the generic `mount()` seam ✅ merged `8fff927`** — deformable LUT-mesh soft body
+  (MLS + XPBD jiggle off-by-default + Taubin); the `mount()` lift unblocked parallax.
+- **PARALLAX (ownCanvas) 🔄 IN FLIGHT** — worktree `wt-parallax` (`exec/fs-parallax`), **built with the Fable
+  model**, given extra goal-context (showcase the gradient beautifully; pro tool a child can use) + creative
+  freedom. **← THE IMMEDIATE NEXT THING TO INGEST.**
 
-**🔁 ORCHESTRATOR HANDOFF (2026-06-07):** the bootstrap orchestrator session got heavy → handing the role
-to a FRESH orchestrator (doc-anchored, this file is the memory). In-flight to ingest: the live-fractal
-carve (wt-lf, exec/livefractal — needs independent review + human visual confirm of fluid-toy AND the
-fractal mode before merge); the P2-scope probe doc; then run fullscreen-v2 scope; then P2. **New
-orchestrator: run autonomous SAFE units (scoping + low-ambiguity cleanups) overnight, paced, NO MERGES;
-everything waits for human visual confirm to merge.**
+**🔁 FRESH ORCHESTRATOR HANDOFF (2026-06-10):** this session has run for days and is being handed to a fresh
+doc-anchored orchestrator (this file is the memory; read the kit: `execution-playbook.md` + `prompts.md`).
+**IMMEDIATE LOOP:** (1) ingest the **Parallax** summary when it lands → focused review on its GL/lifecycle (it's
+`ownCanvas`) → **merge on the user's visual confirm** (the user visually verifies BEFORE sending a summary).
+That completes the 3 splashy modes. (2) Then **fullscreen-v2 fold-in polish** (each rides the merged seam):
+per-mode **aesthetic + customizability overhaul** (expose the hard-coded geometry constants as controls),
+**last-hero live-binding UI**, **animated-preview UI** (play/pause on the foundational clock/uPhase) — and the
+liquify-flagged tech-debt (shared GL compile/link helper; migrate fractal knobs to a mode-local store) + the
+spline docstring nit. (3) Then the **post-fullscreen-v2 roadmap** (see "ROADMAP LOCKED" + "MORE notes" in the
+changelog + the Backlog): **generator-polish** (Mixer rename, Stops next to Mixer/ColorBox, intuitive vertical
+sliders, Mixer reset) · **favients add→last-group** · **tech-debt cleanup** (esp. the failing `test:compat`;
+oklab de-dup remainder; ColorBox sub-range UI; P0d nits) · **W9 snapshot** (low-pri) · **P3 light polish** (final
+whole-app coherence sweep) · then **dev→prod promotion** (grep `TODO(dev→prod promotion)`).
+**OPERATIONAL GOTCHAS (these bit this session — don't relearn):** • Sessions run on **in-`dev` feature branches**
+(or worktrees for parallelism) → the dev worktree is left **parked on the last feature branch**; **switch dev to
+`exec/gradient-explorer` BEFORE editing/committing this log** (else log commits land on the feature branch —
+see `project_gx_log_on_integration` memory). • Worktree node_modules are junctions → **`cmd /c rmdir
+..\wt-X\node_modules` BEFORE `git worktree remove`** (else it wipes dev's real node_modules); the
+`additionalDirectories` settings fix makes worktree writes prompt-free. • On a feature-branch merge, a diff vs
+integration shows the **other merged streams as spurious deletions** (diff-direction) — verify the branch
+didn't actually modify the file before worrying. • **Confirm what a feature MEANS with the user before
+researching it** (spline + splitscreen were both misframed → wasted research). • Session work often arrives
+**uncommitted in the worktree** — commit on the branch (preserve + review), merge only on the user's visual
+confirm. **Lessons banked in memory:** verified-prototype-is-authority · batch-session-scope ·
+confirm-feature-concept · gx-log-on-integration · fs-liquify-mount-seam.
 
 - **P0a** — engine gradient + colour CORE — ✅ DONE (in-review, **uncommitted**; gates green;
   interfaces (e)+(f) FROZEN below).
