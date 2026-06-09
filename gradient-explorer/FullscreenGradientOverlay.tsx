@@ -303,6 +303,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
         iterMul: snap.fractalIterMul,
       });
       if (snap.fractalDeepZoom) renderer.setDeepZoomEnabled(true);
+      renderer.setDither(snap.dither);
 
       // RAF loop. When auto-cycling, advance the phase directly on the renderer
       // (no store write → no per-frame React render); the slider is hidden while
@@ -382,6 +383,12 @@ export const FullscreenGradientOverlay: React.FC = () => {
   useEffect(() => {
     rendererRef.current?.setDeepZoomEnabled(fs.fractalDeepZoom);
   }, [fs.fractalDeepZoom]);
+
+  // The Dither toggle applies to the fractal display pass too (it's an ownCanvas mode).
+  useEffect(() => {
+    rendererRef.current?.setDither(fs.dither);
+    rendererRef.current?.render();
+  }, [fs.dither]);
 
   // At deep zoom, iterMul scales the reference-orbit BUILD length (a longer
   // reference, not a reference reused past its end), so changing it must rebuild

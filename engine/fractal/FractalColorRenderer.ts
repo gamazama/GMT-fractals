@@ -222,6 +222,10 @@ export class FractalColorRenderer {
    *  rebasing a reference that no longer exists. */
   private deepGpuIter = 2000;
 
+  /** Apply the shared adaptive-dither tail in the display pass (banding fix). On by default;
+   *  the host toggles it in lock-step with the other fullscreen modes. */
+  private ditherEnabled = true;
+
   private simW = 0;
   private simH = 0;
   private frameCount = 0;
@@ -330,7 +334,8 @@ export class FractalColorRenderer {
     this.progJulia = this.link(VERT_FULLSCREEN, FRAG_JULIA, JULIA_UNIFORMS);
     this.progTsaa = this.link(VERT_FULLSCREEN, FRAG_TSAA_BLEND,
       ['uCurrentMain', 'uCurrentFx', 'uHistoryMain', 'uHistoryFx', 'uSampleIndex']);
-    this.progDisplay = this.link(VERT_FULLSCREEN, FRAG_FRACTAL_DISPLAY, ['uImage']);
+    this.progDisplay = this.link(VERT_FULLSCREEN, FRAG_FRACTAL_DISPLAY,
+      ['uImage', 'uBlueNoise', 'uBlueNoiseRes', 'uDither']);
   }
 
   private createMrt(w: number, h: number): MrtFbo {
@@ -403,6 +408,11 @@ export class FractalColorRenderer {
    *  (`renderStopsToBuffer`) output goes straight in. Resets TSAA via the hash. */
   setColormap(rgba1024: Uint8Array): void {
     this.gradients.setBuffer('main', rgba1024);
+  }
+
+  /** Toggle the display-pass dither tail. Cheap (a display re-render reflects it). */
+  setDither(on: boolean): void {
+    this.ditherEnabled = on;
   }
 
   setParams(p: Partial<FractalColorParams>): void {
@@ -787,6 +797,13 @@ export class FractalColorRenderer {
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     this.useProgram(this.progDisplay);
     this.bindTex(0, this.juliaTsaa.texFx, this.progDisplay.uniforms['uImage']);
+    // Shared adaptive dither — static tile, so it doesn't shimmer over TSAA accumulation.
+    if (this.blueNoise) {
+      this.bindTex(1, this.blueNoise.texture, this.progDisplay.uniforms['uBlueNoise']);
+      const [bw, bh] = this.blueNoise.getResolution();
+      gl.uniform2f(this.progDisplay.uniforms['uBlueNoiseRes'], bw, bh);
+    }
+    gl.uniform1i(this.progDisplay.uniforms['uDither'], this.ditherEnabled ? 1 : 0);
     this.drawQuad();
   }
 

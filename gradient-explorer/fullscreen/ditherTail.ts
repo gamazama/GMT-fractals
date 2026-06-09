@@ -24,27 +24,15 @@
  *     in-kernel blue noise + TSAA accumulation, so it doesn't band — it opts out today.)
  *
  * @see gradient-explorer/fullscreen/FullscreenCompositor.ts (compiles the wrapped shaders)
+ * @see engine/fractal/shaders/ditherTail.ts (the shared adaptive-dither chunk — single source)
  * @see engine/utils/createBlueNoiseWebGL2.ts (the tile loader)
  */
 
-/** The dither function + the uniforms it reads. Standalone so an `ownCanvas` mode can
- *  include it in a hand-written display shader. Expects `uniform sampler2D uBlueNoise;
- *  uniform vec2 uBlueNoiseRes; uniform bool uDither;` to be declared (the wrapper declares
- *  them; a hand-written shader must too). */
-export const DITHER_TAIL_GLSL = /* glsl */ `
-// TPDF blue-noise dither @ 1 LSB — static tile (no temporal reseed → no shimmer on a still ramp).
-vec3 ditherTail(vec3 c, vec2 fragCoord) {
-  if (!uDither) return c;
-  vec2 uv = fragCoord / max(uBlueNoiseRes, vec2(1.0));   // REPEAT wrap tiles over any size
-  vec4 bn = texture(uBlueNoise, uv);                      // 4 independently-distributed channels
-  // TPDF per channel = sum of two uniform blue-noise samples − 1 → triangular in [-1,1].
-  // Pair channels differently per output channel so the three are decorrelated.
-  vec3 tpdf = vec3(bn.r + bn.g, bn.b + bn.a, bn.g + bn.b) - 1.0;
-  // Taper amplitude toward pure black/white so we never dither 0 or 1 into noise.
-  vec3 taper = min(c, 1.0 - c) * 255.0;                   // 0 at extremes, ≥1 in the interior
-  return c + tpdf * (clamp(taper, 0.0, 1.0) / 255.0);
-}
-`;
+// The dither function itself is the shared, host-agnostic engine chunk — re-exported here so
+// the seam's public surface is unchanged, and so the live-fractal display pass uses the EXACT
+// same tail (one source, no drift).
+export { DITHER_TAIL_GLSL } from '../../engine/fractal/shaders/ditherTail';
+import { DITHER_TAIL_GLSL } from '../../engine/fractal/shaders/ditherTail';
 
 /** Uniform names the wrapper always declares (the standard fullscreen-mode preamble).
  *  A mode's `setUniforms` must NOT collide with these.
