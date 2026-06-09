@@ -33,6 +33,7 @@ import {
 } from '../palette/core/rampGeometry';
 import {
   closeFullscreen,
+  setFullscreenConfig,
   setFullscreenGeom,
   setFullscreenSplit,
   setFullscreenSplitY,
@@ -679,7 +680,12 @@ export const FullscreenGradientOverlay: React.FC = () => {
 
         <div className="flex items-center gap-2 ml-auto">
           <button
-            onClick={() => setFullscreenSplit(!fs.split)}
+            onClick={() => {
+              // Leaving split: promote the live gradient we're viewing into the snapshot so the
+              // fullscreen view keeps it instead of snapping back to the open-time gradient.
+              if (fs.split && liveSplit) setFullscreenConfig(liveSplit.config, liveSplit.name);
+              setFullscreenSplit(!fs.split);
+            }}
             title="Split: keep the app on top, dock this preview on the bottom — it live-follows the gradient you last edited"
             aria-pressed={fs.split}
             className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
