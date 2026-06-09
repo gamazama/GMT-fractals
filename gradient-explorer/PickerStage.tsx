@@ -22,7 +22,15 @@ import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIco
 import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { setFavientDrag, suppressNativeDragImage } from '../palette/core/favientDnd';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
-import { useHeroPick, useActiveHeroMode, setHeroPick, setHeroDrag, deselectActiveHero } from '../palette/store/heroSelection';
+import {
+  useHeroPick,
+  useActiveHeroMode,
+  useActiveHeroSelection,
+  useHeroOptionsOpen,
+  setHeroPick,
+  setHeroDrag,
+  deselectActiveHero,
+} from '../palette/store/heroSelection';
 import { useHeroHeight } from '../palette/store/heroPrefs';
 
 const win = (v: { x?: number; y?: number } | undefined): [number, number] => [v?.x ?? 0, v?.y ?? 1];
@@ -83,6 +91,14 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   // shows while the Picker is the ACTIVE surface, so deselect (empty-wall/Esc) clears the
   // wall highlight while the hero keeps showing the gradient.
   const pickerActive = useActiveHeroMode() === 'picker';
+  // A gradient is in hand following the cursor (click-through) → suppress the wall's
+  // hover-zoom preview so it doesn't fight the floating avatar. `optionsOpen` is set ONLY by
+  // the click path (setHeroPick), never by a drag (setHeroDrag), so this already means
+  // "picked && !dragging" — no drag check needed. (Any surface's pick floats over the wall,
+  // so this isn't gated to the Picker.)
+  const optionsOpen = useHeroOptionsOpen();
+  const activeSel = useActiveHeroSelection();
+  const gradientInHand = optionsOpen && activeSel != null;
 
   // Free-text catalog search (transient, session-only — see pickerSearch). `searchOpen`
   // is purely the hero affordance's expanded/collapsed UI; the query itself is shared
@@ -482,6 +498,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
             onSelectionCommit={onSelectionCommit}
             onSelectionCancel={() => setTool(null)}
             onDeselect={deselectActiveHero}
+            inHand={gradientInHand}
           />
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-zinc-400 px-6 text-center">

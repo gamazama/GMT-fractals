@@ -46,6 +46,11 @@ export interface DropTargetLayerProps {
     /** Called after a final target receives the payload — with the target's rect (or null for
      *  an unanchored bottom well), so the host can play a landing animation into it. */
     onSent?: (landedRect: DOMRect | null) => void;
+    /** A host-supplied SYNCHRONOUS "a drag is in flight" override, OR-ed into the window
+     *  dragenter detection. The host (which wires its drag sources) can assert a drag the
+     *  instant it starts and for its whole life, so a `dragPassthrough` target never flickers
+     *  back to interactive mid-drag when dragenter/dragleave depth bookkeeping is briefly off. */
+    dragActiveOverride?: boolean;
     z?: number;
 }
 
@@ -55,14 +60,19 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
     dragAccepts,
     readDragPayload,
     onSent,
+    dragActiveOverride = false,
     z = Z.overlay,
 }) => {
     const allTargets = useSyncExternalStore(subscribeSendTargets, getSendTargets, getSendTargets);
     const { inFlight, types } = useDragInFlight(allTargets.length > 0);
     const [hoverId, setHoverId] = useState<string | null>(null);
 
-    const dragActive = inFlight && (dragAccepts ? dragAccepts(types) : true);
-    const selecting = !inFlight && selectedPayload != null;
+    // dragActive: the host's synchronous override (robust) OR window dragenter detection.
+    // selecting is derived from !dragActive (not !inFlight) so a drag the override is asserting
+    // never also counts as the click/select path — which would make a passthrough tile
+    // interactive and swallow the drop.
+    const dragActive = dragActiveOverride || (inFlight && (dragAccepts ? dragAccepts(types) : true));
+    const selecting = !dragActive && selectedPayload != null;
     const active = dragActive || selecting;
 
     // Keep anchored dropboxes over their live rects. During a DRAG, refresh each frame
@@ -76,7 +86,9 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
     const dragPointer = useRef({ x: -1, y: -1 });
     useEffect(() => {
         if (!active) return;
-        if (inFlight) {
+        // Use dragActive (override OR window detection) — not raw inFlight — so the cursor /
+        // rect tracking runs for the whole drag even when the override is carrying it.
+        if (dragActive) {
             let raf = 0;
             const onMove = (e: DragEvent): void => {
                 dragPointer.current = { x: e.clientX, y: e.clientY };
@@ -100,7 +112,7 @@ export const DropTargetLayer: React.FC<DropTargetLayerProps> = ({
             window.removeEventListener('scroll', onChange, true);
             window.removeEventListener('resize', onChange);
         };
-    }, [active, inFlight]);
+    }, [active, dragActive]);
 
     if (!active) return null;
 

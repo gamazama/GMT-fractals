@@ -33,7 +33,7 @@ import {
 } from '../core/favientTargets';
 import { setFavientDrag, suppressNativeDragImage, readFavientDrag, FAVIENT_DND_MIME, type FavientDragPayload } from '../core/favientDnd';
 import { useHeroPick, useActiveHeroMode, setHeroDrag, setHeroPick } from '../store/heroSelection';
-import { setDragOrigin } from '../store/dragVisual';
+import { setDragOrigin, markPickLanded } from '../store/dragVisual';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
 import { FavientsIcon } from './FavientsIcon';
@@ -782,6 +782,10 @@ export const FavientsPanel: React.FC = () => {
   // history provider). A drop that changes nothing yields an empty diff → no entry.
   const doDrop = (p: FavientDragPayload | null, t: DropTarget) => {
     if (!p || !t) return;
+    // The shelf is consuming this drag itself (insert / reorder / group / trash) — tell the
+    // drop layer the in-hand pick LANDED, so its teardown skips the cancel wipe. The shelf's
+    // drop `stopPropagation`s, so it never reaches the dock's apply path that would mark this.
+    markPickLanded();
     favEdit(() => {
       if (t.kind === 'trash') {
         if (p.favId) {

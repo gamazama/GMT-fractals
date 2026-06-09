@@ -5,6 +5,7 @@
  */
 
 import type { GradientConfig } from '../../types';
+import { beginNativeDrag } from '../store/dragVisual';
 
 export const FAVIENT_DND_MIME = 'application/x-gmt-favient';
 /** Marker MIME present ONLY on drags that started from an existing Favients swatch.
@@ -35,22 +36,32 @@ export const setFavientDrag = (dt: DataTransfer, payload: FavientDragPayload): v
   dt.effectAllowed = 'copy';
 };
 
-// A 1×1 transparent GIF, lazily created (DOM-guarded so pure-core tests don't touch it).
-let _emptyDragImg: HTMLImageElement | null = null;
+// A 1×1 transparent GIF, created EAGERLY at module load (DOM-guarded so pure-core tests don't
+// touch it). Eager (not lazy-on-first-drag) is the fix for "I just get a plain HTML drag":
+// setDragImage needs a DECODED image, and a freshly-`new Image()` set in the same dragstart
+// hasn't decoded yet, so the browser silently falls back to the native frozen-bitmap image.
+// Creating it at import gives it ample time to decode before the user can drag.
+const EMPTY_DRAG_IMG: HTMLImageElement | null = (() => {
+  if (typeof document === 'undefined') return null;
+  const img = new Image();
+  img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  return img;
+})();
 
 /**
  * Suppress the browser's default (frozen-bitmap) drag image so a custom cursor-following
  * avatar can stand in. Call right after `setFavientDrag` in a gradient drag source.
+ *
+ * Also REGISTERS the drag as in flight (`beginNativeDrag`) — this is the one chokepoint every
+ * custom-avatar drag source funnels through, so the synchronous drag signal the avatar +
+ * passthrough rely on is set the instant ANY source starts a drag (future sources get it for
+ * free just by calling this). The signal self-clears on drop/dragend/blur/mousemove.
  */
 export const suppressNativeDragImage = (dt: DataTransfer): void => {
-  if (typeof document === 'undefined') return;
-  if (!_emptyDragImg) {
-    _emptyDragImg = new Image();
-    _emptyDragImg.src =
-      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-  }
+  if (!EMPTY_DRAG_IMG) return;
+  beginNativeDrag();
   try {
-    dt.setDragImage(_emptyDragImg, 0, 0);
+    dt.setDragImage(EMPTY_DRAG_IMG, 0, 0);
   } catch {
     /* setDragImage unsupported on some elements — fall back to the native image */
   }

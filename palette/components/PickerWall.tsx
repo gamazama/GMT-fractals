@@ -81,6 +81,9 @@ export interface PickerWallProps {
   /** A click on the wall that did NOT land on a swatch (an "empty-wall click") — the host
    *  deselects the current pick. Not fired while a selection tool is active. */
   onDeselect?: () => void;
+  /** A gradient is in hand following the cursor (click-through pick, not a drag) — suppress
+   *  the wall's own hover-zoom preview so it doesn't fight the floating avatar. */
+  inHand?: boolean;
 }
 
 const LABEL_W = 132;
@@ -423,6 +426,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   onSelectionCommit,
   onSelectionCancel,
   onDeselect,
+  inHand = false,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -500,6 +504,9 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // stable identities for the memoised GroupRows) can read it without re-binding.
   const selToolRef = useRef(selectionTool);
   selToolRef.current = selectionTool;
+  // Mirror "a gradient is in hand" so the stable hover handler reads it without re-binding.
+  const inHandRef = useRef(inHand);
+  inHandRef.current = inHand;
   // Registry of on-screen swatch chunks for hit-testing the carve region.
   const registry = useRef(new Map<string, ChunkDesc>());
   const registerChunk = useCallback((key: string, desc: ChunkDesc | null) => {
@@ -919,12 +926,16 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     endDrag(e);
   };
 
-  // Suppress hover while dragging OR while a selection tool is active (the carve overlay,
-  // not the zoom preview, is the relevant feedback then). Stable identity so memoised
+  // Suppress hover while dragging, while a selection tool is active (the carve overlay, not
+  // the zoom preview, is the relevant feedback then), OR while a gradient is in hand (the
+  // floating click-through avatar already follows the cursor). Stable identity so memoised
   // GroupRows don't re-render on every hover.
   const handleHover = useCallback((h: Hover | null) => {
-    if (!dragging.current && !selToolRef.current) setHover(h);
+    if (!dragging.current && !selToolRef.current && !inHandRef.current) setHover(h);
   }, []);
+  // Drop any showing preview the instant a gradient goes in hand, so it doesn't linger
+  // under the avatar (the guard above only blocks NEW hovers).
+  useEffect(() => { if (inHand) setHover(null); }, [inHand]);
   // Picks are suppressed while a tool is active (left-click is the carve keep-click).
   const handlePick = useCallback((entry: CatalogEntry) => {
     if (!selToolRef.current) onPick(entry);
