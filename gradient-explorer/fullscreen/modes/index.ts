@@ -10,10 +10,11 @@
 
 import { registerFullscreenMode } from '../modeRegistry';
 import { BUILTIN_MODES } from './geometryModes';
+import { splineMode } from './splineMode';
 
 for (const mode of BUILTIN_MODES) registerFullscreenMode(mode);
 
-// Parallel mode streams: register here (or import their self-registering module), e.g.
-//   import './splineMode';     // glQuad — gradient flows along an editable spline path
+// Parallel mode streams: register here (after the builtins, so they append to the selector).
+registerFullscreenMode(splineMode); // glQuad — gradient flows along an editable Catmull-Rom path
 //   import './liquifyMode';    // ownCanvas — deformable LUT-mesh (MLS + XPBD + Taubin)
 //   import './parallaxMode';   // ownCanvas — depth-layered parallax dot field
