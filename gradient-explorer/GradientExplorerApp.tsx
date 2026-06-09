@@ -40,6 +40,7 @@ import { FavientsPanel } from '../palette/components/FavientsPanel';
 import { FavientsIcon } from '../palette/components/FavientsIcon';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
 import { useActiveHeroMode, closeHeroOptions, deselectActiveHero } from '../palette/store/heroSelection';
+import { useFullscreenState } from '../palette/store/fullscreenStore';
 import type { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
@@ -241,6 +242,12 @@ const GradientExplorerApp: React.FC = () => {
   useGlobalContextMenu();
   useResponsiveDocks();
   const isMobile = useIsMobile();
+  // Split layout (fullscreen overlay docked on the bottom): shrink the app into the TOP
+  // region so its content stays reachable instead of being occluded by the fixed shelf.
+  // The shelf fills the remaining bottom; both read the same `splitY` so the divider drag
+  // resizes them together.
+  const fsState = useFullscreenState();
+  const splitActive = fsState.open && fsState.split;
   // The Favients shelf has no side dock on a phone; reuse the same open-state the
   // top-bar Favients button already toggles, surfaced as a slide-in drawer instead.
   const favShown = !state.isLeftDockCollapsed && (state.panels.Favients?.isOpen ?? false);
@@ -307,6 +314,7 @@ const GradientExplorerApp: React.FC = () => {
 
         <div
           className="relative bg-black select-none flex flex-col w-full h-full"
+          style={splitActive ? { height: `${fsState.splitY * 100}vh` } : undefined}
           onContextMenu={(e) => e.preventDefault()}
         >
           <TopBarHost />

@@ -14,11 +14,12 @@
  */
 
 import React from 'react';
-import { renderGeometry, GEOM_DEFAULTS, type GeometryId } from '../../../palette/core/rampGeometry';
+import { sampleGeometry, GEOM_DEFAULTS, type GeometryId } from '../../../palette/core/rampGeometry';
 import { rerollFullscreen, setFullscreenAmount, useFullscreenState } from '../../../palette/store/fullscreenStore';
 import type { FullscreenMode, FullscreenParamField } from '../modeRegistry';
 
-/** A cpuRaster geometry mode wrapping the pure `renderGeometry` for `id`. */
+/** A cpuField geometry mode: produces the pure position+coverage field via `sampleGeometry`;
+ *  the compositor samples the LUT at the float position (smooth) + dithers. */
 const geom = (
   id: GeometryId,
   label: string,
@@ -26,9 +27,9 @@ const geom = (
 ): FullscreenMode => ({
   id,
   label,
-  kind: 'cpuRaster',
+  kind: 'cpuField',
   paramFields,
-  raster: (ctx) => renderGeometry(ctx.ramp, id, ctx.params, ctx.width, ctx.height),
+  field: (ctx) => sampleGeometry(id, ctx.params, ctx.width, ctx.height),
 });
 
 /** Randomized-field controls — the self-contained `Controls` exemplar for the seam: it

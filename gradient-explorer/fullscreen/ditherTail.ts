@@ -47,7 +47,11 @@ vec3 ditherTail(vec3 c, vec2 fragCoord) {
 `;
 
 /** Uniform names the wrapper always declares (the standard fullscreen-mode preamble).
- *  A mode's `setUniforms` must NOT collide with these. */
+ *  A mode's `setUniforms` must NOT collide with these.
+ *
+ *  Reserved TEXTURE UNITS the compositor binds: 0 = uSrc, 1 = uLut, 2 = uBlueNoise,
+ *  3 = uPos, 4 = uCov (field path). A glQuad mode that binds its OWN textures in
+ *  `setUniforms` must use unit ≥ 5 (and declare the sampler via `fragUniforms`). */
 export const RESERVED_UNIFORMS = [
   'uSrc', 'uLut', 'uResolution', 'uBlueNoise', 'uBlueNoiseRes', 'uDither',
 ] as const;
@@ -65,6 +69,21 @@ void main() {
 /** GLSL body for the built-in cpuRaster present: blit the uploaded RGBA buffer. */
 export const BLIT_MODE_BODY = /* glsl */ `
 vec3 modeColor(vec2 uv) { return texture(uSrc, uv).rgb; }
+`;
+
+/** Extra uniforms for the built-in cpuField present (a per-pixel position+coverage field). */
+export const FIELD_UNIFORMS = /* glsl */ `uniform sampler2D uPos; uniform sampler2D uCov; uniform vec3 uBg;`;
+
+/** GLSL body for the built-in cpuField present: sample the LUT at the FLOAT ramp position
+ *  (linear-filtered → no 256-step banding) and blend toward the background by coverage. The
+ *  dither tail then smooths the residual 8-bit step — so dithering does real work here, vs a
+ *  pre-quantised RGBA blit where the banding is already baked in. */
+export const FIELD_MODE_BODY = /* glsl */ `
+vec3 modeColor(vec2 uv) {
+  float p = texture(uPos, uv).r;
+  float c = clamp(texture(uCov, uv).r, 0.0, 1.0);
+  return mix(uBg, sampleLut(p), c);
+}
 `;
 
 /**

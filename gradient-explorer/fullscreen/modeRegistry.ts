@@ -41,7 +41,16 @@ import type React from 'react';
 import type { RGB } from '../../palette/core/oklab';
 import type { GeometryParams } from '../../palette/core/rampGeometry';
 
-export type FullscreenModeKind = 'cpuRaster' | 'glQuad' | 'ownCanvas';
+export type FullscreenModeKind = 'cpuField' | 'cpuRaster' | 'glQuad' | 'ownCanvas';
+
+/** A per-pixel ramp-position (`pos`) + coverage (`cov`) field — the output of the pure
+ *  `sampleGeometry`. Rendered by sampling the LUT at the FLOAT position in GL (smooth, no
+ *  256-step banding) and dithering before the 8-bit write. This is the right primitive for
+ *  "a 1D gradient mapped across a 2D field" (the geometry modes). */
+export interface GeometryField {
+  pos: Float32Array;
+  cov: Float32Array;
+}
 
 /** Per-present inputs the harness hands a mode's render path. Gradient data is RESOLVED
  *  by the overlay (snapshot in fullscreen, live last-modified hero in split) — a mode
@@ -77,8 +86,17 @@ export interface FullscreenMode {
   /** Flat-optional `GeometryParams` fields this mode reads (declarative). */
   paramFields?: readonly FullscreenParamField[];
 
+  // ── kind: 'cpuField' ──
+  /** Pure position+coverage field producer (e.g. `sampleGeometry`). The harness samples the
+   *  LUT at the float position in GL + dithers — so banding is removed, not baked. MUST stay
+   *  pure + deterministic. */
+  field?: (ctx: FullscreenModeContext) => GeometryField;
+
   // ── kind: 'cpuRaster' ──
-  /** Pure pixel producer; uploaded + presented through the shared dither tail. */
+  /** Pure pixel producer; uploaded + presented through the shared dither tail. Use `cpuField`
+   *  instead for gradient-over-position modes — `cpuRaster` pre-quantises to 8-bit so the
+   *  dither can't recover banding. For modes that genuinely own their pixels (e.g. an
+   *  imported image). */
   raster?: (ctx: FullscreenModeContext) => Uint8ClampedArray;
 
   // ── kind: 'glQuad' ──

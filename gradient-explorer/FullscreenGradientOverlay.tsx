@@ -27,6 +27,7 @@ import { createLogMapping } from '../components/inputs/primitives/FormatUtils';
 import { renderStopsToRamp, renderStopsToBuffer } from '../palette/core/gmtGradient';
 import {
   RANDOM_MAX_DIM,
+  DEFAULT_BACKGROUND,
   isStochastic,
   isFractal,
 } from '../palette/core/rampGeometry';
@@ -44,6 +45,9 @@ import {
   useFullscreenState,
 } from '../palette/store/fullscreenStore';
 import { useActiveHeroSelection } from '../palette/store/heroSelection';
+import { usePaletteEditorStore } from '../palette/store/paletteEditorStore';
+import { useGeneratorDerived } from '../palette/store/generatorStore';
+import type { GradientConfig } from '../types';
 import { FullscreenCompositor } from './fullscreen/FullscreenCompositor';
 import { getFullscreenMode, listFullscreenModes } from './fullscreen/modeRegistry';
 import './fullscreen/modes'; // registers the builtin modes at import time
@@ -76,6 +80,36 @@ const PHASE_ANIM_STEP = 1 / 480;
 // mapping makes each drag a RATIO so dialling 0.05 vs 50 is the same gesture.
 const REPEATS_MAPPING = createLogMapping(0.01, 1024);
 
+/** Resolves the live "working" gradient for split layout and reports it upward. Mounted ONLY
+ *  while split is on, so the (heavy) generator derivation never runs otherwise. For the
+ *  editable surfaces (Stops / Generator) it reads the live store so edits reflect without
+ *  re-selecting the hero; otherwise it follows the active hero's selected payload. */
+const SplitLiveSource: React.FC<{
+  onResolve: (r: { config: GradientConfig; name: string } | null) => void;
+}> = ({ onResolve }) => {
+  const hero = useActiveHeroSelection();
+  const stopsConfig = usePaletteEditorStore((s) => s.config);
+  const generatorConfig = useGeneratorDerived().config;
+  let config: GradientConfig | null = hero?.payload.config ?? null;
+  let name = hero?.payload.name ?? 'Gradient';
+  if (hero?.mode === 'stops') { config = stopsConfig; name = 'Stops'; }
+  else if (hero?.mode === 'generator') { config = generatorConfig; name = hero.payload.name || 'Generator'; }
+  // Push only when the colour CONTENT changes — a value signature (not object identity) so an
+  // unstable store ref can't drive a render loop.
+  const sig = config
+    ? config.stops.map((s) => `${s.color}@${s.position}`).join('|') + `:${config.blendSpace}:${config.colorSpace}:${name}`
+    : '';
+  const lastSig = useRef<string | null>(null);
+  useEffect(() => {
+    if (sig === lastSig.current) return;
+    lastSig.current = sig;
+    onResolve(config ? { config, name } : null);
+  }, [sig, name, config, onResolve]);
+  // Clear on unmount (split toggled off) so the snapshot source resumes cleanly.
+  useEffect(() => () => { lastSig.current = null; onResolve(null); }, [onResolve]);
+  return null;
+};
+
 export const FullscreenGradientOverlay: React.FC = () => {
   const fs = useFullscreenState();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -95,13 +129,12 @@ export const FullscreenGradientOverlay: React.FC = () => {
   const fractal = isFractal(fs.geom);
 
   // The colour SOURCE: normally the open-time snapshot; in split layout the preview
-  // live-follows the LAST-MODIFIED hero (the active selection), so editing a hero in the
-  // app (top) instantly recolours the docked preview (bottom). All modes read colour from
-  // this resolved source — never the store directly — so both paths work unchanged.
-  const activeHero = useActiveHeroSelection();
-  const sourceConfig =
-    fs.split && activeHero?.payload.config ? activeHero.payload.config : fs.config;
-  const sourceName = fs.split && activeHero ? activeHero.payload.name : fs.name;
+  // live-follows the gradient you're editing (resolved by the split-only <SplitLiveSource>
+  // child below, which reads the live Stops/Generator stores so edits reflect immediately).
+  // All modes read colour from this resolved source — never the store directly.
+  const [liveSplit, setLiveSplit] = useState<{ config: GradientConfig; name: string } | null>(null);
+  const sourceConfig = fs.split && liveSplit ? liveSplit.config : fs.config;
+  const sourceName = fs.split && liveSplit ? liveSplit.name : fs.name;
 
   // The "Fullscreen" target is registered in `gradientTargets.ts` (the one target list)
   // at boot — not inline here — so the dock has a single source of truth.
@@ -154,9 +187,10 @@ export const FullscreenGradientOverlay: React.FC = () => {
     const h = Math.max(1, Math.round(ch * scale));
     comp.setSize(w, h);
     comp.dither = fs.dither;
-    comp.uploadLut(lut); // cheap (1024 bytes); keeps uLut complete for both kinds
+    comp.uploadLut(lut); // cheap (1024 bytes); the field + glQuad paths sample uLut
     const modeCtx = { ramp, lut, params: { amount: fs.amount, seed: fs.seed }, width: w, height: h };
     if (mode.kind === 'glQuad') comp.presentMode(mode, modeCtx);
+    else if (mode.kind === 'cpuField') comp.presentField(mode.field!(modeCtx), w, h, DEFAULT_BACKGROUND, ramp);
     else comp.presentRaster(mode.raster!(modeCtx), w, h);
   }, [ramp, lut, fs.geom, fs.amount, fs.seed, fs.dither]);
 
@@ -445,9 +479,11 @@ export const FullscreenGradientOverlay: React.FC = () => {
     const useGl = isFractal(liveRef.current.geom);
     const canvas = useGl ? glCanvasRef.current : canvasRef.current;
     if (!canvas) return;
-    // For the GL canvas, force a fresh render right before capture so toBlob
-    // reads current pixels (belt-and-suspenders alongside preserveDrawingBuffer).
+    // Force a fresh render right before capture so toBlob reads current pixels
+    // (belt-and-suspenders alongside preserveDrawingBuffer): the fractal renderer for the
+    // GL canvas, or a compositor re-present for cpuField/cpuRaster/glQuad modes.
     if (useGl) rendererRef.current?.render();
+    else paintRef.current();
     const blob = await canvasToPngBlob(canvas);
     if (!blob) return;
     const stem = (sourceName || 'gradient').trim().replace(/\s+/g, '-').toLowerCase() || 'gradient';
@@ -473,6 +509,9 @@ export const FullscreenGradientOverlay: React.FC = () => {
       style={fs.split ? { zIndex: Z.overlay, top: `${fs.splitY * 100}%`, left: 0, right: 0, bottom: 0 } : { zIndex: Z.overlay }}
       data-testid="fullscreen-gradient-overlay"
     >
+      {/* Live source for split — resolves the gradient being edited (Stops/Generator live). */}
+      {fs.split && <SplitLiveSource onResolve={setLiveSplit} />}
+
       {/* Split divider — drag (or arrow keys) to resize the app/preview split. WAI-ARIA
           slider semantics; an oversized hit-strip straddles the top edge for easy grabbing;
           pointer capture lets the drag continue across the whole window. */}
