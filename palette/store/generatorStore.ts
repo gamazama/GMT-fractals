@@ -352,6 +352,21 @@ export const restoreGeneratorHistory = (snap: unknown): void => {
   useGeneratorStore.setState({ ...(snap as Partial<ReturnType<typeof captureGeneratorHistory>>) });
 };
 
+/**
+ * Resolve a slot to its 256-RGB ramp + display name — the CATALOG-INDEPENDENT
+ * representation the scene document stores. A slot is a catalog INDEX in-memory (fine for
+ * same-session undo), but that index is meaningless across a reload: the ad-hoc catalog
+ * (img2grad sends, bakes, drag-drops) isn't persisted, so a saved index would point at a
+ * different gradient — or nothing. Saving the resolved ramp and re-registering it on load
+ * (registerCustomRamp) makes the slot restore exactly, regardless of catalog state.
+ * (Now that slot selection is drag-drop, there is no name/preset reference to save.)
+ */
+export const slotSnapshot = (idx: number): { ramp: RGB[]; name: string } => {
+  const cat = buildPresetCatalog();
+  const i = Math.max(0, Math.min(cat.length - 1, idx));
+  return { ramp: presetRamp(idx), name: cat[i]?.name ?? `Slot ${idx}` };
+};
+
 export interface GeneratorDerived {
   stripA: RGB[];
   stripB: RGB[];

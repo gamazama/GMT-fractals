@@ -13,7 +13,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useImageStore, useImageDerived, useImageMode, useImageParam } from '../store/imageStore';
-import { ingestPixels, INGEST_MAX_EDGE, autoPath, tracePolyline, type Img2GradMode } from '../core/img2grad';
+import { decodeAndIngest, autoPath, tracePolyline, type Img2GradMode } from '../core/img2grad';
 import type { Pt, TracePath } from '../core/img2grad/common';
 import { CanonicalHero } from './CanonicalHero';
 import { fitRampToStops } from '../core/stopFit';
@@ -110,42 +110,20 @@ export const ImageStage: React.FC = () => {
     window.setTimeout(() => setToast(null), 1400);
   }, []);
 
-  // --- image loading: decode → downsample to ≤160px → ingest ---
+  // --- image loading: decode → downsample to ≤160px → ingest (shared with the scene
+  // document round-trip via decodeAndIngest) ---
   const loadImage = useCallback(
     (src: string) => {
       setLoading(true);
-      const im = new Image();
-      im.onload = () =>
-        requestAnimationFrame(() => {
-          const scale = Math.min(1, INGEST_MAX_EDGE / Math.max(im.width, im.height));
-          const w = Math.max(1, Math.round(im.width * scale));
-          const h = Math.max(1, Math.round(im.height * scale));
-          const c = document.createElement('canvas');
-          c.width = w;
-          c.height = h;
-          const cx = c.getContext('2d', { willReadFrequently: true });
-          if (!cx) return setLoading(false);
-          cx.drawImage(im, 0, 0, w, h);
-          const data = cx.getImageData(0, 0, w, h).data;
-          const m = ingestPixels(data, w, h);
-
-          // Display thumbnail — kept at near-full resolution (≤1920px longest edge) so
-          // the source pane stays crisp; the DPR-aware pane canvas downscales it cleanly.
-          // (ingest above keeps its own ≤160px copy for the colour maths — separate.)
-          const THUMB_MAX = 1920;
-          const ts = Math.min(1, THUMB_MAX / Math.max(im.width, im.height));
-          const tw = Math.max(1, Math.round(im.width * ts));
-          const th = Math.max(1, Math.round(im.height * ts));
-          const t = document.createElement('canvas');
-          t.width = tw; t.height = th;
-          const tctx = t.getContext('2d');
-          if (tctx) { tctx.imageSmoothingEnabled = true; tctx.imageSmoothingQuality = 'high'; tctx.drawImage(im, 0, 0, tw, th); }
-
-          setModel(m, t);
-          if (mode === 'trace') setPath(autoPath(m));
+      decodeAndIngest(src)
+        .then(({ model, thumb }) => {
+          setModel(model, thumb);
+          if (mode === 'trace') setPath(autoPath(model));
+        })
+        .catch(() => {
+          setLoading(false);
+          flash('could not load image');
         });
-      im.onerror = () => { setLoading(false); flash('could not load image'); };
-      im.src = src;
     },
     [mode, setModel, setPath, setLoading, flash],
   );

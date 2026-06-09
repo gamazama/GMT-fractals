@@ -8,8 +8,7 @@
  */
 
 import { registerPaletteUI } from '../palette/registerPaletteUI';
-import { setFavientBrowseAction, setFavientSelectMode } from '../palette/core/favientTargets';
-import { useEngineStore } from '../store/engineStore';
+import { setFavientSelectMode } from '../palette/core/favientTargets';
 import { registerGradientTargets } from './gradientTargets';
 
 registerPaletteUI();
@@ -21,8 +20,11 @@ registerPaletteUI();
 // at click/drop time; getRect queries the DOM at paint time).
 registerGradientTargets();
 
-// Favients header "Palettes" button → TOGGLE the studio's Picker tab.
-setFavientBrowseAction(() => useEngineStore.getState().togglePanel('Picker'));
+// N7: the Favients header "Palettes" (picker) button is host-gated OFF here — leaving
+// the browse action unset hides it (the button is gated on `browse &&` in FavientsPanel).
+// In the Explorer the Picker is already a top-level mode tab, so the panel shortcut is
+// redundant; app-gmt (where Favients floats and the Picker isn't a tab) keeps it by
+// registering its own browse action.
 
 // This host owns the select→reveal→place dock (GradientDropLayer), so the Favients panel
 // flips a swatch CLICK to SELECT (→ enlarge → dock) and hides its "Destination" dropdown.

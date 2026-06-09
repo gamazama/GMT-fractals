@@ -14,9 +14,10 @@
  * / studio). The header's "Palettes" button calls a host-registered browse action.
  */
 
-import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { GenericDropdown } from '../../components/GenericDropdown';
 import { Hint } from '../../components/Hint';
+import { clampToViewport } from '../../components/ui/viewportClamp';
 import {
   useFavientsStore,
   favientSig,
@@ -128,11 +129,43 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
   const [open, setOpen] = useState(false);
   const [zipFmt, setZipFmt] = useState(EXPORT_FORMATS[0].key);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const gradientFileRef = useRef<HTMLInputElement>(null);
   const importMode = useRef<'merge' | 'replace'>('merge');
 
   useDismiss(rootRef, { onClose: () => setOpen(false), enabled: open, escape: true });
+
+  // N6: keep the popover on-screen. The Favients panel floats, so its header can sit near
+  // the viewport's right/bottom edge — where the default `right-0 top-full` anchor would
+  // clip the menu off. Measure once open, then translate it back inside via the shared
+  // `clampToViewport` (flip off — it's already anchored, we only push it in-bounds). We
+  // subtract the applied nudge to recover the un-transformed rect, so the calc is stable
+  // and converges in one extra pass (the `!==` guard stops it). `placed` hides the menu
+  // for the first paint so there's no visible jump from the raw anchor to the corrected one.
+  const [nudge, setNudge] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [placed, setPlaced] = useState(false);
+  useLayoutEffect(() => {
+    if (!open) {
+      if (placed) setPlaced(false);
+      if (nudge.x !== 0 || nudge.y !== 0) setNudge({ x: 0, y: 0 });
+      return;
+    }
+    const el = menuRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
+    const natX = r.left - nudge.x, natY = r.top - nudge.y; // un-nudged top-left
+    const { x, y } = clampToViewport(
+      { x: natX, y: natY },
+      { width: r.width, height: r.height },
+      { width: window.innerWidth, height: window.innerHeight },
+      { flip: false },
+    );
+    const dx = x - natX, dy = y - natY;
+    if (dx !== nudge.x || dy !== nudge.y) setNudge({ x: dx, y: dy });
+    if (!placed) setPlaced(true);
+  }, [open, nudge, placed]);
 
   const close = () => setOpen(false);
   const empty = favients.length === 0;
@@ -292,7 +325,12 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
       </button>
       {open && (
         <div
+          ref={menuRef}
           className="absolute right-0 top-full mt-1 w-52 bg-black/95 border border-white/15 rounded-lg shadow-2xl z-50 p-1"
+          style={{
+            opacity: placed ? 1 : 0,
+            transform: nudge.x || nudge.y ? `translate(${nudge.x}px, ${nudge.y}px)` : undefined,
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           <button className={menuItemCls} onClick={() => gradientFileRef.current?.click()}>Import gradient file…</button>
@@ -870,6 +908,10 @@ export const FavientsPanel: React.FC = () => {
           ) : (
             <span className="text-[10px] text-gray-600 italic">no targets in this app</span>
           ))}
+        {/* Select-mode hosts (the Explorer) have no Destination dropdown to fill the row, so
+            push the header tools to the right edge. app-gmt's full-width dropdown already
+            does this, so the spacer is select-mode only. */}
+        {selectMode && <div className="flex-1" />}
         {browse && (
           <button
             onClick={() => browse()}
