@@ -22,6 +22,7 @@ import { createPortal } from 'react-dom';
 import { DropTargetLayer } from '../components/DropTargetLayer';
 import { DropTargetTile } from '../components/DropTarget';
 import { useDragInFlight } from '../hooks/useDragInFlight';
+import { useEngineStore } from '../store/engineStore';
 import { Z } from '../components/ui/zIndex';
 import { useActiveHeroSelection, useHeroOptionsOpen, closeHeroOptions } from '../palette/store/heroSelection';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
@@ -141,11 +142,37 @@ export const GradientDropLayer: React.FC = () => {
     // is the robust one — it can't be reset mid-drag by dragenter/dragleave imbalance the way
     // `inFlight` can while the Favients shelf re-renders, so the avatar + passthrough stay live.
     const nativeDragging = useNativeDragging();
-    const dragging = nativeDragging || (inFlight && acceptsGradient(types));
+
+    // --- Panel-drag deconfliction (N1) --------------------------------------------------
+    // The engine-core panel-DOCK drag (mouse-based; `draggingPanelId`, driven by
+    // Dock/DraggableWindow → DropZones) and THIS gradient drag/in-hand layer are MUTUALLY
+    // EXCLUSIVE gestures: they share the global pointer stream AND overlap in z — this
+    // layer's dropboxes/wells sit at Z.overlay (2000), ABOVE the panel redock zones
+    // (z-1000). If the layer stays live while the floating Favients shelf is dragged back
+    // to the dock, those overlays swallow the redock mouse-up (and the window-level mouseup
+    // then fires cancelPanelDrag) — the reported "undock→redock fails" bug. The trigger is a
+    // STUCK in-flight signal: a favourite reorder leaves `nativeDrag` set (its drop
+    // stopPropagations + the source swatch unmounts, so neither drop nor dragend clears it),
+    // which keeps `dragging`/`active` true with NO dock open — so the existing click-away
+    // handler (GradientExplorerApp's global pointerdown → closeHeroOptions, which only closes
+    // the dock) can't bring the overlays down. Gating on the panel drag does.
+    //
+    // The two gestures never co-occur — a panel drag needs a deliberate handle press,
+    // impossible mid-gradient-drag — so while a panel drag is in flight this layer stands
+    // DOWN completely (no overlays, no avatar, no in-hand tracking, no markPickLanded
+    // contention); the redock then owns the pointer stream and its drop fires reliably (the
+    // transient dock is dismissed by that same global click-away handler; the sticky pick is
+    // kept). This is the ONE deconfliction gate, at the single point every gradient-drag
+    // SOURCE composes through, so future sources (N4 Generator slots, N5 curves) inherit the
+    // separation for free. Keep this boundary intact.
+    const panelDragActive = useEngineStore((s) => s.draggingPanelId != null);
+
+    const dragging = !panelDragActive && (nativeDragging || (inFlight && acceptsGradient(types)));
     // The dock is shown while the options are open (click path) OR a drag is in flight.
     // The PICK itself (sel) is sticky and no longer gates the dock — closing options
     // leaves the pick in hand. (sel-guard so a stray open with no pick can't show empty.)
-    const active = (optionsOpen && sel != null) || dragging;
+    // Forced inert while a panel drag owns the pointer (see the deconfliction note above).
+    const active = !panelDragActive && ((optionsOpen && sel != null) || dragging);
 
     const pointer = useRef({ x: 0, y: 0 });
     const [, tick] = useReducer((n: number) => n + 1, 0);
@@ -270,8 +297,11 @@ export const GradientDropLayer: React.FC = () => {
         }
         const la = lastAvatar.current;
         lastAvatar.current = null;
+        // A panel-drag interruption is a neutral SUSPEND (the pick is kept, only the dock
+        // closed — see the deconfliction note) — never play the abandon wipe for it.
+        if (panelDragActive) return;
         if (la && !consumePickLanded()) triggerCancel(avatarBoxAt(la.x, la.y), la.ramp);
-    }, [active]);
+    }, [active, panelDragActive]);
 
     // The dragged ramp — recomputed only when the selection changes (not per rAF frame).
     // MUST stay above the early return below so the hook order is stable.
