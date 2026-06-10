@@ -23,7 +23,8 @@
  * @see engine/fractal/shaders/ditherTail.ts (DITHER_TAIL_GLSL — the shared tail)
  */
 
-import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../../../engine/utils/createBlueNoiseWebGL2';
+import { type BlueNoiseTexture } from '../../../../engine/utils/createBlueNoiseWebGL2';
+import { createDitherNoise, linkProgram, wireContextLoss } from '../../../../engine/utils/glHelpers';
 import { DITHER_TAIL_GLSL, VERT_QUAD } from '../../ditherTail';
 import { PAR_FAR } from './ParallaxField';
 import type { ParallaxColorBy } from './parallaxStore';
@@ -125,26 +126,34 @@ void main() {
 
 export class ParallaxRenderer {
   private gl: WebGL2RenderingContext;
-  private spriteProg: WebGLProgram;
-  private presentProg: WebGLProgram;
-  private spriteVao: WebGLVertexArrayObject;
-  private presentVao: WebGLVertexArrayObject;
-  private cornerVbo: WebGLBuffer;
-  private dynVbo: WebGLBuffer;
-  private statVbo: WebGLBuffer;
-  private lutTex: WebGLTexture;
-  private fieldTex: WebGLTexture;
-  private fbo: WebGLFramebuffer;
-  private blueNoise: BlueNoiseTexture;
+  private canvas: HTMLCanvasElement;
+  private spriteProg!: WebGLProgram;
+  private presentProg!: WebGLProgram;
+  private spriteVao!: WebGLVertexArrayObject;
+  private presentVao!: WebGLVertexArrayObject;
+  private cornerVbo!: WebGLBuffer;
+  private dynVbo!: WebGLBuffer;
+  private statVbo!: WebGLBuffer;
+  private lutTex!: WebGLTexture;
+  private fieldTex!: WebGLTexture;
+  private fbo!: WebGLFramebuffer;
+  private blueNoise!: BlueNoiseTexture;
   private sLoc: Record<string, WebGLUniformLocation | null> = {};
   private pLoc: Record<string, WebGLUniformLocation | null> = {};
   /** RGBA16F when float render targets are supported (the usual case), else RGBA8 (slightly
    *  clipped highlights, still correct). */
-  private fieldInternal: number;
-  private fieldType: number;
+  private fieldInternal = 0;
+  private fieldType = 0;
   private n = 0;
   private cssW = 1;
   private cssH = 1;
+  /** True between a `webglcontextlost` and the matching `restored` — `draw()` no-ops while the
+   *  GPU resources are gone (rebuilt by {@link build} on restore). */
+  private lost = false;
+  private unwireLoss: () => void;
+  /** Set by the owning mode: re-supply the data the renderer doesn't retain (the LUT + the static
+   *  per-instance attribs) after a context-loss recovery rebuilds the GL objects. */
+  onRestored?: () => void;
   dither = true;
   /** Background-wash orientation — the mode keeps it matched to the colour mapping. */
   washMode: WashMode = 0;
@@ -153,20 +162,38 @@ export class ParallaxRenderer {
     const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, preserveDrawingBuffer: true });
     if (!gl) throw new Error('[ParallaxRenderer] WebGL2 unavailable');
     this.gl = gl;
+    this.canvas = canvas;
+    this.build();
+    // Recover from a GPU context loss: rebuild every GL object on the (now-healthy) context, then
+    // let the mode re-upload the LUT + static attribs. Without this the canvas stays black.
+    this.unwireLoss = wireContextLoss(canvas, {
+      onLost: () => { this.lost = true; },
+      onRestored: () => { this.build(); this.lost = false; this.onRestored?.(); },
+    });
+  }
+
+  /** (Re)create every GL object on `this.gl`. Run once from the constructor and again after a
+   *  context restore (the prior objects are already invalidated by the loss). */
+  private build(): void {
+    const gl = this.gl;
 
     const floatOk =
       !!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float');
     this.fieldInternal = floatOk ? gl.RGBA16F : gl.RGBA8;
     this.fieldType = floatOk ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
 
-    this.spriteProg = this.link(SPRITE_VERT, SPRITE_FRAG);
-    this.presentProg = this.link(VERT_QUAD, PRESENT_FRAG);
-    for (const u of ['uResolution', 'uCam', 'uSizeScale', 'uLut', 'uIntensity', 'uHalo']) {
-      this.sLoc[u] = gl.getUniformLocation(this.spriteProg, u);
-    }
-    for (const u of ['uField', 'uLut', 'uBlueNoise', 'uBlueNoiseRes', 'uDither', 'uExposure', 'uWashMode']) {
-      this.pLoc[u] = gl.getUniformLocation(this.presentProg, u);
-    }
+    const sprite = linkProgram(gl, SPRITE_VERT, SPRITE_FRAG, {
+      uniforms: ['uResolution', 'uCam', 'uSizeScale', 'uLut', 'uIntensity', 'uHalo'],
+      label: 'ParallaxRenderer',
+    });
+    this.spriteProg = sprite.prog;
+    this.sLoc = sprite.uniforms;
+    const present = linkProgram(gl, VERT_QUAD, PRESENT_FRAG, {
+      uniforms: ['uField', 'uLut', 'uBlueNoise', 'uBlueNoiseRes', 'uDither', 'uExposure', 'uWashMode'],
+      label: 'ParallaxRenderer',
+    });
+    this.presentProg = present.prog;
+    this.pLoc = present.uniforms;
 
     // One corner VBO serves both passes: sprite quad corners (divisor 0) + the present quad.
     this.cornerVbo = gl.createBuffer()!;
@@ -211,41 +238,12 @@ export class ParallaxRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     this.fbo = gl.createFramebuffer()!;
+    // Allocate the float field at the current backing size so a context-restore rebuild is
+    // immediately renderable even if `setSize`'s same-dimensions early-out skips a realloc.
+    this.allocField(Math.max(1, gl.canvas.width), Math.max(1, gl.canvas.height));
 
     // Independent-channel RGBA blue noise → a true TPDF in the shared tail (matches the compositor).
-    this.blueNoise = createBlueNoiseWebGL2(gl, '/blueNoiseRGBA.png');
-    gl.bindTexture(gl.TEXTURE_2D, this.blueNoise.texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  }
-
-  private link(vsrc: string, fsrc: string): WebGLProgram {
-    const gl = this.gl;
-    const compile = (type: number, src: string): WebGLShader => {
-      const sh = gl.createShader(type)!;
-      gl.shaderSource(sh, src);
-      gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-        const log = gl.getShaderInfoLog(sh) || '';
-        gl.deleteShader(sh);
-        throw new Error(`[ParallaxRenderer] shader compile: ${log}`);
-      }
-      return sh;
-    };
-    const vs = compile(gl.VERTEX_SHADER, vsrc);
-    const fs = compile(gl.FRAGMENT_SHADER, fsrc);
-    const p = gl.createProgram()!;
-    gl.attachShader(p, vs);
-    gl.attachShader(p, fs);
-    gl.linkProgram(p);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-      const log = gl.getProgramInfoLog(p);
-      gl.deleteProgram(p);
-      throw new Error(`[ParallaxRenderer] program link: ${log}`);
-    }
-    return p;
+    this.blueNoise = createDitherNoise(gl);
   }
 
   setLut(rgba1024: Uint8Array): void {
@@ -282,6 +280,13 @@ export class ParallaxRenderer {
     if (gl.canvas.width === w && gl.canvas.height === h) return;
     gl.canvas.width = w;
     gl.canvas.height = h;
+    this.allocField(w, h);
+  }
+
+  /** (Re)allocate the float field texture + bind it to the FBO at device-pixel size `w×h`, with
+   *  the RGBA8 fallback if the driver can't render the float format. */
+  private allocField(w: number, h: number): void {
+    const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.fieldTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, this.fieldInternal, w, h, 0, gl.RGBA, this.fieldType, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
@@ -300,6 +305,7 @@ export class ParallaxRenderer {
    *  float field, then tonemap + wash + dither to the canvas. `dyn` is the (x, y, energy)
    *  per-instance buffer; `camX/camY` the parallax camera shift in CSS px. */
   draw(dyn: Float32Array, camX: number, camY: number): void {
+    if (this.lost) return; // GL objects gone until the context restores + build() reruns
     const gl = this.gl;
     const W = gl.canvas.width;
     const H = gl.canvas.height;
@@ -353,6 +359,7 @@ export class ParallaxRenderer {
 
   dispose(): void {
     const gl = this.gl;
+    this.unwireLoss();
     gl.deleteProgram(this.spriteProg);
     gl.deleteProgram(this.presentProg);
     gl.deleteBuffer(this.cornerVbo);

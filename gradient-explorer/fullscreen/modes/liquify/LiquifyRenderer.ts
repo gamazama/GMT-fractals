@@ -15,7 +15,8 @@
  * @see engine/fractal/shaders/ditherTail.ts (DITHER_TAIL_GLSL — the shared tail)
  */
 
-import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../../../engine/utils/createBlueNoiseWebGL2';
+import { type BlueNoiseTexture } from '../../../../engine/utils/createBlueNoiseWebGL2';
+import { createDitherNoise, linkProgram, wireContextLoss } from '../../../../engine/utils/glHelpers';
 import { DITHER_TAIL_GLSL } from '../../ditherTail';
 import { DEFAULT_BACKGROUND } from '../../../../palette/core/rampGeometry';
 import { renderSide, upsampleCatmullRom, buildRenderT, buildRenderIndices } from './catmullRom';
@@ -69,13 +70,14 @@ void main() {
 
 export class LiquifyRenderer {
   private gl: WebGL2RenderingContext;
-  private prog: WebGLProgram;
-  private posVbo: WebGLBuffer;
-  private tVbo: WebGLBuffer;
-  private ibo: WebGLBuffer;
-  private vao: WebGLVertexArrayObject;
-  private lutTex: WebGLTexture;
-  private blueNoise: BlueNoiseTexture;
+  private canvas: HTMLCanvasElement;
+  private prog!: WebGLProgram;
+  private posVbo!: WebGLBuffer;
+  private tVbo!: WebGLBuffer;
+  private ibo!: WebGLBuffer;
+  private vao!: WebGLVertexArrayObject;
+  private lutTex!: WebGLTexture;
+  private blueNoise!: BlueNoiseTexture;
   private loc: Record<string, WebGLUniformLocation | null> = {};
   private indexCount = 0;
   /** Sim grid side (the coarse control grid). */
@@ -86,18 +88,42 @@ export class LiquifyRenderer {
   private subdiv = true;
   /** Reused render-grid position buffer (Catmull-Rom upsample target), resized on a level change. */
   private renderPos = new Float32Array(0);
+  private onReady?: () => void;
+  /** True between a `webglcontextlost` and the matching `restored` — `draw()` no-ops while the
+   *  GPU resources are gone (they're rebuilt by {@link build} on restore). */
+  private lost = false;
+  private unwireLoss: () => void;
+  /** Set by the owning mode: re-supply the data the renderer doesn't retain (the LUT) after a
+   *  context-loss recovery rebuilds the GL objects. */
+  onRestored?: () => void;
   dither = true;
 
   constructor(canvas: HTMLCanvasElement, simN: number, onReady?: () => void) {
     const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, preserveDrawingBuffer: true });
     if (!gl) throw new Error('[LiquifyRenderer] WebGL2 unavailable');
     this.gl = gl;
+    this.canvas = canvas;
     this.simN = simN;
+    this.onReady = onReady;
+    this.build();
+    // Recover from a GPU context loss: rebuild every GL object on the (now-healthy) context, then
+    // let the mode re-upload the LUT. Without this the canvas stays black until a mode-switch.
+    this.unwireLoss = wireContextLoss(canvas, {
+      onLost: () => { this.lost = true; },
+      onRestored: () => { this.build(); this.lost = false; this.onRestored?.(); },
+    });
+  }
 
-    this.prog = this.link(VERT, FRAG);
-    for (const u of ['uLut', 'uBlueNoise', 'uBlueNoiseRes', 'uDither', 'uFit']) {
-      this.loc[u] = gl.getUniformLocation(this.prog, u);
-    }
+  /** (Re)create every GL object on `this.gl`. Run once from the constructor and again after a
+   *  context restore (the prior objects are already invalidated by the loss). */
+  private build(): void {
+    const gl = this.gl;
+    const linked = linkProgram(gl, VERT, FRAG, {
+      uniforms: ['uLut', 'uBlueNoise', 'uBlueNoiseRes', 'uDither', 'uFit'],
+      label: 'LiquifyRenderer',
+    });
+    this.prog = linked.prog;
+    this.loc = linked.uniforms;
 
     this.vao = gl.createVertexArray()!;
     gl.bindVertexArray(this.vao);
@@ -111,6 +137,7 @@ export class LiquifyRenderer {
     gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 0, 0);
     this.ibo = gl.createBuffer()!;
     gl.bindVertexArray(null);
+    this.subdivLevel = 1;
     this.buildRenderBuffers(1); // start at the flat grid; draw() raises the level on stretch
 
     this.lutTex = gl.createTexture()!;
@@ -121,37 +148,7 @@ export class LiquifyRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     // Independent-channel RGBA blue noise → a true TPDF in the shared tail (matches the compositor).
-    this.blueNoise = createBlueNoiseWebGL2(gl, '/blueNoiseRGBA.png', () => onReady?.());
-    gl.bindTexture(gl.TEXTURE_2D, this.blueNoise.texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  }
-
-  private link(vsrc: string, fsrc: string): WebGLProgram {
-    const gl = this.gl;
-    const compile = (type: number, src: string): WebGLShader => {
-      const sh = gl.createShader(type)!;
-      gl.shaderSource(sh, src);
-      gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-        const log = gl.getShaderInfoLog(sh) || '';
-        gl.deleteShader(sh);
-        throw new Error(`[LiquifyRenderer] shader compile: ${log}`);
-      }
-      return sh;
-    };
-    const vs = compile(gl.VERTEX_SHADER, vsrc);
-    const fs = compile(gl.FRAGMENT_SHADER, fsrc);
-    const p = gl.createProgram()!;
-    gl.attachShader(p, vs); gl.attachShader(p, fs);
-    gl.linkProgram(p);
-    gl.deleteShader(vs); gl.deleteShader(fs);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-      const log = gl.getProgramInfoLog(p);
-      gl.deleteProgram(p);
-      throw new Error(`[LiquifyRenderer] program link: ${log}`);
-    }
-    return p;
+    this.blueNoise = createDitherNoise(gl, this.onReady);
   }
 
   setLut(rgba1024: Uint8Array): void {
@@ -218,6 +215,7 @@ export class LiquifyRenderer {
   /** Draw the soft body: pick a subdivision level from the stretch, Catmull-Rom upsample the coarse
    *  deformed grid into the render grid (smooth — no facets), then draw it. */
   draw(pos: Float32Array): void {
+    if (this.lost) return; // GL objects gone until the context restores + build() reruns
     const gl = this.gl;
     const S = this.pickSubdiv(pos);
     if (S !== this.subdivLevel) this.buildRenderBuffers(S);
@@ -247,6 +245,7 @@ export class LiquifyRenderer {
 
   dispose(): void {
     const gl = this.gl;
+    this.unwireLoss();
     gl.deleteProgram(this.prog);
     gl.deleteBuffer(this.posVbo);
     gl.deleteBuffer(this.tVbo);

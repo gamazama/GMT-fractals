@@ -95,7 +95,7 @@ async function main() {
   // Flip a live knob (mapping mode → Bands) and confirm the image changes.
   const before = stats.distinctColors!;
   await page.evaluate(async () => {
-    const store = await import('/palette/store/fullscreenStore.ts');
+    const store = await import('/gradient-explorer/fullscreen/modes/fractal/fractalStore.ts');
     store.setFractalMapping(4);   // Bands
     store.setFractalRepeats(6);
   });

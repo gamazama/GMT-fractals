@@ -71,6 +71,15 @@ const mountParallax = (host: OwnCanvasHost): OwnCanvasHandle => {
   const ctx0 = host.getContext();
   if (ctx0.lut.length) renderer.setLut(ctx0.lut);
 
+  // After a GPU context-loss recovery the renderer has rebuilt its GL objects but lost the static
+  // per-instance attribs + the LUT (neither retained) — re-supply them so the field returns.
+  renderer.onRestored = () => {
+    renderer.setField(field.staticAttribs());
+    const ctx = host.getContext();
+    if (ctx.lut.length) renderer.setLut(ctx.lut);
+    wake();
+  };
+
   let raf = 0;
   let lastT = 0;
   let first = true;

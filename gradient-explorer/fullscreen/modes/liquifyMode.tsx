@@ -76,6 +76,17 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
   const ctx0 = host.getContext();
   if (ctx0.lut.length) renderer.setLut(ctx0.lut);
 
+  // After a GPU context-loss recovery the renderer has rebuilt its GL objects but lost the
+  // uploaded LUT (not retained) — re-supply it (+ the subdiv flag) so the colour field returns.
+  const wireRestore = (r: LiquifyRenderer): void => {
+    r.onRestored = () => {
+      const ctx = host.getContext();
+      if (ctx.lut.length) r.setLut(ctx.lut);
+      r.setSubdiv(getLiquifyState().subdiv);
+    };
+  };
+  wireRestore(renderer);
+
   let raf = 0;
   let lastT = 0;
   let first = true;
@@ -118,6 +129,7 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
     renderer = new LiquifyRenderer(glCanvas, mesh.n);
     renderer.dither = dither;
     renderer.setSubdiv(getLiquifyState().subdiv);
+    wireRestore(renderer);
     const ctx = host.getContext();
     if (ctx.lut.length) renderer.setLut(ctx.lut);
     resize();

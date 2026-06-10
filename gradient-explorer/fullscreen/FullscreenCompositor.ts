@@ -16,7 +16,8 @@
  * @see gradient-explorer/fullscreen/modeRegistry.ts (the mode contract)
  */
 
-import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../engine/utils/createBlueNoiseWebGL2';
+import { type BlueNoiseTexture } from '../../engine/utils/createBlueNoiseWebGL2';
+import { createDitherNoise, linkProgram } from '../../engine/utils/glHelpers';
 import { VERT_QUAD, BLIT_MODE_BODY, RESERVED_UNIFORMS, wrapModeFragment } from './ditherTail';
 import { renderFieldDithered } from '../../palette/core/rampGeometry';
 import type { RGB } from '../../palette/core/oklab';
@@ -68,13 +69,9 @@ export class FullscreenCompositor {
 
     this.srcTex = this.makeTex(gl.NEAREST);
     this.lutTex = this.makeTex(gl.LINEAR); // for glQuad modes that sample uLut
-    // Independent-channel RGBA blue-noise (Christoph Peters free set) — the dither tail sums
-    // two independent channels for a true TPDF; a grayscale tile would degrade to uniform-PDF.
-    this.blueNoise = createBlueNoiseWebGL2(gl, '/blueNoiseRGBA.png', () => onReady?.());
-    // Point-sample the tile so the static dither stays crisp (the loader defaults to LINEAR).
-    gl.bindTexture(gl.TEXTURE_2D, this.blueNoise.texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    // Independent-channel RGBA blue-noise (Christoph Peters free set), point-sampled for a crisp
+    // static dither — the shared tail sums two independent channels for a true TPDF.
+    this.blueNoise = createDitherNoise(gl, onReady);
   }
 
   /** True when the GL path is live (dither + glQuad available). */
@@ -99,39 +96,14 @@ export class FullscreenCompositor {
     return true;
   }
 
-  private compileShader(type: number, src: string): WebGLShader {
-    const gl = this.gl!;
-    const sh = gl.createShader(type)!;
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      const log = gl.getShaderInfoLog(sh) || '';
-      gl.deleteShader(sh);
-      throw new Error(`[FullscreenCompositor] shader compile error: ${log}`);
-    }
-    return sh;
-  }
-
   /** Compile + cache a program from a wrapped fragment shader, resolving the reserved
    *  preamble uniforms plus any extra `names` the mode declares. */
   private buildProgram(id: string, fragSrc: string, names: readonly string[]): CompiledProgram {
-    const gl = this.gl!;
-    const vs = this.compileShader(gl.VERTEX_SHADER, VERT_QUAD);
-    const fs = this.compileShader(gl.FRAGMENT_SHADER, fragSrc);
-    const prog = gl.createProgram()!;
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.bindAttribLocation(prog, 0, 'aPos');
-    gl.linkProgram(prog);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      const log = gl.getProgramInfoLog(prog);
-      gl.deleteProgram(prog);
-      throw new Error(`[FullscreenCompositor] program link error: ${log}`);
-    }
-    const loc: Record<string, WebGLUniformLocation | null> = {};
-    for (const n of [...RESERVED_UNIFORMS, ...names]) loc[n] = gl.getUniformLocation(prog, n);
+    const { prog, uniforms: loc } = linkProgram(this.gl!, VERT_QUAD, fragSrc, {
+      attribs: { aPos: 0 },
+      uniforms: [...RESERVED_UNIFORMS, ...names],
+      label: 'FullscreenCompositor',
+    });
     const compiled = { prog, loc };
     this.programs.set(id, compiled);
     return compiled;
