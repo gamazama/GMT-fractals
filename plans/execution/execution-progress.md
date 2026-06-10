@@ -9,7 +9,16 @@ Status legend: `not-started` · `in-flight` · `blocked` · `in-review` (gates/v
 
 ---
 
-## Current phase: **FULLSCREEN-V2 EXECUTION** — splashy-modes fan-out (integration `exec/gradient-explorer` @ `4b3856f`)
+## Current phase: **FULLSCREEN-V2 ✅ COMPLETE → POST-V2 ROADMAP** (integration `exec/gradient-explorer` @ `a3dbc42`+log; pushed to github)
+
+**FULLSCREEN-V2 IS DONE** (2026-06-10): all 3 splashy modes (spline · liquify · parallax) + the full fold-in
+polish (Session A items 2/4/5/6 `28187ed`; Session B item 1 geometry-handles-v2 `a3dbc42`) are merged,
+gate-green, and pushed. Item 3 (animated preview/shared clock) was dropped by user decision. **NEXT = the
+post-fullscreen-v2 roadmap** (see the changelog "ROADMAP LOCKED" + Backlog): generator-polish (Mixer rename,
+Stops beside Mixer/ColorBox, intuitive vertical sliders, Mixer reset) · favients add→last-group · tech-debt
+(esp. the failing `test:compat`; oklab de-dup remainder; ColorBox sub-range UI; P0d nits) · curve-editor
+refinements · W9 snapshot (low-pri) · P3 light polish · then **dev→prod promotion** (grep `TODO(dev→prod
+promotion)`). Pick the next unit with the user.
 
 Phase 0 + Phase 1 + **P2 portability** + the **live-fractal carve** are all merged & gate-green (P2 summary:
 `plans/p2-completion-summary.md`). Now building **fullscreen-v2** — re-scoped + web-SOTA-researched in
@@ -476,6 +485,43 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-10 — **✅ fullscreen-v2 GEOMETRY HANDLES v2 (Session B, item 1) MERGED** into integration `a3dbc42`
+  (merge of `exec/fs-onscreen-handles`, 5 commits; 11 files +1391/−293 — new `GeometryHandleLayer.tsx`
+  [~690 lines] + `plans/gx-geometry-handles-v2.md` + 2 debug helpers). **← FOLD-IN POLISH COMPLETE; the 3
+  splashy modes + the full fold-in are done → FULLSCREEN-V2 IS COMPLETE.** Shipped on-screen
+  direct-manipulation handles per geometry mode + the auto-fade-on-idle hide control. **⚠ SCOPE-CHANGE
+  (user-approved in-session, 3 concept forks confirmed): grew into a GEOMETRY-MODE REDESIGN — standalone
+  S-curve mode REMOVED (absorbed into a rotatable+eased Linear mode: Angle + Bias handles); Randomized mode
+  REMOVED entirely (seed/amount/re-roll plumbing deleted); the geometry set went 6→4 modes.** New handles:
+  radial (centre dot + scale ring + radial-drag bias) · conic (centre dot + angle handle + collapsible
+  Mirror w/ per-half bias, opens by pulling a pull-tab off the seam, symmetric 0.5 cap) · arched (position +
+  radius + width [now fills the stage] + curvature ±0.6) · linear (angle, screen-true at 45° via isotropic
+  projection, + bias). One shared `bias(t,b)` gain (identity at b=0) drives every ease → every new param
+  defaults to the legacy render, so the additive byte-identity pin needed zero baseline edits for surviving
+  modes. **Independent review = MERGE-CLEAN, no bugs** (the central worry — an edited determinism test —
+  was REFUTED: `test-palette-rampgeometry.mts` was never a byte-golden; it pins self-consistency +
+  additive-equality `render({})===render(GEOM_DEFAULTS)` + shape invariants, and the edit only removed
+  scurve/random cases + added new-param cases; the surviving modes reduce ALGEBRAICALLY to pre-session
+  output at defaults [`bias(t,0)`=id · `archCurve===0` = verbatim old branch · `conicLegacy` true at
+  defaults]; no dangling `'scurve'`/`'random'` refs in live code; default geom = valid `'linear'`; store is
+  transient → no GMF/PNG/scene/catalog compat break; `package.json +1` = a test SCRIPT not a dep;
+  export-suppression is STRUCTURAL — handles are sibling DOM, export reads the canvas only; `mulberry32`
+  still validly used by Parallax + generatorPipeline). User visual confirm. Gate green (tsc 0 ·
+  test:palette 44/44 · test:dither). **2 non-blocking NITS:** (n-hv2-1) `interacting` could stick if the
+  handle `<g>` unmounts mid-drag — **unreachable** with one pointer (capture redirects events; can't click
+  the toggle mid-drag); optional unmount-effect cleanup. (n-hv2-2) cosmetic doc drift: `geometryModes.tsx`
+  header says "four modes" but the frozen `fullscreen-v2-rescope.md` still says "six geometries" (frozen
+  doc = read-only historical; stale prose only). **⚠ WATCH (for future `sampleGeometry` refactors):** the
+  determinism gate is a BEHAVIORAL/STRUCTURAL pin, NOT byte-golden — the byte-identity-to-legacy guarantee
+  rests on the no-op default branches (`bias(·,0)` / `archCurve===0` / `conicLegacy`) staying intact; anyone
+  touching the geometry mappers must preserve those or re-establish the pin. **CONFLICT CANDIDATES (small,
+  self-contained blast radius — flag for any parallel/future mode stream):** `fullscreenStore` lost
+  `seed`/`amount`/`setFullscreenAmount`/`rerollFullscreen` + gained `geomParams`/`setFullscreenGeomParams`;
+  `rampGeometry.ts` `GeometryId` lost scurve/random + `GeometryParams` lost amount/seed gained 10 keys + new
+  `bias`/`archRadiusAt` exports; `geometryModes.tsx` `BUILTIN_MODES` dropped 2 entries. No engine/app-gmt
+  reader of the removed fields exists today. **NEXT: fullscreen-v2 is closed → the post-fullscreen-v2
+  roadmap** (generator-polish · favients add→last-group · tech-debt incl. failing `test:compat` · W9
+  snapshot · P3 light polish · then dev→prod promotion).
 - 2026-06-10 — **✅ fullscreen-v2 CLEANUP wave (Session A) MERGED** into integration `28187ed` (merge of
   `exec/fs-polish-cleanup`, 2 commits; 13 files +511/−341 — new `engine/utils/glHelpers.ts` +
   `modes/fractal/fractalStore.ts`). **Items 2+4+5+6 done** (item 1 on-screen handles = Session B, next).
