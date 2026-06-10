@@ -485,6 +485,22 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-10 — **✅ GEOMETRY-MODE PERF FIX landed on integration `9d8730d` + DEPLOYED.** Committed directly
+  onto `exec/gradient-explorer` by the user's perf session (Fable-co-authored), not a branch. The cpuField
+  geometry modes (linear/radial/conic/arched) ran two full per-pixel CPU passes/frame (sampleGeometry +
+  serpentine Floyd–Steinberg) → ~15fps interaction; linear felt worst (near-free field math, so the dither
+  pass was ~all the cost). Fix (single file, `FullscreenGradientOverlay.tsx`): **(a)** skip the CPU
+  error-diffusion dither WHILE a handle drag is in flight (`comp.dither = fs.dither && !fs.interacting`) —
+  releasing renders ONE full-res dithered settle frame, then idle; export/still keep full dither. **(b)**
+  idempotent cpuField present — a dirty key `geom|dither|w×h|geomParams` + ramp-ref skips the field+dither
+  when nothing affecting it changed (no continuous re-dithering on idle / unrelated re-renders); resize +
+  interacting→idle change the key; compositor-recreate resets it to null. **Determinism pin SAFE** (verified
+  by orchestrator): dither only skipped mid-drag; the gates render at REST so the pinned dithered steady-state
+  is unchanged; the key captures every cpuField input. **Gate green (tsc 0 · test:palette 44/44 · test:dither
+  flat-gate holds).** Pushed to BOTH `exec/gradient-explorer` (integration) AND the `dev` deploy branch
+  (`4e99893..9d8730d`, clean ff) → Cloudflare auto-deploy for the user's online test. Other perf items
+  (bucket-render PT noise · 4K path · low-FPS warning · multi-frame bucket export) still with the user's
+  session.
 - 2026-06-10 — **PROMOTION-BLOCKER RECONCILIATION + KNOCK-OUT BATCH SCOPED.** User is taking the perf items
   (bucket-render PT noise · 4K render path · low-FPS perf warning · multi-frame bucket export) with the
   geometry-handles session directly; I scoped the remaining SMALL non-perf items into one knock-out batch.
