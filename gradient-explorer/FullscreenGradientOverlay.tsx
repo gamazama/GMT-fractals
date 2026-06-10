@@ -42,6 +42,7 @@ import {
   setFullscreenDither,
   setFullscreenHandles,
   useFullscreenState,
+  type FullscreenState,
 } from '../palette/store/fullscreenStore';
 import { useActiveHeroSelection } from '../palette/store/heroSelection';
 import { usePaletteEditorStore } from '../palette/store/paletteEditorStore';
@@ -59,6 +60,18 @@ import { Z } from '../components/ui/zIndex';
  *  renders at (near-)native device pixels: error-diffusion dither must be at display resolution,
  *  or the browser's bilinear upscale stretches the step-runs and re-introduces banding. */
 const CONTINUOUS_MAX_DIM = 2560;
+
+/** Long-edge cap while a handle drag is in flight: the full-res CPU field + error diffusion
+ *  costs ~100ms+ at 2560 on big displays — far too slow for pointer-rate repaints. A drag
+ *  renders at this cap (slightly soft, fast) and snaps back to full resolution on release. */
+const INTERACT_MAX_DIM = 1280;
+
+/** The ctx params handed to modes: handle-driven shape params (`geomParams`) with the
+ *  dedicated `amount`/`seed` fields spread LAST so they always win (the random mode's own
+ *  controls). An unset key resolves to its GEOM_DEFAULT inside the pure mappers —
+ *  byte-identical to the pre-handles render. ONE definition so the spread-order invariant
+ *  can't drift between the live-paint and ownCanvas-context paths. */
+const buildParams = (fs: FullscreenState) => ({ ...fs.geomParams, amount: fs.amount, seed: fs.seed });
 
 /** Resolves the live "working" gradient (the last-modified hero) and reports it upward. Mounted
  *  whenever the overlay is open (split AND plain fullscreen now share this one live path), so the
@@ -164,13 +177,11 @@ export const FullscreenGradientOverlay: React.FC = () => {
     () => ({
       ramp: ramp ?? [],
       lut: lut ?? new Uint8Array(1024),
-      // The on-screen-handle shape params spread FIRST so the dedicated amount/seed fields
-      // (the random mode's own controls) always win. An unset key resolves to its
-      // GEOM_DEFAULT inside the pure mappers — byte-identical to the pre-handles render.
-      params: { ...fs.geomParams, amount: fs.amount, seed: fs.seed },
+      params: buildParams(fs),
       width: 0,
       height: 0,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildParams reads exactly these
     [ramp, lut, fs.amount, fs.seed, fs.geomParams],
   );
   const ctxRef = useRef(modeCtx);
@@ -184,7 +195,10 @@ export const FullscreenGradientOverlay: React.FC = () => {
     if (!comp || !stage || !ramp || !lut) return;
     const mode = getFullscreenMode(fs.geom);
     if (!mode || mode.kind === 'ownCanvas') return;
-    const cap = isStochastic(fs.geom) ? RANDOM_MAX_DIM : CONTINUOUS_MAX_DIM;
+    const fullCap = isStochastic(fs.geom) ? RANDOM_MAX_DIM : CONTINUOUS_MAX_DIM;
+    // A handle drag in flight renders at a reduced cap (pointer-rate repaints must be cheap);
+    // releasing the drag flips `interacting` off, which re-creates `paint` → full-res repaint.
+    const cap = fs.interacting ? Math.min(fullCap, INTERACT_MAX_DIM) : fullCap;
     const cw = stage.clientWidth;
     const ch = stage.clientHeight;
     // Render at native device pixels (×DPR, capped at 2) so the dither lands on real display
@@ -197,8 +211,8 @@ export const FullscreenGradientOverlay: React.FC = () => {
     comp.dither = fs.dither;
     // Shape params (radial centre, conic angle, arch r/w/pos/span, s-curve shape) come from the
     // store's `geomParams` — written by the on-screen handle layer, threaded here from OUTSIDE
-    // the pure mappers. An unset key renders byte-identically to its GEOM_DEFAULT.
-    const ctx = { ramp, lut, params: { ...fs.geomParams, amount: fs.amount, seed: fs.seed }, width: w, height: h };
+    // the pure mappers (see `buildParams` for the spread-order invariant).
+    const ctx = { ramp, lut, params: buildParams(fs), width: w, height: h };
     if (mode.kind === 'glQuad') {
       comp.uploadLut(lut); // only glQuad modes sample uLut; cpuField bakes colour on the CPU
       comp.presentMode(mode, ctx);
@@ -207,11 +221,17 @@ export const FullscreenGradientOverlay: React.FC = () => {
     } else {
       comp.presentRaster(mode.raster!(ctx), w, h);
     }
-  }, [ramp, lut, fs.geom, fs.amount, fs.seed, fs.geomParams, fs.dither]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildParams reads amount/seed/geomParams
+  }, [ramp, lut, fs.geom, fs.amount, fs.seed, fs.geomParams, fs.dither, fs.interacting]);
 
-  // Repaint on open + whenever the geometry / seed / amount / ramp change.
+  // Repaint on open + whenever the geometry / params / ramp change — COALESCED to one paint
+  // per animation frame: a handle drag emits store updates at pointer rate, and each re-created
+  // `paint` cancels the previous pending frame, so a fast drag costs one full-field CPU render
+  // per displayed frame instead of one per pointermove.
   useEffect(() => {
-    if (fs.open) paint();
+    if (!fs.open) return;
+    const id = requestAnimationFrame(() => paint());
+    return () => cancelAnimationFrame(id);
   }, [fs.open, paint]);
 
   // Repaint whenever the stage itself resizes — window resize, the toolbar wrapping when controls

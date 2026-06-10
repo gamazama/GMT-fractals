@@ -8,36 +8,21 @@
  * render ctx). Also checks the toolbar toggle hides the layer and that double-click resets.
  * Works on the compositor's Canvas-2D fallback too (no WebGL2 needed for cpuField modes).
  *
- * Run (needs `npm run dev`):
+ * Run (needs `npm run dev` — a FRESH server; see the dual-instance note below):
  *   npx tsx debug/smoke-gx-geom-handles.mts
+ *
+ * ⚠ Vite dual-instance hazard: this smoke drives the store via a bare-URL dynamic import.
+ * On a LONG-RUNNING dev server whose store module has been HMR-invalidated (any edit to it
+ * since the server started), the app's module graph holds a `?t=`-timestamped instance and
+ * the bare import yields a SECOND instance — openFullscreen then mutates a store no React
+ * tree subscribes to and the overlay never appears. The smoke detects this and says so;
+ * the fix is restarting the dev server (or pointing ENGINE_URL at a fresh one).
  */
 import { chromium } from 'playwright';
+import { signature, diff } from './helpers/canvas-signature.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 function fail(msg: string): never { console.error(`✗ ${msg}`); process.exit(1); }
-
-async function signature(page: import('playwright').Page): Promise<number[]> {
-  return page.evaluate(() => {
-    const canvas = document.querySelector('[data-testid="fullscreen-gradient-overlay"] canvas') as HTMLCanvasElement | null;
-    if (!canvas) return [];
-    const tmp = document.createElement('canvas'); tmp.width = canvas.width; tmp.height = canvas.height;
-    const c2 = tmp.getContext('2d')!; c2.drawImage(canvas, 0, 0);
-    const { data } = c2.getImageData(0, 0, tmp.width, tmp.height);
-    const sig: number[] = [];
-    const N = 12;
-    for (let gy = 0; gy < N; gy++) for (let gx = 0; gx < N; gx++) {
-      const x = ((gx + 0.5) / N * tmp.width) | 0, y = ((gy + 0.5) / N * tmp.height) | 0;
-      const i = (y * tmp.width + x) * 4;
-      sig.push(data[i], data[i + 1], data[i + 2]);
-    }
-    return sig;
-  });
-}
-const diff = (a: number[], b: number[]): number => {
-  if (a.length !== b.length || !a.length) return -1;
-  let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]);
-  return s / a.length;
-};
 
 async function main() {
   const browser = await chromium.launch();
@@ -64,6 +49,12 @@ async function main() {
     }
   }
   await page.waitForTimeout(600);
+
+  // Dual-instance guard: the store said "open" — the overlay must exist, or the page's app
+  // is subscribed to a DIFFERENT module instance (stale long-running dev server).
+  if (!(await page.locator('[data-testid="fullscreen-gradient-overlay"]').count())) {
+    fail('overlay did not open after openFullscreen — likely the Vite dual-instance hazard (HMR-invalidated store on a long-running dev server). RESTART `npm run dev` and re-run.');
+  }
 
   const getParams = async (): Promise<Record<string, number>> =>
     page.evaluate(async () => {

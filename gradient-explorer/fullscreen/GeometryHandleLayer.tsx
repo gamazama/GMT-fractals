@@ -20,15 +20,19 @@
  * spatial) — neither gets a handle here. Linear has no shape params.
  *
  * ── Determinism boundary ────────────────────────────────────────────────────────────────
- * Handles write ONLY `fullscreenStore.geomParams` (via `setFullscreenGeomParam`); the
+ * Handles write ONLY `fullscreenStore.geomParams` (batched `setFullscreenGeomParams`); the
  * overlay threads that into the render ctx, so the pure mappers (`sampleGeometry`) are
  * driven from the OUTSIDE and stay pure. Values are clamped to the mode's `paramFields`
  * ranges (the frozen seam metadata). Double-click a handle to reset its params (an unset
  * key IS the `GEOM_DEFAULTS` default — byte-identical to the pre-handles render).
+ * A drag also flags `fullscreenStore.interacting` so the overlay repaints at a reduced
+ * resolution cap while the pointer is down (full-res snap on release).
  *
  * ── Visibility ──────────────────────────────────────────────────────────────────────────
  * Visible on mode activation and on any pointer activity over the stage; gently fades
  * after a few idle seconds (instant when `prefers-reduced-motion`). Never fades mid-drag.
+ * The fade is VISUAL ONLY — handles stay grabbable while fading/faded (the stage beneath
+ * has no pointer interactions in these modes, and any approach movement wakes the layer).
  * `fullscreenStore.handles` (the toolbar "Handles" toggle) force-hides the whole layer.
  * PNG export can never contain handles BY CONSTRUCTION: export reads the canvas back
  * (`canvasToPngBlob(canvas)`), and this layer is sibling DOM above it.
@@ -45,20 +49,19 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GEOM_DEFAULTS, easeShaped, type GeometryParams } from '../../palette/core/rampGeometry';
 import {
   resetFullscreenGeomParams,
-  setFullscreenGeomParam,
+  setFullscreenGeomParams,
+  setFullscreenInteracting,
   useFullscreenState,
+  type HandleParamKey,
 } from '../../palette/store/fullscreenStore';
 import { getFullscreenMode } from './modeRegistry';
 import { precisionMultiplier } from '../../components/inputs/usePrecisionTrackDrag';
 
-/** Modes this layer knows how to dress with handles. */
-const HANDLED_GEOMS = new Set(['radial', 'conic', 'arched', 'scurve']);
-
-/** Whether a mode id has on-screen handles (drives the toolbar "Handles" toggle visibility). */
-export const hasGeometryHandles = (geomId: string): boolean => HANDLED_GEOMS.has(geomId);
-
 /** Idle time before the handle layer fades out. */
 const IDLE_FADE_MS = 3000;
+/** Skip re-arming the fade timer (and the hit-test's getBoundingClientRect) when it was
+ *  armed this recently — pointermove fires at up to 120Hz+; the fade only needs ~4Hz. */
+const REARM_MS = 250;
 
 /** Liquify's signifier palette — one visual language across the fullscreen modes. */
 const HANDLE_FILL = 'rgba(34,211,238,0.95)'; // cyan
@@ -66,8 +69,9 @@ const HANDLE_STROKE = 'rgba(0,0,0,0.55)';
 const GUIDE_FAINT = 'rgba(255,255,255,0.12)';
 const GUIDE_SOFT = 'rgba(255,255,255,0.30)';
 
-/** Clamp a value to the range the mode declared for the param in its `paramFields`. */
-const clampToField = (geomId: string, key: keyof GeometryParams, v: number): number => {
+/** Clamp a value to the range the mode declared for the param in its `paramFields` —
+ *  paramFields stays the single source of truth for ranges (no duplicated min/max). */
+const clampToField = (geomId: string, key: HandleParamKey, v: number): number => {
   const f = getFullscreenMode(geomId)?.paramFields?.find((p) => p.key === key);
   if (!f) return v;
   return Math.min(f.max, Math.max(f.min, v));
@@ -97,8 +101,6 @@ interface HandleEnv {
   rootRef: React.RefObject<HTMLDivElement | null>;
   wake: () => void;
   dragging: React.MutableRefObject<boolean>;
-  /** False while faded — handles must not eat clicks invisibly. */
-  interactive: boolean;
 }
 
 interface DragPoint {
@@ -113,6 +115,7 @@ interface DragPoint {
  * Pointer-capture drag for one handle. The handle does its own param math in `onMove`,
  * accumulating per-segment deltas (each scaled by that segment's precision multiplier, so
  * toggling Shift/Alt mid-drag re-anchors smoothly — `usePrecisionTrackDrag` semantics).
+ * Flags `fullscreenStore.interacting` for the overlay's reduced-cap drag repaints.
  */
 const useHandleDrag = (
   env: HandleEnv,
@@ -133,6 +136,7 @@ const useHandleDrag = (
       if (!active.current) return;
       active.current = false;
       dragging.current = false;
+      setFullscreenInteracting(false);
       try {
         (e.currentTarget as Element).releasePointerCapture(e.pointerId);
       } catch {
@@ -150,6 +154,7 @@ const useHandleDrag = (
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
       active.current = true;
       dragging.current = true;
+      setFullscreenInteracting(true);
       const pt = toPt(e);
       if (pt) spec.onStart(pt);
       wake();
@@ -166,6 +171,38 @@ const useHandleDrag = (
   };
 };
 
+/**
+ * One-param drag over a scalar pointer METRIC (vertical px, radial distance, orbit angle):
+ * `param += (metric_now − metric_last) × precision`, clamped to the paramFields range.
+ * `angular` wraps each delta into ±π (orbits cross the seam); `wrapValue` keeps the param
+ * itself an angle (conic). Conic + all four arched handles are instances of this.
+ */
+const useParamDrag = (
+  env: HandleEnv,
+  geomId: string,
+  key: HandleParamKey,
+  metric: (pt: DragPoint) => number,
+  opts?: { angular?: boolean; wrapValue?: boolean },
+) => {
+  const acc = useRef({ v: 0, last: 0 });
+  return useHandleDrag(env, {
+    onStart: (pt) => {
+      acc.current = { v: env.P[key], last: metric(pt) };
+    },
+    onMove: (pt) => {
+      const a = acc.current;
+      const m = metric(pt);
+      const d = opts?.angular ? wrapPi(m - a.last) : m - a.last;
+      let v = a.v + d * pt.mult;
+      if (opts?.wrapValue) v = wrapPi(v);
+      v = clampToField(geomId, key, v);
+      a.v = v;
+      a.last = m;
+      setFullscreenGeomParams({ [key]: v });
+    },
+  });
+};
+
 /** Keep a handle's DISPLAYED position reachable — pin it just inside the stage when the
  *  shape math puts it off-screen (drags are delta-based, so a pinned dot still works). */
 const pin = (u: StageUnits, p: { x: number; y: number }, m = 14): { x: number; y: number } => ({
@@ -179,14 +216,13 @@ const Handle: React.FC<{
   y: number;
   title: string;
   cursor: string;
-  env: HandleEnv;
   drag: ReturnType<typeof useHandleDrag>;
-  resetKeys: readonly (keyof GeometryParams)[];
+  resetKeys: readonly HandleParamKey[];
   children: React.ReactNode;
-}> = ({ x, y, title, cursor, env, drag, resetKeys, children }) => (
+}> = ({ x, y, title, cursor, drag, resetKeys, children }) => (
   <g
     transform={`translate(${x},${y})`}
-    style={{ pointerEvents: env.interactive ? 'auto' : 'none', cursor, touchAction: 'none' }}
+    style={{ pointerEvents: 'auto', cursor, touchAction: 'none' }}
     {...drag}
     onDoubleClick={() => resetFullscreenGeomParams(resetKeys)}
   >
@@ -216,13 +252,13 @@ const RadialHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
       a.cy = clampToField('radial', 'radialCy', a.cy + ((pt.y - a.ly) / u.half) * pt.mult);
       a.lx = pt.x;
       a.ly = pt.y;
-      setFullscreenGeomParam('radialCx', a.cx);
-      setFullscreenGeomParam('radialCy', a.cy);
+      // One batched emit — no torn cx-moved/cy-stale state, one repaint per move.
+      setFullscreenGeomParams({ radialCx: a.cx, radialCy: a.cy });
     },
   });
   const p = pin(u, { x: u.cx + P.radialCx * u.half, y: u.cy + P.radialCy * u.half });
   return (
-    <Handle x={p.x} y={p.y} title="Centre — drag to move the gradient's origin" cursor="move" env={env} drag={drag} resetKeys={['radialCx', 'radialCy']}>
+    <Handle x={p.x} y={p.y} title="Centre — drag to move the gradient's origin" cursor="move" drag={drag} resetKeys={['radialCx', 'radialCy']}>
       <circle r={12} fill="none" stroke={GUIDE_SOFT} strokeWidth={1.5} />
       <Dot />
     </Handle>
@@ -233,21 +269,11 @@ const RadialHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
 
 const ConicHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   const { u, P } = env;
-  const acc = useRef({ value: 0, lastPhi: 0 });
-  const phiOf = (pt: DragPoint): number => Math.atan2(pt.y - u.cy, pt.x - u.cx);
-  const drag = useHandleDrag(env, {
-    onStart: (pt) => {
-      acc.current = { value: P.conicAngle, lastPhi: phiOf(pt) };
-    },
-    onMove: (pt) => {
-      const a = acc.current;
-      const phi = phiOf(pt);
-      // The handle sits at θ = −π − conicAngle; following the pointer means dθ = dφ,
-      // i.e. conicAngle decreases by the (precision-scaled) pointer-angle delta.
-      a.value = wrapPi(a.value - wrapPi(phi - a.lastPhi) * pt.mult);
-      a.lastPhi = phi;
-      setFullscreenGeomParam('conicAngle', clampToField('conic', 'conicAngle', a.value));
-    },
+  // The handle sits at θ = −π − conicAngle; following the pointer means dθ = dφ, i.e.
+  // conicAngle decreases by the pointer-angle delta — hence the negated metric.
+  const drag = useParamDrag(env, 'conic', 'conicAngle', (pt) => -Math.atan2(pt.y - u.cy, pt.x - u.cx), {
+    angular: true,
+    wrapValue: true,
   });
   // Park the handle on the gradient SEAM (ramp position 0) so what you grab is what rotates.
   const theta = -Math.PI - P.conicAngle;
@@ -258,7 +284,7 @@ const ConicHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
     <>
       <line x1={u.cx} y1={u.cy} x2={hx} y2={hy} stroke={GUIDE_FAINT} strokeWidth={1.5} />
       <circle cx={u.cx} cy={u.cy} r={3} fill={GUIDE_SOFT} />
-      <Handle x={hx} y={hy} title="Rotation — drag around the centre to spin the sweep" cursor="grab" env={env} drag={drag} resetKeys={['conicAngle']}>
+      <Handle x={hx} y={hy} title="Rotation — drag around the centre to spin the sweep" cursor="grab" drag={drag} resetKeys={['conicAngle']}>
         <Dot />
       </Handle>
     </>
@@ -293,64 +319,12 @@ const ArchedHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   /** Pointer angle from straight-up around the arc centre (the field's position angle). */
   const angOf = (pt: DragPoint): number => Math.atan2(pt.x - Cx, Cy - pt.y);
 
-  // APEX dot — slides the whole band vertically (archCy). Apex y moves 1:1 with archCy.
-  const cyAcc = useRef({ v: 0, ly: 0 });
-  const cyDrag = useHandleDrag(env, {
-    onStart: (pt) => {
-      cyAcc.current = { v: archCy, ly: pt.y };
-    },
-    onMove: (pt) => {
-      const a = cyAcc.current;
-      a.v = clampToField('arched', 'archCy', a.v + ((pt.y - a.ly) / u.half) * pt.mult);
-      a.ly = pt.y;
-      setFullscreenGeomParam('archCy', a.v);
-    },
-  });
-
-  // RADIUS diamond — drag toward/away from the arc centre (curvature).
-  const rAcc = useRef({ v: 0, ld: 0 });
-  const rDrag = useHandleDrag(env, {
-    onStart: (pt) => {
-      rAcc.current = { v: archR, ld: distOf(pt) };
-    },
-    onMove: (pt) => {
-      const a = rAcc.current;
-      const d = distOf(pt);
-      a.v = clampToField('arched', 'archR', a.v + (d - a.ld) * pt.mult);
-      a.ld = d;
-      setFullscreenGeomParam('archR', a.v);
-    },
-  });
-
-  // WIDTH bar — on the OUTER band edge; drag across the band to thicken/thin it.
-  const wAcc = useRef({ v: 0, ld: 0 });
-  const wDrag = useHandleDrag(env, {
-    onStart: (pt) => {
-      wAcc.current = { v: archHalfWidth, ld: distOf(pt) };
-    },
-    onMove: (pt) => {
-      const a = wAcc.current;
-      const d = distOf(pt);
-      a.v = clampToField('arched', 'archHalfWidth', a.v + (d - a.ld) * pt.mult);
-      a.ld = d;
-      setFullscreenGeomParam('archHalfWidth', a.v);
-    },
-  });
-
-  // SPAN pill — on the band's end; orbit around the arc centre to sweep further/shorter.
-  const sAcc = useRef({ v: 0, la: 0 });
-  const sDrag = useHandleDrag(env, {
-    onStart: (pt) => {
-      sAcc.current = { v: archSpan, la: angOf(pt) };
-    },
-    onMove: (pt) => {
-      const a = sAcc.current;
-      const ang = angOf(pt);
-      a.v = clampToField('arched', 'archSpan', a.v + wrapPi(ang - a.la) * pt.mult);
-      a.la = ang;
-      setFullscreenGeomParam('archSpan', a.v);
-    },
-  });
+  // The four params as metric drags: apex slides vertically (1:1 with archCy), radius and
+  // width track the pointer's distance to the arc centre, span orbits around it.
+  const cyDrag = useParamDrag(env, 'arched', 'archCy', (pt) => pt.y / u.half);
+  const rDrag = useParamDrag(env, 'arched', 'archR', distOf);
+  const wDrag = useParamDrag(env, 'arched', 'archHalfWidth', distOf);
+  const sDrag = useParamDrag(env, 'arched', 'archSpan', angOf, { angular: true });
 
   // Handle layout along the arc — apex at 0, radius at −45% span, width at +45% span
   // (outer edge), span at the +span end. Distinct angular slots so they never collide.
@@ -368,16 +342,16 @@ const ArchedHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
       <polyline points={arcPath(archR)} fill="none" stroke={GUIDE_SOFT} strokeWidth={1} strokeDasharray="4 5" />
       {/* the band's other end — a static tick (the band is symmetric; one span handle drives both) */}
       <circle cx={mirror.x} cy={mirror.y} r={3.5} fill={GUIDE_SOFT} />
-      <Handle x={apex.x} y={apex.y} title="Position — drag up/down to slide the band" cursor="ns-resize" env={env} drag={cyDrag} resetKeys={['archCy']}>
+      <Handle x={apex.x} y={apex.y} title="Position — drag up/down to slide the band" cursor="ns-resize" drag={cyDrag} resetKeys={['archCy']}>
         <Dot />
       </Handle>
-      <Handle x={radiusP.x} y={radiusP.y} title="Radius — drag to flatten or tighten the curve" cursor="grab" env={env} drag={rDrag} resetKeys={['archR']}>
+      <Handle x={radiusP.x} y={radiusP.y} title="Radius — drag to flatten or tighten the curve" cursor="grab" drag={rDrag} resetKeys={['archR']}>
         <rect x={-6.5} y={-6.5} width={13} height={13} transform="rotate(45)" fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={2} />
       </Handle>
-      <Handle x={widthP.x} y={widthP.y} title="Width — drag across the band to thicken it" cursor="grab" env={env} drag={wDrag} resetKeys={['archHalfWidth']}>
+      <Handle x={widthP.x} y={widthP.y} title="Width — drag across the band to thicken it" cursor="grab" drag={wDrag} resetKeys={['archHalfWidth']}>
         <rect x={-3} y={-9} width={6} height={18} rx={2.5} transform={`rotate(${deg(0.45 * archSpan)})`} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={2} />
       </Handle>
-      <Handle x={spanP.x} y={spanP.y} title="Span — drag along the arc to sweep further" cursor="grab" env={env} drag={sDrag} resetKeys={['archSpan']}>
+      <Handle x={spanP.x} y={spanP.y} title="Span — drag along the arc to sweep further" cursor="grab" drag={sDrag} resetKeys={['archSpan']}>
         <rect x={-9} y={-3} width={18} height={6} rx={3} transform={`rotate(${deg(archSpan)})`} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={2} />
       </Handle>
     </>
@@ -432,7 +406,7 @@ const SCurveHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
       // Re-sync the accumulator to the clamped shape so the dot re-responds immediately
       // after an overshoot past the range end.
       a.nx = invEase(0.5, shape);
-      setFullscreenGeomParam('scurveShape', shape);
+      setFullscreenGeomParams({ scurveShape: shape });
     },
   });
   const nxMid = invEase(0.5, P.scurveShape);
@@ -440,7 +414,7 @@ const SCurveHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   return (
     <>
       <polyline points={curve} fill="none" stroke={GUIDE_SOFT} strokeWidth={1.5} />
-      <Handle x={p.x} y={p.y} title="Shape — drag left/right to bend the curve" cursor="ew-resize" env={env} drag={drag} resetKeys={['scurveShape']}>
+      <Handle x={p.x} y={p.y} title="Shape — drag left/right to bend the curve" cursor="ew-resize" drag={drag} resetKeys={['scurveShape']}>
         <Dot />
       </Handle>
     </>
@@ -456,33 +430,61 @@ const GEOM_HANDLES: Record<string, React.FC<{ env: HandleEnv }>> = {
   scurve: SCurveHandles,
 };
 
+/** Whether a mode id has on-screen handles (drives the toolbar "Handles" toggle visibility).
+ *  Derived from the SAME record that renders them — the two can't drift. */
+export const hasGeometryHandles = (geomId: string): boolean => geomId in GEOM_HANDLES;
+
 export const GeometryHandleLayer: React.FC = () => {
   const fs = useFullscreenState();
-  const rootRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const dragging = useRef(false);
 
+  const Handles = GEOM_HANDLES[fs.geom];
+  // Layer active = a handled geometry is selected AND the toolbar toggle is on. Hooks below
+  // gate on this (they run regardless — the early return is after them).
+  const layerActive = !!Handles && fs.handles;
+
   // ── fade on idle: awake on mode entry + any pointer activity over the stage ──
   const [awake, setAwake] = useState(true);
+  const awakeRef = useRef(true);
+  const lastArm = useRef(0);
   const timer = useRef<number | null>(null);
   const wake = useCallback(() => {
+    const now = performance.now();
+    // Already awake + recently armed → skip the timer churn (pointermove fires at 120Hz+).
+    if (awakeRef.current && now - lastArm.current < REARM_MS) return;
+    lastArm.current = now;
+    awakeRef.current = true;
     setAwake(true);
-    if (timer.current !== null) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => {
-      if (dragging.current) wake();
-      else setAwake(false);
-    }, IDLE_FADE_MS);
+    const arm = (): void => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => {
+        if (dragging.current) arm(); // never fade mid-drag — re-arm and check again
+        else {
+          awakeRef.current = false;
+          setAwake(false);
+        }
+      }, IDLE_FADE_MS);
+    };
+    arm();
   }, []);
   useEffect(() => () => {
     if (timer.current !== null) window.clearTimeout(timer.current);
   }, []);
   useEffect(() => {
-    wake();
-  }, [fs.geom, fs.handles, wake]);
+    if (layerActive) {
+      lastArm.current = 0;
+      wake();
+    }
+  }, [layerActive, fs.geom, wake]);
   useEffect(() => {
+    if (!layerActive) return;
     // Window-level so it works without giving the layer a hit surface (the layer is
     // pointer-events:none except the handles — stage clicks pass through untouched).
     const onActivity = (e: PointerEvent): void => {
+      // Cheap out BEFORE the rect read — at most ~4 hit-tests/s while awake.
+      if (awakeRef.current && performance.now() - lastArm.current < REARM_MS) return;
       const r = rootRef.current?.getBoundingClientRect();
       if (!r) return;
       if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
@@ -495,26 +497,29 @@ export const GeometryHandleLayer: React.FC = () => {
       window.removeEventListener('pointermove', onActivity);
       window.removeEventListener('pointerdown', onActivity);
     };
-  }, [wake]);
+  }, [layerActive, wake]);
   const reducedMotion = useMemo(
     () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     [],
   );
 
-  // ── self-measure (the layer fills the stage; units must track the canvas) ──
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const measure = (): void =>
-      setSize({ w: el.clientWidth, h: el.clientHeight });
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [fs.geom, fs.handles]);
+  // ── self-measure via callback ref (re-observes whenever React swaps the element, so the
+  //    mount condition below can change freely without a hidden deps coupling) ──
+  const roRef = useRef<ResizeObserver | null>(null);
+  const setRoot = useCallback((el: HTMLDivElement | null) => {
+    rootRef.current = el;
+    roRef.current?.disconnect();
+    roRef.current = null;
+    if (el && typeof ResizeObserver !== 'undefined') {
+      const measure = (): void => setSize({ w: el.clientWidth, h: el.clientHeight });
+      measure();
+      const ro = new ResizeObserver(measure);
+      ro.observe(el);
+      roRef.current = ro;
+    }
+  }, []);
 
-  const Handles = GEOM_HANDLES[fs.geom];
-  if (!Handles || !fs.handles) return null;
+  if (!layerActive) return null;
 
   const env: HandleEnv | null = size
     ? {
@@ -523,24 +528,29 @@ export const GeometryHandleLayer: React.FC = () => {
         rootRef,
         wake,
         dragging,
-        interactive: awake,
       }
     : null;
 
   return (
     <div
-      ref={rootRef}
+      ref={setRoot}
       className="absolute inset-0"
       style={{
+        // The fade is visual only — handle <g>s keep pointer-events:auto so a grab mid-fade
+        // (or from muscle memory while faded) still lands; everything else passes through.
         pointerEvents: 'none',
         opacity: awake ? 1 : 0,
         transition: reducedMotion ? 'none' : 'opacity 600ms ease',
       }}
-      aria-hidden={!awake}
       data-testid="geometry-handle-layer"
     >
       {env && (
-        <svg width="100%" height="100%" viewBox={`0 0 ${env.u.w} ${env.u.h}`} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        <svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${env.u.w} ${env.u.h}`}
+          style={{ position: 'absolute', inset: 0, pointerEvents: 'none', touchAction: 'none', overflow: 'hidden' }}
+        >
           <Handles env={env} />
         </svg>
       )}

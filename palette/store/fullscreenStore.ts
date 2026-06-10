@@ -44,6 +44,9 @@ export interface FullscreenState {
   /** On-screen geometry handles master toggle (the toolbar force-hide). The layer also
    *  auto-fades on idle independently of this. */
   handles: boolean;
+  /** True while a handle drag is in flight — the overlay renders at a reduced cap during
+   *  interaction (cheap, responsive) and snaps back to full resolution on release. */
+  interacting: boolean;
   /** Split layout: app on top, fullscreen preview docked on the bottom (the user's
    *  splitscreen). The preview live-follows the last-modified hero while split is on. */
   split: boolean;
@@ -67,6 +70,7 @@ const CLOSED: FullscreenState = {
   amount: 0.5,
   geomParams: {},
   handles: true,
+  interacting: false,
   split: false,
   splitY: 0.55,
   dither: true,
@@ -138,24 +142,37 @@ export const rerollFullscreen = (): void => {
   emit({ ...state, seed: next });
 };
 
-/** Set one geometry shape param (an on-screen handle drag writes here; the overlay threads
- *  `geomParams` into the render ctx, so the pure mappers see it from the OUTSIDE). */
-export const setFullscreenGeomParam = (key: keyof GeometryParams, value: number): void => {
-  if (!Number.isFinite(value) || state.geomParams[key] === value) return;
-  emit({ ...state, geomParams: { ...state.geomParams, [key]: value } });
+/** The geometry shape params a handle may write. `amount`/`seed` are excluded
+ *  STRUCTURALLY: the overlay's ctx spread gives the dedicated `fs.amount`/`fs.seed` fields
+ *  precedence, so a geomParams write to them would be a silent no-op. */
+export type HandleParamKey = Exclude<keyof GeometryParams, 'amount' | 'seed'>;
+
+/** Set geometry shape params in ONE emit (an on-screen handle drag writes here; the overlay
+ *  threads `geomParams` into the render ctx, so the pure mappers see it from the OUTSIDE).
+ *  Batched so a 2-axis drag (radial centre) is a single state transition — no torn
+ *  cx-moved/cy-stale frame for synchronous subscribers, one listener sweep per move. */
+export const setFullscreenGeomParams = (patch: Partial<Record<HandleParamKey, number>>): void => {
+  let next: GeometryParams | null = null;
+  for (const [k, v] of Object.entries(patch) as [HandleParamKey, number][]) {
+    if (!Number.isFinite(v) || state.geomParams[k] === v) continue;
+    next = next ?? { ...state.geomParams };
+    next[k] = v;
+  }
+  if (next) emit({ ...state, geomParams: next });
+};
+
+/** Single-param convenience over {@link setFullscreenGeomParams}. */
+export const setFullscreenGeomParam = (key: HandleParamKey, value: number): void => {
+  setFullscreenGeomParams({ [key]: value });
 };
 
 /** Clear geometry shape params back to their `GEOM_DEFAULTS` (an unset key IS the default).
  *  With `keys`, clears only those (a handle's double-click reset); without, clears all. */
-export const resetFullscreenGeomParams = (keys?: readonly (keyof GeometryParams)[]): void => {
-  if (!keys) {
-    if (Object.keys(state.geomParams).length === 0) return;
-    emit({ ...state, geomParams: {} });
-    return;
-  }
-  if (!keys.some((k) => k in state.geomParams)) return;
+export const resetFullscreenGeomParams = (keys?: readonly HandleParamKey[]): void => {
+  const ks = keys ?? (Object.keys(state.geomParams) as HandleParamKey[]);
+  if (!ks.some((k) => k in state.geomParams)) return;
   const next = { ...state.geomParams };
-  for (const k of keys) delete next[k];
+  for (const k of ks) delete next[k];
   emit({ ...state, geomParams: next });
 };
 
@@ -163,6 +180,12 @@ export const resetFullscreenGeomParams = (keys?: readonly (keyof GeometryParams)
 export const setFullscreenHandles = (on: boolean): void => {
   if (on === state.handles) return;
   emit({ ...state, handles: on });
+};
+
+/** Flag a handle drag in flight (the overlay drops to a reduced render cap while true). */
+export const setFullscreenInteracting = (on: boolean): void => {
+  if (on === state.interacting) return;
+  emit({ ...state, interacting: on });
 };
 
 export const setFullscreenAmount = (amount: number): void => {

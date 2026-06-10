@@ -69,21 +69,24 @@ const RandomControls: React.FC = () => {
 export const BUILTIN_MODES: readonly FullscreenMode[] = [
   geom('linear', 'Linear'),
   geom('radial', 'Radial', [
-    { key: 'radialCx', label: 'Centre X', min: -1, max: 1, step: 0.01, default: GEOM_DEFAULTS.radialCx },
-    { key: 'radialCy', label: 'Centre Y', min: -1, max: 1, step: 0.01, default: GEOM_DEFAULTS.radialCy },
-  ], 'drag the dot to move the centre'),
+    // ±2 (not ±1): the units are ISOTROPIC (half the SHORTER side), so on a wide stage the
+    // horizontal edges sit at ±aspect (~±1.8 on 16:9) — ±1 would wall the centre dot at
+    // ~56% of the way out. Defaults unchanged (the determinism pin cares about defaults).
+    { key: 'radialCx', label: 'Centre X', min: -2, max: 2, step: 0.01, default: GEOM_DEFAULTS.radialCx },
+    { key: 'radialCy', label: 'Centre Y', min: -2, max: 2, step: 0.01, default: GEOM_DEFAULTS.radialCy },
+  ], 'drag the dot to move the centre · Esc to close'),
   geom('conic', 'Conic', [
     { key: 'conicAngle', label: 'Rotation', min: -Math.PI, max: Math.PI, step: 0.01, default: GEOM_DEFAULTS.conicAngle },
-  ], 'drag the handle around the centre to rotate'),
+  ], 'drag the handle around the centre to rotate · Esc to close'),
   geom('arched', 'Arched', [
     { key: 'archR', label: 'Radius', min: 1, max: 4, step: 0.01, default: GEOM_DEFAULTS.archR },
     { key: 'archHalfWidth', label: 'Width', min: 0.05, max: 1, step: 0.01, default: GEOM_DEFAULTS.archHalfWidth },
     { key: 'archCy', label: 'Centre Y', min: 0.5, max: 2.5, step: 0.01, default: GEOM_DEFAULTS.archCy },
     { key: 'archSpan', label: 'Span', min: 0.3, max: 2.5, step: 0.01, default: GEOM_DEFAULTS.archSpan },
-  ], 'drag the handles to shape the band'),
+  ], 'drag the handles to shape the band · Esc to close'),
   geom('scurve', 'S-curve', [
     { key: 'scurveShape', label: 'Shape', min: -2, max: 2, step: 0.01, default: GEOM_DEFAULTS.scurveShape },
-  ], 'drag the dot to bend the curve'),
+  ], 'drag the dot to bend the curve · Esc to close'),
   {
     ...geom('random', 'Randomized', [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.01, default: GEOM_DEFAULTS.amount },
