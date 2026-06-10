@@ -58,10 +58,12 @@ import { Z } from '../components/ui/zIndex';
  *  or the browser's bilinear upscale stretches the step-runs and re-introduces banding. */
 const CONTINUOUS_MAX_DIM = 2560;
 
-/** Resolves the live "working" gradient for split layout and reports it upward. Mounted ONLY
- *  while split is on, so the (heavy) generator derivation never runs otherwise. For the
- *  editable surfaces (Stops / Generator) it reads the live store so edits reflect without
- *  re-selecting the hero; otherwise it follows the active hero's selected payload. */
+/** Resolves the live "working" gradient (the last-modified hero) and reports it upward. Mounted
+ *  whenever the overlay is open (split AND plain fullscreen now share this one live path), so the
+ *  (heavy) generator derivation runs while the overlay is up — acceptable since fullscreen has no
+ *  edit UI. For the editable surfaces (Stops / Generator) it reads the live store so edits reflect
+ *  without re-selecting the hero; otherwise it follows the active hero's selected payload, and
+ *  reports null (→ the open-time snapshot) when nothing is selected. */
 const SplitLiveSource: React.FC<{
   onResolve: (r: { config: GradientConfig; name: string } | null) => void;
 }> = ({ onResolve }) => {
@@ -108,13 +110,15 @@ export const FullscreenGradientOverlay: React.FC = () => {
   const activeMode = getFullscreenMode(fs.geom);
   const isOwnCanvas = activeMode?.kind === 'ownCanvas';
 
-  // The colour SOURCE: normally the open-time snapshot; in split layout the preview live-follows
-  // the gradient you're editing (resolved by the split-only <SplitLiveSource> child below, which
-  // reads the live Stops/Generator stores so edits reflect immediately). All modes read colour
-  // from this resolved source — never the store directly.
+  // The colour SOURCE: the fullscreen preview ALWAYS live-follows the last-modified hero (the same
+  // resolution split uses — one code path), falling back to the open-time snapshot when nothing live
+  // resolves. Resolved by the <SplitLiveSource> child below (mounted whenever the overlay is open),
+  // which reads the live Stops/Generator stores so edits reflect immediately. All modes read colour
+  // from this resolved source — never the store directly. Fullscreen hides the app UI so there's no
+  // edit path while open ⇒ live ≡ pinned in practice (no toggle; user-ratified 2026-06-10).
   const [liveSplit, setLiveSplit] = useState<{ config: GradientConfig; name: string } | null>(null);
-  const sourceConfig = fs.split && liveSplit ? liveSplit.config : fs.config;
-  const sourceName = fs.split && liveSplit ? liveSplit.name : fs.name;
+  const sourceConfig = liveSplit ? liveSplit.config : fs.config;
+  const sourceName = liveSplit ? liveSplit.name : fs.name;
 
   // The "Fullscreen" target is registered in `gradientTargets.ts` at boot (not inline here), so
   // the dock has a single source of truth. `openFullscreen` is the receive path that target calls.
@@ -312,8 +316,9 @@ export const FullscreenGradientOverlay: React.FC = () => {
       style={fs.split ? { zIndex: Z.overlay, top: `${fs.splitY * 100}%`, left: 0, right: 0, bottom: 0 } : { zIndex: Z.overlay }}
       data-testid="fullscreen-gradient-overlay"
     >
-      {/* Live source for split — resolves the gradient being edited (Stops/Generator live). */}
-      {fs.split && <SplitLiveSource onResolve={setLiveSplit} />}
+      {/* Live source — resolves the last-modified hero (Stops/Generator live) for BOTH split and
+          plain fullscreen (always-live, one code path). Only mounts while the overlay is open. */}
+      <SplitLiveSource onResolve={setLiveSplit} />
 
       {/* Split divider — drag (or arrow keys) to resize the app/preview split. WAI-ARIA slider
           semantics; an oversized hit-strip straddles the top edge for easy grabbing; pointer

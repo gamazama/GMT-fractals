@@ -37,6 +37,7 @@ import { DeepZoomController } from './DeepZoomController';
 import { getDeepZoomRuntime } from './deepZoom/laRuntime';
 import { ddAddF64 } from './deepZoom/dd';
 import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../utils/createBlueNoiseWebGL2';
+import { createDitherNoise, linkProgram, wireContextLoss } from '../utils/glHelpers';
 
 export type FractalKind = 'mandelbrot' | 'julia';
 
@@ -193,7 +194,7 @@ const JULIA_UNIFORMS = [
 export class FractalColorRenderer {
   private gl: WebGL2RenderingContext;
   private canvas: HTMLCanvasElement;
-  private quadVbo: WebGLBuffer;
+  private quadVbo!: WebGLBuffer;
 
   private progJulia!: Program;
   private progTsaa!: Program;
@@ -204,7 +205,7 @@ export class FractalColorRenderer {
   private juliaTsaa!: MrtFbo;
   private juliaTsaaPrev!: MrtFbo;
 
-  private gradients: GradientLutManager;
+  private gradients!: GradientLutManager;
   private blueNoise: BlueNoiseTexture | null = null;
   /** Separate independent-channel RGBA tile for the DISPLAY-pass dither tail (the kernel's
    *  `blueNoise` may be grayscale, which would degrade the TPDF). Kept apart so the kernel /
@@ -213,7 +214,7 @@ export class FractalColorRenderer {
   /** Owns the deep-zoom GPU state (reference orbit / LA table / AT payload).
    *  Binds inert OFF defaults until an orbit is uploaded, so the shallow path
    *  is unaffected. Shared with fluid-toy via engine/fractal/DeepZoomController. */
-  private deepZoom: DeepZoomController;
+  private deepZoom!: DeepZoomController;
   /** Bumped on every orbit-build request so a stale async result (the user
    *  panned/zoomed again before the worker returned) is discarded. */
   private buildSeq = 0;
@@ -236,6 +237,14 @@ export class FractalColorRenderer {
   private tsaaSampleIndex = 0;
   private tsaaParamHash = '';
 
+  /** True between a `webglcontextlost` and the matching `restored` — `render()` no-ops while the
+   *  GPU resources are gone (rebuilt by {@link build} on restore). */
+  private lost = false;
+  private unwireLoss: () => void;
+  /** Set by the owning mode: re-supply the data the renderer doesn't retain (the colormap LUT,
+   *  the render size, the live params, the deep-zoom orbit) after a context-loss rebuild. */
+  onRestored?: () => void;
+
   params: FractalColorParams = { ...DEFAULTS };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -251,6 +260,23 @@ export class FractalColorRenderer {
     if (!floatExt && !halfExt) {
       throw new Error('Float render targets unavailable (EXT_color_buffer_float / _half_float).');
     }
+
+    this.build();
+    // Recover from a GPU context loss: rebuild every GL object (programs, MRTs, blue-noise, and the
+    // gradient/deep-zoom sub-controllers) on the now-healthy context, then let the mode re-supply
+    // the LUT / size / params / deep orbit. Without this the canvas stays black until a mode-switch.
+    this.unwireLoss = wireContextLoss(canvas, {
+      onLost: () => { this.lost = true; },
+      onRestored: () => { this.build(); this.lost = false; this.onRestored?.(); },
+    });
+  }
+
+  /** (Re)create every GL object on `this.gl` — the GL plumbing the constructor used to inline.
+   *  Run once from the constructor and again after a context restore (the prior objects, including
+   *  the gradient/deep-zoom controllers' GPU state, are invalidated by the loss, so fresh
+   *  controllers are minted; the mode re-uploads the colormap + rebuilds the orbit). */
+  private build(): void {
+    const gl = this.gl;
     this.fmt = this.detectFormat();
 
     this.gradients = new GradientLutManager(gl);
@@ -264,10 +290,7 @@ export class FractalColorRenderer {
     this.allocate(64, 64);
     this.blueNoise = createBlueNoiseWebGL2(gl);
     // Display-pass dither tile — independent-channel RGBA, point-sampled (crisp static dither).
-    this.ditherNoise = createBlueNoiseWebGL2(gl, '/blueNoiseRGBA.png');
-    gl.bindTexture(gl.TEXTURE_2D, this.ditherNoise.texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    this.ditherNoise = createDitherNoise(gl);
     // Allocate both LUT slots up front so the lazy `ensure()` in the first
     // renderJulia doesn't bump `gradients.version` AFTER that frame's
     // updateHash() already sampled it — which would spuriously reset the TSAA
@@ -277,13 +300,12 @@ export class FractalColorRenderer {
   }
 
   // ── Setup ──────────────────────────────────────────────────────────────
-  // NOTE: detectFormat / compileShader / link / createMrt / drawQuad / bindTex
-  // below are near-identical to FluidEngine's private GL plumbing. The dup is
-  // intentional for now — this renderer must stand alone (no fluid-app import),
-  // and FluidEngine already hands the same hook-bundle to BloomChain. A shared
-  // host-agnostic `engine/utils` WebGL2 helper (consumed by BOTH) is the clean
-  // follow-up, deliberately deferred out of this carve to keep its blast radius
-  // off FluidEngine (the no-regression-of-fluid-toy gate is the priority).
+  // NOTE: shader compile + program link now go through the shared
+  // `engine/utils/glHelpers` leaf (linkProgram) — the same helper the fullscreen
+  // GL surfaces use. detectFormat / createMrt / drawQuad / bindTex below remain
+  // near-identical to FluidEngine's private GL plumbing; folding those into a
+  // shared helper too is the next follow-up (kept off FluidEngine here so the
+  // no-regression-of-fluid-toy gate stays the priority).
 
   private detectFormat() {
     const gl = this.gl;
@@ -308,35 +330,12 @@ export class FractalColorRenderer {
     throw new Error('No renderable float texture format supported.');
   }
 
-  private compileShader(type: number, src: string): WebGLShader {
-    const gl = this.gl;
-    const sh = gl.createShader(type)!;
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      const log = gl.getShaderInfoLog(sh) || '';
-      throw new Error(`Fractal shader compile error: ${log}`);
-    }
-    return sh;
-  }
-
   private link(vsSrc: string, fsSrc: string, names: string[]): Program {
-    const gl = this.gl;
-    const vs = this.compileShader(gl.VERTEX_SHADER, vsSrc);
-    const fs = this.compileShader(gl.FRAGMENT_SHADER, fsSrc);
-    const prog = gl.createProgram()!;
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.bindAttribLocation(prog, 0, 'aPos');
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      throw new Error(`Fractal program link error: ${gl.getProgramInfoLog(prog)}`);
-    }
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    const uniforms: Record<string, WebGLUniformLocation | null> = {};
-    for (const n of names) uniforms[n] = gl.getUniformLocation(prog, n);
-    return { prog, uniforms };
+    return linkProgram(this.gl, vsSrc, fsSrc, {
+      attribs: { aPos: 0 },
+      uniforms: names,
+      label: 'Fractal',
+    });
   }
 
   private compile() {
@@ -556,9 +555,13 @@ export class FractalColorRenderer {
     return this.params;
   }
 
-  /** Set the render buffer + canvas dimensions (capped at MAX_RENDER_DIM). */
+  /** Set the render buffer + canvas dimensions. Renders at native device pixels (×DPR, capped at
+   *  2 like the other fullscreen modes) so the fractal stays crisp on retina instead of soft/banded
+   *  at CSS resolution — but never past MAX_RENDER_DIM on the long edge (Mandelbrot at high
+   *  iteration is fragment-heavy; the cap bounds the cost and TSAA refines the buffer). */
   setRenderSize(cssW: number, cssH: number): void {
-    const scale = Math.min(1, MAX_RENDER_DIM / Math.max(cssW, cssH, 1));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const scale = Math.min(dpr, MAX_RENDER_DIM / Math.max(cssW, cssH, 1));
     const w = Math.max(32, Math.round(cssW * scale));
     const h = Math.max(32, Math.round(cssH * scale));
     if (w === this.simW && h === this.simH && this.canvas.width === w && this.canvas.height === h) return;
@@ -671,6 +674,7 @@ export class FractalColorRenderer {
   /** Render one frame: fractal pass → TSAA blend → display. The host calls
    *  this from a RAF loop; once converged it's a cheap re-display. */
   render(): void {
+    if (this.lost) return; // GL objects gone until the context restores + build() reruns
     const gl = this.gl;
     this.updateHash();
     this.frameCount++;
@@ -818,6 +822,7 @@ export class FractalColorRenderer {
 
   dispose(): void {
     const gl = this.gl;
+    this.unwireLoss();
     this.buildSeq++; // drop any in-flight orbit build result
     this.deleteMrt(this.juliaCur);
     this.deleteMrt(this.juliaTsaa);

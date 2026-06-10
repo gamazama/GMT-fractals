@@ -7,11 +7,14 @@
  * ── How it renders ────────────────────────────────────────────────────────────────────
  * CPU side: the user's control points are tessellated through a CENTRIPETAL Catmull-Rom
  * (α=0.5 — interpolates the points, auto-tangents, provably no cusps/self-intersection)
- * into a polyline + a normalized arc-length table. GPU side: a `glQuad` fragment finds the
- * nearest polyline segment via IQ's `sdSegment` (the clamp factor gives the along-segment
- * param for free), interpolates the arc-length → ramp coord `u` → `sampleLut(u)`, and the
- * perpendicular distance drives a smoothstep band falloff. The compositor wraps it in the
- * shared blue-noise dither tail, so it dithers + exports like every other mode.
+ * into a polyline + a normalized arc-length table. GPU side: a `glQuad` fragment runs a
+ * full-bleed DIFFUSION field — a Shepard inverse-square blend of the along-path arc-length
+ * coord over EVERY segment (NOT a nearest-segment pick, which would leave hard Voronoi seams
+ * along the medial axis): crisp on the path, smooth in the gaps, no void. One `sampleLut` on
+ * the blended coord. `Spread` sets the Shepard core radius (hug-the-path ↔ wash); the
+ * perpendicular distance to the nearest segment drives a `Depth` proximity shade (glow near /
+ * vignette far). The compositor wraps it in the shared blue-noise dither tail, so it dithers +
+ * exports like every other mode.
  *
  * ── Why a Controls-mounted interaction layer ──────────────────────────────────────────
  * The frozen seam feeds a mode only `{amount, seed}` through `ctx.params` and re-renders

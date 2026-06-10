@@ -25,16 +25,17 @@
 import React, { useCallback, useState } from 'react';
 import { ScalarInput } from '../../../components/inputs/ScalarInput';
 import { createLogMapping } from '../../../components/inputs/primitives/FormatUtils';
+import { getFullscreenState } from '../../../palette/store/fullscreenStore';
 import {
-  getFullscreenState,
-  subscribeFullscreen,
+  getFractalState,
+  subscribeFractal,
   setFractalPhase,
   setFractalRepeats,
   setFractalMapping,
   setFractalAnimate,
   setFractalIterMul,
-  useFullscreenState,
-} from '../../../palette/store/fullscreenStore';
+  useFractalState,
+} from './fractal/fractalStore';
 import type { FullscreenMode, OwnCanvasHost, OwnCanvasHandle } from '../modeRegistry';
 // Type-only — the engine (perturbation + LA + shaders) is a heavy chunk, lazy-loaded via
 // dynamic import() when the mode mounts so it stays out of the main bundle.
@@ -107,7 +108,7 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
   // Rebuild the deep-zoom reference orbit once a gesture settles (commit on gesture-end, not
   // per-frame). Cheap no-op when deep zoom is off.
   const scheduleDeepRebuild = (delayMs: number): void => {
-    if (!getFullscreenState().fractalDeepZoom) return;
+    if (!getFractalState().deepZoom) return;
     if (rebuildTimer) clearTimeout(rebuildTimer);
     rebuildTimer = setTimeout(() => {
       rebuildTimer = null;
@@ -153,66 +154,76 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
       }
 
       const r = renderer;
-      r.setRenderSize(container.clientWidth, container.clientHeight);
-      const snap = getFullscreenState();
-      const ctx = host.getContext();
-      if (ctx.lut.length) r.setColormap(ctx.lut);
-      r.setParams({
-        gradientPhase: snap.fractalPhase,
-        gradientRepeat: snap.fractalRepeats,
-        colorMapping: snap.fractalMapping,
-        iterMul: snap.fractalIterMul,
-      });
-      if (snap.fractalDeepZoom) r.setDeepZoomEnabled(true);
-      r.setDither(snap.dither);
+      // Apply the current state to the freshly-created renderer. Shared with the context-loss
+      // recovery path (onRestored) so a rebuilt GL surface comes back configured identically.
+      const configure = (): void => {
+        r.setRenderSize(container.clientWidth, container.clientHeight);
+        const ctx = host.getContext();
+        if (ctx.lut.length) r.setColormap(ctx.lut);
+        const f = getFractalState();
+        r.setParams({
+          gradientPhase: f.phase,
+          gradientRepeat: f.repeats,
+          colorMapping: f.mapping,
+          iterMul: f.iterMul,
+        });
+        if (f.deepZoom) r.setDeepZoomEnabled(true);
+        r.setDither(getFullscreenState().dither);
+      };
+      configure();
+      // After a GPU context-loss recovery the renderer has rebuilt its GL objects (incl. fresh
+      // gradient/deep-zoom controllers with no orbit) — re-apply state + rebuild the deep orbit.
+      r.onRestored = () => {
+        configure();
+        if (getFractalState().deepZoom) void r.rebuildDeepZoom();
+      };
 
       // ── live-knob subscription: push store changes to the renderer ──
       // Replaces the overlay's former per-knob effects. The RAF loop renders every frame, so a
       // knob push only needs to update renderer state before the next frame (no explicit render).
-      let prevPhase = snap.fractalPhase;
-      let prevRepeats = snap.fractalRepeats;
-      let prevMapping = snap.fractalMapping;
-      let prevIterMul = snap.fractalIterMul;
-      let prevDeep = snap.fractalDeepZoom;
-      let prevDither = snap.dither;
-      unsubscribe = subscribeFullscreen(() => {
-        const s = getFullscreenState();
-        const iterMulChanged = s.fractalIterMul !== prevIterMul;
+      // (Dither is forwarded by the overlay via the OwnCanvasHandle, not watched here.)
+      const f0 = getFractalState();
+      let prevPhase = f0.phase;
+      let prevRepeats = f0.repeats;
+      let prevMapping = f0.mapping;
+      let prevIterMul = f0.iterMul;
+      let prevDeep = f0.deepZoom;
+      unsubscribe = subscribeFractal(() => {
+        const s = getFractalState();
+        const iterMulChanged = s.iterMul !== prevIterMul;
         if (
-          s.fractalPhase !== prevPhase ||
-          s.fractalRepeats !== prevRepeats ||
-          s.fractalMapping !== prevMapping ||
+          s.phase !== prevPhase ||
+          s.repeats !== prevRepeats ||
+          s.mapping !== prevMapping ||
           iterMulChanged
         ) {
           r.setParams({
-            gradientPhase: s.fractalPhase,
-            gradientRepeat: s.fractalRepeats,
-            colorMapping: s.fractalMapping,
-            iterMul: s.fractalIterMul,
+            gradientPhase: s.phase,
+            gradientRepeat: s.repeats,
+            colorMapping: s.mapping,
+            iterMul: s.iterMul,
           });
         }
-        if (s.fractalDeepZoom !== prevDeep) r.setDeepZoomEnabled(s.fractalDeepZoom);
+        if (s.deepZoom !== prevDeep) r.setDeepZoomEnabled(s.deepZoom);
         // At deep zoom, iterMul scales the reference-orbit BUILD length, so an actual iterMul change
         // must rebuild. The deep-zoom ENABLE path already rebuilds inside setDeepZoomEnabled, so this
         // only fires on an iterMul change (never on the toggle, which leaves iterMul untouched).
-        if (iterMulChanged && s.fractalDeepZoom) void r.rebuildDeepZoom();
-        if (s.dither !== prevDither) r.setDither(s.dither);
-        prevPhase = s.fractalPhase;
-        prevRepeats = s.fractalRepeats;
-        prevMapping = s.fractalMapping;
-        prevIterMul = s.fractalIterMul;
-        prevDeep = s.fractalDeepZoom;
-        prevDither = s.dither;
+        if (iterMulChanged && s.deepZoom) void r.rebuildDeepZoom();
+        prevPhase = s.phase;
+        prevRepeats = s.repeats;
+        prevMapping = s.mapping;
+        prevIterMul = s.iterMul;
+        prevDeep = s.deepZoom;
       });
 
       // ── RAF loop ──
       // When auto-cycling, advance the phase directly on the renderer (no store write → no per-frame
       // React render); the slider is hidden while animating, so there's no desync to reconcile.
-      let animPhase = snap.fractalPhase;
-      let wasAnimating = snap.fractalAnimate;
+      let animPhase = getFractalState().phase;
+      let wasAnimating = getFractalState().animate;
       let first = true;
       const loop = (): void => {
-        const animating = getFullscreenState().fractalAnimate;
+        const animating = getFractalState().animate;
         if (animating) {
           animPhase = (animPhase + PHASE_ANIM_STEP) % 1;
           r.setParams({ gradientPhase: animPhase });
@@ -292,7 +303,7 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
 /** The fractal toolbar block — the mode's self-contained `Controls`. Reads the store + calls the
  *  store setters; Reset/Copy reach the live renderer through the module-scoped {@link activeControl}. */
 const FractalControls: React.FC = () => {
-  const fs = useFullscreenState();
+  const fr = useFractalState();
   const [coordsCopied, setCoordsCopied] = useState(false);
 
   const copyCoords = useCallback(() => {
@@ -308,7 +319,7 @@ const FractalControls: React.FC = () => {
       <label className="flex items-center gap-1.5 text-[11px] text-gray-400">
         Mapping
         <select
-          value={fs.fractalMapping}
+          value={fr.mapping}
           onChange={(e) => setFractalMapping(parseInt(e.target.value, 10))}
           className="bg-zinc-900 border border-white/10 rounded px-1.5 py-1 text-[11px] text-gray-200"
           aria-label="Colormap mapping mode"
@@ -320,7 +331,7 @@ const FractalControls: React.FC = () => {
       </label>
       <div className="w-32">
         <ScalarInput
-          value={fs.fractalRepeats}
+          value={fr.repeats}
           onChange={setFractalRepeats}
           min={0.01}
           max={1024}
@@ -335,7 +346,7 @@ const FractalControls: React.FC = () => {
       </div>
       <div className="w-32">
         <ScalarInput
-          value={fs.fractalIterMul}
+          value={fr.iterMul}
           onChange={setFractalIterMul}
           min={0.5}
           max={8}
@@ -348,10 +359,10 @@ const FractalControls: React.FC = () => {
           trackHeight={14}
         />
       </div>
-      {!fs.fractalAnimate && (
+      {!fr.animate && (
         <div className="w-32">
           <ScalarInput
-            value={fs.fractalPhase}
+            value={fr.phase}
             onChange={setFractalPhase}
             min={0}
             max={1}
@@ -363,15 +374,15 @@ const FractalControls: React.FC = () => {
         </div>
       )}
       <button
-        onClick={() => setFractalAnimate(!fs.fractalAnimate)}
+        onClick={() => setFractalAnimate(!fr.animate)}
         title="Auto-cycle the colormap phase (palette cycling)"
         className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
-          fs.fractalAnimate
+          fr.animate
             ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100'
             : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
         }`}
       >
-        {fs.fractalAnimate ? '❚❚ Cycling' : '▶ Cycle'}
+        {fr.animate ? '❚❚ Cycling' : '▶ Cycle'}
       </button>
       <button
         onClick={copyCoords}
