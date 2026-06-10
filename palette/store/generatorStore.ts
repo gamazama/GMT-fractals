@@ -526,12 +526,17 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   );
 
   const mixedConfig = useMemo(() => {
+    // Stops mode supplies its own config (stopsConfig below), so the costly ramp→stops
+    // fit here is wasted — skip it. (The mix/colorbox memos above still run; they're
+    // cheap and stay memoized while editing stops. Only this Douglas-Peucker fit is
+    // worth gating.) Returns null in stops mode; the result branch picks stopsConfig.
+    if (mode === 'stops') return null;
     const k = (11 - detail) / 3;
     // maxStops scales with the detail dial. The default cap (32) truncated rich
     // generated gradients (e.g. posterized / many-hue / noisy) so a favourited result
     // lost detail vs the live 256-step preview — let detail buy the fidelity it asks for.
     return fitRampToStops(built.ramp, { targetDE: Math.max(0.004, 0.012 * k), maxStops: Math.round(32 + detail * 12) });
-  }, [built.ramp, detail]);
+  }, [mode, built.ramp, detail]);
 
   // Stops mode: the RESULT is the hand-authored stops, rendered through the canonical
   // sampler (byte-exact with the texture bake), and the config IS the edited gradient
@@ -550,7 +555,7 @@ export const useGeneratorDerived = (): GeneratorDerived => {
     base,
     ghost,
     ghostPoints,
-    config: mode === 'stops' ? stopsConfig : mixedConfig,
+    config: mode === 'stops' ? stopsConfig : (mixedConfig ?? stopsConfig),
   };
 };
 

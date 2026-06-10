@@ -17,6 +17,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useGeneratorStore, useGeneratorDerived, genEdit, genEditStart, genEditEnd, useGenParam, useColorBoxParams } from '../store/generatorStore';
 import AdvancedGradientEditor from '../../components/AdvancedGradientEditor';
+import { applyEditorChange } from '../core/editorConfig';
 import type { GradientConfig, GradientStop } from '../../types';
 import { EASING_NAMES } from '../core/easings';
 import { oklabToRgbSafe } from '../core/oklab';
@@ -178,10 +179,9 @@ const GeneratorModeToggle: React.FC = () => {
 const GeneratorStopsControls: React.FC = () => {
   const config = useGeneratorStore((s) => s.stopsConfig);
   const setConfig = useGeneratorStore((s) => s.setStopsConfig);
-  // The editor emits the object form; tolerate the legacy bare-array shape defensively,
-  // preserving the current blend/output space if it ever fires (mirrors EditorStage).
-  const onChange = (val: GradientStop[] | GradientConfig): void =>
-    setConfig(Array.isArray(val) ? { ...config, stops: val } : val);
+  // Shared normaliser (object form, tolerating the legacy bare-array shape) — the same
+  // boundary the studio Stops MODE uses, so the rule can't drift between the two.
+  const onChange = (val: GradientStop[] | GradientConfig): void => setConfig(applyEditorChange(config, val));
   return (
     <AdvancedGradientEditor
       value={config}
