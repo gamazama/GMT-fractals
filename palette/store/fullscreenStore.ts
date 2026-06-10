@@ -19,7 +19,7 @@
 
 import { useSyncExternalStore } from 'react';
 import type { GradientConfig } from '../../types';
-import { mulberry32 } from '../core/rampGeometry';
+import { mulberry32, type GeometryParams } from '../core/rampGeometry';
 
 export interface FullscreenState {
   open: boolean;
@@ -35,6 +35,15 @@ export interface FullscreenState {
   seed: number;
   /** Randomization strength 0..1. */
   amount: number;
+  /** The flat-optional geometry shape params driven by the ON-SCREEN handles (radial centre,
+   *  conic angle, arch radius/width/position/span, s-curve shape). ADDITIVE over the gate:
+   *  an UNSET key resolves to its `GEOM_DEFAULTS` entry inside the pure mappers, so `{}`
+   *  renders byte-identically to the pre-handles overlay (the determinism pin). `amount` /
+   *  `seed` stay as the dedicated fields above (the random mode's minimal controls). */
+  geomParams: GeometryParams;
+  /** On-screen geometry handles master toggle (the toolbar force-hide). The layer also
+   *  auto-fades on idle independently of this. */
+  handles: boolean;
   /** Split layout: app on top, fullscreen preview docked on the bottom (the user's
    *  splitscreen). The preview live-follows the last-modified hero while split is on. */
   split: boolean;
@@ -56,6 +65,8 @@ const CLOSED: FullscreenState = {
   geom: 'linear',
   seed: 1,
   amount: 0.5,
+  geomParams: {},
+  handles: true,
   split: false,
   splitY: 0.55,
   dither: true,
@@ -125,6 +136,33 @@ export const rerollFullscreen = (): void => {
   // — one determinism story, and the field for any given seed stays reproducible.
   const next = Math.floor(mulberry32(state.seed)() * 0x7fffffff) || 1;
   emit({ ...state, seed: next });
+};
+
+/** Set one geometry shape param (an on-screen handle drag writes here; the overlay threads
+ *  `geomParams` into the render ctx, so the pure mappers see it from the OUTSIDE). */
+export const setFullscreenGeomParam = (key: keyof GeometryParams, value: number): void => {
+  if (!Number.isFinite(value) || state.geomParams[key] === value) return;
+  emit({ ...state, geomParams: { ...state.geomParams, [key]: value } });
+};
+
+/** Clear geometry shape params back to their `GEOM_DEFAULTS` (an unset key IS the default).
+ *  With `keys`, clears only those (a handle's double-click reset); without, clears all. */
+export const resetFullscreenGeomParams = (keys?: readonly (keyof GeometryParams)[]): void => {
+  if (!keys) {
+    if (Object.keys(state.geomParams).length === 0) return;
+    emit({ ...state, geomParams: {} });
+    return;
+  }
+  if (!keys.some((k) => k in state.geomParams)) return;
+  const next = { ...state.geomParams };
+  for (const k of keys) delete next[k];
+  emit({ ...state, geomParams: next });
+};
+
+/** Master show/hide for the on-screen geometry handles (the toolbar toggle). */
+export const setFullscreenHandles = (on: boolean): void => {
+  if (on === state.handles) return;
+  emit({ ...state, handles: on });
 };
 
 export const setFullscreenAmount = (amount: number): void => {

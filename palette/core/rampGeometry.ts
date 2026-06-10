@@ -167,8 +167,9 @@ const smootherstep = (t: number): number => {
 };
 /** Shaped S-curve ease. `shape === 0` is EXACTLY {@link smootherstep} (the legacy
  *  default, byte-identical); shape ≠ 0 biases the toe/shoulder via a symmetric gamma so
- *  the curve stays in [0,1] and monotone. Positive = lazier start / harder finish. */
-const easeShaped = (t: number, shape: number): number => {
+ *  the curve stays in [0,1] and monotone. Positive = lazier start / harder finish.
+ *  Exported so the on-screen handle layer draws the SAME curve it manipulates. */
+export const easeShaped = (t: number, shape: number): number => {
   const s = smootherstep(t);
   if (shape === 0) return s;
   // gamma in (0,∞): >1 pushes the curve down (slower start), <1 lifts it (faster start).

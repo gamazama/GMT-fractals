@@ -40,6 +40,7 @@ import {
   setFullscreenSplit,
   setFullscreenSplitY,
   setFullscreenDither,
+  setFullscreenHandles,
   useFullscreenState,
 } from '../palette/store/fullscreenStore';
 import { useActiveHeroSelection } from '../palette/store/heroSelection';
@@ -47,6 +48,7 @@ import { usePaletteEditorStore } from '../palette/store/paletteEditorStore';
 import { useGeneratorDerived } from '../palette/store/generatorStore';
 import type { GradientConfig } from '../types';
 import { FullscreenCompositor } from './fullscreen/FullscreenCompositor';
+import { GeometryHandleLayer, hasGeometryHandles } from './fullscreen/GeometryHandleLayer';
 import { getFullscreenMode, listFullscreenModes } from './fullscreen/modeRegistry';
 import type { FullscreenModeContext, OwnCanvasHandle } from './fullscreen/modeRegistry';
 import './fullscreen/modes'; // registers the builtin modes at import time
@@ -162,11 +164,14 @@ export const FullscreenGradientOverlay: React.FC = () => {
     () => ({
       ramp: ramp ?? [],
       lut: lut ?? new Uint8Array(1024),
-      params: { amount: fs.amount, seed: fs.seed },
+      // The on-screen-handle shape params spread FIRST so the dedicated amount/seed fields
+      // (the random mode's own controls) always win. An unset key resolves to its
+      // GEOM_DEFAULT inside the pure mappers — byte-identical to the pre-handles render.
+      params: { ...fs.geomParams, amount: fs.amount, seed: fs.seed },
       width: 0,
       height: 0,
     }),
-    [ramp, lut, fs.amount, fs.seed],
+    [ramp, lut, fs.amount, fs.seed, fs.geomParams],
   );
   const ctxRef = useRef(modeCtx);
   ctxRef.current = modeCtx;
@@ -190,10 +195,10 @@ export const FullscreenGradientOverlay: React.FC = () => {
     const h = Math.max(1, Math.round(ch * scale));
     comp.setSize(w, h);
     comp.dither = fs.dither;
-    // params beyond amount/seed (radial centre, conic angle, arch r/w/pos, s-curve shape) are
-    // declared in each mode's `paramFields` as the frozen contract for the FS1 polish wave; until
-    // then the modes render at GEOM_DEFAULTS.
-    const ctx = { ramp, lut, params: { amount: fs.amount, seed: fs.seed }, width: w, height: h };
+    // Shape params (radial centre, conic angle, arch r/w/pos/span, s-curve shape) come from the
+    // store's `geomParams` — written by the on-screen handle layer, threaded here from OUTSIDE
+    // the pure mappers. An unset key renders byte-identically to its GEOM_DEFAULT.
+    const ctx = { ramp, lut, params: { ...fs.geomParams, amount: fs.amount, seed: fs.seed }, width: w, height: h };
     if (mode.kind === 'glQuad') {
       comp.uploadLut(lut); // only glQuad modes sample uLut; cpuField bakes colour on the CPU
       comp.presentMode(mode, ctx);
@@ -202,7 +207,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
     } else {
       comp.presentRaster(mode.raster!(ctx), w, h);
     }
-  }, [ramp, lut, fs.geom, fs.amount, fs.seed, fs.dither]);
+  }, [ramp, lut, fs.geom, fs.amount, fs.seed, fs.geomParams, fs.dither]);
 
   // Repaint on open + whenever the geometry / seed / amount / ramp change.
   useEffect(() => {
@@ -393,6 +398,20 @@ export const FullscreenGradientOverlay: React.FC = () => {
           >
             ⇅ Split
           </button>
+          {hasGeometryHandles(fs.geom) && (
+            <button
+              onClick={() => setFullscreenHandles(!fs.handles)}
+              title="On-screen shape handles — drag them on the image to reshape the gradient (they fade when idle and never export)"
+              aria-pressed={fs.handles}
+              className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+                fs.handles
+                  ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100'
+                  : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+              }`}
+            >
+              ◉ Handles
+            </button>
+          )}
           <button
             onClick={() => setFullscreenDither(!fs.dither)}
             title="Blue-noise dither — smooths 8-bit banding on the ramp (bakes into the PNG)"
@@ -432,6 +451,10 @@ export const FullscreenGradientOverlay: React.FC = () => {
         ) : (
           <canvas key="geom-2d" ref={canvasRef} className="absolute inset-0 w-full h-full" />
         )}
+        {/* On-screen geometry handles — a DOM/SVG layer ABOVE the canvas (so PNG export, which
+            reads the canvas back, can never contain it). The layer itself decides whether the
+            active geometry has handles, fades on idle, and honours the toolbar toggle. */}
+        {!isOwnCanvas && <GeometryHandleLayer />}
         {isOwnCanvas && ownError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/60 text-center px-6">
             <div className="text-[13px] text-gray-200">Couldn’t start {activeMode!.label}</div>
