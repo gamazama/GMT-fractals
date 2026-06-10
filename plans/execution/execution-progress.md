@@ -475,6 +475,33 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-10 — **FOLD-IN POLISH PRE-SCOPED (read-only probe on integration `46cc94b`; Parallax still
+  in-flight in wt-parallax — user said hands-off until its summary lands).** Touchpoint inventory for the
+  post-Parallax polish session, with two corrections to the handoff note:
+  **(1) CORRECTION — there is NO "foundational clock/uPhase".** Animation today is **fractal-mode-local**
+  (RAF in `fractalMode.tsx:208-229`, `fractalAnimate` flag in fullscreenStore; geometry/spline modes are
+  static snapshots). The animated-preview item is therefore *build* work (small overlay-level RAF clock or
+  per-mode loops re-rendering the active mode's animated param), not just play/pause UI. Decision 7 ratified
+  scope stands: autoplay + single play/pause, no scrub, animate only the current mode.
+  **(2) Session-1 deferred item "lazy-load the compositor blue-noise tile" is ALREADY SATISFIED** — all 3 GL
+  stacks lazy-load via `createBlueNoiseWebGL2` with a neutral 1×1 fallback (dither fades in post-PNG-load).
+  Drop it from the backlog.
+  **Confirmed scopes:** • paramFields = **dead metadata** (overlay renders at GEOM_DEFAULTS,
+  `FullscreenGradientOverlay.tsx:189-191`; fullscreenStore holds only `amount`/`seed`) → polish = generic
+  slider UI from `paramFields` + store extension; 12 flat-optional keys exist in `GEOM_DEFAULTS`
+  (`rampGeometry.ts:107-123`). • Live-binding = **one split-gated conditional** (overlay `:115-117`
+  `fs.split && liveSplit`) + `SplitLiveSource` mounts only when split — fullscreen live-follow ≈ drop the
+  guard + mount the live source unconditionally; ownCanvas `onContext` plumbing already handles LUT swaps.
+  • Fractal-knobs→mode-local-store migration: 6 fields + setters in fullscreenStore (`:47-65`, `:160-220`),
+  liquifyStore is the template (~150 LOC). • GL compile/link/blue-noise scaffolding **triplicated**
+  (Compositor `:102-155` · LiquifyRenderer `:91-155` · FractalColorRenderer `:311-348`) → ~80-LOC shared
+  leaf helper; **NB the dedup touches the FROZEN compositor** — the freeze existed for the parallel fan-out,
+  so ratify a one-time behaviour-identical compositor edit AFTER Parallax merges (fan-out over). • Nits
+  confirmed: spline docstring says nearest-segment-sdSegment but shader is Shepard inverse-square diffusion
+  (`splineMode.tsx:1-30` vs `:243-284`); fractal renderer DPR-blind 1600-cap (`FractalColorRenderer.ts:163`,
+  `:560-571` — liquify's `min(dpr,2)` sizing is the pattern). Draft polish-session prompt prepared (emitted
+  in-turn; issue after Parallax merges — it touches the shared overlay/store, so SERIAL, in-dev branch).
+
 - 2026-06-10 — **Worktree write-permission flood FIXED (for real this time).** Root cause: worktree sessions
   use the worktree as their project root and never load `dev/.claude/settings.local.json` (gitignored, not in
   the checkout); my earlier `additionalDirectories:["h:/GMT/workspace-gmt"]` was there + forward-slash (wrong
