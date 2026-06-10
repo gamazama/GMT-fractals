@@ -15,6 +15,7 @@ import { useMemo } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { fitRampToStops } from '../core/stopFit';
+import { makeDefaultEditorConfig } from '../core/editorConfig';
 import type { RGB } from '../core/oklab';
 import type { GradientConfig } from '../../types';
 import {
@@ -44,7 +45,9 @@ import { paramEditStart, paramEditEnd, paramEdit } from './paramUndoBracket';
 
 /** Shape of the paletteGenerator DDFS slice (the dials). */
 interface GeneratorSlice {
-  /** 0 = mixed (two-source blend), 1 = colorbox (per-channel OKLCh sweep). */
+  /** 0 = mixer (two-source blend), 1 = colorbox (per-channel OKLCh sweep),
+   *  2 = stops (hand-authored stop editor). The persisted int id is STABLE —
+   *  never renumber (scene/preset compat); only the user-facing label is "Mixer". */
   generatorMode: number;
   aHueRotate: number; aChroma: number; aContrast: number; aReverse: boolean; aRepeats: number; aPhase: number; aMirror: boolean;
   bHueRotate: number; bChroma: number; bContrast: number; bReverse: boolean; bRepeats: number; bPhase: number; bMirror: boolean;
@@ -58,10 +61,14 @@ interface GeneratorSlice {
   cbHStart: number; cbHEnd: number; cbHEasing: number;
 }
 
-/** Two generator modes; the build call-site branches on the slice's generatorMode. */
-export type GeneratorMode = 'mixed' | 'colorbox';
-export const generatorModeOf = (s: GeneratorSlice): GeneratorMode =>
-  (s.generatorMode ?? 0) === 1 ? 'colorbox' : 'mixed';
+/** Three generator modes; the build call-site branches on the slice's generatorMode.
+ *  The literal is 'mixer' (was 'mixed') to match the user-facing label — the persisted
+ *  int id (0) is unchanged, so this is a code-clarity rename only, no scene migration. */
+export type GeneratorMode = 'mixer' | 'colorbox' | 'stops';
+export const generatorModeOf = (s: GeneratorSlice): GeneratorMode => {
+  const m = s.generatorMode ?? 0;
+  return m === 2 ? 'stops' : m === 1 ? 'colorbox' : 'mixer';
+};
 
 /** Map a stored easing index → EasingName (clamped; defaults to linear on garbage). */
 const easingFromIndex = (i: number): EasingName => EASING_NAMES[i] ?? EASING_NAMES[0];
@@ -127,12 +134,20 @@ interface GeneratorState {
   smooth: number;
   noiseSeed: number;
   exportFmt: string;
+  /** Stops mode (generatorMode === 2): a hand-authored GradientConfig the engine
+   *  AdvancedGradientEditor edits in place. NON-DDFS (a variable-length stop array),
+   *  so it lives here and round-trips via the generator history + document providers
+   *  — NOT shared with the studio's separate Stops MODE (paletteEditorStore). */
+  stopsConfig: GradientConfig;
 
   setSlot: (which: 'A' | 'B', idx: number) => void;
   /** Register an arbitrary 256-RGB ramp as a custom source and load it into a slot
    *  (the img2grad → generator merge). Returns the catalog index used. */
   sendRampToSlot: (which: 'A' | 'B', ramp: RGB[], name: string) => number;
   setTracks: (tracks: ChannelTracks | null) => void;
+  /** Stops mode onChange sink — commits the whole edited config. Bracketing for undo
+   *  is the caller's job via the (d) seam (genEditStart/End/genEdit at the editor). */
+  setStopsConfig: (config: GradientConfig) => void;
   setCurvesOn: (on: boolean) => void;
   setDetail: (v: number) => void;
   setSmooth: (v: number) => void;
@@ -146,6 +161,8 @@ interface GeneratorState {
    *  undo entry. */
   fitCurvesFromRamp: (ramp: RGB[]) => void;
   resetCurves: () => void;
+  /** Reset the Mix channel (L/C/h) blend to defaults (0/0/0 = all source A). One undo entry. */
+  resetMix: () => void;
   resetAll: () => void;
   /** Bake a slot's modifiers into a new source ramp + reset that slot's dials (picture unchanged). */
   bakeSlot: (which: 'A' | 'B') => void;
@@ -269,9 +286,11 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
   smooth: 5,
   noiseSeed: 1,
   exportFmt: 'map',
+  stopsConfig: makeDefaultEditorConfig(),
 
   // Discrete actions self-bracket so each is one undo entry. setTracks / setDetail /
-  // setSmooth are CONTINUOUS (curve drag / slider drag) — the UI brackets those.
+  // setSmooth / setStopsConfig are CONTINUOUS (curve drag / slider drag / knot drag) —
+  // the UI brackets those via genEditStart/End.
   setSlot: (which, idx) => genEdit(() => set(which === 'A' ? { slotA: idx } : { slotB: idx })),
   sendRampToSlot: (which, ramp, name) => {
     const idx = registerCustomRamp(ramp, name);
@@ -279,6 +298,7 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
     return idx;
   },
   setTracks: (tracks) => set({ tracks }),
+  setStopsConfig: (stopsConfig) => set({ stopsConfig }),
   setCurvesOn: (on) => genEdit(() => set((s) => ({ curvesOn: on && !!s.tracks }))),
   setDetail: (v) => set({ detail: v }),
   setSmooth: (v) => set({ smooth: v }),
@@ -299,6 +319,9 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
       set({ tracks: fitChannelsToTracks(decomposeRamp(ramp), get().detail, get().smooth), curvesOn: true });
     }),
   resetCurves: () => genEdit(() => set({ tracks: null, curvesOn: false })),
+  // Reset the Mix blend (mixL/mixC/mixH are DDFS params on the slice) to defaults —
+  // 0/0/0 = all source A. Mirrors resetCurves: one genEdit() bracket = one undo entry.
+  resetMix: () => genEdit(() => setSlice({ mixL: 0, mixC: 0, mixH: 0 })),
   resetAll: () =>
     genEdit(() => {
       // Reset every dial to defaults but STAY in the current mode (don't yank the
@@ -367,7 +390,7 @@ export const useColorBoxParams = (): ColorBoxParams => {
  */
 export const captureGeneratorHistory = () => {
   const s = useGeneratorStore.getState();
-  return { slotA: s.slotA, slotB: s.slotB, tracks: s.tracks, curvesOn: s.curvesOn, detail: s.detail, smooth: s.smooth, noiseSeed: s.noiseSeed };
+  return { slotA: s.slotA, slotB: s.slotB, tracks: s.tracks, curvesOn: s.curvesOn, detail: s.detail, smooth: s.smooth, noiseSeed: s.noiseSeed, stopsConfig: s.stopsConfig };
 };
 export const restoreGeneratorHistory = (snap: unknown): void => {
   useGeneratorStore.setState({ ...(snap as Partial<ReturnType<typeof captureGeneratorHistory>>) });
@@ -422,6 +445,7 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   const detail = useGeneratorStore((s) => s.detail);
   const smooth = useGeneratorStore((s) => s.smooth);
   const noiseSeed = useGeneratorStore((s) => s.noiseSeed);
+  const stopsConfig = useGeneratorStore((s) => s.stopsConfig);
 
   const mode = generatorModeOf(slice);
   const modsA = useMemo(() => sliceToModsA(slice), [slice]);
@@ -501,7 +525,7 @@ export const useGeneratorDerived = (): GeneratorDerived => {
     [mode, base, detail, smooth],
   );
 
-  const config = useMemo(() => {
+  const mixedConfig = useMemo(() => {
     const k = (11 - detail) / 3;
     // maxStops scales with the detail dial. The default cap (32) truncated rich
     // generated gradients (e.g. posterized / many-hue / noisy) so a favourited result
@@ -509,7 +533,25 @@ export const useGeneratorDerived = (): GeneratorDerived => {
     return fitRampToStops(built.ramp, { targetDE: Math.max(0.004, 0.012 * k), maxStops: Math.round(32 + detail * 12) });
   }, [built.ramp, detail]);
 
-  return { stripA, stripB, ramp: built.ramp, base, ghost, ghostPoints, config };
+  // Stops mode: the RESULT is the hand-authored stops, rendered through the canonical
+  // sampler (byte-exact with the texture bake), and the config IS the edited gradient
+  // (no fit round-trip needed — it already carries stops). The mix/colorbox pipeline
+  // above still runs but its ramp/config are superseded here. base/ghost/ghostPoints
+  // are mix-only scopes and go unused (the Stops UI has no curve editor).
+  const stopsRamp = useMemo(
+    () => (mode === 'stops' ? renderStopsToRamp(stopsConfig.stops, stopsConfig.blendSpace, stopsConfig.colorSpace) : null),
+    [mode, stopsConfig],
+  );
+
+  return {
+    stripA,
+    stripB,
+    ramp: stopsRamp ?? built.ramp,
+    base,
+    ghost,
+    ghostPoints,
+    config: mode === 'stops' ? stopsConfig : mixedConfig,
+  };
 };
 
 /** Catalog accessor for the source picker (memoised in presetCatalog). */

@@ -260,10 +260,6 @@ export class FractalColorRenderer {
     if (!floatExt && !halfExt) {
       throw new Error('Float render targets unavailable (EXT_color_buffer_float / _half_float).');
     }
-    // Detect once — the renderable float format is immutable per GPU/driver, so a context-loss
-    // rebuild reuses this rather than re-running the throwaway-FBO probe.
-    this.fmt = this.detectFormat();
-
     this.build();
     // Recover from a GPU context loss: rebuild every GL object (programs, MRTs, blue-noise, and the
     // gradient/deep-zoom sub-controllers) on the now-healthy context, then let the mode re-supply
@@ -280,6 +276,11 @@ export class FractalColorRenderer {
    *  controllers are minted; the mode re-uploads the colormap + rebuilds the orbit). */
   private build(): void {
     const gl = this.gl;
+    // Re-probe the renderable float format on every build — parity with ParallaxRenderer.
+    // A context-restore can land on a different adapter (hybrid-GPU switch, driver reset),
+    // so re-running the throwaway-FBO probe here avoids reusing a stale format from the
+    // pre-loss adapter. Cheap (a one-off FBO test) relative to the full rebuild around it.
+    this.fmt = this.detectFormat();
     this.gradients = new GradientLutManager(gl);
     this.deepZoom = new DeepZoomController(gl);
 

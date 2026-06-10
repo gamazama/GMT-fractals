@@ -266,7 +266,12 @@ const DENSITIES: ReadonlyArray<{ id: ParallaxDensity; label: string }> = [
 const Slider: React.FC<{
   label: string; value: number; min: number; max: number; step: number;
   onChange: (v: number) => void; title?: string;
-}> = ({ label, value, min, max, step, onChange, title }) => (
+  // Optional readout override. By default the value renders as a 0–100% of-range figure,
+  // which only reads honestly when min is 0 — a slider whose floor is non-zero (e.g. Stir
+  // at 0.05) would show "0" at its minimum and be misread as off. Pass a formatter to show
+  // the absolute value instead.
+  readout?: (v: number) => string;
+}> = ({ label, value, min, max, step, onChange, title, readout }) => (
   <label className="flex items-center gap-1.5 text-[11px] text-gray-400" title={title}>
     {label}
     <input
@@ -275,7 +280,9 @@ const Slider: React.FC<{
       className="w-20 accent-cyan-400"
       aria-label={label}
     />
-    <span className="tabular-nums w-6 text-right text-gray-500">{Math.round(((value - min) / (max - min)) * 100)}</span>
+    <span className="tabular-nums w-8 text-right text-gray-500">
+      {readout ? readout(value) : Math.round(((value - min) / (max - min)) * 100)}
+    </span>
   </label>
 );
 
@@ -286,7 +293,7 @@ const ParallaxControls: React.FC = () => {
       <Slider label="Depth" value={st.depth} min={0} max={1} step={0.01} onChange={setParallaxDepth}
         title="How far the view peeks around the field as you move" />
       <Slider label="Stir" value={st.stir} min={0.05} max={0.4} step={0.01} onChange={setParallaxStir}
-        title="Size of the stir brush" />
+        title="Size of the stir brush" readout={(v) => v.toFixed(2)} />
 
       <div className="flex items-center rounded-md border border-white/10 overflow-hidden divide-x divide-white/10">
         {COLOR_MODES.map((m) => (

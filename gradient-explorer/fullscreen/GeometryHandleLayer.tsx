@@ -600,6 +600,10 @@ export const GeometryHandleLayer: React.FC = () => {
   }, []);
   useEffect(() => () => {
     if (timer.current !== null) window.clearTimeout(timer.current);
+    // If the layer unmounts mid-drag (mode/route change while a handle is held), the
+    // drag's `end` never fires — clear the interaction flag here so the overlay can't
+    // stay pinned at the reduced interaction repaint cap.
+    setFullscreenInteracting(false);
   }, []);
   useEffect(() => {
     if (layerActive) {

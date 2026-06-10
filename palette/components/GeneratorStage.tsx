@@ -15,7 +15,9 @@
  */
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { useGeneratorStore, useGeneratorDerived, genEdit, useGenParam, useColorBoxParams } from '../store/generatorStore';
+import { useGeneratorStore, useGeneratorDerived, genEdit, genEditStart, genEditEnd, useGenParam, useColorBoxParams } from '../store/generatorStore';
+import AdvancedGradientEditor from '../../components/AdvancedGradientEditor';
+import type { GradientConfig, GradientStop } from '../../types';
 import { EASING_NAMES } from '../core/easings';
 import { oklabToRgbSafe } from '../core/oklab';
 import { GenParamSlider } from './GenParamSlider';
@@ -134,13 +136,16 @@ const EMPTY_TRACKS: ChannelTracks = {
 
 // --- ColorBox mode UI ------------------------------------------------------------
 
-/** Segmented Mixed | ColorBox switch, bound to the hidden `generatorMode` DDFS param. */
+/** Segmented Mixer | ColorBox | Stops switch, bound to the hidden `generatorMode` DDFS
+ *  param. The int ids are STABLE (0 = Mixer, 1 = ColorBox, 2 = Stops) — only the label
+ *  changed (was "Mixed"); the `gen:mixed` step id stays for gradientTargets reveal compat. */
 const GeneratorModeToggle: React.FC = () => {
   const [mode, setMode] = useGenParam<number>('generatorMode');
   const m = mode ?? 0;
-  const opts: { label: string; value: number; title: string }[] = [
-    { label: 'Mixed', value: 0, title: 'Blend two source gradients per channel' },
-    { label: 'ColorBox', value: 1, title: 'Sweep each OKLCh channel start→end under an easing curve' },
+  const opts: { label: string; value: number; step: string; title: string }[] = [
+    { label: 'Mixer', value: 0, step: 'gen:mixed', title: 'Blend two source gradients per channel' },
+    { label: 'ColorBox', value: 1, step: 'gen:colorbox', title: 'Sweep each OKLCh channel start→end under an easing curve' },
+    { label: 'Stops', value: 2, step: 'gen:stops', title: 'Hand-author the gradient stop by stop' },
   ];
   return (
     <div className="flex items-center gap-2">
@@ -149,7 +154,7 @@ const GeneratorModeToggle: React.FC = () => {
         {opts.map((o) => (
           <button
             key={o.value}
-            data-gx-step={o.value === 0 ? 'gen:mixed' : 'gen:colorbox'}
+            data-gx-step={o.step}
             onClick={() => m !== o.value && genEdit(() => setMode(o.value))}
             title={o.title}
             aria-pressed={m === o.value}
@@ -162,6 +167,29 @@ const GeneratorModeToggle: React.FC = () => {
         ))}
       </div>
     </div>
+  );
+};
+
+/** Stops mode (generatorMode === 2): mount the engine AdvancedGradientEditor (consumed
+ *  AS-IS, the same editor the studio Stops MODE uses) bound to the generator's own
+ *  stopsConfig via the (d) reusable-editor undo seam. Its edits become the generator
+ *  RESULT ramp (useGeneratorDerived branches on mode === 'stops'). The result hero above
+ *  shows that ramp; this is the authoring surface. */
+const GeneratorStopsControls: React.FC = () => {
+  const config = useGeneratorStore((s) => s.stopsConfig);
+  const setConfig = useGeneratorStore((s) => s.setStopsConfig);
+  // The editor emits the object form; tolerate the legacy bare-array shape defensively,
+  // preserving the current blend/output space if it ever fires (mirrors EditorStage).
+  const onChange = (val: GradientStop[] | GradientConfig): void =>
+    setConfig(Array.isArray(val) ? { ...config, stops: val } : val);
+  return (
+    <AdvancedGradientEditor
+      value={config}
+      onChange={onChange}
+      onEditStart={genEditStart}
+      onEditEnd={genEditEnd}
+      edit={genEdit}
+    />
   );
 };
 
@@ -297,8 +325,10 @@ export const GeneratorStage: React.FC = () => {
   const setSmooth = useGeneratorStore((s) => s.setSmooth);
   const fitFromSource = useGeneratorStore((s) => s.fitFromSource);
   const resetCurves = useGeneratorStore((s) => s.resetCurves);
+  const resetMix = useGeneratorStore((s) => s.resetMix);
   const [genMode] = useGenParam<number>('generatorMode');
   const colorbox = (genMode ?? 0) === 1;
+  const stops = (genMode ?? 0) === 2;
 
   // Decision 3: detail/smooth are NON-DESTRUCTIVE. They no longer schedule a live re-fit
   // (which silently discarded hand-edited keyframes). Instead they drive the faint dashed
@@ -334,13 +364,18 @@ export const GeneratorStage: React.FC = () => {
           below (so the gradients and the curve t-axis share a left/right edge). Takes
           the slack so the graph stays compact with no dead space under it. */}
       <div
-        className={`flex-1 min-h-0 overflow-y-auto pt-3 pb-2 flex flex-col gap-1.5 ${tracks && !colorbox ? '' : 'justify-center'}`}
+        className={`flex-1 min-h-0 overflow-y-auto pt-3 pb-2 flex flex-col gap-1.5 ${(tracks && !colorbox) || stops ? '' : 'justify-center'}`}
         style={{ paddingLeft: padLeft, paddingRight: padRight }}
       >
         <div className="flex items-center mb-0.5">
           <GeneratorModeToggle />
         </div>
-        {colorbox ? (
+        {stops ? (
+          // Stops mode: the engine stop editor IS the authoring surface; its edits feed
+          // the result hero below. (No canonical drop target yet — dropping a gradient
+          // INTO the generator's stops is a future enhancement, out of this scope.)
+          <GeneratorStopsControls />
+        ) : colorbox ? (
           // data-gx-target="colorbox" anchors the ColorBox drop target here (reached via
           // the Generator tab → ColorBox sub-mode reveal chain).
           <div data-gx-target="colorbox">
@@ -355,7 +390,7 @@ export const GeneratorStage: React.FC = () => {
             )}
             <SourceRow which="A" ramp={stripA} preset={slotA} height={40} dimmed={curvesOn} />
             {/* The L/C/h blend sits BETWEEN A and B as vertical sliders bridging A→B. */}
-            <MixBlend onSwap={swap} dimmed={curvesOn} />
+            <MixBlend onSwap={swap} onReset={resetMix} dimmed={curvesOn} />
             <SourceRow which="B" ramp={stripB} preset={slotB} height={40} dimmed={curvesOn} />
           </>
         )}
@@ -375,7 +410,7 @@ export const GeneratorStage: React.FC = () => {
             lower-centre bin dock now (click the strip to reveal it); the vertical-enlarge
             toggle is built into the hero now (shared + persisted across all modes). */}
         <div className="mt-1">
-          {curvesOn && !colorbox && (
+          {curvesOn && !colorbox && !stops && (
             <div className="text-[10px] text-cyan-400/70 truncate mb-1">
               curves drive output — Re-fit / Reset points to edit sources
             </div>
@@ -395,9 +430,10 @@ export const GeneratorStage: React.FC = () => {
       {/* Channel curve graph (full width) with its controls. Fixed-height at the bottom
           — the keyframe inspector is about as tall as the editor ever needs to be, so the
           slack goes to the gradients above rather than dead space below the graph.
-          Mixed mode only: the curve editor shapes the two-source mix; ColorBox sweeps the
-          channels directly, so it has no curve surface. */}
-      {!colorbox && (
+          Mixer mode only: the curve editor shapes the two-source mix; ColorBox sweeps the
+          channels directly and Stops authors the gradient explicitly, so neither has a
+          curve surface. */}
+      {!colorbox && !stops && (
       <div className="shrink-0 flex flex-col border-t border-white/10 bg-zinc-950">
         <div className="flex items-center gap-2 flex-wrap px-3 py-1.5 shrink-0">
           <span className="text-[10px] uppercase tracking-wide text-gray-500">Curves</span>
