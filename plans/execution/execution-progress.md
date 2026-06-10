@@ -475,6 +475,16 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-10 — **Worktree write-permission flood FIXED (for real this time).** Root cause: worktree sessions
+  use the worktree as their project root and never load `dev/.claude/settings.local.json` (gitignored, not in
+  the checkout); my earlier `additionalDirectories:["h:/GMT/workspace-gmt"]` was there + forward-slash (wrong
+  file + wrong format). Meanwhile the **USER** settings `~/.claude/settings.json` `additionalDirectories` was
+  accreting ~19 per-folder `wt-*\…\subfolder` entries (one per prompt). **Fix:** put the parent
+  **`h:\GMT\workspace-gmt`** (backslash, matching format) in the **USER** settings (loaded by EVERY session
+  incl. worktrees) + pruned the cruft (23→4 entries; backup `settings.json.bak`). **→ new sessions / worktrees
+  no longer prompt per-folder.** NB: settings load at session START, so the **already-running Parallax session
+  won't pick it up mid-run** (restart to get it, or let it keep auto-granting). (The stale forward-slash entry
+  in dev's settings.local.json is harmless, left as-is.)
 - 2026-06-09 — **✅ fullscreen-v2 LIQUIFY + generic mount() seam MERGED** into integration `8fff927`
   (merge of `exec/fs-liquify`; `modes/index.ts` register conflict resolved — kept spline glQuad + fractal +
   liquify ownCanvas). Gate green (tsc 0 · test:palette 44 passed incl. liquify/catmull/convergence numerics).
