@@ -180,6 +180,13 @@ export const FullscreenGradientOverlay: React.FC = () => {
   const ctxRef = useRef(modeCtx);
   ctxRef.current = modeCtx;
 
+  // Dirty key of the last cpuField present (geom/params/dither/size/ramp). A re-render that
+  // doesn't change any of these skips the expensive CPU field+dither — so once a frame is
+  // rendered it stays rendered (no continuous re-dithering on idle / unrelated re-renders).
+  // Reset to null whenever the compositor is (re)created so a fresh surface always paints.
+  const lastFieldKeyRef = useRef<string | null>(null);
+  const lastFieldRampRef = useRef<unknown>(null);
+
   // Paint a compositor mode (cpuField / cpuRaster / glQuad) through the shared dither tail.
   // `ownCanvas` modes drive their own canvas and are skipped here.
   const paint = useCallback(() => {
@@ -201,7 +208,10 @@ export const FullscreenGradientOverlay: React.FC = () => {
     const w = Math.max(1, Math.round(cw * scale));
     const h = Math.max(1, Math.round(ch * scale));
     comp.setSize(w, h);
-    comp.dither = fs.dither;
+    // Skip the (CPU error-diffusion) dither WHILE a handle drag is in flight — it's the
+    // dominant per-frame cost and the brief banding is invisible mid-motion. Releasing the drag
+    // flips `interacting` off → one final full-res DITHERED settle render, then idle.
+    comp.dither = fs.dither && !fs.interacting;
     // Shape params (linear angle/bias, radial centre/scale/bias, conic centre/rotation/mirror,
     // arch r/w/pos/span/curvature) come from the store's `geomParams` — written by the on-screen
     // handle layer, threaded here from OUTSIDE the pure mappers.
@@ -210,6 +220,13 @@ export const FullscreenGradientOverlay: React.FC = () => {
       comp.uploadLut(lut); // only glQuad modes sample uLut; cpuField bakes colour on the CPU
       comp.presentMode(mode, ctx);
     } else if (mode.kind === 'cpuField') {
+      // Idempotent: an unrelated re-render (or a no-op upstream emit) with the SAME geom/params/
+      // dither/size/ramp re-runs nothing — the field stays as last rendered. Resize and the
+      // interacting→idle settle change `key`, so they still repaint.
+      const key = `${fs.geom}|${comp.dither ? 1 : 0}|${w}x${h}|${JSON.stringify(fs.geomParams)}`;
+      if (lastFieldKeyRef.current === key && lastFieldRampRef.current === ramp) return;
+      lastFieldKeyRef.current = key;
+      lastFieldRampRef.current = ramp;
       comp.presentField(mode.field!(ctx), w, h, DEFAULT_BACKGROUND, ramp);
     } else {
       comp.presentRaster(mode.raster!(ctx), w, h);
@@ -251,6 +268,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
     if (!canvas) return;
     const comp = new FullscreenCompositor(canvas, () => paintRef.current());
     compositorRef.current = comp;
+    lastFieldKeyRef.current = null; // fresh surface → the forced paint below must not be skipped
     paintRef.current();
     return () => {
       comp.dispose();
