@@ -26,9 +26,10 @@ modes in parallel → fold-in polish.**
 - **SPLINE (glQuad) ✅ merged `8ca2c9b`** — gradient flows along an editable Catmull-Rom path (diffusion field).
 - **LIQUIFY (ownCanvas) + the generic `mount()` seam ✅ merged `8fff927`** — deformable LUT-mesh soft body
   (MLS + XPBD jiggle off-by-default + Taubin); the `mount()` lift unblocked parallax.
-- **PARALLAX (ownCanvas) 🔄 IN FLIGHT** — worktree `wt-parallax` (`exec/fs-parallax`), **built with the Fable
-  model**, given extra goal-context (showcase the gradient beautifully; pro tool a child can use) + creative
-  freedom. **← THE IMMEDIATE NEXT THING TO INGEST.**
+- **PARALLAX (ownCanvas) ✅ merged `e8e4c09`** — gradient-as-nebula pseudo-3D depth field (spatial Flow/Bloom
+  mappings, two-pass halo→RGBA16F float FBO + tonemap present, pointer parallax peek / drag stir / click pulse,
+  spring-home, idle early-out). Independent GL/lifecycle review = MERGE-WITH-NITS (no blockers); user visual
+  confirm; gate green (tsc 0 · test:palette 44/44). **← THE 3 SPLASHY MODES ARE COMPLETE.** Next = fold-in polish.
 
 **🔁 FRESH ORCHESTRATOR HANDOFF (2026-06-10):** this session has run for days and is being handed to a fresh
 doc-anchored orchestrator (this file is the memory; read the kit: `execution-playbook.md` + `prompts.md`).
@@ -475,6 +476,24 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-10 — **✅ fullscreen-v2 PARALLAX MERGED** into integration `e8e4c09` (merge of `exec/fs-parallax`;
+  commit `bd22054`, 5 files +1008/−1 — 4 new under `modes/parallax/` + `parallaxMode.tsx` + the one additive
+  `modes/index.ts` register line; overlay core untouched). **THE 3 SPLASHY MODES (spline · liquify · parallax)
+  ARE NOW COMPLETE** — all three proven on the frozen seam (glQuad + 2× ownCanvas/mount()). Gate green (tsc 0 ·
+  test:palette 44/44). Independent GL/lifecycle review = **MERGE-WITH-NITS, no blockers** (verified: fresh
+  canvas per mount [no StrictMode brick], full dispose cleanup [RAF/listeners/RO/store-unsub/GL-delete+
+  loseContext], RGBA16F has a runtime checkFramebufferStatus→RGBA8 fallback beyond the extension query, dither
+  in the PRESENT pass [not the float FBO] = grain identical to the compositor, exportCanvas re-draws +
+  preserveDrawingBuffer, no uniform-array ANGLE risk, dt floored+capped, idle early-out has all wake paths, no
+  hidden edits). User visual confirm. wt-parallax retired (junction-first; dev node_modules intact). **NITS →
+  backlog:** (n1) no `webglcontextlost` handler — **parity gap across ALL 3 ownCanvas modes** (fractal +
+  liquify + parallax all lack it) → fold a shared context-loss handler into the GL-helper dedup pass; (n2)
+  hover-at-rest defeats the idle skip (motionless pointer over canvas runs full sim/upload/draw at 60fps) —
+  could also skip when cam+field settled with a static cursor; (n3) high-density fill-rate (12k×2 draws, halos
+  up to ~330px) may dip on integrated GPUs at 4K *during interaction only* (idle frames skip) — visual-pass
+  watch item; (n4) Stir slider min 0.05 displays "0" (range-normalised readout). **Deferred by the session:**
+  cross-mode Slider extraction (would touch the merged liquify module → the orchestrator's GL-dedup pass).
+  **NEXT: fold-in polish** (pre-scoped below; serial in-dev branch — touches shared overlay/store).
 - 2026-06-10 — **FOLD-IN POLISH PRE-SCOPED (read-only probe on integration `46cc94b`; Parallax still
   in-flight in wt-parallax — user said hands-off until its summary lands).** Touchpoint inventory for the
   post-Parallax polish session, with two corrections to the handoff note:
