@@ -476,6 +476,32 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-10 — **✅ fullscreen-v2 CLEANUP wave (Session A) MERGED** into integration `28187ed` (merge of
+  `exec/fs-polish-cleanup`, 2 commits; 13 files +511/−341 — new `engine/utils/glHelpers.ts` +
+  `modes/fractal/fractalStore.ts`). **Items 2+4+5+6 done** (item 1 on-screen handles = Session B, next).
+  Mechanical cleanup, no new features: **(2)** live-binding unified — plain fullscreen now follows the
+  last-modified hero on split's one always-live path (snapshot fallback when nothing resolves);
+  **(4)** the 6 fractal knobs migrated out of `fullscreenStore` into a mode-local `fractalStore` (liquify
+  pattern); dither moved fully onto the `OwnCanvasHandle.setDither` path; **(5)** GL compile/link/dither-noise
+  scaffolding deduped into `glHelpers.ts` across all 4 GL surfaces (incl. the **ratified byte-identical
+  frozen-compositor touch**) + **webglcontextlost/restored recovery wired into all 3 ownCanvas modes** (each
+  `build()` rebuilds GL state, `onRestored` re-supplies LUT/attribs/params/deep-orbit — none recovered
+  before); **(6)** spline docstring fixed + fractal renderer made DPR-aware to its 1600 cap (was soft on
+  retina). **Independent review = MERGE-CLEAN, no bugs** (verified: compositor program/uniform path
+  byte-identical on success; context-loss recovery complete + correctly scoped; listeners unwired before
+  dispose-time loseContext; `preventDefault` present; no dangling store refs; `fullscreenStore` was never
+  persisted so no migration gap; diff scope clean — no seam/log edits). User visual confirm (fractal
+  renders+animates post-migration; non-split live-follow works). Gate green (tsc 0 · test:palette 44/44 ·
+  test:dither · smoke:liquify + smoke-gx-fractal). **2 non-blocking NITS → backlog:** (n-clean-1) fractal
+  `detectFormat()` cached in constructor not re-probed in `build()` — a context-restore onto a *different*
+  adapter could theoretically use a stale float format (negligible; parallax re-probes per-build — optional
+  parity fix); (n-clean-2) DPR fix renders up to 2× device pixels → up to ~4× fragment cost on small hi-DPI
+  windows before the 1600 cap clamps (intended; watch on integrated GPUs). **/simplify deferred:** a shared
+  mode-store factory (the hand-rolled per-mode store is the established convention — liquify/parallax/now
+  fractal all follow it). **ENV NOTE from the session:** after ~16 back-to-back headless launches this box's
+  SwiftShader degrades until the GX overlay won't open — reproduced on the unmodified base `f2621ff` (NOT a
+  regression); liquify/fractal smokes should get a clean re-run on a fresh session for the record.
+  **NEXT: Session B — item 1** (on-screen geometry handles + hide control).
 - 2026-06-10 — **FOLD-IN POLISH SCOPE RATIFIED (user decisions).** The 6-item pre-scope is reshaped:
   **(1) customizability — KEEP, but RESHAPED: on-screen DIRECT-MANIPULATION handles, NOT slider panels.**
   Expose the geometry params as draggable on-canvas elements (radial centre dot · conic angle handle · arch
