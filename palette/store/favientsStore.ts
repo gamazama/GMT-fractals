@@ -103,6 +103,24 @@ const pruneLabels = (favients: Favient[], labels: Record<string, string>): Recor
 
 const clamp = (n: number, lo: number, hi: number) => (n < lo ? lo : n > hi ? hi : n);
 
+/** Disambiguate a group label against the OTHER groups' labels (case-insensitive,
+ *  trimmed) so two dividers can't read identically — appends " 2", " 3", … until
+ *  free. An empty label (clears the divider name) is returned as-is. */
+const uniqueGroupLabel = (label: string, selfId: string, labels: Record<string, string>): string => {
+  const want = label.trim();
+  if (!want) return want;
+  const taken = new Set(
+    Object.entries(labels)
+      .filter(([id]) => id !== selfId)
+      .map(([, l]) => l.trim().toLowerCase()),
+  );
+  if (!taken.has(want.toLowerCase())) return want;
+  let n = 2;
+  let candidate = `${want} ${n}`;
+  while (taken.has(candidate.toLowerCase())) candidate = `${want} ${++n}`;
+  return candidate;
+};
+
 /**
  * Content signature for dedupe: rounded stop positions + colours + interpolation.
  * Two gradients with the same stops are treated as the same favourite.
@@ -200,7 +218,15 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
       get().favients.some((f) => (f.group ?? DEFAULT_GROUP) === lg);
     const group = present ? lg : DEFAULT_GROUP;
     const fav: Favient = { id: newId(), name, source, config, createdAt: Date.now(), group };
-    const favients = [fav, ...get().favients];
+    const favients = [...get().favients];
+    // Insert at the START of the target group's contiguous run so the new favourite
+    // JOINS that group. Prepending to index 0 would split a mid-list group into two
+    // separate blocks with the same divider (buildBlocks groups by contiguous runs) —
+    // i.e. a visually "duplicated" group. For the default top group (or a not-yet-
+    // populated named group) the front / end is the natural spot.
+    const firstInGroup = favients.findIndex((f) => (f.group ?? DEFAULT_GROUP) === group);
+    const at = firstInGroup >= 0 ? firstInGroup : group === DEFAULT_GROUP ? 0 : favients.length;
+    favients.splice(at, 0, fav);
     saveFavients(favients);
     saveLastGroup(group);
     set({ favients, lastGroupId: group });
@@ -251,7 +277,8 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
   },
 
   renameGroup: (groupId, label) => {
-    const groupLabels = { ...get().groupLabels, [groupId]: label };
+    // Prevent two groups reading identically — disambiguate against the others' labels.
+    const groupLabels = { ...get().groupLabels, [groupId]: uniqueGroupLabel(label, groupId, get().groupLabels) };
     saveGroupLabels(groupLabels);
     set({ groupLabels });
   },

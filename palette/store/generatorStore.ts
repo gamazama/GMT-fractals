@@ -15,7 +15,7 @@ import { useMemo } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { fitRampToStops } from '../core/stopFit';
-import { makeDefaultEditorConfig } from '../core/editorConfig';
+import { usePaletteEditorStore } from './paletteEditorStore';
 import type { RGB } from '../core/oklab';
 import type { GradientConfig } from '../../types';
 import {
@@ -134,20 +134,12 @@ interface GeneratorState {
   smooth: number;
   noiseSeed: number;
   exportFmt: string;
-  /** Stops mode (generatorMode === 2): a hand-authored GradientConfig the engine
-   *  AdvancedGradientEditor edits in place. NON-DDFS (a variable-length stop array),
-   *  so it lives here and round-trips via the generator history + document providers
-   *  — NOT shared with the studio's separate Stops MODE (paletteEditorStore). */
-  stopsConfig: GradientConfig;
 
   setSlot: (which: 'A' | 'B', idx: number) => void;
   /** Register an arbitrary 256-RGB ramp as a custom source and load it into a slot
    *  (the img2grad → generator merge). Returns the catalog index used. */
   sendRampToSlot: (which: 'A' | 'B', ramp: RGB[], name: string) => number;
   setTracks: (tracks: ChannelTracks | null) => void;
-  /** Stops mode onChange sink — commits the whole edited config. Bracketing for undo
-   *  is the caller's job via the (d) seam (genEditStart/End/genEdit at the editor). */
-  setStopsConfig: (config: GradientConfig) => void;
   setCurvesOn: (on: boolean) => void;
   setDetail: (v: number) => void;
   setSmooth: (v: number) => void;
@@ -286,11 +278,9 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
   smooth: 5,
   noiseSeed: 1,
   exportFmt: 'map',
-  stopsConfig: makeDefaultEditorConfig(),
 
   // Discrete actions self-bracket so each is one undo entry. setTracks / setDetail /
-  // setSmooth / setStopsConfig are CONTINUOUS (curve drag / slider drag / knot drag) —
-  // the UI brackets those via genEditStart/End.
+  // setSmooth are CONTINUOUS (curve drag / slider drag) — the UI brackets those.
   setSlot: (which, idx) => genEdit(() => set(which === 'A' ? { slotA: idx } : { slotB: idx })),
   sendRampToSlot: (which, ramp, name) => {
     const idx = registerCustomRamp(ramp, name);
@@ -298,7 +288,6 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
     return idx;
   },
   setTracks: (tracks) => set({ tracks }),
-  setStopsConfig: (stopsConfig) => set({ stopsConfig }),
   setCurvesOn: (on) => genEdit(() => set((s) => ({ curvesOn: on && !!s.tracks }))),
   setDetail: (v) => set({ detail: v }),
   setSmooth: (v) => set({ smooth: v }),
@@ -390,7 +379,7 @@ export const useColorBoxParams = (): ColorBoxParams => {
  */
 export const captureGeneratorHistory = () => {
   const s = useGeneratorStore.getState();
-  return { slotA: s.slotA, slotB: s.slotB, tracks: s.tracks, curvesOn: s.curvesOn, detail: s.detail, smooth: s.smooth, noiseSeed: s.noiseSeed, stopsConfig: s.stopsConfig };
+  return { slotA: s.slotA, slotB: s.slotB, tracks: s.tracks, curvesOn: s.curvesOn, detail: s.detail, smooth: s.smooth, noiseSeed: s.noiseSeed };
 };
 export const restoreGeneratorHistory = (snap: unknown): void => {
   useGeneratorStore.setState({ ...(snap as Partial<ReturnType<typeof captureGeneratorHistory>>) });
@@ -445,7 +434,10 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   const detail = useGeneratorStore((s) => s.detail);
   const smooth = useGeneratorStore((s) => s.smooth);
   const noiseSeed = useGeneratorStore((s) => s.noiseSeed);
-  const stopsConfig = useGeneratorStore((s) => s.stopsConfig);
+  // Stops mode shares the engine stops document (paletteEditorStore) — the same gradient
+  // the editor on the canvas edits — so the Generator's Stops mode and the round-trip
+  // providers ('paletteEditor' history + 'stops' document) all reference one source.
+  const stopsConfig = usePaletteEditorStore((s) => s.config);
 
   const mode = generatorModeOf(slice);
   const modsA = useMemo(() => sliceToModsA(slice), [slice]);

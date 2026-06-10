@@ -35,7 +35,6 @@ import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import { PickerStage, SearchIcon } from './PickerStage';
 import { GeneratorStage } from '../palette/components/GeneratorStage';
 import { ImageStage } from '../palette/components/ImageStage';
-import { EditorStage } from './EditorStage';
 import { FavientsPanel } from '../palette/components/FavientsPanel';
 import { FavientsIcon } from '../palette/components/FavientsIcon';
 import { usePickerSearch, setPickerSearch } from '../palette/store/pickerSearch';
@@ -55,7 +54,7 @@ const MODE_STAGES: Record<string, React.FC> = {
   Picker: PickerStage,
   Generator: GeneratorStage,
   Image: ImageStage,
-  Stops: EditorStage,
+  // Stops is no longer a standalone mode — it lives inside Generator's Stops sub-mode.
 };
 
 const Stage: React.FC = () => {
@@ -137,7 +136,7 @@ const useIsMobile = (): boolean => {
 
 // Phone mode selector — the three studio modes as a full-width tab bar (the desktop
 // right-dock tab strip is the mode selector; on a phone that strip isn't shown).
-const MOBILE_MODES: PanelId[] = ['Picker', 'Generator', 'Image', 'Stops'] as PanelId[];
+const MOBILE_MODES: PanelId[] = ['Picker', 'Generator', 'Image'] as PanelId[];
 const tabClass = (on: boolean): string =>
   `flex-1 py-2.5 text-[12px] font-medium transition-colors border-b-2 flex items-center justify-center gap-1 ${
     on ? 'text-cyan-200 border-cyan-400 bg-white/[0.04]' : 'text-gray-400 border-transparent hover:text-gray-200'

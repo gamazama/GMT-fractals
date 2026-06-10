@@ -15,7 +15,8 @@
  */
 
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { useGeneratorStore, useGeneratorDerived, genEdit, genEditStart, genEditEnd, useGenParam, useColorBoxParams } from '../store/generatorStore';
+import { useGeneratorStore, useGeneratorDerived, genEdit, useGenParam, useColorBoxParams } from '../store/generatorStore';
+import { usePaletteEditorStore, editorEditStart, editorEditEnd, editorEdit } from '../store/paletteEditorStore';
 import AdvancedGradientEditor from '../../components/AdvancedGradientEditor';
 import { applyEditorChange } from '../core/editorConfig';
 import type { GradientConfig, GradientStop } from '../../types';
@@ -172,23 +173,24 @@ const GeneratorModeToggle: React.FC = () => {
 };
 
 /** Stops mode (generatorMode === 2): mount the engine AdvancedGradientEditor (consumed
- *  AS-IS, the same editor the studio Stops MODE uses) bound to the generator's own
- *  stopsConfig via the (d) reusable-editor undo seam. Its edits become the generator
- *  RESULT ramp (useGeneratorDerived branches on mode === 'stops'). The result hero above
- *  shows that ramp; this is the authoring surface. */
+ *  AS-IS) bound to the SHARED stops document (paletteEditorStore) via its (d) undo seam.
+ *  This is the one stops gradient in the studio — the same store the document-level dock
+ *  controls (Blend / Output / Reset, now in the Generator tab) and the round-trip
+ *  providers reference. Its edits become the generator RESULT ramp (useGeneratorDerived
+ *  branches on mode === 'stops'); the result hero above shows that ramp. */
 const GeneratorStopsControls: React.FC = () => {
-  const config = useGeneratorStore((s) => s.stopsConfig);
-  const setConfig = useGeneratorStore((s) => s.setStopsConfig);
-  // Shared normaliser (object form, tolerating the legacy bare-array shape) — the same
-  // boundary the studio Stops MODE uses, so the rule can't drift between the two.
+  const config = usePaletteEditorStore((s) => s.config);
+  const setConfig = usePaletteEditorStore((s) => s.setConfig);
+  // Shared normaliser (object form, tolerating the legacy bare-array shape) so the rule
+  // can't drift between this surface and any other host that mounts the editor.
   const onChange = (val: GradientStop[] | GradientConfig): void => setConfig(applyEditorChange(config, val));
   return (
     <AdvancedGradientEditor
       value={config}
       onChange={onChange}
-      onEditStart={genEditStart}
-      onEditEnd={genEditEnd}
-      edit={genEdit}
+      onEditStart={editorEditStart}
+      onEditEnd={editorEditEnd}
+      edit={editorEdit}
     />
   );
 };
@@ -372,9 +374,12 @@ export const GeneratorStage: React.FC = () => {
         </div>
         {stops ? (
           // Stops mode: the engine stop editor IS the authoring surface; its edits feed
-          // the result hero below. (No canonical drop target yet — dropping a gradient
-          // INTO the generator's stops is a future enhancement, out of this scope.)
-          <GeneratorStopsControls />
+          // the result hero below. data-gx-target="stops" anchors the canonical 'stops'
+          // drop target here (reached via the Generator tab → Stops sub-mode reveal chain),
+          // so a sent/dropped gradient lands on the shared stops document.
+          <div data-gx-target="stops">
+            <GeneratorStopsControls />
+          </div>
         ) : colorbox ? (
           // data-gx-target="colorbox" anchors the ColorBox drop target here (reached via
           // the Generator tab → ColorBox sub-mode reveal chain).

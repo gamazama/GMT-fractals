@@ -31,7 +31,6 @@ import type { JsonValue } from '../../types';
 import type { RGB } from '../core/oklab';
 import { useGeneratorStore, slotSnapshot, restoreGeneratorHistory } from './generatorStore';
 import { registerCustomRamp } from '../core/presetCatalog';
-import { coerceGradientConfig, serializeEditorConfig } from '../core/editorConfig';
 import { num, bool, str, isPlainObject } from './coerceJson';
 
 export const serializeGeneratorDocument = (): JsonValue => {
@@ -48,9 +47,6 @@ export const serializeGeneratorDocument = (): JsonValue => {
     detail: s.detail,
     smooth: s.smooth,
     noiseSeed: s.noiseSeed,
-    // Stops-mode gradient — a portable GradientConfig (serialised through the same
-    // editor serialiser the Stops MODE uses, so it round-trips identically).
-    stopsConfig: serializeEditorConfig(s.stopsConfig),
   };
 };
 
@@ -101,9 +97,6 @@ export const restoreGeneratorDocument = (snap: JsonValue): void => {
   const slotB = rampB ? registerCustomRamp(rampB, str(s.slotBName) ?? 'Slot B') : cur.slotB;
 
   const tracks = sanitizeTracks(s.tracks);
-  // Coerce the untrusted stops doc (never throws, null on garbage) — keep the current
-  // stops gradient if the scene's is missing/malformed rather than blanking it.
-  const stopsConfig = coerceGradientConfig(s.stopsConfig) ?? cur.stopsConfig;
   restoreGeneratorHistory({
     slotA,
     slotB,
@@ -113,6 +106,5 @@ export const restoreGeneratorDocument = (snap: JsonValue): void => {
     detail: num(s.detail, 8),
     smooth: num(s.smooth, 5),
     noiseSeed: num(s.noiseSeed, 1),
-    stopsConfig,
   });
 };

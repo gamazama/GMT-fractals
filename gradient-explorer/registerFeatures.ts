@@ -11,7 +11,10 @@ import { registerPaletteUI } from '../palette/registerPaletteUI';
 import { setFavientSelectMode } from '../palette/core/favientTargets';
 import { registerGradientTargets } from './gradientTargets';
 
-registerPaletteUI();
+// Stops is folded into the Generator's Stops sub-mode in the studio, so the standalone
+// Stops MODE tab is OFF here (the engine stops store + providers + dock controls remain —
+// the Generator hosts them). app-gmt keeps the separate tab (default).
+registerPaletteUI({ standaloneStopsMode: false });
 
 // The "select → reveal → place" drop targets — every gradient destination (Generator
 // slots, Stops, Favients, Fullscreen, Export) registered into the engine (c) send-target
