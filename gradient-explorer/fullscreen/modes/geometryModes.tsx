@@ -73,6 +73,6 @@ export const BUILTIN_MODES: readonly FullscreenMode[] = [
     { key: 'archHalfWidth', label: 'Width', min: 0.05, max: 3, step: 0.01, default: GEOM_DEFAULTS.archHalfWidth },
     { key: 'archCy', label: 'Centre Y', min: 0.5, max: 2.5, step: 0.01, default: GEOM_DEFAULTS.archCy },
     { key: 'archSpan', label: 'Span', min: 0.3, max: 2.5, step: 0.01, default: GEOM_DEFAULTS.archSpan },
-    { key: 'archCurve', label: 'Curvature', min: -0.3, max: 0.3, step: 0.005, default: GEOM_DEFAULTS.archCurve },
+    { key: 'archCurve', label: 'Curvature', min: -0.6, max: 0.6, step: 0.005, default: GEOM_DEFAULTS.archCurve },
   ], 'drag the handles to shape the band · the curvature handle bends the spine · Esc to close'),
 ];

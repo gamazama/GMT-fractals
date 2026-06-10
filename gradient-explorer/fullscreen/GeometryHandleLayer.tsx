@@ -345,14 +345,15 @@ const RadialHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   const diry = u.h - gcy;
   const dm = Math.hypot(dirx, diry) || 1;
   const dir = { x: dirx / dm, y: diry / dm };
-  const tang = { x: -dir.y, y: dir.x };
   const scaleR = P.radialScale * diag;
   const scalePos = pin(u, { x: gcx + dir.x * scaleR, y: gcy + dir.y * scaleR });
 
+  // Bias rides the radius between centre and scale; dragging it TOWARD/AWAY from the centre
+  // (radially, along `dir`) eases the falloff — reads more naturally than a tangential skew.
   const biasAnchor = { x: gcx + dir.x * 0.5 * scaleR, y: gcy + dir.y * 0.5 * scaleR };
-  const biasDrag = useBiasDrag(env, 'radial', 'radialBias', biasAnchor, tang, reach);
+  const biasDrag = useBiasDrag(env, 'radial', 'radialBias', biasAnchor, dir, reach);
   const biasOff = (P.radialBias / BIAS_MAX) * reach;
-  const biasPos = pin(u, { x: biasAnchor.x + tang.x * biasOff, y: biasAnchor.y + tang.y * biasOff });
+  const biasPos = pin(u, { x: biasAnchor.x + dir.x * biasOff, y: biasAnchor.y + dir.y * biasOff });
   const cpos = pin(u, { x: gcx, y: gcy });
 
   return (

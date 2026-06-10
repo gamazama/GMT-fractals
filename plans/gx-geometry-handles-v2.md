@@ -90,7 +90,7 @@ Rt = archR * (1 + archCurve * a*a)          // curve>0 grows R toward ends → f
 d  = hypot(ux, uy − archCy)
 band = archHalfWidth − |d − Rt|             // unchanged shape of the test
 ```
-`archCurve = 0 → Rt = archR →` identical band. Range `[-0.3, 0.3]` (tunable). Width max
+`archCurve = 0 → Rt = archR →` identical band. Range `[-0.6, 0.6]`. Width max
 raised `1 → 3` (isotropic half-units) so the band can fill the stage; the width handle pins
 inside the stage when the band overshoots (existing `pin()`).
 
