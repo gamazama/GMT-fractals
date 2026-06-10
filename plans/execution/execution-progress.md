@@ -520,6 +520,14 @@ merges, plan amendments. Newest first.)_
   (CLEANUP, run first): items 2+4+5+6** — lower-risk, foundational (5's shared GL helper benefits later mode
   work), gets debt out before the visible feature. **Session B (the marquee): item 1** — on-screen geometry
   handles + hide control, with visual iteration. Both serial in-`dev` (touch shared overlay/store).
+  **Session B (item 1) design RATIFIED (user, 2026-06-10):** on-screen direct-manipulation handles per
+  geometry mode — radial (centre dot) · conic (angle ring handle) · arched (**all 4** as handles: position
+  dot + radius + width + span) · s-curve (bend control point); spline already on-screen, random 'amount'
+  (count, non-spatial) stays a minimal control. **Hide control = VISIBLE with AUTO-FADE ON IDLE** (show on
+  open + on hover/interaction, fade after a few idle seconds; manual toggle too). Handles auto-suppress
+  during PNG export. Item 1 still needs the fullscreenStore GeometryParams extension (carry the per-geom
+  params, driven by handles not sliders); paramFields metadata defines which params + ranges. Reuse the 2D
+  signifier-overlay precedent (liquify handle dots / parallax ring) + shared pointer-capture drag primitives.
 - 2026-06-10 — **✅ fullscreen-v2 PARALLAX MERGED** into integration `e8e4c09` (merge of `exec/fs-parallax`;
   commit `bd22054`, 5 files +1008/−1 — 4 new under `modes/parallax/` + `parallaxMode.tsx` + the one additive
   `modes/index.ts` register line; overlay core untouched). **THE 3 SPLASHY MODES (spline · liquify · parallax)
