@@ -182,14 +182,18 @@ export class ParallaxRenderer {
     this.fieldInternal = floatOk ? gl.RGBA16F : gl.RGBA8;
     this.fieldType = floatOk ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
 
-    this.spriteProg = linkProgram(gl, SPRITE_VERT, SPRITE_FRAG, { label: 'ParallaxRenderer' }).prog;
-    this.presentProg = linkProgram(gl, VERT_QUAD, PRESENT_FRAG, { label: 'ParallaxRenderer' }).prog;
-    for (const u of ['uResolution', 'uCam', 'uSizeScale', 'uLut', 'uIntensity', 'uHalo']) {
-      this.sLoc[u] = gl.getUniformLocation(this.spriteProg, u);
-    }
-    for (const u of ['uField', 'uLut', 'uBlueNoise', 'uBlueNoiseRes', 'uDither', 'uExposure', 'uWashMode']) {
-      this.pLoc[u] = gl.getUniformLocation(this.presentProg, u);
-    }
+    const sprite = linkProgram(gl, SPRITE_VERT, SPRITE_FRAG, {
+      uniforms: ['uResolution', 'uCam', 'uSizeScale', 'uLut', 'uIntensity', 'uHalo'],
+      label: 'ParallaxRenderer',
+    });
+    this.spriteProg = sprite.prog;
+    this.sLoc = sprite.uniforms;
+    const present = linkProgram(gl, VERT_QUAD, PRESENT_FRAG, {
+      uniforms: ['uField', 'uLut', 'uBlueNoise', 'uBlueNoiseRes', 'uDither', 'uExposure', 'uWashMode'],
+      label: 'ParallaxRenderer',
+    });
+    this.presentProg = present.prog;
+    this.pLoc = present.uniforms;
 
     // One corner VBO serves both passes: sprite quad corners (divisor 0) + the present quad.
     this.cornerVbo = gl.createBuffer()!;
