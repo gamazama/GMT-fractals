@@ -86,12 +86,15 @@ async function main() {
     await page.waitForTimeout(350);
   };
 
-  // [1] per-geometry: layer mounts, a drag writes the param, the render changes
+  // [1] per-geometry: layer mounts, a drag writes the param, the render changes.
+  // handle indices follow each component's <g> render order (see GeometryHandleLayer):
+  //   linear: 0=angle 1=bias · radial: 0=scale 1=bias 2=centre · conic: 0=rotation 1=mirror …
+  //   2=centre · arched: 0=apex 1=radius 2=width 3=span 4=curvature.
   const cases: Array<{ geom: string; handle: number; dx: number; dy: number; param: string }> = [
-    { geom: 'radial', handle: 0, dx: 120, dy: 60, param: 'radialCx' },
+    { geom: 'linear', handle: 1, dx: 0, dy: 90, param: 'linearBias' },
+    { geom: 'radial', handle: 2, dx: 120, dy: 60, param: 'radialCx' },
     { geom: 'conic', handle: 0, dx: 0, dy: -120, param: 'conicAngle' },
     { geom: 'arched', handle: 0, dx: 0, dy: 80, param: 'archCy' },
-    { geom: 'scurve', handle: 0, dx: 90, dy: 0, param: 'scurveShape' },
   ];
   for (const c of cases) {
     await setGeom(c.geom);
@@ -119,6 +122,7 @@ async function main() {
     { idx: 1, dx: 0, dy: -50, param: 'archR' },
     { idx: 2, dx: 0, dy: -40, param: 'archHalfWidth' },
     { idx: 3, dx: 40, dy: 40, param: 'archSpan' },
+    { idx: 4, dx: 30, dy: 30, param: 'archCurve' },
   ];
   for (const a of archDrags) {
     const before = (await getParams())[a.param];
@@ -128,7 +132,26 @@ async function main() {
     console.log(`[2] arched #${a.idx} → ${a.param}=${after.toFixed(3)} ✓`);
   }
 
-  // [3] double-click resets the param (unset key = default)
+  // [2b] conic mirror is a discovery: collapsed by default (3 handles — rotation/mirror/centre),
+  // and pulling the mirror handle off the rotation handle reveals the two bias handles.
+  await setGeom('conic');
+  await page.evaluate(async () => {
+    const s = await import('/palette/store/fullscreenStore.ts');
+    (s as any).resetFullscreenGeomParams();
+  });
+  await page.waitForTimeout(300);
+  const gCount = () => page.locator('[data-testid="geometry-handle-layer"] svg g').count();
+  const before = await gCount();
+  await dragHandle(1, 0, -90); // orbit the mirror handle off the seam
+  const mirror = (await getParams()).conicMirror;
+  if (mirror === undefined || mirror <= 0) fail(`conic mirror drag did not open the mirror (conicMirror=${mirror})`);
+  const after = await gCount();
+  if (after <= before) fail(`pulling the mirror out did not reveal the bias handles (${before} → ${after})`);
+  console.log(`[2b] conic mirror: ${before} → ${after} handles, conicMirror=${mirror.toFixed(3)} ✓`);
+
+  // [3] double-click resets the param (unset key = default). Back to arched (whose apex set
+  // archCy in [2]); double-clicking the apex handle (g0) clears it.
+  await setGeom('arched');
   const g0 = page.locator('[data-testid="geometry-handle-layer"] svg g').nth(0);
   await g0.dblclick();
   await page.waitForTimeout(250);

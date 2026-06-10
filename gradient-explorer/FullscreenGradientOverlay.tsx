@@ -17,7 +17,7 @@
  * Opened via `openFullscreen(config, name)` — the receive path of the "Fullscreen" send-target
  * registered in `gradient-explorer/gradientTargets.ts` (a bottom-row well in the P2-A dock).
  *
- * All view state (mode / seed / amount / open / split / dither) is transient + shell-scoped in
+ * All view state (mode / geomParams / open / split / dither) is transient + shell-scoped in
  * `fullscreenStore` (not DDFS, not persisted). The geometry mappings are pure; this component owns
  * the canvas paint + the chrome, and dispatches mode lifecycle to the registry.
  *
@@ -28,11 +28,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { renderStopsToRamp, renderStopsToBuffer } from '../palette/core/gmtGradient';
-import {
-  RANDOM_MAX_DIM,
-  DEFAULT_BACKGROUND,
-  isStochastic,
-} from '../palette/core/rampGeometry';
+import { DEFAULT_BACKGROUND } from '../palette/core/rampGeometry';
 import {
   closeFullscreen,
   setFullscreenConfig,
@@ -66,12 +62,10 @@ const CONTINUOUS_MAX_DIM = 2560;
  *  renders at this cap (slightly soft, fast) and snaps back to full resolution on release. */
 const INTERACT_MAX_DIM = 1280;
 
-/** The ctx params handed to modes: handle-driven shape params (`geomParams`) with the
- *  dedicated `amount`/`seed` fields spread LAST so they always win (the random mode's own
- *  controls). An unset key resolves to its GEOM_DEFAULT inside the pure mappers —
- *  byte-identical to the pre-handles render. ONE definition so the spread-order invariant
- *  can't drift between the live-paint and ownCanvas-context paths. */
-const buildParams = (fs: FullscreenState) => ({ ...fs.geomParams, amount: fs.amount, seed: fs.seed });
+/** The ctx params handed to modes: the handle-driven shape params. An unset key resolves to
+ *  its GEOM_DEFAULT inside the pure mappers — byte-identical to the pre-handles render. ONE
+ *  definition so the live-paint and ownCanvas-context paths can't drift. */
+const buildParams = (fs: FullscreenState) => fs.geomParams;
 
 /** Resolves the live "working" gradient (the last-modified hero) and reports it upward. Mounted
  *  whenever the overlay is open (split AND plain fullscreen now share this one live path), so the
@@ -181,8 +175,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
       width: 0,
       height: 0,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildParams reads exactly these
-    [ramp, lut, fs.amount, fs.seed, fs.geomParams],
+    [ramp, lut, fs.geomParams],
   );
   const ctxRef = useRef(modeCtx);
   ctxRef.current = modeCtx;
@@ -195,7 +188,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
     if (!comp || !stage || !ramp || !lut) return;
     const mode = getFullscreenMode(fs.geom);
     if (!mode || mode.kind === 'ownCanvas') return;
-    const fullCap = isStochastic(fs.geom) ? RANDOM_MAX_DIM : CONTINUOUS_MAX_DIM;
+    const fullCap = CONTINUOUS_MAX_DIM;
     // A handle drag in flight renders at a reduced cap (pointer-rate repaints must be cheap);
     // releasing the drag flips `interacting` off, which re-creates `paint` → full-res repaint.
     const cap = fs.interacting ? Math.min(fullCap, INTERACT_MAX_DIM) : fullCap;
@@ -209,9 +202,9 @@ export const FullscreenGradientOverlay: React.FC = () => {
     const h = Math.max(1, Math.round(ch * scale));
     comp.setSize(w, h);
     comp.dither = fs.dither;
-    // Shape params (radial centre, conic angle, arch r/w/pos/span, s-curve shape) come from the
-    // store's `geomParams` — written by the on-screen handle layer, threaded here from OUTSIDE
-    // the pure mappers (see `buildParams` for the spread-order invariant).
+    // Shape params (linear angle/bias, radial centre/scale/bias, conic centre/rotation/mirror,
+    // arch r/w/pos/span/curvature) come from the store's `geomParams` — written by the on-screen
+    // handle layer, threaded here from OUTSIDE the pure mappers.
     const ctx = { ramp, lut, params: buildParams(fs), width: w, height: h };
     if (mode.kind === 'glQuad') {
       comp.uploadLut(lut); // only glQuad modes sample uLut; cpuField bakes colour on the CPU
@@ -221,8 +214,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
     } else {
       comp.presentRaster(mode.raster!(ctx), w, h);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildParams reads amount/seed/geomParams
-  }, [ramp, lut, fs.geom, fs.amount, fs.seed, fs.geomParams, fs.dither, fs.interacting]);
+  }, [ramp, lut, fs.geom, fs.geomParams, fs.dither, fs.interacting]);
 
   // Repaint on open + whenever the geometry / params / ramp change — COALESCED to one paint
   // per animation frame: a handle drag emits store updates at pointer rate, and each re-created
@@ -396,8 +388,9 @@ export const FullscreenGradientOverlay: React.FC = () => {
           ))}
         </div>
 
-        {/* The active mode's own self-contained controls (Randomized's amount/re-roll, the
-            fractal's mapping/repeats/phase/cycle, Liquify's brushes/physics, …). */}
+        {/* The active mode's own self-contained controls (the fractal's mapping/repeats/phase/
+            cycle, Liquify's brushes/physics, …). The geometry modes drive their shape via the
+            on-screen handle layer, so they declare no toolbar controls. */}
         {ActiveControls && <ActiveControls />}
 
         <div className="flex items-center gap-2 ml-auto">

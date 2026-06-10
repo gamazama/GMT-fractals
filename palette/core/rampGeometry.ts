@@ -28,12 +28,13 @@
 import type { RGB } from './oklab';
 
 /** The geometries the gallery cycles. Room left for Diamond / Mirror / Bands.
- *  `fractal` is special: it is GPU-rendered by `engine/fractal`'s
- *  FractalColorRenderer (a live Mandelbrot coloured by the ramp), NOT one of the
- *  pure 2D `sampleGeometry` fields — the overlay mounts a WebGL canvas for it and
- *  bypasses `renderGeometry`. It lives in this union/list only so the selector
- *  offers it; `sampleGeometry`/`renderGeometry` treat it as a no-op flat field. */
-export type GeometryId = 'linear' | 'radial' | 'conic' | 'arched' | 'scurve' | 'random' | 'fractal';
+ *  `linear` is a rotatable, eased gradient (it absorbed the old `scurve` mode — its
+ *  `linearBias` IS an s-curve). `fractal` is special: it is GPU-rendered by
+ *  `engine/fractal`'s FractalColorRenderer (a live Mandelbrot coloured by the ramp), NOT
+ *  one of the pure 2D `sampleGeometry` fields — the overlay mounts a WebGL canvas for it
+ *  and bypasses `renderGeometry`. It lives in this union/list only so the selector offers
+ *  it; `sampleGeometry`/`renderGeometry` treat it as a no-op flat field. */
+export type GeometryId = 'linear' | 'radial' | 'conic' | 'arched' | 'fractal';
 
 /** Ordered selector list (id + human label). */
 export const GEOMETRIES: ReadonlyArray<{ id: GeometryId; label: string }> = [
@@ -41,14 +42,8 @@ export const GEOMETRIES: ReadonlyArray<{ id: GeometryId; label: string }> = [
   { id: 'radial', label: 'Radial' },
   { id: 'conic', label: 'Conic' },
   { id: 'arched', label: 'Arched' },
-  { id: 'scurve', label: 'S-curve' },
-  { id: 'random', label: 'Randomized' },
   { id: 'fractal', label: 'Fractal' },
 ];
-
-/** Whether a geometry consumes the seed/amount controls (only `random` does). Accepts a
- *  string since the active-mode id is now a registry key (a superset of `GeometryId`). */
-export const isStochastic = (geom: string): boolean => geom === 'random';
 
 /** Whether a geometry is the GPU-rendered live fractal (its own WebGL canvas +
  *  live phase/repeats/mapping controls), not a pure 2D `sampleGeometry` field. */
@@ -70,24 +65,38 @@ export const isFractal = (geom: string): boolean => geom === 'fractal';
  *   byte-identically when the field is absent.
  */
 export interface GeometryParams {
-  // ── stochastic field (`random`) ────────────────────────────────────────
-  /** Randomization strength 0..1 (point density + colour jitter). Only `random` reads it. */
-  amount?: number;
-  /** PRNG seed — a re-roll mints a new seed; a fixed seed reproduces the field exactly. */
-  seed?: number;
+  // ── linear (rotatable, eased — absorbed the old scurve mode) ────────────
+  /** [linear] gradient direction in radians (0 = horizontal `nx`, the legacy linear). */
+  linearAngle?: number;
+  /** [linear] s-curve bias (0 = straight ramp; ±drives an ease-in-out / inverse S via {@link bias}). */
+  linearBias?: number;
   // ── continuous-geometry shape controls (the formerly hard-coded constants) ──
   /** [radial] centre offset in isotropic units (0,0 = frame centre). */
   radialCx?: number;
   radialCy?: number;
+  /** [radial] outer-radius scale (1 = corner reaches ramp end; <1 tightens, >1 overshoots). */
+  radialScale?: number;
+  /** [radial] falloff bias (0 = linear falloff; ± eases it via {@link bias}). */
+  radialBias?: number;
   /** [conic] sweep rotation in radians (0 = the legacy orientation). */
   conicAngle?: number;
+  /** [conic] centre offset in isotropic units (0,0 = frame centre). */
+  conicCx?: number;
+  conicCy?: number;
+  /** [conic] mirrored-sweep width 0..0.5 — fraction of the circle the `1→0` return arc occupies.
+   *  0 = collapsed (plain `0→1` wrap, byte-identical legacy); 0.5 = a symmetric mirror. >0
+   *  reflects the sweep so there's no hard seam. */
+  conicMirror?: number;
+  /** [conic] bias of the rising (`0→1`) and falling (`1→0`) mirror halves (0 = linear). */
+  conicBiasA?: number;
+  conicBiasB?: number;
   /** [arched] band geometry — centre-Y / radius / half-width / ± sweep span (isotropic units). */
   archCy?: number;
   archR?: number;
   archHalfWidth?: number;
   archSpan?: number;
-  /** [scurve] eased-shape strength (0 = the legacy Perlin smootherstep; ±drives toe/shoulder bias). */
-  scurveShape?: number;
+  /** [arched] spine curvature (0 = circular arc; ± bends the band flatter/tighter, independent of radius). */
+  archCurve?: number;
   // ── spline (path) mode — the gradient flows along an editable Catmull-Rom path ──
   // Scalar shape controls only; the control-point LIST is mode-private (a variable-length
   // array can't be a flat scalar key) and lives in the spline mode's own store. These two
@@ -105,18 +114,25 @@ export interface GeometryParams {
  *  params object resolves to the matching entry here — and these are the EXACT legacy
  *  constants, so a default-valued params renders byte-identically to the pre-gate code. */
 export const GEOM_DEFAULTS = {
-  amount: 0.5,
-  seed: 1,
+  linearAngle: 0,
+  linearBias: 0,
   radialCx: 0,
   radialCy: 0,
+  radialScale: 1,
+  radialBias: 0,
   conicAngle: 0,
+  conicCx: 0,
+  conicCy: 0,
+  conicMirror: 0,
+  conicBiasA: 0,
+  conicBiasB: 0,
   // Arched band: a circular arc whose centre sits below the frame so the band sweeps
   // across the top. Tuned in isotropic units (uy = −1 at the top edge).
   archCy: 1.35,
   archR: 2.3,
   archHalfWidth: 0.3,
   archSpan: 1.15, // ± angle (radians) the band sweeps through
-  scurveShape: 0,
+  archCurve: 0,
   // Spline path: a gentle diffusion spread, flat depth (full-bleed fill) by default.
   splineSpread: 0.15,
   splineDepth: 0,
@@ -160,65 +176,20 @@ export const mulberry32 = (seed: number): (() => number) => {
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 /** Wrap into [0,1) — used when a rotation can push an angle param past the ±π seam. */
 const wrap01 = (v: number): number => v - Math.floor(v);
-/** smootherstep — Ken Perlin's C2 ease (the S in "S-curve"). */
-const smootherstep = (t: number): number => {
-  const x = clamp01(t);
-  return x * x * x * (x * (x * 6 - 15) + 10);
-};
-/** Shaped S-curve ease. `shape === 0` is EXACTLY {@link smootherstep} (the legacy
- *  default, byte-identical); shape ≠ 0 biases the toe/shoulder via a symmetric gamma so
- *  the curve stays in [0,1] and monotone. Positive = lazier start / harder finish.
- *  Exported so the on-screen handle layer draws the SAME curve it manipulates. */
-export const easeShaped = (t: number, shape: number): number => {
-  const s = smootherstep(t);
-  if (shape === 0) return s;
-  // gamma in (0,∞): >1 pushes the curve down (slower start), <1 lifts it (faster start).
-  const gamma = Math.exp(-shape);
-  return Math.pow(s, gamma);
-};
 
-/** Stochastic field render-resolution cap (long edge) — keeps the splat loop bounded. */
-export const RANDOM_MAX_DIM = 1024;
-
+/** Bias steepness scale: maps a bias param in ~[-2,2] to a usable gain-exponent range. */
+const BIAS_K = 1.6;
 /**
- * Build the stochastic dot field. Points are generated in a stable order from
- * `seed` alone (so raising `amount` only ever ADDS dots on top of the same field),
- * then `amount` scales how many are kept and how much colour-jitter each carries.
- * Each dot splats a soft 1px-radius disk so the field reads as anti-aliased.
+ * Signed S-curve ease (Inigo Quilez "gain"). `b === 0` is EXACTLY the identity (early
+ * return, byte-identical to a straight ramp); `b > 0` is an S-curve (ease-in-out / contrast);
+ * `b < 0` is the inverse S. Monotone and stays in [0,1]. ONE bias used by linear / radial /
+ * both conic mirror halves. Exported so the on-screen handle layer draws the curve it drives.
  */
-const fillRandom = (s: GeometrySample, amount: number, seed: number): void => {
-  const { width: w, height: h, pos, cov } = s;
-  const a = clamp01(amount);
-  const rng = mulberry32(seed);
-  // Density 1%..7% of the area; the void stays background.
-  const count = Math.floor(w * h * (0.01 + a * 0.06));
-  const jitter = a * 0.25; // colour position jitter, in ramp-units
-  const splat = (px: number, py: number, t: number): void => {
-    for (let dy = -1; dy <= 1; dy++) {
-      const y = py + dy;
-      if (y < 0 || y >= h) continue;
-      for (let dx = -1; dx <= 1; dx++) {
-        const x = px + dx;
-        if (x < 0 || x >= w) continue;
-        // Soft disk: full at centre, ~0.4 on the 4-neighbours, ~0.15 on diagonals.
-        const c = dx === 0 && dy === 0 ? 1 : dx === 0 || dy === 0 ? 0.4 : 0.15;
-        const i = y * w + x;
-        if (c > cov[i]) {
-          cov[i] = c;
-          pos[i] = t;
-        }
-      }
-    }
-  };
-  for (let n = 0; n < count; n++) {
-    const fx = rng();
-    const fy = rng();
-    const fj = rng();
-    // Colour follows the horizontal position, jittered by `amount`.
-    const t = clamp01(fx + (fj - 0.5) * 2 * jitter);
-    // fx,fy ∈ [0,1) → floor(·*w) ∈ [0, w-1], so the right/bottom edges can host a dot.
-    splat(Math.floor(fx * w), Math.floor(fy * h), t);
-  }
+export const bias = (t: number, b: number): number => {
+  if (b === 0) return t;
+  const k = Math.exp(b * BIAS_K);
+  const u = clamp01(t);
+  return u < 0.5 ? 0.5 * Math.pow(2 * u, k) : 1 - 0.5 * Math.pow(2 * (1 - u), k);
 };
 
 /**
@@ -236,68 +207,88 @@ export const sampleGeometry = (
   const cov = new Float32Array(n); // 0 by default
   const sample: GeometrySample = { width, height, pos, cov };
 
-  if (geom === 'random') {
-    fillRandom(sample, params.amount ?? GEOM_DEFAULTS.amount, params.seed ?? GEOM_DEFAULTS.seed);
-    return sample;
-  }
-
   // ── continuous geometries: every pixel is covered (cov = 1) unless a band masks it.
   // Shape geometries (radial/conic/arched) work in CENTRED, ISOTROPIC units — pixel
   // offsets divided by half the SHORTER side — so a circle stays a circle on a wide
-  // canvas instead of stretching into an ellipse. Linear/S-curve stay on nx (they're
-  // horizontal, aspect-independent).
+  // canvas instead of stretching into an ellipse. Linear projects onto its angle axis in
+  // normalised box space (nx/ny).
   const cxp = (width - 1) / 2;
   const cyp = (height - 1) / 2;
   const half = Math.max(1e-6, Math.min(cxp, cyp));
   const radialNorm = 1 / Math.max(1e-6, Math.hypot(cxp, cyp) / half); // corner → 1
   // Per-mode shape params — flat-optional, each falling back to its legacy constant so a
   // default-valued params renders byte-identically to the pre-gate code.
+  const linearBias = params.linearBias ?? GEOM_DEFAULTS.linearBias;
   const radialCx = params.radialCx ?? GEOM_DEFAULTS.radialCx;
   const radialCy = params.radialCy ?? GEOM_DEFAULTS.radialCy;
+  const radialScale = Math.max(1e-3, params.radialScale ?? GEOM_DEFAULTS.radialScale);
+  const radialBias = params.radialBias ?? GEOM_DEFAULTS.radialBias;
   const conicAngle = params.conicAngle ?? GEOM_DEFAULTS.conicAngle;
+  const conicCx = params.conicCx ?? GEOM_DEFAULTS.conicCx;
+  const conicCy = params.conicCy ?? GEOM_DEFAULTS.conicCy;
+  const conicMirror = params.conicMirror ?? GEOM_DEFAULTS.conicMirror;
+  const conicBiasA = params.conicBiasA ?? GEOM_DEFAULTS.conicBiasA;
+  const conicBiasB = params.conicBiasB ?? GEOM_DEFAULTS.conicBiasB;
   const archCy = params.archCy ?? GEOM_DEFAULTS.archCy;
   const archR = params.archR ?? GEOM_DEFAULTS.archR;
   const archHalfWidth = params.archHalfWidth ?? GEOM_DEFAULTS.archHalfWidth;
   const archSpan = params.archSpan ?? GEOM_DEFAULTS.archSpan;
-  const scurveShape = params.scurveShape ?? GEOM_DEFAULTS.scurveShape;
+  const archCurve = params.archCurve ?? GEOM_DEFAULTS.archCurve;
+
+  // Linear projection axis in ISOTROPIC units so the angle is screen-true (a 45° gradient
+  // looks 45° on any aspect). The projection is remapped from its corner range to [0,1]. At
+  // angle 0 this reduces EXACTLY to nx (byte-identical legacy linear), independent of aspect.
+  const linearAngle = params.linearAngle ?? GEOM_DEFAULTS.linearAngle;
+  const lc = Math.cos(linearAngle);
+  const ls = Math.sin(linearAngle);
+  const ax = cxp / half; // half-extent of ux at the frame edge
+  const ay = cyp / half; // half-extent of uy at the frame edge
+  const lProjAbs = Math.abs(lc) * ax + Math.abs(ls) * ay; // projection at the far corner
+  const lSpan = Math.max(1e-6, 2 * lProjAbs);
+  // Conic at all-default centre + angle + mirror keeps the EXACT legacy expression (no
+  // wrap01) so a default-valued params is byte-identical to the pre-gate field.
+  const conicLegacy = conicCx === 0 && conicCy === 0 && conicAngle === 0 && conicMirror === 0;
+  const conicSplit = 1 - conicMirror; // rising-arc fraction when mirrored
 
   for (let y = 0; y < height; y++) {
-    const ny = height > 1 ? y / (height - 1) : 0;
     const uy = (y - cyp) / half;
     for (let x = 0; x < width; x++) {
-      const nx = width > 1 ? x / (width - 1) : 0;
       const ux = (x - cxp) / half;
       const i = y * width + x;
       let p = 0;
       let c = 1;
       switch (geom) {
         case 'linear':
-          p = nx;
+          p = bias((ux * lc + uy * ls + lProjAbs) / lSpan, linearBias);
           break;
         case 'radial':
-          p = clamp01(Math.hypot(ux - radialCx, uy - radialCy) * radialNorm);
+          p = bias(
+            clamp01((Math.hypot(ux - radialCx, uy - radialCy) * radialNorm) / radialScale),
+            radialBias,
+          );
           break;
         case 'conic': {
-          const ang = Math.atan2(uy, ux); // -π..π, true angle (aspect-correct)
-          // Default (conicAngle === 0) keeps the EXACT legacy expression; a rotation
-          // wraps into [0,1) so the ±π seam doesn't clip.
-          p = conicAngle === 0
-            ? (ang + Math.PI) / (2 * Math.PI)
-            : wrap01((ang + conicAngle + Math.PI) / (2 * Math.PI));
+          const ang = Math.atan2(uy - conicCy, ux - conicCx); // -π..π, true angle
+          if (conicLegacy) {
+            p = bias((ang + Math.PI) / (2 * Math.PI), conicBiasA);
+          } else {
+            const phi = wrap01((ang + conicAngle + Math.PI) / (2 * Math.PI)); // [0,1)
+            if (conicMirror <= 0) p = bias(phi, conicBiasA);
+            else if (phi < conicSplit) p = bias(phi / conicSplit, conicBiasA); // rising 0→1
+            else p = bias(1 - (phi - conicSplit) / conicMirror, conicBiasB); // falling 1→0
+          }
           break;
         }
-        case 'scurve':
-          p = easeShaped(nx, scurveShape);
-          break;
         case 'arched': {
+          // Sweep angle from straight-up; the target radius bends with it (curvature).
+          const ang = Math.atan2(ux, archCy - uy); // 0 at top, ± toward sides
+          const Rt = archR * (1 + archCurve * ang * ang);
           const d = Math.hypot(ux, uy - archCy);
-          const band = archHalfWidth - Math.abs(d - archR);
+          const band = archHalfWidth - Math.abs(d - Rt);
           if (band <= 0) {
             c = 0; // outside the band → background
             p = 0;
           } else {
-            // Position runs along the arc by angle from straight-up.
-            const ang = Math.atan2(ux, archCy - uy); // 0 at top, ± toward sides
             p = clamp01((ang + archSpan) / (2 * archSpan));
             // Soft edge over the outer ~25% of the half-width for an anti-aliased band.
             c = clamp01(band / (archHalfWidth * 0.25));

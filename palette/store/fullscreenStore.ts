@@ -2,9 +2,9 @@
  * fullscreenStore — the W11 fullscreen gradient-config gallery's transient UI state.
  *
  * Shell-scoped + session-only — like `pickerSearch` and the rest of the W4 well /
- * preview state. NOT DDFS, NOT persisted, NOT undoable: the selected geometry, the
- * re-roll seed, and the randomization amount are pure VIEW choices over a gradient,
- * never part of the document. The previewed `config` is a snapshot handed in at open
+ * preview state. NOT DDFS, NOT persisted, NOT undoable: the selected geometry and its
+ * shape params are pure VIEW choices over a gradient, never part of the document. The
+ * previewed `config` is a snapshot handed in at open
  * time (from a hero toolbar button or a dropped gradient payload) — the overlay is
  * display-only and never writes it back.
  *
@@ -19,7 +19,7 @@
 
 import { useSyncExternalStore } from 'react';
 import type { GradientConfig } from '../../types';
-import { mulberry32, type GeometryParams } from '../core/rampGeometry';
+import type { GeometryParams } from '../core/rampGeometry';
 
 export interface FullscreenState {
   open: boolean;
@@ -31,15 +31,11 @@ export interface FullscreenState {
    *  A string (not the `GeometryId` union) so parallel mode streams add ids without a store
    *  edit. */
   geom: string;
-  /** Re-roll seed for the stochastic geometry (a roll mints a new one). */
-  seed: number;
-  /** Randomization strength 0..1. */
-  amount: number;
-  /** The flat-optional geometry shape params driven by the ON-SCREEN handles (radial centre,
-   *  conic angle, arch radius/width/position/span, s-curve shape). ADDITIVE over the gate:
-   *  an UNSET key resolves to its `GEOM_DEFAULTS` entry inside the pure mappers, so `{}`
-   *  renders byte-identically to the pre-handles overlay (the determinism pin). `amount` /
-   *  `seed` stay as the dedicated fields above (the random mode's minimal controls). */
+  /** The flat-optional geometry shape params driven by the ON-SCREEN handles (linear angle/bias,
+   *  radial centre/scale/bias, conic centre/rotation/mirror/bias, arch radius/width/position/span/
+   *  curvature). ADDITIVE over the gate: an UNSET key resolves to its `GEOM_DEFAULTS` entry inside
+   *  the pure mappers, so `{}` renders byte-identically to the pre-handles overlay (the
+   *  determinism pin). */
   geomParams: GeometryParams;
   /** On-screen geometry handles master toggle (the toolbar force-hide). The layer also
    *  auto-fades on idle independently of this. */
@@ -66,8 +62,6 @@ const CLOSED: FullscreenState = {
   config: null,
   name: 'Gradient',
   geom: 'linear',
-  seed: 1,
-  amount: 0.5,
   geomParams: {},
   handles: true,
   interacting: false,
@@ -134,18 +128,9 @@ export const setFullscreenDither = (on: boolean): void => {
   emit({ ...state, dither: on });
 };
 
-/** Re-roll the stochastic field with a fresh seed (kept in [1, 2^31)). */
-export const rerollFullscreen = (): void => {
-  // Advance to the next seed via the SAME shared PRNG the field uses (not Math.random)
-  // — one determinism story, and the field for any given seed stays reproducible.
-  const next = Math.floor(mulberry32(state.seed)() * 0x7fffffff) || 1;
-  emit({ ...state, seed: next });
-};
-
-/** The geometry shape params a handle may write. `amount`/`seed` are excluded
- *  STRUCTURALLY: the overlay's ctx spread gives the dedicated `fs.amount`/`fs.seed` fields
- *  precedence, so a geomParams write to them would be a silent no-op. */
-export type HandleParamKey = Exclude<keyof GeometryParams, 'amount' | 'seed'>;
+/** The geometry shape params a handle may write — every `GeometryParams` field is handle-
+ *  driven now (the spline path's own scalar fields are written by its editor, not here). */
+export type HandleParamKey = keyof GeometryParams;
 
 /** Set geometry shape params in ONE emit (an on-screen handle drag writes here; the overlay
  *  threads `geomParams` into the render ctx, so the pure mappers see it from the OUTSIDE).
@@ -186,12 +171,6 @@ export const setFullscreenHandles = (on: boolean): void => {
 export const setFullscreenInteracting = (on: boolean): void => {
   if (on === state.interacting) return;
   emit({ ...state, interacting: on });
-};
-
-export const setFullscreenAmount = (amount: number): void => {
-  const a = amount < 0 ? 0 : amount > 1 ? 1 : amount;
-  if (a === state.amount) return;
-  emit({ ...state, amount: a });
 };
 
 /** Subscribe a component to the whole fullscreen view state. */
