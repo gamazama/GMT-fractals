@@ -17,7 +17,7 @@
  * Opened via `openFullscreen(config, name)` — the receive path of the "Fullscreen" send-target
  * registered in `gradient-explorer/gradientTargets.ts` (a bottom-row well in the P2-A dock).
  *
- * All view state (mode / seed / amount / open / split / dither) is transient + shell-scoped in
+ * All view state (mode / geomParams / open / split / dither) is transient + shell-scoped in
  * `fullscreenStore` (not DDFS, not persisted). The geometry mappings are pure; this component owns
  * the canvas paint + the chrome, and dispatches mode lifecycle to the registry.
  *
@@ -28,11 +28,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { renderStopsToRamp, renderStopsToBuffer } from '../palette/core/gmtGradient';
-import {
-  RANDOM_MAX_DIM,
-  DEFAULT_BACKGROUND,
-  isStochastic,
-} from '../palette/core/rampGeometry';
+import { DEFAULT_BACKGROUND } from '../palette/core/rampGeometry';
 import {
   closeFullscreen,
   setFullscreenConfig,
@@ -40,13 +36,16 @@ import {
   setFullscreenSplit,
   setFullscreenSplitY,
   setFullscreenDither,
+  setFullscreenHandles,
   useFullscreenState,
+  type FullscreenState,
 } from '../palette/store/fullscreenStore';
 import { useActiveHeroSelection } from '../palette/store/heroSelection';
 import { usePaletteEditorStore } from '../palette/store/paletteEditorStore';
 import { useGeneratorDerived } from '../palette/store/generatorStore';
 import type { GradientConfig } from '../types';
 import { FullscreenCompositor } from './fullscreen/FullscreenCompositor';
+import { GeometryHandleLayer, hasGeometryHandles } from './fullscreen/GeometryHandleLayer';
 import { getFullscreenMode, listFullscreenModes } from './fullscreen/modeRegistry';
 import type { FullscreenModeContext, OwnCanvasHandle } from './fullscreen/modeRegistry';
 import './fullscreen/modes'; // registers the builtin modes at import time
@@ -57,6 +56,16 @@ import { Z } from '../components/ui/zIndex';
  *  renders at (near-)native device pixels: error-diffusion dither must be at display resolution,
  *  or the browser's bilinear upscale stretches the step-runs and re-introduces banding. */
 const CONTINUOUS_MAX_DIM = 2560;
+
+/** Long-edge cap while a handle drag is in flight: the full-res CPU field + error diffusion
+ *  costs ~100ms+ at 2560 on big displays — far too slow for pointer-rate repaints. A drag
+ *  renders at this cap (slightly soft, fast) and snaps back to full resolution on release. */
+const INTERACT_MAX_DIM = 1280;
+
+/** The ctx params handed to modes: the handle-driven shape params. An unset key resolves to
+ *  its GEOM_DEFAULT inside the pure mappers — byte-identical to the pre-handles render. ONE
+ *  definition so the live-paint and ownCanvas-context paths can't drift. */
+const buildParams = (fs: FullscreenState) => fs.geomParams;
 
 /** Resolves the live "working" gradient (the last-modified hero) and reports it upward. Mounted
  *  whenever the overlay is open (split AND plain fullscreen now share this one live path), so the
@@ -162,11 +171,11 @@ export const FullscreenGradientOverlay: React.FC = () => {
     () => ({
       ramp: ramp ?? [],
       lut: lut ?? new Uint8Array(1024),
-      params: { amount: fs.amount, seed: fs.seed },
+      params: buildParams(fs),
       width: 0,
       height: 0,
     }),
-    [ramp, lut, fs.amount, fs.seed],
+    [ramp, lut, fs.geomParams],
   );
   const ctxRef = useRef(modeCtx);
   ctxRef.current = modeCtx;
@@ -179,7 +188,10 @@ export const FullscreenGradientOverlay: React.FC = () => {
     if (!comp || !stage || !ramp || !lut) return;
     const mode = getFullscreenMode(fs.geom);
     if (!mode || mode.kind === 'ownCanvas') return;
-    const cap = isStochastic(fs.geom) ? RANDOM_MAX_DIM : CONTINUOUS_MAX_DIM;
+    const fullCap = CONTINUOUS_MAX_DIM;
+    // A handle drag in flight renders at a reduced cap (pointer-rate repaints must be cheap);
+    // releasing the drag flips `interacting` off, which re-creates `paint` → full-res repaint.
+    const cap = fs.interacting ? Math.min(fullCap, INTERACT_MAX_DIM) : fullCap;
     const cw = stage.clientWidth;
     const ch = stage.clientHeight;
     // Render at native device pixels (×DPR, capped at 2) so the dither lands on real display
@@ -190,10 +202,10 @@ export const FullscreenGradientOverlay: React.FC = () => {
     const h = Math.max(1, Math.round(ch * scale));
     comp.setSize(w, h);
     comp.dither = fs.dither;
-    // params beyond amount/seed (radial centre, conic angle, arch r/w/pos, s-curve shape) are
-    // declared in each mode's `paramFields` as the frozen contract for the FS1 polish wave; until
-    // then the modes render at GEOM_DEFAULTS.
-    const ctx = { ramp, lut, params: { amount: fs.amount, seed: fs.seed }, width: w, height: h };
+    // Shape params (linear angle/bias, radial centre/scale/bias, conic centre/rotation/mirror,
+    // arch r/w/pos/span/curvature) come from the store's `geomParams` — written by the on-screen
+    // handle layer, threaded here from OUTSIDE the pure mappers.
+    const ctx = { ramp, lut, params: buildParams(fs), width: w, height: h };
     if (mode.kind === 'glQuad') {
       comp.uploadLut(lut); // only glQuad modes sample uLut; cpuField bakes colour on the CPU
       comp.presentMode(mode, ctx);
@@ -202,11 +214,16 @@ export const FullscreenGradientOverlay: React.FC = () => {
     } else {
       comp.presentRaster(mode.raster!(ctx), w, h);
     }
-  }, [ramp, lut, fs.geom, fs.amount, fs.seed, fs.dither]);
+  }, [ramp, lut, fs.geom, fs.geomParams, fs.dither, fs.interacting]);
 
-  // Repaint on open + whenever the geometry / seed / amount / ramp change.
+  // Repaint on open + whenever the geometry / params / ramp change — COALESCED to one paint
+  // per animation frame: a handle drag emits store updates at pointer rate, and each re-created
+  // `paint` cancels the previous pending frame, so a fast drag costs one full-field CPU render
+  // per displayed frame instead of one per pointermove.
   useEffect(() => {
-    if (fs.open) paint();
+    if (!fs.open) return;
+    const id = requestAnimationFrame(() => paint());
+    return () => cancelAnimationFrame(id);
   }, [fs.open, paint]);
 
   // Repaint whenever the stage itself resizes — window resize, the toolbar wrapping when controls
@@ -371,8 +388,9 @@ export const FullscreenGradientOverlay: React.FC = () => {
           ))}
         </div>
 
-        {/* The active mode's own self-contained controls (Randomized's amount/re-roll, the
-            fractal's mapping/repeats/phase/cycle, Liquify's brushes/physics, …). */}
+        {/* The active mode's own self-contained controls (the fractal's mapping/repeats/phase/
+            cycle, Liquify's brushes/physics, …). The geometry modes drive their shape via the
+            on-screen handle layer, so they declare no toolbar controls. */}
         {ActiveControls && <ActiveControls />}
 
         <div className="flex items-center gap-2 ml-auto">
@@ -393,6 +411,20 @@ export const FullscreenGradientOverlay: React.FC = () => {
           >
             ⇅ Split
           </button>
+          {hasGeometryHandles(fs.geom) && (
+            <button
+              onClick={() => setFullscreenHandles(!fs.handles)}
+              title="On-screen shape handles — drag them on the image to reshape the gradient (they fade when idle and never export)"
+              aria-pressed={fs.handles}
+              className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+                fs.handles
+                  ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100'
+                  : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+              }`}
+            >
+              ◉ Handles
+            </button>
+          )}
           <button
             onClick={() => setFullscreenDither(!fs.dither)}
             title="Blue-noise dither — smooths 8-bit banding on the ramp (bakes into the PNG)"
@@ -432,6 +464,10 @@ export const FullscreenGradientOverlay: React.FC = () => {
         ) : (
           <canvas key="geom-2d" ref={canvasRef} className="absolute inset-0 w-full h-full" />
         )}
+        {/* On-screen geometry handles — a DOM/SVG layer ABOVE the canvas (so PNG export, which
+            reads the canvas back, can never contain it). The layer itself decides whether the
+            active geometry has handles, fades on idle, and honours the toolbar toggle. */}
+        {!isOwnCanvas && <GeometryHandleLayer />}
         {isOwnCanvas && ownError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/60 text-center px-6">
             <div className="text-[13px] text-gray-200">Couldn’t start {activeMode!.label}</div>

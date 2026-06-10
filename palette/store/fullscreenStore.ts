@@ -2,9 +2,9 @@
  * fullscreenStore — the W11 fullscreen gradient-config gallery's transient UI state.
  *
  * Shell-scoped + session-only — like `pickerSearch` and the rest of the W4 well /
- * preview state. NOT DDFS, NOT persisted, NOT undoable: the selected geometry, the
- * re-roll seed, and the randomization amount are pure VIEW choices over a gradient,
- * never part of the document. The previewed `config` is a snapshot handed in at open
+ * preview state. NOT DDFS, NOT persisted, NOT undoable: the selected geometry and its
+ * shape params are pure VIEW choices over a gradient, never part of the document. The
+ * previewed `config` is a snapshot handed in at open
  * time (from a hero toolbar button or a dropped gradient payload) — the overlay is
  * display-only and never writes it back.
  *
@@ -19,7 +19,7 @@
 
 import { useSyncExternalStore } from 'react';
 import type { GradientConfig } from '../../types';
-import { mulberry32 } from '../core/rampGeometry';
+import type { GeometryParams } from '../core/rampGeometry';
 
 export interface FullscreenState {
   open: boolean;
@@ -31,10 +31,18 @@ export interface FullscreenState {
    *  A string (not the `GeometryId` union) so parallel mode streams add ids without a store
    *  edit. */
   geom: string;
-  /** Re-roll seed for the stochastic geometry (a roll mints a new one). */
-  seed: number;
-  /** Randomization strength 0..1. */
-  amount: number;
+  /** The flat-optional geometry shape params driven by the ON-SCREEN handles (linear angle/bias,
+   *  radial centre/scale/bias, conic centre/rotation/mirror/bias, arch radius/width/position/span/
+   *  curvature). ADDITIVE over the gate: an UNSET key resolves to its `GEOM_DEFAULTS` entry inside
+   *  the pure mappers, so `{}` renders byte-identically to the pre-handles overlay (the
+   *  determinism pin). */
+  geomParams: GeometryParams;
+  /** On-screen geometry handles master toggle (the toolbar force-hide). The layer also
+   *  auto-fades on idle independently of this. */
+  handles: boolean;
+  /** True while a handle drag is in flight — the overlay renders at a reduced cap during
+   *  interaction (cheap, responsive) and snaps back to full resolution on release. */
+  interacting: boolean;
   /** Split layout: app on top, fullscreen preview docked on the bottom (the user's
    *  splitscreen). The preview live-follows the last-modified hero while split is on. */
   split: boolean;
@@ -54,8 +62,9 @@ const CLOSED: FullscreenState = {
   config: null,
   name: 'Gradient',
   geom: 'linear',
-  seed: 1,
-  amount: 0.5,
+  geomParams: {},
+  handles: true,
+  interacting: false,
   split: false,
   splitY: 0.55,
   dither: true,
@@ -119,18 +128,49 @@ export const setFullscreenDither = (on: boolean): void => {
   emit({ ...state, dither: on });
 };
 
-/** Re-roll the stochastic field with a fresh seed (kept in [1, 2^31)). */
-export const rerollFullscreen = (): void => {
-  // Advance to the next seed via the SAME shared PRNG the field uses (not Math.random)
-  // — one determinism story, and the field for any given seed stays reproducible.
-  const next = Math.floor(mulberry32(state.seed)() * 0x7fffffff) || 1;
-  emit({ ...state, seed: next });
+/** The geometry shape params a handle may write — every `GeometryParams` field is handle-
+ *  driven now (the spline path's own scalar fields are written by its editor, not here). */
+export type HandleParamKey = keyof GeometryParams;
+
+/** Set geometry shape params in ONE emit (an on-screen handle drag writes here; the overlay
+ *  threads `geomParams` into the render ctx, so the pure mappers see it from the OUTSIDE).
+ *  Batched so a 2-axis drag (radial centre) is a single state transition — no torn
+ *  cx-moved/cy-stale frame for synchronous subscribers, one listener sweep per move. */
+export const setFullscreenGeomParams = (patch: Partial<Record<HandleParamKey, number>>): void => {
+  let next: GeometryParams | null = null;
+  for (const [k, v] of Object.entries(patch) as [HandleParamKey, number][]) {
+    if (!Number.isFinite(v) || state.geomParams[k] === v) continue;
+    next = next ?? { ...state.geomParams };
+    next[k] = v;
+  }
+  if (next) emit({ ...state, geomParams: next });
 };
 
-export const setFullscreenAmount = (amount: number): void => {
-  const a = amount < 0 ? 0 : amount > 1 ? 1 : amount;
-  if (a === state.amount) return;
-  emit({ ...state, amount: a });
+/** Single-param convenience over {@link setFullscreenGeomParams}. */
+export const setFullscreenGeomParam = (key: HandleParamKey, value: number): void => {
+  setFullscreenGeomParams({ [key]: value });
+};
+
+/** Clear geometry shape params back to their `GEOM_DEFAULTS` (an unset key IS the default).
+ *  With `keys`, clears only those (a handle's double-click reset); without, clears all. */
+export const resetFullscreenGeomParams = (keys?: readonly HandleParamKey[]): void => {
+  const ks = keys ?? (Object.keys(state.geomParams) as HandleParamKey[]);
+  if (!ks.some((k) => k in state.geomParams)) return;
+  const next = { ...state.geomParams };
+  for (const k of ks) delete next[k];
+  emit({ ...state, geomParams: next });
+};
+
+/** Master show/hide for the on-screen geometry handles (the toolbar toggle). */
+export const setFullscreenHandles = (on: boolean): void => {
+  if (on === state.handles) return;
+  emit({ ...state, handles: on });
+};
+
+/** Flag a handle drag in flight (the overlay drops to a reduced render cap while true). */
+export const setFullscreenInteracting = (on: boolean): void => {
+  if (on === state.interacting) return;
+  emit({ ...state, interacting: on });
 };
 
 /** Subscribe a component to the whole fullscreen view state. */
