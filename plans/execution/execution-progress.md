@@ -492,6 +492,8 @@ merges, plan amendments. Newest first.)_
   (`rampGeometry.ts:107-123`). • Live-binding = **one split-gated conditional** (overlay `:115-117`
   `fs.split && liveSplit`) + `SplitLiveSource` mounts only when split — fullscreen live-follow ≈ drop the
   guard + mount the live source unconditionally; ownCanvas `onContext` plumbing already handles LUT swaps.
+  **RATIFIED (user, 2026-06-10): always-live, NO pin/live toggle** — fullscreen hides the app UI so there is
+  no modification path while open; live ≡ pinned in practice. Unify on split's resolution path (one code path).
   • Fractal-knobs→mode-local-store migration: 6 fields + setters in fullscreenStore (`:47-65`, `:160-220`),
   liquifyStore is the template (~150 LOC). • GL compile/link/blue-noise scaffolding **triplicated**
   (Compositor `:102-155` · LiquifyRenderer `:91-155` · FractalColorRenderer `:311-348`) → ~80-LOC shared
