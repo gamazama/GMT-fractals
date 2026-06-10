@@ -476,6 +476,24 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-10 — **FOLD-IN POLISH SCOPE RATIFIED (user decisions).** The 6-item pre-scope is reshaped:
+  **(1) customizability — KEEP, but RESHAPED: on-screen DIRECT-MANIPULATION handles, NOT slider panels.**
+  Expose the geometry params as draggable on-canvas elements (radial centre dot · conic angle handle · arch
+  radius/width/position handles · s-curve control point), child-simple drag. Spline already is on-screen
+  (no change); parallax/liquify already direct-manip. **Each mode's on-screen handles need a HIDE/SHOW
+  control** (toggle so the clean gradient shows unobstructed). 'amount' (random dot count) isn't spatial →
+  may stay a minimal control. paramFields metadata still drives WHICH params exist + ranges; the UI is
+  handles, not a generic slider strip. **(2) live-binding — KEEP as the small cleanup** (drop the fs.split
+  guard, unify on split's resolution path; near-invisible since fullscreen has no edit path — user ratified).
+  **(3) animated preview + shared clock — DROPPED** (user: no animated-preview feature, so no clock is
+  needed; it served only that feature). **(4) fractal knobs → mode-local store — KEEP (cleanup).** **(5) GL
+  dedupe + context-loss recovery — KEEP (cleanup + the real fix: none of the 3 ownCanvas modes recover from
+  webglcontextlost today).** **(6) nits (spline docstring + fractal DPR) — KEEP (fix).**
+  **SEQUENCING: split into 2 sessions** (item 1 is now design/visual-iteration interaction work; 2/4/5/6 are
+  mechanical cleanup + 5 touches the FROZEN compositor = high blast radius, wants its own review). **Session A
+  (CLEANUP, run first): items 2+4+5+6** — lower-risk, foundational (5's shared GL helper benefits later mode
+  work), gets debt out before the visible feature. **Session B (the marquee): item 1** — on-screen geometry
+  handles + hide control, with visual iteration. Both serial in-`dev` (touch shared overlay/store).
 - 2026-06-10 — **✅ fullscreen-v2 PARALLAX MERGED** into integration `e8e4c09` (merge of `exec/fs-parallax`;
   commit `bd22054`, 5 files +1008/−1 — 4 new under `modes/parallax/` + `parallaxMode.tsx` + the one additive
   `modes/index.ts` register line; overlay core untouched). **THE 3 SPLASHY MODES (spline · liquify · parallax)
