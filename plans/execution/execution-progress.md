@@ -485,6 +485,26 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-10 — **PT PERF+QUALITY VALIDATION session SCOPED** (cutover-blocker: bucket-render PT noise). User
+  reports the **low-FPS perf warning is now FIXED** (drop #6 from the perf backlog). Read-only probe mapped the
+  PT/bucket/accumulation system + harnesses. **KEY FINDING: the bucket-noise is well-CHARACTERIZED, the gap is
+  MEASUREMENT.** Root causes already documented (`docs/gmt/43_Bucket_Render_Overhaul.md:103-114`): (1) bloom/CA
+  run per-tile on isolated composites → edge samples black → the **main visible seam** (v2 plan = "render bloom
+  once, sample many"; today a UI warning fires when cols×rows>1 && bloom>0); (2) blue-noise tile-repeat — **already
+  FIXED** (noiseCoord offset by `uFullOutputResolution + uTilePixelOrigin`); (3) **convergence-variance seams** —
+  buckets can converge at different sample counts (scene-complexity-dependent) → boundary variance; mitigation
+  exists (min-sample + threshold) but **no "all buckets to equal convergence" enforcement**. Accumulation =
+  ping-pong float MRT, **deterministic per-bucket Halton(accumulationCount) seeding** (`FractalEngine.ts:508-510`)
+  → reproducible diffs are achievable. Harnesses TODAY: `opus-shot.mts` (headless PNG + sigma, multi-SPP via
+  configOverrides) + `render-harness.ts` (perf mode, fps p50/p95) + `bench-perf.mts` (app-wide) — **adequate for
+  smoke, NOT rigorous**: no ground-truth-relative convergence metric (sigma is raw pixel variance, not MSE-vs-
+  reference), no seam-isolation metric, no render-time×resolution matrix, no headless bucket loop. **⚠ HEADLESS =
+  ANGLE/SwiftShader ≠ real GPU** (degrades after ~16 launches) → relative metrics (convergence ratio, seam delta)
+  are GPU-robust but ABSOLUTE timing is headless-indicative-only → the harness must ALSO be user-runnable on the
+  real GPU for timing + final visual sign-off. **Session = BUILD a reproducible PT-validation harness + RUN it →
+  decision-grade report** (is bucket render production-quality for target export res; if not, which named fix
+  closes it + the quantified residual). Measurement + report only — any seam FIX is a follow-up the findings
+  scope. Serial in-`dev` branch. Prompt emitted in-turn.
 - 2026-06-10 — **✅ PROMOTION KNOCK-OUT BATCH MERGED** into integration `0da97d0` (merge of `exec/promo-batch`,
   3 commits; 18 files +288/−80 — new `.gitattributes`). **All 7 scoped units landed (item 3 did NOT balloon)
   + a user-ratified follow-up.** Units: (1) "Mixed"→"Mixer" (label + `GeneratorMode` literal; persisted int id
