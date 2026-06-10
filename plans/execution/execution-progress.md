@@ -485,6 +485,45 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-10 — **✅ PROMOTION KNOCK-OUT BATCH MERGED** into integration `0da97d0` (merge of `exec/promo-batch`,
+  3 commits; 18 files +288/−80 — new `.gitattributes`). **All 7 scoped units landed (item 3 did NOT balloon)
+  + a user-ratified follow-up.** Units: (1) "Mixed"→"Mixer" (label + `GeneratorMode` literal; persisted int id
+  stays 0; `gen:mixed` nav id kept); (2) Mixer reset (`resetMix`, one undo, ↺ in MixBlend); (3) **Stops as a
+  3rd generator MODE** (`generatorMode` 0/1→0/1/2, reuses the engine `AdvancedGradientEditor` as-is); (4) Mix
+  sliders rebuilt as **grabbable A↔B thumbs** on a tinted track (DraggableNumber-driven → precision/soft-bounds/
+  click-to-edit/keyframe intact); (5) favients add→last-group (`lastGroupId` tracked + persisted, new
+  `LS_LASTGROUP` key, additive); (6) `test:compat` GREEN — drift was a **CRLF/LF working-copy artifact** (blob
+  unchanged), pinned via a **narrow single-path `.gitattributes` LF** rule (masks nothing); (7) 3 nits —
+  GeometryHandleLayer clears `interacting` on unmount (load-bearing: the perf fix drives `comp.dither` off
+  `fs.interacting`, so a stuck flag would pin the reduced-dither cap), FractalColorRenderer `detectFormat()`
+  moved into `build()` (re-probes on context-restore, runs ≤2×, no per-frame cost), parallax Stir reads 0.05
+  not 0. **FOLLOW-UP (`4cd496b`, post-dated the session's /code-review → orchestrator reviewed it hardest):
+  STOPS UNIFIED onto the shared `paletteEditorStore`** — reverted the separate generator `stopsConfig`; the
+  Generator's Stops sub-mode now edits the shared engine stops document (Blend/Output/Reset dock controls fold
+  into the Generator tab, stops-mode only); **the standalone Stops studio MODE is REMOVED** (MODE_STAGES,
+  MOBILE_MODES, panel manifest, CENTRE_MIRRORED_MODES, REVEAL_STEPS; the `stops` send-target repointed to
+  Generator→Stops via a new `gen:stops` reveal step; dead `mode==='stops'` overlay branch removed; engine stops
+  store + paletteEditor/stops doc providers stay registered UNCONDITIONALLY). Plus favients **add-duplication
+  BUG fix** (was prepending at index 0 → split a mid-list same-label group into two contiguity-blocks; now
+  inserts at the target group's run start) + **group-name collision disambiguation** (renameGroup " 2"/" 3"…).
+  **Independent review = MERGE-CLEAN, no bugs** (verified: **app-gmt byte-UNCHANGED** — `standaloneStopsMode`
+  defaults true + app-gmt passes no args, so it keeps its standalone Stops tab + PaletteEditorFeature; the
+  Explorer opts out in `registerFeatures.ts`; no dangling studio-`'stops'` refs in live code; a stale persisted
+  `activeRightTab='Stops'` falls back to Picker gracefully [Stage + pickActive both degrade, no blank studio];
+  the send-target reveal chain resolves to Generator→Stops, not a void; doc providers registered exactly once,
+  undo brackets route through the shared `paramUndoBracket`; `generatorMode` int ids stable → saved 0/1 scenes
+  load fine; mix-thumb math no NaN/div0; favients fixes terminate; `.gitattributes` narrow + masks nothing).
+  User visual confirm ("working well, visual tests pass"). Gate green (tsc 0 · test:palette 44/44 · test:compat
+  44/44 matches). **2 non-blocking NITS → backlog:** (n-pb-1) `EditorStage.tsx` is now an unreferenced ORPHAN
+  in dev/ (superseded by Generator·Stops; was edited in the batch but harmless) — deletable in a cleanup pass.
+  (n-pb-2) stops-mode still computes `built.ramp`/`ghost` memos unused (the expensive Douglas-Peucker fit IS
+  gated; residual is cheap — acknowledged in-comment). **CONFLICT CANDIDATES (shared-shell — for parallel
+  palette streams):** `registerPaletteUI.ts` (+`standaloneStopsMode` option, additive default-true) ·
+  GradientExplorerApp.tsx (MODE_STAGES/MOBILE_MODES) · `setup.ts` (panel manifest) · `gradientTargets.ts`
+  (`gen:stops` step + stops revealPath) · `paletteGenerator.ts` (hosts `palette-editor-dock` at
+  generatorMode eq 2) · `.gitattributes` (new). **app-gmt fold-in of Stops is a SEPARATE decision** (flip its
+  registerPaletteUI call if wanted). **This clears the generator-polish + favients-add roadmap items; the path
+  to dev→prod is now: the user's remaining perf items + a final coherence pass + promotion.**
 - 2026-06-10 — **✅ GEOMETRY-MODE PERF FIX landed on integration `9d8730d` + DEPLOYED.** Committed directly
   onto `exec/gradient-explorer` by the user's perf session (Fable-co-authored), not a branch. The cpuField
   geometry modes (linear/radial/conic/arched) ran two full per-pixel CPU passes/frame (sampleGeometry +
