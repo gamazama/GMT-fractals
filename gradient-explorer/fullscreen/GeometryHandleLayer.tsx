@@ -38,7 +38,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GEOM_DEFAULTS, bias, type GeometryParams } from '../../palette/core/rampGeometry';
+import { GEOM_DEFAULTS, bias, archRadiusAt, type GeometryParams } from '../../palette/core/rampGeometry';
 import {
   resetFullscreenGeomParams,
   setFullscreenGeomParams,
@@ -203,26 +203,52 @@ const useParamDrag = (
 };
 
 /**
- * Bias drag: a transverse (perpendicular) pointer offset from the handle's on-axis anchor
- * maps linearly to the bias param (0 on the axis → ±BIAS_MAX at ±BIAS_REACH). Absolute (not
- * delta-accumulated) so the dot tracks the finger; grabbing the offset dot re-reads its own
- * bias, so there's no jump. Used by linear / radial / both conic halves.
+ * Bias drag: pointer travel ALONG `tangent` maps to the bias param (±BIAS_REACH px of travel =
+ * ±BIAS_MAX), delta-accumulated from the value at grab (× precision). Delta — not absolute —
+ * so grabbing the dot never jumps even when it's `pin()`-clamped off its true anchor, and it
+ * honours Shift/Alt. Used by linear / radial / both conic halves.
  */
 const useBiasDrag = (
   env: HandleEnv,
   geomId: string,
   key: HandleParamKey,
-  anchor: { x: number; y: number },
   tangent: { x: number; y: number },
   reach: number,
-) =>
-  useHandleDrag(env, {
-    onStart: () => {},
+) => {
+  const acc = useRef({ b: 0, last: 0 });
+  return useHandleDrag(env, {
+    onStart: (pt) => {
+      acc.current = { b: env.P[key], last: pt.x * tangent.x + pt.y * tangent.y };
+    },
     onMove: (pt) => {
-      const perp = (pt.x - anchor.x) * tangent.x + (pt.y - anchor.y) * tangent.y;
-      setFullscreenGeomParams({ [key]: clampToField(geomId, key, (perp / reach) * BIAS_MAX) });
+      const m = pt.x * tangent.x + pt.y * tangent.y;
+      const b = clampToField(geomId, key, acc.current.b + ((m - acc.current.last) / reach) * BIAS_MAX * pt.mult);
+      acc.current.b = b;
+      acc.current.last = m;
+      setFullscreenGeomParams({ [key]: b });
     },
   });
+};
+
+/** Two-axis centre drag (the gradient origin dot): batched delta accumulation on both keys,
+ *  one emit per move. The 2D sibling of {@link useParamDrag} — radial + conic share it. */
+const useCentreDrag = (env: HandleEnv, geomId: string, keyX: HandleParamKey, keyY: HandleParamKey) => {
+  const { u, P } = env;
+  const acc = useRef({ x: 0, y: 0, lx: 0, ly: 0 });
+  return useHandleDrag(env, {
+    onStart: (pt) => {
+      acc.current = { x: P[keyX], y: P[keyY], lx: pt.x, ly: pt.y };
+    },
+    onMove: (pt) => {
+      const a = acc.current;
+      a.x = clampToField(geomId, keyX, a.x + ((pt.x - a.lx) / u.half) * pt.mult);
+      a.y = clampToField(geomId, keyY, a.y + ((pt.y - a.ly) / u.half) * pt.mult);
+      a.lx = pt.x;
+      a.ly = pt.y;
+      setFullscreenGeomParams({ [keyX]: a.x, [keyY]: a.y });
+    },
+  });
+};
 
 /** Keep a handle's DISPLAYED position reachable — pin it just inside the stage when the
  *  shape math puts it off-screen (drags are delta-based, so a pinned dot still works). */
@@ -273,10 +299,9 @@ const LinearHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   const dx = Math.cos(P.linearAngle);
   const dy = Math.sin(P.linearAngle); // axis dir (screen-true)
   const tx = -dy;
-  const ty = dx; // perpendicular
-  const anchor = { x: u.cx, y: u.cy }; // bias rides the axis midpoint (centre)
+  const ty = dx; // perpendicular — the bias dot rides the axis midpoint, drags across it
 
-  const biasDrag = useBiasDrag(env, 'linear', 'linearBias', anchor, { x: tx, y: ty }, reach);
+  const biasDrag = useBiasDrag(env, 'linear', 'linearBias', { x: tx, y: ty }, reach);
   const angleDrag = useParamDrag(env, 'linear', 'linearAngle', (pt) => Math.atan2(pt.y - u.cy, pt.x - u.cx), {
     angular: true,
     wrapValue: true,
@@ -323,20 +348,7 @@ const RadialHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   const diag = Math.hypot(u.w / 2, u.h / 2); // screen px where scale=1 reaches (the corner)
   const reach = BIAS_REACH * Math.min(u.w, u.h);
 
-  const cAcc = useRef({ cx: 0, cy: 0, lx: 0, ly: 0 });
-  const centreDrag = useHandleDrag(env, {
-    onStart: (pt) => {
-      cAcc.current = { cx: P.radialCx, cy: P.radialCy, lx: pt.x, ly: pt.y };
-    },
-    onMove: (pt) => {
-      const a = cAcc.current;
-      a.cx = clampToField('radial', 'radialCx', a.cx + ((pt.x - a.lx) / u.half) * pt.mult);
-      a.cy = clampToField('radial', 'radialCy', a.cy + ((pt.y - a.ly) / u.half) * pt.mult);
-      a.lx = pt.x;
-      a.ly = pt.y;
-      setFullscreenGeomParams({ radialCx: a.cx, radialCy: a.cy });
-    },
-  });
+  const centreDrag = useCentreDrag(env, 'radial', 'radialCx', 'radialCy');
   const scaleDrag = useParamDrag(env, 'radial', 'radialScale', (pt) => Math.hypot(pt.x - gcx, pt.y - gcy) / diag);
 
   // Scale handle runs toward the nearest stage corner from the gradient centre, so scale=1
@@ -351,7 +363,7 @@ const RadialHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   // Bias rides the radius between centre and scale; dragging it TOWARD/AWAY from the centre
   // (radially, along `dir`) eases the falloff — reads more naturally than a tangential skew.
   const biasAnchor = { x: gcx + dir.x * 0.5 * scaleR, y: gcy + dir.y * 0.5 * scaleR };
-  const biasDrag = useBiasDrag(env, 'radial', 'radialBias', biasAnchor, dir, reach);
+  const biasDrag = useBiasDrag(env, 'radial', 'radialBias', dir, reach);
   const biasOff = (P.radialBias / BIAS_MAX) * reach;
   const biasPos = pin(u, { x: biasAnchor.x + dir.x * biasOff, y: biasAnchor.y + dir.y * biasOff });
   const cpos = pin(u, { x: gcx, y: gcy });
@@ -385,20 +397,7 @@ const ConicHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   const rHandle = 0.4 * u.half;
   const biasR = 0.62 * u.half;
 
-  const cAcc = useRef({ cx: 0, cy: 0, lx: 0, ly: 0 });
-  const centreDrag = useHandleDrag(env, {
-    onStart: (pt) => {
-      cAcc.current = { cx: P.conicCx, cy: P.conicCy, lx: pt.x, ly: pt.y };
-    },
-    onMove: (pt) => {
-      const a = cAcc.current;
-      a.cx = clampToField('conic', 'conicCx', a.cx + ((pt.x - a.lx) / u.half) * pt.mult);
-      a.cy = clampToField('conic', 'conicCy', a.cy + ((pt.y - a.ly) / u.half) * pt.mult);
-      a.lx = pt.x;
-      a.ly = pt.y;
-      setFullscreenGeomParams({ conicCx: a.cx, conicCy: a.cy });
-    },
-  });
+  const centreDrag = useCentreDrag(env, 'conic', 'conicCx', 'conicCy');
   // Rotation: the handle sits on the seam (θ = −π − angle); following the pointer rotates the
   // sweep, hence the negated pointer-angle metric (the legacy conic feel).
   const rotDrag = useParamDrag(env, 'conic', 'conicAngle', (pt) => -Math.atan2(pt.y - gcy, pt.x - gcx), {
@@ -424,10 +423,10 @@ const ConicHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
 
   const anchorA = { x: gcx + Math.cos(angA) * biasR, y: gcy + Math.sin(angA) * biasR };
   const tangA = { x: Math.cos(angA), y: Math.sin(angA) }; // radial — drag in/out to bias
-  const biasADrag = useBiasDrag(env, 'conic', 'conicBiasA', anchorA, tangA, reach);
+  const biasADrag = useBiasDrag(env, 'conic', 'conicBiasA', tangA, reach);
   const anchorB = { x: gcx + Math.cos(angB) * biasR, y: gcy + Math.sin(angB) * biasR };
   const tangB = { x: Math.cos(angB), y: Math.sin(angB) };
-  const biasBDrag = useBiasDrag(env, 'conic', 'conicBiasB', anchorB, tangB, reach);
+  const biasBDrag = useBiasDrag(env, 'conic', 'conicBiasB', tangB, reach);
 
   const cpos = pin(u, { x: gcx, y: gcy });
   const rotPos = pin(u, { x: gcx + Math.cos(seamθ) * rHandle, y: gcy + Math.sin(seamθ) * rHandle });
@@ -477,8 +476,9 @@ const ArchedHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   // The band is an arc of the circle centred at (0, archCy) iso — usually OFF-screen below.
   const Cx = u.cx;
   const Cy = u.cy + archCy * u.half;
-  // Target radius bends with the sweep angle (curvature); curve=0 → constant archR (circle).
-  const Rt = (a: number): number => archR * (1 + archCurve * a * a);
+  // Target radius bends with the sweep angle (curvature); the SAME law `sampleGeometry` uses
+  // (archRadiusAt), so the guide arcs trace the exact rendered band — no parallel formula.
+  const Rt = (a: number): number => archRadiusAt(archR, archCurve, a);
   const at = (a: number, rad: number): { x: number; y: number } => ({
     x: Cx + Math.sin(a) * rad * u.half,
     y: Cy - Math.cos(a) * rad * u.half,
@@ -504,9 +504,10 @@ const ArchedHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   const wDrag = useParamDrag(env, 'arched', 'archHalfWidth', distOf);
   const sDrag = useParamDrag(env, 'arched', 'archSpan', angOf, { angular: true });
   // Curvature: at a fixed sample angle, the pointer's arc-centre distance maps to the radius
-  // there (Rt = archR·(1+curve·a²)), so we back out `curve` and drag it directly.
+  // there (Rt = archR·(1+curve·a²)), so we back out `curve` and drag it directly. The aC²
+  // divisor is floored (max(·,0.2)) so a short span doesn't make the handle hypersensitive.
   const aC = -0.7 * archSpan;
-  const curveDrag = useParamDrag(env, 'arched', 'archCurve', (pt) => (distOf(pt) / Math.max(1e-3, archR) - 1) / (aC * aC || 1e-3));
+  const curveDrag = useParamDrag(env, 'arched', 'archCurve', (pt) => (distOf(pt) / Math.max(1e-3, archR) - 1) / Math.max(aC * aC, 0.2));
 
   // Handle layout along distinct angular slots so they never collide.
   const apex = pin(u, at(0, Rt(0)));
@@ -516,12 +517,19 @@ const ArchedHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   const curveP = pin(u, at(aC, Rt(aC)));
   const mirror = at(-archSpan, Rt(-archSpan));
   const deg = (a: number): number => (a * 180) / Math.PI;
+  // The three 49-point guide polylines rebuild only when the band shape/size changes — not on
+  // every pointer-rate re-render (the layer re-renders on each geomParams emit).
+  const paths = useMemo(
+    () => ({ inner: arcPath(-archHalfWidth), outer: arcPath(archHalfWidth), centre: arcPath(0) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [archCy, archR, archHalfWidth, archSpan, archCurve, u.cx, u.cy, u.half],
+  );
   return (
     <>
       {/* guide arcs: band edges (faint) + centre-line (softer), all following the curved spine */}
-      <polyline points={arcPath(-archHalfWidth)} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} />
-      <polyline points={arcPath(archHalfWidth)} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} />
-      <polyline points={arcPath(0)} fill="none" stroke={GUIDE_SOFT} strokeWidth={1} strokeDasharray="4 5" />
+      <polyline points={paths.inner} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} />
+      <polyline points={paths.outer} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} />
+      <polyline points={paths.centre} fill="none" stroke={GUIDE_SOFT} strokeWidth={1} strokeDasharray="4 5" />
       <circle cx={mirror.x} cy={mirror.y} r={3.5} fill={GUIDE_SOFT} />
       <Handle x={apex.x} y={apex.y} title="Position — drag up/down to slide the band" cursor="ns-resize" drag={cyDrag} resetKeys={['archCy']}>
         <Dot />

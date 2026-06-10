@@ -2,7 +2,7 @@
  * Smoke — the on-screen geometry HANDLES drive the gradient end-to-end in a real browser.
  *
  * Drives the live Gradient Explorer headlessly: opens fullscreen on a colourful gradient,
- * walks the four handled geometries (radial / conic / arched / scurve), and for each:
+ * walks the four handled geometries (linear / radial / conic / arched), and for each:
  * asserts the handle layer mounts, drags a handle with real pointer events, and asserts the
  * store param actually changed AND the canvas pixels changed (the param threads through the
  * render ctx). Also checks the toolbar toggle hides the layer and that double-click resets.

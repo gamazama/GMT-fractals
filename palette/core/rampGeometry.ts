@@ -2,20 +2,19 @@
  * rampGeometry — pure, deterministic ramp-geometry mappings for the W11 fullscreen
  * configuration gallery (S6).
  *
- * A gradient's 256-step ramp reads very differently as a ring, an angular sweep, an
- * arched band, an eased S-curve, or a stochastic dot field — and that is where the
- * gradient is actually used (radial maps, fractal colouring, …). These mappings let
- * the fullscreen overlay *show* those geometries over the SAME ramp. They are
- * DISPLAY-ONLY: nothing here mutates gradient data — a mapping samples the existing
- * ramp through a geometry and produces pixels.
+ * A gradient's 256-step ramp reads very differently as a directional sweep, a ring, an
+ * angular sweep, or an arched band — and that is where the gradient is actually used
+ * (radial maps, fractal colouring, …). These mappings let the fullscreen overlay *show*
+ * those geometries over the SAME ramp. They are DISPLAY-ONLY: nothing here mutates gradient
+ * data — a mapping samples the existing ramp through a geometry and produces pixels.
  *
  * Contract (mirrors the rest of `palette/core/`):
  *  • Pure + DOM-free + dependency-light (no canvas, no React) so `core/` stays a
  *    portable library — the actual canvas paint lives in the overlay component, which
  *    only calls `renderGeometry` and `ctx.putImageData`.
- *  • Deterministic. The stochastic `random` field is driven by a SEEDED `mulberry32`
- *    PRNG (per the determinism contract — `debug/test-palette-rampgeometry.mts`
- *    pins it), so the same `(seed, amount)` always renders the same point field.
+ *  • Deterministic. Every mapping is a pure function of `(geom, params, w, h)`, and the
+ *    flat-optional params are ADDITIVE — an omitted field reproduces its `GEOM_DEFAULT`
+ *    byte-for-byte (pinned by `debug/test-palette-rampgeometry.mts`).
  *
  * Each geometry is `(ramp, params, width, height) → RGBA` via `renderGeometry`, built
  * on a pure `sampleGeometry` that yields a per-pixel ramp-position + coverage field
@@ -192,6 +191,13 @@ export const bias = (t: number, b: number): number => {
   return u < 0.5 ? 0.5 * Math.pow(2 * u, k) : 1 - 0.5 * Math.pow(2 * (1 - u), k);
 };
 
+/** The arched band's target radius at sweep angle `ang` from straight-up. `archCurve === 0`
+ *  is a plain circle (radius `archR`); ± bends the spine flatter/tighter. Exported as the
+ *  SINGLE source of the curvature law so the on-screen handle's guide arcs trace the exact
+ *  band `sampleGeometry` renders (they'd silently drift if each kept its own copy). */
+export const archRadiusAt = (archR: number, archCurve: number, ang: number): number =>
+  archR * (1 + archCurve * ang * ang);
+
 /**
  * Sample a geometry into a pure per-pixel position + coverage field. No colours, no
  * canvas — deterministic given `(geom, params, width, height)`.
@@ -280,19 +286,30 @@ export const sampleGeometry = (
           break;
         }
         case 'arched': {
-          // Sweep angle from straight-up; the target radius bends with it (curvature).
-          const ang = Math.atan2(ux, archCy - uy); // 0 at top, ± toward sides
-          const Rt = archR * (1 + archCurve * ang * ang);
           const d = Math.hypot(ux, uy - archCy);
-          const band = archHalfWidth - Math.abs(d - Rt);
-          if (band <= 0) {
-            c = 0; // outside the band → background
-            p = 0;
+          // Common case (curve=0 → circular band): the band test needs no angle, so the cheap
+          // `atan2` for the POSITION only runs for in-band pixels (most of the frame is void).
+          let ang: number;
+          let band: number;
+          if (archCurve === 0) {
+            band = archHalfWidth - Math.abs(d - archR);
+            if (band <= 0) {
+              c = 0; // outside the band → background (p stays 0)
+              break;
+            }
+            ang = Math.atan2(ux, archCy - uy);
           } else {
-            p = clamp01((ang + archSpan) / (2 * archSpan));
-            // Soft edge over the outer ~25% of the half-width for an anti-aliased band.
-            c = clamp01(band / (archHalfWidth * 0.25));
+            // Curved spine: the target radius depends on the sweep angle, so compute it first.
+            ang = Math.atan2(ux, archCy - uy); // 0 at top, ± toward sides
+            band = archHalfWidth - Math.abs(d - archRadiusAt(archR, archCurve, ang));
+            if (band <= 0) {
+              c = 0;
+              break;
+            }
           }
+          p = clamp01((ang + archSpan) / (2 * archSpan));
+          // Soft edge over the outer ~25% of the half-width for an anti-aliased band.
+          c = clamp01(band / (archHalfWidth * 0.25));
           break;
         }
       }
