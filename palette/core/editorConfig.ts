@@ -73,3 +73,15 @@ export const coerceGradientConfig = (snap: unknown): GradientConfig | null => {
 /** Snapshot a config as a plain JSON-value (deep clone — stable against later store mutation). */
 export const serializeEditorConfig = (config: GradientConfig): JsonValue =>
     JSON.parse(JSON.stringify(config)) as JsonValue;
+
+/**
+ * Normalise an AdvancedGradientEditor `onChange` payload into a full GradientConfig.
+ * The editor emits the object form, but tolerates the legacy bare-`GradientStop[]`
+ * shape defensively — in which case the caller's current blend/output space is
+ * preserved (only the stops change). Shared by every host that mounts the editor
+ * (the studio Stops MODE and the Generator's Stops mode) so the rule can't drift.
+ */
+export const applyEditorChange = (
+    prev: GradientConfig,
+    val: GradientStop[] | GradientConfig,
+): GradientConfig => (Array.isArray(val) ? { ...prev, stops: val } : val);

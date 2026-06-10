@@ -76,8 +76,9 @@ export const PaletteGeneratorFeature: FeatureDefinition = {
     generatorMode: {
       type: 'int', default: 0, hidden: true, label: 'Generator mode',
       options: [
-        { label: 'Mixed', value: 0, hint: 'Blend two source gradients per channel.' },
+        { label: 'Mixer', value: 0, hint: 'Blend two source gradients per channel.' },
         { label: 'ColorBox', value: 1, hint: 'Sweep each OKLCh channel start→end under an easing curve.' },
+        { label: 'Stops', value: 2, hint: 'Hand-author the gradient stop by stop.' },
       ],
     },
 
@@ -123,8 +124,11 @@ export const PaletteGeneratorFeature: FeatureDefinition = {
     // Inline lightness/chroma/hue toggles, nested in the Noise group under Frequency.
     { componentId: 'palette-noise-targets', group: 'Noise', parentId: 'noiseFreq' },
     // Modify+Noise actions (Bake → curve / Reset mods / Reseed), grouped under the mods.
-    // Mixed-mode only — they act on the mix/global chain, which ColorBox doesn't use.
+    // Mixer-mode only — they act on the mix/global chain, which ColorBox/Stops don't use.
     { componentId: 'palette-modifier-actions', condition: { param: 'generatorMode', eq: 0 } },
+    // Stops-mode document controls (blend space / output space / reset), folded in from the
+    // former standalone Stops tab. Shown only in Stops mode; acts on the shared stops doc.
+    { componentId: 'palette-editor-dock', condition: { param: 'generatorMode', eq: 2 } },
     // Bottom block: Reset all / Export.
     { componentId: 'palette-generator-extras' },
   ],

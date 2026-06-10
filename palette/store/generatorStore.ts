@@ -15,6 +15,7 @@ import { useMemo } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { fitRampToStops } from '../core/stopFit';
+import { usePaletteEditorStore } from './paletteEditorStore';
 import type { RGB } from '../core/oklab';
 import type { GradientConfig } from '../../types';
 import {
@@ -44,7 +45,9 @@ import { paramEditStart, paramEditEnd, paramEdit } from './paramUndoBracket';
 
 /** Shape of the paletteGenerator DDFS slice (the dials). */
 interface GeneratorSlice {
-  /** 0 = mixed (two-source blend), 1 = colorbox (per-channel OKLCh sweep). */
+  /** 0 = mixer (two-source blend), 1 = colorbox (per-channel OKLCh sweep),
+   *  2 = stops (hand-authored stop editor). The persisted int id is STABLE —
+   *  never renumber (scene/preset compat); only the user-facing label is "Mixer". */
   generatorMode: number;
   aHueRotate: number; aChroma: number; aContrast: number; aReverse: boolean; aRepeats: number; aPhase: number; aMirror: boolean;
   bHueRotate: number; bChroma: number; bContrast: number; bReverse: boolean; bRepeats: number; bPhase: number; bMirror: boolean;
@@ -58,10 +61,14 @@ interface GeneratorSlice {
   cbHStart: number; cbHEnd: number; cbHEasing: number;
 }
 
-/** Two generator modes; the build call-site branches on the slice's generatorMode. */
-export type GeneratorMode = 'mixed' | 'colorbox';
-export const generatorModeOf = (s: GeneratorSlice): GeneratorMode =>
-  (s.generatorMode ?? 0) === 1 ? 'colorbox' : 'mixed';
+/** Three generator modes; the build call-site branches on the slice's generatorMode.
+ *  The literal is 'mixer' (was 'mixed') to match the user-facing label — the persisted
+ *  int id (0) is unchanged, so this is a code-clarity rename only, no scene migration. */
+export type GeneratorMode = 'mixer' | 'colorbox' | 'stops';
+export const generatorModeOf = (s: GeneratorSlice): GeneratorMode => {
+  const m = s.generatorMode ?? 0;
+  return m === 2 ? 'stops' : m === 1 ? 'colorbox' : 'mixer';
+};
 
 /** Map a stored easing index → EasingName (clamped; defaults to linear on garbage). */
 const easingFromIndex = (i: number): EasingName => EASING_NAMES[i] ?? EASING_NAMES[0];
@@ -146,6 +153,8 @@ interface GeneratorState {
    *  undo entry. */
   fitCurvesFromRamp: (ramp: RGB[]) => void;
   resetCurves: () => void;
+  /** Reset the Mix channel (L/C/h) blend to defaults (0/0/0 = all source A). One undo entry. */
+  resetMix: () => void;
   resetAll: () => void;
   /** Bake a slot's modifiers into a new source ramp + reset that slot's dials (picture unchanged). */
   bakeSlot: (which: 'A' | 'B') => void;
@@ -299,6 +308,9 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
       set({ tracks: fitChannelsToTracks(decomposeRamp(ramp), get().detail, get().smooth), curvesOn: true });
     }),
   resetCurves: () => genEdit(() => set({ tracks: null, curvesOn: false })),
+  // Reset the Mix blend (mixL/mixC/mixH are DDFS params on the slice) to defaults —
+  // 0/0/0 = all source A. Mirrors resetCurves: one genEdit() bracket = one undo entry.
+  resetMix: () => genEdit(() => setSlice({ mixL: 0, mixC: 0, mixH: 0 })),
   resetAll: () =>
     genEdit(() => {
       // Reset every dial to defaults but STAY in the current mode (don't yank the
@@ -422,6 +434,10 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   const detail = useGeneratorStore((s) => s.detail);
   const smooth = useGeneratorStore((s) => s.smooth);
   const noiseSeed = useGeneratorStore((s) => s.noiseSeed);
+  // Stops mode shares the engine stops document (paletteEditorStore) — the same gradient
+  // the editor on the canvas edits — so the Generator's Stops mode and the round-trip
+  // providers ('paletteEditor' history + 'stops' document) all reference one source.
+  const stopsConfig = usePaletteEditorStore((s) => s.config);
 
   const mode = generatorModeOf(slice);
   const modsA = useMemo(() => sliceToModsA(slice), [slice]);
@@ -501,15 +517,38 @@ export const useGeneratorDerived = (): GeneratorDerived => {
     [mode, base, detail, smooth],
   );
 
-  const config = useMemo(() => {
+  const mixedConfig = useMemo(() => {
+    // Stops mode supplies its own config (stopsConfig below), so the costly ramp→stops
+    // fit here is wasted — skip it. (The mix/colorbox memos above still run; they're
+    // cheap and stay memoized while editing stops. Only this Douglas-Peucker fit is
+    // worth gating.) Returns null in stops mode; the result branch picks stopsConfig.
+    if (mode === 'stops') return null;
     const k = (11 - detail) / 3;
     // maxStops scales with the detail dial. The default cap (32) truncated rich
     // generated gradients (e.g. posterized / many-hue / noisy) so a favourited result
     // lost detail vs the live 256-step preview — let detail buy the fidelity it asks for.
     return fitRampToStops(built.ramp, { targetDE: Math.max(0.004, 0.012 * k), maxStops: Math.round(32 + detail * 12) });
-  }, [built.ramp, detail]);
+  }, [mode, built.ramp, detail]);
 
-  return { stripA, stripB, ramp: built.ramp, base, ghost, ghostPoints, config };
+  // Stops mode: the RESULT is the hand-authored stops, rendered through the canonical
+  // sampler (byte-exact with the texture bake), and the config IS the edited gradient
+  // (no fit round-trip needed — it already carries stops). The mix/colorbox pipeline
+  // above still runs but its ramp/config are superseded here. base/ghost/ghostPoints
+  // are mix-only scopes and go unused (the Stops UI has no curve editor).
+  const stopsRamp = useMemo(
+    () => (mode === 'stops' ? renderStopsToRamp(stopsConfig.stops, stopsConfig.blendSpace, stopsConfig.colorSpace) : null),
+    [mode, stopsConfig],
+  );
+
+  return {
+    stripA,
+    stripB,
+    ramp: stopsRamp ?? built.ramp,
+    base,
+    ghost,
+    ghostPoints,
+    config: mode === 'stops' ? stopsConfig : (mixedConfig ?? stopsConfig),
+  };
 };
 
 /** Catalog accessor for the source picker (memoised in presetCatalog). */

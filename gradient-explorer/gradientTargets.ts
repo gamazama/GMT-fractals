@@ -86,7 +86,7 @@ const panelOf = (id: string): PanelRec | undefined =>
  *  only visible while its dock is expanded, and must be UN-collapsed (not merely navigated) to
  *  be revealed, on EITHER side. Keying the reveal logic on this set (not on dock side) is what
  *  lets a right-docked Favients reveal correctly. */
-const CENTRE_MIRRORED_MODES = new Set(['Picker', 'Generator', 'Image', 'Stops']);
+const CENTRE_MIRRORED_MODES = new Set(['Picker', 'Generator', 'Image']);
 
 /** Is a panel currently shown (its content on screen)? */
 const isPanelShown = (id: string): boolean => {
@@ -167,10 +167,10 @@ const tabStep = (id: string): RevealStep => ({
 });
 const REVEAL_STEPS: Record<string, RevealStep> = {
     'tab:Generator': tabStep('Generator'),
-    'tab:Stops': tabStep('Stops'),
     'tab:Favients': tabStep('Favients'),
     'gen:mixed': { getRect: () => stepRect('gen:mixed'), isActive: () => genMode() === 0, activate: () => setGenMode(0) },
     'gen:colorbox': { getRect: () => stepRect('gen:colorbox'), isActive: () => genMode() === 1, activate: () => setGenMode(1) },
+    'gen:stops': { getRect: () => stepRect('gen:stops'), isActive: () => genMode() === 2, activate: () => setGenMode(2) },
 };
 
 /** Register every gradient drop target (idempotent by id). Call once at boot. */
@@ -212,7 +212,8 @@ export const registerGradientTargets = (): void => {
         anchored: true,
     });
     r('stops', 'Stops', (p) => editorEdit(() => usePaletteEditorStore.getState().setConfig(p.config)), {
-        revealPath: ['tab:Stops'],
+        // Stops is the Generator's Stops sub-mode now — reveal Generator tab → Stops.
+        revealPath: ['tab:Generator', 'gen:stops'],
         anchored: true,
     });
     // Favients shelf. During a DRAG it shows as a VISUAL dropbox (so the shelf reads as a

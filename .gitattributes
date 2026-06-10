@@ -1,0 +1,4 @@
+# test:compat byte-compares this snapshot against a freshly generated one (LF joins).
+# core.autocrlf=true checks it out as CRLF on Windows, which spuriously fails the gate.
+# Pin it to LF so the working copy always matches what the harness writes/expects.
+debug/compat-snapshot.jsonl text eol=lf

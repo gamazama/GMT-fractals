@@ -41,7 +41,6 @@ import {
   type FullscreenState,
 } from '../palette/store/fullscreenStore';
 import { useActiveHeroSelection } from '../palette/store/heroSelection';
-import { usePaletteEditorStore } from '../palette/store/paletteEditorStore';
 import { useGeneratorDerived } from '../palette/store/generatorStore';
 import type { GradientConfig } from '../types';
 import { FullscreenCompositor } from './fullscreen/FullscreenCompositor';
@@ -77,12 +76,12 @@ const SplitLiveSource: React.FC<{
   onResolve: (r: { config: GradientConfig; name: string } | null) => void;
 }> = ({ onResolve }) => {
   const hero = useActiveHeroSelection();
-  const stopsConfig = usePaletteEditorStore((s) => s.config);
+  // Generator covers Stops too now (its Stops sub-mode resolves to the stops gradient via
+  // useGeneratorDerived().config), so there's no separate 'stops' hero mode to special-case.
   const generatorConfig = useGeneratorDerived().config;
   let config: GradientConfig | null = hero?.payload.config ?? null;
   let name = hero?.payload.name ?? 'Gradient';
-  if (hero?.mode === 'stops') { config = stopsConfig; name = 'Stops'; }
-  else if (hero?.mode === 'generator') { config = generatorConfig; name = hero.payload.name || 'Generator'; }
+  if (hero?.mode === 'generator') { config = generatorConfig; name = hero.payload.name || 'Generator'; }
   // Push only when the colour CONTENT changes — a value signature (not object identity) so an
   // unstable store ref can't drive a render loop.
   const sig = config

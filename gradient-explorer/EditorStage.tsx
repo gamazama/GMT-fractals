@@ -25,6 +25,7 @@ import {
 } from '../palette/store/paletteEditorStore';
 import { CanonicalHero } from '../palette/components/CanonicalHero';
 import { renderStopsToRamp } from '../palette/core/gmtGradient';
+import { applyEditorChange } from '../palette/core/editorConfig';
 
 export const EditorStage: React.FC = () => {
     const config = usePaletteEditorStore((s) => s.config);
@@ -35,12 +36,10 @@ export const EditorStage: React.FC = () => {
         [config],
     );
 
-    // The editor's value is always the object form here, so onChange emits a
-    // GradientConfig; tolerate the legacy bare-array shape defensively — and if it
-    // ever fires, keep the user's current blend/output space rather than resetting.
-    const onChange = (val: GradientStop[] | GradientConfig): void => {
-        setConfig(Array.isArray(val) ? { ...config, stops: val } : val);
-    };
+    // Shared normaliser: the editor emits the object form, but the legacy bare-array
+    // shape is tolerated defensively (keeps the current blend/output space). The same
+    // boundary the Generator's Stops mode uses, so the rule can't drift between them.
+    const onChange = (val: GradientStop[] | GradientConfig): void => setConfig(applyEditorChange(config, val));
 
     return (
         <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">

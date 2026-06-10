@@ -36,6 +36,7 @@ const LS_KEY = 'gmt.favients';
 const LS_TARGET = 'gmt.favients.target';
 const LS_GROUPS = 'gmt.favients.groups';
 const LS_SEEDED = 'gmt.favients.seeded';
+const LS_LASTGROUP = 'gmt.favients.lastgroup';
 
 /**
  * Strict well-formedness gate for a favourite. Beyond "has a stops array", it
@@ -81,6 +82,12 @@ const loadGroupLabels = (): Record<string, string> => {
 
 const saveGroupLabels = (m: Record<string, string>): void => lsSetJson(LS_GROUPS, m);
 
+/** The last group a favourite was created in / inserted/moved into — the landing group
+ *  for a plain `add()` so a new favourite joins the group you were last working in
+ *  (not always the default top group). Defaults to DEFAULT_GROUP. */
+const loadLastGroup = (): string => lsGet(LS_LASTGROUP) ?? DEFAULT_GROUP;
+const saveLastGroup = (id: string): void => lsSet(LS_LASTGROUP, id);
+
 /** Keys that must never be written via bracket assignment — `out['__proto__'] = …`
  *  invokes the prototype setter rather than creating an own property. Group ids
  *  arrive from untrusted scene files (W8 import), so skip them defensively. */
@@ -95,6 +102,24 @@ const pruneLabels = (favients: Favient[], labels: Record<string, string>): Recor
 };
 
 const clamp = (n: number, lo: number, hi: number) => (n < lo ? lo : n > hi ? hi : n);
+
+/** Disambiguate a group label against the OTHER groups' labels (case-insensitive,
+ *  trimmed) so two dividers can't read identically — appends " 2", " 3", … until
+ *  free. An empty label (clears the divider name) is returned as-is. */
+const uniqueGroupLabel = (label: string, selfId: string, labels: Record<string, string>): string => {
+  const want = label.trim();
+  if (!want) return want;
+  const taken = new Set(
+    Object.entries(labels)
+      .filter(([id]) => id !== selfId)
+      .map(([, l]) => l.trim().toLowerCase()),
+  );
+  if (!taken.has(want.toLowerCase())) return want;
+  let n = 2;
+  let candidate = `${want} ${n}`;
+  while (taken.has(candidate.toLowerCase())) candidate = `${want} ${++n}`;
+  return candidate;
+};
 
 /**
  * Content signature for dedupe: rounded stop positions + colours + interpolation.
@@ -120,6 +145,10 @@ interface FavientsState {
   groupLabels: Record<string, string>;
   /** The currently selected apply target (id into the send-target registry). */
   selectedTargetId: string | null;
+  /** Last group a favourite was created in / inserted/moved into — the landing group
+   *  for a plain `add()`. Transient landing preference (like selectedTargetId): persisted
+   *  to localStorage but EXCLUDED from undo history. */
+  lastGroupId: string;
 
   add: (config: GradientConfig, name: string, source?: string) => string;
   remove: (id: string) => void;
@@ -177,12 +206,30 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
   favients: loadFavients(),
   groupLabels: loadGroupLabels(),
   selectedTargetId: loadTarget(),
+  lastGroupId: loadLastGroup(),
 
   add: (config, name, source) => {
-    const fav: Favient = { id: newId(), name, source, config, createdAt: Date.now(), group: DEFAULT_GROUP };
-    const favients = [fav, ...get().favients];
+    // Land in the last-used group — but fall back to the default if it has since vanished
+    // (group deleted / its only favourites removed) so we never resurrect an orphan group.
+    const lg = get().lastGroupId;
+    const present =
+      lg === DEFAULT_GROUP ||
+      !!get().groupLabels[lg] ||
+      get().favients.some((f) => (f.group ?? DEFAULT_GROUP) === lg);
+    const group = present ? lg : DEFAULT_GROUP;
+    const fav: Favient = { id: newId(), name, source, config, createdAt: Date.now(), group };
+    const favients = [...get().favients];
+    // Insert at the START of the target group's contiguous run so the new favourite
+    // JOINS that group. Prepending to index 0 would split a mid-list group into two
+    // separate blocks with the same divider (buildBlocks groups by contiguous runs) —
+    // i.e. a visually "duplicated" group. For the default top group (or a not-yet-
+    // populated named group) the front / end is the natural spot.
+    const firstInGroup = favients.findIndex((f) => (f.group ?? DEFAULT_GROUP) === group);
+    const at = firstInGroup >= 0 ? firstInGroup : group === DEFAULT_GROUP ? 0 : favients.length;
+    favients.splice(at, 0, fav);
     saveFavients(favients);
-    set({ favients });
+    saveLastGroup(group);
+    set({ favients, lastGroupId: group });
     return fav.id;
   },
 
@@ -215,7 +262,8 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     const groupLabels = pruneLabels(arr, get().groupLabels);
     saveFavients(arr);
     saveGroupLabels(groupLabels);
-    set({ favients: arr, groupLabels });
+    saveLastGroup(group);
+    set({ favients: arr, groupLabels, lastGroupId: group });
   },
 
   insertFavient: (config, name, source, toIndex, group) => {
@@ -223,12 +271,14 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     const arr = [...get().favients];
     arr.splice(clamp(toIndex, 0, arr.length), 0, fav);
     saveFavients(arr);
-    set({ favients: arr });
+    saveLastGroup(group);
+    set({ favients: arr, lastGroupId: group });
     return fav.id;
   },
 
   renameGroup: (groupId, label) => {
-    const groupLabels = { ...get().groupLabels, [groupId]: label };
+    // Prevent two groups reading identically — disambiguate against the others' labels.
+    const groupLabels = { ...get().groupLabels, [groupId]: uniqueGroupLabel(label, groupId, get().groupLabels) };
     saveGroupLabels(groupLabels);
     set({ groupLabels });
   },
@@ -254,7 +304,8 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
   clear: () => {
     saveFavients([]);
     saveGroupLabels({});
-    set({ favients: [], groupLabels: {} });
+    saveLastGroup(DEFAULT_GROUP);
+    set({ favients: [], groupLabels: {}, lastGroupId: DEFAULT_GROUP });
   },
 
   setSelectedTarget: (id) => {

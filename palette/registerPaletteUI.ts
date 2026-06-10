@@ -40,7 +40,14 @@ import { setGradientEditorEntrance } from '../components/gradient/gradientEditor
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
 import type { GradientConfig } from '../types';
 
-export const registerPaletteUI = (): void => {
+export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}): void => {
+  // standaloneStopsMode — register the standalone "Stops" MODE tab (PaletteEditorFeature).
+  // The gradient-explorer studio folds Stops into the Generator's Stops sub-mode and opts
+  // OUT; app-gmt keeps the separate tab (default true). Either way the engine stops store
+  // (paletteEditorStore) + its 'paletteEditor' history / 'stops' document providers + the
+  // 'palette-editor-dock' controls stay registered (the Generator hosts the dock when the
+  // tab is off) — only the extra mode tab is conditional.
+  const { standaloneStopsMode = true } = opts;
   // Custom-UI components must be registered before the registries freeze, and
   // QualityRangePadConnected does not touch useEngineStore at module scope, so
   // it is safe to register here (pre-store).
@@ -125,7 +132,8 @@ export const registerPaletteUI = (): void => {
   featureRegistry.register(PaletteGeneratorFeature);
   featureRegistry.register(PaletteFiltersFeature);
   featureRegistry.register(PaletteImageFeature);
-  featureRegistry.register(PaletteEditorFeature);
+  // Standalone Stops MODE tab — host-gated (the Explorer folds it into Generator·Stops).
+  if (standaloneStopsMode) featureRegistry.register(PaletteEditorFeature);
 
   // Seed the Favients shelf with the built-in presets (a "Presets" group) on first
   // run, so a new user has starter gradients. One-time — never re-seeds after edits.
