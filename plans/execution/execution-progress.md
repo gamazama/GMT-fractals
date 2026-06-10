@@ -485,6 +485,34 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-10 — **PROMOTION-BLOCKER RECONCILIATION + KNOCK-OUT BATCH SCOPED.** User is taking the perf items
+  (bucket-render PT noise · 4K render path · low-FPS perf warning · multi-frame bucket export) with the
+  geometry-handles session directly; I scoped the remaining SMALL non-perf items into one knock-out batch.
+  **RECONCILED (verified vs git, NOT the stale log prose): every `exec/*` branch is merged into integration;
+  there is NO `exec/p2-finish` branch.** The following older-log "in-review / pending" items are ACTUALLY
+  DONE & merged (confirmed by file presence in HEAD): P2 Batch B (N6 menu clampToViewport @ FavientsPanel.ts:159
+  · N2 tool cursors) + Batch C R4 (`palette/store/generatorDocument.ts` + `imageDocument.ts` exist) · the knip
+  entry (`knip.json:10` has `gradient-explorer/main.tsx`) · facetName auto-naming (`palette/core/facetName.ts`
+  `configToName` wired via `autoName` in GeneratorStage/ImageStage/FavientsPanel/CanonicalHero) · oklab
+  `lerpOklab` collapse. **GENUINELY REMAINING (verified untouched in HEAD) = the knock-out batch:** (1)
+  Generator: rename "Mixed"→"Mixer" — label-only (`generatorStore.ts:62,64` type/`generatorModeOf`,
+  `GeneratorStage.tsx:142` label, `paletteGenerator.ts:79` label + comments; the persisted DDFS int id stays
+  0, so rename is cosmetic); (2) Generator: Mixer reset (mirror the existing `resetCurves` @ GeneratorStage:299;
+  reset mix L/C/h to defaults via the genEdit undo bracket); (3) **Generator: Stops as a 3rd generator MODE —
+  user RATIFIED "3rd mode in the toggle"** → extend the `generatorMode` DDFS param 0/1→0/1/2 (`'mixed'|'colorbox'`
+  → add `'stops'`), add the 3rd toggle segment (`GeneratorStage.tsx:137-142`), render the engine stops editor
+  when mode===2, and feed its ramp as the generator result. **This is the M–L ANCHOR of the batch — STOP+report
+  if the result pipeline can't cleanly take a stops source.** (4) **Mix channel sliders (L/C/h) intuitive — user
+  RATIFIED "Mix channel sliders"** → make drag direction/effect on the ramp obvious (the L/C/h MixBlend
+  sliders), keep precision/over-min-max/keyframeable; (5) Favients add→last-group (`favientsStore.ts:182` `add()`
+  hardcodes `group: DEFAULT_GROUP` → track a `lastGroupId`, updated on move/insert/create, used in add); (6)
+  `test:compat` regenerate+verify (pre-existing red; `npm run test:compat:write` then confirm green — verify no
+  unintended formula drift first); (7) 3 nits — GeometryHandleLayer clear `interacting` on unmount
+  (`GeometryHandleLayer.tsx` add a cleanup effect beside the timer cleanup); fractal `detectFormat()` re-probe
+  parity on context-restore (`FractalColorRenderer.ts` — move/echo the probe into the restore path like
+  ParallaxRenderer); Stir slider reads "0" at 0.05 min (`parallaxMode.tsx` — show the absolute value or relabel).
+  **All one in-`dev` batch branch.** Ambiguous items confirmed with user FIRST (Stops IA + which sliders) per
+  the confirm-feature-concept lesson. Prompt emitted in-turn.
 - 2026-06-10 — **✅ fullscreen-v2 GEOMETRY HANDLES v2 (Session B, item 1) MERGED** into integration `a3dbc42`
   (merge of `exec/fs-onscreen-handles`, 5 commits; 11 files +1391/−293 — new `GeometryHandleLayer.tsx`
   [~690 lines] + `plans/gx-geometry-handles-v2.md` + 2 debug helpers). **← FOLD-IN POLISH COMPLETE; the 3
