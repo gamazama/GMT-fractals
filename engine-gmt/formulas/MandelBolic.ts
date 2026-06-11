@@ -4,66 +4,116 @@ import type { Capability } from '../types/capabilities';
 export const MandelBolic: FractalDefinition = {
     id: 'MandelBolic',
     name: 'MandelBolic',
-    shortDescription: 'A true 3D geometric extension of the Mandelbrot set into Hyperbolic 3-Space.',
-    description: 'Bypasses the limitations of 3D algebra by using the Poincaré-Ahlfors extension into Hyperbolic 3-Space. This preserves perfect spherical bulbs, exact periodicity, and the true 3D cardioid core without the "smeared" artifacts of standard 3D fractals. Now features generalized Power and Hyperbolic distortion parameters.',
+    shortDescription: 'A conformal lift of the 2D Mandelbrot into a height axis — exact on the z=0 slice, with optional genuine-3D height folds.',
+    description: 'A conformal lift of the exact 2D Mandelbrot into a third (height) axis. The z=0 slice is the true Mandelbrot set — exact periodicity, real cardioid — and the height is carried upward by the map\'s own conformal derivative (a Poincaré-style normal-axis extension), giving smooth bulbs with none of the angular smearing of spherical-power 3D fractals like the Mandelbulb. By default the height dynamics are linear (a pure conformal lift, so the object is essentially 2.5D); the "Height Fold" and "Shells" controls add genuine nonlinear dynamics in the height axis — a real 3D escape boundary — while keeping that z=0 slice exact. Power, conformal cone, phase twist and height-scale shape the rest.',
     juliaType: 'julia',
     
     shader: {
         function: `
         void formula_MandelBolic(inout vec4 z, inout float dr, inout float trap, vec4 c) {
+            // Z = (x, y) is the 2D complex plane; T = z is the height axis.
+            // NOTE: paramB ('Hyp. Scale') is also wired as z.w (4D init) by the
+            // engine, but this formula never reads z.w, so there is no interaction.
             vec3 z3 = z.xyz;
             float power = uParamA;
+            float T = z3.z;
 
-            // Z is the 2D complex plane (x, y), T is the hyperbolic height (z)
             float rxy2 = z3.x*z3.x + z3.y*z3.y;
-            float rxy = sqrt(rxy2);
+            float rxy  = sqrt(rxy2);
+            float invR2 = 1.0 / (rxy2 + 1e-20);
 
-            // Ahlfors Extension multiplier: M = (|Z|^2 - T^2) / |Z|^2
-            // uParamC (Conformal Shift) distorts the hyperbolic mapping
-            float m = (rxy2 - uParamC * z3.z*z3.z) / (rxy2 + 1e-20);
+            // Conformal multiplier M = 1 - C*T^2/|Z|^2. uParamC is the cone
+            // control: where |Z| = sqrt(C)*|T|, M flips sign (turns bulbs inside-out).
+            float m = (rxy2 - uParamC * T*T) * invR2;
 
-            // Shared rxy^(p-1) — used by both derivative and Z mapping
-            float rxy_pm1 = pow(max(rxy, 1e-10), power - 1.0);
-            float rxy_p = rxy_pm1 * rxy;
+            // Shared radial powers — used by both the Z mapping and the Jacobian.
+            float rxy_pm1 = pow(max(rxy, 1e-10), power - 1.0);   // r^(p-1)
+            float rxy_p   = rxy_pm1 * rxy;                       // r^p
+            float pm2 = (power - 1.0) * rxy_pm1 / max(rxy, 1e-10); // (p-1) r^(p-2)
 
-            // Derivative: account for split XY/Z Jacobian
-            // XY stretch: p * rxy^(p-1) * |m|  (conformal distortion)
-            // Z  stretch: p * rxy^(p-1) * |B|  (hyperbolic scaling)
-            // Use max for conservative bound on largest singular value
-            float stretch = power * rxy_pm1 * max(abs(m), abs(uParamB));
-            dr = stretch * dr + 1.0;
+            // --- Height (T) dynamics ---
+            // Linear lift  (vec2A = 0): pure conformal/Poincaré extension. The
+            // height is carried by the in-plane map's derivative, so T obeys a
+            // *linear* recurrence — the object is conformally beautiful but 2.5D
+            // (no independent escape boundary in T).
+            // vec2A.x 'Height Fold' : odd quadratic self-term -> a genuine
+            //   nonlinear escape boundary in T (truly 3D structure).
+            // vec2A.y 'Shells'      : sin(T) periodic fold -> concentric shells.
+            // Both vanish at T = 0, so the z = 0 slice stays the exact 2D Mandelbrot.
+            float tFold  = uVec2A.x;
+            float tShell = uVec2A.y;
+            float nlSelf  = tFold  * T * abs(T) * rxy_pm1;  // sign(T)*T^2 * r^(p-1)
+            float nlShell = tShell * sin(T)     * rxy_pm1;
 
-            // Apply the conformal 3D power with Phase Twist (uParamD)
+            // --- Distance estimate: largest singular value of the 3x3 Jacobian,
+            // bounded by the EXACT sigma_max of its dominant 2x2 (XY,T) block.
+            // The previous max(|m|,|B|) ignored the off-diagonal coupling (T<->XY
+            // through M and through r^(p-1)), under-estimating the stretch and
+            // cracking the surface. jA/jD are the diagonal stretches; jB/jC the
+            // coupling. At T=0 the block is diagonal and this reduces exactly to
+            // the old p*r^(p-1)*max(|m|,|B|).
+            float jA = power * rxy_pm1 * abs(m);                               // d(XY)/d(XY)
+            float jD = power * rxy_pm1 * abs(uParamB)                          // d(T)/d(T)
+                     + abs(tFold) * 2.0 * abs(T) * rxy_pm1
+                     + abs(tShell) * abs(cos(T)) * rxy_pm1;
+            float jB = rxy_p * 2.0 * abs(uParamC) * abs(T) * invR2;            // d(XY)/dT  (|W| * |dM/dT|)
+            float jC = abs(uParamB) * abs(T) * power * pm2                     // d(T)/d(XY) (linear + folds)
+                     + abs(tFold)  * T*T          * pm2
+                     + abs(tShell) * abs(sin(T))  * pm2;
+            float S   = jA*jA + jB*jB + jC*jC + jD*jD;     // ||J_block||_F^2
+            float det = jA*jD - jB*jC;
+            float sigmaMax = sqrt(0.5 * (S + sqrt(max(S*S - 4.0*det*det, 0.0))));
+            dr = sigmaMax * dr + 1.0;
+
+            // --- Z mapping: Z_{n+1} = Z_n^p * M + C_z, with Phase Twist (uParamD) ---
             float theta = atan(z3.y, z3.x) * power + uParamD;
-
-            // Z_{n+1} = Z_n^p * M + C_z
             float nx = rxy_p * cos(theta) * m + c.x;
             float ny = rxy_p * sin(theta) * m + c.y;
 
-            // T_{n+1} = p * |Z_n|^(p-1) * T_n + C_t
-            // uParamB scales the hyperbolic height growth, uParamE adds a constant Z-offset
-            float nz = power * rxy_pm1 * z3.z * uParamB + c.z + uParamE;
+            // T_{n+1} = p*|Z|^(p-1)*T*B  + nonlinear folds + C_t + Z-offset
+            float nz = power * rxy_pm1 * T * uParamB + nlSelf + nlShell + c.z + uParamE;
 
             z.xyz = vec3(nx, ny, nz);
             trap = min(trap, length(z.xyz) * uParamF);
         }`,
         loopBody: `formula_MandelBolic(z, dr, trap, c);`,
+        // Lock the analytic-log estimator so the carefully-bounded dr above is
+        // always paired with the matching metric (independent of the Quality
+        // panel's Estimator dropdown). This replicates the engine's built-in
+        // estimator 0 + log iteration smoothing exactly — coloring is unchanged.
+        getDist: `
+            float m2 = r * r;
+            if (m2 < 1.0e-20) return vec2(0.0, iter);
+            float smoothIter = iter;
+            if (m2 > 1.0) {
+                float threshLog = log2(max(uEscapeThresh, 1.1));
+                smoothIter = iter + 1.0 - log2(log2(m2) / threshLog);
+            }
+            float dr_safe = max(abs(dr), 1.0e-20);
+            float d = 0.17328679 * log2(m2) * r / dr_safe;   // 0.5*r*ln(r)/dr
+            return vec2(d, smoothIter);`,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [
         { label: 'Power', id: 'paramA', min: 1.0, max: 16.0, step: 0.01, default: 2.0 },
         { label: 'Hyp. Scale', id: 'paramB', min: -2.0, max: 2.0, step: 0.01, default: 1.0 },
-        { label: 'Conformal Shift', id: 'paramC', min: -2.0, max: 2.0, step: 0.01, default: 1.0 },
+        // Coefficient on T^2 in the conformal multiplier M = 1 - C*T^2/|Z|^2 —
+        // controls the |Z| = sqrt(C)*|T| cone where M flips sign (not a shift).
+        { label: 'Conformal Cone', id: 'paramC', min: -2.0, max: 2.0, step: 0.01, default: 1.0 },
         { label: 'Phase Twist', id: 'paramD', min: -3.14, max: 3.14, step: 0.01, default: 0.0, scale: 'pi' },
         { label: 'Z-Offset', id: 'paramE', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
-        { label: 'Trap Scale', id: 'paramF', min: 0.1, max: 5.0, step: 0.01, default: 1.0 }
+        { label: 'Trap Scale', id: 'paramF', min: 0.1, max: 5.0, step: 0.01, default: 1.0 },
+        // Nonlinear height dynamics. (0,0) = pure linear conformal lift (2.5D).
+        // x = Height Fold (quadratic self-term -> real 3D escape boundary),
+        // y = Shells (sin(T) periodic fold). Both keep the z=0 slice exact.
+        { label: 'Height Fold / Shells', id: 'vec2A', type: 'vec2', min: -1.0, max: 1.0, step: 0.01, default: { x: 0, y: 0 } }
     ],
 
     defaultPreset: {
         formula: "MandelBolic",
         features: {
-            coreMath: { iterations: 26, paramA: 2, paramB: 1, paramC: 1, paramD: 0, paramE: 0, paramF: 1 },
+            coreMath: { iterations: 26, paramA: 2, paramB: 1, paramC: 1, paramD: 0, paramE: 0, paramF: 1, vec2A: { x: 0, y: 0 } },
             geometry: {
                 applyTransformLogic: true,
                 preRotMaster: true,
@@ -256,7 +306,7 @@ export const MandelBolic: FractalDefinition = {
                 maxSteps: 534,
                 distanceMetric: 0,
                 estimator: 0,
-                fudgeFactor: 0.32,
+                fudgeFactor: 1.0,
                 stepRelaxation: 0,
                 refinementSteps: 0,
                 detail: 6.1,
