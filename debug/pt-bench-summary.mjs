@@ -49,7 +49,7 @@ for (const s of scenes) {
     }
 }
 
-console.log('\n## TIMING (HEADLESS-INDICATIVE ONLY)');
+console.log(`\n## TIMING (${extras.backend === 'gpu' ? 'REAL GPU' : 'HEADLESS-INDICATIVE ONLY'})`);
 const tr = rows.filter(r => r.suite === 'timing');
 if (tr.length) {
     console.log('  case               renderMs   ms/(Mpx·spp)');

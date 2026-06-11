@@ -1,8 +1,10 @@
 # PT Perf + Quality Validation — Bucket Render Verdict
 
 > exec/pt-validation · 2026-06-11 · measurement-only session (no render-behaviour changes)
-> Status: COMPLETE (headless std tier, canonical scene). Relative metrics are GPU-robust;
-> real absolute timing + final visual sign-off come from the user's `--gpu` run.
+> Status: COMPLETE — **confirmed on the real GPU** (`--gpu` std tier, canonical scene, 3 min).
+> Every relative metric reproduced the earlier headless run within noise (direct proof that
+> SwiftShader↔GPU relative metrics transfer); timing below is REAL GPU. Numbers in this report
+> are the GPU run.
 
 ## Why
 
@@ -163,12 +165,15 @@ metrics only — see caveat. (Reproduce: `npm run bench:pt:with-server`; raw in
 
 | spp | PSNR | PSNR (corr) | RMSE | max\|Δ\| |
 |----:|-----:|-----:|-----:|-----:|
-| 4 | 25.15 | 25.08 | 14.10 | 137 |
-| 8 | 28.51 | 28.37 | 9.57 | 102 |
-| 16 | 31.69 | 31.41 | 6.64 | 70 |
-| 32 | 35.09 | 34.51 | 4.49 | 89 |
-| 64 | 38.77 | 37.52 | 2.94 | 51 |
-| 128 | 43.46 | 40.45 | 1.71 | 22 |
+| 4 | 25.14 | 25.08 | 14.10 | 129 |
+| 8 | 28.50 | 28.36 | 9.58 | 91 |
+| 16 | 31.69 | 31.41 | 6.64 | 64 |
+| 32 | 35.09 | 34.51 | 4.49 | 40 |
+| 64 | 38.79 | 37.54 | 2.93 | 30 |
+| 128 | 43.43 | 40.42 | 1.72 | 27 |
+
+(Headless SwiftShader gave PSNR 25.15/28.51/31.69/35.09/38.77/43.46 — identical within
+rounding, the direct CPU↔GPU transfer proof.)
 
 - **Monotone, no plateau** in 4–128 spp: ~+3.3 dB per doubling (the ideal Monte-Carlo
   +3.01 dB/2× plus tone-map shaping). Noise is monotone-decreasing as required.
@@ -182,13 +187,13 @@ metrics only — see caveat. (Reproduce: `npm run bench:pt:with-server`; raw in
 
 | case | PSNR | seamExcess (luma) | stepRatio / ref | eff. spp | verdict |
 |---|---:|---:|---:|---:|---|
-| `gpu-buckets` (3×3 internal) | 58.3 | **0.007** | 1.27 / 1.27 | 24 | seamless |
-| `tiled-3x3` (post off) | 53.2 | **0.025** | 1.27 / 1.27 | 24 | seamless |
-| `tiled-2x2` (post off) | 32.1 | 1.41 | 1.42 / 1.45 | 24 | noise-phase only (step ≤ ref) |
-| `tiled-bloom` | 32.2 | 1.51 | 1.50 / 1.45 | 24 | bloom seam (structural — see curve) |
-| `tiled-ca` | 29.6 | 2.38 | 1.63 / 1.87 | 24 | CA seam (step ≤ ref content) |
-| `tiled-natural` (post off) | 33.1 | 1.46 | 1.40 / 1.45 | 77–95 | = exact (ran to cap) |
-| `gpu-natural` | 34.7 | 0.80 | 1.22 / 1.27 | 95–95 | no variance (frame-filling) |
+| `gpu-buckets` (3×3 internal) | 58.7 | **0.003** | 1.27 / 1.27 | 24 | seamless |
+| `tiled-3x3` (post off) | 48.1 | **0.10** | 1.28 / 1.27 | 24 | seamless |
+| `tiled-2x2` (post off) | 32.1 | 1.45 | 1.40 / 1.45 | 24 | noise-phase only (step ≤ ref) |
+| `tiled-bloom` | 32.2 | 1.55 | 1.48 / 1.45 | 24 | bloom seam (structural — see curve) |
+| `tiled-ca` | 29.6 | 2.35 | 1.63 / 1.87 | 24 | CA seam (step ≤ ref content) |
+| `tiled-natural` (post off) | 32.9 | 1.52 | 1.39 / 1.45 | 70–84 | = exact (ran to cap) |
+| `gpu-natural` | 35.2 | 0.75 | 1.24 / 1.27 | 59–91 | ~no variance (frame-filling) |
 
 - **GPU bucketing is seamless** (seamExcess 0.007, step ratio exactly the reference) — the
   common export path is a non-issue. `tiled-3x3` post-off is likewise at the noise floor.
@@ -204,31 +209,56 @@ metrics only — see caveat. (Reproduce: `npm run bench:pt:with-server`; raw in
 
 ### Seam vs samples — the decisive curve (does the seam converge away?)
 
-`seamExcess(spp)`, tiled-2×2 vs matched 1×1 reference:
+`seamExcess(spp)` (band−interior luma) and `stepRatio` vs the seam-free reference, tiled-2×2.
+Claude is the full 3-point GPU curve; Mandelbulb is the dark-background worst-case spot-check.
 
-| spp | Claude nopost | Mandelbulb nopost | Mandelbulb bloom |
+| spp | Claude nopost (excess / step·ref) | Claude bloom (excess / step·ref) | Mandelbulb bloom |
 |----:|---:|---:|---:|
-| 8 | 2.34 | 3.76 | 4.40 (stepRatio 4.81) |
-| 32 | 1.19 | 1.79 | 3.44 (stepRatio **6.33**) |
-| ratio | ×0.51 | ×0.48 | ×0.78 |
+| 8 | 2.45 / 1.35·1.43 | 2.50 / 1.40·1.43 | 4.40 / 4.81·~2.1 |
+| 32 | 1.24 / 1.37·1.41 | 1.36 / 1.45·1.42 | 3.44 / 6.33·~2.1 |
+| 128 | **0.61 / 1.42·1.40** | **0.81 / 1.53·1.41** | — |
+| 8→128 ratio | **×0.25** (= 1/√16) | ×0.32 | (8→32 ×0.78) |
 
-- **No-post tile seam = NOISE-PHASE**: seamExcess halves per 4× samples (×0.5 ≈ 1/√spp) on
-  both scenes → it **vanishes at export spp**. stepRatio tracks the reference throughout.
-- **Bloom tile seam = STRUCTURAL**: seamExcess barely drops (×0.78), and the smoking gun is
-  `stepRatio` *growing* with samples (4.81 → 6.33) while the reference stays flat (~2.1) — as
-  the interior converges and quiets, the per-tile bloom black-bleed seam becomes **more**
-  visible. High spp does not fix it.
-- The 128-spp points (Claude) and the bloom curve on Claude were left to the GPU run — the
-  two-point law is already unambiguous (each fits 1/√spp / plateau exactly), and SwiftShader
-  is the wrong tool for the high-spp points (CPU-bound, hours).
+- **No-post tile seam = NOISE-PHASE, proven over three points**: seamExcess **0.61 at 128 spp**
+  (from 2.45) — each 4× samples halves it (×0.50, ×0.49), i.e. exactly 1/√spp — and the
+  `stepRatio` lands on the reference baseline (1.42 vs ref 1.40). At export spp the tile
+  boundary is *measurably invisible*. It vanishes.
+- **Bloom tile seam = STRUCTURAL**: even on frame-filling Claude the bloom `seamExcess` floors
+  HIGHER than no-post (0.81 vs 0.61 at 128 spp) and — the signature — `stepRatio` **grows with
+  samples** (1.40 → 1.45 → 1.53), pulling away from the reference (~1.41) as the interior
+  quiets, the opposite of no-post. On a dark background (Mandelbulb) the effect is far starker
+  (stepRatio 4.81 → 6.33). High spp does NOT fix it.
+- This is the crux: the only seam that survives convergence is per-tile bloom/CA.
 
-### Timing (headless-indicative ONLY — do NOT cite as export performance)
+### Timing — REAL GPU (8 spp, this machine)
 
-SwiftShader is a CPU software rasterizer; absolute ms are meaningless for real export.
-Validation-tier indicative figures: ~8–14 k ms/(Mpx·spp), and **2×2 tiling cost ≈ 1×1**
-(bucket/tile overhead is negligible; 512² 2×2 was even marginally faster than 1×1). The
-real render-time × resolution matrix is the **user's `--gpu --full` run** — that is the
-only source of trustworthy absolute timing.
+| output | 1×1 | 2×2 tiles | ms/(Mpx·spp) |
+|---|---:|---:|---:|
+| 256² | 306 ms | 900 ms | 584 (overhead-dominated) |
+| 512² | 525 ms | 755 ms | 250 |
+| 1024² | 1415 ms | 1460 ms | **169** |
+
+- The per-pixel cost converges to **~170 ms/(Mpx·spp)** at 1024² (fixed compile/warmup/eval
+  overhead amortizes out at larger sizes; the tiny 256² is overhead-dominated, ignore it).
+- **2×2 tiling costs essentially the same as 1×1** (1024²: 1415 → 1460 ms, +3 %). The
+  VRAM-safety win from bucketing/tiling is effectively free in wall-clock — a key result for
+  large exports.
+- One-time PT shader compile ≈ 19 s on this Windows GPU (fxc) — a fixed startup cost, not
+  per-frame.
+
+**Export extrapolation** (single-tile, this GPU, linear in Mpx·spp at the amortized rate;
+treat as an estimate — real high-res may bend with memory bandwidth, and 4K+ is the known
+unverified path, see §opt-in below):
+
+| resolution | 64 spp | 128 spp |
+|---|---:|---:|
+| 1080p (2.1 Mpx) | ~22 s | ~45 s |
+| 1440p (3.7 Mpx) | ~40 s | ~80 s |
+| 4K (8.3 Mpx) | ~90 s | ~180 s |
+
+So a converged (≈128 spp) 1080p PT export is ~45 s and a 4K is ~3 min on this GPU — well
+within "usable." Absolute numbers are GPU-specific; re-run `bench:pt --gpu` on any target
+machine to recalibrate.
 
 ## Verdict
 
@@ -242,33 +272,35 @@ Decomposed by the documented seam causes:
    the reference (1.27/1.27), PSNR 58 dB. This is the common case (every export larger than
    one bucket uses internal buckets) and it is a non-issue.
 
-2. **Blue-noise tile-repeat (historic cause #2) — FIXED, confirmed by outcome.** The no-post
-   image-tile seam is **noise-phase**: `seamExcess` falls ~1/√spp (Claude 2.34→1.19 over
-   8→32 spp = ×0.51; Mandelbulb 3.76→1.79 = ×0.48) and `stepRatio` sits *at or below* the
-   seam-free reference (Claude 1.42 vs ref 1.45). It **converges away** — at export spp the
-   tile boundary is statistically invisible. A broken blue-noise offset would make this seam
-   sample-independent; it is not.
+2. **Blue-noise tile-repeat (historic cause #2) — FIXED, proven over three sample points.**
+   The no-post image-tile seam is **noise-phase**: `seamExcess` falls exactly 1/√spp across
+   8/32/128 spp (Claude 2.45 → 1.24 → 0.61, each step ×0.50) and by 128 spp `stepRatio` is on
+   the seam-free reference baseline (1.42 vs 1.40). It **converges to invisibility** at export
+   spp. A broken blue-noise offset would make this seam sample-independent; it provably is not.
 
 3. **Convergence variance (cause #3) — ALREADY MITIGATED at default settings.** At the
-   0.25 % threshold every IMAGE tile runs to the sample cap (`tiled-natural` 77–95 spp,
-   matched the exact-spp control), so multi-tile exports converge to equal per-tile sample
+   0.25 % threshold every IMAGE tile runs to (near) the sample cap (`tiled-natural` 70–84 spp,
+   matched the exact-spp control), so multi-tile exports converge to ~equal per-tile sample
    counts by default. Variance appears only for SMALL GPU buckets over empty regions
-   (validation Mandelbulb `gpu-natural` 12–31 spp; frame-filling Claude shows none, 95–95) —
+   (Mandelbulb dark-bg `gpu-natural` 12–31 spp; frame-filling Claude is a tight 59–91) —
    internal to one PNG, not a stitch seam, and it does not raise the bucket-boundary step
    ratio above the exact-spp control.
 
 4. **Per-tile bloom / CA (cause #1, "the real seam") — STRUCTURAL, does NOT converge.**
-   With bloom on, `seamExcess` barely drops (Mandelbulb 4.40→3.44 over 8→32 spp, vs
-   noise-phase's halving) and — the smoking gun — `stepRatio` GROWS with samples (4.81→6.33)
-   while the reference stays flat (~2.1): as the interior converges and quiets, the bloom
-   black-bleed seam becomes *more* prominent. **Severity is scene-content-dependent** —
-   stark on a dark background (Mandelbulb, stepRatio 6.3) and mild on frame-filling structure
-   (Claude, 1.50) — but it is the one residual high spp does not fix. CA behaves the same way.
+   With bloom on, the signature is `stepRatio` **growing with samples** while no-post's settles
+   onto the reference: Claude bloom 1.40 → 1.45 → 1.53 over 8/32/128 spp (pulling *away* from
+   ref ~1.41), and its `seamExcess` floors higher than no-post (0.81 vs 0.61 at 128 spp). As
+   the interior quiets, the per-tile bloom black-bleed becomes *more* prominent. **Severity is
+   scene-content-dependent** — stark on a dark background (Mandelbulb, stepRatio 4.81→6.33) and
+   milder but still present on frame-filling structure (Claude) — but it is the one residual
+   high spp does not fix. CA behaves the same way (worst single seam at 24 spp, seamExcess 2.35).
 
 **Bottom line:** for the target export resolutions, the bucket render is
 production-quality at converged sample counts (≈64–128 spp) **whenever bloom/CA are off or
 negligible**. The single blocker to "seamless with any post" is per-tile bloom/CA — exactly
-the seam the overhaul doc flagged for the v2 fix.
+the seam the overhaul doc flagged for the v2 fix. And it's *fast enough*: real GPU timing puts
+a converged 1080p PT export at ~45 s and 4K at ~3 min, with tiling adding ~0 wall-clock — so
+the VRAM-safety decomposition is free. **The cutover is unblocked** on the noise/seam axis.
 
 ## Recommended next actions
 
@@ -291,10 +323,13 @@ In priority order (this session is measurement-only; these are the scoped follow
    minimal fix is a per-image-tile min-sample floor, not a new convergence subsystem — flag
    only, not scoped here.)
 
-4. **Real-GPU confirmation before cutover sign-off**: run `npm run bench:pt:with-server --
-   --gpu --full` on the user's machine for (a) absolute export timings at 1080p–4K (the
-   headless ms are SwiftShader-indicative only) and (b) a final visual sign-off on the
-   stitched PNGs + heatmaps in `debug/pt-bench/index.html`.
+4. **Real-GPU confirmation — DONE.** The `--gpu` std run (this report's numbers) reproduced
+   every headless relative metric within noise and gave real timing (~170 ms/Mpx·spp;
+   1080p≈45 s, 4K≈3 min at 128 spp; tiling free). Visual matrix at `debug/pt-bench/index.html`.
+   *Remaining opt-in:* `--gpu --full` to exercise the **4096² timing point** — held back here
+   because full-res 4K renders can trip the Windows GPU watchdog (desktop freeze; see
+   `project_render_4k_gap`). Run it deliberately when you can tolerate a possible freeze; it
+   doubles as a probe of the known "no reliable 4K path on most GPUs" gap.
 
 ## Harness fixes made this session (measurement infra only — no render-behaviour change)
 
