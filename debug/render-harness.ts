@@ -25,6 +25,10 @@ import * as THREE from 'three';
 import { FractalEngine } from '../engine-gmt/engine/FractalEngine';
 import type { ShaderConfig } from '../engine-gmt/engine/ShaderFactory';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine-gmt/engine/FractalEvents';
+import { BucketRunner } from '../engine/export/BucketRunner';
+import { bucketRenderer } from '../engine-gmt/engine/BucketRenderer';
+import type { BucketRenderConfig } from '../engine-gmt/engine/BucketRenderer';
+import { BloomPass } from '../engine-gmt/engine/BloomPass';
 import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { createDefaultShaderConfig } from '../engine-gmt/engine/ConfigDefaults';
 import { registerFeatures } from '../engine-gmt/features';
@@ -415,6 +419,39 @@ function hydrateEngineState(cfg: any) {
 let engineBooted = false;
 let inflight: Promise<TestResult> | null = null;
 
+/**
+ * Shared scene prep: config build → engine-state hydration → preset/override
+ * camera → boot or CONFIG re-emit → compile completion. Used by runOne and
+ * runBucketOne.
+ *
+ * Listener-first: a CONFIG that needs no rebuild (identical re-render — the
+ * normal bench case) emits IS_COMPILING=false SYNCHRONOUSLY inside the emit
+ * (FractalEngine.updateConfigInternal), so awaitCompile must be attached
+ * BEFORE the emit or it hangs until timeout.
+ */
+async function prepareScene(spec: TestSpec, timeoutMs: number): Promise<{ config: ShaderConfig; compileMs: number }> {
+    const config = buildConfigForTest(spec);
+    lastCompileLogParse = {};
+    hydrateEngineState(config);
+    applyPresetCamera(spec);
+    engine.syncCameraFromMatrix(camera);
+
+    const compileStart = performance.now();
+    let compileDone: Promise<void>;
+    if (!engineBooted) {
+        engine.preloadConfig(config);
+        engineBooted = true;
+        compileDone = engine.awaitCompile(timeoutMs);
+        engine.bootWithConfig(config);
+    } else {
+        compileDone = engine.awaitCompile(timeoutMs);
+        FractalEvents.emit(FRACTAL_EVENTS.CONFIG, config);
+    }
+    await compileDone;
+    engine.syncCameraFromMatrix(camera);
+    return { config, compileMs: Math.round(performance.now() - compileStart) };
+}
+
 async function runOne(spec: TestSpec): Promise<TestResult> {
     const t0 = performance.now();
     const [w, h] = spec.size ?? [256, 256];
@@ -433,40 +470,11 @@ async function runOne(spec: TestSpec): Promise<TestResult> {
     // drifts if a formula's preset has an unexpected shape.
     let stage = 'start';
     try {
-        stage = 'buildConfig';
-        const config = buildConfigForTest(spec);
-        lastCompileLogParse = {};
-
-        // Mirror renderWorker's sequence: preloadConfig → engine.state hydration
-        // → camera uniform sync → bootWithConfig (or CONFIG re-emit).
-        stage = 'hydrateEngineState';
-        hydrateEngineState(config);
-        stage = 'applyPresetCamera';
-        applyPresetCamera(spec);
-        stage = 'syncCameraToUniforms';
-        engine.syncCameraFromMatrix(camera);
-
-        const compileStart = performance.now();
-        stage = 'bootOrConfig';
-        if (!engineBooted) {
-            engine.preloadConfig(config);
-            engineBooted = true;
-            engine.bootWithConfig(config);
-        } else {
-            FractalEvents.emit(FRACTAL_EVENTS.CONFIG, config);
-            if (!engine.isCompiling) {
-                (engine as any).scheduleCompile?.();
-            }
-        }
-
-        stage = 'awaitCompile';
-        await engine.awaitCompile(spec.timeoutMs ?? 30000);
-        result.compile.totalMs = Math.round(performance.now() - compileStart);
+        stage = 'prepareScene';
+        const { config, compileMs } = await prepareScene(spec, spec.timeoutMs ?? 30000);
+        result.compile.totalMs = compileMs;
         result.compile.logPreviewMs = lastCompileLogParse.previewMs;
         result.compile.logGpuMs = lastCompileLogParse.gpuMs;
-
-        stage = 'syncCamera-postCompile';
-        engine.syncCameraFromMatrix(camera);
 
         // Render: mode-dependent
         if (spec.mode === 'single') {
@@ -553,5 +561,241 @@ async function runOne(spec: TestSpec): Promise<TestResult> {
     finally { inflight = null; }
 };
 
+// ─── PT bench: headless bucket-render driver (debug/bench-pt.mts) ────────────
+//
+// Drives the REAL export path (BucketRunner + GmtBucketHost + exportMaterial
+// readback) headless, capturing the exact pixels a user's PNG would contain.
+// Two debug-only prototype patches (TS `private` is compile-time only):
+//   - saveImage: captures per-tile readback pixels instead of DOM-downloading.
+//   - compositeCurrentBucket: records per-bucket effective sample counts
+//     (pipeline.accumulationCount at composite time) — this is the
+//     convergence-variance data the seam analysis needs.
+// Both fall through to original behaviour when no capture is active.
+
+interface CapturedTile {
+    row: number; col: number;
+    pixelX: number; pixelY: number;       // origin in full output, Y from bottom (GL convention)
+    width: number; height: number;
+    pixels: Uint8ClampedArray;            // top-down RGBA (readCompositePixels Y-flips)
+}
+interface BucketStat {
+    tileIndex: number; bucketIndex: number;
+    frames: number;                       // BucketRunner.bucketFrameCount at composite
+    samples: number;                      // pipeline.accumulationCount at composite = true spp
+}
+let bucketCapture: { tiles: CapturedTile[]; buckets: BucketStat[] } | null = null;
+
+const runnerProto = BucketRunner.prototype as any;
+const origSaveImage = runnerProto.saveImage;
+runnerProto.saveImage = function (readbackMat: THREE.ShaderMaterial) {
+    if (!bucketCapture) return origSaveImage.call(this, readbackMat);
+    const result = this.readCompositePixels(readbackMat);
+    if (!result) return;
+    const imgTile = this.imageTiles[this.currentImageTileIndex];
+    bucketCapture.tiles.push({
+        row: imgTile.row, col: imgTile.col,
+        pixelX: imgTile.pixelX, pixelY: imgTile.pixelY,
+        width: result.width, height: result.height,
+        pixels: result.pixels,
+    });
+};
+const origComposite = runnerProto.compositeCurrentBucket;
+runnerProto.compositeCurrentBucket = function () {
+    if (bucketCapture) {
+        bucketCapture.buckets.push({
+            tileIndex: this.currentImageTileIndex,
+            bucketIndex: this.currentBucketIndex,
+            frames: this.bucketFrameCount,
+            samples: engine.pipeline?.accumulationCount ?? -1,
+        });
+    }
+    return origComposite.call(this);
+};
+
+// Mirror renderWorker: clear the engine flag when the runner reports done,
+// and give the host a BloomPass so the bloom branch of the readback material
+// is exercised (the worker creates one at INIT).
+FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, (data: any) => {
+    if (!data.isRendering) (engine as any).state.isBucketRendering = false;
+});
+bucketRenderer.setBloomPass(new BloomPass());
+
+export interface BucketTestSpec {
+    id: string;
+    formula: string;
+    configOverrides?: Record<string, any>;
+    cameraOverrides?: TestSpec['cameraOverrides'];
+    outputWidth: number;
+    outputHeight: number;
+    tileCols: number;
+    tileRows: number;
+    /** GPU bucket (VRAM tile) size in px. Default 512. */
+    bucketSize?: number;
+    /** Exact-spp mode: every bucket renders exactly this many samples/pixel.
+     *  Threshold is pinned to 0 so convergence never fires early; the cap is
+     *  spp+1 because BucketRunner composites on the update() tick BEFORE the
+     *  frame that would render sample N; the bucket loop additionally skips
+     *  the compute on bucket-transition frames so non-first buckets don't
+     *  pick up an orphan extra sample. Verified via BucketStat.samples. */
+    samplesPerPixel?: number;
+    /** Natural-convergence mode (used when samplesPerPixel is unset):
+     *  threshold is the UI percent value, cap is maxSamplesPerBucket. */
+    convergenceThreshold?: number;
+    maxSamplesPerBucket?: number;
+    /** Canvas ("viewport") size — affects the bloom-at-viewport-res branch
+     *  exactly like a real export from a window. Default 512×512. */
+    viewport?: [number, number];
+    timeoutMs?: number;
+    /** Return the stitched image as raw RGBA (base64) for metric computation. */
+    returnPixels?: boolean;
+    /** Return the stitched image as a PNG data URL for artifacts. */
+    returnPNG?: boolean;
+}
+
+export interface BucketTestResult {
+    id: string;
+    ok: boolean;
+    error?: string;
+    compileMs: number;
+    renderMs: number;          // bucket loop wall time (excludes compile)
+    frames: number;            // total engine frames driven
+    width: number;
+    height: number;
+    tileCount: number;
+    buckets: BucketStat[];
+    stitchedPNG?: string;      // data URL
+    rgbaBase64?: string;       // top-down RGBA of the stitched output
+    timeMs: number;
+}
+
+function uint8ToBase64(data: Uint8ClampedArray): string {
+    let s = '';
+    const CHUNK = 0x8000;
+    for (let i = 0; i < data.length; i += CHUNK) {
+        s += String.fromCharCode.apply(null, data.subarray(i, i + CHUNK) as unknown as number[]);
+    }
+    return btoa(s);
+}
+
+async function runBucketOne(spec: BucketTestSpec): Promise<BucketTestResult> {
+    const t0 = performance.now();
+    const [vw, vh] = spec.viewport ?? [512, 512];
+    resizeCanvas(vw, vh);
+
+    const result: BucketTestResult = {
+        id: spec.id, ok: false, compileMs: 0, renderMs: 0, frames: 0,
+        width: spec.outputWidth, height: spec.outputHeight,
+        tileCount: 0, buckets: [], timeMs: 0,
+    };
+
+    let stage = 'start';
+    try {
+        stage = 'prepareScene';
+        const { compileMs } = await prepareScene(
+            spec as unknown as TestSpec, spec.timeoutMs ?? 60000);
+        result.compileMs = compileMs;
+
+        // Settle frames: let lazy GL state (blue-noise LUT upload etc.) land
+        // before the measured bucket loop starts.
+        stage = 'settleFrames';
+        for (let i = 0; i < 4; i++) {
+            engine.update(camera, 1 / 60, (engine as any).state, false);
+            engine.compute(renderer);
+            await nextFrame();
+        }
+
+        stage = 'bucketStart';
+        const exact = spec.samplesPerPixel !== undefined;
+        const bConfig: BucketRenderConfig = {
+            bucketSize: spec.bucketSize ?? 512,
+            outputWidth: spec.outputWidth,
+            outputHeight: spec.outputHeight,
+            tileCols: spec.tileCols,
+            tileRows: spec.tileRows,
+            // Exact mode: threshold 0 can never beat the (strictly positive)
+            // convergence measure, so every bucket runs to the cap.
+            convergenceThreshold: exact ? 0 : (spec.convergenceThreshold ?? 0.25),
+            accumulation: true,
+            samplesPerBucket: exact ? spec.samplesPerPixel! + 1 : (spec.maxSamplesPerBucket ?? 1024),
+            includeGmfData: false,
+        };
+        bucketCapture = { tiles: [], buckets: [] };
+        // Mirror renderWorker BUCKET_START: state.bucketConfig must match the
+        // started config — engine.update() feeds it back via updateConfig()
+        // every frame, so a stale default here would overwrite the threshold/cap.
+        (engine as any).state.bucketConfig = { ...bConfig };
+        (engine as any).state.isBucketRendering = true;
+        bucketRenderer.start(true, bConfig);
+
+        stage = 'bucketLoop';
+        const renderStart = performance.now();
+        const deadline = renderStart + (spec.timeoutMs ?? 600000);
+        let frames = 0;
+        let compositesSeen = 0;
+        while (bucketRenderer.getIsRunning()) {
+            if (performance.now() > deadline) {
+                bucketRenderer.stop();
+                (engine as any).state.isBucketRendering = false;
+                throw new Error(`bucket render timeout after ${frames} frames`);
+            }
+            engine.update(camera, 1 / 60, (engine as any).state, false);
+            // Skip the compute on bucket-transition frames: the runner
+            // composites + advances during update(), and rendering into the
+            // freshly-reset accumulator on the SAME frame would give every
+            // non-first bucket one extra sample (spp+1 vs spp for the first —
+            // sampling is deterministic by accumulation index, so dropping
+            // the orphan sample keeps per-bucket spp uniform without
+            // changing which samples are drawn).
+            const advanced = bucketCapture!.buckets.length !== compositesSeen;
+            compositesSeen = bucketCapture!.buckets.length;
+            if (!advanced) engine.compute(renderer);
+            frames++;
+            await nextFrame();
+        }
+        (engine as any).state.isBucketRendering = false;
+        result.renderMs = Math.round(performance.now() - renderStart);
+        result.frames = frames;
+
+        // Stitch tiles into one top-down canvas. Tile pixelY is from the
+        // BOTTOM of the full output (GL convention); tile pixel buffers are
+        // already top-down.
+        stage = 'stitch';
+        const W = spec.outputWidth, H = spec.outputHeight;
+        const cvs = document.createElement('canvas');
+        cvs.width = W; cvs.height = H;
+        const ctx = cvs.getContext('2d')!;
+        for (const t of bucketCapture.tiles) {
+            const img = new ImageData(t.pixels as unknown as Uint8ClampedArray<ArrayBuffer>, t.width, t.height);
+            ctx.putImageData(img, t.pixelX, H - t.pixelY - t.height);
+        }
+        result.tileCount = bucketCapture.tiles.length;
+        result.buckets = bucketCapture.buckets;
+        if (spec.returnPNG !== false) result.stitchedPNG = cvs.toDataURL('image/png');
+        if (spec.returnPixels !== false) {
+            result.rgbaBase64 = uint8ToBase64(ctx.getImageData(0, 0, W, H).data);
+        }
+        result.ok = true;
+    } catch (e: any) {
+        const stack = e?.stack ? String(e.stack).split('\n').slice(0, 5).join(' | ') : '';
+        result.error = `[stage=${stage}] ${e?.message ?? String(e)} ${stack ? '\nstack: ' + stack : ''}`;
+        // Never leave a wedged bucket session behind for the next test.
+        if (bucketRenderer.getIsRunning()) bucketRenderer.stop();
+        (engine as any).state.isBucketRendering = false;
+    } finally {
+        bucketCapture = null;
+    }
+
+    result.timeMs = Math.round(performance.now() - t0);
+    return result;
+}
+
+(window as any).runBucketRenderTest = async (spec: BucketTestSpec): Promise<BucketTestResult> => {
+    if (inflight) await inflight;
+    const run = runBucketOne(spec);
+    inflight = run as unknown as Promise<TestResult>;
+    try { return await run; }
+    finally { inflight = null; }
+};
+
 (window as any).harnessReady = true;
-log('ready — window.runRenderTest(spec) + runFragRenderTest(spec) exposed.');
+log('ready — window.runRenderTest(spec) + runFragRenderTest(spec) + runBucketRenderTest(spec) exposed.');

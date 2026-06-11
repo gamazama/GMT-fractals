@@ -129,6 +129,42 @@ No change needed to the deep-link *builder* — `Lightbox`/`copyShareLink` use
 
 ---
 
+## 4b. Cloudflare security posture (dashboard scan, 2026-06-08)
+
+Cloudflare's automated Security Insights flagged the items below (none are
+active breaches — all are hardening suggestions). They're dashboard-only ops, so
+they belong with the §5 domain swap (owner-action). Triaged by priority:
+
+**Do at/before cutover:**
+- **Enable MFA on the Cloudflare account** (`gighzack@gmail.com`, flagged
+  "Users without MFA"). This account controls DNS, R2, and Pages deploys — it's
+  the single most valuable credential in the stack. My Profile → Authentication
+  → 2FA (TOTP + save recovery codes). *Highest priority, ~2 min.*
+- **Fix DMARC on `send.gmt-fractals.com`** (flagged "DMARC Record Error"). This
+  is the gallery backend's mail-sending subdomain; a broken record hurts
+  deliverability and invites spoofing. Verify SPF + DKIM exist first, then a
+  sane `_dmarc.send.gmt-fractals.com` TXT:
+  `v=DMARC1; p=quarantine; rua=mailto:gighzack@gmail.com; adkim=s; aspf=s`
+- **`cdn.gmt-fractals.com` TLS** — three flags ("Missing TLS Encryption" /
+  "Always Use HTTPS" / "HSTS") share one root cause. SSL/TLS → Overview: set
+  encryption mode to **Full (Strict)**; Edge Certificates: enable **Always Use
+  HTTPS** + **HSTS** (short max-age, no preload to start). This is the R2 CDN
+  host already in §4's palette note — verify nothing fetches it over plain
+  `http://` before enabling HSTS.
+
+**Worth doing (ties to the open threat-model gaps):**
+- **Enable Turnstile** on the gallery submission + feedback forms. Maps directly
+  to the known account-farming / `feedback_submissions` spam gaps. Not a cutover
+  blocker, but the one "optional" Cloudflare suggestion that addresses a real gap.
+
+**Low priority / optional:**
+- **security.txt** — add a static `public/.well-known/security.txt` (contact
+  email). Cheap, low impact.
+- **Block AI bots / AI Labyrinth** — purely optional and arguably against the
+  open-source-friendly stance. Skip unless crawler bandwidth becomes a cost.
+
+---
+
 ## 5. Cutover sequence (proposed order)
 
 1. **(this plan, §3)** Land the index=app / launcher restructure on `dev`;
@@ -140,7 +176,8 @@ No change needed to the deep-link *builder* — `Lightbox`/`copyShareLink` use
    now serves the new app at root.
 4. **Cloudflare domain swap** (INPUT_NEEDED.md steps 2–6): point
    `app.gmt-fractals.com` at the app, attach `gmt-fractals.com` + `www` to the
-   Astro landing project. *(Dashboard ops — needs owner.)*
+   Astro landing project. *(Dashboard ops — needs owner.)* While in the
+   dashboard, also clear the §4b security-posture items (MFA, DMARC, cdn TLS).
 5. **Only now** swap the landing's APP_URL → `https://app.gmt-fractals.com`
    and redeploy the landing. (If done before step 3, gallery tiles 404.)
 6. Verify: app at `app.gmt-fractals.com/` and `/?gallery=<slug>`; landing at
