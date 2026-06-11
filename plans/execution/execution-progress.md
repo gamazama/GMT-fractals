@@ -485,6 +485,39 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
 _(Orchestrator appends every cycle: ratified interface changes, re-scopes, blockers resolved,
 merges, plan amendments. Newest first.)_
 
+- 2026-06-11 — **✅ PT PERF+QUALITY VALIDATION MERGED** into integration `85f025e` (merge of
+  `exec/pt-validation`, 2 commits + a docs commit `f957692`; 7 files +1590/−34 — all `debug/` + `plans/` +
+  2 package.json scripts, **ZERO production/render-behaviour change** verified). **★ THE BUCKET-RENDER PT-NOISE
+  CUTOVER BLOCKER IS RESOLVED on the noise/seam axis.** Built `bench:pt` (`debug/bench-pt.mts` + a real-export
+  bucket driver in `render-harness.ts` → drives BucketRunner→GmtBucketHost→exportMaterial readback): suites
+  convergence (reference-relative MSE/PSNR + determinism), seam (1×1 vs GPU-buckets vs N×N tiles at MATCHED spp,
+  bloom/CA toggles; `seamExcess`=band−interior + reference-free `stepRatio`), seamconv (seamExcess-vs-spp),
+  timing; `--gpu`/`--quick`/`--full`; artifacts→`debug/pt-bench/` (gitignored) + HTML matrix + `pt-bench-summary.mjs`.
+  **VERDICT (GPU-confirmed, canonical scene): bucket render IS production-quality at ~64–128 spp.** By cause:
+  **GPU buckets (the common VRAM-tiling export path) = SEAMLESS** (seamExcess 0.003/255); **image-tile seam =
+  NOISE-PHASE, converges away** (no-post seamExcess 2.45→0.61 over 8→128 spp ≈ 1/√spp); **convergence-variance =
+  ALREADY MITIGATED** at the 0.25% default (tiles run to equal sample counts — **NO force-equal-convergence work
+  needed**, data refutes it as a blocker); **per-tile bloom/CA = STRUCTURAL, does NOT converge** (bloom stepRatio
+  GROWS away from ref 1.40→1.53; dark-bg worst case 4.81→6.33) → **the ONE residual.** Convergence ~3.3 dB/doubling
+  monotone, knee ≈64 spp, 128 past visual convergence, determinism bit-identical. **Timing (real GPU): 2×2 VRAM
+  tiling = 1×1 (+3%, wall-clock-free); ~170 ms/(Mpx·spp); 1080p ≈45 s, 4K ≈3 min @128 spp; PT first-compile ≈19 s
+  (fxc).** Measurement-only — the session ran `/code-review high` (fixed 2 real metric bugs: psnr ∞-guard,
+  nested-correction single-bucket invariant) + `/simplify` (shared `prepareScene`). User did the real-GPU visual
+  sign-off (post-off diff = no tile lines; bloom diff = the tile quadrant). Two test-only harness fixes
+  (listener-first compile-await; uniform per-bucket spp) confined to `render-harness.ts`. Gate green (tsc 0 ·
+  test:palette 44/44 · bench:pt green headless+GPU). **Orchestrator merge: diff scope verified
+  debug/+plans/+package.json only (no engine/app touch) + user GPU sign-off ⇒ no separate heavyweight review
+  warranted for test-infra+report.** **RECOMMENDED NEXT (the remaining PT item, now a scoped FOLLOW-UP not a
+  blocker): ship the bloom "render-once, sample-many" v2 fix** (`docs/gmt/43:111` option b) — `bench:pt
+  --suite=seamconv` measures it directly (after the fix the bloom seamExcess(spp) curve should collapse onto the
+  no-post curve); until then the existing bloom-tiling UI warning is correct (optionally auto-suggest bloom-off /
+  single-tile for bloomed exports). Report: `plans/pt-validation-report.md`. Memories: NEW
+  `project_pt_bucket_validation.md` + `feedback_gpu_over_cpu_render_tests.md` (default harness to real GPU;
+  one canonical scene). **NB: in-flight Julia3D / golden-problem work is UNCOMMITTED in the dev working tree
+  (4 modified engine-gmt + untracked Julia3D.ts/golden-problem/) — NOT mine, preserved untouched through the
+  merge.** **The docs commit `f957692` added a Cloudflare security-posture section to the cutover plan**
+  (`plans/index-landing-cutover.md`: MFA/DMARC/TLS-HSTS/Turnstile/security.txt) — cutover-prep, rode in with
+  the merge.
 - 2026-06-10 — **PT PERF+QUALITY VALIDATION session SCOPED** (cutover-blocker: bucket-render PT noise). User
   reports the **low-FPS perf warning is now FIXED** (drop #6 from the perf backlog). Read-only probe mapped the
   PT/bucket/accumulation system + harnesses. **KEY FINDING: the bucket-noise is well-CHARACTERIZED, the gap is
