@@ -91,6 +91,7 @@ export const PREDEFINED_CATEGORIES = [
             'MandelBolic',
             'Claude',
             'SineJulia3D',
+            'Julia3D',
         ]
     },
     {

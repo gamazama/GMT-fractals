@@ -45,6 +45,7 @@ import { PseudoKleinianMod4 } from './PseudoKleinianMod4';
 import { KleinianMobius } from './KleinianMobius';
 import { KleinianJos } from './KleinianJos';
 import { SineJulia3D } from './SineJulia3D';
+import { Julia3D } from './Julia3D';
 
 
 // Organized list determines UI order on LOADING SCREEN
@@ -67,6 +68,7 @@ const formulas = [
     MandelTerrain,
     Claude,
     SineJulia3D,
+    Julia3D,
 
     // --- Others ---
     KleinianMobius,
