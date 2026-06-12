@@ -347,6 +347,17 @@ export class AnimationEngine {
     }
 
     /**
+     * Public, side-effect-free evaluation of a single track at a frame —
+     * for consumers that need the raw animated value without scrubbing the
+     * whole engine (e.g. the AFX exporter sampling slider params). Routes
+     * through the same interpolation as live playback, so postBehavior
+     * (Loop / PingPong / …), log and rotation handling all match.
+     */
+    public evaluateTrack(track: Track, frame: number): number {
+        return this.interpolate(track, frame);
+    }
+
+    /**
      * @invariant Bezier is NOT applied on log tracks. Tangent y-values
      *   live in absolute value-space; reinterpreting under log would
      *   silently change the curve shape. Log tracks evaluate as
