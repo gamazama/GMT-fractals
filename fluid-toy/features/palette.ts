@@ -150,10 +150,16 @@ export const PaletteFeature: FeatureDefinition = {
             description: 'How the iteration-space scalar becomes a t-value into the gradient. Each mode exposes its own extra controls below.',
         },
 
+        colorNormV2: {
+            type: 'boolean', default: false,
+            label: 'Depth-normalized colour',
+            description: 'Normalize every colour mode by its depth driver (iteration cap / pixel scale / log potential) so Density ≈ 1 stays sane at any zoom. Off = the original look. A/B while we tune the new defaults.',
+        },
+
         gradientRepeat: {
-            type: 'float', default: 1, min: 0.1, max: 8, step: 0.01,
-            label: 'Repetition',
-            description: 'Tiles the gradient across the mapped axis. 1 = one sweep, 3 = three bands.',
+            type: 'float', default: 1, min: 0.1, max: 100, step: 0.01, scale: 'log',
+            label: 'Density',
+            description: 'Colour density along the mapped axis. 1 = one sweep. With depth-normalized colour on, ~1 stays sane at any zoom; raise for more bands.',
         },
         gradientPhase: {
             type: 'float', default: 0, min: 0, max: 1, step: 0.005,
@@ -262,6 +268,7 @@ export const syncPaletteToEngine = (engine: FluidEngine, palette: PaletteSlice):
         stripeFreq:          palette.stripeFreq,
         gradientRepeat:      palette.gradientRepeat,
         gradientPhase:       palette.gradientPhase,
+        colorNormV2:         palette.colorNormV2,
     });
 
     if (palette.gradient) {

@@ -86,6 +86,20 @@ uniform int       uColorMapping;
 uniform float     uGradientRepeat;
 uniform float     uGradientPhase;
 uniform vec3      uInteriorColor;
+// Colour-normalization regime (see gradientSample.ts colorMappingT):
+//   0 = v1 legacy magic constants (current look, byte-identical)
+//   1 = v2 depth-decoupled fields (Density ≈ 1 sane at any zoom)
+uniform int       uColorNormV2;
+// ln(world-units per pixel) = ln(uScale / uResolution.y). Passed as a LOG because
+// the linear pixel spacing underflows f32 at deep zoom (uScale does too — that's why
+// the deep path carries uDeepScale as HDR). Drives the in-pixels Distance Estimate.
+uniform float     uLogPixelScale;
+// Iterations-mode (mode 0) v2 controls: uIterRate = gamma on log-iteration (low-vs-high
+// emphasis); uIterOffset/uIterScale = on-demand "Fit to view" re-anchor of the visible
+// iteration range onto the gradient (identity 0 / 1 = colours hold across zoom).
+uniform float     uIterRate;
+uniform float     uIterOffset;
+uniform float     uIterScale;
 uniform sampler2D uCollisionGradient;
 uniform float     uCollisionRepeat;
 uniform float     uCollisionPhase;
@@ -245,6 +259,16 @@ vec2 cpow(vec2 z, float p) {
   float rm = pow(mag, p);
   float ra = ang * p;
   return rm * vec2(cos(ra), sin(ra));
+}
+
+// Cheap per-pixel 2D hash (Dave Hoskins hash22) → [0,1)². Used to decorrelate the
+// TSAA sub-cell jitter PER PIXEL instead of shifting the whole image by one global
+// offset each round — which made neighbouring boundary pixels cross a colour band in
+// lockstep, the cause of the grid-aligned "blocky" background convergence.
+vec2 hash22(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.xx + p3.yz) * p3.zy);
 }
 
 // Distance of point q to the currently-selected trap shape.
@@ -446,6 +470,14 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA) {
   float trapIter  = 0.0;
   float stripeSum = 0.0;
   int   stripeCount = 0;
+  // Stripe-average colouring loses contrast at depth: as the iteration cap rises,
+  // more sin() terms average toward 0.5 (central-limit), so deep views need an
+  // absurd Density to tease bands out. In v2 we scale the angular frequency down by
+  // ln(cap) so fewer, broader stripes contribute coherently → contrast holds at any
+  // depth. v1 leaves the user's frequency untouched. (Output stays [0,1].)
+  float stripeFreqEff = (uColorNormV2 != 0)
+      ? uStripeFreq / max(1.0, log(max(float(uColorIter), 2.0)))
+      : uStripeFreq;
   vec2  dz = vec2(1.0, 0.0);  // dz/dc, the standard-path derivative tracker
 
   // iter tracks total iterations performed across the LA pre-pass and
@@ -736,7 +768,7 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA) {
     if (uTrackAccum != 0 && iter < uColorIter) {
       float td = trapDistance(z);
       if (td < minT) { minT = td; trapIter = float(iter); }
-      stripeSum += 0.5 + 0.5 * sin(uStripeFreq * atan(z.y, z.x));
+      stripeSum += 0.5 + 0.5 * sin(stripeFreqEff * atan(z.y, z.x));
       stripeCount++;
     }
     float r2 = dot(z, z);
@@ -788,18 +820,17 @@ void main() {
   int frameIdx = max(uTsaaSampleIndex, 0);
   int round = frameIdx / framesPerRound;
   int frameInRound = frameIdx - round * framesPerRound;
-  // Sub-cell offset progressive refinement. Round 0 = cell centre
-  // (matches a single-frame K=gridSize grid). Round 1+ pulls a
-  // deterministic blue-noise tap indexed by round number — same
-  // offset for every pixel at a given round (no shimmer; the whole
-  // image jitters as one), but consecutive rounds walk through the
-  // blue-noise texture via R2 so the offset sequence has good 2D
-  // coverage without low-discrepancy patterning.
+  // Sub-cell offset progressive refinement. Round 0 = cell centre (matches a
+  // single-frame K=gridSize grid). Round 1+ jitters within the cell by a PER-PIXEL
+  // offset seeded by hash(pixel, round): deterministic in (pixel, round) so the
+  // offset is stable across the frames of a round (no shimmer), but neighbouring
+  // pixels get DECORRELATED offsets — so boundary pixels no longer cross a colour
+  // band in lockstep and the convergence dissolves into per-pixel noise the 1/N
+  // blend averages out smoothly, instead of stepping in grid-aligned blocks.
   vec2 subOffset = vec2(0.0);
   if (round > 0) {
-    vec2 roundCoord = vec2(R2_A1, R2_A2) * float(round) * uBlueNoiseResolution.x;
-    vec4 bn = getStableBlueNoise4(roundCoord);
-    subOffset = (bn.xy - 0.5) / float(gridDim);
+    vec2 h = hash22(gl_FragCoord.xy + vec2(float(round) * 19.19, float(round) * 7.7));
+    subOffset = (h - 0.5) / float(gridDim);
   }
   int cellOffset = frameInRound * K;
 

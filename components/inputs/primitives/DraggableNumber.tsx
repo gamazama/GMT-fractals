@@ -64,6 +64,8 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
         step,
         sensitivity,
         axis,
+        min,
+        max,
         hardMin,
         hardMax,
         mapping,

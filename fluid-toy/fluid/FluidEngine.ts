@@ -19,6 +19,7 @@ import {
   FRAG_TSAA_BLEND,
 } from './shaders';
 import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../engine/utils/createBlueNoiseWebGL2';
+import { autoShallowIter } from '../../engine/fractal/iterationPolicy';
 import { DeepZoomController } from './DeepZoomController';
 import { GpuTimerManager } from './GpuTimerManager';
 import { GradientLutManager } from './GradientLutManager';
@@ -198,7 +199,14 @@ export interface FluidParams {
    *  (non-deep) views work unchanged. */
   centerLow: [number, number];
   zoom: number;               // world-units per screen-height / 2
-  maxIter: number;
+  /** Auto-scale the per-pixel iteration cap with zoom depth (shallow) and the
+   *  reference-orbit length (deep). When false, `maxIter` / `deepMaxIter` are
+   *  the hard caps. See engine/fractal/iterationPolicy. */
+  autoIter: boolean;
+  /** Multiplier on the AUTO iteration count (shallow + deep build/cap). 1 = policy
+   *  default; raise for difficult areas. Ignored when autoIter is false. */
+  iterMul: number;
+  maxIter: number;            // manual shallow cap (used when autoIter is false)
   escapeR: number;
   power: number;
   kind: FractalKind;
@@ -224,6 +232,9 @@ export interface FluidParams {
   gradientRepeat: number;
   /** Phase shift of the gradient along the mapped axis (0..1 wraps). */
   gradientPhase: number;
+  /** Depth-normalized colour fields (v2). True = every mode divided by its depth
+   *  driver so Density ≈ 1 is sane at any zoom; false = original per-mode look. */
+  colorNormV2: boolean;
   /** What fractal quantity drives the gradient lookup. */
   colorMapping: ColorMapping;
   /** Iterations used for coloring accumulators (orbit-trap, stripe, DE, etc). ≤ maxIter. */
@@ -328,6 +339,12 @@ export interface FluidParams {
    *  when off (the shader's deep branch is dead-stripped past its
    *  guard). Driven by the DeepZoomFeature DDFS slice. */
   deepZoomEnabled: boolean;
+  /** Manual deep per-pixel cap (used when autoIter is false + deep zoom on). */
+  deepMaxIter: number;
+  /** Auto deep per-pixel cap — the reference-orbit length (or full zoom-depth
+   *  budget for a periodic nucleus), computed by useDeepZoomOrbit after each
+   *  orbit build and pushed in. Used when autoIter is true + deep zoom on. */
+  deepIterCap: number;
 }
 
 export interface FBO {
@@ -375,6 +392,8 @@ export const DEFAULT_PARAMS: FluidParams = {
   center: [-0.8139175130270945, -0.054649908357858296],
   centerLow: [0, 0],
   zoom: 1.2904749020480561,
+  autoIter: true,
+  iterMul: 1,
   maxIter: 310,
   escapeR: 32,
   power: 2,
@@ -396,6 +415,7 @@ export const DEFAULT_PARAMS: FluidParams = {
   velocityViz: 0.02,
   gradientRepeat: 1,
   gradientPhase: 0,
+  colorNormV2: false,
   colorMapping: 'iterations',
   colorIter: 310,
   trapCenter: [0, 0],
@@ -441,6 +461,8 @@ export const DEFAULT_PARAMS: FluidParams = {
   tsaaGridSize: 16,
   tsaaJitterMode: 'grid',
   deepZoomEnabled: false,
+  deepMaxIter: 2_000,
+  deepIterCap: 2_000,
 };
 
 export class FluidEngine {
@@ -711,6 +733,7 @@ export class FluidEngine {
        'uATRefC', 'uATCCoeff', 'uATInvZCoeff',
        'uTrackAccum', 'uTrackDeriv',
        'uGradient', 'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uInteriorColor',
+       'uColorNormV2', 'uLogPixelScale', 'uIterRate', 'uIterOffset', 'uIterScale',
        'uCollisionGradient', 'uCollisionRepeat', 'uCollisionPhase', 'uCollisionEnabled']);
     this.progTsaaBlend = this.linkProgram(VERT_FULLSCREEN, FRAG_TSAA_BLEND,
       ['uCurrentMain', 'uCurrentFx', 'uHistoryMain', 'uHistoryFx', 'uSampleIndex']);
@@ -1239,6 +1262,24 @@ export class FluidEngine {
 
   // ---------------------------- Per-frame passes ----------------------------
 
+  /**
+   * Per-pixel iteration cap for the julia display pass. Mirrors the Gradient
+   * Explorer's FractalColorRenderer.effectiveMaxIter via the shared
+   * engine/fractal/iterationPolicy, so both renderers iterate identically:
+   *   • deep zoom (orbit built): the reference-orbit cap (deepIterCap, computed
+   *     in useDeepZoomOrbit) — or the manual deepMaxIter when autoIter is off;
+   *   • shallow: zoom-scaled (autoShallowIter) — or the manual maxIter when off.
+   * The fluid force (motion pass) keeps the modest manual maxIter; only the
+   * displayed fractal needs the deep iteration budget.
+   */
+  private effectiveMaxIter(): number {
+    const p = this.params;
+    if (p.deepZoomEnabled && this.deepZoom.hasOrbit()) {
+      return Math.max(200, (p.autoIter ? p.deepIterCap : p.deepMaxIter) | 0);
+    }
+    return p.autoIter ? autoShallowIter(p.zoom, p.iterMul) : Math.max(4, p.maxIter | 0);
+  }
+
   private renderJulia() {
     const gl = this.gl;
 
@@ -1291,9 +1332,17 @@ export class FluidEngine {
       ? this.bucketOutputSize[0] / this.bucketOutputSize[1]
       : this.simW / this.simH;
     gl.uniform1f(this.progJulia.uniforms['uAspect'], aspect);
-    const maxIt = Math.max(4, this.params.maxIter | 0);
+    const maxIt = this.effectiveMaxIter();
     gl.uniform1i(this.progJulia.uniforms['uMaxIter'], maxIt);
-    gl.uniform1i(this.progJulia.uniforms['uColorIter'], Math.max(1, Math.min(maxIt, this.params.colorIter | 0)));
+    // Coloring-accumulator cap (orbit-trap / stripe / DE run only while
+    // iter < uColorIter). With Auto iterations on, track the effective cap so
+    // those modes — and the Iteration × multiplier — actually gain detail at
+    // depth (matches the Gradient Explorer, which binds uColorIter = uMaxIter).
+    // With auto off, honour the manual palette.colorIter knob (capped at maxIt).
+    const colorIt = this.params.autoIter
+      ? maxIt
+      : Math.max(1, Math.min(maxIt, this.params.colorIter | 0));
+    gl.uniform1i(this.progJulia.uniforms['uColorIter'], colorIt);
     gl.uniform1f(this.progJulia.uniforms['uEscapeR2'], this.params.escapeR * this.params.escapeR);
     gl.uniform1f(this.progJulia.uniforms['uPower'], this.params.power);
     gl.uniform1i(this.progJulia.uniforms['uTrapMode'], colorMappingTrapShape(this.params.colorMapping));
@@ -1358,6 +1407,21 @@ export class FluidEngine {
     gl.uniform1i(this.progJulia.uniforms['uColorMapping'], colorMappingToIndex(this.params.colorMapping));
     gl.uniform1f(this.progJulia.uniforms['uGradientRepeat'], this.params.gradientRepeat);
     gl.uniform1f(this.progJulia.uniforms['uGradientPhase'], this.params.gradientPhase);
+    gl.uniform1i(this.progJulia.uniforms['uColorNormV2'], this.params.colorNormV2 ? 1 : 0);
+    // ln(world-units per pixel) for the v2 in-pixels Distance Estimate. Computed in
+    // JS (f64) so it survives deep zoom where uScale underflows f32. Use full-output
+    // height during bucket render so DE stays scale-correct in exports.
+    {
+      const heightPx = this.bucketOutputSize[1] > 0 ? this.bucketOutputSize[1] : this.simH;
+      gl.uniform1f(this.progJulia.uniforms['uLogPixelScale'],
+        Math.log((2 * Math.max(this.params.zoom, 1e-300)) / Math.max(heightPx, 1)));
+    }
+    // Iterations-mode (v2) log-iteration gamma + Fit-to-view anchor. fluid-toy has no UI
+    // for these yet, so bind identity (rate 1, offset 0, scale 1) → absolute log-iteration,
+    // colours hold across zoom. (GX drives the real values.)
+    gl.uniform1f(this.progJulia.uniforms['uIterRate'], 1);
+    gl.uniform1f(this.progJulia.uniforms['uIterOffset'], 0);
+    gl.uniform1f(this.progJulia.uniforms['uIterScale'], 0.125); // 1/LREF pivot (see gradientSample)
     gl.uniform3f(this.progJulia.uniforms['uInteriorColor'],
       this.params.interiorColor[0], this.params.interiorColor[1], this.params.interiorColor[2]);
     gl.uniform1i(this.progJulia.uniforms['uCollisionEnabled'], this.params.collisionEnabled ? 1 : 0);
@@ -1465,7 +1529,7 @@ export class FluidEngine {
     // change that alters the baked colour must reset the accumulator,
     // not just the iteration-affecting params.
     const ic = p.interiorColor;
-    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|ic:${ic[0]},${ic[1]},${ic[2]}|ce:${p.collisionEnabled ? 1 : 0}|cr:${p.collisionRepeat}|cp:${p.collisionPhase}|gV:${this.gradients.version}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}`;
+    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|cL:${p.centerLow[0]},${p.centerLow[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|cn:${p.colorNormV2 ? 1 : 0}|ic:${ic[0]},${ic[1]},${ic[2]}|ce:${p.collisionEnabled ? 1 : 0}|cr:${p.collisionRepeat}|cp:${p.collisionPhase}|gV:${this.gradients.version}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}|ai:${p.autoIter ? 1 : 0}|im:${p.iterMul}|dmi:${p.deepMaxIter}`;
     if (hash !== this.tsaaParamHash) {
         this.tsaaParamHash = hash;
         this.tsaaSampleIndex = 0;

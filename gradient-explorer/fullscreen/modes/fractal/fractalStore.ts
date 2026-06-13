@@ -31,7 +31,23 @@ export interface FractalState {
   deepZoom: boolean;
   /** Per-pixel iteration multiplier (1 = auto). Raise to resolve deeper detail. */
   iterMul: number;
+  /** Depth-normalized colour fields (v2). When on, every mapping mode is divided by its
+   *  depth driver so Density (repeats) ≈ 1 stays sane at any zoom. Off = the original
+   *  per-mode look, byte-identical. A/B flag — ships off pending the visual pass. */
+  colorNormV2: boolean;
+  /** Iterations mode (v2): gamma on the log-iteration field — biases low-iteration
+   *  filaments vs deep interiors. 1 = neutral. */
+  iterRate: number;
+  /** Iterations mode (v2) "Fit to view" anchor: log-iteration window [offset, offset+1/scale]
+   *  mapped onto the gradient. offset 0 / scale 1 = identity (a point's colour holds across
+   *  zoom). Set by the Fit-to-view action; never a slider. */
+  iterOffset: number;
+  iterScale: number;
 }
+
+/** Identity anchor scale = 1/LREF (LREF=8 ≈ log(1+3000)). Pivots the Rate gamma at Lv=1 so
+ *  Rate reshapes the curve without scaling its magnitude → Density stays usable (~1). */
+const ITER_IDENTITY_SCALE = 0.125;
 
 const INITIAL: FractalState = {
   phase: 0,
@@ -40,6 +56,10 @@ const INITIAL: FractalState = {
   animate: false,
   deepZoom: true,
   iterMul: 1,
+  colorNormV2: false,
+  iterRate: 1,
+  iterOffset: 0,
+  iterScale: ITER_IDENTITY_SCALE,
 };
 
 let state: FractalState = INITIAL;
@@ -62,10 +82,11 @@ export const setFractalPhase = (phase: number): void => {
   if (p !== state.phase) emit({ phase: p });
 };
 
-/** Sensible starting "Repeats" per colour-mapping mode — the modes compress or stretch the mapped
- *  t-range very differently, so a value good for one is wrong for another. Switching mode re-seeds
- *  this so you start near a usable tiling instead of carrying the previous mode's (often wildly off)
- *  value. Tune from there with the (log) Repeats slider; modes not listed fall back to 1. */
+/** Sensible starting "Repeats" per colour-mapping mode for the LEGACY (v1) colour path —
+ *  those modes compress/stretch the un-normalized t-range very differently, so a value good
+ *  for one is wrong for another. Switching mode re-seeds this so you start near a usable
+ *  tiling. Under depth-normalized colour (v2) every mode wants ≈1, so the re-seed collapses
+ *  to a universal 1.0 and this table is bypassed (sign-off D4). */
 const DEFAULT_REPEATS_BY_MODE: Record<number, number> = {
   0: 1,    // Iterations
   4: 4,    // Bands
@@ -86,12 +107,44 @@ export const setFractalRepeats = (repeats: number): void => {
   if (r !== state.repeats) emit({ repeats: r });
 };
 
-/** Set the live fractal colormap mapping mode (kernel colorMapping index). Also re-seeds Repeats to
- *  a sane default for the new mode. */
+/** Set the live fractal colormap mapping mode (kernel colorMapping index). Re-seeds Density to a
+ *  sane default for the new mode: a universal 1.0 under depth-normalized colour (v2), else the
+ *  legacy per-mode table. */
 export const setFractalMapping = (mapping: number): void => {
   const m = mapping | 0;
   if (m === state.mapping) return;
-  emit({ mapping: m, repeats: DEFAULT_REPEATS_BY_MODE[m] ?? 1 });
+  const seed = state.colorNormV2 ? 1 : (DEFAULT_REPEATS_BY_MODE[m] ?? 1);
+  emit({ mapping: m, repeats: seed });
+};
+
+/** Toggle depth-normalized colour (v2). Re-seeds Density to 1 when turning it on (every
+ *  normalized mode wants ≈1) so the user lands on a sane value instead of the legacy seed. */
+export const setFractalColorNormV2 = (on: boolean): void => {
+  if (on === state.colorNormV2) return;
+  emit({ colorNormV2: on, repeats: on ? 1 : state.repeats });
+};
+
+/** Set the Iterations-mode log-iteration gamma. Slider track is 0.25..8 but typed/dragged
+ *  values are free within a loose guard (0.01..64 — just keeps the pow well-defined and
+ *  positive). Pivoted at Lv=1 so it reshapes contrast without forcing Density to compensate. */
+export const setFractalIterRate = (rate: number): void => {
+  if (!Number.isFinite(rate)) return;
+  const r = rate < 0.01 ? 0.01 : rate > 64 ? 64 : rate;
+  if (r !== state.iterRate) emit({ iterRate: r });
+};
+
+/** Apply a "Fit to view" anchor (offset/scale) computed from the current view's iteration
+ *  range. After this colours HOLD again (the anchor is fixed) until re-fit or reset. */
+export const setFractalIterFit = (offset: number, scale: number): void => {
+  if (!Number.isFinite(offset) || !Number.isFinite(scale)) return;
+  if (offset !== state.iterOffset || scale !== state.iterScale) emit({ iterOffset: offset, iterScale: scale });
+};
+
+/** Reset the Iterations anchor to identity (absolute pivoted log-iteration — colours hold). */
+export const resetFractalIterFit = (): void => {
+  if (state.iterOffset !== 0 || state.iterScale !== ITER_IDENTITY_SCALE) {
+    emit({ iterOffset: 0, iterScale: ITER_IDENTITY_SCALE });
+  }
 };
 
 /** Toggle phase auto-cycling (palette-cycling animation). */

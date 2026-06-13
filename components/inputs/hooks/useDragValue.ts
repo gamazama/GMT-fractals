@@ -56,6 +56,8 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         onDragEnd,
         step = 0.01,
         sensitivity = 1,
+        min,
+        max,
         hardMin,
         hardMax,
         mapping,
@@ -78,14 +80,22 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
     const currentPointerId = useRef<number | null>(null);
 
     /**
-     * Calculate sensitivity multiplier based on step and modifiers
+     * Per-pixel sensitivity, expressed in DISPLAY space (the drag accumulates onto
+     * mapping.toDisplay(value)). For a mapped (e.g. log) param the raw `step` is the wrong
+     * unit — it's a raw-value quantum, not a display-space rate — so a tiny step (0.0001)
+     * crawled and the value barely moved. When bounds + a mapping are present, derive the
+     * rate from the display SPAN so a plain drag traverses the soft range in ~DRAG_RANGE_PX
+     * pixels (mirrors the track's feel); otherwise keep the raw step*0.5 rate (display == raw).
      */
     const getSensitivity = useCallback((shiftKey: boolean, altKey: boolean): number => {
-        let sens = step * 0.5 * sensitivity;
-        if (shiftKey) sens *= 10;  // Fast mode
-        if (altKey) sens *= 0.1;   // Precision mode
-        return sens;
-    }, [step, sensitivity]);
+        const mult = (shiftKey ? 10 : 1) * (altKey ? 0.1 : 1);
+        if (mapping && min !== undefined && max !== undefined && min !== max) {
+            const DRAG_RANGE_PX = 200;
+            const span = Math.abs(mapping.toDisplay(max) - mapping.toDisplay(min));
+            return (span / DRAG_RANGE_PX) * sensitivity * mult;
+        }
+        return step * 0.5 * sensitivity * mult;
+    }, [step, sensitivity, mapping, min, max]);
 
     /**
      * Handle pointer down - start drag
@@ -153,16 +163,16 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
             lastAlt.current = e.altKey;
         }
 
-        // Calculate new value with current sensitivity
+        // Calculate new value with current sensitivity (in DISPLAY space).
         const currentSensitivity = getSensitivity(e.shiftKey, e.altKey);
-        let nextValue = dragStartValue.current + (dx * currentSensitivity);
+        const nextDisplay = dragStartValue.current + (dx * currentSensitivity);
 
-        // Apply hard bounds if specified
-        if (hardMin !== undefined) nextValue = Math.max(hardMin, nextValue);
-        if (hardMax !== undefined) nextValue = Math.min(hardMax, nextValue);
-
-        // Convert from display value to internal value
-        const finalValue = mapping ? mapping.fromDisplay(nextValue) : nextValue;
+        // Convert display → internal FIRST, then clamp hard bounds in RAW space. (Clamping the
+        // display value broke mapped params: a raw hardMin of 0.0001 applied to a log-display
+        // value floored it at e^0.0001 ≈ 1 — the "min just over 1" bug.)
+        let finalValue = mapping ? mapping.fromDisplay(nextDisplay) : nextDisplay;
+        if (hardMin !== undefined) finalValue = Math.max(hardMin, finalValue);
+        if (hardMax !== undefined) finalValue = Math.min(hardMax, finalValue);
 
         if (!isNaN(finalValue)) {
             immediateValueRef.current = finalValue;

@@ -36,6 +36,12 @@ import { GradientLutManager } from './GradientLutManager';
 import { DeepZoomController } from './DeepZoomController';
 import { getDeepZoomRuntime } from './deepZoom/laRuntime';
 import { ddAddF64 } from './deepZoom/dd';
+import {
+  autoShallowIter,
+  deepRefIter as policyDeepRefIter,
+  deepBuildIter as policyDeepBuildIter,
+  deepGpuCap,
+} from './iterationPolicy';
 import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../utils/createBlueNoiseWebGL2';
 import { createDitherNoise, linkProgram, wireContextLoss } from '../utils/glHelpers';
 
@@ -105,6 +111,20 @@ export interface FractalColorParams {
   gradientRepeat: number;
   /** Phase offset of the colormap along the mapped axis, 0..1 wraps (live knob). */
   gradientPhase: number;
+  /** Depth-normalized colour fields (v2). When true, every colorMapping mode is
+   *  divided through by its depth driver (iteration cap / pixel scale / log
+   *  potential) so the Density control means the same thing at any zoom. When
+   *  false, the legacy per-mode constants render the original look byte-identical.
+   *  A/B flag — ships false; flip the default after the visual pass. */
+  colorNormV2: boolean;
+  /** Iterations mode (v2) gamma on log-iteration — biases low-iter filaments vs deep
+   *  interiors. 1 = neutral. Only affects colorMapping 0. */
+  iterRate: number;
+  /** Iterations-mode "Fit to view" re-anchor of the visible iteration range onto the
+   *  gradient. offset/scale default to 0/1 (identity → a point's colour holds across
+   *  zoom); `fitIterationRange()` sets them from the current view on demand. */
+  iterOffset: number;
+  iterScale: number;
   /** Colour for points inside the set. */
   interiorColor: [number, number, number];
   // Orbit-trap / stripe params — used only by the matching colorMapping modes.
@@ -134,6 +154,13 @@ const DEFAULTS: FractalColorParams = {
   colorMapping: 0,
   gradientRepeat: 1,
   gradientPhase: 0,
+  colorNormV2: false,
+  iterRate: 1,
+  iterOffset: 0,
+  // 1/LREF (LREF=8 ≈ log(1+3000), a typical deep iteration count). This pivots the Rate
+  // gamma at Lv=1 so Rate reshapes the curve WITHOUT scaling its magnitude — keeping Density
+  // in a usable range (~1) instead of forcing it to ~0.001 to cancel a high Rate.
+  iterScale: 0.125,
   interiorColor: [0.02, 0.02, 0.04],
   trapCenter: [0, 0],
   trapRadius: 1,
@@ -188,8 +215,31 @@ const JULIA_UNIFORMS = [
   'uATRefC', 'uATCCoeff', 'uATInvZCoeff',
   'uTrackAccum', 'uTrackDeriv',
   'uGradient', 'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uInteriorColor',
+  'uColorNormV2', 'uLogPixelScale', 'uIterRate', 'uIterOffset', 'uIterScale',
   'uCollisionGradient', 'uCollisionRepeat', 'uCollisionPhase', 'uCollisionEnabled',
 ];
+
+/** Decode an IEEE half-float (Uint16) → JS number. Fallback for drivers that only
+ *  allow HALF_FLOAT readback from an RGBA16F attachment. */
+const halfToFloat = (hbits: number): number => {
+  const s = (hbits & 0x8000) >> 15;
+  const e = (hbits & 0x7c00) >> 10;
+  const f = hbits & 0x03ff;
+  if (e === 0) return (s ? -1 : 1) * Math.pow(2, -14) * (f / 1024);
+  if (e === 0x1f) return f ? NaN : (s ? -Infinity : Infinity);
+  return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / 1024);
+};
+
+/** Linear-interpolated percentile from a uniform histogram over [lo,hi]. */
+const percentileFromHist = (hist: Int32Array, total: number, frac: number, lo: number, hi: number): number => {
+  const target = total * frac;
+  let cum = 0;
+  for (let b = 0; b < hist.length; b++) {
+    cum += hist[b];
+    if (cum >= target) return lo + ((b + 0.5) * (hi - lo)) / hist.length;
+  }
+  return hi;
+};
 
 export class FractalColorRenderer {
   private gl: WebGL2RenderingContext;
@@ -504,9 +554,7 @@ export class FractalColorRenderer {
       // every later-escaping pixel to interior — the iteration cliff). For a
       // NON-periodic reference the orbit length is the hard ceiling (iterating
       // past it only wastes cycles rebasing). @see docs/adr/0066
-      this.deepGpuIter = res.period > 0
-        ? this.deepBuildIter()
-        : Math.max(200, res.length);
+      this.deepGpuIter = deepGpuCap(this.params.zoom, res.length, res.period, this.params.iterMul || 1);
       // Use the reference centre the BUILDER chose — the auto-reference search
       // may have relocated it to a deeper (non-escaping) point than the view
       // centre. setReferenceOrbit must get the actual orbit centre so the
@@ -555,6 +603,80 @@ export class FractalColorRenderer {
 
   getParams(): Readonly<FractalColorParams> {
     return this.params;
+  }
+
+  /** Re-anchor Iterations-mode (v2) colour onto the CURRENT view's iteration range: reads back
+   *  the converged smoothPot channel (texMain.g = smoothIter/maxIter), takes its 2nd/98th
+   *  percentiles over escaped pixels, recovers the raw count via the active cap, and returns the
+   *  {offset, scale} that map that log-iteration window onto the full gradient. Returns null if
+   *  nothing escaped (all-interior view). One-shot — the caller writes the result to the store,
+   *  after which colours HOLD again (the anchor is fixed) until the next fit/reset. */
+  fitIterationRange(): { offset: number; scale: number } | null {
+    const gl = this.gl;
+    const w = this.simW;
+    const h = this.simH;
+    const n = w * h;
+    if (n <= 0) return null;
+
+    // texMain (att0) = vec4(DE, smoothPot, stripe, injectGate), TSAA-blended. The normalized
+    // iteration `smoothPot = smoothIter/maxIter` lives in CHANNEL 1; multiply by the active cap
+    // to recover the raw count the shader's log-iteration field uses.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.juliaTsaa.fbo);
+    gl.readBuffer(gl.COLOR_ATTACHMENT0);
+    // RGBA16F is not universally FLOAT-readable; ask the driver what it actually supports
+    // (FLOAT or HALF_FLOAT here) rather than guessing and silently reading zeros.
+    const readType = gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_TYPE) as number;
+    let smoothPotOf: (i: number) => number;
+    if (readType === gl.FLOAT) {
+      const fbuf = new Float32Array(n * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.FLOAT, fbuf);
+      smoothPotOf = (i) => fbuf[i * 4 + 1];
+    } else {
+      const hbuf = new Uint16Array(n * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.HALF_FLOAT, hbuf);
+      smoothPotOf = (i) => halfToFloat(hbuf[i * 4 + 1]);
+    }
+    const glErr = gl.getError();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (glErr !== gl.NO_ERROR) {
+      console.warn('[fitIterationRange] readPixels failed', glErr, 'readType', readType);
+      return null;
+    }
+
+    const maxIter = Math.max(this.effectiveMaxIter(), 1);
+    // Escaped pixels have smoothPot in (0,1); interior sits at ~1 (iters clamped to the cap).
+    // Pass 1: min/max smoothPot over escaped pixels.
+    let lo = Infinity;
+    let hi = -Infinity;
+    let count = 0;
+    for (let i = 0; i < n; i++) {
+      const sp = smoothPotOf(i);
+      if (!Number.isFinite(sp) || sp <= 1e-4 || sp >= 0.999) continue;
+      if (sp < lo) lo = sp;
+      if (sp > hi) hi = sp;
+      count++;
+    }
+    if (count === 0 || hi <= lo) {
+      console.warn('[fitIterationRange] no escaped pixels in view to fit');
+      return null;
+    }
+
+    // Pass 2: 256-bin histogram of smoothPot → 2nd/98th percentile (trims a few outliers).
+    const BINS = 256;
+    const hist = new Int32Array(BINS);
+    const inv = (BINS - 1) / (hi - lo);
+    for (let i = 0; i < n; i++) {
+      const sp = smoothPotOf(i);
+      if (!Number.isFinite(sp) || sp <= 1e-4 || sp >= 0.999) continue;
+      hist[Math.round((sp - lo) * inv)]++;
+    }
+    const spLo = percentileFromHist(hist, count, 0.02, lo, hi);
+    const spHi = percentileFromHist(hist, count, 0.98, lo, hi);
+    // Map percentile smoothPot → raw count → log-iteration window (the field's units).
+    const lLo = Math.log(1 + Math.max(spLo * maxIter, 0));
+    const lHi = Math.log(1 + Math.max(spHi * maxIter, 0));
+    const span = Math.max(lHi - lLo, 1e-3);
+    return { offset: lLo, scale: 1 / span };
   }
 
   /** Set the render buffer + canvas dimensions. Renders at native device pixels (×DPR, capped at
@@ -629,8 +751,7 @@ export class FractalColorRenderer {
   /** Zoom-depth iteration budget (base, before iterMul). Grows with depth so a
    *  deeper view has more orbit to iterate against. */
   private deepRefIter(): number {
-    const depth = Math.log10(DEFAULTS.zoom / Math.max(this.params.zoom, MANDEL_DEEP_MIN_ZOOM));
-    return Math.round(Math.min(20000, Math.max(2000, 1500 + 900 * Math.max(0, depth))));
+    return policyDeepRefIter(this.params.zoom);
   }
 
   /** Reference-orbit BUILD length = the zoom-depth budget scaled by the user's
@@ -642,8 +763,7 @@ export class FractalColorRenderer {
    *  reference reused beyond its validity — we fold iterMul into the build length
    *  here rather than multiplying the GPU cap. @see docs/adr/0065 */
   private deepBuildIter(): number {
-    const mul = Math.max(0.25, this.params.iterMul || 1);
-    return Math.round(Math.min(MANDEL_MAX_DEEP_ITER, this.deepRefIter() * mul));
+    return policyDeepBuildIter(this.params.zoom, this.params.iterMul || 1);
   }
 
   private effectiveMaxIter(): number {
@@ -664,9 +784,7 @@ export class FractalColorRenderer {
     }
     if (!p.autoIter) return Math.max(4, Math.round((p.maxIter | 0) * mul));
     // More iterations as you dive so shallow views stay crisp, not blobby.
-    const depth = Math.log10(DEFAULTS.zoom / Math.max(p.zoom, MANDEL_MIN_ZOOM));
-    const base = Math.max(200, Math.min(2000, 200 + 220 * Math.max(0, depth)));
-    return Math.round(base * mul);
+    return autoShallowIter(p.zoom, mul);
   }
 
   private zoomFloor(): number {
@@ -700,6 +818,7 @@ export class FractalColorRenderer {
       + `${p.power}|${this.effectiveMaxIter()}|${p.escapeR}|${p.colorMapping}|`
       + `${p.trapCenter[0]},${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]},${p.trapNormal[1]}|`
       + `${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|`
+      + `cn:${p.colorNormV2 ? 1 : 0}|ir:${p.iterRate}|io:${p.iterOffset}|is:${p.iterScale}|`
       + `ic:${ic[0]},${ic[1]},${ic[2]}|gV:${this.gradients.version}`
       + `|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}`;
     if (hash !== this.tsaaParamHash) {
@@ -779,6 +898,14 @@ export class FractalColorRenderer {
     gl.uniform1i(u['uColorMapping'], cm);
     gl.uniform1f(u['uGradientRepeat'], p.gradientRepeat);
     gl.uniform1f(u['uGradientPhase'], p.gradientPhase);
+    gl.uniform1i(u['uColorNormV2'], p.colorNormV2 ? 1 : 0);
+    // ln(world-units per pixel) = ln(2·uScale / heightPx). Computed in JS (f64)
+    // so it stays exact even when uScale itself underflows f32 at deep zoom; the
+    // log keeps the value tiny (~-115 at zoom 1e-50), well inside f32 range.
+    gl.uniform1f(u['uLogPixelScale'], Math.log((2 * Math.max(p.zoom, 1e-300)) / Math.max(this.simH, 1)));
+    gl.uniform1f(u['uIterRate'], p.iterRate);
+    gl.uniform1f(u['uIterOffset'], p.iterOffset);
+    gl.uniform1f(u['uIterScale'], p.iterScale);
     gl.uniform3f(u['uInteriorColor'], p.interiorColor[0], p.interiorColor[1], p.interiorColor[2]);
     gl.uniform1i(u['uCollisionEnabled'], 0);
     gl.uniform1f(u['uCollisionRepeat'], 1);

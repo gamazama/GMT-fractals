@@ -34,6 +34,10 @@ import {
   setFractalMapping,
   setFractalAnimate,
   setFractalIterMul,
+  setFractalColorNormV2,
+  setFractalIterRate,
+  setFractalIterFit,
+  resetFractalIterFit,
   useFractalState,
 } from './fractal/fractalStore';
 import type { FullscreenMode, OwnCanvasHost, OwnCanvasHandle } from '../modeRegistry';
@@ -55,9 +59,28 @@ const FRACTAL_MAPPINGS: ReadonlyArray<{ value: number; label: string }> = [
 
 /** Per-frame phase advance when auto-cycling (≈ one full cycle / 8s @ 60fps). */
 const PHASE_ANIM_STEP = 1 / 480;
-// Repeats spans ~5 decades and the useful value shifts by colour-mapping mode and zoom depth —
-// a linear track crams everything into the high end. A log mapping makes each drag a RATIO.
-const REPEATS_MAPPING = createLogMapping(0.01, 1024);
+// Density is a log control so each drag is a RATIO. Under depth-normalized colour (v2) every
+// mode wants ≈1 so a ~3-decade track (0.1..100) centred on 1 is plenty; the hard bounds stay
+// wide so legacy (v1) power-users can still type the old extreme tilings (e.g. Stripe ~500).
+const REPEATS_MAPPING = createLogMapping(0.05, 100);
+// Iterations 'Rate' (log-iteration gamma) — log track centred on 1, each drag a ratio.
+const ITER_RATE_MAPPING = createLogMapping(0.25, 8);
+
+/** The exact fractal view + colour-mapping a handoff carries to another app (fluid-toy).
+ *  A flat, app-agnostic snapshot — the consumer maps it onto its own slices. */
+export interface FractalHandoffCoords {
+  center: [number, number];
+  centerLow: [number, number];
+  zoom: number;
+  juliaC: [number, number];
+  kind: 'mandelbrot' | 'julia';
+  power: number;
+  maxIter: number;
+  colorMapping: number;
+  gradientRepeat: number;
+  gradientPhase: number;
+  deepZoom: boolean;
+}
 
 /** The single live fractal instance's control surface (one overlay → one fractal at a time).
  *  `mount()` publishes it so the toolbar `Controls` (a separate React subtree) can drive
@@ -66,7 +89,14 @@ const REPEATS_MAPPING = createLogMapping(0.01, 1024);
 let activeControl: {
   resetView: () => void;
   copyCoords: () => string | null;
+  getCoords: () => FractalHandoffCoords | null;
+  fitIterView: () => boolean;
 } | null = null;
+
+/** Read the live fractal's exact view + colour-mapping, or null when no fractal is mounted.
+ *  Used by the fullscreen overlay's "Open in Fluid Toy" handoff + PNG coordinate embed. */
+export const getActiveFractalCoords = (): FractalHandoffCoords | null =>
+  activeControl?.getCoords() ?? null;
 
 /**
  * Mount the live fractal: create + drive its own WebGL renderer in `host.container`. Ported
@@ -165,6 +195,10 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
           gradientPhase: f.phase,
           gradientRepeat: f.repeats,
           colorMapping: f.mapping,
+          colorNormV2: f.colorNormV2,
+          iterRate: f.iterRate,
+          iterOffset: f.iterOffset,
+          iterScale: f.iterScale,
           iterMul: f.iterMul,
         });
         if (f.deepZoom) r.setDeepZoomEnabled(true);
@@ -188,6 +222,10 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
       let prevMapping = f0.mapping;
       let prevIterMul = f0.iterMul;
       let prevDeep = f0.deepZoom;
+      let prevColorNorm = f0.colorNormV2;
+      let prevIterRate = f0.iterRate;
+      let prevIterOffset = f0.iterOffset;
+      let prevIterScale = f0.iterScale;
       unsubscribe = subscribeFractal(() => {
         const s = getFractalState();
         const iterMulChanged = s.iterMul !== prevIterMul;
@@ -195,12 +233,20 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
           s.phase !== prevPhase ||
           s.repeats !== prevRepeats ||
           s.mapping !== prevMapping ||
+          s.colorNormV2 !== prevColorNorm ||
+          s.iterRate !== prevIterRate ||
+          s.iterOffset !== prevIterOffset ||
+          s.iterScale !== prevIterScale ||
           iterMulChanged
         ) {
           r.setParams({
             gradientPhase: s.phase,
             gradientRepeat: s.repeats,
             colorMapping: s.mapping,
+            colorNormV2: s.colorNormV2,
+            iterRate: s.iterRate,
+            iterOffset: s.iterOffset,
+            iterScale: s.iterScale,
             iterMul: s.iterMul,
           });
         }
@@ -214,6 +260,10 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
         prevMapping = s.mapping;
         prevIterMul = s.iterMul;
         prevDeep = s.deepZoom;
+        prevColorNorm = s.colorNormV2;
+        prevIterRate = s.iterRate;
+        prevIterOffset = s.iterOffset;
+        prevIterScale = s.iterScale;
       });
 
       // ── RAF loop ──
@@ -245,11 +295,19 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
         ro.observe(container);
       }
 
-      // Publish the control surface for the toolbar Controls (Reset / Copy).
+      // Publish the control surface for the toolbar Controls (Reset / Copy / Fit).
       activeControl = {
         resetView: () => {
           r.setParams({ center: [-0.5, 0], centerLow: [0, 0], zoom: 1.4 });
           scheduleDeepRebuild(0);
+        },
+        // Re-anchor Iterations colour onto the current view's iteration range. Returns
+        // false when nothing escaped (all-interior view) so the UI can flash "no range".
+        fitIterView: () => {
+          const fit = r.fitIterationRange();
+          if (!fit) return false;
+          setFractalIterFit(fit.offset, fit.scale);
+          return true;
         },
         copyCoords: () => {
           const p = r.getParams();
@@ -266,6 +324,22 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
           });
           console.log('[fractal coords]', json);
           return json;
+        },
+        getCoords: () => {
+          const p = r.getParams();
+          return {
+            center: [p.center[0], p.center[1]],
+            centerLow: [p.centerLow[0], p.centerLow[1]],
+            zoom: p.zoom,
+            juliaC: [p.juliaC[0], p.juliaC[1]],
+            kind: p.kind,
+            power: p.power,
+            maxIter: p.maxIter,
+            colorMapping: p.colorMapping,
+            gradientRepeat: p.gradientRepeat,
+            gradientPhase: p.gradientPhase,
+            deepZoom: p.deepZoomEnabled,
+          };
         },
       };
     });
@@ -333,17 +407,52 @@ const FractalControls: React.FC = () => {
         <ScalarInput
           value={fr.repeats}
           onChange={setFractalRepeats}
-          min={0.01}
-          max={1024}
+          min={0.05}
+          max={100}
           hardMin={0.0001}
           hardMax={1024}
           step={0.0001}
           mapping={REPEATS_MAPPING}
           defaultValue={1}
-          label="Repeats"
+          label="Density"
           trackHeight={14}
         />
       </div>
+      {fr.colorNormV2 && fr.mapping === 0 && (
+        <>
+          <div className="w-28">
+            <ScalarInput
+              value={fr.iterRate}
+              onChange={setFractalIterRate}
+              min={0.25}
+              max={8}
+              hardMin={0.01}
+              hardMax={64}
+              step={0.01}
+              mapping={ITER_RATE_MAPPING}
+              defaultValue={1}
+              label="Rate"
+              trackHeight={14}
+            />
+          </div>
+          <button
+            onClick={() => activeControl?.fitIterView()}
+            title="Fit the gradient to this view's iteration range. Colours then hold until you re-fit or reset."
+            className="px-2.5 py-1 text-[12px] rounded-md border border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+          >
+            ⊞ Fit to view
+          </button>
+          {(fr.iterOffset !== 0 || fr.iterScale !== 1) && (
+            <button
+              onClick={resetFractalIterFit}
+              title="Clear the Fit-to-view anchor (back to absolute log — full range, colours hold)"
+              className="px-2 py-1 text-[12px] rounded-md border border-violet-500/30 text-violet-200 hover:bg-violet-500/10 transition-colors"
+            >
+              ↺ fit
+            </button>
+          )}
+        </>
+      )}
       <div className="w-32">
         <ScalarInput
           value={fr.iterMul}
@@ -373,6 +482,17 @@ const FractalControls: React.FC = () => {
           />
         </div>
       )}
+      <button
+        onClick={() => setFractalColorNormV2(!fr.colorNormV2)}
+        title="Depth-normalized colour — every mode keeps a sane Density (~1) at any zoom. Off = the original look."
+        className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+          fr.colorNormV2
+            ? 'border-violet-500/40 bg-violet-500/20 text-violet-100'
+            : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+        }`}
+      >
+        {fr.colorNormV2 ? '✦ Norm v2' : '○ Norm v1'}
+      </button>
       <button
         onClick={() => setFractalAnimate(!fr.animate)}
         title="Auto-cycle the colormap phase (palette cycling)"

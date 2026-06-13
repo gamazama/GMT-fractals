@@ -32,6 +32,15 @@ uniform int   uColorMapping;
 uniform float uGradientRepeat;
 uniform float uGradientPhase;
 uniform vec3  uInteriorColor;
+// Declared because GRADIENT_SAMPLE_GLSL (below) references them inside colorMappingT.
+// Display bakes nothing itself — it reads the pre-baked uJuliaFx.rgb — so these stay
+// unbound (default 0); they exist only to keep the shared chunk's function compiling.
+uniform int   uMaxIter;
+uniform int   uColorNormV2;
+uniform float uLogPixelScale;
+uniform float uIterRate;
+uniform float uIterOffset;
+uniform float uIterScale;
 
 // Post-processing knobs
 uniform int   uToneMapping;    // 0 none, 1 reinhard, 2 agx, 3 filmic

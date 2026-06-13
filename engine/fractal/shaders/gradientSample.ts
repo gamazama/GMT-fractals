@@ -60,35 +60,105 @@ vec3 oklabToRgb(vec3 c) {
 export const GRADIENT_SAMPLE_GLSL = /* glsl */ `
 // Convert the fractal's per-pixel data into a 0..1-ish scalar along which to sample the gradient.
 // j   = main  tex: rg = final z, b = smooth iter, a = escaped
-// aux = aux   tex: r = minT (orbit trap),  g = stripe avg,  b = log|dz|,  a = trapIter (norm)
+// aux = aux   tex: r = minT (orbit trap),  g = stripe avg,  b = log(1+|dz|),  a = trapIter (norm)
+//
+// Two normalization regimes, selected by uColorNormV2:
+//   v1 (legacy, flag OFF): the original per-mode magic constants. Kept verbatim so
+//      existing GX / fluid-toy scenes render byte-identical until the flag flips.
+//   v2 (flag ON): every mode returns a DEPTH-DECOUPLED field so the Density control
+//      (uGradientRepeat) means the same thing (~1 = one sane sweep) at ANY zoom.
+//      The depth normalizers (from the SOTA research) are:
+//        • counts  → divide by the iteration cap (uMaxIter grows ~linearly with depth)
+//        • potential / |z| → log2(log2(|z|²))  (classic even-band escape potential)
+//        • DISTANCE ESTIMATE → measured in PIXELS: d / pixel_spacing. Both d and the
+//          spacing underflow f32 at deep zoom, but the RATIO is O(1); we work in log
+//          space via uLogPixelScale = ln(world-units per pixel) so it never underflows.
+//        • orbit traps → the trap distance lives in the DYNAMICAL z-plane (camera-zoom
+//          INDEPENDENT); a deeper view just runs more iters so minT saturates → use a
+//          log mapping to restore contrast instead of a pixel-scale divide.
 float colorMappingT(vec4 j, vec4 aux) {
-  if (uColorMapping == 0)  return j.b * 0.05;                                    // Iterations (smooth)
-  if (uColorMapping == 1)  return atan(j.g, j.r) * 0.15915494 + 0.5;             // Angle (arg z)
-  if (uColorMapping == 2)  return clamp(length(j.rg) * 0.08, 0.0, 1.0);          // Magnitude
-  if (uColorMapping == 3)  return step(0.0, j.g) * 0.5 + 0.25;                   // Decomposition
-  if (uColorMapping == 4)  return floor(j.b) * 0.0625;                           // Hard Bands
-  // Orbit traps share aux.r but the distance FORMULA differs per shape; the Julia
-  // shader already knows which one to compute via uTrapMode, so the four trap
-  // mapping IDs below just select how to stretch that distance to a [0,1] colour t.
-  if (uColorMapping == 5)  return 1.0 - clamp(aux.r * 0.6, 0.0, 1.0);            // Orbit Trap (point)
-  if (uColorMapping == 6)  return 1.0 - clamp(aux.r * 0.8, 0.0, 1.0);            // Orbit Trap (circle)
-  if (uColorMapping == 7)  return 1.0 - clamp(aux.r * 1.2, 0.0, 1.0);            // Orbit Trap (cross)
-  if (uColorMapping == 8)  return 1.0 - clamp(aux.r * 0.8, 0.0, 1.0);            // Orbit Trap (line)
-  if (uColorMapping == 9)  return clamp(aux.g, 0.0, 1.0);                        // Stripe Average
-  if (uColorMapping == 10) {                                                    // Distance Estimate
-    // d ≈ 0.5 * |z| * log|z| / |dz|  →  aux.b stores log(1+|dz|).
-    float absZ = max(length(j.rg), 1e-6);
-    float absDz = max(exp(aux.b) - 1.0, 1e-6);
-    float d = 0.5 * absZ * log(absZ) / absDz;
-    return 1.0 - exp(-d * 4.0);
+  if (uColorNormV2 == 0) {
+    // ── v1 legacy (unchanged) ────────────────────────────────────────────────
+    if (uColorMapping == 0)  return j.b * 0.05;                                  // Iterations (smooth)
+    if (uColorMapping == 1)  return atan(j.g, j.r) * 0.15915494 + 0.5;           // Angle (arg z)
+    if (uColorMapping == 2)  return clamp(length(j.rg) * 0.08, 0.0, 1.0);        // Magnitude
+    if (uColorMapping == 3)  return step(0.0, j.g) * 0.5 + 0.25;                 // Decomposition
+    if (uColorMapping == 4)  return floor(j.b) * 0.0625;                         // Hard Bands
+    if (uColorMapping == 5)  return 1.0 - clamp(aux.r * 0.6, 0.0, 1.0);          // Orbit Trap (point)
+    if (uColorMapping == 6)  return 1.0 - clamp(aux.r * 0.8, 0.0, 1.0);          // Orbit Trap (circle)
+    if (uColorMapping == 7)  return 1.0 - clamp(aux.r * 1.2, 0.0, 1.0);          // Orbit Trap (cross)
+    if (uColorMapping == 8)  return 1.0 - clamp(aux.r * 0.8, 0.0, 1.0);          // Orbit Trap (line)
+    if (uColorMapping == 9)  return clamp(aux.g, 0.0, 1.0);                      // Stripe Average
+    if (uColorMapping == 10) {                                                  // Distance Estimate
+      float absZ = max(length(j.rg), 1e-6);
+      float absDz = max(exp(aux.b) - 1.0, 1e-6);
+      float d = 0.5 * absZ * log(absZ) / absDz;
+      return 1.0 - exp(-d * 4.0);
+    }
+    if (uColorMapping == 11) return clamp(aux.b * 0.25, 0.0, 1.0);              // Derivative (log|dz|)
+    if (uColorMapping == 12) {                                                  // Continuous Potential
+      float r2 = max(dot(j.rg, j.rg), 1.0001);
+      return fract(log2(log2(r2)) * 0.5);
+    }
+    if (uColorMapping == 13) return aux.a;                                      // Trap Iteration
+    return j.b * 0.05;
   }
-  if (uColorMapping == 11) return clamp(aux.b * 0.25, 0.0, 1.0);                // Derivative (log|dz|)
-  if (uColorMapping == 12) {                                                    // Continuous Potential
+
+  // ── v2 depth-normalized fields (Density ≈ 1 sane at any zoom) ───────────────
+  float maxIterF = max(float(uMaxIter), 1.0);
+  if (uColorMapping == 0) {                                                     // Iterations: absolute log + Rate
+    // The iteration count is INTRINSIC to a point, so an absolute mapping (no ÷cap)
+    // keeps a point's colour constant at any zoom → colours HOLD. log(1+count) stays
+    // in a tight ~0..17 band across all depths so one Density is sane everywhere AND
+    // a view spanning low+high counts bands in both (log compresses the high end).
+    // uIterOffset/uIterScale are the on-demand "Fit to view" re-anchor (identity by
+    // default); uIterRate is the gamma that biases low-iter filaments vs deep interiors.
+    float L  = log(1.0 + max(j.b, 0.0));
+    float Lv = (L - uIterOffset) * uIterScale;
+    // sign-symmetric gamma: the banding stays continuous & monotonic THROUGH the
+    // anchored window into the out-of-range regions (counts below/above the Fit
+    // window keep cycling the palette) instead of clamping flat at field 0.
+    return sign(Lv) * pow(abs(Lv), uIterRate);
+  }
+  if (uColorMapping == 1)  return atan(j.g, j.r) * 0.15915494 + 0.5;            // Angle (bounded — unchanged)
+  if (uColorMapping == 2) {                                                     // Magnitude → escape potential
     float r2 = max(dot(j.rg, j.rg), 1.0001);
-    return fract(log2(log2(r2)) * 0.5);
+    return log2(log2(r2));
   }
-  if (uColorMapping == 13) return aux.a;                                        // Trap Iteration
-  return j.b * 0.05;
+  if (uColorMapping == 3)  return step(0.0, j.g) * 0.5 + 0.25;                  // Decomposition (topological — unchanged)
+  if (uColorMapping == 4) {                                                     // Hard Bands: N bands across the escape spread
+    const float BANDS = 32.0;
+    return floor(clamp(j.b / maxIterF, 0.0, 1.0) * BANDS) * (1.0 / BANDS);
+  }
+  // Orbit traps — log of (inverse) trap distance. Dynamical-plane distance is
+  // camera-scale-independent; the log spreads minT's many-decade range into even
+  // contrast and keeps it from saturating as the iteration cap rises with depth.
+  // Per-shape scale keeps each shape's character (point tightest, cross loosest).
+  if (uColorMapping == 5)  return -log2(clamp(aux.r, 1e-8, 1.0)) * 0.06;        // Orbit Trap (point)
+  if (uColorMapping == 6)  return -log2(clamp(aux.r, 1e-8, 1.0)) * 0.05;        // Orbit Trap (circle)
+  if (uColorMapping == 7)  return -log2(clamp(aux.r, 1e-8, 1.0)) * 0.04;        // Orbit Trap (cross)
+  if (uColorMapping == 8)  return -log2(clamp(aux.r, 1e-8, 1.0)) * 0.05;        // Orbit Trap (line)
+  if (uColorMapping == 9)  return clamp(aux.g, 0.0, 1.0);                       // Stripe Average (freq normalized in kernel)
+  if (uColorMapping == 10) {                                                   // Distance Estimate (in PIXELS, log space)
+    // d = 0.5·|z|·ln|z| / |dz| ; DE_pixels = d / pixel_spacing.
+    // ln(DE_px) = ln0.5 + ln|z| + ln(ln|z|) − ln|dz| − ln(pixel_spacing).
+    // aux.b = ln(1+|dz|) ≈ ln|dz| where |dz| is large (i.e. near the boundary,
+    // which is where DE matters); uLogPixelScale = ln(world-units per pixel).
+    float lnAbsZ   = log(max(length(j.rg), 1.0001));
+    float lnDEpix  = -0.6931472 + lnAbsZ + log(max(lnAbsZ, 1e-12)) - aux.b - uLogPixelScale;
+    float dePix    = exp(clamp(lnDEpix, -40.0, 30.0));
+    return 1.0 - exp(-dePix);                                                   // boundary→0, exterior→1
+  }
+  if (uColorMapping == 11) {                                                   // Derivative as slope: log|dz| / depth
+    // |dz| ≈ 1/pixel_spacing at the boundary, so ln|dz| ≈ −uLogPixelScale; divide it out.
+    return clamp(aux.b / max(-uLogPixelScale + 1.0, 1.0), 0.0, 1.0);
+  }
+  if (uColorMapping == 12) {                                                   // Continuous Potential (even bands)
+    float r2 = max(dot(j.rg, j.rg), 1.0001);
+    return log2(log2(r2));
+  }
+  if (uColorMapping == 13) return aux.a;                                       // Trap Iteration (already /maxIter)
+  return j.b / maxIterF;
 }
 
 vec4 gradientForJuliaRgba(vec4 j, vec4 aux) {
