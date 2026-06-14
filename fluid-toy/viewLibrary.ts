@@ -196,7 +196,7 @@ const DEFAULT_VIEWS: Array<{ label: string; state: JuliaViewState }> = [
       state: { kind: 1, juliaC: { x: 0,    y: 0 },       center: { x: -0.75, y: 0.1 },  zoom: 0.15, maxIter: 384, power: 2 } },
 ];
 
-const seedDefaultViews = (): void => {
+const seedDefaultViews = (autoSelect: boolean): void => {
     const s = useEngineStore.getState();
     const arr = s.savedViews ?? [];
     if (arr.length > 0) return;  // user has views already; never overwrite
@@ -212,13 +212,16 @@ const seedDefaultViews = (): void => {
 
     // Auto-select the first seed (Mandelbrot · Home) so first-time visitors
     // boot into a curated view rather than the slice's raw param defaults.
-    // selectView writes activeViewId AND applies the snap to julia.*.
-    // Returning users have arr.length > 0 above and skip this entirely.
+    // selectView writes activeViewId AND applies the snap to julia.* (via a
+    // tween). Returning users have arr.length > 0 above and skip this entirely.
+    // Skipped when a GX handoff is incoming — its tween would clobber the
+    // handoff camera a few frames after boot.
+    if (!autoSelect) return;
     const selectView = (useEngineStore.getState() as { selectView?: (id: string | null) => void }).selectView;
     selectView?.(seeds[0].id);
 };
 
-export const installFluidToyViewLibrary = (): void => {
+export const installFluidToyViewLibrary = (opts: { autoSelectDefault?: boolean } = {}): void => {
     installStateLibrary<JuliaViewState>({
         // The saved-view library now lives inside the unified "View"
         // panel (along with camera / fractal / iteration controls)
@@ -267,5 +270,5 @@ export const installFluidToyViewLibrary = (): void => {
 
     // Seed defaults AFTER install so the slice exists. Idempotent —
     // only writes when the array is empty.
-    seedDefaultViews();
+    seedDefaultViews(opts.autoSelectDefault !== false);
 };

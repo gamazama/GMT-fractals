@@ -14,7 +14,7 @@
  * the renderScale chain visible alongside each other), and the JSX.
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { ViewportFrame } from '../engine/plugins/viewport/ViewportFrame';
 import { useQualityFraction, useViewportFps } from '../engine/plugins/Viewport';
@@ -59,7 +59,25 @@ export const FluidToyApp: React.FC = () => {
     const openHelp = useEngineStore((s) => s.openHelp);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const engineRef = useFluidEngine(canvasRef);
+    // The boot splash lives in fluid-toy.html so it paints BEFORE React mounts
+    // (the JS bundle takes a few seconds — a React overlay can't cover that).
+    // Remove it once the engine's first frame has drawn (onReady, or on boot
+    // failure); the 450ms CSS fade also covers the initial resize so the reveal
+    // doesn't flash.
+    const dismissSplash = useCallback(() => {
+        const el = document.getElementById('ft-boot-splash');
+        if (!el) return;
+        el.classList.add('ft-hidden');
+        window.setTimeout(() => el.remove(), 500);
+    }, []);
+    const engineRef = useFluidEngine(canvasRef, dismissSplash);
+
+    // Safety net — drop the splash even if the ready signal never arrives
+    // (e.g. a stalled GL context with no first frame).
+    useEffect(() => {
+        const id = window.setTimeout(dismissSplash, 12000);
+        return () => window.clearTimeout(id);
+    }, [dismissSplash]);
 
     const floatingPanels = (Object.values(panels) as PanelState[])
         .filter((p) => p.location === 'float' && p.isOpen);
@@ -217,6 +235,7 @@ export const FluidToyApp: React.FC = () => {
                     onOpenHelp={openHelp}
                 />
             )}
+
         </div>
         </StoreCallbacksProvider>
     );

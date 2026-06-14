@@ -23,6 +23,7 @@ import { registerFluidToyHotkeys } from './hotkeys';
 
 export const useFluidEngine = (
     canvasRef: React.RefObject<HTMLCanvasElement>,
+    onReady?: () => void,
 ): React.RefObject<FluidEngine | null> => {
     const engineRef = useRef<FluidEngine | null>(null);
     const rafRef = useRef<number | null>(null);
@@ -57,6 +58,10 @@ export const useFluidEngine = (
             // had on the canvas; with it, "play" gives a clean baseline that
             // matches a fresh export from frame 0.
             let prevIsPlaying = false;
+            // Fire onReady once, right after the first real frame draws — lets the
+            // app drop its loading overlay (the canvas is black until the shaders
+            // compile + the first frame() runs, which can take ~0.5–2s).
+            let firstFrameDone = false;
             const loop = (t: number) => {
                 const dtSec = prevT < 0 ? 0 : Math.min(0.1, (t - prevT) / 1000);
                 prevT = t;
@@ -92,6 +97,7 @@ export const useFluidEngine = (
                     prevIsPlaying = animSt.isPlaying;
                     const engineT = det ? (animSt.currentFrame * 1000 / Math.max(1, animSt.fps)) : t;
                     engineRef.current.frame(engineT);
+                    if (!firstFrameDone) { firstFrameDone = true; onReady?.(); }
                     if (t - lastReportT > 100) {
                         const count = engineRef.current.getAccumulationCount();
                         if (count !== lastReportedCount) {
@@ -106,6 +112,9 @@ export const useFluidEngine = (
             rafRef.current = requestAnimationFrame(loop);
         } catch (e) {
             console.error('[FluidToy] failed to start engine:', e);
+            // Clear the loading overlay even on boot failure so the app doesn't
+            // hang on a spinner — the error is logged + the (black) canvas shows.
+            onReady?.();
         }
 
         // Register hotkeys now that engineRef is live (R needs

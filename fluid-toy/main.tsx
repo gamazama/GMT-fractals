@@ -304,11 +304,24 @@ hud.register({
     component: CoordsButton,
 });
 
+// Parse any incoming GX "Open in Fluid Toy" handoff BEFORE the view library
+// seeds + auto-selects its default "Home" view: selectView starts a 500ms tween
+// that fires a few frames later and would overwrite the handoff's camera
+// (center/zoom/juliaC). The gradient lives on a different slice, so it survived —
+// which is exactly why the coordinates looked "not sent". Key kept in sync with
+// gradient-explorer/fractalHandoff.ts (FLUID_TOY_HANDOFF_KEY).
+let incomingScene: unknown = null;
+try {
+    const raw = localStorage.getItem('gmt.fluidToy.incomingScene');
+    if (raw) { localStorage.removeItem('gmt.fluidToy.incomingScene'); incomingScene = JSON.parse(raw); }
+} catch { incomingScene = null; }
+
 // Saved-views library — one call wires everything: slice CRUD, slot
 // shortcuts (Ctrl+1..9 save, 1..9 recall), and topbar Camera menu.
 // Must run AFTER installMenu / installShortcuts so their registries
 // exist, and BEFORE setupFluidToy so the Views panel finds the slice.
-installFluidToyViewLibrary();
+// Skip the default-view auto-select (+ its tween) when a handoff is incoming.
+installFluidToyViewLibrary({ autoSelectDefault: !incomingScene });
 
 // `panel-views` is referenced from the manifest by `component:`. It's
 // registered here (after the store + slice install) rather than in
@@ -337,21 +350,12 @@ restoreFavientsPanel(
 );
 watchFavientsPanel({ storageKey: FAVIENTS_PANEL_KEY });
 
-// Incoming fractal handoff from the Gradient Explorer's "Open in Fluid Toy" button:
-// it stashed a fluid-toy scene Preset under this localStorage key before opening this
-// page. Load it once (then clear) so we boot at that fractal view + gradient — the scene
-// only carries julia + palette + deepZoom, so every other feature falls back to defaults
-// (sim off → pure fractal). Keep the key in sync with
-// gradient-explorer/fractalHandoff.ts (FLUID_TOY_HANDOFF_KEY).
-try {
-    const handoff = localStorage.getItem('gmt.fluidToy.incomingScene');
-    if (handoff) {
-        localStorage.removeItem('gmt.fluidToy.incomingScene');
-        const preset = JSON.parse(handoff);
-        (useEngineStore.getState() as { loadPreset?: (p: unknown) => void }).loadPreset?.(preset);
-    }
-} catch {
-    // Malformed handoff — ignore and boot normally.
+// Apply the incoming GX handoff (parsed above, before the view library seeded its
+// default view so its tween can't clobber the camera). Only julia + palette +
+// deepZoom are carried; every other feature falls back to defaults (sim off →
+// pure fractal at this view).
+if (incomingScene) {
+    (useEngineStore.getState() as { loadPreset?: (p: unknown) => void }).loadPreset?.(incomingScene);
 }
 
 const rootElement = document.getElementById('root');
