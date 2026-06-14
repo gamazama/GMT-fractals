@@ -100,6 +100,15 @@ uniform float     uLogPixelScale;
 uniform float     uIterRate;
 uniform float     uIterOffset;
 uniform float     uIterScale;
+// Distance-Estimate (mode 10) v2: 0 = linear edge/glow, 1 = log contour rings (even at any zoom).
+uniform int       uDeLogBands;
+// Slope-lighting composite layer (multiplies the baked colour of ANY mode). Driven by the
+// analytic escape-gradient normal u = z/dz. Off (uLightEnabled 0) leaves colour untouched.
+uniform int       uLightEnabled;
+uniform float     uLightAngle;     // azimuth (radians)
+uniform float     uLightHeight;    // elevation factor (~0.5..3; higher = flatter)
+uniform float     uLightStrength;  // 0 = flat, 1 = fully lit (mix flat↔lit)
+uniform float     uAmbient;        // shadow floor so lit areas never go pure black
 uniform sampler2D uCollisionGradient;
 uniform float     uCollisionRepeat;
 uniform float     uCollisionPhase;
@@ -237,6 +246,17 @@ ${GRADIENT_SAMPLE_GLSL}
 
 // complex multiply
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
+// complex divide a/b
+vec2 cdiv(vec2 a, vec2 b) { float d = max(dot(b, b), 1e-30); return vec2(a.x*b.x + a.y*b.y, a.y*b.x - a.x*b.y) / d; }
+
+// Slope-lighting from the analytic escape-gradient normal (Chéritat's u = z/dz trick):
+// treat the unit xy direction as a surface normal tilt and Lambert-shade against a light
+// at azimuth "angle" and elevation "h" (higher h = flatter / softer). nrm is unit-length.
+float slopeShade(vec2 nrm, float angle, float h) {
+  vec2 v = vec2(cos(angle), sin(angle));
+  float t = (nrm.x * v.x + nrm.y * v.y + h) / (1.0 + h);
+  return clamp(t, 0.0, 1.0);
+}
 
 // z -> z^p for small integer p (unrolled for speed; fallback for non-int powers)
 vec2 cpow(vec2 z, float p) {
@@ -418,7 +438,7 @@ vec2 fetchRefZ(int idx) {
 // the (outMain, outAux) data. Extracted so K-sampling can call it K
 // times with different jitter offsets without inlining the iteration
 // loop K times in source.
-void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA) {
+void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
   vec2 uv = uvJ * 2.0 - 1.0;
   uv.x *= uAspect;
   vec2 p = uCenter + uv * uScale;
@@ -591,7 +611,7 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA) {
           z = nextLA.Ref + dz_pert;
           float zMag2 = dot(z, z);
           if (zMag2 > uEscapeR2) {
-            iters = float(iter) + 1.0 - log2(0.5 * log2(zMag2));
+            iters = float(iter) + 1.0 - log2(max(0.5 * log2(max(zMag2, 1.0001)), 1e-6));
             escaped = 1.0;
             earlyEscape = true;
             break;
@@ -773,7 +793,7 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA) {
     }
     float r2 = dot(z, z);
     if (r2 > uEscapeR2) {
-      iters = float(iter) + 1.0 - log2(0.5 * log2(r2));
+      iters = float(iter) + 1.0 - log2(max(0.5 * log2(max(r2, 1.0001)), 1e-6));
       escaped = 1.0;
       break;
     }
@@ -786,6 +806,14 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA) {
 
   outM = vec4(z, iters, escaped);
   outA = vec4(minT, stripeAvg, logDz, trapIterN);
+  // Analytic escape-gradient normal (xy) for slope lighting; interior is ill-defined → 0.
+  vec2 uDir = vec2(0.0);
+  if (escaped > 0.5) {
+    vec2 u = cdiv(z, dz);
+    float ul = length(u);
+    uDir = ul > 1e-12 ? u / ul : vec2(0.0);
+  }
+  outNormal = uDir;
 }
 
 void main() {
@@ -874,7 +902,8 @@ void main() {
     vec2 uvJ = uImageTileOrigin + (vUv + jitter * invRes) * uImageTileSize;
 
     vec4 sM, sA;
-    evalJulia(uvJ, sM, sA);
+    vec2 sN;
+    evalJulia(uvJ, sM, sA, sN);
 
     // Per-evaluation palette bake. sM.w is 0 (interior) or 1 (escaped).
     // For interior pixels, palette colour is undefined (smoothIter is
@@ -884,6 +913,15 @@ void main() {
     bool  escaped = sM.w > 0.5;
     vec4  sPalRgba = gradientForJuliaRgba(sM, sA);
     vec3  sColor   = escaped ? sPalRgba.rgb : uInteriorColor;
+
+    // Slope-lighting composite layer — modulates the base colour of ANY mode by the
+    // analytic escape-gradient normal, so escaped pixels read as a lit, sculpted surface.
+    // Mean-pools cleanly under jitter/TSAA (it's a smooth function of sub-pixel position).
+    if (uLightEnabled != 0 && escaped) {
+      float shade = slopeShade(sN, uLightAngle, uLightHeight);
+      float lit = uAmbient + (1.0 - uAmbient) * shade;
+      sColor *= mix(1.0, lit, uLightStrength);
+    }
 
     // Per-evaluation mask bake. Same colour-mapping scalar the palette
     // uses, but remapped through the collision LUT's own repeat/phase,

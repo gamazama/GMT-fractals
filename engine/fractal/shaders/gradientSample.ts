@@ -76,6 +76,17 @@ export const GRADIENT_SAMPLE_GLSL = /* glsl */ `
 //        • orbit traps → the trap distance lives in the DYNAMICAL z-plane (camera-zoom
 //          INDEPENDENT); a deeper view just runs more iters so minT saturates → use a
 //          log mapping to restore contrast instead of a pixel-scale divide.
+// Continuous-potential field (shared by Potential + its Magnitude alias). PURE |z|-based: the
+// escape overshoot log2(|z|²/R²) ∈ [0, 2·log2 R], measured relative to the escape radius (so it's
+// escape-radius-robust). No iteration count — this is the sub-iteration equipotential structure
+// (sparse far from the set, dense near the boundary), genuinely distinct from Iterations. The
+// "rate of log" lives INSIDE the outer log: small rate → ~one narrow sweep (the classic
+// equipotential ramp), large rate → the overshoot spreads into more bands. Density = frequency.
+float potentialField(vec4 j, float rate) {
+  float overshoot = log2(max(dot(j.rg, j.rg) / max(uEscapeR2, 1e-12), 1.0));
+  return log2(1.0 + rate * overshoot);
+}
+
 float colorMappingT(vec4 j, vec4 aux) {
   if (uColorNormV2 == 0) {
     // ── v1 legacy (unchanged) ────────────────────────────────────────────────
@@ -120,11 +131,14 @@ float colorMappingT(vec4 j, vec4 aux) {
     // window keep cycling the palette) instead of clamping flat at field 0.
     return sign(Lv) * pow(abs(Lv), uIterRate);
   }
-  if (uColorMapping == 1)  return atan(j.g, j.r) * 0.15915494 + 0.5;            // Angle (bounded — unchanged)
-  if (uColorMapping == 2) {                                                     // Magnitude → escape potential
-    float r2 = max(dot(j.rg, j.rg), 1.0001);
-    return log2(log2(r2));
+  if (uColorMapping == 1) {                                                     // Angle: iteration log-spiral
+    // Twist the angular bands by the smooth iteration count → a log-spiral. Density = arms,
+    // Phase = rotate, Rate = how tightly the bands wind with depth (the high-vs-low-iter
+    // "closeness"). Rate 0 → pure radial sectors; higher → tighter spiral.
+    float angle01 = atan(j.g, j.r) * 0.15915494 + 0.5;
+    return angle01 + uIterRate * 0.05 * log(1.0 + max(j.b, 0.0));
   }
+  if (uColorMapping == 2)  return potentialField(j, uIterRate);                 // Magnitude → alias of Continuous Potential
   if (uColorMapping == 3)  return step(0.0, j.g) * 0.5 + 0.25;                  // Decomposition (topological — unchanged)
   if (uColorMapping == 4) {                                                     // Hard Bands: N bands across the escape spread
     const float BANDS = 32.0;
@@ -139,24 +153,26 @@ float colorMappingT(vec4 j, vec4 aux) {
   if (uColorMapping == 7)  return -log2(clamp(aux.r, 1e-8, 1.0)) * 0.04;        // Orbit Trap (cross)
   if (uColorMapping == 8)  return -log2(clamp(aux.r, 1e-8, 1.0)) * 0.05;        // Orbit Trap (line)
   if (uColorMapping == 9)  return clamp(aux.g, 0.0, 1.0);                       // Stripe Average (freq normalized in kernel)
-  if (uColorMapping == 10) {                                                   // Distance Estimate (in PIXELS, log space)
+  if (uColorMapping == 10) {                                                   // Distance Estimate (in PIXELS)
     // d = 0.5·|z|·ln|z| / |dz| ; DE_pixels = d / pixel_spacing.
     // ln(DE_px) = ln0.5 + ln|z| + ln(ln|z|) − ln|dz| − ln(pixel_spacing).
     // aux.b = ln(1+|dz|) ≈ ln|dz| where |dz| is large (i.e. near the boundary,
     // which is where DE matters); uLogPixelScale = ln(world-units per pixel).
     float lnAbsZ   = log(max(length(j.rg), 1.0001));
     float lnDEpix  = -0.6931472 + lnAbsZ + log(max(lnAbsZ, 1e-12)) - aux.b - uLogPixelScale;
-    float dePix    = exp(clamp(lnDEpix, -40.0, 30.0));
-    return 1.0 - exp(-dePix);                                                   // boundary→0, exterior→1
+    // Linear = boundary glow (0 at the set, →1 in the open exterior). Log = log10(DE_px) →
+    // even contour rings, ~1 ring per distance-decade at Density 1 (scale-uniform at any zoom).
+    // Rate (shared gamma, sign-symmetric so log rings band on both sides) shapes contrast.
+    float f = (uDeLogBands != 0)
+        ? (lnDEpix * 0.4342945)
+        : (1.0 - exp(-exp(clamp(lnDEpix, -40.0, 30.0))));
+    return sign(f) * pow(abs(f), uIterRate);
   }
   if (uColorMapping == 11) {                                                   // Derivative as slope: log|dz| / depth
     // |dz| ≈ 1/pixel_spacing at the boundary, so ln|dz| ≈ −uLogPixelScale; divide it out.
     return clamp(aux.b / max(-uLogPixelScale + 1.0, 1.0), 0.0, 1.0);
   }
-  if (uColorMapping == 12) {                                                   // Continuous Potential (even bands)
-    float r2 = max(dot(j.rg, j.rg), 1.0001);
-    return log2(log2(r2));
-  }
+  if (uColorMapping == 12) return potentialField(j, uIterRate);               // Continuous Potential
   if (uColorMapping == 13) return aux.a;                                       // Trap Iteration (already /maxIter)
   return j.b / maxIterF;
 }

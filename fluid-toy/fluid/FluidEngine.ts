@@ -733,7 +733,8 @@ export class FluidEngine {
        'uATRefC', 'uATCCoeff', 'uATInvZCoeff',
        'uTrackAccum', 'uTrackDeriv',
        'uGradient', 'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uInteriorColor',
-       'uColorNormV2', 'uLogPixelScale', 'uIterRate', 'uIterOffset', 'uIterScale',
+       'uColorNormV2', 'uLogPixelScale', 'uIterRate', 'uIterOffset', 'uIterScale', 'uDeLogBands',
+       'uLightEnabled', 'uLightAngle', 'uLightHeight', 'uLightStrength', 'uAmbient',
        'uCollisionGradient', 'uCollisionRepeat', 'uCollisionPhase', 'uCollisionEnabled']);
     this.progTsaaBlend = this.linkProgram(VERT_FULLSCREEN, FRAG_TSAA_BLEND,
       ['uCurrentMain', 'uCurrentFx', 'uHistoryMain', 'uHistoryFx', 'uSampleIndex']);
@@ -1422,6 +1423,14 @@ export class FluidEngine {
     gl.uniform1f(this.progJulia.uniforms['uIterRate'], 1);
     gl.uniform1f(this.progJulia.uniforms['uIterOffset'], 0);
     gl.uniform1f(this.progJulia.uniforms['uIterScale'], 0.125); // 1/LREF pivot (see gradientSample)
+    // DE Linear↔Log toggle + slope-lighting layer — no fluid-toy UI yet (lands with the artist-tool
+    // port), so bind off/linear defaults: DE = linear glow, lighting disabled (colour untouched).
+    gl.uniform1i(this.progJulia.uniforms['uDeLogBands'], 1); // Rings (prettier DE default)
+    gl.uniform1i(this.progJulia.uniforms['uLightEnabled'], 0);
+    gl.uniform1f(this.progJulia.uniforms['uLightAngle'], Math.PI / 4);
+    gl.uniform1f(this.progJulia.uniforms['uLightHeight'], 1.5);
+    gl.uniform1f(this.progJulia.uniforms['uLightStrength'], 0.7);
+    gl.uniform1f(this.progJulia.uniforms['uAmbient'], 0.2);
     gl.uniform3f(this.progJulia.uniforms['uInteriorColor'],
       this.params.interiorColor[0], this.params.interiorColor[1], this.params.interiorColor[2]);
     gl.uniform1i(this.progJulia.uniforms['uCollisionEnabled'], this.params.collisionEnabled ? 1 : 0);

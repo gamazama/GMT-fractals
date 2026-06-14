@@ -38,6 +38,13 @@ import {
   setFractalIterRate,
   setFractalIterFit,
   resetFractalIterFit,
+  setFractalDeLogBands,
+  setFractalLightEnabled,
+  setFractalLightAngle,
+  setFractalLightHeight,
+  setFractalLightStrength,
+  setFractalAmbient,
+  setFractalEscapeR,
   useFractalState,
 } from './fractal/fractalStore';
 import type { FullscreenMode, OwnCanvasHost, OwnCanvasHandle } from '../modeRegistry';
@@ -51,11 +58,12 @@ const FRACTAL_MAPPINGS: ReadonlyArray<{ value: number; label: string }> = [
   { value: 0, label: 'Iterations' },
   { value: 4, label: 'Bands' },
   { value: 1, label: 'Angle' },
-  { value: 2, label: 'Magnitude' },
   { value: 12, label: 'Potential' },
   { value: 9, label: 'Stripe' },
   { value: 10, label: 'Distance' },
 ];
+// Magnitude (mode 2) was dropped from the picker — in v2 it computed the identical field to
+// Potential. The shader keeps mode 2 as a Potential alias for back-compat with old scenes.
 
 /** Per-frame phase advance when auto-cycling (≈ one full cycle / 8s @ 60fps). */
 const PHASE_ANIM_STEP = 1 / 480;
@@ -65,6 +73,9 @@ const PHASE_ANIM_STEP = 1 / 480;
 const REPEATS_MAPPING = createLogMapping(0.05, 100);
 // Iterations 'Rate' (log-iteration gamma) — log track centred on 1, each drag a ratio.
 const ITER_RATE_MAPPING = createLogMapping(0.25, 8);
+// Escape radius / bailout — log track. The decomposition-cell looks live BELOW 2; larger gives
+// smooth shells. Track emphasises the low end where the interesting structure is.
+const ESCAPE_R_MAPPING = createLogMapping(0.2, 64);
 
 /** The exact fractal view + colour-mapping a handoff carries to another app (fluid-toy).
  *  A flat, app-agnostic snapshot — the consumer maps it onto its own slices. */
@@ -184,6 +195,25 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
       }
 
       const r = renderer;
+      // Map the live store knobs onto renderer params. One source of truth shared by configure(),
+      // context-loss recovery, and the live subscription, so adding a knob means editing one place.
+      const colourParams = (f: ReturnType<typeof getFractalState>) => ({
+        gradientPhase: f.phase,
+        gradientRepeat: f.repeats,
+        colorMapping: f.mapping,
+        colorNormV2: f.colorNormV2,
+        iterRate: f.iterRate,
+        iterOffset: f.iterOffset,
+        iterScale: f.iterScale,
+        deLogBands: f.deLogBands,
+        lightEnabled: f.lightEnabled,
+        lightAngle: f.lightAngle,
+        lightHeight: f.lightHeight,
+        lightStrength: f.lightStrength,
+        ambient: f.ambient,
+        escapeR: f.escapeR,
+        iterMul: f.iterMul,
+      });
       // Apply the current state to the freshly-created renderer. Shared with the context-loss
       // recovery path (onRestored) so a rebuilt GL surface comes back configured identically.
       const configure = (): void => {
@@ -191,16 +221,7 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
         const ctx = host.getContext();
         if (ctx.lut.length) r.setColormap(ctx.lut);
         const f = getFractalState();
-        r.setParams({
-          gradientPhase: f.phase,
-          gradientRepeat: f.repeats,
-          colorMapping: f.mapping,
-          colorNormV2: f.colorNormV2,
-          iterRate: f.iterRate,
-          iterOffset: f.iterOffset,
-          iterScale: f.iterScale,
-          iterMul: f.iterMul,
-        });
+        r.setParams(colourParams(f));
         if (f.deepZoom) r.setDeepZoomEnabled(true);
         r.setDither(getFullscreenState().dither);
       };
@@ -216,54 +237,21 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
       // Replaces the overlay's former per-knob effects. The RAF loop renders every frame, so a
       // knob push only needs to update renderer state before the next frame (no explicit render).
       // (Dither is forwarded by the overlay via the OwnCanvasHandle, not watched here.)
-      const f0 = getFractalState();
-      let prevPhase = f0.phase;
-      let prevRepeats = f0.repeats;
-      let prevMapping = f0.mapping;
-      let prevIterMul = f0.iterMul;
-      let prevDeep = f0.deepZoom;
-      let prevColorNorm = f0.colorNormV2;
-      let prevIterRate = f0.iterRate;
-      let prevIterOffset = f0.iterOffset;
-      let prevIterScale = f0.iterScale;
+      let prevIterMul = getFractalState().iterMul;
+      let prevDeep = getFractalState().deepZoom;
       unsubscribe = subscribeFractal(() => {
         const s = getFractalState();
+        // Push all colour knobs every change — setParams just merges, and the renderer's reset
+        // hash decides whether the TSAA accumulator actually restarts, so redundant pushes are free.
+        r.setParams(colourParams(s));
         const iterMulChanged = s.iterMul !== prevIterMul;
-        if (
-          s.phase !== prevPhase ||
-          s.repeats !== prevRepeats ||
-          s.mapping !== prevMapping ||
-          s.colorNormV2 !== prevColorNorm ||
-          s.iterRate !== prevIterRate ||
-          s.iterOffset !== prevIterOffset ||
-          s.iterScale !== prevIterScale ||
-          iterMulChanged
-        ) {
-          r.setParams({
-            gradientPhase: s.phase,
-            gradientRepeat: s.repeats,
-            colorMapping: s.mapping,
-            colorNormV2: s.colorNormV2,
-            iterRate: s.iterRate,
-            iterOffset: s.iterOffset,
-            iterScale: s.iterScale,
-            iterMul: s.iterMul,
-          });
-        }
         if (s.deepZoom !== prevDeep) r.setDeepZoomEnabled(s.deepZoom);
         // At deep zoom, iterMul scales the reference-orbit BUILD length, so an actual iterMul change
         // must rebuild. The deep-zoom ENABLE path already rebuilds inside setDeepZoomEnabled, so this
         // only fires on an iterMul change (never on the toggle, which leaves iterMul untouched).
         if (iterMulChanged && s.deepZoom) void r.rebuildDeepZoom();
-        prevPhase = s.phase;
-        prevRepeats = s.repeats;
-        prevMapping = s.mapping;
         prevIterMul = s.iterMul;
         prevDeep = s.deepZoom;
-        prevColorNorm = s.colorNormV2;
-        prevIterRate = s.iterRate;
-        prevIterOffset = s.iterOffset;
-        prevIterScale = s.iterScale;
       });
 
       // ── RAF loop ──
@@ -418,23 +406,60 @@ const FractalControls: React.FC = () => {
           trackHeight={14}
         />
       </div>
+      {/* Escape radius — shapes the equipotential band character (cells ↔ shells) for
+          Potential / Distance; global bailout, so it re-renders. Most relevant in v2. */}
+      {fr.colorNormV2 && (
+        <div className="w-28">
+          <ScalarInput
+            value={fr.escapeR}
+            onChange={setFractalEscapeR}
+            min={0.2}
+            max={64}
+            hardMin={0.1}
+            hardMax={65536}
+            step={0.01}
+            mapping={ESCAPE_R_MAPPING}
+            defaultValue={32}
+            label="Escape R"
+            trackHeight={14}
+          />
+        </div>
+      )}
+      {/* Rate — shared gamma/twist: Iterations + Distance + Potential (gamma), Angle (spiral). */}
+      {fr.colorNormV2 && (fr.mapping === 0 || fr.mapping === 1 || fr.mapping === 10 || fr.mapping === 12) && (
+        <div className="w-28">
+          <ScalarInput
+            value={fr.iterRate}
+            onChange={setFractalIterRate}
+            min={0.25}
+            max={8}
+            hardMin={0.01}
+            hardMax={64}
+            step={0.01}
+            mapping={ITER_RATE_MAPPING}
+            defaultValue={1}
+            label="Rate"
+            trackHeight={14}
+          />
+        </div>
+      )}
+      {/* Distance: linear glow ↔ log contour rings. */}
+      {fr.colorNormV2 && fr.mapping === 10 && (
+        <button
+          onClick={() => setFractalDeLogBands(!fr.deLogBands)}
+          title="Distance look: Glow = soft boundary falloff; Rings = even log-distance contour bands."
+          className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+            fr.deLogBands
+              ? 'border-violet-500/40 bg-violet-500/20 text-violet-100'
+              : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+          }`}
+        >
+          {fr.deLogBands ? '◉ Rings' : '◯ Glow'}
+        </button>
+      )}
+      {/* Iterations Fit-to-view (reads the iteration histogram → not meaningful for other modes). */}
       {fr.colorNormV2 && fr.mapping === 0 && (
         <>
-          <div className="w-28">
-            <ScalarInput
-              value={fr.iterRate}
-              onChange={setFractalIterRate}
-              min={0.25}
-              max={8}
-              hardMin={0.01}
-              hardMax={64}
-              step={0.01}
-              mapping={ITER_RATE_MAPPING}
-              defaultValue={1}
-              label="Rate"
-              trackHeight={14}
-            />
-          </div>
           <button
             onClick={() => activeControl?.fitIterView()}
             title="Fit the gradient to this view's iteration range. Colours then hold until you re-fit or reset."
@@ -442,7 +467,7 @@ const FractalControls: React.FC = () => {
           >
             ⊞ Fit to view
           </button>
-          {(fr.iterOffset !== 0 || fr.iterScale !== 1) && (
+          {fr.iterOffset !== 0 && (
             <button
               onClick={resetFractalIterFit}
               title="Clear the Fit-to-view anchor (back to absolute log — full range, colours hold)"
@@ -493,6 +518,75 @@ const FractalControls: React.FC = () => {
       >
         {fr.colorNormV2 ? '✦ Norm v2' : '○ Norm v1'}
       </button>
+      {/* Slope-lighting composite layer — modulates any mode's colour by the escape-gradient
+          normal. Off by default; controls appear when enabled. */}
+      {fr.colorNormV2 && (
+        <button
+          onClick={() => setFractalLightEnabled(!fr.lightEnabled)}
+          title="Slope lighting — shade the fractal as a lit surface using the escape-gradient normal. Works on any colour mode."
+          className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+            fr.lightEnabled
+              ? 'border-amber-500/40 bg-amber-500/20 text-amber-100'
+              : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+          }`}
+        >
+          {fr.lightEnabled ? '☀ Lit' : '○ Lit'}
+        </button>
+      )}
+      {fr.colorNormV2 && fr.lightEnabled && (
+        <>
+          <div className="w-24">
+            <ScalarInput
+              value={fr.lightAngle}
+              onChange={setFractalLightAngle}
+              min={0}
+              max={6.2832}
+              step={0.01}
+              defaultValue={Math.PI / 4}
+              label="Light ∠"
+              trackHeight={14}
+            />
+          </div>
+          <div className="w-24">
+            <ScalarInput
+              value={fr.lightHeight}
+              onChange={setFractalLightHeight}
+              min={0.2}
+              max={4}
+              hardMin={0.1}
+              hardMax={6}
+              step={0.05}
+              defaultValue={1.5}
+              label="Elev"
+              trackHeight={14}
+            />
+          </div>
+          <div className="w-24">
+            <ScalarInput
+              value={fr.lightStrength}
+              onChange={setFractalLightStrength}
+              min={0}
+              max={1}
+              step={0.01}
+              defaultValue={0.7}
+              label="Relief"
+              trackHeight={14}
+            />
+          </div>
+          <div className="w-24">
+            <ScalarInput
+              value={fr.ambient}
+              onChange={setFractalAmbient}
+              min={0}
+              max={1}
+              step={0.01}
+              defaultValue={0.2}
+              label="Ambient"
+              trackHeight={14}
+            />
+          </div>
+        </>
+      )}
       <button
         onClick={() => setFractalAnimate(!fr.animate)}
         title="Auto-cycle the colormap phase (palette cycling)"

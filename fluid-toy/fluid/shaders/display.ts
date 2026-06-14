@@ -41,6 +41,8 @@ uniform float uLogPixelScale;
 uniform float uIterRate;
 uniform float uIterOffset;
 uniform float uIterScale;
+uniform int   uDeLogBands;
+uniform float uEscapeR2;
 
 // Post-processing knobs
 uniform int   uToneMapping;    // 0 none, 1 reinhard, 2 agx, 3 filmic

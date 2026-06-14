@@ -43,6 +43,18 @@ export interface FractalState {
    *  zoom). Set by the Fit-to-view action; never a slider. */
   iterOffset: number;
   iterScale: number;
+  /** Distance mode (10): false = linear edge/glow, true = log contour rings. */
+  deLogBands: boolean;
+  /** Slope-lighting composite layer (multiplies any mode's colour by an escape-gradient shade). */
+  lightEnabled: boolean;
+  lightAngle: number;     // azimuth, radians
+  lightHeight: number;    // elevation factor
+  lightStrength: number;  // 0 flat .. 1 lit
+  ambient: number;        // shadow floor
+  /** Escape radius (bailout). Global iteration param — shapes the equipotential band
+   *  character for Potential/Magnitude/Distance (small = decomposition cells, large = smooth
+   *  shells). Changing it re-renders + resets accumulation. */
+  escapeR: number;
 }
 
 /** Identity anchor scale = 1/LREF (LREF=8 ≈ log(1+3000)). Pivots the Rate gamma at Lv=1 so
@@ -60,6 +72,13 @@ const INITIAL: FractalState = {
   iterRate: 1,
   iterOffset: 0,
   iterScale: ITER_IDENTITY_SCALE,
+  deLogBands: true,   // Rings: the prettier DE look (even log-distance contours); Glow is the toggle.
+  lightEnabled: false,
+  lightAngle: Math.PI / 4,
+  lightHeight: 1.5,
+  lightStrength: 0.7,
+  ambient: 0.2,
+  escapeR: 32,
 };
 
 let state: FractalState = INITIAL;
@@ -145,6 +164,40 @@ export const resetFractalIterFit = (): void => {
   if (state.iterOffset !== 0 || state.iterScale !== ITER_IDENTITY_SCALE) {
     emit({ iterOffset: 0, iterScale: ITER_IDENTITY_SCALE });
   }
+};
+
+/** Toggle Distance mode's log-contour-rings (vs linear edge/glow). */
+export const setFractalDeLogBands = (on: boolean): void => { if (on !== state.deLogBands) emit({ deLogBands: on }); };
+
+/** Toggle the slope-lighting composite layer. */
+export const setFractalLightEnabled = (on: boolean): void => { if (on !== state.lightEnabled) emit({ lightEnabled: on }); };
+/** Light azimuth in radians (wraps 0..2π). */
+export const setFractalLightAngle = (a: number): void => { if (Number.isFinite(a) && a !== state.lightAngle) emit({ lightAngle: a }); };
+/** Light elevation factor (clamped 0.1..6). */
+export const setFractalLightHeight = (h: number): void => {
+  if (!Number.isFinite(h)) return;
+  const v = h < 0.1 ? 0.1 : h > 6 ? 6 : h;
+  if (v !== state.lightHeight) emit({ lightHeight: v });
+};
+/** Lighting strength, 0 flat .. 1 fully lit (clamped). */
+export const setFractalLightStrength = (s: number): void => {
+  if (!Number.isFinite(s)) return;
+  const v = s < 0 ? 0 : s > 1 ? 1 : s;
+  if (v !== state.lightStrength) emit({ lightStrength: v });
+};
+/** Ambient shadow floor, 0..1 (clamped). */
+export const setFractalAmbient = (a: number): void => {
+  if (!Number.isFinite(a)) return;
+  const v = a < 0 ? 0 : a > 1 ? 1 : a;
+  if (v !== state.ambient) emit({ ambient: v });
+};
+
+/** Set the escape radius / bailout (clamped 0.1..65536; <2 gives decomposition cells). Global —
+ *  re-renders + resets accumulation. */
+export const setFractalEscapeR = (r: number): void => {
+  if (!Number.isFinite(r)) return;
+  const v = r < 0.1 ? 0.1 : r > 65536 ? 65536 : r;
+  if (v !== state.escapeR) emit({ escapeR: v });
 };
 
 /** Toggle phase auto-cycling (palette-cycling animation). */

@@ -125,6 +125,15 @@ export interface FractalColorParams {
    *  zoom); `fitIterationRange()` sets them from the current view on demand. */
   iterOffset: number;
   iterScale: number;
+  /** Distance-Estimate mode (10): false = linear edge/glow, true = log contour rings. */
+  deLogBands: boolean;
+  /** Slope-lighting composite layer (multiplies the active mode's colour by an analytic
+   *  escape-gradient normal shade). Off = colour untouched. */
+  lightEnabled: boolean;
+  lightAngle: number;     // azimuth, radians
+  lightHeight: number;    // elevation factor (~0.5..3)
+  lightStrength: number;  // 0 flat .. 1 fully lit
+  ambient: number;        // shadow floor
   /** Colour for points inside the set. */
   interiorColor: [number, number, number];
   // Orbit-trap / stripe params — used only by the matching colorMapping modes.
@@ -161,6 +170,12 @@ const DEFAULTS: FractalColorParams = {
   // gamma at Lv=1 so Rate reshapes the curve WITHOUT scaling its magnitude — keeping Density
   // in a usable range (~1) instead of forcing it to ~0.001 to cancel a high Rate.
   iterScale: 0.125,
+  deLogBands: true,
+  lightEnabled: false,
+  lightAngle: Math.PI / 4,
+  lightHeight: 1.5,
+  lightStrength: 0.7,
+  ambient: 0.2,
   interiorColor: [0.02, 0.02, 0.04],
   trapCenter: [0, 0],
   trapRadius: 1,
@@ -215,7 +230,8 @@ const JULIA_UNIFORMS = [
   'uATRefC', 'uATCCoeff', 'uATInvZCoeff',
   'uTrackAccum', 'uTrackDeriv',
   'uGradient', 'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uInteriorColor',
-  'uColorNormV2', 'uLogPixelScale', 'uIterRate', 'uIterOffset', 'uIterScale',
+  'uColorNormV2', 'uLogPixelScale', 'uIterRate', 'uIterOffset', 'uIterScale', 'uDeLogBands',
+  'uLightEnabled', 'uLightAngle', 'uLightHeight', 'uLightStrength', 'uAmbient',
   'uCollisionGradient', 'uCollisionRepeat', 'uCollisionPhase', 'uCollisionEnabled',
 ];
 
@@ -819,6 +835,7 @@ export class FractalColorRenderer {
       + `${p.trapCenter[0]},${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]},${p.trapNormal[1]}|`
       + `${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|`
       + `cn:${p.colorNormV2 ? 1 : 0}|ir:${p.iterRate}|io:${p.iterOffset}|is:${p.iterScale}|`
+      + `de:${p.deLogBands ? 1 : 0}|li:${p.lightEnabled ? 1 : 0},${p.lightAngle},${p.lightHeight},${p.lightStrength},${p.ambient}|`
       + `ic:${ic[0]},${ic[1]},${ic[2]}|gV:${this.gradients.version}`
       + `|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}`;
     if (hash !== this.tsaaParamHash) {
@@ -851,7 +868,10 @@ export class FractalColorRenderer {
     const cm = p.colorMapping;
     gl.uniform1i(u['uTrapMode'], trapShape(cm));
     gl.uniform1i(u['uTrackAccum'], NEEDS_ACCUM.has(cm) ? 1 : 0);
-    gl.uniform1i(u['uTrackDeriv'], NEEDS_DERIV.has(cm) ? 1 : 0);
+    // Slope lighting needs the dz/dc derivative regardless of colour mode (it builds the
+    // surface normal from z/dz). Without this, dz stays at its init value for non-DE modes
+    // and the lighting normal is garbage — so force derivative tracking when lighting is on.
+    gl.uniform1i(u['uTrackDeriv'], (NEEDS_DERIV.has(cm) || p.lightEnabled) ? 1 : 0);
     gl.uniform2f(u['uTrapCenter'], p.trapCenter[0], p.trapCenter[1]);
     gl.uniform1f(u['uTrapRadius'], p.trapRadius);
     gl.uniform2f(u['uTrapNormal'], p.trapNormal[0], p.trapNormal[1]);
@@ -906,6 +926,12 @@ export class FractalColorRenderer {
     gl.uniform1f(u['uIterRate'], p.iterRate);
     gl.uniform1f(u['uIterOffset'], p.iterOffset);
     gl.uniform1f(u['uIterScale'], p.iterScale);
+    gl.uniform1i(u['uDeLogBands'], p.deLogBands ? 1 : 0);
+    gl.uniform1i(u['uLightEnabled'], p.lightEnabled ? 1 : 0);
+    gl.uniform1f(u['uLightAngle'], p.lightAngle);
+    gl.uniform1f(u['uLightHeight'], p.lightHeight);
+    gl.uniform1f(u['uLightStrength'], p.lightStrength);
+    gl.uniform1f(u['uAmbient'], p.ambient);
     gl.uniform3f(u['uInteriorColor'], p.interiorColor[0], p.interiorColor[1], p.interiorColor[2]);
     gl.uniform1i(u['uCollisionEnabled'], 0);
     gl.uniform1f(u['uCollisionRepeat'], 1);
