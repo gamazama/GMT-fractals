@@ -16,32 +16,54 @@
       ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
       .mobile-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
       .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
+
+      /* Boot splash — inline so it paints IMMEDIATELY, before the JS bundle
+         parses + React mounts (which is seconds of black otherwise). Lives
+         OUTSIDE #root so React's render() never touches it; the app removes it
+         only once the engine's first frame has drawn (see FluidToyApp). */
+      @keyframes ft-spin { to { transform: rotate(360deg); } }
+      #ft-boot-splash {
+        position: fixed; inset: 0; z-index: 99999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+        background: #000; color: #9ca3af;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        font-size: 12px; letter-spacing: 0.04em;
+        transition: opacity 450ms ease;
+      }
+      #ft-boot-splash .ft-spinner {
+        width: 32px; height: 32px; border-radius: 9999px;
+        border: 2px solid rgba(255,255,255,0.15); border-top-color: #22d3ee;
+        animation: ft-spin 0.8s linear infinite;
+      }
+      #ft-boot-splash.ft-hidden { opacity: 0; pointer-events: none; }
     </style>
     <link rel="icon" type="image/x-icon" href="./favicon.ico" />
-    <script type="module" crossorigin src="./assets/fluid-toy-i4VQJgmE.js"></script>
+    <script type="module" crossorigin src="./assets/fluid-toy-BkFKgYpM.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/three-DQWx7qFd.js">
     <link rel="modulepreload" crossorigin href="./assets/three-fiber-GKfjny8F.js">
     <link rel="modulepreload" crossorigin href="./assets/pako-DwGzBETv.js">
     <link rel="modulepreload" crossorigin href="./assets/three-drei-BQSiXBFe.js">
-    <link rel="modulepreload" crossorigin href="./assets/toastStore-BXg0YdZb.js">
-    <link rel="modulepreload" crossorigin href="./assets/FormulaFormat-DoquWzI-.js">
-    <link rel="modulepreload" crossorigin href="./assets/PwaUpdate-CKGFF30O.js">
-    <link rel="modulepreload" crossorigin href="./assets/CompositionOverlay-B5SsLcvN.js">
-    <link rel="modulepreload" crossorigin href="./assets/Camera-CDL6qbnC.js">
+    <link rel="modulepreload" crossorigin href="./assets/toastStore-JXwhaN_k.js">
+    <link rel="modulepreload" crossorigin href="./assets/gradientEditorEntrance-lpg_cy5d.js">
+    <link rel="modulepreload" crossorigin href="./assets/FormulaFormat-_BvAUnsz.js">
+    <link rel="modulepreload" crossorigin href="./assets/PwaUpdate-CxouZS6m.js">
+    <link rel="modulepreload" crossorigin href="./assets/CompositionOverlay-DNY9vrei.js">
+    <link rel="modulepreload" crossorigin href="./assets/Camera-B2Wq6CUT.js">
     <link rel="modulepreload" crossorigin href="./assets/AudioAnalysisEngine-DyaB3DyZ.js">
     <link rel="modulepreload" crossorigin href="./assets/ModulationEngine-Cg8y2ZHH.js">
-    <link rel="modulepreload" crossorigin href="./assets/index-D_CDU0HE.js">
-    <link rel="modulepreload" crossorigin href="./assets/RenderLoop-6B-eQgEB.js">
-    <link rel="modulepreload" crossorigin href="./assets/laRuntime-BGxnZsaP.js">
-    <link rel="modulepreload" crossorigin href="./assets/typedSlices-CjYt6Zfh.js">
+    <link rel="modulepreload" crossorigin href="./assets/index-BurM9MIM.js">
+    <link rel="modulepreload" crossorigin href="./assets/RenderLoop-CjM6pW8r.js">
+    <link rel="modulepreload" crossorigin href="./assets/laRuntime-OLmq4Kv5.js">
+    <link rel="modulepreload" crossorigin href="./assets/typedSlices-BB7Zn6YU.js">
     <link rel="modulepreload" crossorigin href="./assets/createBlueNoiseWebGL2-BPguvqd_.js">
-    <link rel="modulepreload" crossorigin href="./assets/support-BSolG7PD.js">
+    <link rel="modulepreload" crossorigin href="./assets/support-E3YS8D0D.js">
     <link rel="modulepreload" crossorigin href="./assets/renderPopupRegistry-DFd-6fyz.js">
-    <link rel="modulepreload" crossorigin href="./assets/index-DfEIrcom.js">
-    <link rel="modulepreload" crossorigin href="./assets/CompositionOverlayControls-C9zrOaIK.js">
-    <link rel="modulepreload" crossorigin href="./assets/cameraKeyRegistry-C5Uu5SjZ.js">
+    <link rel="modulepreload" crossorigin href="./assets/index-0jUtCNW4.js">
+    <link rel="modulepreload" crossorigin href="./assets/CompositionOverlayControls-yy9diWz6.js">
+    <link rel="modulepreload" crossorigin href="./assets/cameraKeyRegistry-DdguEhfY.js">
   <link rel="manifest" href="./manifest.webmanifest"></head>
   <body>
     <div id="root"></div>
+    <div id="ft-boot-splash"><div class="ft-spinner"></div><span>Loading fractal…</span></div>
   </body>
 </html>
