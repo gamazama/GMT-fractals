@@ -47,7 +47,16 @@ export const BucketRenderResultModal: React.FC = () => {
     const openSubmitWith   = useGalleryStore((s) => s.openSubmitWith);
 
     useEffect(() => {
-        const handler = (data: { blob: Blob; filename: string; width: number; height: number }) => {
+        const handler = (data: { blob: Blob; filename: string; width: number; height: number; multiTile?: boolean }) => {
+            // Tiled render (rows×cols > 1): each tile saved as its own PNG. No
+            // single tile — nor the un-stitched set — is a submittable image,
+            // and the gallery server caps uploads at 5 MB, which a hi-res tile
+            // would blow past anyway. Skip the prompt; the tiles still download.
+            // TODO(gallery tiled-submit): accept tiled renders by stitching the
+            //   tiles client-side, downscaling to the server's limit, and telling
+            //   the user the gallery copy is a resized preview of their full-res
+            //   tiled export (see backend submit-gallery-item: 5 MB JPG cap).
+            if (data.multiTile) return;
             // A prompt is already open (sequence streaming in) — keep the first
             // shown and just tally the extras. Don't clobber its blob; each new
             // frame is already downloaded as its own file.

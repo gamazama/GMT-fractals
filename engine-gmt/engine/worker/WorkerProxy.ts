@@ -922,7 +922,7 @@ export class WorkerProxy implements AccumulationController {
 
     /** Handle completed bucket image from worker — saves to disk via DOM */
     private async _handleBucketImage(msg: Extract<WorkerToMainMessage, { type: 'BUCKET_IMAGE' }>) {
-        const { pixels, width, height, presetJson, filename } = msg;
+        const { pixels, width, height, presetJson, filename, multiTile } = msg;
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
@@ -954,6 +954,7 @@ export class WorkerProxy implements AccumulationController {
                     filename,
                     width,
                     height,
+                    multiTile,
                 });
             } catch (e) {
                 console.error("Failed to inject metadata", e);

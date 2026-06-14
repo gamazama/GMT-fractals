@@ -505,6 +505,10 @@ export class BucketRunner {
             ? ''
             : (this.exportData?.metadataJson ?? '{}');
         const filename = this.buildTileFilename();
+        // A tiled render (rows×cols > 1) saves each tile as its own PNG; none
+        // of them is a complete, submittable image, so the gallery prompt is
+        // suppressed downstream for these.
+        const multiTile = this.config.tileRows * this.config.tileCols > 1;
 
         // Worker context: emit pixel data, main thread handles DOM save.
         if (typeof document === 'undefined') {
@@ -514,6 +518,7 @@ export class BucketRunner {
                 height: result.height,
                 presetJson: presetStr,
                 filename,
+                multiTile,
             });
             return;
         }

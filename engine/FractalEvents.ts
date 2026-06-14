@@ -50,12 +50,15 @@ type EventMap = {
     [FRACTAL_EVENTS.COMPILE_TIME]: number;
     [FRACTAL_EVENTS.COMPILE_ESTIMATE]: number;
     [FRACTAL_EVENTS.BUCKET_STATUS]: { isRendering: boolean; progress: number; totalBuckets?: number; currentBucket?: number };
-    [FRACTAL_EVENTS.BUCKET_IMAGE]: { pixels: Uint8ClampedArray; width: number; height: number; presetJson: string; filename: string };
+    [FRACTAL_EVENTS.BUCKET_IMAGE]: { pixels: Uint8ClampedArray; width: number; height: number; presetJson: string; filename: string; multiTile?: boolean };
     /** Fires on the main thread after a bucket render has been encoded to
      *  a PNG blob and downloaded. Gallery plugin listens to offer a
      *  "submit this hi-res render?" prompt. The blob carries the embedded
-     *  GMF metadata exactly as the saved file. */
-    [FRACTAL_EVENTS.BUCKET_RENDER_COMPLETE]: { blob: Blob; filename: string; width: number; height: number };
+     *  GMF metadata exactly as the saved file. `multiTile` is true when this
+     *  PNG is one tile of a tiled (rows×cols > 1) render — gallery submit is
+     *  suppressed for those (each tile alone, and the un-stitched set, aren't
+     *  a submittable image; the server also caps uploads at 5 MB). */
+    [FRACTAL_EVENTS.BUCKET_RENDER_COMPLETE]: { blob: Blob; filename: string; width: number; height: number; multiTile?: boolean };
     [FRACTAL_EVENTS.TRACK_FOCUS]: string;
     [FRACTAL_EVENTS.TEXTURE]: { textureType: 'color' | 'env'; dataUrl: string | null };
     [FRACTAL_EVENTS.ENGINE_QUEUE]: { featureId: string; param: string; value: any };

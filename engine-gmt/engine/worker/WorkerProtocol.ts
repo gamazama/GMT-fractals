@@ -135,7 +135,7 @@ export type WorkerToMainMessage =
     // ─── Bucket Render ───
     | { type: 'BUCKET_STATUS'; isRendering: boolean; progress: number; totalBuckets?: number; currentBucket?: number }
     | { type: 'BUCKET_IMAGE'; pixels: Uint8ClampedArray; width: number; height: number;
-        presetJson: string; filename: string }
+        presetJson: string; filename: string; multiTile?: boolean }
     // ─── Shader Debug ───
     | { type: 'SHADER_SOURCE_RESULT'; id: string; code: string | null }
     | { type: 'UNIFORMS_SNAPSHOT_RESULT'; id: string; uniforms: Record<string, any> | null };
