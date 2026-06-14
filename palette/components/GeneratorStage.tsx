@@ -34,6 +34,7 @@ import { GradientSourcePicker } from './GradientSourcePicker';
 import { GeneratorSlotMods } from './GeneratorSlotMods';
 import { MixBlend } from './MixBlend';
 import { CanonicalHero } from './CanonicalHero';
+import { HeroSlot } from './HeroSlot';
 import { setFavientDrag, beginCustomAvatarDrag } from '../core/favientDnd';
 import { fitRampToStops } from '../core/stopFit';
 import { favientSig } from '../store/favientsStore';
@@ -415,20 +416,22 @@ export const GeneratorStage: React.FC = () => {
             lower-centre bin dock now (click the strip to reveal it); the vertical-enlarge
             toggle is built into the hero now (shared + persisted across all modes). */}
         <div className="mt-1">
-          {curvesOn && !colorbox && !stops && (
-            <div className="text-[10px] text-cyan-400/70 truncate mb-1">
-              curves drive output — Re-fit / Reset points to edit sources
-            </div>
-          )}
-          <CanonicalHero
-            config={config}
-            ramp={ramp}
-            name="Generated"
-            autoName
-            source="Generator"
-            mode="generator"
-            trailing={<span className="text-[11px] text-gray-500">{config.stops.length} stops</span>}
-          />
+          {/* The curves-on caption lives with the SOURCES above (the fuller note at the
+              SourceRow block) — not here, where on mobile the hero portals to the rail and
+              would leave this line orphaned, pointing at a hero that isn't beside it. */}
+          {/* HeroSlot: inline on desktop; portals into the mobile hero rail (the live
+              result stays put while the curve graph + controls scroll). */}
+          <HeroSlot>
+            <CanonicalHero
+              config={config}
+              ramp={ramp}
+              name="Generated"
+              autoName
+              source="Generator"
+              mode="generator"
+              trailing={<span className="text-[11px] text-gray-500">{config.stops.length} stops</span>}
+            />
+          </HeroSlot>
         </div>
       </div>
 

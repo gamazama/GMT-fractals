@@ -16,6 +16,7 @@ import { useImageStore, useImageDerived, useImageMode, useImageParam } from '../
 import { decodeAndIngest, autoPath, tracePolyline, type Img2GradMode } from '../core/img2grad';
 import type { Pt, TracePath } from '../core/img2grad/common';
 import { CanonicalHero } from './CanonicalHero';
+import { HeroSlot } from './HeroSlot';
 import { fitRampToStops } from '../core/stopFit';
 import { wellsForTypes } from '../../store/dropWellRegistry';
 
@@ -441,6 +442,13 @@ export const ImageStage: React.FC = () => {
 
       {!model ? (
         <div className="flex-1 flex items-center justify-center p-8">
+          {/* Keep the always-visible mobile hero rail from showing a bare band before any
+              image exists — rail-only, so desktop's no-image screen is unchanged. */}
+          <HeroSlot railOnly>
+            <div className="text-[11px] text-gray-500 flex items-center h-full">
+              The image’s gradient appears here once you load one.
+            </div>
+          </HeroSlot>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="max-w-md text-center border border-dashed border-zinc-700 hover:border-cyan-500/60 rounded-xl px-10 py-12 transition-colors"
@@ -477,26 +485,29 @@ export const ImageStage: React.FC = () => {
           </div>
 
           {/* Result gradient — the shared select/drag hero (drag it onto a bin, or
-              click to select then pick a destination: Generator · A/B, ColorBox, …). */}
-          {favConfig && derived ? (
-            <CanonicalHero
-              config={favConfig}
-              ramp={derived.ramp}
-              name={`Image · ${mode}`}
-              autoName
-              source="Image"
-              mode="image"
-            />
-          ) : (
-            <div>
-              <div className="text-xs text-gray-400 mb-1.5">
-                Result <span className="ml-1 text-gray-500 capitalize">{mode}</span>
+              click to select then pick a destination: Generator · A/B, ColorBox, …).
+              HeroSlot: inline on desktop; portals into the mobile hero rail. */}
+          <HeroSlot>
+            {favConfig && derived ? (
+              <CanonicalHero
+                config={favConfig}
+                ramp={derived.ramp}
+                name={`Image · ${mode}`}
+                autoName
+                source="Image"
+                mode="image"
+              />
+            ) : (
+              <div>
+                <div className="text-xs text-gray-400 mb-1.5">
+                  Result <span className="ml-1 text-gray-500 capitalize">{mode}</span>
+                </div>
+                <div className="rounded-md border border-white/15 bg-black/30 p-2 shadow-lg">
+                  <div className="h-24" />
+                </div>
               </div>
-              <div className="rounded-md border border-white/15 bg-black/30 p-2 shadow-lg">
-                <div className="h-24" />
-              </div>
-            </div>
-          )}
+            )}
+          </HeroSlot>
 
           {/* Cloud + image pane */}
           <div className="flex gap-4 flex-wrap">

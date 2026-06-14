@@ -27,12 +27,14 @@ import { PanelRouter } from '../components/PanelRouter';
 import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
 import { TimelineHost } from '../components/TimelineHost';
 import { ToastHost } from '../engine/components/ToastHost';
+import { MobileViewportShell } from '../engine/components/MobileViewportShell';
 import { GradientDropLayer } from './GradientDropLayer';
 import { GradientLandingLayer } from './GradientLandingLayer';
 import { FullscreenGradientOverlay } from './FullscreenGradientOverlay';
 import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import { PickerStage, SearchIcon } from './PickerStage';
+import { HeroPortalProvider } from '../palette/components/HeroSlot';
 import { GeneratorStage } from '../palette/components/GeneratorStage';
 import { ImageStage } from '../palette/components/ImageStage';
 import { FavientsPanel } from '../palette/components/FavientsPanel';
@@ -191,7 +193,10 @@ const SectionChevron: React.FC<{ open: boolean }> = ({ open }) => (
 );
 
 const MobilePickerControls: React.FC = () => {
-  const [open, setOpen] = useState<string>('arrange');
+  // Default to Sources & themes — the primary "narrow 11k down" action on a phone (the
+  // carve/zoom narrowers are pointer-only). Arrange is refinement, so it shouldn't be the
+  // section a thumb lands on first.
+  const [open, setOpen] = useState<string>('sources');
   // Search is the primary mobile narrower (the desktop carve/zoom tools are pointer-only),
   // so surface it full-width above the collapsible sections. Shares the transient query
   // with the PickerStage hero field via the pickerSearch store.
@@ -247,6 +252,11 @@ const GradientExplorerApp: React.FC = () => {
   // resizes them together.
   const fsState = useFullscreenState();
   const splitActive = fsState.open && fsState.split;
+  // The mobile hero rail's DOM node — the active mode's result hero portals into it (see
+  // HeroSlot), giving the current gradient one fixed, always-visible home above the
+  // scrolling wall/controls. Null until the rail mounts (heroes render inline for that
+  // first frame); state (not a ref) so the provider re-renders children once it's set.
+  const [heroRailEl, setHeroRailEl] = useState<HTMLDivElement | null>(null);
   // The Favients shelf has no side dock on a phone; reuse the same open-state the
   // top-bar Favients button already toggles, surfaced as a slide-in drawer instead.
   const favShown = !state.isLeftDockCollapsed && (state.panels.Favients?.isOpen ?? false);
@@ -293,7 +303,11 @@ const GradientExplorerApp: React.FC = () => {
 
   return (
     <StoreCallbacksProvider value={storeCallbacks}>
-      <div className="fixed inset-0 w-full h-full bg-black select-none overflow-hidden flex flex-col">
+      {/* MobileViewportShell: desktop keeps `fixed inset-0`; on a real touch device it
+          swaps to `sticky h-[100dvh]` + safe-area-inset padding so content clears the
+          notch/home-bar and tracks the iOS address-bar collapse (engine-standard, matches
+          app-gmt). */}
+      <MobileViewportShell className="bg-black select-none overflow-hidden flex flex-col">
         {/* EngineBridge connects the animation engine to the store; RenderLoopDriver
             runs the TickRegistry each frame so the timeline plays + keyframes apply. */}
         <EngineBridge />
@@ -329,26 +343,35 @@ const GradientExplorerApp: React.FC = () => {
                   <FavientsPanel />
                 </div>
               ) : (
-                <div className="flex-1 min-h-0 overflow-y-auto custom-scroll relative flex flex-col">
-                  <div className="shrink-0 h-[62vh] min-h-[340px] flex flex-col">
-                    <Stage />
-                  </div>
-                  <div className="shrink-0 border-t border-white/10 bg-zinc-950">
-                    <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-gray-500 bg-black/30 border-b border-white/5">
-                      {(state.activeRightTab as string) ?? 'Mode'} controls
+                <HeroPortalProvider value={heroRailEl}>
+                  {/* Dedicated hero rail — OUTSIDE the scroll area so the current mode's
+                      result hero (portaled in via HeroSlot) stays put while the wall +
+                      controls scroll beneath it. min-h guards the one frame before it fills. */}
+                  <div
+                    ref={setHeroRailEl}
+                    className="shrink-0 min-h-[64px] flex flex-col justify-center px-4 py-2 border-b border-white/10 bg-zinc-950"
+                  />
+                  <div className="flex-1 min-h-0 overflow-y-auto custom-scroll relative flex flex-col">
+                    <div className="shrink-0 h-[58vh] min-h-[320px] flex flex-col">
+                      <Stage />
                     </div>
-                    {state.activeRightTab === 'Picker' ? (
-                      <MobilePickerControls />
-                    ) : (
-                      <PanelRouter
-                        activeTab={state.activeRightTab as PanelId}
-                        state={state}
-                        actions={state}
-                        onSwitchTab={(t) => state.togglePanel(t, true)}
-                      />
-                    )}
+                    <div className="shrink-0 border-t border-white/10 bg-zinc-950">
+                      <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-gray-500 bg-black/30 border-b border-white/5">
+                        {(state.activeRightTab as string) ?? 'Mode'} controls
+                      </div>
+                      {state.activeRightTab === 'Picker' ? (
+                        <MobilePickerControls />
+                      ) : (
+                        <PanelRouter
+                          activeTab={state.activeRightTab as PanelId}
+                          state={state}
+                          actions={state}
+                          onSwitchTab={(t) => state.togglePanel(t, true)}
+                        />
+                      )}
+                    </div>
                   </div>
-                </div>
+                </HeroPortalProvider>
               )}
               <HudHost />
             </div>
@@ -383,8 +406,10 @@ const GradientExplorerApp: React.FC = () => {
             </Suspense>
           )}
 
-          {/* Timeline — params keyed via the slider diamonds animate here. */}
-          <TimelineHost />
+          {/* Timeline — params keyed via the slider diamonds animate here. Desktop-only:
+              animation editing isn't a phone task (matches app-gmt + the engine convention),
+              and it would otherwise eat scarce bottom space on mobile. */}
+          {!isMobile && <TimelineHost />}
 
           {/* Toasts — save/load + Favients feedback surface here. */}
           <ToastHost />
@@ -397,7 +422,7 @@ const GradientExplorerApp: React.FC = () => {
           <GradientLandingLayer />
           <FullscreenGradientOverlay />
         </div>
-      </div>
+      </MobileViewportShell>
     </StoreCallbacksProvider>
   );
 };

@@ -66,9 +66,15 @@ interface KeyframeInspectorProps {
      *  inspector with a fixed width (the palette) reclaim the space; flex hosts
      *  (the timeline) reflow automatically and can ignore it. */
     onCollapsedChange?: (collapsed: boolean) => void;
+    /** CONTROLLED collapse: when provided, the panel's width follows this prop instead of
+     *  its own internal state. Fixed-width hosts (the palette curve editor) own the collapse
+     *  so they can auto-collapse it on a narrow editor AND keep the canvas-width math in sync
+     *  — otherwise the panel can render expanded (256px) while the canvas was sized for the
+     *  28px rail, overflowing + clipping the inspector. Omit it (the timeline) → internal. */
+    collapsed?: boolean;
 }
 
-export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource, onCollapsedChange }) => {
+export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource, onCollapsedChange, collapsed: collapsedProp }) => {
     // Default to the live-timeline store data source (narrow per-field subs +
     // stable action refs). A provided dataSource (palette) is used as-is and the
     // store hook is skipped — each call site is consistent, so this is safe.
@@ -88,11 +94,14 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
     const canDelete       = !!ds.deleteSelectedKeyframes;
     const canSoftType     = !!ds.setSoftSelectionType;
 
-    // Collapse to a thin rail. Internal state; hosts learn of it via onCollapsedChange.
-    const [collapsed, setCollapsed] = useState(false);
+    // Collapse to a thin rail. Controlled when `collapsedProp` is supplied (the palette
+    // owns it so its canvas-width math stays in sync), else internal (the timeline). Either
+    // way the toggle notifies the host via onCollapsedChange.
+    const [collapsedInternal, setCollapsedInternal] = useState(false);
+    const collapsed = collapsedProp ?? collapsedInternal;
     const toggleCollapsed = () => {
         const next = !collapsed;
-        setCollapsed(next);
+        if (collapsedProp === undefined) setCollapsedInternal(next);
         onCollapsedChange?.(next);
     };
 

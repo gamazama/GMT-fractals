@@ -119,7 +119,7 @@ export const PaletteFiltersFeature: FeatureDefinition = {
       type: 'vec2', default: { x: 32, y: 18 }, min: 8, max: 320, step: 2,
       label: 'Swatch size', description: 'Width × height of each gradient swatch (px).', group: G_ARRANGE,
     },
-    paddingSize: { type: 'float', default: 0, min: 0, max: 40, step: 1, label: 'Padding', description: 'Gap between swatches (px). 0 = flush.', group: G_ARRANGE },
+    paddingSize: { type: 'float', default: 1, min: 0, max: 40, step: 1, label: 'Padding', description: 'Gap between swatches (px). 0 = flush.', group: G_ARRANGE },
     ...padParams,
   },
 

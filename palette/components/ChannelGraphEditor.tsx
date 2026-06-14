@@ -803,7 +803,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
         <canvas ref={stripRef} width={canvasWidth} height={STRIP_H} className="block" style={{ width: canvasWidth, height: STRIP_H }} />
       </div>
 
-      <KeyframeInspector dataSource={dataSource} onCollapsedChange={setInspectorCollapsed} />
+      <KeyframeInspector dataSource={dataSource} collapsed={inspectorCollapsed} onCollapsedChange={setInspectorCollapsed} />
     </div>
   );
 };

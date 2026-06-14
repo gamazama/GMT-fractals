@@ -963,12 +963,21 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     endDrag(e);
   };
 
+  // On a touch device the floating zoom-preview is pure noise: a tap synthesises a
+  // mouseenter/mousemove so the preview pops up and LINGERS over its neighbours until the
+  // next tap — and it's redundant there anyway (the tapped swatch already enlarges in place
+  // and the hero shows the pick). Kill it on coarse pointers; the desktop mouse keeps it.
+  const coarsePointer = useRef(
+    typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: coarse)').matches,
+  );
   // Suppress hover while dragging, while a selection tool is active (the carve overlay, not
   // the zoom preview, is the relevant feedback then), OR while a gradient is in hand (the
   // floating click-through avatar already follows the cursor). Stable identity so memoised
   // GroupRows don't re-render on every hover.
   const handleHover = useCallback((h: Hover | null) => {
-    if (!dragging.current && !selToolRef.current && !inHandRef.current) setHover(h);
+    if (!dragging.current && !selToolRef.current && !inHandRef.current && !coarsePointer.current) setHover(h);
   }, []);
   // Drop any showing preview the instant a gradient goes in hand, so it doesn't linger
   // under the avatar (the guard above only blocks NEW hovers).
@@ -996,8 +1005,11 @@ export const PickerWall: React.FC<PickerWallProps> = ({
         onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => { if (e.button === 1 || e.button === 2) e.preventDefault(); }}
         // A left-click that bubbles here didn't land on a swatch (swatch hits stopPropagation)
-        // → empty-wall click → deselect. Suppressed while a carve tool is active.
-        onClick={() => { if (!selectionTool) onDeselect?.(); }}
+        // → empty-wall click → deselect. Suppressed while a carve tool is active. Also
+        // suppressed on touch: a fat-finger near-miss that lands in a sub-pixel gap would
+        // otherwise blank the active pick with no feedback near the finger (desktop keeps it —
+        // the cursor is precise and Esc is the explicit deselect there).
+        onClick={() => { if (!selectionTool && !coarsePointer.current) onDeselect?.(); }}
       >
         <div ref={contentRef} style={{ width: contentWidth, transformOrigin: '0 0' }}>
           {rows.map((g) => (

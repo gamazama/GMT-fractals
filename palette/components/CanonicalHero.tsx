@@ -34,7 +34,8 @@ import type { RGB } from '../core/oklab';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { configToName } from '../core/facetName';
 import { GradientStrip } from './GradientStrip';
-import { favientSig } from '../store/favientsStore';
+import { favientSig, useFavientsStore } from '../store/favientsStore';
+import { useInHeroRail } from './HeroSlot';
 import { setFavientDrag, beginCustomAvatarDrag } from '../core/favientDnd';
 import {
   useHeroPick,
@@ -129,6 +130,22 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
   const pick = (): void =>
     setHeroPick({ mode, key, payload: { config, name: payloadName(), source }, selfTargetId: targetId });
 
+  // On mobile the hero lives in a dedicated always-visible rail — and the desktop save
+  // path (drag the strip onto the Favients shelf) doesn't fire on touch. So when rendered
+  // INTO the rail, the hero carries an explicit Save-to-favourites toggle (the only touch
+  // path to favourite). The inline desktop strip keeps its no-button decision. The matching
+  // favourite's id (if already saved) both reflects state and lets the toggle un-save.
+  const inRail = useInHeroRail();
+  const savedId = useFavientsStore((s) => {
+    const sig = favientSig(config);
+    return s.favients.find((f) => favientSig(f.config) === sig)?.id ?? null;
+  });
+  const toggleSave = (): void => {
+    const st = useFavientsStore.getState();
+    if (savedId) st.remove(savedId);
+    else st.add(config, payloadName(), source);
+  };
+
   return (
     // data-gx-target tags this hero as the anchor for its (c) drop target, when it is one.
     // data-gx-selectable on the ROOT (not just the strip) so clicking a header control —
@@ -143,13 +160,29 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {trailing}
-          {/* Shared vertical-enlarge toggle — flips every hero at once (persisted). */}
+          {/* Rail-only (mobile) Save-to-favourites toggle — the touch equivalent of dragging
+              the strip onto the shelf, which native drag can't do on touch. Filled = saved. */}
+          {inRail && (
+            <button
+              onClick={toggleSave}
+              title={savedId ? 'Remove from Favients' : 'Save to Favients'}
+              aria-pressed={!!savedId}
+              className={`flex items-center gap-1 text-[12px] leading-none px-2.5 py-2 rounded-sm transition-colors ${
+                savedId ? 'bg-amber-400/20 text-amber-200' : 'bg-white/[0.06] text-gray-200 hover:text-white'
+              }`}
+            >
+              <span aria-hidden>{savedId ? '★' : '☆'}</span>
+              {savedId ? 'Saved' : 'Save'}
+            </button>
+          )}
+          {/* Shared vertical-enlarge toggle — flips every hero at once (persisted). Bigger
+              tap target in the rail (the one hero control a thumb reaches on a phone). */}
           <button
             onClick={toggleHeroEnlarged}
             title={enlarged ? 'Compact hero strip' : 'Enlarge hero strip'}
             aria-label="Toggle hero height"
             aria-pressed={enlarged}
-            className={`text-[11px] leading-none px-1.5 py-1 rounded-sm transition-colors ${
+            className={`text-[11px] leading-none rounded-sm transition-colors ${inRail ? 'px-2.5 py-2' : 'px-1.5 py-1'} ${
               enlarged ? 'bg-cyan-500/20 text-cyan-200' : 'bg-white/[0.06] text-gray-400 hover:text-gray-200'
             }`}
           >

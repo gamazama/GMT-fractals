@@ -18,6 +18,7 @@ import type { CatalogEntry } from '../palette/core/presetCatalog';
 import { bufferToRamp } from '../palette/core/stopFit';
 import { PickerWall, type PickerGroup, type SelectionTool } from '../palette/components/PickerWall';
 import { CanonicalHero } from '../palette/components/CanonicalHero';
+import { HeroSlot } from '../palette/components/HeroSlot';
 import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
 import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { setFavientDrag, beginCustomAvatarDrag } from '../palette/core/favientDnd';
@@ -326,33 +327,37 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-zinc-950">
       <div className="px-4 pt-3 pb-2 border-b border-zinc-800 shrink-0">
-        {selected && favConfig ? (
-          // The shared hero: the entry's pixel-exact ramp as a select/drag source — click
-          // to bring up destinations, drag onto a target. selectionKey = the catalog id so
-          // the hero + the wall's selectedId share one key.
-          <CanonicalHero
-            config={favConfig}
-            ramp={heroRamp}
-            name={selected.name}
-            source="Picker"
-            mode="picker"
-            selectionKey={selected.id}
-          />
-        ) : (
-          // Mirror the hero's footprint (a header row + a strip of the shared height) so
-          // deselecting (empty-wall click / Esc) doesn't jump the layout.
-          <div>
-            <div className="flex items-center mb-1 h-[19px]">
-              <span className="text-[10px] text-zinc-600">No gradient picked</span>
+        {/* HeroSlot: inline on desktop; on mobile it portals into the dedicated hero rail
+            so the current pick stays visible while the wall + controls scroll. */}
+        <HeroSlot>
+          {selected && favConfig ? (
+            // The shared hero: the entry's pixel-exact ramp as a select/drag source — click
+            // to bring up destinations, drag onto a target. selectionKey = the catalog id so
+            // the hero + the wall's selectedId share one key.
+            <CanonicalHero
+              config={favConfig}
+              ramp={heroRamp}
+              name={selected.name}
+              source="Picker"
+              mode="picker"
+              selectionKey={selected.id}
+            />
+          ) : (
+            // Mirror the hero's footprint (a header row + a strip of the shared height) so
+            // deselecting (empty-wall click / Esc) doesn't jump the layout.
+            <div>
+              <div className="flex items-center mb-1 h-[19px]">
+                <span className="text-[10px] text-zinc-600">No gradient picked</span>
+              </div>
+              <div
+                className="w-full rounded-md border border-dashed border-zinc-700/70 bg-zinc-900/40 flex items-center justify-center"
+                style={{ height: heroH }}
+              >
+                <span className="text-[10px] text-zinc-600">Click a swatch below to preview it here</span>
+              </div>
             </div>
-            <div
-              className="w-full rounded-md border border-dashed border-zinc-700/70 bg-zinc-900/40 flex items-center justify-center"
-              style={{ height: heroH }}
-            >
-              <span className="text-[10px] text-zinc-600">Click a swatch below to preview it here</span>
-            </div>
-          </div>
-        )}
+          )}
+        </HeroSlot>
         <div className="mt-1.5 flex items-center justify-between text-[11px] gap-2">
           {/* The ★ + name now live in the hero above; this row keeps the bundle provenance
               (when picked) on the left and the search/count/hint controls on the right. */}
@@ -365,43 +370,48 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
                 {hintPhase === 'zoom' ? 'Middle-drag to zoom' : hintPhase === 'pan' ? 'Right-drag to pan' : 'Middle-click to reset zoom'}
               </span>
             )}
+            {/* Favients link + inline search are desktop-only: on a phone the Favients TAB
+                and the full-width search in MobilePickerControls are the canonical paths, so
+                these would be duplicate affordances stacked a few hundred px apart. */}
             {!hideFavientsLink && (
-              <button onClick={openFavientsPanel} title="Open the Favients shelf" className={FAVIENTS_ACCENT.link}>
+              <button onClick={openFavientsPanel} title="Open the Favients shelf" className={`hidden md:inline-flex ${FAVIENTS_ACCENT.link}`}>
                 <FavientsIcon /> Favients
               </button>
             )}
             {/* Free-text search over name · theme · source — a collapsed icon that
                 expands to one inline input (stays expanded while a query is active). */}
-            {searchOpen || search ? (
-              <span className="inline-flex items-center gap-1 h-[22px] rounded border border-zinc-700 bg-zinc-900 pl-1.5 pr-1">
-                <SearchIcon className="w-3 h-3 text-zinc-500 shrink-0" />
-                <input
-                  autoFocus
-                  value={search}
-                  onChange={(e) => setPickerSearch(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') { setPickerSearch(''); setSearchOpen(false); (e.target as HTMLInputElement).blur(); }
-                  }}
-                  placeholder="name · theme · source"
-                  className="w-28 md:w-32 bg-transparent outline-none text-[11px] text-zinc-200 placeholder-zinc-600"
-                />
+            <span className="hidden md:inline-flex items-center">
+              {searchOpen || search ? (
+                <span className="inline-flex items-center gap-1 h-[22px] rounded border border-zinc-700 bg-zinc-900 pl-1.5 pr-1">
+                  <SearchIcon className="w-3 h-3 text-zinc-500 shrink-0" />
+                  <input
+                    autoFocus
+                    value={search}
+                    onChange={(e) => setPickerSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { setPickerSearch(''); setSearchOpen(false); (e.target as HTMLInputElement).blur(); }
+                    }}
+                    placeholder="name · theme · source"
+                    className="w-28 md:w-32 bg-transparent outline-none text-[11px] text-zinc-200 placeholder-zinc-600"
+                  />
+                  <button
+                    onClick={() => { setPickerSearch(''); setSearchOpen(false); }}
+                    title={search ? 'Clear search' : 'Close search'}
+                    className="px-0.5 text-zinc-500 hover:text-zinc-200"
+                  >
+                    ×
+                  </button>
+                </span>
+              ) : (
                 <button
-                  onClick={() => { setPickerSearch(''); setSearchOpen(false); }}
-                  title={search ? 'Clear search' : 'Close search'}
-                  className="px-0.5 text-zinc-500 hover:text-zinc-200"
+                  onClick={() => setSearchOpen(true)}
+                  title="Search the catalog by name, theme, or source"
+                  className="p-0.5 text-zinc-500 hover:text-zinc-200"
                 >
-                  ×
+                  <SearchIcon className="w-3.5 h-3.5" />
                 </button>
-              </span>
-            ) : (
-              <button
-                onClick={() => setSearchOpen(true)}
-                title="Search the catalog by name, theme, or source"
-                className="p-0.5 text-zinc-500 hover:text-zinc-200"
-              >
-                <SearchIcon className="w-3.5 h-3.5" />
-              </button>
-            )}
+              )}
+            </span>
             <span className="text-zinc-500 tabular-nums">
               {!loaded ? 'loading…' : (
                 <>
