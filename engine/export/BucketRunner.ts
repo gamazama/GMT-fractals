@@ -288,15 +288,27 @@ export class BucketRunner {
         }
 
         const b = this.buckets[this.currentBucketIndex];
-        // Expand by half a pixel in UV space so boundary pixels are always
-        // rendered. Composite uses integer scissor for exact clipping.
-        const halfPixelU = 0.5 / this.targetResolution.x;
-        const halfPixelV = 0.5 / this.targetResolution.y;
+        // Expand the region mask by a few pixels in UV space so a scissored
+        // (in-bucket) pixel can NEVER fall outside the region under any small
+        // precision/transient error. The exact integer scissor (set in
+        // beginGpuBucket) still clips the output identically, so this changes
+        // nothing in correct operation — it only removes the one realistic path
+        // to a stuck boundary line: the region-mask out-of-region branch does a
+        // copy-forward of `history` (required for viewport region-render), which
+        // — once the scissor is the real clip (since the per-bucket main-MRT
+        // scissor landed) — can only *weld in* a stale/background value if an
+        // in-bucket pixel ever fails the region test mid-accumulation. The
+        // margin makes that impossible while keeping the belt-and-braces
+        // fallback: if the scissor itself ever failed, the region would still
+        // clip damage to a REGION_MARGIN_PX skirt instead of the whole frame.
+        const REGION_MARGIN_PX = 4;
+        const marginU = REGION_MARGIN_PX / this.targetResolution.x;
+        const marginV = REGION_MARGIN_PX / this.targetResolution.y;
         const uvRect = {
-            minX: b.minX - halfPixelU,
-            minY: b.minY - halfPixelV,
-            maxX: b.maxX + halfPixelU,
-            maxY: b.maxY + halfPixelV,
+            minX: b.minX - marginU,
+            minY: b.minY - marginV,
+            maxX: b.maxX + marginU,
+            maxY: b.maxY + marginV,
         };
         const pixelRect = {
             pixelX: b.pixelX,
