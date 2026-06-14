@@ -130,6 +130,11 @@ export const applyRefPreset = (preset: RefPreset) => {
     // what's changed.
     const blendIdx = idx(DYE_BLENDS, p.dyeBlend);
     if (blendIdx !== undefined) fs.dyeBlend = blendIdx;
+    // The reference presets are dynamic fluid scenes, but fluidSim.paused now
+    // defaults ON (pure-fractal boot). Always start the sim when a preset is
+    // applied so the curated motion actually plays. A frozen "benchmark" preset
+    // can still hard-stop via the engine-level isPaused below.
+    fs.paused = false;
     s.setFluidSim({ ...buildDefaultSlice('fluidSim'), ...fs });
 
     // ── Palette (colour mapping, gradient, trap) ────────────────────
@@ -172,7 +177,10 @@ export const applyRefPreset = (preset: RefPreset) => {
     // ── Composite ───────────────────────────────────────────────────
     const comp: any = {};
     const showIdx = idx(SHOW_MODES, p.show);
-    if (showIdx !== undefined) comp.show = showIdx;
+    // composite.show now defaults to 'julia' (Fractal-only) for the pure-fractal
+    // boot. A preset that doesn't pin a show mode should still reveal its fluid,
+    // so fall back to 'composite' (Mixed = index 0) rather than the new default.
+    comp.show = showIdx ?? 0;
     if (p.juliaMix    !== undefined) comp.juliaMix    = p.juliaMix;
     if (p.dyeMix      !== undefined) comp.dyeMix      = p.dyeMix;
     if (p.velocityViz !== undefined) comp.velocityViz = p.velocityViz;

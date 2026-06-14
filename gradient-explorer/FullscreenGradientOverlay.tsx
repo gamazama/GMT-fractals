@@ -48,7 +48,9 @@ import { GeometryHandleLayer, hasGeometryHandles } from './fullscreen/GeometryHa
 import { getFullscreenMode, listFullscreenModes } from './fullscreen/modeRegistry';
 import type { FullscreenModeContext, OwnCanvasHandle } from './fullscreen/modeRegistry';
 import './fullscreen/modes'; // registers the builtin modes at import time
-import { canvasToPngBlob, downloadBlob } from '../utils/SceneFormat';
+import { canvasToPngBlob, downloadBlob, embedScenePng } from '../utils/SceneFormat';
+import { getActiveFractalCoords } from './fullscreen/modes/fractalMode';
+import { buildFluidToyScene, openInFluidToy } from './fractalHandoff';
 import { Z } from '../components/ui/zIndex';
 
 /** Continuous geometries render up to this long edge. Higher than the old 1440 so the preview
@@ -322,13 +324,20 @@ export const FullscreenGradientOverlay: React.FC = () => {
       canvas = canvasRef.current;
     }
     if (!canvas) return;
-    const blob = await canvasToPngBlob(canvas);
+    let blob = await canvasToPngBlob(canvas);
     if (!blob) return;
+    // Fractal mode: embed the exact view + gradient as a fluid-toy scene in the PNG's SceneData
+    // chunk, so the exported image doubles as a coordinate carrier — drop it on fluid-toy and it
+    // opens at this fractal. Other modes export a plain (metadata-free) image.
+    if (activeMode?.id === 'fractal') {
+      const coords = getActiveFractalCoords();
+      if (coords) blob = await embedScenePng(blob, buildFluidToyScene(coords, sourceConfig, sourceName));
+    }
     const stem = (sourceName || 'gradient').trim().replace(/\s+/g, '-').toLowerCase() || 'gradient';
     // Split exports the live preview pane (the app DOM above can't be rasterised); the `-split`
     // suffix marks it as captured in the live-follow split layout.
     downloadBlob(blob, `${stem}-${fs.split ? 'split' : fs.geom}.png`);
-  }, [sourceName, fs.geom, fs.split, isOwnCanvas]);
+  }, [sourceName, sourceConfig, fs.geom, fs.split, isOwnCanvas, activeMode]);
 
   if (!fs.open || !fs.config) return null;
 
@@ -454,6 +463,18 @@ export const FullscreenGradientOverlay: React.FC = () => {
           >
             ▦ Dither
           </button>
+          {activeMode?.id === 'fractal' && (
+            <button
+              onClick={() => {
+                const coords = getActiveFractalCoords();
+                if (coords) openInFluidToy(coords, sourceConfig, sourceName);
+              }}
+              title="Open this fractal view (and its gradient) in the Fluid Toy"
+              className="px-3 py-1 text-[12px] rounded-md border border-violet-500/30 bg-violet-500/15 text-violet-100 hover:bg-violet-500/25 transition-colors"
+            >
+              ≈ Open in Fluid Toy
+            </button>
+          )}
           <button
             onClick={exportPng}
             className="px-3 py-1 text-[12px] rounded-md border border-cyan-500/30 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 transition-colors"

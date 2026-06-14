@@ -31,11 +31,15 @@ import { FluidToyApp } from './FluidToyApp';
 import { registerUI } from '../engine/features/ui';
 import { setupFluidToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
-import { installTopBar } from '../engine/plugins/TopBar';
+import { installTopBar, topbar } from '../engine/plugins/TopBar';
+import { FluidToggleButton } from './components/FluidToggleButton';
+import { FavientsToggleButton } from './components/FavientsToggleButton';
+import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
 import { installBucketRender } from '../engine/plugins/topbar/installBucketRender';
 import { FluidBucketController } from './bucket/FluidBucketController';
+import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { appEngine } from './engineHandles';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
@@ -52,6 +56,7 @@ import { gmtSupportConfig } from '../engine-gmt/support';
 import { feedbackMenuItem, registerFeedbackUI } from '../engine-gmt/feedback';
 import { installHud, hud } from '../engine/plugins/Hud';
 import { QualityBadge } from './components/QualityBadge';
+import { CoordsButton } from './components/CoordsButton';
 import { HotkeysCheatsheet } from './components/HotkeysCheatsheet';
 import { useEngineStore } from '../store/engineStore';
 import { installFluidToyViewLibrary } from './viewLibrary';
@@ -103,6 +108,15 @@ installViewport({
 // badge). Save/load etc. slot-register from other plugins when those land.
 installTopBar();
 
+// Fluid on/off — the simple path to start the sim. The toy boots as a pure
+// fractal explorer (sim frozen, Fractal-only view); this flips both back on.
+topbar.register({ id: 'fluid-toggle', slot: 'left', order: 5, component: FluidToggleButton });
+
+// Favients shelf show/hide — the persistent gradient-favourites bar. Applies a
+// picked gradient to the Palette (fractal + dye). The shelf itself is a floating
+// panel restored below; this button just toggles its visibility.
+topbar.register({ id: 'favients-toggle', slot: 'left', order: 40, component: FavientsToggleButton });
+
 // PWA update pill. Surfaces an amber "Update" button in the topbar
 // when a new SW is detected; clicking skips-waiting + reloads.
 installPwaUpdate();
@@ -121,6 +135,22 @@ installBucketRender({
     slot: 'left',
     order: 30,
     id: 'fluid-toy-bucket-render',
+});
+
+// Bridge the bucket controller's BUCKET_STATUS events onto the store's
+// isBucketRendering / isExporting flags. Without this the render popover never
+// enters its "Rendering" state, so any outside click closes (and UNMOUNTS) it
+// mid-render — the panel's unmount cleanup calls stopBucketRender(), cancelling
+// the run before it saves. This is why tiled renders (which run long enough for
+// the user to click away) silently produced no file. engine-gmt does the same
+// two-flip bridge in renderer/bindings.ts.
+FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, (data) => {
+    const s = useEngineStore.getState() as {
+        setIsBucketRendering?: (v: boolean) => void;
+        setIsExporting?: (v: boolean) => void;
+    };
+    s.setIsBucketRendering?.(data.isRendering);
+    s.setIsExporting?.(data.isRendering);
 });
 
 // @engine/scene-io — Save + Load buttons into the topbar. PNG save
@@ -265,6 +295,15 @@ hud.register({
     component: QualityBadge,
 });
 
+// Copy-coords debug button (mirrors the Gradient Explorer's). Dumps the exact
+// view + colour state to clipboard/console for bug reports + reproducing a spot.
+hud.register({
+    id: 'fluid-toy.coords',
+    slot: 'bottom-left',
+    order: 20,  // below the quality badge
+    component: CoordsButton,
+});
+
 // Saved-views library — one call wires everything: slice CRUD, slot
 // shortcuts (Ctrl+1..9 save, 1..9 recall), and topbar Camera menu.
 // Must run AFTER installMenu / installShortcuts so their registries
@@ -284,6 +323,36 @@ componentRegistry.register('panel-views', ViewLibraryPanel);
 installRenderDialog({ runner: runVideoExport, defaults: { samplesPerFrame: 32 } });
 
 setupFluidToy();
+
+// Float + open the Favients shelf at its remembered (or default middle-left)
+// spot. Must run AFTER setupFluidToy()'s applyPanelManifest registered the
+// 'Favients' panel. A per-host storage key keeps fluid-toy's panel position
+// independent of app-gmt's (the favourite COLLECTION itself stays shared via
+// the 'gmt.favients' key, so saved gradients follow the user across apps).
+const FAVIENTS_PANEL_KEY = 'fluid-toy.favients.panel';
+const fh = typeof window !== 'undefined' ? window.innerHeight : 800;
+restoreFavientsPanel(
+    { x: 20, y: Math.max(20, Math.round(fh / 2 - 160)), w: 296, h: 320, open: true },
+    { storageKey: FAVIENTS_PANEL_KEY },
+);
+watchFavientsPanel({ storageKey: FAVIENTS_PANEL_KEY });
+
+// Incoming fractal handoff from the Gradient Explorer's "Open in Fluid Toy" button:
+// it stashed a fluid-toy scene Preset under this localStorage key before opening this
+// page. Load it once (then clear) so we boot at that fractal view + gradient — the scene
+// only carries julia + palette + deepZoom, so every other feature falls back to defaults
+// (sim off → pure fractal). Keep the key in sync with
+// gradient-explorer/fractalHandoff.ts (FLUID_TOY_HANDOFF_KEY).
+try {
+    const handoff = localStorage.getItem('gmt.fluidToy.incomingScene');
+    if (handoff) {
+        localStorage.removeItem('gmt.fluidToy.incomingScene');
+        const preset = JSON.parse(handoff);
+        (useEngineStore.getState() as { loadPreset?: (p: unknown) => void }).loadPreset?.(preset);
+    }
+} catch {
+    // Malformed handoff — ignore and boot normally.
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Could not find root element to mount to');

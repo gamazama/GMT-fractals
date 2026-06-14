@@ -90,3 +90,37 @@ featureRegistry.register(BrushFeature);
 // dispatches every affected slice setter via presets/apply.ts and
 // resets the fluid fields via engineHandles.
 featureRegistry.register(PresetsFeature);
+
+// ── Favients (the cross-app gradient-favourites shelf) ───────────────────
+// registerPaletteUI registers the `panel-favients` component + its history /
+// document providers + the gradient-editor favourites entrance + seeds the
+// starter presets. Same seam app-gmt uses. The shelf is host-agnostic; the
+// host (here) declares where a picked favourite applies.
+import { registerPaletteUI } from '../palette/registerPaletteUI';
+registerPaletteUI();
+
+// Where a favourite lands in fluid-toy: the Palette gradient, which colours
+// both the fractal and the dye injected into the fluid. HOST-group send target
+// — the shelf's "Destination" dropdown lists it; the payload carries the
+// favourite's GradientConfig. We reach the store via the global handle (set
+// after the engine store is constructed) rather than a static import, so this
+// module doesn't pull useEngineStore into the registration chain and freeze the
+// feature registry mid-register (see README "boot-order trap").
+import { setFavientBrowseAction, setFavientStudioAction } from '../palette/core/favientTargets';
+import { registerSendTarget } from '../store/sendTargetRegistry';
+import type { FavientDragPayload } from '../palette/core/favientDnd';
+registerSendTarget<FavientDragPayload>({
+    id: 'palette-gradient',
+    label: 'Palette (fractal + dye)',
+    group: 'host',
+    apply: (p) => {
+        const store = (globalThis as { __engineStore?: { getState: () => { setPalette?: (u: { gradient: unknown }) => void } } }).__engineStore;
+        store?.getState().setPalette?.({ gradient: { ...p.config } });
+    },
+});
+
+// fluid-toy has no in-app Palette-Picker overlay, so the shelf's "Palettes"
+// browse button has nothing to open — hide it. The studio button opens the
+// standalone GMT Gradient Explorer (same origin) for richer authoring.
+setFavientBrowseAction(null);
+setFavientStudioAction(() => window.open('gradient-explorer.html', '_blank', 'noopener'));

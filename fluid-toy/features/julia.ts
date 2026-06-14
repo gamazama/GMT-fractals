@@ -110,7 +110,7 @@ export const JuliaFeature: FeatureDefinition = {
             type: 'int',
             default: 310, min: 16, max: 512, step: 1,
             label: 'Iter',
-            description: 'More iterations → sharper escape gradients → finer force detail.',
+            description: 'Caps the fractal force-field detail, and the shallow display when Deep Zoom ▸ Auto iterations is off. More iterations → sharper escape gradients → finer force detail.',
         },
         power: {
             type: 'float',

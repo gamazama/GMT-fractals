@@ -60,7 +60,7 @@ export const useEngineSync = (engineRef: RefObject<FluidEngine | null>): void =>
     // changes, so auto-orbit / audio-reactive modulation drives the
     // fractal continuously without touching the gesture-owned view.
     useEffect(() => { const e = engineRef.current; if (e) syncJuliaCToEngine(e, julia, liveMod); },    [julia, liveMod, engineRef]);
-    useEffect(() => { const e = engineRef.current; if (e) syncDeepZoomToEngine(e, deepZoom, julia); }, [deepZoom, julia, engineRef]);
+    useEffect(() => { const e = engineRef.current; if (e) syncDeepZoomToEngine(e, deepZoom); }, [deepZoom, engineRef]);
     useEffect(() => { const e = engineRef.current; if (e) syncPaletteToEngine(e, paletteMod); },          [paletteMod, engineRef]);
     useEffect(() => { const e = engineRef.current; if (e) syncCollisionToEngine(e, collisionMod); },      [collisionMod, engineRef]);
     useEffect(() => { const e = engineRef.current; if (e) syncFluidSimToEngine(e, fluidSimMod, couplingMod); }, [fluidSimMod, couplingMod, engineRef]);

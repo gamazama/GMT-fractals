@@ -20,6 +20,10 @@ const showParam = defineEnumParam(
     ['composite', 'julia', 'dye', 'velocity'] as const,
     'Show',
     {
+        // Boot in pure-fractal view ('julia' = index 1). The fluid sim is
+        // frozen by default (fluidSim.paused) and the Fluid topbar toggle
+        // flips both back on (sim running + Mixed view). See FluidToggleButton.
+        defaultIndex: 1,
         optionLabels: {
             composite: 'Mixed',
             julia: 'Fractal',

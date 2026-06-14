@@ -18,6 +18,7 @@ import { useSlice, useLiveModulations } from '../engine/typedSlices';
 import type { FluidEngine } from './fluid/FluidEngine';
 import { getDeepZoomRuntime } from './deepZoom/laRuntime';
 import { setDeepZoomDiag, clearDeepZoomDiag, setDeepZoomJuliaMs } from './deepZoom/diagnostics';
+import { deepBuildIter, deepGpuCap } from '../engine/fractal/iterationPolicy';
 
 export const useDeepZoomOrbit = (engineRef: RefObject<FluidEngine | null>): void => {
     const julia    = useSlice('julia');
@@ -61,13 +62,21 @@ export const useDeepZoomOrbit = (engineRef: RefObject<FluidEngine | null>): void
         const liveCx = liveMod['julia.juliaC_x'] ?? julia.juliaC.x;
         const liveCy = liveMod['julia.juliaC_y'] ?? julia.juliaC.y;
 
+        // Reference-orbit BUILD length. Auto iterations (default) scales it with
+        // zoom depth (× the multiplier) via the shared policy — same as the
+        // Gradient Explorer's viewer — so we build only as deep as the view
+        // needs; the manual `maxRefIter` slider is the override when auto is off.
+        const buildIter = deepZoom.autoIter
+            ? deepBuildIter(julia.zoom, deepZoom.iterMul)
+            : deepZoom.maxRefIter;
+
         runtime.computeReferenceOrbit({
             centerX: builtCenter[0],
             centerY: builtCenter[1],
             centerLowX: builtCenterLow[0],
             centerLowY: builtCenterLow[1],
             zoom: julia.zoom,
-            maxIter: deepZoom.maxRefIter,
+            maxIter: buildIter,
             power,
             kind,
             juliaCx: liveCx,
@@ -92,6 +101,10 @@ export const useDeepZoomOrbit = (engineRef: RefObject<FluidEngine | null>): void
             const refCenter: [number, number] = [res.refCenterX, res.refCenterY];
             const refLow: [number, number] = [res.refCenterLowX, res.refCenterLowY];
             dz.setReferenceOrbit(res.orbit, res.length, refCenter, refLow, res.period);
+            // Auto deep per-pixel cap (used by FluidEngine.effectiveMaxIter when
+            // autoIter is on): the full zoom-depth budget for a periodic nucleus
+            // reference, else the actual orbit length. @see engine/fractal/iterationPolicy
+            engine.setParams({ deepIterCap: deepGpuCap(julia.zoom, res.length, res.period, deepZoom.iterMul) });
             if (res.laTable && res.laStages && res.laCount > 0) {
                 dz.setLATable(res.laTable, res.laCount, res.laStages);
                 dz.setLAEnabled(true);
@@ -142,6 +155,7 @@ export const useDeepZoomOrbit = (engineRef: RefObject<FluidEngine | null>): void
         });
         return () => { cancelled = true; };
     }, [deepZoom.enabled, deepZoom.useLA, deepZoom.useAT, deepZoom.maxRefIter, deepZoom.showStats,
+        deepZoom.autoIter, deepZoom.iterMul,
         julia.center.x, julia.center.y, julia.centerLow?.x, julia.centerLow?.y, julia.zoom,
         julia.power, julia.kind, julia.juliaC.x, julia.juliaC.y,
         canvasPixelSize, engineRef]);

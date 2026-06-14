@@ -61,7 +61,7 @@ export const PostFxFeature: FeatureDefinition = {
         },
 
         refraction: {
-            type: 'float', default: 0.037, min: 0, max: 0.3, step: 0.001,
+            type: 'float', default: 0, min: 0, max: 0.3, step: 0.001,
             label: 'Refraction',
             description: 'Screen-space refraction: dye\'s luminance acts as a height field — the fractal underneath warps like glass.',
         },

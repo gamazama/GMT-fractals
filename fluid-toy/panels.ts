@@ -20,6 +20,16 @@
 
 import type { PanelManifest } from '../engine/PanelManifest';
 
+// Fluid is "on" when the sim isn't paused. The fluid-specific panels
+// (Coupling / Fluid / Collision / Brush / Composite) only make sense while
+// the sim runs, so they hide when the Fluid toggle is off — the toy then
+// presents purely as a fractal explorer (left dock + Post-FX stay visible).
+// Post-FX is intentionally NOT gated: its Tone / Bloom / Velocity sections
+// colour the fractal too; only its Glass section (refraction/caustics) is
+// fluid-specific and hides via a per-section showIf below.
+const fluidOn = (s: unknown): boolean =>
+    !(s as { fluidSim?: { paused?: boolean } }).fluidSim?.paused;
+
 export const FluidToyPanels: PanelManifest = [
     // ── LEFT DOCK — authoring ────────────────────────────────────────
     // The View panel is the navigation surface — saved views + the live
@@ -76,7 +86,7 @@ export const FluidToyPanels: PanelManifest = [
 
     // ── RIGHT DOCK — sim / look ─────────────────────────────────────
     {
-        id: 'Coupling', dock: 'right', order: 0, active: true,
+        id: 'Coupling', dock: 'right', order: 0, active: true, showIf: fluidOn,
         items: [
             { type: 'section', label: 'Driver' },
             { type: 'feature', id: 'coupling', whitelistParams: ['forceMode', 'forceSource'] },
@@ -85,7 +95,7 @@ export const FluidToyPanels: PanelManifest = [
         ],
     },
     {
-        id: 'Fluid', dock: 'right', order: 1,
+        id: 'Fluid', dock: 'right', order: 1, showIf: fluidOn,
         items: [
             { type: 'section', label: 'Sim' },
             { type: 'feature', id: 'fluidSim', whitelistParams: ['vorticity', 'vorticityScale', 'dissipation', 'pressureIters'] },
@@ -97,9 +107,9 @@ export const FluidToyPanels: PanelManifest = [
             { type: 'feature', id: 'fluidSim', whitelistParams: ['dyeDecayMode', 'dyeDissipation', 'dyeChromaDecayHz', 'dyeSaturationBoost'] },
         ],
     },
-    { id: 'Collision',  dock: 'right', order: 2, features: ['collision'] },
+    { id: 'Collision',  dock: 'right', order: 2, features: ['collision'], showIf: fluidOn },
     {
-        id: 'Brush', dock: 'right', order: 3,
+        id: 'Brush', dock: 'right', order: 3, showIf: fluidOn,
         items: [
             { type: 'section', label: 'Stamp' },
             { type: 'feature', id: 'brush', whitelistParams: ['mode', 'colorMode', 'solidColor', 'size', 'hardness', 'strength'] },
@@ -116,14 +126,18 @@ export const FluidToyPanels: PanelManifest = [
             { type: 'feature', id: 'postFx', whitelistParams: ['toneMapping', 'exposure', 'vibrance'] },
             { type: 'section', label: 'Bloom' },
             { type: 'feature', id: 'postFx', whitelistParams: ['bloomAmount', 'bloomThreshold'] },
-            { type: 'section', label: 'Glass' },
-            { type: 'feature', id: 'postFx', whitelistParams: ['refraction', 'refractSmooth', 'refractRoughness', 'caustics'] },
-            { type: 'section', label: 'Velocity' },
-            { type: 'feature', id: 'postFx', whitelistParams: ['aberration'] },
+            // Glass (refraction/caustics) reads the dye height field, and the
+            // velocity-driven aberration reads the velocity field — both are
+            // fluid-only, so they hide when the sim is off (Tone + Bloom stay,
+            // they colour the fractal too).
+            { type: 'section', label: 'Glass', showIf: fluidOn },
+            { type: 'feature', id: 'postFx', whitelistParams: ['refraction', 'refractSmooth', 'refractRoughness', 'caustics'], showIf: fluidOn },
+            { type: 'section', label: 'Velocity', showIf: fluidOn },
+            { type: 'feature', id: 'postFx', whitelistParams: ['aberration'], showIf: fluidOn },
         ],
     },
     {
-        id: 'Composite', dock: 'right', order: 5,
+        id: 'Composite', dock: 'right', order: 5, showIf: fluidOn,
         items: [
             { type: 'section', label: 'Show' },
             { type: 'feature', id: 'composite', whitelistParams: ['show'] },
@@ -131,5 +145,13 @@ export const FluidToyPanels: PanelManifest = [
             { type: 'feature', id: 'composite', whitelistParams: ['juliaMix', 'dyeMix', 'velocityViz'] },
         ],
     },
+
+    // ── Favients shelf ───────────────────────────────────────────────
+    // The persistent gradient-favourites bar. Registered with a dock so the
+    // manifest accepts it, but main.tsx floats it via restoreFavientsPanel()
+    // (it lives as a floating window, not a docked tab). The `panel-favients`
+    // component is registered by registerPaletteUI(). isCore:false so the
+    // floating window shows a close button.
+    { id: 'Favients', dock: 'right', order: 90, component: 'panel-favients', isCore: false },
 
 ];

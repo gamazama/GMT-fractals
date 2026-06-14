@@ -92,6 +92,14 @@ export const FluidToyApp: React.FC = () => {
     const isPaused     = useEngineStore((s) => s.isPaused);
     const sampleCap    = useEngineStore((s) => s.sampleCap);
 
+    // The fluid sim's own Pause (fluidSim.paused) and the topbar render-control
+    // Pause (isPaused) both gate the SINGLE engine.params.paused. We merge them
+    // here (OR) so they compose — pausing either freezes the sim — and so the
+    // sync function for fluidSim doesn't have to fight this effect for the param.
+    // engine.params.paused freezes only the fluid passes; the fractal/TSAA keeps
+    // refining, which is exactly the default pure-fractal experience.
+    const fluidPaused  = useSlice('fluidSim').paused;
+
     // All DDFS slice → engine pushes happen inside useEngineSync.
     // Deep-zoom orbit/LA/AT rebuild + GPU-time polling lives in
     // useDeepZoomOrbit. Both hooks read their own slices via useSlice.
@@ -113,9 +121,9 @@ export const FluidToyApp: React.FC = () => {
         const cap = (accumulation ?? true) ? sampleCap : 1;
         engine.setParams({
             tsaaSampleCap: cap,
-            paused:        isPaused,
+            paused:        isPaused || fluidPaused,
         });
-    }, [accumulation, isPaused, sampleCap]);
+    }, [accumulation, isPaused, sampleCap, fluidPaused]);
 
     // K-sampling is fixed at 1 (DEFAULT_PARAMS.tsaaPerFrameSamples).
     // TSAA does all the convergence progressively across frames —

@@ -305,8 +305,15 @@ export class FluidBucketController implements BucketRenderController {
                     const link = document.createElement('a');
                     link.download = filename;
                     link.href = url;
+                    // Attach to the DOM before clicking — some browsers ignore a
+                    // click() on a detached anchor. Defer revokeObjectURL well past
+                    // the click so the browser has finished reading the blob (an
+                    // immediate revoke can cancel the download, which is what dropped
+                    // tile files on multi-tile exports).
+                    document.body.appendChild(link);
                     link.click();
-                    URL.revokeObjectURL(url);
+                    link.remove();
+                    setTimeout(() => URL.revokeObjectURL(url), 10000);
                 }
             }
         } finally {

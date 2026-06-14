@@ -103,9 +103,9 @@ export const FluidSimFeature: FeatureDefinition = {
         },
 
         paused: {
-            type: 'boolean', default: false,
+            type: 'boolean', default: true,
             label: 'Pause sim',
-            description: 'Freeze the fluid state. Splats and param changes still land; they just don\'t integrate forward.',
+            description: 'Freeze the fluid state. Splats and param changes still land; they just don\'t integrate forward. Defaults ON — the toy boots as a pure fractal explorer; the Fluid topbar toggle (or any preset) starts the sim.',
         },
     },
 };
@@ -120,12 +120,17 @@ export const syncFluidSimToEngine = (
     fluidSim: FluidSimSlice,
     coupling: CouplingSlice,
 ): void => {
+    // NB: `paused` is intentionally NOT sent here. Both this slice's `paused`
+    // and the topbar render-control `isPaused` map onto the single
+    // `engine.params.paused`, so two sync paths would race (last write wins).
+    // FluidToyApp owns the merge — it pushes `isPaused || fluidSim.paused` from
+    // its render-control effect, so the topbar Pause and the per-sim Pause
+    // compose instead of clobbering each other.
     engine.setParams({
         vorticity:      fluidSim.vorticity,
         vorticityScale: fluidSim.vorticityScale,
         pressureIters:  fluidSim.pressureIters,
         dissipation:    fluidSim.dissipation,
-        paused:         fluidSim.paused,
         timeScale:      fluidSim.timeScale,
         // Dye-inject + dye-decay subsection live on the Fluid tab.
         dyeInject:          fluidSim.dyeInject,
