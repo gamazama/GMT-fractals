@@ -1,18 +1,19 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { GradientStop } from '../../types';
+import { ContextMenuItem } from '../../types/help';
 import { getGradientCssString } from '../../utils/colorUtils';
+import { CheckIcon } from '../Icons';
 import { AnchoredMenu } from '../ui';
+
+// Accepts the engine ContextMenuItem shape (the shared gradientActions list) plus an
+// optional `stops` preview swatch, so this dropdown mirrors the right-click context
+// menu — same items, same checked/danger/disabled rendering.
+type GradientMenuOption = ContextMenuItem & { stops?: GradientStop[] };
 
 interface ContextMenuProps {
     x: number;
     y: number;
-    options: {
-        label: string;
-        action: () => void;
-        disabled?: boolean;
-        isHeader?: boolean;
-        stops?: GradientStop[]; // Optional stops for preview
-    }[];
+    options: GradientMenuOption[];
     onClose: () => void;
 }
 
@@ -56,11 +57,16 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose
                 ) : (
                     <button
                         key={i}
-                        onClick={() => { onClose(); requestAnimationFrame(() => opt.action()); }}
+                        onClick={() => { onClose(); requestAnimationFrame(() => opt.action?.()); }}
                         disabled={opt.disabled}
-                        className="w-full text-left px-4 py-2 text-xs text-gray-200 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between group transition-colors"
+                        className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between group transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                            opt.danger
+                                ? 'text-red-400 hover:bg-red-900/30 hover:text-red-300'
+                                : 'text-gray-200 hover:bg-white/10 hover:text-white'
+                        }`}
                     >
-                        <span className="truncate mr-2">{opt.label}</span>
+                        <span className={`truncate mr-2 ${opt.checked ? 'text-cyan-400 font-bold' : ''}`}>{opt.label}</span>
+                        {opt.checked && <span className="text-cyan-400 shrink-0"><CheckIcon /></span>}
                         {opt.stops && <LazyGradientPreview stops={opt.stops} />}
                     </button>
                 )

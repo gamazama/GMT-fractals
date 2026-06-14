@@ -12,9 +12,10 @@
  *
  * It owns the strip render, the name + source chip, and the pick/drag wiring; it embeds —
  * never modifies — `GradientStrip`. The ACTIONS are the dock targets, not per-hero buttons,
- * so this hero carries no Apply / Send-to / Fullscreen buttons, and no favourite star —
- * dragging the strip onto the Favients shelf is the sole add-to-favourites path. Surface-
- * specific NON-action controls (stops count) go in `trailing`.
+ * so this hero carries no Apply / Send-to / Fullscreen buttons. The ONE exception is the
+ * Save-to-Favients star (add-with-dedup, reflects saved state) — a quick one-click add on
+ * every surface, and the only add path on touch (drag-to-shelf doesn't fire on touch).
+ * Surface-specific NON-action controls (stops count) go in `trailing`.
  *
  * Visual tiers (orthogonal): the in-hand pick shows a muted cyan ring; the ACTIVE state
  * (pick + dock open) brightens it + glows AND insets the ramp in a tinted padding frame
@@ -130,11 +131,12 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
   const pick = (): void =>
     setHeroPick({ mode, key, payload: { config, name: payloadName(), source }, selfTargetId: targetId });
 
-  // On mobile the hero lives in a dedicated always-visible rail — and the desktop save
-  // path (drag the strip onto the Favients shelf) doesn't fire on touch. So when rendered
-  // INTO the rail, the hero carries an explicit Save-to-favourites toggle (the only touch
-  // path to favourite). The inline desktop strip keeps its no-button decision. The matching
-  // favourite's id (if already saved) both reflects state and lets the toggle un-save.
+  // Save-to-Favients toggle. Originally rail-only (the desktop add path is dragging the
+  // strip onto the shelf, which doesn't fire on touch); now shown on every surface as an
+  // explicit one-click affordance so desktop users don't have to drag. It ADDS with dedup
+  // (add only when not already saved) and reflects state — filled ★ when this gradient is
+  // on the shelf, and a second click un-saves it. The rail variant keeps a bigger tap
+  // target + "Save/Saved" label; the inline desktop variant is a compact star glyph.
   const inRail = useInHeroRail();
   const savedId = useFavientsStore((s) => {
     const sig = favientSig(config);
@@ -160,21 +162,22 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {trailing}
-          {/* Rail-only (mobile) Save-to-favourites toggle — the touch equivalent of dragging
-              the strip onto the shelf, which native drag can't do on touch. Filled = saved. */}
-          {inRail && (
-            <button
-              onClick={toggleSave}
-              title={savedId ? 'Remove from Favients' : 'Save to Favients'}
-              aria-pressed={!!savedId}
-              className={`flex items-center gap-1 text-[12px] leading-none px-2.5 py-2 rounded-sm transition-colors ${
-                savedId ? 'bg-amber-400/20 text-amber-200' : 'bg-white/[0.06] text-gray-200 hover:text-white'
-              }`}
-            >
-              <span aria-hidden>{savedId ? '★' : '☆'}</span>
-              {savedId ? 'Saved' : 'Save'}
-            </button>
-          )}
+          {/* Save-to-Favients toggle — a one-click add-with-dedup (the quick alternative to
+              dragging the strip onto the shelf, and the only path on touch). Filled ★ =
+              saved; a second click un-saves. Bigger tap target + label in the rail; compact
+              star glyph inline on desktop. */}
+          <button
+            onClick={toggleSave}
+            title={savedId ? 'Remove from Favients' : 'Save to Favients'}
+            aria-label={savedId ? 'Remove from Favients' : 'Save to Favients'}
+            aria-pressed={!!savedId}
+            className={`flex items-center gap-1 leading-none rounded-sm transition-colors ${
+              inRail ? 'text-[12px] px-2.5 py-2' : 'text-[11px] px-1.5 py-1'
+            } ${savedId ? 'bg-amber-400/20 text-amber-200' : 'bg-white/[0.06] text-gray-300 hover:text-white'}`}
+          >
+            <span aria-hidden>{savedId ? '★' : '☆'}</span>
+            {inRail && (savedId ? 'Saved' : 'Save')}
+          </button>
           {/* Shared vertical-enlarge toggle — flips every hero at once (persisted). Bigger
               tap target in the rail (the one hero control a thumb reaches on a phone). */}
           <button

@@ -77,6 +77,14 @@ export const openFavientsPanel = (): void => {
   st.togglePanel?.(PANEL_ID, true);
 };
 
+/** Reactive: is the Favients panel currently open? Lets a header affordance (the editor's
+ *  Favients button) switch between "open the shelf" and "add the current gradient to the
+ *  already-open shelf". Keeps the PANEL_ID contract in this module. */
+export const useFavientsPanelOpen = (): boolean =>
+  useEngineStore(
+    (s) => !!(s as unknown as { panels?: Record<string, { isOpen?: boolean }> }).panels?.[PANEL_ID]?.isOpen,
+  );
+
 /** Restore the panel at its remembered (or default) location + open-state. Call after
  *  the host's applyPanelManifest registered the `Favients` panel. */
 export const restoreFavientsPanel = (defaults: FavientsPanelDefaults, opts?: FavientsPersistOptions): void => {

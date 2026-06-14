@@ -19,13 +19,21 @@
  */
 
 import type { ReactNode } from 'react';
+import type { GradientConfig } from '../../types';
+
+/** Live editor context handed to the entrance on every render. */
+export interface GradientEditorEntranceContext {
+  /** The editor's CURRENT gradient (stops + colour/blend space) — lets the entrance
+   *  act on it (e.g. the Favients button adds it when the shelf is already open). */
+  config: GradientConfig;
+}
 
 export interface GradientEditorEntrance {
   /** Stable id (for debugging / future multi-slot; currently a single slot). */
   id: string;
-  /** Render the header affordance. Called on every editor render, so the host's
-   *  component should be cheap / memo-friendly. */
-  render: () => ReactNode;
+  /** Render the header affordance. Called on every editor render with the current
+   *  gradient, so the host's component should be cheap / memo-friendly. */
+  render: (ctx: GradientEditorEntranceContext) => ReactNode;
 }
 
 let _entrance: GradientEditorEntrance | null = null;

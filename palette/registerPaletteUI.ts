@@ -37,6 +37,8 @@ import { serializeImageDocument, restoreImageDocument } from './store/imageDocum
 import { registerHistoryProvider } from '../store/slices/historySlice';
 import { registerDocumentProvider } from '../store/documentRegistry';
 import { setGradientEditorEntrance } from '../components/gradient/gradientEditorEntrance';
+import { setGradientFavientsBridge } from '../components/gradient/gradientFavients';
+import { configToName } from './core/facetName';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
 import type { GradientConfig } from '../types';
 
@@ -75,7 +77,23 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
   // so it renders whatever a host injects through this seam). Registering it here
   // means every host that mounts the palette suite gets the entrance, and hosts
   // that don't (fluid-toy) leave the slot empty — the old `hasFavients` behaviour.
-  setGradientEditorEntrance({ id: 'favients', render: () => React.createElement(FavientsEditorEntrance) });
+  setGradientEditorEntrance({
+    id: 'favients',
+    render: (ctx) => React.createElement(FavientsEditorEntrance, { config: ctx.config }),
+  });
+
+  // The Stops editor's menus ("Send to Favients") AND its header Favients button add the
+  // current gradient to the shelf through this seam (engine-core can't import palette).
+  // Dedupe + auto-name happen here, exactly like the drag-to-shelf add paths: a repeat add
+  // is a no-op, and an unnamed gradient gets a perceptual label via configToName. Every
+  // host that mounts the palette suite registers it (incl. fluid-toy, which has a shelf).
+  setGradientFavientsBridge({
+    add: (config) => {
+      const store = useFavientsStore.getState();
+      if (!store.isFav(config)) store.add(config, configToName(config), 'Stops');
+    },
+    isFav: (config) => useFavientsStore.getState().isFav(config),
+  });
 
   // The generator's non-DDFS state (curve Track[], slot selection, fit dials) lives in
   // its own store, so register it as a PARAM-undo history provider — curves + slots now

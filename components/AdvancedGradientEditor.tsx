@@ -10,7 +10,6 @@ import Dropdown from './Dropdown';
 import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { useInteractionGesture } from '../engine/hooks/useInteractionDrag';
 import { collectHelpIds } from '../utils/helpUtils';
-import { ContextMenuItem } from '../types/help';
 import { ContextMenu as PresetMenu } from './gradient/GradientContextMenu';
 import { MenuIcon } from './Icons';
 import { useRenderPause } from '../hooks/useRenderPause';
@@ -18,6 +17,11 @@ import {
     getGradientEditorEntrance,
     subscribeGradientEditorEntrance,
 } from './gradient/gradientEditorEntrance';
+import {
+    getGradientFavientsBridge,
+    subscribeGradientFavientsBridge,
+} from './gradient/gradientFavients';
+import { buildGradientMenu } from './gradient/gradientActions';
 
 // Host-agnostic InteractionSession token (ADR-0061) for the continuous
 // stop/bracket/bias drags. The same string app-gmt's INTERACTION_SOURCES.slider
@@ -195,6 +199,14 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     // host registered through the gradientEditorEntrance seam — or nothing.
     const entrance = useSyncExternalStore(subscribeGradientEditorEntrance, getGradientEditorEntrance);
 
+    // The editor's current gradient as a config — handed to the header entrance so the
+    // host's Favients button can add it (when the shelf is already open), and reused for
+    // the menu's "Send to Favients".
+    const currentConfig = useMemo<GradientConfig>(
+        () => ({ stops: knots, colorSpace, blendSpace }),
+        [knots, colorSpace, blendSpace],
+    );
+
     // Preview strip = the EXACT 256-step ramp (LOCKED P0c decision 2), rendered by
     // the engine canonical sampler so it matches the baked texture (no CSS-gradient
     // approximation). colorSpace is the OUTPUT-texture transform, not an authoring
@@ -316,14 +328,27 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         }
     }, [emitChange, editAction]);
 
-    // Gradient presets now live in the Favients shelf (a "Presets" group, seeded on
-    // first run) — pick/apply from there instead of this menu. This menu keeps the
-    // clipboard utilities.
-    const presetMenuOptions = useMemo(() => [
-        { label: 'Clipboard', action: () => {}, isHeader: true },
-        { label: 'Copy Gradient', action: handleCopy },
-        { label: 'Paste Gradient', action: handlePaste },
-    ], [handleCopy, handlePaste]);
+    // Single source of truth for BOTH menus: the header dropdown and the right-click
+    // track context menu build their items from `buildGradientMenu`, so the dropdown is
+    // a literal mirror of the context menu (gradients actions + Send to Favients +
+    // clipboard + view/blend/output toggles). The favients bridge is host-injected
+    // (subscribed for late registration); the dropdown shows the same "Send to Favients"
+    // the context menu does. Built at call time so `checked`/disabled stay fresh.
+    const favientsBridge = useSyncExternalStore(subscribeGradientFavientsBridge, getGradientFavientsBridge);
+    const buildMenuItems = useCallback(() => buildGradientMenu({
+        knots,
+        config: currentConfig,
+        selectedIds,
+        blendSpace,
+        colorSpace,
+        isBiasHandlesVisible,
+        emit: emitChange,
+        editAction,
+        setSelectedIds,
+        setBiasHandlesVisible: setIsBiasHandlesVisible,
+        copy: handleCopy,
+        paste: handlePaste,
+    }), [knots, currentConfig, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible, emitChange, editAction, handleCopy, handlePaste, favientsBridge]);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         const payload = dragPayloadRef.current;
@@ -544,82 +569,8 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     const openTrackContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        
-        const wrapAction = (fn: () => void) => () => editAction(fn);
-        const selectedIdList = Array.from(selectedIds);
-
-        const items: ContextMenuItem[] = [
-            { label: 'Actions', action: () => {}, isHeader: true },
-            {
-                label: 'Invert Gradient',
-                action: wrapAction(() => emitChange(stopOps.invert(knots)))
-            },
-            {
-                label: 'Double Knots',
-                action: wrapAction(() => emitChange(stopOps.double(knots)))
-            },
-            {
-                label: 'Distribute Selected',
-                disabled: selectedIds.size < 3,
-                action: wrapAction(() => emitChange(stopOps.distribute(knots, selectedIdList)))
-            },
-            {
-                label: 'Delete Selected',
-                disabled: selectedIds.size === 0 || knots.length <= 2,
-                danger: true,
-                action: wrapAction(() => { emitChange(stopOps.delete(knots, selectedIdList)); setSelectedIds(new Set<string>()); })
-            },
-            { label: 'View', action: () => {}, isHeader: true },
-            {
-                label: 'Bias Handles',
-                checked: isBiasHandlesVisible,
-                action: () => setIsBiasHandlesVisible(!isBiasHandlesVisible)
-            },
-            {
-                label: 'Reset Default',
-                danger: true,
-                action: wrapAction(() => { emitChange(stopOps.default(), 'linear', 'oklab'); setSelectedIds(new Set<string>()); })
-            },
-            { label: 'Blend Mode', action: () => {}, isHeader: true },
-            {
-                label: 'RGB (Standard)',
-                checked: blendSpace === 'rgb',
-                action: wrapAction(() => emitChange(knots, undefined, 'rgb'))
-            },
-            {
-                label: 'HSV (Short Path)',
-                checked: blendSpace === 'hsv',
-                action: wrapAction(() => emitChange(knots, undefined, 'hsv'))
-            },
-            {
-                label: 'HSV (Long Path)',
-                checked: blendSpace === 'hsv-far',
-                action: wrapAction(() => emitChange(knots, undefined, 'hsv-far'))
-            },
-            {
-                label: 'Oklab (Perceptual)',
-                checked: blendSpace === 'oklab',
-                action: wrapAction(() => emitChange(knots, undefined, 'oklab'))
-            },
-            { label: 'Output Mode', action: () => {}, isHeader: true },
-            {
-                label: 'sRGB (Standard)',
-                checked: colorSpace === 'srgb',
-                action: wrapAction(() => emitChange(knots, 'srgb'))
-            },
-            {
-                label: 'Linear (Physical)',
-                checked: colorSpace === 'linear',
-                action: wrapAction(() => emitChange(knots, 'linear'))
-            },
-            {
-                label: 'Inverse ACES',
-                checked: colorSpace === 'aces_inverse',
-                action: wrapAction(() => emitChange(knots, 'aces_inverse'))
-            }
-        ];
-        
-        openContextMenu(e.clientX, e.clientY, items, [helpId || 'ui.gradient_editor']);
+        // Same shared list the header dropdown renders — see buildMenuItems.
+        openContextMenu(e.clientX, e.clientY, buildMenuItems(), [helpId || 'ui.gradient_editor']);
     };
 
     const handlePresetsClick = (e: React.MouseEvent) => {
@@ -688,7 +639,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                     {/* Host-injected header entrance (app-gmt / explorer mount the
                         Favients saved-gradients shelf button here; engine-core renders
                         whatever the host registered, or nothing). */}
-                    {entrance && entrance.render()}
+                    {entrance && entrance.render({ config: currentConfig })}
 
                     {/* Utility menu (clipboard) */}
                     <button
@@ -704,7 +655,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                             x={presetMenu.x}
                             y={presetMenu.y}
                             onClose={() => setPresetMenu(null)}
-                            options={presetMenuOptions}
+                            options={buildMenuItems()}
                         />
                     )}
                 </div>
