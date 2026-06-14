@@ -24,6 +24,10 @@ import {
     getRenderPopup,
     subscribeRenderPopup,
 } from '../../engine/animation/renderPopupRegistry';
+import {
+    getRenderAdjunct,
+    subscribeRenderAdjunct,
+} from '../../engine/animation/renderAdjunctRegistry';
 
 /**
  * Key Cam button — captures the current camera pose as a keyframe and
@@ -211,6 +215,16 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
         getRenderPopup,
         getRenderPopup
     );
+
+    // Optional subordinate render action, surfaced as a row in the "…"
+    // overflow menu (e.g. GMT's "Export to After Effects"). The dialog is
+    // mounted at the toolbar root so it survives the menu closing.
+    const renderAdjunct = useSyncExternalStore(
+        subscribeRenderAdjunct,
+        getRenderAdjunct,
+        getRenderAdjunct
+    );
+    const [showAdjunct, setShowAdjunct] = useState(false);
 
     // Position the menu (in viewport coords) when opening — flip above the
     // trigger if there isn't room below. The menu is ~220px tall in its
@@ -436,6 +450,19 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                             {deterministicPlayback && <span className="text-cyan-400"><CheckIcon /></span>}
                         </button>
 
+                        {renderAdjunct && (
+                            <>
+                                <div className="h-px bg-white/10 mx-1"/>
+                                <button
+                                    onClick={() => { setShowAdjunct(true); setShowMenu(false); }}
+                                    className="text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded transition-colors"
+                                    title={renderAdjunct.title}
+                                >
+                                    {renderAdjunct.label}
+                                </button>
+                            </>
+                        )}
+
                         <div className="h-px bg-white/10 mx-1"/>
                         <button
                             onClick={() => { deleteAllKeys(); setShowMenu(false); }}
@@ -458,6 +485,8 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
             </button>
 
             {showRender && RenderPopupComponent && <RenderPopupComponent onClose={() => setShowRender(false)} />}
+
+            {showAdjunct && renderAdjunct && <renderAdjunct.Dialog onClose={() => setShowAdjunct(false)} />}
         </div>
     );
 };

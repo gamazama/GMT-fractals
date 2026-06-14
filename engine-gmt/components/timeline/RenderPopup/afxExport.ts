@@ -413,12 +413,20 @@ export const runAfxExport = (opts: AfxExportOptions): void => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${safeName(opts.projectName)}_GMT_afx.jsx`;
+        const fileName = `${safeName(opts.projectName)}_GMT_afx.jsx`;
+        a.download = fileName;
         a.click();
         URL.revokeObjectURL(url);
         showToast(
-            `AFX script saved — run it in After Effects (File ▸ Scripts ▸ Run Script File). ${sample.frames.length} frames.`,
-            'success', 5500,
+            `After Effects script saved to your Downloads:  ${fileName}\n` +
+            `\n` +
+            `1. In After Effects, choose  File ▸ Scripts ▸ Run Script File…  and pick this .jsx.\n` +
+            `   It builds a comp with the camera, lights and ${sample.frames.length} frames of animation.\n` +
+            `\n` +
+            `2. The background "plate" layer is a grey placeholder. Render your video separately as\n` +
+            `   "${opts.footageFileName}", drop it in the same folder as the .jsx, and run the script\n` +
+            `   again (or swap the placeholder layer for it) to see the fractal behind the comp.`,
+            'info', 16000,
         );
     } catch (e) {
         console.error('AFX export failed', e);

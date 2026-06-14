@@ -18,7 +18,6 @@ import type {
     RenderDialogStartContext,
 } from '../engine/plugins/RenderDialog';
 import type { AppGmtExtra } from '../engine-gmt/components/timeline/RenderPopup/exportRunner';
-import { AfxExportDialog } from '../engine-gmt/components/timeline/RenderPopup/AfxExportDialog';
 
 const engineProxy = getProxy();
 
@@ -119,7 +118,6 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
     // Track viewport accumulation so the user can see what one frame
     // costs at the chosen sample cap before committing to a render.
     const [frameStats, setFrameStats] = useState({ duration: 0, progress: 0 });
-    const [showAfx, setShowAfx] = useState(false);
 
     // Engine-side side-effects: keep the live preview's TSAA cap in
     // sync with the form's "Samples / Frame" so the estimator below
@@ -296,29 +294,6 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
                     </div>
                 )}
             </div>
-
-            {/* After Effects comp export — camera + lights + params as a .jsx */}
-            <div className="px-1 pt-1.5 mt-1 border-t border-white/10">
-                <button
-                    type="button"
-                    onClick={() => setShowAfx(true)}
-                    className="w-full px-3 py-1.5 rounded border border-purple-500/50 bg-purple-900/30 text-[10px] text-purple-100 hover:bg-purple-800/40 transition-colors"
-                    title="Export the camera animation, light positions and chosen params as an After Effects script (.jsx)."
-                >
-                    Save AFX comp…
-                </button>
-            </div>
-            {showAfx && (
-                <AfxExportDialog
-                    width={cfg.width}
-                    height={cfg.height}
-                    fps={cfg.fps}
-                    startFrame={cfg.startFrame}
-                    endFrame={cfg.endFrame}
-                    frameStep={cfg.frameStep}
-                    onClose={() => setShowAfx(false)}
-                />
-            )}
         </div>
     );
 };

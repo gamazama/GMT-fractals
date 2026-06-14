@@ -53,6 +53,8 @@ import { installGmtColoringBinders } from '../engine-gmt/animation/coloringBinde
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { useAnimationStore } from '../store/animationStore';
 import { installRenderDialog } from '../engine/plugins/RenderDialog';
+import { registerRenderAdjunct } from '../engine/animation/renderAdjunctRegistry';
+import { afxRenderAdjunct } from './AfxRenderAdjunct';
 import { runVideoExport, type AppGmtExtra } from '../engine-gmt/components/timeline/RenderPopup/exportRunner';
 import {
     AppGmtExtraFormFields,
@@ -400,6 +402,10 @@ installRenderDialog<AppGmtExtra>({
     baseSize:            { width: 340, height: 644 },
     expandedSize:        { width: 400, height: 450 },
 });
+
+// "Export to After Effects" — a subordinate row in the timeline toolbar's
+// "…" overflow menu, next to Render. Self-contained descriptor + dialog.
+registerRenderAdjunct(afxRenderAdjunct);
 
 // Warm the help-topics chunk on idle so the first ?-button click
 // doesn't fall back to an empty topic map. Mirrors gmt-0.8.5's App.tsx.
