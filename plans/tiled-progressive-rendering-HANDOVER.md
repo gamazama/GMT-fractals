@@ -154,6 +154,25 @@ the cost EMA (it samples `sessionHoldActive` frames only) — minor; camera move
 adaptive downscale — the low→full resize at the handoff blanks the buffer and a held move
 captures no fresh frame, so bands fill from black for ~0.4s.
 
+**If you want to abandon the seed entirely (recommended — do this FIRST in the black-frames
+session).** The whole seed mechanism (`captureSeed` / `seedFromLastFrame` /
+`maybeSeedAfterResize` / `invalidateSeed`, `_seedTarget` / `_hasSeed` / `_resizedSinceSeed`,
+the copy pass, and the seed call in the tiling block) exists for ONE reason: a resize creates
+black targets, so the handoff needs *something* to refine over. It was also the source of most
+of this session's regressions (stale flash, settled-scene re-render). The deeper fix deletes
+all of it: make `RenderPipeline.resize()` **preserve buffer content** — blit the current output
+into the new targets (upscaled) before disposing the old ones — so the buffer is NEVER black
+across a resize. The shader's region copy-forward then refines over whatever was last on screen.
+- Deletes ~5 fields + 4 methods + the copy-pass plumbing and all the seed-gating logic.
+- Kills the black class (buffer never blank) AND the stale-flash class: there's no separate
+  snapshot to drift — you refine over the *actual* last-displayed frame. For a held move that's
+  its own frozen frame, so the transition is continuous, not a flash.
+- Catch: `resize()` needs the `renderer` to blit — pass it from the two call sites that have it
+  (`UniformManager` adaptive resize ~193; `renderWorker` RESIZE handler). Upscale uses the
+  float-linear filter already in use. One extra blit per resize (a few per gesture — cheap).
+- Net: strictly simpler than the seed, and removes the bug surface that ate most of this
+  session. Worth doing before M5b.
+
 ## Commands
 
 - `npm run typecheck` / `npm run test:baseline` / `npm run test:hybrid` — all green as of
