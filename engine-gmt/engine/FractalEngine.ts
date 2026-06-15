@@ -6,6 +6,7 @@ import { Uniforms } from './UniformNames';
 import { VirtualSpace } from './PrecisionMath';
 import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { RenderPipeline } from './RenderPipeline';
+import { BandScheduler } from './BandScheduler';
 import { MaterialController } from './MaterialController';
 import { SceneController } from './SceneController';
 import { PickingController } from './controllers/PickingController';
@@ -167,6 +168,21 @@ export class FractalEngine {
 
     public isPaused: boolean = false;
     private lastInteractionTime: number = 0;
+
+    // ── Tiled progressive idle rendering (plans/tiled-progressive-rendering.md, M2) ──
+    // When accumulating on a STATIC scene, render one horizontal band per tick
+    // instead of a full-screen sample, so each frame is a short GPU submit the
+    // compositor can interleave UI paints between. The whole screen advances one
+    // sample at a time (pass-indexed blend). Off during interaction/hold, bucket,
+    // export, and preview-region.
+    public progressiveTilingEnabled: boolean = true;
+    /** Worker sets this true while preview-region owns the render, so tiling
+     *  stands down for that specialised path. */
+    public tilingSuppressed: boolean = false;
+    private bandScheduler = new BandScheduler();
+    private _tilingActive = false;
+    private _bandMin = new THREE.Vector2(0, 0);
+    private _bandMax = new THREE.Vector2(1, 1);
     private _lastCameraInUseTime: number = 0;
 
     public shouldSnapCamera: boolean = false;
@@ -360,9 +376,29 @@ export class FractalEngine {
         // NOTE: Removed setting 'this.dirty = true' because it was causing an infinite loop
         // in the update() method where accumulation was constantly being reset
         this.markInteraction();
+        this.bandScheduler.reset();
         this.pipeline?.resetAccumulation();
     }
     public setPreviewSampleCap(n: number) { this.pipeline?.setSampleCap(n); }
+
+    /** Write the active render region (UV-space) to the shader. Used by tiling for
+     *  the per-band rect and to restore the full frame (0,0)-(1,1). */
+    private setRegion(minX: number, minY: number, maxX: number, maxY: number) {
+        this._bandMin.set(minX, minY);
+        this._bandMax.set(maxX, maxY);
+        this.materials.setUniform(Uniforms.RegionMin, this._bandMin);
+        this.materials.setUniform(Uniforms.RegionMax, this._bandMax);
+    }
+
+    /** Force tiling to release the region uniforms back to full-frame and clear the
+     *  blend override. Called when an exclusive render mode (export/bucket) starts,
+     *  because those don't run compute()'s tiling-exit branch, so a leftover band
+     *  region would otherwise clip the exported / bucketed image. */
+    public clearTilingRegion() {
+        this._tilingActive = false;
+        this.pipeline.setTiledBlend(null);
+        this.setRegion(0, 0, 1, 1);
+    }
     
     public registerCamera(camera: THREE.Camera) { 
         this.sceneCtrl.registerCamera(camera); 
@@ -428,6 +464,11 @@ export class FractalEngine {
         }
 
         const { rebuildNeeded, uniformUpdate, modeChanged, needsAccumReset } = this.configManager.update(newConfig, this.state);
+
+        // A formula/shader-structure change makes any captured seed (the previous
+        // shader's image) stale — drop it so a tiling pass-0 after the switch doesn't
+        // briefly show the old scene in not-yet-rendered bands.
+        if (rebuildNeeded || modeChanged) this.pipeline.invalidateSeed();
 
         if (newConfig.maxSteps !== undefined) {
              this.setUniform('uMaxSteps', newConfig.maxSteps);
@@ -614,6 +655,62 @@ export class FractalEngine {
             this.pipeline.resetAccumulation();
         }
 
+        // ── Tiled progressive idle rendering ─────────────────────────────────
+        // On a static scene (not holding, not bucket/export, region not owned by
+        // preview-region, accumulation on), render ONE horizontal band this tick
+        // instead of a full-screen sample. The band's uRegionMin/Max confine the
+        // expensive trace; the shader copies history forward outside it so the
+        // accumulation buffer stays complete. blend + accumulationCount come from
+        // the pass-indexed band scheduler — render() honours the blend override
+        // and skips its auto-increment. See plans/tiled-progressive-rendering.md.
+        // `interacting` (the full session signal incl. slider/picker/drawing, which
+        // reset accumulation every frame and are NOT in the hold set) must gate
+        // tiling too — otherwise a slider drag re-enters pass 0 each frame and only
+        // ever paints the centre band. `shouldHold` adds playback + adaptive-grace.
+        // `convergenceNeeded` = a render-region overlay owns uRegionMin/Max — stand
+        // down so tiling doesn't overwrite the user's region with bands.
+        const tiling = this.progressiveTilingEnabled && !shouldHold && !this.state.interacting
+            && !this.state.isBucketRendering && !this.state.isExporting
+            && !this.tilingSuppressed && !this.pipeline.convergenceNeeded
+            && this.pipeline.accumulationEnabled;
+        if (tiling) {
+            this._tilingActive = true;
+            // Restart pass 0 + seed ONLY when accumulation was ACTUALLY reset
+            // (accumulationCount===0) — NEVER just because tiling re-entered. A
+            // momentary exit/re-enter (e.g. a display-only slider that briefly flips
+            // `interacting`, or any blip) must not restart accumulation on a settled
+            // scene. `accumulationCount===0` also catches direct
+            // pipeline.resetAccumulation() calls that bypass engine.resetAccumulation()
+            // (ghosting fix). seedFromLastFrame is a no-op unless a resize blanked the
+            // buffer, and it consumes itself, so it can't replay a stale frame.
+            if (this.pipeline.accumulationCount === 0) {
+                this.bandScheduler.reset();
+                this.pipeline.seedFromLastFrame(renderer);
+            }
+            const cap = this.pipeline.getSampleCap();
+            if (cap > 0 && this.bandScheduler.passCount >= cap) {
+                // Converged at the sample cap: stop advancing. Clearing the blend
+                // override lets render()'s normal cap gate no-op (accumulationCount is
+                // pinned at the cap), so the raymarch idles and the count stops climbing;
+                // the display keeps showing the converged buffer.
+                this.pipeline.setTiledBlend(null);
+            } else {
+                const band = this.bandScheduler.next();
+                this.setRegion(0, band.y0, 1, band.y1);
+                this.pipeline.accumulationCount = band.sampleCount;
+                this.pipeline.setTiledBlend(band.blend);
+            }
+        } else if (this._tilingActive) {
+            // Leaving tiled mode: clear the blend override, and restore the full region
+            // unless another owner (bucket/export/preview/render-region) owns it now.
+            this._tilingActive = false;
+            this.pipeline.setTiledBlend(null);
+            if (!this.state.isBucketRendering && !this.state.isExporting
+                && !this.tilingSuppressed && !this.pipeline.convergenceNeeded) {
+                this.setRegion(0, 0, 1, 1);
+            }
+        }
+
         // Apply Jitter
         if (this.pipeline.accumulationCount > 1) {
             const idx = (this.pipeline.accumulationCount % PRECOMPUTED_JITTER.length);
@@ -633,6 +730,19 @@ export class FractalEngine {
 
         // Execute Render Pipeline
         this.pipelineRender(renderer);
+
+        // M3 seed capture: on non-tiled frames (interaction / hold) keep the last
+        // frame so the next tiling pass-0 starts from it instead of black. The seed
+        // is display-only — pass-0 blend=1.0 fully replaces it band-by-band.
+        if (this.progressiveTilingEnabled && !tiling && !shouldHold
+            && !this.state.isBucketRendering && !this.state.isExporting
+            && !this.tilingSuppressed && this.pipeline.accumulationCount >= 1) {
+            // `!shouldHold` matters: a held frame is a no-op render, so during a
+            // resize+hold race the output is the freshly-cleared (black) buffer —
+            // capturing it would seed the next pass from black. Only capture frames
+            // that actually rendered.
+            this.pipeline.captureSeed(renderer);
+        }
     }
     
     // Updated: Only used for legacy or explicit blit calls (e.g. video export)

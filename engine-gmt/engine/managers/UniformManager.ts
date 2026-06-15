@@ -146,12 +146,29 @@ export class UniformManager {
             // E2 export-safety: this whole block is already gated by
             // `!isExporting && !isBucketRendering` (above), so the gate is
             // preserved at the GMT consumer site, not baked into the core slice.
-            const adaptiveInteracting = runtimeState.interacting || runtimeState.isSceneAnimating;
+            // Adaptive must engage ONLY for buffer-invalidating activity, never for
+            // display-only slider/picker drags (bloom, colour-mapping, post FX) — those
+            // are noReset and must re-grade without downscaling (a downscale resizes the
+            // FBO → resetAccumulation → the fractal re-renders, which they must not).
+            // `sessionHoldActive` is the camera/gizmo/scrub-filtered set (always engages);
+            // fractal-affecting sliders still engage via the accum-drop signal below
+            // (ignoreAccumDrop:false), because they drop the accumulation count. Display-
+            // only sliders drop nothing, so they no longer trigger an adaptive resize.
+            const adaptiveInteracting = runtimeState.sessionHoldActive || runtimeState.isSceneAnimating;
             const adaptive = tickAdaptiveResolution(this._adaptive, {
                 now: performance.now(),
                 accumCount: this.pipeline.accumulationCount,
                 isInteracting: adaptiveInteracting,
-                ignoreAccumDrop: true,
+                // Re-enabled (was true): the accum-drop is how buffer-invalidating
+                // slider/picker/drawing gestures (which DON'T set sessionHoldActive)
+                // engage adaptive — they drop the accumulation count. Display-only
+                // (noReset) params drop nothing, so they correctly stay non-adaptive.
+                // `selfResized` already excludes adaptive's own resize from this.
+                ignoreAccumDrop: false,
+                // Idle frames are cheap tiled bands, not full-screen renders — keep
+                // them out of the full-res cost EMA so the interaction seed stays
+                // accurate and adaptive doesn't rediscover the scale from full res.
+                costSampleInteractingOnly: true,
                 dynamicScaling: !!runtimeState.quality?.dynamicScaling,
                 adaptiveTarget,
                 interactionDownsample: runtimeState.quality?.interactionDownsample ?? 2.0,

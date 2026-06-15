@@ -704,6 +704,9 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     if (!exporter) {
                         exporter = new WorkerExporter(engine, renderer, camera, postMsg);
                     }
+                    // Tiling may have left uRegionMin/Max on a band; export won't run
+                    // compute() to restore it, so reset region + tiling state now.
+                    engine.clearTilingRegion();
                     exporter.start(msg.config, msg.stream, msg.dirHandle, msg.audio);
                 } else {
                     postMsg({ type: 'EXPORT_ERROR', message: 'Engine not ready for export' });
@@ -763,6 +766,9 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                         name: msg.exportData.name,
                         version: msg.exportData.version
                     } : undefined;
+                    // Release any leftover tiling band region before the bucket host
+                    // takes over the region uniforms.
+                    engine.clearTilingRegion();
                     engine.state.isBucketRendering = true;
                     bucketRenderer.start(msg.exportImage, msg.config, exportData);
                 }
@@ -802,6 +808,8 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     if (!_previewActive) _savedSampleCap = engine.pipeline.getSampleCap();
                     engine.pipeline.setSampleCap(Math.max(1, Math.floor(msg.sampleCap)));
                     _previewActive = true;
+                    engine.tilingSuppressed = true;
+                    engine.clearTilingRegion(); // drop any leftover band region before preview owns the frame
                     engine.resetAccumulation();
                 }
                 break;
@@ -817,6 +825,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     engine.pipeline.setSampleCap(_savedSampleCap);
                     _savedSampleCap = 0;
                     _previewActive = false;
+                    engine.tilingSuppressed = false;
                     engine.resetAccumulation();
                 }
                 break;

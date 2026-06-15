@@ -10,7 +10,7 @@ type QualityState = {
     precisionMode?: number;
     compilerHardCap?: number;
 };
-import { createFullscreenPass } from './utils/FullscreenQuad';
+import { createFullscreenPass, type FullscreenPass } from './utils/FullscreenQuad';
 
 const CONVERGENCE_FRAG = `
 precision mediump float;
@@ -92,6 +92,19 @@ export class RenderPipeline {
     // discards everything outside the bucket, which is ~64× wasted work for a
     // 512px bucket in a 4K image tile. Set/cleared by GmtBucketHost.
     private _bucketScissor: { x: number; y: number; w: number; h: number } | null = null;
+    // Tiled/progressive live rendering: when non-null, render() uses this as the
+    // temporal blend factor instead of 1/accumulationCount, and does NOT
+    // auto-increment accumulationCount (the band scheduler owns the per-pixel
+    // sample count = pass index). Null = normal full-frame accumulation (unchanged).
+    // See plans/tiled-progressive-rendering.md §4.
+    private _blendOverride: number | null = null;
+    // M3 seed: keep the last non-tiled frame so a fresh tiling pass-0 starts from
+    // it (upscaled) instead of black. Display-only — pass-0 blend=1.0 replaces it.
+    private _seedTarget: THREE.WebGLRenderTarget | null = null;
+    private _hasSeed = false;
+    private _resizedSinceSeed = false;
+    private _copyMaterial: THREE.ShaderMaterial | null = null;
+    private _copyPass: FullscreenPass | null = null;
     // Gate the viewport convergence pass behind an explicit consumer flag.
     // The only consumer is RegionOverlay (engine-gmt/components/viewport/
     // RegionOverlay.tsx) which polls `convergenceValue` while a render-region
@@ -101,6 +114,9 @@ export class RenderPipeline {
     // from main thread via SET_CONVERGENCE_NEEDED worker message.
     private _convergenceNeeded: boolean = false;
     public setConvergenceNeeded(v: boolean) { this._convergenceNeeded = v; }
+    /** True while a render-region overlay is mounted (owns uRegionMin/Max + polls
+     *  convergence). Tiling stands down for it. */
+    public get convergenceNeeded() { return this._convergenceNeeded; }
 
     public isHolding: boolean = false;
 
@@ -378,6 +394,7 @@ export class RenderPipeline {
                 this.mrtTargetB?.dispose();
             }
             this.initTargets(width, height);
+            this._resizedSinceSeed = true; // new targets are black — seed them next compute
         }
     }
     
@@ -593,6 +610,98 @@ export class RenderPipeline {
         this._bucketScissor = rect;
     }
 
+    /** Tiled progressive mode: drive the temporal blend from the band scheduler's
+     *  pass index instead of the global frame counter. Pass null to restore normal
+     *  full-frame accumulation. When set, render() does NOT auto-increment
+     *  accumulationCount — the caller sets it (= samples-per-pixel) for the
+     *  sampleCap / convergence gates. */
+    public setTiledBlend(blend: number | null) {
+        this._blendOverride = blend;
+    }
+
+    /** Whether temporal accumulation is currently enabled (tiling requires it). */
+    public get accumulationEnabled() { return this._accumulationEnabled; }
+
+    private ensureCopyPass() {
+        if (this._copyMaterial) return;
+        this._copyMaterial = new THREE.ShaderMaterial({
+            vertexShader: VERTEX_SHADER,
+            fragmentShader: `precision highp float;
+varying vec2 vUv;
+uniform sampler2D tSrc;
+void main() { gl_FragColor = texture2D(tSrc, vUv); }`,
+            uniforms: { tSrc: { value: null } },
+            depthTest: false,
+            depthWrite: false,
+        });
+        this._copyPass = createFullscreenPass(this._copyMaterial);
+    }
+
+    /** Capture the current output into a persistent seed target so the next tiling
+     *  pass-0 can refine over the last frame instead of black. One blit; call only
+     *  on non-tiled frames (interaction / hold). Survives resize + resetAccumulation
+     *  because the seed target is separate from the ping-pong buffers. */
+    public captureSeed(renderer: THREE.WebGLRenderer) {
+        if (!this.mrtTargetA || this.accumulationCount < 1) return;
+        const src = this.getOutputTexture();
+        if (!src) return;
+        const w = this.mrtTargetA.width, h = this.mrtTargetA.height;
+        const type = this.mrtTargetA.texture.type;
+        if (!this._seedTarget || this._seedTarget.width !== w || this._seedTarget.height !== h
+            || this._seedTarget.texture.type !== type) {
+            this._seedTarget?.dispose();
+            this._seedTarget = new THREE.WebGLRenderTarget(w, h, {
+                minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+                stencilBuffer: false, depthBuffer: false, generateMipmaps: false,
+                format: THREE.RGBAFormat, type,
+            });
+        }
+        this.ensureCopyPass();
+        this._copyMaterial!.uniforms.tSrc.value = src;
+        const prev = renderer.getRenderTarget();
+        renderer.setRenderTarget(this._seedTarget);
+        renderer.render(this._copyPass!.scene, this._copyPass!.camera);
+        renderer.setRenderTarget(prev);
+        this._hasSeed = true;
+    }
+
+    /** Seed both ping-pong targets from the last captured frame (upscaling if the
+     *  resolution changed) so a fresh tiling pass refines over it instead of black.
+     *  Consumed once; no-op without a seed. */
+    public seedFromLastFrame(renderer: THREE.WebGLRenderer) {
+        // Apply the seed ONLY when there's a fresh capture AND a resize actually
+        // blanked the buffer (otherwise the buffer already holds a valid frame).
+        // One-shot: consume BOTH flags so a stale frame is never re-applied. This
+        // is the M3 behaviour — a held move with no fresh capture falls back to a
+        // brief fill rather than replaying a stale frame.
+        if (!this._hasSeed || !this._resizedSinceSeed || !this._seedTarget || !this.mrtTargetA || !this.mrtTargetB) return;
+        this.ensureCopyPass();
+        this._copyMaterial!.uniforms.tSrc.value = this._seedTarget.texture;
+        const prev = renderer.getRenderTarget();
+        renderer.setRenderTarget(this.mrtTargetA);
+        renderer.render(this._copyPass!.scene, this._copyPass!.camera);
+        renderer.setRenderTarget(this.mrtTargetB);
+        renderer.render(this._copyPass!.scene, this._copyPass!.camera);
+        renderer.setRenderTarget(prev);
+        this._hasSeed = false;
+        this._resizedSinceSeed = false;
+    }
+
+    /** After a resize the new ping-pong targets are black. Seed them from the last
+     *  captured frame (upscaled) so a held or slow frame never displays black, then
+     *  the normal render (full or banded) draws over it. One attempt per resize. */
+    public maybeSeedAfterResize(renderer: THREE.WebGLRenderer) {
+        if (!this._resizedSinceSeed) return;
+        this._resizedSinceSeed = false;
+        this.seedFromLastFrame(renderer);
+    }
+
+    /** Drop the captured seed — e.g. on a formula/shader change, so the next tiling
+     *  pass doesn't briefly show the PREVIOUS scene. _seedTarget is kept for reuse. */
+    public invalidateSeed() {
+        this._hasSeed = false;
+    }
+
 
     /**
      * @invariant Bucket scissor must be set AFTER `setRenderTarget`. three.js
@@ -613,7 +722,12 @@ export class RenderPipeline {
         if (!this.mrtTargetA || !this.mrtTargetB) return;
         if (this.isHolding) return;
 
-        if (!this._isBucketRendering && this.sampleCap > 0 && this.accumulationCount >= this.sampleCap) {
+        // Viewport sample-cap auto-stop. Skipped in tiled mode (_blendOverride set):
+        // there accumulationCount is the band scheduler's pass count and the
+        // scheduler owns the stop, so applying this gate here would no-op the
+        // final pass (off-by-one) and freeze the image one sample short.
+        if (!this._isBucketRendering && this._blendOverride === null
+            && this.sampleCap > 0 && this.accumulationCount >= this.sampleCap) {
             return;
         }
 
@@ -623,14 +737,20 @@ export class RenderPipeline {
 
         const accumEnabled = this._accumulationEnabled;
 
-        if (!accumEnabled) {
-            this.accumulationCount = 1;
-        } else {
-            if (this.accumulationCount === 0) this.accumulationCount = 1;
-            else this.accumulationCount++;
+        // Normal full-frame accumulation owns the sample counter. In tiled/
+        // progressive mode (_blendOverride set) the band scheduler owns it
+        // (= pass index) and sets accumulationCount itself, so skip the increment.
+        if (this._blendOverride === null) {
+            if (!accumEnabled) {
+                this.accumulationCount = 1;
+            } else if (this.accumulationCount === 0) {
+                this.accumulationCount = 1;
+            } else {
+                this.accumulationCount++;
+            }
         }
 
-        const blend = 1.0 / this.accumulationCount;
+        const blend = this._blendOverride ?? (1.0 / this.accumulationCount);
 
         // Determine write/read targets (double-buffering)
         const writeTarget = this.writeIndex === 0 ? this.mrtTargetA : this.mrtTargetB;

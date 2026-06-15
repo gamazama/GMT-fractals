@@ -137,6 +137,12 @@ export interface AdaptiveResolutionInput {
      *  is no longer wanted. Distinct from `gateOnAccumOnly`, which does the
      *  OPPOSITE (accum-drop only, ignore isInteracting) for sibling apps. */
     ignoreAccumDrop?: boolean;
+    /** Sample the full-res cost EMA ONLY on interaction/animation frames, not on
+     *  idle accumulation. Required when idle frames are cheap tiled bands (GMT
+     *  progressive tiling): otherwise the band cost poisons the EMA downward, the
+     *  seed under-downscales, and adaptive rediscovers the scale from full res on
+     *  every interaction (visible handover lag). */
+    costSampleInteractingOnly?: boolean;
 }
 
 export interface AdaptiveResolutionResult {
@@ -219,7 +225,9 @@ export function tickAdaptiveResolution(
     // frames that did real trace work (interacting, or a new sample was
     // accumulated) so cheap display frames after convergence / while paused
     // don't poison it. Pauses / tab-switches (≥2s) are ignored.
-    const tracedThisFrame = isInteracting || accumCount > state.prevAccumCount;
+    const tracedThisFrame = input.costSampleInteractingOnly
+        ? isInteracting
+        : (isInteracting || accumCount > state.prevAccumCount);
     if (state.lastTickNow > 0 && tracedThisFrame) {
         const frameMs = now - state.lastTickNow;
         if (frameMs > 0 && frameMs < 2000) {
