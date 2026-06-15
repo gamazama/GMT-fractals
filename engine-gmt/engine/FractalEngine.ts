@@ -676,10 +676,22 @@ export class FractalEngine {
         // accumulation buffer stays complete. blend + accumulationCount come from
         // the pass-indexed band scheduler — render() honours the blend override
         // and skips its auto-increment. See plans/tiled-progressive-rendering.md.
-        // `interacting` (the full session signal incl. slider/picker/drawing, which
-        // reset accumulation every frame and are NOT in the hold set) must gate
-        // tiling too — otherwise a slider drag re-enters pass 0 each frame and only
-        // ever paints the centre band. `shouldHold` adds playback + adaptive-grace.
+        // `interacting` is the full session signal (incl. slider/picker/drawing). TILE
+        // only when accumulation is SURVIVING (`accumulationCount > 1`) during a gesture
+        // — that is the "the image is static this frame" signal, and it splits the two
+        // held-gesture cases correctly so the handoff is adaptive-while-dragging,
+        // bands-on-pause:
+        //   • display-only / no-reset drag (bloom, saturation, droste): never resets
+        //     accumulation → always > 1 → bands the whole time (the post-process fix:
+        //     measured ~6-18fps full-frame → ~30fps tiled).
+        //   • scene-changing drag (power, camera blur): ACTIVE movement resets every
+        //     frame → pinned at 0/1 → NOT tiled → adaptive resolution drives a cheap
+        //     downscaled live preview; the moment the user PAUSES, accumulation climbs
+        //     past 1 → hands off to bands and converges. (Banding a reset-every-frame
+        //     drag would only ever paint the centre strip, and flipping to bands mid-drag
+        //     is the "hands off too soon" regression.)
+        // (Sliders stay out of the hold set for the same "not a camera move" reason,
+        // ADR-0061.) `shouldHold` adds playback + adaptive-grace.
         // `convergenceNeeded` = a render-region overlay owns uRegionMin/Max — stand
         // down so tiling doesn't overwrite the user's region with bands.
         // `isSceneAnimating` (timeline playback / live LFO) must gate tiling DIRECTLY,
@@ -690,7 +702,10 @@ export class FractalEngine {
         // resets accumulation each tick → the band scheduler restarts at pass 0 → only
         // the centre band ever paints. Animation must render full-frame (adaptive
         // engages on `isSceneAnimating` in UniformManager), never banded.
-        const tiling = this.progressiveTilingEnabled && !shouldHold && !this.state.interacting
+        // Adaptive while dragging, bands on pause: tile only when accumulation is
+        // surviving (static this frame). See block comment above.
+        const tilesDuringInteraction = !this.state.interacting || this.pipeline.accumulationCount > 1;
+        const tiling = this.progressiveTilingEnabled && !shouldHold && tilesDuringInteraction
             && !this.state.isSceneAnimating
             && !this.state.isBucketRendering && !this.state.isExporting
             && !this.tilingSuppressed && !this.pipeline.convergenceNeeded
@@ -821,7 +836,7 @@ export class FractalEngine {
             this.pipelineRender(renderer);
         }
     }
-    
+
     // Updated: Only used for legacy or explicit blit calls (e.g. video export)
     public render(renderer: THREE.WebGLRenderer) { 
         // Forward compat stub: If called directly, run compute then blit to default

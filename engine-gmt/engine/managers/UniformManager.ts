@@ -159,11 +159,26 @@ export class UniformManager {
             // display-only slider/picker drags (bloom, colour-mapping, post FX) — those
             // are noReset and must re-grade without downscaling (a downscale resizes the
             // FBO → resetAccumulation → the fractal re-renders, which they must not).
-            // `sessionHoldActive` is the camera/gizmo/scrub-filtered set (always engages);
-            // fractal-affecting sliders still engage via the accum-drop signal below
-            // (ignoreAccumDrop:false), because they drop the accumulation count. Display-
-            // only sliders drop nothing, so they no longer trigger an adaptive resize.
-            const adaptiveInteracting = runtimeState.sessionHoldActive || runtimeState.isSceneAnimating;
+            // `sessionHoldActive` is the camera/gizmo/scrub-filtered set (always engages).
+            //
+            // A SCENE-CHANGING slider drag (power, camera blur) is held (`interacting`) AND
+            // pins accumulation at 0/1 (it invalidates the image every frame) — feed THAT
+            // here so adaptive engages directly and STABLY. The old path (engage only via
+            // the per-frame accum-drop activity signal) flickered: gaps between drops > the
+            // ~100ms grace disengaged adaptive → scale snapped back to 1.0 → re-seeded from a
+            // stale cost EMA → the scale oscillated 1↔2-3 and dropped 40+ full-res stall
+            // frames per drag (measured: 22 scaleFlips on a power drag).
+            // Engaging on `interacting && accumulationCount <= 1` holds the engagement for the
+            // whole active gesture (no grace-gap flicker) and keeps `costSampleInteractingOnly`
+            // sampling the real full-frame cost so the downscale seed is accurate.
+            //
+            // The moment the user PAUSES, accumulation climbs past 1 → this goes false →
+            // adaptive stands down and tiling (`accumulationCount > 1`, FractalEngine.compute)
+            // takes over with cheap bands — and those bands no longer poison the cost EMA.
+            // Display-only drags never pin accum (>1 throughout) → never downscale (correct).
+            // Complementary with the tiling gate: active-move ⇒ adaptive, pause/static ⇒ bands.
+            const sceneChangingMove = runtimeState.interacting && this.pipeline.accumulationCount <= 1;
+            const adaptiveInteracting = runtimeState.sessionHoldActive || runtimeState.isSceneAnimating || sceneChangingMove;
             const adaptive = tickAdaptiveResolution(this._adaptive, {
                 now: performance.now(),
                 accumCount: this.pipeline.accumulationCount,
