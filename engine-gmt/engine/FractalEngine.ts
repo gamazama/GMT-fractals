@@ -119,6 +119,11 @@ export interface EngineRenderState {
      *  buffered-useFrame lag. The worker only gets this serialized boolean; the
      *  filtering happens main-thread (the worker can't call session.isInteracting). */
     sessionHoldActive: boolean;
+    /** Main-thread frame rate (GmtRendererTickDriver's 500ms sampler). The idle
+     *  band scheduler closes its adaptive band-count loop on this — it's the
+     *  compositor/responsiveness rate the band renderer exists to protect, and the
+     *  signal the analytic cost estimate can't see (per-tick overhead). */
+    fps?: number;
 }
 
 // Precompute 2048 jitter values using Halton sequence for faster access.
@@ -164,6 +169,7 @@ export class FractalEngine {
         interacting: false,        // ADR-0061: session gesture activity (adaptive + idle-pause)
         isSceneAnimating: false,   // ADR-0061: autonomous-animation axis (composed with interacting)
         sessionHoldActive: false,  // ADR-0061: filtered camera/gizmo/scrub session activity (hold)
+        fps: 0,                    // M5b: measured main-thread fps for the adaptive band loop
     };
 
     public isPaused: boolean = false;
@@ -181,6 +187,14 @@ export class FractalEngine {
     public tilingSuppressed: boolean = false;
     private bandScheduler = new BandScheduler();
     private _tilingActive = false;
+    /** Adaptive band-count controller (M5b). Float so the FPS feedback loop can
+     *  nudge it fractionally; rounded when pushed to the scheduler. Seeded from the
+     *  analytic cost estimate on a fresh accumulation, then closed-loop on measured
+     *  fps. 0 = uninitialised. */
+    private _bandCountCtrl = 0;
+    /** performance.now() of the last FPS-driven band-count adjustment — throttles
+     *  the loop to roughly one step per fps sample window. */
+    private _lastBandAdjustTime = 0;
     /** Render-target width at the last frame we actually drew. Used to catch the
      *  adaptive→idle handoff frame (resolution restored to full) and keep a stray
      *  full-screen pass off it — bands must own the first full-res frame. */
@@ -684,23 +698,47 @@ export class FractalEngine {
         if (tiling) {
             const wasTiling = this._tilingActive;
             this._tilingActive = true;
-            // M5b — adaptive band count. Size the bands so ONE band's trace costs
-            // about the target frame budget: nBands ≈ fullFrameCost / targetBandMs.
-            // A heavy scene gets more (thinner) bands → each tick stays short and the
-            // UI keeps painting; a cheap scene collapses toward full-frame. The cost
-            // EMA is sampled on interaction frames only, so it reflects the true
-            // full-res cost, not the cheap idle bands. setBandCount defers to the next
-            // pass boundary (no mid-pass re-layout), so calling it every tick is safe.
-            const fullMs = this.uniformManager.getFullResFrameMs();
-            if (fullMs > 0) {
-                // Reuse the "Target FPS" responsiveness slider (quality.adaptiveTarget);
-                // fall back to 30 when it's off so tiling still adapts.
-                const targetFps = (this.state.quality?.adaptiveTarget ?? 0) > 0
-                    ? (this.state.quality!.adaptiveTarget as number)
-                    : 30;
-                const targetBandMs = 1000 / targetFps;
-                this.bandScheduler.setBandCount(Math.ceil(fullMs / targetBandMs));
+            // M5b — adaptive band count, closed-loop on measured fps.
+            //   Seed: nBands ≈ fullFrameCost / targetBandMs (analytic). Good starting
+            //     point so a new scene converges in ~1 window instead of ramping.
+            //   Refine: AIMD off the REAL main-thread fps. The analytic model ignores
+            //     per-tick overhead (whole-screen history copy + blit + driver), so it
+            //     undershoots the target; the feedback loop makes the band count
+            //     actually hit it. Multiplicative increase (fast back-off when too
+            //     slow → protect responsiveness), additive decrease (slowly reclaim
+            //     convergence speed when there's headroom), deadband between to avoid
+            //     oscillation. setBandCount defers to a pass boundary, so per-tick
+            //     calls are safe.
+            // The "Target FPS" responsiveness slider (quality.adaptiveTarget) is the
+            // target; fall back to 30 when it's off.
+            const targetFps = (this.state.quality?.adaptiveTarget ?? 0) > 0
+                ? (this.state.quality!.adaptiveTarget as number)
+                : 30;
+            if (this.pipeline.accumulationCount === 0 || this._bandCountCtrl <= 0) {
+                // Fresh accumulation (new scene/view) — reseed from the analytic estimate.
+                const fullMs = this.uniformManager.getFullResFrameMs();
+                const seed = fullMs > 0 ? Math.ceil(fullMs / (1000 / targetFps)) : 24;
+                this._bandCountCtrl = Math.max(1, Math.min(64, seed));
+                this._lastBandAdjustTime = now;
+            } else if (!wasTiling) {
+                // Just re-entered steady tiling — let it settle a window before the
+                // loop reads fps (the last reading reflects the interaction, not bands).
+                this._lastBandAdjustTime = now;
+            } else {
+                const fps = this.state.fps ?? 0;
+                if (fps > 0 && now - this._lastBandAdjustTime >= 500) {
+                    this._lastBandAdjustTime = now;
+                    if (fps < targetFps * 0.92) {
+                        // Too slow → more (thinner) bands. Step scales with the deficit.
+                        const factor = Math.min(1.6, Math.max(1.05, targetFps / fps));
+                        this._bandCountCtrl = Math.min(64, this._bandCountCtrl * factor);
+                    } else if (fps > targetFps * 1.12 && this._bandCountCtrl > 1) {
+                        // Headroom → fewer bands, one at a time (slow reclaim).
+                        this._bandCountCtrl = Math.max(1, this._bandCountCtrl - 1);
+                    }
+                }
             }
+            this.bandScheduler.setBandCount(Math.round(this._bandCountCtrl));
             // Restart pass 0 ONLY when accumulation was ACTUALLY reset
             // (accumulationCount===0) — NEVER just because tiling re-entered. A
             // momentary exit/re-enter (e.g. a display-only slider that briefly flips

@@ -302,6 +302,7 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             quality:  storeState.quality  ?? null,
             geometry: storeState.geometry ?? null,
             adaptiveSuppressed: !!storeState.adaptiveSuppressed,
+            fps: t.fps, // M5b: feeds the worker's adaptive band-count feedback loop
             ...interactionBlock, // interacting + isSceneAnimating + sessionHoldActive (ADR-0061)
         };
 
