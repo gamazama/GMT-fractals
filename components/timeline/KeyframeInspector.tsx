@@ -247,9 +247,16 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
     const handleDragStart = () => {
         ds.snapshot?.();
         ds.scrub?.setIsScrubbing(true);
+        // Engage the session scrub gesture so the live value-drag renders adaptive
+        // (full-frame) instead of the idle band renderer — a value drag changes the
+        // scene every frame (onAfterMutate → scrub), which bands can't accumulate.
+        ds.scrub?.begin();
     };
 
-    const handleDragEnd = () => ds.scrub?.setIsScrubbing(false);
+    const handleDragEnd = () => {
+        ds.scrub?.setIsScrubbing(false);
+        ds.scrub?.end();
+    };
 
     const displayValue = (hasSelection && firstKey) ? (isAllRotation ? THREE.MathUtils.radToDeg(firstKey.value) : firstKey.value) : 0;
 

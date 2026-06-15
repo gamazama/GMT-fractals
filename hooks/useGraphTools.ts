@@ -168,6 +168,11 @@ export const useGraphTools = (
         e.preventDefault(); e.stopPropagation();
         (e.target as Element).setPointerCapture(e.pointerId);
         ds.snapshot?.();
+        // Smooth/Bake/Simplify apply keyframe updates LIVE as you drag (the viewport
+        // re-evaluates each move), so the gesture must read as `interacting` →
+        // adaptive, not the idle band renderer. begin() is idempotent; each tool's
+        // *Up handler calls the balanced end(). No-op for the palette (no ds.scrub).
+        ds.scrub?.begin();
         originalSequenceRef.current = JSON.parse(JSON.stringify(sequence));
         toolStartRef.current = { x: e.clientX, y: e.clientY };
         window.addEventListener('pointermove', onMove);
@@ -209,6 +214,7 @@ export const useGraphTools = (
         setIsSmoothing(false);
         setSmoothingRadius(0);
         originalSequenceRef.current = null;
+        ds.scrub?.end();
         window.removeEventListener('pointermove', handleSmoothMove);
         window.removeEventListener('pointerup', handleSmoothUp);
     };
@@ -234,6 +240,7 @@ export const useGraphTools = (
     const handleBakeUp = () => {
         setIsBaking(false);
         originalSequenceRef.current = null;
+        ds.scrub?.end();
         window.removeEventListener('pointermove', handleBakeMove);
         window.removeEventListener('pointerup', handleBakeUp);
     };
@@ -263,6 +270,7 @@ export const useGraphTools = (
     const handleSimplifyUp = () => {
         setIsSimplifying(false);
         originalSequenceRef.current = null;
+        ds.scrub?.end();
         window.removeEventListener('pointermove', handleSimplifyMove);
         window.removeEventListener('pointerup', handleSimplifyUp);
     };

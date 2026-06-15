@@ -542,6 +542,10 @@ export const useGraphInteraction = (
             ds.scrub?.setIsScrubbing(false);
         }
 
+        // Balanced end for the session scrub gesture begun in handleMouseDown for
+        // viewport-mutating drags. Idempotent — a no-op when none was begun.
+        ds.scrub?.end();
+
         isDraggingRef.current = false;
 
         if (dragMode.current === 'box' && boxStartRef.current) {
@@ -832,6 +836,18 @@ export const useGraphInteraction = (
                     }
                 }
             }
+        }
+
+        // Engage the InteractionSession `scrub` gesture for drags that mutate the
+        // LIVE frame — playhead scrub, key move, handle/curve edit (the modes that
+        // call ds.onAfterMutate → animationEngine.scrub, changing the scene every
+        // frame). Without this the worker sees `interacting=false` and the idle band
+        // renderer engages, which can only paint the centre strip on a per-frame-
+        // changing scene; with it the viewport renders adaptive (full-frame), exactly
+        // like the dopesheet playhead. begin() is idempotent and handleGlobalUp calls
+        // the balanced end(); `ds.scrub` is undefined for the palette (safe no-op).
+        if (dragMode.current === 'scrub' || dragMode.current === 'key' || dragMode.current === 'handle') {
+            ds.scrub?.begin();
         }
 
         if (isDraggingRef.current) {

@@ -4,6 +4,8 @@ import { useAnimationStore } from '../store/animationStore';
 import { animationEngine } from '../engine/AnimationEngine';
 import { Track, BezierHandle, Keyframe, AnimationSequence } from '../types';
 import { constrainKeyframeHandles, scaleKeyframeHandles } from '../utils/timelineUtils';
+import { useInteractionGesture } from '../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
 
 interface DopeSheetInteractionProps {
     frameWidth: number;
@@ -74,6 +76,13 @@ export const useDopeSheetInteraction = ({
     const deselectAllKeys      = useAnimationStore((s) => s.deselectAllKeys);
     const setIsScrubbing       = useAnimationStore((s) => s.setIsScrubbing);
     const snapshot             = useAnimationStore((s) => s.snapshot);
+
+    // Session scrub gesture: a key drag / selection transform changes the live
+    // frame every move (updateKeyframes → animationEngine.scrub), so it must read
+    // as `interacting` to the worker → adaptive (full-frame), not the idle band
+    // renderer (which can only paint the centre strip on a per-frame-changing
+    // scene). begin() is idempotent; onUp calls the balanced end().
+    const scrubGesture = useInteractionGesture(INTERACTION_SOURCES.scrub);
 
     const [selectionBox, setSelectionBox] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
     
@@ -167,14 +176,16 @@ export const useDopeSheetInteraction = ({
         });
 
         dragState.current = { startX, keys, neighbors };
-        setIsScrubbing(true); 
+        setIsScrubbing(true);
+        scrubGesture.begin();
     };
 
     const startTransformSelection = (e: React.MouseEvent, type: 'move' | 'scale_left' | 'scale_right', minFrame: number, maxFrame: number) => {
         e.stopPropagation();
         e.preventDefault();
         snapshot();
-        setIsScrubbing(true); 
+        setIsScrubbing(true);
+        scrubGesture.begin();
 
         const initialKeys: { trackId: string, keyId: string, startFrame: number, startLeftTan?: BezierHandle, startRightTan?: BezierHandle }[] = [];
         selectedKeyframeIds.forEach(id => {
@@ -416,6 +427,7 @@ export const useDopeSheetInteraction = ({
             if (dragState.current || transformState.current) {
                 setIsScrubbing(false);
             }
+            scrubGesture.end(); // balanced (idempotent) end for the begins above
             dragState.current = null;
             transformState.current = null;
             
