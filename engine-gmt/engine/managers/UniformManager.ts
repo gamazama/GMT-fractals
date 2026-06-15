@@ -207,7 +207,10 @@ export class UniformManager {
             if (currentW !== targetW || currentH !== targetH) {
                 this._adaptive.selfResized = true; // flag so we don't re-trigger activity from our own reset
                 this.uniforms[Uniforms.Resolution].value.set(targetW, targetH);
-                this.pipeline.resize(targetW, targetH);
+                // Pass the renderer so resize() blits the previous frame into the new
+                // targets — the accumulation buffer stays valid across the adaptive
+                // low↔full resize, so the tiling handoff never flashes black.
+                this.pipeline.resize(targetW, targetH, renderer);
                 this.pipeline.resetAccumulation();
                 _adaptiveResizeCount++; // diagnostic (present-path workstream) — see getAdaptiveResizeCount
                 

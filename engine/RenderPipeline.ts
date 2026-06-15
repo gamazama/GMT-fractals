@@ -98,11 +98,9 @@ export class RenderPipeline {
     // sample count = pass index). Null = normal full-frame accumulation (unchanged).
     // See plans/tiled-progressive-rendering.md §4.
     private _blendOverride: number | null = null;
-    // M3 seed: keep the last non-tiled frame so a fresh tiling pass-0 starts from
-    // it (upscaled) instead of black. Display-only — pass-0 blend=1.0 replaces it.
-    private _seedTarget: THREE.WebGLRenderTarget | null = null;
-    private _hasSeed = false;
-    private _resizedSinceSeed = false;
+    // Fullscreen copy pass — used by resize() to blit the previous frame into the
+    // freshly-allocated targets so the accumulation buffer is never black across a
+    // resize (see resize()). Lazily created on first use.
     private _copyMaterial: THREE.ShaderMaterial | null = null;
     private _copyPass: FullscreenPass | null = null;
     // Gate the viewport convergence pass behind an explicit consumer flag.
@@ -382,19 +380,49 @@ export class RenderPipeline {
         this.resetAccumulation();
     }
     
-    public resize(width: number, height: number) {
+    /**
+     * Resize the accumulation targets. When `renderer` is supplied AND there is
+     * existing content, the previous frame is blitted (upscaled via the targets'
+     * linear filter) into the new targets BEFORE the old ones are disposed, so the
+     * accumulation buffer is NEVER black across a resize. A tiling pass-0 (or a
+     * full-frame render) then refines over the actual last-displayed frame
+     * band-by-band — this is what kills both the black-flash and stale-flash
+     * classes, and replaces the old capture/seed machinery entirely.
+     *
+     * Callers that deliberately want fresh (black) targets — bucket / export /
+     * compile / quality-precision change — omit `renderer` and keep the old
+     * no-blit behaviour (they clear/redraw their targets immediately anyway).
+     */
+    public resize(width: number, height: number, renderer?: THREE.WebGLRenderer) {
         const wantsHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
         const useHalfFloat = wantsHalfFloat && this.checkHalfFloatAlphaSupport();
         const currentType = this.mrtTargetA?.texture.type;
         const desiredType = useHalfFloat ? THREE.HalfFloatType : THREE.FloatType;
-        
+
         if (!this.mrtTargetA || this.mrtTargetA.width !== width || this.mrtTargetA.height !== height || currentType !== desiredType) {
-            if (this.mrtTargetA) {
-                this.mrtTargetA.dispose();
-                this.mrtTargetB?.dispose();
-            }
+            const oldA = this.mrtTargetA;
+            const oldB = this.mrtTargetB;
+            // Capture the last-written (displayed) texture BEFORE initTargets
+            // reassigns mrtTargetA/B to the fresh black targets.
+            const oldOutput = (oldA && renderer) ? this.getOutputTexture() : null;
+
             this.initTargets(width, height);
-            this._resizedSinceSeed = true; // new targets are black — seed them next compute
+
+            // Preserve content across the resize: draw the previous frame into BOTH
+            // new targets so neither the display nor the next history-read is black.
+            if (oldOutput && renderer && this.mrtTargetA && this.mrtTargetB) {
+                this.ensureCopyPass();
+                this._copyMaterial!.uniforms.tSrc.value = oldOutput;
+                const prev = renderer.getRenderTarget();
+                renderer.setRenderTarget(this.mrtTargetA);
+                renderer.render(this._copyPass!.scene, this._copyPass!.camera);
+                renderer.setRenderTarget(this.mrtTargetB);
+                renderer.render(this._copyPass!.scene, this._copyPass!.camera);
+                renderer.setRenderTarget(prev);
+            }
+
+            oldA?.dispose();
+            oldB?.dispose();
         }
     }
     
@@ -635,71 +663,6 @@ void main() { gl_FragColor = texture2D(tSrc, vUv); }`,
             depthWrite: false,
         });
         this._copyPass = createFullscreenPass(this._copyMaterial);
-    }
-
-    /** Capture the current output into a persistent seed target so the next tiling
-     *  pass-0 can refine over the last frame instead of black. One blit; call only
-     *  on non-tiled frames (interaction / hold). Survives resize + resetAccumulation
-     *  because the seed target is separate from the ping-pong buffers. */
-    public captureSeed(renderer: THREE.WebGLRenderer) {
-        if (!this.mrtTargetA || this.accumulationCount < 1) return;
-        const src = this.getOutputTexture();
-        if (!src) return;
-        const w = this.mrtTargetA.width, h = this.mrtTargetA.height;
-        const type = this.mrtTargetA.texture.type;
-        if (!this._seedTarget || this._seedTarget.width !== w || this._seedTarget.height !== h
-            || this._seedTarget.texture.type !== type) {
-            this._seedTarget?.dispose();
-            this._seedTarget = new THREE.WebGLRenderTarget(w, h, {
-                minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
-                stencilBuffer: false, depthBuffer: false, generateMipmaps: false,
-                format: THREE.RGBAFormat, type,
-            });
-        }
-        this.ensureCopyPass();
-        this._copyMaterial!.uniforms.tSrc.value = src;
-        const prev = renderer.getRenderTarget();
-        renderer.setRenderTarget(this._seedTarget);
-        renderer.render(this._copyPass!.scene, this._copyPass!.camera);
-        renderer.setRenderTarget(prev);
-        this._hasSeed = true;
-    }
-
-    /** Seed both ping-pong targets from the last captured frame (upscaling if the
-     *  resolution changed) so a fresh tiling pass refines over it instead of black.
-     *  Consumed once; no-op without a seed. */
-    public seedFromLastFrame(renderer: THREE.WebGLRenderer) {
-        // Apply the seed ONLY when there's a fresh capture AND a resize actually
-        // blanked the buffer (otherwise the buffer already holds a valid frame).
-        // One-shot: consume BOTH flags so a stale frame is never re-applied. This
-        // is the M3 behaviour — a held move with no fresh capture falls back to a
-        // brief fill rather than replaying a stale frame.
-        if (!this._hasSeed || !this._resizedSinceSeed || !this._seedTarget || !this.mrtTargetA || !this.mrtTargetB) return;
-        this.ensureCopyPass();
-        this._copyMaterial!.uniforms.tSrc.value = this._seedTarget.texture;
-        const prev = renderer.getRenderTarget();
-        renderer.setRenderTarget(this.mrtTargetA);
-        renderer.render(this._copyPass!.scene, this._copyPass!.camera);
-        renderer.setRenderTarget(this.mrtTargetB);
-        renderer.render(this._copyPass!.scene, this._copyPass!.camera);
-        renderer.setRenderTarget(prev);
-        this._hasSeed = false;
-        this._resizedSinceSeed = false;
-    }
-
-    /** After a resize the new ping-pong targets are black. Seed them from the last
-     *  captured frame (upscaled) so a held or slow frame never displays black, then
-     *  the normal render (full or banded) draws over it. One attempt per resize. */
-    public maybeSeedAfterResize(renderer: THREE.WebGLRenderer) {
-        if (!this._resizedSinceSeed) return;
-        this._resizedSinceSeed = false;
-        this.seedFromLastFrame(renderer);
-    }
-
-    /** Drop the captured seed — e.g. on a formula/shader change, so the next tiling
-     *  pass doesn't briefly show the PREVIOUS scene. _seedTarget is kept for reuse. */
-    public invalidateSeed() {
-        this._hasSeed = false;
     }
 
 

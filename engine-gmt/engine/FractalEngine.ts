@@ -465,11 +465,6 @@ export class FractalEngine {
 
         const { rebuildNeeded, uniformUpdate, modeChanged, needsAccumReset } = this.configManager.update(newConfig, this.state);
 
-        // A formula/shader-structure change makes any captured seed (the previous
-        // shader's image) stale — drop it so a tiling pass-0 after the switch doesn't
-        // briefly show the old scene in not-yet-rendered bands.
-        if (rebuildNeeded || modeChanged) this.pipeline.invalidateSeed();
-
         if (newConfig.maxSteps !== undefined) {
              this.setUniform('uMaxSteps', newConfig.maxSteps);
         }
@@ -669,23 +664,42 @@ export class FractalEngine {
         // ever paints the centre band. `shouldHold` adds playback + adaptive-grace.
         // `convergenceNeeded` = a render-region overlay owns uRegionMin/Max — stand
         // down so tiling doesn't overwrite the user's region with bands.
+        // `isSceneAnimating` (timeline playback / live LFO) must gate tiling DIRECTLY,
+        // not via `shouldHold`: playback is not a gesture so it never sets
+        // `interacting`, and `shouldHold` has a DOF carve-out (false while DOF is on so
+        // the blur preview renders) — so with DOF enabled, animation would otherwise
+        // fall into tiling. But the scene changes EVERY frame during animation, which
+        // resets accumulation each tick → the band scheduler restarts at pass 0 → only
+        // the centre band ever paints. Animation must render full-frame (adaptive
+        // engages on `isSceneAnimating` in UniformManager), never banded.
         const tiling = this.progressiveTilingEnabled && !shouldHold && !this.state.interacting
+            && !this.state.isSceneAnimating
             && !this.state.isBucketRendering && !this.state.isExporting
             && !this.tilingSuppressed && !this.pipeline.convergenceNeeded
             && this.pipeline.accumulationEnabled;
         if (tiling) {
+            const wasTiling = this._tilingActive;
             this._tilingActive = true;
-            // Restart pass 0 + seed ONLY when accumulation was ACTUALLY reset
+            // Restart pass 0 ONLY when accumulation was ACTUALLY reset
             // (accumulationCount===0) — NEVER just because tiling re-entered. A
             // momentary exit/re-enter (e.g. a display-only slider that briefly flips
             // `interacting`, or any blip) must not restart accumulation on a settled
             // scene. `accumulationCount===0` also catches direct
             // pipeline.resetAccumulation() calls that bypass engine.resetAccumulation()
-            // (ghosting fix). seedFromLastFrame is a no-op unless a resize blanked the
-            // buffer, and it consumes itself, so it can't replay a stale frame.
+            // (ghosting fix). The buffer always holds the last frame (resize() blits
+            // content forward), so pass-0 refines over it band-by-band — no seed.
             if (this.pipeline.accumulationCount === 0) {
                 this.bandScheduler.reset();
-                this.pipeline.seedFromLastFrame(renderer);
+            } else if (!wasTiling) {
+                // Re-entering tiling after a full-frame interlude (a display-only /
+                // no-reset param flips `interacting` for the gesture's duration). Those
+                // full-frame frames advanced accumulationCount uniformly over the whole
+                // screen; resume the scheduler from that count so the count stays
+                // MONOTONIC. Otherwise the re-entry overwrites accumulationCount back
+                // down to the frozen passIndex+1, which the adaptive accum-drop heuristic
+                // misreads as a buffer-invalidating gesture → phantom downscale → reset →
+                // the whole scene restarts accumulating on every no-reset param change.
+                this.bandScheduler.resumeFrom(this.pipeline.accumulationCount);
             }
             const cap = this.pipeline.getSampleCap();
             if (cap > 0 && this.bandScheduler.passCount >= cap) {
@@ -730,19 +744,6 @@ export class FractalEngine {
 
         // Execute Render Pipeline
         this.pipelineRender(renderer);
-
-        // M3 seed capture: on non-tiled frames (interaction / hold) keep the last
-        // frame so the next tiling pass-0 starts from it instead of black. The seed
-        // is display-only — pass-0 blend=1.0 fully replaces it band-by-band.
-        if (this.progressiveTilingEnabled && !tiling && !shouldHold
-            && !this.state.isBucketRendering && !this.state.isExporting
-            && !this.tilingSuppressed && this.pipeline.accumulationCount >= 1) {
-            // `!shouldHold` matters: a held frame is a no-op render, so during a
-            // resize+hold race the output is the freshly-cleared (black) buffer —
-            // capturing it would seed the next pass from black. Only capture frames
-            // that actually rendered.
-            this.pipeline.captureSeed(renderer);
-        }
     }
     
     // Updated: Only used for legacy or explicit blit calls (e.g. video export)

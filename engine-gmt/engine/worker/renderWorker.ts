@@ -333,7 +333,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     const pH = Math.floor(pr.height * pr.dpr);
                     engine.mainUniforms.uResolution.value.set(pW, pH);
                     engine.mainUniforms.uInternalScale.value = pr.dpr;
-                    engine.pipeline.resize(pW, pH);
+                    engine.pipeline.resize(pW, pH, renderer);
                     bloomPass?.resize(pW, pH);
                 }
                 break;
@@ -353,7 +353,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     const sizeChanged = curRes.x !== physW || curRes.y !== physH;
                     curRes.set(physW, physH);
                     engine.mainUniforms.uInternalScale.value = msg.dpr;
-                    engine.pipeline.resize(physW, physH);
+                    engine.pipeline.resize(physW, physH, renderer);
                     bloomPass?.resize(physW, physH);
                     if (sizeChanged) engine.resetAccumulation();
                 } else {

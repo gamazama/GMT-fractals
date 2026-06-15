@@ -49,6 +49,24 @@ export class BandScheduler {
         this.cursor = 0;
     }
 
+    /**
+     * Resume tiling after a full-frame interlude (e.g. a display-only slider that
+     * flipped the interaction signal off→on, standing tiling down for a few
+     * frames). Those full-frame renders advanced the global sample count uniformly
+     * over the WHOLE screen, so continue from there — start a fresh pass (cursor 0)
+     * at that sample count instead of the frozen pre-interlude passIndex.
+     *
+     * This keeps the sample count MONOTONIC across the full-frame↔tiled transition,
+     * which the adaptive accum-drop heuristic relies on: a backward jump in
+     * accumulationCount reads as a buffer-invalidating gesture → phantom downscale →
+     * resetAccumulation → full restart (the "every no-reset param restarts
+     * accumulation" bug). Never moves passIndex backward.
+     */
+    resumeFrom(samples: number) {
+        this.passIndex = Math.max(this.passIndex, Math.floor(samples));
+        this.cursor = 0;
+    }
+
     /** Complete passes finished so far = samples every pixel already has. */
     get passCount(): number {
         return this.passIndex;
