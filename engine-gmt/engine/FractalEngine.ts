@@ -181,6 +181,10 @@ export class FractalEngine {
     public tilingSuppressed: boolean = false;
     private bandScheduler = new BandScheduler();
     private _tilingActive = false;
+    /** Render-target width at the last frame we actually drew. Used to catch the
+     *  adaptive→idle handoff frame (resolution restored to full) and keep a stray
+     *  full-screen pass off it — bands must own the first full-res frame. */
+    private _lastRenderResX = 0;
     private _bandMin = new THREE.Vector2(0, 0);
     private _bandMax = new THREE.Vector2(1, 1);
     private _lastCameraInUseTime: number = 0;
@@ -680,6 +684,23 @@ export class FractalEngine {
         if (tiling) {
             const wasTiling = this._tilingActive;
             this._tilingActive = true;
+            // M5b — adaptive band count. Size the bands so ONE band's trace costs
+            // about the target frame budget: nBands ≈ fullFrameCost / targetBandMs.
+            // A heavy scene gets more (thinner) bands → each tick stays short and the
+            // UI keeps painting; a cheap scene collapses toward full-frame. The cost
+            // EMA is sampled on interaction frames only, so it reflects the true
+            // full-res cost, not the cheap idle bands. setBandCount defers to the next
+            // pass boundary (no mid-pass re-layout), so calling it every tick is safe.
+            const fullMs = this.uniformManager.getFullResFrameMs();
+            if (fullMs > 0) {
+                // Reuse the "Target FPS" responsiveness slider (quality.adaptiveTarget);
+                // fall back to 30 when it's off so tiling still adapts.
+                const targetFps = (this.state.quality?.adaptiveTarget ?? 0) > 0
+                    ? (this.state.quality!.adaptiveTarget as number)
+                    : 30;
+                const targetBandMs = 1000 / targetFps;
+                this.bandScheduler.setBandCount(Math.ceil(fullMs / targetBandMs));
+            }
             // Restart pass 0 ONLY when accumulation was ACTUALLY reset
             // (accumulationCount===0) — NEVER just because tiling re-entered. A
             // momentary exit/re-enter (e.g. a display-only slider that briefly flips
@@ -742,8 +763,25 @@ export class FractalEngine {
             this.mainUniforms[Uniforms.PixelSizeBase].value = bucketRenderer.savedPixelSizeBase;
         }
 
+        // Adaptive→idle handoff guard. When adaptive restores full resolution it
+        // resizes the targets (one step, scale→1) on a frame where tiling may not yet
+        // own the render — that lone full-RES full-screen raymarch is the hitch the
+        // band renderer exists to avoid (the hold-extension that should cover it keys
+        // off camera-use time, which slider-driven adaptive never updates). If the
+        // resolution just grew and tiling isn't taking this frame, SKIP the draw: the
+        // resize already blitted the previous frame forward so the display stays
+        // valid, and next frame the band sweep starts at full res. Bucket/export own
+        // their own resize cadence, so leave them alone.
+        const resX = this.mainUniforms.uResolution.value.x;
+        const resJustGrew = this._lastRenderResX > 0 && resX > this._lastRenderResX;
+        this._lastRenderResX = resX;
+        const skipForHandoff = resJustGrew && this.progressiveTilingEnabled && !tiling
+            && !this.state.isBucketRendering && !this.state.isExporting;
+
         // Execute Render Pipeline
-        this.pipelineRender(renderer);
+        if (!skipForHandoff) {
+            this.pipelineRender(renderer);
+        }
     }
     
     // Updated: Only used for legacy or explicit blit calls (e.g. video export)

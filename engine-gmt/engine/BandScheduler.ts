@@ -38,13 +38,38 @@ export class BandScheduler {
     private passIndex = 0;
     private cursor = 0;
     private order: number[];
+    private pendingNBands: number;
 
     constructor(private nBands = 24) {
         this.order = centerOutOrder(nBands);
+        this.pendingNBands = nBands;
+    }
+
+    /** Bands the screen is currently split into. */
+    get bandCount(): number { return this.nBands; }
+
+    /**
+     * Request a new band count (M5b adaptive sizing). Applied at the next pass
+     * boundary (cursor 0) — NEVER mid-pass, or the pass would mix two band layouts
+     * and leave gaps/overlaps where the old and new band edges don't line up. The
+     * running mean is unaffected: every pass still covers every pixel exactly once
+     * at a constant blend, regardless of how many bands that pass used.
+     */
+    setBandCount(n: number) {
+        this.pendingNBands = Math.max(1, Math.min(64, Math.floor(n)));
+    }
+
+    /** Apply a pending band-count change. Only safe at a pass boundary. */
+    private applyPending() {
+        if (this.pendingNBands !== this.nBands) {
+            this.nBands = this.pendingNBands;
+            this.order = centerOutOrder(this.nBands);
+        }
     }
 
     /** Restart from the first sample. Call whenever accumulation resets. */
     reset() {
+        this.applyPending();
         this.passIndex = 0;
         this.cursor = 0;
     }
@@ -63,6 +88,7 @@ export class BandScheduler {
      * accumulation" bug). Never moves passIndex backward.
      */
     resumeFrom(samples: number) {
+        this.applyPending();
         this.passIndex = Math.max(this.passIndex, Math.floor(samples));
         this.cursor = 0;
     }
@@ -88,6 +114,7 @@ export class BandScheduler {
         if (this.cursor >= this.nBands) {
             this.cursor = 0;
             this.passIndex++;
+            this.applyPending(); // pass boundary — safe to re-layout the bands
         }
         return { y0, y1, blend, sampleCount };
     }

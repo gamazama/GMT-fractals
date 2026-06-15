@@ -60,6 +60,15 @@ export class UniformManager {
         return getAdaptiveGrace(this._adaptive.stillFps);
     }
 
+    /** Scale-normalized EMA of one FULL-RES frame's trace cost in ms (0 until the
+     *  first interaction frame populates it). Drives M5b's adaptive band count:
+     *  more bands when a full frame is expensive, fewer when it's cheap. Sampled
+     *  on interaction frames only (costSampleInteractingOnly), so idle bands don't
+     *  poison it. See engine/AdaptiveResolution.ts. */
+    public getFullResFrameMs(): number {
+        return this._adaptive.fullResFrameMs;
+    }
+
     constructor(
         uniforms: { [key: string]: THREE.IUniform }, 
         virtualSpace: VirtualSpace,
