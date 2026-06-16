@@ -16,6 +16,7 @@ import type { VideoExportConfig } from '../../../engine/codec/VideoExportTypes';
 import type { BucketRenderConfig } from '../BucketRenderer';
 import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState, SerializedCamera, SerializedOffset } from './WorkerProtocol';
 import { injectMetadata } from '../../../utils/pngMetadata';
+import { showToast } from '../../../engine/store/toastStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
 import type { AccumulationController } from '../../../engine/AccumulationController';
 import { useCompileProgress } from '../../../store/CompileProgressStore';
@@ -957,7 +958,18 @@ export class WorkerProxy implements AccumulationController {
                     multiTile,
                 });
             } catch (e) {
-                console.error("Failed to inject metadata", e);
+                console.error("Failed to inject GMF metadata into render PNG", e);
+                // The embed was requested (non-empty presetJson) but failed.
+                // We still save the image — losing the render is worse — but the
+                // PNG will NOT reopen as a scene, so say so loudly rather than
+                // handing the user a silently-stripped file that looks fine.
+                if (presetJson) {
+                    showToast(
+                        'Render saved, but scene data (GMF) could not be embedded — this PNG won’t reopen as a scene.',
+                        'error',
+                        6000,
+                    );
+                }
                 const link = document.createElement('a');
                 link.download = filename;
                 link.href = canvas.toDataURL('image/png');

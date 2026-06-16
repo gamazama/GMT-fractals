@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
 import { createFullscreenPass, type FullscreenPass } from '../utils/FullscreenQuad';
 import { injectMetadata } from '../../utils/pngMetadata';
+import { showToast } from '../store/toastStore';
 import { getExportFileName } from '../../utils/fileUtils';
 import type {
     BucketRenderConfig,
@@ -559,7 +560,16 @@ export class BucketRunner {
                 link.click();
                 URL.revokeObjectURL(url);
             } catch (e) {
-                console.error('[BucketRunner] Failed to inject metadata', e);
+                console.error('[BucketRunner] Failed to inject scene metadata into render PNG', e);
+                // Embed was requested (non-empty presetStr) but failed. Save the
+                // image anyway, but warn loudly — the PNG won't reopen as a scene.
+                if (presetStr) {
+                    showToast(
+                        'Render saved, but scene data could not be embedded — this PNG won’t reopen as a scene.',
+                        'error',
+                        6000,
+                    );
+                }
                 const link = document.createElement('a');
                 link.download = filename;
                 link.href = canvas.toDataURL('image/png');
