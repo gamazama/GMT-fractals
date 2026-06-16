@@ -20,7 +20,12 @@
                the visible viewport (when the address bar is showing), so
                the body has scroll capacity. Once the user swipes past the
                intro, the address bar hides and the sticky shell locks. */
-            html, body, #root { margin: 0; padding: 0; width: 100%; background: #000; color: #fff; }
+            /* color-scheme: dark tells auto-darkening browsers (Samsung Internet
+               Dark mode, Chrome Android Auto-dark / Force-Dark, some WebViews)
+               that the page already provides a dark theme, so they skip the
+               automatic darkening pass that otherwise dims the white GMT logo
+               to grey on those devices. Every other app entry already sets this. */
+            html, body, #root { margin: 0; padding: 0; width: 100%; background: #000; color: #fff; color-scheme: dark; }
             html { min-height: 100%; }
             body { min-height: 100%; overscroll-behavior-y: none; }
             /* Desktop: lock to viewport so the layout doesn't accidentally scroll. */

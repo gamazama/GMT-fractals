@@ -37,6 +37,13 @@ export const GmtWordmark: React.FC<GmtWordmarkProps> = ({
         role="img"
         aria-label={title}
         xmlns="http://www.w3.org/2000/svg"
+        // forced-colors / high-contrast mode (notably Firefox, which enters it
+        // off OS accessibility settings more readily than iOS Safari) replaces
+        // author colours with the system palette — that turned the white fill
+        // near-black on the app's black background. `none` keeps the brand
+        // colours intact. Inherited by the child paths, so one declaration
+        // protects the G, M and T across every usage of the wordmark.
+        style={{ forcedColorAdjust: 'none' }}
     >
         <path d={G_PATH} fill={base} />
         <path d={M_PATH} fill={accent} />
