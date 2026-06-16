@@ -1,5 +1,36 @@
 # Tiled Progressive Rendering — Session Handover (2026-06-15)
 
+## Status update (2026-06-16) — branch `feat/tiled-progressive`, committed
+
+The tree is **committed** (no longer "uncommitted on main"). Since this handover was
+written, the following landed:
+
+- **M5b — adaptive band count, FPS-closed-loop** — DONE (`2e545c4`). `BandScheduler.nBands`
+  is settable; AIMD off measured fps. (Handover §6 / next-step #3.)
+- **Black-frames-after-move + the whole seed machinery** — DONE. Replaced by
+  `RenderPipeline.resize()` **preserve-content** (copy pass blits old→new, never black).
+  `captureSeed`/`seedFromLastFrame`/`maybeSeedAfterResize`/`invalidateSeed` are GONE.
+  (Handover next-step #2 — the recommended "abandon the seed entirely" path.)
+- **Post-process + interactive slider rendering** — DONE (`c75e925`). Tiling now runs
+  during display-only drags (bloom/saturation/droste stay smooth + converge while
+  dragging) and hands off adaptive↔bands correctly: `tiling` gate keys on
+  `accumulationCount > 1` (static-this-frame) instead of `!interacting`. Scene-changing
+  slider drags (power, camera blur) now downscale **consistently** (no scale 1↔2-3
+  oscillation) — adaptive engages on `interacting && accumulationCount <= 1` in
+  `UniformManager` (was a flaky per-frame accum-drop). Verified on a headed-GPU harness.
+- **Convergence-stop / battery** — DONE (`d91bf74`). The driver stops dispatching
+  RENDER_TICK once accumulation reaches the sample cap and nothing requests a frame, so a
+  settled scene no longer re-blits the post-process every frame. Wakes on camera /
+  interaction / output-changing events (all main-thread → no deadlock). (Was the "still
+  blits when converged" waste the prior survey flagged.)
+
+**Still open** (in rough priority): camera-blur (DOF) residual band-cost stalls
+(deprioritized — no live repro); **M4 — bloom at pass boundaries** (§8); worker-owned
+idle loop (§5.2); M6 (2D-tile fallback for deep zoom); the `renderTiledBand()` pipeline
+refactor (architectural, risky — leave until the tiling code is touched again anyway).
+
+---
+
 Pick-up doc for the next session. Design rationale is in
 [`tiled-progressive-rendering.md`](./tiled-progressive-rendering.md); this is **where we
 are, what broke, and what to do next.**
