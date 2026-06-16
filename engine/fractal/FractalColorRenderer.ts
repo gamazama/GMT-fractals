@@ -32,6 +32,7 @@ import { VERT_FULLSCREEN } from './shaders/gradientSample';
 import { FRAG_JULIA } from './shaders/fractalKernel';
 import { FRAG_TSAA_BLEND } from './shaders/tsaaBlend';
 import { FRAG_FRACTAL_DISPLAY } from './shaders/fractalDisplay';
+import { fitIterationRange } from './fitIterationRange';
 import { GradientLutManager } from './GradientLutManager';
 import { DeepZoomController } from './DeepZoomController';
 import { getDeepZoomRuntime } from './deepZoom/laRuntime';
@@ -234,28 +235,6 @@ const JULIA_UNIFORMS = [
   'uLightEnabled', 'uLightAngle', 'uLightHeight', 'uLightStrength', 'uAmbient',
   'uCollisionGradient', 'uCollisionRepeat', 'uCollisionPhase', 'uCollisionEnabled',
 ];
-
-/** Decode an IEEE half-float (Uint16) → JS number. Fallback for drivers that only
- *  allow HALF_FLOAT readback from an RGBA16F attachment. */
-const halfToFloat = (hbits: number): number => {
-  const s = (hbits & 0x8000) >> 15;
-  const e = (hbits & 0x7c00) >> 10;
-  const f = hbits & 0x03ff;
-  if (e === 0) return (s ? -1 : 1) * Math.pow(2, -14) * (f / 1024);
-  if (e === 0x1f) return f ? NaN : (s ? -Infinity : Infinity);
-  return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / 1024);
-};
-
-/** Linear-interpolated percentile from a uniform histogram over [lo,hi]. */
-const percentileFromHist = (hist: Int32Array, total: number, frac: number, lo: number, hi: number): number => {
-  const target = total * frac;
-  let cum = 0;
-  for (let b = 0; b < hist.length; b++) {
-    cum += hist[b];
-    if (cum >= target) return lo + ((b + 0.5) * (hi - lo)) / hist.length;
-  }
-  return hi;
-};
 
 export class FractalColorRenderer {
   private gl: WebGL2RenderingContext;
@@ -628,71 +607,7 @@ export class FractalColorRenderer {
    *  nothing escaped (all-interior view). One-shot — the caller writes the result to the store,
    *  after which colours HOLD again (the anchor is fixed) until the next fit/reset. */
   fitIterationRange(): { offset: number; scale: number } | null {
-    const gl = this.gl;
-    const w = this.simW;
-    const h = this.simH;
-    const n = w * h;
-    if (n <= 0) return null;
-
-    // texMain (att0) = vec4(DE, smoothPot, stripe, injectGate), TSAA-blended. The normalized
-    // iteration `smoothPot = smoothIter/maxIter` lives in CHANNEL 1; multiply by the active cap
-    // to recover the raw count the shader's log-iteration field uses.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.juliaTsaa.fbo);
-    gl.readBuffer(gl.COLOR_ATTACHMENT0);
-    // RGBA16F is not universally FLOAT-readable; ask the driver what it actually supports
-    // (FLOAT or HALF_FLOAT here) rather than guessing and silently reading zeros.
-    const readType = gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_TYPE) as number;
-    let smoothPotOf: (i: number) => number;
-    if (readType === gl.FLOAT) {
-      const fbuf = new Float32Array(n * 4);
-      gl.readPixels(0, 0, w, h, gl.RGBA, gl.FLOAT, fbuf);
-      smoothPotOf = (i) => fbuf[i * 4 + 1];
-    } else {
-      const hbuf = new Uint16Array(n * 4);
-      gl.readPixels(0, 0, w, h, gl.RGBA, gl.HALF_FLOAT, hbuf);
-      smoothPotOf = (i) => halfToFloat(hbuf[i * 4 + 1]);
-    }
-    const glErr = gl.getError();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    if (glErr !== gl.NO_ERROR) {
-      console.warn('[fitIterationRange] readPixels failed', glErr, 'readType', readType);
-      return null;
-    }
-
-    const maxIter = Math.max(this.effectiveMaxIter(), 1);
-    // Escaped pixels have smoothPot in (0,1); interior sits at ~1 (iters clamped to the cap).
-    // Pass 1: min/max smoothPot over escaped pixels.
-    let lo = Infinity;
-    let hi = -Infinity;
-    let count = 0;
-    for (let i = 0; i < n; i++) {
-      const sp = smoothPotOf(i);
-      if (!Number.isFinite(sp) || sp <= 1e-4 || sp >= 0.999) continue;
-      if (sp < lo) lo = sp;
-      if (sp > hi) hi = sp;
-      count++;
-    }
-    if (count === 0 || hi <= lo) {
-      console.warn('[fitIterationRange] no escaped pixels in view to fit');
-      return null;
-    }
-
-    // Pass 2: 256-bin histogram of smoothPot → 2nd/98th percentile (trims a few outliers).
-    const BINS = 256;
-    const hist = new Int32Array(BINS);
-    const inv = (BINS - 1) / (hi - lo);
-    for (let i = 0; i < n; i++) {
-      const sp = smoothPotOf(i);
-      if (!Number.isFinite(sp) || sp <= 1e-4 || sp >= 0.999) continue;
-      hist[Math.round((sp - lo) * inv)]++;
-    }
-    const spLo = percentileFromHist(hist, count, 0.02, lo, hi);
-    const spHi = percentileFromHist(hist, count, 0.98, lo, hi);
-    // Map percentile smoothPot → raw count → log-iteration window (the field's units).
-    const lLo = Math.log(1 + Math.max(spLo * maxIter, 0));
-    const lHi = Math.log(1 + Math.max(spHi * maxIter, 0));
-    const span = Math.max(lHi - lLo, 1e-3);
-    return { offset: lLo, scale: 1 / span };
+    return fitIterationRange(this.gl, this.juliaTsaa.fbo, this.simW, this.simH, this.effectiveMaxIter());
   }
 
   /** Set the render buffer + canvas dimensions. Renders at native device pixels (×DPR, capped at

@@ -67,9 +67,19 @@ export const FluidToyPanels: PanelManifest = [
         id: 'Palette', dock: 'left', order: 3,
         items: [
             { type: 'section', label: 'Mode + LUT' },
-            { type: 'feature', id: 'palette', whitelistParams: ['colorMapping', 'gradient', 'interiorColor'] },
+            { type: 'feature', id: 'palette', whitelistParams: ['colorMapping', 'colorNormV2', 'gradient', 'interiorColor'] },
             { type: 'section', label: 'Tiling' },
-            { type: 'feature', id: 'palette', whitelistParams: ['gradientRepeat', 'gradientPhase'] },
+            // iterRate (Rate) + deLogBands (Distance rings) self-gate on colorNormV2 + mode.
+            { type: 'feature', id: 'palette', whitelistParams: ['gradientRepeat', 'gradientPhase', 'iterRate', 'deLogBands'] },
+            // Iterations Fit-to-view — anchors the gradient on the visible iteration range
+            // (only meaningful for Iterations mode, which uses the iterOffset/iterScale anchor).
+            { type: 'widget', id: 'palette-fit', showIf: (s) => {
+                const p = (s as { palette?: { colorNormV2?: boolean; colorMapping?: number } }).palette;
+                return !!p?.colorNormV2 && p?.colorMapping === 0;
+            } },
+            // Slope-lighting group — only meaningful under depth-normalized colour.
+            { type: 'section', label: 'Lighting', showIf: (s) => !!(s as { palette?: { colorNormV2?: boolean } }).palette?.colorNormV2 },
+            { type: 'feature', id: 'palette', whitelistParams: ['lightEnabled', 'lightAngle', 'lightHeight', 'lightStrength', 'ambient'] },
             { type: 'section', label: 'Trap shape' },
             { type: 'feature', id: 'palette', whitelistParams: ['trapCenter', 'trapRadius', 'trapNormal', 'trapOffset'] },
             { type: 'section', label: 'Stripe' },

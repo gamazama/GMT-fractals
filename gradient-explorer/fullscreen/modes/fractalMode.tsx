@@ -73,9 +73,9 @@ const PHASE_ANIM_STEP = 1 / 480;
 const REPEATS_MAPPING = createLogMapping(0.05, 100);
 // Iterations 'Rate' (log-iteration gamma) — log track centred on 1, each drag a ratio.
 const ITER_RATE_MAPPING = createLogMapping(0.25, 8);
-// Escape radius / bailout — log track. The decomposition-cell looks live BELOW 2; larger gives
+// Escape radius / bailout — log track. The decomposition-cell looks live near 1–2; larger gives
 // smooth shells. Track emphasises the low end where the interesting structure is.
-const ESCAPE_R_MAPPING = createLogMapping(0.2, 64);
+const ESCAPE_R_MAPPING = createLogMapping(1, 10);
 
 /** The exact fractal view + colour-mapping a handoff carries to another app (fluid-toy).
  *  A flat, app-agnostic snapshot — the consumer maps it onto its own slices. */
@@ -413,9 +413,9 @@ const FractalControls: React.FC = () => {
           <ScalarInput
             value={fr.escapeR}
             onChange={setFractalEscapeR}
-            min={0.2}
-            max={64}
-            hardMin={0.1}
+            min={1}
+            max={10}
+            hardMin={1}
             hardMax={65536}
             step={0.01}
             mapping={ESCAPE_R_MAPPING}
@@ -433,7 +433,7 @@ const FractalControls: React.FC = () => {
             onChange={setFractalIterRate}
             min={0.25}
             max={8}
-            hardMin={0.01}
+            hardMin={0.001}
             hardMax={64}
             step={0.01}
             mapping={ITER_RATE_MAPPING}

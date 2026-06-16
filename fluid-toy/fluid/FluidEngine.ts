@@ -20,6 +20,7 @@ import {
 } from './shaders';
 import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../engine/utils/createBlueNoiseWebGL2';
 import { autoShallowIter } from '../../engine/fractal/iterationPolicy';
+import { fitIterationRange } from '../../engine/fractal/fitIterationRange';
 import { DeepZoomController } from './DeepZoomController';
 import { GpuTimerManager } from './GpuTimerManager';
 import { GradientLutManager } from './GradientLutManager';
@@ -235,6 +236,19 @@ export interface FluidParams {
   /** Depth-normalized colour fields (v2). True = every mode divided by its depth
    *  driver so Density ≈ 1 is sane at any zoom; false = original per-mode look. */
   colorNormV2: boolean;
+  /** Shared Rate: gamma for Iterations/Distance/Potential, spiral tightness for Angle. */
+  iterRate: number;
+  /** Iterations-mode "Fit to view" anchor (offset 0 / scale 1/LREF=0.125 = identity, colours hold). */
+  iterOffset: number;
+  iterScale: number;
+  /** Distance mode: log contour rings (true) vs linear edge glow (false). */
+  deLogBands: boolean;
+  /** Slope-lighting composite layer (multiplies any mode's colour by an escape-gradient shade). */
+  lightEnabled: boolean;
+  lightAngle: number;     // azimuth, radians
+  lightHeight: number;    // elevation factor
+  lightStrength: number;  // 0 flat .. 1 lit
+  ambient: number;        // shadow floor
   /** What fractal quantity drives the gradient lookup. */
   colorMapping: ColorMapping;
   /** Iterations used for coloring accumulators (orbit-trap, stripe, DE, etc). ≤ maxIter. */
@@ -416,6 +430,15 @@ export const DEFAULT_PARAMS: FluidParams = {
   gradientRepeat: 1,
   gradientPhase: 0,
   colorNormV2: false,
+  iterRate: 1,
+  iterOffset: 0,
+  iterScale: 0.125,
+  deLogBands: true,
+  lightEnabled: false,
+  lightAngle: Math.PI / 4,
+  lightHeight: 1.5,
+  lightStrength: 0.7,
+  ambient: 0.2,
   colorMapping: 'iterations',
   colorIter: 310,
   trapCenter: [0, 0],
@@ -1281,6 +1304,12 @@ export class FluidEngine {
     return p.autoIter ? autoShallowIter(p.zoom, p.iterMul) : Math.max(4, p.maxIter | 0);
   }
 
+  /** "Fit to view" for Iterations-mode (v2): read back the converged view's iteration range and
+   *  return the {offset, scale} anchor (the caller writes them to palette.iterOffset/iterScale). */
+  fitIterationRange(): { offset: number; scale: number } | null {
+    return fitIterationRange(this.gl, this.juliaTsaa.fbo, this.simW, this.simH, this.effectiveMaxIter());
+  }
+
   private renderJulia() {
     const gl = this.gl;
 
@@ -1351,7 +1380,11 @@ export class FluidEngine {
     // whether the active palette actually reads them. Saves ~35 ops
     // per iter for the common smoothI / iter-based modes.
     gl.uniform1i(this.progJulia.uniforms['uTrackAccum'], colorMappingNeedsAccum(this.params.colorMapping) ? 1 : 0);
-    gl.uniform1i(this.progJulia.uniforms['uTrackDeriv'], colorMappingNeedsDeriv(this.params.colorMapping) ? 1 : 0);
+    // Slope lighting builds its normal from the dz/dc derivative, so it needs derivative
+    // tracking on for ANY mode (not just DE) — else dz stays at its init value and the
+    // normal is garbage (the "decomposition overlay" look). Force it on when lighting.
+    gl.uniform1i(this.progJulia.uniforms['uTrackDeriv'],
+      (colorMappingNeedsDeriv(this.params.colorMapping) || this.params.lightEnabled) ? 1 : 0);
     gl.uniform2f(this.progJulia.uniforms['uTrapCenter'], this.params.trapCenter[0], this.params.trapCenter[1]);
     gl.uniform1f(this.progJulia.uniforms['uTrapRadius'], this.params.trapRadius);
     gl.uniform2f(this.progJulia.uniforms['uTrapNormal'], this.params.trapNormal[0], this.params.trapNormal[1]);
@@ -1417,20 +1450,18 @@ export class FluidEngine {
       gl.uniform1f(this.progJulia.uniforms['uLogPixelScale'],
         Math.log((2 * Math.max(this.params.zoom, 1e-300)) / Math.max(heightPx, 1)));
     }
-    // Iterations-mode (v2) log-iteration gamma + Fit-to-view anchor. fluid-toy has no UI
-    // for these yet, so bind identity (rate 1, offset 0, scale 1) → absolute log-iteration,
-    // colours hold across zoom. (GX drives the real values.)
-    gl.uniform1f(this.progJulia.uniforms['uIterRate'], 1);
-    gl.uniform1f(this.progJulia.uniforms['uIterOffset'], 0);
-    gl.uniform1f(this.progJulia.uniforms['uIterScale'], 0.125); // 1/LREF pivot (see gradientSample)
-    // DE Linear↔Log toggle + slope-lighting layer — no fluid-toy UI yet (lands with the artist-tool
-    // port), so bind off/linear defaults: DE = linear glow, lighting disabled (colour untouched).
-    gl.uniform1i(this.progJulia.uniforms['uDeLogBands'], 1); // Rings (prettier DE default)
-    gl.uniform1i(this.progJulia.uniforms['uLightEnabled'], 0);
-    gl.uniform1f(this.progJulia.uniforms['uLightAngle'], Math.PI / 4);
-    gl.uniform1f(this.progJulia.uniforms['uLightHeight'], 1.5);
-    gl.uniform1f(this.progJulia.uniforms['uLightStrength'], 0.7);
-    gl.uniform1f(this.progJulia.uniforms['uAmbient'], 0.2);
+    // Iterations log-iteration gamma (shared Rate). uIterOffset/uIterScale = the Fit-to-view
+    // anchor; fluid-toy has no Fit UI yet so they stay at the identity pivot (offset 0,
+    // scale 1/LREF=0.125) → colours hold across zoom.
+    gl.uniform1f(this.progJulia.uniforms['uIterRate'], this.params.iterRate);
+    gl.uniform1f(this.progJulia.uniforms['uIterOffset'], this.params.iterOffset);
+    gl.uniform1f(this.progJulia.uniforms['uIterScale'], this.params.iterScale);
+    gl.uniform1i(this.progJulia.uniforms['uDeLogBands'], this.params.deLogBands ? 1 : 0);
+    gl.uniform1i(this.progJulia.uniforms['uLightEnabled'], this.params.lightEnabled ? 1 : 0);
+    gl.uniform1f(this.progJulia.uniforms['uLightAngle'], this.params.lightAngle);
+    gl.uniform1f(this.progJulia.uniforms['uLightHeight'], this.params.lightHeight);
+    gl.uniform1f(this.progJulia.uniforms['uLightStrength'], this.params.lightStrength);
+    gl.uniform1f(this.progJulia.uniforms['uAmbient'], this.params.ambient);
     gl.uniform3f(this.progJulia.uniforms['uInteriorColor'],
       this.params.interiorColor[0], this.params.interiorColor[1], this.params.interiorColor[2]);
     gl.uniform1i(this.progJulia.uniforms['uCollisionEnabled'], this.params.collisionEnabled ? 1 : 0);
@@ -1538,7 +1569,7 @@ export class FluidEngine {
     // change that alters the baked colour must reset the accumulator,
     // not just the iteration-affecting params.
     const ic = p.interiorColor;
-    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|cL:${p.centerLow[0]},${p.centerLow[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|cn:${p.colorNormV2 ? 1 : 0}|ic:${ic[0]},${ic[1]},${ic[2]}|ce:${p.collisionEnabled ? 1 : 0}|cr:${p.collisionRepeat}|cp:${p.collisionPhase}|gV:${this.gradients.version}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}|ai:${p.autoIter ? 1 : 0}|im:${p.iterMul}|dmi:${p.deepMaxIter}`;
+    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|cL:${p.centerLow[0]},${p.centerLow[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|cn:${p.colorNormV2 ? 1 : 0}|ir:${p.iterRate}|io:${p.iterOffset}|is:${p.iterScale}|de:${p.deLogBands ? 1 : 0}|li:${p.lightEnabled ? 1 : 0},${p.lightAngle},${p.lightHeight},${p.lightStrength},${p.ambient}|ic:${ic[0]},${ic[1]},${ic[2]}|ce:${p.collisionEnabled ? 1 : 0}|cr:${p.collisionRepeat}|cp:${p.collisionPhase}|gV:${this.gradients.version}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}|ai:${p.autoIter ? 1 : 0}|im:${p.iterMul}|dmi:${p.deepMaxIter}`;
     if (hash !== this.tsaaParamHash) {
         this.tsaaParamHash = hash;
         this.tsaaSampleIndex = 0;

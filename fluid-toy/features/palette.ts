@@ -156,6 +156,36 @@ export const PaletteFeature: FeatureDefinition = {
             description: 'Normalize every colour mode by its depth driver (iteration cap / pixel scale / log potential) so Density ≈ 1 stays sane at any zoom. Off = the original look. A/B while we tune the new defaults.',
         },
 
+        // Shared "Rate" — gamma for Iterations/Distance/Potential, spiral tightness for Angle.
+        iterRate: {
+            type: 'float', default: 1, min: 0.001, max: 8, step: 0.01, scale: 'log',
+            label: 'Rate',
+            description: 'Shapes how bands distribute across iteration depth. Iterations/Distance/Potential: contrast/contour spacing gamma. Angle: spiral tightness.',
+            condition: { and: [
+                { param: 'colorNormV2', bool: true },
+                { or: [
+                    { param: 'colorMapping', eq: 0 },   // iterations
+                    { param: 'colorMapping', eq: 1 },   // angle
+                    { param: 'colorMapping', eq: 10 },  // distance
+                    { param: 'colorMapping', eq: 12 },  // potential
+                ] },
+            ] },
+        },
+        // Iterations "Fit to view" anchor — set by the Fit button (not a slider). identity =
+        // offset 0 / scale 1/LREF (0.125) → absolute log-iteration, colours hold across zoom.
+        iterOffset: { type: 'float', default: 0, min: -20, max: 20, step: 0.001, label: 'Iter offset', hidden: true },
+        iterScale: { type: 'float', default: 0.125, min: 0.001, max: 10, step: 0.001, label: 'Iter scale', hidden: true },
+        // Distance: log contour rings (on) vs linear edge glow (off).
+        deLogBands: {
+            type: 'boolean', default: true,
+            label: 'Distance rings',
+            description: 'Distance mode: even log-distance contour rings (on) vs a soft boundary glow (off).',
+            condition: { and: [
+                { param: 'colorNormV2', bool: true },
+                { param: 'colorMapping', eq: 10 },
+            ] },
+        },
+
         gradientRepeat: {
             type: 'float', default: 1, min: 0.1, max: 100, step: 0.01, scale: 'log',
             label: 'Density',
@@ -223,13 +253,46 @@ export const PaletteFeature: FeatureDefinition = {
             description: 'Colour for bounded points (pixels that never escape the iteration).',
         },
 
-        // Escape radius — used by every iteration mode. Hidden from the
-        // Palette tab to match reference toy-fluid; still round-trips
-        // in presets.
+        // ── Slope-lighting composite layer (multiplies any mode's colour by an
+        // escape-gradient normal shade). Off by default; sliders appear when enabled.
+        lightEnabled: {
+            type: 'boolean', default: false,
+            label: 'Slope lighting',
+            description: 'Shade the fractal as a lit surface using the escape-gradient normal (z/dz). Works on any colour mode.',
+            condition: { param: 'colorNormV2', bool: true },
+        },
+        lightAngle: {
+            type: 'float', default: Math.PI / 4, min: 0, max: 6.2832, step: 0.01,
+            label: 'Light angle',
+            description: 'Light azimuth (radians).',
+            condition: { and: [ { param: 'colorNormV2', bool: true }, { param: 'lightEnabled', bool: true } ] },
+        },
+        lightHeight: {
+            type: 'float', default: 1.5, min: 0.2, max: 4, step: 0.05,
+            label: 'Light elevation',
+            description: 'Light elevation factor — higher = flatter / softer relief.',
+            condition: { and: [ { param: 'colorNormV2', bool: true }, { param: 'lightEnabled', bool: true } ] },
+        },
+        lightStrength: {
+            type: 'float', default: 0.7, min: 0, max: 1, step: 0.01,
+            label: 'Relief',
+            description: 'Lighting strength — 0 flat, 1 fully lit.',
+            condition: { and: [ { param: 'colorNormV2', bool: true }, { param: 'lightEnabled', bool: true } ] },
+        },
+        ambient: {
+            type: 'float', default: 0.2, min: 0, max: 1, step: 0.01,
+            label: 'Ambient',
+            description: 'Shadow floor so lit areas never go pure black.',
+            condition: { and: [ { param: 'colorNormV2', bool: true }, { param: 'lightEnabled', bool: true } ] },
+        },
+
+        // Escape radius / bailout. Below 2 gives decomposition cells; large gives smooth
+        // shells — shapes Potential/Distance bands. Global: affects the whole fractal + the
+        // fluid forcing (it feeds the motion field via the iteration gradient).
         escapeR: {
-            type: 'float', default: 32, min: 2, max: 1024, step: 0.1,
+            type: 'float', default: 32, min: 1, max: 10, step: 0.01,
             label: 'Escape R', scale: 'log',
-            hidden: true,
+            description: 'Bailout radius. Near 1–2 → decomposition cells; toward 10 → smooth shells (≥10 looks identical). Global render param.',
         },
 
         // (Collision walls moved to CollisionFeature on Tab 7.)
@@ -269,6 +332,15 @@ export const syncPaletteToEngine = (engine: FluidEngine, palette: PaletteSlice):
         gradientRepeat:      palette.gradientRepeat,
         gradientPhase:       palette.gradientPhase,
         colorNormV2:         palette.colorNormV2,
+        iterRate:            palette.iterRate,
+        iterOffset:          palette.iterOffset,
+        iterScale:           palette.iterScale,
+        deLogBands:          palette.deLogBands,
+        lightEnabled:        palette.lightEnabled,
+        lightAngle:          palette.lightAngle,
+        lightHeight:         palette.lightHeight,
+        lightStrength:       palette.lightStrength,
+        ambient:             palette.ambient,
     });
 
     if (palette.gradient) {

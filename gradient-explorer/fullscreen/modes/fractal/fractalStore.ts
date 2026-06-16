@@ -148,7 +148,7 @@ export const setFractalColorNormV2 = (on: boolean): void => {
  *  positive). Pivoted at Lv=1 so it reshapes contrast without forcing Density to compensate. */
 export const setFractalIterRate = (rate: number): void => {
   if (!Number.isFinite(rate)) return;
-  const r = rate < 0.01 ? 0.01 : rate > 64 ? 64 : rate;
+  const r = rate < 0.001 ? 0.001 : rate > 64 ? 64 : rate;
   if (r !== state.iterRate) emit({ iterRate: r });
 };
 
@@ -196,7 +196,7 @@ export const setFractalAmbient = (a: number): void => {
  *  re-renders + resets accumulation. */
 export const setFractalEscapeR = (r: number): void => {
   if (!Number.isFinite(r)) return;
-  const v = r < 0.1 ? 0.1 : r > 65536 ? 65536 : r;
+  const v = r < 1 ? 1 : r > 65536 ? 65536 : r;
   if (v !== state.escapeR) emit({ escapeR: v });
 };
 
