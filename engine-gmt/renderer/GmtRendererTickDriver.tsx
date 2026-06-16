@@ -159,6 +159,13 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
     // Handle resize (reacts to viewport size AND DPR changes).
     useEffect(() => {
         proxy.resizeWorker(size.width, size.height, dpr);
+        // Wake the convergence-stop: a resize reallocates (blank) render targets, but
+        // a converged + idle-stopped loop holds a STALE accumulationCount (still at the
+        // cap, since no FRAME_READY has reported the resize's reset) so `converged` reads
+        // true and it would never render the new targets → a grey/blank frame. Bumping
+        // the invalidation timestamp forces a dispatch; the worker then reports the reset
+        // count → `!converged` → it re-converges and re-idles on its own.
+        lastInvalidateRef.current = performance.now();
     }, [size.width, size.height, dpr]);
 
     // Bridge FractalEvents → worker. Before boot, CONFIG/UNIFORM/RESET are
