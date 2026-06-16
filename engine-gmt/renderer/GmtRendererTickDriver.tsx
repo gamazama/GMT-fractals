@@ -74,6 +74,12 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
     const sizeRef = useRef({ width: size.width, height: size.height, dpr });
     sizeRef.current = { width: size.width, height: size.height, dpr };
 
+    // Convergence-stop state (see the gate in useFrame): the last camera we
+    // dispatched (for change detection). `lastInvalidateRef` is bumped by the wake
+    // subscription below on any output-changing event so a settled loop re-arms.
+    const convergeRef = useRef<{ lastCam: SerializedCamera | null }>({ lastCam: null });
+    const lastInvalidateRef = useRef(0);
+
     // Register R3F camera + canvas for DOM overlays (light gizmos, etc.)
     useEffect(() => {
         setViewportCamera(camera);
@@ -205,6 +211,22 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         return () => { unsubs.forEach((u) => u()); };
     }, []);
 
+    // Convergence-stop wake: anything that can change the rendered output bumps the
+    // invalidation timestamp so a settled loop resumes — display-only re-grades
+    // (bloom/saturation/droste) included, since they don't reset accumulation and so
+    // wouldn't otherwise re-arm the loop. (Camera moves + interaction are picked up
+    // directly by the gate; these are the discrete worker-bound changes.)
+    useEffect(() => {
+        const wake = () => { lastInvalidateRef.current = performance.now(); };
+        const unsubs = [
+            FRACTAL_EVENTS.UNIFORM, FRACTAL_EVENTS.CONFIG, FRACTAL_EVENTS.CONFIG_DONE,
+            FRACTAL_EVENTS.RESET_ACCUM, FRACTAL_EVENTS.OFFSET_SET, FRACTAL_EVENTS.OFFSET_SHIFT,
+            FRACTAL_EVENTS.CAMERA_SNAP, FRACTAL_EVENTS.CAMERA_TELEPORT, FRACTAL_EVENTS.TEXTURE,
+            FRACTAL_EVENTS.REGISTER_FORMULA,
+        ].map((e) => FractalEvents.on(e, wake));
+        return () => unsubs.forEach((u) => u());
+    }, []);
+
     // Performance throttle: when FPS < 20, yield 1 frame/sec to let React
     // render UI (keeps the app responsive during heavy compile/bucket-render).
     const throttleRef = React.useRef({ lastYield: 0, fps: 60, frames: 0, lastSample: 0 });
@@ -306,7 +328,41 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             ...interactionBlock, // interacting + isSceneAnimating + sessionHoldActive (ADR-0061)
         };
 
-        proxy.sendRenderTick(serializedCamera, serializedOffset, clampedDelta, renderState);
+        // ── Convergence-stop gate ────────────────────────────────────────────
+        // Skip the dispatch once the path-traced image is fully converged and nothing is
+        // requesting a new frame. Otherwise the worker re-blits the full-screen
+        // post-process (+ flush + a cross-thread round trip) every frame for zero visual
+        // change — battery/thermal drain on a settled image.
+        //
+        // "Converged" = accumulation reached the sample cap (the worker has stopped
+        // tracing). Keying on the ABSOLUTE cap — not a "stable for N ms" window — is the
+        // load-bearing detail: during tiling `accumulationCount` is the per-PASS index,
+        // constant for N band-ticks within a pass, so a time/Δ window would expire
+        // mid-convergence and freeze a noisy frame. cap=0 (infinite samples) never
+        // converges → never idles here. Every wake reason below is main-thread, so the
+        // loop can never deadlock on a frame it stopped requesting; a reset drops the
+        // count below the cap → `!converged` → it resumes on its own.
+        const cv = convergeRef.current;
+        const cap = (storeState.sampleCap as number) ?? 0;
+        const converged = cap > 0 && proxy.accumulationCount >= cap;
+        const lc = cv.lastCam;
+        const camMoved = !lc
+            || Math.abs(serializedCamera.position[0] - lc.position[0]) > 1e-6
+            || Math.abs(serializedCamera.position[1] - lc.position[1]) > 1e-6
+            || Math.abs(serializedCamera.position[2] - lc.position[2]) > 1e-6
+            || Math.abs(serializedCamera.quaternion[0] - lc.quaternion[0]) > 1e-7
+            || Math.abs(serializedCamera.quaternion[1] - lc.quaternion[1]) > 1e-7
+            || Math.abs(serializedCamera.quaternion[2] - lc.quaternion[2]) > 1e-7
+            || Math.abs(serializedCamera.quaternion[3] - lc.quaternion[3]) > 1e-7
+            || serializedCamera.fov !== lc.fov;
+        const busy = !!storeState.isBucketRendering || !!storeState.isExporting || !!storeState.adaptiveSuppressed;
+        const wantsRender = !converged || camMoved || busy
+            || interactionBlock.interacting || interactionBlock.isSceneAnimating
+            || (now - lastInvalidateRef.current) < 500;
+        if (wantsRender) {
+            proxy.sendRenderTick(serializedCamera, serializedOffset, clampedDelta, renderState);
+            cv.lastCam = serializedCamera;
+        }
     }, 1);
 
     return null;
