@@ -13,7 +13,12 @@
                the visible viewport (when the address bar is showing), so
                the body has scroll capacity. Once the user swipes past the
                intro, the address bar hides and the sticky shell locks. */
-            html, body, #root { margin: 0; padding: 0; width: 100%; background: #000; color: #fff; }
+            /* color-scheme: dark tells auto-darkening browsers (Samsung Internet
+               Dark mode, Chrome Android Auto-dark / Force-Dark, some WebViews)
+               that the page already provides a dark theme, so they skip the
+               automatic darkening pass that otherwise dims the white GMT logo
+               to grey on those devices. Every other app entry already sets this. */
+            html, body, #root { margin: 0; padding: 0; width: 100%; background: #000; color: #fff; color-scheme: dark; }
             html { min-height: 100%; }
             body { min-height: 100%; overscroll-behavior-y: none; }
             /* Desktop: lock to viewport so the layout doesn't accidentally scroll. */
@@ -33,7 +38,7 @@
                 }
             }
         </script>
-      <script type="module" crossorigin src="./assets/app-gmt-CmHw-YUe.js"></script>
+      <script type="module" crossorigin src="./assets/app-gmt-CbVZ_ahQ.js"></script>
       <link rel="modulepreload" crossorigin href="./assets/three-DQWx7qFd.js">
       <link rel="modulepreload" crossorigin href="./assets/three-fiber-GKfjny8F.js">
       <link rel="modulepreload" crossorigin href="./assets/pako-DwGzBETv.js">
@@ -46,7 +51,7 @@
       <link rel="modulepreload" crossorigin href="./assets/PwaUpdate-CWXFNu5-.js">
       <link rel="modulepreload" crossorigin href="./assets/CompositionOverlay-RLqBXenp.js">
       <link rel="modulepreload" crossorigin href="./assets/Camera-Dz-By2QQ.js">
-      <link rel="modulepreload" crossorigin href="./assets/GmtWordmark-Df2kUQeb.js">
+      <link rel="modulepreload" crossorigin href="./assets/GmtWordmark-DzS69bx1.js">
       <link rel="modulepreload" crossorigin href="./assets/AudioAnalysisEngine-DyaB3DyZ.js">
       <link rel="modulepreload" crossorigin href="./assets/ModulationEngine-Cg8y2ZHH.js">
       <link rel="modulepreload" crossorigin href="./assets/index-DANmIVB1.js">
