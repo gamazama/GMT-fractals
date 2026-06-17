@@ -1,66 +1,344 @@
+/**
+ * PanelRouter — renders the content of the currently-active dock tab by
+ * looking up its manifest entry (see engine/PanelManifest.ts).
+ *
+ * Resolution order (richest first):
+ *   1. `component: '…'`  — bespoke escape hatch. Renders that
+ *      componentRegistry entry verbatim. Use only when `items` can't
+ *      express the layout (e.g. ReactFlow node graph). Other content
+ *      paths are ignored.
+ *   2. `items: [...]`    — ordered render list of features, widgets
+ *      (with optional props), section headers, and separators. The
+ *      richest layout the manifest can produce.
+ *   3. `features: [...]` + `widgets:` — shorthand. Compiles to an
+ *      `items` list of features in order, with `widgets.before/
+ *      between/after` injected at the obvious positions.
+ *   4. Neither — fallback "Select a module" placeholder (also when the
+ *      active tab isn't in the manifest at all).
+ *
+ * PanelRouter does NOT decide tab visibility; Dock applies the
+ * manifest's panel-level `showIf` before picking an active tab. Item-
+ * level `showIf` is evaluated here.
+ */
 
 import React, { memo } from 'react';
-import { FractalState, FractalActions, PanelId } from '../types';
-import { featureRegistry } from '../engine/FeatureSystem';
+import { EngineState, EngineActions, PanelId } from '../types';
 import { componentRegistry } from './registry/ComponentRegistry';
-
-// Import FlowEditor specifically because it's a special case (not fully DDFS yet)
-// OR we rely on it being registered as 'panel-graph' which we did in ComponentRegistry.
+import { AutoFeaturePanel } from './AutoFeaturePanel';
+import {
+    getPanelDefinition,
+    evalShowIf,
+    PanelDefinition,
+    PanelItem,
+    PanelAccordionSection,
+} from '../engine/PanelManifest';
+import { SectionLabel } from './SectionLabel';
+import { CollapsibleSection } from './CollapsibleSection';
+import { Accordion, AccordionSection } from './Accordion';
+import { CompilableFeatureSection } from './CompilableFeatureSection';
+import { RuntimeSection } from './RuntimeSection';
+import { CompileDropdownSection } from './CompileDropdownSection';
+import { SectionDivider } from './SectionLabel';
+import { useEngineStore } from '../store/engineStore';
+import { BenchProfiler } from '../engine-gmt/utils/BenchProfiler';
 
 interface PanelRouterProps {
     activeTab: PanelId;
-    state: FractalState;
-    actions: FractalActions;
+    state: EngineState;
+    actions: EngineActions;
     onSwitchTab: (tab: PanelId) => void;
 }
 
-export const PanelRouter: React.FC<PanelRouterProps> = ({ activeTab, state, actions, onSwitchTab }) => {
-    // 1. Check for Graph Special Case (Modular)
-    if (activeTab === 'Graph') {
-        const GraphComponent = componentRegistry.get('panel-graph') as React.FC<any>;
-        if (GraphComponent) {
-            return <div className="h-full -mx-4 -mb-4 overflow-hidden"><GraphComponent state={state} actions={actions} /></div>;
-        }
-    }
+interface WidgetProps {
+    state: EngineState;
+    actions: EngineActions;
+    onSwitchTab: (t: PanelId) => void;
+}
 
-    // 2. Check for Camera Manager Special Case
-    if (activeTab === 'Camera Manager') {
-        const CameraManagerComponent = componentRegistry.get('panel-cameramanager') as React.FC<any>;
-        if (CameraManagerComponent) {
-            return <CameraManagerComponent state={state} actions={actions} />;
-        }
+const renderWidget = (
+    id: string,
+    keySuffix: string,
+    props: WidgetProps,
+    extraProps?: Record<string, unknown>,
+): React.ReactNode => {
+    const Component = componentRegistry.get(id) as React.FC<any> | undefined;
+    if (!Component) {
+        console.warn(`[PanelRouter] widget "${id}" not in componentRegistry`);
+        return null;
     }
-
-    // 3. Check for Engine Special Case
-    if (activeTab === 'Engine') {
-        const EngineComponent = componentRegistry.get('panel-engine') as React.FC<any>;
-        if (EngineComponent) {
-            return <EngineComponent state={state} actions={actions} />;
-        }
-    }
-
-    // 4. Find feature associated with this tab
-    const tabs = featureRegistry.getTabs();
-    const activeFeature = tabs.find(t => t.label === activeTab);
-    
-    if (activeFeature) {
-        const Component = componentRegistry.get(activeFeature.componentId);
-        if (Component) {
-             // Pass state and actions. Legacy panels expect them directly.
-             // We also pass onSwitchTab for FormulaPanel
-             // We pass featureId and sliceState to satisfy FeatureComponentProps for newer components
-             const featureId = activeFeature.id;
-             const sliceState = (state as any)[featureId];
-             
-             return <Component 
-                state={state} 
-                actions={actions} 
-                onSwitchTab={onSwitchTab}
-                featureId={featureId}
-                sliceState={sliceState}
-             />;
-        }
-    }
-
-    return <div className="flex h-full items-center justify-center text-gray-600 text-xs italic">Select a module</div>;
+    return <Component key={`${id}::${keySuffix}`} {...props} {...(extraProps ?? {})} />;
 };
+
+/** Compile the legacy shorthand (`features` + `widgets`) into a flat
+ *  `items` array so the renderer below has one code path. */
+const featuresToItems = (def: PanelDefinition): PanelItem[] => {
+    if (!def.features || def.features.length === 0) return [];
+    const w = def.widgets;
+    const out: PanelItem[] = [];
+    (w?.before ?? []).forEach((id) => out.push({ type: 'widget', id }));
+    def.features.forEach((featureId) => {
+        out.push({ type: 'feature', id: featureId });
+        (w?.between?.[featureId] ?? []).forEach((id) => out.push({ type: 'widget', id }));
+    });
+    (w?.after ?? []).forEach((id) => out.push({ type: 'widget', id }));
+    return out;
+};
+
+/** Wrap a node in a data-help-id div when the manifest item declares
+ *  one. Lets right-click contextual help pick up panel-level grouping
+ *  (e.g. an Effects roll-up) without requiring the underlying feature
+ *  to know about it. Skips the wrapper when no helpId is set so we
+ *  don't litter the DOM. */
+const withHelpId = (node: React.ReactNode, helpId: string | undefined, key: string): React.ReactNode => {
+    if (node === null || node === undefined) return node;
+    if (!helpId) return node;
+    return (
+        <div key={key} data-help-id={helpId}>
+            {node}
+        </div>
+    );
+};
+
+const renderItem = (
+    item: PanelItem,
+    index: number,
+    state: EngineState,
+    widgetProps: WidgetProps,
+): React.ReactNode => {
+    if (!evalShowIf(item.showIf, state as never)) return null;
+
+    let node: React.ReactNode;
+    switch (item.type) {
+        case 'separator':
+            // Shared SectionDivider keeps the bespoke 1.5px bar + drop-
+            // gradient consistent with the dividers each section component
+            // (Runtime / Compilable / CompileDropdown) emits at its bottom.
+            return <div key={`sep-${index}`}><SectionDivider /></div>;
+
+        case 'section':
+            node = (
+                <div key={`section-${index}-${item.label}`} className="px-2 pt-2">
+                    <SectionLabel>{item.label}</SectionLabel>
+                </div>
+            );
+            break;
+
+        case 'widget':
+            node = renderWidget(item.id, `item-${index}`, widgetProps, item.props);
+            break;
+
+        case 'feature':
+            node = (
+                <AutoFeaturePanel
+                    key={`feat-${item.id}-${index}`}
+                    featureId={item.id}
+                    groupFilter={item.groupFilter}
+                    whitelistParams={item.whitelistParams}
+                    excludeParams={item.excludeParams}
+                    className={item.className}
+                />
+            );
+            break;
+
+        case 'collapsible':
+            node = (
+                <CollapsibleSection
+                    key={`collapsible-${index}-${item.label}`}
+                    label={item.label}
+                    defaultOpen={item.defaultOpen}
+                >
+                    {item.items.map((child, childIdx) =>
+                        renderItem(child, index * 1000 + childIdx, state, widgetProps),
+                    )}
+                </CollapsibleSection>
+            );
+            break;
+
+        case 'accordion': {
+            const visible = item.sections.filter((s) =>
+                evalShowIf(s.showIf, state as never),
+            );
+            const sections: AccordionSection[] = visible.map((s, sIdx) =>
+                accordionSectionToProp(s, sIdx, index, state, widgetProps),
+            );
+            node = <Accordion key={`accordion-${index}`} sections={sections} />;
+            break;
+        }
+
+        case 'compilable': {
+            const dynamic = item.labelFn?.(state as never);
+            node = (
+                <CompilableFeatureSection
+                    key={`compilable-${item.id}-${index}`}
+                    featureId={item.id}
+                    helpId={item.helpId}
+                    compileParam={item.compileParam}
+                    runtimeToggleParam={item.runtimeToggleParam}
+                    compileSettingsParams={item.compileSettingsParams}
+                    runtimeGroup={item.runtimeGroup}
+                    runtimeExcludeParams={item.runtimeExcludeParams}
+                    label={dynamic || item.label}
+                    compileMessage={item.compileMessage}
+                    requires={item.requires}
+                />
+            );
+            break;
+        }
+
+        case 'compile-dropdown': {
+            const dynamic = item.labelFn?.(state as never);
+            node = (
+                <CompileDropdownSection
+                    key={`compile-dropdown-${item.id}-${index}`}
+                    featureId={item.id}
+                    helpId={item.helpId}
+                    compileSettingsParams={item.compileSettingsParams}
+                    runtimeGroup={item.runtimeGroup}
+                    runtimeExcludeParams={item.runtimeExcludeParams}
+                    label={dynamic || item.label}
+                    compileMessage={item.compileMessage}
+                />
+            );
+            break;
+        }
+
+        case 'runtime-section': {
+            const dynamic = item.labelFn?.(state as never);
+            node = (
+                <RuntimeSection
+                    key={`runtime-section-${item.id}-${index}`}
+                    featureId={item.id}
+                    helpId={item.helpId}
+                    runtimeToggleParam={item.runtimeToggleParam}
+                    runtimeGroup={item.runtimeGroup}
+                    runtimeExcludeParams={item.runtimeExcludeParams}
+                    label={dynamic || item.label}
+                />
+            );
+            break;
+        }
+
+        default:
+            return null;
+    }
+    // Per-item BenchProfiler boundary for diagnosing per-RAF commits.
+    // Tag includes type and id (where present) so the bench output can
+    // attribute commits to a specific manifest item.
+    const itemTag = item.type === 'feature' || item.type === 'widget' || item.type === 'compilable' || item.type === 'compile-dropdown' || item.type === 'runtime-section'
+        ? `${item.type}:${(item as any).id}${(item as any).groupFilter ? `:${(item as any).groupFilter}` : ''}`
+        : `${item.type}:${index}`;
+    const wrapped = (
+        <BenchProfiler key={`item-${index}-${itemTag}`} id={`Item:${itemTag}`}>
+            {node}
+        </BenchProfiler>
+    );
+    return withHelpId(wrapped, item.helpId, `helpwrap-${index}`);
+};
+
+const accordionSectionToProp = (
+    s: PanelAccordionSection,
+    sIdx: number,
+    panelItemIdx: number,
+    state: EngineState,
+    widgetProps: WidgetProps,
+): AccordionSection => {
+    const isActive = evalShowIf(s.activePredicate, state as never);
+    const headerRight = s.headerWidget
+        ? renderWidget(s.headerWidget, `accordion-${panelItemIdx}-${sIdx}-hdr`, widgetProps)
+        : undefined;
+    const closedBadge =
+        !isActive && s.closedBadge ? (
+            <span className="text-[8px] text-gray-600">{s.closedBadge}</span>
+        ) : undefined;
+    const defaultOpen =
+        typeof s.defaultOpen === 'boolean'
+            ? s.defaultOpen
+            : s.defaultOpen
+              ? evalShowIf(s.defaultOpen, state as never)
+              : undefined;
+    return {
+        id: s.id,
+        label: s.label,
+        helpId: s.helpId,
+        dimmed: s.activePredicate !== undefined && !isActive,
+        defaultOpen,
+        group: s.group,
+        groupFallback: s.groupFallback,
+        headerRight,
+        closedBadge,
+        children: (
+            <>
+                {s.items.map((child, childIdx) =>
+                    renderItem(
+                        child,
+                        panelItemIdx * 10000 + sIdx * 100 + childIdx,
+                        state,
+                        widgetProps,
+                    ),
+                )}
+            </>
+        ),
+    };
+};
+
+const PanelRouterInner: React.FC<PanelRouterProps> = ({
+    activeTab,
+    state,
+    actions,
+    onSwitchTab,
+}) => {
+    const def: PanelDefinition | undefined = getPanelDefinition(activeTab);
+    // Subscribe to store changes so item-level `showIf` predicates re-evaluate.
+    // (`state` prop is captured by the parent's render but item showIf reads
+    // are done via getState calls that won't re-trigger renders here without
+    // a subscription. The Dock-level subscription already covers most cases.)
+    useEngineStore((s) => s);
+
+    if (!def) {
+        return (
+            <div className="flex h-full items-center justify-center text-gray-600 text-xs italic">
+                Select a module
+            </div>
+        );
+    }
+
+    // Escape hatch — bespoke component owns its layout.
+    if (def.component) {
+        const Component = componentRegistry.get(def.component) as React.FC<WidgetProps> | undefined;
+        if (!Component) {
+            console.warn(`[PanelRouter] panel "${def.id}" references unregistered component "${def.component}"`);
+            return (
+                <div className="flex h-full items-center justify-center text-gray-600 text-xs italic">
+                    Component not registered: {def.component}
+                </div>
+            );
+        }
+        return (
+            <div className="h-full" data-help-id={def.helpId}>
+                <Component state={state} actions={actions} onSwitchTab={onSwitchTab} />
+            </div>
+        );
+    }
+
+    // Items wins over the legacy shorthand if explicitly set.
+    const items: PanelItem[] = def.items && def.items.length > 0
+        ? def.items
+        : featuresToItems(def);
+
+    if (items.length === 0) {
+        return (
+            <div className="flex h-full items-center justify-center text-gray-600 text-xs italic">
+                Select a module
+            </div>
+        );
+    }
+
+    const widgetProps: WidgetProps = { state, actions, onSwitchTab };
+    return (
+        <div className="flex flex-col" data-help-id={def.helpId}>
+            {items.map((item, idx) => renderItem(item, idx, state, widgetProps))}
+        </div>
+    );
+};
+
+export const PanelRouter = memo(PanelRouterInner);

@@ -5,15 +5,22 @@ import { AnimationStore } from './animation/types';
 import { createPlaybackSlice } from './animation/playbackSlice';
 import { createSelectionSlice } from './animation/selectionSlice';
 import { createSequenceSlice } from './animation/sequenceSlice';
+import { createUiSlice } from './animation/uiSlice';
+import { createAudioClipsSlice } from './animation/audioClipsSlice';
 
 export const useAnimationStore = create<AnimationStore>()(subscribeWithSelector((set, get, api) => ({
     ...createPlaybackSlice(set, get, api),
     ...createSelectionSlice(set, get, api),
-    ...createSequenceSlice(set, get, api)
+    ...createSequenceSlice(set, get, api),
+    ...createUiSlice(set, get, api),
+    ...createAudioClipsSlice(set, get, api)
 })));
 
-// Expose for FractalStore to avoid circular dependency lookup issues during save
+// Dev-console handle (matching the __camera / __animEngine / __store
+// pattern). Production code uses the imported reference directly —
+// the cross-store access path that previously needed this handle was
+// resolved by importing animationStore eagerly into engineStore (no
+// cycle: animationStore depends only on its own slice files).
 if (typeof window !== 'undefined') {
-    // @ts-expect-error — custom window global for cross-store access without import cycle
-    window.useAnimationStore = useAnimationStore;
+    (window as any).useAnimationStore = useAnimationStore;
 }

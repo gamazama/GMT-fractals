@@ -10,6 +10,9 @@
  *   - Modular (interlace feature bails on Modular either side)
  *   - Formulas with shader.selfContainedSDE (JuliaMorph, MandelTerrain)
  *
+ * Setup: requires `debug/validator.html` (gitignored by convention; copy from
+ * stable: `cp ../stable/debug/validator.html debug/validator.html`).
+ *
  * Usage:
  *   npx tsx debug/native-interlace-sweep.mts                         # full N×N
  *   npx tsx debug/native-interlace-sweep.mts --primary=Mandelbulb    # one row
@@ -23,9 +26,6 @@
  * Output:
  *   debug/native-interlace-sweep.jsonl   — one row per pair
  *   debug/thumbnails/interlace/<hash>.png
- *
- * Render a matrix view afterward:
- *   npx tsx debug/native-interlace-matrix.mts
  */
 
 import * as fs from 'fs';
@@ -33,12 +33,12 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { chromium, Browser, Page } from 'playwright';
 
-import { registry } from '../engine/FractalRegistry.ts';
-import { ShaderFactory } from '../engine/ShaderFactory.ts';
-import type { ShaderConfig } from '../engine/ShaderFactory.ts';
-import { createDefaultShaderConfig } from '../engine/ConfigDefaults.ts';
-import { registerFeatures } from '../features/index.ts';
-import '../formulas/index.ts';  // side-effect: registers all 45 native FractalDefinitions
+import { registry } from '../engine-gmt/engine/FractalRegistry.ts';
+import { ShaderFactory } from '../engine-gmt/engine/ShaderFactory.ts';
+import type { ShaderConfig } from '../engine-gmt/engine/ShaderFactory.ts';
+import { createDefaultShaderConfig } from '../engine-gmt/engine/ConfigDefaults.ts';
+import { registerFeatures } from '../engine-gmt/features/index.ts';
+import '../engine-gmt/formulas/index.ts';  // side-effect: registers all native FractalDefinitions
 
 registerFeatures();
 

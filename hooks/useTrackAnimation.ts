@@ -5,7 +5,26 @@ import { KeyStatus } from '../components/Icons';
 import { evaluateTrackValue, isRotationTrack } from '../utils/timelineUtils';
 
 export const useTrackAnimation = (trackId: string | undefined, currentValue: number, label: string) => {
-    const { sequence, currentFrame, addTrack, addKeyframe, removeKeyframe, isRecording, snapshot } = useAnimationStore();
+    // Narrow per-field subscriptions instead of destructuring useAnimationStore()
+    // (full-store sub). The animationStore receives many no-op `set()` calls per
+    // RAF (e.g. AnimationEngine.tick / scrub-style writes that pass equal values),
+    // and a full subscription forces every <Slider> in every panel to re-render
+    // each time. With narrow selectors Zustand only fires when the chosen field
+    // actually changed — verified via debug/probe-fpw.mts: 240 no-op notifs/4s
+    // → 0 re-renders here.
+    //
+    // Action selectors via `useAnimationStore((s) => s.fn)` — Zustand returns
+    // the stable slice-init ref and bails on Object.is, so consumers using
+    // these in useCallback/useEffect deps get a stable identity across
+    // renders. (The earlier wrapper-closure form returned a NEW function each
+    // render, which broke drag handlers that pinned listeners via deps.)
+    const sequence       = useAnimationStore((s) => s.sequence);
+    const currentFrame   = useAnimationStore((s) => s.currentFrame);
+    const isRecording    = useAnimationStore((s) => s.isRecording);
+    const addTrack       = useAnimationStore((s) => s.addTrack);
+    const addKeyframe    = useAnimationStore((s) => s.addKeyframe);
+    const removeKeyframe = useAnimationStore((s) => s.removeKeyframe);
+    const snapshot       = useAnimationStore((s) => s.snapshot);
 
     // 1. Status Calculation
     const status: KeyStatus = (() => {

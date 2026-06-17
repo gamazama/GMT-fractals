@@ -13,6 +13,11 @@ export interface PostProcessOptions {
   smoothIterations?: number;
   lambda?: number;
   mu?: number;
+  /** Welds vertices closer than `mergeEpsilon` (default 1e-6) via spatial hashing. Off by default. */
+  mergeVertices?: boolean;
+  mergeEpsilon?: number;
+  /** Flips face winding so face normals point outward from the mesh centroid. Off by default. */
+  consistentWinding?: boolean;
 }
 
 // ============================================================================
@@ -277,6 +282,10 @@ export function postProcessMesh(mesh: MeshData, options?: PostProcessOptions): M
   const lambda = opts.lambda ?? 0.5;
   const mu = opts.mu ?? -(lambda + 0.03);
 
+  if (opts.mergeVertices) {
+    mesh = mergeCloseVertices(mesh, opts.mergeEpsilon ?? 1e-6);
+  }
+
   // Skip degenerate face removal for very large meshes (JS array push overhead)
   if (mesh.faceCount < 5000000) {
     mesh = removeDegenerateFaces(mesh);
@@ -290,6 +299,10 @@ export function postProcessMesh(mesh: MeshData, options?: PostProcessOptions): M
     } else {
       mesh = taubinSmooth(mesh, lambda, mu, smoothIterations);
     }
+  }
+
+  if (opts.consistentWinding) {
+    mesh = ensureConsistentWinding(mesh);
   }
 
   mesh = computeVertexNormals(mesh);

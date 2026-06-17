@@ -2,6 +2,7 @@
 import React from 'react';
 import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { useHelpContextMenu } from '../hooks/useHelpContextMenu';
+import { useSelectRenderPause } from '../hooks/useRenderPause';
 import { GenericDropdown } from './GenericDropdown';
 import type { GenericDropdownOption } from './GenericDropdown';
 
@@ -25,11 +26,14 @@ interface DropdownProps<T> {
 export function Dropdown<T extends string | number>({ label, value, options, onChange, helpId, fullWidth, className = '', selectClassName = '', labelSuffix }: DropdownProps<T>) {
     const { handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
     const handleContextMenu = useHelpContextMenu();
+    // Pause rendering while the native select is open; resume on selection.
+    const { selectHandlers, resume } = useSelectRenderPause();
 
     const handleChange = (val: T) => {
         handleInteractionStart('param');
         onChange(val);
         handleInteractionEnd();
+        resume();
     };
 
     return (
@@ -44,6 +48,7 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
             labelSuffix={labelSuffix}
             data-help-id={helpId}
             onContextMenu={handleContextMenu}
+            selectHandlers={selectHandlers}
         />
     );
 }

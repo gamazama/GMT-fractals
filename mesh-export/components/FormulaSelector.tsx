@@ -1,9 +1,9 @@
 import React, { useRef } from 'react';
 import { useMeshExportStore, DEFAULT_QUALITY } from '../store/meshExportStore';
-import { registry } from '../../engine/FractalRegistry';
-import { loadGMFScene } from '../../utils/FormulaFormat';
+import { registry } from '../../engine-gmt/engine/FractalRegistry';
+import { loadGMFScene } from '../../engine-gmt/utils/FormulaFormat';
 import { GenericDropdown } from '../../components/GenericDropdown';
-import type { FractalDefinition } from '../../types/fractal';
+import type { FractalDefinition } from '../../engine-gmt/types/fractal';
 import type { FormulaType } from '../../types';
 
 /** Build default parameter values from a FractalDefinition, including Julia from defaultPreset */
@@ -84,6 +84,13 @@ export function loadGMFIntoStore(text: string, filename?: string): void {
     });
     if (quality.distanceMetric !== undefined) {
       params.distanceMetric = quality.distanceMetric;
+    }
+    // DE bailout drives self-contained formulas' geometry (e.g. MandelTerrain),
+    // so the mesh must use the scene value rather than the shader default.
+    if (quality.deBailout !== undefined) {
+      params.deBailout = quality.deBailout;
+    }
+    if (quality.distanceMetric !== undefined || quality.deBailout !== undefined) {
       store.setFormulaParams(params);
     }
   } else {

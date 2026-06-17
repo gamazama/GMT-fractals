@@ -1,9 +1,9 @@
 import React from 'react';
 import { useMeshExportStore } from '../store/meshExportStore';
-import { registry } from '../../engine/FractalRegistry';
+import { registry } from '../../engine-gmt/engine/FractalRegistry';
 import { runMeshPipeline, runExportMesh } from '../pipeline/mesh-pipeline';
 import type { PipelineCallbacks, MeshPipelineParams } from '../pipeline/types';
-import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
+import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 import { downloadBlob } from '../algorithms/mesh-writers';
 import { resetCancel, requestCancel } from '../algorithms/dc-core';
 import { resetCancel as resetCancelSparse, requestCancel as requestCancelSparse } from '../algorithms/sparse-grid';

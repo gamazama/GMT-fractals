@@ -3,7 +3,10 @@ import React, { useRef, useEffect } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
 import { animationEngine } from '../../engine/AnimationEngine';
 import { getTimeGridSteps } from '../../utils/GraphUtils';
-import { TIMELINE_SIDEBAR_WIDTH, TIMELINE_RULER_HEIGHT } from '../../data/constants';
+import { TIMELINE_RULER_HEIGHT } from '../../data/constants';
+import { useSidebarResize } from '../../hooks/useSidebarResize';
+import { useInteractionGesture } from '../../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../../engine-gmt/interaction/interactionSources';
 
 interface TimelineRulerProps {
     FRAME_WIDTH: number;
@@ -14,11 +17,20 @@ interface TimelineRulerProps {
 
 export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durationFrames, scrollLeft, visibleWidth }) => {
     const rulerRef = useRef<HTMLCanvasElement>(null);
-    const { currentFrame, seek, setIsScrubbing } = useAnimationStore();
+    // Narrow per-field sub — `useAnimationStore()` (full sub) re-renders on
+    // every no-op set() call (~60 Hz). currentFrame is the only reactive
+    // value here; seek/setIsScrubbing are stable action refs.
+    const currentFrame   = useAnimationStore((s) => s.currentFrame);
+    const seek           = useAnimationStore((s) => s.seek);
+    const setIsScrubbing = useAnimationStore((s) => s.setIsScrubbing);
+    const sidebarWidth   = useAnimationStore((s) => s.timelineSidebarWidth);
+    const handleSidebarResizeStart = useSidebarResize();
+    // Session 'scrub' for the playhead drag, anchored to the setIsScrubbing
+    // boundary (ADR-0061 P3b). Window mouse-listener gesture — unmount cleanup +
+    // watchdog back the release.
+    const scrub = useInteractionGesture(INTERACTION_SOURCES.scrub);
 
-    // The canvas should fill the visible timeline area (viewport - sidebar)
-    // We add a small buffer to prevent flickering at edges
-    const canvasWidth = Math.max(1, visibleWidth - TIMELINE_SIDEBAR_WIDTH);
+    const canvasWidth = Math.max(1, visibleWidth - sidebarWidth);
 
     useEffect(() => {
         const canvas = rulerRef.current;
@@ -123,8 +135,9 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
         e.stopPropagation();
         
         const isMiddleClick = e.button === 1;
-        setIsScrubbing(true); 
-        
+        setIsScrubbing(true);
+        scrub.begin();
+
         const rect = e.currentTarget.getBoundingClientRect();
         
         const update = (clientX: number) => {
@@ -143,6 +156,7 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
 
         const move = (ev: MouseEvent) => update(ev.clientX);
         const up = () => {
+            scrub.end();
             setIsScrubbing(false);
             window.removeEventListener('mousemove', move);
             window.removeEventListener('mouseup', up);
@@ -157,11 +171,19 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
             style={{ height: TIMELINE_RULER_HEIGHT }}
         >
             {/* Fixed Sidebar Header */}
-            <div 
-                className="sticky left-0 z-30 w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 text-[9px] text-gray-500 font-bold"
-                style={{ width: TIMELINE_SIDEBAR_WIDTH }}
+            <div
+                className="sticky left-0 z-30 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 text-[9px] text-gray-500 font-bold relative"
+                style={{ width: sidebarWidth }}
             >
-                Tracks
+                <span>Tracks</span>
+                {/* Drag handle — 6px hit zone at the right edge, 1px visible bar */}
+                <div
+                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-40 group/resize hover:bg-cyan-500/20"
+                    onMouseDown={handleSidebarResizeStart}
+                    title="Drag to resize sidebar"
+                >
+                    <div className="absolute right-0 top-0 h-full w-px bg-white/0 group-hover/resize:bg-cyan-400 transition-colors" />
+                </div>
             </div>
             
             {/* 

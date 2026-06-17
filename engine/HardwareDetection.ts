@@ -3,17 +3,36 @@ import type { HardwareProfile } from '../types/viewport';
 import { DEFAULT_HARD_CAP, MOBILE_HARD_CAP } from '../data/constants';
 
 /**
+ * Mobile-viewport heuristic shared by hardware detection and runtime
+ * layout. Coarse pointer OR viewport < 768px CSS wide. SSR-safe.
+ *
+ * @invariant Single source of truth for the 768px breakpoint —
+ *   `hooks/useMobileLayout.ts` and `detectHardwareProfile` both consume
+ *   this. Changing the threshold or pointer media query happens here.
+ */
+export function isMobileViewport(): boolean {
+    return typeof window !== 'undefined' && (
+        window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768
+    );
+}
+
+/**
  * Detect device hardware capabilities.
  * Called once at boot — the result is immutable for the session.
  *
  * When a WebGL2 context is available (worker-side), probes Float32
  * render target support. On the main thread (no GL context), falls
  * back to heuristics (pointer type, viewport width, user agent).
+ *
+ * @invariant Not cached — each call allocates and deletes a 1x1 RGBA32F
+ *   framebuffer + texture. Safe to call repeatedly but not free;
+ *   detect once at boot.
+ * @invariant `compilerHardCap` flattens both mobile tiers to
+ *   `MOBILE_HARD_CAP` (256); desktop uses `DEFAULT_HARD_CAP` (2000).
+ *   Units are raymarch/DE loop iteration count, not pixels.
  */
 export function detectHardwareProfile(gl?: WebGL2RenderingContext): HardwareProfile {
-    const isMobile = typeof window !== 'undefined' && (
-        window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768
-    );
+    const isMobile = isMobileViewport();
 
     // Probe Float32 render target support if we have a GL context
     let supportsFloat32 = true;

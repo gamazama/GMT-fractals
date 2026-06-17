@@ -1,6 +1,14 @@
 // sdf-eval.ts — CPU SDF evaluators + Newton vertex projection
 // Converted from prototype sdf-eval.js
 // GMT Fractal Explorer — mesh export
+//
+// @deprecated No live consumer inside `mesh-export/`. Newton projection
+//   runs on GPU via `gpuNewtonProject` (mesh-export/pipeline/mesh-pipeline.ts).
+//   Retained as a CPU prototype-parity reference: when the GPU path needs
+//   verification, these functions can be ported back into a test harness.
+//   `setActiveFormula` / `setActiveFormulaParams` have no callers either.
+//   Delete or move under a `legacy/` subdir once parity verification is
+//   no longer needed.
 
 // ============================================================================
 // Types

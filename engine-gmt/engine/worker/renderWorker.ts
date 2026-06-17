@@ -1,0 +1,858 @@
+/**
+ * renderWorker.ts — Web Worker entry point for offscreen fractal rendering.
+ *
+ * Owns: FractalEngine, THREE.WebGLRenderer, OffscreenCanvas
+ * Receives: RENDER_TICK (camera + delta), CONFIG, UNIFORM, etc.
+ * Sends back: FRAME_READY (shadow state; canvas auto-presents via transferControlToOffscreen)
+ */
+
+import * as THREE from 'three';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { FractalEngine } from '../FractalEngine';
+import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
+import { registry } from '../FractalRegistry';
+import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState } from './WorkerProtocol';
+import type { Capability } from '../../types/capabilities';
+import { WorkerExporter } from './WorkerExporter';
+import { bucketRenderer } from '../BucketRenderer';
+import { handleHistogramReadback } from './WorkerHistogram';
+import { WorkerDepthReadback } from './WorkerDepthReadback';
+import { BloomPass } from '../BloomPass';
+import { createFullscreenPass, type FullscreenPass } from '../utils/FullscreenQuad';
+import { handleRenderTick as runRenderTick } from './handleRenderTick';
+import { getAdaptiveResizeCount } from '../managers/UniformManager';
+
+let engine: FractalEngine | null = null;
+let renderer: THREE.WebGLRenderer | null = null;
+let canvas: OffscreenCanvas | null = null;
+let camera: THREE.PerspectiveCamera | null = null;
+let exporter: WorkerExporter | null = null;
+
+// Display scene for blitting output texture to the OffscreenCanvas
+let displayPass: FullscreenPass | null = null;
+let displayScene: THREE.Scene | null = null;
+let displayCamera: THREE.OrthographicCamera | null = null;
+let displayMesh: THREE.Mesh | null = null;
+
+const depthReadback = new WorkerDepthReadback();
+let bloomPass: BloomPass | null = null;
+
+function postMsg(msg: WorkerToMainMessage, transfer?: Transferable[]) {
+    if (transfer) {
+        (self as any).postMessage(msg, transfer);
+    } else {
+        (self as any).postMessage(msg);
+    }
+}
+
+function getShadowState(): WorkerShadowState {
+    if (!engine) {
+        return {
+            isBooted: false, isCompiling: false, hasCompiledShader: false,
+            isPaused: false, dirty: false, lastCompileDuration: 0,
+            lastMeasuredDistance: 1, centerIsSky: false, accumulationCount: 0, convergenceValue: 1.0, frameCount: 0,
+            sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 }
+        };
+    }
+    const offset = engine.sceneOffset;
+    return {
+        isBooted: engine.isBooted,
+        isCompiling: engine.isCompiling,
+        hasCompiledShader: engine.hasCompiledShader,
+        isPaused: engine.isPaused,
+        dirty: engine.dirty,
+        lastCompileDuration: engine.lastCompileDuration,
+        lastMeasuredDistance: engine.lastMeasuredDistance,
+        centerIsSky: engine.centerIsSky,
+        accumulationCount: engine.pipeline?.accumulationCount ?? 0,
+        convergenceValue: engine.pipeline?.getLastConvergenceResult() ?? 1.0,
+        frameCount: 0,
+        fboResizes: getAdaptiveResizeCount(),
+        sceneOffset: {
+            x: offset.x, y: offset.y, z: offset.z,
+            xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0
+        }
+    };
+}
+
+function initDisplayScene() {
+    // Mesh material is assigned after engine boots — uses engine.materials.displayMaterial
+    // which includes full post-processing (ACES tone mapping, sRGB, color grading)
+    displayPass = createFullscreenPass();
+    displayScene = displayPass.scene;
+    displayCamera = displayPass.camera;
+    displayMesh = displayPass.mesh;
+}
+
+// Deferred init state — holds INIT params until BOOT triggers full setup.
+// This allows the worker to stay responsive to further restarts while the
+// GPU may still be busy with an abandoned compile from a terminated worker.
+let _deferredInit: Extract<MainToWorkerMessage, { type: 'INIT' }> | null = null;
+let _pendingResize: { width: number; height: number; dpr: number } | null = null;
+
+/** Lightweight INIT: just stash the message. Heavy WebGL setup is deferred
+ *  to setupEngine() which runs when BOOT arrives. This keeps the worker
+ *  responsive to further restarts while the GPU may still be draining an
+ *  abandoned compile from a terminated worker. */
+function handleInit(msg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
+    _deferredInit = msg;
+    postMsg({ type: 'READY' });
+}
+
+/** Full engine setup — called once when BOOT arrives. Creates WebGL renderer,
+ *  engine, event bridges, and applies the initial config. */
+function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
+    canvas = initMsg.canvas;
+
+    // Create WebGL renderer on the OffscreenCanvas.
+    // `desynchronized` (present-path engagement-floor experiment, NOT ADR-0061):
+    // opt-in via the page URL `?lowlatency=1` (default OFF → no behaviour change).
+    // Low-latency present bypasses the compositor's double/triple-buffer + DWM
+    // sync that the rAF gap waits on — the cheapest lever against the 300–800ms
+    // engagement floor. See plan "Present-path engagement floor".
+    renderer = new THREE.WebGLRenderer({
+        canvas: canvas as any,
+        alpha: false,
+        depth: false,
+        antialias: false,
+        powerPreference: 'high-performance',
+        preserveDrawingBuffer: false,
+        desynchronized: initMsg.desynchronized === true,
+    } as THREE.WebGLRendererParameters & { desynchronized?: boolean });
+    // We manage sRGB encoding ourselves via uEncodeOutput in the post-process shader.
+    // Set LinearSRGBColorSpace so Three.js compiles identical shader programs for canvas
+    // and render-target rendering (avoids program hash divergence from outputColorSpace).
+    // drawingBufferColorSpace stays 'srgb' regardless, so the browser correctly interprets
+    // our sRGB-encoded output for canvas compositing.
+    renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+
+    // Surface shader compile/link failures with the actual GLSL log — the most
+    // likely cause of a black viewport on a weak mobile GPU (precision/budget
+    // limits the desktop never hits). Pre-boot, WorkerProxy turns this ERROR
+    // into the friendly boot-failure panel + diagnostics; post-boot (a failed
+    // recompile on formula switch) it's just logged. THREE doesn't throw on
+    // shader error, so without this the frame is silently black.
+    renderer.debug.checkShaderErrors = true;
+    renderer.debug.onShaderError = (gl, program, glVertexShader, glFragmentShader) => {
+        const vLog = gl.getShaderInfoLog(glVertexShader) || '';
+        const fLog = gl.getShaderInfoLog(glFragmentShader) || '';
+        const pLog = gl.getProgramInfoLog(program) || '';
+        const detail = [pLog, fLog && `FRAGMENT:\n${fLog}`, vLog && `VERTEX:\n${vLog}`]
+            .filter(Boolean).join('\n').slice(0, 2000);
+        postMsg({ type: 'ERROR', message: `Shader compile/link failed:\n${detail || '(no log)'}` });
+    };
+
+    // Bench instrumentation — count two operations that aren't surfaced by
+    // renderer.info: readRenderTargetPixels (sync GPU stall, used by depth
+    // probe / histogram / picking) and setRenderTarget switches (counts
+    // every framebuffer bind, including duplicates which usually indicate
+    // a missed batching opportunity). Counters live on the renderer's
+    // .info struct (extended) so GET_RENDER_INFO returns them in the same
+    // payload as the built-in counts. Cost is two integer increments per
+    // call; trivially below the noise floor.
+    const benchCounts = { readRenderTargetPixels: 0, setRenderTargetSwitches: 0 };
+    (renderer as any).__benchCounts = benchCounts;
+    const origRead = renderer.readRenderTargetPixels.bind(renderer);
+    renderer.readRenderTargetPixels = function (...args: any[]) {
+        benchCounts.readRenderTargetPixels += 1;
+        return (origRead as any)(...args);
+    };
+    const origSetTarget = renderer.setRenderTarget.bind(renderer);
+    renderer.setRenderTarget = function (target: any, ...rest: any[]) {
+        benchCounts.setRenderTargetSwitches += 1;
+        return (origSetTarget as any)(target, ...rest);
+    };
+    renderer.setSize(initMsg.width, initMsg.height, false);
+    renderer.setPixelRatio(initMsg.dpr);
+
+    // Create camera — apply initial position from preset so the first preview frame is correct
+    camera = new THREE.PerspectiveCamera(initMsg.initialCamera?.fov ?? 60, initMsg.width / initMsg.height, 0.01, 1000);
+    if (initMsg.initialCamera) {
+        const [px, py, pz] = initMsg.initialCamera.position;
+        const [qx, qy, qz, qw] = initMsg.initialCamera.quaternion;
+        camera.position.set(px, py, pz);
+        camera.quaternion.set(qx, qy, qz, qw);
+    }
+
+    // Create engine
+    engine = new FractalEngine();
+    engine.registerCamera(camera);
+    engine.registerRenderer(renderer);
+    engine.mainUniforms.uInternalScale.value = initMsg.dpr;
+
+    // Sync initial camera to shader uniforms so the first preview frame renders correctly.
+    // Shared with test harnesses via the canonical FractalEngine method.
+    if (initMsg.initialCamera) engine.syncCameraFromMatrix(camera);
+
+    // Set up display scene for blitting
+    initDisplayScene();
+
+    // Bridge engine events back to main thread.
+    //
+    // COMPILE_FAILED subscription must register BEFORE IS_COMPILING so that on
+    // a compile failure (where CompileScheduler emits both) the ERROR
+    // postMessage reaches the main thread before BOOTED (gated below on
+    // !hasSentBooted + IS_COMPILING:false). WorkerProxy's ERROR handler only
+    // promotes to WORKER_BOOT_FAILED while !isBooted, so order matters.
+    FractalEvents.on(FRACTAL_EVENTS.COMPILE_FAILED, ({ reason }) => {
+        postMsg({ type: 'ERROR', message: `Shader compile failed: ${reason}` });
+    });
+
+    let hasSentBooted = false;
+    FractalEvents.on(FRACTAL_EVENTS.IS_COMPILING, (status) => {
+        postMsg({ type: 'COMPILING', status });
+        if (!status && !hasSentBooted) {
+            hasSentBooted = true;
+            let gpuInfo = 'Generic WebGL Device';
+            try {
+                const gl = renderer!.getContext();
+                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                if (debugInfo) gpuInfo = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+            } catch {}
+            // Probe HALF_FLOAT-alpha framebuffer completeness once per worker
+            // and publish to main so the proxy can mirror the truth. Used by
+            // RenderPipeline.initTargets to fall back to FloatType on mobile
+            // GPUs that report half-float support but fail FBO completeness.
+            let halfFloatAlphaSupport: boolean | undefined;
+            try { halfFloatAlphaSupport = engine?.checkHalfFloatAlphaSupport(); } catch {}
+            postMsg({ type: 'BOOTED', gpuInfo, halfFloatAlphaSupport });
+        }
+    });
+    FractalEvents.on(FRACTAL_EVENTS.COMPILE_TIME, (duration) => {
+        postMsg({ type: 'COMPILE_TIME', duration });
+    });
+FractalEvents.on(FRACTAL_EVENTS.SHADER_CODE, (code) => {
+        postMsg({ type: 'SHADER_CODE', code });
+    });
+
+    // Bridge bucket render events back to main thread
+    FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, (data) => {
+        if (!data.isRendering && engine) engine.state.isBucketRendering = false;
+        postMsg({ type: 'BUCKET_STATUS', ...data });
+    });
+    FractalEvents.on(FRACTAL_EVENTS.BUCKET_IMAGE, (data) => {
+        postMsg({ type: 'BUCKET_IMAGE', ...data }, [data.pixels.buffer as ArrayBuffer]);
+    });
+
+    // Initialize bloom pass
+    bloomPass = new BloomPass();
+    const initPhysW = Math.floor(initMsg.width * initMsg.dpr);
+    const initPhysH = Math.floor(initMsg.height * initMsg.dpr);
+    bloomPass.resize(initPhysW, initPhysH);
+
+    // Pass BloomPass + display refs to bucket renderer for full post-processing pipeline
+    bucketRenderer.setBloomPass(bloomPass);
+    if (displayScene && displayCamera) {
+        bucketRenderer.setDisplayRefs(displayScene, displayCamera);
+    }
+
+    // Resize pipeline — use physical pixels (CSS × DPR) so the shader compiles
+    // at the correct resolution from the start (matches RESIZE handler logic).
+    engine.mainUniforms.uResolution.value.set(initPhysW, initPhysH);
+    engine.pipeline.resize(initPhysW, initPhysH);
+
+    // Preload config — gradients and all uniforms are synced by
+    // syncConfigUniforms() during performCompilation() after BOOT.
+    engine.preloadConfig(initMsg.initialConfig);
+}
+
+let _tickCount = 0;
+
+function handleRenderTick(msg: Extract<MainToWorkerMessage, { type: 'RENDER_TICK' }>) {
+    runRenderTick(
+        { engine, renderer, canvas, camera, displayScene, displayCamera, displayMesh,
+          bloomPass, depthReadback, exporter },
+        msg,
+        {
+            incTickCount: () => ++_tickCount,
+            postMsg,
+            getShadowState,
+        },
+    );
+}
+
+// ─── Message Handler ─────────────────────────────────────────────────────
+
+// RENDER_TICK processing:
+// Uses MessageChannel to schedule rendering — this lets already-queued messages
+// (CONFIG, UNIFORM, OFFSET_SHIFT) process first, then renders with up-to-date state.
+// Unlike setTimeout(0) which adds 1-4ms minimum delay, MessageChannel fires in <0.1ms.
+// Preview Region state. Stored at module scope (not on engine) because the worker handles
+// it as a lightweight uniform override with no bucket-render locking — any module that
+// observes engine.state won't see anything special.
+let _previewActive = false;
+let _savedSampleCap = 0;
+
+let _pendingTick: Extract<MainToWorkerMessage, { type: 'RENDER_TICK' }> | null = null;
+let _rendering = false;
+let _tickScheduled = false;
+
+const _tickChannel = new MessageChannel();
+_tickChannel.port1.onmessage = () => {
+    _tickScheduled = false;
+    if (_rendering || !_pendingTick) return;
+    _rendering = true;
+    const tick = _pendingTick;
+    _pendingTick = null;
+    handleRenderTick(tick);
+    _rendering = false;
+};
+
+self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
+    const msg = e.data;
+
+    try {
+        // ── Bucket render lock ──────────────────────────────────────
+        // While a bucket render is in progress, reject messages that would
+        // corrupt the tiled render (resize, param changes, camera moves, etc.).
+        // Only BUCKET_STOP and RENDER_TICK (drives the bucket frame loop) pass through.
+        if (engine?.state.isBucketRendering) {
+            if (msg.type !== 'BUCKET_STOP' && msg.type !== 'RENDER_TICK') return;
+        }
+
+        switch (msg.type) {
+            case 'INIT':
+                handleInit(msg);
+                break;
+
+            case 'BOOT':
+                // If engine hasn't been set up yet (deferred from INIT), do it now.
+                // This is the point where we accept the GPU stall — the user has
+                // committed to this formula and won't switch again.
+                if (!engine && _deferredInit) {
+                    setupEngine(_deferredInit);
+                    _deferredInit = null;
+                }
+                // Apply camera from BOOT so the first compiled frame has the correct viewpoint
+                // (INIT camera may be stale if store wasn't hydrated yet when WorkerDisplay mounted)
+                if (msg.camera && camera) {
+                    const [px, py, pz] = msg.camera.position;
+                    const [qx, qy, qz, qw] = msg.camera.quaternion;
+                    camera.position.set(px, py, pz);
+                    camera.quaternion.set(qx, qy, qz, qw);
+                    camera.fov = msg.camera.fov;
+                    camera.updateProjectionMatrix();
+                    camera.updateMatrixWorld();
+                }
+                engine?.bootWithConfig(msg.config);
+                // Apply any RESIZE that arrived before engine existed
+                if (_pendingResize && renderer && engine) {
+                    const pr = _pendingResize;
+                    _pendingResize = null;
+                    renderer.setSize(pr.width, pr.height, false);
+                    renderer.setPixelRatio(pr.dpr);
+                    if (camera) {
+                        camera.aspect = pr.width / pr.height;
+                        camera.updateProjectionMatrix();
+                    }
+                    const pW = Math.floor(pr.width * pr.dpr);
+                    const pH = Math.floor(pr.height * pr.dpr);
+                    engine.mainUniforms.uResolution.value.set(pW, pH);
+                    engine.mainUniforms.uInternalScale.value = pr.dpr;
+                    engine.pipeline.resize(pW, pH, renderer);
+                    bloomPass?.resize(pW, pH);
+                }
+                break;
+
+            case 'RESIZE':
+                if (renderer && engine) {
+                    renderer.setSize(msg.width, msg.height, false);
+                    renderer.setPixelRatio(msg.dpr);
+                    if (camera) {
+                        camera.aspect = msg.width / msg.height;
+                        camera.updateProjectionMatrix();
+                    }
+                    // Physical pixel dimensions (Three.js applies pixelRatio internally)
+                    const physW = Math.floor(msg.width * msg.dpr);
+                    const physH = Math.floor(msg.height * msg.dpr);
+                    const curRes = engine.mainUniforms.uResolution.value;
+                    const sizeChanged = curRes.x !== physW || curRes.y !== physH;
+                    curRes.set(physW, physH);
+                    engine.mainUniforms.uInternalScale.value = msg.dpr;
+                    engine.pipeline.resize(physW, physH, renderer);
+                    bloomPass?.resize(physW, physH);
+                    if (sizeChanged) engine.resetAccumulation();
+                } else {
+                    // Engine not ready yet — store for application after BOOT
+                    _pendingResize = { width: msg.width, height: msg.height, dpr: msg.dpr };
+                }
+                break;
+
+            case 'REGISTER_FORMULA':
+                // Register a dynamically-imported formula (Workshop/DEC) in the worker's registry
+                // so core_math.ts inject() can find it during shader compilation.
+                registry.register({
+                    id: msg.id as any,
+                    name: msg.id,
+                    shader: { ...msg.shader, capabilities: new Set<Capability>() }, // worker registry is injection-only; capability gating is main-thread (message carries none)
+                    parameters: [],
+                    defaultPreset: {},
+                });
+                break;
+
+            case 'CONFIG':
+                if (engine) {
+                    // Forward config update through internal event system
+                    FractalEvents.emit(FRACTAL_EVENTS.CONFIG, msg.config);
+                }
+                break;
+
+            case 'CONFIG_DONE':
+                // Main thread finished sending all CONFIGs — compile now.
+                // Cancels the fallback timer and fires immediately.
+                engine?.fireCompile();
+                break;
+
+            case 'UNIFORM':
+                engine?.setUniform(msg.key, msg.value, msg.noReset);
+                break;
+
+            case 'RENDER_TICK':
+                // Buffer latest tick and schedule via MessageChannel.
+                // This yields to the event loop so queued CONFIG/UNIFORM messages
+                // process first, but with near-zero delay (unlike setTimeout).
+                //
+                // CRITICAL: propagate syncOffset forward when overwriting.
+                // If the previous pending tick had syncOffset=true (from a
+                // main-thread absorb) and the new one doesn't, dropping it
+                // means virtualSpace.state never gets updated → main and
+                // worker disagree about sceneOffset → all subsequent picks
+                // return coords against a stale offset → cursor anchoring
+                // is wrong by the absorb delta, permanently. The offset
+                // VALUE in the new tick is already correct (engine.sceneOffset
+                // is updated synchronously by queueOffsetSync), so we just
+                // need to preserve the flag.
+                _pendingTick = _pendingTick?.syncOffset && !msg.syncOffset
+                    ? { ...msg, syncOffset: true }
+                    : msg;
+                if (!_tickScheduled) {
+                    _tickScheduled = true;
+                    _tickChannel.port2.postMessage(null);
+                }
+                break;
+
+            case 'RESET_ACCUM':
+                engine?.resetAccumulation();
+                break;
+
+            case 'OFFSET_SET':
+                if (engine) {
+                    engine.virtualSpace.state = msg.offset;
+                    if (!msg.noReset) {
+                        engine.resetAccumulation();
+                    }
+                }
+                // Always discard buffered tick — its camera/offset data is stale.
+                // noReset preserves accumulated samples (inflate/absorb don't change
+                // unified position), but the pending tick would render with the old
+                // camera at the new offset, producing a wrong frame.
+                _pendingTick = null;
+                break;
+
+            case 'OFFSET_SHIFT':
+                if (engine) {
+                    engine.virtualSpace.move(msg.x, msg.y, msg.z);
+                    engine.resetAccumulation();
+                }
+                // Discard any buffered tick — its camera position is stale
+                // (orbit pivot shifts camera and offset atomically on main thread,
+                // but they arrive as separate messages here)
+                _pendingTick = null;
+                break;
+
+            case 'SET_SAMPLE_CAP':
+                engine?.setPreviewSampleCap(msg.n);
+                break;
+
+            case 'PAUSE':
+                if (engine) engine.isPaused = msg.paused;
+                break;
+
+            case 'SET_DIRTY':
+                if (engine) engine.dirty = true;
+                break;
+
+            case 'MARK_INTERACTION':
+                engine?.markInteraction();
+                break;
+
+            case 'SNAP_CAMERA':
+                if (engine) engine.shouldSnapCamera = true;
+                break;
+
+            case 'CAPTURE_SNAPSHOT':
+                if (engine) {
+                    engine.captureSnapshot().then(blob => {
+                        if (blob) {
+                            postMsg({ type: 'SNAPSHOT_RESULT', id: msg.id, blob });
+                        }
+                    });
+                }
+                break;
+
+            case 'CAPTURE_ENV_MAP':
+                if (engine) {
+                    engine.captureEnvMap(msg.maxEdge ?? 1024).then(blob => {
+                        // Always reply, even with null, so the proxy doesn't
+                        // wait for the timeout when there's simply no env bound.
+                        postMsg({ type: 'ENV_MAP_RESULT', id: msg.id, blob });
+                    }).catch(err => {
+                        console.error('[worker] captureEnvMap failed:', err);
+                        postMsg({ type: 'ENV_MAP_RESULT', id: msg.id, blob: null });
+                    });
+                } else {
+                    postMsg({ type: 'ENV_MAP_RESULT', id: msg.id, blob: null });
+                }
+                break;
+
+            case 'GET_SHADER_SOURCE':
+                if (engine) {
+                    let code: string | null = null;
+                    if (msg.variant === 'compiled') {
+                        code = engine.getCompiledFragmentShader();
+                    } else if (msg.variant === 'translated') {
+                        code = engine.getTranslatedFragmentShader();
+                    }
+                    postMsg({ type: 'SHADER_SOURCE_RESULT', id: msg.id, code });
+                } else {
+                    postMsg({ type: 'SHADER_SOURCE_RESULT', id: msg.id, code: null });
+                }
+                break;
+
+            case 'GET_UNIFORMS_SNAPSHOT':
+                // Snapshot the live mainUniforms for debug tools (bench-shader).
+                // Walk the IUniform map, serialize each .value into a postMessage-
+                // safe shape: primitives + arrays pass through; THREE classes
+                // serialize to flat arrays / matrix shapes; Textures become a
+                // sentinel { __sampler: true, kind } so consumers can bind dummies.
+                if (engine) {
+                    const out: Record<string, any> = {};
+                    const ser = (v: any): any => {
+                        if (v == null) return v;
+                        if (typeof v !== 'object') return v;
+                        if (Array.isArray(v)) return v.map(ser);
+                        // Typed arrays (Float32Array, Int32Array, Uint8Array, …)
+                        // are how light arrays / vec3[] are usually stored. They
+                        // ARE postMessage-safe but their JSON serialization is
+                        // garbage; convert to plain Array. Caught BEFORE the
+                        // duck-typed checks because typed arrays don't have .x/.y.
+                        if (ArrayBuffer.isView(v) && !(v instanceof DataView)) {
+                            return Array.from(v as any);
+                        }
+                        if (v.isTexture || v.isCubeTexture || v.isDataTexture ||
+                            v.isVideoTexture || v.isCanvasTexture) {
+                            return { __sampler: true, kind: v.isCubeTexture ? 'cube' : '2d' };
+                        }
+                        if (v.isVector2)    return [v.x, v.y];
+                        if (v.isVector3)    return [v.x, v.y, v.z];
+                        if (v.isVector4)    return [v.x, v.y, v.z, v.w];
+                        if (v.isQuaternion) return [v.x, v.y, v.z, v.w];
+                        if (v.isMatrix3)    return { mat3: Array.from(v.elements) };
+                        if (v.isMatrix4)    return { mat4: Array.from(v.elements) };
+                        if (v.isColor)      return [v.r, v.g, v.b];
+                        if (typeof v.toArray === 'function') {
+                            try { return v.toArray(); } catch { /* fall through */ }
+                        }
+                        // Plain {x,y[,z[,w]]} fallback. Some feature defaults
+                        // store vectors as object literals (not THREE.Vector*
+                        // instances), so the duck-typed checks above miss them
+                        // and they'd serialize as null. Detect by .x being
+                        // numeric and round-trip as an array.
+                        if (typeof v.x === 'number' && typeof v.y === 'number') {
+                            if (typeof v.w === 'number') return [v.x, v.y, v.z, v.w];
+                            if (typeof v.z === 'number') return [v.x, v.y, v.z];
+                            return [v.x, v.y];
+                        }
+                        return null; // unserializable — drop
+                    };
+                    const u = engine.mainUniforms || {};
+                    for (const [k, slot] of Object.entries(u)) {
+                        out[k] = ser((slot as any)?.value);
+                    }
+                    postMsg({ type: 'UNIFORMS_SNAPSHOT_RESULT', id: msg.id, uniforms: out });
+                } else {
+                    postMsg({ type: 'UNIFORMS_SNAPSHOT_RESULT', id: msg.id, uniforms: null });
+                }
+                break;
+
+            case 'TEXTURE':
+                if (engine && msg.bitmap) {
+                    // Create THREE.Texture from ImageBitmap (transferred from main thread)
+                    const tex = new THREE.Texture(msg.bitmap as any);
+                    tex.flipY = false; // Already flipped via createImageBitmap imageOrientation
+                    tex.needsUpdate = true;
+                    if (msg.textureType === 'color') {
+                        tex.wrapS = THREE.RepeatWrapping;
+                        tex.wrapT = THREE.RepeatWrapping;
+                        tex.minFilter = THREE.LinearFilter;
+                        tex.magFilter = THREE.LinearFilter;
+                        engine.materials.setUniform('uTexture', tex);
+                        engine.materials.setUniform('uUseTexture', 1.0);
+                    } else {
+                        tex.mapping = THREE.EquirectangularReflectionMapping;
+                        tex.minFilter = THREE.LinearMipmapLinearFilter;
+                        tex.generateMipmaps = true;
+                        engine.materials.setUniform('uEnvMapTexture', tex);
+                        engine.materials.rebuildEnvCDF(tex);
+                    }
+                    engine.resetAccumulation();
+                } else if (engine && !msg.bitmap) {
+                    if (msg.textureType === 'color') {
+                        engine.materials.setUniform('uUseTexture', 0.0);
+                    }
+                    engine.resetAccumulation();
+                }
+                break;
+
+            case 'TEXTURE_HDR':
+                if (engine) {
+                    const rgbeLoader = new RGBELoader();
+                    rgbeLoader.setDataType(THREE.HalfFloatType);
+                    const hdrData = rgbeLoader.parse(msg.buffer);
+                    if (hdrData) {
+                        const hdrTex = new THREE.DataTexture(hdrData.data as any, hdrData.width, hdrData.height, THREE.RGBAFormat, hdrData.type);
+                        hdrTex.mapping = THREE.EquirectangularReflectionMapping;
+                        hdrTex.minFilter = THREE.LinearMipmapLinearFilter;
+                        hdrTex.generateMipmaps = true;
+                        hdrTex.flipY = true;
+                        hdrTex.needsUpdate = true;
+                        if (msg.textureType === 'color') {
+                            hdrTex.wrapS = THREE.RepeatWrapping;
+                            hdrTex.wrapT = THREE.RepeatWrapping;
+                            engine.materials.setUniform('uTexture', hdrTex);
+                            engine.materials.setUniform('uUseTexture', 1.0);
+                        } else {
+                            engine.materials.setUniform('uEnvMapTexture', hdrTex);
+                            engine.materials.rebuildEnvCDF(hdrTex);
+                        }
+                        engine.resetAccumulation();
+                    }
+                }
+                break;
+
+            case 'PICK_WORLD_POSITION':
+                if (engine) {
+                    const pos = msg.fast
+                        ? engine.pickWorldPositionFast(msg.x, msg.y)
+                        : engine.pickWorldPosition(msg.x, msg.y);
+                    postMsg({
+                        type: 'PICK_RESULT',
+                        id: msg.id,
+                        position: pos ? [pos.x, pos.y, pos.z] : null
+                    });
+                } else {
+                    postMsg({ type: 'PICK_RESULT', id: msg.id, position: null });
+                }
+                break;
+
+            case 'FOCUS_PICK_START':
+                if (engine) {
+                    // Depth alpha is DoF-invariant — just snapshot on next frame
+                    depthReadback.startFocusPick(msg.id, msg.x, msg.y);
+                } else {
+                    postMsg({ type: 'FOCUS_RESULT', id: msg.id, distance: -1 });
+                }
+                break;
+
+            case 'FOCUS_PICK_SAMPLE':
+                depthReadback.sampleFocusPick(msg.id, msg.x, msg.y, postMsg);
+                break;
+
+            case 'FOCUS_PICK_END':
+                depthReadback.endFocusPick();
+                break;
+
+            case 'HISTOGRAM_READBACK':
+                if (engine && renderer && camera) {
+                    handleHistogramReadback(msg.id, msg.source, engine, renderer, camera, postMsg);
+                } else {
+                    postMsg({ type: 'HISTOGRAM_RESULT', id: msg.id, data: new Float32Array(0) });
+                }
+                break;
+
+            case 'SET_CONVERGENCE_NEEDED':
+                // RegionOverlay (the only convergence consumer) toggles this on
+                // mount/unmount. Without it, the viewport convergence pass runs
+                // every 8 accumulation samples and the result is never read.
+                if (engine?.pipeline) engine.pipeline.setConvergenceNeeded(msg.needed);
+                break;
+
+            case 'GET_GPU_INFO': {
+                let info = 'Generic WebGL Device';
+                try {
+                    if (renderer) {
+                        const gl = renderer.getContext();
+                        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                        if (debugInfo) info = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                    }
+                } catch {}
+                postMsg({ type: 'GPU_INFO', info });
+                break;
+            }
+
+            case 'GET_RENDER_INFO': {
+                // Snapshot of THREE.WebGLRenderer.info + bench counters. Bench
+                // takes two snapshots (start, end) and diffs to attribute draw
+                // calls / RT readbacks / RT switches per scenario.
+                const r = renderer;
+                const benchCounts = r ? ((r as any).__benchCounts ?? {}) : {};
+                postMsg({
+                    type: 'RENDER_INFO', id: msg.id, info: {
+                        calls:      r?.info.render.calls ?? 0,
+                        triangles:  r?.info.render.triangles ?? 0,
+                        points:     r?.info.render.points ?? 0,
+                        lines:      r?.info.render.lines ?? 0,
+                        frame:      r?.info.render.frame ?? 0,
+                        geometries: r?.info.memory.geometries ?? 0,
+                        textures:   r?.info.memory.textures ?? 0,
+                        programs:   r?.info.programs?.length ?? 0,
+                        readRenderTargetPixels:   benchCounts.readRenderTargetPixels ?? 0,
+                        setRenderTargetSwitches:  benchCounts.setRenderTargetSwitches ?? 0,
+                    },
+                });
+                break;
+            }
+
+            // ─── Video Export ───────────────────────────────────────
+
+            case 'EXPORT_START':
+                if (engine && renderer && camera) {
+                    if (!exporter) {
+                        exporter = new WorkerExporter(engine, renderer, camera, postMsg);
+                    }
+                    // Tiling may have left uRegionMin/Max on a band; export won't run
+                    // compute() to restore it, so reset region + tiling state now.
+                    engine.clearTilingRegion();
+                    exporter.start(msg.config, msg.stream, msg.dirHandle, msg.audio);
+                } else {
+                    postMsg({ type: 'EXPORT_ERROR', message: 'Engine not ready for export' });
+                }
+                break;
+
+            case 'EXPORT_RENDER_FRAME':
+                if (exporter?.active) {
+                    try {
+                        exporter.renderFrame(
+                            msg.frameIndex, msg.time,
+                            msg.camera, msg.offset,
+                            msg.renderState, msg.modulations
+                        );
+                    } catch (e) {
+                        postMsg({ type: 'EXPORT_ERROR', message: `Frame render failed: ${e instanceof Error ? e.message : String(e)}` });
+                    }
+                }
+                break;
+
+            case 'EXPORT_FINISH':
+                if (exporter?.active) {
+                    exporter.finish();
+                }
+                break;
+
+            case 'EXPORT_CANCEL':
+                if (exporter?.active) {
+                    exporter.cancel();
+                    postMsg({ type: 'EXPORT_COMPLETE', blob: null });
+                }
+                break;
+
+            // ─── Bucket Render ───────────────────────────────────────
+            case 'BUCKET_START':
+                if (engine && renderer) {
+                    // One-shot aspect sync: UniformManager.syncFrame skips cam.aspect updates
+                    // during bucket rendering, so if cam.aspect got out of sync with the
+                    // renderer buffer between the last resize and bucket start (e.g., a panel
+                    // toggle), the first bucket render would stretch. Correct it here before
+                    // BucketRenderer captures originalSize.
+                    if (camera) {
+                        const bufW = renderer.domElement.width;
+                        const bufH = renderer.domElement.height;
+                        if (bufH > 0) {
+                            const bufAspect = bufW / bufH;
+                            if (Number.isFinite(bufAspect) && Math.abs(camera.aspect - bufAspect) > 0.001) {
+                                camera.aspect = bufAspect;
+                                camera.updateProjectionMatrix();
+                            }
+                        }
+                    }
+
+                    engine.state.bucketConfig = { ...msg.config };
+                    const exportData = msg.exportData ? {
+                        preset: JSON.parse(msg.exportData.preset),
+                        name: msg.exportData.name,
+                        version: msg.exportData.version
+                    } : undefined;
+                    // Release any leftover tiling band region before the bucket host
+                    // takes over the region uniforms.
+                    engine.clearTilingRegion();
+                    engine.state.isBucketRendering = true;
+                    bucketRenderer.start(msg.exportImage, msg.config, exportData);
+                }
+                break;
+
+            case 'BUCKET_STOP':
+                if (engine) {
+                    bucketRenderer.stop();
+                    engine.state.isBucketRendering = false;
+                }
+                break;
+
+            // ─── Preview Region (live, uniforms-only) ─────────────────────
+            // Sets UV-remap uniforms so primary rays cover the selected sub-rect of the full
+            // output, at export pixel density. Does NOT engage bucket-render lock — all
+            // normal interactions (camera, params, sliders) continue to work; each change
+            // resets accumulation naturally and the preview re-renders.
+            case 'PREVIEW_REGION_SET':
+                if (engine) {
+                    const u = engine.mainUniforms;
+                    const outW = Math.max(1, Math.floor(msg.outputWidth));
+                    const outH = Math.max(1, Math.floor(msg.outputHeight));
+                    const rMinX = Math.max(0, Math.min(1, msg.region.minX));
+                    const rMinY = Math.max(0, Math.min(1, msg.region.minY));
+                    const rMaxX = Math.max(0, Math.min(1, msg.region.maxX));
+                    const rMaxY = Math.max(0, Math.min(1, msg.region.maxY));
+                    const px0 = Math.floor(rMinX * outW);
+                    const py0 = Math.floor(rMinY * outH);
+                    const px1 = Math.max(px0 + 1, Math.ceil(rMaxX * outW));
+                    const py1 = Math.max(py0 + 1, Math.ceil(rMaxY * outH));
+                    (u.uImageTileOrigin.value as any).set(px0 / outW, py0 / outH);
+                    (u.uImageTileSize.value as any).set((px1 - px0) / outW, (py1 - py0) / outH);
+                    (u.uTilePixelOrigin.value as any).set(px0, py0);
+                    u.uFullOutputResolution.value.set(outW, outH);
+
+                    // Apply sample cap (saved once on first SET, restored on CLEAR).
+                    if (!_previewActive) _savedSampleCap = engine.pipeline.getSampleCap();
+                    engine.pipeline.setSampleCap(Math.max(1, Math.floor(msg.sampleCap)));
+                    _previewActive = true;
+                    engine.tilingSuppressed = true;
+                    engine.clearTilingRegion(); // drop any leftover band region before preview owns the frame
+                    engine.resetAccumulation();
+                }
+                break;
+
+            case 'PREVIEW_REGION_CLEAR':
+                if (engine && _previewActive) {
+                    const u = engine.mainUniforms;
+                    (u.uImageTileOrigin.value as any).set(0, 0);
+                    (u.uImageTileSize.value as any).set(1, 1);
+                    (u.uTilePixelOrigin.value as any).set(0, 0);
+                    // UniformManager.syncFrame will resume auto-copying uResolution -> uFullOutputResolution
+                    // now that uImageTileSize == (1,1).
+                    engine.pipeline.setSampleCap(_savedSampleCap);
+                    _savedSampleCap = 0;
+                    _previewActive = false;
+                    engine.tilingSuppressed = false;
+                    engine.resetAccumulation();
+                }
+                break;
+        }
+    } catch (err) {
+        // Include stack so the worker-side throw site is visible on the main
+        // thread (otherwise WorkerProxy's console.error only shows the proxy's
+        // own log call as the origin).
+        const message = err instanceof Error
+            ? `${err.message}\n${err.stack ?? ''}`
+            : String(err);
+        postMsg({ type: 'ERROR', message });
+    }
+};

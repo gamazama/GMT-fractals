@@ -4,11 +4,20 @@ import { useAnimationStore } from '../store/animationStore';
 import { animationEngine } from '../engine/AnimationEngine';
 import { Track, BezierHandle, Keyframe, AnimationSequence } from '../types';
 import { constrainKeyframeHandles, scaleKeyframeHandles } from '../utils/timelineUtils';
+import { useInteractionGesture } from '../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
 
 interface DopeSheetInteractionProps {
     frameWidth: number;
     contentRef: React.RefObject<HTMLDivElement>;
     scrollContainerRef: React.RefObject<HTMLDivElement>;
+    /** Wrapper holding the group + track row stack (everything below the global summary).
+     *  Used at mouseup to translate marquee box coords into row-relative coords without
+     *  hard-coding the height of the audio strip / global summary that sit above it. */
+    rowsContainerRef: React.RefObject<HTMLDivElement>;
+    /** Sticky global-summary row. Used to compute its actual contentRef-y bounds for
+     *  the marquee's "select all keys at this frame" check. */
+    globalSummaryRef: React.RefObject<HTMLDivElement>;
     SIDEBAR_WIDTH: number;
     RULER_HEIGHT: number;
     GROUP_HEIGHT: number;
@@ -44,6 +53,8 @@ export const useDopeSheetInteraction = ({
     frameWidth,
     contentRef,
     scrollContainerRef,
+    rowsContainerRef,
+    globalSummaryRef,
     SIDEBAR_WIDTH,
     RULER_HEIGHT,
     GROUP_HEIGHT,
@@ -53,15 +64,25 @@ export const useDopeSheetInteraction = ({
     sequence,
     selectedTrackIds
 }: DopeSheetInteractionProps) => {
-    const { 
-        updateKeyframes, 
-        selectKeyframes, 
-        selectTrack, 
-        deselectAllKeys, 
-        setIsScrubbing,
-        selectedKeyframeIds,
-        snapshot 
-    } = useAnimationStore();
+    // Narrow per-field subs — `useAnimationStore()` (full sub) re-rendered the
+    // hook's host component every RAF on the no-op set() flood. Action selectors
+    // use `useAnimationStore((s) => s.fn)` so refs stay stable across renders
+    // (Object.is bail-out) — wrapper-closures break useCallback dep stability.
+    const selectedKeyframeIds = useAnimationStore((s) => s.selectedKeyframeIds);
+    const updateKeyframes      = useAnimationStore((s) => s.updateKeyframes);
+    const selectKeyframes      = useAnimationStore((s) => s.selectKeyframes);
+    const setTrackSelection    = useAnimationStore((s) => s.setTrackSelection);
+    const addTracksToSelection = useAnimationStore((s) => s.addTracksToSelection);
+    const deselectAllKeys      = useAnimationStore((s) => s.deselectAllKeys);
+    const setIsScrubbing       = useAnimationStore((s) => s.setIsScrubbing);
+    const snapshot             = useAnimationStore((s) => s.snapshot);
+
+    // Session scrub gesture: a key drag / selection transform changes the live
+    // frame every move (updateKeyframes → animationEngine.scrub), so it must read
+    // as `interacting` to the worker → adaptive (full-frame), not the idle band
+    // renderer (which can only paint the centre strip on a per-frame-changing
+    // scene). begin() is idempotent; onUp calls the balanced end().
+    const scrubGesture = useInteractionGesture(INTERACTION_SOURCES.scrub);
 
     const [selectionBox, setSelectionBox] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
     
@@ -74,10 +95,10 @@ export const useDopeSheetInteraction = ({
         neighbors: Map<string, NeighborKeyData> // Keyed by "trackId::keyId"
     } | null>(null);
 
-    const transformState = useRef<{ 
-        type: 'move' | 'scale_left' | 'scale_right', 
-        startX: number, 
-        initialKeys: { trackId: string, keyId: string, startFrame: number }[],
+    const transformState = useRef<{
+        type: 'move' | 'scale_left' | 'scale_right',
+        startX: number,
+        initialKeys: { trackId: string, keyId: string, startFrame: number, startLeftTan?: BezierHandle, startRightTan?: BezierHandle }[],
         minFrame: number,
         maxFrame: number
     } | null>(null);
@@ -155,22 +176,30 @@ export const useDopeSheetInteraction = ({
         });
 
         dragState.current = { startX, keys, neighbors };
-        setIsScrubbing(true); 
+        setIsScrubbing(true);
+        scrubGesture.begin();
     };
 
     const startTransformSelection = (e: React.MouseEvent, type: 'move' | 'scale_left' | 'scale_right', minFrame: number, maxFrame: number) => {
         e.stopPropagation();
         e.preventDefault();
         snapshot();
-        setIsScrubbing(true); 
+        setIsScrubbing(true);
+        scrubGesture.begin();
 
-        const initialKeys: { trackId: string, keyId: string, startFrame: number }[] = [];
+        const initialKeys: { trackId: string, keyId: string, startFrame: number, startLeftTan?: BezierHandle, startRightTan?: BezierHandle }[] = [];
         selectedKeyframeIds.forEach(id => {
             const [tid, kid] = id.split('::');
             const t = sequence.tracks[tid];
             const k = t?.keyframes.find(kf => kf.id === kid);
             if (k) {
-                initialKeys.push({ trackId: tid, keyId: k.id, startFrame: k.frame });
+                initialKeys.push({
+                    trackId: tid,
+                    keyId: k.id,
+                    startFrame: k.frame,
+                    startLeftTan: k.leftTangent ? { ...k.leftTangent } : undefined,
+                    startRightTan: k.rightTangent ? { ...k.rightTangent } : undefined,
+                });
             }
         });
 
@@ -342,36 +371,33 @@ export const useDopeSheetInteraction = ({
                 else if (type === 'scale_left' || type === 'scale_right') {
                     const span = Math.max(1, maxFrame - minFrame);
                     let ratio = 1.0;
-                    
+                    const deltaFrames = diffPx / currentFrameWidth;
+
                     if (type === 'scale_right') {
-                         const deltaFrames = diffPx / currentFrameWidth;
-                         const newSpan = Math.max(1, span + deltaFrames);
-                         ratio = newSpan / span;
-                         
-                         initialKeys.forEach(k => {
-                             const localPos = k.startFrame - minFrame;
-                             const newFrame = minFrame + (localPos * ratio);
-                             updates.push({
-                                trackId: k.trackId,
-                                keyId: k.keyId,
-                                patch: { frame: Math.max(0, Math.round(newFrame)) }
-                             });
-                         });
-                    } else {
-                        const deltaFrames = diffPx / currentFrameWidth;
-                        const newSpan = Math.max(1, span - deltaFrames); 
+                        const newSpan = Math.max(1, span + deltaFrames);
                         ratio = newSpan / span;
-                        
-                        initialKeys.forEach(k => {
-                             const distFromMax = maxFrame - k.startFrame;
-                             const newFrame = maxFrame - (distFromMax * ratio);
-                             updates.push({
-                                trackId: k.trackId,
-                                keyId: k.keyId,
-                                patch: { frame: Math.max(0, Math.round(newFrame)) }
-                             });
-                        });
+                    } else {
+                        const newSpan = Math.max(1, span - deltaFrames);
+                        ratio = newSpan / span;
                     }
+
+                    // Scale tangent X with the frame interval so curve shape stays
+                    // proportional (Maya/Blender behaviour). Y is left alone — value range
+                    // isn't being scaled, only time.
+                    const scaleTangent = (t?: BezierHandle): BezierHandle | undefined =>
+                        t ? { x: t.x * ratio, y: t.y } : undefined;
+
+                    initialKeys.forEach(k => {
+                        const newFrame = type === 'scale_right'
+                            ? minFrame + (k.startFrame - minFrame) * ratio
+                            : maxFrame - (maxFrame - k.startFrame) * ratio;
+                        const patch: Partial<Keyframe> = { frame: Math.max(0, Math.round(newFrame)) };
+                        const lt = scaleTangent(k.startLeftTan);
+                        const rt = scaleTangent(k.startRightTan);
+                        if (lt) patch.leftTangent = lt;
+                        if (rt) patch.rightTangent = rt;
+                        updates.push({ trackId: k.trackId, keyId: k.keyId, patch });
+                    });
                 }
                 
                 if (updates.length > 0) {
@@ -401,21 +427,31 @@ export const useDopeSheetInteraction = ({
             if (dragState.current || transformState.current) {
                 setIsScrubbing(false);
             }
+            scrubGesture.end(); // balanced (idempotent) end for the begins above
             dragState.current = null;
             transformState.current = null;
             
             if (boxStartRef.current && selectionBox && contentRef.current) {
                 const newSelectedIds = new Set<string>();
                 const tracksInvolved = new Set<string>();
-                
+
                 const boxX = selectionBox.x;
                 const boxY = selectionBox.y;
                 const boxR = boxX + selectionBox.w;
                 const boxB = boxY + selectionBox.h;
 
-                const globalTop = RULER_HEIGHT;
-                const globalBottom = RULER_HEIGHT + GROUP_HEIGHT;
-                
+                // Resolve the row stack's actual contentRef-y origin at mouseup time.
+                // The Root Summary now lives at y=0 inside rowsContainerRef (was a sticky
+                // sibling above it); globalSummaryRef points at that leading row, so the
+                // first regular group/track row starts at globalBottom.
+                const contentRect = contentRef.current.getBoundingClientRect();
+                const globalTop = globalSummaryRef.current
+                    ? globalSummaryRef.current.getBoundingClientRect().top - contentRect.top
+                    : (rowsContainerRef.current
+                        ? rowsContainerRef.current.getBoundingClientRect().top - contentRect.top
+                        : RULER_HEIGHT);
+                const globalBottom = globalTop + GROUP_HEIGHT;
+
                 if (boxB > globalTop && boxY < globalBottom) {
                     const allTracks = Object.values(sequence.tracks) as Track[];
                     allTracks.forEach(track => {
@@ -430,7 +466,7 @@ export const useDopeSheetInteraction = ({
                     });
                 }
 
-                let yOffset = RULER_HEIGHT + GROUP_HEIGHT; 
+                let yOffset = globalBottom;
                 const BUFFER = 4;
 
                 const checkTrack = (tid: string) => {
@@ -486,15 +522,14 @@ export const useDopeSheetInteraction = ({
                     selectKeyframes(idsArray, isMulti);
                     
                     if (isMulti) {
-                        tracksInvolved.forEach(t => {
-                            if (!selectedTrackIds.includes(t)) selectTrack(t, true);
-                        });
+                        const toAdd = Array.from(tracksInvolved).filter(t => !selectedTrackIds.includes(t));
+                        if (toAdd.length > 0) addTracksToSelection(toAdd);
                     } else {
                         const tracksArray = Array.from(tracksInvolved);
                         if (tracksArray.length > 0) {
-                            selectTrack(tracksArray[0], false);
-                            for (let i = 1; i < tracksArray.length; i++) {
-                                selectTrack(tracksArray[i], true);
+                            setTrackSelection(tracksArray[0]);
+                            if (tracksArray.length > 1) {
+                                addTracksToSelection(tracksArray.slice(1));
                             }
                         }
                     }

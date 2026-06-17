@@ -1,0 +1,187 @@
+/**
+ * modeRegistry — the FROZEN mode plug-in seam for the fullscreen gradient overlay.
+ *
+ * A "fullscreen mode" is a self-contained way to render the active gradient full-bleed
+ * (Linear / Radial / … / live Fractal / future Splitscreen-wipe / Spline / Liquify /
+ * Parallax). The overlay dispatches PURELY on this registry: it never hard-codes a mode.
+ * A new mode is added by calling {@link registerFullscreenMode} from its own module — no
+ * edit to the overlay core — so the parallel mode streams don't collide.
+ *
+ * ── A mode declares three things (the seam's three faces) ───────────────────────────────
+ *   (a) PARAMS  — `paramFields`: which flat-optional `GeometryParams` fields it reads, with
+ *                 UI metadata. Threads through the GATE shape (palette/core/rampGeometry).
+ *   (b) RENDER  — ONE of three `kind`s:
+ *        • 'cpuRaster' — a pure `raster(ctx) → RGBA` producer. The harness uploads it and
+ *          presents through the shared dither tail. (The 6 geometry modes.)
+ *        • 'glQuad'    — a fragment `fragBody` defining `vec3 modeColor(vec2 uv)`. The
+ *          harness wraps it (standard preamble + `sampleLut` + dither tail), compiles once,
+ *          and renders a fullscreen quad. Reads the gradient via `uLut`. Extra uniforms via
+ *          `fragUniforms` + `uniformNames` + `setUniforms`. (Spline / splitscreen-wipe.)
+ *        • 'ownCanvas' — the escape hatch: the mode mounts + drives its OWN canvas/renderer/
+ *          RAF (the live Fractal; a future Liquify/Parallax that needs custom GL or a CPU
+ *          sim). It bypasses the compositor and bakes its own dither (include
+ *          `DITHER_TAIL_GLSL` in its display shader if it bands).
+ *   (c) CONTROLS — `Controls`: a self-contained React panel (reads the store + registry).
+ *
+ * ── Invariants (FROZEN — parallel sessions rely on these) ───────────────────────────────
+ *   • `id` is the stable mode key persisted in `fullscreenStore.geom` and used in export
+ *     filenames (`{stem}-{id}.png`). Don't rename a shipped id.
+ *   • cpuRaster `raster` MUST stay pure + deterministic (it's pinned by the determinism
+ *     harness via `renderGeometry`). Side effects / RAF / DOM belong in 'ownCanvas'.
+ *   • A mode reads gradient data ONLY from `ctx` (never the store directly) so the same mode
+ *     renders correctly for the snapshot (fullscreen) AND the live hero (split) source.
+ *   • `setUniforms` must not touch the reserved preamble uniforms (see ditherTail.ts).
+ *
+ * @see gradient-explorer/fullscreen/ditherTail.ts   (the wrapper + shared dither tail)
+ * @see gradient-explorer/fullscreen/FullscreenCompositor.ts (compiles + presents)
+ * @see palette/core/rampGeometry.ts                  (the flat-optional GeometryParams gate)
+ */
+
+import type React from 'react';
+import type { RGB } from '../../palette/core/oklab';
+import type { GeometryParams } from '../../palette/core/rampGeometry';
+
+export type FullscreenModeKind = 'cpuField' | 'cpuRaster' | 'glQuad' | 'ownCanvas';
+
+/** A per-pixel ramp-position (`pos`) + coverage (`cov`) field — the output of the pure
+ *  `sampleGeometry`. Rendered by sampling the LUT at the FLOAT position in GL (smooth, no
+ *  256-step banding) and dithering before the 8-bit write. This is the right primitive for
+ *  "a 1D gradient mapped across a 2D field" (the geometry modes). */
+export interface GeometryField {
+  pos: Float32Array;
+  cov: Float32Array;
+}
+
+/** Per-present inputs the harness hands a mode's render path. Gradient data is RESOLVED
+ *  by the overlay (snapshot in fullscreen, live last-modified hero in split) — a mode
+ *  must read it from here, never from the store, so both sources work unchanged. */
+export interface FullscreenModeContext {
+  /** Active gradient ramp — 256 RGB entries (for cpuRaster CPU sampling). */
+  ramp: RGB[];
+  /** Active gradient LUT — 256×4 RGBA8 (1024 bytes), the same colours as `ramp` (for GL upload). */
+  lut: Uint8Array;
+  /** The flat-optional params object; a mode reads the fields it declared in `paramFields`. */
+  params: GeometryParams;
+  /** Backing-store size in device pixels. */
+  width: number;
+  height: number;
+}
+
+/**
+ * OwnCanvasHost — the environment the overlay hands an `ownCanvas` mode at {@link FullscreenMode.mount}
+ * time. The mode mounts + drives its OWN canvas/renderer/RAF inside `container`, reads colour ONLY
+ * via `getContext()` (the overlay resolves it — the open-time snapshot in fullscreen, the live
+ * last-modified hero in split), and reports first-frame readiness / a fatal failure through the
+ * callbacks (the overlay shows a generic spinner until `onReady`, an error panel after `onError`).
+ *
+ * This is the seam's escape-hatch face: the overlay knows nothing mode-specific — it just provides
+ * an empty positioned container + the resolved colour source + lifecycle signalling. A mode owns its
+ * canvas DOM, RAF, gestures, and (via a ResizeObserver on `container`) its own resize.
+ */
+export interface OwnCanvasHost {
+  /** An empty, positioned (`absolute inset-0`) element to mount the canvas into. Fills the stage. */
+  container: HTMLElement;
+  /** The current render context (resolved colour source + size). Read at mount + lazily per-frame. */
+  getContext: () => FullscreenModeContext;
+  /** Call once the first frame has painted — clears the overlay's loading spinner. */
+  onReady: () => void;
+  /** Call on a fatal mount failure (e.g. no WebGL2) — shows the overlay's error panel. */
+  onError: (err: unknown) => void;
+}
+
+/**
+ * OwnCanvasHandle — the lifecycle handle a mode returns from {@link FullscreenMode.mount}. The
+ * overlay drives the few cross-cutting events every ownCanvas mode shares; the mode owns everything
+ * else internally. All callbacks are optional except {@link dispose}.
+ */
+export interface OwnCanvasHandle {
+  /** The resolved colour source changed (snapshot replaced, or the live hero updated in split) —
+   *  re-read `ctx.lut` / `ctx.ramp` and re-upload. */
+  onContext?: (ctx: FullscreenModeContext) => void;
+  /** The shared Dither toggle changed. */
+  setDither?: (on: boolean) => void;
+  /** Return the canvas to read for PNG export (the mode should render a fresh frame first). */
+  exportCanvas?: () => HTMLCanvasElement | null;
+  /** Tear down — dispose the renderer, cancel RAF, remove listeners, and remove the canvas. */
+  dispose: () => void;
+}
+
+/** A flat-optional `GeometryParams` field a mode reads, with the metadata a generic panel
+ *  needs to render a control for it. `default` should mirror `GEOM_DEFAULTS[key]`. */
+export interface FullscreenParamField {
+  key: keyof GeometryParams;
+  label: string;
+  min: number;
+  max: number;
+  step?: number;
+  default: number;
+}
+
+export interface FullscreenMode {
+  /** Stable key — persisted in the store + used in export filenames. */
+  id: string;
+  label: string;
+  kind: FullscreenModeKind;
+  /** Flat-optional `GeometryParams` fields this mode reads (declarative). */
+  paramFields?: readonly FullscreenParamField[];
+
+  // ── kind: 'cpuField' ──
+  /** Pure position+coverage field producer (e.g. `sampleGeometry`). The harness LINEAR-samples
+   *  the LUT at the float position and applies CPU **error-diffusion** dither before the 8-bit
+   *  write (the smoothest still-gradient result — column average tracks the input, WIGGLE→0).
+   *  MUST stay pure + deterministic. */
+  field?: (ctx: FullscreenModeContext) => GeometryField;
+
+  // ── kind: 'cpuRaster' ──
+  /** Pure pixel producer; uploaded + presented through the shared dither tail. Use `cpuField`
+   *  instead for gradient-over-position modes — `cpuRaster` pre-quantises to 8-bit so the
+   *  dither can't recover banding. For modes that genuinely own their pixels (e.g. an
+   *  imported image). */
+  raster?: (ctx: FullscreenModeContext) => Uint8ClampedArray;
+
+  // ── kind: 'glQuad' ──
+  /** Fragment BODY defining `vec3 modeColor(vec2 uv)` (+ any helpers). */
+  fragBody?: string;
+  /** Extra `uniform …;` declarations the body reads (beyond the reserved preamble set). */
+  fragUniforms?: string;
+  /** Names of the extra uniforms to resolve locations for, so `setUniforms` can set them. */
+  uniformNames?: readonly string[];
+  /** Set this mode's per-present uniforms. `loc(name)` resolves a cached location. */
+  setUniforms?: (
+    gl: WebGL2RenderingContext,
+    loc: (name: string) => WebGLUniformLocation | null,
+    ctx: FullscreenModeContext,
+  ) => void;
+
+  // ── kind: 'ownCanvas' ──
+  /** Mount the mode's OWN canvas/renderer/RAF into `host.container`; returns a lifecycle handle.
+   *  The overlay calls this once when the mode becomes active and `dispose()`s it on exit / mode
+   *  switch. Required for `kind === 'ownCanvas'` (the live Fractal; Liquify; Parallax). The mode
+   *  bakes its own dither (include `DITHER_TAIL_GLSL` in its display shader). */
+  mount?: (host: OwnCanvasHost) => OwnCanvasHandle;
+  /** A one-line hint shown bottom-right of the stage (e.g. 'drag to pan · scroll to zoom'). The
+   *  overlay falls back to a generic display-only hint when absent (and to the split hint in split). */
+  hint?: string;
+
+  // ── controls ──
+  /** Self-contained controls panel (optional). */
+  Controls?: React.FC;
+}
+
+// ── registry ────────────────────────────────────────────────────────────────────────────
+// A Map preserves insertion order, so the toolbar order = registration order. Builtins
+// register in a fixed order from `modes/index.ts`; a parallel mode registers itself there
+// (or via its own import) to slot into the selector.
+
+const REGISTRY = new Map<string, FullscreenMode>();
+
+/** Register a mode. Idempotent on `id` (re-registering replaces — handy for HMR). */
+export const registerFullscreenMode = (mode: FullscreenMode): void => {
+  REGISTRY.set(mode.id, mode);
+};
+
+/** Look up a mode by id (null if unknown — the overlay falls back to the first mode). */
+export const getFullscreenMode = (id: string): FullscreenMode | null => REGISTRY.get(id) ?? null;
+
+/** All registered modes in registration order (drives the selector). */
+export const listFullscreenModes = (): FullscreenMode[] => [...REGISTRY.values()];

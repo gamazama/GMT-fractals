@@ -1,16 +1,108 @@
 
 import { StateCreator } from 'zustand';
-import { FractalStoreState, FractalActions, PanelId, PanelState, DockZone, CompositionOverlayType, CompositionOverlaySettings } from '../../types';
+import { EngineStoreState, EngineActions, PanelId, PanelState, DockZone, CompositionOverlayType, CompositionOverlaySettings, UiModePreference } from '../../types';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
 
-export type UISlice = Pick<FractalStoreState,
-    'showLightGizmo' | 'isGizmoDragging' | 
+// User preferences persisted to localStorage. Read at slice init,
+// written from setters. All keys under the `gmt.` namespace.
+const LS = {
+    uiMode: 'gmt.uiModePreference',
+    showHints: 'gmt.showHints',
+    invertY: 'gmt.invertY',
+    advancedMode: 'gmt.advancedMode',
+    lockSceneOnSwitch: 'gmt.lockSceneOnSwitch',
+    exportIncludeScene: 'gmt.exportIncludeScene',
+    leftDockSize: 'gmt.leftDockSize',
+    rightDockSize: 'gmt.rightDockSize',
+    isLeftDockCollapsed: 'gmt.isLeftDockCollapsed',
+    isRightDockCollapsed: 'gmt.isRightDockCollapsed',
+    compositionOverlay: 'gmt.compositionOverlay',
+    compositionOverlaySettings: 'gmt.compositionOverlaySettings',
+} as const;
+
+function readBool(key: string, fallback: boolean): boolean {
+    try {
+        const v = localStorage.getItem(key);
+        if (v === '0' || v === 'false') return false;
+        if (v === '1' || v === 'true') return true;
+    } catch { /* SSR / private mode */ }
+    return fallback;
+}
+function writeBool(key: string, v: boolean): void {
+    try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* quota */ }
+}
+function readNumber(key: string, fallback: number): number {
+    try {
+        const v = localStorage.getItem(key);
+        if (v !== null) {
+            const n = Number(v);
+            if (Number.isFinite(n)) return n;
+        }
+    } catch { /* SSR / private mode */ }
+    return fallback;
+}
+function writeNumber(key: string, v: number): void {
+    try { localStorage.setItem(key, String(v)); } catch { /* quota */ }
+}
+function readJson<T>(key: string, fallback: T): T {
+    try {
+        const v = localStorage.getItem(key);
+        if (v !== null) return { ...fallback, ...(JSON.parse(v) as object) } as T;
+    } catch { /* SSR / malformed */ }
+    return fallback;
+}
+function writeJson(key: string, v: unknown): void {
+    try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* quota */ }
+}
+
+function readUiModePreference(): UiModePreference {
+    try {
+        const v = localStorage.getItem(LS.uiMode);
+        if (v === 'auto' || v === 'mobile' || v === 'desktop') return v;
+    } catch { /* SSR / private mode */ }
+    return 'auto';
+}
+function writeUiModePreference(v: UiModePreference): void {
+    try { localStorage.setItem(LS.uiMode, v); } catch { /* quota */ }
+}
+
+const COMPOSITION_OVERLAY_TYPES = new Set(['none', 'grid', 'thirds', 'golden', 'spiral', 'center', 'diagonal', 'safearea']);
+function readCompositionOverlay(fallback: CompositionOverlayType): CompositionOverlayType {
+    try {
+        const v = localStorage.getItem(LS.compositionOverlay);
+        if (v && COMPOSITION_OVERLAY_TYPES.has(v)) return v as CompositionOverlayType;
+    } catch { /* SSR / private mode */ }
+    return fallback;
+}
+
+// Tutorial completion persistence — namespaced per app via
+// `setTutorialStorageKey(key)` (called by installTutorial). Default
+// 'gmt-tutorials' so existing GMT installs keep their completion state.
+let _tutorialStorageKey = 'gmt-tutorials';
+function readTutorialCompleted(): number[] {
+    try {
+        const stored = localStorage.getItem(_tutorialStorageKey);
+        return stored ? JSON.parse(stored).completed || [] : [];
+    } catch { return []; }
+}
+function writeTutorialCompleted(completed: number[]): void {
+    try { localStorage.setItem(_tutorialStorageKey, JSON.stringify({ completed })); } catch { /* quota */ }
+}
+/** Set the localStorage key used to persist tutorial completion. Re-reads
+ *  the completion list under the new key so a freshly-namespaced app
+ *  picks up its own history. Apps call this through `installTutorial`. */
+export function setTutorialStorageKey(key: string, applyToStore: (completed: number[]) => void): void {
+    _tutorialStorageKey = key;
+    applyToStore(readTutorialCompleted());
+}
+
+export type UISlice = Pick<EngineStoreState,
+    'showLightGizmo' |
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' | 'histogramLoading' |
     'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
-    'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'autoCompile' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'invertY' |
-    'resolutionMode' | 'fixedResolution' |
+    'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'advancedMode' | 'showHints' | 'uiModePreference' | 'isDeviceMobile' | 'isPortrait' | 'mobileActiveMenu' | 'invertY' |
     'helpWindow' | 'contextMenu' |
     'lockSceneOnSwitch' | 'exportIncludeScene' |
     'isTimelineHovered' | 
@@ -23,15 +115,15 @@ export type UISlice = Pick<FractalStoreState,
     // New Layout Props
     'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' |
     'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot' |
-    'workshopOpen' | 'workshopEditFormula' |
+    'workshopOpen' | 'workshopEditFormula' | 'workshopCatalogKey' |
+    'newSceneOpen' |
     // Tutorial
     'tutorialActive' | 'tutorialLessonId' | 'tutorialStepIndex' | 'tutorialCompleted'
-> & Pick<FractalActions,
-    'setShowLightGizmo' | 'setGizmoDragging' | 
+> & Pick<EngineActions,
+    'setShowLightGizmo' |
     'setHistogramData' | 'setHistogramAutoUpdate' | 'setHistogramLoading' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
     'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
-    'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAutoCompile' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setInvertY' |
-    'setResolutionMode' | 'setFixedResolution' |
+    'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAdvancedMode' | 'setShowHints' | 'setUiModePreference' | 'setMobileActiveMenu' | 'setInvertY' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
     'setIsTimelineHovered' | 
     'setInteractionMode' | 'setFocusLock' |
@@ -47,6 +139,7 @@ export type UISlice = Pick<FractalStoreState,
     'setActiveTab' | 'floatTab' | 'dockTab' |
     // Workshop
     'openWorkshop' | 'closeWorkshop' |
+    'openNewScene' | 'closeNewScene' |
     // Tutorial
     'startTutorial' | 'advanceTutorialStep' | 'skipTutorial' | 'completeTutorial'
 >;
@@ -59,28 +152,15 @@ const getUrlParam = (key: string) => {
 };
 
 // INITIAL LAYOUT DEFINITION
-// Left dock is empty by default - panels are added when called from menus
-// Right dock contains main control panels
-const DEFAULT_PANELS: Record<string, PanelState> = {
-    // Left Dock - Empty by default, panels added dynamically
-    
-    // Right Dock (Main Control Deck)
-    'Formula': { id: 'Formula', location: 'right', order: 0, isCore: true, isOpen: true }, // Default Active
-    'Graph': { id: 'Graph', location: 'right', order: 1, isCore: true, isOpen: false },
-    'Scene': { id: 'Scene', location: 'right', order: 2, isCore: true, isOpen: false },
-    'Shader': { id: 'Shader', location: 'right', order: 3, isCore: true, isOpen: false },
-    'Gradient': { id: 'Gradient', location: 'right', order: 4, isCore: true, isOpen: false },
-    'Quality': { id: 'Quality', location: 'right', order: 5, isCore: true, isOpen: false },
-    
-    // Dynamic / Switchable Panels (Initially Hidden/Closed)
-    'Light': { id: 'Light', location: 'right', order: 6, isCore: false, isOpen: false },
-    'Audio': { id: 'Audio', location: 'right', order: 7, isCore: false, isOpen: false },
-    'Drawing': { id: 'Drawing', location: 'right', order: 8, isCore: false, isOpen: false },
-};
+//
+// The generic engine ships with no panels pre-registered. Apps seed their
+// own panel set by merging entries into the `panels` record in their store
+// bootstrap — either via `movePanel(id, dock)` at boot time or by spreading
+// an app-specific initial state into the Zustand creator.
+const DEFAULT_PANELS: Record<string, PanelState> = {};
 
-export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
-    showLightGizmo: true, 
-    isGizmoDragging: false, 
+export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
+    showLightGizmo: true,
     interactionMode: 'none',
     focusLock: false,
 
@@ -90,21 +170,27 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     openLightPopupIndex: -1,
     shadowPanelOpen: false,
     vpQualityOpen: false,
-    autoCompile: false,
-    
+
     isUserInteracting: false,
 
-    advancedMode: false,
-    showHints: true,
-    debugMobileLayout: false,
-    invertY: false,
-    
-    resolutionMode: 'Full',
-    fixedResolution: [800, 600],
+    advancedMode: readBool(LS.advancedMode, false),
+    showHints: readBool(LS.showHints, true),
+    uiModePreference: readUiModePreference(),
+    // Initialized from window at slice creation; a single global
+    // resize listener in hooks/useMobileLayout.ts keeps these in sync.
+    isDeviceMobile: typeof window !== 'undefined'
+        && (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768),
+    isPortrait: typeof window !== 'undefined'
+        && window.innerHeight > window.innerWidth,
+    mobileActiveMenu: null,
+    invertY: readBool(LS.invertY, false),
+
+    // resolutionMode + fixedResolution migrated to viewportSlice (Phase 2a).
+
     isBroadcastMode: getUrlParam('clean') || getUrlParam('broadcast'),
-    
-    lockSceneOnSwitch: false,
-    exportIncludeScene: false,
+
+    lockSceneOnSwitch: readBool(LS.lockSceneOnSwitch, false),
+    exportIncludeScene: readBool(LS.exportIncludeScene, false),
     
     isTimelineHovered: false,
     tabSwitchCount: 0,
@@ -113,8 +199,8 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     contextMenu: { visible: false, x: 0, y: 0, items: [], targetHelpIds: [] },
     
     // Composition overlay
-    compositionOverlay: 'none',
-    compositionOverlaySettings: {
+    compositionOverlay: readCompositionOverlay('none'),
+    compositionOverlaySettings: readJson(LS.compositionOverlaySettings, {
         opacity: 0.5,
         lineThickness: 1,
         showCenterMark: false,
@@ -129,40 +215,36 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
         spiralPositionY: 0.5,
         spiralScale: 1.0,
         spiralRatio: 1.618033988749895 // Golden ratio (phi) by default
-    },
+    }),
 
     // --- LAYOUT STATE ---
     panels: DEFAULT_PANELS,
-    leftDockSize: 320, // Width for Engine and Camera Manager panels
-    rightDockSize: 360, // Slightly wider to fit all tabs on one line
-    isLeftDockCollapsed: true, // Collapsed by default - panels will open it when initialized
-    isRightDockCollapsed: false,
+    leftDockSize: readNumber(LS.leftDockSize, 320), // Width for Engine and Camera Manager panels
+    rightDockSize: readNumber(LS.rightDockSize, 360), // Slightly wider to fit all tabs on one line
+    isLeftDockCollapsed: readBool(LS.isLeftDockCollapsed, true), // Collapsed by default - panels will open it when initialized
+    isRightDockCollapsed: readBool(LS.isRightDockCollapsed, false),
     draggingPanelId: null,
     dragSnapshot: null,
     
     // Computed props (updated when panels change)
-    activeLeftTab: null, // No active tab since panels are closed
-    activeRightTab: 'Formula',
+    activeLeftTab: null,
+    activeRightTab: null,
 
     // Workshop
     workshopOpen: false,
+    newSceneOpen: false,
     workshopEditFormula: undefined,
+    workshopCatalogKey: undefined,
 
     // Tutorial System
     tutorialActive: false,
     tutorialLessonId: null,
     tutorialStepIndex: 0,
-    tutorialCompleted: (() => {
-        try {
-            const stored = localStorage.getItem('gmt-tutorials');
-            return stored ? JSON.parse(stored).completed || [] : [];
-        } catch { return []; }
-    })(),
+    tutorialCompleted: readTutorialCompleted(),
 
     // --- ACTIONS ---
 
     setShowLightGizmo: (v) => set({ showLightGizmo: v }),
-    setGizmoDragging: (v) => set({ isGizmoDragging: v }),
     setInteractionMode: (mode) => set({ interactionMode: mode }),
     setFocusLock: (v) => set({ focusLock: v }),
 
@@ -177,7 +259,10 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     setHistogramLayer: (v) => {
         if (get().histogramLayer === v) return;
         set({ histogramLayer: v });
-        FractalEvents.emit('uniform', { key: Uniforms.HistogramLayer, value: v });
+        // uHistogramLayer only selects which colour layer the histogram READBACK
+        // samples (ShaderBuilder histogram variant) — it does not affect the main
+        // render, so it must not reset accumulation.
+        FractalEvents.emit('uniform', { key: Uniforms.HistogramLayer, value: v, noReset: true });
         set((state) => ({ histogramTrigger: state.histogramTrigger + 1 }));
     },
     
@@ -190,17 +275,16 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     setOpenLightPopupIndex: (index) => set({ openLightPopupIndex: index }),
     setShadowPanelOpen: (v) => set({ shadowPanelOpen: v }),
     setVpQualityOpen: (v) => set({ vpQualityOpen: v }),
-    setAutoCompile: (v) => set({ autoCompile: v }),
-    setAdvancedMode: (v) => set({ advancedMode: v }),
-    setShowHints: (v) => set({ showHints: v }),
-    setDebugMobileLayout: (v) => set({ debugMobileLayout: v }),
-    setInvertY: (v) => set({ invertY: v }),
-    
-    setResolutionMode: (m) => { set({ resolutionMode: m }); FractalEvents.emit('reset_accum', undefined); },
-    setFixedResolution: (w, h) => { set({ fixedResolution: [w, h] }); FractalEvents.emit('reset_accum', undefined); },
-    
-    setLockSceneOnSwitch: (v) => set({ lockSceneOnSwitch: v }),
-    setExportIncludeScene: (v) => set({ exportIncludeScene: v }),
+    setAdvancedMode: (v) => { writeBool(LS.advancedMode, v); set({ advancedMode: v }); },
+    setShowHints: (v) => { writeBool(LS.showHints, v); set({ showHints: v }); },
+    setUiModePreference: (v) => { writeUiModePreference(v); set({ uiModePreference: v }); },
+    setMobileActiveMenu: (v) => set((s) => s.mobileActiveMenu === v ? s : { mobileActiveMenu: v }),
+    setInvertY: (v) => { writeBool(LS.invertY, v); set({ invertY: v }); },
+
+    // setResolutionMode / setFixedResolution migrated to viewportSlice (Phase 2a).
+
+    setLockSceneOnSwitch: (v) => { writeBool(LS.lockSceneOnSwitch, v); set({ lockSceneOnSwitch: v }); },
+    setExportIncludeScene: (v) => { writeBool(LS.exportIncludeScene, v); set({ exportIncludeScene: v }); },
     
     setIsTimelineHovered: (v) => set({ isTimelineHovered: v }),
     incrementTabSwitchCount: () => set(s => ({ tabSwitchCount: s.tabSwitchCount + 1 })),
@@ -217,14 +301,21 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     }),
     closeContextMenu: () => set(s => ({ contextMenu: { ...s.contextMenu, visible: false } })),
 
-    openWorkshop: (editFormula) => set({ workshopOpen: true, workshopEditFormula: editFormula }),
-    closeWorkshop: () => set({ workshopOpen: false, workshopEditFormula: undefined }),
+    openWorkshop: (editFormula, catalogKey) => set({ workshopOpen: true, workshopEditFormula: editFormula, workshopCatalogKey: catalogKey }),
+    closeWorkshop: () => set({ workshopOpen: false, workshopEditFormula: undefined, workshopCatalogKey: undefined }),
+
+    openNewScene: () => set({ newSceneOpen: true }),
+    closeNewScene: () => set({ newSceneOpen: false }),
 
     // --- NEW LAYOUT ACTIONS IMPLEMENTATION ---
 
     movePanel: (id, targetZone, order) => set((state) => {
         const panels = { ...state.panels };
-        
+
+        // Non-floatable panels (e.g. the Gradient Explorer's canvas mode stages, which
+        // desync from the centre stage when floated) can't be undocked — reject the move.
+        if (targetZone === 'float' && panels[id]?.floatable === false) return {};
+
         // Create panel dynamically if it doesn't exist (for Engine, Camera Manager, etc.)
         if (!panels[id]) {
             panels[id] = { 
@@ -305,24 +396,25 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
         const panels = { ...state.panels };
         if (!panels[id]) return {};
 
-        const p = panels[id];
-        const nextState = forceState !== undefined ? forceState : !p.isOpen;
-        
-        if (p.location === 'float') {
-            p.isOpen = nextState;
-        } else {
+        const nextState = forceState !== undefined ? forceState : !panels[id].isOpen;
+
+        // Replace the entry with a NEW object rather than mutating isOpen in
+        // place. Subscribers that detect panel changes by reference equality
+        // (e.g. favientsPanelPersist's open-state watcher) would otherwise miss
+        // a pure open/close toggle, since the entry reference stayed identical —
+        // that's why a closed Favients shelf reopened on reload.
+        const p = panels[id] = { ...panels[id], isOpen: nextState };
+
+        if (p.location !== 'float') {
             if (nextState) {
                 (Object.values(panels) as PanelState[]).forEach((other) => {
                     if (other.location === p.location && other.id !== id) {
                         other.isOpen = false;
                     }
                 });
-                p.isOpen = true;
-                
+
                 if (p.location === 'left') return { panels, activeLeftTab: id as PanelId, isLeftDockCollapsed: false };
                 if (p.location === 'right') return { panels, activeRightTab: id as PanelId, isRightDockCollapsed: false };
-            } else {
-                p.isOpen = false;
             }
         }
         
@@ -332,8 +424,14 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
         return { panels, activeLeftTab: activeLeft, activeRightTab: activeRight };
     }),
 
-    setDockSize: (side, size) => set({ [side === 'left' ? 'leftDockSize' : 'rightDockSize']: size }),
-    setDockCollapsed: (side, collapsed) => set({ [side === 'left' ? 'isLeftDockCollapsed' : 'isRightDockCollapsed']: collapsed }),
+    setDockSize: (side, size) => {
+        writeNumber(side === 'left' ? LS.leftDockSize : LS.rightDockSize, size);
+        set({ [side === 'left' ? 'leftDockSize' : 'rightDockSize']: size });
+    },
+    setDockCollapsed: (side, collapsed) => {
+        writeBool(side === 'left' ? LS.isLeftDockCollapsed : LS.isRightDockCollapsed, collapsed);
+        set({ [side === 'left' ? 'isLeftDockCollapsed' : 'isRightDockCollapsed']: collapsed });
+    },
     
     setFloatPosition: (id, x, y) => set((state) => ({
         panels: { ...state.panels, [id]: { ...state.panels[id], floatPos: { x, y } } }
@@ -360,10 +458,15 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     dockTab: (tab) => get().movePanel(tab, 'right'),
     
     // Composition overlay
-    setCompositionOverlay: (type) => set({ compositionOverlay: type }),
-    setCompositionOverlaySettings: (settings) => set(state => ({
-        compositionOverlaySettings: { ...state.compositionOverlaySettings, ...settings }
-    })),
+    setCompositionOverlay: (type) => {
+        try { localStorage.setItem(LS.compositionOverlay, type); } catch { /* quota */ }
+        set({ compositionOverlay: type });
+    },
+    setCompositionOverlaySettings: (settings) => set(state => {
+        const merged = { ...state.compositionOverlaySettings, ...settings };
+        writeJson(LS.compositionOverlaySettings, merged);
+        return { compositionOverlaySettings: merged };
+    }),
 
     // --- TUTORIAL ACTIONS ---
     startTutorial: (lessonId) => set({
@@ -385,7 +488,7 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
         const completed = state.tutorialLessonId !== null && !state.tutorialCompleted.includes(state.tutorialLessonId)
             ? [...state.tutorialCompleted, state.tutorialLessonId]
             : state.tutorialCompleted;
-        try { localStorage.setItem('gmt-tutorials', JSON.stringify({ completed })); } catch {}
+        writeTutorialCompleted(completed);
         return {
             tutorialActive: false,
             tutorialLessonId: null,

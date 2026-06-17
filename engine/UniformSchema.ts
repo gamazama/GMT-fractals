@@ -1,8 +1,14 @@
+/**
+ * @invariant Importing this module triggers `registerFeatures()` at top
+ *   level — even a types-only import. The merge filters feature-vs-base
+ *   name collisions SILENTLY (no warning); feature-vs-feature collisions
+ *   go last-feature-wins via `UNIFORM_DEFAULTS` reduce.
+ */
 
 import * as THREE from 'three';
 import { Uniforms } from './UniformNames';
 import { featureRegistry } from './FeatureSystem';
-import { registerFeatures } from '../features';
+import { registerFeatures } from './features';
 
 // Ensure features are registered before schema is built
 registerFeatures();
@@ -14,15 +20,25 @@ export interface UniformDefinition {
     type: GLSLType;
     default: any;
     arraySize?: number;
-    precision?: 'highp' | 'mediump' | 'lowp';
     comment?: string;
     /** If true, creates the Three.js uniform backing but skips GLSL declaration.
-     *  Use for uniforms that are only needed for specific formula variants (e.g. Modular). */
+     *  Use for uniforms that are only needed for specific formula variants (e.g. Modular).
+     *
+     *  @enforcement `shaders/chunks/uniforms.ts` (and its engine-gmt
+     *    mirror) is the SOLE enforcement site — skips GLSL declaration
+     *    emit when true. `ShaderBuilder.buildUniformsBlock` and
+     *    `createUniforms` ignore this flag. */
     backingOnly?: boolean;
 }
 
-// Base Schema (Pure Core)
-// Only contains uniforms required by the RenderPipeline and Camera logic.
+// Base Schema — three categories:
+//   1. True engine core: time, resolution, camera basis, pipeline (history/blend/jitter).
+//   2. Tool/export slots that no-op at defaults (image-tile, histogram layer,
+//      output-pass A/B/depth, region rect). Live here so apps don't have to
+//      re-declare them per feature.
+//   3. CPU-derived caches of feature uniforms (pre/post/world rot matrices,
+//      env rotation, fog linear, pixel-size base). Computed once on CPU to
+//      avoid per-fragment work; the feature still owns the source-of-truth.
 const BASE_SCHEMA: UniformDefinition[] = [
     // Core
     { name: Uniforms.Time, type: 'float', default: 0 },
@@ -76,11 +92,35 @@ const BASE_SCHEMA: UniformDefinition[] = [
 
 const featureUniforms = featureRegistry.getUniformDefinitions();
 
-// Deduplicate in case a feature defines a uniform that's also in base (shouldn't happen with correct separation)
-const existingNames = new Set(BASE_SCHEMA.map(u => u.name));
-const uniqueFeatures = featureUniforms.filter(u => !existingNames.has(u.name));
+// Collision detection at module-load time. Two failure modes the naming
+// convention alone can't catch:
+//   1. A feature redeclares a base-schema name (e.g. `uTime`).
+//   2. Two features collide on a name (last registered would silently win
+//      `UNIFORM_DEFAULTS`'s reduce).
+// Both cases throw on first import so the breakage is loud and immediate
+// instead of presenting as a mysterious wrong-default at render time.
+const baseNames = new Set(BASE_SCHEMA.map(u => u.name));
+const baseCollisions = featureUniforms.filter(u => baseNames.has(u.name)).map(u => u.name);
+if (baseCollisions.length > 0) {
+    throw new Error(
+        `[UniformSchema] Feature uniform(s) shadow base schema: ${baseCollisions.join(', ')}. ` +
+        `Rename in the feature def or remove the base entry.`
+    );
+}
+const seenFeatureNames = new Set<string>();
+const featureCollisions: string[] = [];
+for (const u of featureUniforms) {
+    if (seenFeatureNames.has(u.name)) featureCollisions.push(u.name);
+    else seenFeatureNames.add(u.name);
+}
+if (featureCollisions.length > 0) {
+    throw new Error(
+        `[UniformSchema] Two features declare the same uniform: ${featureCollisions.join(', ')}. ` +
+        `Rename one in its feature def.`
+    );
+}
 
-export const UNIFORM_SCHEMA = [...BASE_SCHEMA, ...uniqueFeatures];
+export const UNIFORM_SCHEMA = [...BASE_SCHEMA, ...featureUniforms];
 
 export const UNIFORM_DEFAULTS = UNIFORM_SCHEMA.reduce((acc, item) => {
     acc[item.name] = item.default;

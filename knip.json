@@ -1,0 +1,53 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "index.tsx",
+    "App.tsx",
+    "app-gmt/main.tsx",
+    "fluid-toy/main.tsx",
+    "fractal-toy/main.tsx",
+    "mesh-export/main.tsx",
+    "gradient-explorer/main.tsx",
+    "engine/plugins/**/*.{ts,tsx}",
+    "debug/smoke-*.mts",
+    "debug/test-*.mts",
+    "debug/*.mts",
+    "vite.config.ts"
+  ],
+  "project": [
+    "**/*.{ts,tsx,mts}",
+    "!node_modules/**",
+    "!dist/**",
+    "!debug/**/*.html",
+    "!**/*.min.{js,mjs}"
+  ],
+  "ignore": [
+    "engine-gmt/types/**",
+    "types/**",
+    "shaders/**",
+    "public/**",
+    "engine-gmt/features/fragmentarium_import/**",
+    "fluid-toy/deepZoom/HDRFloat.ts",
+    "mesh-export/algorithms/sdf-eval.ts",
+    "components/timeline/exportHelpers.ts",
+    "components/timeline/exportModulations.ts",
+    "engine/ConfigDefaults.ts",
+    "engine/managers/ConfigManager.ts"
+  ],
+  "ignoreBinaries": [],
+  "ignoreDependencies": [],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "files": "error",
+    "exports": "off",
+    "types": "off",
+    "duplicates": "off",
+    "enumMembers": "off",
+    "classMembers": "off",
+    "binaries": "off",
+    "dependencies": "off",
+    "devDependencies": "off",
+    "unlisted": "off",
+    "unresolved": "off"
+  }
+}

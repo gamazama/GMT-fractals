@@ -17,10 +17,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { parse } from '@shaderfrog/glsl-parser';
-import { detectFormulaV3, transformFormulaV3 } from '../features/fragmentarium_import/v3/compat.ts';
-import { buildFractalParams, filterDeadParams } from '../features/fragmentarium_import/workshop/param-builder.ts';
-import { slotToUniform } from '../features/fragmentarium_import/transform/variable-renamer.ts';
-import type { TransformedFormulaV2, FragDocumentV2, WorkshopParam } from '../features/fragmentarium_import/types.ts';
+import { detectFormulaV3, transformFormulaV3 } from '../engine-gmt/features/fragmentarium_import/v3/compat.ts';
+import { buildFractalParams, filterDeadParams } from '../engine-gmt/features/fragmentarium_import/workshop/param-builder.ts';
+import { slotToUniform } from '../engine-gmt/features/fragmentarium_import/transform/variable-renamer.ts';
+import type { TransformedFormulaV2, FragDocumentV2, WorkshopParam } from '../engine-gmt/features/fragmentarium_import/types.ts';
 
 // ─── CLI args ────────────────────────────────────────────────────────────────
 
@@ -37,8 +37,8 @@ const FILTER   = process.argv.slice(2).find(a =>
     !skipArgs.has(a) && !a.startsWith('-') && !a.includes('test-frag')
 );
 
-const REF  = 'features/fragmentarium_import/reference/Examples';
-const ROOT = path.resolve('h:/GMT/workspace-gmt/stable');
+const REF  = 'engine-gmt/features/fragmentarium_import/reference/Examples';
+const ROOT = path.resolve(import.meta.dirname, '..');
 
 // ─── Formatting ──────────────────────────────────────────────────────────────
 

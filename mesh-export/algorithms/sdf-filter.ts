@@ -43,7 +43,7 @@ export function applyMinFeatureSparse(sparseGrid: SparseSDFGrid, threshold: numb
  * 3D separable filter (min or max) on a dense Float32Array grid.
  * Applies the filter along X, Y, Z axes sequentially.
  */
-export function separableFilter(
+function separableFilter(
   src: Float32Array, dst: Float32Array, N: number, radius: number,
   op: (a: number, b: number) => number
 ): void {

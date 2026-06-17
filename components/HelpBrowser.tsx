@@ -79,7 +79,7 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
             cats[topic.category].push(topic);
         });
         return cats;
-    }, [searchTerm]);
+    }, [searchTerm, HELP_TOPICS]);
 
     // Flattened list logic - Optimized to only return topics for the Current Category (or Search)
     const visibleTopics = useMemo(() => {
@@ -137,23 +137,68 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
         }
 
         return pool;
-    }, [searchTerm, activeCategory]);
+    }, [searchTerm, activeCategory, HELP_TOPICS]);
+
+    // Auto-expand the active topic's ancestor chain in the sidebar so the
+    // selected entry is actually visible in the TOC. Without this, external
+    // openHelp(id) calls (e.g. a "?" button click outside the browser) leave
+    // the topic hidden under a collapsed parent.
+    useEffect(() => {
+        if (!activeTopicId) return;
+        const ancestors = getAncestors(activeTopicId);
+        setExpandedItems(prev => {
+            const next = new Set(prev);
+            ancestors.forEach(a => next.add(a));
+            next.add(activeTopicId);
+            return next;
+        });
+    }, [activeTopicId]);
 
     // Scroll active topic into view when ID changes
     useEffect(() => {
         // LOCK IMMEDIATELY: Prevent observer from hijacking navigation while we calculate scroll position
         isScrollingRef.current = true;
 
-        if (!activeTopicId || !contentRef.current) {
+        const container = contentRef.current;
+        if (!activeTopicId || !container) {
             isScrollingRef.current = false;
             return;
         }
-        
+
+        // Custom rAF scroll capped at SCROLL_DURATION_MS — native
+        // scrollIntoView({behavior:'smooth'}) lets the browser pick a duration
+        // based on distance, so long jumps to a far topic could take >1s and
+        // outrun the observer lock. A fixed short duration keeps "click ? →
+        // land on topic" snappy regardless of distance.
+        const SCROLL_DURATION_MS = 220;
+        let rafId = 0;
+        const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+        const animateScroll = (targetTop: number) => {
+            const startTop = container.scrollTop;
+            const delta = targetTop - startTop;
+            if (Math.abs(delta) < 1) {
+                isScrollingRef.current = false;
+                return;
+            }
+            const start = performance.now();
+            const tick = (now: number) => {
+                const t = Math.min((now - start) / SCROLL_DURATION_MS, 1);
+                container.scrollTop = startTop + delta * easeOutCubic(t);
+                if (t < 1) {
+                    rafId = requestAnimationFrame(tick);
+                } else {
+                    isScrollingRef.current = false;
+                }
+            };
+            rafId = requestAnimationFrame(tick);
+        };
+
         // Retry mechanism for cases where DOM hasn't rendered yet
         let attempts = 0;
         const maxAttempts = 10;
         const attemptDelay = 50;
-        
+
         const tryScroll = () => {
             const el = topicRefs.current[activeTopicId];
             if (!el) {
@@ -168,41 +213,35 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                 return;
             }
 
+            // Compute target scrollTop so the topic lands near the top of the viewport
+            // (matches the prior `block: 'start'` behaviour, with a small padding).
+            const containerRect = container.getBoundingClientRect();
+            const rect = el.getBoundingClientRect();
+            const targetTop = container.scrollTop + (rect.top - containerRect.top) - 16;
+
             if (forceScrollRef.current) {
-                if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-                
-                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 forceScrollRef.current = false;
-                
-                // Unlock after estimated scroll duration
-                scrollTimeoutRef.current = window.setTimeout(() => {
-                    isScrollingRef.current = false;
-                }, 750);
+                animateScroll(targetTop);
                 return;
             }
 
-            // Snap logic for external triggers
-            const rect = el.getBoundingClientRect();
-            const containerRect = contentRef.current!.getBoundingClientRect();
+            // Snap logic for external triggers — only scroll if the topic isn't
+            // already roughly at the top of the viewport.
             const isVisibleAtTop = rect.top >= containerRect.top - 50 && rect.top <= containerRect.top + 300;
-
             if (!isVisibleAtTop) {
-                 if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-                  
-                 el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  
-                 scrollTimeoutRef.current = window.setTimeout(() => {
-                    isScrollingRef.current = false;
-                 }, 750);
+                animateScroll(targetTop);
             } else {
                 isScrollingRef.current = false;
             }
         };
-        
+
         // Initial delay to ensure DOM update has flushed after category switch
         const timer = setTimeout(tryScroll, 50);
 
-        return () => clearTimeout(timer);
+        return () => {
+            clearTimeout(timer);
+            if (rafId) cancelAnimationFrame(rafId);
+        };
     }, [activeTopicId, visibleTopics]);
 
     // Intersection Observer to update active ID on scroll
@@ -424,9 +463,9 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                 </div>
 
                 {/* Content - SCROLLABLE AREA */}
-                <div 
+                <div
                     ref={contentRef}
-                    className="flex-1 bg-gray-900/50 overflow-y-auto custom-scroll p-6 scroll-smooth"
+                    className="flex-1 bg-gray-900/50 overflow-y-auto custom-scroll p-6"
                 >
                     {!searchTerm && (
                         <div className="mb-6 pb-2 border-b border-white/10">

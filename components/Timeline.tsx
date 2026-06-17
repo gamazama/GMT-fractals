@@ -1,13 +1,14 @@
 
-import React, { useRef, useEffect, useState, useLayoutEffect } from 'react';
+import React, { useRef, useEffect, useState, useLayoutEffect, useCallback } from 'react';
 import { useAnimationStore } from '../store/animationStore';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
+import { useShortcutScope } from '../engine/plugins/Shortcuts';
 import GraphEditor from './GraphEditor';
 import { TimelineToolbar } from './timeline/TimelineToolbar';
 import { KeyframeInspector } from './timeline/KeyframeInspector';
 import { DopeSheet } from './timeline/DopeSheet';
+import { BenchProfiler } from '../engine-gmt/utils/BenchProfiler';
 import { getKeyframeMenuItems } from './timeline/KeyframeContextMenu'; 
-import { TIMELINE_SIDEBAR_WIDTH } from '../data/constants';
 import { Track } from '../types';
 import { ContextMenuItem } from '../types/help';
 
@@ -16,16 +17,47 @@ interface TimelineProps {
 }
 
 const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
-    const {
-        isPlaying, currentFrame, durationFrames, sequence,
-        selectedTrackIds, updateKeyframes, setTangents, deleteSelectedKeyframes, snapshot,
-        selectedKeyframeIds, clipboard, copySelectedKeyframes, pasteKeyframes, duplicateSelection, loopSelection,
-        setIsScrubbing
-    } = useAnimationStore();
+    // Narrow per-field subscriptions instead of `useAnimationStore()` (full
+    // store sub). The animationStore receives ~60 no-op `set()` calls per
+    // second; with the destructured full sub Timeline.tsx re-rendered every
+    // RAF (241 commits per 240 RAFs idle) and DopeSheet/GraphEditor inherited
+    // the work — bench-perf-timeline showed 15ms/commit dope-idle = 3.7s of
+    // React work per 4s scenario, dropping wkrFps from 60 → 50. With narrow
+    // selectors the per-RAF noise no longer reaches this tree.
+    //
+    // Reactive values + action selectors via `useAnimationStore((s) => s.fn)`.
+    // For actions this returns a stable ref (Object.is bail-out) without forcing
+    // re-renders. The earlier wrapper-closure pattern broke useCallback dep
+    // stability and silently disabled mousemove handlers mid-drag.
+    const isPlaying           = useAnimationStore((s) => s.isPlaying);
+    const currentFrame        = useAnimationStore((s) => s.currentFrame);
+    const durationFrames      = useAnimationStore((s) => s.durationFrames);
+    const sequence            = useAnimationStore((s) => s.sequence);
+    const selectedTrackIds    = useAnimationStore((s) => s.selectedTrackIds);
+    const selectedKeyframeIds = useAnimationStore((s) => s.selectedKeyframeIds);
+    const clipboard           = useAnimationStore((s) => s.clipboard);
+    const updateKeyframes        = useAnimationStore((s) => s.updateKeyframes);
+    const setTangents            = useAnimationStore((s) => s.setTangents);
+    const deleteSelectedKeyframes = useAnimationStore((s) => s.deleteSelectedKeyframes);
+    const snapshot               = useAnimationStore((s) => s.snapshot);
+    const copySelectedKeyframes  = useAnimationStore((s) => s.copySelectedKeyframes);
+    const pasteKeyframes         = useAnimationStore((s) => s.pasteKeyframes);
+    const duplicateSelection     = useAnimationStore((s) => s.duplicateSelection);
+    const loopSelection          = useAnimationStore((s) => s.loopSelection);
+    const setIsScrubbing         = useAnimationStore((s) => s.setIsScrubbing);
+    const sidebarWidth           = useAnimationStore((s) => s.timelineSidebarWidth);
 
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
-    const setIsTimelineHovered = useFractalStore(s => s.setIsTimelineHovered);
-    
+    const openGlobalMenu = useEngineStore(s => s.openContextMenu);
+    const setIsTimelineHovered = useEngineStore(s => s.setIsTimelineHovered);
+    const isTimelineHovered = useEngineStore(s => s.isTimelineHovered);
+
+    // Push the 'timeline-hover' shortcut scope while the cursor is over
+    // the timeline. The Undo plugin registers Mod+Z / Mod+Y under this
+    // scope at priority 10, so when active they shadow the global undo
+    // and route to undo('animation') instead — independent stack from
+    // param/scene undos.
+    useShortcutScope('timeline-hover', isTimelineHovered);
+
     // Reset hover/scrub flags on unmount so they can't get stuck if the timeline
     // closes while the mouse is inside it or while a drag is in progress.
     useEffect(() => {
@@ -36,9 +68,26 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
     }, []);
 
     const [mode, setMode] = useState<'DopeSheet' | 'Graph'>('DopeSheet');
+    // Expose setMode + a heavy-state seed hook so debug/bench-perf-timeline.mts
+    // can drive Dope/Graph switching and inject a pre-seeded sequence
+    // without simulating 20 s of mouse-record. Stable refs across renders;
+    // teardown clears the globals so they don't leak between mounts.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        (window as any).__timelineSetMode = setMode;
+        return () => { delete (window as any).__timelineSetMode; };
+    }, []);
     const [panelHeight, setPanelHeight] = useState(250);
     const [isResizing, setIsResizing] = useState(false);
-    const [frameWidth, setFrameWidth] = useState(8); 
+    const [frameWidth, setFrameWidth] = useState(8);
+    // Bench seam: let debug/bench-perf-timeline.mts force fit-to-window so
+    // TrackRow virtualisation doesn't clip most seeded keys. Sibling of
+    // __timelineSetMode above.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        (window as any).__timelineSetFrameWidth = setFrameWidth;
+        return () => { delete (window as any).__timelineSetFrameWidth; };
+    }, []);
     
     const [scrollLeft, setScrollLeft] = useState(0);
     const [viewportWidth, setViewportWidth] = useState(0);
@@ -85,10 +134,10 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
         if (!isPlaying || !scrollContainerRef.current) return;
 
         const containerWidth = scrollContainerRef.current.clientWidth;
-        const playheadPos = TIMELINE_SIDEBAR_WIDTH + currentFrame * frameWidth;
+        const playheadPos = sidebarWidth + currentFrame * frameWidth;
         const currentScroll = scrollLeftRef.current;
 
-        const visibleStart = currentScroll + TIMELINE_SIDEBAR_WIDTH;
+        const visibleStart = currentScroll + sidebarWidth;
         const visibleEnd = currentScroll + containerWidth;
 
         const isOffscreenRight = playheadPos > visibleEnd;
@@ -103,7 +152,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                 setScrollLeft(Math.max(0, newScroll));
              }
         }
-    }, [currentFrame, isPlaying, mode, frameWidth]);
+    }, [currentFrame, isPlaying, mode, frameWidth, sidebarWidth]);
 
     useEffect(() => {
         if (!scrollContainerRef.current) return;
@@ -117,61 +166,76 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
         return () => observer.disconnect();
     }, []); 
 
-    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-        if (mode === 'DopeSheet') {
-            setScrollLeft(e.currentTarget.scrollLeft);
-        }
-    };
+    // Stable handlers — wrapping in useCallback with the necessary deps so that
+    // DopeSheet/GraphEditor (memoized below) can bail on prop equality. Reactive
+    // values that aren't already in deps are read via useAnimationStore.getState()
+    // inside the handler at call time — they only matter when the user actually
+    // right-clicks, not on every render.
+    const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+        // Read mode via ref-style: handler is created with [] deps, but mode
+        // changes are infrequent and we re-create on dep change to capture
+        // the current mode. Cheap.
+        setScrollLeft(e.currentTarget.scrollLeft);
+    }, []);
 
-    const handleNavigatorZoom = (val: number, type: 'factor' | 'absolute' = 'factor') => {
-        let newWidth = frameWidth;
-        if (type === 'factor') newWidth = frameWidth * val;
-        else newWidth = val;
-        
-        newWidth = Math.max(1, Math.min(200, newWidth));
-        setFrameWidth(newWidth);
-    };
+    const handleNavigatorZoom = useCallback((val: number, type: 'factor' | 'absolute' = 'factor') => {
+        setFrameWidth((prev) => {
+            const next = type === 'factor' ? prev * val : val;
+            return Math.max(1, Math.min(200, next));
+        });
+    }, []);
 
     // --- CONTEXT MENUS ---
 
-    const handleKeyContextMenu = (e: React.MouseEvent, trackId: string, keyId: string, interp: string, broken?: boolean, auto?: boolean) => {
+    const handleKeyContextMenu = useCallback((
+        e: React.MouseEvent, trackId: string, keyId: string, interp: string,
+        broken?: boolean, auto?: boolean,
+    ) => {
         e.preventDefault();
-        
+        const a = useAnimationStore.getState();
+        const selectedIds = a.selectedKeyframeIds;
+        const clip = a.clipboard;
+        const curFrame = a.currentFrame;
         const actions = {
             updateInterp: (newInterp: 'Linear' | 'Step' | 'Bezier') => {
                 snapshot();
-                const targetIds = selectedKeyframeIds.length > 0 ? selectedKeyframeIds : [`${trackId}::${keyId}`];
+                const targetIds = selectedIds.length > 0 ? selectedIds : [`${trackId}::${keyId}`];
                 const updates = targetIds.map(id => {
                     const [tid, kid] = id.split('::');
                     return { trackId: tid, keyId: kid, patch: { interpolation: newInterp } };
                 });
                 updateKeyframes(updates);
             },
-            setTangents: (mode: 'Auto' | 'Split' | 'Unified' | 'Ease') => setTangents(mode),
+            setTangents: (m: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease') => setTangents(m),
             deleteKeys: deleteSelectedKeyframes,
             copyKeys: copySelectedKeyframes,
-            pasteKeys: () => pasteKeyframes(currentFrame), // Paste at current playhead position
+            pasteKeys: () => pasteKeyframes(curFrame),
             duplicateKeys: duplicateSelection,
-            loopKeys: (times: number) => loopSelection(times)
+            loopKeys: (times: number) => loopSelection(times),
         };
-
-        const items = getKeyframeMenuItems(interp, broken, auto, actions, selectedKeyframeIds.length, !!clipboard);
+        const items = getKeyframeMenuItems(interp, broken, auto, actions, selectedIds.length, !!clip);
         openGlobalMenu(e.clientX, e.clientY, items, ['ui.timeline']);
-    };
+    }, [snapshot, updateKeyframes, setTangents, deleteSelectedKeyframes, copySelectedKeyframes, pasteKeyframes, duplicateSelection, loopSelection, openGlobalMenu]);
 
-    const handleDopeSheetCanvasMenu = (e: React.MouseEvent, frame: number) => {
+    const handleDopeSheetCanvasMenu = useCallback((e: React.MouseEvent, frame: number) => {
         e.preventDefault();
+        // Read latest reactive values at click time (not via closure capture)
+        // so this handler can remain useCallback([])-stable for memoization.
+        const a = useAnimationStore.getState();
+        const selectedIds = a.selectedKeyframeIds;
+        const clip = a.clipboard;
+        const dur = a.durationFrames;
         const items: ContextMenuItem[] = [
             { label: 'Timeline Actions', action: () => {}, isHeader: true },
-            { 
-                label: `Copy Selected (${selectedKeyframeIds.length})`, 
-                action: copySelectedKeyframes, 
-                disabled: selectedKeyframeIds.length === 0 
+            {
+                label: `Copy Selected (${selectedIds.length})`,
+                action: copySelectedKeyframes,
+                disabled: selectedIds.length === 0
             },
-            { 
-                label: 'Paste Keys Here', 
-                action: () => pasteKeyframes(frame), 
-                disabled: !clipboard 
+            {
+                label: 'Paste Keys Here',
+                action: () => pasteKeyframes(frame),
+                disabled: !clip
             },
             {
                 label: 'Duplicate Selection Here',
@@ -179,15 +243,14 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                     copySelectedKeyframes();
                     pasteKeyframes(frame);
                 },
-                disabled: selectedKeyframeIds.length === 0
+                disabled: selectedIds.length === 0
             },
             { label: 'View', action: () => {}, isHeader: true },
             {
                 label: 'Fit View (Duration)',
                 action: () => {
-                    // Calculate frame width to fit duration in viewport
-                    const availWidth = viewportWidth - TIMELINE_SIDEBAR_WIDTH;
-                    const newFrameWidth = availWidth / (durationFrames + 10); // +10 padding
+                    const availWidth = viewportWidth - sidebarWidth;
+                    const newFrameWidth = availWidth / (dur + 10);
                     handleNavigatorZoom(newFrameWidth, 'absolute');
                     setScrollLeft(0);
                     if (scrollContainerRef.current) scrollContainerRef.current.scrollLeft = 0;
@@ -201,7 +264,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
             }
         ];
         openGlobalMenu(e.clientX, e.clientY, items, ['ui.timeline']);
-    };
+    }, [copySelectedKeyframes, pasteKeyframes, viewportWidth, sidebarWidth, handleNavigatorZoom, openGlobalMenu]);
 
     useEffect(() => {
         const onMove = (e: MouseEvent) => {
@@ -223,7 +286,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
     }, [isResizing]);
 
     const timelineAreaWidth = (durationFrames + 20) * frameWidth;
-    const totalContentWidth = TIMELINE_SIDEBAR_WIDTH + timelineAreaWidth;
+    const totalContentWidth = sidebarWidth + timelineAreaWidth;
 
     return (
         <div 
@@ -272,41 +335,47 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                     {/* Changed bg-transparent to bg-[#080808] */}
                     <div className="flex-1 flex flex-col min-w-0 bg-[#080808] relative">
                         {mode === 'DopeSheet' ? (
-                            <div 
-                                ref={scrollContainerRef}
-                                onScroll={handleScroll}
-                                className="flex-1 overflow-auto bg-transparent no-scrollbar relative"
-                            >
-                                <DopeSheet 
-                                    frameWidth={frameWidth}
-                                    totalContentWidth={totalContentWidth}
-                                    scrollContainerRef={scrollContainerRef}
-                                    onContextMenu={handleKeyContextMenu}
-                                    onCanvasContextMenu={handleDopeSheetCanvasMenu}
-                                    scrollLeft={scrollLeft}
-                                    visibleWidth={viewportWidth}
-                                />
-                            </div>
+                            <BenchProfiler id="Timeline:DopeSheet">
+                                <div
+                                    ref={scrollContainerRef}
+                                    onScroll={handleScroll}
+                                    className="flex-1 overflow-auto bg-transparent no-scrollbar relative"
+                                >
+                                    <DopeSheet
+                                        frameWidth={frameWidth}
+                                        totalContentWidth={totalContentWidth}
+                                        scrollContainerRef={scrollContainerRef}
+                                        onContextMenu={handleKeyContextMenu}
+                                        onCanvasContextMenu={handleDopeSheetCanvasMenu}
+                                        scrollLeft={scrollLeft}
+                                        visibleWidth={viewportWidth}
+                                        visibleGraphTracks={visibleGraphTracks}
+                                        setVisibleGraphTracks={setVisibleGraphTracks}
+                                    />
+                                </div>
+                            </BenchProfiler>
                         ) : (
-                            <div ref={scrollContainerRef} className="flex-1 bg-transparent relative overflow-hidden">
-                                <GraphEditor 
-                                    // Graph now receives the decoupled VISIBLE tracks list
-                                    trackIds={visibleGraphTracks} 
-                                    setVisibleTracks={setVisibleGraphTracks}
-                                    width={viewportWidth}
-                                    height={panelHeight - 32} 
-                                    scrollLeft={scrollLeft}
-                                    frameWidth={frameWidth}
-                                    sidebarWidth={TIMELINE_SIDEBAR_WIDTH}
-                                    onSetScroll={setScrollLeft}
-                                    onSetFrameWidth={setFrameWidth}
-                                    onContextMenu={(e, tid, kid, interp) => {
-                                        const track = sequence.tracks[tid];
-                                        const k = track?.keyframes.find(kf => kf.id === kid);
-                                        handleKeyContextMenu(e, tid, kid, interp, k?.brokenTangents, k?.autoTangent);
-                                    }}
-                                />
-                            </div>
+                            <BenchProfiler id="Timeline:Graph">
+                                <div ref={scrollContainerRef} className="flex-1 bg-transparent relative overflow-hidden">
+                                    <GraphEditor
+                                        // Graph now receives the decoupled VISIBLE tracks list
+                                        trackIds={visibleGraphTracks}
+                                        setVisibleTracks={setVisibleGraphTracks}
+                                        width={viewportWidth}
+                                        height={panelHeight - 32}
+                                        scrollLeft={scrollLeft}
+                                        frameWidth={frameWidth}
+                                        sidebarWidth={sidebarWidth}
+                                        onSetScroll={setScrollLeft}
+                                        onSetFrameWidth={setFrameWidth}
+                                        onContextMenu={(e, tid, kid, interp) => {
+                                            const track = sequence.tracks[tid];
+                                            const k = track?.keyframes.find(kf => kf.id === kid);
+                                            handleKeyContextMenu(e, tid, kid, interp, k?.brokenTangents, k?.autoTangent);
+                                        }}
+                                    />
+                                </div>
+                            </BenchProfiler>
                         )}
                     </div>
                     

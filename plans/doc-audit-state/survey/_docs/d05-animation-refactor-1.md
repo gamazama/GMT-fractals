@@ -1,0 +1,97 @@
+---
+batch_id: d05-animation-refactor-1
+audited_at: 2026-05-20T00:00:00Z
+files:
+  - path: docs/animation-refactor/00_INDEX.md
+    blob_sha: a33baf9ffaa41cdc5fa3171f09af59015738b409
+    lines_read: [1, 146]
+  - path: docs/animation-refactor/01_AUDIT.md
+    blob_sha: d251a2b6e5bc171045c889a6eceb17384a78d3ba
+    lines_read: [1, 273]
+  - path: docs/animation-refactor/02_RATIONALE.md
+    blob_sha: 5d225fc1b84f548a555f12037601abe8e95361df
+    lines_read: [1, 300]
+  - path: docs/animation-refactor/03_SPEC.md
+    blob_sha: da7e02a8df1d40b79df8219cb213922b1569df24
+    lines_read: [1, 691]
+  - path: docs/animation-refactor/04_CORRECTIONS.md
+    blob_sha: 4bd7688826bd888f83eb5d4b09fd578791db9d44
+    lines_read: [1, 77]
+  - path: docs/animation-refactor/05_SPIKE_PROMPT.md
+    blob_sha: efb065d31d61f866aa1c8af797440ae69f099cd0
+    lines_read: [1, 129]
+  - path: docs/animation-refactor/06_SPIKE_FINDINGS.md
+    blob_sha: 5d4982be3732b1181526d74d3d7326754cbf3177
+    lines_read: [1, 71]
+  - path: docs/animation-refactor/07_ENGINE_PROBE_PROMPT.md
+    blob_sha: bca826f88176832bc51f7fe5d3f49554b36faba8
+    lines_read: [1, 99]
+  - path: docs/animation-refactor/08_ENGINE_PROBE_FINDINGS.md
+    blob_sha: 44c47649ec08280e79c8e20dc4ca9038df9ea389
+    lines_read: [1, 92]
+  - path: docs/animation-refactor/09_CANVAS_GRAPH_PROMPT.md
+    blob_sha: 27274ee779614cd8d83dc0d257e7b0aac7c1dd24
+    lines_read: [1, 159]
+---
+
+## 00_INDEX.md
+Living roadmap and status doc for the multi-phase animation/modulation/recording/timeline refactor. Tracks 25+ phase docs, outcomes log, and an implementation roadmap revised after empirical probes. As of 2026-05-18 the directory is "push-ready" with 44 commits ahead of `github/dev`; modulation off-switches just shipped (118ec09). The original AnimationDocument-first phase plan is deferred — perf rationale was retracted after canvas work resolved user-felt lag at heavy seeds. Bench numbers, surprises, and spec corrections are referenced inline by commit SHA.
+Key decisions: Spec v2 is source of truth; corrections logged in 04_CORRECTIONS.md, not silent reinterpretation. Working protocol = one fresh Claude session per phase with prompt/report doc pairs. AnimationDocument plan held after two probes invalidated its perf rationale; canvas-first reordering became front-runner. After audio fps-sync work, all prior app-gmt benches need re-baselining (double-mounted RAF drivers ran ticks 2× per RAF).
+Preservable: full outcomes-log table (date + event + plan effect); revised roadmap (canvas GraphEd → bench metric → canvas DopeSheet → re-measure); decision references quick-find (Q1-Q9 + section pointers in 03_SPEC); cross-coordination contract with gmt-rs (patterns flow both ways via 04_CORRECTIONS); done-criteria checklist for the refactor as a whole; the deferred AnimationDocument 10-phase plan preserved in a `<details>` block.
+MAY BE STALE: "44 commits ahead of github/dev" status line; "[NEXT] git push origin dev" — likely actioned since 2026-05-18; reservations like `19_OFFLINE_MODULATION_BAKE_PROMPT.md` may now exist as shipped phases.
+
+## 01_AUDIT.md
+30-entry-point inventory of the existing animation/modulation surface, mapping every reader and writer of `sequence` state across 8 files. Concludes the codebase has six entangled concerns (Document, Player, Engine, Modulation, Audio, Recorder) where six clean modules would fit. Includes pattern observation that `snapshot()`-calling vs caller-snapshot conventions are inconsistent and undocumented; identifies two camera-key capture paths that bypass slice methods via direct `setState`; documents ~15 external snapshot callers that drive the undo stack from outside the slice. Live and offline export pipelines for modulation are independently implemented — source of "live and export disagree" bug class. Recommends a spike before committing to full refactor.
+Key decisions: Six-module decomposition: AnimationDocument, Player, Engine, ModulationRuntime, Recorder, AudioRuntime. Registries (binderRegistry, cameraKeyRegistry, cameraPairRegistry, logTrackRegistry, featureRegistry) judged "already clean" and stay structurally as-is. Phasing should follow module boundaries, not optimisation surfaces; estimated 8-12 weeks realistic vs original 3.
+Preservable: §1 (every writer enumeration with snapshot/no-snapshot disposition); §3a (16 distinct `animationEngine.scrub` call sites); §4b duplication audit (live vs export `exportModulations.ts`); §7 boot-order table per-app (10 install steps with consequence-if-missing); §10 boundary cleanups list (in-place mutation footguns; duplicate `exportModulations.ts` files; orphaned comments); §11 expanded refactor plan (8 phases following module boundaries).
+MAY BE STALE: file-line references (e.g. `sequenceSlice.ts:393-394`, `cameraKeyRegistry.ts:142`, `cameraBinders.ts:168`) may have drifted; the "spike from refactor doc §recommendation" gates the rest of the plan, and the spike has since invalidated parts of the diagnosis.
+
+## 02_RATIONALE.md
+Original refactor proposal with self-pushback. Frames the problem as not nine bottlenecks but one architectural mismatch (animation data in wrong store, rendered the wrong way). Inventories ten costs that all scale with total keyframe count: snapshot serialisation, mount/unmount churn, memo invalidation, prop fan-out, selector fan-out, per-RAF dirty-check, per-track RAF, polyline resampling, marquee hit-test, recording write storm. Argues DCC tools (Maya, Blender, After Effects) and document-canvas tools (Figma, Tldraw) handle this by keeping document data outside the framework's reactive store, rendering to canvas, and undoing by reversing operations. Proposes class-based `AnimationDocument` with patch-based undo and per-track version counters.
+Key decisions: Class-not-Zustand for document data (per-subscriber + version counter avoid selector-comparison overhead per RAF). No-op write gating at one location enforced by every public mutator. `recordingSnapshot` becomes a docVersion checkpoint instead of deep clone. Canvas DopeSheet + GraphCurvesCanvas with three-layer cache (back: per-track polyline; mid: soft-selection mask; front: overlay). Selection/UI state stays in Zustand; only document data moves out.
+Preservable: §1 ten-cost table with where + triggered-by columns; §3 target architecture ASCII diagram (inversion of data ownership); §4 full `AnimationDocument` class signature (Patch types + DocSubscriber + methods); §4a Zustand-vs-Document boundary table (what stays where + why); §7 three-canvas render API design (`<DopeSheetCanvas />`, `<GraphCurvesCanvas />`, `<GraphSidebar />`); §9 modulation/audio/recording redesign — Arm/Play/Stop→Bake flow; §10 migration plan in 6 phases (foundation → reader → writer → DopeSheet canvas → Graph canvas → recording/bake); §11 survives/dies list (what gets preserved vs deleted); §13 files-touched matrix with LOC + migration phase columns.
+MAY BE STALE: 3-week estimate (audit said 6-7, then probe deferred the whole thing); the empirical motivation has been retracted per 04_CORRECTIONS; design intent itself is sound but its priority dropped.
+
+## 03_SPEC.md
+The v2 inter-module API spec with 9 open questions resolved. Specifies the public surface of every module the refactor introduces — contracts, state ownership, read/write boundaries. Implementation detail is out of scope. Inspired by the gmt-rs port's animation crate (patterns marked [gmt-rs] are direct ports). Includes nine binding design principles (P1-P9), a per-tick data flow diagram, cross-module invariants (I1-I10) each individually testable, and a test strategy where contract tests are part of the spec, not afterthought. Resolves Q1-Q9: `setSequence` clears AppHistory, branded TimeSec/Frame at module boundaries, lazy cached derived properties, chunked bake with sync fast-path, folders are passive, hybrid tick+scrubAt, whole-object patches with commit-time coalescing, HostAdapter class form, hybrid singletons.
+Key decisions: P1-P9 design principles (state as data + behaviour as functions; single source of truth per concern; type-segregated dispatch; auto-register at feature-freeze; explicit deps via parameters; one write path per data type; no-op gate on every public write; subscription bails by default; test the contract). Data ownership map locks who owns what — refactor PRs that introduce duplicates fail review. Boot pattern A (eager construct + explicit init) chosen over factory; matches existing `bindStoreToEngine` pattern. AppHistory is unified undo across animation/scene/features domains; `timeline-hover` scope goes away.
+Preservable: §1 design principles P1-P9 with rationale per principle; §2 data ownership map (every state with owner + reader + writer); §3.1-3.9 full module API surfaces (AnimationDocument, Player, Engine, ModulationRuntime, AudioRuntime, Recorder, AppHistory, TrackProvider, Registries) with patch unions, deps interfaces, signatures; §4 per-tick data flow (TickRegistry phases + ANIMATE 6-step sequence); §4a singleton pattern decision (Pattern A vs B); §5 explicit boot order in code; §6 cross-module invariants I1-I10 (each testable); §7 test strategy per-module; §8 Q1-Q9 resolved decisions with rationale; §8a type appendix (branded primitives, ids, forward-referenced types).
+MAY BE STALE: §10 implementation order — 33 days of foundation work was deferred after probes; the spec itself remains intended as source of truth even though shipping has been reordered.
+
+## 04_CORRECTIONS.md
+Running log of post-shipping amendments to 03_SPEC.md. Template-driven. Four entries to date (all 2026-05-17), each documenting a spec or audit claim that was invalidated or refined by implementation reality. Bidirectional with gmt-rs: when the Rust port ships a phase touching shared scope, the relevant pattern is captured as an inbound entry.
+Key decisions: When implementation diverges from spec, the spec is updated AND the change is logged here with date + rationale (not silent reinterpretation). Template includes Phase, Section, Change, Rationale, Discovered-by, Cross-refs. Audit accuracy is logged honestly (e.g. "audit MISSED these four writers with the same bug class — leaving as-is for historical accuracy and flagging the gap here").
+Preservable: All four entries (Canvas-DopeSheet React-fanout retraction; shared canvas utils mirror-bug; DopeSheet probe invalidating three audit claims; in-place keyframe mutation bug class). Lessons learned, e.g. "any inner loop of the shape `for selected of N: keys.find(...)` is a footgun"; "when the audit names a specific code path as load-bearing, the probe's first move should be a grep to confirm the path is still wired"; "`mutates in place` / `clones correctly` is a per-pattern property, not per-method."
+MAY BE STALE: None — this is historical record by design; entries should accumulate, not get rewritten.
+
+## 05_SPIKE_PROMPT.md
+Self-contained prompt for the 2-3 day diagnostic spike that gates Phase 0. Validates the architectural diagnosis empirically by converting `useTrackAnimation` to subscribe to a single track instead of the entire sequence. Three edits only — strict scope guard. Uses existing `bench-perf-timeline.mts` infrastructure. Defines pass criteria (storeNotifyCount drop ≥30%, frameDts p50 improve ≥15%, Slider profiler drop ≥50% — any two of three across dope-* scenarios) and explicit fail/partial-gain interpretations. Output is `06_SPIKE_FINDINGS.md` with diff tables.
+Key decisions: Use a git worktree (`../dev-spike-pertrack-sub`) so the spike is isolated from main; landing spike change directly on main is forbidden. Three files only: `useTrackAnimation.ts`, new `useTrackKeyframes` hook, `TrackRow.tsx`. Test the keyframe-subscription specifically, not full prop removal (that's Phase 0). Don't skip bench in favour of "looks faster."
+Preservable: §Pass criteria (the falsifiability bar); §Partial-gain interpretation (paint dominant → canvas DopeSheet jumps earlier in phase plan); §Fail criteria (alternative hypothesis: no-op set() flood is dominant source); §Step 6 findings doc template (5 required sections); §Scope guards list (don't build AnimationDocument; don't touch canvas; don't land on main).
+MAY BE STALE: Worktree paths; the entire spike has shipped and findings have invalidated its diagnosis. Preserved for protocol design pattern (worktree + bench + falsifiable criteria).
+
+## 06_SPIKE_FINDINGS.md
+Output of the spike: "**Diagnosis invalidated for the named consumer.**" Per-track keyframes subscription is sound primitive but does not in isolation reduce Slider re-renders or frame time under any tested scenario. A follow-up probe (Probe 2) removed ALL non-keyframe subs from `useTrackAnimation` — also no measurable effect. Slider re-render cause is elsewhere, most likely engineStore notifications driving panel-level re-renders. Includes methodology corrections: bench was hooked to wrong store; viewport virtualisation was clipping seeded keys. Pass criteria as written couldn't fire even on a working change because dope-idle has zero animation-store writes.
+Key decisions: Architectural proposal in 02_RATIONALE remains internally consistent, but its stated mechanism for why user-reported lag occurs is not supported by measurement. Phase 0 should not begin until actual fanout source is identified. Bench instrumentation patches (animStoreNotifyCount + __timelineSetFrameWidth) stay regardless; should be ported back to dev.
+Preservable: §Result line; §Methodology corrections (bench was measuring wrong axis; pass criteria couldn't fire); §Bench delta tables pre vs post vs probe2 (numbers preserved); §Observed surprises (5 falsifications: Sliders re-render at same rate regardless of useTrackAnimation subs; TrackRow's per-track sub bails correctly but parent still re-renders; `dope-idle` has zero animation-store writes; frame times vsync-pinned except `*-play`; `Timeline:Graph` is dominant cost at graph-play); §Recommendation for Phase 0 (three concrete next steps including reorder phase plan + add modulation-recording scenario).
+MAY BE STALE: Worktree retention recommendation; the probe branch may have been cleaned up since.
+
+## 07_ENGINE_PROBE_PROMPT.md
+Follow-up probe prompt to locate which engineStore subscription drives Slider re-renders at engine-tick rate. Targets `Item:widget:formula-params`'s ~480 commits during dope-play (once per worker frame). 1-day budget. Investigative only — no animation-refactor changes, no AnimationDocument, no canvas work. Output is findings doc + recommended targeted fix. Hypothesis: `Item:widget:formula-params` re-renders because some component in render chain holds a broad `useEngineStore` subscription that fires every engine tick. Pass criteria: commit count drops ≥50% from a localised fix in ≤5 files.
+Key decisions: Worktree isolation; chain location by grep + ancestry trace; counter-instrumentation pattern using `window.__probeCounts`; smallest-possible-narrowing edit per top suspect; explicit pause points (after Step 2 chain; after Step 4 counters; before Step 7 recommendation framing).
+Preservable: §The hypothesis statement (three candidate mechanisms ranked); §Step 3 inventory table shape (selector / primitive-vs-reference / change frequency / writer location); §Step 4 instrumentation pattern (`window.__probeCounts[selector_name]++`); §Step 5 narrowing edit family (full-object vs single-field; split into multiple `useEngineStore` calls; imperative subscribe-and-mutate-ref like `TrackRow.tick`); §Step 6 pass/partial/fail criteria; §Pause-points design pattern.
+MAY BE STALE: Worktree paths; the probe completed and its hypothesis was invalidated. Pattern is preserved as a probe template.
+
+## 08_ENGINE_PROBE_FINDINGS.md
+Output of the engine-fanout probe: "**Hypothesis invalidated.**" Narrowing the three identified broad subscriptions (PanelRouter:251, FormulaParamsWidget:53, App.tsx:34) plus a fourth narrowing of `useTrackAnimation`'s `currentFrame` produced **zero impact** — bit-for-bit 480 commits in every variant during dope-play. Surfaces two truths instead: (a) bench's commit-count metric is misleading in isolation, and (b) actual user-visible cost is `Timeline:Graph`'s per-redraw polyline work, not in React fanout from animation/engine stores. Redirect: canvas GraphEditor work becomes next concrete piece, not another probe.
+Key decisions: Commit count is a near-useless metric in isolation — correlates with notification rate, not per-subtree work; cost = commit count × per-commit ms. Every profiler boundary in entire app commits exactly 480 times during dope-play — consequence of many `useSyncExternalStore` consumers across tree. `Timeline:Graph` at 6.95 ms × 480 commits = 3.3 s/scenario is the actual lag — dominant cost by an order of magnitude. None of the probe's four edits should ship — all are sketches with regressions; rederive proper full-coverage narrowings on dev if wanted for hygiene.
+Preservable: §Result line and redirect; §The chain (App → Dock:right → PanelRouter → FormulaParamsWidget → Sliders); §Bench delta tables Variant A/C/D (every variant null); §Observed surprises (5 findings about React-fanout axis exhaustion); §Recommendation (stop diagnostic probes on React-fanout axis; start canvas GraphEditor; defer AnimationDocument; add per-commit-median-ms bench column); §Probe code retention notes (why each of 4 edits should NOT ship).
+MAY BE STALE: Worktree retention; the canvas GraphEditor work has since shipped (per 00_INDEX), so this probe's redirect was actioned.
+
+## 09_CANVAS_GRAPH_PROMPT.md
+Implementation prompt for the canvas GraphEditor — replaces `GraphRenderer.drawGraph` per-redraw polyline + soft-selection resampling with a three-layer canvas cache. Targets `Timeline:Graph` cost drop from ~7 ms/commit to <1 ms/commit during graph-play. Empirically justified by `08_ENGINE_PROBE_FINDINGS.md`. Estimated 1-2 weeks. Architecture: three composited canvases (back: per-track polylines + grid + ruler; mid: soft-selection mask; front: overlay = playhead/selection box/hover). Each layer has its own invalidation contract. Cache keys are the load-bearing correctness question.
+Key decisions: Per-track polyline cache keyed on `{trackId, keyframesRef, viewScaleX, viewScaleY, normalized, trackRangeMin, trackRangeMax}` — use array reference as version token (cloned writers in sequenceSlice already produce new arrays). `panX` is NOT in the key — pan is `ctx.translate(-panOffset, 0)` on back canvas during composition. Soft-selection mask keyed on `{selectedKeyframeIdsHash, softRadius, softType, viewScaleX}`. Overlay layer has no cache — repainted per render. Use OffscreenCanvas where supported; fall back to detached canvas for tests. WeakRef on keyframesRef so old entries are GC'd.
+Preservable: §Architecture ASCII diagram (3-canvas composition with invalidation triggers per layer); §Cache key contract (full per-cache key composition + rationale); §Implementation steps 1-6 (cache infrastructure → polyline builder → wire cache into drawGraph → soft-selection mask → overlay layer → validation); §Acceptance criteria checklist; §Pause points at key risk junctions; §Out-of-band concerns to flag (DPR/HiDPI, OffscreenCanvas test env, pan precision).
+MAY BE STALE: This work has shipped (`a9518c6` → `ad6b7a8` per 00_INDEX). The prompt is preserved as the design contract and as a template for future canvas work; subsequent prompts (DopeSheet, etc.) reused this shape.
+
+PASS

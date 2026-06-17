@@ -1,26 +1,46 @@
 
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import * as THREE from 'three';
 import { Keyframe, AnimationSequence, SoftSelectionType } from '../types';
 import { featureRegistry } from '../engine/FeatureSystem';
-import { getLightFromSlice } from '../features/lighting';
 import { nanoid } from 'nanoid';
 import { AnimationMath } from '../engine/math/AnimationMath';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
 
 /** Checks if a track ID represents a rotation-like parameter (needs euler unwrapping) */
 export const isRotationTrack = (trackId: string): boolean =>
     /rotation|rot|phase|twist/i.test(trackId) || /param[C-F]/i.test(trackId);
-import { CameraUtils } from './CameraUtils';
 import { getViewportCamera } from '../engine/worker/ViewportRefs';
+
+// CameraUtils provided fractal deep-zoom unified-position math; stubbed
+// for the generic engine. Apps with their own camera math replace this.
+const UnifiedPos = {
+    getUnifiedPosition: (local: { x: number; y: number; z: number }, offset: any) => ({
+        x: local.x + (offset?.x ?? 0) + (offset?.xL ?? 0),
+        y: local.y + (offset?.y ?? 0) + (offset?.yL ?? 0),
+        z: local.z + (offset?.z ?? 0) + (offset?.zL ?? 0),
+    }),
+};
+
+// Lighting feature was fractal-raymarching specific. This helper is a
+// no-op stand-in so tracks bound to `lighting.*` fall through to nothing.
+// Typed with an optional Light shape so downstream property accesses still
+// compile — apps re-installing a lighting feature replace this.
+interface StubLight {
+    intensity: number;
+    falloff: number;
+    position: { x: number; y: number; z: number };
+}
+const getLightFromSlice = (_lighting: unknown, _idx: number): StubLight | null => null;
 
 // --- LIVE VALUE HELPER ---
 // Reads current value from the specific store slice
 export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: number, sequence: any): number => {
     if (isPlaying) return 0;
 
-    const fs = useFractalStore.getState();
+    const fs = useEngineStore.getState();
     const geom = (fs as any).geometry;
     const lighting = (fs as any).lighting;
     
@@ -31,7 +51,7 @@ export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: 
         // non-zero during orbit drag — store never has this, engine camera does.
         const cam0 = getViewportCamera() || engine.activeCamera;
         const localPos = cam0 ? cam0.position : { x: 0, y: 0, z: 0 };
-        const unified = CameraUtils.getUnifiedPosition(localPos, fs.sceneOffset);
+        const unified = UnifiedPos.getUnifiedPosition(localPos, (fs as any).sceneOffset);
 
         if (trackId === 'camera.unified.x') return unified.x;
         if (trackId === 'camera.unified.y') return unified.y;
@@ -96,7 +116,7 @@ export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: 
     }
     
     // Fallback for legacy bare params
-    const coreMath = fs.coreMath;
+    const coreMath = (fs as any).coreMath;
     if (coreMath) {
         if (trackId === 'paramA') return coreMath.paramA;
         if (trackId === 'paramB') return coreMath.paramB;
@@ -111,19 +131,23 @@ export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: 
 };
 
 // --- CURVE EVALUATION ---
-// Wrapper for AnimationMath to handle track traversal
-export const evaluateTrackValue = (keys: Keyframe[], frame: number, isRotation: boolean): number => {
+// Wrapper for AnimationMath to handle track traversal.
+// `isLog` mirrors the AnimationEngine path so the graph editor draws
+// (and the timeline samples) the same curve that actually plays back —
+// log-track params (e.g. fluid-toy's julia.zoom) interpolate in
+// log-value space with Bezier handles re-interpreted as log-units.
+export const evaluateTrackValue = (keys: Keyframe[], frame: number, isRotation: boolean, isLog: boolean = false): number => {
     if (keys.length === 0) return 0;
-    
+
     if (frame <= keys[0].frame) return keys[0].value;
     if (frame >= keys[keys.length - 1].frame) return keys[keys.length - 1].value;
-    
+
     for (let i = 0; i < keys.length - 1; i++) {
         const k1 = keys[i];
         const k2 = keys[i+1];
-        
+
         if (frame >= k1.frame && frame < k2.frame) {
-            return AnimationMath.interpolate(frame, k1, k2, isRotation);
+            return AnimationMath.interpolate(frame, k1, k2, isRotation, isLog);
         }
     }
     return keys[0].value;
@@ -158,6 +182,96 @@ export const updateTangentFromStats = (isLeft: boolean, angle: number, lenPct: n
     const y = Math.abs(x) * Math.tan(rad) * (isLeft ? -1 : 1);
     
     return { x, y };
+};
+
+// --- TANGENT-MODE / GLOBAL-INTERP UPDATE BUILDERS ---
+// Pure per-key/per-track transforms shared by the animation store's setTangents /
+// setGlobalInterpolation actions AND the palette channel editor's GraphDataSource,
+// so the "make a key Auto/Ease/Aligned/Unified/Split" and "set every key's
+// interpolation" logic lives in ONE place. The store applies these via its
+// clone-and-set; the palette applies via updateKeyframes / replaceKeyframes.
+
+/** Per-key patches for a tangent-mode change over the current selection. */
+export const calculateTangentModeUpdates = (
+    sequence: AnimationSequence,
+    selectedKeyframeIds: string[],
+    mode: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease'
+): { trackId: string, keyId: string, patch: Partial<Keyframe> }[] => {
+    const updates: { trackId: string, keyId: string, patch: Partial<Keyframe> }[] = [];
+    selectedKeyframeIds.forEach(cid => {
+        const [tid, kid] = cid.split('::');
+        const track = sequence.tracks[tid];
+        if (!track) return;
+        const idx = track.keyframes.findIndex(k => k.id === kid);
+        if (idx === -1) return;
+        const k = track.keyframes[idx];
+
+        if (mode === 'Split') {
+            updates.push({ trackId: tid, keyId: kid, patch: { brokenTangents: true, autoTangent: false, tangentMode: undefined } });
+        } else if (mode === 'Unified' || mode === 'Aligned') {
+            // Lock both handles to a shared through-direction (average of current
+            // left/right) so the result is order-independent. Unified shares
+            // magnitude across both; Aligned keeps each side's own length.
+            const rt = k.rightTangent;
+            const lt = k.leftTangent;
+            let newLt = lt;
+            let newRt = rt;
+            if (rt && lt) {
+                const tx = rt.x - lt.x;
+                const ty = rt.y - lt.y;
+                const tlen = Math.hypot(tx, ty);
+                if (tlen > 1e-6) {
+                    const ux = tx / tlen;
+                    const uy = ty / tlen;
+                    const lLen = Math.hypot(lt.x, lt.y);
+                    const rLen = Math.hypot(rt.x, rt.y);
+                    const sharedLen = (lLen + rLen) * 0.5;
+                    const useL = mode === 'Unified' ? sharedLen : lLen;
+                    const useR = mode === 'Unified' ? sharedLen : rLen;
+                    newLt = { x: -ux * useL, y: -uy * useL };
+                    newRt = { x:  ux * useR, y:  uy * useR };
+                }
+            }
+            updates.push({
+                trackId: tid, keyId: kid,
+                patch: { leftTangent: newLt, rightTangent: newRt, brokenTangents: false, autoTangent: false, tangentMode: mode === 'Unified' ? 'Unified' : undefined },
+            });
+        } else if (mode === 'Auto' || mode === 'Ease') {
+            const prev = track.keyframes[idx - 1];
+            const next = track.keyframes[idx + 1];
+            const { l, r } = AnimationMath.calculateTangents(k, prev, next, mode, isLogTrack(tid));
+            updates.push({ trackId: tid, keyId: kid, patch: { autoTangent: mode === 'Auto', brokenTangents: false, leftTangent: l, rightTangent: r } });
+        }
+    });
+    return updates;
+};
+
+/** New keyframe arrays per track for a global interpolation change (all keys). */
+export const calculateGlobalInterpolationUpdates = (
+    sequence: AnimationSequence,
+    type: 'Linear' | 'Step' | 'Bezier',
+    tangentMode?: 'Auto' | 'Ease'
+): { trackId: string, newKeys: Keyframe[] }[] => {
+    const updates: { trackId: string, newKeys: Keyframe[] }[] = [];
+    Object.keys(sequence.tracks).forEach(tid => {
+        const track = sequence.tracks[tid];
+        if (track.keyframes.length === 0) return;
+        const trackIsLog = isLogTrack(tid);
+        const clonedKeys = track.keyframes.map(k => ({ ...k, interpolation: type }));
+        if (type === 'Bezier' && tangentMode) {
+            clonedKeys.forEach((k, i) => {
+                const prev = clonedKeys[i - 1];
+                const next = clonedKeys[i + 1];
+                const { l, r } = AnimationMath.calculateTangents(k, prev, next, tangentMode, trackIsLog);
+                k.leftTangent = l;
+                k.rightTangent = r;
+                k.autoTangent = (tangentMode === 'Auto');
+                k.brokenTangents = false;
+            });
+        }
+        updates.push({ trackId: tid, newKeys: clonedKeys });
+    });
+    return updates;
 };
 
 // --- KEYFRAME CONSTRAINT UTILITY ---

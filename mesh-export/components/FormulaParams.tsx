@@ -3,7 +3,7 @@ import { useMeshExportStore } from '../store/meshExportStore';
 import { ScalarInput } from '../../components/inputs/ScalarInput';
 import { VectorInput } from '../../components/inputs/VectorInput';
 import { GenericToggleSwitch } from '../../components/GenericToggleSwitch';
-import type { FractalDefinition, FractalParameter } from '../../types/fractal';
+import type { FractalDefinition, FractalParameter } from '../../engine-gmt/types/fractal';
 
 interface FormulaParamsProps {
   /** Override definition (for interlace secondary formula) */

@@ -2,13 +2,12 @@ import React, { useEffect, useRef } from 'react';
 import { MeshExportPage } from './MeshExportPage';
 import { loadGMFIntoStore, buildDefaultParams } from './FormulaSelector';
 import { useMeshExportStore } from '../store/meshExportStore';
-import { registry } from '../../engine/FractalRegistry';
+import { registry } from '../../engine-gmt/engine/FractalRegistry';
 
-// Import formulas to ensure the formula registry is populated
-import '../../formulas';
-// Register DDFS features so ShaderFactory.generateMeshSDFLibrary() can run inject() hooks
-import { registerFeatures } from '../../features';
-registerFeatures();
+// Side-effect: registers all 26 GMT DDFS features and 42 formulas into the
+// shared registries. Mirrors app-gmt's boot sequence — must run before
+// ShaderFactory.generateMeshSDFLibrary() touches feature inject() hooks.
+import '../../app-gmt/registerFeatures';
 
 export function MeshExportApp() {
   const loaded = useRef(false);

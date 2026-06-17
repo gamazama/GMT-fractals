@@ -1,0 +1,351 @@
+/**
+ * Display + post-processing passes. Composites Julia/dye/velocity into
+ * the final framebuffer, runs the dual-filter bloom chain, and applies
+ * the TSAA blend that feeds the next frame's accumulator.
+ */
+
+import { GRADIENT_SAMPLE_GLSL } from './common';
+
+export const FRAG_DISPLAY = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+
+// Pre-baked palette + collision mask — the Julia pass writes outFx with
+// gradient-mapped colour (rgb) mean-pooled across jitter samples plus
+// the collision-mask iso (a). Display reads it directly so the boundary
+// blend and wall edges converge smoothly under TSAA instead of being
+// recomputed from raw evaluator state every frame.
+uniform sampler2D uJuliaFx;
+uniform sampler2D uDye;
+uniform sampler2D uVelocity;
+uniform sampler2D uGradient;
+uniform sampler2D uMask;
+uniform sampler2D uBloom;      // pre-computed bloom texture (black if bloom disabled)
+uniform vec2  uTexelDisplay;   // 1/width, 1/height of the DISPLAY canvas
+uniform vec2  uTexelDye;       // 1/width, 1/height of the dye (sim) grid
+uniform int   uShowMode;       // 0 composite, 1 julia-only, 2 dye-only, 3 velocity-only
+uniform float uJuliaMix;
+uniform float uDyeMix;
+uniform float uVelocityViz;
+uniform int   uColorMapping;
+uniform float uGradientRepeat;
+uniform float uGradientPhase;
+uniform vec3  uInteriorColor;
+// Declared because GRADIENT_SAMPLE_GLSL (below) references them inside colorMappingT.
+// Display bakes nothing itself — it reads the pre-baked uJuliaFx.rgb — so these stay
+// unbound (default 0); they exist only to keep the shared chunk's function compiling.
+uniform int   uMaxIter;
+uniform int   uColorNormV2;
+uniform float uLogPixelScale;
+uniform float uIterRate;
+uniform float uIterOffset;
+uniform float uIterScale;
+uniform int   uDeLogBands;
+uniform float uEscapeR2;
+
+// Post-processing knobs
+uniform int   uToneMapping;    // 0 none, 1 reinhard, 2 agx, 3 filmic
+uniform float uExposure;
+uniform float uVibrance;       // 0..1
+uniform float uBloomAmount;    // 0..3
+uniform float uAberration;     // 0..1 — velocity-keyed RGB shift
+uniform float uRefraction;     // 0..0.3 — dye-gradient UV offset for the fractal
+uniform float uRefractSmooth;  // stencil width (in dye texels) — smooths the gradient
+uniform float uRefractRoughness; // 0..1 — frosted-glass effect: scatters the
+                                 // refracted sample across a Vogel-disc kernel.
+                                 // 0 = single-tap (crisp). 1 = ~5px blur radius.
+uniform float uCaustics;       // 0..25 — laplacian-of-dye highlight
+uniform int   uCollisionPreview; // 1 = overlay the mask with diagonal hatching so walls are visible
+${GRADIENT_SAMPLE_GLSL}
+
+const vec3 LUM_REC601 = vec3(0.299, 0.587, 0.114);   // used for dye luminance + vibrance
+const float PI  = 3.14159265359;
+const float TAU = 6.28318530718;
+
+vec3 velocityToColor(vec2 v) {
+  float ang = atan(v.y, v.x);
+  float mag = clamp(length(v) * 0.5, 0.0, 1.0);
+  float hue = (ang + PI) / TAU;
+  vec3 c = abs(mod(hue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0;
+  return clamp(c, 0.0, 1.0) * mag;
+}
+
+// ── Tone-mapping family. ────────────────────────────────────────────────────
+// Reinhard: c/(1+c). Smooth but desaturates highlights.
+// AgX: Sobotka's log/sigmoid in a rotated basis. Hue-stable, vibrant.
+// Filmic: Hable's Uncharted 2 filmic — cinematic s-curve.
+vec3 tmReinhard(vec3 c) { return c / (1.0 + c); }
+
+vec3 tmAgX(vec3 c) {
+  const mat3 M = mat3(
+    0.842, 0.078, 0.088,
+    0.042, 0.878, 0.088,
+    0.042, 0.078, 0.880
+  );
+  c = M * c;
+  c = clamp((log2(max(c, 1e-10)) + 12.47393) / 16.5, 0.0, 1.0);
+  vec3 x2 = c * c;
+  vec3 x4 = x2 * x2;
+  return 15.5*x4*x2 - 40.14*x4*c + 31.96*x4 - 6.868*x2*c + 0.4298*x2 + 0.1191*c - 0.00232;
+}
+
+vec3 tmFilmic(vec3 c) {
+  // Hable / Uncharted 2: F(x) = ((x(Ax+CB)+DE)/(x(Ax+B)+DF)) - E/F
+  const float A = 0.15, B = 0.50, C = 0.10, D = 0.20, E = 0.02, F = 0.30;
+  vec3 num = c * (A*c + C*B) + D*E;
+  vec3 den = c * (A*c + B)   + D*F;
+  return num/den - E/F;
+}
+
+vec3 applyToneMapping(vec3 c) {
+  if (uToneMapping == 0) return c;
+  if (uToneMapping == 1) return tmReinhard(c);
+  if (uToneMapping == 2) return tmAgX(c);
+  return tmFilmic(c) / tmFilmic(vec3(11.2));   // Filmic wants a fixed white-point divide
+}
+
+// Vibrance: chroma-aware saturation. Pushes low-saturation pixels without
+// posterising already-vivid ones.
+vec3 applyVibrance(vec3 c, float amount) {
+  if (amount <= 0.0) return c;
+  float mx = max(max(c.r, c.g), c.b);
+  float mn = min(min(c.r, c.g), c.b);
+  float sat = mx - mn;
+  vec3 gray = vec3(dot(c, LUM_REC601));
+  return mix(gray, c, 1.0 + amount * (1.0 - sat));
+}
+
+void main() {
+  vec2 uv = vUv;
+
+  // ── Liquid-look refraction. The gradient of dye luminance acts as a
+  // fake height-field slope; we offset the fractal sample by that
+  // gradient. Use a Sobel 3×3 — mathematically a Gaussian (1,2,1)
+  // blur composed with a central difference, so it actually SMOOTHS
+  // the gradient instead of just spreading two taps further apart.
+  // uRefractSmooth controls the stencil width (in dye texels);
+  // larger values give a lower-frequency, calmer slope.
+  vec2 refractOffset = vec2(0.0);
+  float caustic = 0.0;
+  if (uRefraction > 0.0 || uCaustics > 0.0) {
+    vec2 t = uTexelDye * max(uRefractSmooth, 1.0);
+    float lTL = dot(texture(uDye, vUv + vec2(-t.x, -t.y)).rgb, LUM_REC601);
+    float lT  = dot(texture(uDye, vUv + vec2( 0.0, -t.y)).rgb, LUM_REC601);
+    float lTR = dot(texture(uDye, vUv + vec2( t.x, -t.y)).rgb, LUM_REC601);
+    float lL  = dot(texture(uDye, vUv + vec2(-t.x,  0.0)).rgb, LUM_REC601);
+    float lC  = dot(texture(uDye, vUv                  ).rgb, LUM_REC601);
+    float lR  = dot(texture(uDye, vUv + vec2( t.x,  0.0)).rgb, LUM_REC601);
+    float lBL = dot(texture(uDye, vUv + vec2(-t.x,  t.y)).rgb, LUM_REC601);
+    float lB  = dot(texture(uDye, vUv + vec2( 0.0,  t.y)).rgb, LUM_REC601);
+    float lBR = dot(texture(uDye, vUv + vec2( t.x,  t.y)).rgb, LUM_REC601);
+    // Sobel — divide by 8 (sum of positive weights on one side) to
+    // normalise. y-axis: vUv.y grows downward in this texture, so
+    // "up" in screen space is -t.y; keep the original sign convention
+    // that bright dye refracts the fractal toward the light.
+    float gx = (lTR + 2.0 * lR + lBR) - (lTL + 2.0 * lL + lBL);
+    float gy = (lBL + 2.0 * lB + lBR) - (lTL + 2.0 * lT + lTR);
+    refractOffset = vec2(gx, gy) * (uRefraction * 0.125);
+    // 9-point Laplacian — better isotropy than the 5-point version
+    // (no preferential x/y axis bias). Divide by smoothness so the
+    // caustic magnitude stays roughly invariant as the stencil grows.
+    float neigh = lTL + lT + lTR + lL + lR + lBL + lB + lBR;
+    caustic = max(0.0, neigh - 8.0 * lC) / (8.0 * max(uRefractSmooth, 1.0));
+  }
+
+  // ── Refracted fractal sample. uJuliaFx packs the per-evaluation-baked
+  // colour-mapping scalar (t0 in .r) and exterior membership (in .a),
+  // both mean-pooled across sub-pixel jitter under TSAA. We finish the
+  // composite here: apply the user's repeat/phase, sample the gradient
+  // LUT, blend with interior colour using exterior as alpha. Doing the
+  // LUT lookup at display time means changing repeat/phase/interior
+  // doesn't reset the accumulator. With uRefractRoughness > 0 we scatter
+  // the sample across an 8-tap Vogel-disc kernel (golden-angle spiral
+  // — even disc coverage at small N, no clumping); each tap is mapped
+  // INDIVIDUALLY before averaging colours, the same per-tap pattern as
+  // the K-sample loop in the Julia shader. Dye and velocity stay sharp.
+  // ── Refracted fractal sample. The Julia pass pre-bakes the palette
+  // colour into uJuliaFx (gradient-mapped per-evaluation, mean-pooled
+  // across sub-pixel jitter), so display just samples it — no per-tap
+  // gradient remapping needed. With uRefractRoughness > 0 we scatter
+  // the sample across an 8-tap Vogel-disc kernel (golden-angle spiral
+  // — even disc coverage at small N, no clumping); averaging the
+  // pre-baked colours is a clean blur. Dye and velocity stay sharp —
+  // they're "near-surface" and shouldn't pick up glass-roughness blur.
+  vec2 refractedBase = uv + refractOffset;
+  vec3 juliaColor;
+  vec3 wallColor;        // colour shown where the mask says "solid wall"
+  float solid;
+  {
+    vec4 fx = texture(uJuliaFx, refractedBase);
+    juliaColor = fx.rgb;
+    wallColor  = fx.rgb;
+    solid = texture(uMask, refractedBase).a;
+    if (uRefractRoughness > 0.0) {
+      const float GOLDEN_ANGLE = 2.39996323;
+      const int VOGEL_N = 8;
+      // 0..1 roughness → 0..5 px disc radius (in dye-grid texels).
+      vec2 radius = uTexelDye * (uRefractRoughness * 5.0);
+      vec3 cAcc = juliaColor;
+      vec3 wAcc = wallColor;
+      float sAcc = solid;
+      for (int i = 0; i < VOGEL_N; ++i) {
+        float r = sqrt((float(i) + 0.5) / float(VOGEL_N));
+        float theta = float(i) * GOLDEN_ANGLE;
+        vec2 ofs = r * vec2(cos(theta), sin(theta)) * radius;
+        vec3 fx_t = texture(uJuliaFx, refractedBase + ofs).rgb;
+        cAcc += fx_t;
+        wAcc += fx_t;
+        sAcc += texture(uMask, refractedBase + ofs).a;
+      }
+      float invN = 1.0 / float(VOGEL_N + 1);  // +1 for the original centre tap
+      juliaColor = cAcc * invN;
+      wallColor = wAcc * invN;
+      solid = sAcc * invN;
+    }
+  }
+
+  vec3 dye = texture(uDye, uv).rgb;
+  vec2 v = texture(uVelocity, uv).rg;
+
+  // ── Chromatic aberration (electric look).
+  // Applied to DYE ONLY — shifting the fractal itself caused distracting
+  // double-vision. Magnitude is bounded (clamped) and direction is the
+  // normalised local velocity, so fast regions get a clean plasma fringe
+  // without the fractal fracturing. Kicks in only where the fluid is moving.
+  if (uAberration > 0.0 && uShowMode == 0) {
+    float vMag = length(v);
+    if (vMag > 1e-4) {
+      vec2 vn = v / vMag;
+      float amt = clamp(vMag * 0.04, 0.0, 1.0) * uAberration * 0.006;
+      vec2 off = vn * amt;
+      dye.r = texture(uDye, uv + off).r;
+      dye.b = texture(uDye, uv - off).b;
+    }
+  }
+
+  vec3 col;
+  if (uShowMode == 1) col = juliaColor;
+  else if (uShowMode == 2) col = dye;
+  else if (uShowMode == 3) col = velocityToColor(v);
+  else {
+    col = juliaColor * uJuliaMix + dye * uDyeMix;
+    col += velocityToColor(v) * uVelocityViz * 0.5;
+  }
+
+  // Caustics: additive highlight on focused-surface regions.
+  col += vec3(caustic) * uCaustics;
+
+  // Solid obstacles: override the composite with the raw (untoned)
+  // gradient colour so walls read as crisp objects, not as "dyed
+  // fluid near a wall." solid and wallColor were sampled above
+  // through the same Vogel-disc kernel as the fractal so the wall
+  // edges blur in step with the refracted fractal behind them.
+  if (solid > 0.01) {
+    col = mix(col, wallColor, solid);
+  }
+
+  // Collision preview: diagonal cyan hatching over solid cells. Uses screen
+  // pixels (not UV) so stripes stay a constant width at any zoom level.
+  if (uCollisionPreview == 1 && solid > 0.01) {
+    vec2 screenPx = vUv / uTexelDisplay;
+    float hatch = step(4.0, mod(screenPx.x + screenPx.y, 8.0));
+    vec3 preview = mix(vec3(0.0, 0.95, 1.0), vec3(0.0, 0.25, 0.35), hatch);
+    col = mix(col, preview, solid * 0.55);
+  }
+
+  // Bloom: an HDR pre-blurred energy texture we add on top.
+  if (uBloomAmount > 0.0) {
+    col += texture(uBloom, vUv).rgb * uBloomAmount;
+  }
+
+  // Exposure → tone map → vibrance → gamma.
+  col *= uExposure;
+  col = applyToneMapping(col);
+  col = applyVibrance(col, uVibrance);
+  col = pow(max(col, 0.0), vec3(1.0/2.2));
+  fragColor = vec4(col, 1.0);
+}`;
+
+// -----------------------------------------------------------------------------
+// (FRAG_MASK is gone — the collision mask is now baked per-evaluation inside
+// FRAG_JULIA into outFx.a, mean-pooled across jitter alongside the palette
+// colour, and consumed by every fluid pass via texture(uMask, vUv).a where
+// uMask binds the Julia MRT's third attachment.)
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Simple clear (for reset).
+// -----------------------------------------------------------------------------
+export const FRAG_BLOOM_EXTRACT = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uSource;
+uniform float uThreshold;
+uniform float uSoftKnee;
+void main() {
+  vec3 c = texture(uSource, vUv).rgb;
+  float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  // Soft-knee: smooth ramp between (threshold - softKnee) and threshold.
+  float lo = uThreshold - uSoftKnee;
+  float t = smoothstep(lo, uThreshold, luma);
+  fragColor = vec4(c * t, 1.0);
+}`;
+
+export const FRAG_BLOOM_DOWN = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uSource;
+uniform vec2 uTexel;   // 1/width, 1/height of the SOURCE
+void main() {
+  vec2 px = uTexel;
+  vec3 c =
+      texture(uSource, vUv).rgb * 0.5
+    + texture(uSource, vUv + vec2(-px.x, -px.y)).rgb * 0.125
+    + texture(uSource, vUv + vec2( px.x, -px.y)).rgb * 0.125
+    + texture(uSource, vUv + vec2(-px.x,  px.y)).rgb * 0.125
+    + texture(uSource, vUv + vec2( px.x,  px.y)).rgb * 0.125;
+  fragColor = vec4(c, 1.0);
+}`;
+
+export const FRAG_BLOOM_UP = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uSource;   // coarser mip being upsampled
+uniform sampler2D uPrev;     // this-level's existing texture (we add onto it)
+uniform vec2 uTexel;         // 1/size of SOURCE (the coarser texture)
+uniform float uIntensity;    // per-upsample scale
+void main() {
+  vec2 px = uTexel;
+  // 3x3 tent filter on the coarse mip
+  vec3 s =
+      texture(uSource, vUv + vec2(-px.x, -px.y)).rgb * 0.0625
+    + texture(uSource, vUv + vec2( 0.0,  -px.y)).rgb * 0.125
+    + texture(uSource, vUv + vec2( px.x, -px.y)).rgb * 0.0625
+    + texture(uSource, vUv + vec2(-px.x,  0.0 )).rgb * 0.125
+    + texture(uSource, vUv).rgb                     * 0.25
+    + texture(uSource, vUv + vec2( px.x,  0.0 )).rgb * 0.125
+    + texture(uSource, vUv + vec2(-px.x,  px.y)).rgb * 0.0625
+    + texture(uSource, vUv + vec2( 0.0,   px.y)).rgb * 0.125
+    + texture(uSource, vUv + vec2( px.x,  px.y)).rgb * 0.0625;
+  vec3 base = texture(uPrev, vUv).rgb;
+  fragColor = vec4(base + s * uIntensity, 1.0);
+}`;
+
+// -----------------------------------------------------------------------------
+// Camera-locked dye. When the user pans or zooms, the fractal shifts under the
+// screen but the dye stays in sim-grid space — it looks detached. This pass
+// resamples dye (or velocity) from the *previous* camera into the *new* camera
+// so world-space positions stay constant. Dye rides the fractal.
+//
+// For each pixel under the new camera, compute its world position, then look up
+// where THAT world position was in the old camera's UV, and sample there.
+// -----------------------------------------------------------------------------
+// FRAG_TSAA_BLEND was carved into the shared engine/fractal library (it's a
+// generic MRT accumulator blend with no fluid-sim coupling) so the Gradient
+// Explorer's live-fractal renderer reuses it. Re-exported here so FluidEngine
+// + the shaders barrel keep importing it from `./display` unchanged.
+export { FRAG_TSAA_BLEND } from '../../../engine/fractal/shaders/tsaaBlend';

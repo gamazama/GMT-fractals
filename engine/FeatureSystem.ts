@@ -1,3 +1,24 @@
+/**
+ * DDFS — Data-Driven Feature System core.
+ *
+ * Features declare identity + params + UI + optional shader injection
+ * as a plain `FeatureDefinition` literal; the engine derives state
+ * slices, setters, uniform definitions, and CONFIG events.
+ *
+ * @invariant `featureRegistry` is a module singleton — every importer
+ *   sees the same instance.
+ * @invariant `register()` is HMR-safe for same-object re-register;
+ *   different object with same id is dev-warn / prod-throw.
+ * @invariant After `freeze()` new registrations throw in dev, warn-
+ *   and-no-op in prod. Dev freeze captures the stack so a later
+ *   `FeatureRegistryFrozenError` points at the import that prematurely
+ *   triggered store construction.
+ * @invariant Dependency cycles do NOT throw — `getAll()` logs
+ *   `console.error` and falls back to registration order.
+ * @invariant `validateComponentRefs` is opt-in (not called from
+ *   `freeze()` — component registry is populated later). Soft-warns;
+ *   never throws.
+ */
 
 import { ShaderBuilder, RenderVariant } from './ShaderBuilder';
 import type { ShaderConfig } from './ShaderConfig';
@@ -22,6 +43,17 @@ export interface ParamOption {
     label: string;
     value: string | number | boolean;
     estCompileMs?: number; // Estimated compile time contribution when this option is selected
+    /** Per-option hint shown below the dropdown when this option is the
+     *  current selection. Lets dropdowns swap hint text contextually
+     *  rather than carrying one all-encompassing description on the
+     *  param. AutoFeaturePanel renders a small caption row off this. */
+    hint?: string;
+    /** Optional predicate evaluated against the global engine store. When
+     *  it returns true, AutoFeaturePanel renders this option as `<option disabled>`
+     *  in the dropdown — selectable in the list but visibly grayed out and
+     *  rejected by the browser. Used to gate options on formula capabilities
+     *  (e.g. estimator=Cutting Plane requires shader.supportsCuttingPlane). */
+    disabledIf?: (state: any) => boolean;
 }
 
 export interface TextureConfig {
@@ -39,20 +71,33 @@ export interface CustomUIConfig {
     props?: Record<string, any>;
     condition?: ParamCondition | ParamCondition[];
     parentId?: string;
+    /** Where the item renders relative to the feature's params. Default
+     *  'bottom' (after all param widgets — the historical behaviour).
+     *  'top' lifts it above the params, for controls that read as the
+     *  panel's primary input (e.g. the Picker's Source toggles). */
+    placement?: 'top' | 'bottom';
 }
 
 export interface ParamConfig {
     type: ParamType;
     default: any;
     label: string;
-    shortId?: string; 
+    shortId?: string;
     uniform?: string;
     min?: number;
     max?: number;
     step?: number;
     group?: string;
+    /** One-line hint copy. Rendered under the param row when the
+     *  global `showHints` toggle is on (engine reads from store). Keep
+     *  this short — for depth, point at a help topic via `helpId`. */
     description?: string;
-    hidden?: boolean; 
+    /** Help topic id this param links to. Emitted on the row as
+     *  `data-help-id` so the right-click contextual menu can pick it
+     *  up via the DOM walk; also drives the `?` button rendered
+     *  alongside the description (clicking it calls `openHelp`). */
+    helpId?: string;
+    hidden?: boolean;
     noReset?: boolean; 
     confirmation?: string;      
     isAdvanced?: boolean;       
@@ -105,12 +150,22 @@ export interface ParamConfig {
     estCompileMs?: number;
 }
 
+/**
+ * Feature-level tab metadata. Panels themselves — dock placement, order,
+ * default-active state, composition, visibility — are declared by the
+ * app's PanelManifest (see engine/PanelManifest.ts). This struct remains
+ * only for feature-internal introspection: the display label and icon
+ * that a panel might show above the feature's params. Dock / ordering /
+ * grouping fields from the pre-manifest era have been removed.
+ */
 export interface FeatureTabConfig {
     label: string;
-    iconId?: string; 
-    componentId: string;
-    order: number; 
-    condition?: ParamCondition | ParamCondition[]; 
+    iconId?: string;
+    /** Optional UI-guard predicate gating whether the feature's
+     *  AutoFeaturePanel should render at all (e.g. hide a whole feature
+     *  behind a toggle param). Per-param visibility stays on param
+     *  entries; this is for feature-wide hiding. */
+    condition?: ParamCondition | ParamCondition[];
 }
 
 export interface FeatureViewportConfig {
@@ -150,6 +205,13 @@ export interface FeatureEngineConfig {
 export interface GroupConfig {
     label: string;
     collapsible?: boolean;
+    /** Optional one-line hint shown above the group's params when
+     *  `showHints` is on. */
+    description?: string;
+    /** Help topic id for the group as a whole. Emitted as
+     *  `data-help-id` on the group's wrapper div so right-clicking
+     *  anywhere in the group surfaces it. */
+    helpId?: string;
 }
 
 export interface FeatureDefinition {
@@ -178,16 +240,7 @@ export interface FeatureDefinition {
     // --- Compilable Section UI ---
     // panelConfig: describes how to render this feature as a compilable section with compile/runtime split.
     // Used by CompilableFeatureSection component. If absent, feature uses default AutoFeaturePanel rendering.
-    panelConfig?: {
-        compileParam: string;               // compile gate param (onUpdate: 'compile')
-        runtimeToggleParam?: string;        // runtime on/off param (uniform-backed, instant toggle)
-        compileSettingsParams?: string[];    // compile-time params to show in settings sub-section
-        runtimeGroup?: string;              // groupFilter for runtime params
-        runtimeExcludeParams?: string[];    // params to hide from runtime section
-        label?: string;                     // section label (falls back to feature name)
-        compileMessage?: string;            // "Compiling X..." message
-        helpId?: string;                    // data-help-id for context help
-    };
+    panelConfig?: CompilablePanelConfig;
 
     // --- Engine Integration ---
     // engineConfig: declares a master enable/disable toggle for ShaderFactory to conditionally skip injection.
@@ -203,10 +256,34 @@ export interface FeatureDefinition {
     // The registry enforces this order via topological sort in getAll().
     dependsOn?: string[];
 
+    // --- Compatibility requirements (capability protocol) ---
+    // Read by `evaluateCompat()` to decide if this feature is enabled given the
+    // current primary/secondary formula. Token strings are app-defined; GMT uses
+    // the closed `Capability` union in engine-gmt/types/capabilities.ts. Apps
+    // declaring requires here should use `[...] satisfies Capability[]` for
+    // type safety at the declaration site.
+    //   - primary:   ALL tokens must be in primary.capabilities
+    //   - secondary: ALL tokens must be in secondary.capabilities (when secondary set)
+    //   - pair:      each token must be in primary OR secondary capabilities
+    //   - rejects:   feature is disabled if any matching token IS present
+    requires?: {
+        primary?: string[];
+        secondary?: string[];
+        pair?: string[];
+        rejects?: { primary?: string[]; secondary?: string[] };
+    };
+
     // --- Shader Injection ---
     // inject(): injects GLSL into the RAYMARCHING shader (main render pass).
     // Consumed by engine/ShaderFactory.ts. Use for SDFs, lighting, material effects.
-    inject?: (builder: ShaderBuilder, config: ShaderConfig, variant: RenderVariant) => void;
+    //
+    // The `builder` parameter is typed as `any` because different renderers
+    // subclass ShaderBuilder with additional methods (GMT's version has
+    // addPostDEFunction/setFormula/setRotation/…; fractal-toy uses the base
+    // primitives only). Typing this as the base `ShaderBuilder` would make
+    // GMT's feature definitions contravariant-incompatible with the shared
+    // registry. Tool-specific features type the parameter themselves.
+    inject?: (builder: any, config: ShaderConfig, variant: RenderVariant) => void;
 
     // postShader: injects GLSL into the POST-PROCESS shader (screen-space pass after raymarching).
     // Consumed by shaders/chunks/post_process.ts. Use for UV warps, color corrections, overlays.
@@ -220,11 +297,167 @@ export interface FeatureDefinition {
 
 }
 
+/** Configuration for rendering a feature as a <CompilableFeatureSection>.
+ *  Mirrored across three sites: FeatureDefinition.panelConfig (canonical
+ *  per-feature config), PanelItem 'compilable' variant override fields
+ *  (lets one feature appear as multiple compilable sections), and
+ *  CompilableFeatureSection props (final resolved values).
+ *
+ *  Pattern: boolean compile gate + optional compile-settings expand + optional
+ *  runtime body. Use when there is a meaningful "off / on" compile flag the
+ *  user toggles, with or without further sub-params. Examples: Hybrid Box,
+ *  Burning Mode, Local Rotation, Formula Interlace, Volumetric, Shadows. */
+export interface CompilablePanelConfig {
+    compileParam: string;
+    runtimeToggleParam?: string;
+    compileSettingsParams?: string[];
+    runtimeGroup?: string;
+    runtimeExcludeParams?: string[];
+    label?: string;
+    /** Spinner message. Defaults to `Compiling ${label}...` when label is set,
+     *  otherwise "Compiling Shader...". */
+    compileMessage?: string;
+    helpId?: string;
+    /** Section-level capability requirements, overrides feature-level `requires`.
+     *  Use when one feature exposes multiple sections with independent compat —
+     *  e.g. Geometry has Hybrid Box (rejects self-contained) AND Local Rotation
+     *  (compatible everywhere). Feature-level requires would gray everything;
+     *  section-level lets each compilable surface declare its own reject set.
+     *  Same schema as FeatureDefinition.requires. */
+    requires?: {
+        primary?: string[];
+        secondary?: string[];
+        pair?: string[];
+        rejects?: { primary?: string[]; secondary?: string[] };
+    };
+}
+
+/** Configuration for rendering a feature as a <CompileDropdownSection>.
+ *  Pattern: one or more compile-flagged dropdowns/options with NO boolean
+ *  gate — the feature is "always on" in compile terms, the user picks an
+ *  algorithm or variant. Apply via an explicit Compile button when the
+ *  user changes a setting. Example: Distance Estimator (estimator + metric).
+ *
+ *  Distinct from CompilablePanelConfig because there is no on/off gate;
+ *  the section is always present. */
+export interface CompileDropdownPanelConfig {
+    /** Compile-flagged params displayed in the section body. Each one
+     *  generates a row; a single param renders compactly. */
+    compileSettingsParams: string[];
+    /** Optional runtime params shown alongside the dropdown(s). */
+    runtimeGroup?: string;
+    runtimeExcludeParams?: string[];
+    label?: string;
+    compileMessage?: string;
+    helpId?: string;
+}
+
+/** Configuration for rendering a feature as a <RuntimeSection>.
+ *  Pattern: pure runtime collapsible — toggle hides the body, no compile
+ *  mechanics whatsoever. Used for features whose effect is gated by a
+ *  runtime uniform (not a shader rebuild). Example: Julia / Offset. */
+export interface RuntimePanelConfig {
+    /** Boolean runtime param controlling the section's on/off state.
+     *  When off, the body is hidden. When omitted, the section is
+     *  always open (no toggle in the header). */
+    runtimeToggleParam?: string;
+    /** Restrict body params to this DDFS group. */
+    runtimeGroup?: string;
+    runtimeExcludeParams?: string[];
+    label?: string;
+    helpId?: string;
+}
+
+/**
+ * Thrown when `featureRegistry.register()` is called after the registry was
+ * frozen (i.e. after `createEngineStore` ran). See docs/02_Feature_Registry.md.
+ * Thrown in dev; downgraded to a console warning in prod to avoid crashing
+ * shipped apps on a late-arriving plugin.
+ *
+ * In dev the message also includes the stack from the first `freeze()` call
+ * — that's the code path that triggered the premature store construction,
+ * which is usually the real bug (the late-registering feature is innocent).
+ */
+export class FeatureRegistryFrozenError extends Error {
+    constructor(featureId: string, freezeStack?: string) {
+        const diagnosis = freezeStack
+            ? `\n\nThe registry was frozen by this call chain (first import that touched useEngineStore):\n${freezeStack}\n\n` +
+              `Fix: move the offending import AFTER all feature registrations in your app entry, ` +
+              `or change the offending module to defer the store reference to call time ` +
+              `(read globalThis.__store inside a handler instead of importing at module scope).`
+            : '';
+        super(
+            `Feature "${featureId}" registered after featureRegistry was frozen. ` +
+            `All features must register BEFORE createEngineStore runs (i.e. before any ` +
+            `module that touches useEngineStore / useEngineStore is imported). See ` +
+            `docs/03_Plugin_Contract.md § boot-timeline.` +
+            diagnosis
+        );
+        this.name = 'FeatureRegistryFrozenError';
+    }
+}
+
+/**
+ * Thrown when two different feature definitions share an id. Always thrown
+ * in prod (data-loss risk — silent overwrite would lose the first feature's
+ * state). In dev, HMR re-registration of the SAME def object is a no-op,
+ * and re-registration with a DIFFERENT def object is allowed with a warning
+ * (Vite HMR creates new def objects across reloads).
+ */
+export class DuplicateFeatureError extends Error {
+    constructor(featureId: string) {
+        super(
+            `Duplicate feature id: "${featureId}". Feature ids must be unique — ` +
+            `second registration rejected to prevent silent overwrite of the first ` +
+            `feature's state slice.`
+        );
+        this.name = 'DuplicateFeatureError';
+    }
+}
+
 class FeatureRegistry {
     private features = new Map<string, FeatureDefinition>();
     private sortedCache: FeatureDefinition[] | null = null;
+    private frozen = false;
+    /** Captured at freeze() time in dev so FeatureRegistryFrozenError can
+     *  point at the module that prematurely triggered store construction
+     *  (usually a stray `import { useEngineStore }` in a plugin's
+     *  top-level import graph). Stays null in prod — capturing the stack
+     *  would cost a throw on every boot. */
+    private freezeStack: string | null = null;
 
     public register(def: FeatureDefinition) {
+        const existing = this.features.get(def.id);
+
+        if (existing) {
+            // Same def object — HMR or accidental double-import. No-op.
+            if (existing === def) return;
+
+            // Different def with same id.
+            if (import.meta.env.DEV) {
+                // Dev: assume HMR; replace with a loud warning so real conflicts
+                // are still obvious in the console.
+                console.warn(
+                    `[FeatureRegistry] Replacing definition for "${def.id}". ` +
+                    `If this is not HMR, it is a duplicate-id bug — see ` +
+                    `docs/02_Feature_Registry.md.`
+                );
+                this.features.set(def.id, def);
+                this.sortedCache = null;
+                return;
+            }
+            // Prod: hard fail. Production has no HMR, so this is always a real conflict.
+            throw new DuplicateFeatureError(def.id);
+        }
+
+        // New feature. Reject if registry was frozen.
+        if (this.frozen) {
+            const err = new FeatureRegistryFrozenError(def.id, this.freezeStack ?? undefined);
+            if (import.meta.env.DEV) throw err;
+            console.warn(`[FeatureRegistry] ${err.message}`);
+            return;
+        }
+
         // Validate dependencies exist (if any registered so far are referenced)
         if (def.dependsOn) {
             for (const dep of def.dependsOn) {
@@ -237,24 +470,39 @@ class FeatureRegistry {
         this.sortedCache = null; // Invalidate cache
     }
 
+    /** Freeze the registry. Subsequent `register()` calls for NEW ids throw
+     *  in dev and no-op (with warning) in prod. Called by the store during
+     *  construction to lock the feature set before state slices are built.
+     *
+     *  In dev we capture the call stack so a later `FeatureRegistryFrozenError`
+     *  can show "who froze the registry" — usually a plugin that top-level-
+     *  imported `useEngineStore`, which is the actual bug. */
+    public freeze() {
+        if (this.frozen) return;
+        this.frozen = true;
+        if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+            const stack = new Error('freeze trace').stack ?? '';
+            // Drop the first line ("Error: freeze trace") and keep ~10 frames.
+            this.freezeStack = stack.split('\n').slice(1, 11).join('\n');
+        }
+    }
+
+    public isFrozen() {
+        return this.frozen;
+    }
+
     public get(id: string) { return this.features.get(id); }
 
     /** Returns all features in dependency-safe order (topological sort).
      *  Features without dependencies maintain their registration order.
-     *  Throws if a dependency cycle is detected. */
+     *  On dependency cycle: logs `[FeatureRegistry] Dependency cycle detected...` to console.error
+     *  and falls back to registration order to avoid breaking the app. Does NOT throw. */
     public getAll() {
         if (this.sortedCache) return this.sortedCache;
         this.sortedCache = this.topologicalSort();
         return this.sortedCache;
     }
     
-    public getTabs() {
-        return Array.from(this.features.values())
-            .filter(f => f.tabConfig)
-            .map(f => ({ id: f.id, ...f.tabConfig! }))
-            .sort((a, b) => a.order - b.order);
-    }
-
     public getViewportOverlays() {
         return Array.from(this.features.values())
             .filter(f => f.viewportConfig)
@@ -282,6 +530,10 @@ class FeatureRegistry {
             .filter(f => !!f.engineConfig);
     }
 
+    /**
+     * @invariant Per-feature dictionary entries are keyed by `shortId` ONLY.
+     *   Params without `shortId` are absent from preset aliases.
+     */
     public getDictionary() {
         const dict: any = {
             'formula': 'f',
@@ -316,6 +568,11 @@ class FeatureRegistry {
         return dict;
     }
 
+    /**
+     * @invariant GLSL type normalisation: `color` → `vec3`, `boolean` →
+     *   `float` (1.0/0.0), `image`/`gradient` → `sampler2D` with null
+     *   default. `extraUniforms` are appended unchanged.
+     */
     public getUniformDefinitions() {
         const defs: UniformDefinition[] = [];
         this.features.forEach(feat => {
@@ -404,3 +661,54 @@ class FeatureRegistry {
 }
 
 export const featureRegistry = new FeatureRegistry();
+
+/**
+ * Dev-mode validator: walks every registered feature and checks that
+ * every `componentId` it references resolves in the supplied component
+ * registry. Catches typos and missing registrations at boot instead of
+ * "blank panel + silent fallback" at first render.
+ *
+ * NOT called from `freeze()` because the feature registry is frozen
+ * during store construction, before app-side `registerUI()` /
+ * `registerGmtUi()` have populated the component registry. Apps call
+ * this after their UI registration phase finishes (see app-gmt/main.tsx).
+ *
+ * Returns the list of missing ids (empty when all resolve). In dev,
+ * also logs each miss with the feature id that referenced it. Apps
+ * may choose to throw on a non-empty result for a hard failure.
+ */
+export const validateComponentRefs = (
+    componentRegistry: { has(id: string): boolean },
+): { featureId: string; componentId: string; site: string }[] => {
+    const missing: { featureId: string; componentId: string; site: string }[] = [];
+    for (const f of featureRegistry.getAll()) {
+        if (f.viewportConfig?.componentId && !componentRegistry.has(f.viewportConfig.componentId)) {
+            missing.push({ featureId: f.id, componentId: f.viewportConfig.componentId, site: 'viewportConfig' });
+        }
+        if (f.customUI) {
+            for (let i = 0; i < f.customUI.length; i++) {
+                const ref = f.customUI[i].componentId;
+                if (ref && !componentRegistry.has(ref)) {
+                    missing.push({ featureId: f.id, componentId: ref, site: `customUI[${i}]` });
+                }
+            }
+        }
+    }
+    if (missing.length && typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+        for (const m of missing) {
+            // console.warn (not error) because some customUI references
+            // are legitimately app-conditional — e.g. ColorGrading's
+            // 'scene-histogram' lives in engine-gmt's UI registration
+            // and is absent in the bare engine demo. AutoFeaturePanel
+            // already silently skips unresolved customUI at render
+            // time. The message still points at the exact feature +
+            // site + id so genuine typos are easy to spot in the
+            // console without making smokes fail on `console.error`.
+            console.warn(
+                `[FeatureRegistry] feature '${m.featureId}'.${m.site} references componentId '${m.componentId}' which is not in the componentRegistry. ` +
+                `Either register the component, fix the typo, or accept the silent skip if this is an app-optional reference.`,
+            );
+        }
+    }
+    return missing;
+};

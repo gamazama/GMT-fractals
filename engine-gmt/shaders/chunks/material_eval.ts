@@ -1,0 +1,161 @@
+
+
+export const generateMaterialEval = (injectedCode: string = "") => `
+// ------------------------------------------------------------------
+// SHARED SURFACE EVALUATION
+// ------------------------------------------------------------------
+
+vec3 GetNormal(vec3 p_ray, float eps) {
+    // High Quality: Tetrahedron Normal (4 taps)
+    // OPTIMIZATION: Use DE_Dist
+    vec2 k = vec2(1.0, -1.0);
+    vec3 n = k.xyy * DE_Dist(p_ray + k.xyy * eps) + 
+             k.yyx * DE_Dist(p_ray + k.yyx * eps) + 
+             k.yxy * DE_Dist(p_ray + k.yxy * eps) + 
+             k.xxx * DE_Dist(p_ray + k.xxx * eps);
+    
+    if (dot(n, n) < 1.0e-20) return vec3(0.0, 1.0, 0.0);
+    
+    return normalize(n);
+}
+
+vec3 GetFastNormal(vec3 p, float eps) {
+    // Forward Difference (4 taps). The center tap d0 is load-bearing: the ray
+    // stops at DE < threshold, so DE(p) is a small POSITIVE residual, not 0.
+    // Dropping it (n = vec3(dx,dy,dz)) leaves n = trueGradient + DE(p)*(1,1,1),
+    // skewing every normal toward the +X+Y+Z diagonal. On fractals with a loose
+    // DE estimator that residual is large enough to collapse NdotL to one side,
+    // which read as single-light "only lights one quadrant" in Direct mode.
+    vec2 e = vec2(eps, 0.0);
+
+    float d0 = DE_Dist(p);
+    float dx = DE_Dist(p + e.xyy);
+    float dy = DE_Dist(p + e.yxy);
+    float dz = DE_Dist(p + e.yyx);
+
+    vec3 n = vec3(dx - d0, dy - d0, dz - d0);
+
+    if (dot(n, n) < 1.0e-20) return vec3(0.0, 1.0, 0.0);
+
+    return normalize(n);
+}
+
+// Evaluate surface properties (Albedo, Normal, Roughness, Emission)
+// Used by both Direct Lighting and Path Tracer
+void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, out vec3 albedo, out vec3 n, out vec3 emission, out float roughness, bool highQuality) {
+    // Initialize outputs to satisfy strict compilers (X4000)
+    albedo = vec3(0.0);
+    n = vec3(0.0, 1.0, 0.0);
+    emission = vec3(0.0);
+    roughness = 0.5;
+
+    float distFromFractalOrigin = length(p_fractal_in);
+    float pixelSizeScale = uPixelSizeBase / uInternalScale;
+    
+    // Matches trace.ts precision floor — PRECISION_RATIO_HIGH of distance from fractal origin
+    float floatLimit = max(1.0e-20, distFromFractalOrigin * PRECISION_RATIO_HIGH);
+    
+    float orthoPixelFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * d;
+    float visualLimit = orthoPixelFootprint * (1.0 / uDetail);
+    
+    float eps = max(floatLimit, visualLimit);
+
+    // Alias inputs (No Retreat/Modification)
+    vec3 p_ray = p_ray_in;
+    vec3 p_fractal = p_fractal_in;
+    
+    // --- ADAPTIVE NORMAL ESTIMATION ---
+    
+    if (highQuality) {
+        n = GetNormal(p_ray, eps);
+    } else {
+        // Boost epsilon slightly for fast normals to avoid noise
+        // FIX: Removed invalid 'd' argument. FastNormal calculates relative to 0.0 surface.
+        n = GetFastNormal(p_ray, eps * 1.5);
+    }
+    
+    // --- Layer 3: Procedural Noise & Bump Mapping ---
+    // Calculate if needed for Surface OR Emission (Mode 3)
+    float noiseVal = 0.0;
+    vec3 noiseP = p_fractal * uLayer3Scale;
+    bool useL3 = (uLayer3Strength > 0.0 || abs(uLayer3Bump) > 0.0 || abs(uEmissionMode - 3.0) < 0.1);
+    
+    if (useL3) {
+        noiseVal = getLayer3Noise(noiseP);
+
+        // Bump-map finite-difference is gated on highQuality at the apply
+        // site below; gate the COMPUTATION too so reflection-bounce inlines
+        // (highQuality=false) skip the 3 noise taps entirely. Saves ~3
+        // getLayer3Noise calls per bounce hit pixel on raymarched reflections.
+        // Audit compile #2 (minimal version of getSurfaceMaterialBounce).
+        if (abs(uLayer3Bump) > 0.001 && highQuality) {
+            vec2 e = vec2(0.01, 0.0);  // Fixed-size finite difference step for bump gradient (world-space units)
+            float nx = getLayer3Noise(noiseP + e.xyy) - noiseVal;
+            float ny = getLayer3Noise(noiseP + e.yxy) - noiseVal;
+            float nz = getLayer3Noise(noiseP + e.yyx) - noiseVal;
+            vec3 grad = vec3(nx, ny, nz);
+            n = normalize(n - grad * uLayer3Bump * 10.0);  // 10x amplification to make bump visually significant at world scale
+        }
+    }
+
+    // --- Coloring Calculation ---
+    vec3 col1 = vec3(0.0);
+    
+    // Layer 1 (Always calculated as base). Texture branch is compile-gated
+    // because uUseTexture is a checkbox toggle (default off) but ANGLE
+    // predicates the runtime if() and runs getTextureColor() anyway.
+#ifdef USE_TEXTURE
+    if (uUseTexture > 0.5) {
+        col1 = getTextureColor(p_fractal, n, result);
+    } else
+#endif
+    {
+        float val1 = getMappingValue(uColorMode, p_fractal, result, n, uColorScale);
+        float t1Raw = val1 * uColorScale + uColorOffset
+                    + gmt_colorSpiral(p_fractal, uColorTwist, uColorTwistArms);
+        float t1 = pow(abs(fract(mod(t1Raw, 1.0))), uGradientBias);
+        col1 = textureLod0(uGradientTexture, vec2(t1, 0.5)).rgb;
+    }
+
+    // Layer 2
+    // Calculate if needed for Surface Blending OR Emission (Mode 2)
+    vec3 col2 = vec3(0.0);
+    bool useL2 = (uBlendOpacity > 0.01 || uBlendMode > 5.5 || abs(uEmissionMode - 2.0) < 0.1);
+
+    if (useL2) { 
+        float val2 = getMappingValue(uColorMode2, p_fractal, result, n, uColorScale2);
+        float t2Raw = val2 * uColorScale2 + uColorOffset2
+                    + gmt_colorSpiral(p_fractal, uColorTwist2, uColorTwistArms2);
+        float t2 = pow(abs(fract(mod(t2Raw, 1.0))), uGradientBias2);
+        
+        col2 = textureLod0(uGradientTexture2, vec2(t2, 0.5)).rgb;
+    }
+
+    // --- Compose Albedo ---
+    albedo = col1;
+
+    // Apply Layer 2 Blend (Only if opacity > 0 or Bump mode)
+    if (uBlendOpacity > 0.01 || uBlendMode > 5.5) {
+        if (uBlendMode > 5.5) {
+             vec3 bumpVec = (col2 - 0.5) * 2.0;
+             // Apply layer blend bump
+             if (highQuality) {
+                n = normalize(n + bumpVec * uBlendOpacity);
+             }
+        } else {
+             albedo = blendColors(albedo, col2, uBlendOpacity, uBlendMode);
+        }
+    }
+    
+    // Apply Layer 3 Blend (Only if strength > 0)
+    if (uLayer3Strength > 0.001) {
+        float n01 = noiseVal * 0.5 + 0.5;
+        albedo = mix(albedo, uLayer3Color, n01 * uLayer3Strength);
+    }
+    
+    // --- FEATURE INJECTION: MATERIAL PROPERTIES ---
+    // Inject Emission, Roughness, and other surface logic here.
+    // Features use builder.addMaterialLogic() to inject code at this point.
+    // Variables in scope: albedo, n, emission, roughness, p_fractal, result
+    ${injectedCode}
+}`;

@@ -1,0 +1,121 @@
+/**
+ * GmtLogo — the "GMT" wordmark with cyan M, ported from gmt-0.8.5's
+ * RenderTools.tsx (the original component had this inline alongside
+ * the project-name button).
+ *
+ * Registered as a left-slot topbar item at order -10 so it renders
+ * before the engine's default `project-name` (order 0). app-gmt-only —
+ * other apps using the engine topbar see only their own ProjectName.
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
+import { useEngineStore } from '../../store/engineStore';
+import { Popover } from '../../components/Popover';
+import { DraggableNumber } from '../../components/Slider';
+import { CheckIcon } from '../../components/Icons';
+import { GmtWordmark } from './GmtWordmark';
+
+export const GmtLogo: React.FC = () => {
+    const name = useEngineStore((s) => s.projectSettings.name);
+    const version = useEngineStore((s) => s.projectSettings.version);
+    const author = useEngineStore((s) => s.projectSettings.author);
+    const setProjectSettings = useEngineStore((s) => s.setProjectSettings);
+
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [tempName, setTempName] = useState(name);
+    const [tempVersion, setTempVersion] = useState(version);
+    const [tempAuthor, setTempAuthor] = useState(author);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Unsaved-changes marker. isSceneDirty() is a method, not reactive state,
+    // so poll it on a light interval rather than re-hashing every render.
+    const [dirty, setDirty] = useState(false);
+    useEffect(() => {
+        const check = () => setDirty(useEngineStore.getState().isSceneDirty());
+        check();
+        const id = window.setInterval(check, 1500);
+        return () => window.clearInterval(id);
+    }, []);
+
+    useEffect(() => {
+        if (isRenaming) {
+            setTempName(name);
+            setTempVersion(version);
+            setTempAuthor(author);
+            setTimeout(() => inputRef.current?.focus(), 0);
+        }
+    }, [isRenaming, name, version, author]);
+
+    const save = () => {
+        if (tempName.trim()) {
+            setProjectSettings({
+                name: tempName.trim(),
+                version: tempVersion,
+                author: tempAuthor.trim(),
+            });
+        }
+        setIsRenaming(false);
+    };
+
+    return (
+        <div className="flex flex-col leading-none select-none pr-3 relative">
+            <GmtWordmark className="h-4 w-auto self-start shrink-0" />
+            <button
+                onClick={() => setIsRenaming(true)}
+                className="text-[8px] font-mono text-gray-400 underline decoration-white/20 hover:text-cyan-300 hover:decoration-cyan-300/50 transition-colors text-left truncate max-w-[120px] mt-1.5"
+                title={dirty ? 'Unsaved changes — click to rename project' : 'Click to rename project'}
+            >
+                {dirty && <span className="text-amber-400" title="Unsaved changes">*</span>}{name}
+            </button>
+
+            {isRenaming && (
+                <Popover width="w-48" align="start" arrow={false} onClose={() => setIsRenaming(false)}>
+                    <div className="space-y-3">
+                        <div>
+                            <label className="text-[9px] text-gray-500 font-bold block mb-1">Project Name</label>
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={tempName}
+                                onChange={(e) => setTempName(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setIsRenaming(false); }}
+                                className="w-full bg-gray-900 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500"
+                                placeholder="Enter name..."
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[9px] text-gray-500 font-bold block mb-1">Author</label>
+                            <input
+                                type="text"
+                                value={tempAuthor}
+                                onChange={(e) => setTempAuthor(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setIsRenaming(false); }}
+                                className="w-full bg-gray-900 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500"
+                                placeholder="Optional"
+                            />
+                        </div>
+                        <div className="flex gap-2">
+                            <div className="flex-1">
+                                <label className="text-[9px] text-gray-500 font-bold block mb-1">Ver</label>
+                                <div className="h-6 bg-gray-900 border border-white/10 rounded overflow-hidden">
+                                    <DraggableNumber
+                                        value={tempVersion}
+                                        onChange={(v) => setTempVersion(Math.max(1, Math.round(v)))}
+                                        step={1} min={1} max={99}
+                                    />
+                                </div>
+                            </div>
+                            <button
+                                onClick={save}
+                                className="flex-1 bg-cyan-900/40 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 rounded flex items-center justify-center mt-3.5"
+                                title="Save"
+                            >
+                                <CheckIcon />
+                            </button>
+                        </div>
+                    </div>
+                </Popover>
+            )}
+        </div>
+    );
+};

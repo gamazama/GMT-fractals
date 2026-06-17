@@ -22,6 +22,8 @@ export interface DraggableNumberProps {
     step?: number;
     /** Base sensitivity multiplier (default: 1) */
     sensitivity?: number;
+    /** Drag axis: 'x' = horizontal (default), 'y' = vertical (drag down to increase). */
+    axis?: 'x' | 'y';
     
     /** Soft min for UI display (not enforced) */
     min?: number;
@@ -70,6 +72,11 @@ export interface ScalarInputProps extends DraggableNumberProps {
     trackPosition?: 'inline' | 'below';
     /** Height of the track in pixels (default: 20) */
     trackHeight?: number;
+    /** Optional CSS `background` for the track (e.g. a `linear-gradient(...)`), making
+     *  the track itself meaningful — a hue rainbow, a lightness or chroma ramp, etc.
+     *  When set, the default cyan progress-fill is suppressed (the gradient + thumb
+     *  convey position). Full variant only. Omit for the standard cyan-fill track. */
+    trackBackground?: string;
     
     /** Default value for reset functionality */
     defaultValue?: number;

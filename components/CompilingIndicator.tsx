@@ -1,113 +1,94 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { FractalEvents } from '../engine/FractalEvents';
-import { getProxy } from '../engine/worker/WorkerProxy';
-const engine = getProxy();
 import { SpinnerIcon } from './Icons';
 import { compileGate } from '../store/CompileGate';
+import { useCompileProgress, selectProgress } from '../store/CompileProgressStore';
 
+/**
+ * CompilingIndicator — toast at top-center showing compile progress.
+ *
+ * Reads phase/message/cycleId from the unified CompileProgressStore.
+ * Drives the visible progress bar via an rAF loop polling the same
+ * store's `selectProgress(state, now)`. The bar uses `transform: scaleX`
+ * so it keeps animating during heavy worker compiles that stall main-
+ * thread paint (notably Firefox single-stage compile).
+ *
+ * Lifecycle responsibilities still owned here:
+ *   - Hold visible for 800ms after `done`, then fade out (UX polish)
+ *   - Call `compileGate.flush()` once the spinner DOM has painted, so
+ *     the GPU-blocking work runs only after the user sees the spinner
+ */
 export const CompilingIndicator: React.FC = () => {
-    const [status, setStatus] = useState<boolean | string>(false);
+    const phase = useCompileProgress(s => s.phase);
+    const message = useCompileProgress(s => s.message);
+    const cycleId = useCompileProgress(s => s.cycleId);
+
+    // Local UI state — purely view-side.
     const [progress, setProgress] = useState(0);
     const [hiding, setHiding] = useState(false);
-
-    const statusRef = useRef<boolean | string>(false); // tracks status outside React batching
-    const hasFlushedRef = useRef(false);
-    const awaitingFlushRef = useRef(false); // true between new cycle reset and flush
-    const [cycleGen, setCycleGen] = useState(0); // increments on new cycle only
-    const intervalRef = useRef(0);
-    const startTimeRef = useRef(0);
-    const estimateRef = useRef(15000);
+    const flushedForCycleRef = useRef(0); // last cycleId we called flush() for
     const hideTimer1 = useRef<ReturnType<typeof setTimeout>>();
     const hideTimer2 = useRef<ReturnType<typeof setTimeout>>();
-    const safetyTimer = useRef<ReturnType<typeof setTimeout>>();
 
-    // Plain function — only called inside the useEffect closure, no need for useCallback
-    const cancelTimers = () => {
-        clearInterval(intervalRef.current);
+    // Reset hiding/progress when a new cycle starts.
+    useEffect(() => {
+        if (phase === 'compiling') {
+            setHiding(false);
+            setProgress(0);
+        }
+    }, [cycleId, phase]);
+
+    // rAF progress loop. Re-arms on cycleId change so it survives
+    // StrictMode dev's mount → cleanup → remount.
+    useEffect(() => {
+        if (phase !== 'compiling') return;
+        let cancelled = false;
+        const tick = () => {
+            if (cancelled) return;
+            const p = selectProgress(useCompileProgress.getState(), performance.now());
+            setProgress(p);
+            if (p < 95) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        return () => { cancelled = true; };
+    }, [cycleId, phase]);
+
+    // Done → snap to 100, schedule fade-out, then reset the store.
+    useEffect(() => {
+        if (phase !== 'done') return;
+        setProgress(100);
         clearTimeout(hideTimer1.current);
         clearTimeout(hideTimer2.current);
-        clearTimeout(safetyTimer.current);
-    };
-
-    useEffect(() => {
-        if (engine.isCompiling) setStatus(true);
-
-        const handler = (val: boolean | string) => {
-            const wasActive = !!statusRef.current;
-            statusRef.current = val;
-            setStatus(val);
-
-            if (compileGate.consumeNewCycle()) {
-                // ── NEW CYCLE (user switched formula / loaded scene) ──
-                // Reset everything: timers, progress, hiding. This is the
-                // definitive "reset the light" — only fires when
-                // queueCompileAfterSpinner was called, never on worker updates.
-                cancelTimers();
-                setHiding(false);
-                setProgress(0);
-                startTimeRef.current = performance.now();
-                hasFlushedRef.current = false;
-                awaitingFlushRef.current = true;
-                setCycleGen(g => g + 1);
-
-                // Start progress animation
-                const TARGET_DURATION = estimateRef.current;
-                const id = setInterval(() => {
-                    const elapsed = performance.now() - startTimeRef.current;
-                    const t = elapsed / TARGET_DURATION;
-                    const p = Math.min(95, 95 * (1 - Math.exp(-3 * t)));
-                    setProgress(p);
-                }, 60);
-                intervalRef.current = id as unknown as number;
-
-            } else if (!val && wasActive && !awaitingFlushRef.current) {
-                // ── CYCLE FINISHED (worker says done) ──
-                // Only run if spinner was actually showing (wasActive).
-                // Ignore false when spinner is already hidden — handleConfigChange
-                // emits false for every non-rebuild param change.
-                clearInterval(intervalRef.current);
-                setProgress(100);
-                hideTimer1.current = setTimeout(() => setHiding(true), 800);
-                hideTimer2.current = setTimeout(() => {
-                    setHiding(false);
-                    setProgress(0);
-                }, 1400);
-            }
-            // Worker status text updates ("Compiling Shader..." → "Compiling Lighting...")
-            // just update the text via setStatus above. No reset, no flush.
+        hideTimer1.current = setTimeout(() => setHiding(true), 800);
+        hideTimer2.current = setTimeout(() => {
+            setHiding(false);
+            setProgress(0);
+            useCompileProgress.getState().reset();
+        }, 1400);
+        return () => {
+            clearTimeout(hideTimer1.current);
+            clearTimeout(hideTimer2.current);
         };
+    }, [phase]);
 
-        const unsub = FractalEvents.on('is_compiling', handler);
-        const unsubEstimate = FractalEvents.on('compile_estimate', (ms: number) => {
-            estimateRef.current = Math.max(2000, ms);
-        });
-        return () => { unsub(); unsubEstimate(); cancelTimers(); };
-    }, []);
-
-    // ── PING: ref callback fires when the spinner DOM is on screen ──
-    // hasFlushedRef ensures we only flush ONCE per cycle.
-    // cycleGen changes only on new user-initiated cycles (not worker text updates),
-    // so the ref callback is only re-created when a flush is actually needed.
+    // pingRef: fires when spinner DOM is committed. After paint we flush
+    // the queued GPU-blocking work. Keyed on cycleId so each cycle gets
+    // exactly one flush.
     const pingRef = useCallback((node: HTMLDivElement | null) => {
-        if (node && !hasFlushedRef.current) {
-            hasFlushedRef.current = true;
-            awaitingFlushRef.current = false;
-            clearTimeout(safetyTimer.current);
+        if (node && flushedForCycleRef.current !== cycleId && cycleId > 0) {
+            flushedForCycleRef.current = cycleId;
             requestAnimationFrame(() => {
                 setTimeout(() => compileGate.flush(), 0);
             });
-            safetyTimer.current = setTimeout(() => compileGate.flush(), 300);
         }
-    }, [cycleGen]);
+    }, [cycleId]);
 
-    const isVisible = !!status || progress >= 100;
+    const isVisible = phase === 'compiling' || phase === 'done';
     const showBar = isVisible && !hiding;
-
     if (!showBar) return null;
 
-    const message = typeof status === 'string' ? status : "Compiling Shader...";
-    const isBackgroundCompile = typeof status === 'string' && status.includes('Lighting');
+    const displayMessage = message || 'Compiling Shader…';
+    const isBackgroundCompile = displayMessage.includes('Lighting');
 
     return (
         <div
@@ -118,18 +99,23 @@ export const CompilingIndicator: React.FC = () => {
                 <div className="flex items-center gap-2">
                     <SpinnerIcon className={`animate-spin h-3 w-3 ${isBackgroundCompile ? 'text-amber-400' : 'text-cyan-400'}`} />
                     <span className={`text-[9px] font-bold ${isBackgroundCompile ? 'text-amber-200' : 'text-cyan-200'}`}>
-                        {message}
+                        {displayMessage}
                     </span>
                     <span className="text-[9px] font-mono text-gray-500">{Math.floor(progress)}%</span>
                 </div>
                 <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                    {/* transform: scaleX runs on the compositor thread, so the
+                        bar keeps animating even when the worker's synchronous
+                        WebGL compile stalls main-thread paint on Firefox /
+                        Chrome with heavy presets. transition-[width] does not
+                        — width changes hit layout on the render thread. */}
                     <div
-                        className={`h-full rounded-full transition-[width] duration-150 ease-linear ${
+                        className={`h-full w-full rounded-full origin-left transition-transform duration-150 ease-linear ${
                             progress >= 100
                                 ? 'bg-green-400'
                                 : isBackgroundCompile ? 'bg-amber-400/60' : 'bg-cyan-400/60'
                         }`}
-                        style={{ width: `${progress}%` }}
+                        style={{ transform: `scaleX(${Math.max(0, Math.min(1, progress / 100))})`, willChange: 'transform' }}
                     />
                 </div>
             </div>

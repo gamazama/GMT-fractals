@@ -3,14 +3,18 @@ import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { useAnimationStore } from '../store/animationStore';
 import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, valueToPixel as v2pH, pixelToValue } from '../utils/GraphUtils';
 import { calculateViewBounds } from '../utils/keyframeViewBounds';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { useGraphInteraction } from '../hooks/useGraphInteraction';
 import { useGraphTools } from '../hooks/useGraphTools';
+import { usePencilTool, PENCIL_CURSOR } from '../hooks/usePencilTool';
+import { useAnimationStoreDataSource } from '../utils/GraphDataSource';
 import { GraphSidebar } from './graph/GraphSidebar';
 import { GraphToolbar } from './graph/GraphToolbar';
 import { GraphCanvas } from './graph/GraphCanvas';
+import { GraphSelectionBBox } from './graph/GraphSelectionBBox';
 import { WaveIcon, BakeIcon, MagicIcon } from './Icons';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
 import { ContextMenuItem } from '../types/help';
 
 interface GraphEditorProps {
@@ -27,7 +31,7 @@ interface GraphEditorProps {
     onSetFrameWidth: (px: number) => void;
 }
 
-const GraphEditor: React.FC<GraphEditorProps> = ({ 
+const GraphEditorInner: React.FC<GraphEditorProps> = ({
     trackIds, setVisibleTracks, width, height, normalized: propNormalized = false, onContextMenu,
     scrollLeft, frameWidth, sidebarWidth, onSetScroll, onSetFrameWidth
 }) => {
@@ -38,19 +42,49 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
     // We use a Div to capture pointer events reliably even if canvas is re-rendering
     const interactionRef = useRef<HTMLDivElement>(null);
 
-    const { 
-        sequence, currentFrame, durationFrames,
-        selectedKeyframeIds, selectedTrackIds, selectKeyframe, selectTracks,
-        softSelectionEnabled, softSelectionRadius, softSelectionType,
-        copySelectedKeyframes, pasteKeyframes, deleteSelectedKeyframes
-    } = useAnimationStore();
+    // Narrow per-field subscriptions instead of `useAnimationStore()` (full
+    // sub). The store receives ~60 no-op set() calls per second and the
+    // destructured form re-rendered GraphEditor every RAF. Action fns are
+    // stable refs read lazily via getState().
+    const sequence              = useAnimationStore((s) => s.sequence);
+    const currentFrame          = useAnimationStore((s) => s.currentFrame);
+    const durationFrames        = useAnimationStore((s) => s.durationFrames);
+    const selectedKeyframeIds   = useAnimationStore((s) => s.selectedKeyframeIds);
+    const selectedTrackIds      = useAnimationStore((s) => s.selectedTrackIds);
+    const softSelectionEnabled  = useAnimationStore((s) => s.softSelectionEnabled);
+    const softSelectionRadius   = useAnimationStore((s) => s.softSelectionRadius);
+    const softSelectionType     = useAnimationStore((s) => s.softSelectionType);
+    // Action selectors — stable refs via Object.is bail-out.
+    const selectKeyframe          = useAnimationStore((s) => s.selectKeyframe);
+    const setTrackSelection       = useAnimationStore((s) => s.setTrackSelection);
+    const selectKeyframes         = useAnimationStore((s) => s.selectKeyframes);
+    const deselectAllKeys         = useAnimationStore((s) => s.deselectAllKeys);
+    const copySelectedKeyframes   = useAnimationStore((s) => s.copySelectedKeyframes);
+    const pasteKeyframes          = useAnimationStore((s) => s.pasteKeyframes);
+    const deleteSelectedKeyframes = useAnimationStore((s) => s.deleteSelectedKeyframes);
+
+    // Selected-only filter: hides any track in the graph that has no selected key.
+    // Industry "key-only mode" — focuses the curve editor on what the user is editing.
+    const [selectedOnly, setSelectedOnly] = useState(false);
     
-    const { openContextMenu: openGlobalContextMenu } = useFractalStore();
+    // openContextMenu via stable selector — same Object.is bail-out trick.
+    const openGlobalContextMenu = useEngineStore((s) => s.openContextMenu);
     
     const [viewY, setViewY] = useState({ pan: 0, scale: 50 });
     const [normalized, setNormalized] = useState(propNormalized); 
     
     const canvasWidth = Math.max(10, width - sidebarWidth);
+
+    // Tracks actually drawn in the graph (filtered when selectedOnly is on).
+    const displayTrackIds = useMemo(() => {
+        if (!selectedOnly) return trackIds;
+        const tracksWithSelectedKeys = new Set<string>();
+        selectedKeyframeIds.forEach(cid => {
+            const tid = cid.split('::')[0];
+            tracksWithSelectedKeys.add(tid);
+        });
+        return trackIds.filter(id => tracksWithSelectedKeys.has(id) || selectedTrackIds.includes(id));
+    }, [selectedOnly, trackIds, selectedKeyframeIds, selectedTrackIds]);
     
     // --- VIEW CALCULATIONS ---
     const view: GraphViewTransform = useMemo(() => {
@@ -78,6 +112,21 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
                 if (k.value < min) min = k.value;
                 if (k.value > max) max = k.value;
             });
+            // Log tracks span many decades (julia.zoom: 1 → 1e-30). A
+            // linear min..max range squashes the curve to a single pixel
+            // at the deep end. Store the range in log space so the
+            // normalized v2p maps the curve across the full y-axis.
+            if (isLogTrack(tid) && min > 0) {
+                const logMin = Math.log(min);
+                const logMax = Math.log(max);
+                const logSpan = logMax - logMin;
+                if (logSpan < 0.00001) {
+                    ranges[tid] = { min: logMin - 0.5, max: logMax + 0.5, span: 1 };
+                } else {
+                    ranges[tid] = { min: logMin, max: logMax, span: logSpan };
+                }
+                return;
+            }
             const span = max - min;
             if (span < 0.00001) { min -= 0.5; max += 0.5; }
             ranges[tid] = { min, max, span: max - min };
@@ -89,7 +138,13 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
         if (!normalized) return val;
         const r = trackRanges[tid];
         if (!r) return 0.5;
-        return (val - r.min) / r.span; 
+        // Log-track ranges store log(min/max). Transform value into the
+        // same space so the normalized [0,1] mapping is meaningful for
+        // values spanning many decades.
+        if (isLogTrack(tid) && val > 0) {
+            return (Math.log(val) - r.min) / r.span;
+        }
+        return (val - r.min) / r.span;
     };
 
     const v2p = (val: number, tid: string) => {
@@ -103,23 +158,78 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + GRAPH_LEFT_GUTTER_WIDTH;
     const canvasPixelToFrame = (px: number) => pixelToFrame(px - GRAPH_LEFT_GUTTER_WIDTH, view);
 
+    // Inverse of v2p (pixel-Y → value), normalised- and log-track-aware — for the
+    // shared selection-box MOVE handle and the Pencil tool.
+    const p2v = (py: number, tid: string) => {
+        const raw = pixelToValue(py, view);
+        if (!normalized) return raw;
+        const r = trackRanges[tid];
+        if (!r) return raw;
+        return isLogTrack(tid) ? Math.exp(r.min + raw * r.span) : r.min + raw * r.span;
+    };
+
+    // Pencil-stroke preview overlay (drawn imperatively by usePencilTool).
+    const pencilOverlayRef = useRef<HTMLCanvasElement>(null);
+
+    // Live-timeline data source — one store-backed GraphDataSource shared by the
+    // interaction hook, the tools hook and the selection bbox (the three pieces
+    // that were store-coupled before the palette/timeline unification).
+    const graphDataSource = useAnimationStoreDataSource();
+
     // --- INTERACTION HOOK ---
     // Now passing the DIV ref instead of canvas ref
-    const { 
-        handleMouseDown: onGraphMouseDown, 
-        getHit, 
-        selectionBox, 
+    const {
+        handleMouseDown: onGraphMouseDown,
+        getHit,
+        selectionBox,
         softInteraction,
         shouldSuppressContextMenu
     } = useGraphInteraction(
-        interactionRef, view, trackIds, normalized, trackRanges, v2p, onSetScroll, onSetFrameWidth, setViewY,
-        frameToCanvasPixel, canvasPixelToFrame, GRAPH_LEFT_GUTTER_WIDTH
+        interactionRef, view, displayTrackIds, normalized, trackRanges, v2p, onSetScroll, onSetFrameWidth, setViewY,
+        frameToCanvasPixel, canvasPixelToFrame, GRAPH_LEFT_GUTTER_WIDTH, graphDataSource
     );
 
     // --- TOOLS CONTROLLER HOOK ---
     const tools = useGraphTools({
-        sequence, trackIds, selectedTrackIds, selectedKeyframeIds, frameWidth,
-        view, normalized, trackRanges, v2p, canvasPixelToFrame
+        sequence, trackIds, selectedTrackIds, selectedKeyframeIds, v2p, canvasPixelToFrame
+    }, graphDataSource);
+
+    // --- PENCIL TOOL (shared with the gradient editor) ---
+    // Draws onto the SINGLE selected track (or the sole visible track); on release the
+    // stroke is fit to keyframes across the drawn span only. snapshot()+replaceKeyframes
+    // = one undo entry.
+    const pencil = usePencilTool({
+        interactionRef,
+        overlayRef: pencilOverlayRef,
+        view,
+        maxFrame: durationFrames,
+        frameToCanvasPixel,
+        canvasPixelToFrame,
+        getTarget: () => {
+            const sel = selectedTrackIds.filter(id => displayTrackIds.includes(id));
+            const tid = sel.length === 1 ? sel[0] : (displayTrackIds.length === 1 ? displayTrackIds[0] : null);
+            if (!tid) return null;
+            const keys = sequence.tracks[tid]?.keyframes ?? [];
+            let mn = Infinity, mx = -Infinity;
+            keys.forEach(k => { if (k.value < mn) mn = k.value; if (k.value > mx) mx = k.value; });
+            const range = (isFinite(mx - mn) && mx > mn) ? mx - mn : 1;
+            return {
+                trackId: tid,
+                eps: Math.max(1e-6, range * 0.02),
+                toValue: (py: number, vw: GraphViewTransform) => {
+                    const raw = pixelToValue(py, vw);
+                    if (!normalized) return raw;
+                    const r = trackRanges[tid];
+                    if (!r) return raw;
+                    return isLogTrack(tid) ? Math.exp(r.min + raw * r.span) : r.min + raw * r.span;
+                },
+            };
+        },
+        getKeys: (tid) => sequence.tracks[tid]?.keyframes ?? [],
+        commit: (tid, keys) => {
+            graphDataSource.snapshot?.();
+            graphDataSource.replaceKeyframes?.([{ trackId: tid, newKeys: keys }]);
+        },
     });
 
     // --- VIEW MANIPULATION (Fit/Normalize) ---
@@ -208,7 +318,24 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
              const timer = setTimeout(() => { fitView(); hasFitted.current = true; }, 50);
              return () => clearTimeout(timer);
         }
-    }, [trackIds, width]); 
+    }, [trackIds, width]);
+
+    // Re-anchor the vertical view when the editor is resized. valueToPixel maps
+    // values relative to centerY = height/2, so a raw height change would slide
+    // every curve by Δheight/2 (the "curves jump on resize" bug). Shift panY by
+    // the matching value delta (Δheight / 2·scaleY) so the curves stay put at the
+    // user's current zoom — the extra/removed space appears at the edge rather
+    // than dragging the content. (ChannelGraphEditor re-fits on resize instead,
+    // which is fine there since it has no persistent user pan/zoom to preserve.)
+    const prevHeightRef = useRef(height);
+    useEffect(() => {
+        const prevH = prevHeightRef.current;
+        prevHeightRef.current = height;
+        // Only after the initial fit owns the layout, and only on a real change.
+        if (!hasFitted.current || prevH <= 0 || height <= 0 || prevH === height) return;
+        const deltaH = height - prevH;
+        setViewY(prev => (prev.scale > 0 ? { ...prev, pan: prev.pan - deltaH / (2 * prev.scale) } : prev));
+    }, [height]);
     
     // --- KEYBOARD SHORTCUTS ---
     useEffect(() => {
@@ -216,7 +343,20 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
             if ((e.target as HTMLElement).tagName === 'INPUT') return;
             if (e.ctrlKey || e.metaKey) {
                 if (e.key === 'c') { e.preventDefault(); copySelectedKeyframes(); }
-                else if (e.key === 'v') { e.preventDefault(); pasteKeyframes(); }
+                else if (e.key === 'v') { e.preventDefault(); pasteKeyframes(useAnimationStore.getState().currentFrame); }
+            } else if (e.altKey && (e.key === 'a' || e.key === 'A')) {
+                // Alt+A: deselect all keys (industry standard)
+                e.preventDefault();
+                deselectAllKeys();
+            } else if (e.key === 'a' || e.key === 'A') {
+                // A: select all keys on currently displayed tracks
+                e.preventDefault();
+                const all: string[] = [];
+                displayTrackIds.forEach(tid => {
+                    const t = sequence.tracks[tid];
+                    if (t) t.keyframes.forEach(k => all.push(`${tid}::${k.id}`));
+                });
+                selectKeyframes(all, false);
             } else {
                 if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelectedKeyframes(); }
                 if (e.key === 'f') { e.preventDefault(); fitSelection(); }
@@ -224,10 +364,16 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [copySelectedKeyframes, pasteKeyframes, deleteSelectedKeyframes, fitSelection]);
+    }, [copySelectedKeyframes, pasteKeyframes, deleteSelectedKeyframes, fitSelection, displayTrackIds, sequence, selectKeyframes, deselectAllKeys]);
 
     // --- EVENT HANDLERS ---
     const handleCanvasMouseDown = (e: React.MouseEvent) => {
+        // Pencil mode: a left-drag (no modifiers) sketches the selected track.
+        if (pencil.pencilMode && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            pencil.beginPencil(e);
+            return;
+        }
         // Ctrl + Click on empty space = Create Keyframe
         if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
              const rect = interactionRef.current?.getBoundingClientRect();
@@ -262,7 +408,7 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
             const composite = `${hit.trackId}::${hit.key.id}`;
             if (!selectedKeyframeIds.includes(composite)) {
                 selectKeyframe(hit.trackId, hit.key.id, false);
-                useAnimationStore.getState().selectTracks([hit.trackId], false);
+                setTrackSelection(hit.trackId);
             }
             onContextMenu(e, hit.trackId, hit.key.id, hit.key.interpolation);
         } else {
@@ -309,10 +455,10 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
     const highlightedTracks = useMemo(() => {
         const s = new Set<string>();
         selectedTrackIds.forEach(id => {
-            if (trackIds.includes(id)) s.add(id);
+            if (displayTrackIds.includes(id)) s.add(id);
         });
         return s;
-    }, [selectedKeyframeIds, selectedTrackIds, trackIds]);
+    }, [selectedTrackIds, displayTrackIds]);
 
     return (
         <div className="flex w-full h-full bg-transparent select-none" data-help-id="anim.graph">
@@ -323,13 +469,13 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
 
             <div className="flex-1 relative group overflow-hidden" data-help-id="anim.graph" ref={containerRef}>
                 {/* CANVAS VIEW */}
-                <div ref={interactionRef}> 
-                    <GraphCanvas 
+                <div ref={interactionRef} className="relative" style={pencil.pencilMode ? { cursor: PENCIL_CURSOR } : undefined}>
+                    <GraphCanvas
                         width={canvasWidth}
                         height={height}
                         view={view}
                         sequence={sequence}
-                        trackIds={trackIds}
+                        trackIds={displayTrackIds}
                         currentFrame={currentFrame}
                         durationFrames={durationFrames}
                         selectedKeyframeIds={selectedKeyframeIds}
@@ -344,6 +490,25 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
                         onMouseDown={handleCanvasMouseDown}
                         onContextMenu={handleContextMenu}
                         onDoubleClick={handleDoubleClick}
+                        cursor={pencil.pencilMode ? PENCIL_CURSOR : undefined}
+                    />
+                    <GraphSelectionBBox
+                        sequence={sequence}
+                        selectedKeyframeIds={selectedKeyframeIds}
+                        view={view}
+                        normalized={normalized}
+                        frameToCanvasPixel={frameToCanvasPixel}
+                        v2p={v2p}
+                        dataSource={graphDataSource}
+                        p2v={p2v}
+                    />
+                    {/* Pencil-stroke preview — paints above the graph, below the toolbar/bbox. */}
+                    <canvas
+                        ref={pencilOverlayRef}
+                        width={canvasWidth}
+                        height={height}
+                        className="absolute top-0 left-0 pointer-events-none"
+                        style={{ width: canvasWidth, height }}
                     />
                 </div>
                 
@@ -381,10 +546,20 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
                     onSmoothDown={tools.handleSmoothDown}
                     isSimplifying={tools.isSimplifying}
                     onSimplifyDown={tools.handleSimplifyDown}
+                    selectedOnly={selectedOnly}
+                    onToggleSelectedOnly={() => setSelectedOnly(s => !s)}
+                    pencilMode={pencil.pencilMode}
+                    onTogglePencil={() => pencil.setPencilMode(p => !p)}
+                    availableHeight={height - 30 - 8}
                 />
             </div>
         </div>
     );
 };
 
+// React.memo: bail out when props are reference-equal so currentFrame ticks
+// during playback don't force GraphEditor to re-render. Inner Zustand selectors
+// (sequence, selectedKeyframeIds, etc.) still re-render when their slice
+// values change.
+const GraphEditor = React.memo(GraphEditorInner);
 export default GraphEditor;

@@ -1,21 +1,49 @@
 
 import { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
-import * as THREE from 'three';
 import { AnimationStore, SequenceSliceState, SequenceSliceActions, HistoryItem, CopiedKeyframe } from './types';
 import { Track, Keyframe, AnimationSequence } from '../../types';
-import { getProxy } from '../../engine/worker/WorkerProxy';
-const engine = getProxy();
-import { CameraUtils } from '../../utils/CameraUtils';
-import { getViewportCamera } from '../../engine/worker/ViewportRefs';
 import { simplifyTrack } from '../../utils/CurveFitting';
 import { AnimationMath } from '../../engine/math/AnimationMath';
 import { TrackUtils } from '../../engine/algorithms/TrackUtils';
+import { splitCubicBezier, solveCubicBezierT } from '../../engine/BezierMath';
+import { isLogTrack } from '../../engine/animation/logTrackRegistry';
+import { calculateTangentModeUpdates, calculateGlobalInterpolationUpdates } from '../../utils/timelineUtils';
 
 const DEFAULT_SEQUENCE: AnimationSequence = {
     durationFrames: 300,
-    fps: 30,
     tracks: {}
+};
+
+// Build a HistoryItem of the same shape as `item` from the current store —
+// used by undo/redo to capture the state we're about to overwrite so it
+// can be pushed onto the opposite stack.
+const captureInverse = (state: AnimationStore, item: HistoryItem): HistoryItem => {
+    if (item.type === 'FPS') {
+        return {
+            type: 'FPS',
+            data: {
+                sequence: JSON.parse(JSON.stringify(state.sequence)),
+                fps: state.fps,
+                durationFrames: state.durationFrames,
+                currentFrame: state.currentFrame,
+            },
+        };
+    }
+    return { type: 'SEQUENCE', data: JSON.parse(JSON.stringify(state.sequence)) };
+};
+
+const applyHistory = (set: (partial: Partial<AnimationStore>) => void, item: HistoryItem) => {
+    if (item.type === 'FPS') {
+        set({
+            sequence: item.data.sequence,
+            fps: item.data.fps,
+            durationFrames: item.data.durationFrames,
+            currentFrame: item.data.currentFrame,
+        });
+    } else {
+        set({ sequence: item.data });
+    }
 };
 
 export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscribeWithSelector", never]], [], SequenceSliceState & SequenceSliceActions> = (set, get) => ({
@@ -36,37 +64,35 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
     },
 
     undo: () => {
-        const { undoStack, redoStack, sequence } = get();
+        const { undoStack, redoStack } = get();
         if (undoStack.length === 0) return false;
-
         const item = undoStack[undoStack.length - 1];
-        const newUndo = undoStack.slice(0, -1);
-        
-        const currentClone = JSON.parse(JSON.stringify(sequence));
-        const redoItem: HistoryItem = { type: 'SEQUENCE', data: currentClone };
-        
-        set({ sequence: item.data, undoStack: newUndo, redoStack: [...redoStack, redoItem] });
+        const inverse = captureInverse(get(), item);
+        applyHistory(set, item);
+        set({ undoStack: undoStack.slice(0, -1), redoStack: [...redoStack, inverse] });
         return true;
     },
 
     redo: () => {
-        const { undoStack, redoStack, sequence } = get();
+        const { undoStack, redoStack } = get();
         if (redoStack.length === 0) return false;
-
         const item = redoStack[redoStack.length - 1];
-        const newRedo = redoStack.slice(0, -1);
-        
-        const currentClone = JSON.parse(JSON.stringify(sequence));
-        const undoItem: HistoryItem = { type: 'SEQUENCE', data: currentClone };
-        
-        set({ sequence: item.data, undoStack: [...undoStack, undoItem], redoStack: newRedo });
+        const inverse = captureInverse(get(), item);
+        applyHistory(set, item);
+        set({ undoStack: [...undoStack, inverse], redoStack: redoStack.slice(0, -1) });
         return true;
     },
 
     // --- BASIC CRUD ---
-    setSequence: (seq) => { 
-        get().snapshot(); 
-        set({ sequence: seq }); 
+    setSequence: (seq) => {
+        get().snapshot();
+        // Normalize at the boundary. A loaded sequence (e.g. decoded from a
+        // share link) can arrive without `tracks` — the URL encoder drops the
+        // empty `tracks: {}`, so the round-tripped sequence has none — which
+        // would make every `sequence.tracks[...]` reader (useTrackAnimation,
+        // the timeline, the graph editors) throw on first render. Guarantee
+        // the shape here so no downstream consumer has to guard.
+        set({ sequence: { ...DEFAULT_SEQUENCE, ...seq, tracks: seq?.tracks ?? {} } });
     },
 
     addTrack: (id, label) => { 
@@ -112,102 +138,240 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         set(state => {
             const track = state.sequence.tracks[trackId];
             if (!track) return state;
-            
+
             let interpolation: 'Linear' | 'Step' | 'Bezier' = explicitInterpolation || 'Bezier';
             if (!explicitInterpolation) {
-                // Determine best interpolation based on history
                 interpolation = TrackUtils.inferInterpolation(track.keyframes, frame);
             }
 
             const autoTangent = interpolation === 'Bezier';
-            
             const tempKey: Keyframe = { id: nanoid(), frame, value, interpolation, autoTangent, brokenTangents: false };
             const others = track.keyframes.filter(k => Math.abs(k.frame - frame) > 0.001);
             const sorted = [...others, tempKey].sort((a,b) => a.frame - b.frame);
             const idx = sorted.findIndex(k => k.id === tempKey.id);
-            
+
             if (interpolation === 'Bezier') {
                 const prev = idx > 0 ? sorted[idx - 1] : undefined;
                 const next = idx < sorted.length - 1 ? sorted[idx + 1] : undefined;
-                const { l, r } = AnimationMath.calculateTangents(tempKey, prev, next, 'Auto');
-                tempKey.leftTangent = l; 
-                tempKey.rightTangent = r;
+
+                // De Casteljau split: when inserting between two Bezier keys, preserve
+                // the existing curve shape exactly. The new key adopts curve-derived
+                // tangents and the neighbours' adjacent handles are rewritten so the
+                // visual segment is unchanged. Falls back to Auto tangents at endpoints.
+                const canSplit = prev && next && prev.interpolation === 'Bezier' && next.interpolation === 'Bezier';
+                if (canSplit) {
+                    const k1HandleX = prev.rightTangent ? prev.rightTangent.x : (next.frame - prev.frame) / 3;
+                    const k1HandleY = prev.rightTangent ? prev.rightTangent.y : 0;
+                    const k2HandleX = next.leftTangent ? next.leftTangent.x : -(next.frame - prev.frame) / 3;
+                    const k2HandleY = next.leftTangent ? next.leftTangent.y : 0;
+
+                    const p0x = prev.frame,                p0y = prev.value;
+                    const p1x = prev.frame + k1HandleX,    p1y = prev.value + k1HandleY;
+                    const p2x = next.frame + k2HandleX,    p2y = next.value + k2HandleY;
+                    const p3x = next.frame,                p3y = next.value;
+
+                    const t = solveCubicBezierT(frame, p0x, p1x, p2x, p3x);
+                    const split = splitCubicBezier(t, p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y);
+
+                    // Replace prev/next with curve-preserving handles. Mark all three
+                    // user-shaped so updateNeighbors won't clobber them downstream.
+                    const updatedPrev: Keyframe = {
+                        ...prev,
+                        autoTangent: false,
+                        rightTangent: { x: split.leftP1x - p0x, y: split.leftP1y - p0y },
+                    };
+                    const updatedNext: Keyframe = {
+                        ...next,
+                        autoTangent: false,
+                        leftTangent: { x: split.rightP2x - p3x, y: split.rightP2y - p3y },
+                    };
+                    tempKey.value = split.sy;
+                    tempKey.autoTangent = false;
+                    tempKey.leftTangent  = { x: split.leftP2x  - split.sx, y: split.leftP2y  - split.sy };
+                    tempKey.rightTangent = { x: split.rightP1x - split.sx, y: split.rightP1y - split.sy };
+
+                    sorted[idx - 1] = updatedPrev;
+                    sorted[idx + 1] = updatedNext;
+                } else {
+                    const trackIsLog = isLogTrack(trackId);
+                    const { l, r } = AnimationMath.calculateTangents(tempKey, prev, next, 'Auto', trackIsLog);
+                    tempKey.leftTangent = l;
+                    tempKey.rightTangent = r;
+                    TrackUtils.updateNeighbors(sorted, idx, trackIsLog);
+                }
+            } else {
+                TrackUtils.updateNeighbors(sorted, idx, isLogTrack(trackId));
             }
 
-            TrackUtils.updateNeighbors(sorted, idx);
-            
-            return { 
-                sequence: { 
-                    ...state.sequence, 
-                    tracks: { ...state.sequence.tracks, [trackId]: { ...track, keyframes: sorted } } 
-                } 
+            return {
+                sequence: {
+                    ...state.sequence,
+                    tracks: { ...state.sequence.tracks, [trackId]: { ...track, keyframes: sorted } }
+                }
             };
         });
     },
 
-    // Optimized batch operation for modulation recording to prevent UI jitter
-    // Uses O(1) append strategy for forward recording instead of O(N log N) sorting
+    // Optimized batch operation for modulation recording to prevent UI jitter.
+    // Uses O(1) append strategy for forward recording instead of O(N log N) sorting.
+    // Intentionally diverges from `addKeyframe`: defaults to Linear, skips tangent
+    // calculation and neighbour updates because dense recorded keys don't want smart
+    // Auto tangents. Don't merge these two without preserving both behaviours.
     batchAddKeyframes: (frame, updates, explicitInterpolation) => {
         set(state => {
-            // Shallow clone tracks object
             const newTracks = { ...state.sequence.tracks };
             let hasChanges = false;
-            
+
             updates.forEach(({ trackId, value }) => {
-                // Auto-create track if missing
                 if (!newTracks[trackId]) {
                     newTracks[trackId] = { id: trackId, type: 'float', label: trackId, keyframes: [] };
                     hasChanges = true;
                 }
-                
-                const track = newTracks[trackId];
-                
-                // Deep clone keyframes only for affected tracks
-                const newKeyframes = [...track.keyframes];
 
-                // Optimization: Check the LAST keyframe.
-                // If we are recording forward, we just need to append or overwrite the last key.
+                const track = newTracks[trackId];
+                const newKeyframes = [...track.keyframes];
                 const lastKey = newKeyframes.length > 0 ? newKeyframes[newKeyframes.length - 1] : null;
 
-                const newKey: Keyframe = { 
-                    id: nanoid(), 
-                    frame, 
-                    value, 
-                    interpolation: explicitInterpolation || 'Linear', 
-                    autoTangent: explicitInterpolation === 'Bezier', 
-                    brokenTangents: false 
+                const newKey: Keyframe = {
+                    id: nanoid(),
+                    frame,
+                    value,
+                    interpolation: explicitInterpolation || 'Linear',
+                    autoTangent: explicitInterpolation === 'Bezier',
+                    brokenTangents: false,
                 };
 
+                let updated = newKeyframes;
                 if (lastKey) {
                     if (frame > lastKey.frame) {
-                        // Append (Fastest)
                         newKeyframes.push(newKey);
                     } else if (Math.abs(frame - lastKey.frame) < 0.001) {
-                        // Overwrite last key (Fast)
-                        // Use existing ID to prevent React list thrashing
+                        // Overwrite last key (use existing ID to prevent React list thrashing).
                         newKey.id = lastKey.id;
                         newKeyframes[newKeyframes.length - 1] = newKey;
                     } else {
-                        // Insert in middle (Slow - Standard Sort)
-                        // Filter out existing key at this frame
-                        const filtered = newKeyframes.filter(k => Math.abs(k.frame - frame) > 0.001);
-                        filtered.push(newKey);
-                        filtered.sort((a,b) => a.frame - b.frame);
-                        
-                        // Replace array
-                        track.keyframes = filtered;
-                        hasChanges = true;
-                        return; // Done with this update
+                        // Insert in middle (cold path).
+                        updated = newKeyframes.filter(k => Math.abs(k.frame - frame) > 0.001);
+                        updated.push(newKey);
+                        updated.sort((a, b) => a.frame - b.frame);
                     }
                 } else {
-                    // First key
                     newKeyframes.push(newKey);
                 }
 
-                track.keyframes = newKeyframes;
+                // Clone the track object so per-track ref subscriptions can
+                // detect a change. The previous code mutated `track.keyframes`
+                // in place, which made `state.sequence.tracks[tid] === prev`
+                // hold even after a write — silently breaking any
+                // narrow-selector subscription.
+                newTracks[trackId] = { ...track, keyframes: updated };
                 hasChanges = true;
             });
-            
+
+            return hasChanges ? { sequence: { ...state.sequence, tracks: newTracks } } : state;
+        });
+    },
+
+    batchAddKeyframesRange: (startFrame, endFrame, updates, explicitInterpolation) => {
+        if (endFrame < startFrame || updates.length === 0) return;
+        set(state => {
+            const newTracks = { ...state.sequence.tracks };
+            let hasChanges = false;
+            const interp = explicitInterpolation || 'Linear';
+            const isAuto = explicitInterpolation === 'Bezier';
+
+            updates.forEach(({ trackId, value }) => {
+                if (!newTracks[trackId]) {
+                    newTracks[trackId] = { id: trackId, type: 'float', label: trackId, keyframes: [] };
+                    hasChanges = true;
+                }
+                const track = newTracks[trackId];
+                const keys = [...track.keyframes];
+
+                for (let f = startFrame; f <= endFrame; f++) {
+                    const lastKey = keys.length > 0 ? keys[keys.length - 1] : null;
+                    const newKey: Keyframe = {
+                        id: nanoid(), frame: f, value, interpolation: interp,
+                        autoTangent: isAuto, brokenTangents: false,
+                    };
+                    if (!lastKey || f > lastKey.frame) {
+                        keys.push(newKey);
+                    } else if (Math.abs(f - lastKey.frame) < 0.001) {
+                        newKey.id = lastKey.id;
+                        keys[keys.length - 1] = newKey;
+                    } else {
+                        // Cold path
+                        const filtered = keys.filter(k => Math.abs(k.frame - f) > 0.001);
+                        filtered.push(newKey);
+                        filtered.sort((a, b) => a.frame - b.frame);
+                        keys.length = 0;
+                        keys.push(...filtered);
+                    }
+                }
+
+                newTracks[trackId] = { ...track, keyframes: keys };
+                hasChanges = true;
+            });
+
+            return hasChanges ? { sequence: { ...state.sequence, tracks: newTracks } } : state;
+        });
+    },
+
+    batchAddKeyframesMultiRange: (entries, explicitInterpolation) => {
+        if (entries.length === 0) return;
+        set(state => {
+            const newTracks = { ...state.sequence.tracks };
+            let hasChanges = false;
+            const interp = explicitInterpolation || 'Linear';
+            const isAuto = explicitInterpolation === 'Bezier';
+
+            // Group writes by track so each track is cloned + extended once.
+            const trackOps = new Map<string, { frame: number, value: number }[]>();
+            for (const entry of entries) {
+                for (const { trackId, value } of entry.updates) {
+                    let ops = trackOps.get(trackId);
+                    if (!ops) { ops = []; trackOps.set(trackId, ops); }
+                    for (let f = entry.startFrame; f <= entry.endFrame; f++) {
+                        ops.push({ frame: f, value });
+                    }
+                }
+            }
+
+            trackOps.forEach((ops, trackId) => {
+                if (!newTracks[trackId]) {
+                    newTracks[trackId] = { id: trackId, type: 'float', label: trackId, keyframes: [] };
+                    hasChanges = true;
+                }
+                const track = newTracks[trackId];
+                const keys = [...track.keyframes];
+
+                for (const { frame, value } of ops) {
+                    const lastKey = keys.length > 0 ? keys[keys.length - 1] : null;
+                    const newKey: Keyframe = {
+                        id: nanoid(), frame, value, interpolation: interp,
+                        autoTangent: isAuto, brokenTangents: false,
+                    };
+                    if (!lastKey || frame > lastKey.frame) {
+                        keys.push(newKey);
+                    } else if (Math.abs(frame - lastKey.frame) < 0.001) {
+                        newKey.id = lastKey.id;
+                        keys[keys.length - 1] = newKey;
+                    } else {
+                        // Cold path — recording shouldn't hit this.
+                        const filtered = keys.filter(k => Math.abs(k.frame - frame) > 0.001);
+                        filtered.push(newKey);
+                        filtered.sort((a, b) => a.frame - b.frame);
+                        keys.length = 0;
+                        keys.push(...filtered);
+                    }
+                }
+
+                // Clone the track object too (not just its keyframes array) so
+                // per-track subscriptions can detect a change by ref equality.
+                newTracks[trackId] = { ...track, keyframes: keys };
+                hasChanges = true;
+            });
+
             return hasChanges ? { sequence: { ...state.sequence, tracks: newTracks } } : state;
         });
     },
@@ -246,6 +410,23 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
     updateKeyframes: (updates) => {
         set(state => {
             const newTracks = { ...state.sequence.tracks };
+            // First pass: clone touched tracks + their keyframes arrays so memoising
+            // consumers (e.g. GraphRenderer's polyline cache, keyed by keyframes
+            // array referential equality) invalidate correctly. Without this,
+            // dragging a key or a bezier handle mutates the array in place and
+            // the cached canvas goes stale until the array ref happens to change
+            // for some other reason.
+            const touchedTracks = new Set<string>();
+            updates.forEach(({ trackId }) => {
+                if (!touchedTracks.has(trackId) && newTracks[trackId]) {
+                    touchedTracks.add(trackId);
+                    newTracks[trackId] = {
+                        ...newTracks[trackId],
+                        keyframes: [...newTracks[trackId].keyframes],
+                    };
+                }
+            });
+            // Second pass: apply patches into the cloned arrays.
             updates.forEach(({ trackId, keyId, patch }) => {
                 const track = newTracks[trackId];
                 if (track) {
@@ -259,8 +440,9 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     }
                 }
             });
-            // Ensure proper sort after bulk update
-            Object.keys(newTracks).forEach(tid => {
+            // Sort touched tracks only (the cloned arrays). Untouched tracks keep
+            // their original references so other cache consumers don't invalidate.
+            touchedTracks.forEach(tid => {
                 newTracks[tid].keyframes.sort((a, b) => a.frame - b.frame);
             });
             return { sequence: { ...state.sequence, tracks: newTracks } };
@@ -306,41 +488,27 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
 
     setTangents: (mode) => {
         get().snapshot();
+        // Per-key patch computation lives in the shared helper (timelineUtils) so
+        // the palette channel editor applies the SAME logic. Apply via the clone-
+        // and-set path below — touched tracks + their keyframe arrays are cloned so
+        // memoising consumers (GraphRenderer's polyline cache, keyed by array
+        // referential equality) invalidate correctly.
+        const updates = calculateTangentModeUpdates(get().sequence, get().selectedKeyframeIds, mode);
+        if (updates.length === 0) return;
         set(state => {
             const newTracks = { ...state.sequence.tracks };
-            state.selectedKeyframeIds.forEach(cid => {
-                const [tid, kid] = cid.split('::');
-                const track = newTracks[tid];
-                if (track) {
-                    const idx = track.keyframes.findIndex(k => k.id === kid);
-                    if (idx === -1) return;
-                    const k = track.keyframes[idx];
-                    
-                    if (mode === 'Split') {
-                        track.keyframes[idx] = { ...k, brokenTangents: true, autoTangent: false };
-                    } else if (mode === 'Unified') {
-                        let rt = k.rightTangent!;
-                        let lt = k.leftTangent!;
-                        if (rt && lt) {
-                            const len = Math.sqrt(rt.x*rt.x + rt.y*rt.y);
-                            const normL = Math.sqrt(lt.x*lt.x + lt.y*lt.y);
-                            // Project right to match left
-                            rt = { x: -lt.x * (len/Math.max(0.001, normL)), y: -lt.y * (len/Math.max(0.001, normL)) };
-                        }
-                        track.keyframes[idx] = { ...k, rightTangent: rt, brokenTangents: false, autoTangent: false };
-                    } else if (mode === 'Auto' || mode === 'Ease') {
-                        const prev = track.keyframes[idx - 1];
-                        const next = track.keyframes[idx + 1];
-                        const { l, r } = AnimationMath.calculateTangents(k, prev, next, mode);
-                        track.keyframes[idx] = { 
-                            ...k, 
-                            autoTangent: mode === 'Auto', 
-                            brokenTangents: false, 
-                            leftTangent: l, 
-                            rightTangent: r 
-                        };
-                    }
+            const touchedTracks = new Set<string>();
+            updates.forEach(({ trackId }) => {
+                if (!touchedTracks.has(trackId) && newTracks[trackId]) {
+                    touchedTracks.add(trackId);
+                    newTracks[trackId] = { ...newTracks[trackId], keyframes: [...newTracks[trackId].keyframes] };
                 }
+            });
+            updates.forEach(({ trackId, keyId, patch }) => {
+                const track = newTracks[trackId];
+                if (!track) return;
+                const idx = track.keyframes.findIndex(k => k.id === keyId);
+                if (idx !== -1) track.keyframes[idx] = { ...track.keyframes[idx], ...patch };
             });
             return { sequence: { ...state.sequence, tracks: newTracks } };
         });
@@ -348,24 +516,14 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
 
     setGlobalInterpolation: (type, tangentMode) => {
         get().snapshot();
+        // Shared helper builds the new keyframe arrays (interpolation + tangents);
+        // installing them as fresh track + array objects keeps memoising consumers
+        // (GraphRenderer's polyline cache) from rendering stale curves.
+        const updates = calculateGlobalInterpolationUpdates(get().sequence, type, tangentMode);
         set(state => {
             const newTracks = { ...state.sequence.tracks };
-            Object.keys(newTracks).forEach(tid => {
-                const track = newTracks[tid];
-                if (track.keyframes.length === 0) return;
-                
-                track.keyframes.forEach((k, i) => {
-                    k.interpolation = type;
-                    if (type === 'Bezier' && tangentMode) {
-                        const prev = track.keyframes[i-1];
-                        const next = track.keyframes[i+1];
-                        const { l, r } = AnimationMath.calculateTangents(k, prev, next, tangentMode);
-                        k.leftTangent = l;
-                        k.rightTangent = r;
-                        k.autoTangent = (tangentMode === 'Auto');
-                        k.brokenTangents = false;
-                    }
-                });
+            updates.forEach(({ trackId, newKeys }) => {
+                if (newTracks[trackId]) newTracks[trackId] = { ...newTracks[trackId], keyframes: newKeys };
             });
             return { sequence: { ...state.sequence, tracks: newTracks } };
         });
@@ -411,17 +569,32 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
             const newTracks = { ...state.sequence.tracks };
             const targetStart = atFrame !== undefined ? atFrame : currentFrame;
 
+            // Clone the tracks we'll modify (one clone per unique target track) so
+            // GraphRenderer's polyline cache invalidates by track-ref equality.
+            // Previously `track.keyframes = [...]` mutated the original track in
+            // place, which the cache happened to see via the new array ref — fragile.
+            const touchedTracks = new Set<string>();
+            clipboard.forEach(c => {
+                if (!touchedTracks.has(c.originalTrackId) && newTracks[c.originalTrackId]) {
+                    touchedTracks.add(c.originalTrackId);
+                    newTracks[c.originalTrackId] = {
+                        ...newTracks[c.originalTrackId],
+                        keyframes: [...newTracks[c.originalTrackId].keyframes],
+                    };
+                }
+            });
+
             clipboard.forEach(c => {
                 const track = newTracks[c.originalTrackId];
                 if (track) {
                     const f = targetStart + c.relativeFrame;
-                    const newKey: Keyframe = { 
-                        id: nanoid(), 
-                        frame: f, 
-                        value: c.value, 
-                        interpolation: c.interpolation, 
-                        leftTangent: c.leftTangent, 
-                        rightTangent: c.rightTangent, 
+                    const newKey: Keyframe = {
+                        id: nanoid(),
+                        frame: f,
+                        value: c.value,
+                        interpolation: c.interpolation,
+                        leftTangent: c.leftTangent,
+                        rightTangent: c.rightTangent,
                         autoTangent: false,
                         brokenTangents: false
                     };
@@ -462,19 +635,33 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
 
         set(s => {
             const newTracks = { ...s.sequence.tracks };
-            
+
+            // Clone tracks we'll modify (one clone per unique tid in the selection)
+            // so memoising consumers see a fresh track ref + fresh keyframes array.
+            const touchedTracks = new Set<string>();
+            s.selectedKeyframeIds.forEach(id => {
+                const [tid] = id.split('::');
+                if (!touchedTracks.has(tid) && newTracks[tid]) {
+                    touchedTracks.add(tid);
+                    newTracks[tid] = {
+                        ...newTracks[tid],
+                        keyframes: [...newTracks[tid].keyframes],
+                    };
+                }
+            });
+
             for(let i = 1; i <= times; i++) {
                 const offset = span * i;
-                
+
                 s.selectedKeyframeIds.forEach(id => {
                     const [tid, kid] = id.split('::');
                     const track = newTracks[tid];
                     if (!track) return;
-                    
+
                     const originalKey = track.keyframes.find(k => k.id === kid);
                     if (originalKey) {
                         const newFrame = originalKey.frame + offset;
-                        const newKey: Keyframe = { 
+                        const newKey: Keyframe = {
                             ...originalKey,
                             id: nanoid(),
                             frame: newFrame
@@ -483,77 +670,22 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     }
                 });
             }
-            
-            // Explicit cast to Track to ensure TS knows about keyframes property
-            Object.values(newTracks).forEach(t => (t as Track).keyframes.sort((a,b) => a.frame - b.frame));
+
+            // Sort touched tracks only (cloned arrays). Untouched tracks keep their
+            // original references — cache stays warm where it can.
+            touchedTracks.forEach(tid => {
+                newTracks[tid].keyframes.sort((a, b) => a.frame - b.frame);
+            });
             return { sequence: { ...s.sequence, tracks: newTracks } };
         });
     },
 
-    // --- COMPLEX OPS ---
-    captureCameraFrame: (frame, skipSnapshot = false, interpolation) => {
-        const cam = getViewportCamera() || engine.activeCamera;
-        if (!cam) return;
-        if (!skipSnapshot) get().snapshot();
-
-        // Use Unified Coordinate Utility
-        const unified = CameraUtils.getUnifiedFromEngine();
-
-        // Get Rotation as Euler (Radians for storage)
-        const q = cam.quaternion;
-        const euler = new THREE.Euler().setFromQuaternion(q);
-        
-        const cameraTracks = [
-            { id: 'camera.unified.x', val: unified.x, label: 'Position X' },
-            { id: 'camera.unified.y', val: unified.y, label: 'Position Y' },
-            { id: 'camera.unified.z', val: unified.z, label: 'Position Z' },
-            { id: 'camera.rotation.x', val: euler.x, label: 'Rotation X' },
-            { id: 'camera.rotation.y', val: euler.y, label: 'Rotation Y' },
-            { id: 'camera.rotation.z', val: euler.z, label: 'Rotation Z' }
-        ];
-
-        set(state => {
-            const newTracks = { ...state.sequence.tracks };
-            
-            const xTrack = newTracks['camera.unified.x'];
-            const isFirstCamKey = !xTrack || xTrack.keyframes.length === 0;
-            const smartInterp = interpolation || (isFirstCamKey ? 'Linear' : 'Bezier');
-            
-            cameraTracks.forEach(t => {
-                let track = newTracks[t.id];
-                if (!track) {
-                    track = { id: t.id, type: 'float', label: t.label, keyframes: [], hidden: false };
-                    newTracks[t.id] = track;
-                }
-                
-                const newKey: Keyframe = { 
-                    id: nanoid(), 
-                    frame, 
-                    value: t.val, 
-                    interpolation: smartInterp, 
-                    autoTangent: smartInterp === 'Bezier', 
-                    brokenTangents: false 
-                };
-                
-                const others = track.keyframes.filter(k => Math.abs(k.frame - frame) > 0.001);
-                const sorted = [...others, newKey].sort((a,b) => a.frame - b.frame);
-                const idx = sorted.findIndex(k => k.id === newKey.id);
-                
-                if (smartInterp === 'Bezier') {
-                    const prev = idx > 0 ? sorted[idx-1] : undefined;
-                    const next = idx < sorted.length-1 ? sorted[idx+1] : undefined;
-                    const { l, r } = AnimationMath.calculateTangents(newKey, prev, next, 'Auto');
-                    newKey.leftTangent = l; 
-                    newKey.rightTangent = r;
-                }
-                
-                TrackUtils.updateNeighbors(sorted, idx);
-                track.keyframes = sorted;
-            });
-            
-            return { sequence: { ...state.sequence, tracks: newTracks } };
-        });
-    },
+    // captureCameraFrame removed — was a GMT-shaped action stuck on the
+    // engine-core animation store, with a stub CameraUtils that always
+    // returned (0,0,0) for non-GMT apps. All call sites now go through
+    // engine/animation/cameraKeyRegistry.captureCameraKeyFrame which is
+    // the single host-pluggable entry point. See F5 in
+    // docs/engine/20_Fragility_Audit.md.
 
     simplifySelectedKeys: (tolerance = 0.01) => {
         get().snapshot();

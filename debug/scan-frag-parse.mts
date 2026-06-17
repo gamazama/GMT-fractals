@@ -11,10 +11,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { detectFormulaV3 } from '../features/fragmentarium_import/v3/compat';
-import { processFormula as v4ProcessFormula } from '../features/fragmentarium_import/v4';
+import { detectFormulaV3 } from '../engine-gmt/features/fragmentarium_import/v3/compat';
+import { processFormula as v4ProcessFormula } from '../engine-gmt/features/fragmentarium_import/v4';
 
-const PUB_DIR = path.resolve('public/formulas/frag');
+const PUB_DIR = path.resolve(import.meta.dirname, '..', 'public/formulas/frag');
 
 function walk(dir: string): string[] {
     const out: string[] = [];

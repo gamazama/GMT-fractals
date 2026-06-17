@@ -1,0 +1,178 @@
+
+// Shared light loop infrastructure (shadows, attenuation, light types).
+// Each BRDF variant gets its own complete function to avoid dead-code overhead.
+// stochasticShadows: compile-time gate — when false, the stochastic jitter block
+// and its GetHardShadow dependency are stripped, saving significant compile time.
+// areaLightsActive: compile-time gate within the stochastic-shadow build —
+// session-2 found that the runtime `if (uAreaLights > 0.5)` was emitting BOTH
+// the stochastic and soft shadow paths and ANGLE/D3D11 was likely predicating
+// (running both 128-step shadow marches). When areaLightsActive=false (default
+// for `uAreaLights=false`), only the soft path is emitted; when true, only the
+// stochastic+GetHardShadow path. Toggling the `areaLights` checkbox triggers a
+// recompile, consistent with the existing compile-toggle UX.
+
+const getLoopOpen = (stochasticShadows: boolean, areaLightsActive: boolean = false) => `
+vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughness, float metallic, float stochasticSeed, bool calcShadows) {
+    vec3 Lo = vec3(0.0);
+
+    float pixelSizeScale = uPixelSizeBase / uInternalScale;
+    float biasAmount = uShadowBias + pixelSizeScale * 2.0;
+    vec3 shadowRo = p + n * biasAmount;
+
+    // BRDF invariants — depend only on roughness/metallic/albedo/n/v, NOT on
+    // per-light direction. Computing them once here saves N-1 redundant
+    // recomputes per pixel on a multi-light scene (3 lights at default ⇒ 2x
+    // savings on these ops). Audit Tier 1 lighting #1.
+    float roughnessSq = roughness * roughness;
+    vec3  specularTint = mix(vec3(1.0), albedo, metallic);   // Blinn-Phong tint
+    vec3  diffuseTerm  = (1.0 - metallic) * albedo * uDiffuse * (1.0 / PI);
+    vec3  F0           = mix(vec3(0.04), albedo, metallic);  // Cook-Torrance base
+    float NdotV        = max(0.001, dot(n, v));              // view-dep, light-indep
+    float ggxA2        = roughnessSq * roughnessSq;
+    float ggxKG        = roughnessSq * 0.5;
+    float ggxG1V       = NdotV / (NdotV * (1.0 - ggxKG) + ggxKG);
+    // Blinn-Phong specular normalisation: shininess + (shininess+2)/(8π)
+    float bpShininess  = max(2.0, 2.0 / (roughnessSq + 0.001) - 2.0);
+    float bpSpecNorm   = (bpShininess + 2.0) * (1.0 / (8.0 * PI));
+
+    // COMPILER OPTIMIZATION: Prevent unrolling of light loop
+    int lightCount = uLightCount;
+
+    for (int i = 0; i < MAX_LIGHTS; i++) {
+        if (i >= lightCount) break;
+
+        float intensity = uLightIntensity[i];
+        if (intensity < 0.01) continue;
+
+        float type = uLightType[i];
+        // type 1 = Directional, type 2 = Sphere area (Direct mode treats Sphere
+        // as a Point at the sphere center — physical area integration requires
+        // the path tracer; see ptAreaLights compile gate).
+        bool isDirectional = type > 0.5 && type < 1.5;
+
+        vec3 lVec = isDirectional ? uLightDir[i] : (uLightPos[i] - p);
+
+        // Cheap backface bail: dot sign survives un-normalized, so we can
+        // skip backside lights BEFORE the length/divide. Saves a sqrt + div
+        // for ~half of pixels in typical scenes (audit T1 lighting #7).
+        if (dot(n, lVec) <= 0.0) continue;
+
+        float distToLight;
+        vec3 l;
+        if (isDirectional) {
+             distToLight = DIR_LIGHT_DIST;  // Directional: treat as infinitely far (> BOUNDING_RADIUS)
+             l = normalize(lVec);
+        } else {
+             distToLight = length(lVec);
+             if (distToLight < 0.0001) continue;  // Skip degenerate (light inside surface)
+             l = lVec / distToLight;
+        }
+
+        float NdotL = max(0.0, dot(n, l));
+        if (NdotL <= 0.0) continue;
+
+        float shadow = 1.0;
+        if (calcShadows && uShadows > 0.5 && uLightShadows[i] > 0.5) {
+            float s = 1.0;
+${stochasticShadows && areaLightsActive ? `
+            // Stochastic area-light path (areaLights checkbox ON, compile-gated).
+            float samplingSeed = fract(stochasticSeed + float(i) * 1.618);
+
+            vec3 u, v;
+            buildTangentBasis(l, u, v);
+
+            float r_jitter = sqrt(samplingSeed);
+            float theta = samplingSeed * TAU * 1.618033;
+            float spread = 2.0 / max(uShadowSoftness, 0.1);
+
+            vec3 offset = (u * cos(theta) + v * sin(theta)) * r_jitter * spread;
+
+            vec3 jitteredLDir = normalize(l + offset);
+            float jitteredDist = distToLight;
+
+            if (!isDirectional) {
+                vec3 jitteredTarget = uLightPos[i] + offset * distToLight;
+                vec3 jVec = jitteredTarget - p;
+                jitteredDist = length(jVec);
+                jitteredLDir = jVec / jitteredDist;
+            }
+
+            s = GetHardShadow(shadowRo, jitteredLDir, jitteredDist);
+` : `
+            s = GetSoftShadow(shadowRo, l, uShadowSoftness, distToLight, stochasticSeed);
+`}
+            shadow = mix(1.0, s, uShadowIntensity);
+        }
+
+        // Branchless attenuation: CPU packs coefficients into uLightFalloff (d² term) and uLightFalloffType (d term)
+        // Quadratic: (k, 0) → 1/(1+k·d²)   Linear: (0, k) → 1/(1+k·d)   InvSq: (k_from_range, 0)
+        float att = 1.0;
+        if (!isDirectional && (uLightFalloff[i] + uLightFalloffType[i]) > 0.001) {
+            float d2 = distToLight * distToLight;
+            att = 1.0 / (1.0 + uLightFalloff[i] * d2 + uLightFalloffType[i] * distToLight);
+        }
+
+        vec3 radiance = uLightColor[i] * intensity * att * shadow;
+`;
+
+const LOOP_CLOSE = `
+    }
+
+    return Lo;
+}
+`;
+
+// Simple Blinn-Phong (fast compile, good visual quality)
+export const getLightingPBRSimple = (stochasticShadows: boolean, areaLightsActive: boolean = false) => `
+// ------------------------------------------------------------------
+// PBR HELPERS (Blinn-Phong)
+// ------------------------------------------------------------------
+${getLoopOpen(stochasticShadows, areaLightsActive)}
+        // Blinn-Phong specular — uses hoisted bpShininess / bpSpecNorm /
+        // specularTint / diffuseTerm from the prelude (per-pixel invariants).
+        vec3 h = normalize(l + v);
+        float NdotH = max(0.0, dot(n, h));
+        float spec = pow(NdotH, bpShininess) * bpSpecNorm;
+        vec3 specular = specularTint * spec;
+
+        Lo += (diffuseTerm + specular * uSpecular) * radiance * NdotL;
+${LOOP_CLOSE}
+`;
+
+// Full Cook-Torrance (GGX + Smith-GGX + Schlick — slower compile)
+export const getLightingPBRFull = (stochasticShadows: boolean, areaLightsActive: boolean = false) => `
+// ------------------------------------------------------------------
+// PBR HELPERS (Cook-Torrance GGX)
+// ------------------------------------------------------------------
+${getLoopOpen(stochasticShadows, areaLightsActive)}
+        // F0 / NdotV / ggxA2 / ggxKG / ggxG1V are hoisted in the prelude.
+        vec3 h = normalize(l + v);
+        float HdotV = max(0.0, dot(h, v));
+        float NdotH = max(0.0, dot(n, h));
+
+        // Fresnel (Schlick)
+        vec3 F = fresnelSchlick(HdotV, F0);
+
+        // Distribution (GGX / Trowbridge-Reitz)
+        float denom = NdotH * NdotH * (ggxA2 - 1.0) + 1.0;
+        float D = ggxA2 / (PI * denom * denom + GGX_EPSILON);
+
+        // Geometry (Smith-GGX)
+        float G1L = NdotL / (NdotL * (1.0 - ggxKG) + ggxKG);
+        float G = ggxG1V * G1L;
+
+        // Cook-Torrance specular BRDF
+        vec3 specular = (D * F * G) / (4.0 * NdotV * NdotL + GGX_EPSILON);
+
+        // Energy Conservation
+        vec3 kS = F;
+        vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
+
+        Lo += (kD * albedo * uDiffuse / PI + specular * uSpecular) * radiance * NdotL;
+${LOOP_CLOSE}
+`;
+
+// Backwards compat constants (stochastic enabled — full codepath)
+export const LIGHTING_PBR_SIMPLE = getLightingPBRSimple(true);
+export const LIGHTING_PBR_FULL = getLightingPBRFull(true);
+export const LIGHTING_PBR = LIGHTING_PBR_SIMPLE;

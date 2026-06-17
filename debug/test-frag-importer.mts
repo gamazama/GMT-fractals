@@ -9,14 +9,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { parse } from '@shaderfrog/glsl-parser';
-import { detectFormulaV3 } from '../features/fragmentarium_import/v3/compat.ts';
-import { transformFormulaV3 } from '../features/fragmentarium_import/v3/compat.ts';
-import type { TransformedFormulaV2, FragDocumentV2 } from '../features/fragmentarium_import/types.ts';
+import { detectFormulaV3 } from '../engine-gmt/features/fragmentarium_import/v3/compat.ts';
+import { transformFormulaV3 } from '../engine-gmt/features/fragmentarium_import/v3/compat.ts';
+import type { TransformedFormulaV2, FragDocumentV2 } from '../engine-gmt/features/fragmentarium_import/types.ts';
 
 const VERBOSE = process.argv.includes('--verbose');
 const FILTER  = process.argv.slice(2).find(a => !a.startsWith('-') && !a.includes('/') && !a.includes('\\') && !a.includes('.') && !a.includes('test-frag'));
-const REF     = 'features/fragmentarium_import/reference/Examples';
-const ROOT    = 'h:/GMT/workspace-gmt/stable';
+const REF     = 'engine-gmt/features/fragmentarium_import/reference/Examples';
+const ROOT    = path.resolve(import.meta.dirname, '..');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 

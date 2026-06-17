@@ -8,8 +8,8 @@
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useMeshExportStore, registerSlicePreview, unregisterSlicePreview } from '../store/meshExportStore';
-import { buildMeshPreviewShader, classifyDEType, MESH_SDF_VERT, MESH_FORMULA_UNIFORMS } from '../../engine/SDFShaderBuilder';
-import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
+import { buildMeshPreviewShader, classifyDEType, MESH_SDF_VERT, MESH_FORMULA_UNIFORMS } from '../../engine-gmt/engine/SDFShaderBuilder';
+import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 import {
   orthoCamBasis, orthoProject, orthoUnprojectDelta,
   normAngle, findAxisSnap, add3, scale3, dot3,
@@ -74,6 +74,7 @@ function setFormulaUniforms(
   if (loc.uJulia) gl.uniform3f(loc.uJulia, p.julia?.x ?? 0, p.julia?.y ?? 0, p.julia?.z ?? 0);
   if (loc.uJuliaMode) gl.uniform1f(loc.uJuliaMode, p.juliaMode ?? 0);
   if (loc.uEscapeThresh) gl.uniform1f(loc.uEscapeThresh, p.escapeThresh ?? 4.0);
+  if (loc.uDeBailout) gl.uniform1f(loc.uDeBailout, p.deBailout ?? 100.0);
   if (loc.uDistanceMetric) gl.uniform1f(loc.uDistanceMetric, p.distanceMetric ?? 0);
 }
 

@@ -1,0 +1,335 @@
+    
+import React, { useEffect, useRef } from 'react';
+import { useThree, useFrame } from '@react-three/fiber';
+import { CameraMode } from '../types';
+import { useEngineStore as useFractalStore, selectMovementLock } from '../../store/engineStore';
+import { useMobileLayout } from '../../hooks/useMobileLayout';
+import { getCameraModifierFromEvent } from './modifiers';
+import { INTERACTION_SOURCES } from '../interaction/interactionSources';
+
+const emptyMoveState = () => ({
+    forward: false, backward: false, left: false, right: false,
+    up: false, down: false, rollLeft: false, rollRight: false,
+    boost: false, precise: false,
+});
+
+/**
+ * True when `el` is (or sits inside) an editable surface where keys
+ * — especially Space — must NOT be consumed as Fly-mode navigation.
+ * Covers <input>, <textarea>, contenteditable, and CodeMirror gutters.
+ */
+const isTypingTarget = (el: HTMLElement | null): boolean => {
+    if (!el) return false;
+    const tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return true;
+    if (el.isContentEditable) return true;
+    if (typeof el.closest === 'function' && el.closest('.cm-editor')) return true;
+    return false;
+};
+
+export const useInputController = (
+    mode: CameraMode,
+    speed: number,
+    setSpeed: (v: number) => void,
+    hudRefs?: Record<string, React.RefObject<HTMLElement | null>> // Optional 4th argument to handle UI exclusions
+) => {
+    const { gl } = useThree();
+    const invertY = useFractalStore(s => s.invertY);
+    const { isMobile: isMobileLayout } = useMobileLayout();
+
+    const moveState = useRef(emptyMoveState());
+    const isDraggingRef = useRef(false);
+    const dragStart = useRef({ x: 0, y: 0 });
+    const mousePos = useRef({ x: 0, y: 0 });
+    const lastActivityTime = useRef(0);
+    
+    // Smooth Roll Logic
+    const rollVelocity = useRef(0);
+    
+    // Mobile Joysticks
+    const joystickMove = useRef({ x: 0, y: 0 });
+    const joystickLook = useRef({ x: 0, y: 0 });
+    
+    const speedRef = useRef(speed);
+    useEffect(() => { speedRef.current = speed; }, [speed]);
+
+    const markActivity = () => {
+        lastActivityTime.current = performance.now();
+    };
+
+    useEffect(() => {
+        joystickMove.current = { x: 0, y: 0 };
+        joystickLook.current = { x: 0, y: 0 };
+        rollVelocity.current = 0;
+        markActivity();
+    }, [mode]);
+
+    // Update roll momentum (affected by speed)
+    useFrame((_, delta) => {
+        const targetRoll = moveState.current.rollLeft ? 1 : (moveState.current.rollRight ? -1 : 0);
+        const accelRate = targetRoll !== 0 ? 1.0 : 3.0;
+        const f = 1.0 - Math.exp(-accelRate * delta);
+        // Scale roll by current speed (minimum 0.1 for usability at low speeds)
+        const speedScale = Math.max(0.1, speedRef.current);
+        rollVelocity.current += (targetRoll * speedScale - rollVelocity.current) * f;
+
+        if (targetRoll === 0 && Math.abs(rollVelocity.current) < 0.001) {
+            rollVelocity.current = 0;
+        }
+    });
+
+    // ── ADR-0061 P4.0 — Fly-mode look + WASD/joystick → `camera` session ────────
+    // These are the camera producers P3a deferred (they entangle the lagged
+    // markActivity / isCameraInteracting proxy E3 migrates). Wire them now as an
+    // INDEPENDENT, balanced path under the `camera` token: Navigation's pointer-
+    // drag paths own their own open/close (camSessionOpen, release-driven), this
+    // owns the keyboard/joystick/fly-look path. Per the ADR, ref-counting under
+    // one token is safe ACROSS paths only when each path balances on its own —
+    // here the close is frame-edge driven (keyup/mouseup/joystick-zero all flip
+    // the refs deterministically) + unmount cleanup + the 8s watchdog backstop,
+    // so it cannot strand. Gated on !movementLock to MATCH the legacy proxy,
+    // which Navigation force-clears while locked (export/bucket/playback/gizmo) —
+    // keeping the session in agreement (near-zero divergence) and export-safe.
+    const moveSessionOpen = useRef(false);
+    useFrame(() => {
+        const ms = moveState.current;
+        const hasKeys = ms.forward || ms.backward || ms.left || ms.right || ms.up || ms.down || ms.rollLeft || ms.rollRight;
+        const jm = joystickMove.current, jl = joystickLook.current;
+        const hasJoy = Math.abs(jm.x) > 0.01 || Math.abs(jm.y) > 0.01 || Math.abs(jl.x) > 0.01 || Math.abs(jl.y) > 0.01;
+        const flyLook = mode === 'Fly' && isDraggingRef.current;
+        const locked = selectMovementLock(useFractalStore.getState());
+        const active = !locked && (flyLook || hasKeys || hasJoy);
+
+        const store = useFractalStore.getState();
+        if (active) {
+            if (!moveSessionOpen.current) {
+                moveSessionOpen.current = true;
+                store.beginInteraction(INTERACTION_SOURCES.camera);
+            } else {
+                // Keep the watchdog alive on long continuous flights (throttled,
+                // ref-only — no store write; the ADR-sanctioned poke exception).
+                store.pokeInteraction(INTERACTION_SOURCES.camera);
+            }
+        } else if (moveSessionOpen.current) {
+            moveSessionOpen.current = false;
+            store.endInteraction(INTERACTION_SOURCES.camera);
+        }
+    });
+
+    // Unmount cleanup — end an open movement session if the controller unmounts
+    // mid-flight (mode/route change). Balances any outstanding begin.
+    useEffect(() => () => {
+        if (moveSessionOpen.current) {
+            moveSessionOpen.current = false;
+            useFractalStore.getState().endInteraction(INTERACTION_SOURCES.camera);
+        }
+    }, []);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Check BOTH the event target and document.activeElement.
+            // e.target can be document.body in some edge cases (portaled
+            // modals, fast re-renders) even when an input has focus — without
+            // the activeElement check, Space gets consumed as Fly-mode "up"
+            // thrust instead of landing in the input.
+            if (isTypingTarget(e.target as HTMLElement) || isTypingTarget(document.activeElement as HTMLElement | null)) return;
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'w' || e.code === 'KeyW')) e.preventDefault();
+
+            // Prevent Spacebar scrolling (only when not in a text editor)
+            if (e.code === 'Space') e.preventDefault();
+
+            // Prevent Alt menu
+            if (e.key === 'Alt') e.preventDefault();
+
+            const isTimelineHovered = useFractalStore.getState().isTimelineHovered;
+            if (isTimelineHovered) return;
+
+            let handled = true;
+            switch(e.code) {
+                case 'KeyW': moveState.current.forward = true; break;
+                case 'KeyS': moveState.current.backward = true; break;
+                case 'KeyA': moveState.current.left = true; break;
+                case 'KeyD': moveState.current.right = true; break;
+                case 'KeyQ': moveState.current.rollLeft = true; break;
+                case 'KeyE': moveState.current.rollRight = true; break;
+                case 'Space': moveState.current.up = true; break;
+                case 'KeyC': moveState.current.down = true; break;
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    moveState.current.boost = true; break;
+                case 'AltLeft':
+                case 'AltRight':
+                    moveState.current.precise = true; break;
+                default:
+                    handled = false;
+            }
+            if (handled) markActivity();
+        };
+        
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.key === 'Alt') e.preventDefault();
+            // Check BOTH the event target and document.activeElement.
+            // e.target can be document.body in some edge cases (portaled
+            // modals, fast re-renders) even when an input has focus — without
+            // the activeElement check, Space gets consumed as Fly-mode "up"
+            // thrust instead of landing in the input.
+            if (isTypingTarget(e.target as HTMLElement) || isTypingTarget(document.activeElement as HTMLElement | null)) return;
+            switch(e.code) {
+                case 'KeyW': moveState.current.forward = false; break;
+                case 'KeyS': moveState.current.backward = false; break;
+                case 'KeyA': moveState.current.left = false; break;
+                case 'KeyD': moveState.current.right = false; break;
+                case 'KeyQ': moveState.current.rollLeft = false; break;
+                case 'KeyE': moveState.current.rollRight = false; break;
+                case 'Space': moveState.current.up = false; break;
+                case 'KeyC': moveState.current.down = false; break;
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    moveState.current.boost = false; break;
+                case 'AltLeft':
+                case 'AltRight':
+                    moveState.current.precise = false; break;
+            }
+        };
+        
+        const handleWheel = (e: WheelEvent) => {
+            const state = useFractalStore.getState();
+            const movementLocked = selectMovementLock(state);
+            if (movementLocked) return;
+
+            // Read from event rather than tracked keystate — wheel can fire
+            // before keydown is processed.
+            const mod = getCameraModifierFromEvent(e);
+
+            const isOrtho = state.optics && Math.abs(state.optics.camType - 1.0) < 0.1;
+
+            // ORTHO ZOOM: If in orthographic mode, scrolling MUST adjust orthoScale directly
+            if (isOrtho) {
+                const dir = e.deltaY > 0 ? 1 : -1;
+                const current = state.optics.orthoScale;
+                const next = current * (1 + dir * 0.1 * mod);
+                state.setOptics({ orthoScale: Math.max(1e-10, Math.min(1000, next)) });
+                markActivity();
+                return;
+            }
+
+            // FLY SPEED: Standard perspective flight speed adjustment
+            if (mode === 'Fly') {
+                const dir = e.deltaY > 0 ? -1 : 1;
+                let current = speedRef.current;
+                let step = 0.01;
+                if (current < 0.05) step = 0.005;
+                if (current > 0.1) step = 0.02;
+                step *= mod;
+                let next = Math.max(0.001, Math.min(1.0, current + (dir * step)));
+                speedRef.current = next;
+                setSpeed(next);
+                markActivity();
+            }
+            // ORBIT ZOOM: Just wake UI
+            else if (mode === 'Orbit') {
+                markActivity();
+            }
+        };
+
+        const handleBlur = () => {
+            moveState.current = emptyMoveState();
+        };
+
+        const handleJoyMove = (e: Event) => { joystickMove.current = (e as CustomEvent).detail; markActivity(); };
+        const handleJoyLook = (e: Event) => { joystickLook.current = (e as CustomEvent).detail; markActivity(); };
+
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        window.addEventListener('blur', handleBlur);
+        window.addEventListener('joyMove', handleJoyMove);
+        window.addEventListener('joyLook', handleJoyLook);
+        gl.domElement.addEventListener('wheel', handleWheel, { passive: true });
+        
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+            window.removeEventListener('blur', handleBlur);
+            window.removeEventListener('joyMove', handleJoyMove);
+            window.removeEventListener('joyLook', handleJoyLook);
+            gl.domElement.removeEventListener('wheel', handleWheel);
+        };
+    }, [mode, gl, setSpeed]);
+
+    useEffect(() => {
+        const domElement = gl.domElement;
+        
+        const getNDC = (clientX: number, clientY: number) => {
+            const rect = domElement.getBoundingClientRect();
+            return {
+                x: ((clientX - rect.left) / rect.width) * 2 - 1,
+                y: -((clientY - rect.top) / rect.height) * 2 + 1
+            };
+        };
+
+        const onMouseDown = (e: MouseEvent) => {
+            const state = useFractalStore.getState();
+            if (selectMovementLock(state)) return;
+            
+            // Check Exclusion (HUD elements)
+            if (hudRefs) {
+                // If any HUD ref contains the target, ignore
+                const isHudClick = Object.values(hudRefs).some((ref) => ref.current && ref.current.contains(e.target as Node));
+                if (isHudClick) return;
+            } else {
+                // Fallback: Check for class
+                if ((e.target as HTMLElement).closest('.pointer-events-auto')) return;
+            }
+            
+            const isMobile = isMobileLayout || (e as MouseEvent & { pointerType?: string }).pointerType === 'touch';
+            if (isMobile && mode === 'Fly') return;
+
+            markActivity();
+
+            if (e.button === 0 && mode === 'Fly') {
+                isDraggingRef.current = true;
+                const { x, y } = getNDC(e.clientX, e.clientY);
+                dragStart.current = { x, y };
+                mousePos.current = { x, y };
+            }
+        };
+        
+        const onMouseMove = (e: MouseEvent) => {
+            if (isDraggingRef.current) {
+                // Fly Mode Drag
+                const { x, y } = getNDC(e.clientX, e.clientY);
+                mousePos.current = { x, y };
+                markActivity();
+            } else if (mode === 'Orbit' && e.buttons > 0) {
+                // Orbit Mode Drag — only mark activity if the drag originated on the canvas,
+                // not on UI elements (buttons, sliders, menus). Without this guard,
+                // clicking any UI button while in Orbit mode triggers markActivity →
+                // isCameraInteracting → dynamic scaling resolution change → accumulation reset.
+                if (e.target === domElement || domElement.contains(e.target as Node)) {
+                    markActivity();
+                }
+            }
+        };
+        
+        const onMouseUp = () => isDraggingRef.current = false;
+
+        domElement.addEventListener('mousedown', onMouseDown);
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        return () => {
+            domElement.removeEventListener('mousedown', onMouseDown);
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+    }, [mode, gl, isMobileLayout, hudRefs]);
+
+    const isInteracting = () => {
+        const ms = moveState.current;
+        const hasKeys = ms.forward || ms.backward || ms.left || ms.right || ms.up || ms.down || ms.rollLeft || ms.rollRight;
+        const hasJoy = Math.abs(joystickMove.current.x) > 0.01 || Math.abs(joystickMove.current.y) > 0.01 || Math.abs(joystickLook.current.x) > 0.01 || Math.abs(joystickLook.current.y) > 0.01;
+        const recentActivity = (performance.now() - lastActivityTime.current) < 200; // 200ms buffer for discrete events (Scroll, Key tap)
+        return isDraggingRef.current || hasKeys || hasJoy || recentActivity;
+    };
+
+    return { moveState, isDraggingRef, dragStart, mousePos, speedRef, joystickMove, joystickLook, invertY, rollVelocity, isInteracting };
+};

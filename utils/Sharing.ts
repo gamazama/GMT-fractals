@@ -4,13 +4,18 @@ import { featureRegistry } from '../engine/FeatureSystem';
 import { UrlStateEncoder } from './UrlStateEncoder';
 import { getFullDefaultPreset } from './PresetLogic';
 
+// Root skeleton for URL-encoding peek pass. The `formula` field is a
+// non-empty placeholder so the encoder can locate the formula tag in
+// the compressed payload during the two-pass decode. Apps that use a
+// different tag name can still round-trip — the peek only needs *some*
+// string there.
 const ROOT_SKELETON: Partial<Preset> = {
-    formula: 'Mandelbulb' as any,
+    formula: '_peek_' as any,
     cameraPos: { x: 0, y: 0, z: 0 },
     cameraRot: { x: 0, y: 0, z: 0, w: 1 },
     sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 },
     targetDistance: 3.5,
-    cameraMode: 'Orbit'
+    cameraMode: 'Orbit',
 };
 
 export const generateShareStringFromPreset = (preset: Preset, advancedMode: boolean, options: { includeAnimations?: boolean } = { includeAnimations: true }): string => {

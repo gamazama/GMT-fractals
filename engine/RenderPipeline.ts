@@ -1,8 +1,16 @@
 import * as THREE from 'three';
 import { Uniforms } from './UniformNames';
 import { VERTEX_SHADER } from '../shaders/chunks/vertex';
-import { QualityState } from '../features/quality';
-import { createFullscreenPass } from './utils/FullscreenQuad';
+// Quality state was a fractal-feature type; treat as a structural shape
+// here — only fields RenderPipeline actually reads. Apps with a richer
+// quality plugin (engine-gmt/features/quality) supply types that satisfy
+// this shape; declaration merging not required.
+type QualityState = {
+    bufferPrecision?: number;
+    precisionMode?: number;
+    compilerHardCap?: number;
+};
+import { createFullscreenPass, type FullscreenPass } from './utils/FullscreenQuad';
 
 const CONVERGENCE_FRAG = `
 precision mediump float;
@@ -27,9 +35,20 @@ void main() {
 }
 `;
 
+/**
+ * @invariant `writeIndex` semantics are inverted — the field points to the
+ *   NEXT target to write, so "previous frame" is the target OPPOSITE
+ *   `writeIndex`. `getPrevious*` helpers and `getOutputTexture()` invert
+ *   this; new callers must NOT assume `writeIndex == the just-written slot`.
+ */
 export class RenderPipeline {
     // MRT targets: texture[0] = Color, texture[1] = Depth
     // Double-buffered for temporal accumulation and async depth readback
+    //
+    // @deprecated-name "MRT" naming is historical — these are
+    //   single-attachment color-only targets. The header comment above
+    //   ("texture[0] = Color, texture[1] = Depth") describes an older
+    //   architecture that no longer exists.
     private mrtTargetA: THREE.WebGLRenderTarget | null = null;
     private mrtTargetB: THREE.WebGLRenderTarget | null = null;
     
@@ -39,6 +58,11 @@ export class RenderPipeline {
     public frameCount: number = 0;
     public accumulationCount: number = 0; // Public for UI monitoring
     private sampleCap: number = 0; // 0 = Infinite
+
+    // Cached half-float-alpha capability probe. Some mobile GPUs report
+    // HALF_FLOAT support but fail framebuffer-completeness when alpha is
+    // attached. When false, initTargets/resize drop to FloatType.
+    private _halfFloatAlphaSupport: boolean | null = null;
     
     public lastCompleteDuration: number = 0;
     private startTime: number = 0;
@@ -62,6 +86,35 @@ export class RenderPipeline {
     // Skipped during bucket rendering (BucketRenderer manages its own).
     private static readonly VIEWPORT_CONVERGENCE_INTERVAL = 8;
     private _isBucketRendering: boolean = false;
+    // Per-GPU-bucket scissor rect (target-local pixels). When set, the main
+    // MRT render is clipped to this rect so the fragment shader only runs on
+    // bucket pixels — without this, the shader runs at full MRT size and
+    // discards everything outside the bucket, which is ~64× wasted work for a
+    // 512px bucket in a 4K image tile. Set/cleared by GmtBucketHost.
+    private _bucketScissor: { x: number; y: number; w: number; h: number } | null = null;
+    // Tiled/progressive live rendering: when non-null, render() uses this as the
+    // temporal blend factor instead of 1/accumulationCount, and does NOT
+    // auto-increment accumulationCount (the band scheduler owns the per-pixel
+    // sample count = pass index). Null = normal full-frame accumulation (unchanged).
+    // See plans/tiled-progressive-rendering.md §4.
+    private _blendOverride: number | null = null;
+    // Fullscreen copy pass — used by resize() to blit the previous frame into the
+    // freshly-allocated targets so the accumulation buffer is never black across a
+    // resize (see resize()). Lazily created on first use.
+    private _copyMaterial: THREE.ShaderMaterial | null = null;
+    private _copyPass: FullscreenPass | null = null;
+    // Gate the viewport convergence pass behind an explicit consumer flag.
+    // The only consumer is RegionOverlay (engine-gmt/components/viewport/
+    // RegionOverlay.tsx) which polls `convergenceValue` while a render-region
+    // is active. When no consumer is mounted, the measurement (1 render +
+    // 2 setRenderTarget swaps + 1 sync readPixels every 8 samples) is pure
+    // waste — the result is computed and never read. Default off; toggled
+    // from main thread via SET_CONVERGENCE_NEEDED worker message.
+    private _convergenceNeeded: boolean = false;
+    public setConvergenceNeeded(v: boolean) { this._convergenceNeeded = v; }
+    /** True while a render-region overlay is mounted (owns uRegionMin/Max + polls
+     *  convergence). Tiling stands down for it. */
+    public get convergenceNeeded() { return this._convergenceNeeded; }
 
     public isHolding: boolean = false;
 
@@ -116,7 +169,15 @@ export class RenderPipeline {
     // doesn't interfere with the live render loop.
     private _compileTarget: THREE.WebGLRenderTarget | null = null;
 
-    /** Get a render target for compile-time context (so Three.js generates matching program params) */
+    /**
+     * Get a render target for compile-time context (so Three.js generates
+     * matching program params).
+     *
+     * @invariant The compile target MUST mirror MRT float type. If live
+     *   target is HalfFloat and compile target is Float, Three.js program
+     *   param hashes diverge and async compile defeats its purpose. Lazy-
+     *   created after `mrtTargetA` exists — do not call before `initTargets()`.
+     */
     public getCompileTarget(): THREE.WebGLRenderTarget | null {
         if (!this._compileTarget && this.mrtTargetA) {
             this._compileTarget = new THREE.WebGLRenderTarget(1, 1, {
@@ -172,8 +233,11 @@ export class RenderPipeline {
         
         // Clear buffer before reading to detect failures
         buffer.fill(0);
-        
-        const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
+
+        // Match the actual target type, not the requested precision —
+        // initTargets may have dropped to FloatType when the half-float-alpha
+        // probe failed (checkHalfFloatAlphaSupport).
+        const useHalfFloat = target.texture.type === THREE.HalfFloatType;
         
         try {
             if (useHalfFloat) {
@@ -202,14 +266,114 @@ export class RenderPipeline {
         }
     }
     
+    /**
+     * Probe HALF_FLOAT alpha framebuffer completeness on a throwaway GL
+     * context. Cached after first call. Worker-side: pipeline lives in the
+     * render worker, so this runs in the worker's GL realm.
+     *
+     * @see docs/adr — extends q-094 fix: half-float fallback for mobile GPUs.
+     */
+    public checkHalfFloatAlphaSupport(): boolean {
+        if (this._halfFloatAlphaSupport !== null) return this._halfFloatAlphaSupport;
+        try {
+            const testCanvas = (typeof document !== 'undefined')
+                ? document.createElement('canvas')
+                : new OffscreenCanvas(1, 1);
+            testCanvas.width = 1;
+            testCanvas.height = 1;
+            let gl = testCanvas.getContext('webgl2') as WebGL2RenderingContext | null;
+            let halfFloatType: number;
+            if (gl) {
+                halfFloatType = gl.HALF_FLOAT;
+            } else {
+                const gl1 = testCanvas.getContext('webgl') as WebGLRenderingContext | null;
+                gl = gl1 as any;
+                if (!gl) { this._halfFloatAlphaSupport = false; return false; }
+                const ext = gl.getExtension('OES_texture_half_float');
+                if (!ext) { this._halfFloatAlphaSupport = false; return false; }
+                halfFloatType = ext.HALF_FLOAT_OES;
+            }
+            const tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, halfFloatType, null);
+            const fbo = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+            const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+            gl.deleteFramebuffer(fbo);
+            gl.deleteTexture(tex);
+            this._halfFloatAlphaSupport = ok;
+            return ok;
+        } catch {
+            this._halfFloatAlphaSupport = false;
+            return false;
+        }
+    }
+
+    /**
+     * Real GPU capability flags for HDR render targets (cached, extension-based).
+     *  - cbf  (EXT_color_buffer_float)       → RGBA16F + RGBA32F color-renderable
+     *  - cbhf (EXT_color_buffer_half_float)  → RGBA16F color-renderable
+     *  - floatLinear (OES_texture_float_linear) → RGBA32F LINEAR-filterable
+     * RGBA16F is ALWAYS linearly filterable in WebGL2 core (no extension).
+     */
+    private _glCaps: { cbf: boolean; cbhf: boolean; floatLinear: boolean } | null = null;
+    private glCaps() {
+        if (this._glCaps) return this._glCaps;
+        let cbf = false, cbhf = false, floatLinear = false;
+        try {
+            const cv = (typeof document !== 'undefined') ? document.createElement('canvas') : new OffscreenCanvas(1, 1);
+            const gl = cv.getContext('webgl2') as WebGL2RenderingContext | null;
+            if (gl) {
+                cbf = !!gl.getExtension('EXT_color_buffer_float');
+                cbhf = !!gl.getExtension('EXT_color_buffer_half_float');
+                floatLinear = !!gl.getExtension('OES_texture_float_linear');
+                gl.getExtension('WEBGL_lose_context')?.loseContext();
+            }
+        } catch { /* leave defaults (no HDR) */ }
+        this._glCaps = { cbf, cbhf, floatLinear };
+        return this._glCaps;
+    }
+
+    /**
+     * Pick the accumulation-buffer texture TYPE and FILTER from real GPU caps.
+     *
+     * The trap that black-screened mobile (Mali): a FloatType (RGBA32F) target
+     * sampled with LinearFilter returns BLACK on GPUs lacking
+     * OES_texture_float_linear — the shader runs (GPU lag) but every read of
+     * the accumulation buffer is black. RGBA16F (half) is renderable here (via
+     * EXT_color_buffer_float) AND linearly filterable in WebGL2 core, so it's
+     * the right choice whenever full float can't be linear-filtered. Full float
+     * is kept only when explicitly wanted AND it filters (desktop) — its 32-bit
+     * precision matters for high sample-count accumulation there.
+     */
+    private accumFormat(): { type: THREE.TextureDataType; filter: THREE.MagnificationTextureFilter } {
+        const { cbf, cbhf, floatLinear } = this.glCaps();
+        const half16Renderable = cbf || cbhf;
+        const float32Renderable = cbf;
+        const wantsHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
+
+        if (float32Renderable && floatLinear && !wantsHalfFloat) {
+            return { type: THREE.FloatType, filter: THREE.LinearFilter };
+        }
+        if (half16Renderable) {
+            return { type: THREE.HalfFloatType, filter: THREE.LinearFilter };
+        }
+        if (float32Renderable) {
+            // Float renderable but not linearly filterable — Nearest avoids black.
+            return { type: THREE.FloatType, filter: floatLinear ? THREE.LinearFilter : THREE.NearestFilter };
+        }
+        // No HDR-renderable format at all (very rare) — keep prior behaviour.
+        return { type: THREE.FloatType, filter: floatLinear ? THREE.LinearFilter : THREE.NearestFilter };
+    }
+
     private initTargets(width: number, height: number) {
-        const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
-        const floatType = useHalfFloat ? THREE.HalfFloatType : THREE.FloatType;
-        
+        const { type: floatType, filter } = this.accumFormat();
+
         // Single render target (color only) - no MRT needed
         const rtOpts = {
-            minFilter: THREE.LinearFilter,
-            magFilter: THREE.LinearFilter,
+            minFilter: filter,
+            magFilter: filter,
             stencilBuffer: false,
             depthBuffer: false,
             generateMipmaps: false,
@@ -271,17 +435,47 @@ export class RenderPipeline {
         this.resetAccumulation();
     }
     
-    public resize(width: number, height: number) {
-        const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
+    /**
+     * Resize the accumulation targets. When `renderer` is supplied AND there is
+     * existing content, the previous frame is blitted (upscaled via the targets'
+     * linear filter) into the new targets BEFORE the old ones are disposed, so the
+     * accumulation buffer is NEVER black across a resize. A tiling pass-0 (or a
+     * full-frame render) then refines over the actual last-displayed frame
+     * band-by-band — this is what kills both the black-flash and stale-flash
+     * classes, and replaces the old capture/seed machinery entirely.
+     *
+     * Callers that deliberately want fresh (black) targets — bucket / export /
+     * compile / quality-precision change — omit `renderer` and keep the old
+     * no-blit behaviour (they clear/redraw their targets immediately anyway).
+     */
+    public resize(width: number, height: number, renderer?: THREE.WebGLRenderer) {
         const currentType = this.mrtTargetA?.texture.type;
-        const desiredType = useHalfFloat ? THREE.HalfFloatType : THREE.FloatType;
-        
+        const desiredType = this.accumFormat().type;
+
         if (!this.mrtTargetA || this.mrtTargetA.width !== width || this.mrtTargetA.height !== height || currentType !== desiredType) {
-            if (this.mrtTargetA) {
-                this.mrtTargetA.dispose();
-                this.mrtTargetB?.dispose();
-            }
+            const oldA = this.mrtTargetA;
+            const oldB = this.mrtTargetB;
+            // Capture the last-written (displayed) texture BEFORE initTargets
+            // reassigns mrtTargetA/B to the fresh black targets.
+            const oldOutput = (oldA && renderer) ? this.getOutputTexture() : null;
+
             this.initTargets(width, height);
+
+            // Preserve content across the resize: draw the previous frame into BOTH
+            // new targets so neither the display nor the next history-read is black.
+            if (oldOutput && renderer && this.mrtTargetA && this.mrtTargetB) {
+                this.ensureCopyPass();
+                this._copyMaterial!.uniforms.tSrc.value = oldOutput;
+                const prev = renderer.getRenderTarget();
+                renderer.setRenderTarget(this.mrtTargetA);
+                renderer.render(this._copyPass!.scene, this._copyPass!.camera);
+                renderer.setRenderTarget(this.mrtTargetB);
+                renderer.render(this._copyPass!.scene, this._copyPass!.camera);
+                renderer.setRenderTarget(prev);
+            }
+
+            oldA?.dispose();
+            oldB?.dispose();
         }
     }
     
@@ -493,12 +687,63 @@ export class RenderPipeline {
         this._isBucketRendering = active;
     }
 
+    public setBucketScissor(rect: { x: number; y: number; w: number; h: number } | null) {
+        this._bucketScissor = rect;
+    }
 
+    /** Tiled progressive mode: drive the temporal blend from the band scheduler's
+     *  pass index instead of the global frame counter. Pass null to restore normal
+     *  full-frame accumulation. When set, render() does NOT auto-increment
+     *  accumulationCount — the caller sets it (= samples-per-pixel) for the
+     *  sampleCap / convergence gates. */
+    public setTiledBlend(blend: number | null) {
+        this._blendOverride = blend;
+    }
+
+    /** Whether temporal accumulation is currently enabled (tiling requires it). */
+    public get accumulationEnabled() { return this._accumulationEnabled; }
+
+    private ensureCopyPass() {
+        if (this._copyMaterial) return;
+        this._copyMaterial = new THREE.ShaderMaterial({
+            vertexShader: VERTEX_SHADER,
+            fragmentShader: `precision highp float;
+varying vec2 vUv;
+uniform sampler2D tSrc;
+void main() { gl_FragColor = texture2D(tSrc, vUv); }`,
+            uniforms: { tSrc: { value: null } },
+            depthTest: false,
+            depthWrite: false,
+        });
+        this._copyPass = createFullscreenPass(this._copyMaterial);
+    }
+
+
+    /**
+     * @invariant Bucket scissor must be set AFTER `setRenderTarget`. three.js
+     *   `setRenderTarget` overwrites GL scissor with the target's stored
+     *   values; any refactor that hoists `setScissor` will silently break
+     *   bucket rendering.
+     * @invariant `render()` is a no-op when `isHolding=true` OR `sampleCap`
+     *   is reached. `clearTargets` / `resetAccumulation` / `resize` still
+     *   function — the gate is only on the draw call.
+     * @invariant The `sampleCap` gate is the LIVE-VIEWPORT auto-stop only
+     *   (topbar "Auto-Stop (Samples)"). It must NOT apply during a bucket /
+     *   high-res render: there the BucketRunner is the sole authority on
+     *   per-bucket sample count (`samplesPerBucket` + convergence), so a low
+     *   viewport cap would otherwise stop each bucket early and starve the
+     *   render of its target samples.
+     */
     public render(renderer: THREE.WebGLRenderer, uniforms?: { [key: string]: THREE.IUniform }, scene?: THREE.Scene, camera?: THREE.Camera) {
         if (!this.mrtTargetA || !this.mrtTargetB) return;
         if (this.isHolding) return;
 
-        if (this.sampleCap > 0 && this.accumulationCount >= this.sampleCap) {
+        // Viewport sample-cap auto-stop. Skipped in tiled mode (_blendOverride set):
+        // there accumulationCount is the band scheduler's pass count and the
+        // scheduler owns the stop, so applying this gate here would no-op the
+        // final pass (off-by-one) and freeze the image one sample short.
+        if (!this._isBucketRendering && this._blendOverride === null
+            && this.sampleCap > 0 && this.accumulationCount >= this.sampleCap) {
             return;
         }
 
@@ -508,14 +753,20 @@ export class RenderPipeline {
 
         const accumEnabled = this._accumulationEnabled;
 
-        if (!accumEnabled) {
-            this.accumulationCount = 1;
-        } else {
-            if (this.accumulationCount === 0) this.accumulationCount = 1;
-            else this.accumulationCount++;
+        // Normal full-frame accumulation owns the sample counter. In tiled/
+        // progressive mode (_blendOverride set) the band scheduler owns it
+        // (= pass index) and sets accumulationCount itself, so skip the increment.
+        if (this._blendOverride === null) {
+            if (!accumEnabled) {
+                this.accumulationCount = 1;
+            } else if (this.accumulationCount === 0) {
+                this.accumulationCount = 1;
+            } else {
+                this.accumulationCount++;
+            }
         }
 
-        const blend = 1.0 / this.accumulationCount;
+        const blend = this._blendOverride ?? (1.0 / this.accumulationCount);
 
         // Determine write/read targets (double-buffering)
         const writeTarget = this.writeIndex === 0 ? this.mrtTargetA : this.mrtTargetB;
@@ -531,8 +782,23 @@ export class RenderPipeline {
 
         // SINGLE render to MRT - outputs both color (location 0) and depth (location 1)
         renderer.setRenderTarget(writeTarget);
+
+        // Bucket scissor: clip fragment-shader execution to the active GPU
+        // bucket. Must be set AFTER setRenderTarget — three.js's setRenderTarget
+        // overwrites the GL scissor state with the target's stored values.
+        const scissor = this._bucketScissor;
+        const prevScissorTest = scissor ? renderer.getScissorTest() : false;
+        if (scissor) {
+            renderer.setScissor(scissor.x, scissor.y, scissor.w, scissor.h);
+            renderer.setScissorTest(true);
+        }
+
         if (scene && camera) {
             renderer.render(scene, camera);
+        }
+
+        if (scissor) {
+            renderer.setScissorTest(prevScissorTest);
         }
 
         renderer.setRenderTarget(currentTarget);
@@ -551,7 +817,7 @@ export class RenderPipeline {
         // Skipped during bucket rendering (BucketRenderer manages its own measurements).
         // Measures the active render region (or full viewport if no region set).
         // Cost: one convergence diff pass every 8 frames + non-blocking fence poll.
-        if (accumEnabled && !this._isBucketRendering && this.accumulationCount > 2) {
+        if (accumEnabled && !this._isBucketRendering && this.accumulationCount > 2 && this._convergenceNeeded) {
             // Poll any pending result first
             if (this.convergencePending) {
                 this.pollConvergenceResult(renderer);

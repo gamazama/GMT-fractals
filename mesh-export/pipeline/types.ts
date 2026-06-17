@@ -1,8 +1,8 @@
 // types.ts — Shared types for the mesh export pipeline
 // GMT Fractal Explorer
 
-import type { FractalDefinition } from '../../types/fractal';
-import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
+import type { FractalDefinition } from '../../engine-gmt/types/fractal';
+import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 import type { DCMeshResult } from '../algorithms/dc-core';
 
 /** UI callback object — all pipeline UI interaction goes through this */
@@ -68,6 +68,8 @@ export interface MeshPipelineResult {
   mesh: MeshWithColors | null;
   baseName: string;
   smoothingSkipped?: boolean;
+  /** True when Newton projection ran to completion; false when `useNewton` was off OR the GPU path threw and the soft-fail catch swallowed the error. */
+  newtonApplied: boolean;
   timings: PipelineTimings | null;
   useNarrowBand: boolean;
   gl: WebGL2RenderingContext | null;

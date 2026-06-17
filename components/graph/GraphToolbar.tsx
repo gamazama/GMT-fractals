@@ -1,13 +1,14 @@
 
 import React from 'react';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 import { collectHelpIds } from '../../utils/helpUtils';
 import { ContextMenuItem } from '../../types/help';
 import Slider from '../../components/Slider';
-import { 
-    FitIcon, FitSelectionIcon, NormIcon, FilterIcon, WaveIcon, BakeIcon, MagicIcon
+import {
+    FitIcon, FitSelectionIcon, NormIcon, FilterIcon, WaveIcon, BakeIcon, MagicIcon, PencilIcon
 } from '../Icons';
+import { balancedToolColumnMaxHeight } from '../../utils/toolColumn';
 
 interface GraphToolbarProps {
     normalized: boolean;
@@ -22,6 +23,12 @@ interface GraphToolbarProps {
     onSmoothDown: (e: React.PointerEvent) => void;
     isSimplifying: boolean;
     onSimplifyDown: (e: React.PointerEvent) => void;
+    selectedOnly: boolean;
+    onToggleSelectedOnly: () => void;
+    pencilMode: boolean;
+    onTogglePencil: () => void;
+    /** Plot height available to the column, so it can reflow into even columns when tall. */
+    availableHeight: number;
 }
 
 const SimpleTooltip = ({ text }: { text: string }) => (
@@ -52,7 +59,12 @@ const ToolButton = ({ onClick, active, icon, tooltip, onPointerDown, danger, onC
 // --- Connected Component for Menu ---
 // This ensures the sliders are reactive even inside a static context menu snapshot
 const BounceSettingsMenu = () => {
-    const { bounceTension, bounceFriction, setBouncePhysics } = useAnimationStore();
+    // Narrow per-field — destructuring useAnimationStore() (full sub) re-rendered
+    // this menu every RAF on the no-op set() flood. Action selector returns
+    // the stable slice ref via Object.is bail-out.
+    const bounceTension    = useAnimationStore((s) => s.bounceTension);
+    const bounceFriction   = useAnimationStore((s) => s.bounceFriction);
+    const setBouncePhysics = useAnimationStore((s) => s.setBouncePhysics);
     
     return (
         <div className="flex flex-col gap-1 py-1">
@@ -90,9 +102,11 @@ export const GraphToolbar: React.FC<GraphToolbarProps> = ({
     onApplyEuler, needsEulerFix,
     isBaking, onBakeDown,
     isSmoothing, onSmoothDown,
-    isSimplifying, onSimplifyDown
+    isSimplifying, onSimplifyDown,
+    selectedOnly, onToggleSelectedOnly,
+    pencilMode, onTogglePencil, availableHeight
 }) => {
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
+    const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     
     const handleContextMenu = (e: React.MouseEvent) => {
         const ids = collectHelpIds(e.currentTarget);
@@ -116,8 +130,9 @@ export const GraphToolbar: React.FC<GraphToolbarProps> = ({
     };
 
     return (
-        <div 
-            className="absolute top-[30px] left-[4px] flex flex-col gap-1 z-20 w-[42px]"
+        <div
+            className="absolute top-[30px] left-[4px] flex flex-col flex-wrap content-start gap-1 z-20"
+            style={{ maxHeight: balancedToolColumnMaxHeight(9, availableHeight) }}
             data-help-id="anim.graph"
             onContextMenu={handleContextMenu}
         >
@@ -133,11 +148,23 @@ export const GraphToolbar: React.FC<GraphToolbarProps> = ({
                 icon={<FitSelectionIcon />}
                 tooltip="Fit Selection"
             />
-            <ToolButton 
+            <ToolButton
                 onClick={onToggleNormalize}
                 active={normalized}
                 icon={<NormIcon active={normalized} />}
                 tooltip="Normalize (0-1 Range)"
+            />
+            <ToolButton
+                onClick={onTogglePencil}
+                active={pencilMode}
+                icon={<PencilIcon active={pencilMode} />}
+                tooltip="Pencil — draw the selected track's curve (click-drag)"
+            />
+            <ToolButton
+                onClick={onToggleSelectedOnly}
+                active={selectedOnly}
+                icon={<FilterIcon />}
+                tooltip="Show Selected Only"
             />
             <ToolButton 
                 onClick={onApplyEuler}

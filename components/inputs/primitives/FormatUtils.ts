@@ -13,6 +13,22 @@ export const formatDisplay = (val: number): string => {
 };
 
 /**
+ * Format a value for the timeline / graph-editor live-value display.
+ * Switches to exponential notation when the magnitude falls outside the
+ * range fixed-decimal can represent without rounding to "0.00" (deep-zoom
+ * params like julia.zoom can be ~1e-30) or before fixed notation gets
+ * unreadably long (>= 1e7). Two sig figs in exponential form keeps the
+ * sidebar narrow.
+ */
+export const formatTimelineValue = (val: number, decimals: number = 2): string => {
+    if (!isFinite(val)) return String(val);
+    if (val === 0) return "0";
+    const abs = Math.abs(val);
+    if (abs < 1e-3 || abs >= 1e7) return val.toExponential(2);
+    return val.toFixed(decimals);
+};
+
+/**
  * Pi unit mapping for rotation inputs
  * Converts between radians (internal) and π units (display)
  */

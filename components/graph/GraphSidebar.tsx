@@ -1,12 +1,16 @@
 
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { getLiveValue } from '../../utils/timelineUtils';
 import { TRACK_COLORS } from '../../utils/GraphRenderer';
 import { EyeIcon, FolderIcon, SelectAllIcon, TrashIcon } from '../Icons';
 import { Track, TrackBehavior } from '../../types';
+import { groupTracks } from '../../utils/groupTracks';
 import { ContextMenuItem } from '../../types/help';
+import { useSidebarResize } from '../../hooks/useSidebarResize';
+import { formatTimelineValue } from '../inputs/primitives/FormatUtils';
+import { isFlatTrack } from '../../utils/dopeSheetTrackFlags';
 
 interface GraphSidebarProps {
     visibleTrackIds: string[];
@@ -23,7 +27,7 @@ const LiveValueDisplay = ({ tid }: { tid: string }) => {
             if (!ref.current) return;
             const state = animStore.getState();
             const val = getLiveValue(tid, state.isPlaying, state.currentFrame, state.sequence);
-            ref.current.innerText = val.toFixed(2);
+            ref.current.innerText = formatTimelineValue(val);
             rafId = requestAnimationFrame(update);
         };
         update();
@@ -33,50 +37,30 @@ const LiveValueDisplay = ({ tid }: { tid: string }) => {
 };
 
 export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, setVisibleTracks }) => {
-    const { sequence, selectedTrackIds, selectTrack, selectKeyframes, removeTrack, setTrackBehavior } = useAnimationStore();
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
+    // Narrow per-field subs — `useAnimationStore()` (full sub) re-rendered the
+    // sidebar every RAF on the no-op set() flood (see useTrackAnimation
+    // commit history for the pattern).
+    const sequence           = useAnimationStore((s) => s.sequence);
+    const selectedTrackIds   = useAnimationStore((s) => s.selectedTrackIds);
+    // Action selectors — stable refs via Object.is bail-out.
+    const selectKeyframes      = useAnimationStore((s) => s.selectKeyframes);
+    const removeTrack          = useAnimationStore((s) => s.removeTrack);
+    const setTrackBehavior     = useAnimationStore((s) => s.setTrackBehavior);
+    const setTrackSelection    = useAnimationStore((s) => s.setTrackSelection);
+    const toggleTrackSelection = useAnimationStore((s) => s.toggleTrackSelection);
+    const addTracksToSelection = useAnimationStore((s) => s.addTracksToSelection);
+    const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     
-    // Grouping State
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['Formula', 'Optics', 'Lighting', 'Shading']));
+    // Collapsed-group state shared with DopeSheet via the animation UI slice.
+    const collapsedGroupsArr        = useAnimationStore((s) => s.collapsedGroups);
+    const toggleCollapsedGroupStore = useAnimationStore((s) => s.toggleCollapsedGroup);
+    const sidebarWidth              = useAnimationStore((s) => s.timelineSidebarWidth);
+    const collapsedGroups           = useMemo(() => new Set(collapsedGroupsArr), [collapsedGroupsArr]);
+    const handleSidebarResizeStart  = useSidebarResize();
     const lastSelectedTrackId = useRef<string | null>(null);
 
-    // Organize tracks into groups (Copied logic from DopeSheet for consistency)
-    const organizedTracks = useMemo<{ groups: Record<string, string[]>, standalone: string[] }>(() => {
-        const groups: Record<string, string[]> = {};
-        const standalone: string[] = [];
-        
-        groups['Camera'] = [];
-        groups['Formula'] = [];
-        groups['Optics'] = [];
-        groups['Lighting'] = [];
-        groups['Shading'] = [];
-
-        if (sequence) {
-            (Object.values(sequence.tracks) as Track[]).forEach(t => {
-                if (t.hidden) return;
-                
-                if (t.id.startsWith('camera.')) {
-                    groups['Camera'].push(t.id);
-                } else if (t.id.startsWith('lights.') || t.id.startsWith('lighting.')) {
-                    groups['Lighting'].push(t.id);
-                } else if (t.id.startsWith('coreMath.') || t.id.startsWith('geometry.') || t.id.startsWith('param') || t.id.startsWith('julia.') || t.id.startsWith('hybridParams.') || t.id === 'iterations') {
-                    groups['Formula'].push(t.id);
-                } else if (t.id === 'camFov' || t.id.startsWith('optics.') || t.id.startsWith('dof') || t.id.startsWith('fog') || t.id.startsWith('atmosphere.')) {
-                    if (t.id.startsWith('fog') || t.id.startsWith('atmosphere.')) groups['Shading'].push(t.id);
-                    else groups['Optics'].push(t.id);
-                } else {
-                    groups['Shading'].push(t.id);
-                }
-            });
-        }
-        
-        // Cleanup empty groups
-        Object.keys(groups).forEach(k => {
-            if (groups[k].length === 0) delete groups[k];
-        });
-
-        return { groups, standalone };
-    }, [sequence]);
+    // Organize tracks into groups (shared with DopeSheet via utils/groupTracks)
+    const organizedTracks = useMemo(() => groupTracks(sequence?.tracks ?? {}), [sequence]);
 
     // Flatten visible tracks for range selection logic
     const visibleInListOrder = useMemo(() => {
@@ -128,23 +112,21 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                 const maxIdx = Math.max(startIdx, endIdx);
                 const rangeTracks = visibleInListOrder.slice(minIdx, maxIdx + 1);
                 
-                rangeTracks.forEach(t => {
-                    if (!selectedTrackIds.includes(t)) selectTrack(t, true);
-                    // UX Polish: If I range select, ensure they are visible in graph too
-                    if (!visibleTrackIds.includes(t)) {
-                        setVisibleTracks([...visibleTrackIds, t]); 
-                    }
-                });
-                // Batch visibility update for range
+                const toAdd = rangeTracks.filter(t => !selectedTrackIds.includes(t));
+                if (toAdd.length > 0) addTracksToSelection(toAdd);
+                // Additive show: range-selected tracks get turned ON in the graph,
+                // but never turned off. Eye column remains the only way to hide.
                 const newVis = new Set(visibleTrackIds);
                 rangeTracks.forEach(t => newVis.add(t));
-                setVisibleTracks(Array.from(newVis));
+                if (newVis.size !== visibleTrackIds.length) {
+                    setVisibleTracks(Array.from(newVis));
+                }
             }
         } else {
-            // Standard Select
-            selectTrack(tid, multi);
-            
-            // UX Polish: Selecting a track ensures it is visible
+            // Standard Select + additive show. Selecting a track that's hidden in the
+            // graph also turns its eye on so the user gets visual feedback. Re-selecting
+            // an already-visible track never hides it (eye is the only hide path).
+            if (multi) toggleTrackSelection(tid); else setTrackSelection(tid);
             if (!visibleTrackIds.includes(tid)) {
                 setVisibleTracks([...visibleTrackIds, tid]);
             }
@@ -218,7 +200,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                 track.keyframes.forEach(k => keysToSelect.push(`${tid}::${k.id}`));
             }
             // Ensure track is selected too
-            if (!selectedTrackIds.includes(tid)) selectTrack(tid, true);
+            if (!selectedTrackIds.includes(tid)) addTracksToSelection([tid]);
             // Ensure visible
             if (!visibleTrackIds.includes(tid)) toggleVisibility(tid); 
         });
@@ -227,18 +209,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
     };
 
     const toggleGroupCollapse = (groupName: string, isAlt: boolean) => {
-        setCollapsedGroups(prev => {
-            const next = new Set(prev);
-            if (isAlt) {
-                next.clear();
-                Object.keys(organizedTracks.groups).forEach(g => { if (g !== groupName) next.add(g); });
-                next.delete(groupName);
-            } else {
-                if (next.has(groupName)) next.delete(groupName);
-                else next.add(groupName);
-            }
-            return next;
-        });
+        toggleCollapsedGroupStore(groupName, isAlt, Object.keys(organizedTracks.groups));
     };
 
     const renderRow = (tid: string) => {
@@ -251,11 +222,12 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
         // Color depends on index in visible array to match GraphRenderer
         const visIdx = visibleTrackIds.indexOf(tid);
         const color = visIdx !== -1 ? TRACK_COLORS[visIdx % TRACK_COLORS.length] : '#555';
-        
+        const flat  = isFlatTrack(track.keyframes);
+
         return (
-            <div 
+            <div
                 key={tid}
-                className={`flex items-center justify-between px-3 py-1.5 cursor-pointer border-b border-white/5 transition-colors group ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'}`}
+                className={`flex items-center justify-between px-3 py-1.5 cursor-pointer border-b border-white/5 transition-colors group ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'} ${flat ? 'opacity-50' : ''}`}
                 onClick={(e) => handleSelect(e, tid)}
                 onContextMenu={(e) => handleContextMenu(e, tid)}
             >
@@ -296,9 +268,20 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
     };
 
     return (
-        <div className="w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 flex flex-col shrink-0 overflow-y-auto custom-scroll">
+        <div
+            className="bg-black/80 backdrop-blur-sm border-r border-white/10 flex flex-col shrink-0 overflow-y-auto custom-scroll relative"
+            style={{ width: sidebarWidth }}
+        >
             <div className="h-6 flex items-center justify-between px-2 border-b border-white/5 text-[9px] text-gray-500 font-bold bg-black sticky top-0 z-10">
                 <span>Curves</span>
+                {/* Drag handle — pinned to the absolute right edge, runs full sidebar height. */}
+                <div
+                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-40 group/resize hover:bg-cyan-500/20"
+                    onMouseDown={handleSidebarResizeStart}
+                    title="Drag to resize sidebar"
+                >
+                    <div className="absolute right-0 top-0 h-full w-px bg-white/0 group-hover/resize:bg-cyan-400 transition-colors" />
+                </div>
                 <div className="flex gap-2">
                      <button 
                         onClick={() => setVisibleTracks([])}
@@ -328,12 +311,12 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                 
                 return (
                     <div key={groupName}>
-                         <div 
-                            className={`flex items-center justify-between px-2 py-1.5 border-b border-white/10 cursor-pointer select-none group bg-[#1a1a1a] hover:bg-gray-700`}
+                         <div
+                            className={`flex items-center justify-between px-2 py-1 border-b border-white/[0.06] cursor-pointer select-none group bg-transparent hover:bg-white/[0.04]`}
                         >
                             <div className="flex items-center gap-2 flex-1" onClick={(e) => toggleGroupCollapse(groupName, e.altKey)}>
-                                <span className="text-gray-500 w-4"><FolderIcon open={!collapsedGroups.has(groupName)} /></span>
-                                <span className="text-[10px] font-bold text-gray-300">{groupName}</span>
+                                <span className="text-gray-600 w-4"><FolderIcon open={!collapsedGroups.has(groupName)} /></span>
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 group-hover:text-gray-300">{groupName}</span>
                             </div>
                             
                             <div className="flex items-center gap-1">

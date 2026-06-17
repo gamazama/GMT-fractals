@@ -1,12 +1,15 @@
 
 import React, { useRef, useEffect } from 'react';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { PanelRouter } from '../PanelRouter';
+import { ScrollSpaceReserver } from '../ScrollSpaceReserver';
+import { BenchProfiler } from '../../engine-gmt/utils/BenchProfiler';
 import { PanelId, DockZone, PanelState } from '../../types';
 import { DragHandleIcon, UndockIcon, ChevronLeft, ChevronRight } from '../Icons';
 import { collectHelpIds } from '../../utils/helpUtils';
-import { AudioState, DrawingState } from '../../features/types';
+import { getPanelDefinition, evalShowIf } from '../../engine/PanelManifest';
 import { accent, surface, text, border, tabActive, tabInactive, collapsedIconActive, collapsedIconInactive, dragHandleActive, dragHandleInactive } from '../../data/theme';
+import { useTutorAnchor } from '../../engine/plugins/Tutorial';
 
 // Mobile detection helper
 const checkIsMobile = () => {
@@ -19,54 +22,77 @@ interface DockProps {
 }
 
 export const Dock: React.FC<DockProps> = ({ side }) => {
-    const { 
-        panels, 
-        activeLeftTab, activeRightTab, 
-        togglePanel, movePanel, reorderPanel,
-        startPanelDrag, endPanelDrag, draggingPanelId,
-        setDockSize, 
-        isLeftDockCollapsed, isRightDockCollapsed, setDockCollapsed,
-        openContextMenu,
-        leftDockSize, rightDockSize,
-        formula,
-        advancedMode
-    } = useFractalStore();
-    
-    // Mobile detection
-    const isMobile = checkIsMobile();
-    
-    // Access Feature States for Visibility Logic
-    const audioState = (useFractalStore.getState() as any).audio as AudioState;
-    const drawingState = (useFractalStore.getState() as any).drawing as DrawingState;
+    // Granular selectors — destructuring `useEngineStore()` would
+    // subscribe Dock to the ENTIRE store and re-render on every
+    // setter (setJulia, setBrush, …). Two Docks × every store update
+    // is a major contributor to the per-pointer-event subscriber
+    // cascade that trips React's max-depth guard. Each field below
+    // is either a stable ref (action functions are created once at
+    // store init) or a value that changes only on dock-relevant
+    // events (panel toggle, drag, resize).
+    const panels = useEngineStore((s) => s.panels);
+    const activeLeftTab = useEngineStore((s) => s.activeLeftTab);
+    const activeRightTab = useEngineStore((s) => s.activeRightTab);
+    const togglePanel = useEngineStore((s) => s.togglePanel);
+    const movePanel = useEngineStore((s) => s.movePanel);
+    const reorderPanel = useEngineStore((s) => s.reorderPanel);
+    const startPanelDrag = useEngineStore((s) => s.startPanelDrag);
+    const endPanelDrag = useEngineStore((s) => s.endPanelDrag);
+    const draggingPanelId = useEngineStore((s) => s.draggingPanelId);
+    const setDockSize = useEngineStore((s) => s.setDockSize);
+    const isLeftDockCollapsed = useEngineStore((s) => s.isLeftDockCollapsed);
+    const isRightDockCollapsed = useEngineStore((s) => s.isRightDockCollapsed);
+    const setDockCollapsed = useEngineStore((s) => s.setDockCollapsed);
+    const openContextMenu = useEngineStore((s) => s.openContextMenu);
+    const leftDockSize = useEngineStore((s) => s.leftDockSize);
+    const rightDockSize = useEngineStore((s) => s.rightDockSize);
 
-    const activeTabId = side === 'left' ? activeLeftTab : activeRightTab;
+    const isMobile = checkIsMobile();
+
+    // Tutorial anchor — only the right-dock root is targeted by lessons.
+    const rightDockAnchorRef = useTutorAnchor(side === 'right' ? 'right-dock' : null);
+
+    const storedActiveTabId = side === 'left' ? activeLeftTab : activeRightTab;
     const isCollapsed = side === 'left' ? isLeftDockCollapsed : isRightDockCollapsed;
     const width = side === 'left' ? leftDockSize : rightDockSize;
 
-    // Filter panels for this dock, sorted by order
-    // On mobile: Engine and Camera Manager go to right side
+    // Filter panels for this dock, sorted by order. Visibility comes
+    // from the manifest's `showIf` predicate; legacy per-id conditionals
+    // (Graph/Light/Audio/Drawing) now live in the manifest.
     const dockPanels = (Object.values(panels) as PanelState[])
         .filter((p) => {
             let location = p.location;
-            
-            // On mobile, redirect Engine and Camera Manager to right dock
-            if (isMobile && (p.id === 'Engine' || p.id === 'Camera Manager')) {
+
+            // On mobile the left dock isn't mounted (see AppGmt), so any
+            // left-docked panel surfaces on the right dock instead — otherwise
+            // it would be unreachable.
+            if (isMobile && location === 'left') {
                 location = 'right';
             }
-            
             if (location !== side) return false;
-            
-            // Conditional Visibility Logic
-            if (p.id === 'Graph' && formula !== 'Modular') return false;
-            if (p.id === 'Light' && !advancedMode) return false;
-            
-            // Feature Switches
-            if (p.id === 'Audio' && !audioState?.isEnabled) return false;
-            if (p.id === 'Drawing' && !drawingState?.enabled) return false;
-            
+
+            const def = getPanelDefinition(p.id);
+            // evalShowIf needs a state snapshot for predicates that
+            // check coarse top-level fields (e.g. advancedMode). Read
+            // imperatively — subscribing to the full state would
+            // defeat the granular-selector point of this component.
+            if (def && !evalShowIf(def.showIf, useEngineStore.getState() as never)) return false;
+
             return true;
         })
         .sort((a, b) => a.order - b.order);
+
+    // The stored active tab can point at a panel that's currently hidden by
+    // its showIf predicate — e.g. 'Graph' stays the active left tab after you
+    // switch away from the Modular formula, because nothing resets it. The
+    // tab is correctly absent from `dockPanels` above, but the content area
+    // keys off the active id and would otherwise still mount the hidden panel
+    // (the Modular FlowEditor) when the dock is opened. Clamp the active id to
+    // a visible panel: keep the stored id if it's still showing, else fall
+    // back to the first visible tab (or null → "Select a panel").
+    const activeTabId = dockPanels.some((p) => p.id === storedActiveTabId)
+        ? storedActiveTabId
+        : (dockPanels[0]?.id ?? null);
 
     const resizeRef = useRef<{ startX: number, startW: number } | null>(null);
 
@@ -112,8 +138,9 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                  </button>
                  <div className="flex-1 flex flex-col items-center py-2 gap-2">
                      {dockPanels.map(p => (
-                         <div 
+                         <div
                              key={p.id}
+                             data-gx-mode-tab={p.id}
                              onClick={() => togglePanel(p.id, true)}
                              className={`w-6 h-6 flex items-center justify-center rounded cursor-pointer ${p.id === activeTabId ? collapsedIconActive : collapsedIconInactive}`}
                              title={p.id}
@@ -130,57 +157,26 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
         <div
             className={`flex flex-col ${surface.dock} border-${side === 'left' ? 'r' : 'l'} ${border.standard} z-40 shrink-0 transition-all duration-75 relative`}
             style={{ width }}
-            data-tut={side === 'right' ? 'right-dock' : undefined}
+            ref={rightDockAnchorRef}
         >
             {/* Header Tabs - Tighter Layout with reduced gap */}
             <div className={`flex flex-wrap gap-0.5 px-0.5 pt-1 ${surface.tabBar} border-b ${border.standard} shrink-0 relative items-end`}>
-                {dockPanels.map(p => {
-                    const isActive = p.id === activeTabId;
-                    return (
-                        <button
-                            key={p.id}
-                            data-tut={`tab-${p.id}`}
-                            onClick={() => togglePanel(p.id, true)}
-                            onContextMenu={(e) => handleContextMenu(e, p.id)}
-                            onMouseEnter={() => {
-                                // LIVE PREVIEW: Update order while dragging over target
-                                if (draggingPanelId && draggingPanelId !== p.id) {
-                                    // Check if dragging source is in this same dock to allow reordering
-                                    const sourcePanel = panels[draggingPanelId];
-                                    if (sourcePanel && sourcePanel.location === side) {
-                                        reorderPanel(draggingPanelId, p.id);
-                                    }
-                                }
-                            }}
-                            onMouseUp={(e) => {
-                                // COMMIT: Just end the drag, the state is already updated live
-                                if (draggingPanelId) {
-                                    e.stopPropagation();
-                                    endPanelDrag();
-                                }
-                            }}
-                            className={`flex items-center gap-0.5 px-1 py-1 text-[9px] font-bold transition-colors group relative rounded-t-sm
-                                ${isActive ? tabActive : tabInactive}`
-                            }
-                        >
-                            {/* Drag Handle - Hidden on mobile */}
-                            {!isMobile && (
-                                <div 
-                                    className={`cursor-move ${isActive ? `${dragHandleActive} group-hover:text-cyan-600` : `${dragHandleInactive} group-hover:text-white`} transition-colors`}
-                                    onMouseDown={(e) => {
-                                        e.stopPropagation();
-                                        startPanelDrag(p.id);
-                                    }}
-                                >
-                                    <div className="transform scale-75 origin-center">
-                                        <DragHandleIcon />
-                                    </div>
-                                </div>
-                            )}
-                            <span className="truncate max-w-[140px]">{p.id}</span>
-                        </button>
-                    );
-                })}
+                {dockPanels.map(p => (
+                    <DockTab
+                        key={p.id}
+                        panel={p}
+                        isActive={p.id === activeTabId}
+                        isMobile={isMobile}
+                        side={side}
+                        draggingPanelId={draggingPanelId}
+                        panels={panels}
+                        togglePanel={togglePanel}
+                        handleContextMenu={handleContextMenu}
+                        reorderPanel={reorderPanel}
+                        endPanelDrag={endPanelDrag}
+                        startPanelDrag={startPanelDrag}
+                    />
+                ))}
             </div>
 
             <button 
@@ -190,9 +186,39 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                 {side === 'left' ? <ChevronLeft /> : <ChevronRight />}
             </button>
 
-            <div className="flex-1 overflow-y-auto custom-scroll p-4 relative">
+            {/* Dock content area — vertical padding only. Horizontal
+                padding is owned by each panel's internal rows (AutoFeaturePanel
+                already applies px-3 on every param row), so compound padding
+                was wasting ~32px of dock width. */}
+            <div className={`flex-1 overflow-y-auto py-2 relative ${isMobile ? 'mobile-scroll' : 'custom-scroll'}`}>
                 {activeTabId ? (
-                     <PanelRouter activeTab={activeTabId} state={useFractalStore.getState()} actions={useFractalStore.getState() as any} onSwitchTab={togglePanel as any} />
+                     <BenchProfiler id={`Dock:${side}/PanelRouter:${activeTabId}`}>
+                        {/* `ScrollSpaceReserver` keyed by activeTabId so it
+                            resets its measured max-height on tab switch:
+                            different panels are very different heights and
+                            we don't want a tall panel's max to be reserved
+                            after switching to a shorter one. Within a
+                            single panel, the reserver keeps total height
+                            stable so toggling a feature off doesn't shift
+                            content below upward — the freed space appears
+                            as an empty bottom spacer instead, which is
+                            GC'd once it scrolls out of view.
+                            Bespoke `component:` panels (FlowEditor, etc.)
+                            own their own layout and need to fill the dock
+                            height — the reserver's auto-measured wrapper
+                            would collapse them to 0 px, which leaves
+                            ReactFlow's nodes stuck at `visibility:hidden`
+                            (it never gets a non-zero container to measure
+                            against). Bypass the reserver in that case. */}
+                        {(() => {
+                            const def = getPanelDefinition(activeTabId);
+                            const isBespoke = !!def?.component;
+                            const router = <PanelRouter activeTab={activeTabId} state={useEngineStore.getState()} actions={useEngineStore.getState() as any} onSwitchTab={togglePanel as any} />;
+                            return isBespoke
+                                ? <div className="h-full">{router}</div>
+                                : <ScrollSpaceReserver key={activeTabId}>{router}</ScrollSpaceReserver>;
+                        })()}
+                     </BenchProfiler>
                 ) : (
                     <div className="flex h-full items-center justify-center text-gray-700 text-xs italic">
                         Select a panel
@@ -205,5 +231,65 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                 onMouseDown={handleResizeStart}
             />
         </div>
+    );
+};
+
+interface DockTabProps {
+    panel: PanelState;
+    isActive: boolean;
+    isMobile: boolean;
+    side: 'left' | 'right';
+    draggingPanelId: PanelId | null;
+    panels: Record<string, PanelState>;
+    togglePanel: (id: PanelId, focus?: boolean) => void;
+    handleContextMenu: (e: React.MouseEvent, id: PanelId) => void;
+    reorderPanel: (sourceId: PanelId, targetId: PanelId) => void;
+    endPanelDrag: () => void;
+    startPanelDrag: (id: PanelId) => void;
+}
+
+const DockTab: React.FC<DockTabProps> = ({
+    panel: p, isActive, isMobile, side, draggingPanelId, panels,
+    togglePanel, handleContextMenu, reorderPanel, endPanelDrag, startPanelDrag,
+}) => {
+    const tabAnchorRef = useTutorAnchor(`tab-${p.id}`);
+    return (
+        <button
+            ref={tabAnchorRef}
+            data-gx-mode-tab={p.id}
+            onClick={() => togglePanel(p.id, true)}
+            onContextMenu={(e) => handleContextMenu(e, p.id)}
+            onMouseEnter={() => {
+                if (draggingPanelId && draggingPanelId !== p.id) {
+                    const sourcePanel = panels[draggingPanelId];
+                    if (sourcePanel && sourcePanel.location === side) {
+                        reorderPanel(draggingPanelId, p.id);
+                    }
+                }
+            }}
+            onMouseUp={(e) => {
+                if (draggingPanelId) {
+                    e.stopPropagation();
+                    endPanelDrag();
+                }
+            }}
+            className={`flex items-center gap-0.5 px-1 py-1 text-[9px] font-bold transition-colors group relative rounded-t-sm
+                ${isActive ? tabActive : tabInactive}`}
+        >
+            {!isMobile && (
+                <div
+                    className={`cursor-move ${isActive ? `${dragHandleActive} group-hover:text-cyan-600` : `${dragHandleInactive} group-hover:text-white`} transition-colors`}
+                    onMouseDown={(e) => {
+                        e.stopPropagation();
+                        startPanelDrag(p.id);
+                    }}
+                >
+                    <div className="transform scale-75 origin-center">
+                        <DragHandleIcon />
+                    </div>
+                </div>
+            )}
+            <span className="truncate max-w-[140px]">{p.id}</span>
+        </button>
     );
 };

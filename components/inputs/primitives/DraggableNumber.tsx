@@ -25,6 +25,7 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
     onDragEnd,
     step = 0.01,
     sensitivity = 1,
+    axis = 'x',
     min,
     max,
     hardMin,
@@ -62,6 +63,9 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
         onDragEnd,
         step,
         sensitivity,
+        axis,
+        min,
+        max,
         hardMin,
         hardMax,
         mapping,
@@ -131,7 +135,7 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
     const containerClasses = `
         w-full h-full flex items-center justify-center
         text-xs font-mono select-none transition-colors touch-none outline-none
-        ${disabled ? 'cursor-not-allowed opacity-50 text-gray-600' : 'cursor-ew-resize focus:ring-1 focus:ring-cyan-500/50'}
+        ${disabled ? 'cursor-not-allowed opacity-50 text-gray-600' : `${axis === 'y' ? 'cursor-ns-resize' : 'cursor-ew-resize'} focus:ring-1 focus:ring-cyan-500/50`}
         ${isDragging ? 'bg-cyan-500/20 text-cyan-300' : (isActive && !disabled ? 'text-cyan-400' : (disabled ? '' : 'text-gray-300 hover:text-white'))}
     `;
 
@@ -140,6 +144,7 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
             <input
                 ref={inputRef}
                 type="text"
+                inputMode="decimal"
                 value={inputValue}
                 onChange={(e) => handleInputChange(e.target.value)}
                 onBlur={handleBlur}

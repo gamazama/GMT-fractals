@@ -1,0 +1,514 @@
+/**
+ * @engine/scene-io — save / load / share UI plugin.
+ *
+ * Slot-registers Save and Load buttons into @engine/topbar's right
+ * slot. Both use the existing utils/SceneFormat.ts transports:
+ *   - JSON: plain-text preset download
+ *   - PNG:  scene embedded in iTXt chunk of a canvas snapshot
+ *   - URL:  compact share-string via utils/Sharing.ts + pako
+ *
+ * Apps install the plugin and — if they can produce a canvas snapshot
+ * (PNG export) — pass a getCanvas() accessor. Apps without a canvas
+ * (headless tests, embedded viewers) still get JSON + share link.
+ *
+ * Preset round-trip is 100% engine-standard: the store's getPreset()
+ * walks the feature registry + preset-field registry, and loadPreset()
+ * reverses it. Zero app-specific save/load code per app.
+ */
+
+import React, { useRef } from 'react';
+import { useEngineStore } from '../../store/engineStore';
+import { useTutorAnchor } from './Tutorial';
+import type { Preset } from '../../types';
+import {
+    serializeScene,
+    parseSceneJson,
+    extractScenePng,
+    snapshotSceneToPng,
+    downloadBlob,
+    type SceneParser,
+    type SceneSerializer,
+} from '../../utils/SceneFormat';
+import { topbar } from './TopBar';
+import { menu } from './Menu';
+import { shortcuts } from './Shortcuts';
+import { showToast } from '../store/toastStore';
+import { useAutosaveSettings } from '../store/autosaveStore';
+
+// ── Install ─────────────────────────────────────────────────────────────
+
+export interface InstallSceneIOOptions {
+    /** Returns the canvas whose pixels back the PNG snapshot. Omit if the
+     *  app has no canvas; PNG export is hidden in that case. */
+    getCanvas?: () => HTMLCanvasElement | null;
+    /** Custom parser for scene file content. Used for both .json/.gmf
+     *  text AND text extracted from PNG iTXt. Default: `parseSceneJson`
+     *  (engine-core JSON + GMF `<Scene>` block extraction).
+     *
+     *  Apps with richer formats override here. GMT injects a parser that
+     *  calls `loadGMFScene` and registers the embedded formula definition
+     *  so workshop / Fragmentarium GMFs round-trip with their shaders. */
+    parseScene?: SceneParser;
+    /** Custom serializer for scene → text. Used for JSON download AND
+     *  PNG iTXt embed. Default: pretty-printed JSON.
+     *
+     *  Apps with richer formats override here. GMT injects `saveGMFScene`
+     *  which embeds the active formula's shader source so saved scenes
+     *  load back even on a fresh runtime that doesn't have that formula
+     *  in its registry. */
+    serializeScene?: SceneSerializer;
+    /** File extension (no dot) used for the primary "Save Scene" menu
+     *  item. Default `'json'` — apps with a richer format set this to
+     *  match (e.g. GMT passes `'gmf'` so the download is named
+     *  `scene.gmf` matching the GMF bytes the serializer writes). */
+    fileExtension?: string;
+    /** Optional tutorial anchor id to register on the snapshot button.
+     *  Apps with tutorials that need to highlight the snapshot affordance
+     *  pass an id (e.g. GMT uses 'snapshot-btn'). Default: no anchor. */
+    snapshotAnchor?: string;
+    /** Synchronous flush invoked immediately before `getPreset()` runs on
+     *  any save path (`saveScene`, `saveScenePng`). Apps whose canonical
+     *  state lives outside the store between debounce ticks (e.g. GMT's
+     *  R3F camera, flushed every 100 ms) register a flush here so a save
+     *  triggered mid-movement reflects the live view rather than the last
+     *  debounced sample. */
+    onBeforeSerialize?: () => void;
+}
+
+let _installed = false;
+let _getCanvas: (() => HTMLCanvasElement | null) | undefined;
+let _parseScene: SceneParser | undefined;
+let _serializeScene: SceneSerializer | undefined;
+let _fileExtension: string = 'json';
+let _snapshotAnchor: string | undefined;
+let _onBeforeSerialize: (() => void) | undefined;
+
+/** Pick the registered serializer, falling back to engine-core's plain
+ *  JSON. Single source of truth — every save path routes through this. */
+const activeSerializer = (): SceneSerializer => _serializeScene ?? serializeScene;
+
+/** Compose the default download filename from the project name. */
+const defaultFileStem = (): string => {
+    const name = useEngineStore.getState().projectSettings.name || 'scene';
+    return name.replace(/\s+/g, '-').toLowerCase();
+};
+
+/**
+ * @invariant Captures option values into `_getCanvas` / `_parseScene` /
+ *   `_serializeScene` / `_fileExtension` / `_snapshotAnchor` BEFORE the
+ *   `_installed` short-circuit. Reinstall updates captured deps even
+ *   though registration is skipped — this DELIBERATELY breaks
+ *   "install* is idempotent" for the captured-deps half of state.
+ * @invariant PNG/JPG export menu items + SnapshotButton are gated on
+ *   `_getCanvas` AT install time. Registering `getCanvas` AFTER install
+ *   will not back-fill these items — apps must uninstall + reinstall,
+ *   or pass `getCanvas` up-front.
+ */
+export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
+    if (options.getCanvas) _getCanvas = options.getCanvas;
+    if (options.parseScene) _parseScene = options.parseScene;
+    if (options.serializeScene) _serializeScene = options.serializeScene;
+    if (options.fileExtension) _fileExtension = options.fileExtension;
+    if (options.snapshotAnchor) _snapshotAnchor = options.snapshotAnchor;
+    if (options.onBeforeSerialize) _onBeforeSerialize = options.onBeforeSerialize;
+    if (_installed) return;
+    _installed = true;
+
+    // File menu groups Save Scene / Save PNG / Save JPG / Load behind a
+    // single dropdown so the topbar isn't crowded by individual buttons.
+    // Snapshot is promoted out of the menu (most-used action).
+    //
+    // order 29.5: between the GMT Camera menu (29) and System (30).
+    // Registered via the menu plugin so it inherits both desktop
+    // popover and mobile MobileMenuHost rendering.
+    menu.register({
+        id: 'file',
+        slot: 'right',
+        order: 29.5,
+        icon: FolderIcon,
+        title: 'File',
+        align: 'end',
+        width: 'w-56',
+    });
+    menu.registerItem('file', {
+        id: 'load',
+        type: 'custom',
+        component: LoadSceneMenuItem,
+    });
+    menu.registerItem('file', {
+        id: 'save-scene',
+        type: 'button',
+        label: `Save Scene (${_fileExtension.toUpperCase()})`,
+        onSelect: () => { saveScene(); },
+    });
+    if (_getCanvas) {
+        menu.registerItem('file', {
+            id: 'save-png',
+            type: 'button',
+            label: 'Save Scene (PNG)',
+            shortcut: 'Alt+S',
+            onSelect: () => { void saveScenePng(); },
+        });
+        menu.registerItem('file', {
+            id: 'save-jpg',
+            type: 'button',
+            label: 'Save Image (JPG)',
+            onSelect: () => { void saveSceneJpg(); },
+        });
+    }
+    // Recover the previous session from the protected recovery slot. Shown
+    // (with an amber glyph) only when a recovery exists — i.e. the last
+    // session ended with unsaved autosaved work.
+    menu.registerItem('file', {
+        id: 'restore-autosave',
+        type: 'button',
+        label: 'Restore Last Session',
+        icon: <RestoreIcon />,
+        when: () => hasRecoverySession(),
+        onSelect: () => { void restoreAutosave(); },
+    });
+    // Autosave on/off + interval (opt-in; off by default).
+    menu.registerItem('file', {
+        id: 'autosave-settings',
+        type: 'custom',
+        component: AutosaveMenuItem,
+    });
+    // Apps that want extra items in the File menu — e.g. GMT's "Copy
+    // Share Link" — register them via menu.registerItem('file', …)
+    // directly after installSceneIO() returns. No bespoke API here.
+
+    // Standalone one-click snapshot button — the heavy-use PNG action
+    // promoted out of the File menu so users don't have to open it for
+    // every screenshot. Hidden when the app has no canvas. Uses an
+    // image icon (not a camera icon) to stay visually distinct from
+    // app-level camera-menu buttons that share the camera glyph.
+    if (_getCanvas) {
+        topbar.register({ id: 'scene-snapshot', slot: 'right', order: 19, component: SnapshotButton });
+    }
+
+    // Alt+S — the conventional single-key screenshot shortcut in
+    // creative web apps. Ctrl+S / Ctrl+Shift+S are browser-reserved
+    // (Save / Save As) and never reach JS, so don't use them.
+    shortcuts.register({
+        id: 'scene-io.quick-png',
+        key: 'Alt+S',
+        description: 'Save PNG',
+        category: 'Export',
+        handler: () => { void saveScenePng(); },
+    });
+};
+
+export const uninstallSceneIO = () => {
+    menu.unregister('file');
+    topbar.unregister('scene-snapshot');
+    shortcuts.unregister('scene-io.quick-png');
+    _getCanvas = undefined;
+    _parseScene = undefined;
+    _serializeScene = undefined;
+    _fileExtension = 'json';
+    _snapshotAnchor = undefined;
+    _onBeforeSerialize = undefined;
+    _installed = false;
+};
+
+/**
+ * Universal file → preset loader. Auto-detects format:
+ *   - image/png   → extracts scene from iTXt chunk (SceneData or legacy FractalData)
+ *   - .gmf / .json / anything else → parser handles raw text
+ *
+ * Routes through the SceneIO-registered `parseScene` so apps with a
+ * custom format (e.g. GMT's GMF with embedded formula shaders) see
+ * every load through their own parser. When no parser is registered,
+ * falls back to engine-core's `parseSceneJson` (plain JSON + `<Scene>`
+ * block extraction).
+ *
+ * **The single public file-loader.** Any caller — LoadingScreen,
+ * drag-drop overlay, deep-link handler, file-picker — routes through
+ * this so a missing parser argument can never silently downgrade a
+ * GMF load to plain JSON (which was a real footgun before this was
+ * the only entry point).
+ */
+/**
+ * @invariant Pure decoder only — returns a parsed Preset but does NOT
+ *   apply it. Callers MUST follow with
+ *   `useEngineStore.getState().loadScene({ preset })` — calling
+ *   `loadPreset` directly skips the compile gate, post-boot config
+ *   flush, worker `OFFSET_SET`, and `CONFIG_DONE` debounce-skip,
+ *   causing post-boot scenes to render as fallback sphere.
+ */
+export const loadSceneFile = async (file: File): Promise<Preset | null> => {
+    const parser: SceneParser = _parseScene ?? parseSceneJson;
+    const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+    if (isPng) return extractScenePng(file, parser);
+    const text = await file.text();
+    return parser(text);
+};
+
+/**
+ * Save the current scene as a text-format download (JSON or whatever
+ * the registered serializer produces — GMT writes GMF). Routes through
+ * the SceneIO-registered `serializeScene` — no way to bypass.
+ *
+ * @param filename Override; defaults to `<project-name>.<fileExtension>`
+ *   (extension defaults to 'json', GMT installs with 'gmf').
+ */
+export const saveScene = (filename?: string): void => {
+    _onBeforeSerialize?.();
+    const preset = useEngineStore.getState().getPreset({ includeScene: true, includeDocuments: true });
+    const text = activeSerializer()(preset);
+    const blob = new Blob([text], { type: 'application/json' });
+    downloadBlob(blob, filename ?? `${defaultFileStem()}.${_fileExtension}`);
+    noteSceneSavedToFile();
+    showToast(`Scene saved (.${_fileExtension})`, 'success');
+};
+
+/**
+ * Snapshot the registered canvas and save as a JPG. Web-friendly format
+ * for sharing the rendered image — does NOT embed scene metadata (JPG's
+ * EXIF is too awkward to write by hand and most receivers strip it
+ * anyway). Use PNG when you want a re-loadable file.
+ *
+ * @param filename Override; defaults to `<project-name>.jpg`.
+ * @param quality JPEG quality 0..1; defaults to 0.92 (visually lossless
+ *   for typical fractal renders, ~3x smaller than PNG).
+ */
+export const saveSceneJpg = async (filename?: string, quality: number = 0.92): Promise<void> => {
+    const canvas = _getCanvas?.();
+    if (!canvas) {
+        console.warn('[SceneIO] JPG save requested but no canvas accessor registered');
+        showToast('Image save failed — no canvas available', 'error');
+        return;
+    }
+    const blob: Blob | null = await new Promise((resolve) => {
+        canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
+    });
+    if (!blob) {
+        console.warn('[SceneIO] canvas.toBlob returned null for JPEG');
+        showToast('Image save failed — try again', 'error');
+        return;
+    }
+    downloadBlob(blob, filename ?? `${defaultFileStem()}.jpg`);
+    showToast('Image saved (JPG)', 'success');
+};
+
+/**
+ * Snapshot the registered canvas and save as a PNG with embedded
+ * scene metadata. Routes through the SceneIO-registered
+ * `serializeScene` for the iTXt payload — same byte-format as
+ * `saveSceneJson` so a saved PNG round-trips cleanly through
+ * `loadSceneFile`.
+ *
+ * Noop with a console warning when no `getCanvas` was registered
+ * at install time — the app is headless or didn't supply one.
+ */
+export const saveScenePng = async (filename?: string): Promise<void> => {
+    const canvas = _getCanvas?.();
+    if (!canvas) {
+        console.warn('[SceneIO] PNG save requested but no canvas accessor registered');
+        showToast('Snapshot failed — no canvas available', 'error');
+        return;
+    }
+    _onBeforeSerialize?.();
+    try {
+        const preset = useEngineStore.getState().getPreset({ includeScene: true, includeDocuments: true });
+        const blob = await snapshotSceneToPng(canvas, preset, activeSerializer());
+        downloadBlob(blob, filename ?? `${defaultFileStem()}.png`);
+        noteSceneSavedToFile();
+        // The PNG embeds the full scene as GMF in an iTXt chunk, so the saved
+        // image is itself a re-openable / remixable file. Surfacing that is
+        // the cheapest growth lever — every shared snapshot is a seed — and
+        // most users never discover it. Longer dwell: the message educates.
+        showToast('Snapshot saved — drag the PNG back in to restore this scene', 'success', 4500);
+    } catch (err) {
+        console.error('[SceneIO] PNG snapshot failed', err);
+        showToast('Snapshot failed — see console', 'error');
+    }
+};
+
+// ── Autosave / session restore (H4) ──────────────────────────────────────
+//
+// <UnsavedWorkGuard/> stashes the serialized scene under AUTOSAVE_KEY while the
+// scene is dirty (opt-in, interval configurable). On boot it snapshots any
+// leftover live autosave into AUTOSAVE_RECOVERY_KEY before new bursts can
+// overwrite it; File ▸ Restore Last Session loads from that protected slot.
+export const AUTOSAVE_KEY = 'gmt-autosave';
+export const AUTOSAVE_RECOVERY_KEY = 'gmt-autosave-recovery';
+export const AUTOSAVE_AT_KEY = 'gmt-autosave-at';
+export const AUTOSAVE_RECOVERY_AT_KEY = 'gmt-autosave-recovery-at';
+
+/** Mark the scene saved + drop the autosave backstop (work is now in a file). */
+const noteSceneSavedToFile = (): void => {
+    useEngineStore.getState().markSceneSaved();
+    try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* work is now in a file */ }
+};
+
+/** Serialize the current scene to the app's text format (GMF for GMT, JSON
+ *  otherwise) via the registered serializer. Used by autosave. */
+export const serializeCurrentScene = (): string => {
+    _onBeforeSerialize?.();
+    const preset = useEngineStore.getState().getPreset({ includeScene: true, includeDocuments: true });
+    return activeSerializer()(preset);
+};
+
+/** Parse a scene from a raw text payload (GMF/JSON) through the registered
+ *  parser — the string-input sibling of `loadSceneFile`. */
+export const parseSceneText = async (text: string): Promise<Preset | null> => {
+    const parser: SceneParser = _parseScene ?? parseSceneJson;
+    return parser(text);
+};
+
+const hasRecoverySession = (): boolean => {
+    try { return !!localStorage.getItem(AUTOSAVE_RECOVERY_KEY); } catch { return false; }
+};
+
+/** Restore the previous session from the protected recovery slot (File menu). */
+const restoreAutosave = async (): Promise<void> => {
+    let text: string | null = null;
+    try { text = localStorage.getItem(AUTOSAVE_RECOVERY_KEY); } catch { /* storage blocked */ }
+    if (!text) { showToast('No recoverable session found', 'warning'); return; }
+    try {
+        const preset = await parseSceneText(text);
+        if (!preset) { showToast('Recovery data could not be read', 'error'); return; }
+        useEngineStore.getState().loadScene({ preset });
+        try {
+            localStorage.removeItem(AUTOSAVE_RECOVERY_KEY);
+            localStorage.removeItem(AUTOSAVE_RECOVERY_AT_KEY);
+        } catch { /* */ }
+        showToast('Restored your last session', 'success');
+    } catch (err) {
+        console.error('[SceneIO] restore autosave failed', err);
+        showToast('Failed to restore session — see console', 'error');
+    }
+};
+
+// Amber restore glyph — only shown on the File ▸ Restore item when a recovery
+// session exists, so it stands out from the plain text items.
+const RestoreIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 7v6h6" />
+        <path d="M3.5 13a9 9 0 1 0 2.3-9.4L3 7" />
+    </svg>
+);
+
+/** Compact autosave on/off + interval control rendered inside the File menu. */
+const AutosaveMenuItem: React.FC<{ close: () => void }> = () => {
+    const enabled = useAutosaveSettings((s) => s.enabled);
+    const intervalSec = useAutosaveSettings((s) => s.intervalSec);
+    const setEnabled = useAutosaveSettings((s) => s.setEnabled);
+    const setIntervalSec = useAutosaveSettings((s) => s.setIntervalSec);
+    return (
+        <div className="px-3 py-2 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+            <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-200">
+                <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-cyan-400" />
+                Autosave
+            </label>
+            {enabled && (
+                <select
+                    value={intervalSec}
+                    onChange={(e) => setIntervalSec(Number(e.target.value))}
+                    title="Autosave interval"
+                    className="bg-gray-900 border border-white/10 rounded text-[11px] text-gray-200 px-1 py-0.5 outline-none focus:border-cyan-500"
+                >
+                    <option value={15}>15s</option>
+                    <option value={30}>30s</option>
+                    <option value={60}>1m</option>
+                    <option value={120}>2m</option>
+                    <option value={300}>5m</option>
+                </select>
+            )}
+        </div>
+    );
+};
+
+// ── Icons ───────────────────────────────────────────────────────────────
+
+const FolderIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    </svg>
+);
+
+// Image / picture glyph for the snapshot button. Visually distinct from
+// the camera glyph used by app-level camera-menu buttons (saved cameras
+// / nav modes), preventing the two from looking identical in the topbar.
+const ImageIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+    </svg>
+);
+
+// ── Load scene menu item ────────────────────────────────────────────────
+//
+// The Load entry has to own a hidden <input type="file"> alongside the
+// click target — the file picker can only be summoned by `.click()` on
+// an <input> already in the DOM. A 'button' menu item can't carry the
+// input, so Load is a 'custom' item that styles itself to match the
+// 'button' renderer in MenuItemView.
+
+const LoadSceneMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const loadScene = useEngineStore((s) => s.loadScene);
+
+    const handleFile = async (file: File) => {
+        const preset = await loadSceneFile(file);
+        if (!preset) {
+            console.warn('[SceneIO] Could not parse scene from', file.name);
+            return;
+        }
+        // loadScene (not loadPreset) — wraps loadPreset with the compile
+        // gate AND posts CONFIG_DONE to the worker, which fires compile
+        // immediately instead of waiting on the 200 ms scheduleCompile
+        // debounce. Critical for GMF loads with a custom formula: the
+        // app's parseScene has just registered the formula def + emitted
+        // REGISTER_FORMULA; loadScene's CONFIG_DONE flushes the compile
+        // so the worker picks up the new shader.
+        loadScene({ preset });
+    };
+
+    return (
+        <>
+            <input
+                ref={inputRef}
+                type="file"
+                accept="application/json,.json,.gmf,image/png"
+                aria-label="Load scene file"
+                className="hidden"
+                onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFile(file);
+                    if (inputRef.current) inputRef.current.value = '';
+                    close();
+                }}
+            />
+            <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
+                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+            >
+                <span className="flex items-center gap-2 min-w-0">
+                    <span className="truncate">Load Scene (PNG/{_fileExtension.toUpperCase()})</span>
+                </span>
+            </button>
+        </>
+    );
+};
+
+// ── Snapshot button (one-click PNG) ─────────────────────────────────────
+
+export const SnapshotButton: React.FC = () => {
+    const tutAnchor = useTutorAnchor(_snapshotAnchor);
+    return (
+        <button
+            ref={tutAnchor}
+            type="button"
+            onClick={() => { void saveScenePng(); }}
+            className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
+            title="Save PNG snapshot (Alt+S)"
+            aria-label="Save PNG snapshot"
+        >
+            <ImageIcon />
+        </button>
+    );
+};

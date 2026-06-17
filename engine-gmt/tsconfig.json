@@ -1,0 +1,21 @@
+{
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "baseUrl": ".",
+        "noEmit": true
+    },
+    "include": ["**/*.ts", "**/*.tsx", "../types/pako.d.ts"],
+    "exclude": [
+        "node_modules", "dist",
+        // Phase E minimum-viable scope: state/shader TS files are in;
+        // panel + overlay + gizmo TSX files depend on unported GMT UI
+        // (CameraTools, RenderPopup, scene_widgets, ShaderDebugger, etc.)
+        // and land when we port the GMT app itself.
+        "features/**/*.tsx",
+        // Feature-internal utility helpers that reach into UI-adjacent
+        // components (gizmos, popover menus) or untyped store slices.
+        // Come back when the GMT app port lands.
+        "features/**/utils/**",
+        "shaders"
+    ]
+}

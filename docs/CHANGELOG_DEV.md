@@ -1,6 +1,543 @@
-# GMT Development Changelog (v0.9.1 dev)
+# GMT Development Changelog (v0.9.6 dev)
 
-Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
+Chronological log of significant changes during the v0.9.6 development cycle (engine-extraction trunk; merges to `main` once stable).
+
+## 2026-06-01
+
+### Share & gallery deep-links no longer bounce to the app launcher
+
+**User-facing**
+- On the deployed build, opening a link with a query string — a gallery share link (`…/app-gmt.html?gallery=<slug>`) or any `?`-param deep-link — could land on the "dev preview" launcher menu instead of the app. Those now resolve to the right page. (Only ever affected the deployed PWA; local `npm run dev` has no service worker, so it never reproduced there.)
+
+**Where**
+- [`vite.config.ts`](../vite.config.ts) — Workbox service-worker config. Added `ignoreURLParametersMatching: [/.*/]` so a query-string URL matches its precached HTML entry instead of missing the cache and falling through to `navigateFallback` (the launcher `index.html`). Also widened `navigateFallbackDenylist` from `/\.html$/` to `/\.html(\?|$)/` — the old regex was anchored at end-of-string, so `app-gmt.html?gallery=x` (ending in the slug, not `.html`) slipped past it and got the launcher.
+
+### Opening a share link no longer crashes the app
+
+**User-facing**
+- Opening a `#s=` share link (or a PNG/`.gmf` with one) could white-screen the viewport with `Cannot read properties of undefined (reading 'coreMath.…')`. Share links now open cleanly. The scene's formula parameters round-trip as before.
+
+**Where**
+- [`store/animation/sequenceSlice.ts`](../store/animation/sequenceSlice.ts) — `setSequence` now normalizes the incoming sequence so `tracks` is always an object. The URL encoder drops an empty `tracks: {}`, so a round-tripped share payload arrived without one; every `sequence.tracks[…]` reader (`useTrackAnimation`, the timeline, the graph editors) then threw on first render. Fixed at the boundary so no downstream consumer has to guard.
+- [`debug/smoke-share-link.mts`](../debug/smoke-share-link.mts) — new smoke (wired into `smoke:all`): encodes the live scene via the real `getShareString`, opens the `#s=` URL in a fresh page, and asserts the formula panel renders with zero page/console errors plus a value round-trip. Catches this whole class of "share link opens to a crash" regression.
+
+### Recovery prompt offers "Step Back" when Reset can't help
+
+**User-facing**
+- The on-screen recovery prompt (the **Reset** / **Undo Cam** buttons that appear when you fly into empty space or bury the camera in a surface) now adapts: if you're **already at the default view**, pressing Reset would do nothing, so the button switches to **Step Back** — it dollies the camera back one unit so you can escape a stuck spot. Once it switches, it stays "Step Back" until you've recovered and the prompt disappears.
+
+**Where**
+- [`engine-gmt/store/cameraSlice.ts`](../engine-gmt/store/cameraSlice.ts) — new `isCameraAtFormulaDefault()` + `stepBackCamera()` action; `cameraRecoveryMode` (`'reset' | 'stepback'`) on the store. Default-preset math factored into `getFormulaDefaultCamera()`, shared by Reset and the at-default check.
+- [`engine-gmt/navigation/usePhysicsProbe.ts`](../engine-gmt/navigation/usePhysicsProbe.ts) — `updateResetButton` picks the mode when the prompt appears and latches to Step Back once the camera reaches the default; holds it until the prompt hides.
+- [`engine-gmt/navigation/HudOverlay.tsx`](../engine-gmt/navigation/HudOverlay.tsx) — the recovery button morphs its label/action from the store mode (visibility stays imperatively driven by the probe, off React's render path).
+
+## 2026-05-28
+
+### Floating panel consolidation
+
+**User-facing**
+- **Send Feedback is now a draggable, dockable panel** (was a fixed modal). Open it from the Help menu; drag it by its title bar, drop it into a dock, or close it — it behaves like the other panels now.
+- **Escape reliably closes dialogs** — sign-in, account, submit-to-gallery, render-result, the gradient and node context menus — including when a text field inside them has focus.
+- **New Scene no longer closes if you click outside it.** A stray backdrop click won't discard an in-progress composition; close it with Escape, the ✕, or Cancel.
+- Context menus (right-click on a node, on a gradient stop, on the canvas) now close on Escape and on a click anywhere outside — previously some couldn't be dismissed by clicking a node.
+
+**Where**
+- New shared primitives: [`components/ui/`](../components/ui/) — `Modal`, `FloatingPanel`, `AnchoredMenu`, plus `useDismiss` ([`hooks/useDismiss.ts`](../hooks/useDismiss.ts)), the `Z` stacking scale, `clampToViewport`, and `stopNavKeys`. Usage contract is the top-of-file JSDoc on each.
+- Shortcut registry now installs in capture phase ([`app-gmt/main.tsx`](../app-gmt/main.tsx)) so Escape-dismissal beats key-propagation stops.
+- Rationale + deliberate bespoke exceptions (CenterHUD, GlobalContextMenu submenu layout): [`docs/adr/0060-floating-panel-primitives.md`](adr/0060-floating-panel-primitives.md).
+
+## 2026-05-26
+
+### Audio + Drawing panels moved to the left dock
+
+**User-facing**
+- Toggling **Enable Audio Reactivity** or **Drawing Mode** in the system menu now reveals the Audio / Drawing panel on the **left** dock (was right). Same flow as the Engine Config panel: the dock surfaces and the tab activates automatically.
+- Right dock stays focused on authoring panels (Formula / Scene / Shader / Gradient / Quality / Light); left dock gathers the modal tools that overlay them (Engine Config, View Manager, Graph, Audio, Drawing).
+
+**Where**
+- Manifest: [`engine-gmt/panels.ts`](../engine-gmt/panels.ts) — Audio + Drawing changed to `dock: 'left'`.
+- Reveal: [`engine-gmt/topbar.tsx`](../engine-gmt/topbar.tsx) — `onToggle` for menu-bound features now calls `togglePanel('Audio' | 'Drawing', true)` after activating.
+
+### Unified formula picker
+
+**User-facing**
+- New formula picker replaces the long flat dropdown. Sidebar lists six categories — **Power Fractals**, **Box & Folds**, **Menger & IFS**, **Polyhedra**, **Kleinian / Apollonian**, **Hybrids & Experimental** — plus separate launchers for **Modular** (graph editor) and **Workshop** (Fragmentarium import). Right pane shows thumbnails (64×64 cards by default; bigger preview floats alongside on hover).
+- **Start typing to search.** The search bar is hidden by default — any printable key opens it and feeds in the character. Fuzzy match across name, id, category. There's also a 🔍 button next to the view toggle if you'd rather click.
+- **Grid / List view toggle** in the header. List mode shrinks the popover by ~40% and drops thumbnails — useful on low-perf devices or when you know the name. Preference persists across sessions (`gmt.formulaPicker.viewMode` in localStorage).
+- **Keyboard navigation.** Arrow keys move through the grid (left/right step columns; up/down step rows; grid-aware row jumps). ArrowLeft from the leftmost column escapes into the category sidebar; up/down there auto-activates categories. Enter commits, Escape closes. Disabled cards are skipped during arrow nav.
+- **Rendering pauses while the picker is open** so the GPU isn't competing with thumbnail decode. Your prior pause state is restored on close (manual pause stays paused).
+- **Online gallery surfaced in the picker.** Two new sidebar entries under "Scenes":
+  - **Curated Gallery** — the public gallery, paginated 24 at a time via a "Load more" button.
+  - **My Submissions** — your own submissions when signed in, across all statuses (pending / approved / rejected) with badges; pending and rejected scenes load correctly even though they're hidden from the public browse.
+  Click a scene and it loads directly into the engine.
+- **Modular's graph panel moved to the left dock.** Picking Modular now reveals the left dock and focuses the Graph tab automatically (same pattern as the Engine Config panel).
+
+**Capability protocol consumer**
+- Interlace's secondary-formula picker now uses the same component. Formulas that can't be a secondary (self-contained SDEs, Modular) are grayed with a tooltip explaining why — first UI to consume `evaluateCompat`'s reject-set output via the unified picker.
+
+**Where**
+- Component: [`engine-gmt/components/FormulaPicker/`](../engine-gmt/components/FormulaPicker/).
+- Design doc: [`plans/formula-picker-design.md`](../plans/formula-picker-design.md) — updated with implementation notes.
+- Call sites swapped: [`engine-gmt/components/panels/formula/FormulaSelect.tsx`](../engine-gmt/components/panels/formula/FormulaSelect.tsx) (main picker), `interlaceFormula` param via [`components/AutoFeaturePanel.tsx`](../components/AutoFeaturePanel.tsx) dispatch into `componentRegistry`'s `'interlace-secondary-picker'`.
+
+### New formula: Sine Julia 3D
+
+**User-facing**
+- New formula in the gallery (Featured row and Hybrids & Experiments category): **Sine Julia 3D**. Julia sets of a 3D extension of `s·sin(z)+c` — `y` plays the imaginary role through `sinh/cosh`. Many parameter combinations produce Kleinian-like limit-set forms.
+- Four parameters: **Scale**, **Inv. Center** (sphere-inversion center, π-scaled vec3), **Inv. Radius**, **Pre-Rotation** (per-axis xy/yz/xz angles, applied once before iteration).
+- Default preset uses Julia mode on with C at the origin; wiggle Julia X/Y/Z and the inversion center to find the interesting shapes. Default 12 iterations.
+
+**Attribution**
+- Formula + distance estimator are ported from amoser's "Sine Fractal 3D" Shadertoy (2026), CC-BY-NC-SA 3.0 (Shadertoy default). Family discussion thread: [fractalforums.org topic 5591](https://fractalforums.org/index.php?topic=5591.0), where Pupukuusikko developed an independent DE on the same family.
+- This port covers the formula, the DE (`0.25 · scale · inverseSqrt(max(dz²))`), and the framing transforms (sphere inversion + per-axis rotation). The Shadertoy's shading stack (Minnaert diffuse, screen-space SSS, mini-probe GI, halation, ACES, FXAA/QCAA) is **not** ported — GMT renders this through its standard lighting pipeline.
+
+**Implementation**
+- New [`engine-gmt/formulas/SineJulia3D.ts`](../engine-gmt/formulas/SineJulia3D.ts). Per-iter body computes `z' = scale · vec3(sin(x)cosh(y), cos(x)sinh(y)cos(z), sin(z)cosh(y)) + c` then multiplies a running `dz²` by amoser's closed-form `S = scale²(sinh²y(2+A−B) + A+B)/3` with `max(S, 0.5)` to guard against inversion overshoot. `dr` carries `sqrt(max(dz²))` across iters; custom `getDist` returns `0.25 · scale / dr`. `preambleVars` lists `sj_dz2`, `sj_cWrap` for interlace correctness.
+- Sphere inversion and 3-axis per-plane rotation run once in `loopInit`, matching amoser exactly. The Julia constant is wrapped into `[-π, π]` once via `mod`.
+- Registered in [`types/common.ts`](../engine-gmt/types/common.ts) (FormulaType union), [`formulas/index.ts`](../engine-gmt/formulas/index.ts) (loading-screen list, Featured row after Claude), [`formulas/categories.ts`](../engine-gmt/formulas/categories.ts) (Hybrids & Experiments).
+- Audit entry: [docs/gmt/23_Formula_Audit.md](gmt/23_Formula_Audit.md#new-formulas-audit-2026-05-26).
+
+**Caveats**
+- Default preset uses `escape: 1e10` so the loop always runs all 12 iterations — sinh-driven z growth would otherwise trip the standard bailout. Lowering `coloring.escape` will produce degenerate geometry.
+- Capability is `shape:per-iteration` so Hybrid and Interlace will be available in the UI, but the custom DE doesn't combine cleanly with other formulas — treat as solo.
+- Amoser's 13 named parameter presets are not ported; the zero-defaults reproduce his first preset. Importing the rest is a mechanical follow-up.
+
+## 2026-05-24
+
+### Send Feedback from the Help menu
+
+**User-facing**
+- New **Send Feedback** item in the `?` menu. Pick a category (bug report, feature request, support), write a message, optionally include an email for a reply. Anonymous works too — but if you want me to write back, leave an address or sign in first.
+- An **Include current scene** checkbox attaches your live `.gmf` (sky and other heavy data stripped) so bug reports come with a reproducible scene. Capped at 200 KB after stripping.
+- Limit of 5 submissions per hour per browser to keep the inbox sane.
+
+## 2026-05-18
+
+### Audio clips on the timeline now play their full duration + survive fps changes
+
+Full report: [docs/animation-refactor/22_AUDIO_TIMELINE_SYNC_REPORT.md](animation-refactor/22_AUDIO_TIMELINE_SYNC_REPORT.md). Commit `0814749` on branch `feature/audio-fps-sync`.
+
+**User-facing**
+- **Audio clips loaded into the timeline now play through to the end.** Previously, dropping an audio file in and hitting play would cut off the sound about halfway through (e.g. the iconic Mario death sound stopped before the recognisable ending). The clip and the playhead now agree on where the audio ends.
+- **Changing project fps no longer slides audio clips out from under your keyframes.** If you had a beat lined up with a keyframe at fps=60 and switched to fps=30 in "match wall-clock" mode, the audio used to drift while the keyframes moved — now they scale together.
+- **The whole GMT main app now runs at the correct speed.** Animation playback, LFOs, modulation rules, audio reactivity, recording, FPS counter, performance monitor — everything that was secretly advancing at 2× wall-clock now advances at the rate it claims. Timeline at fps=30 advances 30 frames per real second, not 60.
+- **Loading audio is faster and works for a wider range of files.** Replaced a 50 ms polling loop with the browser's actual metadata-loaded event, and the strip no longer mis-identifies certain MP3 / AAC files as 1 s slices when their decode is slow.
+- **The waveform now reflects what actually decoded.** For files where Web Audio's decoder under-reports duration (some VBR MP3, MPEG-2 Layer III at low sample rates, some AAC), the part it couldn't decode shows as blank space at the tail of the clip — visual feedback that the file decoded only partially — instead of being stretched across the full clip width.
+
+**Re-bench notice** — the 2× tick rate was active in `app-gmt/` for an unknown duration. Any animation or perf bench numbers taken on `app-gmt` during that window reflect 2× state. Verify any cited numbers from `project_appgmt_perf_bench.md` and `project_animation_refactor_spike.md` if they're load-bearing.
+
+**Implementation**
+- `setFps(newFps, 'match')` in [`store/animation/playbackSlice.ts`](../store/animation/playbackSlice.ts) now remaps `state.audioClips[*].startFrame` by `newFps / oldFps` alongside the existing keyframe/tangent/`durationFrames`/`currentFrame` remap. Frame-indexed fields scale; `trimStartSec` / `trimEndSec` are in seconds and stay put.
+- `AudioAnalysisEngine.getTrackInfo(deckIndex).duration` returns `0` (not the previous `|| 1` synthetic fallback) when the deck's `<audio>` element hasn't reported metadata yet. The `|| 1` made `waitForMetadata` polling false-resolve and lock the clip to a 1-second slice if `computeWaveformPeaks` subsequently failed or lagged.
+- `AudioClip` gained `peaksDurationSeconds?: number` ([`store/animation/types.ts`](../store/animation/types.ts)). `durationSeconds` now reflects `<audio>.duration` (the playback authority, lenient decoder); `peaksDurationSeconds` reflects `audioBuf.duration` (used only for the waveform's peak-bucket-to-audio-time mapping). The Waveform component takes `peaksDurationSec` for its bucket math.
+- [`app-gmt/AppGmt.tsx`](../app-gmt/AppGmt.tsx) no longer mounts `<RenderLoopDriver />`. `<GmtRendererTickDriver />` (already mounted inside the R3F `<Canvas />`) is GMT's canonical tick driver — it owns `TickRegistry.runTicks(dt)` AND dispatches the worker frame. Both being mounted made `runTicks` fire twice per RAF.
+- [`engine/TickRegistry.ts`](../engine/TickRegistry.ts) gained a 1 ms dedup guard. Two `runTicks(dt)` calls in the same RAF frame are treated as a sibling-driver duplicate; the second is suppressed and a single dev-only warning surfaces the wiring bug. Catches the failure mode that previously presented as silent 2× animation drift.
+- `AudioAnalysisEngine.waitForMetadata(deckIndex, timeoutMs?)` — new event-driven helper. Resolves on the deck's `loadedmetadata` / `durationchange` events, or with `0` on timeout. Replaced AudioStrip's local 50 ms-poll `waitForAudioMetadata` helper.
+- `AudioAnalysisEngine.getElementDuration(deckIndex)` — direct accessor for `<audio>.duration`. Avoids round-tripping through `getTrackInfo` (which builds a full snapshot of unrelated fields) when only the duration is needed.
+
+**Regression**
+- New `npm run smoke:audio-fps-remap` ([`debug/smoke-audio-fps-remap.mts`](../debug/smoke-audio-fps-remap.mts)) — boots the page, seeds an audio clip + keyframe at frame 120 at fps=60, calls `setFps(30, 'match')`, asserts both remap to frame 60. Also asserts round-trip 30→60 restores 120, and `'keep'` leaves audio untouched. Verified to fail pre-fix (`audio startFrame expected 60, got 120`) and pass post-fix.
+
+## 2026-05-04
+
+### app-gmt UI touchups (batch)
+
+Plan: [plans/app-gmt-touchups.md](../plans/app-gmt-touchups.md). Ten small items the user listed against `dev/app-gmt`; each addressed independently. No new architecture, no breaking changes.
+
+**User-facing**
+- **Gradient → Repeats slider** is now log-scaled. Half the bar covers the artistic 0.1–~3 range instead of compressing it into the leftmost 5%. Geometric midpoint at slider 50%.
+- **Internal Scale** dropdown (Quality → Resolution) gains a **0.75×** option between 0.5 and 1.0.
+- **Viewport render-scale pill** (top-center, only in Fixed mode) is now linked to the same `aaLevel` field as the Quality panel's Internal Scale — changing one updates the other. Same 0.75 step added.
+- **Auto-Stop default** dropped from 256 to 64 samples — better default for fast iteration. Existing scenes with an explicit cap saved into a preset keep their value.
+- **Bucket-render ETA pill** rounds to 30s (`10.5m – 12m`) instead of showing seconds during long renders. Elapsed counter and video-export timing keep their precise format.
+- **Live blit during a high-res bucket render** (e.g. 8k tile downsampled to ~800px viewport canvas) is now box-filtered instead of bilinear-only. Cap 8×8 taps. No visible change outside bucket render.
+- **Loading screen progress bar** is now a clip-path mask instead of a `transform: scaleX` — the inner Julia animation no longer compresses with the fill.
+- **Viewport aspect-ratio dropdown** has a new **Custom...** entry that opens a small W×H dialog (Enter applies, Esc cancels).
+- **Shadow popover** is now flush to its edges; the per-row content owns its own padding.
+- **Bucket-render popover** no longer resets the on-screen accumulator on open/close at default settings. Adaptive-resolution suppression is now scoped to "while a bucket render is actually running" instead of the whole popover lifecycle, and the Fixed-mode swap is restored on close only if it was actually applied on open.
+
+**Implementation**
+- New `Popover` `padding?: 'default' \| 'none'` prop replaces an `!important` Tailwind override path.
+- New `buildLogMapping(min, max)` helper exported from `AutoFeaturePanel.tsx` so hand-rolled Sliders (those bypassing the auto-panel) can share the canonical log-scale `customMapping` instead of re-deriving it. Used by the Repeats slider in `ColoringHistogram.tsx`.
+- New `formatEtaCoarse(secs)` helper in `components/timeline/exportHelpers.ts` (re-exported from the engine-gmt shim). The bucket panel calls it; existing `formatTimeWithUnits` consumers untouched.
+- `setAALevel` and `setAdaptiveSuppressed` in `renderControlSlice.ts` now early-return on no-op writes — re-clicking the active viewport pill (or repeat-suppressing) no longer emits stray `reset_accum` events.
+- `setRenderScaleSource(...)` in `app-gmt/main.tsx` repointed at the canonical root `aaLevel` field. Was reading `quality.aaLevel` (a stale field still seeded by some preset blocks; no UI now reads it — separate cleanup).
+- Bucket panel tracks `didSuppressAdaptiveRef` / `didSwapResolutionRef` so the unmount cleanup only undoes side effects it actually applied.
+- New `uPreviewBoxTaps` uniform on `displayMaterial`. The post-process shader does an N×N box average around `sampleUV` when taps > 1 (capped 8×8). `handleRenderTick` sets `taps = ceil(srcSize/canvasFootprint)` during bucket render; default 1 = single sample = bit-identical to before for normal rendering.
+- Custom-resolution dialog uses the same portal/backdrop pattern as `HardwarePreferences.tsx` and `Help.tsx`. Worth extracting a `Modal` primitive when there's a fourth caller; the three current sites all carry slight variations and the deduplication isn't load-bearing yet.
+- `applyAspectLock` in the bucket panel narrows on `typeof value !== 'number'` instead of enumerating sentinels — `'Custom'` and any future non-numeric ratio sentinel can no longer leak into a NaN-divide.
+
+**Initial mis-diagnosis on the tile filtering (worth recording so we don't repeat it)**
+- First fix path tried mipmaps on the per-tile composite RT (`LinearMipmapLinearFilter` + manual `gl.generateMipmap` regen at blit time). Float32 + manual generate-mipmap on a Three `WebGLRenderTarget` with `generateMipmaps: false` produces black output — likely Three's RT-tracking doesn't allocate mip-level storage when the flag is off, so the GPU samples undefined memory at mip > 0. Reverted.
+- Second mis-diagnosis: the *composite* end-of-tile blit isn't where the user actually saw the blockiness. The visible "blocky" comes from the *live in-progress* blit reading `pipeline.outputTexture` (the per-tile MRT, e.g. 8k for an 8k 1×1 export) into the canvas (~800px CSS) every frame. The display path is `handleRenderTick` → `displayMaterial`, not `onTileBlitToScreen`. Real fix is the box-tap uniform on `displayMaterial`, applied in the live blit path.
+
+**Pending**
+- Item #4 (the "saved bucket export was the last tile enlarged") — couldn't reproduce after the dual-`aaLevel` rewire (#3b). User confirmed deferred-acceptance pending re-test against this build.
+- Stale `quality.aaLevel` field in 8 formula preset blocks + 2 type files — no reader after the rewire above. Separate cleanup PR.
+
+## 2026-05-03
+
+### True area lights — physical soft shadows + correct specular highlights
+
+**User-facing**
+- New light type: **Sphere (Area)**, alongside Point and Directional. Right-click any light orb (or use the ☰ menu) and pick "Sphere (Area)" to convert it. Selecting Sphere on a zero-radius light bumps the radius to 0.5 so it has finite extent to start from.
+- Sphere lights produce real soft shadows that get **sharper close to occluders, softer far from them** — geometrically correct, the way an actual lamp behaves. Shadow softness is determined by the sphere's size and distance to the surface, not by the global Hardness slider.
+- Glossy and mirror surfaces now show **specular reflections of the lights themselves** — the bright highlight you'd expect from a physical area light reflecting off a polished surface. Previously the path tracer caught light only via the diffuse direct-lighting estimator, so direct specular highlights from lights were missing.
+- Convergence is **roughly twice as fast** for scenes that use sphere lights — clean shadows in ~64–128 accumulation frames instead of 256+. The path tracer combines two estimators (next-event sampling + BSDF sampling) using Multiple Importance Sampling, which lowers variance.
+- Enable via the engine panel: **Path Tracing Core ON → Active Mode = Path Tracing → True Area Lights ON**. Then change a light's type to Sphere via its right-click menu. Recommended workflow is in the Light Studio help.
+- The "Visible Sphere" toggle on a Sphere light now controls **only the rendered emitter ball** — turn it off to hide the glowing sphere from the viewport while keeping the area light fully active. (For Point lights the toggle keeps its old meaning: off = invisible analytical light.)
+- Compile cost: about **+600 ms** the first time you enable True Area Lights (one-time recompile). Per-frame GPU cost scales with sphere-light count; default 3-light scenes are unaffected by anything other than the lights you actually convert.
+- Existing scenes load unchanged. The new system is opt-in per light AND per compile gate.
+
+**UI cleanup**
+- The "Area Lights" checkbox under the shadow engine settings was renamed **Soft Shadow Jitter** — it was confusingly named the same thing as the new True Area Lights, even though it's a separate feature (a fast stochastic-jitter trick for Point lights, kept as-is). The shadows-panel header button changed from "Area" to "Jitter" with a tooltip pointing to Sphere lights for the physical path.
+- The Hardness slider description now notes it only affects Point and Directional lights — Sphere lights derive softness from physics.
+- A small amber warning appears in a Sphere light's popover if the light won't actually integrate as an area light (e.g. you set type to Sphere but haven't enabled Path Tracing or True Area Lights yet). It tells you exactly what's missing.
+
+**Bug fixes (along the way)**
+- Sphere lights in Direct (non-PT) mode were treated as Directional — they had no position and ignored their `uLightPos` uniform entirely. Now correctly fall through to the Point branch in Direct mode and look identical to a Point light at the sphere's center.
+- The visible glowing emitter sphere wasn't rendering for Sphere-type lights — the visualization filter was excluding them alongside Directional lights. Fixed.
+- Volumetric god-rays scatter had the same Sphere-as-Directional bug. Fixed.
+
+**Implementation**
+- Plan: `plans/area-lights.md`. Live status: `HANDOFF.md`. Architecture notes: `docs/gmt/02_Rendering_Internals.md` § Sphere Area Lights & MIS.
+- New shader helpers in `engine-gmt/shaders/chunks/pathtracer.ts`: `intersectAreaLight` (closest-hit test against type-2 lights, reuses `intersectSphere` from `math.ts`), `pdfSphereLightDir`, `pdfVNDF` (Heitz 2018 §3 eq. 17), `pdfBSDF` (mixture density matching the bounce-direction sampler), `misPower2` (Veach 1995 power-heuristic), `tracePTBounce` (wrapper around `traceSceneLean` that runs the sphere-light intersection alongside the fractal march).
+- New light-type-2 NEE branch samples a point on the sphere surface (Marsaglia 1972) and uses `1/pdfSphereDir` as the compensation factor instead of the delta-light `activeCount`. Shadow ray for sphere lights forces `GetHardShadow` on the sampled direction so accumulation across frames produces the correct soft shadow — no double-soften from `GetSoftShadow`'s penumbra approximation, no override from the stochastic-jitter path.
+- BSDF estimator at the next-iter `!hit` branch reads previous-bounce surface state (`n_prev` / `viewDir_prev` / `roughness_prev` / `probSpec_prev`, captured before each bounce trace), evaluates `pdfBSDF` against the direction now hitting a light, weights against `pdfSphereLightDir` via `misPower2`. Delta lights collapse to `w_nee = 1, w_bsdf = 0` automatically.
+- New `LightType` value `'Sphere'` widened in both `types/graphics.ts` copies. New `hideEmitter?: boolean` field decouples emitter visibility from physical radius. New `uLightHideEmitter` Float32Array uniform.
+- New compile gate `ptAreaLights` in `LightingFeature` params. All shader code is `#ifdef PT_AREA_LIGHTS` so default-PT shaders are bit-identical to before; GPU driver strips the gated paths at compile when off.
+- Pending: Phase 4 unbias bench (spec is in the plan doc) — until built, MIS correctness is "reasonably believed" but not pixel-proven.
+
+## 2026-05-01
+
+### Mobile mode for app-gmt
+
+**User-facing**
+- Open app-gmt on a phone or tablet in landscape and the UI is finally usable. Hold it in portrait and you get a "Landscape Recommended" prompt with a rotate-device icon — rotate and the prompt dismisses. The address bar collapses on first touch so the canvas fills the screen.
+- One-finger drag in Orbit mode rotates the camera around its target; pinch zooms; two-finger drag pans. (Drei's native touch path; the desktop "rotate around the cursor" trick is mouse-only — it doesn't translate to multi-touch.)
+- Switch into Fly mode and the right-side panel hides so the joysticks (left = move, right = look) and the Orbit/Fly toggle pill have viewport reach. Mode switch is on-screen now (no Tab key needed).
+- The topbar is much tighter on mobile — quality preset chip, adaptive-resolution badge, render-region toggle, bucket render, and the share-link icon are all hidden. The dividers around the quality chip are gone too. Light Studio still shows the first 3 lights; the expand-to-8-lights chevron is desktop-only (the 3×3 grid doesn't fit comfortably).
+- Tap a topbar menu (System / Camera / File / Help) on mobile and it replaces the right dock with a scrollable side panel instead of overflowing as a popover. Tap the X in the panel header to dismiss, or tap a different menu to swap.
+- The System menu has a new "UI Layout" tri-state (Auto / Force Mobile / Force Desktop) — Auto detects by device, the others override. The setting persists across reloads.
+- Mobile-only items in the System menu: 6-button Quality preset grid (Preview / Fastest / Lite / Balanced / Full / Ultra) and an Adaptive Resolution toggle, replacing the topbar controls hidden above. Share Link is in the File menu (always — desktop and mobile) so mobile users can still share their scene.
+- Boot compile is roughly half the time on phones (~5 s vs ~10 s) — when the device is mobile and you haven't picked a preset yet, the app starts on Fastest instead of Balanced. Pick anything else once and it remembers.
+- Timeline / animation editing is desktop-only for now. (Mobile animation UI is researched in `plans/mobile-animation-research.md`; deferred for scope.)
+- iOS notch / Dynamic Island / Android gesture bars don't overlap UI any more — safe-area insets applied on all four edges.
+
+**Implementation**
+- New engine primitives in `engine/components/`: `LandscapeGate` (the rotate-prompt overlay) and `MobileViewportShell` (root wrapper that swaps `fixed inset-0` ↔ `sticky top-0 h-[100vh] overflow-hidden` for the iOS Safari address-bar collapse). Both consume `useMobileLayout()` so they self-gate.
+- `useMobileLayout()` rewritten to resolve a new `uiModePreference: 'auto' | 'mobile' | 'desktop'` field on the engine store (replacing the old `debugMobileLayout: boolean` debug toggle). Persists to `localStorage` under `gmt.uiModePreference`. `isMobileSnapshot()` exported for non-React contexts (menu `when:` predicates, install-time gates).
+- `engine/plugins/Menu.tsx` gained a `mobileMenu` API (open / close / toggle / getActive / subscribe) and a `<MobileMenuHost>` component. On mobile, `MenuAnchor` writes the active menu id to global state instead of opening a local popover; `<MobileMenuHost>` renders the items in a scrollable side panel where the right dock would go. Apps subscribe and gate their right-dock rendering on `mobileMenu.getActive() !== null`.
+- `engine/plugins/SceneIO.tsx` File menu retired its bespoke 90-line component and now uses `menu.register('file', …)` + `menu.registerItem('file', …)`. Icon-only (FolderIcon + chevron), matches Camera/System pattern, inherits MobileMenuHost rendering. Load is the only `'custom'` item — the hidden `<input type="file">` has to live with its trigger button to be `.click()`-able.
+- `engine-gmt/topbar.tsx` got a `mobileHidden(Component)` HOC and `pillClass(active, extra)` helper. Used to wrap topbar items that should hide on mobile (AdaptiveResolution, RenderRegionToggle, ShareLinkButton, ViewportQuality, both dividers) and to share the cyan active-button styling between the new `UiModePreferenceMenuItem` and `MobileQualityMenuItem` pill rows.
+- `engine-gmt/navigation/Navigation.tsx`: one-line touch gate `if (e.pointerType === 'touch') return;` added to the custom cursor-anchored orbit `pointerdown` handler at line 666. Restores drei's native `THREE.TOUCH.ROTATE` / `DOLLY_PAN` on touch (which was already declared at line 1326 but was being shadowed because the handler's only gate was `e.button !== 0`, which passes for touch).
+- `hooks/useAppStartup.ts`: after `detectHardwareProfileMainThread()`, if mobile and the active scalability preset is the engine default `'balanced'`, calls `applyScalabilityPreset('fastest')`. User-chosen presets are respected.
+- `app-gmt/AppGmt.tsx`: hardcoded `isMobile={false}` props on `<GmtNavigationHud>` mounts (lines 206, 253) replaced with the real flag. Right-dock JSX now `{isMobileMenuOpen ? <MobileMenuHost /> : !(isMobile && cameraMode === 'Fly') && <Dock side="right" />}`. `<MobileControls />` mounted (was missing entirely from the port). `<TimelineHost>` and `<Dock side="left">` gated on `!isMobile`.
+- Plan: `plans/mobile-mode-app-gmt.md`. Reference doc: `docs/engine/17_Mobile_Layout.md` (covers detection, preference, layout primitives, mobile-menu architecture, sibling-app adoption checklist, known limitations).
+- Pending: real-device validation by user. Known limitations: mobile menu outside-tap dismissal not implemented (X button only); `installBucketRender` install-time gate is non-reactive (reload required to dynamically remove); ~15 redundant resize listeners across an active session (single global listener would be cleaner — works fine for now).
+
+### Compile progress UI unification
+
+**User-facing**
+- The "Loading Preview… 0 %" toast that used to sit frozen for the entire boot compile (and the entire 12-23 s Firefox compile) now actually animates a progress bar over the estimated compile time, snapping to 100 % when the worker finishes.
+- The boot screen's progress bar tracks the real compile estimate too (Fastest preset ~3-4 s, Lite ~5-6 s, Balanced ~7-8 s, Ultra ~17 s+) instead of the previous arbitrary 2.5 s timer that hit 100 % then idled until the worker caught up.
+- The progress message now matches what's actually happening: "Compiling Shader…" for single-stage compiles (Firefox, or same-formula recompiles like quality-preset switching) and "Loading Preview…" only when there's a genuine two-stage preview-then-full happening (Chrome with parallel compile + new formula).
+
+**Implementation**
+- New `store/CompileProgressStore.ts` (Zustand) is the single source of truth: `phase | message | startedAt | estimateMs | doneAt | cycleId`. `selectProgress(state, now)` is an exponential approach to 95 % over the estimate, snapping to 100 on `finish()`. `LoadingScreen` and `CompilingIndicator` are pure views over it.
+- `CompileGate.queue()` now opens a cycle on the store, returns a `Promise<void>`, and arms a 500 ms safety timer that fires the queued work even if `pingRef` never paints (defensive against unmount races).
+- `WorkerProxy._handleWorkerMessage('COMPILING')` bridges worker IS_COMPILING events into the store: string-while-idle → `start()`; string-while-compiling → `setMessage()`; `false` → `finish()`.
+- Bar fill switched to `transform: scaleX` (compositor thread) instead of `width: %` (main render thread). Fix for Firefox where heavy worker compiles starve main-thread paint and `width` transitions stall visually.
+- `useAppStartup` rewritten to be renderer-agnostic — takes `bootRenderer / pushOffset / isBootedOrRequested / estimateBootCompileMs` callbacks via options. AppGmt wires these to `gmtRenderer.boot` and engine-gmt's `getProxy()`.
+- `engineStore.setCompileEstimator(fn)` registers an app-specific estimator. `setFormula` and `loadScene` call it before `compileGate.queue` so the next cycle uses a fresh estimate.
+
+### Stub WorkerProxy → registry (footgun fix)
+
+- `engine/worker/WorkerProxy.ts` was a no-op stub left from the engine extraction. Pre-existing dev/ code (engineStore, components, hooks) imported the stub; engine-gmt code imported its own real worker-backed proxy. They were two different singletons — generic dev/ code saw `isBooted = false` forever while the engine-gmt worker was actually live.
+- The stub is now a registry: `setProxy(realProxy)` is called from `installGmtRenderer` so `getProxy()` from both `engine/` and `engine-gmt/` returns the same instance in the GMT app. fluid-toy / fractal-toy / test harnesses that don't install get the no-op fallback (same behavior as before the fix).
+- This fix surfaced because Phase 2 of the spinner unification accidentally exercised the stub's `bootWithConfig` for the first time — useAppStartup's bootEngine was posting BOOT to the no-op stub while the real worker waited. Worker timed out at 30 s.
+
+## 2026-04-30
+
+### Timeline: FPS change has Keep / Match modes; deterministic playback throttles to project FPS
+
+**User-facing**
+- Changing the project FPS (kebab menu in the timeline toolbar) used to silently keep keyframes at their existing frame indices, which secretly changed the speed of every existing animation — a key at frame 30 played twice as fast after switching 30→60. There's now a small **Keep frames / Match time** toggle directly under the FPS field:
+  - **Keep frames** (default, matches old behaviour) — keys stay at the same frame index. Wall-clock time of every key shifts.
+  - **Match time** — keys, the timeline length, the playhead, and Bezier handles are all rescaled by the FPS ratio so the animation looks identical at the new framerate. Use this when you change FPS to match a target export and don't want to retime everything by hand.
+- FPS changes are now properly undoable as a single step (one drag = one undo entry, even though dragging fires hundreds of intermediate values).
+- **Deterministic Playback** (also in the kebab menu) used to advance one timeline frame per render tick — meaning at 60Hz monitor refresh + project FPS=30, the live preview ran at 2× speed compared to the exported video. It now actually plays back at project FPS so the preview matches the export frame-for-frame on any monitor refresh rate. Useful for syncing motion to music or matching action to a specific frame count.
+- Kebab menu now flips upward when the timeline is docked at the bottom of the viewport so it stays on-screen instead of being clipped against the toolbar's edge.
+
+**Mechanism**
+- `setFps(newFps, mode = 'keep')` rewritten in `dev/store/animation/playbackSlice.ts`. `'match'` mode rescales every keyframe's `frame`, Bezier handle x-deltas, `durationFrames`, `sequence.durationFrames`, and `currentFrame` by `newFps / oldFps`. Collisions (when two source frames round to the same target at large ratios) resolve last-writer-wins.
+- New `FPS` history variant in `dev/store/animation/types.ts` carrying the four-field tuple (sequence + fps + duration + currentFrame). `undo` / `redo` in `sequenceSlice.ts` route by item type via two small helpers (`captureInverse`, `applyHistory`); the previous duplicated branches collapsed to 5-line bodies.
+- 400ms coalesce window on FPS history pushes — a continuous drag pushes one entry (the pre-drag state); discrete edits more than 400ms apart push separate entries.
+- Orphan `AnimationSequence.fps` field deleted from `dev/types/animation.ts` and `dev/engine-gmt/types/animation.ts`. Nothing read it; the playback slice's `fps` was the only live copy. Old `.gmf` payloads still load — JS ignores extra keys.
+- `AnimationEngine.tick` now accumulates wall-clock dt under deterministic playback and emits integer frames once `accum ≥ 1/fps`. Accumulator resets on pause and discards backlogs `> 250ms` (tab hidden, debugger pause).
+- `TimelineToolbar` kebab menu portals to `document.body` and uses `position: fixed` with measured viewport coords. The previous `top-full` / `bottom-full` approach was clipped by the timeline panel's `overflow-hidden` ancestor; portaling escapes both the overflow clip and the `backdrop-blur` containing-block trap.
+
+Docs: [docs/engine/08_Animation.md](engine/08_Animation.md) decisions log + Sequence shape, [docs/gmt/04_Animation_Engine.md](gmt/04_Animation_Engine.md) §6.1 / §7.1, help topic `ui.timeline` / `anim.transport` updated.
+
+### Bucket render: redesigned panel + UI primitives
+
+**User-facing**
+- The High Quality Render popover no longer covers the canvas while a render is in flight. When you hit Export the panel collapses to a compact pill — same anchor under the topbar icon — that just shows the progress bar plus a tile counter, elapsed time, and an **ETA range** (±10%, computed locally). Stop button stays one click away. Setup-side controls, which used to dim out behind the rendering view, are simply gone until the render finishes.
+- Action buttons (Refine / Preview / Export / Stop / Match Viewport) now use the standard GMT button style, matching the rest of the topbar and AutoFeaturePanel chrome.
+- New **Ratio** dropdown beside Width/Height. Pick *Free*, or any of the standard aspect ratios (1:1, 16:9, 21:9, 4:3, 4:5, 9:16, 2.35:1, 2:1) — editing one dimension recomputes the other. The same ratio list now drives the viewport "fit to window" dropdown, the Quality > Resolution Ratio dropdown, and this one — they're all sourced from a single module.
+- Output Size **Preset** list expanded: SVGA, Skybox sizes, three 21:9 sizes (Ultrawide 2560×1080, UWQHD 3440×1440, 5K2K 5120×2160), and additional square presets are now available everywhere the resolution dropdown appears (Quality > Resolution and bucket render share the list).
+- Tile Grid laid out as a single row (`Columns [N] × Rows [M]`); panel itself is 32 px narrower.
+- Slider helper text in the bucket panel now uses the same `<Hint>` component as the rest of the app, so the global hint-toggle hotkey hides them along with everything else.
+
+**Mechanism**
+- New `dev/data/resolutionPresets.ts` — single source for `ASPECT_RATIOS` (viewport fit-to-window), `ASPECT_LOCK_OPTIONS` (W/H ratio-lock dropdowns; Free + 8 ratios), and `RESOLUTION_PRESETS` (18 pixel sizes, union of what bucket and Quality previously had separately). Three call sites now import from one module: `engine/plugins/viewport/FixedResolutionControls.tsx`, `engine-gmt/components/panels/quality/QualityRenderControls.tsx`, `engine/plugins/topbar/BucketRenderPanel.tsx`.
+- New `dev/components/Hint.tsx` — extracted from `AutoFeaturePanel`'s local `renderHint` helper. Reads `showHints` itself, so callers don't need to gate the render. AutoFeaturePanel's 5 `renderHint(...)` call sites now use `<Hint>` directly; the wrapper helper was deleted.
+- New `dev/components/NumberInput.tsx` — labeled `DraggableNumber` with the standard `h-6 bg-black/40 rounded border` chrome that was inlined 6× across BucketRenderPanel and QualityRenderControls. Both files now use the shared component.
+- New `dev/utils/resolutionUtils.ts` exports `snap8(n, min=64)` — the GPU-friendly multiple-of-8 rounder that previously appeared inline in three files (BucketRenderPanel, QualityRenderControls, FixedResolutionControls).
+- `calcEtaRange(elapsedSec, done, total)` consolidated in `dev/components/timeline/exportHelpers.ts` (alongside `formatTimeWithUnits`). Was triplicated in `engine-gmt/.../exportRunner.ts`, `fluid-toy/.../exportRunner.ts`, and inline in BucketRenderPanel; all four sites now import the same function.
+- `BucketRenderPanel`'s `BUCKET_STATUS` event handler now performs change-detection before calling `setProgress` / `setTileInfo`, so engine-rate status events don't trigger a React re-render every tick when nothing has actually moved.
+- `BucketRenderPanel`'s match-viewport-aspect `useEffect` had no dependency array and was running every render. Now declares `[matchViewportAspect, outputWidth, outputHeight, viewportPixels]` and reads `viewportPixels` from the existing memo instead of re-grabbing store state inside the effect body.
+
+Docs: [docs/engine/05_Shared_UI.md](engine/05_Shared_UI.md) catalog updated with `<Hint>` and `<NumberInput>`; help topic `bucket.render` updated to describe the rendering view's tile/elapsed/ETA stat strip and the new Ratio dropdown.
+
+### Undo: per-scope stacks (camera/param no longer conflate)
+
+**User-facing**
+- Pressing Ctrl+Z to undo a parameter change reliably undoes a parameter change. Previously, if a camera gesture had landed on top of the shared undo stack (easy to trigger when reaching for a slider right after orbiting), Ctrl+Z would roll back the camera move instead. Ctrl+Shift+Z still owns camera undo; Ctrl+Z over the timeline still owns animation undo.
+- The Camera menu's "Undo Move" / "Redo Move" items now enable/disable based on whether a camera move actually exists to undo, rather than lighting up whenever any parameter edit happens to be in history.
+
+**Mechanism**
+- `historySlice` split from one unified stack with scope tags into four typed stacks: `paramUndoStack` / `paramRedoStack` / `cameraUndoStack` / `cameraRedoStack`. `MAX_STACK = 50` per lane independently.
+- `scope` is now required on `undo` / `redo` / `canUndo` / `canRedo` / `peekUndo` / `peekRedo` — the unscoped form is gone. Type signature forces every call site to declare which lane.
+- New typed entry points: `beginParamTransaction()`, `endParamTransaction()`, `pushCameraTransaction(state: CameraState)`. Replaces the runtime-overloaded `handleInteractionStart(mode | CameraState)`. Old name kept as a back-compat shim.
+- `engine/plugins/Undo.tsx`: global Ctrl+Z / Ctrl+Y / Mod+Shift+Z hotkeys and the topbar UndoButton/RedoButton all pass `'param'`. Camera Ctrl+Shift+Z handled by app-gmt's priority-10 `gmt.undoCameraMove` registration as before.
+- `engine-gmt/topbar.tsx`: Camera menu's "Undo Move" / "Redo Move" disabled-checks now use `canUndo('camera')` / `canRedo('camera')` (were reading the unified stack length — same bug class).
+- `app-gmt/AppGmt.tsx`: `GmtNavigation.onStart` calls `pushCameraTransaction(s)` directly. The `as any` cast is gone; the entry point is properly typed `(state: CameraState) => void`.
+
+Docs: [06_Undo_Transactions.md](engine/06_Undo_Transactions.md) rewritten; [20_Fragility_Audit.md § F2b](engine/20_Fragility_Audit.md#f2b--undo-lane-conflation) updated with the regression-then-fix history; [07_Shortcuts.md](engine/07_Shortcuts.md) keybinding table updated.
+
+## 2026-04-29
+
+### Fluid-toy: smooth-source TSAA bake — palette + collision + motion
+
+**User-facing**
+- The fractal palette and the collision walls now look genuinely smooth as TSAA accumulates, instead of speckling at low sample counts. The fluid no longer gets driven by sub-pixel jitter noise; flow settles cleanly within a few frames.
+- New "Coupling" tab layout: an **Operator** dropdown (Gradient / Curl / Direct / Temporal Δ / Hue) and a **Source** dropdown (Smooth potential / Distance estimate / Stripe average / Palette luminance / Collision mask). 5 × 5 = 25 motion configurations, with per-option hints that swap as you change the selection.
+- Coupling and Palette presets calibrated for the new pipeline; old presets keep working (legacy `iterate` enum value drives Direct, `c-track` drives Temporal Δ).
+
+**Mechanism**
+- The Julia render pass now writes **smooth, mean-poolable derived quantities** instead of raw evaluator state. `outFx.rgb` carries the pre-baked palette colour (per-eval gradient lookup + interior blend), `outFx.a` carries the collision-mask iso (collision LUT × exterior). σ/√N convergence under TSAA actually delivers a smooth image — averaging raw `z` / `iters` / `minT` was averaging meaningless intermediate values at the set boundary.
+- Standalone `FRAG_MASK` pass and its `progMask` / `maskTex` / `computeMask` / readback removed. Every shader that read `texture(uMask, vUv).r` now reads `.a` from the Julia outFx; the CPU mask readback blits attachment 1.
+- `outMain` repurposed for **four smooth motion sources**: distance estimate, smooth potential, stripe average, dye-injection gate. Palette luminance derived in the motion shader from `outFx.rgb`. The MRT dropped from 3 attachments back to 2 (~33% bandwidth cut on the Julia pass).
+- New (Operator × Source) factoring in `FRAG_MOTION`. Per-source magnitude compensation via `× 0.1 * uMaxIter` keeps legacy `forceGain` calibrations in the right ballpark.
+- TSAA boolean collapsed into `tsaaSampleCap`: `1` = OFF (no jitter, no blend, downstream reads `juliaCur`), `> 1` = active, `0` = infinite.
+
+### Fluid-toy: retire bespoke orbit, route modulation through liveMod merge
+
+**User-facing**
+- The legacy "Auto-orbit c" subsection on the Coupling tab is gone. Auto-orbit is now expressed as two normal LFO entries authored via the **Modulation panel** — full waveform / period / amplitude / phase / smoothing control per LFO, plus the ability to modulate any DDFS param (not just juliaC).
+- LFOs targeting any feature param now actually drive the engine. Previously the modulation indicator on a slider would light up but the renderer kept reading the raw slice value (e.g. brush size, dye inject didn't actually modulate).
+
+**Mechanism**
+- New `applyLiveMod(slice, featureId, liveMod)` helper in `engine/typedSlices.ts`: returns a slice copy with `liveModulations` overrides applied (scalars by `featureId.field`, vec axes by `featureId.field_x`). Returns the original reference unchanged when nothing's modulated to avoid spurious re-renders.
+- `useEngineSync` now wraps each slice in `useMemo(() => applyLiveMod(slice, id, liveMod))` and passes the modulated copy to the existing `sync<X>ToEngine` functions. Sync functions are unchanged from before — they just see slices that already include modulations.
+- `readBrushParams` (imperative path called from pointer/RAF) reads `state.liveModulations` directly via the same helper.
+- `syncJuliaToEngine` split into a slice-driven full sync + a liveMod-driven juliaC-only sync, so orbit modulation can't clobber gesture-set `engine.params.center/zoom` mid-pan.
+- `presets/data.ts` legacy `orbit: { enabled, radius, speed }` migrated to `animations: orbitPair(radius, speed)` — two Sine LFOs at 90° phase. `applyRefPreset` pushes `preset.animations ?? []` into `state.animations` on every load (replaces wholesale, so swapping presets cleans up prior LFOs).
+- `installModulationUI()` registers the engine's `lfo-list` widget; new "Modulation" panel in `panels.ts` hosts it via `items: [{ type: 'widget', id: 'lfo-list' }]`.
+- `orbitTick.ts` deleted; `installOrbitSync()` call removed from `main.tsx`. Coupling feature drops `orbitEnabled / orbitRadius / orbitSpeed` params.
+
+### Fluid-toy: panel restructure + dynamic dropdown hints
+
+**User-facing**
+- Panel layout split: **Left dock** = View, Fractal (hidden), Deep Zoom, Palette, Modulation, Presets. **Right dock** = Coupling, Fluid, Collision, Brush, Post-FX, Composite.
+- The View panel now hosts the saved-views library at the top (replaces the old separate "View Manager" tab). 5 default saved views seeded on first install (Mandelbrot Home, Julia Classic, Julia Dendrite, Julia San Marco, Mandelbrot Seahorse Valley) so the panel isn't empty on first launch. Pan / zoom / juliaC happen on the canvas; fine-grained adjustments live on the hidden Fractal tab.
+- Multi-section tabs (Coupling / Fluid / Brush / Palette / Post-FX / Composite) use section headers + filtered feature rows so related params group visually.
+- Dropdown hints are now **per-option** — the small italic caption beneath each enum dropdown swaps as you change the selection. forceMode / forceSource / colorMapping (14 modes) / dyeBlend / dyeDecayMode / kind / show / toneMapping all carry contextual one-line hints.
+- `julia.juliaC` is hidden when the fractal kind is Mandelbrot (Mandelbrot uses pixel coords as c — the slice value is ignored, so the slider was a no-op there).
+- Retired `fluidStyle` (plain / electric / liquid) — the variants didn't actually do anything in the current shader.
+
+**Mechanism**
+- `engine/PanelManifest.ts` already supported `items: [{ type: 'section' | 'feature' | 'widget', ... }]`. Used `whitelistParams` to slice each feature into multiple sections.
+- New optional `hint` field on `engine/FeatureSystem.ts:ParamOption` plus new `optionHints` parameter on `defineEnumParam`, threaded into the generated options list. `AutoFeaturePanel` finds the current option after every dropdown render and emits a small italic caption row (`text-[9px]`, gray, `break-words`).
+- `dyeBlend` moved Palette → Fluid (it's a dye-mixing knob, not a colour-mapping one). `fluidStyle` enum, `FluidStyle` type, `FLUID_STYLES` export, `fluidStyle` field on `FluidParams`, default value, and `apply.ts` mapping all dropped together.
+- `viewLibrary.ts` `seedDefaultViews()` runs once on install and writes hardcoded snapshots into `state.savedViews` only when the array is empty — never overwrites a user's library.
+
+## 2026-04-28
+
+### Fluid-toy: deep-zoom Mandelbrot/Julia, working past 1e-30
+
+**User-facing**
+- Fluid-toy now zooms past the f32 wall (~1e-7) and the f64 pan wall (~1e-15), all the way to ~1e-30 cleanly. The fractal stays sharp and the fluid keeps flowing, no quantising, no jump-back on release. Verified with a single drag-zoom from 1e-15 down to 1e-20 — smooth the whole way.
+- A **Fractal panel** "Deep zoom" toggle drops the slider's hardMin from 1e-5 to 1e-300 and switches the kernel to the perturbation path. Mouse wheel + middle-drag drive deeper than the slider's range.
+- Variable power (z² through z⁸) and Julia mode both supported in deep zoom; the LA / AT acceleration is still Mandelbrot+power-2 only (their step rules are d=2-specific), but the orbit-only path renders any combination.
+- Pan and zoom feel right at every depth — the previous "snap to coarse grid on release" artifact is gone.
+
+**Mechanism**
+- **Reference-orbit perturbation kernel.** Worker (`fluid-toy/deepZoom/deepZoomWorker.ts`) builds a BigInt fixed-point reference orbit, packs it as RGBA32F texels, and ships it main-thread. The Julia shader runs `dz' = 2·Z·dz + dz² + dc` against the orbit instead of iterating directly — this is what unlocks zooms past f32. Adapted from FractalShark's algorithm.
+- **LA + AT acceleration.** A merge-tree of linear-approximation nodes (`fluid-toy/deepZoom/laBuilder.ts`) lets the shader skip ~99% of orbit iterations in a few hundred LA steps. AT (Approximation Terms, `fluid-toy/deepZoom/atBuilder.ts`) front-loads the iteration with a polynomial expansion when the per-pixel `|dc|` is small enough. Both gated to Mandelbrot kind + power 2.
+- **Double-double pan accumulator.** `fluid-toy/deepZoom/dd.ts` adds Dekker two-sum primitives. Pan / wheel / middle-zoom gestures track the centre as a `(hi, lo)` f64 pair so sub-ulp pan deltas (typical at zoom <1e-15) survive accumulation. The engine packs `(paramCenter+paramLow) − (refCenter+refLow)` into the shader uniform via DD-subtraction so the lo word reaches the GPU.
+- **HPReal.fromNumber rewrite.** Previously converted via `fracPart × 2^53`, which rounded sub-1.1e-16 inputs (the typical lo word at deep zoom) to zero. Now extracts the IEEE-754 (mantissa, exp) directly and shifts to fixed-point — preserves all 53 bits regardless of magnitude. The "snap to coarse grid on release" symptom was this rounding kicking in only on orbit rebuild.
+- **HDR-packed shader uniforms.** Plain f32 underflows past ~1e-38; `(mantissa, exp)` packing reaches zoom 1e-300+ at the JS→GLSL boundary.
+
+### Fluid-toy: refactor pass — split god class + sync hooks + per-gesture files
+
+**Mechanism (no user-facing change — pure organisation)**
+- `fluid/FluidEngine.ts` 2245 → 1798 by extracting four cohesive units:
+  - `DeepZoomController` — refOrbit + LA + AT GPU state, exposed as `engine.deepZoom`
+  - `BloomChain` — Jimenez 2-level dual-filter chain owning its programs + FBOs
+  - `GpuTimerManager` — Julia-pass GPU timer (begin/end around the draw, EWMA poll)
+  - `GradientLutManager` — main + collision LUT slots
+- `fluid/shaders.ts` (1706 lines) split into `fluid/shaders/{common,julia,sim,display,utility,index}.ts` grouped by render stage.
+- `FluidToyApp.tsx` 372 → 214 by lifting all DDFS slice → engine pushes into `useEngineSync.ts`, and the orbit/LA/AT rebuild loop into `useDeepZoomOrbit.ts`.
+- `pointer/handlers.ts` 427 → 133 dispatcher; six gestures (pan, zoom, wheel, splat, pickC, resizeBrush) in `pointer/gestures/`, sharing a tiny `GestureCtx` (refs + callbacks bag).
+- `fluid-toy/CODE_MAP.md` added as the navigation index.
+
+### engine-gmt: split RenderPopup + extract CompileScheduler + handleRenderTick
+
+**Mechanism**
+- `engine-gmt/components/timeline/RenderPopup.tsx` 1046 → 299 + 4 focused files (`types.ts`, `exportRunner.ts`, `ConfigView.tsx`, `RenderingView.tsx`). Behaviour preserved exactly — every closure dependency the runner needs is bundled into a deps object the parent constructs.
+- `engine-gmt/engine/FractalEngine.ts` 933 → 711. The off-thread shader compile pipeline (9 fields + 4 methods, ~225 lines) extracted into `engine-gmt/engine/CompileScheduler.ts`. External readers (`engine.isCompiling`, `engine.hasCompiledShader`, `engine.lastCompileDuration`) become getter delegates so call sites in WorkerProxy / renderWorker / FormulaParamsWidget don't change.
+- `engine-gmt/engine/worker/renderWorker.ts` 796 → 678. The 130-line per-frame tick body hoisted into `engine-gmt/engine/worker/handleRenderTick.ts` with two interfaces bundling the live refs (engine/renderer/camera/displayScene/...) and the tick hooks (incTickCount / postMsg / getShadowState).
+- Verified end-to-end with `smoke:engine-gmt` (boot), `smoke:formula-switch` (preview→full hot-swap), `smoke:anim-vec2` (binder writes), `smoke:bc-drag` (pointer interaction).
+- Engine cleanup plan written to `plans/engine-cleanup.md`. After hands-on review the remaining big files (rest of worker dispatch, WorkerProxy, WorkerExporter, AdvancedGradientEditor, BucketRenderer, AutoFeaturePanel) were judged not worth refactoring — they're large but cohesive, splitting would be ceremony without clarity gain. `Navigation.tsx` (1261) got an architecture comment block at the top instead of a split — same conclusion: complexity is intrinsic, comprehension help wins over mechanical extraction.
+
+## 2026-04-27
+
+### Fluid-toy: render-scale system replaces sim-resolution + Fixed mode + bilinear reprojection
+
+**User-facing**
+- The "Sim resolution" slider is gone. Render resolution is now driven by **mode** (Full / Fixed) × **Render scale** (segmented picker: 0.25× 0.5× 0.75× 1× 1.5× 2×) × adaptive quality. The sim grid and the canvas drawing buffer share one resolution, derived from those three knobs. One mental model instead of three.
+- **Fixed mode works.** Picking Fixed (or dragging the resolution pill in the top-left) sets the canvas to a specific pixel size, letterboxed in the viewport with a centred render box. The fluid sim and fractal render at exactly those dimensions. Render scale still multiplies on top — e.g. Fixed 1920×1080 + 0.5× → renders at 960×540, displayed at 1920×1080. Previously fluid-toy ignored Fixed mode entirely; the canvas stretched to fit the window regardless and the drawing buffer never matched.
+- **Resolution changes (slider, mode switch, adaptive nudge, window resize) no longer wipe dye, velocity, or fractal accumulation.** A bilinear blit reprojects everything into the new-size FBOs in one frame.
+- Adaptive resolution now produces real performance gains during navigation. The Julia iteration grid, fluid sim, and canvas all scale together with `qualityFraction` — previously only canvas/bloom/refraction-post-fx were scaling.
+- Default render scale is 1.0 (match CSS pixels). Retina users who want the full sharpness of their display set 2.0 explicitly; 0.5× and below are good for heavy fractals at deep iter depths.
+
+**Mechanism**
+- **`renderScale` field on viewportSlice.** [`store/slices/viewportSlice.ts`](../store/slices/viewportSlice.ts) gains `renderScale: number` (default 1.0) + `setRenderScale(v)` setter (clamps to [0.1, 4]). New `RENDER_SCALE_STEPS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0]` constant for the UI to snap to. Type added to [`types/store.ts`](../types/store.ts) `EngineStoreState`.
+- **`<RenderScaleControl>` segmented picker.** Mounted inside [`engine/plugins/viewport/ViewportModeControls.tsx`](../engine/plugins/viewport/ViewportModeControls.tsx) so it sits next to the Fill / Fixed pill in the viewport's top-left. Clicking a step calls `setRenderScale`; the active step highlights.
+- **One render dimension on FluidEngine.** [`fluid-toy/fluid/FluidEngine.ts`](../fluid-toy/fluid/FluidEngine.ts) drops `params.simResolution`, `params.autoQuality`, the private `simAspect` field, and the public `setSimAspect()` / `resize()` methods. New single entry point: `setRenderSize(w, h)` that sizes both the canvas drawing buffer and the sim/fractal FBOs in one call. `simW × simH` is the only resolution the engine knows about.
+- **Bilinear reprojection on resolution change.** New `reallocateAt(w, h)` on FluidEngine creates fresh FBOs at the new size, blits surviving content (`dye.read`, `velocity.read`, `juliaTsaa`) through new `progCopy` (single-tap) and `progCopyMrt` (two-attachment MRT) shaders with `LINEAR` filtering, then frees the old. New `FRAG_COPY` and `FRAG_COPY_MRT` shaders in [`fluid-toy/fluid/shaders.ts`](../fluid-toy/fluid/shaders.ts). `tsaaSampleIndex` is preserved — partial accumulation continues across resolution changes without a visible reset.
+- **App-level resize formula.** [`fluid-toy/FluidToyApp.tsx`](../fluid-toy/FluidToyApp.tsx) resize useEffect now reads `resolutionMode`, `fixedResolution`, `renderScale`, and `quality` from the store and computes `finalW = round(baseW × renderScale × quality)` (same for H). `baseW/H` is `canvasPixelSize / DPR` in Full mode (CSS pixels) or `fixedResolution` in Fixed mode (CSS pixels). One `engine.setRenderSize(finalW, finalH)` call per change; `engine.redraw()` immediately after to suppress the canvas-clear black flash.
+- **Sim slice cleanup.** [`fluid-toy/features/fluidSim.ts`](../fluid-toy/features/fluidSim.ts) drops the `simResolution` param + slider. [`fluid-toy/presets/apply.ts`](../fluid-toy/presets/apply.ts) and `presets/data.ts` drop the field from each preset blob. Save format is early-prototype so no migration shim needed. Dead `ADAPTIVE_*` constants removed from [`fluid-toy/constants.ts`](../fluid-toy/constants.ts) — those were stub values for a fluid-side adaptive loop that never shipped (the engine-side adaptive in `viewportSlice` superseded it).
+
+### Fluid-toy: adaptive resolution overhaul + Pause button polish
+
+**User-facing**
+- Fluid-toy adaptive resolution no longer flickers on slider drags or when moving the mouse off the canvas. Adaptive now engages **only** when the fractal accumulator is actually invalidated (camera pan/zoom, Julia c, palette mapping). Unrelated sliders (vorticity, dissipation, brush, dye colour) drag at full resolution. Once the fractal has accumulated halfway to its sample cap, adaptive locks off entirely until the next genuine fractal-invalidating change.
+- Fluid simulation no longer resets on adaptive nudges. Dye and velocity persist through every quality change; only a real window resize reallocates sim FBOs.
+- Black-flash on adaptive nudges is gone.
+- Pause/Play button is wider, shows both icons (Play / Pause inline; the active state is bright, the other dims), and the accumulation-progress fill is more prominent — `~2×` the previous opacity plus a 1px right-edge accent line so the front of the fill reads clearly. Engine-wide change — GMT picks it up automatically.
+- Pause popover sample readout (`<n>/<cap> samples`) now actually ticks. Previously stuck at `0/256` because nothing in fluid-toy reported accumulation back to the store. Default cap for fluid-toy is now 64 (was 256, GMT-sized).
+- Once TSAA reaches its cap, the fractal pass is skipped each frame until any Julia-affecting param changes. The freed GPU time goes to the fluid sim.
+
+**Mechanism**
+- **Sim-grid decoupling.** [`fluid-toy/features/fluidSim.ts`](../fluid-toy/features/fluidSim.ts) no longer multiplies `simResolution` by `qualityFraction`. The sim grid runs at the user's chosen size full-time. [`fluid-toy/fluid/FluidEngine.ts`](../fluid-toy/fluid/FluidEngine.ts) gains a `simAspect` field driven by the new `setSimAspect(aspect)` method; `allocateTextures` reads it instead of `canvas.width / canvas.height`. Adaptive-quality canvas resizes (which round-trip through `Math.floor`/`Math.round` and drift the aspect by ±1 pixel) no longer shift `simW` and trip the sim FBO reallocation guard. `FluidEngine.resize()` now only touches the canvas + bloom FBOs; sim FBOs only reallocate on real window resize via `setSimAspect`.
+- **Black-flash fix.** New `FluidEngine.redraw()` calls `displayToScreen()` only — re-blits the existing `juliaTsaa` + dye/velocity to the canvas without advancing the sim or re-rendering the fractal. [`fluid-toy/FluidToyApp.tsx`](../fluid-toy/FluidToyApp.tsx) calls it after `engine.resize()` so the canvas is repainted before the browser compositor reads the freshly-cleared drawing buffer. Cheaper than a full `frame()` — skips the `gl.readPixels` GPU→CPU stall in `readMaskToCPU` and the ten-pass fluid sim step.
+- **Adaptive-only-on-accum-drop.** [`engine/AdaptiveResolution.ts`](../../engine/AdaptiveResolution.ts) gains an opt-in `gateOnAccumOnly: boolean` input. When true, both `isInteracting` and `!mouseOverCanvas` are dropped from the activity-tracking and `needsAdaptive` predicates — the only signal that engages adaptive is an `accumCount < prevAccumCount` event (which fluid-toy's TSAA hash check raises only on Julia-affecting param changes). Wired through `ViewportAdaptiveConfig.engageOnAccumOnly` and on by default for fluid-toy. GMT's worker-side adaptive is unaffected (the flag is opt-in).
+- **Sample-cap-aware deep-accum gate.** [`engine/AdaptiveResolution.ts`](../../engine/AdaptiveResolution.ts) also gains `accumThreshold?: number` — when set, overrides the FPS-derived 8–50 default. [`store/slices/viewportSlice.ts`](../../store/slices/viewportSlice.ts) computes `Math.floor(sampleCap * 0.5)` so once the fractal has accumulated halfway to the user's cap, adaptive can't re-engage until the accumulator actually drops.
+- **Accumulation reporting.** [`fluid-toy/useFluidEngine.ts`](../fluid-toy/useFluidEngine.ts) RAF loop pushes `engine.getAccumulationCount()` into the store at ~10 Hz with a per-call no-op guard. [`store/slices/renderControlSlice.ts`](../../store/slices/renderControlSlice.ts) `reportAccumulation` setter now early-returns when the value is unchanged so future callers without their own throttling can't spam Zustand subscribers either.
+- **Fractal pass skip when converged.** [`fluid-toy/fluid/FluidEngine.ts`](../fluid-toy/fluid/FluidEngine.ts) `frame()` skips both `renderJulia()` and `runTsaaBlend()` when `tsaaSampleIndex >= tsaaSampleCap`. `updateTsaaHash()` resets the index on any Julia-affecting param change, so scrubs / camera moves re-engage rendering on the next frame. `tsaaSampleCap === 0` disables the short-circuit (infinite accumulation), matching the popover's `0 = Infinite` semantic. The `1_000_000` workaround that previously lived in `FluidToyApp` is gone — the sentinel is now the engine's contract.
+- **Pause/Play UI refresh.** [`engine/plugins/topbar/PauseControls.tsx`](../../engine/plugins/topbar/PauseControls.tsx) — three-tone lookup table (`paused / done / active`) keeps border, fill, edge accent, and icon colour in sync. Width grew from `p-0.5` to `flex … gap-1.5 px-2 py-1`. Both icons are rendered inline; the inactive icon dims to `text-gray-600`. Fill opacity bumped from `/15`–`/20` to `/30`–`/35`; new 1px right-edge accent at `/60` opacity tracks the fill front for visibility against similarly-toned topbar backgrounds. Width / left transitions on the fill animate the progress smoothly instead of snapping per-frame.
+- **Type dedupe.** `ViewportAdaptiveConfig` was duplicated (with already-drifting comments) across [`engine/plugins/Viewport.tsx`](../engine/plugins/Viewport.tsx) and [`types/store.ts`](../types/store.ts). Canonical definition moved to [`types/viewport.ts`](../types/viewport.ts) (a leaf type module) and both sites import from there. `EngineStoreState['adaptiveConfig']` is now `ViewportAdaptiveConfig`.
+
+### Fluid-toy: pan/zoom store-bypass + max-depth React-subscriber cascade fix
+
+**User-facing**
+- Fluid-toy pan (right-drag), middle-drag zoom and wheel zoom no longer trip React's `Maximum update depth exceeded` warning under load. Pan / zoom are visibly smoother, especially with the fractal panel + Views panel both open.
+- Slider drags (e.g. gradient bias inside `AdvancedGradientEditor`) no longer stutter after a few seconds of dragging.
+- Fluid-toy fractal background now keeps accumulating across non-fractal param changes (brush size, exposure, vorticity, dye colour …). Previously every feature setter emitted the engine-wide `reset_accum` event which fluid-toy's TSAA listener treated as a full restart; now the fractal background only resets when an actual fractal-affecting parameter changes.
+
+**Mechanism**
+- **Pointer-gesture store-bypass** in [`fluid-toy/FluidPointerLayer.tsx`](../fluid-toy/FluidPointerLayer.tsx). During pan/middle-drag/wheel, center+zoom now route directly to `FluidEngine.setParams` (a `pendingViewRef` keeps the latest value) instead of `setJulia({center,zoom})`. The store sees a single `setJulia` commit on `pointerup` (drag) or after a 100 ms wheel-idle debounce. With dozens of `useEngineStore`-subscribed components in the panel tree, every per-pointermove `setJulia` was triggering a 50+ subscriber cascade — exactly what trips React 18's nested-update guard. Same pattern engine-gmt's cursor-anchored navigation uses for orbit/zoom (treadmill absorb).
+- **Granular selectors** instead of `useEngineStore()` no-selector in the high-volume subscribers (each one was re-rendering on every store update):
+  - [`fluid-toy/FluidToyApp.tsx`](../fluid-toy/FluidToyApp.tsx) — split the whole-state subscription into `panels` / `contextMenu` / a handful of stable action-function refs. Floating `PanelRouter` instances now receive `useEngineStore.getState()` as an imperative snapshot, since their child components handle their own per-slice subscriptions.
+  - `DomOverlays` factored into a per-overlay `DomOverlayInstance` that subscribes only to its specific slice.
+  - [`components/Knob.tsx`](../components/Knob.tsx), [`components/ToggleSwitch.tsx`](../components/ToggleSwitch.tsx), [`components/vector-input/index.tsx`](../components/vector-input/index.tsx), [`components/layout/Dock.tsx`](../components/layout/Dock.tsx), [`components/layout/DropZones.tsx`](../components/layout/DropZones.tsx), [`components/DraggableWindow.tsx`](../components/DraggableWindow.tsx), [`components/FeatureSection.tsx`](../components/FeatureSection.tsx), [`components/CompilableFeatureSection.tsx`](../components/CompilableFeatureSection.tsx) — converted destructured `useEngineStore()` reads to one selector per field. Most fields are stable function refs (created once at store init) so the selectors return the same value every store update and never trigger re-renders.
+- [`engine/animation/AnimationSystem.tsx`](../engine/animation/AnimationSystem.tsx) — `setLiveModulations` now compares values and only writes when something actually changed. Previously it wrote a fresh `{}` every frame, replacing the store value's reference and forcing every subscriber to re-render every animation tick — major contributor to the per-pointer-event update budget.
+- [`fluid-toy/FluidToyApp.tsx`](../fluid-toy/FluidToyApp.tsx) — replaced inline `?? {}` in the `liveModulations` selector with a module-level `EMPTY_MODS` constant. `?? {}` returns a new object every selector call, defeating Zustand's reference-equality re-render gate.
+- [`components/AdvancedGradientEditor.tsx`](../components/AdvancedGradientEditor.tsx) — added a `justEmittedRef` flag so the prop-sync `useEffect` skips its `setKnots` when our own `emitChange` caused the prop to change. Without it, `emitChange → setKnots(local) + onChange(parent) → parent commits → useMemo re-derives stops → useEffect[stops] fires → setKnots again` could saturate React's update budget mid-drag under load.
+- [`fluid-toy/fluid/FluidEngine.ts`](../fluid-toy/fluid/FluidEngine.ts) — removed the global `FRACTAL_EVENTS.RESET_ACCUM` listener in the FluidEngine ctor. The hash check in `updateTsaaHash()` already covers every fractal-affecting parameter (kind, juliaC, center, zoom, power, maxIter, colorIter, escapeR, colorMapping, trapCenter/Radius/Normal/Offset, stripeFreq) and is the sole authority for accumulator restarts. The generic event was firing on every DDFS feature setter (brush, fluidSim, postFx, …) and unnecessarily wiping the fractal background.
+- [`fluid-toy/FluidToyApp.tsx`](../fluid-toy/FluidToyApp.tsx) — `tsaaSampleCap` is now pinned to 64 in fluid-toy directly. The engine-level `sampleCap` (default 256) is sized for GMT's path-traced renderer; with K=4-per-frame TSAA + Halton blue-noise sub-cell refinement, fluid-toy's fractal background visually settles by frame ~64.
+
+### Fluid-toy: progressive-grid TSAA convergence + Sobel/Vogel refraction polish
+
+**User-facing**
+- Fluid-toy fractal background converges noticeably faster and looks cleaner. With the grid jitter mode (default), the first 4 frames after any view change deliver a 4×4 stratified-grid average, then frames 5+ progressively refine via deterministic blue-noise sub-cell offsets — 4× cheaper per frame than the previous K=16 approach with continuing improvement out to ~64 frames.
+- New **Refract roughness** slider (post-FX panel, gated on `Refraction > 0`). 0 = polished glass (single-tap, current default); 1 = ~5px Vogel-disc blur for a frosted-glass scatter. Mask + walls blur in step so glass edges stay consistent with the refracted fractal behind them.
+- Existing **Refract smooth** slider actually smooths now. It used to spread a 4-tap forward-difference further apart (smoother stencil but the gradient was just as noisy); now it controls the stencil width of a Sobel 3×3 — mathematically a Gaussian blur composed with a central difference. Cranking it produces calm low-frequency liquid waves instead of the previous pixely slope. Caustic glints are also rounder (9-point Laplacian replaces 5-point — no preferential x/y axis bias).
+
+**Mechanism**
+- **K-sampling + grid lattice** in [`fluid-toy/fluid/shaders.ts`](../fluid-toy/fluid/shaders.ts) `FRAG_JULIA`. The Julia eval body extracted into an `evalJulia(uvJ, …)` helper; `main()` runs it K times with K different sub-pixel offsets, raw-averages the outputs, and pushes one averaged sample per frame to the TSAA accumulator. New uniforms `uPerFrameSamples` (K, default 4), `uGridSize` (lattice cell count, default 16), `uTsaaSampleIndex` (current accumulator frame), `uJitterMode` (0 = blue-noise, 1 = grid).
+- **Progressive-grid logic**: with K=4 and gridSize=16, one round = 4 frames. Frame F visits cells `[F*K .. F*K+K-1]` of the 16-cell lattice. After 4 frames the accumulator equals a single-frame K=16 grid result. Round 1+ shifts the cell sample to a sub-cell offset taken from the blue-noise texture (stepped by R2 per round, sampled via `getStableBlueNoise4` so all pixels see the same offset → no per-pixel shimmer). After 16 frames there are 4 rounds × 16 cells = 64 unique sub-positions per pixel; after 64 frames there are 256.
+- **Sobel 3×3 gradient + 9-point Laplacian** in [`fluid-toy/fluid/shaders.ts`](../fluid-toy/fluid/shaders.ts) `FRAG_DISPLAY`. Replaced 4-tap forward differences `(lR-lL, lU-lD)` with a proper Sobel 3×3 (= Gaussian blur ⊗ central difference) for the refraction gradient, and the 5-point Laplacian `(lL+lR+lU+lD - 4*lC)` with a 9-point form `(8 neighbours - 8*lC)` for caustics. Same number of texture taps as the previous code when caustics is also enabled.
+- **Vogel-disc roughness** in `FRAG_DISPLAY`. New uniform `uRefractRoughness` (0..1). When > 0, the fractal sample at `uv + refractOffset` is scattered across 8 Vogel-disc taps (golden-angle spiral — even disc coverage at small N) plus the centre tap. Each tap is gradient-mapped individually before averaging — same reasoning as the K-loop fractal AA: averaging raw `j`/`aux` at fractal boundaries gives meaningless intermediate iterations. The mask reads the same kernel so wall edges blur in step. Dye + velocity stay sharp.
+- New params: `tsaaPerFrameSamples`, `tsaaGridSize`, `tsaaJitterMode`, `refractRoughness` on `FluidParams`. New DDFS field `refractRoughness` on [`fluid-toy/features/postFx.ts`](../fluid-toy/features/postFx.ts).
+
+### Engine: pre-existing bug fixes surfaced when fluid-toy / fractal-toy went live
+
+**Mechanism**
+- [`engine/PanelManifest.ts`](../engine/PanelManifest.ts) — switched `useEngineStore` from a runtime import to a type-only import + lazy `globalThis.__engineStore` accessor. Module-level import of `useEngineStore` evaluated `engineStore.ts`, which froze the feature registry — and `PanelManifest` is reachable from `formulaRegistry.registerFormula → addPanel`, which fractal-toy calls during its registerFeatures phase BEFORE the store should be created. Result was `FeatureRegistryFrozenError: Feature "mandelbulb" registered after featureRegistry was frozen`. With the lazy accessor, `addPanel` becomes a no-op-on-store when called pre-boot (panel still pushed to `_byId`); `applyPanelManifest` was switched to iterate the full accumulated `_byId` so the pre-boot panel registrations get seeded into the store when setup runs.
+- [`store/engineStore.ts`](../store/engineStore.ts) — publishes `useEngineStore` to `globalThis.__engineStore` after `create()` returns, for the PanelManifest lazy accessor.
+- [`engine/utils/createBlueNoiseWebGL2.ts`](../engine/utils/createBlueNoiseWebGL2.ts) — `img.onload` callback now guards with `gl.isContextLost() || !gl.isTexture(texture)` before binding. Under React StrictMode + HMR, the fluid-toy WebGL context can be torn down before the blue-noise PNG finishes loading, leaving a `WebGL: INVALID_OPERATION: bindTexture: attempt to use a deleted object` warning.
+
+### Camera shortcuts wired + saved-camera toast + fluid-toy smooth view tween
+
+**User-facing**
+- Camera Manager hotkeys finally work: **Ctrl+1..9** saves the current view to a slot, **1..9** recalls it. The Camera menu's Slot N entries now do the same and show a ✓ once a slot is filled.
+- Saving to a slot pops a small **"Camera N saved"** toast under the topbar (2s) and lights a notification dot on the **View Manager** menu item for 5s — so you know the save landed even with the Manager closed.
+- Pressing **Ctrl+5** when only 2 cameras are saved no longer silently appends as the 3rd entry mislabelled "5". Now warns: *"Slot 5 unavailable — only 2 slots are filled"*. Slots fill sequentially.
+- Fluid-toy "Views" gets the same toast + dot + ✓ for free, and **switching between saved views now smoothly animates** over 500ms (center, julia C, zoom in log-space, power) — was an instant jarring snap.
+
+**Mechanism**
+- `installGmtCameraSlice` was calling only the inner `installStateLibrarySlice` — not the outer `installStateLibrary` bundle that actually registers the keyboard slot shortcuts. Switched to the bundle. `installCamera({hideShortcuts: true})` in app-gmt suppresses the legacy `@engine/camera` shortcut bindings whose adapter was never registered (silent no-ops that won the tie-break).
+- Promoted the saved-toast pattern to the engine: `installStateLibrarySlice` now writes `${arrayKey}_savedToast` and `${arrayKey}_notifyDot` transient store fields with timer cleanup. New `<StateLibraryToast arrayKey={...}/>` component renders the pill with success/warning tones. Auto-mounted by `installStateLibrary` next to the menu when one is configured. Field names exported via `toastFieldKey()` / `dotFieldKey()` helpers.
+- `MenuButtonItem.label` and `MenuToggleItem.label` now accept `string | (() => string)` (matching the existing `disabled: boolean | (() => boolean)`). Drives the live ✓ on filled slots and the ● on the View Manager item.
+- `lerp` and `easeInOutQuad` lifted to `engine/math/Easing.ts` for fluid-toy's `tweenView` and any future ad-hoc tweens.
+
+## 2026-04-26
+
+### Cursor-anchored orbit/zoom + worker offset-sync race fix
+
+**User-facing**
+- Orbit-mode left-drag now rotates around whatever's under the mouse cursor, like Blender. The cursor pixel stays put while the world rotates around it.
+- Wheel and middle-drag zoom both anchor the same way — the point under the cursor stays fixed; you zoom toward/away from it.
+- Right-drag pan unchanged (still drei native).
+- A small crosshair-with-dot toggle in the DST HUD pill flips between cursor-anchored and the original centre-pivot behaviour. Default on; click to switch. A pivot reticle dot tracks the cursor when a fractal surface is under it.
+- Subjective smoothness now matches drei's native OrbitControls even under render strain. Every interaction now resets accumulation immediately (no more motion-blur stutter on wheel/middle/pan that previously slipped past the position-delta detection).
+
+**Mechanism**
+- New custom handlers in [`engine-gmt/navigation/Navigation.tsx`](../engine-gmt/navigation/Navigation.tsx) for left-drag rotate, wheel zoom and middle-drag zoom replace drei's `ROTATE` / `DOLLY` / `MIDDLE_DOLLY`. drei still owns `PAN`. When the toggle is off, the custom handlers self-gate at the top and drei's full native path runs (mouseButtons + enableZoom flip via the toggle).
+- **Math (rotate)**: rotate `(camera.position − pivot)` and `camera.quaternion` by the same composite quaternion (azimuth around frozen `gestureUp` captured at pointerdown × polar around post-azimuth `camera.right`). Both rotations share the axis, so the pivot's direction-from-camera stays invariant in camera-space → cursor pixel stays put. `gestureUp` frozen for the gesture's duration; recaptured on next pointerdown so Q/E roll between gestures still applies, but azimuth doesn't drift within a drag.
+- **Math (zoom)**: pure translation along the cursor→pivot ray — `camera = pivot + (camera − pivot) × f`. No `lookAt`; orientation unchanged.
+- **Treadmill handover**: every gesture event absorbs `camera.position` into `engine.sceneOffset` immediately (via existing `absorbOrbitPosition`). The local pivot is shifted into the new local frame to compensate (`pivot.sub(camera.position)` before absorb). End-of-gesture absorbs become no-ops, eliminating the end-of-gesture snap. For pan, drei owns the camera so the absorb runs in `useFrame` priority 0 with `keepTarget=true` (a new option that shifts target into the new local frame instead of resetting to forward — keeps drei's pan-distance-based sensitivity stable).
+- **Hover pre-pick**: cursor anchoring needs the world-space surface point under the cursor at the moment of click. We pre-pick on `pointermove`, throttled by an in-flight gate (only one async pick at a time) plus a 10 px movement gate to skip parked-cursor picks. Cached in world space (`hoverPivotWorldRef`) so it stays valid across treadmill absorbs; localized at gesture start via the current `sceneOffset`. Skips during all gestures (pan / wheel / middle / custom orbit).
+- **Up-pole stability**: previous design used the live `camera.up` for azimuth, which polar tilts gradually rotated off vertical → up-pole tumbled across drags. Frozen `gestureUp` made each drag a clean turntable. `camera.up` is also locked to `gestureUp` throughout the drag so drei's `lookAt` (when re-enabled at gesture end) doesn't fight the rotation.
+- **Synchronous application**: rotation math runs inside `pointermove`, not deferred to `useFrame`. (We tried deferral; agent research confirmed drei's smoothness comes specifically from per-event apply — deferring adds a full render-frame of latency that perceptibly chunks under strain. The math itself is microseconds; coalescing wasn't worth it.)
+- **Drei coexistence**: when toggle is on, drei is force-disabled synchronously at custom-gesture start (`orbitRef.enabled = false`) so its priority −1 useFrame `lookAt(target)` doesn't fight our rotation. Re-enabled by the gating logic in `useFrame` when the gesture ends. When toggle is off, drei stays enabled subject to lock predicates only — fixes a regression where wheel-only interactions silently no-opped because drei's `enabled` flag was tied to a pointerdown-pointerup latch that never fired for wheel-only events.
+- **Accumulation reset**: per-event/per-frame absorb keeps `camera.position` at (0,0,0) every frame, so `useFrame`'s `posChanged` / `rotChanged` checks (which compare frame-to-frame) miss the actual view change. Each custom handler now sets `engine.dirty = true` directly, where it knows the view has moved.
+
+### Fix: worker `RENDER_TICK` overwrite drops `syncOffset` flag
+
+A subtle race in the worker's `RENDER_TICK` buffering caused occasional permanent main↔worker `sceneOffset` desyncs (~1 in 12 interactions, then all subsequent picks landed at the wrong world point until app reload).
+
+The worker buffers the latest pending tick (`_pendingTick = msg`) — if two ticks arrived between worker drains, the newer overwrote the older. When the older had `syncOffset: true` (from a main-thread treadmill absorb) and the newer didn't, the flag was lost — the worker's `RENDER_TICK` handler conditionally writes `engine.virtualSpace.state = msg.offset` only when `syncOffset` is true (other paths use `OFFSET_SHIFT` / `OFFSET_SET`), so the worker's `virtualSpace` never updated. Main kept absorbing into its own `engine.sceneOffset`; worker stayed at the pre-absorb value. Every subsequent `pickWorldPosition` returned coords against the worker's stale offset, which main localized against its newer offset → cursor pivot off by exactly the lost delta, permanently.
+
+Fix in [`engine-gmt/engine/worker/renderWorker.ts:RENDER_TICK case`](../engine-gmt/engine/worker/renderWorker.ts) — when overwriting `_pendingTick`, propagate `syncOffset` forward if either tick has it. The offset *value* in the new tick is already correct (`queueOffsetSync`'s shadow set keeps `engine.sceneOffset` synchronous on main); only the flag had to survive the merge.
+
+### Misc
+- `engine-gmt/features/navigation.ts` — new `orbitCursorAnchor` boolean param (default true, hidden from auto-panel; exposed as the DST HUD pill toggle).
+- `engine-gmt/navigation/HudOverlay.tsx` — added the cursor-anchor toggle button inside the DST HUD pill (Orbit mode only). Even-pixel SVG sizing and `display: block` on the icon to fix a visible sub-pixel offset in the small button.
+
+## 2026-04-25
+
+### Fix: FOV Dolly Link — correct WorkerProxy import in scene_widgets
+
+`engine-gmt/components/panels/scene_widgets.tsx` imported `getProxy` from `'../../../engine/worker/WorkerProxy'` (3 levels up = project root → the engine-core extraction stub). The stub's `_shadow.lastMeasuredDistance` defaults to `1` and is never updated. `handleDollyStart` read `probeDist = 1`, which passes the range guard `(> 0.0001 && < 900)`, so the dolly always assumed the subject was 1 unit away regardless of camera depth — making the zoom-and-move compensation wildly wrong.
+
+Fix: changed import to `'../../engine/worker/WorkerProxy'` (2 levels up = `engine-gmt/` → the real engine-gmt proxy that receives `FRAME_READY` with live `lastMeasuredDistance`).
+
+This is the same duplicate-module-state pattern as the Key Cam dirty bug (ViewportRefs). `scene_widgets.tsx` was 2 directories deep inside `engine-gmt/`, so the 3-level import climbed out of the overlay entirely; all other engine-gmt files using `'../../../engine/worker/WorkerProxy'` are ≥3 directories deep and correctly land on the engine-gmt copy.
 
 ## 2026-04-20
 

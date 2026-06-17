@@ -1,41 +1,37 @@
 
 import React, { useState, useRef, useCallback } from 'react';
-import { useAnimationStore } from '../store/animationStore';
 import { calculateEulerUpdates, calculateSmoothingUpdates, calculateResampleUpdates, evaluateTrackValue, isRotationTrack } from '../utils/timelineUtils';
 import { calculateConstrainedSmoothing } from '../utils/ConstrainedSmoothing';
 import { simplifyTrack } from '../utils/CurveFitting';
 import { Keyframe, AnimationSequence } from '../types';
-import { GraphViewTransform, valueToPixel, pixelToFrame } from '../utils/GraphUtils';
+import type { GraphDataSource } from '../utils/GraphDataSource';
 
 interface GraphToolsProps {
     sequence: AnimationSequence;
     trackIds: string[]; // Visible tracks
     selectedTrackIds: string[];
     selectedKeyframeIds: string[];
-    frameWidth: number;
-    view: GraphViewTransform;
-    normalized: boolean;
-    trackRanges: Record<string, { min: number, max: number, span: number }>;
     v2p: (val: number, tid: string) => number;
     canvasPixelToFrame: (px: number) => number;
 }
 
-export const useGraphTools = ({
-    sequence,
-    trackIds,
-    selectedTrackIds,
-    selectedKeyframeIds,
-    frameWidth,
-    view,
-    normalized,
-    trackRanges,
-    v2p,
-    canvasPixelToFrame
-}: GraphToolsProps) => {
-    const { 
-        updateKeyframes, snapshot, addKeyframe, selectKeyframes,
-        bounceTension, bounceFriction
-    } = useAnimationStore();
+export const useGraphTools = (
+    {
+        sequence,
+        trackIds,
+        selectedTrackIds,
+        selectedKeyframeIds,
+        v2p,
+        canvasPixelToFrame
+    }: GraphToolsProps,
+    // Store-agnostic data source — the timeline passes the store source, the
+    // palette its local impl. Always supplied by callers.
+    dataSource: GraphDataSource
+) => {
+    const ds = dataSource;
+    // Smoothing physics — store provides these; palette omits → defaults.
+    const bounceTension  = ds.bounceTension ?? 0.5;
+    const bounceFriction = ds.bounceFriction ?? 0.6;
 
     // --- TOOL STATE ---
     const [isSmoothing, setIsSmoothing] = useState(false);
@@ -86,23 +82,15 @@ export const useGraphTools = ({
         const updates = calculateResampleUpdates(targets, originalSequenceRef.current, step);
         if (updates.length > 0) {
             const allNewKeyIds: string[] = [];
-            useAnimationStore.setState(state => {
-                const newTracks = { ...state.sequence.tracks };
-                updates.forEach(u => {
-                    if (newTracks[u.trackId]) {
-                        newTracks[u.trackId].keyframes = u.newKeys;
-                        u.newKeys.forEach(k => allNewKeyIds.push(`${u.trackId}::${k.id}`));
-                    }
-                });
-                return { sequence: { ...state.sequence, tracks: newTracks } };
-            });
-            selectKeyframes(allNewKeyIds, false);
+            updates.forEach(u => u.newKeys.forEach(k => allNewKeyIds.push(`${u.trackId}::${k.id}`)));
+            ds.replaceKeyframes?.(updates);
+            ds.selectKeyframes(allNewKeyIds, false);
         }
-    }, [getTargetTracks, selectKeyframes]);
+    }, [getTargetTracks, ds]);
 
     const performSimplify = useCallback((strength: number) => {
         if (!originalSequenceRef.current) return;
-        
+
         const updates: { trackId: string, newKeys: Keyframe[] }[] = [];
         const allNewKeyIds: string[] = [];
         const targetSet = new Set(simplifyTargetsRef.current);
@@ -124,42 +112,34 @@ export const useGraphTools = ({
 
             const simplified = simplifyTrack(sortedSelection, 0.01, strength);
             const newKeys = [...preKeys, ...simplified, ...postKeys].sort((a, b) => a.frame - b.frame);
-            
+
             updates.push({ trackId: tid, newKeys });
             simplified.forEach(k => allNewKeyIds.push(`${tid}::${k.id}`));
         });
 
         if (updates.length > 0) {
-            useAnimationStore.setState(state => {
-                const newTracks = { ...state.sequence.tracks };
-                updates.forEach(u => {
-                    if (newTracks[u.trackId]) {
-                        newTracks[u.trackId] = { ...newTracks[u.trackId], keyframes: u.newKeys };
-                    }
-                });
-                return { sequence: { ...state.sequence, tracks: newTracks } };
-            });
-            selectKeyframes(allNewKeyIds, false);
+            ds.replaceKeyframes?.(updates);
+            ds.selectKeyframes(allNewKeyIds, false);
         }
-    }, [selectKeyframes]);
+    }, [ds]);
 
     // --- ACTIONS ---
 
     const applyEulerFilter = useCallback(() => {
         const targets = getTargetTracks();
         if (targets.length === 0) return;
-        snapshot();
+        ds.snapshot?.();
         const updates = calculateEulerUpdates(targets, sequence);
-        if (updates.length > 0) updateKeyframes(updates);
-    }, [getTargetTracks, sequence, snapshot, updateKeyframes]);
+        if (updates.length > 0) ds.updateKeyframes(updates);
+    }, [getTargetTracks, sequence, ds]);
 
     const checkEulerNeeded = useCallback(() => {
-        const targetKeys = selectedKeyframeIds.length > 0 
-            ? selectedKeyframeIds 
+        const targetKeys = selectedKeyframeIds.length > 0
+            ? selectedKeyframeIds
             : trackIds.map(tid => sequence.tracks[tid]?.keyframes.map(k => `${tid}::${k.id}`)).flat().filter(Boolean) as string[];
 
         const tracksToScan: Record<string, Keyframe[]> = {};
-        
+
         targetKeys.forEach(id => {
             if (!id) return;
             const [tid, kid] = id.split('::');
@@ -171,7 +151,7 @@ export const useGraphTools = ({
                 if(k) tracksToScan[tid].push(k);
             }
         });
-        
+
         for (const tid in tracksToScan) {
             const keys = tracksToScan[tid].sort((a,b) => a.frame - b.frame);
             for(let i=0; i<keys.length-1; i++) {
@@ -187,7 +167,12 @@ export const useGraphTools = ({
     const beginDragTool = (e: React.PointerEvent, onMove: (e: PointerEvent) => void, onUp: () => void) => {
         e.preventDefault(); e.stopPropagation();
         (e.target as Element).setPointerCapture(e.pointerId);
-        snapshot();
+        ds.snapshot?.();
+        // Smooth/Bake/Simplify apply keyframe updates LIVE as you drag (the viewport
+        // re-evaluates each move), so the gesture must read as `interacting` →
+        // adaptive, not the idle band renderer. begin() is idempotent; each tool's
+        // *Up handler calls the balanced end(). No-op for the palette (no ds.scrub).
+        ds.scrub?.begin();
         originalSequenceRef.current = JSON.parse(JSON.stringify(sequence));
         toolStartRef.current = { x: e.clientX, y: e.clientY };
         window.addEventListener('pointermove', onMove);
@@ -204,15 +189,14 @@ export const useGraphTools = ({
 
     const handleSmoothMove = (e: PointerEvent) => {
         const dx = e.clientX - toolStartRef.current.x;
-        const r = dx / 30; 
-        
+        const r = dx / 30;
+
         if (Math.abs(r - smoothingRadius) > 0.01) {
             setSmoothingRadius(r);
             // Apply logic
             if (!originalSequenceRef.current) return;
             const targets = getTargetTracks();
-            let keysToSmooth = selectedKeyframeIds;
-            if (keysToSmooth.length === 0) keysToSmooth = getTargetKeys();
+            const keysToSmooth = getTargetKeys();
 
             let updates: { trackId: string; keyId: string; patch: Partial<Keyframe> }[] = [];
             if (r > 0) {
@@ -222,7 +206,7 @@ export const useGraphTools = ({
                     targets, sequence, keysToSmooth, r, originalSequenceRef.current, bounceTension, bounceFriction
                 );
             }
-            if (updates.length > 0) updateKeyframes(updates);
+            if (updates.length > 0) ds.updateKeyframes(updates);
         }
     };
 
@@ -230,6 +214,7 @@ export const useGraphTools = ({
         setIsSmoothing(false);
         setSmoothingRadius(0);
         originalSequenceRef.current = null;
+        ds.scrub?.end();
         window.removeEventListener('pointermove', handleSmoothMove);
         window.removeEventListener('pointerup', handleSmoothUp);
     };
@@ -255,6 +240,7 @@ export const useGraphTools = ({
     const handleBakeUp = () => {
         setIsBaking(false);
         originalSequenceRef.current = null;
+        ds.scrub?.end();
         window.removeEventListener('pointermove', handleBakeMove);
         window.removeEventListener('pointerup', handleBakeUp);
     };
@@ -274,7 +260,7 @@ export const useGraphTools = ({
         const dx = e.clientX - toolStartRef.current.x;
         const delta = dx / 200;
         const newStrength = Math.max(0, Math.min(1, 1.0 + delta));
-        
+
         if (Math.abs(newStrength - simplifyStrength) > 0.01) {
             setSimplifyStrength(newStrength);
             performSimplify(newStrength);
@@ -284,6 +270,7 @@ export const useGraphTools = ({
     const handleSimplifyUp = () => {
         setIsSimplifying(false);
         originalSequenceRef.current = null;
+        ds.scrub?.end();
         window.removeEventListener('pointermove', handleSimplifyMove);
         window.removeEventListener('pointerup', handleSimplifyUp);
     };
@@ -292,11 +279,11 @@ export const useGraphTools = ({
     const createKeyAtMouse = useCallback((e: React.MouseEvent, canvasRect: DOMRect) => {
         const mx = e.clientX - canvasRect.left;
         const my = e.clientY - canvasRect.top;
-        
+
         const frame = canvasPixelToFrame(mx);
         const frameInt = Math.max(0, Math.round(frame));
-        
-        let bestDist = 10; 
+
+        let bestDist = 10;
         let bestTrackId: string | null = null;
         let bestVal = 0;
 
@@ -306,7 +293,7 @@ export const useGraphTools = ({
             const val = evaluateTrackValue(track.keyframes, frame, isRotationTrack(tid));
             const py = v2p(val, tid);
             const dist = Math.abs(my - py);
-            
+
             if (dist < bestDist) {
                 bestDist = dist;
                 bestTrackId = tid;
@@ -315,22 +302,22 @@ export const useGraphTools = ({
         });
 
         if (bestTrackId) {
-            snapshot();
-            addKeyframe(bestTrackId, frameInt, bestVal, 'Bezier'); 
+            ds.snapshot?.();
+            ds.addKeyframe?.(bestTrackId, frameInt, bestVal, 'Bezier');
         }
-    }, [trackIds, sequence, v2p, canvasPixelToFrame, addKeyframe, snapshot]);
+    }, [trackIds, sequence, v2p, canvasPixelToFrame, ds]);
 
     return {
         // State
         isSmoothing, smoothingRadius,
         isBaking, bakeStep,
         isSimplifying, simplifyStrength,
-        
+
         // Handlers
         handleSmoothDown,
         handleBakeDown,
         handleSimplifyDown,
-        
+
         // Actions
         applyEulerFilter,
         checkEulerNeeded,

@@ -1,0 +1,2005 @@
+import {
+  VERT_FULLSCREEN,
+  FRAG_JULIA,
+  FRAG_MOTION,
+  FRAG_ADDFORCE,
+  FRAG_INJECT_DYE,
+  FRAG_ADVECT,
+  FRAG_DIVERGENCE,
+  FRAG_CURL,
+  FRAG_VORTICITY,
+  FRAG_PRESSURE,
+  FRAG_GRADSUB,
+  FRAG_SPLAT,
+  FRAG_DISPLAY,
+  FRAG_CLEAR,
+  FRAG_COPY,
+  FRAG_COPY_MRT,
+  FRAG_REPROJECT,
+  FRAG_TSAA_BLEND,
+} from './shaders';
+import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../engine/utils/createBlueNoiseWebGL2';
+import { autoShallowIter } from '../../engine/fractal/iterationPolicy';
+import { fitIterationRange } from '../../engine/fractal/fitIterationRange';
+import { DeepZoomController } from './DeepZoomController';
+import { GpuTimerManager } from './GpuTimerManager';
+import { GradientLutManager } from './GradientLutManager';
+import { BloomChain } from './BloomChain';
+// FractalEvents reset_accum subscription removed — see ctor comment.
+
+export type ForceMode = 'gradient' | 'curl' | 'iterate' | 'c-track' | 'hue';
+/**
+ * Scalar field the motion shader reads from the Julia MRT. Combined with
+ * ForceMode (the operator) this gives a 5×5 matrix of motion behaviours.
+ * The "hue" operator ignores ForceSource (it reads the baked palette colour).
+ *
+ *   smoothPot   — smooth escape time, the classic "outside the set" gradient
+ *   de          — distance estimate, smooth across the set boundary
+ *   stripe      — Härkönen stripe average, aesthetic banding
+ *   paletteLuma — luminance of the user-selected palette colour, follows
+ *                 whatever colorMapping mode is active
+ *   mask        — the collision-mask channel, drives flow toward / away
+ *                 from walls
+ */
+export type ForceSource = 'smoothPot' | 'de' | 'stripe' | 'paletteLuma' | 'mask';
+export type ShowMode = 'composite' | 'julia' | 'dye' | 'velocity';
+export type FractalKind = 'julia' | 'mandelbrot';
+
+/** How new dye blends into the existing dye field each frame. */
+export type DyeBlend = 'add' | 'screen' | 'max' | 'over';
+
+/** Colour space used when dye decays each frame — controls whether fading dye stays vivid or goes grey. */
+export type DyeDecayMode = 'linear' | 'perceptual' | 'vivid';
+
+export const DYE_DECAY_MODES: Array<{ id: DyeDecayMode; label: string; hint: string }> = [
+  { id: 'linear',     label: 'Linear',     hint: 'Classic RGB multiply. Fades to black but mixing goes through muddy greys.' },
+  { id: 'perceptual', label: 'Perceptual', hint: 'OKLab: decay only the L-channel. Hue + chroma preserved — dye fades hue-stable to black.' },
+  { id: 'vivid',      label: 'Vivid',      hint: 'OKLab with chroma boost as lightness drops. Dye stays punchy all the way to near-black.' },
+];
+
+export function dyeDecayModeToIndex(m: DyeDecayMode): number {
+  switch (m) {
+    case 'linear': return 0;
+    case 'perceptual': return 1;
+    case 'vivid': return 2;
+  }
+}
+
+/** How the final colour gets compressed before display. */
+export type ToneMapping = 'none' | 'reinhard' | 'agx' | 'filmic';
+
+export const TONE_MAPPINGS: Array<{ id: ToneMapping; label: string; hint: string }> = [
+  { id: 'none',     label: 'None',     hint: 'No compression. Vivid colours, will clip if exposure is too high.' },
+  { id: 'reinhard', label: 'Reinhard', hint: 'Classic c/(1+c). Smooth but desaturates highlights.' },
+  { id: 'agx',      label: 'AgX',      hint: 'Sobotka 2023. Hue-stable, vibrant highlights — best for rich colours.' },
+  { id: 'filmic',   label: 'Filmic',   hint: 'Hable/Uncharted filmic. Cinematic contrast with gentle roll-off.' },
+];
+
+export function toneMappingToIndex(m: ToneMapping): number {
+  switch (m) {
+    case 'none': return 0;
+    case 'reinhard': return 1;
+    case 'agx': return 2;
+    case 'filmic': return 3;
+  }
+}
+
+export const DYE_BLENDS: Array<{ id: DyeBlend; label: string; hint: string }> = [
+  { id: 'add',    label: 'Add',    hint: 'Linear accumulate — bright strokes build up, classic fluid look.' },
+  { id: 'screen', label: 'Screen', hint: '1−(1−d)(1−i) — overlapping dye glows brighter, never clips to full white.' },
+  { id: 'max',    label: 'Max',    hint: 'Per-channel max — keeps the brightest layer, leaves darker alone.' },
+  { id: 'over',   label: 'Over',   hint: 'Alpha compositing — uses the gradient\'s α to fade / mask dye onto existing.' },
+];
+
+export function dyeBlendToIndex(b: DyeBlend): number {
+  switch (b) {
+    case 'add': return 0;
+    case 'screen': return 1;
+    case 'max': return 2;
+    case 'over': return 3;
+  }
+}
+
+/** What quantity from the fractal drives gradient lookup. */
+export type ColorMapping =
+  | 'iterations'      // smooth iter count (classic)
+  | 'angle'           // arg(z_final)
+  | 'magnitude'       // |z_final|
+  | 'decomposition'  // sign(imag(z_final))
+  | 'bands'           // floor(smoothI) — hard banding
+  | 'orbit-point'     // orbit trap vs a point
+  | 'orbit-circle'    // orbit trap vs a circle
+  | 'orbit-cross'     // orbit trap vs the cross (axes)
+  | 'orbit-line'      // orbit trap vs a line
+  | 'stripe'          // stripe average (Härkönen)
+  | 'distance'        // distance-estimate coloring (DE)
+  | 'derivative'      // log|dz/dc|
+  | 'potential'       // continuous potential / Böttcher approx
+  | 'trap-iter';      // iteration at which minT occurred (trap iteration)
+
+export const COLOR_MAPPINGS: Array<{ id: ColorMapping; label: string; hint: string }> = [
+  { id: 'iterations',   label: 'Iterations',    hint: 'Smooth iteration count. Classic escape-time coloring.' },
+  { id: 'angle',        label: 'Angle',         hint: 'arg(z_final). Gradient wraps around the set.' },
+  { id: 'magnitude',    label: 'Magnitude',     hint: '|z_final|. Brighter at faster escape.' },
+  { id: 'decomposition',label: 'Decomp',        hint: 'Binary by sign(imag z). Reveals the Julia domains.' },
+  { id: 'bands',        label: 'Bands',         hint: 'Hard bands per integer iter — maximum banding.' },
+  { id: 'orbit-point',  label: 'Trap·point',    hint: 'Orbit trap: min distance from the iteration to a point.' },
+  { id: 'orbit-circle', label: 'Trap·circle',   hint: 'Orbit trap: min distance to a ring of given radius.' },
+  { id: 'orbit-cross',  label: 'Trap·cross',    hint: 'Orbit trap: min approach to the X/Y axes.' },
+  { id: 'orbit-line',   label: 'Trap·line',     hint: 'Orbit trap: min distance to an arbitrary line.' },
+  { id: 'stripe',       label: 'Stripe',        hint: 'Härkönen stripe-average — ⟨½+½·sin(k·arg z)⟩.' },
+  { id: 'distance',     label: 'DE',            hint: 'Distance-estimate to the set. Crisp boundary glow.' },
+  { id: 'derivative',   label: 'Derivative',    hint: 'log|dz/dc| — how fast orbits stretch around c.' },
+  { id: 'potential',    label: 'Potential',     hint: 'log²|z| / 2ⁿ — continuous Böttcher potential.' },
+  { id: 'trap-iter',    label: 'Trap iter',     hint: 'Iteration at which the trap minimum was reached.' },
+];
+
+export function colorMappingToIndex(m: ColorMapping): number {
+  switch (m) {
+    case 'iterations': return 0;
+    case 'angle': return 1;
+    case 'magnitude': return 2;
+    case 'decomposition': return 3;
+    case 'bands': return 4;
+    case 'orbit-point': return 5;
+    case 'orbit-circle': return 6;
+    case 'orbit-cross': return 7;
+    case 'orbit-line': return 8;
+    case 'stripe': return 9;
+    case 'distance': return 10;
+    case 'derivative': return 11;
+    case 'potential': return 12;
+    case 'trap-iter': return 13;
+  }
+}
+
+/** Whether this colorMapping needs the trap/stripe accumulator block in
+ *  the iteration loop. Modes that read aux.r (orbit traps), aux.g
+ *  (stripe), or aux.a (trap iter) need it; the rest don't and can skip
+ *  the per-iter atan + sin work. */
+export function colorMappingNeedsAccum(m: ColorMapping): boolean {
+  switch (m) {
+    case 'orbit-point':
+    case 'orbit-circle':
+    case 'orbit-cross':
+    case 'orbit-line':
+    case 'stripe':
+    case 'trap-iter':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Whether this colorMapping needs the per-iter dz/dc derivative tracker.
+ *  Distance estimate and derivative modes read aux.b (logDz). */
+export function colorMappingNeedsDeriv(m: ColorMapping): boolean {
+  return m === 'distance' || m === 'derivative';
+}
+
+/** Which orbit-trap shape the Julia shader should use (derived from colorMapping). */
+export function colorMappingTrapShape(m: ColorMapping): number {
+  switch (m) {
+    case 'orbit-point':  return 0;
+    case 'orbit-circle': return 1;
+    case 'orbit-cross':  return 2;
+    case 'orbit-line':   return 3;
+    case 'trap-iter':    return 0;   // trap-iter uses whatever shape — default to point
+    default:             return 0;   // doesn't matter; aux.r is just unused
+  }
+}
+
+export interface FluidParams {
+  juliaC: [number, number];
+  center: [number, number];
+  /** Sub-f64 residual paired with `center` for deep-zoom panning.
+   *  Auto-managed by gesture handlers via Dekker two-sum. The engine
+   *  packs (center + centerLow) − (refOrbitCenter + refOrbitCenterLow)
+   *  into uDeepCenterOffset, recovering pan increments below f64's
+   *  mantissa floor. Defaults to [0, 0] — old saves and standard
+   *  (non-deep) views work unchanged. */
+  centerLow: [number, number];
+  zoom: number;               // world-units per screen-height / 2
+  /** Auto-scale the per-pixel iteration cap with zoom depth (shallow) and the
+   *  reference-orbit length (deep). When false, `maxIter` / `deepMaxIter` are
+   *  the hard caps. See engine/fractal/iterationPolicy. */
+  autoIter: boolean;
+  /** Multiplier on the AUTO iteration count (shallow + deep build/cap). 1 = policy
+   *  default; raise for difficult areas. Ignored when autoIter is false. */
+  iterMul: number;
+  maxIter: number;            // manual shallow cap (used when autoIter is false)
+  escapeR: number;
+  power: number;
+  kind: FractalKind;
+  forceMode: ForceMode;
+  forceSource: ForceSource;
+  forceGain: number;
+  interiorDamp: number;       // 0..1
+  dt: number;                 // timestep for fluid (computed each frame; not directly user-set)
+  /** Wall-clock dt multiplier applied per sim step. 1 = real time, 0.5 =
+   *  half-speed, 2 = double-speed, 0 = freeze (use `paused` for hard stop).
+   *  Lets the artist slow-mo or speed up the fluid without touching fps. */
+  timeScale: number;
+  dissipation: number;        // velocity dissipation /s
+  dyeDissipation: number;     // dye fade /s
+  dyeInject: number;          // fractal color → dye injection rate
+  vorticity: number;
+  pressureIters: number;
+  show: ShowMode;
+  juliaMix: number;
+  dyeMix: number;
+  velocityViz: number;
+  /** How many times to tile the gradient across the mapped axis. 1 = once, 2 = twice (banding), etc. */
+  gradientRepeat: number;
+  /** Phase shift of the gradient along the mapped axis (0..1 wraps). */
+  gradientPhase: number;
+  /** Depth-normalized colour fields (v2). True = every mode divided by its depth
+   *  driver so Density ≈ 1 is sane at any zoom; false = original per-mode look. */
+  colorNormV2: boolean;
+  /** Shared Rate: gamma for Iterations/Distance/Potential, spiral tightness for Angle. */
+  iterRate: number;
+  /** Iterations-mode "Fit to view" anchor (offset 0 / scale 1/LREF=0.125 = identity, colours hold). */
+  iterOffset: number;
+  iterScale: number;
+  /** Distance mode: log contour rings (true) vs linear edge glow (false). */
+  deLogBands: boolean;
+  /** Slope-lighting composite layer (multiplies any mode's colour by an escape-gradient shade). */
+  lightEnabled: boolean;
+  lightAngle: number;     // azimuth, radians
+  lightHeight: number;    // elevation factor
+  lightStrength: number;  // 0 flat .. 1 lit
+  ambient: number;        // shadow floor
+  /** What fractal quantity drives the gradient lookup. */
+  colorMapping: ColorMapping;
+  /** Iterations used for coloring accumulators (orbit-trap, stripe, DE, etc). ≤ maxIter. */
+  colorIter: number;
+  /** Orbit-trap center (for point / circle shapes). */
+  trapCenter: [number, number];
+  /** Orbit-trap circle radius. */
+  trapRadius: number;
+  /** Orbit-trap line normal (unit). */
+  trapNormal: [number, number];
+  /** Orbit-trap line offset: dot(z, normal) = offset. */
+  trapOffset: number;
+  /** Stripe-average frequency: k in sin(k·arg z). */
+  stripeFreq: number;
+  /** How new dye blends onto the existing dye field. */
+  dyeBlend: DyeBlend;
+  /** Colour-space used when dye decays each frame. `linear` = classic RGB, `perceptual` = OKLab L-decay. */
+  dyeDecayMode: DyeDecayMode;
+  /** Per-second decay rate for chroma (OKLab a/b) when mode is perceptual/vivid.
+   *  Lower than dyeDissipation → colour stays saturated longer than it stays bright. */
+  dyeChromaDecayHz: number;
+  /** Per-frame chroma multiplier applied after decay. 1 = neutral, <1 washes out, >1 punches up. */
+  dyeSaturationBoost: number;
+  /** Vorticity-confinement spatial scale (in sim texels). 1 = tight pixel-scale swirls, 4 = wider regional vortices. */
+  vorticityScale: number;
+  /** Final tone-mapping stage. `none` is vivid & may clip; `agx` is best for rich colours. */
+  toneMapping: ToneMapping;
+  /** Pre-tone-map exposure gain (multiplier on final colour). */
+  exposure: number;
+  /** Post-tone-map vibrance boost (chroma-aware saturation, 0..1). */
+  vibrance: number;
+  /** Strength of bloom glow, 0..3. */
+  bloomAmount: number;
+  /** Luminance threshold before anything contributes to bloom. */
+  bloomThreshold: number;
+  /** Velocity-keyed chromatic-aberration strength. */
+  aberration: number;
+  /** Dye-gradient refraction distortion (samples fractal at offset uv). */
+  refraction: number;
+  /** Stencil width (in dye-texels) for the refraction gradient. Higher = smoother distortion,
+   *  less pixel jitter, at the cost of detail. 1 = raw single-pixel gradient. */
+  refractSmooth: number;
+  /** Frosted-glass roughness for the refracted fractal sample. 0 = crisp single-tap
+   *  refraction (default). 1 = ~5px Vogel-disc blur radius — light scatters across an
+   *  8-tap kernel, matching how real rough surfaces refract into a cone of directions
+   *  rather than one ray. Each tap is gradient-mapped individually before averaging,
+   *  so boundary pixels stay coherent. The mask + wall edges blur in step with the
+   *  fractal so glass refractions look consistent. */
+  refractRoughness: number;
+  /** Laplacian-of-dye caustic highlight scale (liquid look). */
+  caustics: number;
+  interiorColor: [number, number, number];
+  edgeMargin: number;         // 0..0.25 — fade force/dye injection + advection near borders (fixes "gushing from edges")
+  forceCap: number;           // per-pixel magnitude cap on force vector (prevents c-track blowup)
+  /** When true, a separate B&W collision gradient paints solid obstacles the fluid bounces off. */
+  collisionEnabled: boolean;
+  /** When true, the display overlays the collision mask so walls are visible. */
+  collisionPreview: boolean;
+  /** Collision LUT tiling repeat — independent of the dye gradientRepeat. */
+  collisionRepeat: number;
+  /** Collision LUT phase shift — independent of the dye gradientPhase. */
+  collisionPhase: number;
+  paused: boolean;
+
+  /** TSAA jitter amplitude in pixel fractions. 1.0 = ±0.5 px. */
+  tsaaJitterAmount: number;
+  /** Max accumulated samples before TSAA stops blending. Doubles as
+   *  the on/off control: tsaaSampleCap === 1 means TSAA is OFF (render
+   *  one sample, no jitter, no blend, downstream consumers read juliaCur
+   *  directly). 0 = infinite (no cap, never converged). Anything > 1 =
+   *  active TSAA with that as the convergence target. */
+  tsaaSampleCap: number;
+  /** K-sampling: number of jittered Julia evaluations per frame, raw-
+   *  averaged before pushing to the TSAA accumulator. GLSL clamps
+   *  to [1, 16]. With grid mode + tsaaGridSize, the cells visited
+   *  cycle across frames so a full round of (gridSize / K) frames
+   *  covers every cell exactly once. K=4 + gridSize=16 → 4 frames
+   *  per round; after frame 4 the accumulator equals a single-frame
+   *  K=16 grid. */
+  tsaaPerFrameSamples?: number;
+  /** Sub-pixel jitter pattern.
+   *  - 'bluenoise': stochastic — fresh blue-noise tap per sub-sample,
+   *    decorrelated across frames. Converges in expectation; the TSAA
+   *    accumulator visibly shimmers en route.
+   *  - 'grid' (default): deterministic √gridSize × √gridSize lattice.
+   *    K cells visited per frame, cycled so a full round covers every
+   *    cell once. Round 0 is centre-of-cell (matches a single-frame
+   *    K=gridSize grid). Round 1+ pulls a deterministic blue-noise
+   *    sub-cell offset (one tap per round, walked through the texture
+   *    by R2 steps) — same offset for every pixel at a given round so
+   *    the image jitters in unison without per-pixel shimmer. */
+  tsaaJitterMode?: 'bluenoise' | 'grid';
+  /** Grid-mode lattice cell count. Should be a perfect square (4, 9,
+   *  16, 25). Default 16 = 4×4. Combined with tsaaPerFrameSamples
+   *  this defines the round length in frames. */
+  tsaaGridSize?: number;
+
+  /** When true, the Julia kernel runs the perturbation path against the
+   *  uploaded reference orbit (see `setReferenceOrbit`) instead of the
+   *  standard f32 iteration. Mandelbrot kind + power 2 only — other
+   *  configs silently fall back to the standard path. Costs nothing
+   *  when off (the shader's deep branch is dead-stripped past its
+   *  guard). Driven by the DeepZoomFeature DDFS slice. */
+  deepZoomEnabled: boolean;
+  /** Manual deep per-pixel cap (used when autoIter is false + deep zoom on). */
+  deepMaxIter: number;
+  /** Auto deep per-pixel cap — the reference-orbit length (or full zoom-depth
+   *  budget for a periodic nucleus), computed by useDeepZoomOrbit after each
+   *  orbit build and pushed in. Used when autoIter is true + deep zoom on. */
+  deepIterCap: number;
+}
+
+export interface FBO {
+  tex: WebGLTexture;
+  fbo: WebGLFramebuffer;
+  width: number;
+  height: number;
+  texel: [number, number];
+}
+
+/** Framebuffer with two colour attachments for the Julia MRT pass.
+ *  texMain holds the smooth motion sources packed into rgba (DE,
+ *  smoothPot, stripe, injectionGate). texFx holds the composited
+ *  display output (rgb = palette colour, a = collision mask). All
+ *  channels are quantities derived per-evaluation BEFORE averaging,
+ *  so they mean-pool cleanly across K sub-samples (in the Julia
+ *  shader's main()) and across TSAA frames (in the blend pass). */
+interface MrtFbo {
+  texMain: WebGLTexture;
+  texFx: WebGLTexture;
+  fbo: WebGLFramebuffer;
+  width: number;
+  height: number;
+  texel: [number, number];
+}
+
+interface DoubleFBO {
+  read: FBO;
+  write: FBO;
+  swap: () => void;
+  width: number;
+  height: number;
+  texel: [number, number];
+}
+
+export interface Program {
+  prog: WebGLProgram;
+  uniforms: Record<string, WebGLUniformLocation | null>;
+}
+
+// Boot defaults: a Mandelbrot-kind, inward-pulling (negative forceGain) gradient-mode
+// scene with a rich Inferno-like palette. Lively from first frame.
+export const DEFAULT_PARAMS: FluidParams = {
+  juliaC: [-0.36303304426511473, 0.16845183018751916],
+  center: [-0.8139175130270945, -0.054649908357858296],
+  centerLow: [0, 0],
+  zoom: 1.2904749020480561,
+  autoIter: true,
+  iterMul: 1,
+  maxIter: 310,
+  escapeR: 32,
+  power: 2,
+  kind: 'mandelbrot',
+  forceMode: 'gradient',
+  forceSource: 'smoothPot',
+  forceGain: -1200,
+  interiorDamp: 0.59,
+  dt: 0.016,
+  timeScale: 1,
+  dissipation: 0.17,
+  dyeDissipation: 1.03,
+  dyeInject: 8,
+  vorticity: 22.1,
+  pressureIters: 50,
+  show: 'composite',
+  juliaMix: 0.4,
+  dyeMix: 2,
+  velocityViz: 0.02,
+  gradientRepeat: 1,
+  gradientPhase: 0,
+  colorNormV2: false,
+  iterRate: 1,
+  iterOffset: 0,
+  iterScale: 0.125,
+  deLogBands: true,
+  lightEnabled: false,
+  lightAngle: Math.PI / 4,
+  lightHeight: 1.5,
+  lightStrength: 0.7,
+  ambient: 0.2,
+  colorMapping: 'iterations',
+  colorIter: 310,
+  trapCenter: [0, 0],
+  trapRadius: 1,
+  trapNormal: [1, 0],
+  trapOffset: 0,
+  stripeFreq: 4,
+  dyeBlend: 'max',
+  dyeDecayMode: 'linear',
+  dyeChromaDecayHz: 1.03,
+  dyeSaturationBoost: 1.0,
+  vorticityScale: 1,
+  toneMapping: 'none',
+  exposure: 1,
+  vibrance: 1.645,
+  bloomAmount: 0,
+  bloomThreshold: 1,
+  aberration: 0.27,
+  refraction: 0.037,
+  refractSmooth: 3,
+  refractRoughness: 0.0,
+  caustics: 1,
+  interiorColor: [0.02, 0.02, 0.04],
+  edgeMargin: 0.04,
+  forceCap: 40,
+  collisionEnabled: false,
+  collisionPreview: false,
+  collisionRepeat: 1.0,
+  collisionPhase: 0.0,
+  paused: false,
+  tsaaJitterAmount: 1.0,
+  tsaaSampleCap: 64,
+  // K=1 per frame: TSAA does ALL the convergence progressively across
+  // frames instead of bursting K samples into one frame. Each frame
+  // adds one jittered sample to the running average, so the image
+  // refines visibly over ~256 frames (≈4s at 60fps). Per-frame cost
+  // is 1/4 of K=4, which gives the user 4× the interactive frame rate
+  // and a smoother visual ramp on idle convergence. The 4×4 grid +
+  // blue-noise sub-offset jitter pattern still cycles through 16
+  // cells × N rounds, yielding the same quality at sampleCap as a
+  // K=N grid would.
+  tsaaPerFrameSamples: 1,
+  tsaaGridSize: 16,
+  tsaaJitterMode: 'grid',
+  deepZoomEnabled: false,
+  deepMaxIter: 2_000,
+  deepIterCap: 2_000,
+};
+
+export class FluidEngine {
+  private gl: WebGL2RenderingContext;
+  private canvas: HTMLCanvasElement;
+  private quadVbo: WebGLBuffer;
+
+  private progJulia!: Program;
+  private progMotion!: Program;
+  private progAddForce!: Program;
+  private progInjectDye!: Program;
+  private progAdvect!: Program;
+  private progDivergence!: Program;
+  private progCurl!: Program;
+  private progVorticity!: Program;
+  private progPressure!: Program;
+  private progGradSub!: Program;
+  private progSplat!: Program;
+  private progDisplay!: Program;
+  private progClear!: Program;
+  private progCopy!: Program;
+  private progCopyMrt!: Program;
+  private progReproject!: Program;
+  private progTsaaBlend!: Program;
+
+  /** TSAA history ping-pong. juliaTsaa is the current accumulator; the
+   *  blend pass reads it + juliaCur and writes juliaTsaaPrev (which we
+   *  then swap). Composite reads juliaTsaa — the averaged image. */
+  private juliaTsaa!: MrtFbo;
+  private juliaTsaaPrev!: MrtFbo;
+  /** 1-based sample index since last reset. When 1, the blend overwrites
+   *  history with the current frame; when N, mixes 1/N current with
+   *  (N-1)/N history. Clamped at params.tsaaSampleCap. */
+  private tsaaSampleIndex = 0;
+  /** Hash of every param that affects the Julia output. When it changes,
+   *  tsaaSampleIndex resets. Compared stringified each step — cheap. */
+  private tsaaParamHash = '';
+  /** Blue-noise texture for sub-pixel jitter. Shared generic loader. */
+  private blueNoise: BlueNoiseTexture | null = null;
+
+  /** Owns reference-orbit / LA / AT GPU state for the deep-zoom path.
+   *  App code drives it via `engine.deepZoom.setReferenceOrbit(...)` etc.
+   *  Engine folds `deepZoom.version` into the TSAA paramHash so an
+   *  orbit/LA/AT swap resets the accumulator. */
+  readonly deepZoom: DeepZoomController;
+
+  /** Forces all fluid sim passes (motion, advect, pressure, etc.) to
+   *  skip — independent of `params.paused`. Used by the deep-zoom
+   *  panel's "Disable fluid sim" toggle to A/B-test render perf with
+   *  the fluid pipeline out of the picture. The fractal pass still
+   *  runs so TSAA can converge. */
+  private forceFluidPaused = false;
+
+  /** Bucket-render: forces composite/display to render the converged julia
+   *  field only (no dye blend, no velocity). Set by FluidBucketHost during
+   *  a bucket-render session; restored on endRender. v1 tracks intent;
+   *  composite consumers may need to gate on it explicitly. */
+  private forceJuliaOnly = false;
+
+  /** Bucket-render uniforms — uploaded each renderJulia call. Defaults are
+   *  no-op (live viewport renders the full image, no region mask). */
+  private bucketTileOrigin: [number, number] = [0, 0];
+  private bucketTileSize:   [number, number] = [1, 1];
+  private bucketRegionMin:  [number, number] = [0, 0];
+  private bucketRegionMax:  [number, number] = [1, 1];
+
+  /** Full bucket-render output dimensions. The fractal world-coord mapping
+   *  uses uAspect = outW/outH so every tile/sub-bucket samples the same
+   *  world rect regardless of the canvas size we happen to be rendering at.
+   *  [0, 0] means "not in bucket render" — uAspect falls back to canvas aspect. */
+  private bucketOutputSize: [number, number] = [0, 0];
+
+  /** Frame counter — advances every step. Feeds shader uFrameCount for
+   *  blue-noise temporal animation. */
+  private frameCount = 0;
+
+  /** Wraps the optional EXT_disjoint_timer_query_webgl2 query around the
+   *  Julia draw call. `getMs()` feeds the diagnostics overlay; returns 0
+   *  when the extension is unavailable. */
+  private juliaTimer: GpuTimerManager;
+
+  /** Owns the bloom programs + scratch FBOs + chain pipeline. */
+  private bloom: BloomChain;
+
+  /** Last camera we rendered with — used to detect pan/zoom between frames and reproject dye. */
+  private lastCenter: [number, number] = [0, 0];
+  private lastZoom = 1.5;
+  private firstFrame = true;
+
+  /** The sim/fractal grid AND the canvas drawing buffer share these
+   *  dimensions — there is one render resolution. The app drives it via
+   *  `setRenderSize(w, h)`, which is computed from window/fixed dims ×
+   *  user `renderScale` × adaptive `qualityFraction`. Resolution changes
+   *  bilinearly reproject `dye`, `velocity`, and `juliaTsaa` so dye and
+   *  in-flight accumulation survive the resize. */
+  private simW = 0;
+  private simH = 0;
+
+  private juliaCur!: MrtFbo;
+  private juliaPrev!: MrtFbo;
+  private forceTex!: FBO;
+  private velocity!: DoubleFBO;
+  private dye!: DoubleFBO;
+  private divergence!: FBO;
+  private pressure!: DoubleFBO;
+  private curl!: FBO;
+
+  /** 1-D gradient LUTs — `main` for Julia/dye colour, `collision` for
+   *  the wall-mask pass. App code uploads via setGradientBuffer /
+   *  setCollisionGradientBuffer. */
+  private gradients: GradientLutManager;
+
+  params: FluidParams = { ...DEFAULT_PARAMS };
+
+  private lastTimeMs = 0;
+  private framebufferFormat!: { internal: number; format: number; type: number };
+
+  // ── CPU-side copy of the collision mask ────────────────────────────
+  // Downsample of the Julia MRT's outFx attachment (mask in alpha) into
+  // a small RGBA8 FBO, then readPixels into a Uint8Array each frame.
+  // Exposed via sampleMask(u,v) so the CPU brush / particle code can
+  // test for walls and bounce off them without a GPU readback per
+  // particle. Size chosen to balance spatial resolution vs readback
+  // cost (64K bytes/frame @ 128×128).
+  private maskReadFBO: FBO | null = null;
+  private maskCpuBuf = new Uint8Array(0);
+  private readonly MASK_CPU_W = 128;
+  private readonly MASK_CPU_H = 128;
+
+  /** Called after each frame's draw. Use to report a frame tick to
+   *  @engine/viewport's adaptive loop without coupling this class to
+   *  plugin imports. Mirror of fractal-toy/FractalEngine.ts pattern. */
+  public onFrameEnd?: () => void;
+
+  constructor(canvas: HTMLCanvasElement, options: { onFrameEnd?: () => void } = {}) {
+    this.canvas = canvas;
+    this.onFrameEnd = options.onFrameEnd;
+    // preserveDrawingBuffer MUST be true so that canvas.toBlob() (used by Save PNG)
+    // captures the last rendered frame. With it false, the browser can clear/swap the
+    // drawing buffer between rAFs, and toBlob returns a transparent/empty image.
+    const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('WebGL2 required — your browser does not support it.');
+    this.gl = gl;
+    this.deepZoom = new DeepZoomController(gl);
+    this.juliaTimer = new GpuTimerManager(gl);
+    this.gradients = new GradientLutManager(gl);
+    this.bloom = new BloomChain({
+      gl,
+      linkProgram: (vs, fs, names) => this.linkProgram(vs, fs, names),
+      drawQuad:    () => this.drawQuad(),
+      bindFBO:     (fbo) => this.bindFBO(fbo),
+      useProgram:  (p) => this.useProgram(p),
+      bindTex:     (u, t, l) => this.bindTex(u, t, l),
+      createFBO:   (w, h) => this.createFBO(w, h),
+      deleteFBO:   (f) => this.deleteFBO(f),
+    });
+
+    // Enable float render targets
+    const colorBufExt = gl.getExtension('EXT_color_buffer_float');
+    const halfFloatExt = gl.getExtension('EXT_color_buffer_half_float');
+    if (!colorBufExt && !halfFloatExt) {
+      throw new Error('Neither EXT_color_buffer_float nor EXT_color_buffer_half_float is available.');
+    }
+    // Prefer RGBA16F when possible; gracefully fall back to RGBA8 for the engine to still run.
+    // We test by trying to attach an RGBA16F texture.
+    this.framebufferFormat = this.detectFormat();
+
+    // fullscreen quad
+    this.quadVbo = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+    this.compileAll();
+    // Boot at a tiny placeholder grid; the app pushes a real
+    // setRenderSize() on its first ResizeObserver callback. The
+    // placeholder still needs valid FBOs so any frame() that lands
+    // before the first resize doesn't NPE on juliaCur/dye/etc.
+    this.allocateAt(64, 64);
+
+    // TSAA blue noise — shared loader (engine/utils/createBlueNoiseWebGL2).
+    // Async, returns a 1×1 neutral fallback until PNG decodes.
+    this.blueNoise = createBlueNoiseWebGL2(gl);
+
+    // Note: we deliberately DO NOT subscribe to the generic RESET_ACCUM
+    // event here. createFeatureSlice emits reset_accum on every param
+    // setter (brush, fluidSim, postFx, …) — but only Julia-affecting
+    // params should reset the Julia accumulator. The narrow check
+    // lives in updateTsaaHash() which inspects the actual fractal
+    // parameters; that's the sole authority for restarts here.
+    // resize() resets directly when the FBO is rebuilt.
+    // (renderControlSlice toggles like aaMode / accumulation that DO
+    // legitimately affect the accumulator are reflected through
+    // setParams({tsaa, tsaaSampleCap}) from FluidToyApp's render-
+    // control useEffect — a tsaa-flag flip flows naturally through
+    // the hash on the next frame.)
+  }
+
+  private detectFormat() {
+    const gl = this.gl;
+    const fmts: Array<{ internal: number; format: number; type: number; name: string }> = [
+      { internal: gl.RGBA16F, format: gl.RGBA, type: gl.HALF_FLOAT, name: 'RGBA16F half_float' },
+      { internal: gl.RGBA32F, format: gl.RGBA, type: gl.FLOAT, name: 'RGBA32F float' },
+      { internal: gl.RGBA8,   format: gl.RGBA, type: gl.UNSIGNED_BYTE, name: 'RGBA8 fallback' },
+    ];
+    for (const f of fmts) {
+      const tex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, f.internal, 4, 4, 0, f.format, f.type, null);
+      const fbo = gl.createFramebuffer()!;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(tex);
+      if (status === gl.FRAMEBUFFER_COMPLETE) {
+        console.info(`[FluidEngine] Using ${f.name} render targets.`);
+        return f;
+      }
+    }
+    throw new Error('No renderable texture format supported (not even RGBA8).');
+  }
+
+  // ---------------------------- Compilation ----------------------------
+
+  private compileShader(type: number, src: string): WebGLShader {
+    const gl = this.gl;
+    const sh = gl.createShader(type)!;
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(sh) || '';
+      const lines = src.split('\n').map((l, i) => `${String(i + 1).padStart(4)}: ${l}`).join('\n');
+      console.error(`Shader compile error:\n${log}\n${lines}`);
+      throw new Error(`Shader compile error: ${log}`);
+    }
+    return sh;
+  }
+
+  private linkProgram(vsSrc: string, fsSrc: string, uniformNames: string[]): Program {
+    const gl = this.gl;
+    const vs = this.compileShader(gl.VERTEX_SHADER, vsSrc);
+    const fs = this.compileShader(gl.FRAGMENT_SHADER, fsSrc);
+    const prog = gl.createProgram()!;
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.bindAttribLocation(prog, 0, 'aPos');
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      throw new Error(`Program link error: ${gl.getProgramInfoLog(prog)}`);
+    }
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    const uniforms: Record<string, WebGLUniformLocation | null> = {};
+    for (const n of uniformNames) uniforms[n] = gl.getUniformLocation(prog, n);
+    return { prog, uniforms };
+  }
+
+  private compileAll() {
+    this.progJulia = this.linkProgram(VERT_FULLSCREEN, FRAG_JULIA,
+      ['uTexel', 'uKind', 'uJuliaC', 'uCenter', 'uScale', 'uAspect', 'uMaxIter', 'uEscapeR2', 'uPower',
+       'uColorIter', 'uTrapMode', 'uTrapCenter', 'uTrapRadius', 'uTrapNormal', 'uTrapOffset', 'uStripeFreq',
+       'uJitterScale', 'uResolution', 'uBlueNoiseTexture', 'uBlueNoiseResolution', 'uFrameCount', 'uPerFrameSamples', 'uJitterMode', 'uGridSize', 'uTsaaSampleIndex',
+       'uImageTileOrigin', 'uImageTileSize', 'uRegionMin', 'uRegionMax',
+       'uDeepZoomEnabled', 'uRefOrbit', 'uRefOrbitTexW', 'uRefOrbitLen', 'uRefPeriod', 'uDeepCenterOffset', 'uDeepScale',
+       'uLATable', 'uLATexW', 'uLATotalCount', 'uLAEnabled', 'uLAStages[0]', 'uLAStageCount',
+       'uATEnabled', 'uATStepLength', 'uATThresholdC', 'uATSqrEscapeRadius',
+       'uATRefC', 'uATCCoeff', 'uATInvZCoeff',
+       'uTrackAccum', 'uTrackDeriv',
+       'uGradient', 'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uInteriorColor',
+       'uColorNormV2', 'uLogPixelScale', 'uIterRate', 'uIterOffset', 'uIterScale', 'uDeLogBands',
+       'uLightEnabled', 'uLightAngle', 'uLightHeight', 'uLightStrength', 'uAmbient',
+       'uCollisionGradient', 'uCollisionRepeat', 'uCollisionPhase', 'uCollisionEnabled']);
+    this.progTsaaBlend = this.linkProgram(VERT_FULLSCREEN, FRAG_TSAA_BLEND,
+      ['uCurrentMain', 'uCurrentFx', 'uHistoryMain', 'uHistoryFx', 'uSampleIndex']);
+    this.progMotion = this.linkProgram(VERT_FULLSCREEN, FRAG_MOTION,
+      ['uTexel', 'uJulia', 'uJuliaPrev', 'uJuliaFx', 'uJuliaPrevFx', 'uMask',
+       'uMode', 'uSource', 'uGain', 'uDt',
+       'uInteriorDamp', 'uEdgeMargin', 'uForceCap', 'uMaxIter']);
+    this.progAddForce = this.linkProgram(VERT_FULLSCREEN, FRAG_ADDFORCE,
+      ['uTexel', 'uVelocity', 'uForce', 'uMask', 'uDt']);
+    this.progInjectDye = this.linkProgram(VERT_FULLSCREEN, FRAG_INJECT_DYE,
+      ['uTexel', 'uDye', 'uJulia', 'uJuliaFx', 'uMask',
+       'uDyeGain', 'uDyeFadeHz', 'uDt', 'uEdgeMargin', 'uDyeBlend',
+       'uDyeDecayMode', 'uDyeChromaFadeHz', 'uDyeSatBoost']);
+    this.progAdvect = this.linkProgram(VERT_FULLSCREEN, FRAG_ADVECT,
+      ['uTexel', 'uVelocity', 'uSource', 'uMask', 'uDt', 'uDissipation', 'uEdgeMargin']);
+    this.progDivergence = this.linkProgram(VERT_FULLSCREEN, FRAG_DIVERGENCE,
+      ['uTexel', 'uVelocity']);
+    this.progCurl = this.linkProgram(VERT_FULLSCREEN, FRAG_CURL,
+      ['uTexel', 'uVelocity']);
+    this.progVorticity = this.linkProgram(VERT_FULLSCREEN, FRAG_VORTICITY,
+      ['uTexel', 'uVelocity', 'uCurl', 'uStrength', 'uScale', 'uDt']);
+    this.progPressure = this.linkProgram(VERT_FULLSCREEN, FRAG_PRESSURE,
+      ['uTexel', 'uPressure', 'uDivergence']);
+    this.progGradSub = this.linkProgram(VERT_FULLSCREEN, FRAG_GRADSUB,
+      ['uTexel', 'uPressure', 'uVelocity', 'uMask']);
+    this.progSplat = this.linkProgram(VERT_FULLSCREEN, FRAG_SPLAT,
+      ['uTexel', 'uTarget', 'uPoint', 'uValue', 'uRadius', 'uDiscR', 'uHardness', 'uAspect', 'uOp']);
+    this.progDisplay = this.linkProgram(VERT_FULLSCREEN, FRAG_DISPLAY,
+      ['uTexel', 'uTexelDisplay', 'uTexelDye', 'uJuliaFx', 'uDye', 'uVelocity', 'uGradient', 'uBloom', 'uMask',
+       'uShowMode', 'uJuliaMix', 'uDyeMix', 'uVelocityViz',
+       'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uInteriorColor',
+       'uToneMapping', 'uExposure', 'uVibrance', 'uBloomAmount', 'uAberration', 'uRefraction', 'uRefractSmooth', 'uRefractRoughness', 'uCaustics',
+       'uCollisionPreview']);
+    this.progClear = this.linkProgram(VERT_FULLSCREEN, FRAG_CLEAR, ['uValue']);
+    this.progCopy    = this.linkProgram(VERT_FULLSCREEN, FRAG_COPY,     ['uSource']);
+    this.progCopyMrt = this.linkProgram(VERT_FULLSCREEN, FRAG_COPY_MRT, ['uSourceMain', 'uSourceFx']);
+    this.progReproject = this.linkProgram(VERT_FULLSCREEN, FRAG_REPROJECT,
+      ['uTexel', 'uSource', 'uNewCenter', 'uOldCenter', 'uNewZoom', 'uOldZoom', 'uAspect']);
+  }
+
+  // ---------------------------- Textures & FBOs ----------------------------
+
+  private createFBO(w: number, h: number): FBO {
+    const gl = this.gl;
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, this.framebufferFormat.internal,
+                  w, h, 0, this.framebufferFormat.format, this.framebufferFormat.type, null);
+    const fbo = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.viewport(0, 0, w, h);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { tex, fbo, width: w, height: h, texel: [1 / w, 1 / h] };
+  }
+
+  private createMrtFbo(w: number, h: number): MrtFbo {
+    const gl = this.gl;
+    const mkTex = (): WebGLTexture => {
+      const tex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, this.framebufferFormat.internal,
+                    w, h, 0, this.framebufferFormat.format, this.framebufferFormat.type, null);
+      return tex;
+    };
+    const texMain = mkTex();
+    const texFx   = mkTex();
+    const fbo = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texMain, 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, texFx, 0);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+    gl.viewport(0, 0, w, h);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { texMain, texFx, fbo, width: w, height: h, texel: [1 / w, 1 / h] };
+  }
+
+  private deleteMrtFbo(m: MrtFbo | null | undefined) {
+    if (!m) return;
+    const gl = this.gl;
+    gl.deleteTexture(m.texMain);
+    gl.deleteTexture(m.texFx);
+    gl.deleteFramebuffer(m.fbo);
+  }
+
+  private createDoubleFBO(w: number, h: number): DoubleFBO {
+    let a = this.createFBO(w, h);
+    let b = this.createFBO(w, h);
+    const self = {
+      width: w, height: h, texel: [1 / w, 1 / h] as [number, number],
+      get read() { return a; },
+      get write() { return b; },
+      swap() { const t = a; a = b; b = t; },
+    };
+    return self as DoubleFBO;
+  }
+
+  private deleteFBO(fbo: FBO | null | undefined) {
+    if (!fbo) return;
+    const gl = this.gl;
+    gl.deleteTexture(fbo.tex);
+    gl.deleteFramebuffer(fbo.fbo);
+  }
+
+  private deleteDoubleFBO(d: DoubleFBO | null | undefined) {
+    if (!d) return;
+    this.deleteFBO(d.read);
+    this.deleteFBO(d.write);
+  }
+
+  /** First-time allocation of all FBOs at the given size. Used at boot
+   *  before any resize has landed. Subsequent dim changes go through
+   *  `setRenderSize` → `reallocateAt` which preserves dye + accumulation. */
+  private allocateAt(w: number, h: number) {
+    this.simW = w;
+    this.simH = h;
+    this.juliaCur     = this.createMrtFbo(w, h);
+    this.juliaPrev    = this.createMrtFbo(w, h);
+    this.juliaTsaa    = this.createMrtFbo(w, h);
+    this.juliaTsaaPrev = this.createMrtFbo(w, h);
+    this.tsaaSampleIndex = 0;
+    this.forceTex   = this.createFBO(w, h);
+    this.velocity   = this.createDoubleFBO(w, h);
+    this.dye        = this.createDoubleFBO(w, h);
+    this.divergence = this.createFBO(w, h);
+    this.pressure   = this.createDoubleFBO(w, h);
+    this.curl       = this.createFBO(w, h);
+    this.firstFrame = true;
+  }
+
+  /** Resolution change. Bilinear-blits the surviving content (dye,
+   *  velocity, juliaTsaa) from the old FBOs into freshly-allocated FBOs
+   *  at the new size, then frees the old. tsaaSampleIndex is preserved
+   *  — the reprojected accumulator is approximately the right average,
+   *  so accumulation can continue without a visible reset.
+   *
+   *  Ephemeral FBOs (juliaCur, juliaPrev, forceTex, divergence,
+   *  pressure, curl) are recomputed each frame, so we just reallocate
+   *  them empty. */
+  private reallocateAt(w: number, h: number) {
+    if (w === this.simW && h === this.simH && this.juliaCur) return;
+
+    const oldDyeRead = this.dye?.read;
+    const oldVelRead = this.velocity?.read;
+    const oldTsaa    = this.juliaTsaa;
+
+    // Allocate new FBOs at the new size.
+    const newDye      = this.createDoubleFBO(w, h);
+    const newVel      = this.createDoubleFBO(w, h);
+    const newTsaa     = this.createMrtFbo(w, h);
+    const newTsaaPrev = this.createMrtFbo(w, h);
+
+    // Bilinear-blit preserved content into the new FBOs' read targets.
+    // The TSAA accumulator survives so partial accumulation continues
+    // without a full reset on every render-scale step.
+    if (oldDyeRead) this.blitInto(oldDyeRead, newDye.read);
+    if (oldVelRead) this.blitInto(oldVelRead, newVel.read);
+    if (oldTsaa)    this.blitMrtInto(oldTsaa, newTsaa);
+
+    // Free old.
+    this.deleteDoubleFBO(this.dye);
+    this.deleteDoubleFBO(this.velocity);
+    this.deleteMrtFbo(this.juliaTsaa);
+    this.deleteMrtFbo(this.juliaTsaaPrev);
+    this.deleteMrtFbo(this.juliaCur);
+    this.deleteMrtFbo(this.juliaPrev);
+    this.deleteFBO(this.forceTex);
+    this.deleteFBO(this.divergence);
+    this.deleteDoubleFBO(this.pressure);
+    this.deleteFBO(this.curl);
+
+    this.simW = w;
+    this.simH = h;
+
+    this.dye           = newDye;
+    this.velocity      = newVel;
+    this.juliaTsaa     = newTsaa;
+    this.juliaTsaaPrev = newTsaaPrev;
+    this.juliaCur      = this.createMrtFbo(w, h);
+    this.juliaPrev     = this.createMrtFbo(w, h);
+    this.forceTex      = this.createFBO(w, h);
+    this.divergence    = this.createFBO(w, h);
+    this.pressure      = this.createDoubleFBO(w, h);
+    this.curl          = this.createFBO(w, h);
+    // The bilinear blits above already populated dye + velocity at the
+    // new resolution, so there's no need to skip the camera-reproject
+    // pass. Mark firstFrame anyway so the next frame doesn't try to
+    // reproject from a now-stale lastCenter/lastZoom (those refer to the
+    // pre-resize FBO).
+    this.firstFrame = true;
+  }
+
+  /** Bilinear-blit `src` into `dst` (different sizes OK). Source min/mag
+   *  filters are forced to LINEAR so the resampled buffer stays smooth. */
+  private blitInto(src: FBO, dst: FBO) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
+    gl.viewport(0, 0, dst.width, dst.height);
+    this.useProgram(this.progCopy);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, src.tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.uniform1i(this.progCopy.uniforms['uSource'], 0);
+    this.drawQuad();
+  }
+
+  /** MRT variant — copies texMain + texFx of `src` into `dst` in lockstep.
+   *  juliaTsaa stores both attachments and they must follow a resize. */
+  private blitMrtInto(src: MrtFbo, dst: MrtFbo) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
+    gl.viewport(0, 0, dst.width, dst.height);
+    this.useProgram(this.progCopyMrt);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, src.texMain);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.uniform1i(this.progCopyMrt.uniforms['uSourceMain'], 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, src.texFx);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.uniform1i(this.progCopyMrt.uniforms['uSourceFx'], 1);
+    this.drawQuad();
+  }
+
+  // ---------------------------- Drawing primitives ----------------------------
+
+  private bindFBO(fbo: FBO) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.fbo);
+    gl.viewport(0, 0, fbo.width, fbo.height);
+  }
+
+  private useProgram(p: Program) {
+    const gl = this.gl;
+    gl.useProgram(p.prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadVbo);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  }
+
+  private drawQuad() {
+    this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  private setTexel(p: Program, w: number, h: number) {
+    const gl = this.gl;
+    const u = p.uniforms['uTexel'];
+    if (u) gl.uniform2f(u, 1 / w, 1 / h);
+  }
+
+  private bindTex(unit: number, tex: WebGLTexture, uLoc: WebGLUniformLocation | null) {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    if (uLoc) gl.uniform1i(uLoc, unit);
+  }
+
+  // ---------------------------- Public API ----------------------------
+
+  setParams(p: Partial<FluidParams>) {
+    this.params = { ...this.params, ...p };
+  }
+
+  /** Current TSAA accumulation depth (0 = freshly reset, == tsaaSampleCap = converged).
+   *  Surfaced so the app can report it back into the engine-core
+   *  renderControlSlice (`reportAccumulation`) for the Pause popover readout. */
+  getAccumulationCount(): number { return this.tsaaSampleIndex; }
+
+  /** Force the TSAA accumulator back to 0. Internal hash-checking
+   *  already resets on Julia-affecting param changes; this is the
+   *  explicit override the video exporter uses between output frames
+   *  to guarantee a fresh integration window even when nothing else
+   *  changed. */
+  resetAccumulation(): void { this.tsaaSampleIndex = 0; }
+
+  /**
+   * Upload a baked LUT (`GRADIENT_LUT_WIDTH × 1 RGBA`, length = 4×width).
+   * Shared helper: both the main colour gradient and the collision B&W gradient
+   * use the same upload path, differing only in the sampling site.
+   */
+  /** Upload the main colour gradient LUT. Call whenever the user edits the gradient. */
+  setGradientBuffer(buf: Uint8Array) { this.gradients.setBuffer('main', buf); }
+
+  /** Upload the collision gradient LUT (black = fluid, white = wall). */
+  setCollisionGradientBuffer(buf: Uint8Array) { this.gradients.setBuffer('collision', buf); }
+
+  /** Set the render dimensions — sim/fractal grid AND canvas drawing
+   *  buffer at the same size, no DPR multiplication or aspect drift.
+   *  Resolution changes bilinearly reproject dye, velocity, and the
+   *  TSAA accumulator so dye state and accumulation survive the resize.
+   *  Bloom FBOs invalidate (they're canvas-sized).
+   *
+   *  The app computes (w, h) from `baseW × baseH × renderScale ×
+   *  qualityFraction` where the base is window CSS in Full mode or
+   *  `fixedResolution` in Fixed mode. */
+  setRenderSize(w: number, h: number) {
+    w = Math.max(32, Math.round(w));
+    h = Math.max(32, Math.round(h));
+    if (w === this.simW && h === this.simH && this.canvas.width === w && this.canvas.height === h) {
+      return;
+    }
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      this.bloom.markResize();
+    }
+    this.reallocateAt(w, h);
+  }
+
+  /** Re-blit the existing `juliaTsaa` + sim state to the canvas without
+   *  advancing the simulation. Use after a `setRenderSize` to repaint
+   *  before the compositor reads the empty drawing buffer (suppresses
+   *  the black flash). Cheaper than a full `frame()` — skips the fluid
+   *  sim step + the mask GPU→CPU readback. */
+  redraw() {
+    this.displayToScreen();
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  /** Clear dye and velocity back to zero. Also resets the camera-lock baseline. */
+  private markFirstFrame() { this.firstFrame = true; }
+
+  /** Clear dye and velocity back to zero. */
+  resetFluid() {
+    const gl = this.gl;
+    for (const d of [this.velocity, this.dye, this.pressure]) {
+      for (const f of [d.read, d.write]) {
+        this.bindFBO(f);
+        this.useProgram(this.progClear);
+        gl.uniform4f(this.progClear.uniforms['uValue'], 0, 0, 0, 1);
+        this.drawQuad();
+      }
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    // After a reset, the camera "before" has no dye to reproject — skip one frame.
+    this.markFirstFrame();
+  }
+
+  /**
+   * Inject a gaussian/disc splat into a ping-pong field and advance the swap.
+   * `sizeUv` is the visual radius of the brush in UV space.
+   * `hardness` blends between soft gaussian (0) and hard disc (1).
+   * `op` selects add / sub (eraser).
+   *
+   * Soft-mode needs sigma² ≈ (0.5·r)² so the 1-stddev ring lines up with
+   * the user-visible brush ring.
+   */
+  private splat(
+    target: DoubleFBO,
+    u: number, v: number,
+    value: [number, number, number],
+    sizeUv: number,
+    hardness: number,
+    op: 'add' | 'sub',
+  ) {
+    const gl = this.gl;
+    this.bindFBO(target.write);
+    this.useProgram(this.progSplat);
+    this.bindTex(0, target.read.tex, this.progSplat.uniforms['uTarget']);
+    gl.uniform2f(this.progSplat.uniforms['uPoint'], u, v);
+    gl.uniform3f(this.progSplat.uniforms['uValue'], value[0], value[1], value[2]);
+    gl.uniform1f(this.progSplat.uniforms['uRadius'], Math.max(1e-6, (sizeUv * 0.5) * (sizeUv * 0.5)));
+    gl.uniform1f(this.progSplat.uniforms['uDiscR'], Math.max(1e-6, sizeUv));
+    gl.uniform1f(this.progSplat.uniforms['uHardness'], hardness);
+    gl.uniform1f(this.progSplat.uniforms['uAspect'], this.simW / this.simH);
+    gl.uniform1f(this.progSplat.uniforms['uOp'], op === 'sub' ? 1 : 0);
+    this.drawQuad();
+    target.swap();
+  }
+
+  /**
+   * Artist brush — single atomic splat respecting the current brush mode.
+   *   mode='paint'  → dye + drag-velocity
+   *   mode='erase'  → subtract dye
+   *   mode='stamp'  → dye only
+   *   mode='smudge' → velocity only
+   *
+   * `color` is the already-resolved RGB (the caller's brush/color.ts
+   * turns brushColorMode + gradient/solid/rainbow + hue jitter into RGB).
+   * `strength` is the dye-amount multiplier (0 = dry brush, 3 = saturated).
+   */
+  brush(
+    u: number, v: number,
+    velX: number, velY: number,
+    color: [number, number, number],
+    sizeUv: number,
+    hardness: number,
+    strength: number,
+    mode: 'paint' | 'erase' | 'stamp' | 'smudge',
+  ) {
+    u = Math.max(0, Math.min(1, u));
+    v = Math.max(0, Math.min(1, v));
+    const dye: [number, number, number] = [color[0] * strength, color[1] * strength, color[2] * strength];
+    const vel: [number, number, number] = [velX, velY, 0];
+    switch (mode) {
+      case 'paint':
+        this.splat(this.velocity, u, v, vel, sizeUv, hardness, 'add');
+        this.splat(this.dye,      u, v, dye, sizeUv, hardness, 'add');
+        break;
+      case 'erase':
+        this.splat(this.dye,      u, v, [strength, strength, strength], sizeUv, hardness, 'sub');
+        break;
+      case 'stamp':
+        this.splat(this.dye,      u, v, dye, sizeUv, hardness, 'add');
+        break;
+      case 'smudge':
+        this.splat(this.velocity, u, v, vel, sizeUv, hardness, 'add');
+        break;
+    }
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+  }
+
+  // ---------------------------- Collision mask CPU readback ----------------
+  //
+  // The mask now rides in the Julia MRT's outFx.a channel (RGBA16F at
+  // sim resolution, baked per jitter sample, TSAA-blended). For particle
+  // bounce we need per-particle wall lookups, which would be a pipeline
+  // stall if read one pixel at a time. So each frame we:
+  //   1. Blit juliaTsaa COLOR_ATTACHMENT2 → maskReadFBO (128×128, RGBA8)
+  //      with LINEAR filtering — WebGL2 blitFramebuffer handles the
+  //      format conversion. The alpha channel of the destination
+  //      carries the mask value.
+  //   2. readPixels into `maskCpuBuf` — one round-trip, ~64 KB.
+  // Then CPU callers hit sampleMask(u,v) without touching the GPU.
+
+  private ensureMaskReadFBO() {
+    if (this.maskReadFBO) return;
+    const gl = this.gl;
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.MASK_CPU_W, this.MASK_CPU_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const fbo = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.maskReadFBO = {
+      tex, fbo,
+      width: this.MASK_CPU_W, height: this.MASK_CPU_H,
+      texel: [1 / this.MASK_CPU_W, 1 / this.MASK_CPU_H],
+    };
+    this.maskCpuBuf = new Uint8Array(this.MASK_CPU_W * this.MASK_CPU_H * 4);
+  }
+
+  /** Refresh the CPU-side copy of the mask. Call once per frame after
+   *  the Julia / TSAA pass has written fresh mask data into outFx.a.
+   *  No-op when collision is disabled — sampleMask() guards
+   *  independently so no CPU buffer allocation is needed until walls
+   *  are actually on. */
+  private readMaskToCPU() {
+    // Fast path: collision off → skip entirely. Avoids allocating the
+    // readback FBO and CPU buffer until the first time walls turn on,
+    // which also means no readPixels stall on apps that never use
+    // collision. readPixels every frame is expensive enough to trigger
+    // Chromium's GPU-process watchdog on long WebGL sessions.
+    if (!this.params.collisionEnabled) return;
+    const gl = this.gl;
+    this.ensureMaskReadFBO();
+    // Source is the Julia MRT, COLOR_ATTACHMENT1 (texFx). LINEAR sampling
+    // gives a sensible downsample. The full RGBA gets blitted across,
+    // but only the alpha channel carries the mask value — sampleMask()
+    // reads the alpha byte.
+    const src = this.juliaReadFbo();
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, src.fbo);
+    gl.readBuffer(gl.COLOR_ATTACHMENT1);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.maskReadFBO!.fbo);
+    gl.blitFramebuffer(
+      0, 0, this.simW, this.simH,
+      0, 0, this.MASK_CPU_W, this.MASK_CPU_H,
+      gl.COLOR_BUFFER_BIT, gl.LINEAR,
+    );
+    // Reset readBuffer to default so other code paths that blit from
+    // single-attachment FBOs aren't surprised by a stale state.
+    gl.readBuffer(gl.COLOR_ATTACHMENT0);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.maskReadFBO!.fbo);
+    gl.readPixels(0, 0, this.MASK_CPU_W, this.MASK_CPU_H, gl.RGBA, gl.UNSIGNED_BYTE, this.maskCpuBuf);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /**
+   * Public: sample the collision mask at UV (0..1) as 0..1 (1 = solid wall).
+   * Uses nearest-neighbour on the 128×128 CPU copy — good enough for
+   * particle-bounce queries, and cheap (one array index per call).
+   *
+   * Always returns 0 when collision is disabled, so callers can invoke
+   * unconditionally without a collisionEnabled check.
+   */
+  sampleMask(u: number, v: number): number {
+    if (!this.params.collisionEnabled) return 0;
+    // Buffer hasn't been allocated yet — collision just turned on and
+    // readMaskToCPU hasn't run yet. Return 0 (fluid) so particles
+    // don't false-bounce on the first frame.
+    if (this.maskCpuBuf.length === 0) return 0;
+    const W = this.MASK_CPU_W;
+    const H = this.MASK_CPU_H;
+    if (u < 0 || u > 1 || v < 0 || v > 1) return 0;
+    const x = Math.min(W - 1, Math.max(0, Math.floor(u * W)));
+    const y = Math.min(H - 1, Math.max(0, Math.floor(v * H)));
+    // Mask is in the alpha byte of the RGBA8 readback (Julia MRT
+    // attachment 2 has palette in RGB and mask in A).
+    return this.maskCpuBuf[(y * W + x) * 4 + 3] / 255;
+  }
+
+  // ---------------------------- Per-frame passes ----------------------------
+
+  /**
+   * Per-pixel iteration cap for the julia display pass. Mirrors the Gradient
+   * Explorer's FractalColorRenderer.effectiveMaxIter via the shared
+   * engine/fractal/iterationPolicy, so both renderers iterate identically:
+   *   • deep zoom (orbit built): the reference-orbit cap (deepIterCap, computed
+   *     in useDeepZoomOrbit) — or the manual deepMaxIter when autoIter is off;
+   *   • shallow: zoom-scaled (autoShallowIter) — or the manual maxIter when off.
+   * The fluid force (motion pass) keeps the modest manual maxIter; only the
+   * displayed fractal needs the deep iteration budget.
+   */
+  private effectiveMaxIter(): number {
+    const p = this.params;
+    if (p.deepZoomEnabled && this.deepZoom.hasOrbit()) {
+      return Math.max(200, (p.autoIter ? p.deepIterCap : p.deepMaxIter) | 0);
+    }
+    return p.autoIter ? autoShallowIter(p.zoom, p.iterMul) : Math.max(4, p.maxIter | 0);
+  }
+
+  /** "Fit to view" for Iterations-mode (v2): read back the converged view's iteration range and
+   *  return the {offset, scale} anchor (the caller writes them to palette.iterOffset/iterScale). */
+  fitIterationRange(): { offset: number; scale: number } | null {
+    return fitIterationRange(this.gl, this.juliaTsaa.fbo, this.simW, this.simH, this.effectiveMaxIter());
+  }
+
+  private renderJulia() {
+    const gl = this.gl;
+
+    // Short-circuit: when TSAA has converged AND no consumer needs a
+    // fresh juliaCur this frame (sim is paused), skip the entire
+    // Julia pass. The display reads juliaTsaa (already converged), so
+    // re-running the kernel produces identical output and burns GPU
+    // time for nothing. Active when the user has pause + accumulation
+    // enabled — typical "settled deep-zoom view" mode.
+    //
+    // Fluid sim consumes juliaCur via the motion shader, so we only
+    // skip when the sim isn't running (params.paused OR
+    // forceFluidPaused). updateTsaaHash() resets tsaaSampleIndex on
+    // any param change, which puts us back into "still rendering"
+    // mode automatically.
+    const tsaaCap = this.params.tsaaSampleCap;
+    const fluidActive = !this.params.paused && !this.forceFluidPaused;
+    if (
+      this.tsaaActive() &&
+      tsaaCap > 0 &&
+      this.tsaaSampleIndex >= tsaaCap &&
+      !fluidActive
+    ) {
+      return;
+    }
+
+    // Swap: current becomes previous
+    const t = this.juliaCur;
+    this.juliaCur = this.juliaPrev;
+    this.juliaPrev = t;
+
+    // GPU timer query bracketed around the Julia pass. Results land
+    // a few frames later via this.juliaTimer.poll() once per frame.
+    this.juliaTimer.begin();
+
+    // Bind MRT framebuffer (has both color attachments; drawBuffers set at creation)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.juliaCur.fbo);
+    gl.viewport(0, 0, this.juliaCur.width, this.juliaCur.height);
+    this.useProgram(this.progJulia);
+    this.setTexel(this.progJulia, this.simW, this.simH);
+    gl.uniform1i(this.progJulia.uniforms['uKind'], this.params.kind === 'julia' ? 0 : 1);
+    gl.uniform2f(this.progJulia.uniforms['uJuliaC'], this.params.juliaC[0], this.params.juliaC[1]);
+    gl.uniform2f(this.progJulia.uniforms['uCenter'], this.params.center[0], this.params.center[1]);
+    gl.uniform1f(this.progJulia.uniforms['uScale'], this.params.zoom);
+    // During bucket render, uAspect must be the FULL OUTPUT aspect — the canvas
+    // is whatever tile/sub-bucket size we're rendering, but uvJ is remapped into
+    // full-output UV by the imageTile uniforms. uAspect applies in world-coord
+    // mapping AFTER that remap, so it has to be full-output aspect, not canvas.
+    const aspect = (this.bucketOutputSize[0] > 0 && this.bucketOutputSize[1] > 0)
+      ? this.bucketOutputSize[0] / this.bucketOutputSize[1]
+      : this.simW / this.simH;
+    gl.uniform1f(this.progJulia.uniforms['uAspect'], aspect);
+    const maxIt = this.effectiveMaxIter();
+    gl.uniform1i(this.progJulia.uniforms['uMaxIter'], maxIt);
+    // Coloring-accumulator cap (orbit-trap / stripe / DE run only while
+    // iter < uColorIter). With Auto iterations on, track the effective cap so
+    // those modes — and the Iteration × multiplier — actually gain detail at
+    // depth (matches the Gradient Explorer, which binds uColorIter = uMaxIter).
+    // With auto off, honour the manual palette.colorIter knob (capped at maxIt).
+    const colorIt = this.params.autoIter
+      ? maxIt
+      : Math.max(1, Math.min(maxIt, this.params.colorIter | 0));
+    gl.uniform1i(this.progJulia.uniforms['uColorIter'], colorIt);
+    gl.uniform1f(this.progJulia.uniforms['uEscapeR2'], this.params.escapeR * this.params.escapeR);
+    gl.uniform1f(this.progJulia.uniforms['uPower'], this.params.power);
+    gl.uniform1i(this.progJulia.uniforms['uTrapMode'], colorMappingTrapShape(this.params.colorMapping));
+    // Gate the per-iter trap/stripe accumulator + dz/dc tracker on
+    // whether the active palette actually reads them. Saves ~35 ops
+    // per iter for the common smoothI / iter-based modes.
+    gl.uniform1i(this.progJulia.uniforms['uTrackAccum'], colorMappingNeedsAccum(this.params.colorMapping) ? 1 : 0);
+    // Slope lighting builds its normal from the dz/dc derivative, so it needs derivative
+    // tracking on for ANY mode (not just DE) — else dz stays at its init value and the
+    // normal is garbage (the "decomposition overlay" look). Force it on when lighting.
+    gl.uniform1i(this.progJulia.uniforms['uTrackDeriv'],
+      (colorMappingNeedsDeriv(this.params.colorMapping) || this.params.lightEnabled) ? 1 : 0);
+    gl.uniform2f(this.progJulia.uniforms['uTrapCenter'], this.params.trapCenter[0], this.params.trapCenter[1]);
+    gl.uniform1f(this.progJulia.uniforms['uTrapRadius'], this.params.trapRadius);
+    gl.uniform2f(this.progJulia.uniforms['uTrapNormal'], this.params.trapNormal[0], this.params.trapNormal[1]);
+    gl.uniform1f(this.progJulia.uniforms['uTrapOffset'], this.params.trapOffset);
+    gl.uniform1f(this.progJulia.uniforms['uStripeFreq'], this.params.stripeFreq);
+
+    // TSAA: push jitter scale + blue-noise texture. When tsaa is off or
+    // jitter has converged to the sample cap, uJitterScale drops to 0 so
+    // the iteration runs at exact pixel centers (no wobble).
+    // tsaaSampleCap === 0 means infinite — never converged.
+    const cap = this.params.tsaaSampleCap;
+    const jitterActive = this.tsaaActive() && (cap <= 0 || this.tsaaSampleIndex < cap);
+    const jitterScale = jitterActive ? this.params.tsaaJitterAmount : 0.0;
+    gl.uniform1f(this.progJulia.uniforms['uJitterScale'], jitterScale);
+    gl.uniform2f(this.progJulia.uniforms['uResolution'], this.simW, this.simH);
+    gl.uniform1i(this.progJulia.uniforms['uFrameCount'], this.frameCount);
+    gl.uniform1i(this.progJulia.uniforms['uPerFrameSamples'], this.params.tsaaPerFrameSamples ?? 1);
+    gl.uniform1i(this.progJulia.uniforms['uJitterMode'], this.params.tsaaJitterMode === 'grid' ? 1 : 0);
+    gl.uniform1i(this.progJulia.uniforms['uGridSize'], this.params.tsaaGridSize ?? 16);
+    // tsaaSampleIndex is the count of accumulator blends so far —
+    // increments AFTER renderJulia in runTsaaBlend, so we send the
+    // current value as "how many frames have already been accumulated"
+    // = the new frame's index in the round (0-based).
+    gl.uniform1i(this.progJulia.uniforms['uTsaaSampleIndex'], this.tsaaSampleIndex);
+    // Bucket-render uniforms (no-op defaults for live viewport).
+    gl.uniform2f(this.progJulia.uniforms['uImageTileOrigin'], this.bucketTileOrigin[0], this.bucketTileOrigin[1]);
+    gl.uniform2f(this.progJulia.uniforms['uImageTileSize'],   this.bucketTileSize[0],   this.bucketTileSize[1]);
+    gl.uniform2f(this.progJulia.uniforms['uRegionMin'],       this.bucketRegionMin[0],  this.bucketRegionMin[1]);
+    gl.uniform2f(this.progJulia.uniforms['uRegionMax'],       this.bucketRegionMax[0],  this.bucketRegionMax[1]);
+    if (this.blueNoise) {
+        this.bindTex(5, this.blueNoise.texture, this.progJulia.uniforms['uBlueNoiseTexture']);
+        const [bnw, bnh] = this.blueNoise.getResolution();
+        gl.uniform2f(this.progJulia.uniforms['uBlueNoiseResolution'], bnw, bnh);
+    }
+
+    // Deep-zoom uniforms (orbit + LA + AT) — DeepZoomController owns the
+    // texture state and packs the uniforms onto the active program. Pass
+    // blueNoise as the fallback so its texture stub-binds units 6/7 when
+    // the orbit/LA texture is absent (avoids driver warnings).
+    this.deepZoom.bindUniforms(this.progJulia, this.params, this.blueNoise?.texture ?? null);
+
+    // Per-evaluation palette + mask bake — gradient LUT + colour-mapping
+    // mode + repeat/phase for both the dye palette and the collision
+    // mask, plus the interior colour. The Julia shader writes outFx
+    // (palette in rgb, mask in a) mean-pooled across jitter, so display
+    // gets a smooth composite and every fluid-side mask consumer reads
+    // the same TSAA-blended wall iso. Trade-off: any change to these
+    // resets the TSAA accumulator, since the values are baked rather
+    // than derived at display time.
+    this.gradients.ensure('main');
+    this.gradients.ensure('collision');
+    this.bindTex(8, this.gradients.getTexture('main')!, this.progJulia.uniforms['uGradient']);
+    this.bindTex(9, this.gradients.getTexture('collision')!, this.progJulia.uniforms['uCollisionGradient']);
+    gl.uniform1i(this.progJulia.uniforms['uColorMapping'], colorMappingToIndex(this.params.colorMapping));
+    gl.uniform1f(this.progJulia.uniforms['uGradientRepeat'], this.params.gradientRepeat);
+    gl.uniform1f(this.progJulia.uniforms['uGradientPhase'], this.params.gradientPhase);
+    gl.uniform1i(this.progJulia.uniforms['uColorNormV2'], this.params.colorNormV2 ? 1 : 0);
+    // ln(world-units per pixel) for the v2 in-pixels Distance Estimate. Computed in
+    // JS (f64) so it survives deep zoom where uScale underflows f32. Use full-output
+    // height during bucket render so DE stays scale-correct in exports.
+    {
+      const heightPx = this.bucketOutputSize[1] > 0 ? this.bucketOutputSize[1] : this.simH;
+      gl.uniform1f(this.progJulia.uniforms['uLogPixelScale'],
+        Math.log((2 * Math.max(this.params.zoom, 1e-300)) / Math.max(heightPx, 1)));
+    }
+    // Iterations log-iteration gamma (shared Rate). uIterOffset/uIterScale = the Fit-to-view
+    // anchor; fluid-toy has no Fit UI yet so they stay at the identity pivot (offset 0,
+    // scale 1/LREF=0.125) → colours hold across zoom.
+    gl.uniform1f(this.progJulia.uniforms['uIterRate'], this.params.iterRate);
+    gl.uniform1f(this.progJulia.uniforms['uIterOffset'], this.params.iterOffset);
+    gl.uniform1f(this.progJulia.uniforms['uIterScale'], this.params.iterScale);
+    gl.uniform1i(this.progJulia.uniforms['uDeLogBands'], this.params.deLogBands ? 1 : 0);
+    gl.uniform1i(this.progJulia.uniforms['uLightEnabled'], this.params.lightEnabled ? 1 : 0);
+    gl.uniform1f(this.progJulia.uniforms['uLightAngle'], this.params.lightAngle);
+    gl.uniform1f(this.progJulia.uniforms['uLightHeight'], this.params.lightHeight);
+    gl.uniform1f(this.progJulia.uniforms['uLightStrength'], this.params.lightStrength);
+    gl.uniform1f(this.progJulia.uniforms['uAmbient'], this.params.ambient);
+    gl.uniform3f(this.progJulia.uniforms['uInteriorColor'],
+      this.params.interiorColor[0], this.params.interiorColor[1], this.params.interiorColor[2]);
+    gl.uniform1i(this.progJulia.uniforms['uCollisionEnabled'], this.params.collisionEnabled ? 1 : 0);
+    gl.uniform1f(this.progJulia.uniforms['uCollisionRepeat'], this.params.collisionRepeat);
+    gl.uniform1f(this.progJulia.uniforms['uCollisionPhase'], this.params.collisionPhase);
+
+    this.drawQuad();
+
+    this.juliaTimer.end();
+  }
+
+  /** Latest smoothed Julia-pass GPU time in ms. 0 when the GPU timer
+   *  extension is unavailable. Surfaced in the deep-zoom diagnostics
+   *  overlay for A/B testing toggles. */
+  getJuliaMs(): number { return this.juliaTimer.getMs(); }
+
+  /** True when the GPU timer extension is available. */
+  hasGpuTimer(): boolean { return this.juliaTimer.available(); }
+
+  setForceFluidPaused(on: boolean): void {
+    this.forceFluidPaused = on;
+  }
+
+  /** Bucket-render: render only the converged julia field, no dye/velocity blend. */
+  setForceJuliaOnly(on: boolean): void {
+    this.forceJuliaOnly = on;
+  }
+  /** Canvas accessor — used by the bucket-render controller for pixel readback. */
+  getCanvas(): HTMLCanvasElement { return this.canvas; }
+  isForceJuliaOnly(): boolean { return this.forceJuliaOnly; }
+  isForceFluidPaused(): boolean { return this.forceFluidPaused; }
+
+  /** Bucket-render: image-tile UV remap. Defaults (0,0)/(1,1) = full image. */
+  setBucketImageTile(originUV: [number, number], sizeUV: [number, number]): void {
+    this.bucketTileOrigin = [originUV[0], originUV[1]];
+    this.bucketTileSize   = [sizeUV[0],   sizeUV[1]];
+  }
+  /** Bucket-render: GPU sub-bucket region in tile-local UV. Outside this rect,
+   *  the julia shader discards the fragment so the accumulator preserves its
+   *  reset/cleared value. Defaults (0,0)/(1,1) = full tile. */
+  setBucketRegion(minUV: [number, number], maxUV: [number, number]): void {
+    this.bucketRegionMin = [minUV[0], minUV[1]];
+    this.bucketRegionMax = [maxUV[0], maxUV[1]];
+  }
+  /** Bucket-render: full output pixel size. Set once at render start so
+   *  uAspect tracks the export aspect across all tiles + sub-buckets,
+   *  regardless of the actual canvas size we're rendering at. Pass (0, 0)
+   *  to clear and fall back to canvas aspect for live viewport. */
+  setBucketOutputSize(w: number, h: number): void {
+    this.bucketOutputSize = [Math.max(0, Math.floor(w)), Math.max(0, Math.floor(h))];
+  }
+
+  /** TSAA blend pass. Reads juliaCur (current jittered frame) + juliaTsaa
+   *  (history), writes the running average to juliaTsaaPrev, swaps.
+   *  Samples past the cap are skipped — accumulator is already converged.
+   *  tsaaSampleCap === 0 means infinite (no clamp, no early return). */
+  private runTsaaBlend() {
+    const cap = this.params.tsaaSampleCap;
+    if (cap > 0 && this.tsaaSampleIndex >= cap) return;
+    const gl = this.gl;
+
+    // Increment first so frame 1 gets index=1 (overwrite history with current).
+    this.tsaaSampleIndex = cap > 0
+        ? Math.min(this.tsaaSampleIndex + 1, cap)
+        : this.tsaaSampleIndex + 1;
+
+    // Write to juliaTsaaPrev; we swap at the end so juliaTsaa is always "current history".
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.juliaTsaaPrev.fbo);
+    gl.viewport(0, 0, this.juliaTsaaPrev.width, this.juliaTsaaPrev.height);
+    this.useProgram(this.progTsaaBlend);
+    this.bindTex(0, this.juliaCur.texMain,  this.progTsaaBlend.uniforms['uCurrentMain']);
+    this.bindTex(1, this.juliaCur.texFx,    this.progTsaaBlend.uniforms['uCurrentFx']);
+    this.bindTex(2, this.juliaTsaa.texMain, this.progTsaaBlend.uniforms['uHistoryMain']);
+    this.bindTex(3, this.juliaTsaa.texFx,   this.progTsaaBlend.uniforms['uHistoryFx']);
+    gl.uniform1i(this.progTsaaBlend.uniforms['uSampleIndex'], this.tsaaSampleIndex);
+    this.drawQuad();
+
+    // Swap so juliaTsaa points at the freshly-written history.
+    const t = this.juliaTsaa;
+    this.juliaTsaa = this.juliaTsaaPrev;
+    this.juliaTsaaPrev = t;
+  }
+
+  /** TSAA is OFF iff sampleCap === 1 (single sample per frame, no jitter,
+   *  no blend). Anything else (cap > 1, or 0 = infinite) runs the full
+   *  TSAA pipeline. Single source of truth — no separate boolean flag. */
+  private tsaaActive(): boolean {
+    return this.params.tsaaSampleCap !== 1;
+  }
+
+  /** Returns the MRT fbo consumers (mask, motion, composite) should read
+   *  to get the "visible" julia image. When TSAA is on, that's the
+   *  averaged accumulator; when off, it's the current per-frame render. */
+  private juliaReadFbo(): MrtFbo {
+    return this.tsaaActive() ? this.juliaTsaa : this.juliaCur;
+  }
+
+  /** Check whether any Julia-affecting parameter changed since the last
+   *  step; if so, reset the TSAA accumulator. Called each step before
+   *  renderJulia. Hashes to stringified key for a cheap equality test. */
+  private updateTsaaHash() {
+    const p = this.params;
+    // Palette + interior + gradient LUT are folded in because the Julia
+    // pass bakes outFx (palette colour mean-pooled across jitter). Any
+    // change that alters the baked colour must reset the accumulator,
+    // not just the iteration-affecting params.
+    const ic = p.interiorColor;
+    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|cL:${p.centerLow[0]},${p.centerLow[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|cn:${p.colorNormV2 ? 1 : 0}|ir:${p.iterRate}|io:${p.iterOffset}|is:${p.iterScale}|de:${p.deLogBands ? 1 : 0}|li:${p.lightEnabled ? 1 : 0},${p.lightAngle},${p.lightHeight},${p.lightStrength},${p.ambient}|ic:${ic[0]},${ic[1]},${ic[2]}|ce:${p.collisionEnabled ? 1 : 0}|cr:${p.collisionRepeat}|cp:${p.collisionPhase}|gV:${this.gradients.version}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}|ai:${p.autoIter ? 1 : 0}|im:${p.iterMul}|dmi:${p.deepMaxIter}`;
+    if (hash !== this.tsaaParamHash) {
+        this.tsaaParamHash = hash;
+        this.tsaaSampleIndex = 0;
+    }
+  }
+
+  private computeForce() {
+    const gl = this.gl;
+    this.bindFBO(this.forceTex);
+    this.useProgram(this.progMotion);
+    this.setTexel(this.progMotion, this.simW, this.simH);
+    // uJulia = smooth motion sources (DE / smoothPot / stripe / paletteLuma
+    // packed into rgba of the TSAA-blended Julia MRT outMain).
+    const jr = this.juliaReadFbo();
+    this.bindTex(0, jr.texMain, this.progMotion.uniforms['uJulia']);
+    // uJuliaPrev = previous frame's raw single-frame bake. Temporal-delta
+    // operator uses this; other operators ignore it. Mismatched smoothness
+    // (TSAA vs raw prev) introduces a small temporal-delta noise floor —
+    // acceptable for now since the operator's purpose is "react to motion."
+    this.bindTex(1, this.juliaPrev.texMain, this.progMotion.uniforms['uJuliaPrev']);
+    // uJuliaFx = baked palette + mask, used by hue operator and the
+    // paletteLuma / mask source channels. uMask is the same texture
+    // (different sampler uniform for clarity).
+    this.bindTex(4, jr.texFx, this.progMotion.uniforms['uJuliaFx']);
+    this.bindTex(5, jr.texFx, this.progMotion.uniforms['uMask']);
+    // Previous frame's outFx — only the temporal-delta operator with
+    // source = paletteLuma or mask reads this.
+    this.bindTex(6, this.juliaPrev.texFx, this.progMotion.uniforms['uJuliaPrevFx']);
+    gl.uniform1i(this.progMotion.uniforms['uMode'], modeToIndex(this.params.forceMode));
+    gl.uniform1i(this.progMotion.uniforms['uSource'], forceSourceToIndex(this.params.forceSource));
+    gl.uniform1f(this.progMotion.uniforms['uGain'], this.params.forceGain);
+    gl.uniform1f(this.progMotion.uniforms['uDt'], this.params.dt);
+    gl.uniform1f(this.progMotion.uniforms['uInteriorDamp'], this.params.interiorDamp);
+    gl.uniform1f(this.progMotion.uniforms['uEdgeMargin'], this.params.edgeMargin);
+    gl.uniform1f(this.progMotion.uniforms['uForceCap'], this.params.forceCap);
+    gl.uniform1i(this.progMotion.uniforms['uMaxIter'], Math.max(1, this.params.maxIter | 0));
+    this.drawQuad();
+  }
+
+  private addForceToVelocity() {
+    const gl = this.gl;
+    this.bindFBO(this.velocity.write);
+    this.useProgram(this.progAddForce);
+    this.setTexel(this.progAddForce, this.simW, this.simH);
+    this.bindTex(0, this.velocity.read.tex, this.progAddForce.uniforms['uVelocity']);
+    this.bindTex(1, this.forceTex.tex, this.progAddForce.uniforms['uForce']);
+    this.bindTex(2, this.juliaReadFbo().texFx, this.progAddForce.uniforms['uMask']);
+    gl.uniform1f(this.progAddForce.uniforms['uDt'], this.params.dt);
+    this.drawQuad();
+    this.velocity.swap();
+  }
+
+  private injectDye() {
+    const gl = this.gl;
+    this.bindFBO(this.dye.write);
+    this.useProgram(this.progInjectDye);
+    this.setTexel(this.progInjectDye, this.simW, this.simH);
+    const juliaReadInject = this.juliaReadFbo();
+    this.bindTex(0, this.dye.read.tex, this.progInjectDye.uniforms['uDye']);
+    // uJulia: motion-source MRT, the dye-inject pass only reads its .a
+    // channel (the per-eval-baked injection gate, mean-pooled).
+    this.bindTex(1, juliaReadInject.texMain, this.progInjectDye.uniforms['uJulia']);
+    // uJuliaFx: pre-baked palette (rgb) + collision mask (a). uMask is
+    // the same texture, separate uniform for clarity at call sites.
+    this.bindTex(4, juliaReadInject.texFx, this.progInjectDye.uniforms['uJuliaFx']);
+    this.bindTex(5, juliaReadInject.texFx, this.progInjectDye.uniforms['uMask']);
+    gl.uniform1f(this.progInjectDye.uniforms['uDyeGain'], this.params.dyeInject);
+    gl.uniform1f(this.progInjectDye.uniforms['uDyeFadeHz'], this.params.dyeDissipation);
+    gl.uniform1f(this.progInjectDye.uniforms['uDt'], this.params.dt);
+    gl.uniform1f(this.progInjectDye.uniforms['uEdgeMargin'], this.params.edgeMargin);
+    gl.uniform1i(this.progInjectDye.uniforms['uDyeBlend'], dyeBlendToIndex(this.params.dyeBlend));
+    gl.uniform1i(this.progInjectDye.uniforms['uDyeDecayMode'], dyeDecayModeToIndex(this.params.dyeDecayMode));
+    gl.uniform1f(this.progInjectDye.uniforms['uDyeChromaFadeHz'], this.params.dyeChromaDecayHz);
+    gl.uniform1f(this.progInjectDye.uniforms['uDyeSatBoost'], this.params.dyeSaturationBoost);
+    this.drawQuad();
+    this.dye.swap();
+  }
+
+  private computeCurl() {
+    this.bindFBO(this.curl);
+    this.useProgram(this.progCurl);
+    this.setTexel(this.progCurl, this.simW, this.simH);
+    this.bindTex(0, this.velocity.read.tex, this.progCurl.uniforms['uVelocity']);
+    this.drawQuad();
+  }
+
+  private applyVorticity() {
+    const gl = this.gl;
+    this.bindFBO(this.velocity.write);
+    this.useProgram(this.progVorticity);
+    this.setTexel(this.progVorticity, this.simW, this.simH);
+    this.bindTex(0, this.velocity.read.tex, this.progVorticity.uniforms['uVelocity']);
+    this.bindTex(1, this.curl.tex, this.progVorticity.uniforms['uCurl']);
+    gl.uniform1f(this.progVorticity.uniforms['uStrength'], this.params.vorticity);
+    gl.uniform1f(this.progVorticity.uniforms['uScale'], this.params.vorticityScale);
+    gl.uniform1f(this.progVorticity.uniforms['uDt'], this.params.dt);
+    this.drawQuad();
+    this.velocity.swap();
+  }
+
+  private computeDivergence() {
+    this.bindFBO(this.divergence);
+    this.useProgram(this.progDivergence);
+    this.setTexel(this.progDivergence, this.simW, this.simH);
+    this.bindTex(0, this.velocity.read.tex, this.progDivergence.uniforms['uVelocity']);
+    this.drawQuad();
+  }
+
+  private solvePressure() {
+    const gl = this.gl;
+    // clear pressure to 0
+    this.bindFBO(this.pressure.read);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    // Jacobi iterations
+    for (let i = 0; i < this.params.pressureIters; ++i) {
+      this.bindFBO(this.pressure.write);
+      this.useProgram(this.progPressure);
+      this.setTexel(this.progPressure, this.simW, this.simH);
+      this.bindTex(0, this.pressure.read.tex, this.progPressure.uniforms['uPressure']);
+      this.bindTex(1, this.divergence.tex, this.progPressure.uniforms['uDivergence']);
+      this.drawQuad();
+      this.pressure.swap();
+    }
+  }
+
+  private subtractPressureGradient() {
+    this.bindFBO(this.velocity.write);
+    this.useProgram(this.progGradSub);
+    this.setTexel(this.progGradSub, this.simW, this.simH);
+    this.bindTex(0, this.pressure.read.tex, this.progGradSub.uniforms['uPressure']);
+    this.bindTex(1, this.velocity.read.tex, this.progGradSub.uniforms['uVelocity']);
+    this.bindTex(2, this.juliaReadFbo().texFx, this.progGradSub.uniforms['uMask']);
+    this.drawQuad();
+    this.velocity.swap();
+  }
+
+  /**
+   * Semi-Lagrangian advect of `source` by the current velocity field.
+   * Used for both velocity (advecting itself) and dye (carried by velocity).
+   */
+  private advect(source: DoubleFBO, dissipationHz: number) {
+    const gl = this.gl;
+    this.bindFBO(source.write);
+    this.useProgram(this.progAdvect);
+    this.setTexel(this.progAdvect, this.simW, this.simH);
+    this.bindTex(0, this.velocity.read.tex, this.progAdvect.uniforms['uVelocity']);
+    this.bindTex(1, source.read.tex, this.progAdvect.uniforms['uSource']);
+    this.bindTex(2, this.juliaReadFbo().texFx, this.progAdvect.uniforms['uMask']);
+    gl.uniform1f(this.progAdvect.uniforms['uDt'], this.params.dt);
+    gl.uniform1f(this.progAdvect.uniforms['uDissipation'], dissipationHz);
+    gl.uniform1f(this.progAdvect.uniforms['uEdgeMargin'], this.params.edgeMargin);
+    this.drawQuad();
+    source.swap();
+  }
+
+  /**
+   * Resample `srcDouble` from the previous camera (oldCenter, oldZoom) into the
+   * current camera (this.params.center, this.params.zoom). Runs a single pass
+   * writing from read → write, then swaps.
+   */
+  private reprojectTexture(srcDouble: DoubleFBO, oldCenter: [number, number], oldZoom: number) {
+    const gl = this.gl;
+    this.bindFBO(srcDouble.write);
+    this.useProgram(this.progReproject);
+    this.setTexel(this.progReproject, this.simW, this.simH);
+    this.bindTex(0, srcDouble.read.tex, this.progReproject.uniforms['uSource']);
+    gl.uniform2f(this.progReproject.uniforms['uNewCenter'], this.params.center[0], this.params.center[1]);
+    gl.uniform2f(this.progReproject.uniforms['uOldCenter'], oldCenter[0], oldCenter[1]);
+    gl.uniform1f(this.progReproject.uniforms['uNewZoom'], this.params.zoom);
+    gl.uniform1f(this.progReproject.uniforms['uOldZoom'], oldZoom);
+    gl.uniform1f(this.progReproject.uniforms['uAspect'], this.simW / this.simH);
+    this.drawQuad();
+    srcDouble.swap();
+  }
+
+  /** If the camera has moved since last frame, reproject dye + velocity so world-space is preserved. */
+  private maybeReprojectForCamera() {
+    if (this.firstFrame) {
+      this.firstFrame = false;
+      this.lastCenter = [this.params.center[0], this.params.center[1]];
+      this.lastZoom = this.params.zoom;
+      return;
+    }
+    const dx = this.params.center[0] - this.lastCenter[0];
+    const dy = this.params.center[1] - this.lastCenter[1];
+    const dz = this.params.zoom - this.lastZoom;
+    if (Math.abs(dx) < 1e-7 && Math.abs(dy) < 1e-7 && Math.abs(dz) < 1e-7) return;
+    const oldCenter: [number, number] = [this.lastCenter[0], this.lastCenter[1]];
+    const oldZoom = this.lastZoom;
+    this.reprojectTexture(this.dye, oldCenter, oldZoom);
+    this.reprojectTexture(this.velocity, oldCenter, oldZoom);
+    this.lastCenter = [this.params.center[0], this.params.center[1]];
+    this.lastZoom = this.params.zoom;
+  }
+
+  private displayToScreen() {
+    const gl = this.gl;
+    this.gradients.ensure('main');
+
+    // Bloom — controller does the dual-filter chain when bloomAmount
+    // is meaningful. We hand it a `renderSource` callback that does a
+    // clean (skipPost) display pass into its first FBO.
+    const wantBloom = this.params.bloomAmount > 0.001;
+    const bloomTex = wantBloom
+        ? this.bloom.process(this.canvas.width, this.canvas.height,
+            this.params.bloomThreshold, () => {
+                this.setDisplayUniforms(null, /*skipPost*/true);
+                this.drawQuad();
+            })
+        : null;
+
+    // Final pass: to screen, with the glow texture (or null if disabled).
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    this.setDisplayUniforms(bloomTex, /*skipPost*/false);
+    this.drawQuad();
+  }
+
+  /**
+   * Binds textures + uniforms for FRAG_DISPLAY.
+   * @param bloomTex  If null, the bloom sampler gets a dummy texture + bloomAmount=0.
+   * @param skipPost  When true (used during the bloom-source pre-pass), disables all
+   *                  post-processing so the bloom extract sees a CLEAN composite —
+   *                  otherwise bloom would feed back on tone-mapped output.
+   */
+  private setDisplayUniforms(bloomTex: WebGLTexture | null, skipPost: boolean = false) {
+    const gl = this.gl;
+    this.useProgram(this.progDisplay);
+    gl.uniform2f(this.progDisplay.uniforms['uTexelDisplay'], 1 / this.canvas.width, 1 / this.canvas.height);
+    gl.uniform2f(this.progDisplay.uniforms['uTexelDye'], 1 / this.simW, 1 / this.simH);
+    const juliaReadDisplay = this.juliaReadFbo();
+    this.bindTex(7, juliaReadDisplay.texFx, this.progDisplay.uniforms['uJuliaFx']);
+    this.bindTex(1, this.dye.read.tex, this.progDisplay.uniforms['uDye']);
+    this.bindTex(2, this.velocity.read.tex, this.progDisplay.uniforms['uVelocity']);
+    this.bindTex(3, this.gradients.getTexture('main')!, this.progDisplay.uniforms['uGradient']);
+    this.bindTex(5, bloomTex ?? this.gradients.getTexture('main')!, this.progDisplay.uniforms['uBloom']);
+    this.bindTex(6, juliaReadDisplay.texFx, this.progDisplay.uniforms['uMask']);
+    // forceJuliaOnly overrides show mode during bucket render — the export
+    // is the converged fractal alone, no dye/velocity blend. Restored on
+    // bucket-render endRender via setForceJuliaOnly(false).
+    const effectiveShow: ShowMode = this.forceJuliaOnly ? 'julia' : this.params.show;
+    gl.uniform1i(this.progDisplay.uniforms['uShowMode'], showToIndex(effectiveShow));
+    gl.uniform1f(this.progDisplay.uniforms['uJuliaMix'], this.params.juliaMix);
+    gl.uniform1f(this.progDisplay.uniforms['uDyeMix'], this.params.dyeMix);
+    gl.uniform1f(this.progDisplay.uniforms['uVelocityViz'], this.params.velocityViz);
+    gl.uniform1i(this.progDisplay.uniforms['uColorMapping'], colorMappingToIndex(this.params.colorMapping));
+    gl.uniform1f(this.progDisplay.uniforms['uGradientRepeat'], this.params.gradientRepeat);
+    gl.uniform1f(this.progDisplay.uniforms['uGradientPhase'], this.params.gradientPhase);
+    gl.uniform3f(this.progDisplay.uniforms['uInteriorColor'],
+      this.params.interiorColor[0], this.params.interiorColor[1], this.params.interiorColor[2]);
+    // Post-processing knobs — zeroed when rendering the bloom source.
+    if (skipPost) {
+      gl.uniform1i(this.progDisplay.uniforms['uToneMapping'], 0);
+      gl.uniform1f(this.progDisplay.uniforms['uExposure'], 1.0);
+      gl.uniform1f(this.progDisplay.uniforms['uVibrance'], 0.0);
+      gl.uniform1f(this.progDisplay.uniforms['uBloomAmount'], 0.0);
+      gl.uniform1f(this.progDisplay.uniforms['uAberration'], 0.0);
+      gl.uniform1f(this.progDisplay.uniforms['uRefraction'], 0.0);
+      gl.uniform1f(this.progDisplay.uniforms['uRefractSmooth'], 1.0);
+      gl.uniform1f(this.progDisplay.uniforms['uRefractRoughness'], 0.0);
+      gl.uniform1f(this.progDisplay.uniforms['uCaustics'], 0.0);
+      gl.uniform1i(this.progDisplay.uniforms['uCollisionPreview'], 0);
+    } else {
+      gl.uniform1i(this.progDisplay.uniforms['uToneMapping'], toneMappingToIndex(this.params.toneMapping));
+      gl.uniform1f(this.progDisplay.uniforms['uExposure'], this.params.exposure);
+      gl.uniform1f(this.progDisplay.uniforms['uVibrance'], this.params.vibrance);
+      gl.uniform1f(this.progDisplay.uniforms['uBloomAmount'], bloomTex ? this.params.bloomAmount : 0);
+      gl.uniform1f(this.progDisplay.uniforms['uAberration'], this.params.aberration);
+      gl.uniform1f(this.progDisplay.uniforms['uRefraction'], this.params.refraction);
+      gl.uniform1f(this.progDisplay.uniforms['uRefractSmooth'], this.params.refractSmooth);
+      gl.uniform1f(this.progDisplay.uniforms['uRefractRoughness'], this.params.refractRoughness);
+      gl.uniform1f(this.progDisplay.uniforms['uCaustics'], this.params.caustics);
+      gl.uniform1i(this.progDisplay.uniforms['uCollisionPreview'], this.params.collisionPreview ? 1 : 0);
+    }
+  }
+
+  frame(timeMs: number) {
+    const gl = this.gl;
+    // Wall-clock dt with a 50ms ceiling — guards the sim against tab-switch
+    // "monster frames". Clamped >= 0 too: callers that swap in a controlled
+    // engine clock (e.g. fluid-toy's deterministic-playback path swapping
+    // wall-clock for `currentFrame * 1000/fps`) cause one discontinuous tick
+    // where timeMs jumps backwards. Without the floor, dt goes hugely
+    // negative, the sim integrates the wrong way, and NaN propagates through
+    // TSAA → black canvas. timeScale is applied AFTER the clamp so a 0.5x
+    // slow-mo through a frame stall still doesn't burst-step the sim.
+    const wallDt = this.lastTimeMs === 0 ? 0.016 : Math.max(0, Math.min(0.05, (timeMs - this.lastTimeMs) / 1000));
+    this.lastTimeMs = timeMs;
+    this.params.dt = wallDt * this.params.timeScale;
+
+    // TSAA hash check — invalidate accumulator on any param change that
+    // would alter the Julia output. Must happen BEFORE renderJulia so the
+    // shader sees the current sample index for jitter scheduling.
+    this.updateTsaaHash();
+    this.frameCount++;
+
+    // 1. Julia pass. Once TSAA has reached its cap the accumulator is
+    // frozen — re-rendering would just blend into a stale history.
+    // updateTsaaHash() resets the index on any Julia-affecting param
+    // change, so scrubs / camera moves re-engage rendering on the next
+    // frame. tsaaSampleCap === 0 disables the short-circuit (infinite
+    // accumulation).
+    const tsaaConverged = this.tsaaActive()
+        && this.params.tsaaSampleCap > 0
+        && this.tsaaSampleIndex >= this.params.tsaaSampleCap;
+    if (!tsaaConverged) {
+      this.renderJulia();
+      if (this.tsaaActive()) this.runTsaaBlend();
+    }
+    // 1c. Downsample + readback the (already-baked) mask channel of the
+    // Julia MRT to CPU for particle-bounce queries. Skips the actual
+    // GPU round-trip when collision is off.
+    this.readMaskToCPU();
+
+    if (!this.params.paused && !this.forceFluidPaused) {
+      // 1b. Camera-locked dye/velocity — if the user panned or zoomed since the last
+      // frame, resample dye + velocity so they stay locked to world-space.
+      this.maybeReprojectForCamera();
+
+      // 2. Motion vector pass
+      this.computeForce();
+      // 3. Add force to velocity
+      this.addForceToVelocity();
+      // 4. Vorticity confinement (optional)
+      if (this.params.vorticity > 0) {
+        this.computeCurl();
+        this.applyVorticity();
+      }
+      // 5. Divergence + pressure projection
+      this.computeDivergence();
+      this.solvePressure();
+      this.subtractPressureGradient();
+      // 6. Advect velocity (carries itself)
+      this.advect(this.velocity, this.params.dissipation);
+      // 7. Inject fractal dye + advect dye (carried by velocity)
+      this.injectDye();
+      this.advect(this.dye, this.params.dyeDissipation);
+    }
+
+    // 8. Display
+    this.displayToScreen();
+
+    // unbind
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    // Drain GPU timer query results. Issued in renderJulia, drained
+    // here a few frames later (async by design).
+    this.juliaTimer.poll();
+
+    if (this.onFrameEnd) this.onFrameEnd();
+  }
+
+  dispose() {
+    const gl = this.gl;
+    this.deepZoom.dispose();
+    this.juliaTimer.dispose();
+    this.deleteMrtFbo(this.juliaCur);
+    this.deleteMrtFbo(this.juliaPrev);
+    this.deleteMrtFbo(this.juliaTsaa);
+    this.deleteMrtFbo(this.juliaTsaaPrev);
+    this.deleteFBO(this.forceTex);
+    this.deleteDoubleFBO(this.velocity);
+    this.deleteDoubleFBO(this.dye);
+    this.deleteFBO(this.divergence);
+    this.deleteDoubleFBO(this.pressure);
+    this.deleteFBO(this.curl);
+    if (this.maskReadFBO) { this.deleteFBO(this.maskReadFBO); this.maskReadFBO = null; }
+    this.gradients.dispose();
+    this.bloom.dispose();
+    gl.deleteBuffer(this.quadVbo);
+    for (const p of [
+      this.progJulia, this.progMotion, this.progAddForce, this.progInjectDye,
+      this.progAdvect, this.progDivergence, this.progCurl, this.progVorticity,
+      this.progPressure, this.progGradSub, this.progSplat, this.progDisplay, this.progClear,
+      this.progReproject, this.progTsaaBlend,
+    ]) {
+      if (p?.prog) gl.deleteProgram(p.prog);
+    }
+    if (this.blueNoise) { gl.deleteTexture(this.blueNoise.texture); this.blueNoise = null; }
+  }
+
+  /** Map canvas pixel coords to fractal coords (for c-picking). */
+  canvasToFractal(xPx: number, yPx: number): [number, number] {
+    const rect = this.canvas.getBoundingClientRect();
+    const u = (xPx - rect.left) / rect.width;
+    const v = 1 - (yPx - rect.top) / rect.height;
+    const aspect = this.canvas.width / this.canvas.height;
+    const fx = (u * 2 - 1) * aspect * this.params.zoom + this.params.center[0];
+    const fy = (v * 2 - 1) * this.params.zoom + this.params.center[1];
+    return [fx, fy];
+  }
+
+  /** Canvas-relative UV (0..1 with origin at bottom-left) for splat injection. */
+  canvasToUv(xPx: number, yPx: number): [number, number] {
+    const rect = this.canvas.getBoundingClientRect();
+    return [(xPx - rect.left) / rect.width, 1 - (yPx - rect.top) / rect.height];
+  }
+}
+
+function modeToIndex(m: ForceMode): number {
+  switch (m) {
+    case 'gradient': return 0;
+    case 'curl': return 1;
+    // Legacy enum names kept for preset compatibility; "iterate" now drives
+    // the Direct operator and "c-track" drives Temporal-Delta. The shader
+    // works on the smooth motion-source channel chosen via ForceSource
+    // rather than the raw z fields the old modes read from.
+    case 'iterate': return 2;
+    case 'c-track': return 3;
+    case 'hue': return 4;
+  }
+}
+
+function forceSourceToIndex(s: ForceSource): number {
+  switch (s) {
+    case 'de':          return 0;
+    case 'smoothPot':   return 1;
+    case 'stripe':      return 2;
+    case 'paletteLuma': return 3;
+    case 'mask':        return 4;
+  }
+}
+
+function showToIndex(s: ShowMode): number {
+  switch (s) {
+    case 'composite': return 0;
+    case 'julia': return 1;
+    case 'dye': return 2;
+    case 'velocity': return 3;
+  }
+}

@@ -1,9 +1,10 @@
 
 import React from 'react';
 import Button from './Button';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { FeatureComponentProps } from './registry/ComponentRegistry';
 import { InteractionMode } from '../types';
+import { useTutorAnchor } from '../engine/plugins/Tutorial';
 
 interface InteractionPickerProps extends FeatureComponentProps {
     targetMode: InteractionMode;
@@ -22,20 +23,21 @@ export const InteractionPicker: React.FC<InteractionPickerProps> = ({
     variant = 'primary'
 }) => {
     // Read global interaction state directly from store hooks
-    const currentMode = useFractalStore(s => s.interactionMode);
+    const currentMode = useEngineStore(s => s.interactionMode);
     
     // Access the global setter. 
     // Note: 'actions' passed from AutoFeaturePanel contains all store actions.
     const { setInteractionMode } = actions as any;
 
     const isActive = currentMode === targetMode;
+    const anchorRef = useTutorAnchor(`pick-${targetMode.replace('picking_', '')}`);
 
     const handleToggle = () => {
         setInteractionMode(isActive ? 'none' : targetMode);
     };
 
     return (
-        <div className="flex flex-col animate-fade-in" data-tut={`pick-${targetMode.replace('picking_', '')}`}>
+        <div className="flex flex-col animate-fade-in" ref={anchorRef}>
              {isActive && helpText && (
                  <div className="mb-px p-2 bg-green-900/30 border border-green-500/30 rounded text-[9px] text-green-200 animate-pulse text-center leading-tight">
                      {helpText}

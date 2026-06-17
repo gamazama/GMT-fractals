@@ -69,22 +69,25 @@ Settings specific to the Path Tracing engine.
 Render images at arbitrary resolutions — far beyond what the GPU can draw in a single frame — by rendering in small internal tiles (GPU buckets) and accumulating samples per tile until noise-free. Optionally split the output into a grid of separate PNG files for massive prints.
 
 ## Actions
-- **Refine View**: renders the current viewport at viewport resolution until converged, then holds the cleaned-up frame on screen until you move the camera or change a parameter. Use when you want a clean still of what you're currently looking at.
-- **Preview Region**: click a spot on the canvas to zoom into that area at export pixel density. You stay fully interactive — move sliders, adjust lights, change colors — and the preview re-renders live. See the *Preview Region* section below.
-- **Export Image**: renders at the configured Output Size and saves PNG(s) to disk. With a tile grid > 1×1, each tile saves as its own file.
+- **Refine**: renders the current viewport at viewport resolution until converged, then holds the cleaned-up frame on screen until you move the camera or change a parameter. Use when you want a clean still of what you're currently looking at.
+- **Preview**: click a spot on the canvas to zoom into that area at export pixel density. You stay fully interactive — move sliders, adjust lights, change colors — and the preview re-renders live. See the *Preview Region* section below.
+- **Export**: renders at the configured Output Size and saves PNG(s) to disk. With a tile grid > 1×1, each tile saves as its own file. The button shows the file count when tiling is active (e.g. *Export 4×*).
 
 ## Quality Settings
 - **Convergence Threshold** (default 0.25%): how similar consecutive frames must be before a tile is considered "done". Lower = more samples, higher quality. 0.1% = production, 1% = fast preview.
-- **Max Samples Per Bucket** (default 64): safety cap so difficult tiles don't accumulate forever. Also caps Preview Region accumulation.
+- **Max Samples / Bucket** (default 64): safety cap so difficult tiles don't accumulate forever. Also caps Preview Region accumulation.
 
 ## Output Size
-- **Preset**: HD / FHD / QHD / 4K / 5K / 8K, squares, portraits, and A0–A3 print sizes at 300 DPI.
+- **Preset**: HD / FHD / QHD / 4K / 5K / 8K UHD, ultrawide (UWQHD, 5K2K), squares, portrait/vertical, skybox, and A0–A3 print sizes at 300 DPI. The list is shared with the Quality > Resolution dropdown.
 - **Width / Height**: type any values; snaps to multiples of 8 for GPU alignment.
-- **Lock to viewport aspect** (default on): the output automatically tracks the current canvas aspect ratio — open a sidebar, change the window size, and the output height adjusts so what you export matches what you see. Turn off to pick an arbitrary aspect ratio; when off, the viewport temporarily switches to a fitted Fixed-mode canvas that matches the output aspect (so the live render doesn't stretch).
-- **Match viewport**: one-click button to set output size to the current canvas dimensions.
+- **Ratio**: aspect-ratio lock for the W/H pair — *Free* (independent), or one of the standard ratios (1:1, 16:9, 21:9, 4:3, 4:5, 9:16, 2.35:1, 2:1). When set, editing Width recomputes Height (and vice versa). The same ratio list is used by the viewport "fit to window" dropdown.
+- **Lock to viewport aspect** (default on): the output automatically tracks the current canvas aspect ratio — open a sidebar, change the window size, and the output height adjusts so what you export matches what you see. Turn off (or pick a static Ratio above) to render an arbitrary aspect; when unlocked, the viewport temporarily switches to a fitted Fixed-mode canvas that matches the output aspect (so the live render doesn't stretch).
+- **Match Viewport**: one-click button to set output size to the current canvas dimensions.
+
+The VRAM estimate next to the *Output Size* heading shows the memory cost of a single tile.
 
 ## Tile Grid
-Columns × Rows splits the output into separate PNG files — useful for prints too large for GPU memory in one render (e.g. 20K × 20K split 5×5 = 25 files at 4K each). The per-tile VRAM estimate below the dimensions shows the memory cost of a single tile. **1 × 1 = single file** (default).
+*Columns × Rows* splits the output into separate PNG files — useful for prints too large for GPU memory in one render (e.g. 20K × 20K split 5×5 = 25 files at 4K each). The header next to *Tile Grid* shows the file count and per-tile pixel size. **1 × 1 = single file** (default).
 
 When tiling is active with bloom or chromatic aberration enabled, visible seams may appear at tile boundaries (spatial effects run per-tile). Disable those effects for seamless stitching.
 
@@ -95,7 +98,7 @@ Internal tile size for VRAM safety — distinct from the output tile grid above.
 Bloom, Chromatic Aberration, Color Grading, and Tone Mapping are applied to each image tile's complete composite after its GPU buckets finish. For single-image renders the result matches the live viewport; for tiled renders see the seam note above.
 
 ## During Export
-The viewport is locked — camera movement, parameter changes, and resizing are blocked to preserve tiled-render integrity. The panel stays open with a progress bar and Stop button.
+The viewport is locked — camera movement, parameter changes, and resizing are blocked to preserve tiled-render integrity. The panel collapses to a compact rendering view that stays out of the canvas: a progress bar plus a stat strip with **Tile** (X / Y), **Elapsed**, and **ETA** (a ±10% range), and a Stop button.
 
 ## Preview Region
 A live, export-density preview of any canvas section. Unlike Export, this does **not** lock the viewport — you keep full interactivity so you can iterate on the look at final resolution.
@@ -104,7 +107,7 @@ A live, export-density preview of any canvas section. Unlike Export, this does *
 2. Hover over the canvas — a dashed fuchsia rectangle follows the cursor, showing which slice of the export will fill the canvas at 1 output-pixel per 1 physical canvas-pixel.
 3. Click to start. The viewport now shows the selected region rendered at export density, converging up to **Max Samples Per Bucket**.
 4. Adjust anything — sliders, lighting, colors, formula params, camera. The preview re-renders live with the new values, still at export density.
-5. Exit via the header **Exit Preview ✕** chip, pressing **Esc**, or closing the panel.
+5. Exit via the header **Exit Preview** chip, pressing **Esc**, or closing the panel.
 
 The panel stays open during preview so all your controls remain reachable. Changing Output Width/Height auto-exits the preview (the rendered pixels no longer represent the configured export).
 `
@@ -351,17 +354,13 @@ Adds depth and atmospheric effects to the scene. Fog controls appear when **Fog 
 - **Fog Color**: The color distant objects fade into.
 
 ## Volumetric Scatter (God Rays)
-Simulates light scattering through a participating medium. Requires **Volumetric Scattering (HG)** to be compiled — enable via the Viewport Quality dropdown (Atmosphere: Volumetric) or the Engine panel.
+God-ray-style light scattering through a participating medium. The volumetric pass lives in its own panel — see **Volumetric Scatter** in the Rendering section for full controls (Quality slider, density, anisotropy, light sources, color scatter, height fog).
 
-- **Volumetric Density (σ)**: Thickness of the air. Higher values = denser fog, shorter light shafts. Good range: 0.005–0.05.
-- **Anisotropy (g)**: Controls direction bias of scattered light (Henyey-Greenstein phase):
-  - **0**: Isotropic — light scatters equally in all directions.
-  - **+0.9**: Strong forward scatter — classic god rays pointing toward lights.
-  - **−0.9**: Back scatter — halo effect around light sources.
+Quick overview: enable via the Volumetric Scatter panel toggle (one-time ~5.5s shader compile), then use **Density** for fog thickness, **Anisotropy** for direction bias (positive = forward god rays, negative = back-scatter halos), and the **Quality** slider to trade per-frame cost vs frames-to-converge.
 
 ## Tips
 - God rays accumulate over frames via Temporal Accumulation — they look best when the camera is still.
-- Shadow jitter is proportional to the DE distance at each scatter sample, which softens the fractal silhouette in open sky while keeping crisp edges near the surface.
+- During interaction the volumetric pass auto-throttles to a cheap preview rate so FPS stays high; once you stop, accumulation builds up the fog quickly.
 - In Direct mode, god rays work without Path Tracing enabled.
 `
     },
@@ -411,6 +410,16 @@ Henyey-Greenstein single-scatter volumetric rendering. Enables god rays, colored
 
 **Note:** This is a compile-time feature. Enabling it triggers a shader recompile (~5.5s). You can also toggle it on/off at runtime without recompiling once it has been compiled in.
 
+## Quality (Sample Rate)
+The **Quality** slider controls how many samples per frame the volumetric pass takes. The default is **0** — a cheap preview rate that's friendly to interactive work.
+
+- **0 (default)**: ~1/16 the per-frame cost of full-rate sampling. Looks noisy in a single frame but accumulates to a clean image over more frames.
+- **1**: Full sample rate. Each frame lands closer to the converged image — useful for short-accumulation final renders.
+
+The final accumulated image is the same regardless of where you set this slider — only the speed of convergence differs. Quality=0 is the right setting for the day-to-day "tweak the scene" workflow; bump toward 1 only when you're rendering a still and want minimum frames-to-clean.
+
+**Interaction rule:** while you're moving the camera, dragging a slider, or moving a light, sampling automatically caps at the cheap rate regardless of slider position — so a high Quality setting won't tank your interactive FPS. Once you stop, the slider's full rate takes over for accumulation.
+
 ## Density & Shadow Rays
 - **Density**: Thickness of the participating medium. Log scale — small values (0.01-0.05) produce subtle haze, higher values create thick fog.
 - **Anisotropy (g)**: Direction bias for scattered light.
@@ -428,6 +437,11 @@ Henyey-Greenstein single-scatter volumetric rendering. Enables god rays, colored
 ## Height Fog
 - **Height Falloff**: Density varies with Y coordinate. Creates ground fog or rising mist.
 - **Height Origin**: The Y level where fog is densest.
+
+## Tips
+- **Want god rays without paying the cost?** Leave Quality at 0 and use the Color Scatter section instead — it produces colored volumetric haze using the fractal's gradient and doesn't fire shadow rays.
+- **Banding visible during interaction?** This shouldn't happen on current builds — if it does, check that Light Sources is at least 1 and Density is above 0.001. (Earlier builds had a banding bug when both Volumetric and DOF were off; that's now fixed via the noise-source dependency in the camera ray module.)
+- **Fog that fades in after stopping is normal**: during interaction the gate samples cheaply for FPS; once you stop, accumulation builds the fog up over the first several frames. This is intentional and you'll see the converged result within a second or two.
 `
     },
     'mat.reflection': {
@@ -507,12 +521,16 @@ Controls how "distance" is measured in 3D space. Different metrics produce diffe
         content: `
 > **REQUIRES ADVANCED MODE**
 
-Controls the mathematical method used to estimate the distance to the fractal surface. Different estimators suit different formula types.
+Controls the mathematical method used to estimate the distance to the fractal surface. Different estimators suit different formula types. **Compile-time setting** — changing it triggers a shader rebuild.
 
 - **Analytic Log**: Uses the logarithmic distance estimate. Best for standard fractals (Mandelbulb, Mandelbox) where the analytic derivative is reliable.
-- **Linear**: A simpler linear estimate. Can work better for formulas with non-standard divergence behavior.
-- **Pseudo**: Approximates the distance without true derivatives. Useful as a fallback when analytic methods produce artifacts.
+- **Linear (Unit 1.0)**: A simpler linear estimate \`(r-1)/dr\`. Standard for IFS / box / Menger fractals.
+- **Linear (Offset 2.0)**: Same family with a 2.0 offset — classic Menger variant.
+- **Pseudo (Raw)**: Approximates the distance without true derivatives \`r/dr\`. Useful as a fallback when analytic methods produce artifacts.
 - **Dampened**: A conservative estimate that under-steps slightly for stability. Helps with formulas prone to overstepping artifacts (holes or noise on surfaces).
+- **Cutting Plane**: Knighty fold-and-cut DE — uses formula-specific face plane geometry instead of \`length(z)/dr\`. Produces visibly sharper edges and faces on supported polyhedra. Grayed out on formulas that don't support it; the supported set currently includes the Knighty polyhedra (Coxeter, Cuboctahedron, Dodecahedron, Icosahedron, Octahedron, Truncated Icosahedron, Great Stellated Dodecahedron, Rhombic Dodecahedron, Rhombic Triacontahedron) plus Menger Sponge, Menger Advanced, and Sierpinski Tetrahedron.
+
+**Note**: The **Distance Metric** setting (Euclidean / Chebyshev / Manhattan / Minkowski) only affects the four \`length()\`-based estimators above. Cutting Plane uses dot-products with face normals directly, so the metric setting has no visual effect on geometry under CP — though it still affects orbit-trap coloring.
 `
     },
     'quality.jitter': {

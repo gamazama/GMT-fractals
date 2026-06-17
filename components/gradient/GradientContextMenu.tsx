@@ -1,18 +1,19 @@
-import React, { useRef, useEffect, useState, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useRef, useEffect, useState } from 'react';
 import { GradientStop } from '../../types';
+import { ContextMenuItem } from '../../types/help';
 import { getGradientCssString } from '../../utils/colorUtils';
+import { CheckIcon } from '../Icons';
+import { AnchoredMenu } from '../ui';
+
+// Accepts the engine ContextMenuItem shape (the shared gradientActions list) plus an
+// optional `stops` preview swatch, so this dropdown mirrors the right-click context
+// menu — same items, same checked/danger/disabled rendering.
+type GradientMenuOption = ContextMenuItem & { stops?: GradientStop[] };
 
 interface ContextMenuProps {
     x: number;
     y: number;
-    options: {
-        label: string;
-        action: () => void;
-        disabled?: boolean;
-        isHeader?: boolean;
-        stops?: GradientStop[]; // Optional stops for preview
-    }[];
+    options: GradientMenuOption[];
     onClose: () => void;
 }
 
@@ -41,75 +42,12 @@ const LazyGradientPreview: React.FC<{ stops: GradientStop[] }> = ({ stops }) => 
 };
 
 export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose }) => {
-    const menuRef = useRef<HTMLDivElement>(null);
-    const [coords, setCoords] = useState({ top: y, left: x, visible: false });
-
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent | PointerEvent) => {
-            if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
-        };
-        // Use pointerdown with capture - fires before React's synthetic events
-        // This ensures we catch clicks even if stopPropagation is called
-        document.addEventListener('pointerdown', handleClickOutside, true);
-        return () => document.removeEventListener('pointerdown', handleClickOutside, true);
-    }, [onClose]);
-
-    // Use LayoutEffect to measure and reposition BEFORE the browser paints
-    useLayoutEffect(() => {
-        if (!menuRef.current) return;
-
-        const updatePosition = () => {
-            if (!menuRef.current) return;
-
-            const rect = menuRef.current.getBoundingClientRect();
-            const winW = window.innerWidth;
-            const winH = window.innerHeight;
-            const padding = 12;
-
-            if (rect.width === 0 || rect.height === 0) {
-                requestAnimationFrame(updatePosition);
-                return;
-            }
-
-            let finalTop = y;
-            let finalLeft = x;
-
-            // Horizontal flip/clamp
-            if (finalLeft + rect.width > winW - padding) {
-                finalLeft = x - rect.width;
-            }
-            if (finalLeft < padding) finalLeft = padding;
-
-            // Vertical flip/clamp
-            if (finalTop + rect.height > winH - padding) {
-                finalTop = y - rect.height;
-            }
-
-            if (finalTop < padding) {
-                finalTop = padding;
-            }
-
-            setCoords({ top: finalTop, left: finalLeft, visible: true });
-        };
-
-        updatePosition();
-
-        const timer = setTimeout(updatePosition, 16);
-        return () => clearTimeout(timer);
-    }, [x, y, options]);
-
-    return createPortal(
-        <div
-            ref={menuRef}
-            className="fixed bg-[#1a1f3a] border border-white/20 rounded-md shadow-2xl py-1 z-[9999] w-[220px] max-h-[400px] overflow-y-auto custom-scroll transition-opacity duration-150"
-            style={{
-                top: coords.top,
-                left: coords.left,
-                opacity: coords.visible ? 1 : 0,
-                visibility: coords.visible ? 'visible' : 'hidden',
-                pointerEvents: coords.visible ? 'auto' : 'none'
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
+    return (
+        <AnchoredMenu
+            anchor={{ x, y }}
+            onClose={onClose}
+            padding={12}
+            className="bg-[#1a1f3a] border border-white/20 rounded-md shadow-2xl py-1 w-[220px] max-h-[400px] overflow-y-auto custom-scroll"
         >
             {options.map((opt, i) => (
                 opt.isHeader ? (
@@ -119,17 +57,21 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose
                 ) : (
                     <button
                         key={i}
-                        onClick={() => { onClose(); requestAnimationFrame(() => opt.action()); }}
+                        onClick={() => { onClose(); requestAnimationFrame(() => opt.action?.()); }}
                         disabled={opt.disabled}
-                        className="w-full text-left px-4 py-2 text-xs text-gray-200 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between group transition-colors"
+                        className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between group transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                            opt.danger
+                                ? 'text-red-400 hover:bg-red-900/30 hover:text-red-300'
+                                : 'text-gray-200 hover:bg-white/10 hover:text-white'
+                        }`}
                     >
-                        <span className="truncate mr-2">{opt.label}</span>
+                        <span className={`truncate mr-2 ${opt.checked ? 'text-cyan-400 font-bold' : ''}`}>{opt.label}</span>
+                        {opt.checked && <span className="text-cyan-400 shrink-0"><CheckIcon /></span>}
                         {opt.stops && <LazyGradientPreview stops={opt.stops} />}
                     </button>
                 )
             ))}
-        </div>,
-        document.body
+        </AnchoredMenu>
     );
 };
 

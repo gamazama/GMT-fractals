@@ -1,124 +1,182 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { useFractalStore, getShaderConfigFromState } from '../store/fractalStore';
-import { getProxy } from '../engine/worker/WorkerProxy';
-const engine = getProxy();
-import { registry } from '../engine/FractalRegistry';
-import { parseShareString } from '../utils/Sharing';
-import type { Preset } from '../types';
+import { useEngineStore, getShaderConfigFromState } from '../store/engineStore';
 import { detectHardwareProfileMainThread } from '../engine/HardwareDetection';
+import { compileGate } from '../store/CompileGate';
+import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import type { ShaderConfig } from '../engine/ShaderFactory';
 
-export const useAppStartup = (isSceneReady: boolean) => {
-    const state = useFractalStore();
+/**
+ * Generic boot sequence.
+ *
+ * Does NOT hydrate the store — that is app-specific (which formula's
+ * defaultPreset to load, which top-level slices to populate). Apps run
+ * synchronous hydration at module load (before React mounts) so the
+ * canvas's `initWorkerMode` reads a fully-populated state.
+ *
+ * This hook:
+ *   1. Detects whether startup mode is `default` or `url` (from `#s=…`)
+ *   2. Runs hardware detection on mount
+ *   3. Marks `isHydrated = true` on mount (caller has already hydrated)
+ *   4. Exposes `bootEngine` which routes through `compileGate.queue` so
+ *      the CompilingIndicator's progress curve animates during the boot
+ *      compile, and emits `compile_estimate` first so the curve uses
+ *      the real estimate from `estimateCompileTime` rather than the
+ *      indicator's 15s default.
+ */
+interface InitialCamera {
+    position: [number, number, number];
+    quaternion: [number, number, number, number];
+    fov: number;
+}
 
-    const [startupMode, setStartupMode] = useState<'default' | 'url'>('default');
-    const [isHydrated, setIsHydrated] = useState(false);
+interface UseAppStartupOptions {
+    /** Called inside the compileGate work closure to actually post BOOT
+     *  to the renderer's worker. Apps wire `gmtRenderer.boot` here so
+     *  the right proxy instance is used. */
+    bootRenderer: (config: ShaderConfig, camera: InitialCamera) => void;
+    /** Called after BOOT to push initial scene offset (treadmill engine).
+     *  Apps that don't use sceneOffset can leave undefined. */
+    pushOffset?: (offset: { x: number; y: number; z: number; xL: number; yL: number; zL: number }) => void;
+    /** Returns whether boot has already been requested / completed.
+     *  Used to short-circuit duplicate triggerBoot calls. */
+    isBootedOrRequested?: () => boolean;
+    /** Returns the expected boot-compile duration in ms. The value is
+     *  emitted on `compile_estimate` so CompileProgressStore can project
+     *  the bar over a realistic duration on the very first cycle. Apps
+     *  pass `(state) => estimateCompileTime(state)` (engine-gmt) or any
+     *  equivalent estimator. Optional — without it, the indicator falls
+     *  back to its 15s default. */
+    estimateBootCompileMs?: (state: any) => number;
+}
+
+/**
+ * `isStartupReady` (formerly `isHydrated`) — the rising edge that triggers
+ * boot from LoadingScreen. Named for what it actually signals: the
+ * mount-effect ran, hardware detection applied, mobile preset overrides
+ * applied, store is safe to read. The store itself is hydrated synchronously
+ * by the app's main.tsx before React renders — this flag is "post-mount
+ * setup done."
+ */
+export const useAppStartup = (options?: UseAppStartupOptions) => {
+    const opts = options;
+    const [startupMode] = useState<'default' | 'url'>(() => {
+        if (typeof window === 'undefined') return 'default';
+        return window.location.hash.startsWith('#s=') ? 'url' : 'default';
+    });
+    const [isStartupReady, setIsStartupReady] = useState(false);
     const bootRequestedRef = useRef(false);
     const hydratedRef = useRef(false);
 
-    // 1. STABLE BOOT FUNCTION
+    /**
+     * @invariant Re-entrancy guard: `bootRequestedRef` blocks double-fire
+     *   unless `force=true`. Formula switches + file loads pass force=true.
+     * @invariant 50 ms `setTimeout` yields a React tick so any in-flight
+     *   `loadScene` writes settle before the worker reads `ShaderConfig`.
+     *   DO NOT remove without revisiting LoadingScreen's
+     *   `handleSelectFormula → bootEngineRef.current(true)` race.
+     * @see app-gmt/LoadingScreen.tsx [isHydrated] effect for the trigger.
+     */
     const bootEngine = useCallback((force?: boolean) => {
-        if (!force && (engine.isBooted || bootRequestedRef.current)) return;
+        if (!opts) return; // No-op when caller provides no boot wiring.
+        if (!force) {
+            if (bootRequestedRef.current) return;
+            if (opts.isBootedOrRequested?.()) return;
+        }
         bootRequestedRef.current = true;
 
         try {
-            // Short yield to let React flush any pending state updates from
-            // loadScene before we read the store. The hydration gate in
-            // LoadingScreen already ensures formulas are imported and URL
-            // preset is applied before bootEngine is called.
+            // 50ms yield: give React a chance to flush any pending state
+            // updates from a just-completed loadScene before we read the
+            // store. Mirrors stable's bootEngine.
             setTimeout(() => {
-                const currentStore = useFractalStore.getState();
+                const currentStore = useEngineStore.getState();
                 const startConfig = getShaderConfigFromState(currentStore);
-                // Camera is always at origin; world position lives in sceneOffset.
-                const camRot = currentStore.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
+                const camRot = (currentStore as any).cameraRot || { x: 0, y: 0, z: 0, w: 1 };
                 const camFov = (currentStore as any).optics?.camFov ?? 60;
-                const initialCamera = {
-                    position: [0, 0, 0] as [number, number, number],
-                    quaternion: [camRot.x, camRot.y, camRot.z, camRot.w] as [number, number, number, number],
-                    fov: camFov
+                const initialCamera: InitialCamera = {
+                    position: [0, 0, 0],
+                    quaternion: [camRot.x, camRot.y, camRot.z, camRot.w],
+                    fov: camFov,
                 };
-                engine.bootWithConfig(startConfig, initialCamera);
+                const offset = (currentStore as any).sceneOffset;
+                const precise = offset ? {
+                    x: offset.x, y: offset.y, z: offset.z,
+                    xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0,
+                } : null;
 
-                // Push scene offset immediately — the treadmill engine keeps camera at
-                // origin and uses sceneOffset for the real position. Without this, the
-                // preview shader renders from the wrong viewpoint until onBooted fires.
-                const offset = currentStore.sceneOffset;
-                if (offset) {
-                    const precise = {
-                        x: offset.x, y: offset.y, z: offset.z,
-                        xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0
-                    };
-                    engine.setShadowOffset(precise);
-                    engine.post({ type: 'OFFSET_SET', offset: precise });
+                // Pre-emit the real estimate so CompilingIndicator's first
+                // cycle uses it rather than the 15s default.
+                if (opts.estimateBootCompileMs) {
+                    FractalEvents.emit(
+                        FRACTAL_EVENTS.COMPILE_ESTIMATE,
+                        opts.estimateBootCompileMs(currentStore),
+                    );
                 }
 
-                // NOTE: camera_teleport is NOT emitted here — this 50ms timer
-                // fires before R3F's Navigation is guaranteed to be mounted.
-                // Instead, WorkerTickScene emits the teleport after boot+compile
-                // finishes, when Navigation is definitely listening.
+                compileGate.queue('Compiling Shader...', () => {
+                    opts.bootRenderer(startConfig, initialCamera);
+                    if (precise && opts.pushOffset) {
+                        opts.pushOffset(precise);
+                    }
+                });
             }, 50);
         } catch (e) {
             console.error("Critical Engine Boot Failure:", e);
             bootRequestedRef.current = false;
         }
-    }, []);
+    }, [opts]);
 
     useEffect(() => {
-        // Guard against React StrictMode re-running this effect.
-        // loadScene is idempotent but wasteful — fires all feature setters twice.
         if (hydratedRef.current) return;
         hydratedRef.current = true;
 
-        // Formulas are loaded via dynamic import so they're in a separate chunk,
-        // reducing the initial bundle size. Registration must complete before
-        // loadScene() calls registry.get().
-        import('../formulas').then(() => {
-            // 2. Determine Initial Preset
-            const hash = window.location.hash;
-            let preset: Preset | null = null;
+        const hwProfile = detectHardwareProfileMainThread();
+        const state = useEngineStore.getState();
+        if ((state as any).setHardwareProfile) {
+            (state as any).setHardwareProfile(hwProfile);
+        }
 
-            if (hash && hash.startsWith('#s=')) {
-                const stateStr = hash.slice(3);
-                if (import.meta.env.DEV) console.log("App: Found shared state in URL. Parsing...");
-                preset = parseShareString(stateStr);
-                if (preset) {
-                    setStartupMode('url');
-                }
+        // Mobile auto-pick: downgrade scalability preset for first
+        // paint. Compile times on mobile GPUs are 2–3× longer than
+        // desktop, and `balanced` (the engine default) typically takes
+        // ~10s. `fastest` lands at ~5s with path tracing still on.
+        //
+        // Only override the *default*: if the user previously chose a
+        // different preset (preview/lite/full/ultra), we respect it.
+        // Persisted-preset hydration runs before this hook.
+        if (hwProfile.isMobile) {
+            const current = (state as any).scalability?.activePreset;
+            if (current === 'balanced' && (state as any).applyScalabilityPreset) {
+                (state as any).applyScalabilityPreset('fastest');
             }
+        }
 
-            // If no URL or parse failed, use default for Mandelbulb
-            if (!preset) {
-                 const def = registry.get('Mandelbulb');
-                 if (def && def.defaultPreset) {
-                     preset = JSON.parse(JSON.stringify(def.defaultPreset)) as Preset;
-                 }
+        // Mobile mid- and low-tier devices: switch adaptive resolution
+        // to manual mode. FPS-targeted scaling (smart mode) oscillates
+        // on mobile because compute fluctuates with thermal / OS load,
+        // and the user always lands in "Always" since hover-detection
+        // is meaningless on touch. Manual mode keeps a static idle
+        // resolution and only downsamples during touch interaction —
+        // responsiveness where it matters, no shimmer where it doesn't.
+        // High-tier mobile (e.g. iPad Pro) keeps full adaptive.
+        if (hwProfile.isMobile && hwProfile.tier !== 'high') {
+            const setQuality = (state as any).setQuality;
+            if (setQuality) {
+                setQuality({
+                    dynamicScaling: true,
+                    adaptiveTarget: 0,           // manual mode (no FPS targeting)
+                    interactionDownsample: 1.5,  // 1/1.5 ≈ 67%, milder than the 2.0 default
+                });
             }
+        }
 
-            // 3. Environment Optimizations — Non-destructive hardware detection
-            //    The preset is loaded UNMODIFIED into the store (authored intent preserved).
-            //    Hardware caps + viewport quality tiers are applied at getShaderConfigFromState().
-            const hwProfile = detectHardwareProfileMainThread();
-            state.setHardwareProfile(hwProfile);
-            if (hwProfile.isMobile) {
-                if (import.meta.env.DEV) console.log("App: Mobile detected. Setting Lite viewport quality.");
-                state.applyScalabilityPreset('lite');
-            }
+        // Caller (e.g. app-gmt/main.tsx) hydrates the store synchronously
+        // at module load before React renders. By the time this effect
+        // runs we are already hydrated — flip the rising-edge signal that
+        // LoadingScreen watches to trigger boot.
+        setIsStartupReady(true);
+    }, []);
 
-            // 4. Load into Store (UI State) via unified loadScene path.
-            //    loadScene detects the engine hasn't booted yet and skips CONFIG/OFFSET
-            //    events (they would just queue and cause a redundant second compile).
-            //    bootEngine() will push the full config + offset after the worker boots.
-            if (preset) {
-                if (import.meta.env.DEV) console.log("App: Hydrating Store from Preset...");
-                state.loadScene({ preset });
-            }
-
-            // Signal that the store is hydrated — LoadingScreen gates boot on this
-            // to avoid a race where bootEngine reads the store before formulas are
-            // imported and the URL preset is applied.
-            setIsHydrated(true);
-        });
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    return { startupMode, bootEngine, isHydrated };
+    return { startupMode, bootEngine, isStartupReady };
 };

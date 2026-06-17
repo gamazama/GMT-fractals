@@ -4,7 +4,7 @@ import { getGradientCssString } from '../utils/colorUtils';
 import { GradientStop, GradientConfig } from '../types';
 import { DraggableNumber } from './Slider';
 import { analyzeHistogram, calculateSmartLevels } from '../utils/histogramUtils';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { collectHelpIds } from '../utils/helpUtils';
 
 interface HistogramProps {
@@ -65,7 +65,14 @@ const Histogram: React.FC<HistogramProps> = ({
 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [viewRange, setViewRange] = useState(fixedRange || { min: 0, max: 1 });
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
+    const openGlobalMenu = useEngineStore(s => s.openContextMenu);
+    // Undo wiring: the handle drags + reset/auto buttons commit through the
+    // raw `onChange` below, bypassing the connected-slider transaction shim,
+    // so the levels they drive (e.g. colour grading) were not undoable. Wrap
+    // them in a param transaction so a snapshot/diff is captured. (The numeric
+    // DraggableNumber fields are the connected component and already wrap.)
+    const handleInteractionStart = useEngineStore(s => s.handleInteractionStart);
+    const handleInteractionEnd = useEngineStore(s => s.handleInteractionEnd);
     
     // Process data into buckets
     const histogramBuckets = useMemo(() => {
@@ -139,11 +146,14 @@ const Histogram: React.FC<HistogramProps> = ({
     const handleMouseDown = (e: React.MouseEvent, type: 'min' | 'max' | 'gamma' | 'pan') => {
         e.preventDefault();
         e.stopPropagation();
-        dragRef.current = { 
-            type, 
-            startX: e.clientX, 
-            startMin: min, 
-            startMax: max, 
+        // Begin the param transaction BEFORE the first onChange — the snapshot
+        // must capture the pre-drag levels so undo restores them.
+        handleInteractionStart('param');
+        dragRef.current = {
+            type,
+            startX: e.clientX,
+            startMin: min,
+            startMax: max,
             startGamma: gamma
         };
         window.addEventListener('mousemove', handleMouseMove);
@@ -214,20 +224,30 @@ const Histogram: React.FC<HistogramProps> = ({
         dragRef.current = null;
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
+        // Close the transaction — diffs against the snapshot + pushes one entry.
+        handleInteractionEnd();
     };
-    
+
+    // Discrete one-shot commits (Fit / Reset / 0-1). Wrap each in its own
+    // synchronous transaction so it lands a single undo entry.
+    const commitLevels = (vals: { min: number, max: number, gamma: number }) => {
+        handleInteractionStart('param');
+        onChange(vals);
+        handleInteractionEnd();
+    };
+
     const handleAuto = () => {
         if (histogramBuckets.length === 0) return;
         const result = calculateSmartLevels(histogramBuckets, viewRange.min, viewRange.max);
         if (result) {
-            onChange({ min: result.start, max: result.end, gamma: 1.0 });
+            commitLevels({ min: result.start, max: result.end, gamma: 1.0 });
         }
     };
-    
+
     const handleReset = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        onChange({ min: 0.0, max: 1.0, gamma: 1.0 });
+        commitLevels({ min: 0.0, max: 1.0, gamma: 1.0 });
     };
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -299,8 +319,8 @@ const Histogram: React.FC<HistogramProps> = ({
                 </div>
                 <div className="flex items-center gap-1">
                     {/* 0-1 Range Button */}
-                    <button 
-                        onClick={() => onChange({ min: 0, max: 1, gamma: 1.0 })}
+                    <button
+                        onClick={() => commitLevels({ min: 0, max: 1, gamma: 1.0 })}
                         className="px-2 py-0.5 bg-gray-800/50 hover:bg-gray-700 text-gray-400 hover:text-white text-[8px] rounded border border-gray-600 transition-colors font-bold"
                         title="Reset to 0-1 range"
                     >

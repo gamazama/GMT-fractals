@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
-import { useFractalStore } from '../../store/fractalStore';
-import { modulationEngine } from '../../features/modulation/ModulationEngine';
+import { useEngineStore } from '../../store/engineStore';
+import { modulationEngine } from '../../engine/features/modulation/ModulationEngine';
 import { featureRegistry } from '../../engine/FeatureSystem';
 
 /**
@@ -12,20 +12,22 @@ import { featureRegistry } from '../../engine/FeatureSystem';
  * Sets uniforms via engine.setUniform() (forwarded to worker) and engine.modulations dict.
  */
 export function applyExportModulations(time: number, dt: number) {
-    const storeState = useFractalStore.getState();
+    const storeState = useEngineStore.getState();
     const animations = storeState.animations;
+    const lfosEnabled = storeState.lfosEnabled;
+    const audioEnabled = (storeState as any).audio?.isEnabled ?? false;
 
     // 1. Reset
     modulationEngine.resetOffsets();
     engine.modulations = {};
 
     // 2. Update oscillators
-    modulationEngine.updateOscillators(animations, time, dt);
+    modulationEngine.updateOscillators(animations, time, dt, lfosEnabled);
 
     // 3. Apply modulation rules
     const modulationSlice = (storeState as any).modulation;
     if (modulationSlice && modulationSlice.rules) {
-        modulationEngine.update(modulationSlice.rules, dt);
+        modulationEngine.update(modulationSlice.rules, dt, audioEnabled, lfosEnabled);
     }
 
     // 4. Apply offsets to uniforms
@@ -122,7 +124,7 @@ export function applyExportModulations(time: number, dt: number) {
             }
         } else if (targetKey.startsWith('param')) {
             uniformName = 'u' + targetKey.charAt(0).toUpperCase() + targetKey.slice(1);
-            baseVal = (storeState.coreMath as any)?.[targetKey] ?? 0;
+            baseVal = (storeState as any).coreMath?.[targetKey] ?? 0;
         }
 
         if (uniformName) {

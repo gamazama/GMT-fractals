@@ -1,17 +1,30 @@
 
 import { FormulaType, CameraMode, PreciseVector3, CameraState } from './common';
 import { LfoTarget, AnimationParams } from './animation';
-import { FractalGraph, PipelineNode } from './graph';
-import { Preset, FractalDefinition } from './fractal';
+import { Preset, FractalDefinition } from './preset';
 import { ContextMenuItem } from './help';
-import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
+import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../engine/features/types';
 import { LightParams } from './graphics';
-import { OpticsState } from '../features/optics';
-import type { ScalabilityState, HardwareProfile } from './viewport';
+import type { ScalabilityState, HardwareProfile, ViewportAdaptiveConfig } from './viewport';
+import type { InteractionSource, SourceFilter } from '../engine/InteractionSessionMachine';
 
-export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager';
+// Optics was a fractal-leaning feature. Apps that need typed optics on
+// saved cameras can declaration-merge to widen this opaque record.
+type OpticsState = Record<string, unknown>;
 
+// PanelId was a fixed union of GMT's panels. The engine treats it as a
+// string tag so apps/add-ons can register any panel they need.
+export type PanelId = string;
+
+/** Canvas-gesture mode. Apps with domain-specific picks (e.g. a
+ *  picker tool) widen this via declaration merging or carry the
+ *  sub-state in their own feature slice. */
 export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region' | 'selecting_preview';
+
+/** UI mode preference. `auto` resolves via matchMedia / viewport width; the
+ *  `mobile` / `desktop` overrides force a specific layout regardless of
+ *  device. Resolved into a boolean by `useMobileLayout()`. */
+export type UiModePreference = 'auto' | 'mobile' | 'desktop';
 
 export type CompositionOverlayType = 'none' | 'grid' | 'thirds' | 'golden' | 'spiral' | 'center' | 'diagonal' | 'safearea';
 
@@ -41,11 +54,19 @@ type FeatureSetters = {
     [K in keyof FeatureStateMap as `set${Capitalize<string & K>}`]: (update: Partial<FeatureStateMap[K]>) => void;
 };
 
-export interface SavedCamera extends CameraState {
+/** Saved-camera library entry. The library is a generic state-library
+ *  slice — the inner `state` payload holds the camera-specific fields
+ *  (CameraState plus GMT optics). See engine-gmt/store/cameraSlice.ts
+ *  for the install + capture/apply wiring. */
+export interface SavedCameraPayload extends CameraState {
+    optics: OpticsState;
+}
+export interface SavedCamera {
     id: string;
     label: string;
-    optics: OpticsState;
     thumbnail?: string;
+    state: SavedCameraPayload;
+    createdAt: number;
 }
 
 // --- NEW LAYOUT TYPES ---
@@ -57,18 +78,24 @@ export interface PanelState {
     isOpen: boolean; // For Float visibility OR Dock active tab logic
     order: number;
     isCore: boolean;
+    /** Whether the panel may be undocked into a floating window (default true). */
+    floatable?: boolean;
     floatPos?: { x: number, y: number };
     floatSize?: { width: number, height: number };
 }
 
 // --- MAIN STORE STATE ---
-export interface FractalStoreState extends FeatureStateMap {
+export interface EngineStoreState extends FeatureStateMap {
   formula: FormulaType;
   
   // Project Metadata
   projectSettings: {
       name: string;
       version: number;
+      /** Optional free-form attribution. Round-trips via the GMF scene block
+       *  so downloaded scenes preserve their author. Empty string when
+       *  unauthored. */
+      author: string;
   };
   
   // State Tracking for Smart Versioning
@@ -82,8 +109,9 @@ export interface FractalStoreState extends FeatureStateMap {
   previewMode: boolean;
   renderMode: 'Direct' | 'PathTracing';
   
-  isPaused: boolean; // Manual pause
-  sampleCap: number; // Stop accumulation after N samples
+  isPaused: boolean;         // Manual pause
+  sampleCap: number;         // Stop accumulation after N samples (0 = infinite)
+  accumulationCount: number; // Current sample count reported by the render loop
   
   isUserInteracting: boolean; // Global flag for slider/gizmo interaction
 
@@ -112,7 +140,25 @@ export interface FractalStoreState extends FeatureStateMap {
 
   advancedMode: boolean;
   showHints: boolean;
-  debugMobileLayout: boolean; // New: Forces Mobile UI Layout
+  /** User preference for mobile vs desktop UI.
+   *   'auto'    — detect via matchMedia('pointer: coarse') / viewport width
+   *   'mobile'  — force mobile layout regardless of device
+   *   'desktop' — force desktop layout regardless of device
+   * Read indirectly via `useMobileLayout()` — don't bind UI to this field
+   * directly. Persisted to localStorage by uiSlice. */
+  uiModePreference: UiModePreference;
+  /** Live device-mobile flag (matchMedia + viewport width). A single
+   *  global resize listener in hooks/useMobileLayout.ts writes here.
+   *  Components read via `useMobileLayout()`; predicates via
+   *  `isMobileSnapshot()`. */
+  isDeviceMobile: boolean;
+  /** Live portrait-orientation flag. Same listener writes both. */
+  isPortrait: boolean;
+  /** Currently-open mobile menu id; null when no menu is replacing the
+   *  right dock. MenuAnchor on touch writes via setMobileActiveMenu;
+   *  MobileMenuHost reads this. Lives here (not in a private pubsub)
+   *  so the existing Zustand subscriber machinery handles updates. */
+  mobileActiveMenu: string | null;
   // Deprecated UI Flags (Handled by PanelState now)
   // isControlsMinimized: boolean; 
   // isControlsDocked: boolean;
@@ -120,7 +166,24 @@ export interface FractalStoreState extends FeatureStateMap {
   invertY: boolean;
   
   resolutionMode: 'Full' | 'Fixed';
-  fixedResolution: [number, number]; 
+  fixedResolution: [number, number];
+  /** Render-scale multiplier on top of the base render dimensions.
+   *  In Full mode, base = window CSS pixels; in Fixed mode, base =
+   *  fixedResolution. Final drawing-buffer = round(base × renderScale ×
+   *  qualityFraction). 1.0 = "match base" (cheap), 2.0 = "Retina-sharp"
+   *  (4× cost). UI snaps to discrete steps; see RENDER_SCALE_STEPS. */
+  renderScale: number;
+
+  // Adaptive viewport quality (phase 2b). Apps consume qualityFraction
+  // as a hint on [minQuality, 1] — 1 = full quality, lower = reduce
+  // internal resolution / sim grid / whatever the app's engine uses as
+  // its quality knob. The plugin computes this from fpsSmoothed vs
+  // adaptiveConfig.targetFps and isUserInteracting. See
+  // docs/10_Viewport.md.
+  qualityFraction: number;
+  fps: number;               // last-sample instantaneous FPS
+  fpsSmoothed: number;       // exponential smoothing, adaptive-loop driver
+  adaptiveConfig: ViewportAdaptiveConfig;
   renderRegion: { minX: number, minY: number, maxX: number, maxY: number } | null;
   // Preview Region — export-resolution preview of a canvas slice. See docs/44_Preview_Region_Plan.md.
   // Truthy iff preview is active (`previewRegion !== null` == "previewing").
@@ -136,7 +199,6 @@ export interface FractalStoreState extends FeatureStateMap {
   exportIncludeScene: boolean;
   
   showLightGizmo: boolean;
-  isGizmoDragging: boolean;
   draggedLightIndex: string | null;
   openLightPopupIndex: number;  // -1 = no popup open
   shadowPanelOpen: boolean;
@@ -145,10 +207,23 @@ export interface FractalStoreState extends FeatureStateMap {
   // Consolidated Interaction State
   interactionMode: InteractionMode;
   focusLock: boolean;
-  
-  cameraMode: CameraMode; 
+
+  // ── InteractionSession (ADR-0061) — single source of truth for "is a
+  //    continuous user gesture in flight?". The machine's HOT state (active
+  //    sources + timestamps) lives in a module-level ref inside
+  //    createInteractionSlice (the viewportSlice `_adaptive` pattern), NOT
+  //    here — interaction sits on the hottest path in the app. The ONLY
+  //    reactive field is this coarse edge boolean, written once per gesture
+  //    edge (idle↔active), never per pointermove. Read activity via
+  //    isInteracting()/isIdle() through getState() on hot paths — do not
+  //    subscribe. (P5: this is the SOLE interaction signal; the per-consumer
+  //    kill-switch flags and the parallel-run divergence instrument are gone.)
+  interacting: boolean;
+
+  cameraMode: CameraMode;
   sceneOffset: PreciseVector3;
-  animations: AnimationParams[]; 
+  animations: AnimationParams[];
+  lfosEnabled: boolean;
   liveModulations: Partial<Record<LfoTarget, number>>;
   
   histogramData: Float32Array | null;
@@ -162,18 +237,20 @@ export interface FractalStoreState extends FeatureStateMap {
   sceneHistogramTrigger: number;
   sceneHistogramActiveCount: number; // Ref count
   
-  undoStack: CameraState[];
-  redoStack: CameraState[];
-  interactionSnapshot: Partial<FractalStoreState> | null;
-  
-  paramUndoStack: Partial<FractalStoreState>[];
-  paramRedoStack: Partial<FractalStoreState>[];
+  // Per-scope transaction stacks (see store/slices/historySlice.ts).
+  // Each entry is a Transaction { scope, label?, diff, timestamp }.
+  // Kept typed as any[] at the root to avoid a circular import with
+  // historySlice's Transaction type; historySlice re-narrows internally.
+  paramUndoStack: any[];
+  paramRedoStack: any[];
+  cameraUndoStack: any[];
+  cameraRedoStack: any[];
+  interactionSnapshot: Partial<EngineStoreState> | null;
 
-  // --- MODULAR BUILDER STATE (managed by modularSlice + uiSlice) ---
-  graph: FractalGraph;
-  pipeline: PipelineNode[];
-  pipelineRevision: number;
-  autoCompile: boolean;
+  // NOTE: Modular builder state (graph/pipeline/pipelineRevision/autoCompile)
+  // was removed with the modular graph system. A future plugin that wants a
+  // node-graph authoring surface should carry its state inside
+  // `features[pluginId]` rather than at the root of EngineStoreState.
 
   isTimelineHovered: boolean;
   
@@ -200,6 +277,12 @@ export interface FractalStoreState extends FeatureStateMap {
   // Formula Workshop
   workshopOpen: boolean;
   workshopEditFormula: string | undefined;
+  /** When opening the Workshop to load a frag/DEC catalog formula, the
+   *  '<source>:<id>' key (e.g. 'frag:3DickUlus/BuffaloBulb.frag'). */
+  workshopCatalogKey: string | undefined;
+
+  // New Scene wizard
+  newSceneOpen: boolean;
 
   // Viewport Quality System
   scalability: ScalabilityState;
@@ -212,18 +295,23 @@ export interface FractalStoreState extends FeatureStateMap {
   tutorialCompleted: number[];
 }
 
-export type FractalState = FractalStoreState;
+export type EngineState = EngineStoreState;
 
 // --- ACTIONS INTERFACE ---
-export interface FractalActions extends FeatureSetters, FeatureCustomActions {
+export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setFormula: (f: FormulaType, options?: { skipDefaultPreset?: boolean }) => void;
     
-    setProjectSettings: (s: Partial<{ name: string, version: number }>) => void;
+    setProjectSettings: (s: Partial<{ name: string, version: number, author: string }>) => void;
     
     // Checks if state has changed since last save. Increments version if dirty. Returns active version.
     prepareExport: () => number;
 
-    setDpr: (v: number) => void; 
+    // Unsaved-work tracking (H4). isSceneDirty: current state differs from the
+    // saved baseline (lastSavedHash). markSceneSaved: set the baseline to now.
+    isSceneDirty: () => boolean;
+    markSceneSaved: () => void;
+
+    setDpr: (v: number) => void;
     setAALevel: (v: number) => void;
     setMSAASamples: (v: number) => void;
     setAAMode: (v: any) => void;
@@ -232,6 +320,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setRenderMode: (v: 'Direct' | 'PathTracing') => void;
     setIsPaused: (v: boolean) => void;
     setSampleCap: (v: number) => void;
+    reportAccumulation: (count: number) => void;
     
     setIsBucketRendering: (v: boolean) => void;
     setBucketSize: (v: number) => void;
@@ -246,12 +335,14 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
 
     setAdvancedMode: (v: boolean) => void;
     setShowHints: (v: boolean) => void;
-    setDebugMobileLayout: (v: boolean) => void;
+    setUiModePreference: (v: UiModePreference) => void;
+    setMobileActiveMenu: (v: string | null) => void;
     // setIsControlsMinimized: (v: boolean) => void; // Deprecated
     setInvertY: (v: boolean) => void;
     
     setResolutionMode: (m: 'Full' | 'Fixed') => void;
     setFixedResolution: (w: number, h: number) => void;
+    setRenderScale: (v: number) => void;
     setRenderRegion: (r: { minX: number, minY: number, maxX: number, maxY: number } | null) => void;
     setPreviewRegion: (r: { minX: number, minY: number, maxX: number, maxY: number } | null) => void;
     // setIsControlsDocked: (v: boolean) => void; // Deprecated
@@ -260,11 +351,18 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setIsExporting: (v: boolean) => void;
     setAdaptiveSuppressed: (v: boolean) => void;
 
+    // Adaptive viewport (phase 2b). Apps call reportFps (or frameTick —
+    // exposed on the plugin) per frame; the slice computes fps/fpsSmoothed
+    // and ramps qualityFraction based on target FPS + interaction state
+    // + grace period. See engine/plugins/Viewport.ts.
+    reportFps: (fps: number) => void;
+    holdAdaptive: (durationMs?: number) => void;
+    setAdaptiveConfig: (cfg: Partial<EngineStoreState['adaptiveConfig']>) => void;
+
     setLockSceneOnSwitch: (v: boolean) => void;
     setExportIncludeScene: (v: boolean) => void;
     
     setShowLightGizmo: (v: boolean) => void;
-    setGizmoDragging: (v: boolean) => void;
     setDraggedLight: (id: string | null) => void;
     setOpenLightPopupIndex: (index: number) => void;
     setShadowPanelOpen: (v: boolean) => void;
@@ -272,20 +370,52 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
 
     setInteractionMode: (mode: InteractionMode) => void;
     setFocusLock: (v: boolean) => void;
+
+    // ── InteractionSession (ADR-0061) — gesture-activity API. Producers
+    //    declare into it (begin/end/poke); consumers poll isInteracting()/
+    //    isIdle() via getState() on hot paths. See createInteractionSlice.ts.
+    /** Continuous gesture start, ref-counted per source. Writes the reactive
+     *  `interacting` boolean only on the idle→active edge. */
+    beginInteraction: (source: InteractionSource) => void;
+    /** Gesture end, ref-counted; an unbalanced end dev-warns and never strands.
+     *  Writes the reactive boolean only on the active→idle edge. */
+    endInteraction: (source: InteractionSource) => void;
+    /** Discrete event (wheel / key) — throttled (~50ms) timestamp refresh on the
+     *  module ref. No store write, never an edge. */
+    pokeInteraction: (source: InteractionSource) => void;
+    /** Poll "is a gesture active (incl. the debounce tail)?". Read via getState()
+     *  on hot paths — never subscribe. Optional source filter (e.g. HUD-fade
+     *  passes `{ only: ['camera','scrub'] }`). */
+    isInteracting: (filter?: SourceFilter) => boolean;
+    /** Idle for >= ms with no active source (distinct window from the debounce
+     *  tail). Consumers COMPOSE this with render-dirtiness — it alone is not
+     *  "should we render". */
+    isIdle: (ms?: number) => boolean;
+    /** Live hard-active sources — for the dev overlay / telemetry (getState()). */
+    getInteractionSources: () => ReadonlySet<InteractionSource>;
+    /** Sources active OR within the debounce tail — dev overlay observability,
+     *  so a discrete poke (wheel) is legible as its source, not an anonymous tail. */
+    getRecentInteractionSources: () => ReadonlySet<InteractionSource>;
+    /** Global last-activity timestamp (ms) — tutorial / telemetry. */
+    getLastActivityTime: () => number;
+    /** Watchdog backstop: force-clears a stranded session (a producer that
+     *  missed an end) and mirrors the resulting idle edge onto the reactive
+     *  boolean. Last line of defence against the never-converges regression
+     *  class; a live drag refreshes via throttled pointermove pokes. */
+    tickInteractionWatchdog: () => void;
     
     setCameraMode: (v: CameraMode) => void;
     setSceneOffset: (v: any) => void;
-    setAnimations: (v: AnimationParams[]) => void; 
+    setAnimations: (v: AnimationParams[]) => void;
+    setLfosEnabled: (v: boolean) => void;
     setLiveModulations: (v: Partial<Record<LfoTarget, number>>) => void;
-    // --- MODULAR BUILDER ACTIONS (managed by modularSlice) ---
-    setGraph: (g: FractalGraph) => void;
-    setPipeline: (v: PipelineNode[]) => void;
-    refreshPipeline: () => void;
-    setAutoCompile: (v: boolean) => void;
+    // Modular builder actions were removed with the graph system; if a
+    // future plugin needs setGraph/setPipeline/refreshPipeline, it adds
+    // them via store extension (Zustand slice composition).
     loadPreset: (p: Preset) => void;
     loadScene: (args: { def?: FractalDefinition; preset: Preset }) => void;
 
-    getPreset: (options?: { includeScene?: boolean }) => Preset;
+    getPreset: (options?: { includeScene?: boolean; includeDocuments?: boolean }) => Preset;
     getShareString: (options?: { includeAnimations?: boolean }) => string;
     
     setHistogramData: (d: Float32Array | null) => void;
@@ -335,6 +465,23 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     duplicateCamera: (id: string) => void;
     saveToSlot: (slotIndex: number) => void;
 
+    // Canonical history entry points (see historySlice).
+    beginParamTransaction: () => void;
+    endParamTransaction: () => void;
+    pushCameraTransaction: (state: any) => void;
+    beginCameraTransaction: () => void;
+
+    // Scoped undo / redo. `scope` is required — there is no unscoped
+    // fallback (the previous unscoped form conflated camera and param).
+    undo: (scope: 'param' | 'camera') => boolean;
+    redo: (scope: 'param' | 'camera') => boolean;
+    canUndo: (scope: 'param' | 'camera') => boolean;
+    canRedo: (scope: 'param' | 'camera') => boolean;
+    peekUndo: (scope: 'param' | 'camera') => any | null;
+    peekRedo: (scope: 'param' | 'camera') => any | null;
+    clearHistory: () => void;
+
+    // Backward-compat shims.
     handleInteractionStart: (mode?: 'camera' | 'param' | any) => void;
     handleInteractionEnd: () => void;
     undoCamera: () => void;
@@ -348,8 +495,10 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     openContextMenu: (x: number, y: number, items: ContextMenuItem[], targetHelpIds?: string[]) => void;
     closeContextMenu: () => void;
 
-    openWorkshop: (editFormula?: string) => void;
+    openWorkshop: (editFormula?: string, catalogKey?: string) => void;
     closeWorkshop: () => void;
+    openNewScene: () => void;
+    closeNewScene: () => void;
 
     // Composition overlay
     setCompositionOverlay: (type: CompositionOverlayType) => void;

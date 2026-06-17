@@ -1,10 +1,37 @@
+/**
+ * Builds the Zustand slice from `featureRegistry`. Boot-time hot path:
+ * registers features → registers preset fields → freezes both
+ * registries → iterates `getAll()` to seed state + install one auto-
+ * setter per feature.
+ *
+ * @invariant Auto-setter name `set${FeatureId with capitalised first
+ *   letter}` is a load-bearing STRING convention with NO type
+ *   enforcement. Four downstream consumers derive the same name:
+ *   PresetLogic.applyPresetState, AnimationEngine.getBinder (case 4),
+ *   historySlice.beginParamTransaction, typedSlices.setSlice.
+ * @invariant Track-id convention `${featureId}.${paramKey}` (scalars)
+ *   and `${featureId}.${paramKey}_<axis>` (UNDERSCORE axes) is the
+ *   second load-bearing string contract. See engine/animation/
+ *   trackBinding.ts for the authoritative form.
+ * @invariant `image`-typed params are deliberately excluded from the
+ *   `config` event payload (data URLs can be many MB). Restored via
+ *   the `texture` event channel.
+ * @invariant The setter has NO `oldValue !== newValue` guard. Every
+ *   key in `updates` triggers the full sanitise + emit path; equality
+ *   short-circuiting lives downstream in `ConfigManager.areValuesEqual`.
+ * @invariant `onSet` extras only land for keys not present in the
+ *   user-provided `updates` — preset loads override defaults the
+ *   `onSet` would otherwise compute.
+ */
 
 import { StateCreator } from 'zustand';
 import * as THREE from 'three';
 import { featureRegistry } from '../engine/FeatureSystem';
-import { registerFeatures } from '../features';
+import { registerFeatures } from '../engine/features';
 import { FractalEvents } from '../engine/FractalEvents';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
+import { presetFieldRegistry } from '../utils/PresetFieldRegistry';
+import { registerDefaultPresetFields } from '../utils/defaultPresetFields';
 
 // Generic type for the dynamic slice
 export interface FeatureSlice {
@@ -14,8 +41,19 @@ export interface FeatureSlice {
 export const createFeatureSlice: StateCreator<any> = (set, get) => {
     const slice: any = {};
     // Ensure features are registered before building slices —
-    // module evaluation order can vary due to circular dependencies
+    // module evaluation order can vary due to circular dependencies.
     registerFeatures();
+    // Register canonical non-feature preset fields (cameraRot, targetDistance,
+    // savedCameras). A future @engine/camera plugin will own these; for now
+    // they live in the engine proper. See docs/20_Fragility_Audit.md F3.
+    registerDefaultPresetFields();
+    // Freeze both registries: from this point on, new registrations fail loudly
+    // (throw in dev, warn in prod). State slices are snapshotted below, so
+    // late arrivals would be invisible to the store — this catches the bug
+    // at the point of the late register() call instead of much later when
+    // a feature's setter is unexpectedly undefined. See docs/20_Fragility_Audit.md F1.
+    featureRegistry.freeze();
+    presetFieldRegistry.freeze();
     const features = featureRegistry.getAll();
 
     features.forEach(feat => {
@@ -101,7 +139,22 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                     }
 
                     if (config) {
-                        if (!config.noReset) shouldReset = true;
+                        // Only treat this param as a reason to reset accumulation
+                        // if its value actually changed. Re-applying the value it
+                        // already holds (redundant setter calls, preset/undo
+                        // re-applies, sliders that re-fire the same value) must
+                        // not disturb the accumulated buffer. Conservative for
+                        // object-typed params (vec/color/gradient/array): treat
+                        // as changed so a needed reset is never skipped.
+                        const oldVal = current[paramKey];
+                        const newVal = next[paramKey];
+                        const paramChanged =
+                            oldVal === newVal ? false
+                            : (typeof newVal === 'number' && typeof oldVal === 'number') ? Math.abs(newVal - oldVal) > 1e-9
+                            : (typeof newVal !== 'object' && typeof oldVal !== 'object') ? newVal !== oldVal
+                            : true;
+
+                        if (paramChanged && !config.noReset) shouldReset = true;
 
                         // Sync ALL changed params to ConfigManager via CONFIG event.
                         // ConfigManager.update() only triggers recompile for onUpdate:'compile'
@@ -164,7 +217,7 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                                 if (config.type === 'boolean') finalVal = val ? 1.0 : 0.0;
                                 if (config.type === 'color' && !(finalVal instanceof THREE.Color)) finalVal = new THREE.Color(finalVal);
                                 
-                                FractalEvents.emit('uniform', { key: config.uniform, value: finalVal, noReset: !!config.noReset });
+                                FractalEvents.emit('uniform', { key: config.uniform, value: finalVal, noReset: !!config.noReset || !paramChanged });
                             }
                         }
                     }

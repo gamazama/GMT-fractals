@@ -1,0 +1,3354 @@
+schema_version: 1
+generated_at: 2026-05-19T19:52:03.788Z
+repo_root: H:/GMT/workspace-gmt/dev
+total_files: 837
+total_bytes: 8252449
+entries:
+  - path: .clinerules
+    bytes: 5463
+    lines: 120
+    blob_sha: 79a73ce9d9277b96a5b7ae04f650b6475c451000
+  - path: .github/workflows/deploy.yml
+    bytes: 1996
+    lines: 61
+    blob_sha: fbb885a82694d13e8ad511b65973fb88488caa5b
+  - path: .gitignore
+    bytes: 2060
+    lines: 79
+    blob_sha: 3484f20bd7e1acdb96879c4f1959ade4ef024258
+  - path: .nvmrc
+    bytes: 4
+    lines: 1
+    blob_sha: 209e3ef4b6247ce746048d5711befda46206d235
+  - path: app-gmt.html
+    bytes: 2035
+    lines: 40
+    blob_sha: 83426138f28a44b231f1bd54c71d565a5a2917a1
+  - path: app-gmt/AppGmt.tsx
+    bytes: 22682
+    lines: 418
+    blob_sha: 69939e9ac3c040ff4b19cf4502d95967f96cbd43
+  - path: app-gmt/HelpExtras.tsx
+    bytes: 3220
+    lines: 66
+    blob_sha: f999180c932f8f685d79fd0a8ac10349d0dd610a
+  - path: app-gmt/LoadingScreen.tsx
+    bytes: 15430
+    lines: 263
+    blob_sha: 148e64c17156238a10a9b267f7abebe55077d486
+  - path: app-gmt/main.tsx
+    bytes: 21723
+    lines: 486
+    blob_sha: c35901dd966a960c37e268df59472ff989978e5a
+  - path: app-gmt/README.md
+    bytes: 6526
+    lines: 144
+    blob_sha: 4d28e04902292d463231a8683effb4a41a4595bf
+  - path: app-gmt/registerFeatures.ts
+    bytes: 908
+    lines: 23
+    blob_sha: 65bcf83d48f96de01fd97b180fa1b49bb1f66cd3
+  - path: app-gmt/renderDialogExtras.tsx
+    bytes: 15580
+    lines: 296
+    blob_sha: b595c4a14c5434e19e6f8e235d5cbbefd8233222
+  - path: app-gmt/tutorial/anchors.ts
+    bytes: 2024
+    lines: 61
+    blob_sha: 46817c83bf372f4ee9116ed65eb15f306fc858fa
+  - path: app-gmt/tutorial/effects.ts
+    bytes: 885
+    lines: 21
+    blob_sha: d826455c48d9734c9dec16eb24adfc2a188ac625
+  - path: app-gmt/tutorial/lessons.ts
+    bytes: 20106
+    lines: 417
+    blob_sha: 0c1b46af90b082e41190ed2f8a0c87cc70fe550b
+  - path: app-gmt/tutorial/stepKinds.tsx
+    bytes: 2384
+    lines: 59
+    blob_sha: 26912a2df9c91474a52b1f6daf9ca45b54b73495
+  - path: app-gmt/tutorial/triggers.ts
+    bytes: 881
+    lines: 28
+    blob_sha: 22fb1a62506d7ab28034d4c3e1d125634258f9af
+  - path: CLAUDE.md
+    bytes: 12124
+    lines: 117
+    blob_sha: 2dc72c79aafe8f08569854aadf7efff143866886
+  - path: CODEBASE_MAP.md
+    bytes: 13159
+    lines: 177
+    blob_sha: d2b61327f142f9b6545bdea4aaecec84da57f582
+  - path: components/Accordion.tsx
+    bytes: 7212
+    lines: 162
+    blob_sha: 20ab894bf54c4a42ad8091ebb7440f03a350cd99
+  - path: components/ActiveSnapshotFeatures.tsx
+    bytes: 3640
+    lines: 97
+    blob_sha: 6a6277b6125524d2202a8091f29a261e985c8272
+  - path: components/AdvancedGradientEditor.tsx
+    bytes: 42595
+    lines: 862
+    blob_sha: bcde62887fb5a1ef4c7afbd53e9e6cca4985cdbb
+  - path: components/AutoFeaturePanel.tsx
+    bytes: 38850
+    lines: 702
+    blob_sha: 858f268982da1b084af7c97f66b2acc99e59a4c2
+  - path: components/Button.tsx
+    bytes: 1551
+    lines: 39
+    blob_sha: abec3c3555bca6bff8687de0c237a8f7d3cef388
+  - path: components/CategoryPickerMenu.tsx
+    bytes: 8193
+    lines: 189
+    blob_sha: 512a3e7108695a820b78ed6da0ed55b4663ecee2
+  - path: components/CollapsibleSection.tsx
+    bytes: 3184
+    lines: 92
+    blob_sha: 5696059eca93828d0bd719ac741398115c46f3d0
+  - path: components/CompilableFeatureSection.tsx
+    bytes: 17804
+    lines: 364
+    blob_sha: 7f6fcfd63e35384347b4f89e8ecefd58e1a73b20
+  - path: components/CompileDropdownSection.tsx
+    bytes: 5985
+    lines: 141
+    blob_sha: 0504db075402195ac6d1687e2659f7e10482b33d
+  - path: components/CompilingIndicator.tsx
+    bytes: 5633
+    lines: 124
+    blob_sha: cf30edb2bc0a3904ea3fc77f7f3670e3eb686a54
+  - path: components/CompositionOverlayControls.tsx
+    bytes: 7698
+    lines: 160
+    blob_sha: 3fcb31e8dec09a62fb72bb8532e594277851db3e
+  - path: components/contexts/StoreCallbacksContext.tsx
+    bytes: 745
+    lines: 20
+    blob_sha: 60c81efa3c7826b833cb346cc1aebf327041f63f
+  - path: components/DotToggle.tsx
+    bytes: 2323
+    lines: 68
+    blob_sha: 04c049f54f6a649dd420ec26be3c3ae08c87da7a
+  - path: components/DraggableWindow.tsx
+    bytes: 8162
+    lines: 195
+    blob_sha: 08f94ca6332af64ae2b8562443cddb8ada5ef1d0
+  - path: components/Dropdown.tsx
+    bytes: 1589
+    lines: 51
+    blob_sha: 5cd1c7c4267510e8766314b20fcb6d5c46065ccc
+  - path: components/DynamicList.tsx
+    bytes: 15683
+    lines: 358
+    blob_sha: b42a0179cd62e93d6dee4a5c8994f29c00671e24
+  - path: components/EmbeddedColorPicker.tsx
+    bytes: 9815
+    lines: 220
+    blob_sha: 7b26528332e5b324747e105000e78ddd93cf7082
+  - path: components/EngineBridge.tsx
+    bytes: 631
+    lines: 22
+    blob_sha: c56d781bd36f9c22844007fdb8687e01ff180cba
+  - path: components/FeatureSection.tsx
+    bytes: 6099
+    lines: 128
+    blob_sha: 5a6d6966d3d131a88e1b81292abb0b786736ddb2
+  - path: components/GenericDropdown.tsx
+    bytes: 3213
+    lines: 86
+    blob_sha: baa286f6dad212b9d20b5b861f63b5fcf0307357
+  - path: components/GenericToggleSwitch.tsx
+    bytes: 8749
+    lines: 194
+    blob_sha: 4d98a35aba27b43cd2873b4a65fe894b016a9d2b
+  - path: components/GlobalContextMenu.tsx
+    bytes: 9772
+    lines: 219
+    blob_sha: 656c9049acec97433cf8f31463f724165126ca97
+  - path: components/gradient/GradientContextMenu.tsx
+    bytes: 5139
+    lines: 136
+    blob_sha: 7cc876634374c1261383d6a5cd2a48ab18f79755
+  - path: components/graph/GraphCanvas.tsx
+    bytes: 4885
+    lines: 122
+    blob_sha: d5d770a1af928a76ab86a76504429902615b0bc8
+  - path: components/graph/GraphSelectionBBox.tsx
+    bytes: 10502
+    lines: 233
+    blob_sha: b3022e6d6e3a486dac97f2074bfdc19ae7e33251
+  - path: components/graph/GraphSidebar.tsx
+    bytes: 17216
+    lines: 354
+    blob_sha: 46df56f4a051ada69beb151aa62007b307bb340f
+  - path: components/graph/GraphToolbar.tsx
+    bytes: 7204
+    lines: 187
+    blob_sha: 76f0bdb06d34fdb73260e800b21ede5d6a31227e
+  - path: components/GraphEditor.tsx
+    bytes: 21668
+    lines: 471
+    blob_sha: d8642da561d9bbbc3fbfc71875a6cb582dca0007
+  - path: components/HelpBrowser.tsx
+    bytes: 23112
+    lines: 513
+    blob_sha: 54f7390e83d0503014d2e97c3ae8a725e60d9011
+  - path: components/Hint.tsx
+    bytes: 1583
+    lines: 43
+    blob_sha: 886af052ddd8fba11f320164aef9663b89b3211e
+  - path: components/Histogram.tsx
+    bytes: 18769
+    lines: 428
+    blob_sha: d8eb2842349e17d76a314e5fa93c95d2ceccf943
+  - path: components/HistogramProbe.tsx
+    bytes: 1445
+    lines: 48
+    blob_sha: dedb7e6e6c07d3343050230577aee0b6e8115147
+  - path: components/Icons.tsx
+    bytes: 25307
+    lines: 254
+    blob_sha: 4e479319992a9fa12ae911b40f57fc1b93269278
+  - path: components/inputs/GlslEditor.tsx
+    bytes: 10886
+    lines: 238
+    blob_sha: a85f5344106cf188aaf254e979740604ec8db540
+  - path: components/inputs/hooks/index.ts
+    bytes: 94
+    lines: 2
+    blob_sha: 8c79132c98defb4b78e23d5ae10bd141098d7f2f
+  - path: components/inputs/hooks/useDragValue.ts
+    bytes: 6929
+    lines: 202
+    blob_sha: 99e3edec4c0f1c3c69d35a25b9e115835376c2a5
+  - path: components/inputs/hooks/useEditMode.ts
+    bytes: 5243
+    lines: 164
+    blob_sha: 737235253777731a207a9bc0447d0b661ecf991c
+  - path: components/inputs/index.ts
+    bytes: 495
+    lines: 18
+    blob_sha: 20043aea5897f3606fd1dcae2af8860215000774
+  - path: components/inputs/primitives/DraggableNumber.tsx
+    bytes: 5368
+    lines: 171
+    blob_sha: a3fca5f2165349d1f2c31bd7918e0fb1b6554e45
+  - path: components/inputs/primitives/FormatUtils.ts
+    bytes: 6424
+    lines: 182
+    blob_sha: 607f58c3f4328b39fa4aab39fd91b9fff9fd0563
+  - path: components/inputs/primitives/index.ts
+    bytes: 213
+    lines: 9
+    blob_sha: eb4e79f3aa0215f08c3b1f3dd2e42240b301d061
+  - path: components/inputs/ScalarInput.tsx
+    bytes: 18456
+    lines: 423
+    blob_sha: fe0d2c0e41952a700b9c9d67228cd4ee466b3538
+  - path: components/inputs/types.ts
+    bytes: 7220
+    lines: 223
+    blob_sha: e292a779fd5d7348297345bb5e1ae1b27b92df70
+  - path: components/inputs/VectorInput.tsx
+    bytes: 15225
+    lines: 345
+    blob_sha: fa0517c7710525c33bdaeff996e1ccc07200759e
+  - path: components/InteractionPicker.tsx
+    bytes: 1884
+    lines: 54
+    blob_sha: 80ab2ece237a47a880d28edc5b7c2d9988f598ee
+  - path: components/KeyframeButton.tsx
+    bytes: 1262
+    lines: 34
+    blob_sha: 7a7c1ae5ff6d076d4ef4fad033cf17f0921236eb
+  - path: components/Knob.tsx
+    bytes: 6975
+    lines: 191
+    blob_sha: d24c70f7f5d724ac761404ed70245cca71f2f060
+  - path: components/layout/Dock.tsx
+    bytes: 11868
+    lines: 254
+    blob_sha: 66bc4399dd3c8a85753413b20da29beb99668ae2
+  - path: components/layout/DropZones.tsx
+    bytes: 4882
+    lines: 101
+    blob_sha: 4ce6896c85f811ba341977ec2e7af4ef6e521123
+  - path: components/LoadingScreen.tsx
+    bytes: 1800
+    lines: 60
+    blob_sha: c524b2fb5ca9c05db8bfeed41317e8412edabb1b
+  - path: components/MobileControls.tsx
+    bytes: 7480
+    lines: 169
+    blob_sha: adf02709cd5e0260c0505cfd0f3822d542263673
+  - path: components/NumberInput.tsx
+    bytes: 1186
+    lines: 40
+    blob_sha: f61fe6d59ed84cd51b3e9483fc047cb9ad5a5379
+  - path: components/PanelHeader.tsx
+    bytes: 760
+    lines: 23
+    blob_sha: a01abc3eda7bb3149398096fd7d650cf19ace6bf
+  - path: components/PanelRouter.tsx
+    bytes: 13111
+    lines: 343
+    blob_sha: 5a56b18b0af293acf1340f0b386f2a5c7f7db687
+  - path: components/panels/engine/EngineFeatureRow.tsx
+    bytes: 9566
+    lines: 209
+    blob_sha: ecf7c850e53c051cc8a0f5993cd654f0635f2da1
+  - path: components/ParameterSelector.tsx
+    bytes: 12057
+    lines: 277
+    blob_sha: 62a702a329be9b7de0b0ce070fd79bf5d3698e97
+  - path: components/ParentSection.tsx
+    bytes: 3243
+    lines: 76
+    blob_sha: 55619772d47c6c8774b8bbb197e1083249cd0b76
+  - path: components/PerformanceMonitor.tsx
+    bytes: 13216
+    lines: 301
+    blob_sha: 6a52ea927cb3062139035186fd4a2d23e8559693
+  - path: components/Popover.tsx
+    bytes: 3427
+    lines: 102
+    blob_sha: 6155504b09fb00d746de559e16e1f44e2c140eda
+  - path: components/registry/ComponentRegistry.tsx
+    bytes: 2026
+    lines: 52
+    blob_sha: 03faf92e84542659b848547e95de69cc338cac32
+  - path: components/RuntimeSection.tsx
+    bytes: 2650
+    lines: 71
+    blob_sha: c3fddfbed336aeaa445c33d32ed0beabfbb3067b
+  - path: components/SectionLabel.tsx
+    bytes: 1253
+    lines: 34
+    blob_sha: cd0fe670b9540853159feb71a3183f934fe52152
+  - path: components/Slider.tsx
+    bytes: 10647
+    lines: 331
+    blob_sha: a7208570d96e9b4f6174fb290fc532a6599e4f29
+  - path: components/SmallColorPicker.tsx
+    bytes: 3995
+    lines: 111
+    blob_sha: f44e1a46ab4fa2f93702d9b9f9c31fe64a8e0202
+  - path: components/StateDebugger.tsx
+    bytes: 5289
+    lines: 130
+    blob_sha: 68702dd9b01f319aab00063a9182370f1d1769e9
+  - path: components/StateLibraryPanel.tsx
+    bytes: 14404
+    lines: 311
+    blob_sha: 3105613bf938deef4d5988690b46366ec0bd7ca4
+  - path: components/StatusDot.tsx
+    bytes: 827
+    lines: 28
+    blob_sha: a751ca9fdaa4095e1f263b5107af81f017f840d5
+  - path: components/TabStrip.tsx
+    bytes: 4450
+    lines: 109
+    blob_sha: 7b1f28fc541921b418eec6605801bf42da6ee8ec
+  - path: components/Timeline.tsx
+    bytes: 19469
+    lines: 389
+    blob_sha: 4a2021b6191a6136fdc5aa176fac246be94d4375
+  - path: components/timeline/AudioStrip.tsx
+    bytes: 14551
+    lines: 312
+    blob_sha: e708b5d59ae8ab0b6a8c0a6be59899858782cea3
+  - path: components/timeline/DopeSheet.tsx
+    bytes: 25264
+    lines: 543
+    blob_sha: 9d95f4dcbf54e1fc1606fc42892f54fc8de037e7
+  - path: components/timeline/DopeSheetCanvas.tsx
+    bytes: 8751
+    lines: 205
+    blob_sha: 8d0c6270f706a238d450335df0e517afae1dba6c
+  - path: components/timeline/exportHelpers.ts
+    bytes: 1978
+    lines: 54
+    blob_sha: 4061b6bfd243448253f2bea3970fdeb73ea92289
+  - path: components/timeline/exportModulations.ts
+    bytes: 5888
+    lines: 143
+    blob_sha: d8474edb08ffa935afc3a70a72ab5ff2fd3760c5
+  - path: components/timeline/KeyframeContextMenu.tsx
+    bytes: 3618
+    lines: 119
+    blob_sha: 2b669155bbf8b12c7296f9bcbb519248c66be22d
+  - path: components/timeline/KeyframeInspector.tsx
+    bytes: 22458
+    lines: 410
+    blob_sha: 1172a79164d3364f745b9cb6fab72b4bda5ee90c
+  - path: components/timeline/SelectionTransformBar.tsx
+    bytes: 1846
+    lines: 38
+    blob_sha: 3d0f15a808922ba947e9b975bcef0b7000b8181a
+  - path: components/timeline/TimelineRuler.tsx
+    bytes: 8082
+    lines: 201
+    blob_sha: 4198e7a45d0bb537ba4f8756e7a93f6e6c0bcc0a
+  - path: components/timeline/TimelineToolbar.tsx
+    bytes: 23598
+    lines: 463
+    blob_sha: 64411ab8b678ce7d7bc0009d4e2f3ce37af5de3b
+  - path: components/timeline/TimeNavigator.tsx
+    bytes: 7994
+    lines: 211
+    blob_sha: d996ff94657b48f280c922eaced958f6c4db6737
+  - path: components/timeline/TrackGroup.tsx
+    bytes: 5028
+    lines: 105
+    blob_sha: e53872c9fde7b252a176d778376bdffe970332da
+  - path: components/timeline/TrackRow.tsx
+    bytes: 4267
+    lines: 84
+    blob_sha: 419a045980bf0a5697d9baf927987c3897cbda10
+  - path: components/TimelineHost.tsx
+    bytes: 4015
+    lines: 104
+    blob_sha: bfa23c9a794d34deb6c1493134ec68937cbee2f6
+  - path: components/ToggleSwitch.tsx
+    bytes: 2509
+    lines: 80
+    blob_sha: 150117e4b97521fb7365b82159711565bf8755cd
+  - path: components/vector-input/BaseVectorInput.tsx
+    bytes: 30522
+    lines: 671
+    blob_sha: 38dfd57071fd7eb762e40ea06fe12875df8147cb
+  - path: components/vector-input/DualAxisPad.tsx
+    bytes: 9074
+    lines: 236
+    blob_sha: 6205368a567456e1685c67b38e7244ab59bd0d53
+  - path: components/vector-input/index.tsx
+    bytes: 18496
+    lines: 449
+    blob_sha: 55ecfce6e9a74b8b7b8fa55a0dd067250d6e2285
+  - path: components/vector-input/RotationHeliotrope.tsx
+    bytes: 20089
+    lines: 443
+    blob_sha: 094f6009276db9847f318c0a27cb4854384c959c
+  - path: components/vector-input/types.ts
+    bytes: 4138
+    lines: 111
+    blob_sha: da41290091b0b96cf1d07ab5a1d26e6fd59e18f2
+  - path: components/vector-input/VectorAxisCell.tsx
+    bytes: 2862
+    lines: 81
+    blob_sha: 71f5a2b1ea0cd3bba5892f6db466865f4c40d030
+  - path: components/viewport/CompositionOverlay.tsx
+    bytes: 13574
+    lines: 316
+    blob_sha: 2cba262359e202ef9d71571484be122886249c66
+  - path: components/ViewportArea.tsx
+    bytes: 10289
+    lines: 243
+    blob_sha: d65617fa49383ac70f0253d40fdb9b9951ea57d5
+  - path: CONTRIBUTING.md
+    bytes: 6653
+    lines: 135
+    blob_sha: 135934f9f07ef09a3622026decb64c0457d669b1
+  - path: data/BlueNoiseData.ts
+    bytes: 4420
+    lines: 112
+    blob_sha: dcdc4e2fce2bb3c1236a15923729cf4a4477d29e
+  - path: data/constants.ts
+    bytes: 2347
+    lines: 49
+    blob_sha: 86dc451925607f471981295c08b1ecf262032a4d
+  - path: data/gradientPresets.ts
+    bytes: 6804
+    lines: 147
+    blob_sha: 81edb9455698fa638649f4fcb24da8bd6579f856
+  - path: data/help/registry.ts
+    bytes: 2224
+    lines: 53
+    blob_sha: be12a6d2f290f6df0937efe05f28412da623b1f1
+  - path: data/help/topics-bundle.ts
+    bytes: 1520
+    lines: 41
+    blob_sha: 747fd7614d5d44ab0dbbee1f234fae127617a9a2
+  - path: data/help/topics/audio.ts
+    bytes: 4668
+    lines: 87
+    blob_sha: 805a53e48d0a69ad540a526bcc82cd624852a828
+  - path: data/help/topics/coloring.ts
+    bytes: 11838
+    lines: 175
+    blob_sha: 69c2a1d945b8f1f8469598eb4d8a0216df917bf0
+  - path: data/help/topics/effects.ts
+    bytes: 7836
+    lines: 154
+    blob_sha: cdea898f5329207ec25ac9ad8c3294d5fa656a8a
+  - path: data/help/topics/formula_library.ts
+    bytes: 45663
+    lines: 935
+    blob_sha: 3f4a910a44af958dc013b5d76005bd9cfc3db9db
+  - path: data/help/topics/formulas.ts
+    bytes: 4841
+    lines: 78
+    blob_sha: 4da1980dbcb2e577a91c3835d407c3f9e42869eb
+  - path: data/help/topics/general.ts
+    bytes: 6080
+    lines: 122
+    blob_sha: 215fbaa4cdfed553ba1b9d86fe2ea78df71fce35
+  - path: data/help/topics/getting_started.ts
+    bytes: 7272
+    lines: 154
+    blob_sha: f2408b89e8701b0d0fd7e6fe7a1329331390e7da
+  - path: data/help/topics/graph.ts
+    bytes: 4648
+    lines: 84
+    blob_sha: 24c6269a61126bd7f3ac1af4dbfb83412d677b04
+  - path: data/help/topics/lighting.ts
+    bytes: 15523
+    lines: 266
+    blob_sha: 7e214201e9f6b7d5a64b2d79e17032a3e8764dea
+  - path: data/help/topics/parameters.ts
+    bytes: 4831
+    lines: 111
+    blob_sha: 7e49484dc452d78780e3a8908732cce206ea57aa
+  - path: data/help/topics/rendering.ts
+    bytes: 36532
+    lines: 630
+    blob_sha: b524e894489f4031aae0584a7a5cfb5ebb856d36
+  - path: data/help/topics/scene.ts
+    bytes: 7777
+    lines: 180
+    blob_sha: eb8d9d0e6a7794412f6b7fac17350598dda2c7df
+  - path: data/help/topics/timeline.ts
+    bytes: 16584
+    lines: 269
+    blob_sha: 917f80c7c202f8d078f823e1b971dd7c6b68353e
+  - path: data/help/topics/ui.ts
+    bytes: 14217
+    lines: 310
+    blob_sha: 5480a301862a53a51e40dfe1bdd41fbbe8704b2e
+  - path: data/help/useHelpTopics.ts
+    bytes: 948
+    lines: 24
+    blob_sha: 7837c3c9dca7164f7ec47ae2511480ff15936bdc
+  - path: data/resolutionPresets.ts
+    bytes: 3598
+    lines: 79
+    blob_sha: 174144ececddf28ab9f1226a04156decc67fc16c
+  - path: data/theme.ts
+    bytes: 5457
+    lines: 129
+    blob_sha: 05761c7e4da2be6ab18449f78f68c990ff225e4b
+  - path: demo.html
+    bytes: 6569
+    lines: 96
+    blob_sha: 895c41d3cd1b71f8241aea770d5824a6e41796c6
+  - path: demo/demoCanvasRef.ts
+    bytes: 526
+    lines: 13
+    blob_sha: 526f4865a49fc133b06516907071c098257257a3
+  - path: demo/DemoExplainer.tsx
+    bytes: 7260
+    lines: 152
+    blob_sha: 1228fc24b0aaa82ce71409038de60f7540bb1fbd
+  - path: demo/DemoFeature.ts
+    bytes: 2279
+    lines: 35
+    blob_sha: 276d8a2c1635ef1d2ba938a265d807e97b226dd9
+  - path: demo/DemoOverlay.tsx
+    bytes: 5824
+    lines: 137
+    blob_sha: 0ad34b4e72e8ef6b2adfb4f756738fa1394f31d6
+  - path: demo/demoRenderRunner.ts
+    bytes: 5598
+    lines: 126
+    blob_sha: b54e2943d6f4a4f052659697632398a2e01c2826
+  - path: demo/README.md
+    bytes: 2503
+    lines: 59
+    blob_sha: 3e638795be0e1efaf433f61228c5cbdb447a4335
+  - path: demo/registerFeatures.ts
+    bytes: 601
+    lines: 12
+    blob_sha: 9cbb6f0dac0256e867dbc6b52a10b3f60712aa11
+  - path: demo/setup.ts
+    bytes: 2847
+    lines: 69
+    blob_sha: ad527a2c7b467181a1140e4e9ca4793e00bb8fc3
+  - path: docs/animation-refactor/00_INDEX.md
+    bytes: 23132
+    lines: 183
+    blob_sha: a33baf9ffaa41cdc5fa3171f09af59015738b409
+  - path: docs/animation-refactor/01_AUDIT.md
+    bytes: 26663
+    lines: 344
+    blob_sha: d251a2b6e5bc171045c889a6eceb17384a78d3ba
+  - path: docs/animation-refactor/02_RATIONALE.md
+    bytes: 29726
+    lines: 383
+    blob_sha: 5d225fc1b84f548a555f12037601abe8e95361df
+  - path: docs/animation-refactor/03_SPEC.md
+    bytes: 50345
+    lines: 850
+    blob_sha: da7e02a8df1d40b79df8219cb213922b1569df24
+  - path: docs/animation-refactor/04_CORRECTIONS.md
+    bytes: 8659
+    lines: 127
+    blob_sha: 4bd7688826bd888f83eb5d4b09fd578791db9d44
+  - path: docs/animation-refactor/05_SPIKE_PROMPT.md
+    bytes: 10543
+    lines: 185
+    blob_sha: efb065d31d61f866aa1c8af797440ae69f099cd0
+  - path: docs/animation-refactor/06_SPIKE_FINDINGS.md
+    bytes: 12050
+    lines: 112
+    blob_sha: 5d4982be3732b1181526d74d3d7326754cbf3177
+  - path: docs/animation-refactor/07_ENGINE_PROBE_PROMPT.md
+    bytes: 9927
+    lines: 151
+    blob_sha: bca826f88176832bc51f7fe5d3f49554b36faba8
+  - path: docs/animation-refactor/08_ENGINE_PROBE_FINDINGS.md
+    bytes: 11355
+    lines: 139
+    blob_sha: 44c47649ec08280e79c8e20dc4ca9038df9ea389
+  - path: docs/animation-refactor/09_CANVAS_GRAPH_PROMPT.md
+    bytes: 14830
+    lines: 213
+    blob_sha: 27274ee779614cd8d83dc0d257e7b0aac7c1dd24
+  - path: docs/animation-refactor/10_BENCH_METRIC_PROMPT.md
+    bytes: 6725
+    lines: 139
+    blob_sha: 68d19e60bad07f635892bf4b0ecd735b85c6b78b
+  - path: docs/animation-refactor/11_CANVAS_GRAPH_REPORT.md
+    bytes: 13215
+    lines: 246
+    blob_sha: 310ba05eaf87e5d346905b0976de407144778ca4
+  - path: docs/animation-refactor/12_BENCH_METRIC_REPORT.md
+    bytes: 3102
+    lines: 42
+    blob_sha: 678c26d83d4b4484db3a9a8f2cad93212dd140f5
+  - path: docs/animation-refactor/13_DOPESHEET_PROBE_PROMPT.md
+    bytes: 12190
+    lines: 170
+    blob_sha: 3e5b9c9f14a286c3399edd0f4802f0f47eafccb1
+  - path: docs/animation-refactor/14_CANVAS_DOPESHEET_PROMPT.md
+    bytes: 22533
+    lines: 276
+    blob_sha: a66b6979b263a75a0aa132be4f06a1bb9c123d59
+  - path: docs/animation-refactor/15_DOPESHEET_PROBE_FINDINGS.md
+    bytes: 15203
+    lines: 175
+    blob_sha: 3e3fffb9e30b415157d9cd7ef3273712718ff7cc
+  - path: docs/animation-refactor/16_CANVAS_DOPESHEET_REPORT.md
+    bytes: 17406
+    lines: 130
+    blob_sha: 79f38207b52074f07998fc2cbb681d867a27ec36
+  - path: docs/animation-refactor/17_SHARED_CANVAS_UTILS.md
+    bytes: 17018
+    lines: 151
+    blob_sha: 848aeddb76fb3a07c589f55aafd4f15d4753e747
+  - path: docs/animation-refactor/18_TIMELINE_CLEANUP_PROMPT.md
+    bytes: 12776
+    lines: 125
+    blob_sha: df6ea1c6505883157029f4f83f8629433df9f33f
+  - path: docs/animation-refactor/20_TIMELINE_CLEANUP_REPORT.md
+    bytes: 10463
+    lines: 88
+    blob_sha: 658ed64c47f3e6e530c6c4a2bc5e0890ce5cd3d6
+  - path: docs/animation-refactor/21_AUDIO_TIMELINE_SYNC_PROMPT.md
+    bytes: 8373
+    lines: 98
+    blob_sha: fdfe9de5a2f5faf9215a3a147069235d6dc0d302
+  - path: docs/animation-refactor/22_AUDIO_TIMELINE_SYNC_REPORT.md
+    bytes: 24322
+    lines: 225
+    blob_sha: 74d277a50dff767f9600e834869f4d80aca9fd73
+  - path: docs/animation-refactor/23_MODULATION_OFF_SWITCH_PROMPT.md
+    bytes: 9746
+    lines: 98
+    blob_sha: ab8ee643f4b7ab9c55a2f7bd3d36c7f6dc0b7b99
+  - path: docs/animation-refactor/24_MODULATION_OFF_SWITCH_REPORT.md
+    bytes: 5369
+    lines: 56
+    blob_sha: 0d82789c9d1c3a7439ec3d8e0e1f3297624b1778
+  - path: docs/animation-refactor/25_NEXT_SESSION_HANDOFF.md
+    bytes: 7400
+    lines: 97
+    blob_sha: b9c56d715bd8166820f751753c829f7e7f7389bd
+  - path: docs/animation-refactor/PHASE_0_PROMPT.md
+    bytes: 12579
+    lines: 235
+    blob_sha: 0bd5beb2588522430d208e81e3c5816943490b5e
+  - path: docs/archive/09_Mapping_Modes_Report.md
+    bytes: 2318
+    lines: 44
+    blob_sha: 1aad042e31665dda993129397912adecd0ac103e
+  - path: docs/archive/10_Shader_Architecture_Refactor.md
+    bytes: 5454
+    lines: 109
+    blob_sha: 5c5b4cfb11e78e52937d2e8f31f7741cdfeed402
+  - path: docs/archive/11_Fragmentarium_Conversion.md
+    bytes: 17766
+    lines: 507
+    blob_sha: a2ee6c4cdf5851a33d50e608d6e06a723c000368
+  - path: docs/archive/12_Vector_Uniform_Requirements.md
+    bytes: 9591
+    lines: 331
+    blob_sha: f4182e4f08ef26b31f7d6447d9e8468f547b9746
+  - path: docs/archive/14_Fragmentarium_Examples_Analysis.md
+    bytes: 13755
+    lines: 470
+    blob_sha: 48b352020655bca8a46bac18e0cec362a99a38db
+  - path: docs/archive/19_GLSL_Parser_Integration_Summary.md
+    bytes: 7734
+    lines: 232
+    blob_sha: 73a423a219c70005658fa705068775c2a46f3cbb
+  - path: docs/archive/20_Fragmentarium_Importer_Formula_Analysis.md
+    bytes: 12047
+    lines: 248
+    blob_sha: 953d0923b81e807385e9b3afe14a67a526e5bac6
+  - path: docs/archive/20_Fragmentarium_Importer_V2.md
+    bytes: 9962
+    lines: 342
+    blob_sha: 0d84506312b24bf15c3a7051b3ed1e2e80d31b29
+  - path: docs/archive/context2.md
+    bytes: 8603
+    lines: 170
+    blob_sha: fd30651057c7201142885d497f3fc0c1134067d1
+  - path: docs/archive/README.md
+    bytes: 1864
+    lines: 26
+    blob_sha: 6025c68ff8d27567a4ce605506006c0327e7d8ca
+  - path: docs/BENCH_SHADER_HANDOFF.md
+    bytes: 53131
+    lines: 988
+    blob_sha: 8ad65e438e116f6f0580c3834bb45c1c4d1b7479
+  - path: docs/CHANGELOG_DEV.md
+    bytes: 163882
+    lines: 1228
+    blob_sha: f344a2ccfb9eb0e555526cc1383da3d61a4fd893
+  - path: docs/DOCS_INDEX.md
+    bytes: 10630
+    lines: 177
+    blob_sha: 696aff59d8652b807ba1c4e91945378ea13d1e98
+  - path: docs/engine/01_Architecture.md
+    bytes: 14212
+    lines: 192
+    blob_sha: 2e28552b34b192beac915d788875d8bf01eca537
+  - path: docs/engine/02_Feature_Registry.md
+    bytes: 10001
+    lines: 196
+    blob_sha: 24b74376cdcbd90fce00d1bd744d69caa59b3fbd
+  - path: docs/engine/03_Plugin_Contract.md
+    bytes: 9291
+    lines: 202
+    blob_sha: 88fcdc61c4c2a96c6d3b6dc3a2a4ad4f7579af33
+  - path: docs/engine/04_Core_Plugins.md
+    bytes: 12517
+    lines: 236
+    blob_sha: eeaa8d5ed8a93dd166cf39078f356e29ddeb5b4f
+  - path: docs/engine/05_Shared_UI.md
+    bytes: 10479
+    lines: 204
+    blob_sha: 7d5782a5dcee2ff57e08c66ce326b1426aa97549
+  - path: docs/engine/06_Undo_Transactions.md
+    bytes: 11496
+    lines: 183
+    blob_sha: ab32acdf16e2dbcacb3c0cdce8bfec46c663bb3e
+  - path: docs/engine/07_Shortcuts.md
+    bytes: 8850
+    lines: 211
+    blob_sha: e3dde1b468a74beecfafab64e766bcc67b7315bb
+  - path: docs/engine/08_Animation.md
+    bytes: 23308
+    lines: 362
+    blob_sha: bec46c0b14a6d3863cd5e081eeae0dc40c3d07b2
+  - path: docs/engine/09_Bridges_and_Derived.md
+    bytes: 9054
+    lines: 216
+    blob_sha: e0a3af97c7e6e05f3252c6b4950f8c78538d3164
+  - path: docs/engine/10_Viewport.md
+    bytes: 21555
+    lines: 323
+    blob_sha: 4c495e344e6488a12ac38a3eb35cbd02b665b8d0
+  - path: docs/engine/11_Plugin_Authoring.md
+    bytes: 10198
+    lines: 233
+    blob_sha: 047b6c5a043085a81ea6c8dac0a673b14326e1ae
+  - path: docs/engine/11_TSAA.md
+    bytes: 15027
+    lines: 228
+    blob_sha: 086e235251205702b43f55a3db4ebe4a7b30f337
+  - path: docs/engine/12_App_Handles.md
+    bytes: 4745
+    lines: 116
+    blob_sha: b5c7b06074d345a27498e8b824ded47aa72b0c93
+  - path: docs/engine/13_Extracting_From_GMT.md
+    bytes: 6128
+    lines: 87
+    blob_sha: 4561ea8cb71f9c430a12d61614b62bdcefaa40d2
+  - path: docs/engine/14_Panel_Manifest.md
+    bytes: 11031
+    lines: 168
+    blob_sha: 171a71cfa79371a519349db405a680161f90130f
+  - path: docs/engine/15_Camera_Manager_Extraction.md
+    bytes: 10418
+    lines: 257
+    blob_sha: 368c999fa168e3a809b49be56e49da95701aeb6e
+  - path: docs/engine/16_Type_Augmentation.md
+    bytes: 7434
+    lines: 195
+    blob_sha: ef04f5760621b805b40802d3f9a286ec12b4a118
+  - path: docs/engine/17_Mobile_Layout.md
+    bytes: 9216
+    lines: 163
+    blob_sha: ef4346aafb4a7eb56549f01c18765a6297962e2c
+  - path: docs/engine/20_Fragility_Audit.md
+    bytes: 31798
+    lines: 382
+    blob_sha: 7124d7bb33b3d133dabde16bc9d16a5580c59162
+  - path: docs/engine/21_Code_Review_2026-04-25.md
+    bytes: 13008
+    lines: 184
+    blob_sha: a9190fc313cf009d2938d90af6cb21ba9addede9
+  - path: docs/FEATURE_STATUS.md
+    bytes: 10770
+    lines: 170
+    blob_sha: cc264b76c330c388034cb234e86cc163e911bcab
+  - path: docs/gmt/01_System_Architecture.md
+    bytes: 22707
+    lines: 281
+    blob_sha: 8a4e35e14347de931d3c57933cfd900fa05d7541
+  - path: docs/gmt/02_Rendering_Internals.md
+    bytes: 62475
+    lines: 892
+    blob_sha: a7d17c0ca1b4b637b3fea9091121b761cad4b841
+  - path: docs/gmt/03_Modular_System.md
+    bytes: 33676
+    lines: 662
+    blob_sha: 854df16e1e12cbd7da5e32faf0853279bb8c8743
+  - path: docs/gmt/04_Animation_Engine.md
+    bytes: 23503
+    lines: 410
+    blob_sha: a7853d2be3b98ce9f3358d7f399ab56e485d5138
+  - path: docs/gmt/05_Data_and_Export.md
+    bytes: 12739
+    lines: 177
+    blob_sha: 033878e9738d303d3f4939438a5731038a0b4c6c
+  - path: docs/gmt/06_Troubleshooting_and_Quirks.md
+    bytes: 32299
+    lines: 380
+    blob_sha: 97b23151a8302be21a369298eb151eec5a74bbd4
+  - path: docs/gmt/07_Code_Health.md
+    bytes: 67267
+    lines: 862
+    blob_sha: 429e958e8f89e92e5e785a41ea54d1b663792218
+  - path: docs/gmt/08_File_Structure.md
+    bytes: 19600
+    lines: 282
+    blob_sha: 6a3eb62acb2ca85b91ef1691329cbddaf6c14b13
+  - path: docs/gmt/21_Frag_Importer_Current_Status.md
+    bytes: 20962
+    lines: 398
+    blob_sha: 23f088b4dbcdcd8b6106fda95e35bfd522f290a1
+  - path: docs/gmt/22_Frag_to_Native_Formula_Conversion.md
+    bytes: 9507
+    lines: 229
+    blob_sha: 6c13b3bc54651971b5b1f462c79d00a12a8dbfbd
+  - path: docs/gmt/23_Formula_Audit.md
+    bytes: 12510
+    lines: 224
+    blob_sha: a497601782cd04b24ae16d9929c97abd8682fb96
+  - path: docs/gmt/24_Formula_Interlace_System.md
+    bytes: 28365
+    lines: 356
+    blob_sha: 0915f26c823a204b20b61bcf9f2d998577b4fd1d
+  - path: docs/gmt/25_Formula_Dev_Reference.md
+    bytes: 37505
+    lines: 898
+    blob_sha: fdf59cbfb8788c44ef41616dc9e7025e322fecf7
+  - path: docs/gmt/26_Formula_Workshop_V4_Plan.md
+    bytes: 59938
+    lines: 835
+    blob_sha: f323c998e7efedc4314f5a428370e931f70a4602
+  - path: docs/gmt/26b_Fragmentarium_Spec.md
+    bytes: 15052
+    lines: 216
+    blob_sha: 536ded64601098230525674a764bc3c4c8a4aeb9
+  - path: docs/gmt/27_Shader_Testing_Suite.md
+    bytes: 22175
+    lines: 294
+    blob_sha: 26f1378fc5d310923530932c1d3ba11cb3baa865
+  - path: docs/gmt/30_Mesh_Export_Prototype.md
+    bytes: 25092
+    lines: 330
+    blob_sha: ded5735717b88207c0285e76fe2d4b82105e2be1
+  - path: docs/gmt/43_Bucket_Render_Overhaul.md
+    bytes: 15014
+    lines: 160
+    blob_sha: 9b512e953eb859962bacede2dcabfd12ff207480
+  - path: docs/gmt/44_Preview_Region_Plan.md
+    bytes: 12391
+    lines: 150
+    blob_sha: 75829505988ae6913a1d877bc790d4f774e65931
+  - path: docs/research/hybrid-formula-architecture-comparison.md
+    bytes: 7064
+    lines: 63
+    blob_sha: 18e027588eeffc115ab8593a7331c275f058c3df
+  - path: docs/research/v4-rethink-prompt.md
+    bytes: 5926
+    lines: 95
+    blob_sha: ec405af8b6edd815e20dc84998d9a1828af477b9
+  - path: docs/specs/10_Shaped_Emission.md
+    bytes: 10496
+    lines: 244
+    blob_sha: d476a770676ff1443d2fbe0dcdf7bc3b3893b956
+  - path: docs/specs/fractal_pathtracing_research_2024_2026.md
+    bytes: 22849
+    lines: 384
+    blob_sha: f1fe3c4a572dd279811d9c83de21278d2753178d
+  - path: docs/UI_PERF_HANDOFF.md
+    bytes: 29642
+    lines: 651
+    blob_sha: 75d35f724ad791bbd57548b8905e7dd067e0acf8
+  - path: docs/VOLUMETRIC_HANDOFF.md
+    bytes: 8201
+    lines: 123
+    blob_sha: ba9d0281c453b4e4fb0ab2ed3220d2456f73f33b
+  - path: engine-gmt/animation/cameraBinders.ts
+    bytes: 11931
+    lines: 277
+    blob_sha: 4181161cc78f2375a30862c52b011e2733ba8bf0
+  - path: engine-gmt/components/DonateButton.tsx
+    bytes: 4106
+    lines: 102
+    blob_sha: e198ece4b7fc6fa0264347183d22edc850d5595e
+  - path: engine-gmt/components/HardwarePrefsHost.tsx
+    bytes: 1069
+    lines: 27
+    blob_sha: 1dd8b77380bda78e0c777fdbfc33572f1ab9b18f
+  - path: engine-gmt/components/HistogramProbe.tsx
+    bytes: 2029
+    lines: 61
+    blob_sha: 330fac754b067b2a74f36c9b92ecd08ea30a48de
+  - path: engine-gmt/components/panels/EnginePanel.tsx
+    bytes: 11982
+    lines: 240
+    blob_sha: ae468aa6f0579d3fb7d6642ddbabd9a0fd84c35c
+  - path: engine-gmt/components/panels/flow/FlowEditor.tsx
+    bytes: 27999
+    lines: 547
+    blob_sha: cad2356d971cb35c51a1d321860b8a6a0753e9c5
+  - path: engine-gmt/components/panels/flow/GraphContextMenu.tsx
+    bytes: 6700
+    lines: 153
+    blob_sha: b378b5abcb6bcae49f7d20854619b24c6caaa11b
+  - path: engine-gmt/components/panels/flow/ShaderNode.tsx
+    bytes: 5756
+    lines: 130
+    blob_sha: 31d97571aff219d3fc60a5fd2e0ed518858b46b3
+  - path: engine-gmt/components/panels/formula/FormulaContextMenu.tsx
+    bytes: 15049
+    lines: 291
+    blob_sha: 0793ae024df88590628e56c67f353ac87019af9d
+  - path: engine-gmt/components/panels/formula/FormulaGallery.tsx
+    bytes: 22148
+    lines: 466
+    blob_sha: 52a5c6b232f002c3fbb2dafcab0ae3c44db75e56
+  - path: engine-gmt/components/panels/formula/FormulaParamsWidget.tsx
+    bytes: 17148
+    lines: 289
+    blob_sha: e539ea83f880f7aaa46a8dd026c135862c719f89
+  - path: engine-gmt/components/panels/formula/FormulaSelect.tsx
+    bytes: 10018
+    lines: 223
+    blob_sha: ad825a66c1db53ea6b8ed262a5e7f47bc2df9d2b
+  - path: engine-gmt/components/panels/gradient/ColoringHistogram.tsx
+    bytes: 7588
+    lines: 177
+    blob_sha: d2ce0ca3f84ddcb58adcdab0af61587ae63f803e
+  - path: engine-gmt/components/panels/gradient/GradientPreview.tsx
+    bytes: 1428
+    lines: 39
+    blob_sha: b8cdf06f2aef23ef6c5011ec7eb802d9d650304f
+  - path: engine-gmt/components/panels/gradient/HistogramLayerMarker.tsx
+    bytes: 975
+    lines: 25
+    blob_sha: 50ebe1a9f3307ba843c02fda629c10d1e2e9bd72
+  - path: engine-gmt/components/panels/gradient/TexturingSourceToggle.tsx
+    bytes: 955
+    lines: 25
+    blob_sha: 278a019e5075c1bcb875244aa8be5f3650cbb30d
+  - path: engine-gmt/components/panels/HardwarePreferences.tsx
+    bytes: 6658
+    lines: 137
+    blob_sha: 7782b4de4a4033869a0ee1a0ca9776db1022dfea
+  - path: engine-gmt/components/panels/HybridAdvancedLock.tsx
+    bytes: 5957
+    lines: 117
+    blob_sha: c429015e435040a01d3725e83be1dd7377d0505d
+  - path: engine-gmt/components/panels/lighting/LightPanelControls.tsx
+    bytes: 20520
+    lines: 447
+    blob_sha: 6b16d1555069246459576066bd5f68d7fb207c18
+  - path: engine-gmt/components/panels/node-editor/NodeParams.tsx
+    bytes: 7615
+    lines: 181
+    blob_sha: bb8ba77bab9e17b2ac3726a57f8883fafe830dd8
+  - path: engine-gmt/components/panels/quality/QualityRenderControls.tsx
+    bytes: 9766
+    lines: 221
+    blob_sha: 284c14f412237a2b9e38bbb285f7a5a36c6f34e0
+  - path: engine-gmt/components/panels/scene_widgets.tsx
+    bytes: 15173
+    lines: 346
+    blob_sha: f4c8ec586a7499380eaed1e3c8610bb0e1acadf4
+  - path: engine-gmt/components/timeline/exportHelpers.ts
+    bytes: 877
+    lines: 26
+    blob_sha: d1abd325e99ed5417cb5c3c33a1b7b5ad7b185ea
+  - path: engine-gmt/components/timeline/exportModulations.ts
+    bytes: 5862
+    lines: 139
+    blob_sha: b53be6dbda741c1d9eea138d166cb3c7c5a82f01
+  - path: engine-gmt/components/timeline/RenderPopup/exportRunner.ts
+    bytes: 20893
+    lines: 485
+    blob_sha: 7816491ebe832eb2d4e7df945e33ea23343ae2c1
+  - path: engine-gmt/components/viewport/PreviewGhostOverlay.tsx
+    bytes: 1577
+    lines: 36
+    blob_sha: 94d7a3c2901a4db83054895368122bf6e6aec4da
+  - path: engine-gmt/components/viewport/RegionOverlay.tsx
+    bytes: 6521
+    lines: 128
+    blob_sha: baeaf6d31f1125158cfe52fbbe42ec96f614e07d
+  - path: engine-gmt/components/widgets/JuliaRandomize.tsx
+    bytes: 4361
+    lines: 102
+    blob_sha: 375f942f639aad48bc63eff84cbc9901b0e16cfc
+  - path: engine-gmt/data/initialPipelines.ts
+    bytes: 2740
+    lines: 94
+    blob_sha: 5f9c4d1d35c2623cb8d4d157589329a133593ba4
+  - path: engine-gmt/data/modularPresets.ts
+    bytes: 2890
+    lines: 63
+    blob_sha: fa5e248c71bd93f9a92b30d53185a59ffc5426f7
+  - path: engine-gmt/data/nodes/definitions.ts
+    bytes: 15740
+    lines: 405
+    blob_sha: 1a530dac20ea47af9724200b3639f24626d97890
+  - path: engine-gmt/engine/BloomPass.ts
+    bytes: 101
+    lines: 2
+    blob_sha: a0bdfb9d89b2e93982f23d2883346f93c9fa6ddf
+  - path: engine-gmt/engine/BucketRenderer.ts
+    bytes: 3456
+    lines: 89
+    blob_sha: 638c33c407c88fc6ce8150a52a01c82844fa74ac
+  - path: engine-gmt/engine/CompileScheduler.ts
+    bytes: 16060
+    lines: 338
+    blob_sha: 286d10fe67676121970eb6fc8eeac4f21d5d95b5
+  - path: engine-gmt/engine/ConfigDefaults.ts
+    bytes: 1759
+    lines: 47
+    blob_sha: 083e3498958252c8ee03134a188ec924a61b6fcb
+  - path: engine-gmt/engine/controllers/CameraController.ts
+    bytes: 6789
+    lines: 178
+    blob_sha: f4bb79a7c60a1d754a6a771427e4f28352b3c878
+  - path: engine-gmt/engine/controllers/PickingController.ts
+    bytes: 6278
+    lines: 143
+    blob_sha: 0f3c7893d3b0771438cae31c554e7913cce1be6b
+  - path: engine-gmt/engine/FeatureSystem.ts
+    bytes: 630
+    lines: 12
+    blob_sha: 7a6247fef701ee170df11808fa6a63ededf1c9b1
+  - path: engine-gmt/engine/FractalEngine.ts
+    bytes: 45108
+    lines: 958
+    blob_sha: fc8b7e4e48b66f448bea68ab8bfa7b5e36abb257
+  - path: engine-gmt/engine/FractalEvents.ts
+    bytes: 290
+    lines: 7
+    blob_sha: b2d381a5d842ff28e32eba1853fb841808faa45b
+  - path: engine-gmt/engine/FractalRegistry.ts
+    bytes: 1045
+    lines: 34
+    blob_sha: 84b024d55e23673ca337fef43dc70ece72469f70
+  - path: engine-gmt/engine/GmtBucketHost.ts
+    bytes: 12507
+    lines: 280
+    blob_sha: f63e306a09022fffe62dd884aaf078306e736200
+  - path: engine-gmt/engine/HardwareDetection.ts
+    bytes: 2350
+    lines: 64
+    blob_sha: 69ef2ff776917ba96090a0ab5a18b696e0c8430f
+  - path: engine-gmt/engine/LoadingRendererCPU.ts
+    bytes: 4680
+    lines: 131
+    blob_sha: 42a81ab1f66af667dc00a14332a13bf761e89f48
+  - path: engine-gmt/engine/managers/ConfigManager.ts
+    bytes: 12174
+    lines: 258
+    blob_sha: 00ed5c89aa1a9523bc21de9c3991139e50015bae
+  - path: engine-gmt/engine/managers/UniformManager.ts
+    bytes: 20320
+    lines: 413
+    blob_sha: 70aa9254afd43a2a76c59a27598ac2a9faf8c7d2
+  - path: engine-gmt/engine/MaterialController.ts
+    bytes: 27658
+    lines: 606
+    blob_sha: 72ee88d8c9f588fb518dc0b58e01c94df93fad73
+  - path: engine-gmt/engine/NodeRegistry.ts
+    bytes: 1734
+    lines: 58
+    blob_sha: 6ed17232071bc9a2a754e91efcb5c8232124bf74
+  - path: engine-gmt/engine/PrecisionMath.ts
+    bytes: 650
+    lines: 12
+    blob_sha: c589c121d41fa889af9cdd77de66f87f2a0ea1b0
+  - path: engine-gmt/engine/RenderPipeline.ts
+    bytes: 343
+    lines: 5
+    blob_sha: b20d2190f2ac5b30596726e5e4947f390f9fb322
+  - path: engine-gmt/engine/SceneController.ts
+    bytes: 1897
+    lines: 54
+    blob_sha: e99e8c1549a478aeeb6bf67368fe4c8580b2fefb
+  - path: engine-gmt/engine/SDFShaderBuilder.ts
+    bytes: 24451
+    lines: 714
+    blob_sha: a5563b2599e95d074d84ec89c7ded0df1e47b5e5
+  - path: engine-gmt/engine/ShaderBuilder.ts
+    bytes: 24024
+    lines: 634
+    blob_sha: 2f66a9680c6f07f5e334d9172c763ffcc8727462
+  - path: engine-gmt/engine/ShaderConfig.ts
+    bytes: 988
+    lines: 26
+    blob_sha: f99f140fa57b7bfeb354d95ef02470a9d84aca6d
+  - path: engine-gmt/engine/ShaderFactory.ts
+    bytes: 2446
+    lines: 62
+    blob_sha: dfbe7acd7b8c755b6132066c19022fc66667e3dd
+  - path: engine-gmt/engine/TickRegistry.ts
+    bytes: 255
+    lines: 6
+    blob_sha: b3995460deb01577767b61a818dbd9fd1915722b
+  - path: engine-gmt/engine/UniformNames.ts
+    bytes: 104
+    lines: 2
+    blob_sha: 0196f8049588cbe987de7b4e44df393a5da8a365
+  - path: engine-gmt/engine/UniformSchema.ts
+    bytes: 5150
+    lines: 104
+    blob_sha: 267fbb91591adf2202ceba758067113e4026e5a9
+  - path: engine-gmt/engine/utils/FullscreenQuad.ts
+    bytes: 910
+    lines: 26
+    blob_sha: be3c2298d0ad0ede9d55b87c56c070ca4b3ae37f
+  - path: engine-gmt/engine/worker/handleRenderTick.ts
+    bytes: 8969
+    lines: 190
+    blob_sha: fbb55be5dae3ac344dfdaa0ae61d26f411aefc44
+  - path: engine-gmt/engine/worker/renderWorker.ts
+    bytes: 39091
+    lines: 807
+    blob_sha: 12ae03838f682ce88eee6b738dd938953c6b1d27
+  - path: engine-gmt/engine/worker/ViewportRefs.ts
+    bytes: 909
+    lines: 22
+    blob_sha: f82e124296fff6dbd2536c47624dbf1eaba0b2c0
+  - path: engine-gmt/engine/worker/WorkerDepthReadback.ts
+    bytes: 8157
+    lines: 175
+    blob_sha: 57a4918d9dbed116fb7ae6e6426e396b4c64e232
+  - path: engine-gmt/engine/worker/WorkerExporter.ts
+    bytes: 42459
+    lines: 893
+    blob_sha: 3ad294b7a1bc4feb7252ab54c05096430a915015
+  - path: engine-gmt/engine/worker/WorkerHistogram.ts
+    bytes: 3921
+    lines: 90
+    blob_sha: 726f7b0f6fb236f49c49028bf8af89bdbcccc94a
+  - path: engine-gmt/engine/worker/WorkerProtocol.ts
+    bytes: 7130
+    lines: 130
+    blob_sha: 1373fd0ae96c4837ba6deb4c28569e6fe090ad3b
+  - path: engine-gmt/engine/worker/WorkerProxy.ts
+    bytes: 42456
+    lines: 879
+    blob_sha: dbdeb11ee0c8c05414d9f4e651c52568310a6eb9
+  - path: engine-gmt/features/ao/index.ts
+    bytes: 4941
+    lines: 124
+    blob_sha: 3230bd1ba0794000529aae504cc68196643128f7
+  - path: engine-gmt/features/ao/shader.ts
+    bytes: 3303
+    lines: 106
+    blob_sha: a767fadea1a1b8b8610238ece2315e0505da47b0
+  - path: engine-gmt/features/atmosphere/index.ts
+    bytes: 8212
+    lines: 182
+    blob_sha: 91601b6b23b96d4107809b42648b6be7ac8bbb25
+  - path: engine-gmt/features/atmosphere/shader.ts
+    bytes: 2168
+    lines: 55
+    blob_sha: b708f662599878ddba26be3583b9f779c33c7af8
+  - path: engine-gmt/features/camera_manager/CameraManagerPanel.tsx
+    bytes: 7936
+    lines: 154
+    blob_sha: 6347e3c22d1a5cb3de58987501120ab43f507870
+  - path: engine-gmt/features/camera_manager/index.ts
+    bytes: 519
+    lines: 16
+    blob_sha: 7f2ef2b6af6ed8f3d277c601e688ec1b1ca4aa33
+  - path: engine-gmt/features/camera_manager/logic.ts
+    bytes: 4727
+    lines: 128
+    blob_sha: 079bf647e31f37712b3f28a489efde2fedd51232
+  - path: engine-gmt/features/coloring/index.ts
+    bytes: 19563
+    lines: 403
+    blob_sha: c6da2e993610e9850e2a8c4d0d890a6ea824edf6
+  - path: engine-gmt/features/coloring/MappingModes.ts
+    bytes: 5860
+    lines: 171
+    blob_sha: 773614da3116e2f19a9f57b9ede5c54a71f625af
+  - path: engine-gmt/features/core_math.ts
+    bytes: 12664
+    lines: 236
+    blob_sha: 270d7336837f2bbd005043fa245f12cefaed33a5
+  - path: engine-gmt/features/drawing/DrawingOverlay.tsx
+    bytes: 32663
+    lines: 761
+    blob_sha: 6e5d4745c920cd3dc62c12973f65e86aebe4a947
+  - path: engine-gmt/features/drawing/DrawingPanel.tsx
+    bytes: 15739
+    lines: 253
+    blob_sha: 0bef693654ac5c97658763f811d0f785f0c86fed
+  - path: engine-gmt/features/drawing/index.ts
+    bytes: 4030
+    lines: 89
+    blob_sha: b149b2da195d717d3298dba99ee66b2994880914
+  - path: engine-gmt/features/droste/index.ts
+    bytes: 9469
+    lines: 271
+    blob_sha: f2cab1d7ec1e7afba3b46c1e89e541353109d999
+  - path: engine-gmt/features/droste/shader.ts
+    bytes: 7819
+    lines: 246
+    blob_sha: c5b30ee97eb812d4d2d25e87a723d8455bd64797
+  - path: engine-gmt/features/engine/index.ts
+    bytes: 1579
+    lines: 46
+    blob_sha: 8ef1bd0b7adc0b94df106da250db118ff3b8ab00
+  - path: engine-gmt/features/engine/profiles.ts
+    bytes: 6803
+    lines: 219
+    blob_sha: 1599cd82ac89dc4b6b75d54dd266056696573b7c
+  - path: engine-gmt/features/fragmentarium_import/formula-library.ts
+    bytes: 9814
+    lines: 257
+    blob_sha: 1e7f033fa5fe6670b84872210a49217a354b31eb
+  - path: engine-gmt/features/fragmentarium_import/FormulaWorkshop.tsx
+    bytes: 80940
+    lines: 1434
+    blob_sha: 05c4f82fd852a2e70bf80727dce2c3cf6a8ee230
+  - path: engine-gmt/features/fragmentarium_import/index.ts
+    bytes: 836
+    lines: 24
+    blob_sha: 97e43428a65d4d40da2bf4ff125d12da0cb779c6
+  - path: engine-gmt/features/fragmentarium_import/parsers/builtins.ts
+    bytes: 5627
+    lines: 171
+    blob_sha: 7f1bfd429682f6ea9c68b44280ad97fb79413231
+  - path: engine-gmt/features/fragmentarium_import/parsers/dec-detector.ts
+    bytes: 6837
+    lines: 190
+    blob_sha: 27d73b926fec89dc4465d8f403f6d52cf80a996c
+  - path: engine-gmt/features/fragmentarium_import/parsers/dec-preprocessor.ts
+    bytes: 30263
+    lines: 750
+    blob_sha: 7c48f854fba31cb8b1c664bdbfaaf584151b562f
+  - path: engine-gmt/features/fragmentarium_import/parsers/preprocessor.ts
+    bytes: 5519
+    lines: 129
+    blob_sha: 82a1e221278e933a615c17b806e203b206452578
+  - path: engine-gmt/features/fragmentarium_import/passing-formulas.ts
+    bytes: 17867
+    lines: 538
+    blob_sha: b73ecf63cf867bd89ee28a643d83ea1f09b5f715
+  - path: engine-gmt/features/fragmentarium_import/random-formulas.ts
+    bytes: 169837
+    lines: 1718
+    blob_sha: aa61dd3438ec79dd03e71ece3600073e8433e1e2
+  - path: engine-gmt/features/fragmentarium_import/TESTING_GUIDE.md
+    bytes: 11087
+    lines: 206
+    blob_sha: df8baaaf6a82f3d7f25fbb28ff50f53b5efcc80d
+  - path: engine-gmt/features/fragmentarium_import/transform/variable-renamer.ts
+    bytes: 7210
+    lines: 159
+    blob_sha: 5c3c2f66096719620a64b605f70f7712024877fc
+  - path: engine-gmt/features/fragmentarium_import/types.ts
+    bytes: 4044
+    lines: 150
+    blob_sha: c24fbdc5d8bdff1a2ca80718e6fbc9b6a6c1d218
+  - path: engine-gmt/features/fragmentarium_import/v3/analyze/functions.ts
+    bytes: 9225
+    lines: 263
+    blob_sha: 2003c63a76ee6fd8bfc45aa5a87932380cb0b3a9
+  - path: engine-gmt/features/fragmentarium_import/v3/analyze/globals.ts
+    bytes: 3684
+    lines: 84
+    blob_sha: 2eabb9076f0d2918b994125078f2170cc15beb45
+  - path: engine-gmt/features/fragmentarium_import/v3/analyze/index.ts
+    bytes: 3744
+    lines: 99
+    blob_sha: 66f966f840d5f76b7d1aa49d62645633107168a7
+  - path: engine-gmt/features/fragmentarium_import/v3/analyze/init.ts
+    bytes: 5501
+    lines: 145
+    blob_sha: b19f1f88f6e42caa9a269ca8b4e28702b800f058
+  - path: engine-gmt/features/fragmentarium_import/v3/analyze/params.ts
+    bytes: 9496
+    lines: 232
+    blob_sha: de12e0672e78265a33f1c54a65a438d4ac4f3b6d
+  - path: engine-gmt/features/fragmentarium_import/v3/analyze/preprocess.ts
+    bytes: 8556
+    lines: 199
+    blob_sha: 8831188e4310409c08cf879e7ec5d8e6f6933429
+  - path: engine-gmt/features/fragmentarium_import/v3/compat.ts
+    bytes: 8773
+    lines: 255
+    blob_sha: a1a407e1b9436e5e03a59c081bb15cce17c3c0d1
+  - path: engine-gmt/features/fragmentarium_import/v3/generate/full-de.ts
+    bytes: 10114
+    lines: 243
+    blob_sha: 46a73ca474eca3325f4d58c5f965b7c54be78607
+  - path: engine-gmt/features/fragmentarium_import/v3/generate/get-dist.ts
+    bytes: 6595
+    lines: 158
+    blob_sha: 97741f6b9dba4be33ffb572902662a3d006e97c1
+  - path: engine-gmt/features/fragmentarium_import/v3/generate/index.ts
+    bytes: 27338
+    lines: 602
+    blob_sha: 783bedeb4c6b38361825a1d22e27f906788f076a
+  - path: engine-gmt/features/fragmentarium_import/v3/generate/init.ts
+    bytes: 7710
+    lines: 188
+    blob_sha: d8364f483178bd91fa060f009ee9202f601e51b6
+  - path: engine-gmt/features/fragmentarium_import/v3/generate/loop-body.ts
+    bytes: 4399
+    lines: 99
+    blob_sha: d72cff3e15ad3649af619f1c07f8490f20342710
+  - path: engine-gmt/features/fragmentarium_import/v3/generate/patterns.ts
+    bytes: 17862
+    lines: 427
+    blob_sha: a349bf6803eb0ecd96ca7bb5c087610f29f46062
+  - path: engine-gmt/features/fragmentarium_import/v3/generate/rename.ts
+    bytes: 8216
+    lines: 213
+    blob_sha: 29bae86864f578898c24af532ea9c4f9d1939179
+  - path: engine-gmt/features/fragmentarium_import/v3/generate/slots.ts
+    bytes: 6730
+    lines: 157
+    blob_sha: f8ab11d682c6b0b5815c83c2bbb96585eebfce6d
+  - path: engine-gmt/features/fragmentarium_import/v3/generate/uniforms.ts
+    bytes: 3383
+    lines: 75
+    blob_sha: 753991816742e462bf0187f9079b5da9da596fb5
+  - path: engine-gmt/features/fragmentarium_import/v3/types.ts
+    bytes: 4690
+    lines: 137
+    blob_sha: 744794bfce8196d41fe8e4798d755c3e4ef4dfca
+  - path: engine-gmt/features/fragmentarium_import/v4/analyze/index.ts
+    bytes: 13547
+    lines: 349
+    blob_sha: 1afe2e9198ccebe3f27984661ef45106d650c9fd
+  - path: engine-gmt/features/fragmentarium_import/v4/emit/index.ts
+    bytes: 15725
+    lines: 353
+    blob_sha: a10f0f8bea26a59c0ceaaa64289195dddd846034
+  - path: engine-gmt/features/fragmentarium_import/v4/emit/parameters.ts
+    bytes: 5497
+    lines: 136
+    blob_sha: db73241b4715f9269cc770f817818451ce616fc3
+  - path: engine-gmt/features/fragmentarium_import/v4/emit/per-iteration.ts
+    bytes: 46706
+    lines: 1049
+    blob_sha: 9f97133324d57689783728f05cc6ae128e71b153
+  - path: engine-gmt/features/fragmentarium_import/v4/emit/rename.ts
+    bytes: 6312
+    lines: 148
+    blob_sha: 52689935af55778cb2aa134728f6a7ce09799741
+  - path: engine-gmt/features/fragmentarium_import/v4/emit/slots.ts
+    bytes: 5151
+    lines: 127
+    blob_sha: d0a80c0a328d4c4eb32f3078b42f9526ae35e05b
+  - path: engine-gmt/features/fragmentarium_import/v4/emit/wrapper.ts
+    bytes: 3799
+    lines: 96
+    blob_sha: 4ee179a688e12088c0843f609e0e09f9b0b5e69d
+  - path: engine-gmt/features/fragmentarium_import/v4/index.ts
+    bytes: 2259
+    lines: 68
+    blob_sha: 78b05ab1f1e37b6356538b9507de3020e9d2a831
+  - path: engine-gmt/features/fragmentarium_import/v4/ingest/dec.ts
+    bytes: 2297
+    lines: 61
+    blob_sha: f2f26d8caa4775cf557aabdfd57ecbb2f9115783
+  - path: engine-gmt/features/fragmentarium_import/v4/ingest/frag.ts
+    bytes: 6915
+    lines: 146
+    blob_sha: ba1490e50205475ce213c8dedc36ed86d45c6a30
+  - path: engine-gmt/features/fragmentarium_import/v4/ingest/index.ts
+    bytes: 1990
+    lines: 47
+    blob_sha: c39a6f9d14f78d0b7dae5e11fd128ebc19fbcaae
+  - path: engine-gmt/features/fragmentarium_import/v4/ingest/plain-glsl.ts
+    bytes: 1006
+    lines: 26
+    blob_sha: 03c28300d3f92f628105692629ba7fb27f7fce34
+  - path: engine-gmt/features/fragmentarium_import/v4/preprocess/annotations.ts
+    bytes: 10182
+    lines: 243
+    blob_sha: 576cb0f87e15602d6ee870e4751a4b8e1493b6b8
+  - path: engine-gmt/features/fragmentarium_import/v4/preprocess/includes.ts
+    bytes: 3171
+    lines: 80
+    blob_sha: 4f184b0cd1ec5616d5fcbf95482a35a37f5a43d8
+  - path: engine-gmt/features/fragmentarium_import/v4/preprocess/index.ts
+    bytes: 3045
+    lines: 77
+    blob_sha: 882cf5ef143400d85b9e8b99a79078d019731584
+  - path: engine-gmt/features/fragmentarium_import/v4/preprocess/presets.ts
+    bytes: 3068
+    lines: 89
+    blob_sha: 7f42e4b821a12fadd63d547a096d7e4c61ccbb7f
+  - path: engine-gmt/features/fragmentarium_import/v4/preprocess/strip.ts
+    bytes: 5347
+    lines: 122
+    blob_sha: 52bba1443d2dd98da1d9deb65a42ace6b0d570fb
+  - path: engine-gmt/features/fragmentarium_import/v4/README.md
+    bytes: 2814
+    lines: 58
+    blob_sha: 1056d57b84d3bc7ce27489897884127f7e3b5234
+  - path: engine-gmt/features/fragmentarium_import/v4/types.ts
+    bytes: 6364
+    lines: 151
+    blob_sha: eeed3f98a88a5dd4151c6db8bbf2f380c4d78c6a
+  - path: engine-gmt/features/fragmentarium_import/workshop/param-builder.ts
+    bytes: 27759
+    lines: 548
+    blob_sha: 522943c38ecd9a583dcf954d257ae3a43dca0dfb
+  - path: engine-gmt/features/fragmentarium_import/workshop/variable-detector.ts
+    bytes: 36779
+    lines: 829
+    blob_sha: e80ece4760c6160c1a47c6dc809cad6af901512a
+  - path: engine-gmt/features/geometry/folds/decoupled.ts
+    bytes: 1290
+    lines: 36
+    blob_sha: 80aac8a08d8f26e6b29976717349f33c62c8d490
+  - path: engine-gmt/features/geometry/folds/half.ts
+    bytes: 520
+    lines: 20
+    blob_sha: eb37d5e56e215b49bb587b54410bb9a18f3de215
+  - path: engine-gmt/features/geometry/folds/icosa.ts
+    bytes: 1133
+    lines: 35
+    blob_sha: 22a47013e948d4ccca5ec7ccb3008cae3484aef8
+  - path: engine-gmt/features/geometry/folds/index.ts
+    bytes: 1097
+    lines: 35
+    blob_sha: da1aa485171423ed5b8e37d8e79976853dd3d525
+  - path: engine-gmt/features/geometry/folds/kali.ts
+    bytes: 913
+    lines: 30
+    blob_sha: 550a56d7b91565794dfa117f4adb7b259694e52c
+  - path: engine-gmt/features/geometry/folds/menger.ts
+    bytes: 1938
+    lines: 56
+    blob_sha: 74b9a55f576ac563538f3762036b152c17067441
+  - path: engine-gmt/features/geometry/folds/mirror.ts
+    bytes: 541
+    lines: 20
+    blob_sha: 3646f4308679b14252d3a3c996631d16c7b4644b
+  - path: engine-gmt/features/geometry/folds/octa.ts
+    bytes: 733
+    lines: 24
+    blob_sha: 2cad43b8b4e0567b6441c45f0d376dff828052d0
+  - path: engine-gmt/features/geometry/folds/standard.ts
+    bytes: 547
+    lines: 20
+    blob_sha: 10d8ade5e121dc0e92184e10920acd862e3db81f
+  - path: engine-gmt/features/geometry/folds/tetra.ts
+    bytes: 620
+    lines: 22
+    blob_sha: e2d2753d22724fdd10bdd12b18ecb326f5380446
+  - path: engine-gmt/features/geometry/index.ts
+    bytes: 24947
+    lines: 505
+    blob_sha: a0fa6b5c91c79d244dcca4757d1ee146fef969d8
+  - path: engine-gmt/features/geometry/transforms.ts
+    bytes: 1324
+    lines: 45
+    blob_sha: b9fae93060ed8a637482eaf030ac0ef61ca1a122
+  - path: engine-gmt/features/geometry/types.ts
+    bytes: 1054
+    lines: 21
+    blob_sha: 16323f18d0b8f152f6f689b8fec7b394678faf92
+  - path: engine-gmt/features/index.ts
+    bytes: 5384
+    lines: 109
+    blob_sha: 014731eeefbe00d82118faf651c84740f28be80b
+  - path: engine-gmt/features/interlace/glslRewriter.ts
+    bytes: 14388
+    lines: 350
+    blob_sha: 3bdede720c8fc90010893a5d293353b8534afa61
+  - path: engine-gmt/features/interlace/index.ts
+    bytes: 19037
+    lines: 390
+    blob_sha: c7e091cbd5950b7496dba855871574a03e1fd04c
+  - path: engine-gmt/features/lighting/components/LightControls.tsx
+    bytes: 29801
+    lines: 570
+    blob_sha: 9f0135cb37b02ccc0890ccfd602054a88191ac9c
+  - path: engine-gmt/features/lighting/components/LightDirectionControl.tsx
+    bytes: 13537
+    lines: 312
+    blob_sha: ccf2914e56d7b7aa4d467de07ef519a8be99f636
+  - path: engine-gmt/features/lighting/components/ShadowControls.tsx
+    bytes: 3257
+    lines: 61
+    blob_sha: 5f6bb75d986e3cc95794558ca97fb4e59230c7fb
+  - path: engine-gmt/features/lighting/components/SingleLightGizmo.tsx
+    bytes: 7652
+    lines: 155
+    blob_sha: 4416150123080e64e9ef3a9edd5a2a14ae7c3123
+  - path: engine-gmt/features/lighting/index.ts
+    bytes: 25921
+    lines: 486
+    blob_sha: 7b60ad290e875789c6a3ad140990e3a306a4e9da
+  - path: engine-gmt/features/lighting/light_spheres.ts
+    bytes: 2871
+    lines: 72
+    blob_sha: a4089e5b898c47474b1554084dd2fd08c713a502
+  - path: engine-gmt/features/lighting/LightGizmo.tsx
+    bytes: 12146
+    lines: 306
+    blob_sha: e998e0fcd7d97fe6f94ff6d0aa2aae47353ba710
+  - path: engine-gmt/features/lighting/utils/GizmoMath.ts
+    bytes: 2480
+    lines: 72
+    blob_sha: b8540844b4e3f1b3e567c91333409ada8325c398
+  - path: engine-gmt/features/lighting/utils/lightMenuUtils.ts
+    bytes: 3288
+    lines: 78
+    blob_sha: e9e350bff1b2a097ccb0b2dd32a3c84429e2c26c
+  - path: engine-gmt/features/materials.ts
+    bytes: 12074
+    lines: 346
+    blob_sha: 6d3d4187457911dbc1047a0d38c21f017addf46d
+  - path: engine-gmt/features/navigation.ts
+    bytes: 1256
+    lines: 27
+    blob_sha: 05117cc9960dac1a85d6f8462c28d914de4372ea
+  - path: engine-gmt/features/optics.ts
+    bytes: 2634
+    lines: 50
+    blob_sha: d194bf6217bccbc5cbefd4bfbe5d0898643ba58d
+  - path: engine-gmt/features/quality.ts
+    bytes: 11714
+    lines: 248
+    blob_sha: f4b53008cb570e801ebf4a9cf4756346fa430549
+  - path: engine-gmt/features/reflections/env_cdf.ts
+    bytes: 10554
+    lines: 255
+    blob_sha: fd5e2eb262e7361723bab566aeea6460a1787af1
+  - path: engine-gmt/features/reflections/index.ts
+    bytes: 10252
+    lines: 229
+    blob_sha: f0b1024e5342289ee149d3f08f8c80ffa01206d2
+  - path: engine-gmt/features/reflections/shader.ts
+    bytes: 2167
+    lines: 52
+    blob_sha: 12828ef25a84c083eb4839b54d1c339163bb0178
+  - path: engine-gmt/features/texturing.ts
+    bytes: 5041
+    lines: 137
+    blob_sha: fb27fbc60f7cbdd8c553a3c9755f704514ca2bf1
+  - path: engine-gmt/features/types.ts
+    bytes: 2535
+    lines: 63
+    blob_sha: 2960caec22353e8bd70ba35ba9524955f1e6c49a
+  - path: engine-gmt/features/ui.tsx
+    bytes: 8849
+    lines: 177
+    blob_sha: ca3c72e2db87a7311748d307c6787fd704f7057b
+  - path: engine-gmt/features/volumetric/index.ts
+    bytes: 7738
+    lines: 165
+    blob_sha: 461b69a5b6a07672eefa2316875b1eb9d3313d05
+  - path: engine-gmt/features/water_plane.ts
+    bytes: 8519
+    lines: 205
+    blob_sha: df2a2e8bce5f5f91ae3a7126fbe6ad42609392c9
+  - path: engine-gmt/formulas/AmazingBox.ts
+    bytes: 6649
+    lines: 180
+    blob_sha: 8d19d9283599c7f1c794c88cc80fa88f4344ede4
+  - path: engine-gmt/formulas/AmazingSurf.ts
+    bytes: 6013
+    lines: 97
+    blob_sha: 43916be84eb6c66086844bac6ccbbf9d9d3ccf56
+  - path: engine-gmt/formulas/AmazingSurface.ts
+    bytes: 11445
+    lines: 299
+    blob_sha: 69fb53c470785d35fd3ab60b2548a0c38ef535e5
+  - path: engine-gmt/formulas/Apollonian.ts
+    bytes: 14172
+    lines: 309
+    blob_sha: 623268585791de8f8aa0fb6ccdbb13768bfea6cc
+  - path: engine-gmt/formulas/Appell.ts
+    bytes: 14197
+    lines: 545
+    blob_sha: 3b090a4f98f4e34ad2d1c30c4d4974ea1df08025
+  - path: engine-gmt/formulas/Borromean.ts
+    bytes: 14225
+    lines: 552
+    blob_sha: f4a0829a7e6dfc7ff72474163c8003a2e64751c4
+  - path: engine-gmt/formulas/BoxBulb.ts
+    bytes: 6513
+    lines: 111
+    blob_sha: f27d35641a464559f1598d3da32c296869ffb99d
+  - path: engine-gmt/formulas/Bristorbrot.ts
+    bytes: 6216
+    lines: 117
+    blob_sha: d247ae22af773c8841f3de034cb4fa40aaf3dce6
+  - path: engine-gmt/formulas/Buffalo.ts
+    bytes: 8545
+    lines: 124
+    blob_sha: 6ad6f63aecc539c87aea960b3e4dfbad0cf9f8da
+  - path: engine-gmt/formulas/categories.ts
+    bytes: 2379
+    lines: 99
+    blob_sha: 14af84bcd8ff9732942ded7944e3bb8dea8836f9
+  - path: engine-gmt/formulas/Claude.ts
+    bytes: 10400
+    lines: 194
+    blob_sha: c9c17ac4882eb1045e4f30bb9482e7ee2b4e02da
+  - path: engine-gmt/formulas/Coxeter.ts
+    bytes: 9470
+    lines: 156
+    blob_sha: 9f4049f476da2c083fd9dbe8be2fa81305e6a0c6
+  - path: engine-gmt/formulas/Cuboctahedron.ts
+    bytes: 13213
+    lines: 269
+    blob_sha: 7d044f881d5de0cf26ec23a13f7da0ae80388ba1
+  - path: engine-gmt/formulas/Dodecahedron.ts
+    bytes: 9691
+    lines: 147
+    blob_sha: 2b3cd3865c46c84b8062b8aad83ba27facd31d76
+  - path: engine-gmt/formulas/GreatStellatedDodecahedron.ts
+    bytes: 10351
+    lines: 173
+    blob_sha: 92f9c206465451568461a3b101a5afdb8b222fa4
+  - path: engine-gmt/formulas/Icosahedron.ts
+    bytes: 12283
+    lines: 264
+    blob_sha: f57ef1508993b8cf0c7a1dbee41d7a1424d4396f
+  - path: engine-gmt/formulas/index.ts
+    bytes: 3811
+    lines: 116
+    blob_sha: e4aeec97db2473619f6a76e92c161789eb240646
+  - path: engine-gmt/formulas/JuliaMorph.ts
+    bytes: 13447
+    lines: 332
+    blob_sha: 08fc8680d66ff42b912573dbe745a03818f7b754
+  - path: engine-gmt/formulas/KaliBox.ts
+    bytes: 8817
+    lines: 146
+    blob_sha: 6307120be2ceebbb7ed06b241e268a4e50b1f634
+  - path: engine-gmt/formulas/Kleinian.ts
+    bytes: 5540
+    lines: 89
+    blob_sha: 846753e2f88853382d95644b63f43d6636daa55c
+  - path: engine-gmt/formulas/KleinianJos.ts
+    bytes: 10920
+    lines: 233
+    blob_sha: b48a9aa9674a17336831b877b71b10438c648d8b
+  - path: engine-gmt/formulas/KleinianMobius.ts
+    bytes: 12265
+    lines: 254
+    blob_sha: 88d5b9148d3c9683990f703122cebff56743cd96
+  - path: engine-gmt/formulas/MakinBrot.ts
+    bytes: 5264
+    lines: 95
+    blob_sha: b0c32258a670c2757956b595d3d0b8e29a87865c
+  - path: engine-gmt/formulas/Mandelbar3D.ts
+    bytes: 5481
+    lines: 97
+    blob_sha: 7a2a439b0618394a0de1f65a51602d2e73298a57
+  - path: engine-gmt/formulas/MandelBolic.ts
+    bytes: 14514
+    lines: 363
+    blob_sha: 6c90d4d7b0d4ee8ced39ee33abbe4e72315929da
+  - path: engine-gmt/formulas/Mandelbulb.ts
+    bytes: 7190
+    lines: 128
+    blob_sha: acff9eb7c6dba07d3225957e27ad6719a618165c
+  - path: engine-gmt/formulas/MandelMap.ts
+    bytes: 15915
+    lines: 588
+    blob_sha: ab46504779fbe36412364a8d58a9f32bd3a97e8c
+  - path: engine-gmt/formulas/Mandelorus.ts
+    bytes: 16829
+    lines: 593
+    blob_sha: 8d525b8283ca40e046da463ee6718e0ad627ac05
+  - path: engine-gmt/formulas/MandelTerrain.ts
+    bytes: 23787
+    lines: 593
+    blob_sha: 084fcbf345399039fbacb5d1ceaed8a05b822d5c
+  - path: engine-gmt/formulas/MarbleMarcher.ts
+    bytes: 7383
+    lines: 142
+    blob_sha: 01135467911dbe95426896df2b84493d41bb1b14
+  - path: engine-gmt/formulas/MengerAdvanced.ts
+    bytes: 9287
+    lines: 223
+    blob_sha: fad44dfc08b5b57f5e2b9c2ab985c1bb55915be4
+  - path: engine-gmt/formulas/MengerSponge.ts
+    bytes: 7229
+    lines: 133
+    blob_sha: 31e41f39c18040b5a7da32c7c625dae70776cda1
+  - path: engine-gmt/formulas/MixPinski.ts
+    bytes: 10007
+    lines: 172
+    blob_sha: 8e789fc23d7aff87a26b59f84d55a88e48b21b48
+  - path: engine-gmt/formulas/Modular.ts
+    bytes: 1316
+    lines: 35
+    blob_sha: 2c2463900054b28c5bd2102ac803a062e21291e7
+  - path: engine-gmt/formulas/Octahedron.ts
+    bytes: 12091
+    lines: 250
+    blob_sha: 770ebdf42296b3af8f75dcecd78c808eb26fac8e
+  - path: engine-gmt/formulas/Phoenix.ts
+    bytes: 11762
+    lines: 206
+    blob_sha: 295208eae81680f171ae99d39309f0fca380f35a
+  - path: engine-gmt/formulas/PseudoKleinian.ts
+    bytes: 6672
+    lines: 112
+    blob_sha: ba250baaadc802b3afa454483e13790785f0e5ca
+  - path: engine-gmt/formulas/PseudoKleinianAdv.ts
+    bytes: 8789
+    lines: 153
+    blob_sha: 1b66baa5845ae39bbbb336bac6d22be863ce1aaf
+  - path: engine-gmt/formulas/PseudoKleinianMod4.ts
+    bytes: 9212
+    lines: 170
+    blob_sha: 6098e8bd00fac1b54fbefcee2e1f67ca7051a7f6
+  - path: engine-gmt/formulas/Quaternion.ts
+    bytes: 8439
+    lines: 155
+    blob_sha: 597221f7d2a457c1a6b2b498b02d2ca4351e7fd8
+  - path: engine-gmt/formulas/RhombicDodecahedron.ts
+    bytes: 9003
+    lines: 148
+    blob_sha: a721224801259c94b4a66b283abb8eacd2eb78e8
+  - path: engine-gmt/formulas/RhombicTriacontahedron.ts
+    bytes: 8757
+    lines: 145
+    blob_sha: 4b7bc3a280ab98563ec3faabc93cf212c5a63ec5
+  - path: engine-gmt/formulas/SierpinskiTetrahedron.ts
+    bytes: 8105
+    lines: 130
+    blob_sha: 8d7fdc561c9c5178ee6465c661305907129e051c
+  - path: engine-gmt/formulas/Tetrabrot.ts
+    bytes: 5331
+    lines: 98
+    blob_sha: e281cad2cfcc8f7405cf78c005278bb6943c5633
+  - path: engine-gmt/formulas/TruncatedIcosahedron.ts
+    bytes: 13447
+    lines: 276
+    blob_sha: 59821dc9731cbed0e6f1b485a5cf4789ad8d9850
+  - path: engine-gmt/gallery/AdminQueue.tsx
+    bytes: 11938
+    lines: 240
+    blob_sha: 9264db0e27b344b91fffe689b3e39e6e7d14fa6a
+  - path: engine-gmt/gallery/GalleryClient.ts
+    bytes: 3182
+    lines: 96
+    blob_sha: 631ac2fdbbcd45d79b7b617a86c2050832f253be
+  - path: engine-gmt/gallery/GalleryPage.tsx
+    bytes: 4614
+    lines: 126
+    blob_sha: 097f1bfe392372f893a5598586ed64ff30ca7e0e
+  - path: engine-gmt/gallery/galleryStore.ts
+    bytes: 1729
+    lines: 63
+    blob_sha: 607cb0eda849a9de6a7841e2675069301cb11b5b
+  - path: engine-gmt/gallery/GalleryTile.tsx
+    bytes: 2081
+    lines: 56
+    blob_sha: ce65dd110889d73742f02b7bdd36109af02b1189
+  - path: engine-gmt/gallery/index.ts
+    bytes: 379
+    lines: 5
+    blob_sha: cbe7a1bdfba31d67e3f155d5bce54a41f34a7a68
+  - path: engine-gmt/gallery/installGallery.tsx
+    bytes: 4228
+    lines: 116
+    blob_sha: 4d7851a4ddef4f4a91f19d54a23a1c8088c3aff7
+  - path: engine-gmt/gallery/loadGalleryScene.ts
+    bytes: 2824
+    lines: 68
+    blob_sha: ac75e913634f604285260e83e69cac036400a101
+  - path: engine-gmt/gallery/moderateGalleryItem.ts
+    bytes: 2218
+    lines: 56
+    blob_sha: 88592451ab8484d05fe82788a419aec40affdd0a
+  - path: engine-gmt/gallery/README.md
+    bytes: 6053
+    lines: 100
+    blob_sha: 4f702f15460d60c6a83accecfe99eab0101eebe4
+  - path: engine-gmt/gallery/submitGalleryItem.ts
+    bytes: 8146
+    lines: 211
+    blob_sha: 022443d894a4ddde62661f2ca1aa151d8e01e8b7
+  - path: engine-gmt/gallery/SubmitGalleryModal.tsx
+    bytes: 13813
+    lines: 288
+    blob_sha: d47fa9cc728d5a28f33657abc48982d1cf7ebf8b
+  - path: engine-gmt/gallery/useGalleryItems.ts
+    bytes: 1156
+    lines: 40
+    blob_sha: d64169d3035312fb08265ff2e912cb9857368857
+  - path: engine-gmt/hooks/useInteractionManager.ts
+    bytes: 14907
+    lines: 295
+    blob_sha: e1591c70f73c500202c6000b1a21e94641f9b35c
+  - path: engine-gmt/hooks/usePreviewTarget.ts
+    bytes: 6080
+    lines: 114
+    blob_sha: e98f748fafadf30a6c316d86da1639850f55004f
+  - path: engine-gmt/hooks/useRegionSelection.ts
+    bytes: 7937
+    lines: 164
+    blob_sha: 34ec00af8eacb9800002b8266924d87cc92e37bf
+  - path: engine-gmt/index.ts
+    bytes: 2154
+    lines: 51
+    blob_sha: c437ab5150833eab6d6bbb0f80ae6c2ba86966c5
+  - path: engine-gmt/navigation/HudOverlay.tsx
+    bytes: 16855
+    lines: 277
+    blob_sha: 76c787b8ef3303f0ca08d17f3ae9e2034a78075c
+  - path: engine-gmt/navigation/index.ts
+    bytes: 1054
+    lines: 24
+    blob_sha: f73bc7bc5e5dfdc3af3811f4e03da234e4a3413e
+  - path: engine-gmt/navigation/modifiers.ts
+    bytes: 757
+    lines: 19
+    blob_sha: fb929739c3464089e4429c62c734938068d288fd
+  - path: engine-gmt/navigation/Navigation.tsx
+    bytes: 70301
+    lines: 1404
+    blob_sha: a3f4d36fc77b5ee89b03958235f2d6a663c8afd5
+  - path: engine-gmt/navigation/useInputController.ts
+    bytes: 11968
+    lines: 265
+    blob_sha: d63b38a75f77e7e9aff3c1289613a90eff94194d
+  - path: engine-gmt/navigation/usePhysicsProbe.ts
+    bytes: 7121
+    lines: 173
+    blob_sha: a6a9759c031e96c858193ae02466620dc54566c1
+  - path: engine-gmt/panels.ts
+    bytes: 21867
+    lines: 471
+    blob_sha: cbbbe7821652201674adad9ab2fbe653dba46a49
+  - path: engine-gmt/renderer/bindings.ts
+    bytes: 4903
+    lines: 98
+    blob_sha: 7d7e7fb530333e482aabd433e79aa39aee478312
+  - path: engine-gmt/renderer/GmtRendererCanvas.tsx
+    bytes: 6449
+    lines: 144
+    blob_sha: d0ff06595a01c0091c446839c5fbc019ad134cd5
+  - path: engine-gmt/renderer/GmtRendererTickDriver.tsx
+    bytes: 11808
+    lines: 255
+    blob_sha: fe31fbe61733f1d7e6dc6b254edf6ed7a3dc0b79
+  - path: engine-gmt/renderer/install.ts
+    bytes: 5343
+    lines: 113
+    blob_sha: d7536707b2b3e2c5eed8501a200998d7264ccee2
+  - path: engine-gmt/shaders/chunks/blue_noise.ts
+    bytes: 1828
+    lines: 52
+    blob_sha: 2c6ed8f6e314c957e51714cd2e71e5651789a1b7
+  - path: engine-gmt/shaders/chunks/coloring.ts
+    bytes: 2941
+    lines: 91
+    blob_sha: 9c52a29d48317f48a7418a0a4018c959d09fe5e5
+  - path: engine-gmt/shaders/chunks/de.ts
+    bytes: 9467
+    lines: 273
+    blob_sha: 4e00840d2be57ada50ac706a694a10cd9ddfabd1
+  - path: engine-gmt/shaders/chunks/lighting/env.ts
+    bytes: 3432
+    lines: 71
+    blob_sha: 85357ebf857c709c93150ef7578dd8b24913d7f9
+  - path: engine-gmt/shaders/chunks/lighting/pbr.ts
+    bytes: 8095
+    lines: 178
+    blob_sha: a01c550e0385bbb49723011ad333f3ad91d4948d
+  - path: engine-gmt/shaders/chunks/lighting/shading.ts
+    bytes: 3743
+    lines: 90
+    blob_sha: 6163fc0f96e6ae7361c01e7b1f9d2f6de0ab9819
+  - path: engine-gmt/shaders/chunks/lighting/shadows.ts
+    bytes: 3879
+    lines: 128
+    blob_sha: a0d74e82795419ba7e11aff91472c98cfa4ab9b2
+  - path: engine-gmt/shaders/chunks/lighting/shared.ts
+    bytes: 5195
+    lines: 131
+    blob_sha: b41a5685c05d25228513f89e9361270239bac41b
+  - path: engine-gmt/shaders/chunks/lighting/volumetric_scatter.ts
+    bytes: 6548
+    lines: 113
+    blob_sha: 6d77f419f5133f6afeedc1f93e6ebd0ffd5689e6
+  - path: engine-gmt/shaders/chunks/main.ts
+    bytes: 3860
+    lines: 107
+    blob_sha: 5ada06825a70596795f4f95cfa81a42af598e4c4
+  - path: engine-gmt/shaders/chunks/material_eval.ts
+    bytes: 6663
+    lines: 165
+    blob_sha: a40d36ecdfe6256905b2b0ef39ee5af4d85c4a00
+  - path: engine-gmt/shaders/chunks/math.ts
+    bytes: 11497
+    lines: 290
+    blob_sha: 40735521d80276b24b376be78a9d6205e083002c
+  - path: engine-gmt/shaders/chunks/pathtracer.ts
+    bytes: 47459
+    lines: 973
+    blob_sha: 2becf249b52cb7894ce374c65d19106d758b9cea
+  - path: engine-gmt/shaders/chunks/post_process.ts
+    bytes: 8614
+    lines: 226
+    blob_sha: 39b41042f41d8fd4f2e1eb02abd50714e10c9de9
+  - path: engine-gmt/shaders/chunks/post.ts
+    bytes: 911
+    lines: 20
+    blob_sha: bfc885568c8a2c34dda0b2593ea1c245546755d5
+  - path: engine-gmt/shaders/chunks/ray.ts
+    bytes: 6201
+    lines: 146
+    blob_sha: d65c9961f76d3bd37618d99d4a4a699f13a2a06a
+  - path: engine-gmt/shaders/chunks/trace.ts
+    bytes: 9936
+    lines: 224
+    blob_sha: 9c6c201ab97159fd8bcb69722cd9f88ca62d4766
+  - path: engine-gmt/shaders/chunks/uniforms.ts
+    bytes: 671
+    lines: 20
+    blob_sha: 7523166519e8fa79857c8db36fbc422c1c99f01e
+  - path: engine-gmt/shaders/chunks/vertex.ts
+    bytes: 188
+    lines: 9
+    blob_sha: 500fece0005ec098d9eaa9d95aa18411f112a116
+  - path: engine-gmt/store/cameraSlice.ts
+    bytes: 13134
+    lines: 310
+    blob_sha: daf23caa86cc20a0aa40ca05f642e6db250bf1c5
+  - path: engine-gmt/store/gmtPresetFields.ts
+    bytes: 3063
+    lines: 69
+    blob_sha: 1e675f8eeec7bd6d92a8906a55f165755650f6d1
+  - path: engine-gmt/store/modularSlice.ts
+    bytes: 3293
+    lines: 73
+    blob_sha: fc5b10d95f845e32fa98bf1cc76d7d15e4d474f1
+  - path: engine-gmt/storeTypes.ts
+    bytes: 2843
+    lines: 62
+    blob_sha: 5229a09e6d44c3d7731b87bc6021d6a252a4a046
+  - path: engine-gmt/topbar.tsx
+    bytes: 29116
+    lines: 643
+    blob_sha: e611ec5fde88b4f950e33cf6081f9287311229ff
+  - path: engine-gmt/topbar/AdaptiveResolution.tsx
+    bytes: 2171
+    lines: 60
+    blob_sha: 43ce5dcda6ed5a5aa92cbc39f6ec50688d4783d5
+  - path: engine-gmt/topbar/CenterHUD.tsx
+    bytes: 16970
+    lines: 353
+    blob_sha: 71a8c3bf7a94d6703e51542f89636f08c8cdb42e
+  - path: engine-gmt/topbar/GmtBucketController.ts
+    bytes: 2019
+    lines: 57
+    blob_sha: 7331f7c6e47a6d6c14108d8af69d7be03a8cd771
+  - path: engine-gmt/topbar/Logo.tsx
+    bytes: 5575
+    lines: 112
+    blob_sha: 7bc354c62e16385ab553e22fbc7df4535092eb4f
+  - path: engine-gmt/topbar/ShareLinkButton.tsx
+    bytes: 3973
+    lines: 98
+    blob_sha: 1cb30c55c03e4bdfcca490ddfc894cb45df64ba7
+  - path: engine-gmt/topbar/ViewportQuality.tsx
+    bytes: 18112
+    lines: 321
+    blob_sha: c51049183acf86262d29660367a3c824f77c1e83
+  - path: engine-gmt/tsconfig.json
+    bytes: 798
+    lines: 21
+    blob_sha: 7bb1dafa90b60b1822852da32098e8826e9f7a1e
+  - path: engine-gmt/types/animation.ts
+    bytes: 1524
+    lines: 58
+    blob_sha: 535cbeefad2b388191cb9789c13dd7a006a42333
+  - path: engine-gmt/types/common.ts
+    bytes: 1379
+    lines: 23
+    blob_sha: 40c001ef15430e14a81f2d2fc905ba04a1774157
+  - path: engine-gmt/types/fractal.ts
+    bytes: 4792
+    lines: 119
+    blob_sha: 74584e314c74f4b6adf46385e5e605f4bf5321d7
+  - path: engine-gmt/types/graph.ts
+    bytes: 1093
+    lines: 43
+    blob_sha: 4797d3fdd385228592d79fb960c88ee53bea25c6
+  - path: engine-gmt/types/graphics.ts
+    bytes: 2672
+    lines: 67
+    blob_sha: 141db42cd185fb048f5329a86dc95c4785e7a073
+  - path: engine-gmt/types/help.ts
+    bytes: 1368
+    lines: 47
+    blob_sha: b6389249bd9677f80ec465a68ba1111be89c992c
+  - path: engine-gmt/types/index.ts
+    bytes: 220
+    lines: 8
+    blob_sha: ae4049b477754a887cb8edeb9d1577c51d40d178
+  - path: engine-gmt/types/store.ts
+    bytes: 15364
+    lines: 396
+    blob_sha: eee511df32c4ff4da8ff1c2736877c2093aea6e2
+  - path: engine-gmt/types/viewport.ts
+    bytes: 12670
+    lines: 363
+    blob_sha: 50ef9421ef4efa858d540e49f635353d7506317a
+  - path: engine-gmt/utils/BenchProfiler.tsx
+    bytes: 1153
+    lines: 30
+    blob_sha: d0b713be91504a2c7b3e006d245a9dfe871a20e2
+  - path: engine-gmt/utils/CameraUtils.ts
+    bytes: 5858
+    lines: 151
+    blob_sha: 88c1d54d5b8f140dacdc2e6430dcef52bb49a935
+  - path: engine-gmt/utils/FormulaFormat.ts
+    bytes: 11037
+    lines: 267
+    blob_sha: 40373ea556248274ac542d5025da3e043f70f124
+  - path: engine-gmt/utils/graphAlg.ts
+    bytes: 4506
+    lines: 133
+    blob_sha: 6c3d22ef5728adf1bff9d14a1844eeac6deac88c
+  - path: engine-gmt/utils/GraphCompiler.ts
+    bytes: 7463
+    lines: 194
+    blob_sha: bc26a7dfda59a03cfc74ab8d721a302b702f7458
+  - path: engine/AccumulationController.ts
+    bytes: 1948
+    lines: 42
+    blob_sha: 91521c4151d7df0db42c34eb93c5c96e456b1b41
+  - path: engine/AdaptiveResolution.ts
+    bytes: 13769
+    lines: 286
+    blob_sha: 906da1c4e2db811f84bcb8b79d8266b6f726a079
+  - path: engine/algorithms/TrackUtils.ts
+    bytes: 2705
+    lines: 61
+    blob_sha: 35f70f537242e1225329838a4e3b7fe0679990f6
+  - path: engine/animation/AnimationSystem.tsx
+    bytes: 30494
+    lines: 592
+    blob_sha: 820c017356c439b82562d71795abc7de1fcfe6bc
+  - path: engine/animation/audioClipSync.ts
+    bytes: 3499
+    lines: 87
+    blob_sha: 932a0cefb6f7a8a3ed1e15bac07b2562cda88f15
+  - path: engine/animation/audioExportMix.ts
+    bytes: 4604
+    lines: 104
+    blob_sha: e2e11bd94a62a99e49da9d6650db939448388ac6
+  - path: engine/animation/audioFileCache.ts
+    bytes: 650
+    lines: 18
+    blob_sha: 0e59e8156ef55a8148c00871dd98009872073d1d
+  - path: engine/animation/binderRegistry.ts
+    bytes: 3175
+    lines: 77
+    blob_sha: 8c69668a6eb4300ec173aea7f8a1ea725ec5c159
+  - path: engine/animation/cameraKeyRegistry.ts
+    bytes: 8724
+    lines: 186
+    blob_sha: 5d99599bbd4f01caaaf30da51f663c426f72d94b
+  - path: engine/animation/cameraPairRegistry.ts
+    bytes: 14930
+    lines: 351
+    blob_sha: 9d982a977a047addb165606bb76975f1588a56bf
+  - path: engine/animation/logTrackRegistry.ts
+    bytes: 1571
+    lines: 41
+    blob_sha: 527faf584217e29ee443890966670fb8a3f823f4
+  - path: engine/animation/modulationTick.ts
+    bytes: 2127
+    lines: 53
+    blob_sha: 75ae0da62332cd663a7f20cbd1ea4a15cec64a16
+  - path: engine/animation/renderPopupRegistry.ts
+    bytes: 1088
+    lines: 31
+    blob_sha: 3cfc95c97d3bb72eabdca7c768744766f6edfcb2
+  - path: engine/animation/trackBinding.ts
+    bytes: 4032
+    lines: 106
+    blob_sha: f78d0b9a952bf6aee8efa6a0191c89b715f3fe0a
+  - path: engine/AnimationEngine.ts
+    bytes: 18837
+    lines: 404
+    blob_sha: 5afdf9d91efcc61e47b9e69a77a2a54c675d81a9
+  - path: engine/appHandles.ts
+    bytes: 4511
+    lines: 118
+    blob_sha: 270950a5562e533d3848372054d385750db9d060
+  - path: engine/BezierMath.ts
+    bytes: 3808
+    lines: 113
+    blob_sha: f3e614da5a2a8b7e81fac7f78d9b8f4b97130f31
+  - path: engine/BloomPass.ts
+    bytes: 12829
+    lines: 351
+    blob_sha: 8701b1821b070dd7dc30dbc0f13894e3e5edf059
+  - path: engine/codec/halton.ts
+    bytes: 375
+    lines: 14
+    blob_sha: 4795cdd92860d0494d2e2e40ac5542da45bd8d0e
+  - path: engine/codec/VideoExportTypes.ts
+    bytes: 2026
+    lines: 37
+    blob_sha: 5d37af8f2deed0a5492fe66d3e260078c7299ed1
+  - path: engine/components/gizmo/SinglePositionGizmo.tsx
+    bytes: 8959
+    lines: 172
+    blob_sha: 372054594a0d7ca48892da40afa59abb932de464
+  - path: engine/components/LandscapeGate.tsx
+    bytes: 1205
+    lines: 28
+    blob_sha: 8ed91713fa03f1e3154054c30bc9de56b00e9e40
+  - path: engine/components/MobileScrollIntro.tsx
+    bytes: 2357
+    lines: 56
+    blob_sha: 48f44de18ab5930b1c8f83c9b04bd53b1c82ea73
+  - path: engine/components/MobileViewportShell.tsx
+    bytes: 2048
+    lines: 53
+    blob_sha: 8d0820bfd9fcdb0529c29817f5eda5218ca187fd
+  - path: engine/components/modulation/index.ts
+    bytes: 1174
+    lines: 29
+    blob_sha: 04fb9ace5d49a0422b8222eb2a95cb8537663481
+  - path: engine/components/modulation/LfoList.tsx
+    bytes: 13230
+    lines: 259
+    blob_sha: 921aa5efad9fc16a319bad0715b84f63584f5686
+  - path: engine/components/modulation/lfoListConfig.ts
+    bytes: 2996
+    lines: 71
+    blob_sha: 45c2b94ea3054106f77db3376c8946e7443140b1
+  - path: engine/components/modulation/WaveformPreview.tsx
+    bytes: 4075
+    lines: 101
+    blob_sha: 42d78ba9e1a2c8fbb3ab188337f80840561b1310
+  - path: engine/components/StateLibraryToast.tsx
+    bytes: 2271
+    lines: 52
+    blob_sha: 8ce55de3560e206526d2aceebdd3552e81d66d32
+  - path: engine/ConfigDefaults.ts
+    bytes: 2044
+    lines: 52
+    blob_sha: e34d5230cb933eacd6a19c4c8c4ea8f44d5feb43
+  - path: engine/defineEnumParam.ts
+    bytes: 4162
+    lines: 105
+    blob_sha: e4766f05336e57f898d593e9aecbcf1bf3c42ffb
+  - path: engine/export/BucketRenderTypes.ts
+    bytes: 5254
+    lines: 141
+    blob_sha: b691c10b6c08ae91c5fb981db06a1566d177e9f7
+  - path: engine/export/BucketRunner.ts
+    bytes: 22599
+    lines: 579
+    blob_sha: 1a0038528d2e59da7771c31b3ca46ca90878ffb6
+  - path: engine/export/videoEncoder.ts
+    bytes: 9699
+    lines: 214
+    blob_sha: 074d202f67cb1b74eb16a191a6cbff4a4938139a
+  - path: engine/features/audioMod/AudioAnalysisEngine.ts
+    bytes: 9638
+    lines: 243
+    blob_sha: d2cf29b3c0059d4543412114700b44c729dc25c0
+  - path: engine/features/audioMod/AudioLinkControls.tsx
+    bytes: 8774
+    lines: 174
+    blob_sha: bd827b169038e5e81731f2ddf3e4c60c193ce015
+  - path: engine/features/audioMod/AudioPanel.tsx
+    bytes: 16372
+    lines: 353
+    blob_sha: 1062c6876daae22e1121cbe32fad9963c42a2c65
+  - path: engine/features/audioMod/AudioSpectrum.tsx
+    bytes: 18813
+    lines: 423
+    blob_sha: 308f2290d38c9cd2055004314b7e676d90b47094
+  - path: engine/features/audioMod/index.ts
+    bytes: 2047
+    lines: 46
+    blob_sha: 89bbc5e52c5c8bcc0a89001004c3e28076181e78
+  - path: engine/features/color_grading.ts
+    bytes: 3697
+    lines: 124
+    blob_sha: 5e8b33678aad168d9c78baa8c15007fea131a297
+  - path: engine/features/debug_tools/DebugToolsOverlay.tsx
+    bytes: 600
+    lines: 17
+    blob_sha: 036eff490758442a22ae20009ef117250750ba67
+  - path: engine/features/debug_tools/index.ts
+    bytes: 987
+    lines: 27
+    blob_sha: c8d287ad55025006c82cf7e9ed6873d5f7d20834
+  - path: engine/features/index.ts
+    bytes: 1259
+    lines: 34
+    blob_sha: c8ba8971fcc5d716a6f81a9ba9d0fe2f96d01e42
+  - path: engine/features/modulation/applyAt.ts
+    bytes: 1464
+    lines: 30
+    blob_sha: f3b0f96d5913e03b0f0f650159a68db9686f43d9
+  - path: engine/features/modulation/index.ts
+    bytes: 3671
+    lines: 108
+    blob_sha: 4974037e5785d3fc448f0836d4ec2a71ef78b1c7
+  - path: engine/features/modulation/ModulationEngine.ts
+    bytes: 8579
+    lines: 197
+    blob_sha: 9bcca466db7d1619e7de4faa0b90c818e412e10b
+  - path: engine/features/post_effects.ts
+    bytes: 3881
+    lines: 116
+    blob_sha: ac08955caaebf3ef765ab2e914a626d9cd9cab0b
+  - path: engine/features/setFeature.ts
+    bytes: 3183
+    lines: 81
+    blob_sha: 112eb19047ab859b22c19ba3ae513954484e878f
+  - path: engine/features/types.ts
+    bytes: 1672
+    lines: 47
+    blob_sha: ef2c2e200fd2812902b9b788a1109876297e5b21
+  - path: engine/features/ui.tsx
+    bytes: 2709
+    lines: 58
+    blob_sha: da3ff8d451f50d40349b457faca121f5b10d41da
+  - path: engine/features/webcam/index.ts
+    bytes: 3267
+    lines: 65
+    blob_sha: ef093b5cde16f08660c156d2b5e56358e07ab192
+  - path: engine/features/webcam/WebcamOverlay.tsx
+    bytes: 22150
+    lines: 408
+    blob_sha: 86a85e4881370be855d8821303a5c72764ac885e
+  - path: engine/FeatureSystem.ts
+    bytes: 27540
+    lines: 649
+    blob_sha: 7fba0a649d055378d42f81ccd30f47f01854f815
+  - path: engine/FractalEvents.ts
+    bytes: 3478
+    lines: 81
+    blob_sha: 1360a341fd9881e13c47e377d651b2a61a30458e
+  - path: engine/HardwareDetection.ts
+    bytes: 2347
+    lines: 64
+    blob_sha: 4e61916f8d9bdfc8ac627d7d485e41ed38c2f5c8
+  - path: engine/managers/ConfigManager.ts
+    bytes: 7935
+    lines: 184
+    blob_sha: 6c73994442bbdc60751173f4e9af92e297528aa6
+  - path: engine/math/AnimationMath.ts
+    bytes: 12426
+    lines: 289
+    blob_sha: 353e27d67d6377e5ba62b22ef40e07622e3d0ba0
+  - path: engine/math/Easing.ts
+    bytes: 483
+    lines: 11
+    blob_sha: 1a784f87ec9b58bfdb534b0925cf4cb601a41648
+  - path: engine/migrations.ts
+    bytes: 6082
+    lines: 149
+    blob_sha: a035384f7e988dbe3fe4b6176d45ff9ba951b5f6
+  - path: engine/overlay/OverlayProjection.ts
+    bytes: 7146
+    lines: 198
+    blob_sha: 748d44200180f470c3f7ef95c639c5e62c46ef1d
+  - path: engine/PanelManifest.ts
+    bytes: 22467
+    lines: 480
+    blob_sha: a0e21757371101649c695d28adcf4ef0480f9232
+  - path: engine/plugins/Camera.ts
+    bytes: 6028
+    lines: 164
+    blob_sha: aad00f324a682b05fe8a2158e05513ac1f86cc4f
+  - path: engine/plugins/camera/presetField.ts
+    bytes: 998
+    lines: 26
+    blob_sha: 3028674d06d5923d2b72e1ac79540737eba32410
+  - path: engine/plugins/Help.tsx
+    bytes: 21647
+    lines: 531
+    blob_sha: 6a76a5695b1754a5cf8513d9bb02817ffb65bc1e
+  - path: engine/plugins/Hud.tsx
+    bytes: 6946
+    lines: 173
+    blob_sha: 4473fc75bd024cce164378b0c2e0dab290693cf4
+  - path: engine/plugins/Menu.tsx
+    bytes: 23769
+    lines: 544
+    blob_sha: f16ff708292676c5f3d9e95d9123fe6875ffb45f
+  - path: engine/plugins/navigation/core/VirtualSpace.ts
+    bytes: 11548
+    lines: 263
+    blob_sha: 7047c5fadbe77f8cb41c0e1280f50aab5b136e7a
+  - path: engine/plugins/PwaUpdate.tsx
+    bytes: 2937
+    lines: 89
+    blob_sha: a7a3bca0abddcebbed707c6ce6215f3849a4824f
+  - path: engine/plugins/RenderDialog/ConfigForm.tsx
+    bytes: 12165
+    lines: 254
+    blob_sha: 2cbbc41630a41f2a5ceb4641018f4bfa6a716e96
+  - path: engine/plugins/RenderDialog/index.tsx
+    bytes: 12254
+    lines: 268
+    blob_sha: 2bd301edb7e6b0d20452da0862f0175f260822a9
+  - path: engine/plugins/RenderDialog/RenderingView.tsx
+    bytes: 5550
+    lines: 110
+    blob_sha: 1ece96589c065f22720e990fdb5ab0e1b82e5168
+  - path: engine/plugins/RenderDialog/types.ts
+    bytes: 6707
+    lines: 158
+    blob_sha: a901f28352c90094dae7cb3f6187d83c0b864bf6
+  - path: engine/plugins/RenderLoop.tsx
+    bytes: 2263
+    lines: 56
+    blob_sha: 58d5cc91c06439a53b903ea0fdf1686c82721637
+  - path: engine/plugins/SceneIO.tsx
+    bytes: 15629
+    lines: 352
+    blob_sha: a0bc5b4c011c02d1d5e9ccf4b68745686beba8f0
+  - path: engine/plugins/Shortcuts.ts
+    bytes: 11448
+    lines: 283
+    blob_sha: 45aa222b296bb73154824d30cea4cf4656d0ed64
+  - path: engine/plugins/TopBar.tsx
+    bytes: 5690
+    lines: 152
+    blob_sha: f1f1b11e4f08499b58a7fbeea92f5bd83b97cf79
+  - path: engine/plugins/topbar/BucketRenderController.ts
+    bytes: 1931
+    lines: 52
+    blob_sha: 0c8ed702cd48826d8aa8b1ee9d79305aa8f092a4
+  - path: engine/plugins/topbar/BucketRenderPanel.tsx
+    bytes: 34046
+    lines: 676
+    blob_sha: 0c73b60a26f4451658381cb0ae6920d6b86b2ccb
+  - path: engine/plugins/topbar/FpsCounter.tsx
+    bytes: 1065
+    lines: 28
+    blob_sha: 4627395b725542bd23b9f5b62d5cb45d49072e62
+  - path: engine/plugins/topbar/installBucketRender.tsx
+    bytes: 5402
+    lines: 116
+    blob_sha: e214e662175d8e6d914715fd1e1225288fcb5562
+  - path: engine/plugins/topbar/PauseControls.tsx
+    bytes: 7114
+    lines: 137
+    blob_sha: 854d03661ec7d6b1065825af80fc2bec69118533
+  - path: engine/plugins/topbar/ProjectName.tsx
+    bytes: 2505
+    lines: 69
+    blob_sha: b9484ac15f2a8623f7c3133db5d0cb5262b4569c
+  - path: engine/plugins/Tutorial.tsx
+    bytes: 2435
+    lines: 59
+    blob_sha: 07b7a1778111d0a2a760cfb56ff33b6973afece5
+  - path: engine/plugins/tutorial/actionBus.ts
+    bytes: 726
+    lines: 20
+    blob_sha: eac7526136465c7ab8ca37c3da3e864b5ae80d36
+  - path: engine/plugins/tutorial/anchors.ts
+    bytes: 4537
+    lines: 121
+    blob_sha: 4fa2d653dfbdf17b0034ddc660a583dd4d2ca546
+  - path: engine/plugins/tutorial/Highlight.tsx
+    bytes: 3622
+    lines: 98
+    blob_sha: 6f3c20b9a7c774a65af78ebbe00fe8fe77b9edec
+  - path: engine/plugins/tutorial/lessons.ts
+    bytes: 971
+    lines: 29
+    blob_sha: c5f83d0630cb2316101567aa70583fa1fc98ce8a
+  - path: engine/plugins/tutorial/Overlay.tsx
+    bytes: 15622
+    lines: 324
+    blob_sha: 1b0977b9efed5109351bc87dd9bb684225aeeded
+  - path: engine/plugins/tutorial/runner.ts
+    bytes: 6425
+    lines: 163
+    blob_sha: 757e8d359e19ce95af9f711a3ccea14decd5307e
+  - path: engine/plugins/tutorial/stepRenderers.ts
+    bytes: 1381
+    lines: 38
+    blob_sha: ef81048df52598e109f9d5d16a06346876a8dd93
+  - path: engine/plugins/tutorial/triggers.ts
+    bytes: 11616
+    lines: 312
+    blob_sha: 695bc704babd13c9554cb0eb01e787d3d119462b
+  - path: engine/plugins/tutorial/types.ts
+    bytes: 2359
+    lines: 66
+    blob_sha: 9b5b715824d8ddc7b1f5dd9030a9e50d0d66de3f
+  - path: engine/plugins/Undo.tsx
+    bytes: 6846
+    lines: 170
+    blob_sha: 2f5a0f29376d5ecc563a07d80ae2f387580511c7
+  - path: engine/plugins/Viewport.tsx
+    bytes: 8752
+    lines: 188
+    blob_sha: e2a80b51fbafb07bc6c85d0338880912b41b6b76
+  - path: engine/plugins/viewport/AdaptiveResolutionBadge.tsx
+    bytes: 3979
+    lines: 93
+    blob_sha: e8ce75956c2a669c835bea8e17e6918459c1ff43
+  - path: engine/plugins/viewport/FixedResolutionControls.tsx
+    bytes: 9977
+    lines: 234
+    blob_sha: 9883c4491fdf5f343e0d813ccb289f46a6355773
+  - path: engine/plugins/viewport/ViewportFrame.tsx
+    bytes: 10021
+    lines: 226
+    blob_sha: 119f7891c6fe7cb0871ec6d251d090da4d3a4733
+  - path: engine/plugins/viewport/ViewportModeControls.tsx
+    bytes: 6853
+    lines: 153
+    blob_sha: cecaba9a4df1b80337bbc26cb5e9a30ec8ec230c
+  - path: engine/RenderPipeline.ts
+    bytes: 26332
+    lines: 612
+    blob_sha: f66f42f7da36611cf4fc2a1c8479b48c2abb1bf9
+  - path: engine/ShaderBuilder.ts
+    bytes: 5563
+    lines: 136
+    blob_sha: b19fe093c132443ec194e0c0817d759e6d4886fa
+  - path: engine/ShaderConfig.ts
+    bytes: 1190
+    lines: 28
+    blob_sha: 2346faac1ad0b755590bab73fd9375a53f3a0ed4
+  - path: engine/ShaderFactory.ts
+    bytes: 1485
+    lines: 36
+    blob_sha: 7191f183dc93d4180b4a068a8594f251ce977472
+  - path: engine/store/createStateLibrarySlice.ts
+    bytes: 15396
+    lines: 363
+    blob_sha: 1552a37f76769f844ae830dbe9c2190cb3bf85c1
+  - path: engine/store/installStateLibrary.ts
+    bytes: 9646
+    lines: 255
+    blob_sha: 7fc1cceef5e70f76ee5f486a36bb9efa3c9a6378
+  - path: engine/styles/componentClasses.ts
+    bytes: 5879
+    lines: 104
+    blob_sha: a40b857b65c9e25df7be7aad24a59bb8190f9241
+  - path: engine/TickRegistry.ts
+    bytes: 5389
+    lines: 138
+    blob_sha: 6b23e85eac534ebed2161a0ad6d13adec5ff64e9
+  - path: engine/typedSlices.ts
+    bytes: 8408
+    lines: 202
+    blob_sha: 6d8f1fcc3f57b7788caeace86c8d909fee29e3ae
+  - path: engine/UniformNames.ts
+    bytes: 3696
+    lines: 95
+    blob_sha: 444824b2c0f464cdd170d3096dbc236de8ca93cb
+  - path: engine/UniformSchema.ts
+    bytes: 5149
+    lines: 104
+    blob_sha: fdb3384330e24d65e3ae299ec99fad320b3ee6ce
+  - path: engine/utils/createBlueNoiseWebGL2.ts
+    bytes: 3366
+    lines: 79
+    blob_sha: 358a0decdc12e92cea98331ee8aa504a9de859b9
+  - path: engine/utils/FullscreenQuad.ts
+    bytes: 910
+    lines: 26
+    blob_sha: be3c2298d0ad0ede9d55b87c56c070ca4b3ae37f
+  - path: engine/utils/refs.ts
+    bytes: 713
+    lines: 19
+    blob_sha: 1aaf165a6c5fa3f41802352c49c677206d015345
+  - path: engine/worker/ViewportRefs.ts
+    bytes: 4849
+    lines: 122
+    blob_sha: 846013fb07d236890682b075e3beba4d0d42dcfe
+  - path: engine/worker/WorkerProxy.ts
+    bytes: 12748
+    lines: 303
+    blob_sha: 4b09ae1f221ca875c42802401d897b6adc35e602
+  - path: fluid-toy.html
+    bytes: 1275
+    lines: 26
+    blob_sha: 3ad44beeee59222c348b37ec0981f8d44fb3db1e
+  - path: fluid-toy/brush/color.ts
+    bytes: 5544
+    lines: 131
+    blob_sha: 45128c97b30449e700354b62f6f06d8d1479a4fe
+  - path: fluid-toy/brush/emitter.ts
+    bytes: 8837
+    lines: 230
+    blob_sha: f6f1327cce64b22a71c64db3b90c3f13a713e98c
+  - path: fluid-toy/brush/index.ts
+    bytes: 1964
+    lines: 58
+    blob_sha: 090a4e23cc474c8507d0fe5144bc047078464f46
+  - path: fluid-toy/brush/particles.ts
+    bytes: 7920
+    lines: 184
+    blob_sha: 04e7617fa55162fa03e08429543fd907da2e1585
+  - path: fluid-toy/brush/readParams.ts
+    bytes: 2383
+    lines: 54
+    blob_sha: f16809b525be6e55880a56d4f0131236d6cbbf4f
+  - path: fluid-toy/bucket/FluidBucketController.ts
+    bytes: 14225
+    lines: 327
+    blob_sha: cf2080631f719df0fbbfbc5c9c02822fc69a084e
+  - path: fluid-toy/CODE_MAP.md
+    bytes: 7058
+    lines: 140
+    blob_sha: c24e715e4673c472d7df19521c6af7a66b6642ec
+  - path: fluid-toy/components/DeepZoomBench.tsx
+    bytes: 5828
+    lines: 145
+    blob_sha: b61e32e54635c4bfb1a825dfe410c88a08639924
+  - path: fluid-toy/components/DeepZoomStatus.tsx
+    bytes: 2596
+    lines: 58
+    blob_sha: d81df419348debcab06c53863be578c3fdc59f96
+  - path: fluid-toy/components/DomOverlays.tsx
+    bytes: 1775
+    lines: 41
+    blob_sha: ca0c1a8918ef055e89ba6a9d8ec78f20055315b5
+  - path: fluid-toy/components/HotkeysCheatsheet.tsx
+    bytes: 3184
+    lines: 63
+    blob_sha: 3fb3ff290ebfc55479ed79c545e85e4abf313c21
+  - path: fluid-toy/components/JuliaCPicker.tsx
+    bytes: 1515
+    lines: 36
+    blob_sha: 7da9f0c50e05996bb5a1d3c02174db1cd349c863
+  - path: fluid-toy/components/MandelbrotPicker.tsx
+    bytes: 11051
+    lines: 295
+    blob_sha: 48dcfd8622a0042e484f82121f954f69ee790dee
+  - path: fluid-toy/components/PresetGrid.tsx
+    bytes: 2014
+    lines: 46
+    blob_sha: 2107b574f81ac9525cc7407a33b6820eb0951f62
+  - path: fluid-toy/components/QualityBadge.tsx
+    bytes: 774
+    lines: 21
+    blob_sha: bc842d3ff0701256c089df088a61423dfde4fc15
+  - path: fluid-toy/components/RenderDialog/exportRunner.ts
+    bytes: 10736
+    lines: 232
+    blob_sha: 2e70230ef08d3886a18741a84e47dc8a564eac94
+  - path: fluid-toy/components/ViewLibraryPanel.tsx
+    bytes: 6594
+    lines: 131
+    blob_sha: 429040744210818119f2d30c37f15de6fd19d1a4
+  - path: fluid-toy/constants.ts
+    bytes: 3877
+    lines: 73
+    blob_sha: 5cd9d9eeee488a1f05d9c145f903cedd0296c126
+  - path: fluid-toy/deepZoom/atBuilder.ts
+    bytes: 6412
+    lines: 154
+    blob_sha: 8be79fef35eb5b8b47a5057baca8135660332c33
+  - path: fluid-toy/deepZoom/benchmark.ts
+    bytes: 11817
+    lines: 279
+    blob_sha: ca3537c31424c661ea0c7cc1d1035affa9315ba8
+  - path: fluid-toy/deepZoom/dd.ts
+    bytes: 1744
+    lines: 48
+    blob_sha: 48906cc164bfc7f7bb5448b967bf7743a26c2481
+  - path: fluid-toy/deepZoom/deepZoomWorker.ts
+    bytes: 8815
+    lines: 226
+    blob_sha: bd7d3e9e8d6fb04c3b6045549c94facfeaf2be1f
+  - path: fluid-toy/deepZoom/diagnostics.ts
+    bytes: 2034
+    lines: 65
+    blob_sha: e6a452e43a8089cfcbdf2517c7ce0f6e37974f0e
+  - path: fluid-toy/deepZoom/HDRFloat.ts
+    bytes: 1907
+    lines: 48
+    blob_sha: adba5d364586360c735a349902fdcd6ee137391f
+  - path: fluid-toy/deepZoom/HighPrecComplex.ts
+    bytes: 7168
+    lines: 197
+    blob_sha: 5efad7930b93449fc52474f7a7ce24195a086ef9
+  - path: fluid-toy/deepZoom/laBuilder.ts
+    bytes: 18214
+    lines: 484
+    blob_sha: 2bacdf1df39cc166d1ee1bfd474d5da75dbc8b15
+  - path: fluid-toy/deepZoom/LAInfoDeep.ts
+    bytes: 9856
+    lines: 266
+    blob_sha: 44e422b2e611198acc32d32e147f8c3adbe13079
+  - path: fluid-toy/deepZoom/laParameters.ts
+    bytes: 1679
+    lines: 41
+    blob_sha: 936bf659cf9617b8ac5cf6d1260852fad0ce872e
+  - path: fluid-toy/deepZoom/laRuntime.ts
+    bytes: 6288
+    lines: 179
+    blob_sha: 0335c92d858a338ad3464cccdd2e50df36ec2243
+  - path: fluid-toy/deepZoom/referenceOrbit.ts
+    bytes: 4864
+    lines: 125
+    blob_sha: 452047c661d0ff57d2b516c6c44fac50fd0ba78d
+  - path: fluid-toy/engineHandles.ts
+    bytes: 2752
+    lines: 56
+    blob_sha: 430c816f96cda5bf3ca92c654c181b7777fcb872
+  - path: fluid-toy/features/brush.ts
+    bytes: 8253
+    lines: 168
+    blob_sha: b9f52c1375b7b98ae28f3ca09d6bcc1006f74277
+  - path: fluid-toy/features/collision.ts
+    bytes: 4086
+    lines: 100
+    blob_sha: 0998809ec6504ed4b4e1b4558465732a223754bb
+  - path: fluid-toy/features/composite.ts
+    bytes: 3197
+    lines: 84
+    blob_sha: 8d442c49adff15fddf3df32bd861c07630bec4a0
+  - path: fluid-toy/features/coupling.ts
+    bytes: 4747
+    lines: 115
+    blob_sha: f9526f662d61aa7545f8f89bc32c11dbdc2e8e27
+  - path: fluid-toy/features/deepZoom.ts
+    bytes: 5442
+    lines: 135
+    blob_sha: f2b2e9c7ab8cbbcd5c0e25fcabc265f4c1afb893
+  - path: fluid-toy/features/fluidSim.ts
+    bytes: 6938
+    lines: 145
+    blob_sha: 86bea008ad6f7a8716ae6affd83b4f70068224c7
+  - path: fluid-toy/features/julia.ts
+    bytes: 7013
+    lines: 174
+    blob_sha: 1190801deb751ad70719d9ee832efaf8bc5d2222
+  - path: fluid-toy/features/palette.ts
+    bytes: 12569
+    lines: 272
+    blob_sha: 616d437e7e635ee8017fad49b79b2d33eba89cb5
+  - path: fluid-toy/features/postFx.ts
+    bytes: 5474
+    lines: 122
+    blob_sha: 4e805bdba7b91b2ed974b80659224a39a8f0e9ee
+  - path: fluid-toy/features/presets.ts
+    bytes: 1393
+    lines: 42
+    blob_sha: 07b47a654ac90efd36d27a5f90517c5254b82675
+  - path: fluid-toy/fluid/BloomChain.ts
+    bytes: 5466
+    lines: 147
+    blob_sha: fc6af4ea10764e4bd40f9dc038467a90ffb9e6e2
+  - path: fluid-toy/fluid/DeepZoomController.ts
+    bytes: 11737
+    lines: 286
+    blob_sha: 5a5b4360ccbaeff2469dd40d32055dd50261b09d
+  - path: fluid-toy/fluid/FluidEngine.ts
+    bytes: 90844
+    lines: 1901
+    blob_sha: 1b3f71198352c9b6a51855cb109c90e13a8e88c3
+  - path: fluid-toy/fluid/GpuTimerManager.ts
+    bytes: 3504
+    lines: 94
+    blob_sha: 3daf57f497482e1c2f47da809a0dbee2f83de67b
+  - path: fluid-toy/fluid/GradientLutManager.ts
+    bytes: 3283
+    lines: 81
+    blob_sha: 1b54456bf763cc1b29447b32a60ddfdad856e948
+  - path: fluid-toy/fluid/shaders/common.ts
+    bytes: 5520
+    lines: 119
+    blob_sha: b85b96c2a017be756c859f08704d7676c7fca52d
+  - path: fluid-toy/fluid/shaders/display.ts
+    bytes: 15744
+    lines: 365
+    blob_sha: 63c647f0d30d586cf4ec3f1d3c967b8121cbcb1f
+  - path: fluid-toy/fluid/shaders/index.ts
+    bytes: 1008
+    lines: 38
+    blob_sha: bea4c74e6477f4988c82ac03cc4f3a77b42fda16
+  - path: fluid-toy/fluid/shaders/julia.ts
+    bytes: 39408
+    lines: 877
+    blob_sha: c30848b9e1fcee9f09a47c1bef7cf82c89dbb128
+  - path: fluid-toy/fluid/shaders/sim.ts
+    bytes: 20361
+    lines: 461
+    blob_sha: 52455438913641379e8f720c93489cb6848656a1
+  - path: fluid-toy/fluid/shaders/utility.ts
+    bytes: 3355
+    lines: 77
+    blob_sha: 2f347ab84994db0c5a9fa799948b0d2e48391928
+  - path: fluid-toy/FluidPointerLayer.tsx
+    bytes: 2033
+    lines: 46
+    blob_sha: 12ca682ac312d145296ddf14cfcf47367b970fbe
+  - path: fluid-toy/FluidToyApp.tsx
+    bytes: 10418
+    lines: 215
+    blob_sha: f5c7afb0a3a6f93bbf6fe165e4fb4a3faec7ee71
+  - path: fluid-toy/hotkeys.ts
+    bytes: 2317
+    lines: 67
+    blob_sha: 5ba258b374bc8909d800581417ad1e3a2e90a3f3
+  - path: fluid-toy/main.tsx
+    bytes: 13312
+    lines: 288
+    blob_sha: 19b2425a1311b8be66692962180929d4d08b4987
+  - path: fluid-toy/migrations.ts
+    bytes: 3806
+    lines: 80
+    blob_sha: 6ae5cb3f8cb40f3ebb61e2b7620d02fbf5980a03
+  - path: fluid-toy/panels.ts
+    bytes: 6927
+    lines: 135
+    blob_sha: b0219a7017eb465cc0971d5f68b9653fde99d74a
+  - path: fluid-toy/pointer/contextMenu.ts
+    bytes: 2825
+    lines: 70
+    blob_sha: 6d542156b219bdf65963eb099dea65277fc82105
+  - path: fluid-toy/pointer/gestures/pan.ts
+    bytes: 2870
+    lines: 72
+    blob_sha: 3df2ab6cdee42678086d71c7b2c2bacc98f3f5cc
+  - path: fluid-toy/pointer/gestures/pickC.ts
+    bytes: 1449
+    lines: 37
+    blob_sha: c5d5848a2b75dcc847249f5278c8e46185045431
+  - path: fluid-toy/pointer/gestures/resizeBrush.ts
+    bytes: 1199
+    lines: 31
+    blob_sha: 96770ca288a5eddf5fc21b8ec6c38892274072ed
+  - path: fluid-toy/pointer/gestures/splat.ts
+    bytes: 2705
+    lines: 70
+    blob_sha: dc49400391fd86cf9245409205169671674ae224
+  - path: fluid-toy/pointer/gestures/types.ts
+    bytes: 709
+    lines: 19
+    blob_sha: 3fa86032d3fa73546d28ac77897367fa9bedbd12
+  - path: fluid-toy/pointer/gestures/wheel.ts
+    bytes: 3638
+    lines: 88
+    blob_sha: 4cb3088840e0af8704c4cd21749c9dd1bb5a1a89
+  - path: fluid-toy/pointer/gestures/zoom.ts
+    bytes: 3254
+    lines: 83
+    blob_sha: 7dc6e5805b930d5f2ecd5a26b85ebc62769a43fa
+  - path: fluid-toy/pointer/gestures/zoomBounds.ts
+    bytes: 631
+    lines: 15
+    blob_sha: 45a50496ef1617745a26158b9e0e731e55540b40
+  - path: fluid-toy/pointer/handlers.ts
+    bytes: 5699
+    lines: 133
+    blob_sha: c9203b270427aefc33c07f81571575106f96d868
+  - path: fluid-toy/pointer/modifiers.ts
+    bytes: 2150
+    lines: 57
+    blob_sha: 8ef6c1287ff8b9021922053e47fcafcc265d6da2
+  - path: fluid-toy/pointer/types.ts
+    bytes: 2707
+    lines: 79
+    blob_sha: 4eb4233c10969aaaa8fa85f93f14f86435aabd9e
+  - path: fluid-toy/presets/apply.ts
+    bytes: 11011
+    lines: 194
+    blob_sha: f24d647bc5d5a5e9e1bad729711bfd6ae7f3dd85
+  - path: fluid-toy/presets/data.ts
+    bytes: 22555
+    lines: 604
+    blob_sha: eb79276b0d18db71d9afb803e151110a032bd648
+  - path: fluid-toy/README.md
+    bytes: 15618
+    lines: 270
+    blob_sha: 9593da765ebf090dec77459abc9c5c36077c2d66
+  - path: fluid-toy/registerFeatures.ts
+    bytes: 4393
+    lines: 91
+    blob_sha: 1bf7a684234dde60c7ae5187186251a71c1ad0a0
+  - path: fluid-toy/setup.ts
+    bytes: 781
+    lines: 21
+    blob_sha: 29f02906a5a0c73f5915fc3419ccb1fb2f8abf71
+  - path: fluid-toy/storeTypes.ts
+    bytes: 3223
+    lines: 72
+    blob_sha: 269dbaf0feb5f1ac8dcecbf8cd67f106a531c338
+  - path: fluid-toy/useDeepZoomOrbit.ts
+    bytes: 7074
+    lines: 153
+    blob_sha: dd7c012b40961b4f19d9bcf4ae60175a6d5e7819
+  - path: fluid-toy/useEngineSync.ts
+    bytes: 4652
+    lines: 69
+    blob_sha: def62a867a271cd7a03c74f3a5e65fdc13827cca
+  - path: fluid-toy/useFluidEngine.ts
+    bytes: 5995
+    lines: 125
+    blob_sha: c45ff14b27d2566dfe3887ef69d02be0ac81f66c
+  - path: fluid-toy/viewLibrary.ts
+    bytes: 11338
+    lines: 271
+    blob_sha: 8199bd57f1447d21284286b2f13ec7bf3e13d8af
+  - path: fractal-toy.html
+    bytes: 1279
+    lines: 26
+    blob_sha: 3bf89a52344a518c60c83385b46133bee0ab857c
+  - path: fractal-toy/features/camera.ts
+    bytes: 1857
+    lines: 43
+    blob_sha: d3210946361784116cf2f0a863867198f1bd487e
+  - path: fractal-toy/features/lighting.ts
+    bytes: 2085
+    lines: 44
+    blob_sha: a0905d05f04987e8274c9a4c61c177c3a039b935
+  - path: fractal-toy/FractalToyApp.tsx
+    bytes: 5021
+    lines: 113
+    blob_sha: 723ddc0b3321984434ed169f57da471f97801ffa
+  - path: fractal-toy/main.tsx
+    bytes: 6207
+    lines: 162
+    blob_sha: b83080db98e45d1c1d8b92e87f1b94fbabe2472a
+  - path: fractal-toy/panels.ts
+    bytes: 528
+    lines: 14
+    blob_sha: 8edc3b9a3fc3887b278e7b6bcf5c90949eb874ea
+  - path: fractal-toy/registerFeatures.ts
+    bytes: 1396
+    lines: 31
+    blob_sha: 26797f6c97ed0605516a5fb7010ad6b8f3411c95
+  - path: fractal-toy/renderer/formulaRegistry.ts
+    bytes: 5867
+    lines: 132
+    blob_sha: 960b290b8f45a196983d3c279b4a648bab713ccb
+  - path: fractal-toy/renderer/formulas/mandelbox.ts
+    bytes: 3000
+    lines: 76
+    blob_sha: 41d1ac2b373f3589562486b3dff3f67bda0cf9b6
+  - path: fractal-toy/renderer/formulas/mandelbulb.ts
+    bytes: 3745
+    lines: 90
+    blob_sha: d1230f370d0a7915c30055b39f31eab3f0ac7ca1
+  - path: fractal-toy/renderer/FractalEngine.ts
+    bytes: 8317
+    lines: 198
+    blob_sha: b998b1993387a5c3487ce04372855f10e4ba7bf4
+  - path: fractal-toy/renderer/index.ts
+    bytes: 814
+    lines: 27
+    blob_sha: b540ac563fb093f03143d397f19e09b5536544bb
+  - path: fractal-toy/renderer/install.tsx
+    bytes: 12298
+    lines: 301
+    blob_sha: cdc74d039955f2b80213121d98f3fcbaa1fff625
+  - path: fractal-toy/renderer/shaderAssembler.ts
+    bytes: 7755
+    lines: 216
+    blob_sha: 51771016331286dfcc3f0501341b752178f4573b
+  - path: fractal-toy/setup.ts
+    bytes: 386
+    lines: 11
+    blob_sha: 6af811b2ee89f8b35a8b960e70b14477ed22af09
+  - path: HANDOFF.md
+    bytes: 82473
+    lines: 610
+    blob_sha: 05a65101979f51fc708711dd3e415960ab6cd76e
+  - path: hooks/useAppStartup.ts
+    bytes: 7783
+    lines: 164
+    blob_sha: 90979df4747666c60be7f7586d31be3208354ffb
+  - path: hooks/useDopeSheetInteraction.ts
+    bytes: 26587
+    lines: 547
+    blob_sha: 33b4c5814714c6175345600bbf376a857b073197
+  - path: hooks/useGlobalContextMenu.ts
+    bytes: 1033
+    lines: 27
+    blob_sha: fb4015e8d13313796f2b7fe7ff6ee990c6f47f7e
+  - path: hooks/useGraphInteraction.ts
+    bytes: 43223
+    lines: 851
+    blob_sha: 8b27ec122c7ba305318304c5396dce34a3e37c9f
+  - path: hooks/useGraphTools.ts
+    bytes: 13861
+    lines: 343
+    blob_sha: 536484af24de791a39abc5c61ae04ebf882db1ee
+  - path: hooks/useHelpContextMenu.ts
+    bytes: 886
+    lines: 23
+    blob_sha: b8976d2081697cd5cefc86877fb509192a1ba365
+  - path: hooks/useMobileLayout.ts
+    bytes: 3180
+    lines: 71
+    blob_sha: 2cfa06777ebaae51c0fa641292c3e4f1b90be8d9
+  - path: hooks/useSidebarResize.ts
+    bytes: 1046
+    lines: 23
+    blob_sha: 1465e288f7c5d7b4fbd6f7c7c0a28197e153e7da
+  - path: hooks/useTrackAnimation.ts
+    bytes: 3983
+    lines: 84
+    blob_sha: e4844b09710fdb5aaeaf5cad09919a306c513bb7
+  - path: knip.json
+    bytes: 1236
+    lines: 52
+    blob_sha: b13c515b8ed780231dcf224c9576f93ff989f765
+  - path: LICENSE
+    bytes: 35823
+    lines: 674
+    blob_sha: f288702d2fa16d3cdf0035b15a9fcbc552cd88e7
+  - path: mesh-export.html
+    bytes: 1493
+    lines: 35
+    blob_sha: 4bc0cd9b76e34df09bef5e0bd655c70494be2fa8
+  - path: mesh-export/algorithms/dc-core.ts
+    bytes: 15566
+    lines: 407
+    blob_sha: 87e648cab15880773abfa26d4c174abcf0ba2c21
+  - path: mesh-export/algorithms/mesh-postprocess.ts
+    bytes: 11703
+    lines: 297
+    blob_sha: 88ed52499684eb03ed22c7262ec881b6299698c5
+  - path: mesh-export/algorithms/mesh-writers.ts
+    bytes: 13428
+    lines: 329
+    blob_sha: 90d8f6a955d28e19fa7fb23f95245e28821c6e82
+  - path: mesh-export/algorithms/sdf-eval.ts
+    bytes: 6977
+    lines: 194
+    blob_sha: 4cb95937bb077a3d81c48dbb077a676cb0de2857
+  - path: mesh-export/algorithms/sdf-filter.ts
+    bytes: 18189
+    lines: 532
+    blob_sha: 1b2ef5ff57d9400fbc306f2ace54bf65ec509f20
+  - path: mesh-export/algorithms/sparse-grid.ts
+    bytes: 20874
+    lines: 550
+    blob_sha: 309a205ee8aca1d6a11d1a9de278e0e2890585af
+  - path: mesh-export/algorithms/vdb-writer.ts
+    bytes: 21414
+    lines: 631
+    blob_sha: fc35a0edb9befea848b4b45497d51033dbbf3c5d
+  - path: mesh-export/components/BoundsPanel.tsx
+    bytes: 4185
+    lines: 117
+    blob_sha: 10f4008efdd7e39371633ed37c0989a36562a8b9
+  - path: mesh-export/components/ExportPanel.tsx
+    bytes: 10828
+    lines: 243
+    blob_sha: 8b230b3f8b35c5fd350243f52442205fcb904a3e
+  - path: mesh-export/components/FormulaParams.tsx
+    bytes: 3625
+    lines: 105
+    blob_sha: 885eae263d26082e897ef1d380d4924913870c43
+  - path: mesh-export/components/FormulaSelector.tsx
+    bytes: 7677
+    lines: 219
+    blob_sha: ae650feb78e71eccc10fffec6831af942a4e30b9
+  - path: mesh-export/components/MeshExportApp.tsx
+    bytes: 1475
+    lines: 43
+    blob_sha: 8da3b64067e16545840b4303f197a3d9543316b2
+  - path: mesh-export/components/MeshExportPage.tsx
+    bytes: 7779
+    lines: 209
+    blob_sha: 86236912264fe8252f22f30ad7928085c0684e60
+  - path: mesh-export/components/PipelineControls.tsx
+    bytes: 8925
+    lines: 235
+    blob_sha: 15fd8fcbeb32a5b17c7c22ec6d429eb74dccfe9a
+  - path: mesh-export/components/PreviewCanvas.tsx
+    bytes: 37178
+    lines: 916
+    blob_sha: 801b2ff07fac130afa203fe3442b5eb81cfd93e1
+  - path: mesh-export/components/ProgressPanel.tsx
+    bytes: 6073
+    lines: 140
+    blob_sha: b45c3fb453b87d769b1149156955260da2c974f4
+  - path: mesh-export/gpu/gpu-pipeline.ts
+    bytes: 68168
+    lines: 1766
+    blob_sha: 840b39278b4b8c73bdc27929f871efd7735cabe8
+  - path: mesh-export/main.tsx
+    bytes: 395
+    lines: 15
+    blob_sha: 4011b0f2e40af3f1fc7fd89cf81c0536fe1e8a2d
+  - path: mesh-export/pipeline/mesh-pipeline.ts
+    bytes: 32649
+    lines: 820
+    blob_sha: 00190e8beb49a925ef781e78fb0e70f83e00f229
+  - path: mesh-export/pipeline/types.ts
+    bytes: 2268
+    lines: 79
+    blob_sha: 5bafeef9ad3619c84c4794f99a7e3a205c0a8a89
+  - path: mesh-export/preview/mesh-preview.ts
+    bytes: 3297
+    lines: 105
+    blob_sha: 88bf5c4c8dae9e0a9132825246201e8d04d6cd96
+  - path: mesh-export/preview/preview-camera.ts
+    bytes: 5552
+    lines: 147
+    blob_sha: 21479f280f8cd2c46c438c5fa055e90580b7bd22
+  - path: mesh-export/store/meshExportStore.ts
+    bytes: 11289
+    lines: 340
+    blob_sha: d87d3b9d41cdcd4e4349d61e4e894fbd63edfcda
+  - path: package.json
+    bytes: 4245
+    lines: 92
+    blob_sha: 29efce0ce5855d91798e244f31e3b6ee7409b020
+  - path: plans/app-gmt-touchups.md
+    bytes: 35181
+    lines: 426
+    blob_sha: ecc11f8bd39432f9c3be8ef1bd67fba05260f420
+  - path: plans/area-lights.md
+    bytes: 28564
+    lines: 629
+    blob_sha: 89d1ffd6a9648c8f4ed092f3644a37374576e471
+  - path: plans/bucket-render-port-handoff.md
+    bytes: 19712
+    lines: 286
+    blob_sha: 8e24f654ada5705e666eeb398900b1e7ef5f51b9
+  - path: plans/compile-progress-unification.md
+    bytes: 20998
+    lines: 308
+    blob_sha: 300b44da3a28e4f737209ede7a467802022f11f5
+  - path: plans/engine-cleanup.md
+    bytes: 10553
+    lines: 233
+    blob_sha: 314d9754bb8d3d0271cf37b780d201fa98721680
+  - path: plans/fluid-toy-deep-zoom.md
+    bytes: 25233
+    lines: 643
+    blob_sha: d6ffd1b3e52407c69594cd4a24574aed5f8a29ae
+  - path: plans/mobile-animation-research.md
+    bytes: 12634
+    lines: 124
+    blob_sha: 908a762153ada2bd258b9794be1625bde9a7597a
+  - path: plans/mobile-mode-app-gmt.md
+    bytes: 24491
+    lines: 300
+    blob_sha: 4f35078d03032f92ab1aabcde2a8b6d0fd1d0d3d
+  - path: plans/path-trace-reflections.md
+    bytes: 14992
+    lines: 358
+    blob_sha: 9082d14b75a98fbbcf884bf32176ffd7ef17cf27
+  - path: README.md
+    bytes: 2507
+    lines: 54
+    blob_sha: 8abaaf9d85c8a018f53011b889e132344f450642
+  - path: shader-bench.html
+    bytes: 33819
+    lines: 697
+    blob_sha: f10ec2e65df93624b0379f5ee63e63395cebbb9f
+  - path: shaders/chunks/blue_noise.ts
+    bytes: 1828
+    lines: 52
+    blob_sha: 2c6ed8f6e314c957e51714cd2e71e5651789a1b7
+  - path: shaders/chunks/tsaa.ts
+    bytes: 1651
+    lines: 37
+    blob_sha: 9559b8081c665b87c628671b6dc780ddd12aeefb
+  - path: shaders/chunks/uniforms.ts
+    bytes: 671
+    lines: 20
+    blob_sha: 7523166519e8fa79857c8db36fbc422c1c99f01e
+  - path: shaders/chunks/vertex.ts
+    bytes: 188
+    lines: 9
+    blob_sha: 500fece0005ec098d9eaa9d95aa18411f112a116
+  - path: store/animation/audioClipsSlice.ts
+    bytes: 875
+    lines: 27
+    blob_sha: 54feb948beafa20b99e1f2e0bccbc07d176021f6
+  - path: store/animation/playbackSlice.ts
+    bytes: 7429
+    lines: 154
+    blob_sha: 27b1bfde7a10ef3aa98fbee1d86099ed4e0c2865
+  - path: store/animation/selectionSlice.ts
+    bytes: 2328
+    lines: 58
+    blob_sha: 49e95521416a8567e3845b567b7f09310e1f23d1
+  - path: store/animation/sequenceSlice.ts
+    bytes: 35965
+    lines: 801
+    blob_sha: 9af4ca33b0bdde50f0b1dd28d65c948d003da76a
+  - path: store/animation/types.ts
+    bytes: 9764
+    lines: 206
+    blob_sha: ffe78043b802ba3c0e3845cd32668a0b75f18863
+  - path: store/animation/uiSlice.ts
+    bytes: 1418
+    lines: 37
+    blob_sha: fd6ba1b4c2d6e24e15a03ad63ebd3a077396f14e
+  - path: store/animationStore.ts
+    bytes: 1253
+    lines: 26
+    blob_sha: bf45f3e981d76b9b0c73cd9d8f5e1e6a76614ca7
+  - path: store/CompileGate.ts
+    bytes: 3175
+    lines: 80
+    blob_sha: 57cbf78254b61c6bdd1e7444c69c0c8d3edbb6e1
+  - path: store/CompileProgressStore.ts
+    bytes: 4336
+    lines: 121
+    blob_sha: 2a22973525259e5a1d2966a0d25faa6c0c1057e0
+  - path: store/createFeatureSlice.ts
+    bytes: 13788
+    lines: 255
+    blob_sha: d219872b3702079e4a4f1b444af6d658d4ab1a26
+  - path: store/engineStore.ts
+    bytes: 25070
+    lines: 527
+    blob_sha: 92de29e84febe11330ede360160c647483ee0459
+  - path: store/slices/historySlice.ts
+    bytes: 12152
+    lines: 305
+    blob_sha: 5f0d614565eaa4f3efb7a369dac6822d980d7395
+  - path: store/slices/installAccumulationBindings.ts
+    bytes: 2589
+    lines: 63
+    blob_sha: 3897f4fb4b55cc21d6fb0d728e596beba97f803e
+  - path: store/slices/renderControlSlice.ts
+    bytes: 6088
+    lines: 141
+    blob_sha: a6dbb5ce8722136d84bcd89115ae4d0570783e3b
+  - path: store/slices/scalabilitySlice.ts
+    bytes: 4454
+    lines: 127
+    blob_sha: d09a3e722ed13631423b00cf645bf6cb5c1f0542
+  - path: store/slices/uiSlice.ts
+    bytes: 21818
+    lines: 487
+    blob_sha: 2d6dd6d4a3263e290624d4d5eb90de24ac32af11
+  - path: store/slices/viewportSlice.ts
+    bytes: 9419
+    lines: 207
+    blob_sha: 0eeb331dd7fa49843b39b2b6765de8ef566d8eb7
+  - path: tsconfig.json
+    bytes: 714
+    lines: 24
+    blob_sha: cfeb067bac281bc84d98819d2e677ba5ac11b1d0
+  - path: tsconfig.node.json
+    bytes: 221
+    lines: 10
+    blob_sha: 099658cf3d29c0c21bc9b61d0a8b02652ddb92a9
+  - path: types.ts
+    bytes: 1803
+    lines: 75
+    blob_sha: aa59a67d88fadbab992d8e2ed654cfbc59f5f3ea
+  - path: types/animation.ts
+    bytes: 2582
+    lines: 75
+    blob_sha: c77561b0aa5ebd3706b6c6efa0c2a72808153ed2
+  - path: types/common.ts
+    bytes: 861
+    lines: 26
+    blob_sha: 79368f004ea644be08fde10121bdcb779c2905f6
+  - path: types/graphics.ts
+    bytes: 2672
+    lines: 67
+    blob_sha: 141db42cd185fb048f5329a86dc95c4785e7a073
+  - path: types/help.ts
+    bytes: 1368
+    lines: 47
+    blob_sha: b6389249bd9677f80ec465a68ba1111be89c992c
+  - path: types/pako.d.ts
+    bytes: 24
+    lines: 1
+    blob_sha: 57be1997bdddea862c3e26889f0eb36fc5b06d65
+  - path: types/preset.ts
+    bytes: 4871
+    lines: 120
+    blob_sha: e4d21fe076f917831ba8da07bf672ace6c98014e
+  - path: types/store.ts
+    bytes: 19214
+    lines: 457
+    blob_sha: 471cabe4eb299b6d54ee5941ac70175b4f5ef719
+  - path: types/viewport.ts
+    bytes: 14958
+    lines: 404
+    blob_sha: e7d60d086fb52df457eae4c49c820eaad479fe42
+  - path: utils/audioWaveform.ts
+    bytes: 1852
+    lines: 40
+    blob_sha: 951f3ac476681d6254b7720198332fdf7765aac2
+  - path: utils/canvasCache.ts
+    bytes: 5168
+    lines: 140
+    blob_sha: cef3138b7469bea57b6e29a69225e6a2a8042e30
+  - path: utils/colorUtils.ts
+    bytes: 15676
+    lines: 430
+    blob_sha: eda6908e8176ea6f35780a973fe2dfa34c9dde9b
+  - path: utils/ConstrainedSmoothing.ts
+    bytes: 8610
+    lines: 217
+    blob_sha: ec392a70b42cdd9165d25a964dec14691594d08e
+  - path: utils/CurveFitting.ts
+    bytes: 9522
+    lines: 294
+    blob_sha: 49e31e912ed3ee61c35def176d7325e41a4c30df
+  - path: utils/defaultPresetFields.ts
+    bytes: 4230
+    lines: 92
+    blob_sha: 330938204e0264df074b3786d8a7011aa998860d
+  - path: utils/DopeSheetRenderer.ts
+    bytes: 16209
+    lines: 392
+    blob_sha: f9bfbd723751a3605bc69c9c91f86a6bca237fa1
+  - path: utils/DopeSheetRendererBuilder.ts
+    bytes: 7611
+    lines: 189
+    blob_sha: 3b2b3d1bda327449e062fce30f1b1b3777adfa26
+  - path: utils/DopeSheetRendererCache.ts
+    bytes: 2881
+    lines: 65
+    blob_sha: 8c282f7bf321c7960b713d103cd8f1fe692ca2f6
+  - path: utils/dopeSheetTrackFlags.ts
+    bytes: 730
+    lines: 17
+    blob_sha: bdb32fe95b2938a48edc3e72f41adcc258300aae
+  - path: utils/fileUtils.ts
+    bytes: 1006
+    lines: 28
+    blob_sha: be729ebfe28562f91e15350bba0757ae2ee38c99
+  - path: utils/GraphRenderer.ts
+    bytes: 19251
+    lines: 447
+    blob_sha: 43a4bffbf18901947fcfc16d780fe011b2feade8
+  - path: utils/GraphRendererBuilder.ts
+    bytes: 16879
+    lines: 393
+    blob_sha: c26d54a4b6b21259da6aed6c943f32554351f478
+  - path: utils/GraphRendererCache.ts
+    bytes: 4261
+    lines: 103
+    blob_sha: 031470906ff2cc5355494631bb0fa2001ea08a51
+  - path: utils/GraphUtils.ts
+    bytes: 3244
+    lines: 90
+    blob_sha: 547bde0e63cc02888d1fd999aefbf17d2ebb073f
+  - path: utils/groupTracks.ts
+    bytes: 2099
+    lines: 55
+    blob_sha: 357ba6d2a17c1121271c7eeb1e89a3ed44ee7dba
+  - path: utils/helpUtils.ts
+    bytes: 811
+    lines: 22
+    blob_sha: 0e703c4e52354de15bf474bea239a55cf9877d0d
+  - path: utils/histogramUtils.ts
+    bytes: 5060
+    lines: 143
+    blob_sha: 1a24c892d59389194dee9514e92f284032942e08
+  - path: utils/keyframeShape.ts
+    bytes: 1644
+    lines: 42
+    blob_sha: 99fd4f4fdaae0304a1b34867f186e3c0616d659e
+  - path: utils/keyframeViewBounds.ts
+    bytes: 879
+    lines: 25
+    blob_sha: 1d36e02c907618848ecc20c16d584bf3fd462a1c
+  - path: utils/paramConditions.ts
+    bytes: 2879
+    lines: 75
+    blob_sha: 14cf1de53b653d8e1f19bb6e62bb79f3da8cc730
+  - path: utils/pngMetadata.ts
+    bytes: 5912
+    lines: 164
+    blob_sha: cad37b575fffa9f7bbd2775bc48acbaf6e61d801
+  - path: utils/PresetFieldRegistry.ts
+    bytes: 4332
+    lines: 115
+    blob_sha: 8e38bf35c1ce9495cae69bd4e9b04c38a67b25ec
+  - path: utils/PresetLogic.ts
+    bytes: 5357
+    lines: 124
+    blob_sha: ed9a647be57b3d05b07634ecee62d328b85b6d29
+  - path: utils/resolutionUtils.ts
+    bytes: 416
+    lines: 9
+    blob_sha: d83b1a2ab0772b6b980a91eeae4d6fcdc4660f21
+  - path: utils/SceneFormat.ts
+    bytes: 7120
+    lines: 159
+    blob_sha: cc1a342ff21f3dee5f46d33f76adbd8782fb73df
+  - path: utils/Sharing.ts
+    bytes: 3006
+    lines: 73
+    blob_sha: d703a8d66c8c24671d538f5fafef341aed8093c2
+  - path: utils/timelineUtils.ts
+    bytes: 17352
+    lines: 434
+    blob_sha: 37989dce1edbad69b4cc24a6d4e2958ab8b6b2d0
+  - path: utils/UrlStateEncoder.ts
+    bytes: 8972
+    lines: 216
+    blob_sha: d9039f4e12facd343d4517ad2dd7340fb1729bb2
+  - path: vite.config.ts
+    bytes: 5401
+    lines: 143
+    blob_sha: 7354bdc79c7cc550aee88df6278d9119c0093418

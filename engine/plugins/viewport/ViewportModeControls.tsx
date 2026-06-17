@@ -1,0 +1,153 @@
+/**
+ * ViewportModeControls — the top-left chrome for viewport size mode.
+ *
+ * When mode is 'Fixed': renders FixedResolutionControls with its
+ * drag-to-resize label, aspect-ratio preset menu, and "Fill" button
+ * (which switches back to Full mode).
+ *
+ * When mode is 'Full': renders a compact pill button that switches
+ * INTO Fixed mode at a sensible default resolution (uses the current
+ * viewport size if available, else the stored fixedResolution).
+ *
+ * Consumed by ViewportFrame by default. Apps can render it directly
+ * in a custom layout, or disable via ViewportFrame's showModeControls
+ * prop. GMT hides it during broadcast mode; toy-fluid might hide it
+ * when the user toggles a clean-feed mode.
+ */
+
+import React from 'react';
+import { useEngineStore } from '../../../store/engineStore';
+import { FixedResolutionControls } from './FixedResolutionControls';
+import { RENDER_SCALE_STEPS } from '../../../store/slices/viewportSlice';
+import { getRenderScaleSource } from '../Viewport';
+
+export interface ViewportModeControlsProps {
+    /** Position of the controls container (absolute px from the
+     *  viewport's top/left edge). Default: top-12px, left-12px. */
+    top?: number;
+    left?: number;
+    /** The viewport container's current dimensions, used by the
+     *  Fixed-mode aspect-ratio presets to compute "fit to window"
+     *  dimensions. If omitted, presets fall back to the current
+     *  fixedResolution. */
+    availableWidth?: number;
+    availableHeight?: number;
+}
+
+/** Compact segmented picker for the user's render-scale multiplier.
+ *  Reads/writes viewportSlice.renderScale by default; apps can register
+ *  a custom source via setRenderScaleSource (e.g. GMT points at
+ *  quality.aaLevel). The pill is rendered as one of two components so
+ *  conditional hook calls are avoided. */
+const RenderScaleControl: React.FC = () => {
+    const source = getRenderScaleSource();
+    return source ? <CustomScalePill source={source} /> : <DefaultScalePill />;
+};
+
+const PILL_OUTER = 'flex flex-nowrap items-center gap-0.5 bg-black/80 px-1 py-1 rounded border border-white/10 shadow-sm backdrop-blur-md whitespace-nowrap';
+const PILL_BTN = (active: boolean) =>
+    `text-[9px] font-mono px-1.5 py-0.5 rounded transition-colors ${active
+        ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/40'
+        : 'text-gray-500 hover:text-gray-200 border border-transparent'}`;
+const PILL_TITLE = 'Render scale — pixel multiplier on top of the viewport size. 1.0 = match CSS pixels (cheap); 2.0 = supersampled (4× cost).';
+
+const DefaultScalePill: React.FC = () => {
+    const renderScale = useEngineStore((s) => s.renderScale);
+    const setRenderScale = useEngineStore((s) => s.setRenderScale);
+    return (
+        <div className={PILL_OUTER} title={PILL_TITLE}>
+            {RENDER_SCALE_STEPS.map((s) => {
+                const active = Math.abs(s - renderScale) < 1e-3;
+                return (
+                    <button
+                        key={s}
+                        onClick={(e) => { e.stopPropagation(); setRenderScale(s); }}
+                        className={PILL_BTN(active)}
+                    >
+                        {s}×
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
+
+const CustomScalePill: React.FC<{ source: NonNullable<ReturnType<typeof getRenderScaleSource>> }> = ({ source }) => {
+    const [value, setValue] = source.use();
+    const fmt = source.formatLabel ?? ((v: number) => `${v}×`);
+    return (
+        <div className={PILL_OUTER} title={PILL_TITLE}>
+            {source.steps.map((s) => {
+                const active = Math.abs(s - value) < 1e-3;
+                return (
+                    <button
+                        key={s}
+                        onClick={(e) => { e.stopPropagation(); setValue(s); }}
+                        className={PILL_BTN(active)}
+                    >
+                        {fmt(s)}
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
+
+export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
+    top = 12,
+    left = 12,
+    availableWidth,
+    availableHeight,
+}) => {
+    const mode = useEngineStore((s) => s.resolutionMode);
+    const fixedResolution = useEngineStore((s) => s.fixedResolution);
+    const setMode = useEngineStore((s) => s.setResolutionMode);
+    const setFixedResolution = useEngineStore((s) => s.setFixedResolution);
+
+    if (mode === 'Fixed') {
+        const [w, h] = fixedResolution;
+        return (
+            <>
+                {/* Top-left: resolution drag-pill + Fill button */}
+                <div className="absolute z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap" style={{ top, left }}>
+                    <FixedResolutionControls
+                        width={w}
+                        height={h}
+                        top={0}
+                        left={0}
+                        maxAvailableWidth={availableWidth ?? w * 2}
+                        maxAvailableHeight={availableHeight ?? h * 2}
+                        onSetResolution={setFixedResolution}
+                        onSetMode={setMode}
+                    />
+                </div>
+                {/* Top-center: render-scale (DPR multiplier) — only shown
+                    in Fixed mode. Centred on the viewport via 50% + a
+                    translateX(-50%) to keep it visually balanced no
+                    matter how wide the canvas is. */}
+                <div
+                    className="absolute z-50 -translate-x-1/2"
+                    style={{ top, left: '50%' }}
+                >
+                    <RenderScaleControl />
+                </div>
+            </>
+        );
+    }
+
+    // Full mode: just the "Fixed" mode-switch button. The RenderScale
+    // multiplier is intentionally hidden here — it's only meaningful when
+    // the user is composing for a target output size (Fixed mode).
+    return (
+        <div className="absolute z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap" style={{ top, left }}>
+            <button
+                onClick={(e) => { e.stopPropagation(); setMode('Fixed'); }}
+                className="flex items-center gap-1.5 text-[9px] font-bold text-gray-300 bg-black/80 px-2 py-1 rounded border border-white/10 hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-900/30 transition-all shadow-sm backdrop-blur-md group"
+                title="Switch to Fixed Resolution Mode"
+            >
+                <span className="w-2 h-2 border border-current rounded-sm group-hover:scale-110 transition-transform" />
+                Fixed
+            </button>
+        </div>
+    );
+};

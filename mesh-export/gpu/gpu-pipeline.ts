@@ -2,7 +2,7 @@
 // Converted from public/mesh-export/gpu-pipeline.js
 // All globals replaced with imports and callback parameters.
 
-import type { FractalDefinition } from '../../types/fractal';
+import type { FractalDefinition } from '../../engine-gmt/types/fractal';
 import type { SparseSDFGrid } from '../algorithms/sparse-grid';
 import type { VDBTree } from '../algorithms/vdb-writer';
 import type { DCMeshResult } from '../algorithms/dc-core';
@@ -13,12 +13,12 @@ import {
   buildMeshEscapeShader,
   buildMeshNewtonShader,
   buildMeshColorShader,
-} from '../../engine/SDFShaderBuilder';
-import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
+} from '../../engine-gmt/engine/SDFShaderBuilder';
+import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 
-import { ShaderFactory } from '../../engine/ShaderFactory';
-import type { ShaderConfig } from '../../engine/ShaderFactory';
-import { registry } from '../../engine/FractalRegistry';
+import { ShaderFactory } from '../../engine-gmt/engine/ShaderFactory';
+import type { ShaderConfig } from '../../engine-gmt/engine/ShaderFactory';
+import { registry } from '../../engine-gmt/engine/FractalRegistry';
 
 import { forEachBandBlock } from '../algorithms/sparse-grid';
 import { createTree, addLeafBlock, optimizeTree, serializeVDB, serializeMultiGridVDB, createVec3Tree, addVec3LeafBlock, optimizeVec3Tree } from '../algorithms/vdb-writer';
@@ -146,8 +146,9 @@ function setFormulaUniforms(
   }
   if (loc.uJuliaMode) gl.uniform1f(loc.uJuliaMode, p.juliaMode ? 1.0 : 0.0);
 
-  // Escape threshold & distance metric
+  // Escape threshold (coloring), DE bailout (geometry) & distance metric
   if (loc.uEscapeThresh) gl.uniform1f(loc.uEscapeThresh, p.escapeThresh ?? 10.0);
+  if (loc.uDeBailout) gl.uniform1f(loc.uDeBailout, p.deBailout ?? 100.0);
   if (loc.uDistanceMetric) gl.uniform1f(loc.uDistanceMetric, p.distanceMetric ?? 0);
 }
 

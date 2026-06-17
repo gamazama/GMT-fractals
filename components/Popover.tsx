@@ -1,5 +1,6 @@
 
 import React, { useRef, useEffect } from 'react';
+import { mergeRefs, useTutorAnchor } from '../engine/plugins/Tutorial';
 
 type PopoverAlign = 'center' | 'start' | 'end';
 
@@ -11,7 +12,13 @@ interface PopoverProps {
     onClose?: () => void;
     /** Set false to hide the pointer arrow. Default true. */
     arrow?: boolean;
-    dataTut?: string;
+    /** Tutorial anchor id — registers the popover root with the tutorial
+     *  anchor registry so lessons can position cards / highlights on it. */
+    tutAnchor?: string;
+    /** Horizontal padding. 'default' = p-3 (matches the original baked-in
+     *  spacing). 'none' = p-0 — for popovers whose inner rows want flush
+     *  alignment with the popover edge. */
+    padding?: 'default' | 'none';
 }
 
 const alignClasses: Record<PopoverAlign, { container: string; arrow: string }> = {
@@ -51,9 +58,11 @@ export const Popover: React.FC<PopoverProps> = ({
     className = '',
     onClose,
     arrow = true,
-    dataTut,
+    tutAnchor,
+    padding = 'default',
 }) => {
     const ref = useRef<HTMLDivElement>(null);
+    const anchorRef = useTutorAnchor(tutAnchor);
 
     useEffect(() => {
         if (!onClose) return;
@@ -74,9 +83,12 @@ export const Popover: React.FC<PopoverProps> = ({
 
     return (
         <div
-            ref={ref}
-            data-tut={dataTut}
-            className={`absolute top-full mt-3 ${a.container} ${width} bg-black border border-white/20 rounded-xl p-3 shadow-2xl z-[70] animate-fade-in ${className}`}
+            ref={tutAnchor ? mergeRefs(ref, anchorRef) : ref}
+            // max-h:80dvh + overflow scroll prevents popover content
+            // from exceeding the visible viewport on mobile (the Light
+            // Studio popup in particular has unbounded internal layout).
+            // mobile-scroll gives a thicker scroll surface for touch.
+            className={`absolute top-full mt-3 ${a.container} ${width} max-h-[80dvh] overflow-y-auto mobile-scroll bg-black border border-white/20 rounded-xl ${padding === 'none' ? 'py-3' : 'p-3'} shadow-2xl z-[70] animate-fade-in ${className}`}
             onClick={e => e.stopPropagation()}
         >
             {arrow && (

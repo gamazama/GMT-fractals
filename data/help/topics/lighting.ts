@@ -12,6 +12,7 @@ The engine utilizes a sophisticated **Physically Based Rendering (PBR)** approxi
 ## Light Types
 - **Point**: Standard light source. Has position and falloff.
 - **Directional (Sun)**: Parallel rays from infinity. Has rotation only. No falloff.
+- **Sphere (Area)**: Physical area light with finite extent. Produces geometrically-correct soft shadows and visible specular highlights on glossy/mirror surfaces. Requires Path Tracing mode + the **True Area Lights** engine setting. See *Sphere Area Lights* topic for the full setup.
 
 ## Top Bar Interaction
 - **Light Orbs**: Click an orb to toggle that light on/off.
@@ -37,7 +38,7 @@ When **Show 3D helpers** is enabled (in the Advanced Light panel), Point lights 
     'light.type': {
         id: 'light.type',
         category: 'Lighting',
-        title: 'Light Type (Point vs Sun)',
+        title: 'Light Type (Point / Sun / Sphere)',
         parentId: 'panel.light',
         content: `
 ### Point Light
@@ -53,6 +54,57 @@ Emits parallel light rays from infinity.
 - **Falloff**: Disabled (Infinite range). The light creates a constant wall of illumination.
 - **Shadows**: Orthographic (Parallel) shadows. Ideally suited for "Sunlight" effects.
 - **Visuals**: Indicated by a Sun icon (Rayed Circle) in the top bar.
+
+### Sphere (Area)
+Physical area light with finite extent — the most realistic option.
+- **Light Radius**: Defines the *physical size* of the light source. Larger = softer shadows, more diffused highlights.
+- **Shadows**: Geometrically correct — sharp close to the light's occluder, gradually softening with distance. Determined by physics (radius + distance), not the global Hardness slider.
+- **Specular Highlights**: Glossy and mirror surfaces show a real reflection of the light surface — the bright highlight you'd expect from a physical lamp reflecting off polished material.
+- **Visible Sphere**: Toggles only the rendered emitter ball. The light continues to integrate as an area light either way.
+- **Requires**: Path Tracing mode + the **True Area Lights** engine setting (Engine panel → Path Tracing → True Area Lights). See *Sphere Area Lights* topic for the full setup.
+- **In Direct mode**: Behaves as a Point light at the sphere's center. The per-light popover shows an amber warning when the prerequisites aren't met.
+`
+    },
+    'light.sphere': {
+        id: 'light.sphere',
+        category: 'Lighting',
+        title: 'Sphere Area Lights',
+        parentId: 'panel.light',
+        content: `
+**Physically-correct area lights for the path tracer.** A real lamp has a finite size — its shadows are geometrically softer when far from the surface and sharper when close, and it produces visible specular reflections on polished materials. Sphere area lights deliver this; Point lights cannot.
+
+## How to enable
+
+1. **Engine panel → Path Tracing → Path Tracing Core**: ON.
+2. **Engine panel → Active Mode**: Path Tracing (GI).
+3. **Engine panel → True Area Lights**: ON. This is a one-time recompile (~600 ms).
+4. **Per light**: right-click any light orb (or use the ☰ menu) and pick **Sphere (Area)**. The light gets a default radius of 0.5 — tune it to taste.
+
+If any of these are missing, the light's popover shows an amber warning explaining what's needed.
+
+## What changes vs Point lights
+
+- **Soft shadows are physical**, not faked. Width depends on the sphere's radius and the distance between occluder and surface — exactly how a lamp behaves in real life. The global *Hardness* slider does not apply.
+- **Glossy and mirror surfaces show specular highlights from the light** — a bright reflection of the sphere itself on polished material. Point lights never produced this in the path tracer.
+- **Convergence is roughly twice as fast** for scenes with sphere lights — clean shadows in ~64-128 accumulation frames instead of 256+. The PT combines two estimators (next-event sampling + BSDF sampling) using Multiple Importance Sampling.
+
+## The Visible Sphere toggle
+
+For Sphere lights, the **Visible Sphere** toggle controls *only* whether the glowing emitter ball is rendered in the viewport. The light continues to integrate as an area light when off — handy for getting a clean "invisible studio lighting" look while still benefitting from the physical shadows and reflections.
+
+For Point lights the toggle keeps its old behaviour: off = invisible analytical light at zero radius.
+
+## Sliders that don't apply
+
+- **Hardness** (in the Shadow panel): Affects only Point and Directional lights.
+- **Soft Shadow Jitter** (engine panel): A separate trick for faking soft shadows on Point lights via stochastic sampling. Not used by Sphere lights — they have real area sampling instead.
+- **Edge Softness** (per-light): Controls the *visible emitter sphere's* halo shape, not the area-light shadow softness.
+
+## Performance
+
+- One-time compile cost: ~600 ms when you enable True Area Lights.
+- Per-frame GPU cost scales with the number of Sphere lights (each bounce ray tests against every sphere light). Default 3-light scenes are fine. With 8+ Sphere lights enabled, the cost may show up — bench-verify if needed.
+- Default scenes that don't enable True Area Lights pay no cost — the new code paths are stripped at GPU compile.
 `
     },
     'light.rot': {
@@ -169,18 +221,21 @@ Each light has its own **Cast Shadow** checkbox, so you can choose exactly which
 We do not use Shadow Maps (rasterization) or BVH Raytracing. We march a ray from the surface *towards* the light.
 
 ## Parameters
-- **Softness**: Simulates the **Size** of the light source (Area Light). Uses a logarithmic scale.
+- **Hardness**: Controls penumbra width for **Point and Directional lights only**. Uses a logarithmic scale.
   - **Low (2–10)**: Pin-point light source. Sharp, hard shadows.
   - **Medium (50–200)**: Moderate-sized light. Visible penumbra.
-  - **High (500–2000)**: Very large area light. Extremely soft, diffuse shadows.
+  - **High (500–2000)**: Very large light. Extremely soft, diffuse shadows.
+  - *Sphere area lights ignore this — their softness comes from physical sphere sampling.*
 - **Intensity**: The opacity of the shadow. Lower this to simulate ambient light filling in the dark spots.
 - **Bias**: **Critical Setting**.
   - Pushes the shadow start point away from the surface.
   - **Too Low**: "Shadow Acne" (Black noise/speckles on the surface).
   - **Too High**: "Peter Panning" (Shadow detaches from the object).
 
-## Stochastic Shadows / Area Lights
-This is a **compile-time feature** — you need to enable it in the shadow settings, which triggers a shader recompilation. Once enabled, the engine uses randomised sampling to produce realistic area-light shadows.
+## Soft Shadow Jitter (formerly "Area Lights")
+A **compile-time feature** — enable it in the shadow settings to recompile the shader with stochastic shadow code. Once on, the engine perturbs the shadow ray within a cone to *fake* soft shadows on Point and Directional lights via accumulation. This is a fast approximation, not physically correct.
+
+For *true* area lights with geometrically-correct soft shadows + visible specular highlights, use the **Sphere** light type instead — see *Sphere Area Lights* topic. The two systems are independent: jitter still works for Point lights, sphere sampling drives Sphere lights.
 
 ### Shadow Quality Levels
 - **Hard Only**: Traditional sharp shadows with no stochastic sampling. Fastest.

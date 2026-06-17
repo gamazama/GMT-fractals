@@ -6,9 +6,9 @@
 //   runMeshPipeline(params, ui) -> MeshPipelineResult
 //   runExportMesh(format, lastMesh, lastBaseName, vdbParams, ui) -> ExportResult
 
-import type { FractalDefinition } from '../../types/fractal';
-import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
-import { classifyDEType } from '../../engine/SDFShaderBuilder';
+import type { FractalDefinition } from '../../engine-gmt/types/fractal';
+import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
+import { classifyDEType } from '../../engine-gmt/engine/SDFShaderBuilder';
 import type { DCMeshResult } from '../algorithms/dc-core';
 import type {
   PipelineCallbacks,
@@ -160,6 +160,7 @@ export async function runMeshPipeline(
   let sparseGrid: SparseSDFGrid | null = null;
   let sdfGrid: Float32Array | null = null;
   let smoothingSkipped = false;
+  let newtonApplied = false;
 
   const formulaName = definition.name || definition.id || 'unknown';
   ui.log('=== Generate: ' + formulaName + ' ===', 'phase');
@@ -509,7 +510,7 @@ export async function runMeshPipeline(
     if (!mesh || mesh.vertexCount === 0) {
       ui.log('No surface found \u2014 check parameters and bounds', 'error');
       ui.setStatus('No surface found! Try different parameters.');
-      return { mesh: null, timings: null, baseName: '', useNarrowBand, gl };
+      return { mesh: null, timings: null, baseName: '', newtonApplied: false, useNarrowBand, gl };
     }
 
     ui.log('DC result: ' + mesh.vertexCount.toLocaleString() + ' vertices, ' + mesh.faceCount.toLocaleString() + ' faces (' + ((t2 - t1) / 1000).toFixed(1) + 's)', 'data');
@@ -563,6 +564,7 @@ export async function runMeshPipeline(
 
       gpuNewtonProject(gl, mesh, definition, formulaParams, power, iters, voxSize, newtonSteps, ui.log, interlace);
       tNewton = performance.now();
+      newtonApplied = true;
       ui.setPhase('Phase 3: Newton Projection', 100);
       ui.log('GPU Newton done: ' + ((tNewton - t2) / 1000).toFixed(1) + 's', 'success');
 
@@ -677,6 +679,7 @@ export async function runMeshPipeline(
     mesh,
     baseName,
     smoothingSkipped,
+    newtonApplied,
     timings,
     useNarrowBand,
     gl,

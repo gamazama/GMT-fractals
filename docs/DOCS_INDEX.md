@@ -1,160 +1,177 @@
-# GMT Documentation - Master Index
+# gmt-engine Documentation — Master Index
 
-## 🎯 Introduction to GMT
+## What this is
 
-**GMT (Fractal Explorer)** is a professional-grade, real-time 3D fractal engineering tool running entirely in the browser. It combines high-performance GPU Raymarching with a reactive, data-driven UI to render complex mathematical structures (Mandelbulbs, Mandelboxes, IFS) with photorealistic lighting, Path Tracing, and infinite zoom capabilities.
+**gmt-engine** is a generic application engine extracted from GMT. It provides the plumbing — DDFS, animation, UI primitives, save/load, shortcuts, undo, plugin seams, HUD — on top of which apps build their domain (fractals, fluids, whatever's next). The engine ships **one tiny core** plus a set of **opt-in core plugins**; apps install what they need.
 
-This documentation system provides comprehensive information for developers working on GMT. Whether you're fixing bugs, adding features, or understanding the architecture, this index will guide you to the right resources.
+These docs are split into **engine** (authoritative, forward-looking) and **gmt** (legacy GMT-era reference, preserved for the eventual GMT-onto-engine port).
 
-## 📚 Documentation Overview
+## Layout
 
-The GMT documentation is organized into several complementary systems:
+```
+docs/
+├── DOCS_INDEX.md                  ← you are here
+├── FEATURE_STATUS.md              engine snapshot (what works / what's missing)
+├── CHANGELOG_DEV.md               running dev log
+│
+├── engine/                        ← engine docs — authoritative
+│   ├── 01_Architecture.md
+│   ├── 02_Feature_Registry.md
+│   ├── 03_Plugin_Contract.md
+│   ├── 04_Core_Plugins.md
+│   ├── 05_Shared_UI.md
+│   ├── 06_Undo_Transactions.md
+│   ├── 07_Shortcuts.md
+│   ├── 08_Animation.md
+│   ├── 09_Bridges_and_Derived.md
+│   ├── 10_Viewport.md
+│   ├── 11_Plugin_Authoring.md     how to build a new core plugin
+│   ├── 12_App_Handles.md          typed cross-tree state pattern
+│   ├── 13_Extracting_From_GMT.md  cookbook for lifting GMT features into engine-core
+│   └── 20_Fragility_Audit.md
+│
+├── gmt/                           ← legacy GMT docs — reference only
+│   ├── 01_System_Architecture.md  engine-bridge pattern (pre-extraction)
+│   ├── 02_Rendering_Internals.md  raymarching, SDF, path tracing
+│   ├── 03_Modular_System.md       modular graph builder, node-to-GLSL
+│   ├── 04_Animation_Engine.md     (pre-engine-port version)
+│   ├── 05_Data_and_Export.md      GMF format, presets, video export
+│   ├── 06_Troubleshooting_and_Quirks.md
+│   ├── 07_Code_Health.md          GMT technical debt tracker
+│   ├── 08_File_Structure.md       GMT codebase layout (pre-extraction)
+│   ├── 21–27_*.md                 formula / frag importer / shader tests
+│   ├── 30_Mesh_Export_Prototype.md
+│   ├── 43_Bucket_Render_Overhaul.md
+│   └── 44_Preview_Region_Plan.md
+│
+├── archive/                       truly retired design notes
+├── research/                      open investigations
+└── specs/                         spec-ish deep dives
+```
 
-1. **Technical Documentation** (this folder): Detailed architecture, rendering, and implementation guides
-2. **In-App Help System** (`data/help/`): User-facing documentation accessible from the application
-3. **README.md**: Project overview, quick start, and high-level documentation
-4. **CLAUDE.md**: Condensed architecture overview and instructions for AI sessions
+## Stability markers
 
-## 📖 Technical Documentation - Table of Contents
+Each engine architecture doc opens with a marker:
 
-### Core Architecture
-| File | Purpose | Key Topics |
-|------|---------|-------------|
-| [01_System_Architecture.md](01_System_Architecture.md) | **Foundation** | Engine-Bridge pattern, DDFS, render loop, state management |
-| [02_Rendering_Internals.md](02_Rendering_Internals.md) | **Raymarching** | SDF, Cook-Torrance PBR, reflection tracing, path tracing, fog system, precision math, accumulation, bucket rendering |
-| [03_Modular_System.md](03_Modular_System.md) | **Modular Graph Builder** | Node graph → GLSL compiler, JIT code generation, uniform flattening |
-| [04_Animation_Engine.md](04_Animation_Engine.md) | **Timeline** | Keyframes, interpolation, unified camera, offline rendering |
-| [05_Data_and_Export.md](05_Data_and_Export.md) | **I/O System** | Video export (multi-pass + Firefox quirks), PNG/JPG image sequences, presets, GMF format, storage strategies |
-| [06_Troubleshooting_and_Quirks.md](06_Troubleshooting_and_Quirks.md) | **Debug Guide** | WebGL issues, export problems, precision artifacts |
-| [07_Code_Health.md](07_Code_Health.md) | **Maintenance** | Technical debt, refactor status, optimization opportunities |
-| [08_File_Structure.md](08_File_Structure.md) | **Reference** | Complete file map with responsibilities |
+- 🔒 **Stable** — API committed; breaking changes only with major version.
+- 🚧 **Evolving** — shape likely but details under active design.
+- ⚠️ **Fragile** — known issues (see `engine/20_Fragility_Audit.md`); consult before depending.
+- 🧪 **Experimental** — proof-of-concept, not yet committed.
 
-### Fragmentarium Importer & Formulas
-| File | Purpose |
-|------|---------|
-| [21_Frag_Importer_Current_Status.md](21_Frag_Importer_Current_Status.md) | **⚠️ START HERE — current status and known issues** |
-| [22_Frag_to_Native_Formula_Conversion.md](22_Frag_to_Native_Formula_Conversion.md) | Guide: converting .frag formulas to native GMT .ts formulas |
-| [23_Formula_Audit.md](23_Formula_Audit.md) | Formula correctness audit: naming, descriptions, params, DE |
-| [24_Formula_Interlace_System.md](24_Formula_Interlace_System.md) | Interlace architecture, preambleVars contract, quirks, improvement suggestions |
-| [25_Formula_Dev_Reference.md](25_Formula_Dev_Reference.md) | **Unified formula writing reference**: full API surface, shader fields, parameters, GLSL built-ins, quirks & gotchas, templates |
-| [26_Formula_Workshop_V4_Plan.md](26_Formula_Workshop_V4_Plan.md) | **V4 rewrite plan** \u2014 self-contained SDE first, verification harness, Fragmentarium as spec reference |
-| [26b_Fragmentarium_Spec.md](26b_Fragmentarium_Spec.md) | **Fragmentarium `.frag` format spec** \u2014 canonical directives, annotations, render-model classification; drives V4 Stage 2 |
-| [27_Shader_Testing_Suite.md](27_Shader_Testing_Suite.md) | **GLSL shader verification harness** \u2014 Playwright-driven, real ShaderFactory path, 6 gates. Usable beyond the importer |
-| [research/v4-rethink-prompt.md](research/v4-rethink-prompt.md) | Self-contained prompt for a fresh session to rethink V4 architecture |
-| [research/hybrid-formula-architecture-comparison.md](research/hybrid-formula-architecture-comparison.md) | **How Mandelbulber2 / Fragmentarium / Fraktaler architect hybrid formulas** — confirms GMT's per-iter contract is mainstream; retires Strategy I; points at N-formula sequences as the real gap |
+## Engine docs — table of contents
 
-### Archive
-Historical design docs, completed reports, and superseded references are in [`docs/archive/`](archive/). See [`archive/README.md`](archive/README.md) for a categorized index.
+### Foundation
+| # | File | Status | Scope |
+|---|---|---|---|
+| 01 | [Architecture](engine/01_Architecture.md) | 🚧 | Core + plugins + apps model; engine boundaries; render-loop ownership |
+| 02 | [Feature Registry](engine/02_Feature_Registry.md) | 🚧 | `defineFeature`, isolation via `dependsOn`, lifecycle hooks, auto-derivation |
+| 03 | [Plugin Contract](engine/03_Plugin_Contract.md) | 🚧 | Three-step add-on: `registerFeatures.ts` → store → `setup.ts`; freeze semantics |
+| 04 | [Core Plugins](engine/04_Core_Plugins.md) | 🚧 | viewport, topbar, scene-io, render-loop, shortcuts, undo, camera, animation, menu, hud, help — 11 shipped |
 
-### Changelog
-| File | Purpose |
-|------|---------|
-| [CHANGELOG_DEV.md](CHANGELOG_DEV.md) | Development changelog for current dev branch (v0.9.1) |
+### Subsystems
+| # | File | Status | Scope |
+|---|---|---|---|
+| 05 | [Shared UI](engine/05_Shared_UI.md) | 🚧 | Pure primitives; `AnimationContext` / `UndoContext` / `ShortcutContext` opt-in |
+| 06 | [Undo & Transactions](engine/06_Undo_Transactions.md) | 🚧 | Unified stack; scopes; debounce groups |
+| 07 | [Shortcuts](engine/07_Shortcuts.md) | 🚧 | Registry, scope stack, priority, text-input guard, rebinding |
+| 08 | [Animation](engine/08_Animation.md) | 🚧 | DDFS param auto-animation; BinderRegistry; interpolators by type |
+| 09 | [Bridges & Derived](engine/09_Bridges_and_Derived.md) | 🚧 | Explicit intra-feature coordination; `derive()` / `bridge()` |
+| 10 | [Viewport](engine/10_Viewport.md) | 🚧 | Size modes, DPR, interaction state, FPS probe, adaptive quality |
 
-## 🚀 Getting Started
+### Authoring & App Patterns
+| # | File | Status | Scope |
+|---|---|---|---|
+| 11 | [Plugin Authoring](engine/11_Plugin_Authoring.md) | 🚧 | How to build a new core plugin — the four-part shape, seven rules |
+| 12 | [App Handles](engine/12_App_Handles.md) | 🚧 | Typed cross-tree state (`defineAppHandles<T>`) for apps |
+| 13 | [Extracting From GMT](engine/13_Extracting_From_GMT.md) | ✅ | Cookbook for lifting GMT features into engine-core — triage + worked example (TSAA + pause button) |
+| 14 | [Panel Manifest](engine/14_Panel_Manifest.md) | 🚧 | How `panels.ts` declares which features compose into which panels |
+| 15 | [Camera Manager Extraction](engine/15_Camera_Manager_Extraction.md) | 🚧 | StateLibrary primitive — how cameras/views/palettes share one mechanism |
+| 16 | [Type Augmentation](engine/16_Type_Augmentation.md) | 🔒 | DDFS slices + state-library keys — the two-target declaration-merge rule |
+| 17 | [Mobile Layout](engine/17_Mobile_Layout.md) | 🚧 | Mobile detection, UI-mode preference, layout primitives, mobile menu rendering, sibling-app adoption |
 
-### For New Contributors
-1. Start with [README.md](../README.md) - Quick start and project overview
-2. Read [01_System_Architecture.md](01_System_Architecture.md) - Understand the core engine pattern
-3. Check [08_File_Structure.md](08_File_Structure.md) - Navigate the codebase
-4. Review [07_Code_Health.md](07_Code_Health.md) - Know the current state of the code
+### Audit
+| # | File | Status | Scope |
+|---|---|---|---|
+| 20 | [Fragility Audit](engine/20_Fragility_Audit.md) | 🔒 | Known issues + remediation status |
+| 21 | [Code Review 2026-04-25](engine/21_Code_Review_2026-04-25.md) | 🔒 | Independent multi-agent survey: what matches docs, what's overstated, 3 live bugs, onboarding gaps |
+| — | [Feature Status](FEATURE_STATUS.md) | 🔒 | Post-phase-5 snapshot across engine + apps |
 
-### For Feature Development
-1. Read [01_System_Architecture.md](01_System_Architecture.md) §2 - Learn about DDFS (Data-Driven Feature System)
-2. Check existing patterns in `engine/FeatureSystem.ts` and `features/` folder
-3. Follow the DDFS implementation pattern (documented in architecture guide §2.2e for reference features)
-4. For modular graph nodes, see [03_Modular_System.md](03_Modular_System.md)
-5. Test with both Direct and Path Tracing modes
+## Apps — per-app onboarding
 
-### For Bug Fixes
-1. Identify the system involved (UI, Engine, or Bridge)
-2. Check [06_Troubleshooting_and_Quirks.md](06_Troubleshooting_and_Quirks.md) for known issues
-3. Use [08_File_Structure.md](08_File_Structure.md) to locate relevant files
-4. Document the fix in the appropriate guide if it reveals new patterns
+Each app folder owns a README that's the canonical entry point for "I'm
+about to work on this app":
 
-## 🔗 Cross-Reference Guide
+| App | README | What it covers |
+|---|---|---|
+| `app-gmt` | [app-gmt/README.md](../app-gmt/README.md) | File map, boot order, how to add a GMT feature/formula, key shortcuts, GMF format |
+| `fluid-toy` | [fluid-toy/README.md](../fluid-toy/README.md) | File map, "how to add a feature" recipe, deliberate-weirdness gotchas, smoke commands |
+| `demo` | [demo/README.md](../demo/README.md) | Minimal three-file plugin contract walkthrough |
 
-### Architecture Concepts
-- **Engine-Bridge Pattern**: [01_System_Architecture.md](01_System_Architecture.md#1-the-engine-bridge-pattern)
-- **Data-Driven Feature System (DDFS)**: [01_System_Architecture.md](01_System_Architecture.md#2-data-driven-feature-system-ddfs)
-- **Virtual Space (Infinite Zoom)**: [02_Rendering_Internals.md](02_Rendering_Internals.md#1-coordinate-precision-the-treadmill)
-- **Temporal Super Sampling**: [02_Rendering_Internals.md](02_Rendering_Internals.md#3-the-pipeline-renderpipelinets)
-- **Modular Graph Builder**: [03_Modular_System.md](03_Modular_System.md#1-the-compiler-graphcompiler.ts)
-- **Animation Engine**: [04_Animation_Engine.md](04_Animation_Engine.md)
+## Reading paths
 
-### Key Files & Locations
-| Concept | File |
-|---------|------|
-| Main Engine Loop | `engine/FractalEngine.ts` |
-| Feature Definitions | `engine/FeatureSystem.ts` |
-| Store & State | `store/fractalStore.ts` |
-| Shader Assembly | `engine/ShaderFactory.ts` |
-| Animation Timeline | `engine/AnimationEngine.ts` |
-| Video Export | `engine/worker/WorkerExporter.ts` |
-| Auto-Generated UI | `components/AutoFeaturePanel.tsx` |
-| Compilable Feature UI | `components/CompilableFeatureSection.tsx` |
+### New contributor
+1. [../CONTRIBUTING.md](../CONTRIBUTING.md) — setup, PR checklist, architecture rules summary.
+2. [engine/01_Architecture.md](engine/01_Architecture.md) — three-tier model.
+3. [engine/02_Feature_Registry.md](engine/02_Feature_Registry.md) — the core primitive.
+4. [engine/03_Plugin_Contract.md](engine/03_Plugin_Contract.md) — how apps plug in.
+5. [../demo/README.md](../demo/README.md) — a real three-file add-on walkthrough.
 
-### User Documentation
-The in-app help system is located in `data/help/`. Topics include:
-- Formula library and usage
-- Rendering techniques (Direct vs Path Trace)
-- Lighting and materials
-- Animation and keyframing
-- Scene configuration
-- UI controls and shortcuts
+### Adding a feature
+1. [engine/02_Feature_Registry.md](engine/02_Feature_Registry.md) — `defineFeature` shape.
+2. [engine/08_Animation.md](engine/08_Animation.md) — how your params become animatable.
+3. [engine/09_Bridges_and_Derived.md](engine/09_Bridges_and_Derived.md) — if your feature talks to another.
 
-## 📝 Documentation Guidelines
+### Authoring a core plugin
+1. [engine/11_Plugin_Authoring.md](engine/11_Plugin_Authoring.md) — the pattern + seven rules.
+2. [engine/04_Core_Plugins.md](engine/04_Core_Plugins.md) — shipped plugins as reference.
+3. [engine/03_Plugin_Contract.md](engine/03_Plugin_Contract.md) — registration/boot contract.
 
-### How to Use This System
-1. **Start with the README** for project overview and quick start
-2. **Use the Table of Contents** to find relevant technical guides
-3. **Follow cross-references** between different documentation types
-4. **Check CLAUDE.md** for AI session context
+### Porting an app onto the engine
+1. [engine/01_Architecture.md](engine/01_Architecture.md) — what the engine provides.
+2. [engine/04_Core_Plugins.md](engine/04_Core_Plugins.md) — which plugins to install.
+3. [engine/12_App_Handles.md](engine/12_App_Handles.md) — cross-tree state pattern.
+4. [engine/16_Type_Augmentation.md](engine/16_Type_Augmentation.md) — typed slices + state-library keys.
+5. [engine/20_Fragility_Audit.md](engine/20_Fragility_Audit.md) — sharp edges to avoid.
 
-### Updating Documentation
-When making changes to GMT:
-1. If you struggle to understand a code section - document it
-2. If you discover an undocumented pattern - add it
-3. If you fix a bug with non-obvious causes - document the fix
-4. If you add a new feature or system - write comprehensive docs
-5. Keep documentation in sync with code changes
+### Working on fluid-toy
+1. [fluid-toy/README.md](../fluid-toy/README.md) — file map, recipes, gotchas. **Start here.**
+2. [engine/02_Feature_Registry.md](engine/02_Feature_Registry.md) — `defineFeature` shape (for adding a feature).
+3. [engine/16_Type_Augmentation.md](engine/16_Type_Augmentation.md) — when adding a slice or state library.
+4. [engine/14_Panel_Manifest.md](engine/14_Panel_Manifest.md) — when changing how panels compose.
 
-### Documentation Style
-- Use clear, technical language
-- Include file paths with backticks: `engine/FractalEngine.ts`
-- Use code blocks for examples
-- Add "Rule:" prefixes for important guidelines
-- Include "Why:" explanations for non-obvious decisions
-- Cross-reference related sections
+### Debugging
+1. [engine/20_Fragility_Audit.md](engine/20_Fragility_Audit.md) — check for known issues first.
+2. Relevant subsystem doc (06–10).
+3. [gmt/06_Troubleshooting_and_Quirks.md](gmt/06_Troubleshooting_and_Quirks.md) — for WebGL / raymarching issues (legacy GMT).
 
-## 🎯 Quick Reference Cards
+## GMT-era reference
 
-### Critical Rules
-1. **Never bind React state directly in render loops** - use the bridge pattern
-2. **Use DDFS for state management** - don't create manual slices
-3. **Let the system auto-generate UI** - use AutoFeaturePanel when possible
-4. **Read docs before making changes** - prevent unnecessary bugs
-5. **Update documentation after changes** - keep the system useful
+The [gmt/](gmt/) subdir preserves pre-extraction GMT docs for the eventual port. **Do not treat these as engine commitments** — they describe what GMT does today, which will become GMT-plugin concerns when we port.
 
-### Performance Tips
-- Use `textureLod0` helper for texture lookups in raymarching loops
-- Set `uEncodeOutput = 1.0` for sRGB gamma during video export
-- Use CPU distance probe to avoid GPU stalls on low-end devices
-- Lower "Max Steps" and "Ray Detail" to fix TDR crashes
+- `01–08` — GMT architecture, rendering, modular graph, animation, data, file structure (pre-engine-split).
+- `21–27` — Fragmentarium importer, formula dev, shader test harness.
+- `30, 43, 44` — Mesh export, bucket render, preview region.
 
-### Debugging Checklist
-1. Check browser console for WebGL errors
-2. Use Shader Debugger (`components/ShaderDebugger.tsx`)
-3. Check State Debugger for feature parameter values
-4. Use Performance Monitor to identify bottlenecks
-5. Try the "Fastest" or "Preview" viewport quality preset to isolate GPU-related issues
+## Style
 
-## 📚 Additional Resources
+- File paths in markdown links: `[text](path/to/file.ts)` for clickable references.
+- Line references: `[FeatureSystem.ts:236](engine/FeatureSystem.ts#L236)`.
+- **Rule:** prefix for normative guidance.
+- **Why:** explanation immediately after.
+- **Decision** blocks at the bottom of architecture docs: what/when/alternatives/rationale.
+- Stability marker in every doc's H1.
 
-- **GitHub Repository**: [https://github.com/gamazama/GMT-fractals](https://github.com/gamazama/GMT-fractals)
-- **License**: [GPL-3.0 License](../LICENSE)
-- **Package Dependencies**: [package.json](../package.json)
+### Adding a doc
+
+- New subsystem or core plugin → new numbered doc in `engine/`.
+- New primitive or pattern within existing subsystem → section in existing doc.
+- Bug fix with non-obvious root cause → note in `engine/20_Fragility_Audit.md`.
+- Design decision (even rejected) → "Decisions" section of the relevant doc.
+
+### Deleting a doc
+
+Don't. Move to `archive/` with a one-line "why archived" at the top. Keeps history discoverable.
 
 ---
 
-*Last updated: April 2026 (v0.9.1 — mesh export VDB, formula interlace, polyhedra formulas)*
+*Engine fork point: GMT 0.9.2 (commit `ece5c84`). Last doc refresh: 2026-04-23 (engine/gmt subdir split; `11_Plugin_Authoring` + `12_App_Handles` added; `toy-fluid/` reference fork retired; debug scratch cleaned).*

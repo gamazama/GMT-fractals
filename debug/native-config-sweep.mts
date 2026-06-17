@@ -1,5 +1,5 @@
 /**
- * Native Formula × Engine Config Sweep
+ * Native Formula × Engine Config Sweep (ported from stable/debug)
  *
  * For each eligible native formula, compile its shader through the real engine
  * ShaderFactory under a given feature-config mode, and gate on webglCompile.
@@ -30,14 +30,15 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { chromium, Browser, Page } from 'playwright';
 
-import { registry } from '../engine/FractalRegistry.ts';
-import { ShaderFactory } from '../engine/ShaderFactory.ts';
-import type { ShaderConfig } from '../engine/ShaderFactory.ts';
-import { createDefaultShaderConfig } from '../engine/ConfigDefaults.ts';
-import { registerFeatures } from '../features/index.ts';
-import '../formulas/index.ts';
-
+// Mirror app-gmt boot order: features register, then formulas register on import.
+import { registerFeatures } from '../engine-gmt/features/index.ts';
 registerFeatures();
+import '../engine-gmt/formulas/index.ts';
+
+import { registry } from '../engine-gmt/engine/FractalRegistry.ts';
+import { ShaderFactory } from '../engine-gmt/engine/ShaderFactory.ts';
+import type { ShaderConfig } from '../engine-gmt/engine/ShaderFactory.ts';
+import { createDefaultShaderConfig } from '../engine-gmt/engine/ConfigDefaults.ts';
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
@@ -112,19 +113,6 @@ function eligibleFormulas(): string[] {
 
 // ─── Shader build ────────────────────────────────────────────────────────────
 
-// DE-slice preview main. Samples map() across 2×2 axis-slice quadrants and
-// encodes the full vec4 return:
-//   R = orbit trap (log-normalized)
-//   G = iteration count (0..1)
-//   B = signed distance (banded, log scale)
-// Known limitation: for most native formulas the engine's map() returns a
-// constant value in the validator environment regardless of input position
-// (because it depends on runtime state — camera, lighting, features — we
-// don't supply). In those cases the thumbnail is uniform-colored; that's
-// honest output, not a bug. Formulas where map() varies (~7/42, mostly
-// polyhedra + JuliaMorph) show proper slice structure.
-//
-// NaN / Inf → pure orange (255,128,0) for validator's NaN detector.
 const PREVIEW_MAIN = `
 layout(location = 0) out vec4 pc_fragColor;
 
@@ -188,13 +176,7 @@ function buildShader(formulaId: string, mode: Mode): string {
     return raw;
 }
 
-function buildUniforms(formulaId: string): Record<string, any> {
-    // Use v4-verify's generic defaults (uParamA=1 not 8) — formula-specific
-    // defaults (e.g. Mandelbulb paramA=8) produce degenerate DE output in the
-    // validator environment because high power-values escape to infinity in a
-    // single iteration and getDist returns near-constant values. Generic
-    // uParamA=1 gives milder iteration that varies more meaningfully across
-    // sample space.
+function buildUniforms(_formulaId: string): Record<string, any> {
     return {
         uIterations: 16, uEscapeThresh: 1000, uJuliaMode: 0, uJulia: [0, 0, 0],
         uCameraPosition: [0, 0, -3], uResolution: [64, 64], uTime: 0,

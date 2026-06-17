@@ -1,0 +1,1292 @@
+<!--
+  GMF: GPU Mandelbulb Format v1.0
+  A portable container for Fractal math definitions + default presets.
+  You can edit the GLSL blocks below directly.
+-->
+
+  /*
+   * --- GMT SHADER API REFERENCE ---
+   *
+   * Scalar Parameters (float uniforms — mapped to UI sliders):
+   *   uParamA, uParamB, uParamC, uParamD, uParamE, uParamF
+   *
+   * Vector Parameters (mapped to multi-axis UI controls):
+   *   vec2 uVec2A, uVec2B, uVec2C
+   *   vec3 uVec3A, uVec3B, uVec3C
+   *   vec4 uVec4A, uVec4B, uVec4C
+   *
+   * System Uniforms:
+   *   int   uIterations      — Iteration count (user-adjustable)
+   *   float uTime            — Elapsed time in seconds
+   *   vec3  uJulia           — Julia seed coordinates (if Julia mode active)
+   *   float uJuliaMode       — 1.0 if Julia mode active, 0.0 otherwise
+   *   float uDistanceMetric  — 0=Euclidean, 1=Chebyshev, 2=Manhattan, 3=Quartic
+   *
+   * Built-in Helper Functions:
+   *   void  sphereFold(inout vec3 z, inout float dz, float minR, float fixedR)
+   *   void  boxFold(inout vec3 z, inout float dz, float foldLimit)
+   *   float snoise(vec3 v)                — Simplex Noise (-1.0 to 1.0)
+   *   float getLength(vec3 p)             — Distance metric (respects uDistanceMetric)
+   *
+   * Rotation Helpers (branchless, CPU-precomputed matrices):
+   *   void applyPreRotation(inout vec3 p)   — Applied inside loop, before formula
+   *   void applyPostRotation(inout vec3 p)  — Applied inside loop, after formula
+   *   void applyWorldRotation(inout vec3 p) — Applied before iteration loop
+   *
+   * Formula Function Signature:
+   *   void formula_NAME(inout vec4 z, inout float dr, inout float trap, vec4 c)
+   *     z    : Current coordinate (.xyz = position, .w = auxiliary)
+   *     dr   : Running derivative (float) — used for distance estimation
+   *     trap : Orbit trap accumulator (float) — used for coloring
+   *     c    : Constant for the fractal (Julia seed or initial position)
+   *
+   * To modify this formula, edit the GLSL blocks below directly.
+   * The Metadata JSON block configures parameter names, ranges, and defaults.
+   */
+
+<Metadata>
+{
+  "id": "Apollonian",
+  "name": "Apollonian",
+  "shortDescription": "Apollonian gasket — sphere packing via iterative inversion.",
+  "description": "Apollonian gasket fractal using space folding and sphere inversion. Each iteration folds space into a unit cube then applies an inversion sphere, creating a foam-like recursive sphere packing. Based on kosalos's Fragmentarium implementation (fractalforums.org). The modulation factor 't' is computed once from the initial ray position before iterations, matching the reference. Optional spherical inversion pre-transform mode (Inversion > 0) replicates the reference 'doInversion' mode with center, radius, and XY angle rotation with proper DE correction.",
+  "juliaType": "offset",
+  "tags": [
+    "sphere-packing",
+    "inversion",
+    "foam"
+  ],
+  "parameters": [
+    { "label": "Foam", "id": "paramA", "min": 0.1, "max": 3, "step": 0.001, "default": 1.032 },
+    { "label": "Foam 2", "id": "paramB", "min": 0.1, "max": 3, "step": 0.001, "default": 0.92 },
+    { "label": "Modulation", "id": "paramC", "min": 0, "max": 2, "step": 0.001, "default": 0.658 },
+    { "label": "Inversion", "id": "paramD", "min": 0, "max": 1, "step": 1, "default": 0, "mode": "toggle" },
+    {
+      "label": "Fold Scale",
+      "id": "vec3A",
+      "type": "vec3",
+      "min": -1,
+      "max": 4,
+      "step": 0.001,
+      "default": {
+        "x": 0.946,
+        "y": -0.009,
+        "z": -0.055
+      }
+    },
+    {
+      "label": "Inv Center",
+      "id": "vec3B",
+      "type": "vec3",
+      "min": -5,
+      "max": 5,
+      "step": 0.001,
+      "default": {
+        "x": 0.758,
+        "y": 0.312,
+        "z": 0.61
+      }
+    },
+    {
+      "label": "Inv Radius / Angle",
+      "id": "vec2A",
+      "type": "vec2",
+      "min": -6.3,
+      "max": 10,
+      "step": 0.001,
+      "default": {
+        "x": 2.74,
+        "y": 0.07
+      }
+    },
+    { "label": "Twist", "id": "paramF", "min": -2, "max": 2, "step": 0.01, "default": 0 }
+  ],
+  "defaultPreset": {
+    "formula": "Apollonian",
+    "features": {
+      "coreMath": {
+        "iterations": 13,
+        "paramA": 1.4,
+        "paramB": 1,
+        "paramC": 0,
+        "paramD": 1,
+        "paramF": 0,
+        "vec2A": {
+          "x": 1,
+          "y": 0.502
+        },
+        "vec3A": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "vec3B": {
+          "x": 1.3525,
+          "y": 0.3285,
+          "z": 0.61
+        }
+      },
+      "coloring": {
+        "gradient": {
+          "stops": [
+            {
+              "id": "apo_0",
+              "position": 0,
+              "color": "#0D0221",
+              "bias": 0.5,
+              "interpolation": "linear"
+            },
+            {
+              "id": "apo_1",
+              "position": 0.15,
+              "color": "#2A0845",
+              "bias": 0.5,
+              "interpolation": "linear"
+            },
+            {
+              "id": "apo_2",
+              "position": 0.3,
+              "color": "#6B1D6B",
+              "bias": 0.5,
+              "interpolation": "linear"
+            },
+            {
+              "id": "apo_3",
+              "position": 0.5,
+              "color": "#D4418E",
+              "bias": 0.5,
+              "interpolation": "linear"
+            },
+            {
+              "id": "apo_4",
+              "position": 0.7,
+              "color": "#FF7F50",
+              "bias": 0.2247,
+              "interpolation": "linear"
+            },
+            {
+              "id": "apo_5",
+              "position": 0.85,
+              "color": "#FFD700",
+              "bias": 0.2837,
+              "interpolation": "linear"
+            },
+            {
+              "id": "apo_6",
+              "position": 1,
+              "color": "#1A0533",
+              "bias": 0.5,
+              "interpolation": "linear"
+            }
+          ],
+          "colorSpace": "srgb"
+        },
+        "mode": 0,
+        "scale": 9.5331,
+        "offset": 1.1556,
+        "repeats": 1,
+        "phase": 0.11,
+        "bias": 1,
+        "colorIter": 0,
+        "twist": 0,
+        "escape": 2,
+        "gradient2": [
+          {
+            "id": "1",
+            "position": 0.3,
+            "color": "#FFFFFF"
+          },
+          {
+            "id": "2",
+            "position": 0.8,
+            "color": "#D4418E"
+          }
+        ],
+        "mode2": 5,
+        "scale2": 1,
+        "offset2": 0,
+        "repeats2": 1,
+        "phase2": 0,
+        "bias2": 1,
+        "twist2": 0,
+        "blendMode": 2,
+        "blendOpacity": 0,
+        "layer3Color": "#ffffff",
+        "layer3Scale": 89,
+        "layer3Strength": 0,
+        "layer3Bump": 0,
+        "layer3Turbulence": 0,
+        "layer3Enabled": true
+      },
+      "ao": {
+        "aoIntensity": 0.411,
+        "aoSpread": 0.0032,
+        "aoSamples": 5,
+        "aoMode": false,
+        "aoColor": "#000000",
+        "aoMaxSamples": 32,
+        "aoStochasticCp": true,
+        "aoEnabled": true
+      },
+      "texturing": {
+        "active": false,
+        "layer1Data": null,
+        "colorSpace": 0,
+        "mapU": 6,
+        "mapV": 8,
+        "textureScale": {
+          "x": 1,
+          "y": 1
+        },
+        "offset": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "materials": {
+        "diffuse": 2,
+        "reflection": 0.12,
+        "specular": 0.19,
+        "roughness": 0.187,
+        "rim": 0,
+        "rimExponent": 4.5,
+        "envStrength": 0.77,
+        "envBackgroundStrength": 0.5,
+        "envSource": 1,
+        "envMapData": null,
+        "envMapColorSpace": 0,
+        "useEnvMap": false,
+        "envRotation": 0,
+        "envGradientStops": {
+          "stops": [
+            {
+              "id": "0",
+              "position": 0,
+              "color": "#0D0221",
+              "bias": 0.5,
+              "interpolation": "linear"
+            },
+            {
+              "id": "1",
+              "position": 0.3,
+              "color": "#2A0845",
+              "bias": 0.5,
+              "interpolation": "linear"
+            },
+            {
+              "id": "2",
+              "position": 0.6,
+              "color": "#6B1D6B",
+              "bias": 0.5,
+              "interpolation": "linear"
+            },
+            {
+              "id": "3",
+              "position": 1,
+              "color": "#D4418E",
+              "bias": 0.5,
+              "interpolation": "linear"
+            }
+          ],
+          "colorSpace": "linear"
+        },
+        "emission": 0,
+        "emissionMode": 0,
+        "emissionColor": "#ffffff",
+        "ptEmissionMult": 1
+      },
+      "atmosphere": {
+        "glowEnabled": true,
+        "glowQuality": 0,
+        "fogIntensity": 0,
+        "fogNear": 0.0001,
+        "fogFar": 501,
+        "fogColor": "#000000",
+        "fogDensity": 0,
+        "glowIntensity": 0,
+        "glowSharpness": 1,
+        "glowMode": false,
+        "glowColor": "#ffffff"
+      },
+      "geometry": {
+        "applyTransformLogic": true,
+        "preRotMaster": true,
+        "hybridCompiled": false,
+        "hybridMode": false,
+        "hybridFoldType": 0,
+        "hybridComplex": false,
+        "hybridPermute": 0,
+        "burningEnabled": false,
+        "hybridIter": 2,
+        "hybridFoldLimit": 1,
+        "hybridFoldLimitVec": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "hybridScale": 2,
+        "hybridScaleVary": 0,
+        "hybridMinR": 0.5,
+        "hybridFixedR": 1,
+        "hybridAddC": false,
+        "hybridShift": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "hybridRot": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "hybridFoldingValue": {
+          "x": 2,
+          "y": 2,
+          "z": 2
+        },
+        "hybridKaliConstant": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "hybridMengerOffset": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "hybridMengerCenterZ": true,
+        "hybridSwap": false,
+        "hybridSkip": 1,
+        "preRotEnabled": false,
+        "preRotX": 0,
+        "preRotY": 0,
+        "preRotZ": 0,
+        "postRotX": 0,
+        "postRotY": 0,
+        "postRotZ": 0,
+        "worldRotX": 0,
+        "worldRotY": 0,
+        "worldRotZ": 0,
+        "juliaMode": false,
+        "juliaX": 0,
+        "juliaY": 0,
+        "juliaZ": 0,
+        "preRot": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "postRot": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "worldRot": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "julia": { "x": 0, "y": 0, "z": 0 }
+      },
+      "lighting": {
+        "advancedLighting": true,
+        "ptEnabled": true,
+        "renderMode": 0,
+        "ptBounces": 3,
+        "ptGIStrength": 1,
+        "specularModel": 0,
+        "shadowsCompile": true,
+        "shadowAlgorithm": 0,
+        "ptStochasticShadows": true,
+        "ptNEEAllLights": false,
+        "ptEnvNEE": false,
+        "ptMaxLuminance": 10,
+        "shadows": true,
+        "areaLights": false,
+        "shadowIntensity": 1,
+        "shadowSoftness": 300,
+        "shadowSteps": 128,
+        "shadowBias": 0,
+        "lights": [
+          {
+            "type": "Point",
+            "position": { "x": 3.3724, "y": -0.0794, "z": 0.9973 },
+            "rotation": {
+              "x": -0.18,
+              "y": -0.04,
+              "z": 0
+            },
+            "color": "#FFE6D1",
+            "intensity": 14.8996,
+            "falloff": 6.4,
+            "falloffType": "Quadratic",
+            "fixed": false,
+            "visible": true,
+            "castShadow": true,
+            "useTemperature": true,
+            "temperature": 5500,
+            "id": "l7",
+            "range": 8.7754
+          },
+          {
+            "type": "Point",
+            "position": { "x": 0.05, "y": 0.075, "z": -0.1 },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "color": "#FFD6AA",
+            "useTemperature": true,
+            "temperature": 3500,
+            "intensity": 0.5,
+            "falloff": 0.5,
+            "falloffType": "Quadratic",
+            "fixed": false,
+            "visible": false,
+            "castShadow": false,
+            "id": "l8"
+          },
+          {
+            "type": "Point",
+            "position": { "x": 0.25, "y": 0.075, "z": -0.1 },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "color": "#E0EEFF",
+            "useTemperature": true,
+            "temperature": 7500,
+            "intensity": 0.5,
+            "falloff": 0.5,
+            "falloffType": "Quadratic",
+            "fixed": false,
+            "visible": false,
+            "castShadow": false,
+            "id": "l9"
+          }
+        ]
+      },
+      "quality": {
+        "engineQuality": true,
+        "compilerHardCap": 2000,
+        "precisionMode": 0,
+        "bufferPrecision": 0,
+        "maxSteps": 500,
+        "distanceMetric": 2,
+        "estimator": 0,
+        "fudgeFactor": 1,
+        "stepRelaxation": 0,
+        "stepJitter": 0.15,
+        "refinementSteps": 0,
+        "detail": 2.5,
+        "pixelThreshold": 0.2,
+        "overstepTolerance": 0,
+        "dynamicScaling": false,
+        "interactionDownsample": 2,
+        "physicsProbeMode": 0,
+        "manualDistance": 10
+      },
+      "colorGrading": {
+        "active": false,
+        "toneMapping": 0,
+        "saturation": 1,
+        "levelsMin": 0,
+        "levelsMax": 1,
+        "levelsGamma": 1
+      },
+      "optics": {
+        "camType": 0,
+        "camFov": 40,
+        "orthoScale": 2,
+        "dofStrength": 0,
+        "dofFocus": 5
+      }
+    },
+    "cameraPos": { "x": 0, "y": 0, "z": 0 },
+    "cameraRot": { "x": 0.41, "y": 0.2424, "z": 0.8532, "w": 0.2125 },
+    "cameraFov": 40,
+    "sceneOffset": { "x": 4, "y": 1.5, "z": 1.8, "xL": 0.2077, "yL": -0.4379, "zL": 0.2855 },
+    "targetDistance": 2.4689,
+    "cameraMode": "Orbit",
+    "lights": [
+      {
+        "type": "Directional",
+        "position": { "x": 0.4, "y": 1.1, "z": 2.5 },
+        "rotation": {
+          "x": -0.18,
+          "y": -0.04,
+          "z": 0
+        },
+        "color": "#FFE6D1",
+        "intensity": 0.5,
+        "falloff": 6.4,
+        "falloffType": "Quadratic",
+        "fixed": false,
+        "visible": true,
+        "castShadow": true,
+        "useTemperature": true,
+        "temperature": 5500
+      },
+      {
+        "type": "Point",
+        "position": { "x": 0.05, "y": 0.075, "z": -0.1 },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#FFD6AA",
+        "useTemperature": true,
+        "temperature": 3500,
+        "intensity": 0.5,
+        "falloff": 0.5,
+        "falloffType": "Quadratic",
+        "fixed": false,
+        "visible": false,
+        "castShadow": false
+      },
+      {
+        "type": "Point",
+        "position": { "x": 0.25, "y": 0.075, "z": -0.1 },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "color": "#E0EEFF",
+        "useTemperature": true,
+        "temperature": 7500,
+        "intensity": 0.5,
+        "falloff": 0.5,
+        "falloffType": "Quadratic",
+        "fixed": false,
+        "visible": false,
+        "castShadow": false
+      }
+    ]
+  },
+  "shaderMeta": {
+    "preambleVars": [
+      "apo_t",
+      "apo_invEnabled",
+      "apo_r2",
+      "apo_invR",
+      "apo_invRadius"
+    ]
+  }
+}
+</Metadata>
+
+<!-- Global scope code: variables and helper functions (before formula) -->
+<Shader_Preamble>
+float apo_t = 1.0;
+float apo_invEnabled = 0.0;
+float apo_r2 = 1.0;
+float apo_invR = 1.0;
+float apo_invRadius = 1.0;
+</Shader_Preamble>
+
+<!-- Code executed once before the loop (Setup) -->
+<Shader_Init>
+// Compute modulation t once from the initial position (kosalos: t is constant throughout loop)
+apo_t = uParamA * (uParamB + 0.25 * cos(3.14159265 * uParamC * (z.z - z.x)));
+apo_invEnabled = 0.0;
+apo_r2 = 1.0;
+apo_invR = 1.0;
+apo_invRadius = max(uVec2A.x, 0.001);
+
+// Spherical inversion pre-transform (kosalos reference 'doInversion' mode)
+if (uParamD > 0.5) {
+    apo_invEnabled = 1.0;
+    vec3 invCenter = uVec3B;
+    float invRadius = apo_invRadius;
+    float invAngle = uVec2A.y;
+
+    vec3 ip = z.xyz - invCenter;
+    apo_r2 = dot(ip, ip);
+    apo_invR = sqrt(apo_r2);
+
+    if (apo_r2 > 1e-10) {
+        ip = (invRadius * invRadius / apo_r2) * ip + invCenter;
+    }
+
+    // XY plane rotation by invAngle (kosalos reference: atan + cos/sin)
+    float an = atan(ip.y, ip.x) + invAngle;
+    float ra = length(ip.xy);
+    ip.x = cos(an) * ra;
+    ip.y = sin(an) * ra;
+
+    z.xyz = ip;
+
+    // Recompute t from the transformed position (inversion changes the coordinates)
+    apo_t = uParamA * (uParamB + 0.25 * cos(3.14159265 * uParamC * (z.z - z.x)));
+}
+</Shader_Init>
+
+<!-- Main Distance Estimator Function -->
+<Shader_Function>
+void formula_Apollonian(inout vec4 z, inout float dr, inout float trap, vec4 c) {
+    vec3 z3 = z.xyz;
+
+    gmt_applyTwist(z3, uParamF);
+
+    // Per-axis fold scaling (kosalos: cc = vec3(cx,cy,cz))
+    // uVec3A stores (cx-1, cy-1, cz-1) so defaults match reference cx=1.946, cy=0.991, cz=0.945
+    vec3 cc = uVec3A + vec3(1.0);
+    z3 *= cc;
+
+    // Fold space into [-1, 1] cube
+    z3 = -1.0 + 2.0 * fract(0.5 * z3 + 0.5);
+
+    // Undo per-axis scaling
+    z3 /= cc;
+
+    // Sphere inversion using pre-computed t (constant per ray, from initial position)
+    float z2 = apo_t / max(dot(z3, z3), 1e-10);
+    z3 *= z2;
+    dr *= abs(z2);
+
+    if (uJuliaMode > 0.5) z3 += c.xyz;
+
+    z.xyz = z3;
+    trap = min(trap, abs(dot(z3, z3)));
+}
+</Shader_Function>
+
+<!-- The Iteration Loop Body -->
+<Shader_Loop>
+formula_Apollonian(z, dr, trap, c);
+</Shader_Loop>
+
+<!-- Optional: Custom Distance/Iteration Smoothing -->
+<Shader_Dist>
+float d = 0.375 * abs(z.y) / max(dr, 1e-10);
+if (apo_invEnabled > 0.5) {
+    float invR2 = apo_invRadius * apo_invRadius;
+    d = apo_r2 * d / max(invR2 + apo_invR * d, 1e-10);
+}
+return vec2(d, iter);
+</Shader_Dist>
+
+<!-- Full scene state (camera, lights, features, quality, animations) -->
+<Scene>
+{
+  "version": 0,
+  "name": "Apollonian",
+  "formula": "Apollonian",
+  "features": {
+    "coreMath": {
+      "iterations": 16,
+      "paramA": 1.4,
+      "paramB": 1,
+      "paramC": 0,
+      "paramD": 1,
+      "paramE": 0,
+      "paramF": 0,
+      "vec2A": {
+        "x": 1,
+        "y": 0.502
+      },
+      "vec2B": {
+        "x": 0,
+        "y": 0
+      },
+      "vec2C": {
+        "x": 0,
+        "y": 0
+      },
+      "vec3A": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "vec3B": {
+        "x": 1.3525,
+        "y": 0.3285,
+        "z": 0.61
+      },
+      "vec3C": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "vec4A": {
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 0
+      },
+      "vec4B": {
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 0
+      },
+      "vec4C": {
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 0
+      }
+    },
+    "geometry": {
+      "applyTransformLogic": true,
+      "preRotMaster": true,
+      "hybridCompiled": false,
+      "hybridMode": false,
+      "hybridFoldType": 0,
+      "hybridComplex": false,
+      "hybridPermute": 0,
+      "burningEnabled": false,
+      "hybridIter": 2,
+      "hybridFoldLimit": 1,
+      "hybridFoldLimitVec": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "hybridScale": 2,
+      "hybridScaleVary": 0,
+      "hybridMinR": 0.5,
+      "hybridFixedR": 1,
+      "hybridAddC": false,
+      "hybridShift": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "hybridRot": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "hybridFoldingValue": {
+        "x": 2,
+        "y": 2,
+        "z": 2
+      },
+      "hybridKaliConstant": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "hybridMengerOffset": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "hybridMengerCenterZ": true,
+      "hybridSwap": false,
+      "hybridSkip": 1,
+      "preRotEnabled": false,
+      "preRotX": 0,
+      "preRotY": 0,
+      "preRotZ": 0,
+      "postRotX": 0,
+      "postRotY": 0,
+      "postRotZ": 0,
+      "worldRotX": 0,
+      "worldRotY": 0,
+      "worldRotZ": 0,
+      "juliaMode": false,
+      "juliaX": 0,
+      "juliaY": 0,
+      "juliaZ": 0,
+      "preRot": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "postRot": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "worldRot": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "julia": { "x": 0, "y": 0, "z": 0 }
+    },
+    "interlace": {
+      "interlaceCompiled": false,
+      "interlaceFormula": "Mandelbulb",
+      "interlaceEnabled": false,
+      "interlaceInterval": 2,
+      "interlaceStartIter": 0,
+      "interlaceParamA": 8,
+      "interlaceParamB": 0,
+      "interlaceParamC": 0,
+      "interlaceParamD": 0,
+      "interlaceParamE": 0,
+      "interlaceParamF": 0,
+      "interlaceVec3A": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "interlaceVec3B": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "interlaceVec3C": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "interlaceVec2A": {
+        "x": 0,
+        "y": 0
+      },
+      "interlaceVec2B": {
+        "x": 0,
+        "y": 0.5
+      },
+      "interlaceVec2C": {
+        "x": 0,
+        "y": 0
+      },
+      "interlaceVec4A": {
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 0
+      },
+      "interlaceVec4B": {
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 0
+      },
+      "interlaceVec4C": {
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "w": 0
+      }
+    },
+    "lighting": {
+      "advancedLighting": true,
+      "ptEnabled": true,
+      "renderMode": 1,
+      "ptBounces": 3,
+      "ptGIStrength": 1,
+      "specularModel": 0,
+      "shadowsCompile": true,
+      "shadowAlgorithm": 0,
+      "ptStochasticShadows": true,
+      "ptAreaLights": false,
+      "ptNEEAllLights": false,
+      "ptReflMode": 0,
+      "ptSobolBounce": false,
+      "ptEnvNEE": true,
+      "ptMaxLuminance": 10,
+      "shadows": true,
+      "areaLights": false,
+      "shadowIntensity": 1,
+      "shadowSoftness": 300,
+      "shadowSteps": 128,
+      "shadowBias": 0,
+      "lights": [
+        {
+          "type": "Point",
+          "position": { "x": 3.3723969790304467, "y": -0.0794041387716754, "z": 0.9973155240700368 },
+          "rotation": {
+            "x": -0.18,
+            "y": -0.04,
+            "z": 0
+          },
+          "color": "#FFDABB",
+          "intensity": 22.09,
+          "falloff": 6.4,
+          "falloffType": "Quadratic",
+          "fixed": false,
+          "visible": false,
+          "castShadow": true,
+          "useTemperature": true,
+          "temperature": 4500,
+          "id": "l7",
+          "range": 8.775404981244709
+        },
+        {
+          "type": "Point",
+          "position": { "x": 0.05, "y": 0.075, "z": -0.1 },
+          "rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "color": "#ff0000",
+          "intensity": 0.5,
+          "falloff": 0.5,
+          "falloffType": "Quadratic",
+          "fixed": false,
+          "visible": false,
+          "castShadow": false,
+          "id": "l8"
+        },
+        {
+          "type": "Point",
+          "position": { "x": 0.25, "y": 0.075, "z": -0.1 },
+          "rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "color": "#0000ff",
+          "intensity": 0.5,
+          "falloff": 0.5,
+          "falloffType": "Quadratic",
+          "fixed": false,
+          "visible": false,
+          "castShadow": false,
+          "id": "l9"
+        }
+      ]
+    },
+    "lightSpheres": {
+      "lightSpheres": true
+    },
+    "ao": {
+      "aoIntensity": 0.411,
+      "aoSpread": 0.00317224008699542,
+      "aoSamples": 5,
+      "aoMode": false,
+      "aoColor": "#000000",
+      "aoMaxSamples": 32,
+      "aoStochasticCp": true,
+      "aoEnabled": true
+    },
+    "reflections": {
+      "reflectionMode": 1,
+      "bounceShadows": false,
+      "mixStrength": 1,
+      "roughnessThreshold": 0.62,
+      "bounces": 1,
+      "steps": 64,
+      "enabled": true
+    },
+    "atmosphere": {
+      "glowEnabled": true,
+      "glowQuality": 0,
+      "fogIntensity": 0,
+      "fogNear": 0.0001,
+      "fogFar": 501,
+      "fogColor": "#000000",
+      "fogDensity": 0,
+      "glowIntensity": 0,
+      "glowSharpness": 1,
+      "glowMode": false,
+      "glowColor": "#ffffff"
+    },
+    "volumetric": {
+      "ptVolumetric": false,
+      "volEnabled": false,
+      "volQuality": 0,
+      "volDensity": 0.01,
+      "volAnisotropy": 0.3,
+      "volMaxLights": 1,
+      "volScatterTint": "#ffffff",
+      "volEmissive": 0,
+      "volStepJitter": 1,
+      "volEmissiveFalloff": 0,
+      "volHeightFalloff": 0,
+      "volHeightOrigin": 0
+    },
+    "materials": {
+      "diffuse": 2,
+      "reflection": 1,
+      "specular": 1.97,
+      "roughness": 0.068,
+      "rim": 0,
+      "rimExponent": 4.5,
+      "rimColor": "#bcdaff",
+      "envStrength": 1.03,
+      "envBackgroundStrength": 0.5,
+      "envSource": 0,
+      "envMapData": "https://cdn.gmt-fractals.com/skies/metallonian.hdr",
+      "envMapColorSpace": 1,
+      "useEnvMap": true,
+      "envRotation": 0.58,
+      "envGradientStops": {
+        "stops": [
+          {
+            "id": "0",
+            "position": 0,
+            "color": "#0D0221",
+            "bias": 0.5,
+            "interpolation": "linear"
+          },
+          {
+            "id": "1",
+            "position": 0.3,
+            "color": "#2A0845",
+            "bias": 0.5,
+            "interpolation": "linear"
+          },
+          {
+            "id": "2",
+            "position": 0.6,
+            "color": "#6B1D6B",
+            "bias": 0.5,
+            "interpolation": "linear"
+          },
+          {
+            "id": "3",
+            "position": 1,
+            "color": "#D4418E",
+            "bias": 0.5,
+            "interpolation": "linear"
+          }
+        ],
+        "colorSpace": "linear"
+      },
+      "emission": 0,
+      "emissionMode": 0,
+      "emissionColor": "#ffffff",
+      "ptEmissionMult": 1
+    },
+    "waterPlane": {
+      "waterEnabled": false,
+      "active": true,
+      "height": -2,
+      "color": "#001133",
+      "roughness": 0.02,
+      "waveStrength": 0.1,
+      "waveSpeed": 1,
+      "waveFrequency": 1.5
+    },
+    "coloring": {
+      "gradient": {
+        "stops": [
+          {
+            "id": "1775558076884_0",
+            "position": 0,
+            "color": "#7f7f7f",
+            "bias": 0.5,
+            "interpolation": "linear"
+          },
+          {
+            "id": "1775558076884_1",
+            "position": 1,
+            "color": "#696969",
+            "bias": 0.5,
+            "interpolation": "linear"
+          }
+        ],
+        "colorSpace": "srgb"
+      },
+      "mode": 6,
+      "scale": 0.9132727097089922,
+      "offset": 0.15448483134282467,
+      "repeats": 1,
+      "phase": 0.11,
+      "bias": 1,
+      "colorIter": 0,
+      "twist": 0,
+      "escape": 76.03262769401819,
+      "gradient2": [
+        {
+          "id": "1",
+          "position": 0.3,
+          "color": "#FFFFFF"
+        },
+        {
+          "id": "2",
+          "position": 0.8,
+          "color": "#D4418E"
+        }
+      ],
+      "mode2": 5,
+      "scale2": 1,
+      "offset2": 0,
+      "repeats2": 1,
+      "phase2": 0,
+      "bias2": 1,
+      "twist2": 0,
+      "blendMode": 2,
+      "blendOpacity": 0,
+      "layer3Color": "#ffffff",
+      "layer3Scale": 89,
+      "layer3Strength": 0,
+      "layer3Bump": 0,
+      "layer3Turbulence": 0,
+      "layer3Enabled": true,
+      "trapEnabled": false,
+      "trapShape": 1,
+      "trapCenter": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "trapRadius": 1,
+      "trapNormal": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      "trapOffset": 0
+    },
+    "texturing": {
+      "active": false,
+      "layer1Data": null,
+      "colorSpace": 0,
+      "mapU": 6,
+      "mapV": 8,
+      "textureScale": {
+        "x": 1,
+        "y": 1
+      },
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    "quality": {
+      "engineQuality": true,
+      "compilerHardCap": 2000,
+      "precisionMode": 0,
+      "bufferPrecision": 0,
+      "maxSteps": 500,
+      "distanceMetric": 2,
+      "estimator": 0,
+      "fudgeFactor": 1,
+      "stepRelaxation": 0,
+      "stepJitter": 0.15,
+      "refinementSteps": 0,
+      "detail": 2,
+      "pixelThreshold": 0.2,
+      "overstepTolerance": 0,
+      "dynamicScaling": false,
+      "interactionDownsample": 2,
+      "adaptiveTarget": 30,
+      "physicsProbeMode": 0,
+      "manualDistance": 10
+    },
+    "droste": {
+      "active": false,
+      "tiling": 1,
+      "center": {
+        "x": 0,
+        "y": 0
+      },
+      "radiusInside": 5,
+      "radiusOutside": 100,
+      "strands": 2,
+      "strandMirror": false,
+      "autoPeriodicity": false,
+      "periodicity": 2,
+      "zoom": 0,
+      "rotate": 0,
+      "rotateSpin": 0,
+      "rotatePolar": 0,
+      "twist": true,
+      "hyperDroste": false,
+      "fractalPoints": 1
+    },
+    "postEffects": {
+      "bloomIntensity": 0,
+      "bloomThreshold": 0.25,
+      "bloomRadius": 7,
+      "caStrength": 0
+    },
+    "colorGrading": {
+      "active": false,
+      "toneMapping": 0,
+      "saturation": 1,
+      "levelsMin": 0,
+      "levelsMax": 1,
+      "levelsGamma": 1
+    },
+    "optics": {
+      "camType": 0,
+      "camFov": 40,
+      "orthoScale": 2,
+      "dofStrength": 0.04320858060093077,
+      "dofFocus": 2.3971006870269775
+    },
+    "navigation": {
+      "flySpeed": 1,
+      "autoSlow": true,
+      "orbitCursorAnchor": true
+    },
+    "cameraManager": {},
+    "audio": {
+      "smoothing": 0.8,
+      "threshold": 0.1,
+      "agcEnabled": false,
+      "attack": 0.1,
+      "decay": 0.3,
+      "highPass": 20,
+      "lowPass": 20000,
+      "gain": 0.8
+    },
+    "drawing": {
+      "activeTool": "rect",
+      "enabled": false,
+      "active": false,
+      "originMode": 1,
+      "color": "#00ffff",
+      "lineWidth": 1,
+      "showLabels": true,
+      "showAxes": false,
+      "shapes": [],
+      "refreshTrigger": 0
+    },
+    "modulation": {
+      "rules": [],
+      "selectedRuleId": null
+    },
+    "webcam": {
+      "opacity": 1,
+      "posX": 20,
+      "posY": 80,
+      "width": 320,
+      "height": 240,
+      "cropL": 0,
+      "cropR": 0,
+      "cropT": 0,
+      "cropB": 0,
+      "blendMode": 0,
+      "crtMode": false,
+      "tilt": 0,
+      "fontSize": 12
+    },
+    "debugTools": {
+      "shaderDebuggerOpen": false,
+      "stateDebuggerOpen": false
+    },
+    "engineSettings": {
+      "showEngineTab": false
+    }
+  },
+  "cameraRot": { "x": -0.022699457221348533, "y": 0.44647645562984617, "z": -0.011972424808939624, "w": 0.8944272861749358 },
+  "targetDistance": 2.7714502811431885,
+  "sceneOffset": { "x": 4.021609306335449, "y": 0.34020963311195374, "z": 2.1425044536590576, "xL": 9.663958344674484e-8, "yL": 4.961028365890741e-9, "zL": 8.461521705527275e-8 },
+  "cameraMode": "Orbit",
+  "lights": [],
+  "animations": [
+    {
+      "id": "apoAnim1",
+      "enabled": false,
+      "target": "coreMath.paramA",
+      "shape": "Sine",
+      "period": 8,
+      "amplitude": 0.2,
+      "baseValue": 1.032,
+      "phase": 0,
+      "smoothing": 0.5
+    }
+  ],
+  "sequence": {
+    "durationFrames": 300,
+    "fps": 30,
+    "tracks": {}
+  },
+  "duration": 300
+}
+</Scene>

@@ -1,7 +1,7 @@
 /**
  * BloomPass — Multi-pass progressive bloom with separable gaussian blur.
  *
- * Pipeline: bright-pass → downsample chain (5 mip levels) →
+ * Pipeline: bright-pass → downsample chain (7 mip levels) →
  *           separable gaussian blur at each level →
  *           progressive upsample with additive blending →
  *           final half-res bloom texture
@@ -274,7 +274,7 @@ export class BloomPass {
         }
 
         // ── 3. Determine active mip levels from radius (spread control) ──
-        // radius 0.5 → ~2 levels (tight glow), radius 5.0 → all 5 (wide dreamy bloom)
+        // radius 0.5 → ~2 levels (tight glow), radius 5.0 → all 7 (wide dreamy bloom)
         const activeLevels = Math.min(MIP_COUNT, Math.max(2, Math.ceil(radius + 0.5)));
 
         // ── 4. Separable gaussian blur at each active mip level ──
@@ -336,6 +336,12 @@ export class BloomPass {
         renderer.render(this.scene, this.camera);
     }
 
+    /**
+     * @invariant Does NOT dispose the shared fullscreen geometry — the
+     *   comment below records the rule. Future code that reaches into
+     *   `this.mesh.geometry` and disposes it will break every other
+     *   consumer of the shared fullscreen pass.
+     */
     dispose() {
         this.mipA.forEach(t => t.dispose());
         this.mipB.forEach(t => t.dispose());

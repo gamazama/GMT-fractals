@@ -203,15 +203,18 @@ export const DynamicListItem: React.FC<DynamicListItemProps> = ({
                 </div>
             )}
 
-            {/* Item body */}
+            {/* Item body. Drop the horizontal padding so contained
+                widgets (Slider, ParameterSelector, …) sit flush at the
+                panel edge — matches AutoFeaturePanel's visual where
+                slider rows extend to the dock side. */}
             {expandable ? (
                 isExpanded && (
-                    <div className="animate-fade-in px-2 pb-2">
+                    <div className="animate-fade-in pb-2">
                         {children}
                     </div>
                 )
             ) : (
-                <div className={title || actions || onRemove ? 'px-2 pb-2' : 'p-2'}>
+                <div className={title || actions || onRemove ? 'pb-2' : 'py-2'}>
                     {children}
                 </div>
             )}
@@ -333,9 +336,13 @@ export const DynamicList: React.FC<DynamicListProps> = ({
                 </div>
             </div>
 
-            {/* Body */}
+            {/* Body. Overflow + scroll classes apply ONLY when a
+                maxHeight is set; otherwise wheel events would be
+                trapped by the inner scroll container even when the
+                content is short, blocking the dock's natural scroll
+                pass-through. */}
             <div
-                className="flex flex-col gap-1 p-2 overflow-y-auto custom-scroll"
+                className={`flex flex-col gap-1 py-2 ${maxHeight ? 'overflow-y-auto custom-scroll' : ''}`}
                 style={maxHeight ? { maxHeight: typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight } : undefined}
             >
                 {isEmpty ? (

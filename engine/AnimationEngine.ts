@@ -1,23 +1,18 @@
+/**
+ * @module engine/AnimationEngine
+ *
+ * @invariant `tick()` / `scrub()` are silent no-ops until
+ *   `connect(animStore, fractalStore)` has been called — apps that skip
+ *   `bindStoreToEngine()` see no playback rather than a crash.
+ */
 
-import * as THREE from 'three';
-import { getProxy } from './worker/WorkerProxy';
-const engine = getProxy();
 import { Track, Keyframe } from '../types';
 import { solveBezierY } from './BezierMath';
-import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
-import { getViewportCamera } from './worker/ViewportRefs';
-import { VirtualSpace } from './PrecisionMath';
 import { AnimationMath } from './math/AnimationMath';
-
-// Pending State Buffer to prevent partial updates per frame
-interface PendingCameraState {
-    rot: THREE.Euler;
-    unified: THREE.Vector3; // The only position source of truth
-    
-    rotDirty: boolean;
-    unifiedDirty: boolean;
-}
+import { binderRegistry } from './animation/binderRegistry';
+import { isLogTrack } from './animation/logTrackRegistry';
+import { evaluatePairedTrack } from './animation/cameraPairRegistry';
 
 type ValueSetter = (val: number) => void;
 
@@ -27,26 +22,36 @@ interface StoreAccessor {
     setState(partial: any): void;
 }
 
+/** Per-frame context passed to scrub hooks. Apps wiring camera-style
+ *  composite binders (e.g. GMT's split-precision sceneOffset) read
+ *  this to know whether to skip camera tracks (record-camera mode). */
+export interface ScrubContext {
+    frame: number;
+    isPlaying: boolean;
+    isRecording: boolean;
+    recordCamera: boolean;
+    /** True when binders that drive the camera should be skipped this
+     *  frame (record-camera mode — the user is moving the camera and
+     *  the timeline shouldn't fight back). */
+    ignoreCamera: boolean;
+}
+
+export type ScrubHook = (ctx: ScrubContext) => void;
+
 export class AnimationEngine {
-    private pendingCam: PendingCameraState;
     private binders: Map<string, ValueSetter> = new Map();
     private overriddenTracks: Set<string> = new Set();
 
-    // Track previous active camera to prevent redundant switching
-    private lastCameraIndex: number = -1;
+    private preScrubHooks: ScrubHook[] = [];
+    private postScrubHooks: ScrubHook[] = [];
+
+    /** Accumulated wall-clock time since the last frame advance, used by
+     *  deterministic playback to throttle the timeline to project fps. */
+    private detAccum = 0;
 
     // Injected store accessors — set via connect() from bridge layer
     private animStore: StoreAccessor | null = null;
     private fractalStore: StoreAccessor | null = null;
-
-    constructor() {
-        this.pendingCam = {
-            rot: new THREE.Euler(),
-            unified: new THREE.Vector3(),
-            rotDirty: false,
-            unifiedDirty: false
-        };
-    }
 
     /** Connect store accessors. Called from bindStoreToEngine() after stores are initialized. */
     public connect(animStore: StoreAccessor, fractalStore: StoreAccessor) {
@@ -58,49 +63,52 @@ export class AnimationEngine {
         this.overriddenTracks = ids;
     }
 
+    /** Register a function that runs before/after every scrub frame.
+     *  Used by host apps that batch composite-track updates outside
+     *  the binder pipeline — e.g. GMT's split-precision camera reads
+     *  the live camera in `pre` and emits CAMERA_TELEPORT in `post`.
+     *  Returns an unregister function so install*() teardowns don't
+     *  leak. */
+    public registerScrubHook(phase: 'pre' | 'post', fn: ScrubHook): () => void {
+        const arr = phase === 'pre' ? this.preScrubHooks : this.postScrubHooks;
+        arr.push(fn);
+        return () => {
+            const idx = arr.indexOf(fn);
+            if (idx >= 0) arr.splice(idx, 1);
+        };
+    }
+
+    /**
+     * @invariant `binderRegistry.lookup` wins over `this.binders` per-id
+     *   cache; checked first so a binder registered AFTER a DDFS-derived
+     *   lookup still takes effect.
+     */
     private getBinder(id: string): ValueSetter {
+        // Explicit registration wins — checked BEFORE the per-id cache
+        // so that registering a custom binder AFTER a previous lookup
+        // (which would have cached a DDFS-derived writer in this.binders)
+        // still takes effect immediately. The registry is O(1) lookup
+        // itself; no second-level caching needed, and caching the
+        // registered writer would leak stale entries across
+        // register/unregister cycles.
+        const registered = binderRegistry.lookup(id);
+        if (registered) return registered.write;
+
         if (this.binders.has(id)) {
             return this.binders.get(id)!;
         }
 
-        let binder: ValueSetter = () => {}; 
-        
-        // 0. Active Camera Switcher
-        if (id === 'camera.active_index') {
-            binder = (v) => {
-                const index = Math.round(v);
-                if (index !== this.lastCameraIndex) {
-                    const store = this.fractalStore!.getState();
-                    const cameras = store.savedCameras;
-                    if (cameras && cameras[index]) {
-                         store.selectCamera(cameras[index].id);
-                         this.lastCameraIndex = index;
-                    }
-                }
-            }
-        }
+        let binder: ValueSetter = () => {};
 
-        // 1. Camera Properties (Unified Only)
-        else if (id.startsWith('camera.')) {
-            const parts = id.split('.');
-            const type = parts[1];
-            const axis = parts[2];
+        // Camera-shaped composite tracks (`camera.active_index`,
+        // `camera.unified.*`, `camera.rotation.*`) live on the host
+        // app — see engine-gmt/animation/cameraBinders.ts. They
+        // register via binderRegistry, which is consulted above
+        // BEFORE this fallback chain. Tracks that fall through here
+        // unmatched get a no-op binder.
 
-            if (type === 'unified') {
-                binder = (v) => {
-                    this.pendingCam.unified[axis as 'x'|'y'|'z'] = v;
-                    this.pendingCam.unifiedDirty = true;
-                }
-            } else if (type === 'rotation') {
-                 binder = (v) => { 
-                    this.pendingCam.rot[axis as 'x'|'y'|'z'] = v; 
-                    this.pendingCam.rotDirty = true; 
-                };
-            } 
-            // Legacy tracks are ignored (no binder created)
-        }
-        // 2. Light Properties (Legacy format mapping)
-        else if (id.startsWith('lights.')) {
+        // Light Properties (Legacy format mapping)
+        if (id.startsWith('lights.')) {
              const parts = id.split('.');
              const index = parseInt(parts[1]);
              const prop = parts[2];
@@ -151,32 +159,60 @@ export class AnimationEngine {
             const parts = id.split('.');
             const parent = parts[0];
             const child = parts[1];
-            
+
             const feature = featureRegistry.get(parent);
-            
+
             if (feature) {
                 const actions = this.fractalStore!.getState();
                 const setterName = `set${parent.charAt(0).toUpperCase() + parent.slice(1)}`;
                 const setter = (actions as any)[setterName];
-                
+
                 if (setter && typeof setter === 'function') {
-                    // Check if this is a vector component track (e.g., vec3A_x, vec2B_y)
-                    const vectorMatch = child.match(/^(vec[23][ABC])_(x|y|z)$/);
-                    if (vectorMatch) {
-                        const vectorName = vectorMatch[1]; // e.g., vec3A
-                        const axis = vectorMatch[2] as 'x' | 'y' | 'z'; // x, y, or z
-                        
-                        binder = (v) => {
-                            const state = this.fractalStore!.getState() as any;
-                            const currentVector = state[parent]?.[vectorName];
-                            if (currentVector) {
-                                const newVector = currentVector.clone();
-                                newVector[axis] = v;
-                                setter({ [vectorName]: newVector });
-                            }
-                        };
+                    // Writer helper: clone the current vec-shaped param,
+                    // overwrite the named axis, commit the whole vec. Works
+                    // for THREE.Vector{2,3,4} (has .clone()) and plain
+                    // {x,y[,z,w]} objects (spread). Used by both the
+                    // UNDERSCORE and DOT forms below.
+                    const writeVecAxis = (base: string, axis: 'x' | 'y' | 'z' | 'w') => (v: number) => {
+                        const state = this.fractalStore!.getState() as any;
+                        const current = state[parent]?.[base];
+                        if (current && typeof current === 'object') {
+                            const next = typeof current.clone === 'function'
+                                ? current.clone()
+                                : { ...current };
+                            next[axis] = v;
+                            setter({ [base]: next });
+                        }
+                    };
+
+                    // UNDERSCORE form — GMT convention used by AutoFeaturePanel's
+                    // vec2/vec3/vec4 rendering: `featureId.paramName_<axis>`.
+                    // Matches if the base name exists as a vec-like object
+                    // in the slice (so `power_x` on a scalar `power` falls
+                    // through to the scalar branch below).
+                    const underscoreMatch = child.match(/^(.+)_([xyzw])$/);
+                    if (underscoreMatch) {
+                        const state = this.fractalStore!.getState() as any;
+                        const base = underscoreMatch[1];
+                        const axis = underscoreMatch[2] as 'x' | 'y' | 'z' | 'w';
+                        const current = state[parent]?.[base];
+                        if (current && typeof current === 'object' && axis in current) {
+                            binder = writeVecAxis(base, axis);
+                            this.binders.set(id, binder);
+                            return binder;
+                        }
+                    }
+
+                    // DOT form — kept as backward-compat for callers that
+                    // encode the axis as a third path segment
+                    // (phase-5-era `feature.param.axis`). Never produced
+                    // by AutoFeaturePanel, but keyframes may exist in
+                    // saved scenes from early phase-5 builds.
+                    const thirdPart = parts[2];
+                    if (thirdPart === 'x' || thirdPart === 'y' || thirdPart === 'z' || thirdPart === 'w') {
+                        binder = writeVecAxis(child, thirdPart as 'x' | 'y' | 'z' | 'w');
                     } else {
-                        // Standard scalar param
+                        // Standard scalar param.
                         binder = (v) => setter({ [child]: v });
                     }
                 } else {
@@ -200,14 +236,38 @@ export class AnimationEngine {
     public tick(dt: number) {
         if (!this.animStore) return;
         const store = this.animStore.getState();
-        if (!store.isPlaying) return;
+        if (!store.isPlaying) {
+            this.detAccum = 0;
+            return;
+        }
 
         const fps = store.fps;
         const currentFrame = store.currentFrame;
         const duration = store.durationFrames;
         const loopMode = store.loopMode;
-        
-        const deltaFrames = dt * fps;
+
+        // Deterministic playback: throttle wall-clock advancement to project
+        // fps so the live preview plays at the same speed as the exported
+        // video — at fps=30 the timeline advances 30 frames per real second
+        // regardless of RAF rate (60Hz, 144Hz, etc). Each tick we accumulate
+        // wall dt and emit integer frames once enough time has passed; if
+        // RAF stalls, we catch up by emitting multiple frames in one tick.
+        const deterministic = (store as { deterministicPlayback?: boolean }).deterministicPlayback;
+        let deltaFrames: number;
+        if (deterministic) {
+            // Discard backlog from large gaps (tab hidden, debugger pause,
+            // long render frame) — without this the timeline lurches forward
+            // when focus returns.
+            if (dt > 0.25) this.detAccum = 0;
+            this.detAccum += dt;
+            const frameDur = 1 / Math.max(1, fps);
+            const steps = Math.floor(this.detAccum / frameDur);
+            if (steps <= 0) return; // not enough wall time for a frame yet
+            this.detAccum -= steps * frameDur;
+            deltaFrames = steps;
+        } else {
+            deltaFrames = dt * fps;
+        }
         let nextFrame = currentFrame + deltaFrames;
         
         if (nextFrame >= duration) {
@@ -228,53 +288,82 @@ export class AnimationEngine {
         this.scrub(nextFrame);
     }
 
+    /**
+     * @invariant Non-float tracks (`track.type !== 'float'`) are silently
+     *   dropped — bool/enum/string/image tracks get no step/interpolation
+     *   behaviour from the engine.
+     * @invariant `ignoreCamera = isPlaying && isRecording && recordCamera`
+     *   skips ALL `camera.*` tracks in record-camera mode; `camera.position`
+     *   and `camera.offset` are also hardcoded-skipped unconditionally
+     *   (legacy carve-out).
+     */
     public scrub(frame: number) {
         if (!this.animStore) return;
-        const { sequence, isPlaying, isRecording, recordCamera } = this.animStore.getState();
+        const state = this.animStore.getState();
+        const { isPlaying, isRecording, recordCamera, isRecordingModulation, recordingSnapshot } = state;
+        // During modulation recording, evaluate the SNAPSHOT taken at recording start
+        // rather than the live sequence. The live sequence is being mutated each tick
+        // (batchAddKeyframes) and the modulation overlay only fires when offset != 0;
+        // reading the live sequence makes the rendered value jitter at the playhead
+        // whenever the user briefly returns to zero offset.
+        const sequence = isRecordingModulation && recordingSnapshot ? recordingSnapshot : state.sequence;
         const tracks = Object.values(sequence.tracks) as Track[];
-        
-        this.syncBuffersFromEngine();
 
-        // If recording camera, ignore timeline camera tracks to avoid fighting
         const ignoreCamera = isPlaying && isRecording && recordCamera;
+        const ctx: ScrubContext = { frame, isPlaying, isRecording, recordCamera, ignoreCamera };
+
+        // Pre-scrub hooks — apps with composite-track batching read the
+        // live state into their own buffers here so the binders that
+        // fire below see a fresh starting point.
+        for (const h of this.preScrubHooks) h(ctx);
 
         for (let i = 0; i < tracks.length; i++) {
             const track = tracks[i];
-            
+
             if (this.overriddenTracks.has(track.id)) continue;
 
             if (track.keyframes.length === 0) continue;
-            if (track.type !== 'float') continue; 
+            if (track.type !== 'float') continue;
 
             if (track.id.includes('camera.position') || track.id.includes('camera.offset')) continue;
 
             if (ignoreCamera && track.id.startsWith('camera.')) continue;
 
-            const val = this.interpolate(track, frame);
+            // Camera-pair tracks (pan + DD-pair lo-words tied to a zoom
+            // track) interpolate via the linear-in-zoom formula so a
+            // deep-zoom flythrough keeps visual pan velocity coherent
+            // with the log-zoom curve. Falls through to standard
+            // per-track interpolation when the track isn't paired or
+            // the formula doesn't apply (no keys, etc.).
+            const paired = evaluatePairedTrack(track.id, frame, sequence);
+            const val = paired !== undefined ? paired : this.interpolate(track, frame);
             const binder = this.getBinder(track.id);
             binder(val);
         }
-        
-        this.commitState();
+
+        // Post-scrub hooks — apps flush their batched composite-track
+        // state here (GMT camera teleport / accumulation reset).
+        for (const h of this.postScrubHooks) h(ctx);
     }
 
-    private syncBuffersFromEngine() {
-        const cam = getViewportCamera() || engine.activeCamera;
-        if (cam) {
-            this.pendingCam.rot.setFromQuaternion(cam.quaternion);
-            const eo = engine.sceneOffset;
-            
-            this.pendingCam.unified.set(
-                eo.x + eo.xL + cam.position.x,
-                eo.y + eo.yL + cam.position.y,
-                eo.z + eo.zL + cam.position.z
-            );
-            
-            this.pendingCam.rotDirty = false;
-            this.pendingCam.unifiedDirty = false;
-        }
+    /**
+     * Public, side-effect-free evaluation of a single track at a frame —
+     * for consumers that need the raw animated value without scrubbing the
+     * whole engine (e.g. the AFX exporter sampling slider params). Routes
+     * through the same interpolation as live playback, so postBehavior
+     * (Loop / PingPong / …), log and rotation handling all match.
+     */
+    public evaluateTrack(track: Track, frame: number): number {
+        return this.interpolate(track, frame);
     }
 
+    /**
+     * @invariant Bezier is NOT applied on log tracks. Tangent y-values
+     *   live in absolute value-space; reinterpreting under log would
+     *   silently change the curve shape. Log tracks evaluate as
+     *   linear-in-log regardless of stored interpolation type.
+     *   See engine/animation/logTrackRegistry.ts:22-26.
+     */
     private interpolate(track: Track, frame: number): number {
         const keys = track.keyframes;
         if (keys.length === 0) return 0;
@@ -282,7 +371,8 @@ export class AnimationEngine {
         const firstKey = keys[0];
         const lastKey = keys[keys.length - 1];
         const isRotation = track.id.startsWith('camera.rotation') || track.id.includes('rot') || track.id.includes('phase') || track.id.includes('twist');
-        
+        const isLog = isLogTrack(track.id);
+
         if (frame > lastKey.frame) {
             const behavior = track.postBehavior || 'Hold';
             
@@ -312,7 +402,7 @@ export class AnimationEngine {
             const cycleCount = Math.floor(timeSinceStart / duration);
             const localTime = firstKey.frame + (timeSinceStart % duration);
             
-            const baseVal = this.evaluateCurveInternal(keys, localTime, isRotation);
+            const baseVal = this.evaluateCurveInternal(keys, localTime, isRotation, isLog);
             
             if (behavior === 'Loop') return baseVal;
             
@@ -320,7 +410,7 @@ export class AnimationEngine {
                 const isReversed = cycleCount % 2 === 1;
                 if (isReversed) {
                     const reversedTime = lastKey.frame - (timeSinceStart % duration);
-                    return this.evaluateCurveInternal(keys, reversedTime, isRotation);
+                    return this.evaluateCurveInternal(keys, reversedTime, isRotation, isLog);
                 }
                 return baseVal;
             }
@@ -333,44 +423,21 @@ export class AnimationEngine {
         
         if (frame < firstKey.frame) return firstKey.value;
 
-        return this.evaluateCurveInternal(keys, frame, isRotation);
+        return this.evaluateCurveInternal(keys, frame, isRotation, isLog);
     }
-    
-    private evaluateCurveInternal(keys: Keyframe[], frame: number, isRotation: boolean): number {
+
+    private evaluateCurveInternal(keys: Keyframe[], frame: number, isRotation: boolean, isLog: boolean = false): number {
         for (let i = 0; i < keys.length - 1; i++) {
             const k1 = keys[i];
             const k2 = keys[i+1];
-            
-            if (frame >= k1.frame && frame <= k2.frame) { 
-                return AnimationMath.interpolate(frame, k1, k2, isRotation);
+
+            if (frame >= k1.frame && frame <= k2.frame) {
+                return AnimationMath.interpolate(frame, k1, k2, isRotation, isLog);
             }
         }
         return keys[keys.length - 1].value;
     }
 
-    private commitState() {
-        if (this.pendingCam.unifiedDirty || this.pendingCam.rotDirty) {
-            engine.shouldSnapCamera = true;
-            
-            const q = new THREE.Quaternion().setFromEuler(this.pendingCam.rot);
-            const rot = { x: q.x, y: q.y, z: q.z, w: q.w };
-            
-            const sX = VirtualSpace.split(this.pendingCam.unified.x);
-            const sY = VirtualSpace.split(this.pendingCam.unified.y);
-            const sZ = VirtualSpace.split(this.pendingCam.unified.z);
-            
-            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, {
-                position: { x: 0, y: 0, z: 0 },
-                rotation: rot,
-                sceneOffset: {
-                    x: sX.high, y: sY.high, z: sZ.high,
-                    xL: sX.low, yL: sY.low, zL: sZ.low
-                }
-            });
-
-            this.fractalStore!.setState({ cameraRot: rot });
-        }
-    }
 }
 
 export const animationEngine = new AnimationEngine();

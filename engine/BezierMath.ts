@@ -51,6 +51,42 @@ export function solveCubicBezierT(x: number, x0: number, x1: number, x2: number,
     return Math.max(0, Math.min(1, t));
 }
 
+/**
+ * De Casteljau split of a cubic Bezier at parameter t.
+ * Given control points P0..P3, returns the new control points produced by splitting:
+ *   - left subcurve: P0, q0, r0, s
+ *   - right subcurve: s, r1, q2, P3
+ * Used to insert a key on an existing Bezier segment without changing its shape.
+ */
+export function splitCubicBezier(
+    t: number,
+    p0x: number, p0y: number,
+    p1x: number, p1y: number,
+    p2x: number, p2y: number,
+    p3x: number, p3y: number
+): {
+    sx: number; sy: number;
+    leftP1x: number; leftP1y: number;  // q0
+    leftP2x: number; leftP2y: number;  // r0
+    rightP1x: number; rightP1y: number; // r1
+    rightP2x: number; rightP2y: number; // q2
+} {
+    const u = 1 - t;
+    const q0x = u * p0x + t * p1x, q0y = u * p0y + t * p1y;
+    const q1x = u * p1x + t * p2x, q1y = u * p1y + t * p2y;
+    const q2x = u * p2x + t * p3x, q2y = u * p2y + t * p3y;
+    const r0x = u * q0x + t * q1x, r0y = u * q0y + t * q1y;
+    const r1x = u * q1x + t * q2x, r1y = u * q1y + t * q2y;
+    const sx  = u * r0x + t * r1x, sy  = u * r0y + t * r1y;
+    return {
+        sx, sy,
+        leftP1x: q0x, leftP1y: q0y,
+        leftP2x: r0x, leftP2y: r0y,
+        rightP1x: r1x, rightP1y: r1y,
+        rightP2x: q2x, rightP2y: q2y,
+    };
+}
+
 export function solveBezierY(
     frame: number, 
     k1Frame: number, k1Val: number, k1HandleX: number, k1HandleY: number, // Handle 1 is Right Tangent of k1

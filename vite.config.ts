@@ -13,8 +13,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // 'prompt' — new SW waits for user approval before activating.
-      // This prevents silent stale-cache breakage on shader/formula updates.
+      // 'prompt' keeps the in-app "Update" pill wired, but the workbox
+      // skipWaiting/clientsClaim below make a new SW take over immediately
+      // (see the cutover note there) — required so returning visitors aren't
+      // stranded on a stale precache at the dev→prod same-origin swap.
       registerType: 'prompt',
       // Don't run SW in dev (avoids middleware-mode complexity with Express server).
       devOptions: { enabled: false },
@@ -69,20 +71,43 @@ export default defineConfig({
           // Preset gallery (gallery.json index + .gmf scene files)
           'gmf/**/*.{gmf,json}',
         ],
-        // Serve cached index.html for offline navigation.
+        // Serve cached index.html for offline navigation to unknown
+        // URLs (typos, deep links). The denylist excludes our actual
+        // .html entry points so they get served from precache directly
+        // instead of being swapped for the landing — without this,
+        // clicking /dev/demo.html on the listing page would route
+        // through NavigationRoute and return the cached index.html.
+        //
+        // ignoreURLParametersMatching strips ALL query params before the
+        // precache lookup, so a deep-link like `app-gmt.html?gallery=<slug>`
+        // resolves to the precached `app-gmt.html` instead of missing the
+        // cache and falling through to navigateFallback (the listing page).
+        // Without this, the default only ignores utm_/fbclid, so any
+        // ?-param navigation served the launcher. The denylist regex also
+        // tolerates a trailing query string (`.html?…`) as defence-in-depth
+        // for any .html the precache hasn't covered.
         navigateFallback: 'index.html',
-        runtimeCaching: [
-          {
-            // CDN assets (Tailwind, jsdelivr) — try network, fall back to cache.
-            urlPattern: /^https:\/\/(cdn\.tailwindcss\.com|cdn\.jsdelivr\.net|esm\.sh)\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'external-cdn',
-              networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 },
-            },
-          },
-        ],
+        navigateFallbackDenylist: [/\.html(\?|$)/],
+        ignoreURLParametersMatching: [/.*/],
+        // ── dev→prod cutover hardening (F2) ──────────────────────────────
+        // dev and stable register a SW at the SAME /sw.js on the SAME origin.
+        // At the cutover, returning visitors still hold STABLE's SW + precache.
+        // Without skipWaiting the new (dev) worker would WAIT, so stable's SW
+        // keeps serving — and if its precache was partially evicted it falls
+        // back to the network, which now serves DEV's deploy → 404 on stable's
+        // hashed filenames → blank page until the SW finally rotates. So the
+        // new worker activates immediately, claims open clients, and purges the
+        // outdated (stable) precache. cleanupOutdatedCaches also reclaims any
+        // prior-revision precache on every normal update.
+        // Trade-off: updates now apply on the next reload without the pill's
+        // approval. Revert skipWaiting/clientsClaim post-cutover if the
+        // manual-update model is wanted back.
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
+        // (No runtimeCaching for third-party CDNs — Tailwind is now compiled
+        // at build time and reactflow CSS is bundled, so the app loads zero
+        // runtime CDN resources. This removes the blank-page-on-CDN-blip class.)
       },
     }),
   ],
@@ -103,9 +128,24 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
+        // Canonical root — the GMT app (same module as 'app-gmt' below). `/`
+        // serves the app, so the SW navigateFallback ('index.html') resolves to
+        // the app (never a menu) and prod's apex matches stable. (Was the static
+        // launcher menu — that's now 'launcher' / launcher.html.)
         main: path.resolve(__dirname, 'index.html'),
+        // Dev launcher — the static 6-app menu (no JS entry). Shipped but
+        // unlinked in prod; the discovery page for the /dev preview.
+        launcher: path.resolve(__dirname, 'launcher.html'),
+        // Engine "Demo" app — the generic plugin-host showcase that
+        // used to live at the root. Now has its own URL so the public
+        // landing site can deep-link to it. Loads /index.tsx (kept as
+        // the demo entry for minimal churn).
+        demo: path.resolve(__dirname, 'demo.html'),
+        'fractal-toy': path.resolve(__dirname, 'fractal-toy.html'),
+        'fluid-toy': path.resolve(__dirname, 'fluid-toy.html'),
+        'gradient-explorer': path.resolve(__dirname, 'gradient-explorer.html'),
+        'app-gmt': path.resolve(__dirname, 'app-gmt.html'),
         'mesh-export': path.resolve(__dirname, 'mesh-export.html'),
-        'toy-fluid': path.resolve(__dirname, 'toy-fluid.html'),
       },
       output: {
         manualChunks: {
@@ -116,14 +156,13 @@ export default defineConfig({
           'three-fiber': ['@react-three/fiber'],
           // Compression (needed at startup for URL parsing)
           'pako': ['pako'],
-          // Note: reactflow and mediabunny intentionally omitted —
-          // they're only used by lazy-loaded components (FlowEditor, RenderPopup)
-          // so Vite naturally bundles them with their consumers.
         }
       }
     }
   },
   server: {
-    middlewareMode: true,
+    port: 3400,
+    // Standalone dev server (not middleware mode) — HMR WebSocket is
+    // attached to the same HTTP server and works out of the box.
   }
 });

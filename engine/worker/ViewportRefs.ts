@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 
 let _camera: THREE.Camera | null = null;
 let _canvasElement: HTMLCanvasElement | null = null;
@@ -28,12 +28,22 @@ let _displayOrthoCamera: THREE.OrthographicCamera | null = null;
 /** Which display camera was active last snapshot — avoids per-read store lookups */
 let _isOrthoActive = false;
 
-/** Call from inside R3F Canvas to register the active camera */
+/**
+ * Call from inside R3F Canvas to register the active camera.
+ *
+ * @invariant Module-level singleton state — multiple `<Canvas>` instances
+ *   would clobber each other; no per-canvas isolation.
+ */
 export function setViewportCamera(camera: THREE.Camera) {
     _camera = camera;
 }
 
-/** Call from inside R3F Canvas to register the canvas DOM element */
+/**
+ * Call from inside R3F Canvas to register the canvas DOM element.
+ *
+ * @invariant Module-level singleton state — multiple `<Canvas>` instances
+ *   would clobber each other; no per-canvas isolation.
+ */
 export function setViewportCanvas(canvas: HTMLCanvasElement) {
     _canvasElement = canvas;
 }
@@ -57,8 +67,18 @@ export function getViewportCanvas(): HTMLCanvasElement | null {
  * camera is an OrthographicCamera configured from orthoScale so that
  * `.project()` produces correct screen-space positions for overlays.
  */
+/**
+ * @invariant Reads engineStore via `(as any)` cast. If `optics` is
+ *   absent, the snapshot silently treats the camera as perspective
+ *   (`isOrtho = false`). The ortho-mode test is `camType > 0.5 &&
+ *   camType < 1.5` — brittle if more camera types are added.
+ * @invariant Lazy display-camera allocation, never freed.
+ *   `_displayPerspCamera` and `_displayOrthoCamera` are allocated on
+ *   first use and survive for the module's lifetime — fine for a
+ *   singleton, but tests iterating ViewportRefs should know.
+ */
 export function snapshotDisplayCamera(cam: THREE.Camera) {
-    const optics = (useFractalStore.getState() as any).optics;
+    const optics = (useEngineStore.getState() as any).optics;
     const isOrtho = optics ? optics.camType > 0.5 && optics.camType < 1.5 : false;
     _isOrthoActive = isOrtho;
 
@@ -110,6 +130,11 @@ export function snapshotDisplayCamera(cam: THREE.Camera) {
  * `.project()` gives correct screen-space positions. Falls back to
  * live camera before first snapshot.
  */
+/**
+ * @invariant Falls back to live `_camera` before first snapshot —
+ *   overlays consuming the result before SNAPSHOT has run will get the
+ *   live perspective camera (wrong projection if ortho is active).
+ */
 export function getDisplayCamera(): THREE.Camera | null {
     if (_isOrthoActive) return _displayOrthoCamera || _camera;
     return _displayPerspCamera || _camera;
@@ -117,6 +142,12 @@ export function getDisplayCamera(): THREE.Camera | null {
 
 // Track whether the mouse is over the viewport canvas (vs UI panels/menus).
 // Used by adaptive resolution to decide grace period behavior.
+//
+// @invariant Ref-backed, NOT a Zustand selector — adaptive-resolution
+//   hot path polls every frame and must not trigger React reconciliation
+//   on hover. `AdaptiveResolutionBadge` therefore does NOT re-render on
+//   mouse-over alone; only on the next adaptive state change (followup
+//   q-043).
 let _mouseOverCanvas = false;
 export function setMouseOverCanvas(over: boolean) { _mouseOverCanvas = over; }
 export function isMouseOverCanvas(): boolean { return _mouseOverCanvas; }

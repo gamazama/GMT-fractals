@@ -1,0 +1,568 @@
+/**
+ * @engine/menu — generic dropdown-menu host for the topbar.
+ *
+ * Any plugin or app can create a named menu (Help, System, User, …) that
+ * appears as a button in one of @engine/topbar's slots. Other plugins
+ * register items into those menus by id. Zero app-specific chrome.
+ *
+ * Why generic: GMT has three nearly-identical topbar dropdowns (System,
+ * Help, Hardware). Apps built on this engine shouldn't each reinvent
+ * that pattern — we factor it out once so the Help plugin can register
+ * a menu and items via a uniform API, and the same component renders
+ * any future menu (user preferences, plugin toggles, app-specific tools).
+ *
+ * Registration API:
+ *
+ *   menu.register({
+ *     id: 'help',
+ *     slot: 'right',
+ *     order: 50,
+ *     icon: HelpIcon,                  // React FC or node
+ *     label?: 'Help',                  // optional text next to icon
+ *     title?: 'Help & tips',
+ *     align?: 'end',                   // Popover alignment
+ *     width?: 'w-56',                  // Popover width
+ *   });
+ *
+ *   menu.registerItem('help', {
+ *     id: 'show-hints',
+ *     order?: number,                   // ascending; lower renders first
+ *     type: 'toggle',
+ *     label: 'Show Hints',
+ *     shortcut: 'H',                    // rendered as [H] next to label
+ *     isActive: () => store.showHints,
+ *     onToggle: () => store.setShowHints(!store.showHints),
+ *   });
+ *
+ * Item types:
+ *   - 'button'    — runs onSelect, closes the menu (unless closeOnSelect=false)
+ *   - 'toggle'    — shows ON/OFF badge, flips via onToggle; keeps menu open
+ *   - 'separator' — horizontal divider
+ *   - 'section'   — small all-caps header label
+ *   - 'custom'    — render a React FC passed a { close } prop
+ *
+ * installMenu() is idempotent. It has no side effects beyond subscribing
+ * to the topbar registry on first call, so apps can skip it and just
+ * call menu.register() when they want their first menu.
+ */
+
+import React, { useSyncExternalStore, useCallback, useState, useRef, useEffect } from 'react';
+import { topbar, TopBarSlot } from './TopBar';
+import { useEngineStore } from '../../store/engineStore';
+import { useMobileLayout } from '../../hooks/useMobileLayout';
+import { CloseIcon } from '../../components/Icons';
+import { useDismiss } from '../../hooks/useDismiss';
+import { useRenderPause } from '../../hooks/useRenderPause';
+
+// ── Types ──────────────────────────────────────────────────────────────
+
+type IconRenderable = React.ReactNode | React.FC;
+
+export type MenuItemType = 'button' | 'toggle' | 'separator' | 'section' | 'custom';
+
+interface MenuItemBase {
+    id: string;
+    /** Ascending sort within a menu. Defaults to insertion order (0 + counter). */
+    order?: number;
+    /** Optional predicate — if false, item is hidden. Re-evaluated each render. */
+    when?: () => boolean;
+    className?: string;
+}
+
+export interface MenuButtonItem extends MenuItemBase {
+    type: 'button';
+    /** Static text or a getter re-evaluated each render for live labels
+     *  (e.g. `Slot 3 ✓` once the slot is filled). */
+    label: string | (() => string);
+    icon?: IconRenderable;
+    shortcut?: string;
+    title?: string;
+    onSelect: () => void;
+    /** Default true — runs onSelect then closes the popover. */
+    closeOnSelect?: boolean;
+    /** Grey-out the row and suppress onSelect. Bool or predicate for
+     *  live state (e.g. Undo/Redo disabled when stack is empty). */
+    disabled?: boolean | (() => boolean);
+}
+
+export interface MenuToggleItem extends MenuItemBase {
+    type: 'toggle';
+    /** Static text or a getter re-evaluated each render for live labels. */
+    label: string | (() => string);
+    icon?: IconRenderable;
+    shortcut?: string;
+    title?: string;
+    /** Returns current on/off state. Re-read on render for live updates. */
+    isActive: () => boolean;
+    onToggle: () => void;
+    /** Badge color. Default 'cyan'. */
+    color?: 'cyan' | 'green' | 'purple';
+    /** Grey-out the row and suppress onToggle. Bool or predicate. */
+    disabled?: boolean | (() => boolean);
+}
+
+export interface MenuSeparatorItem extends MenuItemBase {
+    type: 'separator';
+}
+
+export interface MenuSectionItem extends MenuItemBase {
+    type: 'section';
+    label: string;
+}
+
+export interface MenuCustomItem extends MenuItemBase {
+    type: 'custom';
+    /** Receives a `close()` callback to dismiss the menu after rendering UI. */
+    component: React.FC<{ close: () => void }>;
+}
+
+export type MenuItem =
+    | MenuButtonItem
+    | MenuToggleItem
+    | MenuSeparatorItem
+    | MenuSectionItem
+    | MenuCustomItem;
+
+export interface MenuDef {
+    id: string;
+    slot: TopBarSlot;
+    order: number;
+    /** Shown inside the topbar button. FC (preferred) or plain node. */
+    icon?: IconRenderable;
+    /** Optional text rendered next to the icon. */
+    label?: string;
+    /** Native title attribute (tooltip). */
+    title?: string;
+    align?: 'start' | 'end' | 'center';
+    width?: string;
+    /** Visibility of the topbar button itself. */
+    when?: () => boolean;
+}
+
+// ── Registry ───────────────────────────────────────────────────────────
+
+const _menus = new Map<string, MenuDef>();
+const _items = new Map<string, Map<string, MenuItem>>();
+const _insertCounter = new Map<string, number>();
+const _subscribers = new Set<() => void>();
+const _notify = () => _subscribers.forEach((fn) => fn());
+
+const subscribe = (fn: () => void) => {
+    _subscribers.add(fn);
+    return () => { _subscribers.delete(fn); };
+};
+
+// ── Mobile menu state ──────────────────────────────────────────────────
+//
+// On mobile, menus replace the right dock instead of overflowing as a
+// popover *when an app mounts <MobileMenuHost />*. Apps that don't
+// (the engine's generic <App />, fluid-toy, fractal-toy) fall back to
+// the desktop popover so menus still work.
+//
+// The active-menu id lives on the engine store as `mobileActiveMenu`
+// so existing Zustand subscriber machinery handles updates. The
+// host-mount counter is module-local — it tracks render-tree presence,
+// which is a Menu plugin implementation detail, not user state.
+
+/**
+ * @invariant Counter, not boolean — two `MobileMenuHost` mounts in the
+ *   same render tree (StrictMode dev double-mount) increment/decrement
+ *   symmetrically; one bool would false-clear on the second mount's
+ *   cleanup.
+ */
+let _hostMounts = 0;
+const _hostListeners = new Set<() => void>();
+const _bumpHostMount = (delta: 1 | -1) => {
+    _hostMounts = Math.max(0, _hostMounts + delta);
+    _hostListeners.forEach((fn) => fn());
+};
+const _subscribeHostMount = (cb: () => void) => {
+    _hostListeners.add(cb);
+    return () => { _hostListeners.delete(cb); };
+};
+const _hasMobileMenuHost = () => _hostMounts > 0;
+
+export const mobileMenu = {
+    open(id: string) { useEngineStore.getState().setMobileActiveMenu(id); },
+    close() { useEngineStore.getState().setMobileActiveMenu(null); },
+    toggle(id: string) {
+        const cur = useEngineStore.getState().mobileActiveMenu;
+        useEngineStore.getState().setMobileActiveMenu(cur === id ? null : id);
+    },
+    getActive(): string | null { return useEngineStore.getState().mobileActiveMenu; },
+};
+
+export const menu = {
+    register(def: MenuDef) {
+        _menus.set(def.id, def);
+        if (!_items.has(def.id)) _items.set(def.id, new Map());
+        if (!_insertCounter.has(def.id)) _insertCounter.set(def.id, 0);
+        // Each menu owns one topbar slot entry. Re-registering replaces it.
+        topbar.register({
+            id: `menu:${def.id}`,
+            slot: def.slot,
+            order: def.order,
+            when: def.when,
+            component: () => <MenuAnchor menuId={def.id} />,
+        });
+        _notify();
+    },
+    unregister(id: string) {
+        if (_menus.delete(id)) {
+            _items.delete(id);
+            _insertCounter.delete(id);
+            topbar.unregister(`menu:${id}`);
+            _notify();
+        }
+    },
+    registerItem(menuId: string, item: MenuItem) {
+        if (!_items.has(menuId)) _items.set(menuId, new Map());
+        if (!_insertCounter.has(menuId)) _insertCounter.set(menuId, 0);
+        // Preserve insertion order when no explicit order is supplied.
+        const resolved: MenuItem = item.order === undefined
+            ? { ...item, order: _insertCounter.get(menuId)! }
+            : item;
+        _insertCounter.set(menuId, _insertCounter.get(menuId)! + 1);
+        _items.get(menuId)!.set(item.id, resolved);
+        _notify();
+    },
+    unregisterItem(menuId: string, itemId: string) {
+        if (_items.get(menuId)?.delete(itemId)) _notify();
+    },
+    listMenus(): MenuDef[] {
+        return Array.from(_menus.values());
+    },
+    listItems(menuId: string): MenuItem[] {
+        const map = _items.get(menuId);
+        if (!map) return [];
+        return Array.from(map.values()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    },
+    clear() {
+        Array.from(_menus.keys()).forEach((id) => topbar.unregister(`menu:${id}`));
+        _menus.clear();
+        _items.clear();
+        _insertCounter.clear();
+        _notify();
+    },
+};
+
+let _installed = false;
+let _unsubStore: (() => void) | null = null;
+/**
+ * @invariant `queueMicrotask(_notify)` defer is load-bearing — Zustand
+ *   fires subscribers synchronously during `setState`; immediate
+ *   `_notify` calls `setState` on MenuAnchor's `useSyncExternalStore`
+ *   while React is still committing, triggering "Cannot update a
+ *   component while rendering" warning.
+ */
+export const installMenu = () => {
+    if (_installed) return;
+    _installed = true;
+    // Pure API plugin — no auto-registered menus. Apps and other plugins
+    // create menus via menu.register().
+    //
+    // Bump the registry revision on every engine-store change too so
+    // toggle items' isActive() results re-render. Without this, a
+    // `type: 'toggle'` row's ON/OFF badge would stay stale until a menu
+    // re-registration bumped the internal rev.
+    //
+    // Defer the notify via queueMicrotask — Zustand fires the
+    // subscriber synchronously during `setState`, so if setState
+    // happens while React is rendering a different component,
+    // immediate `_notify()` calls `setState` on MenuAnchor's
+    // useSyncExternalStore subscribers while it's still committing,
+    // triggering React's "Cannot update a component while rendering
+    // a different component" warning. Microtask batching moves the
+    // notify to after the current render completes.
+    _unsubStore = useEngineStore.subscribe(() => {
+        queueMicrotask(_notify);
+    });
+};
+export const uninstallMenu = () => {
+    menu.clear();
+    _unsubStore?.();
+    _unsubStore = null;
+    _installed = false;
+};
+
+// ── Anchor + Popover rendering ─────────────────────────────────────────
+
+const renderIcon = (icon: IconRenderable | undefined): React.ReactNode => {
+    if (!icon) return null;
+    if (typeof icon === 'function') {
+        const Icon = icon as React.FC;
+        return <Icon />;
+    }
+    return icon;
+};
+
+interface MenuAnchorProps {
+    menuId: string;
+}
+
+const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
+    // Subscribe to both menu and item changes — the button label/items
+    // update live if other plugins register mid-session.
+    useSyncExternalStore(subscribe, () => {
+        // Combine maps into a cheap identity we can depend on: the
+        // registry is mutated in place, so we just count changes.
+        return _notifyRev;
+    }, () => _notifyRev);
+    // Subscribe to the active mobile menu so the button's highlight
+    // updates when one menu opens another. Direct store selector — no
+    // separate pubsub needed.
+    const mobileActive = useEngineStore((s) => s.mobileActiveMenu);
+    const { isMobile } = useMobileLayout();
+    // Only route to the mobile side-panel path when an app has actually
+    // mounted <MobileMenuHost />. Apps that haven't (generic <App />,
+    // fluid-toy, fractal-toy) get the desktop popover even on mobile —
+    // a working fallback rather than a silent dead-tap.
+    const hasMobileHost = useSyncExternalStore(_subscribeHostMount, _hasMobileMenuHost, _hasMobileMenuHost);
+    const useSidePanel = isMobile && hasMobileHost;
+
+    const def = _menus.get(menuId);
+    const [open, setOpen] = useState(false);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const close = useCallback(() => setOpen(false), []);
+
+    // Outside-click dismissal — popover path only (desktop, or mobile when no
+    // MobileMenuHost is mounted). The side-panel path dismisses via
+    // <MobileMenuHost> (outside-tap + X button).
+    useDismiss(rootRef, { onClose: close, enabled: open && !useSidePanel, escape: false });
+
+    // If a side panel takes over while a popover was open, close the
+    // local state so re-toggling back doesn't resurface a stale popover.
+    useEffect(() => { if (useSidePanel && open) close(); }, [useSidePanel, open, close]);
+
+    // Side-panel route: button toggles the global state, no popover.
+    // Popover route (desktop, or mobile without a host): local state.
+    const isOpenForVisual = useSidePanel ? mobileActive === menuId : open;
+
+    // Pause the render loop while this menu is open — covers both the popover
+    // and mobile side-panel paths via `isOpenForVisual`.
+    useRenderPause(isOpenForVisual);
+
+    if (!def) return null;
+
+    const items = menu.listItems(menuId).filter((i) => !i.when || i.when());
+
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (useSidePanel) {
+            mobileMenu.toggle(menuId);
+        } else {
+            setOpen((o) => !o);
+        }
+    };
+
+    return (
+        <div className="relative" ref={rootRef} data-menu-anchor>
+            <button
+                type="button"
+                onClick={handleClick}
+                className={`flex items-center gap-1 text-[10px] font-medium ${isOpenForVisual ? 'text-cyan-300 border-cyan-500/40' : 'text-gray-300 hover:text-white border-white/10 hover:border-cyan-500/40'} bg-black/40 hover:bg-white/5 border rounded px-2 py-1 transition-colors`}
+                title={def.title}
+                aria-label={def.title || def.label || def.id}
+            >
+                {renderIcon(def.icon)}
+                {def.label && <span>{def.label}</span>}
+                {/* Chevron signals dropdown affordance — every menu is a
+                    dropdown so this is unconditional for consistency
+                    across Camera / System / File / Help / etc. */}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-60">
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </button>
+            {/* Popover path — desktop, or mobile when no MobileMenuHost. */}
+            {open && !useSidePanel && (
+                <div
+                    className={`absolute top-full ${def.align === 'end' ? 'right-0' : def.align === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0'} mt-2 ${def.width || 'w-56'} bg-black/95 border border-white/15 rounded-lg shadow-2xl z-50 p-1`}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {items.map((item) => (
+                        <MenuItemView key={item.id} item={item} close={close} />
+                    ))}
+                    {items.length === 0 && (
+                        <div className="px-3 py-2 text-[10px] text-gray-600 italic">(empty)</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Monotonic revision bumped every _notify() so useSyncExternalStore has
+// a cheap, stable "has anything changed" snapshot.
+let _notifyRev = 0;
+const _bumpRev = () => { _notifyRev++; };
+_subscribers.add(_bumpRev);
+
+// ── Item renderers ─────────────────────────────────────────────────────
+
+const BADGE_COLORS = {
+    cyan:   { on: 'bg-cyan-500/30 text-cyan-300 border-cyan-500/40',     off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+    green:  { on: 'bg-green-500/30 text-green-300 border-green-500/40',  off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+    purple: { on: 'bg-purple-500/30 text-purple-300 border-purple-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+};
+
+const OnOffBadge: React.FC<{ active: boolean; color: 'cyan' | 'green' | 'purple' }> = ({ active, color }) => (
+    <span className={`px-1.5 py-0.5 text-[8px] font-bold rounded-sm border transition-colors ${active ? BADGE_COLORS[color].on : BADGE_COLORS[color].off}`}>
+        {active ? 'ON' : 'OFF'}
+    </span>
+);
+
+interface MenuItemViewProps {
+    item: MenuItem;
+    close: () => void;
+}
+
+const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
+    switch (item.type) {
+        case 'separator':
+            return <div className={`h-px bg-white/10 my-1 ${item.className || ''}`} />;
+        case 'section':
+            return (
+                <div className={`text-[9px] font-bold text-gray-500 uppercase tracking-wider px-2 py-1 ${item.className || ''}`}>
+                    {item.label}
+                </div>
+            );
+        case 'button': {
+            const b = item;
+            const isDisabled = typeof b.disabled === 'function' ? b.disabled() : !!b.disabled;
+            const labelText = typeof b.label === 'function' ? b.label() : b.label;
+            return (
+                <button
+                    type="button"
+                    title={b.title}
+                    disabled={isDisabled}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (isDisabled) return;
+                        b.onSelect();
+                        if (b.closeOnSelect !== false) close();
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs transition-colors ${isDisabled ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:text-white hover:bg-white/10'} ${b.className || ''}`}
+                >
+                    <span className="flex items-center gap-2 min-w-0">
+                        {renderIcon(b.icon)}
+                        <span className="truncate">{labelText}</span>
+                        {b.shortcut && (
+                            <span className="text-[9px] text-gray-500 font-mono">[{b.shortcut}]</span>
+                        )}
+                    </span>
+                </button>
+            );
+        }
+        case 'toggle': {
+            const t = item;
+            const active = t.isActive();
+            const isDisabled = typeof t.disabled === 'function' ? t.disabled() : !!t.disabled;
+            const labelText = typeof t.label === 'function' ? t.label() : t.label;
+            return (
+                <button
+                    type="button"
+                    title={t.title}
+                    disabled={isDisabled}
+                    onClick={(e) => { e.stopPropagation(); if (!isDisabled) t.onToggle(); }}
+                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs transition-colors ${isDisabled ? 'text-gray-600 cursor-not-allowed' : active ? 'text-white hover:bg-white/10' : 'text-gray-300 hover:text-white hover:bg-white/10'} ${t.className || ''}`}
+                >
+                    <span className="flex items-center gap-2 min-w-0">
+                        {renderIcon(t.icon)}
+                        <span className="truncate">{labelText}</span>
+                        {t.shortcut && (
+                            <span className="text-[9px] text-gray-500 font-mono">[{t.shortcut}]</span>
+                        )}
+                    </span>
+                    <OnOffBadge active={active} color={t.color || 'cyan'} />
+                </button>
+            );
+        }
+        case 'custom': {
+            const C = item.component;
+            return <C close={close} />;
+        }
+    }
+};
+
+// ── Mobile menu host ──────────────────────────────────────────────────
+//
+// On mobile, menus replace the right dock instead of overflowing as a
+// popover. Apps mount <MobileMenuHost /> in the right-dock slot (or
+// wherever they want the menu panel to land) and gate their own dock
+// rendering on `mobileMenu.getActive()` being null.
+//
+// The host renders nothing when no menu is active. When active, it
+// renders the items in a scrollable panel sized like the right dock.
+
+interface MobileMenuHostProps {
+    /** Width class for the panel. Defaults to `w-72` (288px). */
+    width?: string;
+    /** Extra classes on the panel wrapper. */
+    className?: string;
+}
+
+export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', className = '' }) => {
+    const activeId = useEngineStore((s) => s.mobileActiveMenu);
+    // Re-render when item registrations change so live labels / when()
+    // predicates pick up state mutations while the panel is open.
+    useSyncExternalStore(subscribe, () => _notifyRev, () => _notifyRev);
+
+    // Tell MenuAnchor a host exists so it routes to the side panel
+    // instead of falling back to the popover. Counter (not bool) so
+    // StrictMode's double-mount in dev doesn't false-clear it.
+    useEffect(() => {
+        _bumpHostMount(1);
+        return () => _bumpHostMount(-1);
+    }, []);
+
+    // Outside-tap dismissal for the mobile side panel (previously X-only).
+    // Excludes the menu triggers ([data-menu-anchor]) so tapping a trigger
+    // toggles cleanly instead of close-then-reopen.
+    const asideRef = useRef<HTMLElement>(null);
+    useDismiss(asideRef, {
+        onClose: () => mobileMenu.close(),
+        enabled: !!activeId,
+        ignore: '[data-menu-anchor]',
+        escape: false,
+    });
+
+    if (!activeId) return null;
+    const def = _menus.get(activeId);
+    if (!def) return null;
+    const items = menu.listItems(activeId).filter((i) => !i.when || i.when());
+    const close = () => mobileMenu.close();
+
+    return (
+        <aside
+            ref={asideRef}
+            className={`${width} h-full flex flex-col bg-black/95 border-l border-white/10 ${className}`}
+            // Touch panning inside the scroll region; prevents the page
+            // from absorbing vertical-scroll gestures meant for the menu.
+            style={{ touchAction: 'pan-y' }}
+        >
+            <header className="flex items-center justify-between px-3 py-2 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-2 text-xs text-gray-200 font-medium">
+                    {renderIcon(def.icon)}
+                    <span>{def.label || def.title || activeId}</span>
+                </div>
+                <button
+                    type="button"
+                    onClick={close}
+                    className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition-colors"
+                    aria-label="Close menu"
+                    title="Close"
+                >
+                    <CloseIcon />
+                </button>
+            </header>
+            <div className="flex-1 overflow-y-auto mobile-scroll p-1">
+                {items.map((item) => (
+                    <MenuItemView key={item.id} item={item} close={close} />
+                ))}
+                {items.length === 0 && (
+                    <div className="px-3 py-2 text-[10px] text-gray-600 italic">(empty)</div>
+                )}
+            </div>
+        </aside>
+    );
+};

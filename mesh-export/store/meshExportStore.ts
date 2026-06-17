@@ -2,7 +2,7 @@
 // Completely independent from the main app's fractalStore
 
 import { create } from 'zustand';
-import type { FractalDefinition } from '../../types/fractal';
+import type { FractalDefinition } from '../../engine-gmt/types/fractal';
 import type { MeshWithColors, PipelineTimings } from '../pipeline/types';
 
 // ============================================================================

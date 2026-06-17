@@ -1,5 +1,13 @@
 
 /** Format seconds into human-readable time with units (e.g. "5s", "2m 30s", "1h 15m") */
+/** Estimate remaining time as a ±10% range. Returns 0..0 when there's not
+ *  enough signal yet (no progress or no elapsed time). */
+export const calcEtaRange = (elapsedSec: number, done: number, total: number): { min: number; max: number } => {
+    if (done <= 0 || total <= 0 || elapsedSec <= 0) return { min: 0, max: 0 };
+    const eta = (total - done) * (elapsedSec / done);
+    return { min: eta * 0.9, max: eta * 1.1 };
+};
+
 export const formatTimeWithUnits = (secs: number) => {
     if (!isFinite(secs) || secs < 0) return "--";
 
@@ -21,4 +29,26 @@ export const formatDurationMs = (ms: number) => {
     const secs = ms / 1000;
     if (secs < 60) return `${secs.toFixed(1)}s`;
     return formatTimeWithUnits(secs);
+};
+
+/**
+ * Coarse ETA format for the bucket-render pill. Rounds to 30s in the
+ * minute range (so "10.5m" / "12m") and to 30m in the hour range. Only
+ * the bucket ETA uses this; elapsed counters / video export keep the
+ * precise `formatTimeWithUnits` output.
+ */
+export const formatEtaCoarse = (secs: number) => {
+    if (!isFinite(secs) || secs < 0) return "--";
+
+    if (secs < 60) return `${secs.toFixed(0)}s`;
+
+    if (secs < 3600) {
+        const halfMin = Math.round(secs / 30) / 2;
+        return halfMin % 1 === 0 ? `${halfMin.toFixed(0)}m` : `${halfMin.toFixed(1)}m`;
+    }
+
+    const h = Math.floor(secs / 3600);
+    const remM = Math.round((secs % 3600) / 60);
+    if (remM >= 30) return `${h}h 30m`;
+    return `${h}h`;
 };

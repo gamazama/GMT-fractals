@@ -1,21 +1,21 @@
 
 import React, { useState } from 'react';
 import DraggableWindow from './DraggableWindow';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { Preset } from '../types';
 import { parseShareString } from '../utils/Sharing';
 
 export const StateDebugger = () => {
     // Updated Selector
-    const isOpen = useFractalStore(s => s.debugTools?.stateDebuggerOpen);
-    const setDebugTools = (useFractalStore.getState() as any).setDebugTools;
+    const isOpen = useEngineStore(s => s.debugTools?.stateDebuggerOpen);
+    const setDebugTools = (useEngineStore.getState() as any).setDebugTools;
     
     const setIsOpen = (val: boolean) => {
         if(setDebugTools) setDebugTools({ stateDebuggerOpen: val });
     };
 
-    const loadPreset = useFractalStore(s => s.loadPreset);
-    const getCurrentPreset = useFractalStore(s => s.getPreset);
+    const loadPreset = useEngineStore(s => s.loadPreset);
+    const getCurrentPreset = useEngineStore(s => s.getPreset);
     
     const [inputStr, setInputStr] = useState('');
     const [jsonOutput, setJsonOutput] = useState('');

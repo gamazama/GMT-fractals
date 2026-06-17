@@ -7,6 +7,12 @@ export interface StoreCallbacks {
     openContextMenu: (x: number, y: number, items: ContextMenuItem[], helpIds?: string[]) => void;
 }
 
+/**
+ * @invariant Missing provider is SILENT. Primitives rendered outside
+ *   `StoreCallbacksProvider` still work but lose undo + context-menu
+ *   integration without any warning. Hosts must wrap their tree in the
+ *   provider explicitly.
+ */
 const NOOP_CALLBACKS: StoreCallbacks = {
     handleInteractionStart: () => {},
     handleInteractionEnd: () => {},

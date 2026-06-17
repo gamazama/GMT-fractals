@@ -1,11 +1,80 @@
 
 import { Keyframe } from '../types';
 import { nanoid } from 'nanoid';
+import { AnimationMath } from '../engine/math/AnimationMath';
 
 interface Point {
     t: number; // Absolute frame or normalized time depending on context
     val: number; // Value
 }
+
+// --- 0. Shared keyframe-fitting primitives -------------------------------------
+// Used by the gradient channel-curve editor (rampToBezierTrack) AND the graph
+// editors' Pencil tool, so the "sample → sparse Bezier keys" recipe lives once.
+
+/** Douglas-Peucker on a (index, value) polyline → kept sample indices (incl. ends).
+ *  Perpendicular distance is measured in index/value space; eps is in value units. */
+export const dpIndices = (vals: number[], eps: number): number[] => {
+    const n = vals.length;
+    if (n <= 2) return vals.map((_, i) => i);
+    const keep = new Uint8Array(n);
+    keep[0] = 1;
+    keep[n - 1] = 1;
+    const stack: [number, number][] = [[0, n - 1]];
+    while (stack.length) {
+        const [a, b] = stack.pop()!;
+        if (b - a < 2) continue;
+        const x0 = a, y0 = vals[a], x1 = b, y1 = vals[b];
+        const dx = x1 - x0, dy = y1 - y0;
+        const denom = Math.hypot(dx, dy) || 1;
+        let worst = -1, worstD = eps;
+        for (let i = a + 1; i < b; i++) {
+            const d = Math.abs(dy * (i - x0) - dx * (vals[i] - y0)) / denom;
+            if (d > worstD) { worstD = d; worst = i; }
+        }
+        if (worst >= 0) { keep[worst] = 1; stack.push([a, worst], [worst, b]); }
+    }
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) if (keep[i]) out.push(i);
+    return out;
+};
+
+/** Recompute Auto (Catmull-Rom) tangents for the Bezier keyframes matched by `pred`
+ *  (default: every key), leaving Step/Linear and hand-broken (`autoTangent === false`)
+ *  keys untouched. Shared by the curve fit, add-key, Bias and Pencil so the
+ *  "smooth out of the box" convention lives in one place. Expects `keys` sorted by frame. */
+export const reTangentBezier = (
+    keys: Keyframe[],
+    pred?: (k: Keyframe, i: number) => boolean,
+): Keyframe[] =>
+    keys.map((k, n) => {
+        if (k.interpolation !== 'Bezier' || k.autoTangent === false) return k;
+        if (pred && !pred(k, n)) return k;
+        const prev = n > 0 ? keys[n - 1] : undefined;
+        const next = n < keys.length - 1 ? keys[n + 1] : undefined;
+        const { l, r } = AnimationMath.calculateTangents(k, prev, next, 'Auto');
+        return { ...k, leftTangent: l, rightTangent: r, tangentMode: 'Aligned' as const, autoTangent: true };
+    });
+
+/** Fit a run of consecutive-integer-frame samples to sparse, auto-tangented Bezier
+ *  keys: Douglas-Peucker placement (eps in value units) then Catmull-Rom tangents.
+ *  `samples[i]` is the value at frame `startFrame + i`. Used for both the full-channel
+ *  fit (startFrame 0) and the Pencil's drawn span (startFrame = stroke start). */
+export const fitSamplesToKeys = (
+    samples: number[],
+    startFrame: number,
+    eps: number,
+    idPrefix: string,
+): Keyframe[] => {
+    const idx = dpIndices(samples, eps);
+    const base: Keyframe[] = idx.map((i, n) => ({
+        id: `${idPrefix}-${n}`,
+        frame: startFrame + i,
+        value: samples[i],
+        interpolation: 'Bezier' as const,
+    }));
+    return reTangentBezier(base);
+};
 
 // --- 1. Fast Bezier Evaluation ---
 function evaluateBezier1D(t: number, p0: number, p1: number, p2: number, p3: number) {

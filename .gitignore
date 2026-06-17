@@ -29,6 +29,31 @@ fractal_generator_*.glsl
 # Shader-validator harness output (regenerated per run)
 debug/shader-validator-results.jsonl
 
+# bench-shader artifacts — timestamped archives + regenerable per-run images.
+# The locked reference image (GMT_Mandelbulb_v1.png) is tracked explicitly.
+debug/bench-shader-2*.json
+debug/bench-shader-latest.json
+debug/bench-shader-snapshot.json
+debug/bench-shader-baseline*.json
+debug/bench-shader-refs/Mandelbulb-*.png
+debug/bench-shader-refs/Apollonian-*.png
+debug/shader-dump/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# bench-perf timestamped archives (paired with debug/bench-perf.mts)
+debug/bench-perf-2*.json
+debug/bench-perf-latest.json
+debug/bench-perf-baseline.json
+debug/bench-perf-after-*.json
+# bench-perf-timeline artifacts (paired with debug/bench-perf-timeline.mts).
+# The seed cache is kept per-machine — re-record with --bench-record if needed.
+debug/bench-perf-timeline-2*.json
+debug/bench-perf-timeline-latest.json
+debug/bench-perf-timeline-baseline.json
+debug/bench-perf-timeline-seed.json
+
 # One-off exploration / debug scripts, not part of the test suite
 debug/scratch/
 
@@ -45,10 +70,22 @@ debug/native-interlace-matrix.html
 debug/v3-v4-catalog.json
 debug/v4-honest-coremath.jsonl
 debug/thumbnails/
-debug/validator.html
+# debug/validator.html is TRACKED — static WebGL2 sweep harness used by
+# test:shader / test:baseline / test:hybrid* / test:interlace. Do NOT ignore it,
+# or those sweeps break in fresh checkouts / CI (ERR_FILE_NOT_FOUND).
 
 # Deep zoom perturbation experiment
 prototype/deep-zoom/
+
+# Palette library — baked by `npm run bake:palette` from H:/GMT/stuff/palette-lab
+# (NOT in this repo, so a clean checkout / CI cannot regenerate these).
+#  • core.*       = TRACKED — clean, redistributable (MIT/Apache/BSD/CC0), ~0.5 MB. Ships always.
+#  • softology.*  = ignored — provenance-unverified aggregate. Lazy-loaded; serve from R2 or omit.
+#  • cptcity.*    = ignored — per-collection redistribution-bound. Lazy-loaded; serve from R2 or omit.
+public/palette/softology.bin.gz
+public/palette/softology.json.gz
+public/palette/cptcity.bin.gz
+public/palette/cptcity.json.gz
 
 # Claude Code personal config
 .claude/

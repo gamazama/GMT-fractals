@@ -6,7 +6,7 @@ import { RotationHeliotrope } from './RotationHeliotrope';
 import { BaseVectorInputProps } from './types';
 import { piMapping, degreesMapping, getMapping, ValueMapping, formatDisplay, computePercentage } from '../inputs/primitives/FormatUtils';
 import { AXIS_CONFIG } from '../inputs/types';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { ContextMenuItem } from '../../types/help';
 
 const D2R = Math.PI / 180;
@@ -87,7 +87,7 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
     }, [mode]);
     
     // Get context menu opener from store
-    const openContextMenu = useFractalStore(s => s.openContextMenu);
+    const openContextMenu = useEngineStore(s => s.openContextMenu);
 
     // Determine if this is a vec2, vec3, or vec4
     const isVec4 = 'w' in value;

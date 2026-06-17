@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        <title>GMT · Fractal Explorer</title>
+        <style>
+            /* Body must NOT be overflow:hidden on mobile — the address-bar
+               collapse trick depends on a 100vh element being taller than
+               the visible viewport (when the address bar is showing), so
+               the body has scroll capacity. Once the user swipes past the
+               intro, the address bar hides and the sticky shell locks. */
+            /* color-scheme: dark tells auto-darkening browsers (Samsung Internet
+               Dark mode, Chrome Android Auto-dark / Force-Dark, some WebViews)
+               that the page already provides a dark theme, so they skip the
+               automatic darkening pass that otherwise dims the white GMT logo
+               to grey on those devices. Every other app entry already sets this. */
+            html, body, #root { margin: 0; padding: 0; width: 100%; background: #000; color: #fff; color-scheme: dark; }
+            html { min-height: 100%; }
+            body { min-height: 100%; overscroll-behavior-y: none; }
+            /* Desktop: lock to viewport so the layout doesn't accidentally scroll. */
+            @media (hover: hover) and (pointer: fine) {
+                html, body, #root { height: 100%; overflow: hidden; }
+            }
+            /* Thicker touch scrollbars where elements opt in via .mobile-scroll. */
+            .mobile-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+            .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
+            .mobile-scroll::-webkit-scrollbar-track { background: transparent; }
+        </style>
+    </head>
+    <body>
+        <div id="root"></div>
+        <script type="module" src="/app-gmt/main.tsx"></script>
+    </body>
+</html>

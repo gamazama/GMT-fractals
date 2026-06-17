@@ -1,0 +1,150 @@
+/**
+ * FluidSimFeature — the "Fluid" tab in the reference.
+ *
+ * Post-Tab-2 pass: force-law params (forceMode, forceGain, interiorDamp,
+ * forceCap, edgeMargin) moved to CouplingFeature because the reference
+ * UI groups them on their own tab.
+ *
+ * What stays here is the fluid's own behaviour: how it carries, swirls,
+ * and dissipates velocity. The render resolution (which sizes both the
+ * sim grid and the canvas) is the viewport plugin's concern — see the
+ * `renderScale` field on viewportSlice and the FluidToyApp resize
+ * useEffect that derives final pixel dims from window/fixed × scale ×
+ * adaptive quality.
+ */
+
+import type { FeatureDefinition } from '../../engine/FeatureSystem';
+import { dyeDecayModeParam, dyeDecayModeFromIndex, dyeBlendParam, dyeBlendFromIndex } from './palette';
+import type { FluidEngine } from '../fluid/FluidEngine';
+import type { FluidSimSlice, CouplingSlice } from '../storeTypes';
+import { forceModeFromIndex, forceSourceFromIndex } from './coupling';
+
+export const FluidSimFeature: FeatureDefinition = {
+    id: 'fluidSim',
+    name: 'Fluid',
+    category: 'Simulation',
+
+    tabConfig: {
+        label: 'Fluid',
+    },
+
+    params: {
+        vorticity: {
+            type: 'float', default: 22.1, min: 0, max: 50, step: 0.1,
+            label: 'Vorticity',
+            description: 'Amplifies existing curl — keeps fractal-induced swirls from smearing away.',
+        },
+        vorticityScale: {
+            type: 'float', default: 1, min: 0.5, max: 8, step: 0.1,
+            label: 'Vorticity scale',
+            condition: { param: 'vorticity', gt: 0 },
+            description: 'Spatial scale of the vorticity confinement (in sim texels). 1 = tight pixel-scale swirls, 4+ = larger organised vortices.',
+        },
+        dissipation: {
+            type: 'float', default: 0.17, min: 0, max: 5, step: 0.01,
+            label: 'Velocity dissipation /s',
+            description: 'How fast velocity decays. High = fluid forgets the fractal quickly.',
+        },
+
+        // Dye inject — how much of the fractal's colour bleeds into the
+        // fluid each frame. Lives on this tab (reference) because it's a
+        // fluid-side knob even though it feeds the dye texture.
+        dyeInject: {
+            type: 'float', default: 1.5, min: 0, max: 3, step: 0.01,
+            label: 'Dye inject',
+            description: 'How much of the fractal\'s color bleeds into the fluid each frame.',
+        },
+        dyeBlend: {
+            ...dyeBlendParam.config,
+            description: 'How new dye mixes with what the fluid already carries. Gradient stop alpha acts as a per-colour injection mask.',
+        },
+
+        pressureIters: {
+            type: 'int', default: 50, min: 4, max: 60, step: 1,
+            label: 'Pressure iters',
+            description: 'Jacobi iterations for incompressibility. More = stricter but slower.',
+        },
+
+        // ── Dye decay subsection ─────────────────────────────────────
+        // How the dye fades between frames. Colour-space mode controls
+        // whether dye greys out (linear) or stays hue-stable (perceptual
+        // / vivid) while fading.
+        dyeDecayMode: {
+            ...dyeDecayModeParam.config,
+            description: 'How dye fades over time. Colour space controls whether it greys out (linear) or stays hue-stable (perceptual / vivid).',
+        },
+        dyeDissipation: {
+            type: 'float', default: 1.03, min: 0, max: 5, step: 0.01,
+            label: 'Dye dissipation /s',
+            description: 'How fast dye fades. In linear mode this is a straight RGB multiply; in perceptual / vivid it\'s the OKLab luminance fade (chroma fades on its own schedule below).',
+        },
+        dyeChromaDecayHz: {
+            type: 'float', default: 1.03, min: 0, max: 5, step: 0.01,
+            label: 'Chroma decay /s',
+            condition: { param: 'dyeDecayMode', neq: 0 },  // 0 = linear
+            description: 'Per-second fade on OKLab a/b (chroma). Lower than Dye dissipation → colour stays saturated longer than it stays bright.',
+        },
+        dyeSaturationBoost: {
+            type: 'float', default: 1, min: 0.5, max: 1.1, step: 0.001,
+            scale: 'log',
+            label: 'Saturation boost',
+            condition: { param: 'dyeDecayMode', eq: 2 },  // 2 = vivid
+            description: 'Per-frame chroma gain. 1 = neutral, <1 washes out, >1 pushes toward max saturation. Gamut-mapped in OKLab so it pegs at the saturation ceiling rather than hue-shifting to white.',
+        },
+
+        // Sim-time multiplier on the wall-clock dt. 1 = real time,
+        // 0.5 = half-speed slow-mo, 2 = double-speed. Decoupled from
+        // the timeline fps so the artist can change pace without
+        // re-keyframing camera moves.
+        timeScale: {
+            type: 'float', default: 1, min: 0, max: 4, step: 0.01,
+            label: 'Sim speed',
+            description: 'Wall-clock dt multiplier on the sim. 0.5 = slow-mo, 2 = double speed. 0 freezes the fluid (Pause is the cleaner way for hard-stop).',
+        },
+
+        paused: {
+            type: 'boolean', default: true,
+            label: 'Pause sim',
+            description: 'Freeze the fluid state. Splats and param changes still land; they just don\'t integrate forward. Defaults ON — the toy boots as a pure fractal explorer; the Fluid topbar toggle (or any preset) starts the sim.',
+        },
+    },
+};
+
+/**
+ * Push the fluid-sim slice + coupling-tab force-law knobs into
+ * FluidEngine. Both slices reach FluidEngine in one call so a change to
+ * either schedules a single setParams.
+ */
+export const syncFluidSimToEngine = (
+    engine: FluidEngine,
+    fluidSim: FluidSimSlice,
+    coupling: CouplingSlice,
+): void => {
+    // NB: `paused` is intentionally NOT sent here. Both this slice's `paused`
+    // and the topbar render-control `isPaused` map onto the single
+    // `engine.params.paused`, so two sync paths would race (last write wins).
+    // FluidToyApp owns the merge — it pushes `isPaused || fluidSim.paused` from
+    // its render-control effect, so the topbar Pause and the per-sim Pause
+    // compose instead of clobbering each other.
+    engine.setParams({
+        vorticity:      fluidSim.vorticity,
+        vorticityScale: fluidSim.vorticityScale,
+        pressureIters:  fluidSim.pressureIters,
+        dissipation:    fluidSim.dissipation,
+        timeScale:      fluidSim.timeScale,
+        // Dye-inject + dye-decay subsection live on the Fluid tab.
+        dyeInject:          fluidSim.dyeInject,
+        dyeBlend:           dyeBlendFromIndex(fluidSim.dyeBlend),
+        dyeDecayMode:       dyeDecayModeFromIndex(fluidSim.dyeDecayMode),
+        dyeDissipation:     fluidSim.dyeDissipation,
+        dyeChromaDecayHz:   fluidSim.dyeChromaDecayHz,
+        dyeSaturationBoost: fluidSim.dyeSaturationBoost,
+        // Coupling-tab force law.
+        forceMode:      forceModeFromIndex(coupling.forceMode),
+        forceSource:    forceSourceFromIndex(coupling.forceSource),
+        forceGain:      coupling.forceGain,
+        interiorDamp:   coupling.interiorDamp,
+        forceCap:       coupling.forceCap,
+        edgeMargin:     coupling.edgeMargin,
+    });
+};

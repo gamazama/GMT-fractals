@@ -5,8 +5,8 @@ import { useMeshExportStore } from '../store/meshExportStore';
 import { VectorInput } from '../../components/inputs/VectorInput';
 import { BaseVectorInput } from '../../components/vector-input/BaseVectorInput';
 import { autoFitBounds } from '../gpu/gpu-pipeline';
-import { registry } from '../../engine/FractalRegistry';
-import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
+import { registry } from '../../engine-gmt/engine/FractalRegistry';
+import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 
 export function BoundsPanel() {
   const center = useMeshExportStore((s) => s.bboxCenter);
