@@ -25,6 +25,11 @@ import { collectBootDiagnostics } from '../engine-gmt/engine/webglDiagnostics';
 // Injected by Vite's `define` from package.json (see vite.config.ts).
 declare const __APP_VERSION__: string;
 
+// Once the engine is ready, the splash may linger this long waiting for the
+// cosmetic compile bar to report 'done' — after which it fades regardless, so
+// a missed 'done' signal can't trap a rendering app behind the splash.
+const LOADING_FADE_GRACE_MS = 1000;
+
 const GMT_NAMES = [
     'Generative Math Tracer', 'GPU Manifold Tracer', 'GPU Mandelorus Tracer',
     'Geometric Morphology Toolkit', 'GLSL Marching Toolkit', 'Generative Morphology Theater',
@@ -56,10 +61,16 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
 
     const isMenuOpenRef = useRef(false);
     const isReadyRef = useRef(isReady);
+    // When the engine first became ready — lets the fade release after a grace
+    // period even if the compile bar never reports 'done' (see fade gate).
+    const readyAtRef = useRef<number | null>(null);
     const bootEngineRef = useRef(bootEngine);
     const hasBootedRef = useRef(false);
 
-    useEffect(() => { isReadyRef.current = isReady; }, [isReady]);
+    useEffect(() => {
+        isReadyRef.current = isReady;
+        if (isReady && readyAtRef.current === null) readyAtRef.current = performance.now();
+    }, [isReady]);
     useEffect(() => { bootEngineRef.current = bootEngine; }, [bootEngine]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -190,11 +201,18 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
             }
             if (rendererRef.current) rendererRef.current.render(time, p / 100.0);
 
-            // @invariant Double-gated fade: `isReady` (worker output) AND
-            // `cp.phase === 'done'` (compile bar hit 100%). Both required so
-            // fast compiles don't snap the bar from 73% → gone.
+            // @invariant Fade when the engine is READY (`isReady` = worker
+            // booted + compiled + dispatching frames). Normally we also wait for
+            // `cp.phase === 'done'` so a fast compile animates the bar to 100%
+            // instead of snapping from 73% → gone. But that 'done' signal can
+            // fail to fire (idle no-op / a re-opened compile cycle), which used
+            // to trap a fully-rendering app behind the splash forever (mobile).
+            // So once ready, a grace window ALSO releases the fade — isReady is
+            // the real signal; the bar is cosmetic.
             // bootError holds the splash open on a failure panel — never fade.
-            if (isReadyRef.current && cp.phase === 'done' && !menuOpen && !bootErrorRef.current) {
+            const readyGraceElapsed = readyAtRef.current !== null
+                && (performance.now() - readyAtRef.current) > LOADING_FADE_GRACE_MS;
+            if (isReadyRef.current && (cp.phase === 'done' || readyGraceElapsed) && !menuOpen && !bootErrorRef.current) {
                 if (rendererRef.current) { rendererRef.current.dispose(); rendererRef.current = null; }
                 setOpacity(0);
                 setTimeout(() => { setIsVisible(false); onFinished(); }, 800);
