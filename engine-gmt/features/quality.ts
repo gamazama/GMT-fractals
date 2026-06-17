@@ -53,7 +53,8 @@ export const QualityFeature: FeatureDefinition = {
             description: "Safety limit for ray/DE loops (MAX_HARD_ITERATIONS define). Requires recompile but does not affect compile time — ANGLE/D3D does not unroll define-bounded loops.",
             onUpdate: 'compile',
             noReset: true,
-            hidden: true  // Managed by Hardware Preferences modal
+            userScoped: true,
+            hidden: true  // Managed by Hardware Preferences modal (hardwareProfile.caps)
         },
         precisionMode: {
             type: 'float', default: 0.0, label: 'Ray Precision', shortId: 'pm',
@@ -62,7 +63,8 @@ export const QualityFeature: FeatureDefinition = {
             description: 'Sets the minimum epsilon (ray hit distance). Standard prevents GPU hangs on mobile.',
             onUpdate: 'compile',
             noReset: true,
-            hidden: true  // Managed by Hardware Preferences modal
+            userScoped: true,
+            hidden: true  // Managed by Hardware Preferences modal (hardwareProfile.caps)
         },
         bufferPrecision: {
             type: 'float', default: 0.0, label: 'Texture Buffer', shortId: 'bp',
@@ -71,7 +73,8 @@ export const QualityFeature: FeatureDefinition = {
             description: 'Controls render target bit-depth. 16-bit is faster and required on some mobile GPUs.',
             onUpdate: 'compile',
             noReset: true,
-            hidden: true  // Managed by Hardware Preferences modal
+            userScoped: true,
+            hidden: true  // Managed by Hardware Preferences modal (hardwareProfile.caps)
         },
 
         // --- RUNTIME (Quality Panel) ---
@@ -179,6 +182,9 @@ export const QualityFeature: FeatureDefinition = {
             helpId: 'quality.fudge',
         },
 
+        // Adaptive resolution is a user/device performance preference, not
+        // scene content — `userScoped` keeps it from being overwritten when a
+        // scene file or formula is loaded. See PresetLogic.applyPresetState.
         dynamicScaling: {
             type: 'boolean',
             default: true,
@@ -186,6 +192,7 @@ export const QualityFeature: FeatureDefinition = {
             shortId: 'ds',
             group: 'performance',
             noReset: true,
+            userScoped: true,
             description: 'Drop resolution while moving and during slow frames; restore when idle.',
             helpId: 'quality.scale',
         },
@@ -199,6 +206,7 @@ export const QualityFeature: FeatureDefinition = {
             condition: { and: [{ param: 'dynamicScaling', bool: true }, { param: 'adaptiveTarget', eq: 0 }] },
             format: (v) => `1/${v}x`,
             noReset: true,
+            userScoped: true,
             description: 'How aggressively to downscale resolution during camera movement.',
             helpId: 'quality.scale',
         },
@@ -211,6 +219,7 @@ export const QualityFeature: FeatureDefinition = {
             group: 'performance',
             condition: { param: 'dynamicScaling', bool: true },
             noReset: true,
+            userScoped: true,
             description: 'Frame rate the adaptive resolver tries to maintain.',
             helpId: 'quality.scale',
         },

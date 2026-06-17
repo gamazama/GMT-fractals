@@ -78,10 +78,20 @@ export const applyPresetState = (
         if (typeof setter !== 'function') return;
 
         const incomingData = (features as any)[feat.id];
+        const liveSlice = (actions as any)[feat.id] as Record<string, unknown> | undefined;
         const nextState: Record<string, unknown> = {};
         if (feat.state) Object.assign(nextState, feat.state);
 
         Object.entries(feat.params).forEach(([key, config]) => {
+            // User/device-local preferences (e.g. adaptive resolution, hardware
+            // precision) are NOT scene content — a loaded scene or formula
+            // switch must never clobber them. Keep the live value, falling back
+            // to the feature default only on first boot when none exists yet.
+            if (config.userScoped) {
+                const liveVal = liveSlice ? liveSlice[key] : undefined;
+                nextState[key] = liveVal !== undefined ? liveVal : config.default;
+                return;
+            }
             if (incomingData && incomingData[key] !== undefined) {
                 let val = incomingData[key];
                 if (config.type === 'vec2' && val && !(val instanceof THREE.Vector2)) {

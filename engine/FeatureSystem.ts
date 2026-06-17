@@ -98,7 +98,14 @@ export interface ParamConfig {
      *  alongside the description (clicking it calls `openHelp`). */
     helpId?: string;
     hidden?: boolean;
-    noReset?: boolean; 
+    noReset?: boolean;
+    /** User/device-local preference, NOT scene content. Persisted live state
+     *  (e.g. via localStorage / device prefs) — a loaded scene or formula
+     *  switch must NEVER overwrite it. `applyPresetState` keeps the live value
+     *  for these params instead of taking the file's value (or the default).
+     *  Use for things like adaptive resolution and hardware precision that
+     *  belong to the machine the user is on, not the artwork. */
+    userScoped?: boolean;
     confirmation?: string;      
     isAdvanced?: boolean;       
     isCollapsible?: boolean;    
