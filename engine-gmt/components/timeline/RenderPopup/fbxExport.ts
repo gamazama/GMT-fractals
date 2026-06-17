@@ -63,24 +63,14 @@ const RAD2DEG = 180 / Math.PI;
  *  the default cm unit-scale → keeps deep-zoom-scaled numbers sane). */
 const NOMINAL = 100;
 
-/** FBX cameras look down local +X; this turns +X to point along GMT's -Z. */
-const CAM_FORWARD_FIX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-
-/** GMT camera quaternion → FBX Lcl Rotation Euler (degrees), XYZ order. */
-const quatToFbxEuler = (q: THREE.Quaternion): [number, number, number] => {
-    const qf = q.clone().multiply(CAM_FORWARD_FIX);
-    const e = new THREE.Euler().setFromQuaternion(qf, 'XYZ');
-    return [e.x * RAD2DEG, e.y * RAD2DEG, e.z * RAD2DEG];
-};
-
-/** Keep an Euler angle within ±180° of the previous frame so the curve sweeps
- *  the short way instead of spinning across the 0/360 seam. */
-const unwrapDeg = (curr: number, prev: number): number => {
-    let d = curr - prev;
-    while (d > 180)  { curr -= 360; d -= 360; }
-    while (d < -180) { curr += 360; d += 360; }
-    return curr;
-};
+// Camera rotation is baked from the SAME source the render uses: the smooth,
+// wrap-continuous `camera.rotation.{x,y,z}` Euler tracks (the render builds its
+// quaternion via setFromEuler of these — see engine-gmt/animation/cameraBinders
+// postScrub). We do NOT read the camera quaternion and re-extract Euler: that
+// round-trip gimbal-flips on frames the playback never flips. The constant FBX
+// camera-forward correction (+X → −Z) is handled once via the camera Model's
+// PostRotation (0,−90,0) in fbxScene.ts, so the animated channel stays flip-free.
+const ROT_TRACK = ['camera.rotation.x', 'camera.rotation.y', 'camera.rotation.z'] as const;
 
 /** High+low split subtraction — cancels the shared magnitude so a deep-zoom
  *  scene's tiny relative motion survives in plain doubles. */
@@ -128,6 +118,14 @@ export const sampleFbxFrames = (opts: FbxExportOptions): FbxSample => {
     const camLocalStart = cStart ? cStart.position.clone() : new THREE.Vector3();
     const fwdStart = new THREE.Vector3(0, 0, -1).applyQuaternion(qStart);
 
+    // Rotation = the smooth camera.rotation.{x,y,z} Euler tracks (render's
+    // source of truth). Fallback for any axis without a track = the static
+    // start-frame Euler (constant → no flip).
+    const seqTracks = useAnimationStore.getState().sequence.tracks;
+    const rotTracks = ROT_TRACK.map((id) => seqTracks[id]);
+    const eStart = (cStart ? cStart.rotation : new THREE.Euler());
+    const rotFallback = [eStart.x, eStart.y, eStart.z];
+
     const rHi = {
         x: soStart.x, y: soStart.y, z: soStart.z,
         xL: soStart.xL ?? 0, yL: soStart.yL ?? 0, zL: soStart.zL ?? 0,
@@ -142,7 +140,6 @@ export const sampleFbxFrames = (opts: FbxExportOptions): FbxSample => {
 
     const frames: FbxFrame[] = [];
     const times: number[] = [];
-    let prevRot: [number, number, number] | null = null;
     try {
         for (let i = 0; i < totalFrames; i++) {
             const tf = opts.startFrame + i * step;
@@ -159,9 +156,12 @@ export const sampleFbxFrames = (opts: FbxExportOptions): FbxSample => {
             const relZ = splitSub(so.z, so.zL ?? 0, rHi.z, rHi.zL) + (camLocal.z - rLocal.z);
             const pos: [number, number, number] = [scale * relX, scale * relY, scale * relZ];
 
-            let rot = quatToFbxEuler(c ? c.quaternion : qStart);
-            if (prevRot) rot = [unwrapDeg(rot[0], prevRot[0]), unwrapDeg(rot[1], prevRot[1]), unwrapDeg(rot[2], prevRot[2])];
-            prevRot = rot;
+            // Euler degrees from the rotation tracks (radians), per the render.
+            const rot: [number, number, number] = [
+                (rotTracks[0] ? animationEngine.evaluateTrack(rotTracks[0], tf) : rotFallback[0]) * RAD2DEG,
+                (rotTracks[1] ? animationEngine.evaluateTrack(rotTracks[1], tf) : rotFallback[1]) * RAD2DEG,
+                (rotTracks[2] ? animationEngine.evaluateTrack(rotTracks[2], tf) : rotFallback[2]) * RAD2DEG,
+            ];
 
             const curLights = useEngineStore.getState().lighting?.lights ?? [];
             const lights: Array<[number, number, number]> = lightIdx.map((idx) => {

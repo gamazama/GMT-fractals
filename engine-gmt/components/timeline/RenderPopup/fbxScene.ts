@@ -208,11 +208,17 @@ export const buildFbxScene = (sample: FbxSample, projectName: string, plate?: Pl
 
     // ── Camera ──
     const camId = id(), camAttrId = id();
-    const f0: FbxFrame = frames[0] ?? { pos: [0, 0, NOMINAL], rot: [0, 90, 0], lights: [], params: [] };
+    const f0: FbxFrame = frames[0] ?? { pos: [0, 0, NOMINAL], rot: [0, 0, 0], lights: [], params: [] };
+    // Lcl Rotation is GMT's raw camera Euler (matches the render exactly).
+    // The FBX camera aims down local +X; PostRotation (0,-90,0) is the constant
+    // correction that swings that to -Z — kept OUT of the animated channel so
+    // it can't gimbal-flip. effective = Lcl · PostRotation⁻¹ = Lcl · Ry(90).
     objects.push(node('Model', [fbxLong(camId), fbxString(objName(`${projectName} Camera`, 'Model')), fbxString('Camera')], [
         node('Version', [fbxInt(232)]),
         node('Properties70', [], [
             P('DefaultAttributeIndex', 'int', 'Integer', '', fbxInt(0)),
+            P('RotationActive', 'bool', '', '', fbxInt(1)),
+            P('PostRotation', 'Vector3D', 'Vector', '', fbxDouble(0), fbxDouble(-90), fbxDouble(0)),
             P('Lcl Translation', 'Lcl Translation', '', 'A', fbxDouble(f0.pos[0]), fbxDouble(f0.pos[1]), fbxDouble(f0.pos[2])),
             P('Lcl Rotation',    'Lcl Rotation',    '', 'A', fbxDouble(f0.rot[0]), fbxDouble(f0.rot[1]), fbxDouble(f0.rot[2])),
         ]),
