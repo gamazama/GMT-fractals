@@ -110,9 +110,14 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        // Static dev landing — lists the apps below. No JS entry, just
-        // copied to dist/ so dev-preview's root URL resolves to a menu.
+        // Canonical root — the GMT app (same module as 'app-gmt' below). `/`
+        // serves the app, so the SW navigateFallback ('index.html') resolves to
+        // the app (never a menu) and prod's apex matches stable. (Was the static
+        // launcher menu — that's now 'launcher' / launcher.html.)
         main: path.resolve(__dirname, 'index.html'),
+        // Dev launcher — the static 6-app menu (no JS entry). Shipped but
+        // unlinked in prod; the discovery page for the /dev preview.
+        launcher: path.resolve(__dirname, 'launcher.html'),
         // Engine "Demo" app — the generic plugin-host showcase that
         // used to live at the root. Now has its own URL so the public
         // landing site can deep-link to it. Loads /index.tsx (kept as

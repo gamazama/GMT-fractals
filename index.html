@@ -1,301 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GMT — dev preview</title>
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #000;
-      --fg: #fff;
-      --muted: #888;
-      --accent: #22d3ee;
-      --border: rgba(255, 255, 255, 0.1);
-      --hover: rgba(34, 211, 238, 0.08);
-    }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; }
-    body {
-      background: var(--bg);
-      color: var(--fg);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-    }
-    .wrap { max-width: 640px; width: 100%; }
-    h1 {
-      font-size: 2.25rem;
-      font-weight: 200;
-      letter-spacing: 0.08em;
-      margin: 0 0 0.5rem;
-    }
-    h1 .accent { color: var(--accent); }
-    .subtitle {
-      color: var(--muted);
-      font-size: 0.95rem;
-      margin: 0 0 2.5rem;
-    }
-    .notice {
-      background: rgba(34, 211, 238, 0.04);
-      border: 1px solid var(--border);
-      border-radius: 0.5rem;
-      padding: 0.875rem 1.125rem;
-      margin-bottom: 2rem;
-      font-size: 0.875rem;
-      color: var(--muted);
-      line-height: 1.5;
-    }
-    .notice a {
-      color: var(--accent);
-      text-decoration: none;
-      border-bottom: 1px solid currentColor;
-    }
-    .notice a:hover { color: #67e8f9; }
-    .notice code {
-      background: rgba(255, 255, 255, 0.06);
-      padding: 0.1em 0.35em;
-      border-radius: 0.25em;
-      font-size: 0.85em;
-    }
-    .apps { display: grid; gap: 0.625rem; }
-    .app {
-      display: block;
-      padding: 1rem 1.25rem;
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid var(--border);
-      border-radius: 0.5rem;
-      text-decoration: none;
-      color: var(--fg);
-      transition: background 0.15s, border-color 0.15s, transform 0.15s;
-    }
-    .app:hover {
-      background: var(--hover);
-      border-color: var(--accent);
-      transform: translateY(-1px);
-    }
-    .app.primary {
-      padding: 1.25rem 1.5rem;
-      border-color: rgba(34, 211, 238, 0.35);
-      background: rgba(34, 211, 238, 0.04);
-    }
-    .app.primary .app-name { font-size: 1.15rem; color: var(--accent); }
-    .app-name { font-weight: 600; font-size: 1rem; }
-    .app-desc { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; line-height: 1.4; }
-    .group-label {
-      font-size: 0.7rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin: 1.5rem 0 0.5rem;
-    }
-    .group-label:first-child { margin-top: 0; }
-    .footer {
-      margin-top: 2.5rem;
-      font-size: 0.75rem;
-      color: var(--muted);
-      text-align: center;
-    }
-    .footer a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted currentColor; }
-    .footer a:hover { color: var(--accent); border-bottom-color: var(--accent); }
-
-    /* SW update bar — hidden until the script flips data-state. */
-    #sw-bar {
-      position: fixed;
-      top: 0;
-      inset-inline: 0;
-      padding: 0.5rem 1rem;
-      font-size: 0.8rem;
-      text-align: center;
-      background: rgba(0, 0, 0, 0.85);
-      border-bottom: 1px solid var(--border);
-      color: var(--muted);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      gap: 0.75rem;
-      z-index: 100;
-      backdrop-filter: blur(8px);
-    }
-    #sw-bar[data-state='checking'],
-    #sw-bar[data-state='updating'],
-    #sw-bar[data-state='ready'],
-    #sw-bar[data-state='offer-reset'] { display: flex; }
-    #sw-bar[data-state='updating']    { color: rgb(252 211 77); border-bottom-color: rgba(252,211,77,0.3); }
-    #sw-bar[data-state='ready']       { color: rgb(110 231 183); border-bottom-color: rgba(110,231,183,0.3); }
-    #sw-bar[data-state='offer-reset'] { color: rgb(252 211 77); border-bottom-color: rgba(252,211,77,0.3); }
-    #sw-bar .dot {
-      width: 0.5rem;
-      height: 0.5rem;
-      border-radius: 50%;
-      background: currentColor;
-      animation: pulse 1.6s ease-in-out infinite;
-    }
-    @keyframes pulse { 50% { opacity: 0.3; } }
-    #sw-bar button {
-      background: transparent;
-      border: 1px solid currentColor;
-      color: inherit;
-      padding: 0.2rem 0.6rem;
-      border-radius: 0.25rem;
-      font-size: 0.75rem;
-      cursor: pointer;
-      font-family: inherit;
-    }
-    #sw-bar button:hover { background: rgba(255,255,255,0.06); }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <h1>GMT <span class="accent">— dev preview</span></h1>
-    <p class="subtitle">Engine-architecture builds, work in progress.</p>
-
-    <div class="notice">
-      For the stable release, visit <a href="https://gmt-fractals.com">gmt-fractals.com</a>.
-      This subdirectory tracks the <code>dev</code> branch and may break or change at any time.
-    </div>
-
-    <div class="group-label">Main app</div>
-    <div class="apps">
-      <a class="app primary" href="app-gmt.html">
-        <div class="app-name">GMT — Fractal Explorer</div>
-        <div class="app-desc">Real-time 3D fractal renderer. The full app, engine-architecture build.</div>
-      </a>
-      <a class="app" href="fluid-toy.html">
-        <div class="app-name">Fluid Toy</div>
-        <div class="app-desc">Real-time 2D fluid simulation. Companion app sharing the GMT engine.</div>
-      </a>
-    </div>
-
-    <div class="group-label">Engine demos</div>
-    <div class="apps">
-      <a class="app" href="demo.html">
-        <div class="app-name">Demo</div>
-        <div class="app-desc">Generic engine showcase — minimal app exercising the plugin host, panels, undo, save/load.</div>
-      </a>
-      <a class="app" href="fractal-toy.html">
-        <div class="app-name">Fractal Toy</div>
-        <div class="app-desc">Stripped-down raymarcher. Two formulas, DDFS camera + lighting only.</div>
-      </a>
-      <a class="app" href="mesh-export.html">
-        <div class="app-name">Mesh Export Prototype</div>
-        <div class="app-desc">SDF → mesh / VDB export tool.</div>
-      </a>
-    </div>
-
-    <div class="footer">
-      <a href="https://github.com/gamazama/GMT-fractals/tree/dev">view source on GitHub</a>
-    </div>
-  </div>
-
-  <!-- SW status bar — see the script below for full lifecycle reasoning. -->
-  <div id="sw-bar" aria-live="polite" data-state="idle">
-    <span class="dot" aria-hidden="true"></span>
-    <span id="sw-bar-text">Checking for updates…</span>
-    <button id="sw-bar-action" type="button" hidden>Reset</button>
-  </div>
-
-  <!-- Stale-cache rescue for users who installed /dev/ as a PWA when this
-       URL was the engine demo (now at /dev/demo.html). The old service
-       worker is still cached and may serve the wrong page; the new SW for
-       the same scope is downloaded but waits in 'installed' state because
-       vite-plugin-pwa uses registerType: 'prompt' — and this static page
-       has no React UI to host the Update pill.
-
-       This script:
-       1. Forces an update check on every visit.
-       2. Auto-applies any waiting SW (skipWaiting + reload on controller change).
-       3. Listens for NEW waiting workers that appear later (the initial
-          getRegistrations may find no waiting SW because the update is
-          still installing — without the updatefound listener we'd miss it).
-       4. After ~5s with no progress, surfaces a manual "Reset" button that
-          unregisters all SWs, clears caches, and reloads. Last-resort
-          escape hatch when the auto-apply path can't take control. -->
-  <script>
-    (function() {
-      if (!('serviceWorker' in navigator)) return;
-
-      const bar    = document.getElementById('sw-bar');
-      const text   = document.getElementById('sw-bar-text');
-      const action = document.getElementById('sw-bar-action');
-      const setState = (state, msg) => {
-        bar.setAttribute('data-state', state);
-        if (msg) text.textContent = msg;
-      };
-
-      let reloadedOnce = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (reloadedOnce) return;
-        reloadedOnce = true;
-        setState('ready', 'Updated — reloading…');
-        setTimeout(() => window.location.reload(), 400);
-      });
-
-      const applyWaiting = (reg) => {
-        if (reg.waiting) {
-          setState('updating', 'Applying update…');
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        }
-      };
-
-      // Wire 'updatefound' on a registration: catches NEW SWs installed
-      // after the initial scan (e.g. update() resolves async).
-      const watchRegistration = (reg) => {
-        applyWaiting(reg);
-        reg.addEventListener('updatefound', () => {
-          const sw = reg.installing;
-          if (!sw) return;
-          setState('checking', 'Update found — installing…');
-          sw.addEventListener('statechange', () => {
-            if (sw.state === 'installed' && reg.waiting) applyWaiting(reg);
-          });
-        });
-      };
-
-      const resetEverything = async () => {
-        setState('updating', 'Resetting…');
-        try {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map((r) => r.unregister().catch(() => {})));
-          if ('caches' in window) {
-            const keys = await caches.keys();
-            await Promise.all(keys.map((k) => caches.delete(k).catch(() => {})));
-          }
-        } catch (e) { /* best-effort */ }
-        window.location.reload();
-      };
-
-      action.addEventListener('click', resetEverything);
-
-      // Boot sequence.
-      setState('checking', 'Checking for updates…');
-      navigator.serviceWorker.getRegistrations().then(async (regs) => {
-        if (regs.length === 0) {
-          bar.removeAttribute('data-state');
-          return;
-        }
-        regs.forEach(watchRegistration);
-        // Trigger update checks in parallel.
-        await Promise.all(regs.map((r) => r.update().catch(() => {})));
-        // If nothing's pending after the update check, hide the bar.
-        const hasPending = regs.some((r) => r.installing || r.waiting);
-        if (!hasPending) {
-          bar.removeAttribute('data-state');
-        }
-      });
-
-      // After 5s of no progress, offer the nuclear option.
-      setTimeout(() => {
-        if (bar.getAttribute('data-state') === 'checking' || bar.getAttribute('data-state') === 'updating') {
-          setState('offer-reset', 'Update is stuck — try a full reset:');
-          action.hidden = false;
-        }
-      }, 5000);
-    })();
-  </script>
-</body>
+    <head>
+        <meta charset="UTF-8" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        <title>GMT · Fractal Explorer</title>
+        <!-- Canonical root = the GMT app (same entry as app-gmt.html). `/` and
+             `/app-gmt.html` serve the identical app, so existing share/gallery
+             links carrying app-gmt.html keep resolving, and the service worker's
+             navigateFallback ('index.html') resolves to the app, never a menu.
+             The 6-app dev launcher lives at launcher.html. -->
+        <style>
+            /* Body must NOT be overflow:hidden on mobile — the address-bar
+               collapse trick depends on a 100vh element being taller than
+               the visible viewport (when the address bar is showing), so
+               the body has scroll capacity. Once the user swipes past the
+               intro, the address bar hides and the sticky shell locks. */
+            /* color-scheme: dark tells auto-darkening browsers (Samsung Internet
+               Dark mode, Chrome Android Auto-dark / Force-Dark, some WebViews)
+               that the page already provides a dark theme, so they skip the
+               automatic darkening pass that otherwise dims the white GMT logo
+               to grey on those devices. Every other app entry already sets this. */
+            html, body, #root { margin: 0; padding: 0; width: 100%; background: #000; color: #fff; color-scheme: dark; }
+            html { min-height: 100%; }
+            body { min-height: 100%; overscroll-behavior-y: none; }
+            /* Desktop: lock to viewport so the layout doesn't accidentally scroll. */
+            @media (hover: hover) and (pointer: fine) {
+                html, body, #root { height: 100%; overflow: hidden; }
+            }
+            /* Thicker touch scrollbars where elements opt in via .mobile-scroll. */
+            .mobile-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+            .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
+            .mobile-scroll::-webkit-scrollbar-track { background: transparent; }
+        </style>
+    </head>
+    <body>
+        <div id="root"></div>
+        <script type="module" src="/app-gmt/main.tsx"></script>
+    </body>
 </html>
