@@ -152,22 +152,24 @@ export const useAppStartup = (options?: UseAppStartupOptions) => {
             }
         }
 
-        // Mobile mid- and low-tier devices: switch adaptive resolution
-        // to manual mode. FPS-targeted scaling (smart mode) oscillates
-        // on mobile because compute fluctuates with thermal / OS load,
-        // and the user always lands in "Always" since hover-detection
-        // is meaningless on touch. Manual mode keeps a static idle
-        // resolution and only downsamples during touch interaction —
-        // responsiveness where it matters, no shimmer where it doesn't.
-        // High-tier mobile (e.g. iPad Pro) keeps full adaptive.
+        // Mobile mid- and low-tier devices: default adaptive resolution to
+        // SMART mode targeting 60 fps. This previously forced MANUAL mode
+        // (adaptiveTarget: 0) because FPS-targeted scaling oscillated on
+        // mobile — but that predates two fixes: the 6× mobile downscale
+        // ceiling (ADR-0024) and seed-from-cost engagement, which together
+        // let smart mode reach a high target without the ramp/oscillation.
+        // Manual mode, capped at the interactionDownsample factor, couldn't
+        // downsample far enough on a retina phone (the 6× ceiling only
+        // applies in smart mode). High-tier mobile already keeps full adaptive.
+        //
+        // First-run default only: applied when Target FPS is still the engine
+        // default (30), unset, or the old forced manual value (0 — never a real
+        // user choice, so migrate it). An explicit user-chosen target is kept.
         if (hwProfile.isMobile && hwProfile.tier !== 'high') {
             const setQuality = (state as any).setQuality;
-            if (setQuality) {
-                setQuality({
-                    dynamicScaling: true,
-                    adaptiveTarget: 0,           // manual mode (no FPS targeting)
-                    interactionDownsample: 1.5,  // 1/1.5 ≈ 67%, milder than the 2.0 default
-                });
+            const at = (state as any).quality?.adaptiveTarget;
+            if (setQuality && (at === undefined || at === 0 || at === 30)) {
+                setQuality({ dynamicScaling: true, adaptiveTarget: 60 });
             }
         }
 
