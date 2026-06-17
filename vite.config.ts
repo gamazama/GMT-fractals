@@ -13,10 +13,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // 'prompt' keeps the in-app "Update" pill wired, but the workbox
-      // skipWaiting/clientsClaim below make a new SW take over immediately
-      // (see the cutover note there) — required so returning visitors aren't
-      // stranded on a stale precache at the dev→prod same-origin swap.
+      // 'prompt' is effectively vestigial: the workbox skipWaiting/clientsClaim
+      // below make every new SW take over immediately + SILENTLY — the chosen
+      // update model (decided 2026-06-17, suite-wide), so there's no waiting
+      // worker for the prompt to surface and no "Update" pill on any app.
       registerType: 'prompt',
       // Don't run SW in dev (avoids middleware-mode complexity with Express server).
       devOptions: { enabled: false },
@@ -99,9 +99,9 @@ export default defineConfig({
         // new worker activates immediately, claims open clients, and purges the
         // outdated (stable) precache. cleanupOutdatedCaches also reclaims any
         // prior-revision precache on every normal update.
-        // Trade-off: updates now apply on the next reload without the pill's
-        // approval. Revert skipWaiting/clientsClaim post-cutover if the
-        // manual-update model is wanted back.
+        // CHOSEN UPDATE MODEL (decided 2026-06-17): silent auto-update — every
+        // app updates on the next reload, no pill, suite-wide (one SW serves
+        // app-gmt + gradient-explorer + fluid-toy + mesh-export). Keep these on.
         cleanupOutdatedCaches: true,
         skipWaiting: true,
         clientsClaim: true,

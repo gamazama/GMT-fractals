@@ -25,8 +25,9 @@ import {
     subscribeRenderPopup,
 } from '../../engine/animation/renderPopupRegistry';
 import {
-    getRenderAdjunct,
+    getRenderAdjuncts,
     subscribeRenderAdjunct,
+    type RenderAdjunct,
 } from '../../engine/animation/renderAdjunctRegistry';
 
 /**
@@ -219,12 +220,12 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
     // Optional subordinate render action, surfaced as a row in the "…"
     // overflow menu (e.g. GMT's "Export to After Effects"). The dialog is
     // mounted at the toolbar root so it survives the menu closing.
-    const renderAdjunct = useSyncExternalStore(
+    const renderAdjuncts = useSyncExternalStore(
         subscribeRenderAdjunct,
-        getRenderAdjunct,
-        getRenderAdjunct
+        getRenderAdjuncts,
+        getRenderAdjuncts
     );
-    const [showAdjunct, setShowAdjunct] = useState(false);
+    const [activeAdjunct, setActiveAdjunct] = useState<RenderAdjunct | null>(null);
 
     // Position the menu (in viewport coords) when opening — flip above the
     // trigger if there isn't room below. The menu is ~220px tall in its
@@ -450,16 +451,19 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                             {deterministicPlayback && <span className="text-cyan-400"><CheckIcon /></span>}
                         </button>
 
-                        {renderAdjunct && (
+                        {renderAdjuncts.length > 0 && (
                             <>
                                 <div className="h-px bg-white/10 mx-1"/>
-                                <button
-                                    onClick={() => { setShowAdjunct(true); setShowMenu(false); }}
-                                    className="text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded transition-colors"
-                                    title={renderAdjunct.title}
-                                >
-                                    {renderAdjunct.label}
-                                </button>
+                                {renderAdjuncts.map((adj) => (
+                                    <button
+                                        key={adj.label}
+                                        onClick={() => { setActiveAdjunct(adj); setShowMenu(false); }}
+                                        className="text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded transition-colors"
+                                        title={adj.title}
+                                    >
+                                        {adj.label}
+                                    </button>
+                                ))}
                             </>
                         )}
 
@@ -486,7 +490,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 
             {showRender && RenderPopupComponent && <RenderPopupComponent onClose={() => setShowRender(false)} />}
 
-            {showAdjunct && renderAdjunct && <renderAdjunct.Dialog onClose={() => setShowAdjunct(false)} />}
+            {activeAdjunct && <activeAdjunct.Dialog onClose={() => setActiveAdjunct(null)} />}
         </div>
     );
 };

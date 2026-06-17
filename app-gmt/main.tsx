@@ -59,6 +59,7 @@ import { useAnimationStore } from '../store/animationStore';
 import { installRenderDialog } from '../engine/plugins/RenderDialog';
 import { registerRenderAdjunct } from '../engine/animation/renderAdjunctRegistry';
 import { afxRenderAdjunct } from './AfxRenderAdjunct';
+import { fbxRenderAdjunct } from './FbxRenderAdjunct';
 import { runVideoExport, type AppGmtExtra } from '../engine-gmt/components/timeline/RenderPopup/exportRunner';
 import {
     AppGmtExtraFormFields,
@@ -410,6 +411,7 @@ installRenderDialog<AppGmtExtra>({
 // "Export to After Effects" — a subordinate row in the timeline toolbar's
 // "…" overflow menu, next to Render. Self-contained descriptor + dialog.
 registerRenderAdjunct(afxRenderAdjunct);
+registerRenderAdjunct(fbxRenderAdjunct);
 
 // Warm the help-topics chunk on idle so the first ?-button click
 // doesn't fall back to an empty topic map. Mirrors gmt-0.8.5's App.tsx.

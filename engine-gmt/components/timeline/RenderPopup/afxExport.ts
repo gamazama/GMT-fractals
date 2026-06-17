@@ -38,12 +38,8 @@
  */
 
 import * as THREE from 'three';
-import { useAnimationStore } from '../../../../store/animationStore';
-import { useEngineStore } from '../../../../store/engineStore';
 import { showToast } from '../../../../engine/store/toastStore';
-import { animationEngine } from '../../../../engine/AnimationEngine';
-import { applyExportModulations } from '../exportModulations';
-import { getViewportCamera } from '../../../engine/worker/ViewportRefs';
+import { sampleScene } from './sceneSampler';
 
 // ─── Public option / result shapes ────────────────────────────────────
 
@@ -116,144 +112,56 @@ const unwrapDeg = (curr: number, prev: number): number => {
     return curr;
 };
 
-/** High+low split subtraction — cancels the shared magnitude exactly so
- *  the tiny relative motion of a deep-zoom scene survives. */
-const splitSub = (aHi: number, aLo: number, bHi: number, bLo: number): number =>
-    (aHi - bHi) + (aLo - bLo);
-
 const safeName = (s: string): string => (s || 'GMT').replace(/[^\w\-]+/g, '_');
 
 // ─── Sampler ──────────────────────────────────────────────────────────
 
 /**
- * Scrub the animation frame-by-frame and record the AE-space camera,
- * positional-light nulls, and chosen slider values. Reuses the proven
- * "scrub → read camera/sceneOffset synchronously" pattern from the video
- * export pump (exportRunner.ts) but skips the worker render.
+ * Adapter over the shared {@link sampleScene}: takes the neutral GMT-space
+ * sample and applies the After Effects coordinate conversion (handedness flip,
+ * comp-pixel scale from the FOV-derived Zoom, scene-centre origin). Output is
+ * byte-identical to the previous standalone sampler — the rebasing lives in
+ * sceneSampler, only the AE-specific math is here.
  */
 export const sampleAfxFrames = (opts: AfxExportOptions): AfxSample => {
-    const cam0 = getViewportCamera() as THREE.PerspectiveCamera | null;
-    const gmtFovDeg = cam0?.fov ?? 60;
-
-    // AE has no FOV field — it derives focal length from comp size + Zoom.
-    // Solve Zoom from GMT's vertical FOV so AE's lens matches the lens the
-    // plate was rendered with; only then do the camera motion and any added
-    // 3D layers track the fractal. (camFov is vertical — see FractalEngine
-    // syncCameraFromMatrix: uCamBasisY = up × tan(fov/2).)
-    const zoom = (opts.height / 2) / Math.tan((gmtFovDeg / 2) * (Math.PI / 180));
-
-    const animState = useAnimationStore.getState();
-    const savedFrame = animState.currentFrame;
-    const savedPlaying = animState.isPlaying;
-    if (savedPlaying) animState.pause();
-
-    // Positional lights only (Directional lights have no world position).
-    // Capture the array INDEX of each positional light: scrub mutates the
-    // store array per frame, but its order is stable, so indexing is robust
-    // (and avoids matching on the optional, often-undefined `id`).
-    const allLights0 = useEngineStore.getState().lighting?.lights ?? [];
-    const lightIdx: number[] = [];
-    const lightMeta: Array<{ name: string }> = [];
-    allLights0.forEach((l, i) => {
-        if (l.type === 'Point' || l.type === 'Sphere') {
-            lightIdx.push(i);
-            lightMeta.push({ name: `GMT ${l.type} Light ${lightIdx.length}` });
-        }
+    const scene = sampleScene({
+        fps: opts.fps, startFrame: opts.startFrame, endFrame: opts.endFrame,
+        frameStep: opts.frameStep, trackIds: opts.sliderTrackIds,
     });
 
-    const step = Math.max(1, opts.frameStep);
-    const totalFrames = Math.max(1, Math.floor((opts.endFrame - opts.startFrame) / step) + 1);
+    // AE has no FOV field — it derives focal length from comp size + Zoom.
+    // Solve Zoom from GMT's vertical FOV so AE's lens matches the render.
+    const zoom = (opts.height / 2) / Math.tan((scene.fovDeg / 2) * (Math.PI / 180));
+    const scale = zoom / scene.dStart;
     const centreX = opts.width / 2;
     const centreY = opts.height / 2;
 
-    // ── Capture START reference (R = start-frame look-at) ──
-    animationEngine.scrub(opts.startFrame);
-    const cStart = getViewportCamera() as THREE.PerspectiveCamera | null;
-    const soStart = useEngineStore.getState().sceneOffset;
-    const dStart = Math.max((useEngineStore.getState() as any).targetDistance ?? 3.5, 1e-12);
-    const qStart = cStart ? cStart.quaternion.clone() : new THREE.Quaternion();
-    const camLocalStart = cStart ? cStart.position.clone() : new THREE.Vector3();
-    const fwdStart = new THREE.Vector3(0, 0, -1).applyQuaternion(qStart);
-
-    // R's high-precision part is the start sceneOffset; the local part is
-    // the start camera-local offset plus the look-at lead (forward·D).
-    const rHi = {
-        x: soStart.x, y: soStart.y, z: soStart.z,
-        xL: soStart.xL ?? 0, yL: soStart.yL ?? 0, zL: soStart.zL ?? 0,
-    };
-    const rLocal = camLocalStart.clone().add(fwdStart.multiplyScalar(dStart));
-    // Plain-double unified R for re-basing light positions (lights aren't
-    // stored in split precision, so this is best-effort in very deep zooms).
-    const rUnified = {
-        x: rHi.x + rHi.xL + rLocal.x,
-        y: rHi.y + rHi.yL + rLocal.y,
-        z: rHi.z + rHi.zL + rLocal.z,
-    };
-    const scale = zoom / dStart;
-
     const frames: SampledFrame[] = [];
     let prevOrient: [number, number, number] | null = null;
-    try {
-        for (let i = 0; i < totalFrames; i++) {
-            const tf = opts.startFrame + i * step;
-            const time = tf / opts.fps;
-            animationEngine.scrub(tf);
-            applyExportModulations(time, 1.0 / opts.fps);
-
-            const c = getViewportCamera() as THREE.PerspectiveCamera | null;
-            const so = useEngineStore.getState().sceneOffset;
-            const camLocal = c ? c.position : camLocalStart;
-
-            // rel = (sceneOffset_f − R_hi) in split precision + (camLocal_f − R_local)
-            const relX = splitSub(so.x, so.xL ?? 0, rHi.x, rHi.xL) + (camLocal.x - rLocal.x);
-            const relY = splitSub(so.y, so.yL ?? 0, rHi.y, rHi.yL) + (camLocal.y - rLocal.y);
-            const relZ = splitSub(so.z, so.zL ?? 0, rHi.z, rHi.zL) + (camLocal.z - rLocal.z);
-
-            const pos = gmtToAePosition(relX, relY, relZ, scale, centreX, centreY);
-            let orient = quatToAeOrientation(c ? c.quaternion : qStart);
-            if (prevOrient) {
-                orient = [
-                    unwrapDeg(orient[0], prevOrient[0]),
-                    unwrapDeg(orient[1], prevOrient[1]),
-                    unwrapDeg(orient[2], prevOrient[2]),
-                ];
-            }
-            prevOrient = orient;
-
-            const curLights = useEngineStore.getState().lighting?.lights ?? [];
-            const lights: Array<[number, number, number]> = lightIdx.map((idx) => {
-                const lp = curLights[idx]?.position ?? { x: 0, y: 0, z: 0 };
-                return gmtToAePosition(
-                    lp.x - rUnified.x, lp.y - rUnified.y, lp.z - rUnified.z,
-                    scale, centreX, centreY,
-                );
-            });
-
-            const seq = useAnimationStore.getState().sequence;
-            const sliders = opts.sliderTrackIds.map((id) => {
-                const t = seq.tracks[id];
-                return t ? animationEngine.evaluateTrack(t, tf) : 0;
-            });
-
-            frames.push({ pos, orient, lights, sliders });
+    for (const f of scene.frames) {
+        const pos = gmtToAePosition(f.relPos[0], f.relPos[1], f.relPos[2], scale, centreX, centreY);
+        let orient = quatToAeOrientation(new THREE.Quaternion(f.quat[0], f.quat[1], f.quat[2], f.quat[3]));
+        if (prevOrient) {
+            orient = [
+                unwrapDeg(orient[0], prevOrient[0]),
+                unwrapDeg(orient[1], prevOrient[1]),
+                unwrapDeg(orient[2], prevOrient[2]),
+            ];
         }
-    } finally {
-        // Always restore the user's timeline, even if sampling throws.
-        animationEngine.scrub(savedFrame);
-        if (savedPlaying) useAnimationStore.getState().play();
-    }
+        prevOrient = orient;
 
-    const sliderMeta = opts.sliderTrackIds.map((id) => {
-        const t = useAnimationStore.getState().sequence.tracks[id];
-        return { name: t?.label || id };
-    });
+        const lights = f.lightsRel.map((l) =>
+            gmtToAePosition(l[0], l[1], l[2], scale, centreX, centreY));
+
+        frames.push({ pos, orient, lights, sliders: f.trackValues });
+    }
 
     return {
         frames,
         zoom,
-        durationSec: totalFrames / opts.fps,
-        lightMeta: lightMeta.map(l => ({ name: l.name })),
-        sliderMeta,
+        durationSec: scene.frames.length / opts.fps,
+        lightMeta: scene.lightMeta,
+        sliderMeta: scene.trackMeta,
     };
 };
 
