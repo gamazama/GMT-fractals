@@ -20,10 +20,15 @@ import React from 'react';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 
 interface MobileScrollIntroProps {
-    /** App name shown in the intro. Defaults to "GMT". */
+    /** App name shown in the intro. Defaults to "GMT". Used as the text
+     *  fallback / aria label when `logo` is not supplied. */
     title?: string;
     /** Subtitle / hint line. Defaults to "Swipe up to enter". */
     subtitle?: string;
+    /** Brand slot — when provided, renders this (e.g. an app's vector
+     *  wordmark) instead of the plain `title` text. Keeps engine-core
+     *  domain-agnostic: the app supplies its own logo. */
+    logo?: React.ReactNode;
 }
 
 /**
@@ -44,6 +49,7 @@ interface MobileScrollIntroProps {
 export const MobileScrollIntro: React.FC<MobileScrollIntroProps> = ({
     title = 'GMT',
     subtitle = 'Swipe up to enter',
+    logo,
 }) => {
     // Intentionally `isDeviceMobile`, not `isMobile` — the address-bar
     // collapse trick has no purpose on a desktop browser, and rendering
@@ -59,8 +65,8 @@ export const MobileScrollIntro: React.FC<MobileScrollIntroProps> = ({
             className="w-full flex flex-col items-center justify-center bg-black text-white text-center px-8"
             style={{ height: '100svh', scrollSnapAlign: 'start' }}
         >
-            <h1 className="text-3xl font-bold tracking-tight mb-2">{title}</h1>
-            <p className="text-gray-500 text-sm font-mono mb-8">{subtitle}</p>
+            {logo ?? <h1 className="text-3xl font-bold tracking-tight mb-2">{title}</h1>}
+            <p className="text-gray-500 text-sm font-mono mt-2 mb-8">{subtitle}</p>
             <div className="text-cyan-400 animate-bounce">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="6 9 12 15 18 9" />
