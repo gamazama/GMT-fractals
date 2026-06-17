@@ -34,6 +34,7 @@ import ReactDOM from 'react-dom/client';
 import { usePaletteOverlayStore } from './paletteOverlayStore';
 import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { restorePaletteFilters, watchPaletteFilters } from '../palette/store/paletteFiltersPersist';
+import { isMobileSnapshot } from '../hooks/useMobileLayout';
 import { topbar } from '../engine/plugins/TopBar';
 import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
@@ -310,7 +311,7 @@ installGallery();
 // Supabase Auth — Phase 2B. Mounts the topbar profile chip (right slot) and
 // gates the gallery's Submit menu item on signed-in status. Auth overlay +
 // AccountPanel are mounted by AppGmt.tsx near the other full-screen UIs.
-installAuth();
+installAuth({ when: () => !isMobileSnapshot() });
 
 installModulation();
 // GMT's LFO defaults: a fresh LFO targets coreMath.paramA (the first

@@ -244,7 +244,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     //  installTopBar({hideDefaults}) and we register our own here.)
     topbar.register({ id: 'gmt-logo',             slot: 'left', order: -10, component: GmtLogo });
     topbar.register({ id: 'gmt-div-1',            slot: 'left', order: 1,   component: TopBarDivider, when: desktopOnly });
-    topbar.register({ id: 'fps',                  slot: 'left', order: 2,   component: FpsCounter });
+    topbar.register({ id: 'fps',                  slot: 'left', order: 2,   component: FpsCounter, when: desktopOnly });
     topbar.register({ id: 'pause',                slot: 'left', order: 3,   component: PauseControls });
     topbar.register({ id: 'gmt-div-2',            slot: 'left', order: 4,   component: TopBarDivider, when: desktopOnly });
     topbar.register({ id: 'gmt-viewport-quality', slot: 'left', order: 5,   component: ViewportQuality, when: desktopOnly });

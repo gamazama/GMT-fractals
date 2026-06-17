@@ -34,6 +34,10 @@ export interface InstallAuthOptions {
     /** Order within the slot. Default 0 — sits between the logo and the
      *  first divider (which is at order 1 in registerGmtTopbar). */
     order?: number;
+    /** Optional visibility predicate (TopBar `when:`). GMT passes
+     *  `() => !isMobileSnapshot()` to hide the avatar on mobile, where the
+     *  narrow topbar can't fit it without burying the System menu. */
+    when?: () => boolean;
 }
 
 export const installAuth = (options: InstallAuthOptions = {}) => {
@@ -45,6 +49,7 @@ export const installAuth = (options: InstallAuthOptions = {}) => {
         slot: options.slot ?? 'left',
         order: options.order ?? 0,
         component: AuthTopbarWidget,
+        when: options.when,
     });
 };
 
