@@ -2,7 +2,10 @@
  * <FormulaPicker> — unified formula-selection UI.
  *
  * Variants:
- *   - popover : portal + anchored to a trigger DOMRect (replaces PortalDropdown)
+ *   - popover : portal + anchored to a trigger DOMRect (replaces PortalDropdown).
+ *               On mobile (coarse pointer / narrow viewport) the popover drops
+ *               its trigger anchor and renders as a viewport-fitted sheet
+ *               (inset + safe-area, dvh-sized) so it never overflows offscreen.
  *   - inline  : in-flow card (interlace secondary picker)
  *   - modal   : centered overlay with backdrop (New Scene wizard)
  *
@@ -813,6 +816,28 @@ function PopoverShell({
         const winW = window.innerWidth;
         const padding = 12;
 
+        // Mobile: an anchored popover with a forced min-height overflows a
+        // small viewport — it renders partially offscreen (unreachable) and
+        // its size is uncontrolled. Present a viewport-fitted sheet instead:
+        // inset by `padding` + safe-area insets, sized with dvh/vw so it tracks
+        // address-bar / keyboard viewport changes and never overflows. Not
+        // anchored to the trigger.
+        const isMobile = (window.matchMedia?.('(pointer: coarse)').matches ?? false) || winW < 768;
+        if (isMobile) {
+            setBoxStyle({
+                position: 'fixed',
+                left:   `calc(${padding}px + env(safe-area-inset-left))`,
+                top:    `calc(${padding}px + env(safe-area-inset-top))`,
+                width:  `calc(100vw - ${padding * 2}px - env(safe-area-inset-left) - env(safe-area-inset-right))`,
+                height: `calc(100dvh - ${padding * 2}px - env(safe-area-inset-top) - env(safe-area-inset-bottom))`,
+                zIndex: 9999,
+                opacity: 1,
+                pointerEvents: 'auto',
+            });
+            setPreviewStyle(null);   // no hover preview on touch
+            return;
+        }
+
         const isList = viewMode === 'list';
         const width = Math.min(isList ? 380 : 640, winW - padding * 2);
 
@@ -886,7 +911,15 @@ function PopoverShell({
             if (target.closest('.formula-picker-shell')) return;
             onClose?.();
         };
-        const handleResize = () => onClose?.();
+        const handleResize = () => {
+            // On mobile the picker is a viewport-fitted sheet (not anchored),
+            // and the on-screen keyboard / address-bar collapse both fire
+            // resize — closing then would dismiss the picker the instant the
+            // search field focuses. The sheet re-fits via CSS (dvh), so only
+            // close on desktop, where a resize moves the anchored trigger.
+            const isMobile = (window.matchMedia?.('(pointer: coarse)').matches ?? false) || window.innerWidth < 768;
+            if (!isMobile) onClose?.();
+        };
         window.addEventListener('mousedown', handleDown, true);
         window.addEventListener('resize', handleResize);
         return () => {
