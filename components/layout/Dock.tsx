@@ -67,6 +67,14 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
             // left-docked panel surfaces on the right dock instead — otherwise
             // it would be unreachable.
             if (isMobile && location === 'left') {
+                // A left panel gated by `showIf` (Graph/Audio/Drawing/Engine)
+                // appears when its feature is active. One with NO showIf
+                // (Camera Manager) is always-available and would otherwise
+                // permanently occupy a right tab — make those summon-only:
+                // shown only once explicitly opened (from their menu). togglePanel
+                // routes them to the right dock via the same effective-dock remap.
+                const mdef = getPanelDefinition(p.id);
+                if (!mdef?.showIf && !p.isOpen) return false;
                 location = 'right';
             }
             if (location !== side) return false;

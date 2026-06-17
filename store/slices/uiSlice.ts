@@ -5,6 +5,17 @@ import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
 
+// Mirrors Dock.tsx: on mobile the left dock isn't mounted (see AppGmt), so a
+// left-located panel is presented in the RIGHT dock. Panel activation must use
+// the SAME effective-dock remap, else opening a left panel writes activeLeftTab
+// (an unmounted dock) and the tap appears to do nothing.
+const checkIsMobile = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth < 768;
+};
+const effectiveDock = (panel: PanelState, mobile: boolean): DockZone =>
+    mobile && panel.location === 'left' ? 'right' : panel.location;
+
 // User preferences persisted to localStorage. Read at slice init,
 // written from setters. All keys under the `gmt.` namespace.
 const LS = {
@@ -405,21 +416,28 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
         // that's why a closed Favients shelf reopened on reload.
         const p = panels[id] = { ...panels[id], isOpen: nextState };
 
-        if (p.location !== 'float') {
+        // Effective dock: on mobile a left panel lives in the right dock (no
+        // left dock is mounted). Use it for same-dock exclusivity AND for the
+        // active-tab routing below, so a summoned left panel actually activates
+        // in the dock the user sees it in.
+        const mobile = checkIsMobile();
+        const pDock = effectiveDock(p, mobile);
+
+        if (pDock !== 'float') {
             if (nextState) {
                 (Object.values(panels) as PanelState[]).forEach((other) => {
-                    if (other.location === p.location && other.id !== id) {
+                    if (other.id !== id && effectiveDock(other, mobile) === pDock) {
                         other.isOpen = false;
                     }
                 });
 
-                if (p.location === 'left') return { panels, activeLeftTab: id as PanelId, isLeftDockCollapsed: false };
-                if (p.location === 'right') return { panels, activeRightTab: id as PanelId, isRightDockCollapsed: false };
+                if (pDock === 'left') return { panels, activeLeftTab: id as PanelId, isLeftDockCollapsed: false };
+                if (pDock === 'right') return { panels, activeRightTab: id as PanelId, isRightDockCollapsed: false };
             }
         }
-        
-        const activeLeft = (Object.values(panels) as PanelState[]).find((x) => x.location === 'left' && x.isOpen)?.id as PanelId || null;
-        const activeRight = (Object.values(panels) as PanelState[]).find((x) => x.location === 'right' && x.isOpen)?.id as PanelId || null;
+
+        const activeLeft = (Object.values(panels) as PanelState[]).find((x) => effectiveDock(x, mobile) === 'left' && x.isOpen)?.id as PanelId || null;
+        const activeRight = (Object.values(panels) as PanelState[]).find((x) => effectiveDock(x, mobile) === 'right' && x.isOpen)?.id as PanelId || null;
 
         return { panels, activeLeftTab: activeLeft, activeRightTab: activeRight };
     }),
