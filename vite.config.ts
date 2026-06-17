@@ -87,18 +87,9 @@ export default defineConfig({
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/\.html(\?|$)/],
         ignoreURLParametersMatching: [/.*/],
-        runtimeCaching: [
-          {
-            // CDN assets (Tailwind, jsdelivr) — try network, fall back to cache.
-            urlPattern: /^https:\/\/(cdn\.tailwindcss\.com|cdn\.jsdelivr\.net|esm\.sh)\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'external-cdn',
-              networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 },
-            },
-          },
-        ],
+        // (No runtimeCaching for third-party CDNs — Tailwind is now compiled
+        // at build time and reactflow CSS is bundled, so the app loads zero
+        // runtime CDN resources. This removes the blank-page-on-CDN-blip class.)
       },
     }),
   ],

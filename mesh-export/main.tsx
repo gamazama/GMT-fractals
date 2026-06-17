@@ -1,3 +1,5 @@
+// Global Tailwind styles (build-time; replaces the cdn.tailwindcss.com Play CDN).
+import '../index.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { MeshExportApp } from './components/MeshExportApp';

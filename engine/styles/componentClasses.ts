@@ -1,41 +1,18 @@
 /**
- * Engine component-utility CSS — single source of truth for the
- * `t-btn`, `t-section-*`, `icon-btn`, `glass-panel`, `t-input`,
- * `t-dropdown`, `t-select` classes that shared UI components reference
- * (Button, SectionLabel, Slider, Dropdown, …).
+ * Engine runtime-injected CSS.
  *
- * The Tailwind CDN parses any `<style type="text/tailwindcss">` block
- * present in the document at scan time. `injectEngineStyles()` appends
- * one to `document.head` so every app that mounts the engine inherits
- * the same component classes — no per-entry HTML duplication.
+ * The component-utility classes (`t-btn`, `t-section-*`, `icon-btn`,
+ * `glass-panel`, `t-input`, `t-dropdown`, `t-select`, `panel-*`) USED to
+ * live here as a `<style type="text/tailwindcss">` block that the Tailwind
+ * Play CDN compiled at runtime. The Play CDN has been removed (it was a
+ * production-fragility — a CDN blip rendered the app unstyled), so those
+ * `@apply` rules are now compiled at BUILD time and live in `index.css`
+ * under `@layer components`. Keep `index.css` in sync with the intent here.
  *
- * Apps don't need to call this directly; `registerUI()` does it on
- * first invocation.
+ * What remains injected at runtime is only the plain CSS below (scrollbars +
+ * dark color-scheme) — real CSS with pseudo-elements that Tailwind can't
+ * express. `registerUI()` calls `injectEngineStyles()` on first invocation.
  */
-
-const ENGINE_COMPONENT_CSS = `
-@layer components {
-    .t-label { @apply text-[10px] font-bold text-gray-500; }
-    .t-label-sm { @apply text-[9px] font-bold text-gray-500; }
-    .t-value { @apply text-xs font-mono text-gray-200; }
-    .t-section-header { @apply px-3 py-1.5 bg-black/20 border-b border-white/5 flex items-center justify-between shrink-0; }
-    .t-section-title { @apply text-[9px] font-bold text-gray-500; }
-    .glass-panel { @apply bg-black/95 backdrop-blur-xl border border-white/20 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.5)]; }
-    .panel-header { @apply flex items-center justify-between px-2 py-1.5 bg-gray-800/80 border-b border-white/10 select-none shrink-0; }
-    .panel-section { @apply px-3 py-1.5 bg-black/20 border-b border-white/5 flex justify-between items-center shrink-0; }
-    .icon-btn { @apply p-1.5 rounded transition-colors text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer; }
-    .icon-btn-active { @apply bg-cyan-900/50 text-cyan-300 border border-cyan-700/50; }
-    .icon-btn-danger { @apply text-red-500 hover:text-red-300 hover:bg-red-900/20; }
-    .t-input { @apply w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500 transition-colors; }
-    .t-dropdown { @apply w-full bg-gradient-to-b from-[#1a1a1a] to-transparent border border-white/5 text-[10px] font-medium text-gray-300 tracking-tight rounded px-2 py-1 outline-none focus:border-cyan-500 appearance-none hover:bg-white/5 transition-colors cursor-pointer text-center; }
-    .t-dropdown option { @apply bg-[#1a1a1a] text-gray-300; }
-    .t-btn { @apply min-h-[26px] py-1 px-3 text-[9px] font-bold border rounded transition-all truncate flex items-center justify-center gap-2 select-none; }
-    .t-btn-sm { @apply py-0.5 px-2 text-[9px] font-bold border rounded transition-all truncate flex items-center justify-center gap-1 select-none; }
-    .t-btn-default { @apply bg-gradient-to-b from-[#1a1a1a] to-transparent border-white/10 text-gray-400 hover:text-white hover:bg-white/5 hover:border-white/20; }
-    .t-select { @apply w-full bg-black/40 border border-white/10 text-[10px] font-medium text-gray-300 rounded px-2 py-1 outline-none focus:border-cyan-500/50 appearance-none hover:border-white/20 transition-colors cursor-pointer; }
-    .t-select option { @apply bg-[#111] text-gray-300; }
-}
-`;
 
 /**
  * Plain CSS the engine needs but Tailwind can't express directly:
@@ -82,16 +59,13 @@ let _injected = false;
 export const injectEngineStyles = (): void => {
     if (_injected) return;
     if (typeof document === 'undefined') return;
-    if (document.head.querySelector('style[data-engine-styles]')) {
+    if (document.head.querySelector('style[data-engine-styles-plain]')) {
         _injected = true;
         return;
     }
-    const tailwindStyle = document.createElement('style');
-    tailwindStyle.setAttribute('type', 'text/tailwindcss');
-    tailwindStyle.setAttribute('data-engine-styles', 'true');
-    tailwindStyle.textContent = ENGINE_COMPONENT_CSS;
-    document.head.appendChild(tailwindStyle);
 
+    // Component-utility classes (t-btn / glass-panel / …) are compiled at
+    // build time now (index.css @layer components), NOT injected here.
     // Plain CSS (scrollbars + color-scheme) goes in a regular <style>
     // tag — Tailwind directives in `text/tailwindcss` can't apply CSS
     // pseudo-elements like ::-webkit-scrollbar.

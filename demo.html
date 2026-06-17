@@ -5,13 +5,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>GMT — Engine Demo</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <!-- Engine component utility classes (t-btn, t-section-*, icon-btn,
          glass-panel, t-input, t-dropdown, t-select) are injected at
          runtime by `engine/styles/componentClasses.ts` via `registerUI()`.
          Single source of truth — apps don't need to duplicate them per
-         entry HTML. -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reactflow@11.10.1/dist/style.min.css" />
+         entry HTML. Tailwind utilities are now compiled at build time
+         (see index.css / tailwind.config.js), not the Play CDN.
+         reactflow's stylesheet is bundled via `import 'reactflow/dist/style.css'`
+         in engine-gmt/components/panels/flow/FlowEditor.tsx. -->
     <style>
       /* FIX: color-scheme: dark forces browser native controls (scrollbars, inputs) to use dark theme */
       html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; }
@@ -55,34 +56,6 @@
       @keyframes pop-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
       .animate-pop-in { animation: pop-in 0.15s ease-out forwards; }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.2.0",
-    "react/": "https://esm.sh/react@18.2.0/",
-    "react-dom": "https://esm.sh/react-dom@18.2.0?external=react",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?external=react",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0/",
-    "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.16.1?external=three,react,react-dom",
-    "@react-three/drei": "https://esm.sh/@react-three/drei@9.102.6?external=three,react,react-dom,@react-three/fiber",
-    "three": "https://esm.sh/three@0.162.0",
-    "three/": "https://esm.sh/three@0.162.0/",
-    "three-stdlib": "https://esm.sh/three-stdlib@2.29.4?external=three",
-    "zustand": "https://esm.sh/zustand@4.5.2?external=react",
-    "zustand/middleware": "https://esm.sh/zustand@4.5.2/middleware?external=react",
-    "zustand/": "https://esm.sh/zustand@4.5.2/",
-    "nanoid": "https://esm.sh/nanoid@^5.1.6",
-    "reactflow": "https://esm.sh/reactflow@11.10.1?external=react,react-dom",
-    "pako": "https://esm.sh/pako@2.1.0",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "vite": "https://esm.sh/vite@^7.3.1",
-    "fs": "https://esm.sh/fs@^0.0.1-security",
-    "path": "https://esm.sh/path@^0.12.7",
-    "url": "https://esm.sh/url@^0.11.4",
-    "express": "https://esm.sh/express@^5.2.1"
-  }
-}
-</script>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />

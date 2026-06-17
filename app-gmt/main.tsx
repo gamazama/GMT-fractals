@@ -16,6 +16,9 @@
 // side-effect import, not a plain function call below.
 import './registerFeatures';
 
+// Global Tailwind styles (build-time; replaces the cdn.tailwindcss.com Play CDN).
+import '../index.css';
+
 // Slice migrations — translate pre-restructure presets at load time.
 // Registered before any preset load; order vs registerFeatures is irrelevant
 // (migrations run in engineStore.loadPreset, well after boot).

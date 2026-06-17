@@ -24,6 +24,9 @@
 import './registerFeatures';
 import '../engine/plugins/camera/presetField';
 
+// Global Tailwind styles (build-time; replaces the cdn.tailwindcss.com Play CDN).
+import '../index.css';
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { FractalToyApp } from './FractalToyApp';

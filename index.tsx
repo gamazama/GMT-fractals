@@ -14,6 +14,9 @@
 // on first store access).
 import './demo/registerFeatures';
 
+// Global Tailwind styles (build-time; replaces the cdn.tailwindcss.com Play CDN).
+import './index.css';
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
