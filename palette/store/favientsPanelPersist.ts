@@ -97,7 +97,13 @@ export const restoreFavientsPanel = (defaults: FavientsPanelDefaults, opts?: Fav
   const w = saved?.w ?? defaults.w;
   const h = saved?.h ?? defaults.h;
   const open = saved ? saved.open : defaults.open;
-  const location = saved?.location ?? defaults.location ?? 'float';
+  // First run (nothing saved): on mobile the shelf defaults DOCKED rather than
+  // floating — a floating shelf on a phone is awkward and easily lost off the
+  // small screen. The left dock is hidden on mobile, so dock it right. Uses a
+  // direct media query (reliable at boot, before store mobile-flags settle).
+  const isMobileBoot = typeof window !== 'undefined'
+    && (window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth < 768);
+  const location = saved?.location ?? (isMobileBoot ? 'right' : (defaults.location ?? 'float'));
 
   // Always remember the float spot/size so a later undock returns the panel to
   // its last floating position, regardless of where it starts.

@@ -1,4 +1,4 @@
-import React, { useRef, useState, type ReactNode } from 'react';
+import React, { useRef, useState, useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismiss } from '../../hooks/useDismiss';
 import { CloseIcon, ResizeHandleIcon } from '../Icons';
@@ -142,6 +142,32 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
         if (onSizeChange) onSizeChange(s);
         if (size === undefined) setInternalSize(s);
     };
+
+    // Keep the panel on-screen. A persisted/default float position can place the
+    // window partly (or fully) off the viewport — e.g. a position saved on a
+    // bigger screen, or a mobile rotate. Clamp the top-left into the viewport on
+    // mount and on resize so the header stays reachable. Coordinate mode only
+    // (anchored panels have no position to clamp). Idempotent: only writes when
+    // actually out of bounds, so it can't fight a legitimate in-view position.
+    useEffect(() => {
+        if (!effectivePos) return;
+        const clamp = () => {
+            const el = panelRef.current;
+            if (!el || typeof window === 'undefined') return;
+            const margin = 8;
+            const w = el.offsetWidth;
+            const h = el.offsetHeight;
+            const maxX = Math.max(margin, window.innerWidth - w - margin);
+            const maxY = Math.max(margin, window.innerHeight - h - margin);
+            const cx = Math.min(Math.max(effectivePos.x, margin), maxX);
+            const cy = Math.min(Math.max(effectivePos.y, margin), maxY);
+            if (cx !== effectivePos.x || cy !== effectivePos.y) applyPos({ x: cx, y: cy });
+        };
+        clamp();
+        window.addEventListener('resize', clamp);
+        return () => window.removeEventListener('resize', clamp);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [effectivePos?.x, effectivePos?.y, effectiveSize?.width, effectiveSize?.height]);
 
     type DragStart = { px: number; py: number; ox: number; oy: number };
     const drag = usePointerDrag<DragStart>({

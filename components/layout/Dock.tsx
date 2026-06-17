@@ -63,8 +63,10 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
         .filter((p) => {
             let location = p.location;
 
-            // On mobile, redirect Engine and Camera Manager to right dock.
-            if (isMobile && (p.id === 'Engine' || p.id === 'Camera Manager')) {
+            // On mobile the left dock isn't mounted (see AppGmt), so any
+            // left-docked panel surfaces on the right dock instead — otherwise
+            // it would be unreachable.
+            if (isMobile && location === 'left') {
                 location = 'right';
             }
             if (location !== side) return false;
