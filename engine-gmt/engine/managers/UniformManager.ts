@@ -196,6 +196,17 @@ export class UniformManager {
                 dynamicScaling: !!runtimeState.quality?.dynamicScaling,
                 adaptiveTarget,
                 interactionDownsample: runtimeState.quality?.interactionDownsample ?? 2.0,
+                // Mobile gets a lower minQuality → a HIGHER max downscale so smart
+                // adaptive can drop resolution further during interaction. A retina
+                // phone renders at full DPR when settled (sharp, untouched here), but
+                // its weak GPU can't sustain that DPR while moving — and the default
+                // 4× ceiling (minQuality 0.25) only reaches full-DPR ÷ 4, which on a
+                // 3× display is still ~0.75× CSS. 1/6 (≈6× ceiling) lets it reach
+                // ~0.5× CSS, matching what heavy scenes needed manually. Desktop keeps
+                // the 0.25 default (undefined → the module's default). Only the smart-
+                // mode (adaptiveTarget>0) scale is bounded by this; manual-mode
+                // interactionDownsample is unaffected. See ADR-0024.
+                minQuality: runtimeState.isMobile ? (1 / 6) : undefined,
                 // Hard-force full res when the bucket-render dialog or export flow
                 // sets the store flag. Without this, the worker keeps adaptive-
                 // scaling while the popup is open — each scale change resizes the
