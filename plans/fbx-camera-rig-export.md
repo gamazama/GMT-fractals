@@ -10,7 +10,11 @@
 > - ⚠️ Phase 3 — opt-in camera-locked backdrop plate. Built + structurally
 >   valid, but orientation/UV/texture-display **NOT yet visually verified**
 >   (knobs isolated in `buildPlate`).
-> - ⏳ Deferred: AFX/FBX shared-sampler unification; Fusion verification (no install).
+> - ✅ AFX/FBX shared-sampler unification — `sceneSampler.ts` emits neutral
+>   GMT-space data; both exporters are thin adapters. AFX `.jsx` byte-identical
+>   (rebasing math verbatim); needs an in-app re-export smoke to confirm.
+> - ⏳ Deferred: Fusion verification (no install); AFX rotation flip-free fix
+>   (blocked on After Effects verification — AE Euler-order dependent).
 
 **Scope:** A camera-rig FBX export — the FBX analog of the existing "Export to
 After Effects" (.jsx) adjunct. Exports the **camera animation, positional-light
