@@ -1,0 +1,1 @@
+let t=[];const r=new Set;function o(e){if(!e){t.length&&(t=[],r.forEach(n=>n()));return}const s=t.findIndex(n=>n.label===e.label),c=t.slice();s>=0?c[s]=e:c.push(e),t=c,r.forEach(n=>n())}function l(){return t}function a(e){return r.add(e),()=>{r.delete(e)}}const i=new Map,d=(e,s)=>{i.set(e,s)},u=e=>i.get(e),f=e=>{i.delete(e)};export{l as a,d as b,f as c,u as g,o as r,a as s};
