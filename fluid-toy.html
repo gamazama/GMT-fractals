@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>GMT — Fluid Toy</title>
+    <style>
+      html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; min-height: 100%; }
+      body { margin: 0; padding: 0; width: 100%; min-height: 100%; background-color: #000; overscroll-behavior-y: none; }
+      @media (hover: hover) and (pointer: fine) {
+        html, body { height: 100vh; overflow: hidden; }
+      }
+      ::-webkit-scrollbar { width: 3px; height: 3px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+      .mobile-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+      .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
+
+      /* Boot splash — inline so it paints IMMEDIATELY, before the JS bundle
+         parses + React mounts (which is seconds of black otherwise). Lives
+         OUTSIDE #root so React's render() never touches it; the app removes it
+         only once the engine's first frame has drawn (see FluidToyApp). */
+      @keyframes ft-spin { to { transform: rotate(360deg); } }
+      #ft-boot-splash {
+        position: fixed; inset: 0; z-index: 99999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+        background: #000; color: #9ca3af;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        font-size: 12px; letter-spacing: 0.04em;
+        transition: opacity 450ms ease;
+      }
+      #ft-boot-splash .ft-spinner {
+        width: 32px; height: 32px; border-radius: 9999px;
+        border: 2px solid rgba(255,255,255,0.15); border-top-color: #22d3ee;
+        animation: ft-spin 0.8s linear infinite;
+      }
+      #ft-boot-splash.ft-hidden { opacity: 0; pointer-events: none; }
+    </style>
+    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+    <script type="module" crossorigin src="./assets/fluid-toy-BKK6sO53.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/three-DQWx7qFd.js">
+    <link rel="modulepreload" crossorigin href="./assets/three-fiber-GKfjny8F.js">
+    <link rel="modulepreload" crossorigin href="./assets/three-drei-DwjSMb5v.js">
+    <link rel="modulepreload" crossorigin href="./assets/pako-DwGzBETv.js">
+    <link rel="modulepreload" crossorigin href="./assets/CollapsibleSection-CYwz2bPS.js">
+    <link rel="modulepreload" crossorigin href="./assets/gradientEditorEntrance-ogKcOBDu.js">
+    <link rel="modulepreload" crossorigin href="./assets/FormulaFormat-C0j2Zhym.js">
+    <link rel="modulepreload" crossorigin href="./assets/Undo-B-YmJZp7.js">
+    <link rel="modulepreload" crossorigin href="./assets/CompositionOverlay-BGSOwrvT.js">
+    <link rel="modulepreload" crossorigin href="./assets/Camera-ydAR93TC.js">
+    <link rel="modulepreload" crossorigin href="./assets/AudioAnalysisEngine-DyaB3DyZ.js">
+    <link rel="modulepreload" crossorigin href="./assets/ModulationEngine-DzT5yS1U.js">
+    <link rel="modulepreload" crossorigin href="./assets/modulationTick-BqanM7li.js">
+    <link rel="modulepreload" crossorigin href="./assets/RenderLoop-SOuvZSfS.js">
+    <link rel="modulepreload" crossorigin href="./assets/laRuntime-CL4G0vAK.js">
+    <link rel="modulepreload" crossorigin href="./assets/typedSlices-BgMAoo1W.js">
+    <link rel="modulepreload" crossorigin href="./assets/createBlueNoiseWebGL2-BPguvqd_.js">
+    <link rel="modulepreload" crossorigin href="./assets/support-oG9HPdkv.js">
+    <link rel="modulepreload" crossorigin href="./assets/renderPopupRegistry-DFd-6fyz.js">
+    <link rel="modulepreload" crossorigin href="./assets/applyAt-DPZxvRG5.js">
+    <link rel="modulepreload" crossorigin href="./assets/installBucketRender-CxFhzLmy.js">
+    <link rel="modulepreload" crossorigin href="./assets/cameraKeyRegistry-csW3AwU6.js">
+    <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-JnDpeTe5.css">
+  <link rel="manifest" href="./manifest.webmanifest"></head>
+  <body>
+    <div id="root"></div>
+    <div id="ft-boot-splash"><div class="ft-spinner"></div><span>Loading fractal…</span></div>
+  </body>
+</html>

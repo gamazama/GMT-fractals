@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        <title>GMT · Fractal Explorer</title>
+        <style>
+            /* Body must NOT be overflow:hidden on mobile — the address-bar
+               collapse trick depends on a 100vh element being taller than
+               the visible viewport (when the address bar is showing), so
+               the body has scroll capacity. Once the user swipes past the
+               intro, the address bar hides and the sticky shell locks. */
+            /* color-scheme: dark tells auto-darkening browsers (Samsung Internet
+               Dark mode, Chrome Android Auto-dark / Force-Dark, some WebViews)
+               that the page already provides a dark theme, so they skip the
+               automatic darkening pass that otherwise dims the white GMT logo
+               to grey on those devices. Every other app entry already sets this. */
+            html, body, #root { margin: 0; padding: 0; width: 100%; background: #000; color: #fff; color-scheme: dark; }
+            html { min-height: 100%; }
+            body { min-height: 100%; overscroll-behavior-y: none; }
+            /* Desktop: lock to viewport so the layout doesn't accidentally scroll. */
+            @media (hover: hover) and (pointer: fine) {
+                html, body, #root { height: 100%; overflow: hidden; }
+            }
+            /* Thicker touch scrollbars where elements opt in via .mobile-scroll. */
+            .mobile-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+            .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
+            .mobile-scroll::-webkit-scrollbar-track { background: transparent; }
+        </style>
+      <script type="module" crossorigin src="./assets/three-DQWx7qFd.js"></script>
+      <script type="module" crossorigin src="./assets/three-fiber-GKfjny8F.js"></script>
+      <script type="module" crossorigin src="./assets/three-drei-DwjSMb5v.js"></script>
+      <script type="module" crossorigin src="./assets/pako-DwGzBETv.js"></script>
+      <script type="module" crossorigin src="./assets/CollapsibleSection-CYwz2bPS.js"></script>
+      <script type="module" crossorigin src="./assets/gradientEditorEntrance-ogKcOBDu.js"></script>
+      <script type="module" crossorigin src="./assets/FormulaFormat-C0j2Zhym.js"></script>
+      <script type="module" crossorigin src="./assets/gradientSeam-DtL_gC3t.js"></script>
+      <script type="module" crossorigin src="./assets/registerFeatures-BKNSc6A-.js"></script>
+      <script type="module" crossorigin src="./assets/Undo-B-YmJZp7.js"></script>
+      <script type="module" crossorigin src="./assets/CompositionOverlay-BGSOwrvT.js"></script>
+      <script type="module" crossorigin src="./assets/Camera-ydAR93TC.js"></script>
+      <script type="module" crossorigin src="./assets/MobileViewportShell-DZ2bp4w7.js"></script>
+      <script type="module" crossorigin src="./assets/AudioAnalysisEngine-DyaB3DyZ.js"></script>
+      <script type="module" crossorigin src="./assets/ModulationEngine-DzT5yS1U.js"></script>
+      <script type="module" crossorigin src="./assets/modulationTick-BqanM7li.js"></script>
+      <script type="module" crossorigin src="./assets/support-oG9HPdkv.js"></script>
+      <script type="module" crossorigin src="./assets/renderPopupRegistry-DFd-6fyz.js"></script>
+      <script type="module" crossorigin src="./assets/applyAt-DPZxvRG5.js"></script>
+      <script type="module" crossorigin src="./assets/installBucketRender-CxFhzLmy.js"></script>
+      <script type="module" crossorigin src="./assets/CompilingIndicator-CJOFyiIM.js"></script>
+      <script type="module" crossorigin src="./assets/MobileControls-DHNPLr-C.js"></script>
+      <script type="module" crossorigin src="./assets/cameraKeyRegistry-csW3AwU6.js"></script>
+      <script type="module" crossorigin src="./assets/DebugToolsOverlay-CQ_CIYmi.js"></script>
+      <script type="module" crossorigin src="./assets/AnchoredMenu-BmrVBv_H.js"></script>
+      <script type="module" crossorigin src="./assets/audioFileCache-B8x1OAB7.js"></script>
+      <script type="module" crossorigin src="./assets/main-BM2X1JHa.js"></script>
+      <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-JnDpeTe5.css">
+      <link rel="stylesheet" crossorigin href="./assets/main-Fd0xVSp_.css">
+    <link rel="manifest" href="./manifest.webmanifest"></head>
+    <body>
+        <div id="root"></div>
+    </body>
+</html>

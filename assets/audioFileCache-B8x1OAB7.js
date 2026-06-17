@@ -1,0 +1,1 @@
+let s=null;const n=new Set;function c(e){s=e,n.forEach(t=>t())}function d(){return s}function u(e){return n.add(e),()=>{n.delete(e)}}const r=new Map,o=(e,t)=>{r.set(e,t)},a=e=>r.get(e),i=e=>{r.delete(e)};export{d as a,o as b,i as c,a as g,c as r,u as s};

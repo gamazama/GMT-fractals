@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>GMT Gradient Explorer</title>
+    <style>
+      html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; min-height: 100%; }
+      body { margin: 0; padding: 0; width: 100%; min-height: 100%; background-color: #000; overscroll-behavior-y: none; }
+      @media (hover: hover) and (pointer: fine) {
+        html, body { height: 100vh; overflow: hidden; }
+      }
+      ::-webkit-scrollbar { width: 3px; height: 3px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+      .mobile-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+      .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
+      /* Reserve the dock scrollbar's gutter so the panel content box keeps a constant
+         width when the (classic) scrollbar toggles. The Picker's theme chips flow
+         unbounded (flex-wrap), making the panel height width-dependent; without a stable
+         gutter the scrollbar appearing reflows the chips, which the ScrollSpaceReserver
+         turns into a flicker loop. Scoped to the dock content (relative + py-2 +
+         custom-scroll) so it stays in THIS app and doesn't touch dropdown/menu scrollers
+         or any other GMT app's docks. */
+      .custom-scroll.relative.py-2 { scrollbar-gutter: stable; }
+    </style>
+    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+    <script type="module" crossorigin src="./assets/gradient-explorer-BNgm2FS0.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/three-DQWx7qFd.js">
+    <link rel="modulepreload" crossorigin href="./assets/three-fiber-GKfjny8F.js">
+    <link rel="modulepreload" crossorigin href="./assets/three-drei-DwjSMb5v.js">
+    <link rel="modulepreload" crossorigin href="./assets/pako-DwGzBETv.js">
+    <link rel="modulepreload" crossorigin href="./assets/CollapsibleSection-CYwz2bPS.js">
+    <link rel="modulepreload" crossorigin href="./assets/gradientEditorEntrance-ogKcOBDu.js">
+    <link rel="modulepreload" crossorigin href="./assets/FormulaFormat-C0j2Zhym.js">
+    <link rel="modulepreload" crossorigin href="./assets/useGlobalContextMenu-D4W9M7jX.js">
+    <link rel="modulepreload" crossorigin href="./assets/Undo-B-YmJZp7.js">
+    <link rel="modulepreload" crossorigin href="./assets/AudioAnalysisEngine-DyaB3DyZ.js">
+    <link rel="modulepreload" crossorigin href="./assets/ModulationEngine-DzT5yS1U.js">
+    <link rel="modulepreload" crossorigin href="./assets/modulationTick-BqanM7li.js">
+    <link rel="modulepreload" crossorigin href="./assets/gradientSeam-DtL_gC3t.js">
+    <link rel="modulepreload" crossorigin href="./assets/MobileViewportShell-DZ2bp4w7.js">
+    <link rel="modulepreload" crossorigin href="./assets/createBlueNoiseWebGL2-BPguvqd_.js">
+    <link rel="modulepreload" crossorigin href="./assets/RenderLoop-SOuvZSfS.js">
+    <link rel="modulepreload" crossorigin href="./assets/AnchoredMenu-BmrVBv_H.js">
+    <link rel="modulepreload" crossorigin href="./assets/AdvancedGradientEditor-we2X_ADl.js">
+    <link rel="modulepreload" crossorigin href="./assets/KeyframeInspector-fVd5rZTr.js">
+    <link rel="modulepreload" crossorigin href="./assets/support-oG9HPdkv.js">
+    <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-JnDpeTe5.css">
+  <link rel="manifest" href="./manifest.webmanifest"></head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
