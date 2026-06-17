@@ -29,13 +29,8 @@
  * seam — same trade-off the AFX exporter accepts.
  */
 
-import * as THREE from 'three';
-import { useAnimationStore } from '../../../../store/animationStore';
-import { useEngineStore } from '../../../../store/engineStore';
 import { showToast } from '../../../../engine/store/toastStore';
-import { animationEngine } from '../../../../engine/AnimationEngine';
-import { applyExportModulations } from '../exportModulations';
-import { getViewportCamera } from '../../../engine/worker/ViewportRefs';
+import { sampleScene } from './sceneSampler';
 import { buildFbxScene, type FbxFrame, type FbxSample } from './fbxScene';
 
 // ─── Options ──────────────────────────────────────────────────────────────
@@ -63,127 +58,39 @@ const RAD2DEG = 180 / Math.PI;
  *  the default cm unit-scale → keeps deep-zoom-scaled numbers sane). */
 const NOMINAL = 100;
 
-// Camera rotation is baked from the SAME source the render uses: the smooth,
-// wrap-continuous `camera.rotation.{x,y,z}` Euler tracks (the render builds its
-// quaternion via setFromEuler of these — see engine-gmt/animation/cameraBinders
-// postScrub). We do NOT read the camera quaternion and re-extract Euler: that
-// round-trip gimbal-flips on frames the playback never flips. The constant FBX
-// camera-forward correction (+X → −Z) is handled once via the camera Model's
-// PostRotation (0,−90,0) in fbxScene.ts, so the animated channel stays flip-free.
-const ROT_TRACK = ['camera.rotation.x', 'camera.rotation.y', 'camera.rotation.z'] as const;
-
-/** High+low split subtraction — cancels the shared magnitude so a deep-zoom
- *  scene's tiny relative motion survives in plain doubles. */
-const splitSub = (aHi: number, aLo: number, bHi: number, bLo: number): number =>
-    (aHi - bHi) + (aLo - bLo);
-
 const safeName = (s: string): string => (s || 'GMT').replace(/[^\w\-]+/g, '_');
 
-// ─── Sampler (cloned from afxExport.sampleAfxFrames, FBX-space output) ──────
+// ─── Sampler ────────────────────────────────────────────────────────────────
 
+/**
+ * Adapter over the shared {@link sampleScene}: applies the FBX coordinate
+ * convention (right-handed, Y-up — no axis flip, just a uniform world scale)
+ * and bakes rotation straight from the neutral Euler tracks (the render's
+ * source of truth; the constant +X→−Z camera-forward correction lives in the
+ * camera Model's PostRotation in fbxScene.ts, so the animated channel never
+ * gimbal-flips). Lights/params come from the same shared sample.
+ */
 export const sampleFbxFrames = (opts: FbxExportOptions): FbxSample => {
-    const cam0 = getViewportCamera() as THREE.PerspectiveCamera | null;
-    const fovDeg = cam0?.fov ?? 60;
-
-    const animState = useAnimationStore.getState();
-    const savedFrame = animState.currentFrame;
-    const savedPlaying = animState.isPlaying;
-    if (savedPlaying) animState.pause();
-
-    // Positional lights only (Directional lights have no world position).
-    // Index into the store array (order is stable across scrubbing).
-    const allLights0 = useEngineStore.getState().lighting?.lights ?? [];
-    const lightIdx: number[] = [];
-    const lightMeta: Array<{ name: string }> = [];
-    allLights0.forEach((l, i) => {
-        if (l.type === 'Point' || l.type === 'Sphere') {
-            lightIdx.push(i);
-            lightMeta.push({ name: `GMT ${l.type} Light ${lightIdx.length}` });
-        }
+    const scene = sampleScene({
+        fps: opts.fps, startFrame: opts.startFrame, endFrame: opts.endFrame,
+        frameStep: opts.frameStep, trackIds: opts.sliderTrackIds,
     });
 
-    // Param tracks → PSR nulls. Resolve labels up front (order stable).
-    const seq0 = useAnimationStore.getState().sequence;
-    const paramMeta = opts.sliderTrackIds.map((id) => ({ name: seq0.tracks[id]?.label || id }));
-
     const step = Math.max(1, opts.frameStep);
-    const totalFrames = Math.max(1, Math.floor((opts.endFrame - opts.startFrame) / step) + 1);
+    const scale = NOMINAL / scene.dStart;
 
-    // ── START reference R = start-frame look-at ──
-    animationEngine.scrub(opts.startFrame);
-    const cStart = getViewportCamera() as THREE.PerspectiveCamera | null;
-    const soStart = useEngineStore.getState().sceneOffset;
-    const dStart = Math.max((useEngineStore.getState() as any).targetDistance ?? 3.5, 1e-12);
-    const qStart = cStart ? cStart.quaternion.clone() : new THREE.Quaternion();
-    const camLocalStart = cStart ? cStart.position.clone() : new THREE.Vector3();
-    const fwdStart = new THREE.Vector3(0, 0, -1).applyQuaternion(qStart);
+    const frames: FbxFrame[] = scene.frames.map((f) => ({
+        pos: [scale * f.relPos[0], scale * f.relPos[1], scale * f.relPos[2]],
+        rot: [f.rotEuler[0] * RAD2DEG, f.rotEuler[1] * RAD2DEG, f.rotEuler[2] * RAD2DEG],
+        lights: f.lightsRel.map((l): [number, number, number] => [scale * l[0], scale * l[1], scale * l[2]]),
+        params: f.trackValues,
+    }));
+    const times = scene.frames.map((_, i) => Math.round((i * step / opts.fps) * KTIME_PER_SEC));
 
-    // Rotation = the smooth camera.rotation.{x,y,z} Euler tracks (render's
-    // source of truth). Fallback for any axis without a track = the static
-    // start-frame Euler (constant → no flip).
-    const seqTracks = useAnimationStore.getState().sequence.tracks;
-    const rotTracks = ROT_TRACK.map((id) => seqTracks[id]);
-    const eStart = (cStart ? cStart.rotation : new THREE.Euler());
-    const rotFallback = [eStart.x, eStart.y, eStart.z];
-
-    const rHi = {
-        x: soStart.x, y: soStart.y, z: soStart.z,
-        xL: soStart.xL ?? 0, yL: soStart.yL ?? 0, zL: soStart.zL ?? 0,
+    return {
+        frames, fovDeg: scene.fovDeg, times,
+        lightMeta: scene.lightMeta, paramMeta: scene.trackMeta, fps: opts.fps,
     };
-    const rLocal = camLocalStart.clone().add(fwdStart.multiplyScalar(dStart));
-    const rUnified = {
-        x: rHi.x + rHi.xL + rLocal.x,
-        y: rHi.y + rHi.yL + rLocal.y,
-        z: rHi.z + rHi.zL + rLocal.z,
-    };
-    const scale = NOMINAL / dStart;
-
-    const frames: FbxFrame[] = [];
-    const times: number[] = [];
-    try {
-        for (let i = 0; i < totalFrames; i++) {
-            const tf = opts.startFrame + i * step;
-            const time = tf / opts.fps;
-            animationEngine.scrub(tf);
-            applyExportModulations(time, 1.0 / opts.fps);
-
-            const c = getViewportCamera() as THREE.PerspectiveCamera | null;
-            const so = useEngineStore.getState().sceneOffset;
-            const camLocal = c ? c.position : camLocalStart;
-
-            const relX = splitSub(so.x, so.xL ?? 0, rHi.x, rHi.xL) + (camLocal.x - rLocal.x);
-            const relY = splitSub(so.y, so.yL ?? 0, rHi.y, rHi.yL) + (camLocal.y - rLocal.y);
-            const relZ = splitSub(so.z, so.zL ?? 0, rHi.z, rHi.zL) + (camLocal.z - rLocal.z);
-            const pos: [number, number, number] = [scale * relX, scale * relY, scale * relZ];
-
-            // Euler degrees from the rotation tracks (radians), per the render.
-            const rot: [number, number, number] = [
-                (rotTracks[0] ? animationEngine.evaluateTrack(rotTracks[0], tf) : rotFallback[0]) * RAD2DEG,
-                (rotTracks[1] ? animationEngine.evaluateTrack(rotTracks[1], tf) : rotFallback[1]) * RAD2DEG,
-                (rotTracks[2] ? animationEngine.evaluateTrack(rotTracks[2], tf) : rotFallback[2]) * RAD2DEG,
-            ];
-
-            const curLights = useEngineStore.getState().lighting?.lights ?? [];
-            const lights: Array<[number, number, number]> = lightIdx.map((idx) => {
-                const lp = curLights[idx]?.position ?? { x: 0, y: 0, z: 0 };
-                return [scale * (lp.x - rUnified.x), scale * (lp.y - rUnified.y), scale * (lp.z - rUnified.z)];
-            });
-
-            const seq = useAnimationStore.getState().sequence;
-            const params = opts.sliderTrackIds.map((id) => {
-                const t = seq.tracks[id];
-                return t ? animationEngine.evaluateTrack(t, tf) : 0;
-            });
-
-            frames.push({ pos, rot, lights, params });
-            times.push(Math.round((i * step / opts.fps) * KTIME_PER_SEC));
-        }
-    } finally {
-        animationEngine.scrub(savedFrame);
-        if (savedPlaying) useAnimationStore.getState().play();
-    }
-
-    return { frames, fovDeg, times, lightMeta, paramMeta, fps: opts.fps };
 };
 
 // ─── Orchestrator ──────────────────────────────────────────────────────────
