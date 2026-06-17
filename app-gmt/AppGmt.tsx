@@ -43,6 +43,7 @@ import { NewSceneModal } from '../components/NewSceneModal';
 import { LoadFilterPanel } from '../components/LoadFilterPanel';
 import { PalettePickerOverlayHost } from './PalettePickerOverlay';
 import { AuthOverlayHost, AccountPanelHost } from '../engine-gmt/auth';
+import { DiagnosticsOverlay } from './DiagnosticsOverlay';
 import { TutorialOverlay, TutorialRunner } from '../engine/plugins/Tutorial';
 import { CompilingIndicator } from '../components/CompilingIndicator';
 import { PerformanceMonitor } from '../components/PerformanceMonitor';
@@ -418,6 +419,7 @@ export const AppGmt: React.FC = () => {
 
                 <CompilingIndicator />
                 <ToastHost />
+                <DiagnosticsOverlay />{/* ?diag — on-screen WebGL capability report */}
                 <SceneFileDropZone />
                 <UnsavedWorkGuard />
                 {!isMobile && <FirstRunHint />}
