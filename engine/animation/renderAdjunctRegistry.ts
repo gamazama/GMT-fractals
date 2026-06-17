@@ -26,16 +26,30 @@ export interface RenderAdjunct {
     Dialog: React.ComponentType<{ onClose: () => void }>;
 }
 
-let renderAdjunct: RenderAdjunct | null = null;
+let adjuncts: RenderAdjunct[] = [];
 const listeners = new Set<() => void>();
 
+/**
+ * Register a subordinate render action (e.g. "Export to After Effects",
+ * "Export to FBX"). Multiple may be registered — each gets its own row in the
+ * overflow menu. Re-registering the same `label` replaces it in place (HMR-
+ * safe). Passing `null` clears all.
+ */
 export function registerRenderAdjunct(adjunct: RenderAdjunct | null): void {
-    renderAdjunct = adjunct;
+    if (!adjunct) {
+        if (adjuncts.length) { adjuncts = []; listeners.forEach(l => l()); }
+        return;
+    }
+    const i = adjuncts.findIndex(a => a.label === adjunct.label);
+    const next = adjuncts.slice();
+    if (i >= 0) next[i] = adjunct; else next.push(adjunct);
+    adjuncts = next; // new reference (stable between registrations) for useSyncExternalStore
     listeners.forEach(l => l());
 }
 
-export function getRenderAdjunct(): RenderAdjunct | null {
-    return renderAdjunct;
+/** All registered adjuncts. Reference is stable until the set changes. */
+export function getRenderAdjuncts(): RenderAdjunct[] {
+    return adjuncts;
 }
 
 export function subscribeRenderAdjunct(cb: () => void): () => void {
