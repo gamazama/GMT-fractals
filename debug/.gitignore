@@ -1,2 +1,5 @@
 scratch/
 pt-bench/
+# Generated FBX-writer test output (.fbx/.json). The .py validators are
+# force-added (git add -f) so they survive — see fbx-export-findings.md.
+out/
