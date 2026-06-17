@@ -31,6 +31,11 @@ const MOBILE_STYLE: React.CSSProperties = {
     paddingBottom: 'env(safe-area-inset-bottom)',
     paddingLeft:   'env(safe-area-inset-left)',
     paddingRight:  'env(safe-area-inset-right)',
+    // Snap target for the body's mandatory y-snap (host HTML). Pairs with
+    // the intro splash's snap-start: the body's only scroll rests either
+    // on the splash or here on the fullscreen shell — never half-scrolled
+    // or drifted past the shell off the bottom. See ADR-0039.
+    scrollSnapAlign: 'start',
 };
 const DESKTOP_STYLE: React.CSSProperties = {};
 
@@ -40,6 +45,11 @@ const DESKTOP_STYLE: React.CSSProperties = {};
  *   band after the mobile keyboard dismisses. Mobile branch applies
  *   `env(safe-area-inset-*)` padding on all four edges via the frozen
  *   `MOBILE_STYLE` object; desktop branch uses an empty style.
+ * @invariant `MOBILE_STYLE` carries `scrollSnapAlign: 'start'`, the
+ *   collapsed-state snap target for the host body's `scroll-snap-type:
+ *   y mandatory`. It pairs with `MobileScrollIntro`'s snap-start: without
+ *   both, the body's scroll could rest half-collapsed or drift past the
+ *   shell off the bottom. See ADR-0039.
  */
 export const MobileViewportShell: React.FC<MobileViewportShellProps> = ({ children, className = '' }) => {
     // Use `isDeviceMobile` (raw device flag) — the sticky+dvh trick is

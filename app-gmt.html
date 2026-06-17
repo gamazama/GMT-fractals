@@ -17,11 +17,25 @@
                automatic darkening pass that otherwise dims the white GMT logo
                to grey on those devices. Every other app entry already sets this. */
             html, body, #root { margin: 0; padding: 0; width: 100%; background: #000; color: #fff; color-scheme: dark; }
-            html { min-height: 100%; }
-            body { min-height: 100%; overscroll-behavior-y: none; }
+            /* `overflow-x: clip` (NOT hidden) kills sideways scroll-off
+               without turning the root into its own scroll container —
+               `hidden` would force overflow-y to `auto`, making the body
+               the scroller instead of the documentElement, which BREAKS
+               the iOS address-bar collapse (collapse is tied to the
+               documentElement scroll). `clip` doesn't create a scroll
+               container, so vertical scrolling still propagates to the
+               viewport. See ADR-0039. */
+            html { min-height: 100%; overflow-x: clip; scroll-snap-type: y mandatory; }
+            /* `overscroll-behavior: none` on BOTH axes stops rubber-band
+               bounce, so a touch the canvas doesn't consume can't drag the
+               page off any edge. Snap points (on the intro splash and the
+               sticky shell) give the body's only scroll exactly two rest
+               states — splash, or fullscreen shell — so the page can't
+               rest half-scrolled or drift past the shell off the bottom. */
+            body { min-height: 100%; overflow-x: clip; overscroll-behavior: none; }
             /* Desktop: lock to viewport so the layout doesn't accidentally scroll. */
             @media (hover: hover) and (pointer: fine) {
-                html, body, #root { height: 100%; overflow: hidden; }
+                html, body, #root { height: 100%; overflow: hidden; scroll-snap-type: none; }
             }
             /* Thicker touch scrollbars where elements opt in via .mobile-scroll. */
             .mobile-scroll::-webkit-scrollbar { width: 10px; height: 10px; }

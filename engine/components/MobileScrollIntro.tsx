@@ -36,6 +36,10 @@ interface MobileScrollIntroProps {
  *   capacity exceeding the visible viewport by at least the
  *   address-bar height — that IS the collapse mechanism. Both heights
  *   are load-bearing; do not interchange with `vh`. See ADR-0039.
+ * @invariant Carries `scrollSnapAlign: 'start'` — the open-state snap
+ *   target for the host body's `scroll-snap-type: y mandatory`. Pairs
+ *   with the sticky shell's snap-start so the body's only scroll rests
+ *   either here (splash) or on the fullscreen shell, never between.
  */
 export const MobileScrollIntro: React.FC<MobileScrollIntroProps> = ({
     title = 'GMT',
@@ -53,7 +57,7 @@ export const MobileScrollIntro: React.FC<MobileScrollIntroProps> = ({
     return (
         <div
             className="w-full flex flex-col items-center justify-center bg-black text-white text-center px-8"
-            style={{ height: '100svh' }}
+            style={{ height: '100svh', scrollSnapAlign: 'start' }}
         >
             <h1 className="text-3xl font-bold tracking-tight mb-2">{title}</h1>
             <p className="text-gray-500 text-sm font-mono mb-8">{subtitle}</p>

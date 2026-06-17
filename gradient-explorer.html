@@ -5,8 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>GMT Gradient Explorer</title>
     <style>
-      html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; min-height: 100%; }
-      body { margin: 0; padding: 0; width: 100%; min-height: 100%; background-color: #000; overscroll-behavior-y: none; }
+      html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; min-height: 100%; overflow-x: clip; }
+      /* `overflow-x: clip` (NOT hidden) stops sideways scroll-off without
+         turning the root into its own scroll container; `overscroll-behavior:
+         none` on both axes kills rubber-band bounce so a touch the canvas
+         doesn't consume can't drag the page off an edge. (GE mounts the
+         dvh MobileViewportShell but no MobileScrollIntro spacer, so there's
+         no document scroll to address-bar-collapse — these are purely the
+         off-edge guards. See ADR-0039.) */
+      body { margin: 0; padding: 0; width: 100%; min-height: 100%; background-color: #000; overflow-x: clip; overscroll-behavior: none; }
       @media (hover: hover) and (pointer: fine) {
         html, body { height: 100vh; overflow: hidden; }
       }

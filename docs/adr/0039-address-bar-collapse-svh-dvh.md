@@ -5,6 +5,29 @@
 **Scope:** `engine/components/MobileScrollIntro.tsx`,
 `engine/components/MobileViewportShell.tsx`
 
+> **Update 2026-06-17 (overscroll/off-edge hardening; decision unchanged):**
+> The paired `100svh` + `100dvh` collapse mechanism is unchanged. It was
+> hardened against a side effect: because the body must stay scrollable
+> for the collapse to fire, touches the canvas didn't consume could drag
+> the page off the bottom/sides, and the page could rest half-scrolled.
+> Fixes (host HTML + the two components):
+> - `overflow-x: clip` on `html`/`body` (mobile). **`clip`, not `hidden`** —
+>   `hidden` forces `overflow-y` to `auto`, making the body its own scroll
+>   container instead of the documentElement, which BREAKS the collapse
+>   (iOS ties address-bar retraction to the documentElement scroll). `clip`
+>   doesn't create a scroll container, so vertical scroll still propagates.
+> - `overscroll-behavior: none` on both axes (was `-y` only) — kills
+>   rubber-band bounce off any edge.
+> - `scroll-snap-type: y mandatory` on `html` (disabled on desktop where
+>   the body is `overflow: hidden`) plus `scroll-snap-align: start` on both
+>   the intro splash and the sticky shell. The body's only scroll now has
+>   exactly two rest states — splash or fullscreen shell — so it can't rest
+>   half-scrolled or drift past the shell.
+> An inner (nested) scroller CANNOT drive the collapse on iOS Safari (no
+> implicit-root-scroller support; Android Chrome M73+ has it under strict
+> criteria). The document-level swipe-past-intro is the only cross-platform
+> trigger, which is why the body stays scrollable rather than being locked.
+
 ## Context
 
 iOS Safari and Android Chrome retract the URL bar after the user scrolls
