@@ -127,6 +127,10 @@ export type WorkerToMainMessage =
         readRenderTargetPixels: number; setRenderTargetSwitches: number;
       } }
     | { type: 'ERROR'; message: string }
+    // WebGL context lost/restored (GPU watchdog reset — heavy frame on a weak
+    // GPU). The worker stops rendering; the main thread surfaces recovery.
+    | { type: 'CONTEXT_LOST' }
+    | { type: 'CONTEXT_RESTORED' }
     // ─── Video Export ───
     | { type: 'EXPORT_READY' }
     | { type: 'EXPORT_FRAME_DONE'; frameIndex: number; progress: number; measuredDistance: number }

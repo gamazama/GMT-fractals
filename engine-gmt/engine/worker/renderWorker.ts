@@ -104,6 +104,26 @@ function handleInit(msg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
 function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
     canvas = initMsg.canvas;
 
+    // WebGL context-loss handling. A too-heavy frame on a weak GPU (common on
+    // mobile) trips the driver/OS GPU watchdog, which resets the context. The
+    // `webglcontextlost` default action is to make the loss PERMANENT — calling
+    // `preventDefault()` is the documented prerequisite for the browser to even
+    // attempt restoration. Without this listener the worker kept submitting draw
+    // calls to a dead context (silent freeze). We stop rendering and tell the
+    // main thread, which surfaces a recovery prompt (in-place GPU-resource
+    // rebuild isn't supported here — recovery is a controlled reload).
+    (canvas as unknown as EventTarget).addEventListener('webglcontextlost', (e: Event) => {
+        e.preventDefault();
+        _contextLost = true;
+        postMsg({ type: 'CONTEXT_LOST' });
+    }, false);
+    (canvas as unknown as EventTarget).addEventListener('webglcontextrestored', () => {
+        // The GPU process recovered. We don't rebuild FBOs/textures/programs in
+        // place (fragile); the main thread drives a reload instead. Report it so
+        // the recovery UI can reflect that the GPU is usable again.
+        postMsg({ type: 'CONTEXT_RESTORED' });
+    }, false);
+
     // Create WebGL renderer on the OffscreenCanvas.
     // `desynchronized` (present-path engagement-floor experiment, NOT ADR-0061):
     // opt-in via the page URL `?lowlatency=1` (default OFF → no behaviour change).
@@ -286,11 +306,15 @@ let _savedSampleCap = 0;
 let _pendingTick: Extract<MainToWorkerMessage, { type: 'RENDER_TICK' }> | null = null;
 let _rendering = false;
 let _tickScheduled = false;
+// True while the WebGL context is lost (GPU watchdog reset). Set by the
+// `webglcontextlost` listener in setupEngine; gates the render loop so we
+// don't submit draw calls to a dead context.
+let _contextLost = false;
 
 const _tickChannel = new MessageChannel();
 _tickChannel.port1.onmessage = () => {
     _tickScheduled = false;
-    if (_rendering || !_pendingTick) return;
+    if (_rendering || !_pendingTick || _contextLost) return;
     _rendering = true;
     const tick = _pendingTick;
     _pendingTick = null;

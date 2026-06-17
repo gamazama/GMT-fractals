@@ -137,6 +137,21 @@ export const useAppStartup = (options?: UseAppStartupOptions) => {
             (state as any).setHardwareProfile(hwProfile);
         }
 
+        // GPU-crash safe mode: if the render worker lost its WebGL context last
+        // session (WorkerProxy sets this flag on CONTEXT_LOST), the persisted
+        // scene is too heavy for this device — reloading straight back into it
+        // re-crashes the GPU and the screen comes up black. Force the lightest
+        // scalability preset for this boot so the recovery render is cheap, and
+        // clear the flag (one-shot — normal presets resume next launch).
+        let gpuCrashRecovery = false;
+        try { gpuCrashRecovery = sessionStorage.getItem('gmt.gpuCrashed') === '1'; } catch { /* private mode */ }
+        if (gpuCrashRecovery) {
+            try { sessionStorage.removeItem('gmt.gpuCrashed'); } catch { /* ignore */ }
+            if ((state as any).applyScalabilityPreset) {
+                (state as any).applyScalabilityPreset('fastest');
+            }
+        }
+
         // Mobile auto-pick: downgrade scalability preset for first
         // paint. Compile times on mobile GPUs are 2–3× longer than
         // desktop, and `balanced` (the engine default) typically takes

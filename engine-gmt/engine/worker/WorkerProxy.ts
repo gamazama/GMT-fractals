@@ -341,6 +341,20 @@ export class WorkerProxy implements AccumulationController {
                     });
                 }
                 break;
+            case 'CONTEXT_LOST': {
+                console.error('[WorkerProxy] WebGL context lost (GPU watchdog reset)');
+                // Remember the crash for the NEXT boot so startup can come up in
+                // a lighter "safe mode" instead of reloading straight back into
+                // the heavy scene that crashed (→ black screen on refresh).
+                try { sessionStorage.setItem('gmt.gpuCrashed', '1'); } catch { /* private mode */ }
+                FractalEvents.emit(FRACTAL_EVENTS.RENDER_CONTEXT_LOST, {
+                    reason: 'The GPU stopped responding while rendering (too heavy a frame for this device).',
+                });
+                break;
+            }
+            case 'CONTEXT_RESTORED':
+                console.info('[WorkerProxy] WebGL context restored');
+                break;
 
             // ─── Video Export ───
             case 'EXPORT_READY':

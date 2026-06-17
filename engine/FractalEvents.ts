@@ -30,7 +30,11 @@ export const FRACTAL_EVENTS = {
     CAMERA_SLOT_SAVED: 'camera_slot_saved',
     WORKER_BOOTED: 'worker_booted',
     WORKER_BOOT_FAILED: 'worker_boot_failed',
-    COMPILE_FAILED: 'compile_failed'
+    COMPILE_FAILED: 'compile_failed',
+    /** The render worker's WebGL context was lost (GPU watchdog / driver
+     *  reset, typically a too-heavy frame on a weak mobile GPU). Rendering
+     *  has stopped; the main thread surfaces a recovery prompt. */
+    RENDER_CONTEXT_LOST: 'render_context_lost'
 } as const;
 
 type EventMap = {
@@ -68,6 +72,7 @@ type EventMap = {
     [FRACTAL_EVENTS.WORKER_BOOTED]: void;
     [FRACTAL_EVENTS.WORKER_BOOT_FAILED]: { reason: string };
     [FRACTAL_EVENTS.COMPILE_FAILED]: { reason: string };
+    [FRACTAL_EVENTS.RENDER_CONTEXT_LOST]: { reason: string };
 };
 
 class FractalEventBus {

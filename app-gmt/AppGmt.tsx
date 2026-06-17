@@ -69,6 +69,7 @@ import { LandscapeGate } from '../engine/components/LandscapeGate';
 import { MobileViewportShell } from '../engine/components/MobileViewportShell';
 import { MobileScrollIntro } from '../engine/components/MobileScrollIntro';
 import { GmtWordmark } from '../engine-gmt/topbar/GmtWordmark';
+import { RenderContextLostOverlay } from './RenderContextLostOverlay';
 import MobileControls from '../components/MobileControls';
 import { MobileMenuHost } from '../engine/plugins/Menu';
 
@@ -468,6 +469,9 @@ export const AppGmt: React.FC = () => {
                 )}
 
             </MobileViewportShell>
+            {/* Full-screen recovery prompt if the render worker's WebGL context
+                is lost (GPU watchdog reset). Renders nothing otherwise. */}
+            <RenderContextLostOverlay />
         </StoreCallbacksProvider>
     );
 };
