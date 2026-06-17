@@ -4,7 +4,7 @@
 // The heavy lifting (timeline sampling + binary FBX writer) lives in
 // fbxExport.ts / fbxBinary.ts.
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Modal } from '../../../../components/ui/Modal';
 import { Z } from '../../../../components/ui/zIndex';
 import { useAnimationStore } from '../../../../store/animationStore';
@@ -19,16 +19,45 @@ export interface FbxExportDialogProps {
     onClose:    () => void;
 }
 
+// Camera-driving tracks live on the exported camera, not on param nulls.
+const isCameraTrack = (id: string) => id.startsWith('camera.');
+
 export const FbxExportDialog: React.FC<FbxExportDialogProps> = (props) => {
     const projectName = useEngineStore.getState().projectSettings?.name || 'scene';
     const frameCount = Math.max(1, Math.floor((props.endFrame - props.startFrame) / Math.max(1, props.frameStep)) + 1);
 
+    // Animatable scalar tracks (camera tracks excluded) → param-null candidates.
+    const paramCandidates = useMemo(() => {
+        const tracks = useAnimationStore.getState().sequence.tracks;
+        return Object.entries(tracks)
+            .filter(([id]) => !isCameraTrack(id))
+            .map(([id, t]) => ({ id, label: t.label || id, count: t.keyframes.length }));
+    }, []);
+    const [selected, setSelected] = useState<Set<string>>(() => new Set(paramCandidates.map(c => c.id)));
+    const toggle = (id: string) => setSelected((prev) => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+
+    const [footage, setFootage] = useState('');
+
+    // Footage aspect for the plate — from the current render resolution.
+    const footageAspect = useMemo(() => {
+        const st = useEngineStore.getState();
+        const [w, h] = st.resolutionMode === 'Fixed' ? st.fixedResolution : st.canvasPixelSize;
+        return h > 0 ? w / h : 16 / 9;
+    }, []);
+
     const handleExport = () => {
         runFbxExport({
-            fps:         props.fps,
-            startFrame:  props.startFrame,
-            endFrame:    props.endFrame,
-            frameStep:   props.frameStep,
+            fps:            props.fps,
+            startFrame:     props.startFrame,
+            endFrame:       props.endFrame,
+            frameStep:      props.frameStep,
+            sliderTrackIds: paramCandidates.filter(c => selected.has(c.id)).map(c => c.id),
+            footageFileName: footage.trim(),
+            footageAspect,
             projectName,
         });
         props.onClose();
@@ -51,9 +80,53 @@ export const FbxExportDialog: React.FC<FbxExportDialogProps> = (props) => {
                         {frameCount} frames @ {props.fps}fps
                     </span>
                 </div>
-                <p className="text-[8px] text-gray-500 mb-4 -mt-2 leading-tight">
+                <p className="text-[8px] text-gray-500 mb-3 -mt-2 leading-tight">
                     Y-up, baked per-frame. Z-up apps (3ds Max / Unreal / Blender) convert on import.
                 </p>
+
+                {/* Optional camera-locked backdrop plate */}
+                <label className="t-label mb-0.5 block">Backdrop plate footage <span className="text-gray-500 normal-case">(optional)</span></label>
+                <input
+                    type="text"
+                    value={footage}
+                    onChange={(e) => setFootage(e.target.value)}
+                    className="w-full mb-1 px-2 py-1 text-[11px] bg-black/40 border border-white/10 rounded text-gray-100 focus:border-cyan-500/60 outline-none"
+                    placeholder="myRender.mp4  (blank = no plate)"
+                />
+                <p className="text-[8px] text-gray-500 mb-3 leading-tight">
+                    Adds a camera-locked plane showing this file (render it separately, keep it beside the .fbx).
+                    Leave blank to skip and composite manually.
+                </p>
+
+                {/* Animated params → PSR-encoded nulls (value on Position Y) */}
+                <div className="mt-2 mb-1 flex items-center justify-between">
+                    <label className="t-label">Animated params as nulls</label>
+                    {paramCandidates.length > 0 && (
+                        <button type="button"
+                                onClick={() => setSelected(selected.size === paramCandidates.length ? new Set() : new Set(paramCandidates.map(c => c.id)))}
+                                className="text-[9px] text-cyan-300 hover:text-cyan-200 underline-offset-2 hover:underline">
+                            {selected.size === paramCandidates.length ? 'None' : 'All'}
+                        </button>
+                    )}
+                </div>
+                {paramCandidates.length === 0 ? (
+                    <p className="text-[9px] text-gray-500 italic mb-3">No animated (non-camera) params on the timeline.</p>
+                ) : (
+                    <>
+                        <div className="max-h-32 overflow-y-auto mb-1 border border-white/5 rounded bg-black/20 p-1.5 space-y-0.5">
+                            {paramCandidates.map((c) => (
+                                <label key={c.id} className="flex items-center gap-2 text-[10px] cursor-pointer hover:bg-white/5 rounded px-1 py-0.5">
+                                    <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="accent-cyan-400" />
+                                    <span className="flex-1 truncate">{c.label}</span>
+                                    <span className="text-gray-600 text-[8px]">{c.count} keys</span>
+                                </label>
+                            ))}
+                        </div>
+                        <p className="text-[8px] text-gray-500 mb-3 leading-tight">
+                            Each becomes a null named <span className="text-cyan-300">GMT_param_&lt;name&gt;</span>; read its value off Position Y.
+                        </p>
+                    </>
+                )}
 
                 <div className="flex gap-2 justify-end">
                     <button onClick={props.onClose}

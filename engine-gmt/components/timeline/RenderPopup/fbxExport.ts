@@ -45,6 +45,12 @@ export interface FbxExportOptions {
     startFrame:  number;
     endFrame:    number;
     frameStep:   number;
+    /** Animation track ids to export as PSR-encoded param nulls (value on Y). */
+    sliderTrackIds: string[];
+    /** Optional camera-locked backdrop plate. Blank filename = no plate. */
+    footageFileName?: string;
+    /** Footage aspect (width / height) for sizing the plate. Defaults to 16:9. */
+    footageAspect?: number;
     /** Used for the camera name and the downloaded .fbx filename. */
     projectName: string;
 }
@@ -106,6 +112,10 @@ export const sampleFbxFrames = (opts: FbxExportOptions): FbxSample => {
         }
     });
 
+    // Param tracks → PSR nulls. Resolve labels up front (order stable).
+    const seq0 = useAnimationStore.getState().sequence;
+    const paramMeta = opts.sliderTrackIds.map((id) => ({ name: seq0.tracks[id]?.label || id }));
+
     const step = Math.max(1, opts.frameStep);
     const totalFrames = Math.max(1, Math.floor((opts.endFrame - opts.startFrame) / step) + 1);
 
@@ -159,7 +169,13 @@ export const sampleFbxFrames = (opts: FbxExportOptions): FbxSample => {
                 return [scale * (lp.x - rUnified.x), scale * (lp.y - rUnified.y), scale * (lp.z - rUnified.z)];
             });
 
-            frames.push({ pos, rot, lights });
+            const seq = useAnimationStore.getState().sequence;
+            const params = opts.sliderTrackIds.map((id) => {
+                const t = seq.tracks[id];
+                return t ? animationEngine.evaluateTrack(t, tf) : 0;
+            });
+
+            frames.push({ pos, rot, lights, params });
             times.push(Math.round((i * step / opts.fps) * KTIME_PER_SEC));
         }
     } finally {
@@ -167,7 +183,7 @@ export const sampleFbxFrames = (opts: FbxExportOptions): FbxSample => {
         if (savedPlaying) useAnimationStore.getState().play();
     }
 
-    return { frames, fovDeg, times, lightMeta, fps: opts.fps };
+    return { frames, fovDeg, times, lightMeta, paramMeta, fps: opts.fps };
 };
 
 // ─── Orchestrator ──────────────────────────────────────────────────────────
@@ -175,7 +191,10 @@ export const sampleFbxFrames = (opts: FbxExportOptions): FbxSample => {
 export const runFbxExport = (opts: FbxExportOptions): void => {
     try {
         const sample = sampleFbxFrames(opts);
-        const bytes = buildFbxScene(sample, opts.projectName);
+        const plate = opts.footageFileName
+            ? { footageFileName: opts.footageFileName, aspect: opts.footageAspect ?? (16 / 9) }
+            : undefined;
+        const bytes = buildFbxScene(sample, opts.projectName, plate);
         // serializeFbxBinary returns a fresh full-length slice, so its backing
         // buffer is exactly the file bytes (offset 0) — hand that to the Blob.
         const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/octet-stream' });
@@ -186,12 +205,19 @@ export const runFbxExport = (opts: FbxExportOptions): void => {
         a.download = fileName;
         a.click();
         URL.revokeObjectURL(url);
+        const paramNote = sample.paramMeta.length
+            ? `\n${sample.paramMeta.length} param null(s) — read each value off "GMT_param_<name>" Position Y.`
+            : '';
+        const plateNote = opts.footageFileName
+            ? `\nA camera-locked "GMT Plate" references "${opts.footageFileName}" — render that separately and keep it beside the .fbx.`
+            : `\nNo backdrop plate — render your video separately to composite behind the move.`;
         showToast(
             `FBX saved to your Downloads:  ${fileName}\n` +
             `\n` +
             `Import it in your 3D app (C4D / Blender / Maya / Resolve Fusion). It carries the\n` +
             `camera animation, lens (${sample.fovDeg.toFixed(1)}° vertical FOV) and ${sample.lightMeta.length} light null(s)\n` +
-            `across ${sample.frames.length} frames. Place your rendered plate at the scene origin to composite.`,
+            `across ${sample.frames.length} frames.` +
+            plateNote + paramNote,
             'info', 14000,
         );
     } catch (e) {

@@ -16,6 +16,7 @@ export interface FbxFrame {
     pos:    [number, number, number];          // FBX camera Lcl Translation
     rot:    [number, number, number];          // FBX camera Lcl Rotation (deg)
     lights: Array<[number, number, number]>;   // FBX null Lcl Translation, aligned to lightMeta
+    params: number[];                          // raw scalar param values, aligned to paramMeta
 }
 
 export interface FbxSample {
@@ -23,8 +24,11 @@ export interface FbxSample {
     fovDeg:    number;          // vertical FOV, for the camera lens
     times:     number[];        // KTime per frame
     lightMeta: Array<{ name: string }>;
+    paramMeta: Array<{ name: string }>;
     fps:       number;
 }
+
+const safe = (s: string): string => (s || 'param').replace(/[^\w\-]+/g, '_');
 
 const P = (name: string, type: string, sub: string, flags: string, ...vals: FbxProp[]): FbxNode =>
     node('P', [fbxString(name), fbxString(type), fbxString(sub), fbxString(flags), ...vals]);
@@ -56,7 +60,123 @@ const OP = (src: number, dst: number, prop: string): FbxNode =>
 
 const NOMINAL = 100; // start-frame camera distance from origin (kept in sync with fbxExport.ts)
 
-export const buildFbxScene = (sample: FbxSample, projectName: string): Uint8Array => {
+export interface PlateOpts {
+    footageFileName: string;
+    aspect: number; // width / height of the rendered footage
+}
+
+/**
+ * Camera-locked backdrop quad carrying the rendered footage, so the artist can
+ * composite 3D elements over the fractal. Parented to the camera at a fixed
+ * depth, sized to fill the frustum, facing back toward the camera.
+ *
+ * In the camera-child local frame: +X = view direction, +Y = screen-up,
+ * +Z = screen-right (derived from the +90°Y camera-forward fix). If the plate
+ * imports MIRRORED, UPSIDE-DOWN, or FACING AWAY (black/back-culled), the four
+ * knobs to flip are: the UV rows below, the vertex winding, and the normal
+ * sign. They're isolated here so a visual test can be fixed in one place.
+ */
+const buildPlate = (camId: number, fovDeg: number, plate: PlateOpts, id: () => number) => {
+    const DEPTH = NOMINAL;            // sit the plate at ~the subject distance
+    const halfH = DEPTH * Math.tan((fovDeg / 2) * Math.PI / 180);
+    const halfW = halfH * Math.max(plate.aspect, 1e-3);
+    // YZ-plane quad at local x=0 (Model translation pushes it to +X·DEPTH).
+    const verts = [
+        0, -halfH, -halfW,  // BL
+        0, -halfH,  halfW,  // BR
+        0,  halfH,  halfW,  // TR
+        0,  halfH, -halfW,  // TL
+    ];
+    const normals = ([] as number[]).concat([-1, 0, 0], [-1, 0, 0], [-1, 0, 0], [-1, 0, 0]); // face camera (-X)
+    const uv = [0, 0, 1, 0, 1, 1, 0, 1];
+    const footage = plate.footageFileName;
+
+    const geomId = id(), modelId = id(), matId = id(), texId = id(), vidId = id();
+    const objects: FbxNode[] = [];
+    const connections: FbxNode[] = [];
+
+    objects.push(node('Geometry', [fbxLong(geomId), fbxString(objName('', 'Geometry')), fbxString('Mesh')], [
+        node('GeometryVersion', [fbxInt(124)]),
+        node('Vertices', [fbxDoubleArray(verts)]),
+        node('PolygonVertexIndex', [fbxIntArray([0, 1, 2, -4])]),
+        node('LayerElementNormal', [fbxInt(0)], [
+            node('Version', [fbxInt(101)]), node('Name', [fbxString('')]),
+            node('MappingInformationType', [fbxString('ByPolygonVertex')]),
+            node('ReferenceInformationType', [fbxString('Direct')]),
+            node('Normals', [fbxDoubleArray(normals)]),
+        ]),
+        node('LayerElementUV', [fbxInt(0)], [
+            node('Version', [fbxInt(101)]), node('Name', [fbxString('map1')]),
+            node('MappingInformationType', [fbxString('ByPolygonVertex')]),
+            node('ReferenceInformationType', [fbxString('Direct')]),
+            node('UV', [fbxDoubleArray(uv)]),
+        ]),
+        node('LayerElementMaterial', [fbxInt(0)], [
+            node('Version', [fbxInt(101)]), node('Name', [fbxString('')]),
+            node('MappingInformationType', [fbxString('AllSame')]),
+            node('ReferenceInformationType', [fbxString('IndexToDirect')]),
+            node('Materials', [fbxIntArray([0])]),
+        ]),
+        node('Layer', [fbxInt(0)], [
+            node('Version', [fbxInt(100)]),
+            node('LayerElement', [], [node('Type', [fbxString('LayerElementNormal')]), node('TypedIndex', [fbxInt(0)])]),
+            node('LayerElement', [], [node('Type', [fbxString('LayerElementMaterial')]), node('TypedIndex', [fbxInt(0)])]),
+            node('LayerElement', [], [node('Type', [fbxString('LayerElementUV')]), node('TypedIndex', [fbxInt(0)])]),
+        ]),
+    ]));
+
+    objects.push(node('Model', [fbxLong(modelId), fbxString(objName('GMT Plate', 'Model')), fbxString('Mesh')], [
+        node('Version', [fbxInt(232)]),
+        node('Properties70', [], [
+            P('DefaultAttributeIndex', 'int', 'Integer', '', fbxInt(0)),
+            P('Lcl Translation', 'Lcl Translation', '', 'A', fbxDouble(DEPTH), fbxDouble(0), fbxDouble(0)),
+        ]),
+    ]));
+
+    // Emissive=white so the footage shows full-bright regardless of scene lights.
+    objects.push(node('Material', [fbxLong(matId), fbxString(objName('GMT Plate', 'Material')), fbxString('')], [
+        node('Version', [fbxInt(102)]),
+        node('ShadingModel', [fbxString('lambert')]),
+        node('Properties70', [], [
+            P('DiffuseColor',   'Color',  '', 'A', fbxDouble(1), fbxDouble(1), fbxDouble(1)),
+            P('EmissiveColor',  'Color',  '', 'A', fbxDouble(1), fbxDouble(1), fbxDouble(1)),
+            P('EmissiveFactor', 'Number', '', 'A', fbxDouble(1)),
+        ]),
+    ]));
+
+    objects.push(node('Video', [fbxLong(vidId), fbxString(objName('GMT Plate', 'Video')), fbxString('Clip')], [
+        node('Type', [fbxString('Clip')]),
+        node('Properties70', []),
+        node('UseMipMap', [fbxInt(0)]),
+        node('Filename', [fbxString(footage)]),
+        node('RelativeFilename', [fbxString(footage)]),
+    ]));
+
+    objects.push(node('Texture', [fbxLong(texId), fbxString(objName('GMT Plate', 'Texture')), fbxString('')], [
+        node('Type', [fbxString('TextureVideoClip')]),
+        node('Version', [fbxInt(202)]),
+        node('TextureName', [fbxString(objName('GMT Plate', 'Texture'))]),
+        node('Properties70', [], [P('UVSet', 'KString', '', '', fbxString('map1'))]),
+        node('Media', [fbxString(objName('GMT Plate', 'Video'))]),
+        node('Filename', [fbxString(footage)]),
+        node('RelativeFilename', [fbxString(footage)]),
+        node('ModelUVTranslation', [fbxDouble(0), fbxDouble(0)]),
+        node('ModelUVScaling', [fbxDouble(1), fbxDouble(1)]),
+        node('Texture_Alpha_Source', [fbxString('None')]),
+    ]));
+
+    connections.push(
+        OO(modelId, camId),                 // camera-locked
+        OO(geomId, modelId),
+        OO(matId, modelId),
+        OP(texId, matId, 'DiffuseColor'),
+        OP(texId, matId, 'EmissiveColor'),
+        OO(vidId, texId),
+    );
+    return { objects, connections };
+};
+
+export const buildFbxScene = (sample: FbxSample, projectName: string, plate?: PlateOpts): Uint8Array => {
     const { frames, times } = sample;
     const single = frames.length <= 1;
 
@@ -88,7 +208,7 @@ export const buildFbxScene = (sample: FbxSample, projectName: string): Uint8Arra
 
     // ── Camera ──
     const camId = id(), camAttrId = id();
-    const f0: FbxFrame = frames[0] ?? { pos: [0, 0, NOMINAL], rot: [0, 90, 0], lights: [] };
+    const f0: FbxFrame = frames[0] ?? { pos: [0, 0, NOMINAL], rot: [0, 90, 0], lights: [], params: [] };
     objects.push(node('Model', [fbxLong(camId), fbxString(objName(`${projectName} Camera`, 'Model')), fbxString('Camera')], [
         node('Version', [fbxInt(232)]),
         node('Properties70', [], [
@@ -130,6 +250,33 @@ export const buildFbxScene = (sample: FbxSample, projectName: string): Uint8Arra
         }
     });
 
+    // ── Param nulls: each selected animated scalar baked onto a null's
+    //    Position Y (raw value, NOT spatially scaled). Artists read the param
+    //    via `GMT_param_<name>.position.y`. Mirrors AFX's Slider Controls. ──
+    sample.paramMeta.forEach((pm, pi) => {
+        const pid = id();
+        const vals = frames.map(f => f.params[pi] ?? 0);
+        const v0 = vals[0] ?? 0;
+        objects.push(node('Model', [fbxLong(pid), fbxString(objName(`GMT_param_${safe(pm.name)}`, 'Model')), fbxString('Null')], [
+            node('Version', [fbxInt(232)]),
+            node('Properties70', [], [
+                P('Lcl Translation', 'Lcl Translation', '', 'A', fbxDouble(0), fbxDouble(v0), fbxDouble(0)),
+            ]),
+        ]));
+        connections.push(OO(pid, 0));
+        if (!single && vals.some(v => v !== v0)) {
+            attachAnim(pid, 'T', 'Lcl Translation', [vals.map(() => 0), vals, vals.map(() => 0)]);
+        }
+    });
+
+    // ── Camera-locked backdrop plate (opt-in: only when footage given) ──
+    const hasPlate = !!(plate && plate.footageFileName);
+    if (hasPlate) {
+        const built = buildPlate(camId, sample.fovDeg, plate!, id);
+        objects.push(...built.objects);
+        connections.push(...built.connections);
+    }
+
     // ── Animation stack/layer (only when there are curves) ──
     const animObjects: FbxNode[] = [];
     const animated = !single && curveNodes.length > 0;
@@ -147,13 +294,23 @@ export const buildFbxScene = (sample: FbxSample, projectName: string): Uint8Arra
         connections.push(OO(layerId, stackId));
     }
 
+    // camera + light nulls + param nulls (+ plate Model when present)
+    const modelCount = 1 + sample.lightMeta.length + sample.paramMeta.length + (hasPlate ? 1 : 0);
     const defs: FbxNode[] = [
         node('Version', [fbxInt(100)]),
-        node('Count', [fbxInt(2 + sample.lightMeta.length + (animated ? 2 + curveNodes.length + animCurves.length : 0))]),
+        node('Count', [fbxInt(1 + modelCount + 1 + (hasPlate ? 4 : 0) + (animated ? 2 + curveNodes.length + animCurves.length : 0))]),
         node('ObjectType', [fbxString('GlobalSettings')], [node('Count', [fbxInt(1)])]),
-        node('ObjectType', [fbxString('Model')],          [node('Count', [fbxInt(1 + sample.lightMeta.length)])]),
+        node('ObjectType', [fbxString('Model')],          [node('Count', [fbxInt(modelCount)])]),
         node('ObjectType', [fbxString('NodeAttribute')],  [node('Count', [fbxInt(1)])]),
     ];
+    if (hasPlate) {
+        defs.push(
+            node('ObjectType', [fbxString('Geometry')], [node('Count', [fbxInt(1)])]),
+            node('ObjectType', [fbxString('Material')], [node('Count', [fbxInt(1)])]),
+            node('ObjectType', [fbxString('Texture')],  [node('Count', [fbxInt(1)])]),
+            node('ObjectType', [fbxString('Video')],    [node('Count', [fbxInt(1)])]),
+        );
+    }
     if (animated) {
         defs.push(
             node('ObjectType', [fbxString('AnimationStack')],     [node('Count', [fbxInt(1)])]),
