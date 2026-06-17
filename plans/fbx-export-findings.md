@@ -105,6 +105,27 @@ the importer converts for free. If a future target genuinely needs baked Z-up,
 the robust route is a single static root-null carrying the 90° rotation (no
 per-frame Euler rebake, no gimbal) — not the per-frame matrix round-trip.
 
+## Finding 7 — Bake camera rotation from the timeline's Euler tracks (flip fix)
+
+The real exporter first showed a camera rotation FLIP the render never has.
+Cause: the sampler read the camera **quaternion** per frame and re-extracted XYZ
+Euler — that round-trip gimbal-/sign-flips on frames the playback sweeps
+smoothly.
+
+Fix: bake `Lcl Rotation` straight from the **`camera.rotation.{x,y,z}` Euler
+tracks** — the render's own source of truth (cameraBinders `postScrub` builds
+the camera quaternion via `setFromEuler` of these smooth, wrap-continuous
+values). No quaternion → Euler round-trip anywhere. The constant FBX
+camera-forward correction (+X → −Z) moves OUT of the animated channel into the
+camera Model's **`PostRotation (0,-90,0)` + `RotationActive`**
+(effective = Lcl · PostRotation⁻¹ = Lcl · Ry(90), the C4D-verified aim).
+
+LESSON for any future bake of an animated rotation: export from the SAME
+representation the engine animates/plays back (here: Euler tracks), never via a
+quaternion the engine merely *derived*. Keep constant axis/convention
+corrections in a separate fixed transform (Pre/PostRotation), not folded into
+the animated keys.
+
 ## Net pivot
 
 The earlier plan's "hand-author ASCII" approach is dead. Everything else holds:
