@@ -63,11 +63,6 @@ export class RenderPipeline {
     // HALF_FLOAT support but fail framebuffer-completeness when alpha is
     // attached. When false, initTargets/resize drop to FloatType.
     private _halfFloatAlphaSupport: boolean | null = null;
-    /** Cache for checkFloatRenderableSupport — whether RGBA32F is a
-     *  color-renderable FBO format (EXT_color_buffer_float). Many mobile GPUs
-     *  (e.g. Mali) lack this, so a FloatType target comes back incomplete =
-     *  black viewport while the shader still runs. */
-    private _floatRenderableSupport: boolean | null = null;
     
     public lastCompleteDuration: number = 0;
     private startTime: number = 0;
@@ -316,70 +311,69 @@ export class RenderPipeline {
     }
 
     /**
-     * Probe whether RGBA32F (full float) is a COLOR-RENDERABLE FBO format —
-     * i.e. EXT_color_buffer_float is present AND the FBO actually completes.
-     * Cached. Worker-side (runs in the render worker's GL realm).
-     *
-     * Why this matters: many mobile GPUs (Mali, older Adreno) expose float
-     * textures but CANNOT render to them (no EXT_color_buffer_float). Picking
-     * THREE.FloatType for the accumulation target there yields an incomplete
-     * framebuffer — the shader runs (GPU lag) but presents BLACK. Half-float
-     * is far more widely renderable, so we prefer it when full float isn't.
+     * Real GPU capability flags for HDR render targets (cached, extension-based).
+     *  - cbf  (EXT_color_buffer_float)       → RGBA16F + RGBA32F color-renderable
+     *  - cbhf (EXT_color_buffer_half_float)  → RGBA16F color-renderable
+     *  - floatLinear (OES_texture_float_linear) → RGBA32F LINEAR-filterable
+     * RGBA16F is ALWAYS linearly filterable in WebGL2 core (no extension).
      */
-    public checkFloatRenderableSupport(): boolean {
-        if (this._floatRenderableSupport !== null) return this._floatRenderableSupport;
+    private _glCaps: { cbf: boolean; cbhf: boolean; floatLinear: boolean } | null = null;
+    private glCaps() {
+        if (this._glCaps) return this._glCaps;
+        let cbf = false, cbhf = false, floatLinear = false;
         try {
-            const testCanvas = (typeof document !== 'undefined')
-                ? document.createElement('canvas')
-                : new OffscreenCanvas(1, 1);
-            testCanvas.width = 1;
-            testCanvas.height = 1;
-            const gl = testCanvas.getContext('webgl2') as WebGL2RenderingContext | null;
-            if (!gl) { this._floatRenderableSupport = false; return false; }
-            // RGBA32F is only color-renderable with EXT_color_buffer_float.
-            if (!gl.getExtension('EXT_color_buffer_float')) { this._floatRenderableSupport = false; return false; }
-            const tex = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, tex);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null);
-            const fbo = gl.createFramebuffer();
-            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-            const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
-            gl.deleteFramebuffer(fbo);
-            gl.deleteTexture(tex);
-            gl.getExtension('WEBGL_lose_context')?.loseContext();
-            this._floatRenderableSupport = ok;
-            return ok;
-        } catch {
-            this._floatRenderableSupport = false;
-            return false;
-        }
+            const cv = (typeof document !== 'undefined') ? document.createElement('canvas') : new OffscreenCanvas(1, 1);
+            const gl = cv.getContext('webgl2') as WebGL2RenderingContext | null;
+            if (gl) {
+                cbf = !!gl.getExtension('EXT_color_buffer_float');
+                cbhf = !!gl.getExtension('EXT_color_buffer_half_float');
+                floatLinear = !!gl.getExtension('OES_texture_float_linear');
+                gl.getExtension('WEBGL_lose_context')?.loseContext();
+            }
+        } catch { /* leave defaults (no HDR) */ }
+        this._glCaps = { cbf, cbhf, floatLinear };
+        return this._glCaps;
     }
 
     /**
-     * Choose the highest-precision COLOR-RENDERABLE float type for the
-     * accumulation targets, honouring the quality preference but never
-     * selecting a type the GPU can't render (which would present black). The
-     * accumulation buffer needs ≥ half-float precision, so half-float is the
-     * floor — full float only when it's genuinely renderable.
+     * Pick the accumulation-buffer texture TYPE and FILTER from real GPU caps.
+     *
+     * The trap that black-screened mobile (Mali): a FloatType (RGBA32F) target
+     * sampled with LinearFilter returns BLACK on GPUs lacking
+     * OES_texture_float_linear — the shader runs (GPU lag) but every read of
+     * the accumulation buffer is black. RGBA16F (half) is renderable here (via
+     * EXT_color_buffer_float) AND linearly filterable in WebGL2 core, so it's
+     * the right choice whenever full float can't be linear-filtered. Full float
+     * is kept only when explicitly wanted AND it filters (desktop) — its 32-bit
+     * precision matters for high sample-count accumulation there.
      */
-    private selectRenderTargetType(): THREE.TextureDataType {
+    private accumFormat(): { type: THREE.TextureDataType; filter: THREE.MagnificationTextureFilter } {
+        const { cbf, cbhf, floatLinear } = this.glCaps();
+        const half16Renderable = cbf || cbhf;
+        const float32Renderable = cbf;
         const wantsHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
-        const halfOK = this.checkHalfFloatAlphaSupport();
-        const floatOK = this.checkFloatRenderableSupport();
-        if (wantsHalfFloat && halfOK) return THREE.HalfFloatType;
-        if (floatOK) return THREE.FloatType;
-        if (halfOK) return THREE.HalfFloatType; // full float not renderable (mobile) — use half
-        return THREE.FloatType;                  // neither renderable — keep prior behaviour
+
+        if (float32Renderable && floatLinear && !wantsHalfFloat) {
+            return { type: THREE.FloatType, filter: THREE.LinearFilter };
+        }
+        if (half16Renderable) {
+            return { type: THREE.HalfFloatType, filter: THREE.LinearFilter };
+        }
+        if (float32Renderable) {
+            // Float renderable but not linearly filterable — Nearest avoids black.
+            return { type: THREE.FloatType, filter: floatLinear ? THREE.LinearFilter : THREE.NearestFilter };
+        }
+        // No HDR-renderable format at all (very rare) — keep prior behaviour.
+        return { type: THREE.FloatType, filter: floatLinear ? THREE.LinearFilter : THREE.NearestFilter };
     }
 
     private initTargets(width: number, height: number) {
-        const floatType = this.selectRenderTargetType();
-        
+        const { type: floatType, filter } = this.accumFormat();
+
         // Single render target (color only) - no MRT needed
         const rtOpts = {
-            minFilter: THREE.LinearFilter,
-            magFilter: THREE.LinearFilter,
+            minFilter: filter,
+            magFilter: filter,
             stencilBuffer: false,
             depthBuffer: false,
             generateMipmaps: false,
@@ -456,7 +450,7 @@ export class RenderPipeline {
      */
     public resize(width: number, height: number, renderer?: THREE.WebGLRenderer) {
         const currentType = this.mrtTargetA?.texture.type;
-        const desiredType = this.selectRenderTargetType();
+        const desiredType = this.accumFormat().type;
 
         if (!this.mrtTargetA || this.mrtTargetA.width !== width || this.mrtTargetA.height !== height || currentType !== desiredType) {
             const oldA = this.mrtTargetA;
