@@ -126,6 +126,22 @@ function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
     // our sRGB-encoded output for canvas compositing.
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
+    // Surface shader compile/link failures with the actual GLSL log — the most
+    // likely cause of a black viewport on a weak mobile GPU (precision/budget
+    // limits the desktop never hits). Pre-boot, WorkerProxy turns this ERROR
+    // into the friendly boot-failure panel + diagnostics; post-boot (a failed
+    // recompile on formula switch) it's just logged. THREE doesn't throw on
+    // shader error, so without this the frame is silently black.
+    renderer.debug.checkShaderErrors = true;
+    renderer.debug.onShaderError = (gl, program, glVertexShader, glFragmentShader) => {
+        const vLog = gl.getShaderInfoLog(glVertexShader) || '';
+        const fLog = gl.getShaderInfoLog(glFragmentShader) || '';
+        const pLog = gl.getProgramInfoLog(program) || '';
+        const detail = [pLog, fLog && `FRAGMENT:\n${fLog}`, vLog && `VERTEX:\n${vLog}`]
+            .filter(Boolean).join('\n').slice(0, 2000);
+        postMsg({ type: 'ERROR', message: `Shader compile/link failed:\n${detail || '(no log)'}` });
+    };
+
     // Bench instrumentation — count two operations that aren't surfaced by
     // renderer.info: readRenderTargetPixels (sync GPU stall, used by depth
     // probe / histogram / picking) and setRenderTarget switches (counts

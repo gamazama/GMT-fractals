@@ -59,6 +59,12 @@ registerTick('snapshotDisplayCamera', TICK_PHASE.SNAPSHOT, () => {
 
 // ── Component ────────────────────────────────────────────────────────
 
+// If the worker hasn't booted + compiled within this window, assume a silent
+// failure (e.g. a shader that won't compile/run on a weak mobile GPU → black
+// viewport) and surface the boot-failure panel. Generous so a slow-but-working
+// mobile compile isn't falsely tripped.
+const BOOT_WATCHDOG_MS = 30000;
+
 interface GmtRendererTickDriverProps {
     onLoaded?: () => void;
 }
@@ -99,6 +105,8 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
     // not by silently waiting out a timer.
     useEffect(() => {
         let finished = false;
+        let watchdog: ReturnType<typeof setTimeout> | null = null;
+        const clearWatchdog = () => { if (watchdog) { clearTimeout(watchdog); watchdog = null; } };
 
         const finalize = () => {
             if (finished) return;
@@ -112,6 +120,7 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             if (proxy.isCompiling) return;
 
             finished = true;
+            clearWatchdog();
 
             // Re-push viewport size — layout may have shifted during compile.
             const s = sizeRef.current;
@@ -153,7 +162,19 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         // effect runs (e.g. fast boot, StrictMode remount).
         finalize();
 
-        return () => { unsubs.forEach((u) => u()); };
+        // Arm the watchdog only if boot didn't already complete synchronously.
+        if (!finished) {
+            watchdog = setTimeout(() => {
+                if (finished) return;
+                FractalEvents.emit(FRACTAL_EVENTS.WORKER_BOOT_FAILED, {
+                    reason:
+                        `Renderer timed out — no frame after ${Math.round(BOOT_WATCHDOG_MS / 1000)}s.\n` +
+                        `The shader likely failed to compile or run on this GPU.`,
+                });
+            }, BOOT_WATCHDOG_MS);
+        }
+
+        return () => { clearWatchdog(); unsubs.forEach((u) => u()); };
     }, []);
 
     // Handle resize (reacts to viewport size AND DPR changes).

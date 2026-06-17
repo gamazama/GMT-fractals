@@ -19,6 +19,8 @@ import { loadSceneFile } from '../engine/plugins/SceneIO';
 import type { Preset } from '../types';
 import { useCompileProgress, selectProgress } from '../store/CompileProgressStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import { submitFeedback } from '../engine-gmt/feedback/FeedbackClient';
+import { collectBootDiagnostics } from '../engine-gmt/engine/webglDiagnostics';
 
 // Injected by Vite's `define` from package.json (see vite.config.ts).
 declare const __APP_VERSION__: string;
@@ -89,6 +91,30 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
         });
         return off;
     }, []);
+
+    // Boot-failure diagnostics — a main-thread WebGL2 probe (GPU, fragment
+    // highp, extensions, OffscreenCanvas) collected lazily once a failure
+    // surfaces. Gives the user (and us) an actionable report — the only way
+    // to diagnose devices we can't physically test.
+    const [diagnostics, setDiagnostics] = useState('');
+    useEffect(() => {
+        if (bootError && !diagnostics) setDiagnostics(collectBootDiagnostics());
+    }, [bootError, diagnostics]);
+
+    const [reportState, setReportState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+    const sendReport = async () => {
+        setReportState('sending');
+        try {
+            await submitFeedback({
+                category: 'bug',
+                message: `Engine failed to start.\n\nReason:\n${bootError ?? '(unknown)'}\n\n--- diagnostics ---\n${diagnostics || collectBootDiagnostics()}`,
+                includeScene: false,
+            });
+            setReportState('sent');
+        } catch {
+            setReportState('error');
+        }
+    };
 
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     const [subtitle] = useState(pickRandomName);
@@ -197,9 +223,18 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
 
                 <div className="relative z-10 w-[500px] max-w-[90vw] bg-gray-900/80 border border-red-500/40 rounded-xl p-5 shadow-[0_0_50px_rgba(239,68,68,0.15)] backdrop-blur-sm">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-red-400/80 mb-2">Reason</div>
-                    <div className="font-mono text-xs text-gray-200 whitespace-pre-wrap break-words max-h-[180px] overflow-auto">
+                    <div className="font-mono text-xs text-gray-200 whitespace-pre-wrap break-words max-h-[140px] overflow-auto">
                         {bootError}
                     </div>
+
+                    <details className="mt-4">
+                        <summary className="text-[10px] font-bold uppercase tracking-widest text-gray-500 cursor-pointer hover:text-gray-300 select-none">
+                            Technical details
+                        </summary>
+                        <div className="mt-2 font-mono text-[10px] leading-relaxed text-gray-400 whitespace-pre-wrap break-words max-h-[180px] overflow-auto bg-black/40 rounded p-2 border border-white/5">
+                            {diagnostics || 'Collecting…'}
+                        </div>
+                    </details>
                 </div>
 
                 <div className="mt-6 flex gap-2 z-20">
@@ -209,11 +244,21 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
                     >
                         Reload
                     </button>
+                    <button
+                        onClick={sendReport}
+                        disabled={reportState === 'sending' || reportState === 'sent'}
+                        className="px-4 py-2 text-xs font-bold rounded border border-white/15 bg-white/5 text-gray-200 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-default"
+                    >
+                        {reportState === 'idle' && 'Send report'}
+                        {reportState === 'sending' && 'Sending…'}
+                        {reportState === 'sent' && 'Report sent ✓'}
+                        {reportState === 'error' && 'Failed — retry'}
+                    </button>
                 </div>
 
                 <div className="mt-4 max-w-[500px] text-center text-[10px] font-mono text-gray-500 px-4">
-                    If reloading doesn't help, the most common causes are WebGL2 / OffscreenCanvas being disabled,
-                    a lost GPU context, or a shader-compile failure for the current formula.
+                    Sending the report shares the technical details above (no scene data) so we can fix it.
+                    Common causes: WebGL2 / OffscreenCanvas disabled, a lost GPU context, or a shader-compile failure on this device.
                 </div>
             </div>
         );
