@@ -13,8 +13,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // 'prompt' — new SW waits for user approval before activating.
-      // This prevents silent stale-cache breakage on shader/formula updates.
+      // 'prompt' keeps the in-app "Update" pill wired, but the workbox
+      // skipWaiting/clientsClaim below make a new SW take over immediately
+      // (see the cutover note there) — required so returning visitors aren't
+      // stranded on a stale precache at the dev→prod same-origin swap.
       registerType: 'prompt',
       // Don't run SW in dev (avoids middleware-mode complexity with Express server).
       devOptions: { enabled: false },
@@ -87,6 +89,22 @@ export default defineConfig({
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/\.html(\?|$)/],
         ignoreURLParametersMatching: [/.*/],
+        // ── dev→prod cutover hardening (F2) ──────────────────────────────
+        // dev and stable register a SW at the SAME /sw.js on the SAME origin.
+        // At the cutover, returning visitors still hold STABLE's SW + precache.
+        // Without skipWaiting the new (dev) worker would WAIT, so stable's SW
+        // keeps serving — and if its precache was partially evicted it falls
+        // back to the network, which now serves DEV's deploy → 404 on stable's
+        // hashed filenames → blank page until the SW finally rotates. So the
+        // new worker activates immediately, claims open clients, and purges the
+        // outdated (stable) precache. cleanupOutdatedCaches also reclaims any
+        // prior-revision precache on every normal update.
+        // Trade-off: updates now apply on the next reload without the pill's
+        // approval. Revert skipWaiting/clientsClaim post-cutover if the
+        // manual-update model is wanted back.
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
         // (No runtimeCaching for third-party CDNs — Tailwind is now compiled
         // at build time and reactflow CSS is bundled, so the app loads zero
         // runtime CDN resources. This removes the blank-page-on-CDN-blip class.)
