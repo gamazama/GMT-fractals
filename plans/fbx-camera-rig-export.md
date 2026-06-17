@@ -1,5 +1,17 @@
 # FBX Camera-Rig Export (After Effects export twin)
 
+> **STATUS (2026-06-17, branch `feat/fbx-export`):** Phases 0–4 built.
+> - ✅ Binary writer `fbxBinary.ts` (C4D-validated container/preamble/anim).
+> - ✅ Phase 1 — `fbxExport.ts` (timeline sampler, FBX-space, deep-zoom rebased)
+>   + pure builder `fbxScene.ts` + `FbxExportDialog` + adjunct. Camera + lights
+>   **verified in C4D**. Also fixed the adjunct registry to hold multiple items
+>   (FBX was evicting AFX).
+> - ✅ Phase 4 — params as `GMT_param_<name>` nulls (value on Position Y).
+> - ⚠️ Phase 3 — opt-in camera-locked backdrop plate. Built + structurally
+>   valid, but orientation/UV/texture-display **NOT yet visually verified**
+>   (knobs isolated in `buildPlate`).
+> - ⏳ Deferred: AFX/FBX shared-sampler unification; Fusion verification (no install).
+
 **Scope:** A camera-rig FBX export — the FBX analog of the existing "Export to
 After Effects" (.jsx) adjunct. Exports the **camera animation, positional-light
 nulls, a backdrop plate quad, and animated params** so an artist can recreate
