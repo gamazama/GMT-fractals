@@ -57,6 +57,7 @@ export const Uniforms = {
     EnvLumIntegral: 'uEnvLumIntegral',       // ∫L sin(θ) dθ dφ — pdf normalizer
     EnvCDFMipBias: 'uEnvCDFMipBias',         // log2(srcW/cdfW) — mip level matching CDF resolution
     EnvMaxMip: 'uEnvMaxMip',                 // floor(log2(max(W,H))) — top mip level for roughness→LOD blur
+    EnvAvgColor: 'uEnvAvgColor',             // sinθ-weighted solid-angle average of the env (raw space); .r<0 = none
     FogColorLinear: 'uFogColorLinear', // CPU: InverseACESFilm(uFogColor)
 
     // Debug Tools

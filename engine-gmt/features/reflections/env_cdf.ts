@@ -26,6 +26,13 @@ export interface EnvCDFTextures {
     size: { w: number; h: number };
     lumIntegral: number;
     /**
+     * sinθ-weighted solid-angle average of the env, in RAW texel space (matches
+     * how the shader samples the texture before applyTextureProfile). Used by
+     * GetEnvMap to blend rough reflections toward the honest average instead of
+     * the pole-biased box-mip global average at the top of the chain.
+     */
+    avgColor: [number, number, number];
+    /**
      * Mip level on the source env that matches CDF resolution. NEE callers
      * sample Le at this mip so per-direction Le matches what the pdf was
      * built from — without it, a sub-pixel sun inside a dim CDF cell
@@ -83,6 +90,24 @@ function sampleLuminance(src: EnvImageSource, sx: number, sy: number): number {
     return l0 * (1 - fy) + l1 * fy;
 }
 
+/** Bilinear sample of the source env, returning raw [r,g,b] (scaled to [0,1] for byte data). */
+function sampleRGB(src: EnvImageSource, sx: number, sy: number): [number, number, number] {
+    const { width: W, height: H, data, channels, isByteData } = src;
+    const x = Math.max(0, Math.min(W - 1, sx));
+    const y = Math.max(0, Math.min(H - 1, sy));
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const fx = x - xi, fy = y - yi;
+    const xi1 = Math.min(W - 1, xi + 1), yi1 = Math.min(H - 1, yi + 1);
+    const scale = isByteData ? 1.0 / 255.0 : 1.0;
+    const ch = (px: number, py: number, c: number) => data[(py * W + px) * channels + c] * scale;
+    const lerp2 = (c: number) => {
+        const a = ch(xi, yi, c) * (1 - fx) + ch(xi1, yi, c) * fx;
+        const b = ch(xi, yi1, c) * (1 - fx) + ch(xi1, yi1, c) * fx;
+        return a * (1 - fy) + b * fy;
+    };
+    return [lerp2(0), lerp2(1), lerp2(2)];
+}
+
 /**
  * Build env CDF tables. Downsamples to (targetW × targetH) — overkill is
  * wasted VRAM and doesn't help precision; under-resolution misses sun discs.
@@ -104,6 +129,9 @@ export function buildEnvCDF(
     const sxStep = src.width  / W;
     const syStep = src.height / H;
 
+    // Solid-angle (sinθ) weighted RGB accumulation → env average for GetEnvMap.
+    let sumR = 0, sumG = 0, sumB = 0, sumSA = 0;
+
     let total = 0;
     for (let j = 0; j < H; j++) {
         // Latitude θ at row center. Equirectangular: y=0 → north pole (θ=0).
@@ -122,10 +150,18 @@ export function buildEnvCDF(
             const w = lum * sinT;
             weighted[j * W + i] = w;
             row += w;
+
+            const rgb = sampleRGB(src, sx, sy);
+            sumR += rgb[0] * sinT; sumG += rgb[1] * sinT; sumB += rgb[2] * sinT;
+            sumSA += sinT;
         }
         rowSum[j] = row;
         total += row;
     }
+
+    const avgColor: [number, number, number] = sumSA > 0
+        ? [sumR / sumSA, sumG / sumSA, sumB / sumSA]
+        : [0, 0, 0];
 
     // Solid-angle normalizer for the per-direction PDF.
     // pdf(ω) = (W·H · L_ij) / (TAU·PI · sin(θ) · lumIntegral)
@@ -197,6 +233,7 @@ export function buildEnvCDF(
         conditional: condTex,
         size: { w: W, h: H },
         lumIntegral: total > 0 ? lumIntegral : 1.0,
+        avgColor,
         mipBias,
     };
 }

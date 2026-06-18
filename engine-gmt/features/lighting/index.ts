@@ -147,6 +147,10 @@ export const LightingFeature: FeatureDefinition = {
         // stayed sharp — see ADR-0069). Set on env load; 8.0 is a safe pre-load
         // fallback (≈256px top mip).
         { name: Uniforms.EnvMaxMip, type: 'float', default: 8.0 },
+        // sinθ-weighted solid-angle average of the env map (raw space), set on
+        // env load. GetEnvMap blends rough reflections toward it instead of the
+        // pole-biased box-mip top. (-1,-1,-1) = none yet → LOD-cap fallback.
+        { name: Uniforms.EnvAvgColor, type: 'vec3', default: new THREE.Vector3(-1, -1, -1) },
     ],
     params: {
         // --- ENGINE MASTER ---

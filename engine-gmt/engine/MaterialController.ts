@@ -612,12 +612,17 @@ export class MaterialController {
         this.setUniform(Uniforms.EnvCDFSize, new THREE.Vector2(cdf.size.w, cdf.size.h));
         this.setUniform(Uniforms.EnvLumIntegral, cdf.lumIntegral);
         this.setUniform(Uniforms.EnvCDFMipBias, cdf.mipBias);
+        // Solid-angle average → GetEnvMap blends rough reflections toward it
+        // instead of the pole-biased box-mip top (ADR-0069 prefilter).
+        this.setUniform(Uniforms.EnvAvgColor, new THREE.Vector3(cdf.avgColor[0], cdf.avgColor[1], cdf.avgColor[2]));
     }
 
     private setEnvCDFStub() {
         this.setUniform(Uniforms.EnvCDFSize, new THREE.Vector2(1, 1));
         this.setUniform(Uniforms.EnvLumIntegral, 1.0);
         this.setUniform(Uniforms.EnvCDFMipBias, 0.0);
+        // Sentinel: extraction failed → GetEnvMap falls back to LOD capping.
+        this.setUniform(Uniforms.EnvAvgColor, new THREE.Vector3(-1, -1, -1));
     }
     
     /**

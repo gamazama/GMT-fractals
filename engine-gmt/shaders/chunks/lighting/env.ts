@@ -28,22 +28,24 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
         // Roughness blur via an ABSOLUTE LOD (textureLod), not a LOD bias.
         // texture(uv, bias) clamps the bias to GL_MAX_TEXTURE_LOD_BIAS (often
         // 2.0 on ANGLE/D3D11), so rough reflections could never blur past ~2
-        // mips and stayed sharp — most visible as a sharp env on matte/metallic-
-        // off surfaces where the blurred diffuse ambient dominates. textureLod
-        // selects the mip directly and is immune to the cap.
+        // mips and stayed sharp. textureLod selects the mip directly.
         //
-        // Cap the LOD ~4 levels below the top mip: a box-filtered equirectangular
-        // chain collapses to a pole-biased GLOBAL average at its smallest mips,
-        // which reads dark and loses all directionality — it would flatten and
-        // darken the diffuse ambient (GetEnvMap(n,1.0)) on matte surfaces and
-        // pull rough reflections toward that dim mean. Stopping ~4 levels up
-        // (≈16 px) keeps even fully-rough samples directional and energy-honest
-        // while still strongly blurred. A true GGX/irradiance prefilter would
-        // remove the need for the cap; this is the cheap, robust approximation.
-        // @see docs/adr/0069
-        float maxBlurLod = max(0.0, uEnvMaxMip - 4.0);
-        float lod = roughness * maxBlurLod;
-        col = textureLod(uEnvMapTexture, uv, lod).rgb;
+        // A box-filtered equirectangular mip chain collapses to a pole-biased,
+        // often-dark GLOBAL average at its smallest mips. So toward the rough
+        // end we blend to the solid-angle-CORRECT average (uEnvAvgColor, sinθ-
+        // weighted on env load) instead of those degenerate mips — energy-honest
+        // and direction-independent where the lobe is near-hemispherical. The
+        // sentinel uEnvAvgColor.r < 0 (pixel extraction failed) falls back to
+        // capping the LOD short of the bad mips. @see docs/adr/0069
+        if (uEnvAvgColor.r >= 0.0) {
+            float lod = roughness * uEnvMaxMip;
+            col = textureLod(uEnvMapTexture, uv, lod).rgb;
+            float avgMix = smoothstep(uEnvMaxMip - 4.0, uEnvMaxMip, lod);
+            col = mix(col, uEnvAvgColor, avgMix);
+        } else {
+            float lod = roughness * max(0.0, uEnvMaxMip - 4.0);
+            col = textureLod(uEnvMapTexture, uv, lod).rgb;
+        }
         
         // Apply Color Profile (Linear/ACES)
         col = applyTextureProfile(col, uEnvMapColorSpace);

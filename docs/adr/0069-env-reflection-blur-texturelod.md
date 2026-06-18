@@ -4,6 +4,23 @@
 **Status:** Accepted
 **Scope:** `engine-gmt/shaders/chunks/lighting/env.ts` (`GetEnvMap`), `engine/UniformNames.ts`, `engine-gmt/features/lighting/index.ts` (uniform schema), `engine-gmt/engine/MaterialController.ts` + `engine-gmt/engine/worker/renderWorker.ts` (env upload sites)
 
+> **Update 2026-06-19 (solid-angle prefilter; the `-4` cap is now a fallback):**
+> The deferred "proper prefilter" is implemented as a **correct-average blend**
+> (the robust subset of approach A). `buildEnvCDF` now also returns the sinθ-
+> weighted solid-angle average of the env (`avgColor`, raw texel space — the same
+> extraction/weighting pass already used for the CDF); `MaterialController.rebuildEnvCDF`
+> uploads it as `uEnvAvgColor`. `GetEnvMap` blends the box-mip sample toward
+> `uEnvAvgColor` over the top LODs (`smoothstep(maxMip-4, maxMip, lod)`), so the
+> rough/diffuse end converges to the honest solid-angle mean instead of the
+> pole-biased, dark box-mip global average — and the LOD runs to the full
+> `uEnvMaxMip`, no longer capped. The `-4` LOD cap survives only as the fallback
+> when pixel extraction fails (`uEnvAvgColor.r < 0` sentinel). A full custom
+> manual-mipmap chain (sinθ-weighted downsample per level) was deliberately NOT
+> done — it needs finicky manual-mipmap upload (unverifiable without a GPU here)
+> and heavy transient memory on large envs, for the same visible goal. That
+> remains the only path to mid-range (not just top-end) box-mip correction if
+> ever needed.
+
 ## Context
 
 `GetEnvMap(dir, roughness)` blurred environment reflections by roughness using
