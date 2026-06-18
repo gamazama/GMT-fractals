@@ -1,11 +1,13 @@
 /**
  * sendTargetRegistry — engine-core SEND-TARGET kernel (W2 generic, P0e interface (c)).
  *
- * The click/keyboard twin of the drag/drop-wells kernel: where a well is reached
- * by dragging, a send target is reached from a "Send to ▾" menu. A target is a
- * named destination ("Generator · Slot A", "Stops · edit", a host coloring layer)
- * that knows how to `apply` a payload. This module is the generic registry +
- * selector; `components/SendToMenu.tsx` is the reusable affordance.
+ * The click/keyboard twin of the drag path: where a destination is reached by
+ * dragging onto its on-screen anchor (`components/DropTargetLayer.tsx`), a send
+ * target is reached from a "Send to ▾" menu. A target is a named destination
+ * ("Generator · Slot A", "Stops · edit", a host coloring layer) that knows how to
+ * `apply` a payload. This module is the generic registry + selector;
+ * `components/SendToMenu.tsx` is the reusable click affordance, and
+ * `components/DropTargetLayer.tsx` is the drag/drop one — both over this registry.
  *
  * It generalizes the gradient-specific list `palette/core/favientTargets.ts` once
  * owned (`apply(config, name)`) into a payload-generic registry. P2 FOLDED those
@@ -21,11 +23,11 @@
  *
  * @invariant Host-agnostic: imports nothing app-specific. Hosts register INTO it.
  * @invariant Idempotent by id (re-registering replaces) — mirrors
- *   `registerDropWell` / `registerHistoryProvider`.
+ *   `registerHistoryProvider`.
  * @invariant `<SendToMenu/>` derives its visible set from `targetsForPayload`, so
  *   the node harness covers the menu's contents + self-filtering by construction.
  *
- * @see store/dropWellRegistry.ts (the drag twin — interface (b))
+ * @see components/DropTargetLayer.tsx (the drag/drop affordance over this registry)
  * @see palette/core/favientTargets.ts (host-capability flags; its target list folded here in P2)
  */
 

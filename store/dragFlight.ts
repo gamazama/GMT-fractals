@@ -1,17 +1,15 @@
 /**
  * dragFlight — pure, DOM-free reducer for window-level "is a drag in flight, and
- * what MIME types does it carry?" tracking (part of the W4 drop-wells kernel,
- * P0e interface (b)).
+ * what MIME types does it carry?" tracking (P0e interface (b)).
  *
- * Split out from the well registry (which never references it) so the registry
- * stays a thin list of wells and this stays a self-contained, harness-testable
- * state machine. `hooks/useDragInFlight.ts` wires it to real window drag events;
- * `debug/test-engine-dnd-kernels.mts` drives it directly.
+ * A self-contained, harness-testable state machine. `hooks/useDragInFlight.ts`
+ * wires it to real window drag events; `debug/test-engine-dnd-kernels.mts` drives
+ * it directly.
  *
  * The model mirrors FavientsPanel's existing `depth.current` tracker: enter ++ /
- * leave --, captured/reset at the 0↔1 boundary, hard-reset on drop/dragend. See
- * store/dropWellRegistry.ts for the surrounding DnD facts (getData blocked
- * mid-drag → visibility keys off `types`).
+ * leave --, captured/reset at the 0↔1 boundary, hard-reset on drop/dragend. Only
+ * `DataTransfer.types` is readable mid-drag (getData is blocked until drop), so a
+ * consumer's drag-visibility keys off `types`.
  */
 
 export interface DragFlightState {

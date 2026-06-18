@@ -18,7 +18,6 @@ import type { Pt, TracePath } from '../core/img2grad/common';
 import { CanonicalHero } from './CanonicalHero';
 import { HeroSlot } from './HeroSlot';
 import { fitRampToStops } from '../core/stopFit';
-import { wellsForTypes } from '../../store/dropWellRegistry';
 
 const MODES: { id: Img2GradMode; label: string }[] = [
   { id: 'distill', label: 'Distill' },
@@ -145,14 +144,13 @@ export const ImageStage: React.FC = () => {
   // whole-window drop target + paste (active while the Image stage is mounted)
   useEffect(() => {
     let dragT: number | undefined;
-    // Coexistence with the W4 drop-wells (dropWellRegistry.ts): an in-app drag (a
-    // gradient swatch, etc.) carries a MIME that a registered drop well accepts and
-    // belongs to that well, not the image-file importer — early-return so the well
-    // handles it (and we don't flash the image overlay over it). The drop-well
-    // registry is the single source of truth for "is this a well-accepted drag":
-    // ImageStage proceeds ONLY for genuine OS file drops (no well claims the types).
+    // Coexistence with in-app drags: a gradient-swatch / favient drag carries a custom
+    // MIME and belongs to a send target (DropTargetLayer), not the image-file importer —
+    // it never carries 'Files'. So ImageStage proceeds ONLY for genuine OS file drops;
+    // any drag without a 'Files' type is an internal drag we stand down for (no overlay
+    // flash over it).
     const isWellDrag = (e: DragEvent): boolean =>
-      !!e.dataTransfer && wellsForTypes(Array.from(e.dataTransfer.types)).length > 0;
+      !e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files');
     const onDragOver = (e: DragEvent) => {
       if (isWellDrag(e)) return;
       e.preventDefault();

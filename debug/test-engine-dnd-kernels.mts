@@ -1,27 +1,15 @@
 /**
- * Engine drag/drop-wells + send-target kernels harness (P0e — interfaces (b) + (c)).
+ * Engine drag-flight + send-target kernels harness (P0e — interfaces (b) + (c)).
  *
- * The React shells (`DragWellsOverlay`, `SendToMenu`) are thin views over the
- * PURE selectors tested here:
- *   • the overlay renders exactly `wellsForTypes(types)` while a drag is in flight,
- *     and tracks the drag via `dragFlightReducer` — so testing those two covers
- *     what the overlay shows + when, without a DOM;
- *   • the menu lists exactly `targetsForPayload(payload, {selfId})` and dispatches
- *     the chosen target's `apply(payload)` — so testing that covers the menu.
- * (Same "view ≡ tested selector by construction" tactic as sampleStops ⇄
- * renderStopsToRamp in test-palette-stopops.)
+ * `dragFlightReducer` is the pure window-level drag tracker (depth counting + types
+ * capture), and `targetsForPayload(payload, {selfId})` is exactly the set a "send to"
+ * surface lists + whose `apply(payload)` it dispatches — so testing those covers the
+ * behaviour without a DOM. (Same "view ≡ tested selector by construction" tactic as
+ * sampleStops ⇄ renderStopsToRamp in test-palette-stopops.)
  *
  * Run: npx tsx debug/test-engine-dnd-kernels.mts
  */
 
-import {
-    registerDropWell,
-    unregisterDropWell,
-    getDropWells,
-    subscribeDropWells,
-    wellsForTypes,
-    type DropWell,
-} from '../store/dropWellRegistry';
 import {
     dragFlightInitial,
     dragFlightReducer,
@@ -44,61 +32,8 @@ const ok = (cond: boolean, msg: string) => {
 
 const GRAD_MIME = 'application/x-gmt-gradient';
 
-/** Minimal DataTransfer stand-in: just the `types` list + a keyed payload store. */
-const fakeDataTransfer = (data: Record<string, string>): DataTransfer => ({
-    types: Object.keys(data),
-    getData: (k: string) => data[k] ?? '',
-} as unknown as DataTransfer);
-
-// ===== (b) drop-wells kernel =====
-console.log('[b1] registry: register / get / idempotent-by-id / unregister');
-{
-    let dropped: string | null = null;
-    const well: DropWell = {
-        id: 'export',
-        label: 'Export',
-        accepts: (t) => t.includes(GRAD_MIME),
-        onDrop: (dt) => { dropped = dt.getData(GRAD_MIME); },
-    };
-    const unreg = registerDropWell(well);
-    ok(getDropWells().some((w) => w.id === 'export'), 'well present after register');
-    registerDropWell({ ...well, label: 'Export!' }); // same id replaces
-    ok(getDropWells().filter((w) => w.id === 'export').length === 1, 'idempotent by id (no dup)');
-    ok(getDropWells().find((w) => w.id === 'export')?.label === 'Export!', 'replacement wins');
-
-    // onDrop routing via a fake DataTransfer (getData unblocked at drop time).
-    getDropWells().find((w) => w.id === 'export')!.onDrop(fakeDataTransfer({ [GRAD_MIME]: '{"kind":"generator"}' }));
-    ok(dropped === '{"kind":"generator"}', 'onDrop reads the real payload from DataTransfer');
-
-    unreg();
-    ok(!getDropWells().some((w) => w.id === 'export'), 'unregister thunk removes the well');
-}
-
-console.log('[b2] wellsForTypes: MIME-presence visibility + throwing accepts excluded');
-{
-    const grad = registerDropWell({ id: 'g', label: 'G', accepts: (t) => t.includes(GRAD_MIME), onDrop: () => {} });
-    const files = registerDropWell({ id: 'f', label: 'F', accepts: (t) => t.includes('Files'), onDrop: () => {} });
-    const boom = registerDropWell({ id: 'x', label: 'X', accepts: () => { throw new Error('bad'); }, onDrop: () => {} });
-
-    const forGrad = wellsForTypes([GRAD_MIME]).map((w) => w.id);
-    ok(forGrad.includes('g') && !forGrad.includes('f'), 'only wells whose accepts(types) is true show (gradient drag)');
-    ok(!forGrad.includes('x'), 'a throwing accepts is treated as not-accepting (overlay never blanks)');
-    ok(wellsForTypes(['Files']).map((w) => w.id).includes('f'), 'file drag shows the file well');
-    grad(); files(); boom();
-    ok(wellsForTypes([GRAD_MIME]).length === 0, 'cleanup: no wells left');
-}
-
-console.log('[b3] subscribe fires on register + unregister');
-{
-    let n = 0;
-    const unsub = subscribeDropWells(() => { n++; });
-    const u = registerDropWell({ id: 's', label: 'S', accepts: () => true, onDrop: () => {} });
-    u();
-    ok(n === 2, `listener fired on register + unregister (got ${n})`);
-    unsub();
-}
-
-console.log('[b4] dragFlightReducer: depth counting + types capture + reset');
+// ===== (b) drag-flight kernel =====
+console.log('[b] dragFlightReducer: depth counting + types capture + reset');
 {
     let s: DragFlightState = dragFlightInitial;
     ok(!s.inFlight && s.depth === 0, 'initial: not in flight');
@@ -185,4 +120,4 @@ console.log('[c3] subscribe fires on register + unregister');
 
 console.log('');
 if (failures) { console.error(`FAILED: ${failures} assertion(s)`); process.exit(1); }
-else console.log('ALL PASS — drag/drop-wells + send-target kernels (b)+(c)');
+else console.log('ALL PASS — drag-flight + send-target kernels (b)+(c)');

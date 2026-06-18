@@ -16,7 +16,7 @@
  * its closure does not reorder the list.
  *
  * @invariant Host-agnostic; the engine registries that use it never import an app.
- * @see store/dropWellRegistry.ts, store/sendTargetRegistry.ts (consumers)
+ * @see store/sendTargetRegistry.ts (consumer)
  */
 
 export interface ListRegistry<T extends { id: string }> {
