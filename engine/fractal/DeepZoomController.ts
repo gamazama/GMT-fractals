@@ -12,17 +12,15 @@
  */
 
 import { ddSub } from './deepZoom/dd';
+import { f64ToHDR, hdrToVec2 } from './deepZoom/HDRFloat';
 
 type ProgramLike = { uniforms: Record<string, WebGLUniformLocation | null> };
 
 /** Pack a JS f64 as `[mantissa, exp]` for the shader's HDR uniforms.
  *  Plain f32 underflows past ~1e-38; carrying the exponent separately
- *  lets the shader reach zoom 1e-300+. Zero maps to (0, 0). */
-const f64ToHDRTuple = (v: number): [number, number] => {
-    if (!Number.isFinite(v) || v === 0) return [0, 0];
-    const e = Math.floor(Math.log2(Math.abs(v)));
-    return [v / Math.pow(2, e), e];
-};
+ *  lets the shader reach zoom 1e-300+. Zero maps to (0, 0).
+ *  Thin tuple alias over the shared {@link HDRFloat} packer. */
+const f64ToHDRTuple = (v: number): [number, number] => hdrToVec2(f64ToHDR(v));
 
 const bindUnit = (
     gl: WebGL2RenderingContext,

@@ -18,6 +18,7 @@
 
 import { useSyncExternalStore } from 'react';
 import { lsGetJson, lsSetJson } from '../core/storage';
+import { createSingleSlot } from '../../store/createSingleSlot';
 
 const LS_KEY = 'gx.hero.prefs';
 
@@ -31,25 +32,20 @@ interface HeroPrefs {
 
 const DEFAULTS: HeroPrefs = { enlarged: true };
 
-let prefs: HeroPrefs = { ...DEFAULTS, ...(lsGetJson<Partial<HeroPrefs> | null>(LS_KEY, null) ?? {}) };
-const listeners = new Set<() => void>();
-const subscribe = (l: () => void): (() => void) => {
-  listeners.add(l);
-  return () => { listeners.delete(l); };
-};
-const getSnapshot = (): HeroPrefs => prefs;
+const slot = createSingleSlot<HeroPrefs>({ ...DEFAULTS, ...(lsGetJson<Partial<HeroPrefs> | null>(LS_KEY, null) ?? {}) });
+const getSnapshot = (): HeroPrefs => slot.get() ?? DEFAULTS;
 
 const update = (patch: Partial<HeroPrefs>): void => {
-  prefs = { ...prefs, ...patch };
-  lsSetJson(LS_KEY, prefs);
-  listeners.forEach((l) => l());
+  const next = { ...getSnapshot(), ...patch };
+  lsSetJson(LS_KEY, next);
+  slot.set(next); // new object identity → always notifies
 };
 
 /** Flip the shared vertical-enlarge tier (every hero re-renders + the choice persists). */
-export const toggleHeroEnlarged = (): void => update({ enlarged: !prefs.enlarged });
+export const toggleHeroEnlarged = (): void => update({ enlarged: !getSnapshot().enlarged });
 
 export const useHeroPrefs = (): HeroPrefs =>
-  useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  useSyncExternalStore(slot.subscribe, getSnapshot, getSnapshot);
 
 /** The hero strip height for the current shared enlarge tier. */
 export const useHeroHeight = (): number =>

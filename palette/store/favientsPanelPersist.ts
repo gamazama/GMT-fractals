@@ -13,6 +13,7 @@
 
 import { useEngineStore } from '../../store/engineStore';
 import { lsGetJson, lsSetJson } from '../core/storage';
+import { watchPersisted } from './watchPersisted';
 
 const DEFAULT_LS = 'gmt.favients.panel';
 const PANEL_ID = 'Favients';
@@ -175,39 +176,31 @@ export const restoreFavientsPanel = (defaults: FavientsPanelDefaults, opts?: Fav
   st.togglePanel?.(PANEL_ID, open);
 };
 
-/** Mirror later open/move/resize/dock back to storage (debounced). Call once. */
+/** Mirror later open/move/resize/dock back to storage (debounced). Call once. The
+ *  reference gate (PanelState is only replaced when a panel action runs) lives in
+ *  watchPersisted, so the every-change subscription stays cheap. */
 export const watchFavientsPanel = (opts?: FavientsPersistOptions): void => {
   const key = opts?.storageKey ?? DEFAULT_LS;
   activeStorageKey = key; // keep the viewMode key in lockstep with the window writer
 
-  let lastPs: PanelEntry | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  useEngineStore.subscribe(() => {
-    // The subscription fires on every store change; the PanelState object is only
-    // replaced when a panel action runs, so a reference check skips all the rest cheaply.
-    const ps = (useEngineStore.getState() as unknown as { panels?: Record<string, PanelEntry> }).panels?.[PANEL_ID];
-    if (!ps || ps === lastPs) return;
-    lastPs = ps;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(
-      () => {
-        // Preserve any persisted viewMode — this writer owns only the window
-        // fields, so re-read the blob and carry the panel's layout pref through
-        // (else toggling open/dock would wipe the saved grid/list choice).
-        const prev = lsGetJson<Stored | null>(key, null);
-        lsSetJson(key, {
-          open: !!ps.isOpen,
-          location: ps.location ?? 'float',
-          order: ps.order ?? 0,
-          x: ps.floatPos?.x ?? 0,
-          y: ps.floatPos?.y ?? 0,
-          w: ps.floatSize?.width ?? 296,
-          h: ps.floatSize?.height ?? 300,
-          ...(prev?.viewMode ? { viewMode: prev.viewMode } : {}),
-        });
-      },
-      300,
-    );
+  watchPersisted<PanelEntry>({
+    select: (s) => (s as { panels?: Record<string, PanelEntry> }).panels?.[PANEL_ID],
+    // Preserve any persisted viewMode — this writer owns only the window fields, so
+    // re-read the blob at flush time and carry the panel's layout pref through (else
+    // toggling open/dock would wipe the saved grid/list choice).
+    write: (ps) => {
+      const prev = lsGetJson<Stored | null>(key, null);
+      lsSetJson(key, {
+        open: !!ps.isOpen,
+        location: ps.location ?? 'float',
+        order: ps.order ?? 0,
+        x: ps.floatPos?.x ?? 0,
+        y: ps.floatPos?.y ?? 0,
+        w: ps.floatSize?.width ?? 296,
+        h: ps.floatSize?.height ?? 300,
+        ...(prev?.viewMode ? { viewMode: prev.viewMode } : {}),
+      });
+    },
   });
 };
 

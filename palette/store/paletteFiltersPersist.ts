@@ -11,6 +11,7 @@
 
 import { useEngineStore } from '../../store/engineStore';
 import { lsGetJson, lsSet } from '../core/storage';
+import { watchPersisted } from './watchPersisted';
 
 const LS = 'gmt.paletteFilters';
 const KEYS = ['swatchSize', 'paddingSize', 'groupBy', 'sortBy', 'rowsBy', 'reverse'] as const;
@@ -29,21 +30,12 @@ export const restorePaletteFilters = (): void => {
   if (typeof set === 'function') set(pick(saved));
 };
 
-/** Mirror later layout changes back to storage (debounced). Call once. */
+/** Mirror later layout changes back to storage (debounced). Call once. The
+ *  reference gate lives in watchPersisted — paletteFilters is only replaced when
+ *  setPaletteFilters runs, so the every-change subscription stays cheap. */
 export const watchPaletteFilters = (): void => {
-  let lastPf: Record<string, unknown> | undefined;
-  let last: string | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  useEngineStore.subscribe(() => {
-    // Reference-gate on the slice before stringifying — the subscription fires on
-    // every store change, but the paletteFilters object only changes on setPaletteFilters.
-    const pf = (useEngineStore.getState() as unknown as { paletteFilters?: Record<string, unknown> }).paletteFilters;
-    if (!pf || pf === lastPf) return;
-    lastPf = pf;
-    const snap = JSON.stringify(pick(pf));
-    if (snap === last) return;
-    last = snap;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => lsSet(LS, snap), 300);
+  watchPersisted<Record<string, unknown>>({
+    select: (s) => (s as { paletteFilters?: Record<string, unknown> }).paletteFilters,
+    write: (pf) => lsSet(LS, JSON.stringify(pick(pf))),
   });
 };

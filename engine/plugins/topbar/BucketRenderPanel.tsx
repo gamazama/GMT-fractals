@@ -19,6 +19,7 @@ import ToggleSwitch from '../../../components/ToggleSwitch';
 import Dropdown from '../../../components/Dropdown';
 import { FractalEvents, FRACTAL_EVENTS } from '../../FractalEvents';
 import { CheckIcon, DownloadIcon } from '../../../components/Icons';
+import { ChevronDown } from '../../../components/Icons2';
 import { Popover } from '../../../components/Popover';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { Button } from '../../../components/Button';
@@ -629,9 +630,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                             aria-label={previewExpanded ? 'Hide render settings' : 'Show render settings'}
                             className="flex items-center justify-center w-9 h-5 rounded border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
                         >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${previewExpanded ? 'rotate-180' : ''}`}>
-                                <polyline points="6 9 12 15 18 9" />
-                            </svg>
+                            <ChevronDown size={12} className={`transition-transform ${previewExpanded ? 'rotate-180' : ''}`} />
                         </button>
                     </div>
                 )}

@@ -8,24 +8,21 @@
  * nothing is registered the Render button is hidden.
  */
 import type React from 'react';
+import { createSingleSlot } from '../../store/createSingleSlot';
 
 export type RenderPopupComponent = React.ComponentType<{ onClose: () => void }>;
 
-let renderPopupComponent: RenderPopupComponent | null = null;
-const listeners = new Set<() => void>();
+/** Last-writer-wins host slot for the app's Render dialog component. */
+const slot = createSingleSlot<RenderPopupComponent>();
 
 export function registerRenderPopup(component: RenderPopupComponent | null): void {
-    renderPopupComponent = component;
-    listeners.forEach(l => l());
+    slot.set(component);
 }
 
 export function getRenderPopup(): RenderPopupComponent | null {
-    return renderPopupComponent;
+    return slot.get();
 }
 
 export function subscribeRenderPopup(cb: () => void): () => void {
-    listeners.add(cb);
-    return () => {
-        listeners.delete(cb);
-    };
+    return slot.subscribe(cb);
 }

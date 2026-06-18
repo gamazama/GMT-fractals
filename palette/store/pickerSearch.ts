@@ -13,23 +13,15 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { createSingleSlot } from '../../store/createSingleSlot';
 
-let query = '';
-const listeners = new Set<() => void>();
-
-const subscribe = (l: () => void): (() => void) => {
-  listeners.add(l);
-  return () => { listeners.delete(l); };
-};
-const getSnapshot = (): string => query;
+const slot = createSingleSlot<string>('');
+// createSingleSlot.set already Object.is-dedups, so an unchanged query no-ops the notify.
+const getSnapshot = (): string => slot.get() ?? '';
 
 /** Set the transient Picker query (session-only). No-ops on an unchanged value. */
-export const setPickerSearch = (q: string): void => {
-  if (q === query) return;
-  query = q;
-  listeners.forEach((l) => l());
-};
+export const setPickerSearch = (q: string): void => slot.set(q);
 
 /** Subscribe a component to the transient Picker search query. */
 export const usePickerSearch = (): string =>
-  useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  useSyncExternalStore(slot.subscribe, getSnapshot, getSnapshot);

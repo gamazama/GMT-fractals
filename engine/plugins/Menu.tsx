@@ -51,6 +51,7 @@ import { topbar, TopBarSlot } from './TopBar';
 import { useEngineStore } from '../../store/engineStore';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { CloseIcon } from '../../components/Icons';
+import { ChevronDown } from '../../components/Icons2';
 import { useDismiss } from '../../hooks/useDismiss';
 import { useRenderPause } from '../../hooks/useRenderPause';
 
@@ -369,9 +370,7 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
                 {/* Chevron signals dropdown affordance — every menu is a
                     dropdown so this is unconditional for consistency
                     across Camera / System / File / Help / etc. */}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-60">
-                    <polyline points="6 9 12 15 18 9" />
-                </svg>
+                <ChevronDown size={10} className="opacity-60" />
             </button>
             {/* Popover path — desktop, or mobile when no MobileMenuHost. */}
             {open && !useSidePanel && (
