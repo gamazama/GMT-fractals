@@ -35,7 +35,7 @@ export const OpticsFeature: FeatureDefinition = {
             min: 0.0, max: 1.0, step: 0.0001, scale: 'log', group: 'dof',
             format: (v) => {
                 if (v === 0) return "0.0 (off)";
-                if (Math.abs(v) < 0.001) return v.toFixed(5);
+                if (Math.abs(v) < 0.001) return v.toFixed(6);
                 if (Math.abs(v) < 10.0) return v.toFixed(4);
                 return v.toFixed(2);
             },

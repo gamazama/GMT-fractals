@@ -6,7 +6,7 @@ export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
         `needNoise = true;` :
         `
         // Always apply DOF noise for blur preview - even during navigation
-        if (uDOFStrength > 0.00001) needNoise = true;
+        if (uDOFStrength > 0.000001) needNoise = true;
         if (!isMoving) needNoise = true;  // Other effects need noise when stationary
         if (uAreaLights > 0.5) needNoise = true;
         // Volumetric scatter: gate hash relies on per-pixel stochasticSeed
@@ -108,7 +108,7 @@ void getCameraRay(vec2 uvCoord, out vec3 ro, out vec3 rd, out float stochasticSe
     // DOF noise behavior:
     // - During navigation (isMoving): Stable per-pixel noise for blur preview
     // - During accumulation: Animated noise for Monte Carlo convergence
-    if (uDOFStrength > 0.00001) {
+    if (uDOFStrength > 0.000001) {
         vec3 focalPoint = ro + rd * uDOFFocus;
         
         // Use stable blue noise during navigation, animated during accumulation
