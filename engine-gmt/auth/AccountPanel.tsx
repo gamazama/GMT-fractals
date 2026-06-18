@@ -14,6 +14,8 @@ import React, { useEffect, useState } from 'react';
 import { getSupabase } from '../supabase';
 import { useAuthStore } from './authStore';
 import { Modal, Z, stopNavKeys } from '../../components/ui';
+import { ErrorNote } from '../../components/ErrorNote';
+import { GhostButton } from '../../components/GhostButton';
 
 const USERNAME_RE = /^[a-z0-9](?:[a-z0-9_-]{1,22}[a-z0-9])?$/;
 const RESERVED_USERNAMES = new Set([
@@ -243,7 +245,7 @@ export const AccountPanel: React.FC = () => {
                 </header>
 
                 {error && (
-                    <div className="m-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-[10px] text-red-300">{error}</div>
+                    <ErrorNote className="m-4 p-3 text-[10px] text-red-300">{error}</ErrorNote>
                 )}
 
                 {setupMode && (
@@ -404,13 +406,13 @@ export const AccountPanel: React.FC = () => {
                         </form>
 
                         <div className="border-t border-white/5 pt-4 space-y-2">
-                            <button
+                            <GhostButton
                                 onClick={signOut}
                                 disabled={busy}
-                                className="w-full py-2 rounded text-[11px] font-bold bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border border-white/10"
+                                className="w-full py-2 rounded text-[11px] font-bold text-gray-300"
                             >
                                 Sign out
-                            </button>
+                            </GhostButton>
 
                             {!confirmDelete ? (
                                 <button
@@ -421,18 +423,18 @@ export const AccountPanel: React.FC = () => {
                                     Delete account
                                 </button>
                             ) : (
-                                <div className="p-3 rounded bg-red-500/10 border border-red-500/30 space-y-2">
+                                <ErrorNote className="p-3 space-y-2">
                                     <div className="text-[10px] text-red-300 leading-relaxed">
                                         This deletes your profile and removes your submissions from the gallery. Cannot be undone.
                                     </div>
                                     <div className="flex gap-2">
-                                        <button
+                                        <GhostButton
                                             onClick={() => setConfirmDelete(false)}
                                             disabled={busy}
-                                            className="flex-1 py-1.5 rounded text-[10px] bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border border-white/10"
+                                            className="flex-1 py-1.5 rounded text-[10px] text-gray-300"
                                         >
                                             Cancel
-                                        </button>
+                                        </GhostButton>
                                         <button
                                             onClick={deleteAccount}
                                             disabled={busy}
@@ -441,7 +443,7 @@ export const AccountPanel: React.FC = () => {
                                             Delete forever
                                         </button>
                                     </div>
-                                </div>
+                                </ErrorNote>
                             )}
                         </div>
                     </div>

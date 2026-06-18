@@ -61,3 +61,47 @@ export const CaretRight: React.FC<{ className?: string }> = ({ className }) => (
     <path d="M0 0l6 5-6 5z" />
   </svg>
 );
+
+/**
+ * Lifted single-use glyphs — these had no Icons.tsx equivalent and were inlined at
+ * one call site each; hoisted here (R3 / B2) so future surfaces reuse them instead of
+ * re-inlining. Each keeps its original default size (the only thing that varied per
+ * call site); `strokeWidth` is baked to the original design value.
+ */
+interface GlyphProps {
+  /** Width = height in px. Defaults to the glyph's original call-site size. */
+  size?: number;
+  className?: string;
+}
+
+/** Left-pointing arrow with tail — back / return-to-parent navigation. */
+export const BackArrowIcon: React.FC<GlyphProps> = ({ size = 14, className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <line x1="19" y1="12" x2="5" y2="12" />
+    <polyline points="12 19 5 12 12 5" />
+  </svg>
+);
+
+/** User / avatar glyph — account affordances. */
+export const PersonIcon: React.FC<GlyphProps> = ({ size = 11, className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
+
+/** Envelope — contact / feedback / email affordances. */
+export const MailIcon: React.FC<GlyphProps> = ({ size = 12, className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+    <polyline points="22,6 12,13 2,6" />
+  </svg>
+);
+
+/** Filled-circle check — success / validation badge. */
+export const CheckCircleIcon: React.FC<GlyphProps> = ({ size = 48, className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
+  </svg>
+);

@@ -7,6 +7,7 @@
  */
 import { saveGMFScene } from '../utils/FormulaFormat';
 import { useEngineStore } from '../../store/engineStore';
+import { safeLocalGet, safeLocalSet, safeLocalRemove } from '../../store/safeLocalStorage';
 
 const STASH_KEY = 'gmt-oauth-scene-stash';
 const STASH_TS_KEY = 'gmt-oauth-scene-stash-ts';
@@ -18,8 +19,8 @@ export function stashSceneForOAuth(): void {
     try {
         const preset = (useEngineStore.getState() as any).getPreset?.();
         if (!preset) return;
-        localStorage.setItem(STASH_KEY, saveGMFScene(preset));
-        localStorage.setItem(STASH_TS_KEY, String(Date.now()));
+        safeLocalSet(STASH_KEY, saveGMFScene(preset));
+        safeLocalSet(STASH_TS_KEY, String(Date.now()));
     } catch (err) {
         console.warn('[auth] failed to stash scene before OAuth redirect:', err);
     }
@@ -29,10 +30,10 @@ export function stashSceneForOAuth(): void {
  *  the stash so it restores at most once per redirect. */
 export function consumeStashedScene(): string | null {
     try {
-        const gmf = localStorage.getItem(STASH_KEY);
-        const ts = Number(localStorage.getItem(STASH_TS_KEY) ?? 0);
-        localStorage.removeItem(STASH_KEY);
-        localStorage.removeItem(STASH_TS_KEY);
+        const gmf = safeLocalGet(STASH_KEY);
+        const ts = Number(safeLocalGet(STASH_TS_KEY) ?? 0);
+        safeLocalRemove(STASH_KEY);
+        safeLocalRemove(STASH_TS_KEY);
         if (!gmf || !ts || Date.now() - ts > FRESHNESS_MS) return null;
         return gmf;
     } catch {

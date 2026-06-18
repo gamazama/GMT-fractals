@@ -3,6 +3,7 @@ import { submitFeedback, FeedbackError, FeedbackCategory } from './FeedbackClien
 import { useAuthStore } from '../auth/authStore';
 import { useEngineStore } from '../../store/engineStore';
 import { stopNavKeys } from '../../components/ui';
+import { ErrorNote } from '../../components/ErrorNote';
 
 const CATEGORIES: { value: FeedbackCategory; label: string; hint: string }[] = [
     { value: 'bug',     label: 'Bug report',     hint: 'Something is broken or behaving unexpectedly' },
@@ -167,9 +168,9 @@ export const FeedbackPanel: React.FC = () => {
                     </label>
 
                     {error && (
-                        <div className="text-[11px] text-red-300 bg-red-500/10 border border-red-500/30 rounded px-2 py-1.5 mb-3">
+                        <ErrorNote className="text-[11px] text-red-300 px-2 py-1.5 mb-3">
                             {error}
-                        </div>
+                        </ErrorNote>
                     )}
 
                     <div className="flex justify-end gap-2">

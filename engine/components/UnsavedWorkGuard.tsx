@@ -20,6 +20,7 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { useEngineStore } from '../../store/engineStore';
+import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { useAutosaveSettings } from '../store/autosaveStore';
 import { serializeCurrentScene, AUTOSAVE_KEY, AUTOSAVE_RECOVERY_KEY, AUTOSAVE_AT_KEY, AUTOSAVE_RECOVERY_AT_KEY } from '../plugins/SceneIO';
 import { showToast } from '../store/toastStore';
@@ -34,11 +35,11 @@ export const UnsavedWorkGuard: React.FC = () => {
         if (snapshotted.current) return;
         snapshotted.current = true;
         try {
-            const prev = localStorage.getItem(AUTOSAVE_KEY);
+            const prev = safeLocalGet(AUTOSAVE_KEY);
             if (prev) {
-                localStorage.setItem(AUTOSAVE_RECOVERY_KEY, prev);
-                const at = localStorage.getItem(AUTOSAVE_AT_KEY);
-                if (at) localStorage.setItem(AUTOSAVE_RECOVERY_AT_KEY, at);
+                safeLocalSet(AUTOSAVE_RECOVERY_KEY, prev);
+                const at = safeLocalGet(AUTOSAVE_AT_KEY);
+                if (at) safeLocalSet(AUTOSAVE_RECOVERY_AT_KEY, at);
                 showToast('Unsaved work from your last session can be recovered — File ▸ Restore Last Session', 'info', 7000);
             }
         } catch { /* storage blocked */ }
@@ -62,8 +63,8 @@ export const UnsavedWorkGuard: React.FC = () => {
         const timer = window.setInterval(() => {
             try {
                 if (!useEngineStore.getState().isSceneDirty()) return;
-                localStorage.setItem(AUTOSAVE_KEY, serializeCurrentScene());
-                localStorage.setItem(AUTOSAVE_AT_KEY, String(Date.now()));
+                safeLocalSet(AUTOSAVE_KEY, serializeCurrentScene());
+                safeLocalSet(AUTOSAVE_AT_KEY, String(Date.now()));
             } catch (err) {
                 console.warn('[UnsavedWorkGuard] autosave failed', err);
             }

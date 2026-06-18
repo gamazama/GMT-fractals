@@ -13,8 +13,9 @@
  * UX: no backdrop-click-to-close (full-screen, easy to mis-click) — close via ✕ or Esc.
  */
 
-import React, { useEffect } from 'react';
-import ReactDOM from 'react-dom';
+import React from 'react';
+import { Modal, Z } from '../components/ui';
+import { CloseIcon } from '../components/Icons';
 import { PickerStage } from '../gradient-explorer/PickerStage';
 import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
 import { usePaletteOverlayStore } from './paletteOverlayStore';
@@ -22,7 +23,7 @@ import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIco
 import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
 
 const PalettePickerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
-  <div className="fixed inset-0 z-[1000] flex flex-col bg-black/85 backdrop-blur-sm">
+  <div className="w-full h-full flex flex-col">
     <div className="shrink-0 h-11 flex items-center gap-3 px-4 border-b border-white/10 bg-black/60">
       <span className="text-sm font-medium text-gray-200">Gradient Library</span>
       <button
@@ -37,9 +38,7 @@ const PalettePickerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
         title="Close (Esc)"
         className="ml-auto flex items-center gap-1.5 px-2.5 h-7 rounded text-[12px] text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-          <path d="M18 6 6 18M6 6l12 12" />
-        </svg>
+        <CloseIcon size={13} strokeWidth={2.2} />
         Close
       </button>
     </div>
@@ -62,20 +61,25 @@ const PalettePickerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
   </div>
 );
 
-/** Mounted once (AppGmt). Renders the modal while the overlay store says it's open. */
+/** Mounted once (AppGmt). Renders the modal while the overlay store says it's open.
+ *  Full-screen takeover with no backdrop-click close (easy to mis-click) — ✕ or Esc.
+ *  Modal owns the portal, scope-aware Escape, and stacking (Z.modal). */
 export const PalettePickerOverlayHost: React.FC = () => {
   const open = usePaletteOverlayStore((s) => s.open);
   const setOpen = usePaletteOverlayStore((s) => s.setOpen);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, setOpen]);
-
   if (!open) return null;
-  return ReactDOM.createPortal(<PalettePickerModal onClose={() => setOpen(false)} />, document.body);
+  return (
+    <Modal
+      onClose={() => setOpen(false)}
+      z={Z.modal}
+      dismissOnBackdrop={false}
+      backdropClassName="bg-black/85 backdrop-blur-sm"
+      className="p-0"
+    >
+      <PalettePickerModal onClose={() => setOpen(false)} />
+    </Modal>
+  );
 };
 
 export default PalettePickerOverlayHost;

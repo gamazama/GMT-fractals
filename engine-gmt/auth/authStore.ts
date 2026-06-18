@@ -13,6 +13,7 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { getSupabase, supabaseEnabled, AUTH_STORAGE_KEY } from '../supabase';
+import { safeLocalRemove } from '../../store/safeLocalStorage';
 
 export type AuthStatus = 'loading' | 'unauthed' | 'needs-profile' | 'authed';
 
@@ -135,7 +136,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             // persisted token and reset state ourselves so the device isn't
             // left holding a live JWT after the user asked to sign out.
             console.warn('[auth] signOut failed — forcing local clear:', error);
-            try { window.localStorage.removeItem(AUTH_STORAGE_KEY); } catch {}
+            safeLocalRemove(AUTH_STORAGE_KEY);
             set({ status: 'unauthed', session: null, user: null, profile: null, isAdmin: false });
         }
         // On success the onAuthStateChange(SIGNED_OUT) listener already reset

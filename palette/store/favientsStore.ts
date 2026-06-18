@@ -16,6 +16,7 @@
 import { create } from 'zustand';
 import type { GradientConfig } from '../../types';
 import { lsGet, lsSet, lsRemove, lsGetJson, lsSetJson } from '../core/storage';
+import { clamp } from '../../utils/stopOps';
 
 export interface Favient {
   id: string;
@@ -101,7 +102,6 @@ const pruneLabels = (favients: Favient[], labels: Record<string, string>): Recor
   return out;
 };
 
-const clamp = (n: number, lo: number, hi: number) => (n < lo ? lo : n > hi ? hi : n);
 
 /** Disambiguate a group label against the OTHER groups' labels (case-insensitive,
  *  trimmed) so two dividers can't read identically — appends " 2", " 3", … until

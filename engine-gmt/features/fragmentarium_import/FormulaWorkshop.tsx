@@ -10,8 +10,8 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { ChevronDown, ChevronRight } from '../../../components/Icons2';
-import { CloseIcon } from '../../../components/Icons';
+import { ChevronDown, ChevronRight, CheckCircleIcon } from '../../../components/Icons2';
+import { CloseIcon, CodeIcon } from '../../../components/Icons';
 import { CategoryPickerMenu } from '../../../components/CategoryPickerMenu';
 import type { PickerCategory, PickerItem } from '../../../components/CategoryPickerMenu';
 import type { FractalDefinition } from '../../types';
@@ -274,8 +274,6 @@ function allGeneratedCode(r: TransformedFormulaV2): string {
 
 // ─── Icons ──────────────────────────────────────────────────────────────────
 
-const CodeIcon = () =><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
-const CheckCircleIcon = () => <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1049,7 +1047,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 bg-black/40 shrink-0">
                 <div className="flex items-center gap-2">
-                    <CodeIcon />
+                    <CodeIcon size={16} />
                     <h2 className="text-[12px] font-semibold text-white leading-tight">Formula Workshop</h2>
                 </div>
                 <button onClick={handleClose} className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-gray-500 hover:text-white">

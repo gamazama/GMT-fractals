@@ -19,7 +19,11 @@
 
 import type { GradientStop } from '../types';
 
-const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
+/** Clamp to [0,1]. Shared generic math helper (lives here as the pure, engine-core
+ *  module palette + gradient-explorer already import; folds several local copies). */
+export const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
+/** Clamp to an arbitrary [a,b]. Shared with clamp01 above. */
+export const clamp = (x: number, a: number, b: number): number => (x < a ? a : x > b ? b : x);
 /** Shift-snap to 1/20 (0.05), matching the editor's `Math.round(x * 20) / 20`. */
 const snap20 = (x: number): number => Math.round(x * 20) / 20;
 

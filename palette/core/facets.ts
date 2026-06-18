@@ -15,6 +15,7 @@
  */
 
 import { rgbToOklab, type RGB } from './oklab';
+import { clamp01 } from '../../utils/stopOps';
 
 export interface Facets {
   /** qL — dark(0) → light(1). */
@@ -47,7 +48,6 @@ const WARM_HALF = 0.12; // |mean a| at the cool/warm extremes
 const HUE_BINS = 36;
 const CHROMA_FLOOR = 0.04; // samples below this chroma are treated as achromatic for hue stats
 
-const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
 
 /** Width-w box low-pass (odd w), edge-clamped. */

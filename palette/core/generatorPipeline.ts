@@ -24,6 +24,7 @@
 import { rgbToOklab, oklabToRgb, oklabToRgbSafe, type RGB } from './oklab';
 import { mulberry32 } from './rampGeometry';
 import { getEasing, type EasingName } from './easings';
+import { clamp01 } from '../../utils/stopOps';
 
 /** OKLCh channels of a 256-step gradient: L∈[0,1], C (chroma) ≥0, h in radians. */
 export interface Channels {
@@ -111,7 +112,6 @@ export const DEFAULT_GENERATOR_PARAMS: GeneratorParams = {
   noiseH: false,
 };
 
-const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /** Circular-mean hue blend (verbatim from the prototype). */

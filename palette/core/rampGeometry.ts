@@ -25,6 +25,7 @@
  */
 
 import type { RGB } from './oklab';
+import { clamp01 } from '../../utils/stopOps';
 
 /** The geometries the gallery cycles. Room left for Diamond / Mirror / Bands.
  *  `linear` is a rotatable, eased gradient (it absorbed the old `scurve` mode — its
@@ -172,7 +173,6 @@ export const mulberry32 = (seed: number): (() => number) => {
 
 // ── geometry math ───────────────────────────────────────────────────────────────
 
-const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 /** Wrap into [0,1) — used when a rotation can push an angle param past the ±π seam. */
 const wrap01 = (v: number): number => v - Math.floor(v);
 

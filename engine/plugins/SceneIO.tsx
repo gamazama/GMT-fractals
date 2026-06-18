@@ -18,6 +18,7 @@
 
 import React, { useRef } from 'react';
 import { useEngineStore } from '../../store/engineStore';
+import { safeLocalGet, safeLocalRemove } from '../../store/safeLocalStorage';
 import { useTutorAnchor } from './Tutorial';
 import type { Preset } from '../../types';
 import {
@@ -339,7 +340,7 @@ export const AUTOSAVE_RECOVERY_AT_KEY = 'gmt-autosave-recovery-at';
 /** Mark the scene saved + drop the autosave backstop (work is now in a file). */
 const noteSceneSavedToFile = (): void => {
     useEngineStore.getState().markSceneSaved();
-    try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* work is now in a file */ }
+    safeLocalRemove(AUTOSAVE_KEY);
 };
 
 /** Serialize the current scene to the app's text format (GMF for GMT, JSON
@@ -358,22 +359,19 @@ export const parseSceneText = async (text: string): Promise<Preset | null> => {
 };
 
 const hasRecoverySession = (): boolean => {
-    try { return !!localStorage.getItem(AUTOSAVE_RECOVERY_KEY); } catch { return false; }
+    return !!safeLocalGet(AUTOSAVE_RECOVERY_KEY);
 };
 
 /** Restore the previous session from the protected recovery slot (File menu). */
 const restoreAutosave = async (): Promise<void> => {
-    let text: string | null = null;
-    try { text = localStorage.getItem(AUTOSAVE_RECOVERY_KEY); } catch { /* storage blocked */ }
+    const text: string | null = safeLocalGet(AUTOSAVE_RECOVERY_KEY);
     if (!text) { showToast('No recoverable session found', 'warning'); return; }
     try {
         const preset = await parseSceneText(text);
         if (!preset) { showToast('Recovery data could not be read', 'error'); return; }
         useEngineStore.getState().loadScene({ preset });
-        try {
-            localStorage.removeItem(AUTOSAVE_RECOVERY_KEY);
-            localStorage.removeItem(AUTOSAVE_RECOVERY_AT_KEY);
-        } catch { /* */ }
+        safeLocalRemove(AUTOSAVE_RECOVERY_KEY);
+        safeLocalRemove(AUTOSAVE_RECOVERY_AT_KEY);
         showToast('Restored your last session', 'success');
     } catch (err) {
         console.error('[SceneIO] restore autosave failed', err);

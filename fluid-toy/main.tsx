@@ -32,6 +32,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { FluidToyApp } from './FluidToyApp';
 import { registerUI } from '../engine/features/ui';
+import { safeLocalGet, safeLocalRemove } from '../store/safeLocalStorage';
 import { setupFluidToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar, topbar } from '../engine/plugins/TopBar';
@@ -316,8 +317,8 @@ hud.register({
 // gradient-explorer/fractalHandoff.ts (FLUID_TOY_HANDOFF_KEY).
 let incomingScene: unknown = null;
 try {
-    const raw = localStorage.getItem('gmt.fluidToy.incomingScene');
-    if (raw) { localStorage.removeItem('gmt.fluidToy.incomingScene'); incomingScene = JSON.parse(raw); }
+    const raw = safeLocalGet('gmt.fluidToy.incomingScene');
+    if (raw) { safeLocalRemove('gmt.fluidToy.incomingScene'); incomingScene = JSON.parse(raw); }
 } catch { incomingScene = null; }
 
 // Saved-views library — one call wires everything: slice CRUD, slot

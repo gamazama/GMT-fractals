@@ -15,6 +15,8 @@ import { getSupabase } from '../supabase';
 import { useAuthStore } from './authStore';
 import { stashSceneForOAuth } from './oauthSceneStash';
 import { Modal, Z, stopNavKeys } from '../../components/ui';
+import { ErrorNote } from '../../components/ErrorNote';
+import { GhostButton } from '../../components/GhostButton';
 
 type Mode = 'signin' | 'signup' | 'forgot' | 'check-email' | 'reset-sent';
 
@@ -196,7 +198,7 @@ export const AuthOverlay: React.FC<Props> = ({ open, onClose }) => {
                 </header>
 
                 {error && (
-                    <div className="m-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-[10px] text-red-300">{error}</div>
+                    <ErrorNote className="m-4 p-3 text-[10px] text-red-300">{error}</ErrorNote>
                 )}
 
                 {mode === 'check-email' && (
@@ -366,13 +368,13 @@ const Divider: React.FC = () => (
 );
 
 const GoogleButton: React.FC<{ onClick: () => void; busy: boolean }> = ({ onClick, busy }) => (
-    <button
+    <GhostButton
         type="button"
         onClick={onClick}
         disabled={busy}
-        className="w-full py-2 rounded text-[11px] font-bold bg-white/[0.04] hover:bg-white/[0.08] text-gray-200 border border-white/10 flex items-center justify-center gap-2 disabled:opacity-30"
+        className="w-full py-2 rounded text-[11px] font-bold text-gray-200 flex items-center justify-center gap-2 disabled:opacity-30"
     >
         <svg width="14" height="14" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6 8-11.3 8a12 12 0 1 1 8-21l5.7-5.7A20 20 0 1 0 24 44a20 20 0 0 0 19.6-23.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.4 19 12 24 12a12 12 0 0 1 8 3l5.7-5.7A20 20 0 0 0 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.8-2 13.3-5.2l-6.1-5.2A12 12 0 0 1 12.7 28l-6.6 5.1A20 20 0 0 0 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.1 5.2C42 36 44 30.5 44 24c0-1.2-.1-2.3-.4-3.5z"/></svg>
         Continue with Google
-    </button>
+    </GhostButton>
 );

@@ -21,6 +21,8 @@ import { PauseControls } from '../engine/plugins/topbar/PauseControls';
 import { AdaptiveResolution } from './topbar/AdaptiveResolution';
 import { GmtLogo } from './topbar/Logo';
 import { useEngineStore } from '../store/engineStore';
+import { safeLocalSet } from '../store/safeLocalStorage';
+import { openSettings } from '../store/settingsPanelState';
 import { useAnimationStore } from '../store/animationStore';
 import { registry } from './engine/FractalRegistry';
 import { saveGMFScene } from './utils/FormulaFormat';
@@ -28,12 +30,12 @@ import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { CenterHUD } from './topbar/CenterHUD';
 import { ShareLinkButton } from './topbar/ShareLinkButton';
+import { CropIcon, CloseRegionIcon } from '../components/Icons';
 import { StateLibraryToast } from '../engine/components/StateLibraryToast';
 import { dotFieldKey } from '../engine/store/createStateLibrarySlice';
 import { ViewportQuality } from './topbar/ViewportQuality';
 import { installBucketRender } from '../engine/plugins/topbar/installBucketRender';
 import { GmtBucketController } from './topbar/GmtBucketController';
-import { toggleHardwarePrefs } from './components/HardwarePrefsHost';
 import { useMobileLayout, isMobileSnapshot } from '../hooks/useMobileLayout';
 import { SCALABILITY_PRESETS, getScalabilityLabel } from '../types/viewport';
 
@@ -82,7 +84,7 @@ const PathTracingToggle: React.FC = () => {
             type="button"
             onClick={() => setRenderMode(active ? 'Direct' : 'PathTracing')}
             title="Path tracing — physically-based lighting with accumulation"
-            className={`flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border transition-colors ${
+            className={`flex items-center justify-center gap-1 text-[10px] font-medium px-2 py-1 rounded border transition-colors ${
                 active
                     ? 'bg-purple-500/30 text-purple-200 border-purple-500/40'
                     : 'bg-black/40 text-gray-400 border-white/10 hover:text-white hover:border-purple-500/40'
@@ -153,20 +155,10 @@ const PlayingBadge: React.FC = () => {
 };
 
 // ── Menu icons (minimal inline SVG — no external dep) ──────────────────
-
-const CropIcon: React.FC = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 2v14a2 2 0 0 0 2 2h14" />
-        <path d="M18 22V8a2 2 0 0 0-2-2H2" />
-    </svg>
-);
-const CloseRegionIcon: React.FC = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-        <line x1="9" y1="9" x2="15" y2="15" />
-        <line x1="15" y1="9" x2="9" y2="15" />
-    </svg>
-);
+// CropIcon / CloseRegionIcon now come from components/Icons (identical 14px
+// glyphs). CameraIcon + MenuIcon stay local: Camera is a different glyph from
+// Icons' filled 512-viewBox version, and both are passed as bare `icon:` refs
+// (no place to override the size mismatch).
 
 const CameraIcon: React.FC = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -393,11 +385,11 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     });
 
     menu.registerItem('system', {
-        id: 'hardware-settings',
+        id: 'app-settings',
         type: 'button',
-        label: 'Hardware Settings…',
-        title: 'GPU caps + quality-tier thresholds.',
-        onSelect: () => { toggleHardwarePrefs(); },
+        label: 'Settings…',
+        title: 'Preferences, hardware caps, and stored data.',
+        onSelect: () => { openSettings(); },
     });
 
     menu.registerItem('system', { id: 'sys-sep-toggles', type: 'separator' });
@@ -507,18 +499,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     menu.registerItem('system', { id: 'sys-sep-prefs', type: 'separator' });
 
     // --- Prefs toggles -----------------------------------------------
-    menu.registerItem('system', {
-        id: 'invert-y',
-        type: 'toggle',
-        label: 'Invert Look Y',
-        title: 'Invert vertical mouse-look direction in Fly camera mode.',
-        isActive: () => useEngineStore.getState().invertY,
-        onToggle: () => {
-            const s = useEngineStore.getState();
-            s.setInvertY(!s.invertY);
-        },
-    });
-
+    // (Invert Look Y + UI Layout moved to the Settings panel — see installGmtSettings.)
     menu.registerItem('system', {
         id: 'broadcast-mode',
         type: 'toggle',
@@ -588,7 +569,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         onSelect: () => {
             try {
                 const gmf = saveGMFScene(useEngineStore.getState().getPreset() as any);
-                localStorage.setItem('gmt-mesh-export-scene', gmf);
+                safeLocalSet('gmt-mesh-export-scene', gmf);
             } catch (err) {
                 console.warn('[app-gmt] Failed to save scene for Mesh Export:', err);
             }
@@ -596,47 +577,6 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         },
     });
 
-    menu.registerItem('system', {
-        id: 'ui-mode-pref',
-        type: 'custom',
-        when: () => useEngineStore.getState().advancedMode,
-        component: UiModePreferenceMenuItem,
-    });
-};
-
-// ── UI mode preference (tri-state) ────────────────────────────────────
-
-const UI_MODE_OPTIONS: Array<{ value: 'auto' | 'mobile' | 'desktop'; label: string; hint: string }> = [
-    { value: 'auto',    label: 'Auto',          hint: 'Detect by device' },
-    { value: 'mobile',  label: 'Force Mobile',  hint: 'Mobile layout on any device' },
-    { value: 'desktop', label: 'Force Desktop', hint: 'Desktop layout on any device' },
-];
-
-const UiModePreferenceMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
-    const pref = useEngineStore((s) => s.uiModePreference);
-    const setPref = useEngineStore((s) => s.setUiModePreference);
-
-    return (
-        <div className="px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1.5">UI Layout</div>
-            <div className="flex gap-1">
-                {UI_MODE_OPTIONS.map((opt) => {
-                    const active = pref === opt.value;
-                    return (
-                        <button
-                            key={opt.value}
-                            type="button"
-                            title={opt.hint}
-                            onClick={() => { setPref(opt.value); close(); }}
-                            className={pillClass(active, 'flex-1')}
-                        >
-                            {opt.label}
-                        </button>
-                    );
-                })}
-            </div>
-        </div>
-    );
 };
 
 // Per-subsystem fine-tuning isn't surfaced on mobile — only the 6

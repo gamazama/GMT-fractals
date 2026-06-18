@@ -42,13 +42,13 @@ import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubm
 import { NewSceneModal } from '../components/NewSceneModal';
 import { LoadFilterPanel } from '../components/LoadFilterPanel';
 import { PalettePickerOverlayHost } from './PalettePickerOverlay';
+import { SettingsHost } from './SettingsHost';
 import { AuthOverlayHost, AccountPanelHost } from '../engine-gmt/auth';
 import { DiagnosticsOverlay } from './DiagnosticsOverlay';
 import { TutorialOverlay, TutorialRunner } from '../engine/plugins/Tutorial';
 import { CompilingIndicator } from '../components/CompilingIndicator';
 import { PerformanceMonitor } from '../components/PerformanceMonitor';
 import HistogramProbe from '../engine-gmt/components/HistogramProbe';
-import { HardwarePrefsHost } from '../engine-gmt/components/HardwarePrefsHost';
 import { useInteractionManager } from '../engine-gmt/hooks/useInteractionManager';
 import { useRegionSelection } from '../engine-gmt/hooks/useRegionSelection';
 import { usePreviewTarget } from '../engine-gmt/hooks/usePreviewTarget';
@@ -421,6 +421,7 @@ export const AppGmt: React.FC = () => {
                 <NewSceneModal />
                 <LoadFilterPanel />
                 <PalettePickerOverlayHost />
+                <SettingsHost />
 
                 <TutorialRunner />
                 <TutorialOverlay />
@@ -433,7 +434,6 @@ export const AppGmt: React.FC = () => {
                 {!isMobile && <FirstRunHint />}
 
 
-                <HardwarePrefsHost />
 
                 {/* Histogram readback drivers — only run while there's a
                     consumer mounted (ColoringPanel / Scene panel widgets

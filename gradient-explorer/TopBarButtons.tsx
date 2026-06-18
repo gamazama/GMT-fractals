@@ -14,6 +14,7 @@ import React from 'react';
 import { FpsCounter } from '../engine/plugins/TopBar';
 import { FavientsToggleButton } from '../palette/components/FavientsToggleButton';
 import { GmtWordmark } from '../engine-gmt/topbar/GmtWordmark';
+import { BackArrowIcon } from '../components/Icons2';
 
 /** FPS readout, desktop-only. The top bar is tight on phones and an FPS number is
  *  noise on a palette tool there, so hide it below the mobile breakpoint (md = 768px,
@@ -22,13 +23,6 @@ export const FpsCounterDesktopOnly: React.FC = () => (
   <div className="hidden md:flex items-center">
     <FpsCounter />
   </div>
-);
-
-const BackArrowIcon: React.FC = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="19" y1="12" x2="5" y2="12" />
-    <polyline points="12 19 5 12 12 5" />
-  </svg>
 );
 
 /** Brand mark + return-to-studio link. The GMT wordmark doubles as the "home"

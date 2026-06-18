@@ -49,3 +49,12 @@ export const safeLocalRemove = (key: string): void => {
         /* ignore */
     }
 };
+
+/** All stored keys (for the Settings storage inspector); `[]` if unavailable. */
+export const safeLocalKeys = (): string[] => {
+    try {
+        return available() ? Object.keys(window.localStorage) : [];
+    } catch {
+        return [];
+    }
+};

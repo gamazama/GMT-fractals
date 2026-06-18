@@ -23,6 +23,7 @@
 
 import { useSyncExternalStore } from 'react';
 import { useEngineStore } from '../../store/engineStore';
+import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { loadSceneFile } from '../../engine/plugins/SceneIO';
 import { applyPartialPreset } from './applyPartialPreset';
 import { flushCameraToStore } from '../store/cameraSlice';
@@ -85,7 +86,7 @@ const KEEP_KEY = 'gmt.loadFilter.keep';
 
 function readPersisted(): LoadFilter {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const raw = safeLocalGet(STORAGE_KEY);
         if (!raw) return { ...DEFAULT_FILTER };
         const parsed = JSON.parse(raw) as Partial<LoadFilter>;
         // Merge over defaults so a newly-added group defaults to on even if
@@ -102,7 +103,7 @@ let _filter: LoadFilter = readPersisted();
 // merely remembered in the panel until the user opts in. The panel's own
 // Load button always honours the toggles regardless.
 let _keepOptions: boolean = (() => {
-    try { return localStorage.getItem(KEEP_KEY) === '1'; } catch { return false; }
+    try { return safeLocalGet(KEEP_KEY) === '1'; } catch { return false; }
 })();
 let _panelOpen = false;
 let _snapshot: { filter: LoadFilter; panelOpen: boolean; keepOptions: boolean } =
@@ -115,8 +116,7 @@ function rebuildAndNotify() {
 }
 
 function persist() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_filter)); }
-    catch { /* private-mode / quota — non-fatal, filter still works in-session */ }
+    safeLocalSet(STORAGE_KEY, JSON.stringify(_filter));
 }
 
 export function getLoadFilter(): LoadFilter { return _filter; }
@@ -139,7 +139,7 @@ export function getKeepOptions(): boolean { return _keepOptions; }
 export function setKeepOptions(value: boolean): void {
     if (_keepOptions === value) return;
     _keepOptions = value;
-    try { localStorage.setItem(KEEP_KEY, value ? '1' : '0'); } catch { /* non-fatal */ }
+    safeLocalSet(KEEP_KEY, value ? '1' : '0');
     rebuildAndNotify();
 }
 

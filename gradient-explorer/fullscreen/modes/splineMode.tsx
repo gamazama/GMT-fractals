@@ -41,6 +41,7 @@ import { useFullscreenState } from '../../../palette/store/fullscreenStore';
 import { useActiveHeroSelection } from '../../../palette/store/heroSelection';
 import type { FullscreenMode } from '../modeRegistry';
 import { FullscreenCompositor } from '../FullscreenCompositor';
+import { clamp01 } from '../../../utils/stopOps';
 
 // ── geometry ────────────────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,6 @@ export interface SplinePoint { x: number; y: number }
  *  loop cheap. Control points tessellate to fit this budget. */
 const MAX_POLY = 64;
 
-const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /** The tessellated path. `poly` (x,y pairs) + `arc` (normalized cumulative length) drive the
  *  CPU hit-testing + outline; `packed` is the GL upload (vec4 = x,y,arc,0 per vertex); `seg`

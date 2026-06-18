@@ -23,6 +23,7 @@ import { useGalleryStore } from './galleryStore';
 import { useAuthStore } from '../auth/authStore';
 import { Modal, Z, stopNavKeys } from '../../components/ui';
 import { CloseIcon } from '../../components/Icons';
+import { GhostButton } from '../../components/GhostButton';
 
 interface PendingResult {
     blob: Blob;
@@ -137,12 +138,12 @@ export const BucketRenderResultModal: React.FC = () => {
                     )}
 
                     <div className="flex gap-2 pt-1">
-                        <button
+                        <GhostButton
                             onClick={dismiss}
-                            className="flex-1 py-2 px-3 rounded text-[11px] font-bold bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border border-white/10"
+                            className="flex-1 py-2 px-3 rounded text-[11px] font-bold text-gray-300"
                         >
                             Skip
-                        </button>
+                        </GhostButton>
                         <button
                             onClick={onSubmit}
                             className="flex-1 py-2 px-3 rounded text-[11px] font-bold bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-100 border border-cyan-500/50"

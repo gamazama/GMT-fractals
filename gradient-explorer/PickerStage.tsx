@@ -10,6 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEngineStore } from '../store/engineStore';
+import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import { usePickerStore } from '../palette/store/pickerStore';
 import { passesFilters, type FilterWindows } from '../palette/core/facets';
 import { entryToGradientConfig } from '../palette/core/gradientSeam';
@@ -124,7 +125,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   // One-time gesture-discovery hint in the hero: middle-drag to zoom → right-drag to pan →
   // middle-click to reset, then hide forever (persisted).
   const [hintPhase, setHintPhase] = useState<'zoom' | 'pan' | 'reset' | 'done'>(() => {
-    try { const v = localStorage.getItem('gx.picker.gestureHint'); return v === 'pan' || v === 'reset' || v === 'done' ? v : 'zoom'; } catch { return 'zoom'; }
+    try { const v = safeLocalGet('gx.picker.gestureHint'); return v === 'pan' || v === 'reset' || v === 'done' ? v : 'zoom'; } catch { return 'zoom'; }
   });
   const advanceHint = useCallback((type: 'zoom' | 'pan' | 'reset') => {
     setHintPhase((p) => {
@@ -133,7 +134,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
         : p === 'pan' && type === 'pan' ? 'reset'
         : p === 'reset' && type === 'reset' ? 'done'
         : p;
-      if (next !== p) { try { localStorage.setItem('gx.picker.gestureHint', next); } catch { /* ignore */ } }
+      if (next !== p) { safeLocalSet('gx.picker.gestureHint', next); }
       return next;
     });
   }, []);

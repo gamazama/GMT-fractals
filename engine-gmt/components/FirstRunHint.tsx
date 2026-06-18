@@ -5,19 +5,18 @@
  * persists in localStorage, so returning users never see it again.
  */
 import React, { useState } from 'react';
+import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 
 const KEY = 'gmt-firstrun-dismissed';
 
-const wasDismissed = (): boolean => {
-    try { return localStorage.getItem(KEY) === '1'; } catch { return false; }
-};
+const wasDismissed = (): boolean => safeLocalGet(KEY) === '1';
 
 export const FirstRunHint: React.FC = () => {
     const [dismissed, setDismissed] = useState(wasDismissed);
     if (dismissed) return null;
 
     const close = () => {
-        try { localStorage.setItem(KEY, '1'); } catch { /* private mode / quota */ }
+        safeLocalSet(KEY, '1');
         setDismissed(true);
     };
 

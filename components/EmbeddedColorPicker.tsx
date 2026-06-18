@@ -15,6 +15,7 @@ import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { useInteractionDrag } from '../engine/hooks/useInteractionDrag';
 import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
 import { collectHelpIds } from '../utils/helpUtils';
+import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisionTrackDrag';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,8 +54,7 @@ const RECENTS_CAP = 16;
 
 const loadRecents = (): string[] => {
     try {
-        if (typeof window === 'undefined' || !window.localStorage) return [];
-        const raw = window.localStorage.getItem(RECENTS_KEY);
+        const raw = safeLocalGet(RECENTS_KEY);
         const arr = raw ? JSON.parse(raw) : [];
         return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string').slice(0, RECENTS_CAP) : [];
     } catch {
@@ -67,21 +67,17 @@ const recentsListeners = new Set<(r: string[]) => void>();
 const pushRecent = (hex: string) => {
     const clean = hex.toUpperCase();
     recentsCache = [clean, ...recentsCache.filter((h) => h !== clean)].slice(0, RECENTS_CAP);
-    try {
-        window.localStorage?.setItem(RECENTS_KEY, JSON.stringify(recentsCache));
-    } catch {
-        /* quota / disabled — keep the in-memory MRU */
-    }
+    safeLocalSet(RECENTS_KEY, JSON.stringify(recentsCache));
     recentsListeners.forEach((fn) => fn(recentsCache));
 };
 
 // --- persisted collapse state for the details (sliders + swatches) section ---
 const DETAILS_KEY = 'gmt.colorpicker.details';
 const loadDetailsOpen = (): boolean => {
-    try { return window.localStorage?.getItem(DETAILS_KEY) === '1'; } catch { return false; }
+    return safeLocalGet(DETAILS_KEY) === '1';
 };
 const saveDetailsOpen = (open: boolean) => {
-    try { window.localStorage?.setItem(DETAILS_KEY, open ? '1' : '0'); } catch { /* ignore */ }
+    safeLocalSet(DETAILS_KEY, open ? '1' : '0');
 };
 
 // Host-agnostic fixed palette (spans hues + neutrals).

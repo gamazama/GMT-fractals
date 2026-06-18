@@ -51,7 +51,7 @@ export const AdaptiveResolution: React.FC = () => {
     return (
         <button
             onClick={handleToggle}
-            className={`p-0.5 rounded transition-colors ${colorClass}`}
+            className={`flex items-center justify-center p-1 rounded transition-colors ${colorClass}`}
             title={`Adaptive Resolution: ${stateLabel}`}
         >
             <AdaptiveIcon />

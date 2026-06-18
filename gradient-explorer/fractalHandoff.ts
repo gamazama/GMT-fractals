@@ -18,6 +18,7 @@
 
 import type { GradientConfig } from '../types';
 import type { Preset } from '../types/preset';
+import { safeLocalSet } from '../store/safeLocalStorage';
 import type { FractalHandoffCoords } from './fullscreen/modes/fractalMode';
 
 /** localStorage key for the live "Open in Fluid Toy" handoff (same-origin). */
@@ -63,7 +64,7 @@ export const openInFluidToy = (
   name: string,
 ): void => {
   try {
-    localStorage.setItem(FLUID_TOY_HANDOFF_KEY, JSON.stringify(buildFluidToyScene(coords, gradient, name)));
+    safeLocalSet(FLUID_TOY_HANDOFF_KEY, JSON.stringify(buildFluidToyScene(coords, gradient, name)));
   } catch {
     // localStorage full/unavailable — still open fluid-toy; it just won't preload the view.
   }

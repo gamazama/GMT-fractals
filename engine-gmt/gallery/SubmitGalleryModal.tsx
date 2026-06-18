@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Modal, Z, stopNavKeys } from '../../components/ui';
 import { CloseIcon } from '../../components/Icons';
+import { GhostButton } from '../../components/GhostButton';
 import { useEngineStore } from '../../store/engineStore';
 import {
     submitGalleryItem, SubmitError, SubmitResult,
@@ -9,6 +10,7 @@ import {
 } from './submitGalleryItem';
 import { useAuthStore, watermarkTextFor } from '../auth/authStore';
 import { useGalleryStore } from './galleryStore';
+import { ErrorNote } from '../../components/ErrorNote';
 
 interface Props {
     open: boolean;
@@ -240,12 +242,12 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                                     ? `You're using ${slotCapHit.current} of ${slotCapHit.cap} active slots. Remove a submission to make room, or unlock unlimited for $5/mo.`
                                     : `Click the link in the email we sent you. Then come back and submit again.`}
                             </div>
-                            <button
+                            <GhostButton
                                 onClick={onClose}
-                                className="px-3 py-1.5 rounded text-[11px] font-bold bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border border-white/10"
+                                className="px-3 py-1.5 rounded text-[11px] font-bold text-gray-300"
                             >
                                 Close
-                            </button>
+                            </GhostButton>
                         </div>
                     )}
 
@@ -279,12 +281,12 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                                 )}
                             </div>
                             <div className="flex gap-2 pt-2">
-                                <button
+                                <GhostButton
                                     onClick={onClose}
-                                    className="flex-1 py-2 px-3 rounded text-[11px] font-bold bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border border-white/10"
+                                    className="flex-1 py-2 px-3 rounded text-[11px] font-bold text-gray-300"
                                 >
                                     Done
-                                </button>
+                                </GhostButton>
                                 <button
                                     onClick={openGalleryFromSuccess}
                                     className="flex-1 py-2 px-3 rounded text-[11px] font-bold bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-100 border border-cyan-500/50"
@@ -438,22 +440,22 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                                     </div>
 
                                     {error && (
-                                        <div className="p-2.5 rounded bg-red-500/10 border border-red-500/30 text-[10px] text-red-300 leading-relaxed">
+                                        <ErrorNote className="p-2.5 text-[10px] text-red-300 leading-relaxed">
                                             {error}
-                                        </div>
+                                        </ErrorNote>
                                     )}
                                 </div>
                             </div>
 
                             {/* Sticky bottom action bar */}
                             <footer className="flex gap-2 px-4 py-3 border-t border-white/10 flex-shrink-0">
-                                <button
+                                <GhostButton
                                     type="button"
                                     onClick={onClose}
-                                    className="flex-1 py-2 px-3 rounded text-[11px] font-bold bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border border-white/10"
+                                    className="flex-1 py-2 px-3 rounded text-[11px] font-bold text-gray-300"
                                 >
                                     Cancel
-                                </button>
+                                </GhostButton>
                                 <button
                                     type="submit"
                                     disabled={!canSubmit}

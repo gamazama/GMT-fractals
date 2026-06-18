@@ -17,6 +17,7 @@
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import { DraggableNumber } from '../../components/inputs/primitives';
+import { clamp } from '../../utils/stopOps';
 
 export type Range01 = [number, number];
 
@@ -40,7 +41,6 @@ export interface QualityRangePadProps {
   className?: string;
 }
 
-const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 const fmt2 = (v: number) => v.toFixed(2);
 
 const EDGE_HIT = 0.05; // press within this of a bound grabs that edge

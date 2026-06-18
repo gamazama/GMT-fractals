@@ -4,6 +4,7 @@ import type { PanelDefinition } from '../../engine/PanelManifest';
 import { componentRegistry } from '../../components/registry/ComponentRegistry';
 import { useEngineStore } from '../../store/engineStore';
 import { FeedbackPanel } from './FeedbackPanel';
+import { MailIcon } from '../../components/Icons2';
 
 // Feedback is a dockable panel ('Feedback' in the panel manifest), opened on
 // demand from the Help menu. No singleton/overlay — the panel renders through
@@ -31,13 +32,6 @@ export const openFeedback = () => {
 export const closeFeedback = () => useEngineStore.getState().togglePanel('Feedback', false);
 
 // ── Menu icon + item ──────────────────────────────────────────────────
-
-const MailIcon: React.FC = () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-        <polyline points="22,6 12,13 2,6" />
-    </svg>
-);
 
 /**
  * MenuItem suitable for `installHelp({ extraItems: [feedbackMenuItem()] })`.

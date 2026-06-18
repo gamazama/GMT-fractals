@@ -9,6 +9,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { GalleryItem, GALLERY_FEATURED_BADGE } from './GalleryClient';
 import { Modal, Z } from '../../components/ui';
+import { useClipboardCopy } from '../../hooks/useClipboardCopy';
+import { ErrorNote } from '../../components/ErrorNote';
+import { GhostButton } from '../../components/GhostButton';
 
 interface Props {
     item: GalleryItem;
@@ -29,26 +32,18 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
     // 'fit' = object-contain into the pane; '100' = native-resolution with
     // overflow-auto on the parent so the user can scroll to see pixels.
     const [zoomMode, setZoomMode] = useState<'fit' | '100'>('fit');
-    const [copyState,  setCopyState]  = useState<'idle' | 'copied' | 'failed'>('idle');
-    const [shareState, setShareState] = useState<'idle' | 'copied' | 'failed'>('idle');
+    const { state: copyState,  copy: copyImage, reset: resetCopy }  = useClipboardCopy();
+    const { state: shareState, copy: copyShare, reset: resetShare } = useClipboardCopy();
 
     // Reset img-loaded + zoom state when the displayed item changes (prev/next).
     useEffect(() => {
         setImgLoaded(false);
         setZoomMode('fit');
-        setCopyState('idle');
-        setShareState('idle');
-    }, [item.id]);
+        resetCopy();
+        resetShare();
+    }, [item.id, resetCopy, resetShare]);
 
-    const copyImageLink = async () => {
-        try {
-            await navigator.clipboard.writeText(item.image_url);
-            setCopyState('copied');
-        } catch {
-            setCopyState('failed');
-        }
-        setTimeout(() => setCopyState('idle'), 1800);
-    };
+    const copyImageLink = () => copyImage(item.image_url);
 
     // Build a deep-link to THIS app's URL with ?gallery=<slug>. We keep
     // origin + pathname so the link stays inside whichever build the user
@@ -60,15 +55,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
         return `${base}?gallery=${encodeURIComponent(item.slug)}`;
     };
 
-    const copyShareLink = async () => {
-        try {
-            await navigator.clipboard.writeText(buildShareUrl());
-            setShareState('copied');
-        } catch {
-            setShareState('failed');
-        }
-        setTimeout(() => setShareState('idle'), 1800);
-    };
+    const copyShareLink = () => copyShare(buildShareUrl());
 
     // The browse list can include the signed-in owner's own private rows
     // (GalleryPage groups those into a separate "My Private Scenes" section).
@@ -140,12 +127,12 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
             <div className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/40 flex-shrink-0">
-                <button
+                <GhostButton
                     onClick={(e) => { e.stopPropagation(); onClose(); }}
-                    className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded bg-white/[0.04] hover:bg-white/[0.08] border border-white/10"
+                    className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded"
                 >
                     ← Back to gallery
-                </button>
+                </GhostButton>
                 <div className="text-[10px] text-gray-500 font-mono">
                     {index >= 0 && `${index + 1} / ${navItems.length}`}
                 </div>
@@ -252,9 +239,9 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                         )}
 
                         {loadError && (
-                            <div className="text-[10px] text-red-300 p-2 rounded bg-red-500/10 border border-red-500/30">
+                            <ErrorNote className="text-[10px] text-red-300 p-2">
                                 {loadError}
-                            </div>
+                            </ErrorNote>
                         )}
 
                         <div className="space-y-2 pt-1">

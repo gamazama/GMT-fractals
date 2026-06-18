@@ -7,6 +7,8 @@ import { loadGalleryScene } from './loadGalleryScene';
 import { GalleryTile } from './GalleryTile';
 import { Lightbox } from './Lightbox';
 import { useAuthStore } from '../auth/authStore';
+import { GhostButton } from '../../components/GhostButton';
+import { Z } from '../../components/ui';
 
 export const GalleryPage: React.FC = () => {
   const isOpen              = useGalleryStore(s => s.isOpen);
@@ -107,7 +109,7 @@ export const GalleryPage: React.FC = () => {
 
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex flex-col">
+      <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex flex-col" style={{ zIndex: Z.overlay }}>
         <div className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/40">
           <div className="flex items-baseline gap-3">
             <h1 className="text-lg font-bold text-white">Gallery</h1>
@@ -115,12 +117,12 @@ export const GalleryPage: React.FC = () => {
               {loading ? 'loading…' : `${items.length} scene${items.length === 1 ? '' : 's'}`}
             </span>
           </div>
-          <button
+          <GhostButton
             onClick={closeGallery}
-            className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded bg-white/[0.04] hover:bg-white/[0.08] border border-white/10"
+            className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded"
           >
             Close (Esc)
-          </button>
+          </GhostButton>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">

@@ -34,8 +34,10 @@ import { createPortal } from 'react-dom';
 import { registry } from '../../engine/FractalRegistry';
 import type { FormulaType } from '../../types';
 import { CheckIcon, CloseIcon, CubeIcon, DiceIcon, NetworkIcon, CodeIcon } from '../../../components/Icons';
+import { Modal, Z } from '../../../components/ui';
 import { LazyThumbnail } from './LazyThumbnail';
 import { useRenderPause } from '../../../hooks/useRenderPause';
+import { safeLocalGet, safeLocalSet } from '../../../store/safeLocalStorage';
 import { setKeyboardCaptured } from '../../../engine/plugins/Shortcuts';
 import {
     NATIVE_CATEGORIES, FORMULA_TO_CATEGORY, DEFAULT_SPECIAL_ENTRIES,
@@ -172,14 +174,14 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
         // ── View mode (Grid / List) ───────────────────────────────────────────
         const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
             try {
-                const stored = window.localStorage.getItem(VIEW_MODE_LS_KEY);
+                const stored = safeLocalGet(VIEW_MODE_LS_KEY);
                 if (stored === 'grid' || stored === 'list') return stored;
             } catch { /* ignore */ }
             return defaultView;
         });
         const updateViewMode = useCallback((next: 'grid' | 'list') => {
             setViewMode(next);
-            try { window.localStorage.setItem(VIEW_MODE_LS_KEY, next); } catch { /* ignore */ }
+            safeLocalSet(VIEW_MODE_LS_KEY, next);
         }, []);
 
         // ── Search visibility + query ────────────────────────────────────────
@@ -946,25 +948,18 @@ function PopoverShell({
 }
 
 function ModalShell({ onClose, children }: { onClose?: () => void; children: React.ReactNode }) {
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose?.(); };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [onClose]);
-
-    return createPortal(
-        <div
-            className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
-            onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
-        >
+    // Modal owns the portal, scope-aware Escape, backdrop click-to-close, and
+    // stacking (Z.modal — the documented tier for FormulaPicker, replacing the
+    // old ad-hoc z-[9998]).
+    return (
+        <Modal onClose={() => onClose?.()} z={Z.modal} backdropClassName="bg-black/60 backdrop-blur-sm">
             <div
                 className="formula-picker-shell bg-[#121212] border border-white/10 rounded-lg shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col"
                 style={{ width: 'min(760px, 100%)', height: 'min(640px, 100%)' }}
             >
                 {children}
             </div>
-        </div>,
-        document.body,
+        </Modal>
     );
 }
 

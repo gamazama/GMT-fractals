@@ -471,7 +471,7 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     
     // Composition overlay
     setCompositionOverlay: (type) => {
-        try { localStorage.setItem(LS.compositionOverlay, type); } catch { /* quota */ }
+        safeLocalSet(LS.compositionOverlay, type);
         set({ compositionOverlay: type });
     },
     setCompositionOverlaySettings: (settings) => set(state => {

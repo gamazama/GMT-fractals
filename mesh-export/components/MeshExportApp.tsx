@@ -3,6 +3,7 @@ import { MeshExportPage } from './MeshExportPage';
 import { loadGMFIntoStore, buildDefaultParams } from './FormulaSelector';
 import { useMeshExportStore } from '../store/meshExportStore';
 import { registry } from '../../engine-gmt/engine/FractalRegistry';
+import { safeLocalGet, safeLocalRemove } from '../../store/safeLocalStorage';
 
 // Side-effect: registers all 26 GMT DDFS features and 42 formulas into the
 // shared registries. Mirrors app-gmt's boot sequence — must run before
@@ -18,9 +19,9 @@ export function MeshExportApp() {
 
     // Try auto-load from main app first
     try {
-      const gmf = localStorage.getItem('gmt-mesh-export-scene');
+      const gmf = safeLocalGet('gmt-mesh-export-scene');
       if (gmf) {
-        localStorage.removeItem('gmt-mesh-export-scene');
+        safeLocalRemove('gmt-mesh-export-scene');
         loadGMFIntoStore(gmf, '(from main app)');
         return;
       }

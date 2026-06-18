@@ -18,6 +18,7 @@ import type { Pt, TracePath } from '../core/img2grad/common';
 import { CanonicalHero } from './CanonicalHero';
 import { HeroSlot } from './HeroSlot';
 import { fitRampToStops } from '../core/stopFit';
+import { clamp01 } from '../../utils/stopOps';
 
 const MODES: { id: Img2GradMode; label: string }[] = [
   { id: 'distill', label: 'Distill' },
@@ -35,7 +36,6 @@ const proj = (L: number, a: number, b: number, W: number, H: number, yaw: number
   return [W / 2 + x1 * sc, H / 2 - y1 * sc * 1.05, z2];
 };
 
-const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /** Keep x0/y0/x1/y1 synced to the first/last freehand point (the 2-handle fallback). */
 const syncEnds = (p: TracePath): TracePath => {

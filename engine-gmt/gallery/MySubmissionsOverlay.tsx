@@ -19,6 +19,9 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useGalleryStore } from './galleryStore';
 import { useAuthStore } from '../auth/authStore';
+import { ErrorNote } from '../../components/ErrorNote';
+import { GhostButton } from '../../components/GhostButton';
+import { Z } from '../../components/ui';
 import {
     listMySubmissions, deleteMySubmission, updateMyVisibility,
     GalleryItem, GALLERY_FEATURED_BADGE,
@@ -95,7 +98,7 @@ export const MySubmissionsOverlay: React.FC = () => {
     if (!isOpen) return null;
     if (!profile) {
         return createPortal(
-            <div className="fixed inset-0 z-[2050] bg-black/85 backdrop-blur-md flex items-center justify-center">
+            <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center" style={{ zIndex: Z.overlayNested }}>
                 <div className="text-sm text-gray-400">Sign in to view your submissions.</div>
             </div>,
             document.body,
@@ -128,7 +131,7 @@ export const MySubmissionsOverlay: React.FC = () => {
     };
 
     return createPortal(
-        <div className="fixed inset-0 z-[2050] bg-black/85 backdrop-blur-md flex flex-col">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex flex-col" style={{ zIndex: Z.overlayNested }}>
             <header className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/40 flex-shrink-0">
                 <div className="flex items-baseline gap-3">
                     <h1 className="text-lg font-bold text-white">My Submissions</h1>
@@ -139,27 +142,27 @@ export const MySubmissionsOverlay: React.FC = () => {
                     </span>
                 </div>
                 <div className="flex gap-2">
-                    <button
+                    <GhostButton
                         onClick={() => void refresh()}
                         disabled={loading}
-                        className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 disabled:opacity-50"
+                        className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded disabled:opacity-50"
                     >
                         Refresh
-                    </button>
-                    <button
+                    </GhostButton>
+                    <GhostButton
                         onClick={close}
-                        className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded bg-white/[0.04] hover:bg-white/[0.08] border border-white/10"
+                        className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded"
                     >
                         Close (Esc)
-                    </button>
+                    </GhostButton>
                 </div>
             </header>
 
             <div className="flex-1 overflow-y-auto px-6 py-4">
                 {error && (
-                    <div className="text-xs text-red-400 max-w-3xl mx-auto mb-4 p-3 rounded bg-red-500/10 border border-red-500/30">
+                    <ErrorNote className="text-xs text-red-400 max-w-3xl mx-auto mb-4 p-3">
                         {error}
-                    </div>
+                    </ErrorNote>
                 )}
 
                 {!loading && items.length === 0 && (
@@ -228,15 +231,15 @@ export const MySubmissionsOverlay: React.FC = () => {
 
                             <div className="flex flex-col gap-1.5 flex-shrink-0 self-center">
                                 {item.status !== 'rejected' && (
-                                    <button
+                                    <GhostButton
                                         onClick={() => onToggleVisibility(item)}
-                                        className="text-[10px] font-bold px-3 py-1.5 rounded bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border border-white/10"
+                                        className="text-[10px] font-bold px-3 py-1.5 rounded text-gray-300"
                                         title={item.visibility === 'public'
                                             ? 'Hide from public browse'
                                             : 'Submit for public listing'}
                                     >
                                         Make {item.visibility === 'public' ? 'private' : 'public'}
-                                    </button>
+                                    </GhostButton>
                                 )}
                                 <button
                                     onClick={() => onDelete(item)}
