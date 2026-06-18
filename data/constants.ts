@@ -6,7 +6,10 @@ export const TIMELINE_TRACK_HEIGHT = 32;
 export const TIMELINE_GROUP_HEIGHT = 24;
 
 export const GRAPH_RULER_HEIGHT = 24;
-export const GRAPH_LEFT_GUTTER_WIDTH = 50;
+// Left gutter the graph editors reserve for the value-axis labels + the floating
+// tool column (GraphToolbar / ChannelGraphEditor). Sized so the tool column clears
+// the plot even when it wraps to TWO columns (2 × 24px buttons + 4px start/gap ≈ 56px).
+export const GRAPH_LEFT_GUTTER_WIDTH = 62;
 
 // Engine Constants
 export const FORMULA_ID_GENERIC = 0;

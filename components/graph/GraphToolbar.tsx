@@ -131,7 +131,7 @@ export const GraphToolbar: React.FC<GraphToolbarProps> = ({
 
     return (
         <div
-            className="absolute top-[30px] left-[4px] flex flex-col flex-wrap content-start gap-1 z-20"
+            className="absolute top-1 left-[4px] flex flex-col flex-wrap content-start gap-1 z-20"
             style={{ maxHeight: balancedToolColumnMaxHeight(9, availableHeight) }}
             data-help-id="anim.graph"
             onContextMenu={handleContextMenu}

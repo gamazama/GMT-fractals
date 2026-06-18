@@ -709,8 +709,8 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
               curves. (Bias + move are handles in the selection box now.) The column WRAPS
               into evenly-split columns when it's taller than the plot. */}
           <div
-            className="absolute top-7 left-1 flex flex-col flex-wrap content-start gap-1 z-20"
-            style={{ maxHeight: balancedToolColumnMaxHeight(interactive ? 8 : 3, canvasHeight - 28 - 8) }}
+            className="absolute top-1 left-1 flex flex-col flex-wrap content-start gap-1 z-20"
+            style={{ maxHeight: balancedToolColumnMaxHeight(interactive ? 8 : 3, canvasHeight - 4 - 8) }}
           >
             <ToolButton onClick={fitAll} icon={<FitIcon />} tooltip="Fit all" />
             {interactive && <ToolButton onClick={fitSelection} icon={<FitSelectionIcon />} tooltip="Fit selection" />}

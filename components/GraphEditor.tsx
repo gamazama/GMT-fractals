@@ -550,7 +550,7 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
                     onToggleSelectedOnly={() => setSelectedOnly(s => !s)}
                     pencilMode={pencil.pencilMode}
                     onTogglePencil={() => pencil.setPencilMode(p => !p)}
-                    availableHeight={height - 30 - 8}
+                    availableHeight={height - 4 - 8}
                 />
             </div>
         </div>
