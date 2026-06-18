@@ -67,7 +67,6 @@ export class BucketRunner {
         outputHeight: 1080,
         tileCols: 1,
         tileRows: 1,
-        convergenceThreshold: 0.25,
         accumulation: true,
         samplesPerBucket: 64,
     };
@@ -138,12 +137,11 @@ export class BucketRunner {
     }
 
     /**
-     * Honour in-flight edits to convergence threshold / accumulation toggle /
-     * sample cap — the bucket-render UI's sliders update these during a render.
-     * Tile geometry, output dimensions, and bucketSize are fixed at start time.
+     * Honour in-flight edits to accumulation toggle / sample cap — the bucket-render
+     * UI's sliders update these during a render. Tile geometry, output dimensions, and
+     * bucketSize are fixed at start time.
      */
     public updateConfig(config: BucketRenderConfig): void {
-        this.config.convergenceThreshold = config.convergenceThreshold;
         this.config.accumulation = config.accumulation;
         if (config.samplesPerBucket !== undefined) {
             this.config.samplesPerBucket = config.samplesPerBucket;
@@ -162,14 +160,25 @@ export class BucketRunner {
 
         this.bucketFrameCount++;
 
-        const minSamples = Math.min(16, (this.config.samplesPerBucket || 64) / 4);
-        if (this.bucketFrameCount < minSamples) return;
-
+        // Off-by-one: `update()` runs at the TOP of each render tick, BEFORE the host
+        // renders this tick's sample (FractalEngine.update → bucketRenderer.update(),
+        // then a later engine.compute()). So the number of samples ACTUALLY accumulated
+        // in the buffer right now is `bucketFrameCount - 1`. Gate composite on that real
+        // count, not the tick count — otherwise every bucket composites one sample early
+        // and at samplesPerBucket = 1 the bucket composites a still-empty (black) buffer
+        // (the "first tile didn't render" symptom).
+        const samplesAccumulated = this.bucketFrameCount - 1;
         const maxSamples = this.config.samplesPerBucket || this.DEFAULT_MAX_FRAMES;
-        const converged = this.host.isCurrentBucketConverged(this.bucketFrameCount, this.config);
-        const capped = this.bucketFrameCount >= maxSamples;
 
-        if (converged || capped) {
+        // Every bucket renders to the user-set sample cap — there is NO per-bucket
+        // convergence early-out. At matched spp adjacent buckets are bit-identical, so
+        // this keeps GPU-bucket boundaries seamless: the old early-out let neighbours
+        // stop at different sample counts, leaving a noise/bias step that post-FX
+        // (chromatic aberration, bloom) amplified into a visible line. It also makes the
+        // Refine preview a faithful match for the saved export. Sample count is the
+        // single quality control. (Viewport region-render convergence is a SEPARATE path
+        // — see RenderPipeline.startAsyncConvergence + RegionOverlay — and is unaffected.)
+        if (samplesAccumulated >= maxSamples) {
             this.compositeCurrentBucket();
             this.currentBucketIndex++;
             this.applyCurrentBucket();

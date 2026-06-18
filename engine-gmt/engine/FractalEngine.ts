@@ -164,7 +164,7 @@ export class FractalEngine {
         lighting: null,
         quality: null,
         geometry: null,
-        bucketConfig: { bucketSize: 512, outputWidth: 1920, outputHeight: 1080, tileCols: 1, tileRows: 1, convergenceThreshold: 0.25, accumulation: true, samplesPerBucket: 64 },
+        bucketConfig: { bucketSize: 512, outputWidth: 1920, outputHeight: 1080, tileCols: 1, tileRows: 1, accumulation: true, samplesPerBucket: 64 },
         adaptiveSuppressed: false,
         interacting: false,        // ADR-0061: session gesture activity (adaptive + idle-pause)
         isSceneAnimating: false,   // ADR-0061: autonomous-animation axis (composed with interacting)

@@ -490,11 +490,30 @@ export class RenderPipeline {
         return this.sampleCap;
     }
     
+    /**
+     * @invariant MUST clear `convergencePending`. Convergence is measured
+     *   per-accumulation-run but the fence/target are pipeline-global; not
+     *   clearing here lets a previous run's pending measurement block + feed a
+     *   stale result to the next run (see test:bucket-convergence).
+     */
     public resetAccumulation() {
         this.accumulationCount = 0;
         this.lastCompleteDuration = 0;
         this.lastConvergenceResult = 1.0;
         this.isHolding = false;
+        // Abandon any in-flight async convergence measurement. The fence/target
+        // are pipeline-global but convergence is measured per-accumulation-run
+        // (per GPU bucket during a bucket render, or per viewport accumulation).
+        // Without this, a measurement started for the PREVIOUS run (e.g. a bucket
+        // that hit its sample cap before its fence resolved) stays pending: the
+        // next run can't start its own measurement (startAsyncConvergence early-
+        // returns on `convergencePending`) and then polls a STALE delta computed
+        // over the previous region — declaring the new run "converged" at a near-
+        // minimum sample count regardless of content. During a bucket export that
+        // under-samples scattered buckets, producing CA-amplified boundary seams.
+        // The dangling fence is freed on the next startAsyncConvergence (which
+        // deletes the previous fence before creating a new one).
+        this.convergencePending = false;
     }
     
     /**

@@ -19,7 +19,6 @@ export interface BucketRenderConfig {
     outputHeight: number;            // Full output image height (composed across image tiles)
     tileCols: number;                // Image-tile grid columns (1 = single PNG)
     tileRows: number;                // Image-tile grid rows    (1 = single PNG)
-    convergenceThreshold: number;    // Per-bucket convergence threshold (host-interpreted)
     accumulation: boolean;           // Whether the host's pipeline accumulates samples
     samplesPerBucket?: number;       // If set, hard cap on samples per bucket
     /** When false, the saved PNG skips the iTXt FractalData chunk — i.e.
@@ -66,7 +65,7 @@ export interface BucketSize2D {
  *       beginGpuBucket(uvRect, pixelRect)
  *       resetAccumulation()
  *       (host's normal render loop runs frames against the new region)
- *       runner ticks per frame; when isCurrentBucketConverged() returns true,
+ *       runner ticks per frame; once the bucket reaches samplesPerBucket the
  *       runner scissor-copies getOutputTexture() into composite
  *     readbackMaterial = getReadbackMaterial(composite, tileSize, fullOutput)
  *     (runner renders that material to RGBA8 + readPixels + saves PNG)
@@ -104,14 +103,6 @@ export interface BucketRenderHost {
 
     /** Reset the host's per-bucket accumulator. */
     resetAccumulation(): void;
-
-    /**
-     * Returns true when the current GPU bucket's accumulation is "good enough."
-     * GMT polls async convergence; fluid-toy compares sample count to cap.
-     * `frameCount` is the number of times `renderOneFrame()` has been called
-     * for the current bucket (≥ 1 by the time this is asked).
-     */
-    isCurrentBucketConverged(frameCount: number, config: BucketRenderConfig): boolean;
 
     /**
      * Texture the runner scissor-copies into the per-tile composite buffer.

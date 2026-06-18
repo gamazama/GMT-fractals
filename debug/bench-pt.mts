@@ -136,7 +136,6 @@ const CONV_REPEAT_SPP = pick(16, 32, 32);      // rendered twice → determinism
 
 const SEAM_SIZE = pick(384, 384, 768);         // divisible by 2 and 3
 const SEAM_SPP = pick(8, 24, 64);
-const SEAM_NATURAL_THRESHOLD = 0.25;           // UI default (percent)
 const SEAM_NATURAL_CAP = SEAM_SPP * 4;
 // Seam-vs-samples curve (canonical scene only). The high points are what
 // "export spp" looks like — the verdict hinges on the seam there.
@@ -613,7 +612,9 @@ async function suiteSeam(sceneId: string): Promise<void> {
             viewport: [512, 512], timeoutMs: RENDER_TIMEOUT_MS,
         };
         if (c.natural) {
-            spec.convergenceThreshold = SEAM_NATURAL_THRESHOLD;
+            // "natural" cases now just run every bucket to the cap — bucket render no
+            // longer has per-bucket convergence early-out, so there is no convergence
+            // variance to measure (that seam source is gone by construction).
             spec.maxSamplesPerBucket = SEAM_NATURAL_CAP;
         } else {
             spec.samplesPerPixel = SEAM_SPP;

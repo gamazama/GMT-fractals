@@ -115,7 +115,6 @@ export interface EngineStoreState extends FeatureStateMap {
   tileCols: number;          // Image-tile grid columns (1 = single image output)
   tileRows: number;          // Image-tile grid rows (1 = single image output)
   matchViewportAspect: boolean; // When true, W/H inputs preserve viewport ratio
-  convergenceThreshold: number;
   samplesPerBucket: number;
   canvasPixelSize: [number, number]; // Physical pixel size of the post-sidebar canvas area. Read via getCanvasPhysicalPixelSize() in fractalStore.ts — do not read directly (Fixed-mode lag).
 
@@ -264,7 +263,6 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setTileCols: (v: number) => void;
     setTileRows: (v: number) => void;
     setMatchViewportAspect: (v: boolean) => void;
-    setConvergenceThreshold: (v: number) => void;
     setSamplesPerBucket: (v: number) => void;
     setCanvasPixelSize: (w: number, h: number) => void;
 

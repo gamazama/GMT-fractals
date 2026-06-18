@@ -638,9 +638,8 @@ export interface BucketTestSpec {
      *  the compute on bucket-transition frames so non-first buckets don't
      *  pick up an orphan extra sample. Verified via BucketStat.samples. */
     samplesPerPixel?: number;
-    /** Natural-convergence mode (used when samplesPerPixel is unset):
-     *  threshold is the UI percent value, cap is maxSamplesPerBucket. */
-    convergenceThreshold?: number;
+    /** When samplesPerPixel is unset, every bucket runs to this cap (bucket render
+     *  no longer has per-bucket convergence early-out — sample count is the only knob). */
     maxSamplesPerBucket?: number;
     /** Canvas ("viewport") size — affects the bloom-at-viewport-res branch
      *  exactly like a real export from a window. Default 512×512. */
@@ -712,11 +711,11 @@ async function runBucketOne(spec: BucketTestSpec): Promise<BucketTestResult> {
             outputHeight: spec.outputHeight,
             tileCols: spec.tileCols,
             tileRows: spec.tileRows,
-            // Exact mode: threshold 0 can never beat the (strictly positive)
-            // convergence measure, so every bucket runs to the cap.
-            convergenceThreshold: exact ? 0 : (spec.convergenceThreshold ?? 0.25),
             accumulation: true,
-            samplesPerBucket: exact ? spec.samplesPerPixel! + 1 : (spec.maxSamplesPerBucket ?? 1024),
+            // Every bucket runs to exactly samplesPerBucket (no convergence early-out).
+            // BucketRunner gates on samplesAccumulated (= ticks − 1), so the cap is the
+            // exact per-pixel sample count — no +1 compensation needed.
+            samplesPerBucket: exact ? spec.samplesPerPixel! : (spec.maxSamplesPerBucket ?? 1024),
             includeGmfData: false,
         };
         bucketCapture = { tiles: [], buckets: [] };

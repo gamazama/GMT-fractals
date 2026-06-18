@@ -29,14 +29,12 @@ export type RenderControlSlice = Pick<EngineStoreState,
     'isExporting' | 'adaptiveSuppressed' | 'renderRegion' | 'previewRegion' |
     'isBucketRendering' | 'bucketSize' |
     'outputWidth' | 'outputHeight' | 'tileCols' | 'tileRows' | 'matchViewportAspect' |
-    'convergenceThreshold' |
     'isPaused' | 'sampleCap' | 'accumulationCount' | 'samplesPerBucket'
 > & Pick<EngineActions,
     'setAALevel' | 'setMSAASamples' | 'setAAMode' | 'setAccumulation' | 'setPreviewMode' | 'setRenderMode' |
     'setIsExporting' | 'setAdaptiveSuppressed' | 'setRenderRegion' | 'setPreviewRegion' |
     'setIsBucketRendering' | 'setBucketSize' |
     'setOutputWidth' | 'setOutputHeight' | 'setTileCols' | 'setTileRows' | 'setMatchViewportAspect' |
-    'setConvergenceThreshold' |
     'setIsPaused' | 'setSampleCap' | 'reportAccumulation' | 'setSamplesPerBucket'
 >;
 
@@ -71,7 +69,6 @@ export const createRenderControlSlice: StateCreator<
     tileCols: 1,
     tileRows: 1,
     matchViewportAspect: true,
-    convergenceThreshold: 0.25,
     samplesPerBucket: 64,
 
     // ── Setters (pure mutations + canonical reset_accum emits) ────────
@@ -130,7 +127,6 @@ export const createRenderControlSlice: StateCreator<
     setTileCols: (v) => set({ tileCols: Math.max(1, Math.min(32, Math.round(v))) }),
     setTileRows: (v) => set({ tileRows: Math.max(1, Math.min(32, Math.round(v))) }),
     setMatchViewportAspect: (v) => set({ matchViewportAspect: v }),
-    setConvergenceThreshold: (v) => set({ convergenceThreshold: v }),
     setSamplesPerBucket: (v) => set({ samplesPerBucket: v }),
 
     setIsExporting: (v) => set({ isExporting: v }),

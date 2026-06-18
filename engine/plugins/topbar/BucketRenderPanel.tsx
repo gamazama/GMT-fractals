@@ -238,8 +238,8 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [outputWidth, outputHeight]);
 
-    // Keep the sample cap in sync mid-preview: if the user moves the Max Samples slider
-    // while a preview is active, resend SET with the new cap.
+    // Keep the sample count in sync mid-preview: if the user moves the Samples slider
+    // while a preview is active, resend SET with the new value.
     useEffect(() => {
         if (previewRegion) {
             controller.setPreviewRegion?.(previewRegion, outputWidth, outputHeight, state.samplesPerBucket);
@@ -412,7 +412,6 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
             outputHeight: viewportPixels[1],
             tileCols: 1,
             tileRows: 1,
-            convergenceThreshold: state.convergenceThreshold,
             accumulation: state.accumulation,
             samplesPerBucket: state.samplesPerBucket,
         });
@@ -427,7 +426,6 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
             outputHeight,
             tileCols,
             tileRows,
-            convergenceThreshold: state.convergenceThreshold,
             accumulation: state.accumulation,
             samplesPerBucket: state.samplesPerBucket,
             includeGmfData: includeGmf,
@@ -641,30 +639,14 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                 <div className={`space-y-2.5 ${previewEngaged && !previewExpanded ? 'hidden' : ''}`}>
                     <div>
                         <Slider
-                            label="Convergence Threshold"
-                            value={state.convergenceThreshold}
-                            min={0.01} max={1.0} step={0.01}
-                            onChange={state.setConvergenceThreshold}
-                            customMapping={{
-                                min: 0, max: 100,
-                                toSlider: (val) => ((Math.log10(val) + 2) / 2) * 100,
-                                fromSlider: (val) => Math.pow(10, (val / 100 * 2) - 2)
-                            }}
-                            overrideInputText={`${state.convergenceThreshold.toFixed(2)}%`}
-                        />
-                        <Hint text="Lower = higher quality. 0.1% production, 1% fast." />
-                    </div>
-
-                    <div>
-                        <Slider
-                            label="Max Samples / Bucket"
+                            label="Samples"
                             value={state.samplesPerBucket}
                             min={16} max={1024} step={16}
                             onChange={state.setSamplesPerBucket}
                             overrideInputText={`${state.samplesPerBucket}`}
                             highlight={state.samplesPerBucket >= 256}
                         />
-                        <Hint text="Safety cap. Tiles stop early when converged." />
+                        <Hint text="Samples per pixel. Higher = less noise, slower." />
                     </div>
 
                     <div className="pt-1">

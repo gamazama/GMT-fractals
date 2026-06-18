@@ -918,7 +918,7 @@ export class WorkerProxy implements AccumulationController {
      * Enter Preview Region mode: live, uniform-only zoom into a sub-rect of the export image
      * at export pixel density. Normal interaction (camera, params, sliders) continues to work
      * — each change resets accumulation and re-renders the preview naturally. Accumulation
-     * is capped at `sampleCap` (the user's Max Samples Per Bucket setting). Exit with
+     * is capped at `sampleCap` (the user's Samples setting). Exit with
      * `clearPreviewRegion()`.
      */
     setPreviewRegion(

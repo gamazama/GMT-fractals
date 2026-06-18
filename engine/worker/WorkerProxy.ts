@@ -29,7 +29,6 @@ export type BucketRenderConfig = {
     outputHeight: number;
     tileCols: number;
     tileRows: number;
-    convergenceThreshold: number;
     accumulation: boolean;
     samplesPerBucket: number;
 };

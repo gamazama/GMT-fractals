@@ -69,13 +69,12 @@ Settings specific to the Path Tracing engine.
 Render images at arbitrary resolutions — far beyond what the GPU can draw in a single frame — by rendering in small internal tiles (GPU buckets) and accumulating samples per tile until noise-free. Optionally split the output into a grid of separate PNG files for massive prints.
 
 ## Actions
-- **Refine**: renders the current viewport at viewport resolution until converged, then holds the cleaned-up frame on screen until you move the camera or change a parameter. Use when you want a clean still of what you're currently looking at.
+- **Refine**: renders the current viewport at viewport resolution to the configured sample count, then holds the cleaned-up frame on screen until you move the camera or change a parameter. Use when you want a clean still of what you're currently looking at.
 - **Preview**: click a spot on the canvas to zoom into that area at export pixel density. You stay fully interactive — move sliders, adjust lights, change colors — and the preview re-renders live. See the *Preview Region* section below.
 - **Export**: renders at the configured Output Size and saves PNG(s) to disk. With a tile grid > 1×1, each tile saves as its own file. The button shows the file count when tiling is active (e.g. *Export 4×*).
 
 ## Quality Settings
-- **Convergence Threshold** (default 0.25%): how similar consecutive frames must be before a tile is considered "done". Lower = more samples, higher quality. 0.1% = production, 1% = fast preview.
-- **Max Samples / Bucket** (default 64): safety cap so difficult tiles don't accumulate forever. Also caps Preview Region accumulation.
+- **Samples** (default 64): samples per pixel. Every tile renders to exactly this count — higher = less noise, slower. This is the single quality control; it also sets Refine and Preview Region density. (Every bucket renders the same number of samples, so high-resolution renders stay seamless across tile boundaries.)
 
 ## Output Size
 - **Preset**: HD / FHD / QHD / 4K / 5K / 8K UHD, ultrawide (UWQHD, 5K2K), squares, portrait/vertical, skybox, and A0–A3 print sizes at 300 DPI. The list is shared with the Quality > Resolution dropdown.
@@ -105,7 +104,7 @@ A live, export-density preview of any canvas section. Unlike Export, this does *
 
 1. Click **Preview Region** in the panel. The cursor becomes a crosshair.
 2. Hover over the canvas — a dashed fuchsia rectangle follows the cursor, showing which slice of the export will fill the canvas at 1 output-pixel per 1 physical canvas-pixel.
-3. Click to start. The viewport now shows the selected region rendered at export density, converging up to **Max Samples Per Bucket**.
+3. Click to start. The viewport now shows the selected region rendered at export density, up to the configured **Samples** count.
 4. Adjust anything — sliders, lighting, colors, formula params, camera. The preview re-renders live with the new values, still at export density.
 5. Exit via the header **Exit Preview** chip, pressing **Esc**, or closing the panel.
 

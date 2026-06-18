@@ -36,7 +36,10 @@ export const RegionOverlay: React.FC<{
 }> = ({ region, isGhostDragging, isDrawing, onClear }) => {
     const sampleCap = useEngineStore((s) => s.sampleCap);
     const setSampleCap = useEngineStore((s) => s.setSampleCap);
-    const convergenceThreshold = useEngineStore((s) => s.convergenceThreshold);
+    // Threshold for the informational "converged" readout below. Fixed at the former
+    // default — bucket render no longer uses per-bucket convergence (sample count is the
+    // sole quality control), so this is the only remaining consumer and needs no UI knob.
+    const convergenceThreshold = 0.25; // percent
 
     const [samples, setSamples] = useState(0);
     const [convergence, setConvergence] = useState(1.0);

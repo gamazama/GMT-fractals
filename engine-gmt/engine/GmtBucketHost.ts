@@ -22,7 +22,6 @@ import type {
     BucketImageTile,
     BucketUvRect,
     BucketSize2D,
-    BucketRenderConfig,
 } from '../../engine/export/BucketRenderTypes';
 
 export interface BucketEngineRef {
@@ -46,11 +45,7 @@ export class GmtBucketHost implements BucketRenderHost {
     private originalAspect: number = 1;
     private savedPixelSizeBase_: number = 0;
 
-    // Current image-tile and GPU-bucket state — needed for async convergence polling
     private currentTileSize = new THREE.Vector2();
-    private currentBucketUv: BucketUvRect = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
-    private convergenceRequested: boolean = false;
-    private cachedConvergenceResult: number | null = null;
 
     public init(engineRef: BucketEngineRef): void {
         this.engine = engineRef;
@@ -128,14 +123,10 @@ export class GmtBucketHost implements BucketRenderHost {
     }
 
     /**
-     * @invariant Writes `RegionMin`/`RegionMax` on materials, caches
-     *   the bucket UV for convergence polling, and applies a pipeline
-     *   SCISSOR over the bucket pixel rect. The shader has a vUv-based
+     * @invariant Writes `RegionMin`/`RegionMax` on materials and applies a
+     *   pipeline SCISSOR over the bucket pixel rect. The shader has a vUv-based
      *   discard too, but scissor is the actual perf-saving mechanism —
      *   the discard still costs a history fetch + MRT write per pixel.
-     * @invariant Convergence state is per-GPU-bucket (not per-image-
-     *   tile): `convergenceRequested` and `cachedConvergenceResult`
-     *   reset every call here.
      */
     public beginGpuBucket(uvRect: BucketUvRect, pixelRect: { pixelX: number; pixelY: number; pixelW: number; pixelH: number }): void {
         if (!this.engine) return;
@@ -143,9 +134,6 @@ export class GmtBucketHost implements BucketRenderHost {
         const max = new THREE.Vector2(uvRect.maxX, uvRect.maxY);
         this.engine.materials.setUniform(Uniforms.RegionMin, min);
         this.engine.materials.setUniform(Uniforms.RegionMax, max);
-        this.currentBucketUv = uvRect;
-        this.convergenceRequested = false;
-        this.cachedConvergenceResult = null;
 
         // Scissor the main MRT render to the bucket pixel rect — the shader's
         // vUv-based discard is kept as a belt-and-braces fallback, but scissor
@@ -164,40 +152,6 @@ export class GmtBucketHost implements BucketRenderHost {
         // Per-bucket reset uses pipeline (preserves global engine accumulation
         // identity). Engine-level resetAccumulation is reserved for cleanup.
         this.engine?.pipeline.resetAccumulation();
-    }
-
-    /**
-     * @invariant `config.convergenceThreshold` is a PERCENT — host
-     *   divides by 100 inside. Callers passing raw 0-1 would silently
-     *   never converge.
-     */
-    public isCurrentBucketConverged(_frameCount: number, config: BucketRenderConfig): boolean {
-        if (!this.engine) return false;
-        const gl = this.engine.renderer;
-        if (!gl) return false;
-        if (!config.accumulation) return false;
-
-        const min = new THREE.Vector2(this.currentBucketUv.minX, this.currentBucketUv.minY);
-        const max = new THREE.Vector2(this.currentBucketUv.maxX, this.currentBucketUv.maxY);
-        const thresholdRaw = config.convergenceThreshold / 100.0;
-
-        // Poll a pending request first.
-        if (this.convergenceRequested) {
-            const result = this.engine.pipeline.pollConvergenceResult(gl);
-            if (result !== null) {
-                this.convergenceRequested = false;
-                this.cachedConvergenceResult = result;
-                if (result < thresholdRaw) return true;
-            }
-        }
-
-        // Start a new measurement — result will be available on the next tick.
-        if (!this.convergenceRequested) {
-            this.engine.pipeline.startAsyncConvergence(gl, min, max);
-            this.convergenceRequested = true;
-        }
-
-        return false;
     }
 
     public getOutputTexture(): THREE.Texture | null {

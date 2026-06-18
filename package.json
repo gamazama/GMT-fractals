@@ -24,6 +24,7 @@
     "test:interaction": "tsx debug/test-interaction-session.mts",
     "test:interaction:wiring": "tsx debug/test-interaction-wiring.mts",
     "test:interaction:coverage": "tsx debug/test-interaction-coverage.mts",
+    "test:bucket-convergence": "tsx debug/test-bucket-convergence.mts",
     "test:gate": "npm run test:interaction && npm run test:interaction:wiring && npm run test:interaction:coverage",
     "bench:interaction-latency": "tsx debug/interaction-latency-harness.mts",
     "test:compat:write": "tsx debug/test-compat.mts --write",
