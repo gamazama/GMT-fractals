@@ -141,6 +141,12 @@ export const LightingFeature: FeatureDefinition = {
         { name: Uniforms.EnvCDFSize, type: 'vec2', default: new THREE.Vector2(1, 1) },
         { name: Uniforms.EnvLumIntegral, type: 'float', default: 1.0 },
         { name: Uniforms.EnvCDFMipBias, type: 'float', default: 0.0 },
+        // Top mip level of the env map (floor(log2(max(W,H)))). Drives the
+        // roughness→LOD env blur in GetEnvMap via textureLod (the texture()
+        // bias form is clamped by GL_MAX_TEXTURE_LOD_BIAS, so rough reflections
+        // stayed sharp — see ADR-0069). Set on env load; 8.0 is a safe pre-load
+        // fallback (≈256px top mip).
+        { name: Uniforms.EnvMaxMip, type: 'float', default: 8.0 },
     ],
     params: {
         // --- ENGINE MASTER ---

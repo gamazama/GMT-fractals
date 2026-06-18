@@ -616,6 +616,8 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                         tex.mapping = THREE.EquirectangularReflectionMapping;
                         tex.minFilter = THREE.LinearMipmapLinearFilter;
                         tex.generateMipmaps = true;
+                        const envBmp = msg.bitmap as ImageBitmap;
+                        engine.materials.setUniform('uEnvMaxMip', Math.floor(Math.log2(Math.max(envBmp.width, envBmp.height))));
                         engine.materials.setUniform('uEnvMapTexture', tex);
                         engine.materials.rebuildEnvCDF(tex);
                     }
@@ -646,6 +648,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                             engine.materials.setUniform('uTexture', hdrTex);
                             engine.materials.setUniform('uUseTexture', 1.0);
                         } else {
+                            engine.materials.setUniform('uEnvMaxMip', Math.floor(Math.log2(Math.max(hdrData.width, hdrData.height))));
                             engine.materials.setUniform('uEnvMapTexture', hdrTex);
                             engine.materials.rebuildEnvCDF(hdrTex);
                         }

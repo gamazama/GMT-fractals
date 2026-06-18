@@ -20,8 +20,25 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
         // Path 2: EnvMap Texture (Flattened else-if for compiler safety)
         // Equirectangular projection: longitude → [0,1], latitude → [0,1]
         vec2 uv = vec2(atan(dir.z, dir.x) * INV_TAU + 0.5, 1.0 - acos(dir.y) * INV_PI);
-        float bias = roughness * 6.0;  // Mip bias: 6 levels ≈ typical env map mip chain depth
-        col = texture(uEnvMapTexture, uv, bias).rgb;
+        // Roughness blur via an ABSOLUTE LOD (textureLod), not a LOD bias.
+        // texture(uv, bias) clamps the bias to GL_MAX_TEXTURE_LOD_BIAS (often
+        // 2.0 on ANGLE/D3D11), so rough reflections could never blur past ~2
+        // mips and stayed sharp — most visible as a sharp env on matte/metallic-
+        // off surfaces where the blurred diffuse ambient dominates. textureLod
+        // selects the mip directly and is immune to the cap.
+        //
+        // Cap the LOD ~4 levels below the top mip: a box-filtered equirectangular
+        // chain collapses to a pole-biased GLOBAL average at its smallest mips,
+        // which reads dark and loses all directionality — it would flatten and
+        // darken the diffuse ambient (GetEnvMap(n,1.0)) on matte surfaces and
+        // pull rough reflections toward that dim mean. Stopping ~4 levels up
+        // (≈16 px) keeps even fully-rough samples directional and energy-honest
+        // while still strongly blurred. A true GGX/irradiance prefilter would
+        // remove the need for the cap; this is the cheap, robust approximation.
+        // @see docs/adr/0069
+        float maxBlurLod = max(0.0, uEnvMaxMip - 4.0);
+        float lod = roughness * maxBlurLod;
+        col = textureLod(uEnvMapTexture, uv, lod).rgb;
         
         // Apply Color Profile (Linear/ACES)
         col = applyTextureProfile(col, uEnvMapColorSpace);

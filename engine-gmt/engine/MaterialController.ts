@@ -563,6 +563,8 @@ export class MaterialController {
                 tex.mapping = THREE.EquirectangularReflectionMapping;
                 tex.minFilter = THREE.LinearMipmapLinearFilter;
                 tex.generateMipmaps = true;
+                const envImg = tex.image as { width: number; height: number };
+                this.setUniform(Uniforms.EnvMaxMip, Math.floor(Math.log2(Math.max(envImg.width, envImg.height))));
                 this.setUniform(Uniforms.EnvMapTexture, tex);
                 this.rebuildEnvCDF(tex);
             }

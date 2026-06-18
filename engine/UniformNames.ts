@@ -56,6 +56,7 @@ export const Uniforms = {
     EnvCDFSize: 'uEnvCDFSize',               // (W,H) of CDF; (1,1) = stub, fall back to uniform sphere
     EnvLumIntegral: 'uEnvLumIntegral',       // ∫L sin(θ) dθ dφ — pdf normalizer
     EnvCDFMipBias: 'uEnvCDFMipBias',         // log2(srcW/cdfW) — mip level matching CDF resolution
+    EnvMaxMip: 'uEnvMaxMip',                 // floor(log2(max(W,H))) — top mip level for roughness→LOD blur
     FogColorLinear: 'uFogColorLinear', // CPU: InverseACESFilm(uFogColor)
 
     // Debug Tools
