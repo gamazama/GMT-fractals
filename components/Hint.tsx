@@ -29,6 +29,7 @@ export const Hint: React.FC<HintProps> = ({ text, helpId, className = '' }) => {
             {helpId && openHelp && (
                 <button
                     type="button"
+                    tabIndex={-1}
                     onClick={(e) => { e.stopPropagation(); openHelp(helpId); }}
                     title={`Help: ${helpId}`}
                     className="shrink-0 w-3.5 h-3.5 flex items-center justify-center text-[8px] font-bold rounded-sm bg-white/5 text-gray-500 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors"
