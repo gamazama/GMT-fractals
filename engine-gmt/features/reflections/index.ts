@@ -12,7 +12,7 @@ export const REFL_MODE_RAYMARCH = 3.0;  // Full raymarched reflections
 // ---------------------------------------------------------------------------
 // REFLECTION SHADING INTEGRATION GLSL
 // Injected into calculateShading() via addShadingLogic().
-// Variables in scope: p_ray, p_fractal, v, n, albedo, roughness, F, NdotV,
+// Variables in scope: p_ray, p_fractal, v, n, albedo, roughness, F, F0, NdotV,
 //   reflDir, reflectionLighting (output), stochasticSeed, d, uReflection, uSpecular
 // ---------------------------------------------------------------------------
 
@@ -23,7 +23,9 @@ const REFL_ENV_SHADING = `
     reflectionLighting = envColor * F * uSpecular;
 `;
 
-/** Full raymarched reflections — traces a reflection ray, shades the hit point. */
+/** Full raymarched reflections — traces a reflection ray, shades the hit point.
+ *  VNDF importance sampling + firefly clamp + env/AO fill at the hit.
+ *  @see docs/adr/0068-raymarched-reflection-importance-sampling.md */
 const REFL_RAYMARCH_SHADING = `
     // --- REFLECTIONS: RAYMARCHED ---
     {
@@ -37,19 +39,42 @@ const REFL_RAYMARCH_SHADING = `
         vec3 currRo = p_ray + n * reflBias;
         vec3 currRd = reflDir;
 
-        // Jitter first bounce based on roughness using Blue Noise
-        bool isMoving = uBlendFactor >= 0.99;
-        if (roughness > 0.05 && !isMoving) {
-             vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy);
-             vec3 randomVec = vec3(blueNoise.b, blueNoise.a, blueNoise.r) * 2.0 - 1.0;
+        // Roughness regularization: floor the lobe width so near-mirror
+        // surfaces don't degenerate (a=0 → NaN in the GGX basis) and the VNDF
+        // weight stays bounded. Mirrors the PT path's max(roughness, 0.04).
+        float reflRough = max(roughness, 0.04);
 
-             if (dot(randomVec, randomVec) > 0.001) {
-                 vec3 jittered = normalize(currRd + normalize(randomVec) * (roughness * 0.8));
-                 if (dot(jittered, n) > 0.05) currRd = jittered;
-             }
+        // GGX VNDF importance sampling (Heitz 2018) replaces the old uniform-
+        // cone jitter. The half-vector is drawn from the visible-normal
+        // distribution conditioned on the view dir, so the single-sample weight
+        // collapses to F * G1(L) — bounded, no grazing-angle fireflies — and
+        // accumulated samples converge on the true glossy lobe instead of a
+        // wrong-shaped blur. Perfect-mirror surfaces and in-motion frames keep
+        // the deterministic reflDir for a clean, responsive view.
+        bool isMoving = uBlendFactor >= 0.99;
+        float reflG1L = 1.0;
+        vec3 reflF = F;  // macro Fresnel fallback (mirror / in-motion)
+        if (roughness > 0.05 && !isMoving) {
+            vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy);
+            vec3 H = sampleReflVNDF(n, v, reflRough, blueNoise.gb);
+            vec3 vndfDir = reflect(-v, H);
+            if (dot(vndfDir, n) > 0.001) {
+                currRd = vndfDir;
+                // Smith G1 for the sampled outgoing direction — the term the
+                // old cone jitter omitted (it weighted by F alone).
+                float NdotL = max(0.001, dot(n, currRd));
+                float kG = (reflRough * reflRough) * 0.5;
+                reflG1L = NdotL / (NdotL * (1.0 - kG) + kG);
+                // Micro-facet Fresnel at the sampled half-vector — accurate at
+                // grazing angles where the macro NdotV Fresnel over-reflects.
+                float HdotV = max(0.0, dot(H, v));
+                reflF = F0 + (max(vec3(1.0 - reflRough), F0) - F0) * pow(1.0 - HdotV, 5.0);
+            }
         }
 
-        vec3 currentThroughput = F * uSpecular;
+        // VNDF specular throughput: F * G1(L). The D, G1(V) and 4·NdotV·NdotL
+        // terms cancel against the VNDF pdf, leaving this bounded weight.
+        vec3 currentThroughput = reflF * uSpecular * reflG1L;
 
         if (roughness <= uReflRoughnessCutoff && dot(currentThroughput, currentThroughput) >= 0.01) {
 
@@ -68,6 +93,12 @@ const REFL_RAYMARCH_SHADING = `
                 float reflCameraDist = length(p_next);
                 getSurfaceMaterial(p_next, p_next_fractal, vec4(0.0, refHit.yzw), reflCameraDist, r_albedo, r_n, r_emission, r_rough, false);
 
+                // Regularize the reflected surface's own roughness — its sharp
+                // specular highlights are a secondary firefly source on the
+                // reflection ray, which NEE on the bounce can never importance-
+                // sample. Widening the lobe trades negligible bias for variance.
+                r_rough = max(r_rough, 0.08);
+
                 if (dot(r_n, -currRd) < 0.0) r_n = -r_n;
 
                 vec3 hitColor = r_emission;
@@ -79,7 +110,38 @@ const REFL_RAYMARCH_SHADING = `
                     hitColor += calculatePBRContribution(p_next, r_n, -currRd, r_albedo, r_rough, uReflection, stochasticSeed + 0.1, false);
                 #endif
 
-                reflectionLighting += hitColor * currentThroughput;
+                // Environment fill at the reflected hit. The primary surface
+                // receives Ambient IBL (shading.ts step 7), but the reflection
+                // hit only got direct lights — so reflected cavities, where
+                // those lights are occluded, went black while the same cavity
+                // reads fine on the primary surface. Add the matching env
+                // irradiance (diffuse IBL, fills the dark cavities) plus a
+                // Fresnel-weighted specular env lobe (so reflected surfaces also
+                // show the environment, not just point lights). Deterministic
+                // mip-filtered lookups — adds fill light, not noise.
+                if (uEnvStrength > 0.001) {
+                    vec3  r_F0    = mix(vec3(0.04), r_albedo, uReflection);
+                    float r_NdotV = max(0.0, dot(r_n, -currRd));
+                    vec3  r_F     = r_F0 + (max(vec3(1.0 - r_rough), r_F0) - r_F0) * pow(1.0 - r_NdotV, 5.0);
+                    vec3  r_kD    = (vec3(1.0) - r_F) * (1.0 - uReflection);
+                    vec3  r_envDiff = r_kD * r_albedo * GetEnvMap(r_n, 1.0) * uDiffuse;
+                    vec3  r_envSpec = r_F * GetEnvMap(reflect(currRd, r_n), r_rough);
+                    hitColor += applyEnvFog((r_envDiff + r_envSpec) * uEnvStrength);
+                }
+
+                // Ambient occlusion on the reflected surface — the same
+                // treatment the primary surface gets (shading.ts step 8), so
+                // reflected cavities occlude the env fill instead of reading
+                // flat / over-lit. GetAO is a safe no-op (returns 1.0) when the
+                // AO feature is disabled.
+                float r_ao = GetAO(p_next, r_n, stochasticSeed + 0.1);
+                hitColor *= mix(uAOColor, vec3(1.0), r_ao);
+
+                // Firefly clamp on the single per-frame reflection sample (uses
+                // the shared uPTMaxLuminance "Firefly Clamp" control). Clamping
+                // before accumulation is what makes bright reflected highlights
+                // average to a stable value instead of persisting as spikes.
+                reflectionLighting += clampReflLum(hitColor * currentThroughput);
 
             } else {
                 reflectionLighting += sampleMissEnv(currRo, currRd, roughness, currentThroughput);
