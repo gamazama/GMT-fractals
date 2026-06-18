@@ -10,30 +10,22 @@ remaining items are heavier or speculative. Denoiser / ReSTIR are **out of scope
 - **PT pass** — procedural-sun NEE, shared bounded-VNDF (`vndf.ts`, PT + reflection),
   cheaper env-NEE visibility march, correct PT defaults (`ptReflMode = Env MIS+IS`,
   `ptSobolBounce = true`), `484c188` (ADR-0070, ADR-0068 update).
+- **Env prefilter (approach A, average-blend form)** — solid-angle (sinθ) average
+  computed in the CDF pass, blended into `GetEnvMap` toward the rough end so box
+  mips no longer collapse to a dark pole-biased mean; LOD cap demoted to fallback,
+  `d9cb18d` (ADR-0069 update). Full custom manual-mipmap chain deferred (see below).
 
 ## Remaining — honest assessment
 
-### Recommended next: proper GGX / irradiance env prefilter
-The only large, clearly-worthwhile item. ADR-0069 currently blurs by selecting
-box-filtered equirect mips with a `-4` LOD cap to dodge the dark, pole-biased
-top mips — a cheap stand-in, not energy-correct. A real prefilter removes the
-cap and makes **every env-lit surface** (Direct + PT + reflections, since all go
-through `GetEnvMap`) correct. Two approaches:
-
-- **A. Custom solid-angle-correct mip chain** (cheaper, lower blast radius):
-  replace Three's box `generateMipmaps` with a downsample weighted by sin(θ) so
-  high mips are honest averages; drop the `-4` cap. Fixes the darkening; still
-  not GGX-convolved (a roughness lobe is approximated by mip selection).
-- **B. Full GGX split-sum prefilter** (gold standard, higher blast radius):
-  PMREM-style GGX-convolved radiance mips + an irradiance map/SH for the diffuse
-  ambient. Three.js `PMREMGenerator` exists but changes the env texture format
-  `GetEnvMap` samples (needs care across the main thread + worker upload paths).
-
-Either touches all three env upload sites (`MaterialController`, `renderWorker`
-TEXTURE / TEXTURE_HDR) and `GetEnvMap`. **Confirm A vs B before building** — it's
-cross-cutting with visual-only verification.
+The plan's substantive items are all shipped. What's left is deliberately not
+pursued:
 
 ### Not pursuing (unless asked) — and why
+- **Full GGX / manual-mipmap env prefilter** — the average-blend (shipped) fixes
+  the top-of-chain darkening; a full sinθ-weighted custom mip chain (or PMREM
+  GGX-convolved radiance + irradiance map/SH) would also correct the *mid-range*
+  box mips, but needs finicky manual-mipmap upload (unverifiable without a GPU
+  here) + heavy transient memory on large envs, for small extra visible gain.
 - **Adaptive / variance-guided sampling** — conflicts with ADR-0067, which
   deliberately removed per-bucket convergence in favour of fixed spp (seams).
   Full-screen fragment shading can't cheaply skip converged pixels anyway.
