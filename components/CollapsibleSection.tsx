@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { SectionLabel } from './SectionLabel';
+import { CaretRight } from './Icons2';
 
 /** Header style presets */
 const headerVariants = {
@@ -30,13 +31,7 @@ interface CollapsibleSectionProps {
 }
 
 const ChevronIcon: React.FC<{ open: boolean }> = ({ open }) => (
-    <svg
-        className={`w-2 h-2 transition-transform ${open ? 'rotate-90' : ''}`}
-        viewBox="0 0 6 10"
-        fill="currentColor"
-    >
-        <path d="M0 0l6 5-6 5z" />
-    </svg>
+    <CaretRight className={`w-2 h-2 transition-transform ${open ? 'rotate-90' : ''}`} />
 );
 
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({

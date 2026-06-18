@@ -11,6 +11,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { createObservableState } from '../../../../store/createObservableState';
 
 /** Colour mapping: 'flow' = LUT coord follows x (the gradient strip, in depth), 'bloom' =
  *  radial (first stop blooms at the centre), 'depth' = far→near, 'mix' = random scatter. */
@@ -43,28 +44,20 @@ const INITIAL: ParallaxState = {
   seed: 1,
 };
 
-let state: ParallaxState = INITIAL;
-const listeners = new Set<() => void>();
-const emit = (next: Partial<ParallaxState>): void => {
-  state = { ...state, ...next };
-  listeners.forEach((l) => l());
-};
+const store = createObservableState<ParallaxState>(INITIAL);
 
-const subscribe = (l: () => void): (() => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
-const getSnapshot = (): ParallaxState => state;
-
-export const getParallaxState = (): ParallaxState => state;
-export const subscribeParallax = (l: () => void): (() => void) => subscribe(l);
-export const useParallaxState = (): ParallaxState => useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+export const getParallaxState = store.get;
+export const subscribeParallax = store.subscribe;
+export const useParallaxState = (): ParallaxState => useSyncExternalStore(store.subscribe, store.get, store.get);
 
 export const setParallaxDepth = (depth: number): void => {
   const d = depth < 0 ? 0 : depth > 1 ? 1 : depth;
-  if (d !== state.depth) emit({ depth: d });
+  if (d !== store.get().depth) store.set({ depth: d });
 };
 export const setParallaxStir = (stir: number): void => {
   const s = stir < 0.05 ? 0.05 : stir > 0.4 ? 0.4 : stir;
-  if (s !== state.stir) emit({ stir: s });
+  if (s !== store.get().stir) store.set({ stir: s });
 };
-export const setParallaxColorBy = (colorBy: ParallaxColorBy): void => { if (colorBy !== state.colorBy) emit({ colorBy }); };
-export const setParallaxDensity = (density: ParallaxDensity): void => { if (density !== state.density) emit({ density }); };
-export const shuffleParallax = (): void => emit({ seed: state.seed + 1 });
+export const setParallaxColorBy = (colorBy: ParallaxColorBy): void => { if (colorBy !== store.get().colorBy) store.set({ colorBy }); };
+export const setParallaxDensity = (density: ParallaxDensity): void => { if (density !== store.get().density) store.set({ density }); };
+export const shuffleParallax = (): void => store.set({ seed: store.get().seed + 1 });

@@ -14,6 +14,7 @@
 import React from 'react';
 import { FavientsIcon, FAVIENTS_ACCENT } from './FavientsIcon';
 import { useFavientsPanelShown, toggleFavientsPanel } from '../store/favientsPanelPersist';
+import { TopBarToggle } from '../../components/TopBarToggle';
 
 export const FavientsToggleButton: React.FC<{ desktopOnly?: boolean; className?: string }> = ({
   desktopOnly = false,
@@ -21,17 +22,17 @@ export const FavientsToggleButton: React.FC<{ desktopOnly?: boolean; className?:
 }) => {
   const shown = useFavientsPanelShown();
   return (
-    <button
-      type="button"
+    <TopBarToggle
+      active={shown}
       onClick={toggleFavientsPanel}
       title="Toggle the Favients shelf (saved gradients)"
-      className={`${desktopOnly ? 'hidden md:flex' : 'flex'} items-center gap-1.5 px-2 h-7 rounded text-[12px] transition-colors ${
-        shown ? `${FAVIENTS_ACCENT.text} bg-white/10` : 'text-gray-400 hover:text-white hover:bg-white/10'
-      } ${className}`}
-    >
-      <FavientsIcon className="text-sm leading-none" />
-      <span className="hidden md:inline">Favients</span>
-    </button>
+      desktopOnly={desktopOnly}
+      icon={<FavientsIcon className="text-sm leading-none" />}
+      label="Favients"
+      activeClassName={`${FAVIENTS_ACCENT.text} bg-white/10`}
+      inactiveClassName="text-gray-400 hover:text-white hover:bg-white/10"
+      className={className}
+    />
   );
 };
 

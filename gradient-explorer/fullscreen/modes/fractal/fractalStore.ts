@@ -16,6 +16,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { createObservableState } from '../../../../store/createObservableState';
 
 export interface FractalState {
   /** Colormap phase offset along the mapped axis, 0..1 wraps (kernel uGradientPhase). */
@@ -81,24 +82,16 @@ const INITIAL: FractalState = {
   escapeR: 32,
 };
 
-let state: FractalState = INITIAL;
-const listeners = new Set<() => void>();
-const emit = (next: Partial<FractalState>): void => {
-  state = { ...state, ...next };
-  listeners.forEach((l) => l());
-};
+const store = createObservableState<FractalState>(INITIAL);
 
-const subscribe = (l: () => void): (() => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
-const getSnapshot = (): FractalState => state;
-
-export const getFractalState = (): FractalState => state;
-export const subscribeFractal = (l: () => void): (() => void) => subscribe(l);
-export const useFractalState = (): FractalState => useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+export const getFractalState = store.get;
+export const subscribeFractal = store.subscribe;
+export const useFractalState = (): FractalState => useSyncExternalStore(store.subscribe, store.get, store.get);
 
 /** Set the live fractal colormap phase (0..1 wraps). */
 export const setFractalPhase = (phase: number): void => {
   const p = ((phase % 1) + 1) % 1; // wrap into [0,1)
-  if (p !== state.phase) emit({ phase: p });
+  if (p !== store.get().phase) store.set({ phase: p });
 };
 
 /** Sensible starting "Repeats" per colour-mapping mode for the LEGACY (v1) colour path —
@@ -123,7 +116,7 @@ const DEFAULT_REPEATS_BY_MODE: Record<number, number> = {
 export const setFractalRepeats = (repeats: number): void => {
   if (!Number.isFinite(repeats)) return;
   const r = repeats < 0.0001 ? 0.0001 : repeats > 1024 ? 1024 : repeats;
-  if (r !== state.repeats) emit({ repeats: r });
+  if (r !== store.get().repeats) store.set({ repeats: r });
 };
 
 /** Set the live fractal colormap mapping mode (kernel colorMapping index). Re-seeds Density to a
@@ -131,16 +124,16 @@ export const setFractalRepeats = (repeats: number): void => {
  *  legacy per-mode table. */
 export const setFractalMapping = (mapping: number): void => {
   const m = mapping | 0;
-  if (m === state.mapping) return;
-  const seed = state.colorNormV2 ? 1 : (DEFAULT_REPEATS_BY_MODE[m] ?? 1);
-  emit({ mapping: m, repeats: seed });
+  if (m === store.get().mapping) return;
+  const seed = store.get().colorNormV2 ? 1 : (DEFAULT_REPEATS_BY_MODE[m] ?? 1);
+  store.set({ mapping: m, repeats: seed });
 };
 
 /** Toggle depth-normalized colour (v2). Re-seeds Density to 1 when turning it on (every
  *  normalized mode wants ≈1) so the user lands on a sane value instead of the legacy seed. */
 export const setFractalColorNormV2 = (on: boolean): void => {
-  if (on === state.colorNormV2) return;
-  emit({ colorNormV2: on, repeats: on ? 1 : state.repeats });
+  if (on === store.get().colorNormV2) return;
+  store.set({ colorNormV2: on, repeats: on ? 1 : store.get().repeats });
 };
 
 /** Set the Iterations-mode log-iteration gamma. Slider track is 0.25..8 but typed/dragged
@@ -149,47 +142,47 @@ export const setFractalColorNormV2 = (on: boolean): void => {
 export const setFractalIterRate = (rate: number): void => {
   if (!Number.isFinite(rate)) return;
   const r = rate < 0.001 ? 0.001 : rate > 64 ? 64 : rate;
-  if (r !== state.iterRate) emit({ iterRate: r });
+  if (r !== store.get().iterRate) store.set({ iterRate: r });
 };
 
 /** Apply a "Fit to view" anchor (offset/scale) computed from the current view's iteration
  *  range. After this colours HOLD again (the anchor is fixed) until re-fit or reset. */
 export const setFractalIterFit = (offset: number, scale: number): void => {
   if (!Number.isFinite(offset) || !Number.isFinite(scale)) return;
-  if (offset !== state.iterOffset || scale !== state.iterScale) emit({ iterOffset: offset, iterScale: scale });
+  if (offset !== store.get().iterOffset || scale !== store.get().iterScale) store.set({ iterOffset: offset, iterScale: scale });
 };
 
 /** Reset the Iterations anchor to identity (absolute pivoted log-iteration — colours hold). */
 export const resetFractalIterFit = (): void => {
-  if (state.iterOffset !== 0 || state.iterScale !== ITER_IDENTITY_SCALE) {
-    emit({ iterOffset: 0, iterScale: ITER_IDENTITY_SCALE });
+  if (store.get().iterOffset !== 0 || store.get().iterScale !== ITER_IDENTITY_SCALE) {
+    store.set({ iterOffset: 0, iterScale: ITER_IDENTITY_SCALE });
   }
 };
 
 /** Toggle Distance mode's log-contour-rings (vs linear edge/glow). */
-export const setFractalDeLogBands = (on: boolean): void => { if (on !== state.deLogBands) emit({ deLogBands: on }); };
+export const setFractalDeLogBands = (on: boolean): void => { if (on !== store.get().deLogBands) store.set({ deLogBands: on }); };
 
 /** Toggle the slope-lighting composite layer. */
-export const setFractalLightEnabled = (on: boolean): void => { if (on !== state.lightEnabled) emit({ lightEnabled: on }); };
+export const setFractalLightEnabled = (on: boolean): void => { if (on !== store.get().lightEnabled) store.set({ lightEnabled: on }); };
 /** Light azimuth in radians (wraps 0..2π). */
-export const setFractalLightAngle = (a: number): void => { if (Number.isFinite(a) && a !== state.lightAngle) emit({ lightAngle: a }); };
+export const setFractalLightAngle = (a: number): void => { if (Number.isFinite(a) && a !== store.get().lightAngle) store.set({ lightAngle: a }); };
 /** Light elevation factor (clamped 0.1..6). */
 export const setFractalLightHeight = (h: number): void => {
   if (!Number.isFinite(h)) return;
   const v = h < 0.1 ? 0.1 : h > 6 ? 6 : h;
-  if (v !== state.lightHeight) emit({ lightHeight: v });
+  if (v !== store.get().lightHeight) store.set({ lightHeight: v });
 };
 /** Lighting strength, 0 flat .. 1 fully lit (clamped). */
 export const setFractalLightStrength = (s: number): void => {
   if (!Number.isFinite(s)) return;
   const v = s < 0 ? 0 : s > 1 ? 1 : s;
-  if (v !== state.lightStrength) emit({ lightStrength: v });
+  if (v !== store.get().lightStrength) store.set({ lightStrength: v });
 };
 /** Ambient shadow floor, 0..1 (clamped). */
 export const setFractalAmbient = (a: number): void => {
   if (!Number.isFinite(a)) return;
   const v = a < 0 ? 0 : a > 1 ? 1 : a;
-  if (v !== state.ambient) emit({ ambient: v });
+  if (v !== store.get().ambient) store.set({ ambient: v });
 };
 
 /** Set the escape radius / bailout (clamped 0.1..65536; <2 gives decomposition cells). Global —
@@ -197,18 +190,18 @@ export const setFractalAmbient = (a: number): void => {
 export const setFractalEscapeR = (r: number): void => {
   if (!Number.isFinite(r)) return;
   const v = r < 1 ? 1 : r > 65536 ? 65536 : r;
-  if (v !== state.escapeR) emit({ escapeR: v });
+  if (v !== store.get().escapeR) store.set({ escapeR: v });
 };
 
 /** Toggle phase auto-cycling (palette-cycling animation). */
-export const setFractalAnimate = (on: boolean): void => { if (on !== state.animate) emit({ animate: on }); };
+export const setFractalAnimate = (on: boolean): void => { if (on !== store.get().animate) store.set({ animate: on }); };
 
 /** Toggle the deep-zoom (perturbation) path. */
-export const setFractalDeepZoom = (on: boolean): void => { if (on !== state.deepZoom) emit({ deepZoom: on }); };
+export const setFractalDeepZoom = (on: boolean): void => { if (on !== store.get().deepZoom) store.set({ deepZoom: on }); };
 
 /** Set the per-pixel iteration multiplier (clamped 0.25..32). */
 export const setFractalIterMul = (mul: number): void => {
   if (!Number.isFinite(mul)) return;
   const m = mul < 0.25 ? 0.25 : mul > 32 ? 32 : mul;
-  if (m !== state.iterMul) emit({ iterMul: m });
+  if (m !== store.get().iterMul) store.set({ iterMul: m });
 };

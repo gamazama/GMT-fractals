@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GalleryItem } from './GalleryClient';
+import { GalleryItem, GALLERY_FEATURED_BADGE } from './GalleryClient';
 
 interface Props {
   item: GalleryItem;
@@ -38,7 +38,7 @@ export const GalleryTile = React.memo(({ item, onClick, busy }: Props) => {
           </div>
         )}
         {item.featured && (
-          <span className="absolute top-1.5 left-1.5 text-[8px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 backdrop-blur-sm">
+          <span className={`absolute top-1.5 left-1.5 text-[8px] px-1.5 py-0.5 rounded ${GALLERY_FEATURED_BADGE} backdrop-blur-sm`}>
             FEATURED
           </span>
         )}

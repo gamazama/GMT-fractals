@@ -4,6 +4,7 @@ import { EngineStoreState, EngineActions, PanelId, PanelState, DockZone, Composi
 import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
+import { safeLocalGet, safeLocalSet } from '../safeLocalStorage';
 
 // Mirrors Dock.tsx: on mobile the left dock isn't mounted (see AppGmt), so a
 // left-located panel is presented in the RIGHT dock. Panel activation must use
@@ -33,58 +34,52 @@ const LS = {
     compositionOverlaySettings: 'gmt.compositionOverlaySettings',
 } as const;
 
+// Low-level localStorage access is guarded by `safeLocalGet`/`safeLocalSet`
+// (store/safeLocalStorage.ts); these helpers add only the type coercion.
 function readBool(key: string, fallback: boolean): boolean {
-    try {
-        const v = localStorage.getItem(key);
-        if (v === '0' || v === 'false') return false;
-        if (v === '1' || v === 'true') return true;
-    } catch { /* SSR / private mode */ }
+    const v = safeLocalGet(key);
+    if (v === '0' || v === 'false') return false;
+    if (v === '1' || v === 'true') return true;
     return fallback;
 }
 function writeBool(key: string, v: boolean): void {
-    try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* quota */ }
+    safeLocalSet(key, v ? '1' : '0');
 }
 function readNumber(key: string, fallback: number): number {
-    try {
-        const v = localStorage.getItem(key);
-        if (v !== null) {
-            const n = Number(v);
-            if (Number.isFinite(n)) return n;
-        }
-    } catch { /* SSR / private mode */ }
+    const v = safeLocalGet(key);
+    if (v !== null) {
+        const n = Number(v);
+        if (Number.isFinite(n)) return n;
+    }
     return fallback;
 }
 function writeNumber(key: string, v: number): void {
-    try { localStorage.setItem(key, String(v)); } catch { /* quota */ }
+    safeLocalSet(key, String(v));
 }
 function readJson<T>(key: string, fallback: T): T {
-    try {
-        const v = localStorage.getItem(key);
-        if (v !== null) return { ...fallback, ...(JSON.parse(v) as object) } as T;
-    } catch { /* SSR / malformed */ }
+    const v = safeLocalGet(key);
+    if (v !== null) {
+        try { return { ...fallback, ...(JSON.parse(v) as object) } as T; } catch { /* malformed */ }
+    }
     return fallback;
 }
 function writeJson(key: string, v: unknown): void {
-    try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* quota */ }
+    safeLocalSet(key, JSON.stringify(v));
 }
 
 function readUiModePreference(): UiModePreference {
-    try {
-        const v = localStorage.getItem(LS.uiMode);
-        if (v === 'auto' || v === 'mobile' || v === 'desktop') return v;
-    } catch { /* SSR / private mode */ }
+    const v = safeLocalGet(LS.uiMode);
+    if (v === 'auto' || v === 'mobile' || v === 'desktop') return v;
     return 'auto';
 }
 function writeUiModePreference(v: UiModePreference): void {
-    try { localStorage.setItem(LS.uiMode, v); } catch { /* quota */ }
+    safeLocalSet(LS.uiMode, v);
 }
 
 const COMPOSITION_OVERLAY_TYPES = new Set(['none', 'grid', 'thirds', 'golden', 'spiral', 'center', 'diagonal', 'safearea']);
 function readCompositionOverlay(fallback: CompositionOverlayType): CompositionOverlayType {
-    try {
-        const v = localStorage.getItem(LS.compositionOverlay);
-        if (v && COMPOSITION_OVERLAY_TYPES.has(v)) return v as CompositionOverlayType;
-    } catch { /* SSR / private mode */ }
+    const v = safeLocalGet(LS.compositionOverlay);
+    if (v && COMPOSITION_OVERLAY_TYPES.has(v)) return v as CompositionOverlayType;
     return fallback;
 }
 
@@ -93,13 +88,12 @@ function readCompositionOverlay(fallback: CompositionOverlayType): CompositionOv
 // 'gmt-tutorials' so existing GMT installs keep their completion state.
 let _tutorialStorageKey = 'gmt-tutorials';
 function readTutorialCompleted(): number[] {
-    try {
-        const stored = localStorage.getItem(_tutorialStorageKey);
-        return stored ? JSON.parse(stored).completed || [] : [];
-    } catch { return []; }
+    const stored = safeLocalGet(_tutorialStorageKey);
+    if (!stored) return [];
+    try { return JSON.parse(stored).completed || []; } catch { return []; }
 }
 function writeTutorialCompleted(completed: number[]): void {
-    try { localStorage.setItem(_tutorialStorageKey, JSON.stringify({ completed })); } catch { /* quota */ }
+    safeLocalSet(_tutorialStorageKey, JSON.stringify({ completed }));
 }
 /** Set the localStorage key used to persist tutorial completion. Re-reads
  *  the completion list under the new key so a freshly-namespaced app

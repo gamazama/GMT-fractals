@@ -12,6 +12,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { createObservableState } from '../../../../store/createObservableState';
 import type { BrushType } from './LiquifyMesh';
 
 export type LiquifyDensity = 'low' | 'med' | 'high';
@@ -52,41 +53,33 @@ const INITIAL: LiquifyState = {
   subdiv: true,
 };
 
-let state: LiquifyState = INITIAL;
-const listeners = new Set<() => void>();
-const emit = (next: Partial<LiquifyState>): void => {
-  state = { ...state, ...next };
-  listeners.forEach((l) => l());
-};
+const store = createObservableState<LiquifyState>(INITIAL);
 
-const subscribe = (l: () => void): (() => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
-const getSnapshot = (): LiquifyState => state;
+export const getLiquifyState = store.get;
+export const subscribeLiquify = store.subscribe;
+export const useLiquifyState = (): LiquifyState => useSyncExternalStore(store.subscribe, store.get, store.get);
 
-export const getLiquifyState = (): LiquifyState => state;
-export const subscribeLiquify = (l: () => void): (() => void) => subscribe(l);
-export const useLiquifyState = (): LiquifyState => useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-
-export const setLiquifyBrush = (brush: BrushType): void => { if (brush !== state.brush) emit({ brush }); };
+export const setLiquifyBrush = (brush: BrushType): void => { if (brush !== store.get().brush) store.set({ brush }); };
 export const setLiquifyRadius = (radius: number): void => {
   const r = radius < 0.02 ? 0.02 : radius > 0.5 ? 0.5 : radius;
-  if (r !== state.radius) emit({ radius: r });
+  if (r !== store.get().radius) store.set({ radius: r });
 };
 export const setLiquifyStrength = (strength: number): void => {
   const s = strength < 0 ? 0 : strength > 1 ? 1 : strength;
-  if (s !== state.strength) emit({ strength: s });
+  if (s !== store.get().strength) store.set({ strength: s });
 };
-export const setLiquifyPhysics = (physics: boolean): void => { if (physics !== state.physics) emit({ physics }); };
+export const setLiquifyPhysics = (physics: boolean): void => { if (physics !== store.get().physics) store.set({ physics }); };
 export const setLiquifyStiffness = (stiffness: number): void => {
   const s = stiffness < 0 ? 0 : stiffness > 1 ? 1 : stiffness;
-  if (s !== state.stiffness) emit({ stiffness: s });
+  if (s !== store.get().stiffness) store.set({ stiffness: s });
 };
 export const setLiquifyDamping = (damping: number): void => {
   const d = damping < 0 ? 0 : damping > 1 ? 1 : damping;
-  if (d !== state.damping) emit({ damping: d });
+  if (d !== store.get().damping) store.set({ damping: d });
 };
 export const setLiquifySmooth = (smooth: number): void => {
   const s = smooth < 0 ? 0 : smooth > 1 ? 1 : smooth;
-  if (s !== state.smooth) emit({ smooth: s });
+  if (s !== store.get().smooth) store.set({ smooth: s });
 };
-export const setLiquifyDensity = (density: LiquifyDensity): void => { if (density !== state.density) emit({ density }); };
-export const setLiquifySubdiv = (subdiv: boolean): void => { if (subdiv !== state.subdiv) emit({ subdiv }); };
+export const setLiquifyDensity = (density: LiquifyDensity): void => { if (density !== store.get().density) store.set({ density }); };
+export const setLiquifySubdiv = (subdiv: boolean): void => { if (subdiv !== store.get().subdiv) store.set({ subdiv }); };

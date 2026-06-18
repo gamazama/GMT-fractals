@@ -21,7 +21,7 @@ import { useGalleryStore } from './galleryStore';
 import { useAuthStore } from '../auth/authStore';
 import {
     listMySubmissions, deleteMySubmission, updateMyVisibility,
-    GalleryItem,
+    GalleryItem, GALLERY_FEATURED_BADGE,
 } from './GalleryClient';
 import type { Profile } from '../auth/authStore';
 
@@ -203,7 +203,7 @@ export const MySubmissionsOverlay: React.FC = () => {
                                         {item.visibility}
                                     </span>
                                     {item.featured && (
-                                        <span className="text-[8px] px-1.5 py-0.5 rounded border bg-cyan-500/20 text-cyan-300 border-cyan-500/40 uppercase tracking-wider font-bold">
+                                        <span className={`text-[8px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold ${GALLERY_FEATURED_BADGE}`}>
                                             featured
                                         </span>
                                     )}

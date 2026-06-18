@@ -27,6 +27,7 @@
  */
 
 import React, { useSyncExternalStore } from 'react';
+import { createListRegistry } from '../../store/createListRegistry';
 
 export type HudSlot =
     | 'top-left' | 'top-center' | 'top-right'
@@ -43,16 +44,11 @@ export interface HudItem {
     className?: string;
 }
 
-const _items = new Map<string, HudItem>();
+// Backed by the shared id-keyed `createListRegistry` primitive; the
+// per-slot insert counter (for default ordering) stays here as the
+// HUD-specific bit the generic factory doesn't own.
+const _registry = createListRegistry<HudItem>();
 const _insertCounter = new Map<string, number>();
-const _subscribers = new Set<() => void>();
-let _rev = 0;
-const _notify = () => { _rev++; _subscribers.forEach((fn) => fn()); };
-
-const subscribe = (fn: () => void) => {
-    _subscribers.add(fn);
-    return () => { _subscribers.delete(fn); };
-};
 
 export const hud = {
     register(item: HudItem) {
@@ -61,19 +57,13 @@ export const hud = {
             ? { ...item, order: (_insertCounter.get(item.slot) ?? 0) }
             : item;
         _insertCounter.set(item.slot, (_insertCounter.get(item.slot) ?? 0) + 1);
-        _items.set(item.id, resolved);
-        _notify();
+        _registry.register(resolved);
     },
-    unregister(id: string) {
-        if (_items.delete(id)) _notify();
-    },
-    list(): HudItem[] {
-        return Array.from(_items.values());
-    },
+    unregister(id: string) { _registry.unregister(id); },
+    list(): HudItem[] { return _registry.getAll(); },
     clear() {
-        _items.clear();
+        _registry.clear();
         _insertCounter.clear();
-        _notify();
     },
 };
 
@@ -126,7 +116,8 @@ const SLOT_ORDER: HudSlot[] = [
 ];
 
 export const HudHost: React.FC<HudHostProps> = ({ hidden = false, className = '', region = 'all' }) => {
-    useSyncExternalStore(subscribe, () => _rev, () => _rev);
+    // getAll() is a stable snapshot (safe getSnapshot).
+    const items = useSyncExternalStore(_registry.subscribe, _registry.getAll, _registry.getAll);
 
     if (hidden) return null;
 
@@ -136,7 +127,7 @@ export const HudHost: React.FC<HudHostProps> = ({ hidden = false, className = ''
         'center': [],
         'bottom-left': [], 'bottom-center': [], 'bottom-right': [],
     };
-    for (const item of _items.values()) {
+    for (const item of items) {
         if (item.when && !item.when()) continue;
         bySlot[item.slot].push(item);
     }

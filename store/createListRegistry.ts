@@ -15,8 +15,13 @@
  * updates in place without moving it), so re-registering a well/target to swap
  * its closure does not reorder the list.
  *
+ * It is the single id-keyed registry primitive — slot hosts (`@engine/topbar`,
+ * `@engine/hud`) and send-targets all ride it. A host that ALSO needs an uninstall /
+ * test-reset path uses `clear()`; one that needs single-item lookup can read `getAll()`
+ * (no `get(id)` is exposed until a consumer needs it — don't add unused surface).
+ *
  * @invariant Host-agnostic; the engine registries that use it never import an app.
- * @see store/sendTargetRegistry.ts (consumer)
+ * @see store/sendTargetRegistry.ts, engine/plugins/TopBar.tsx, engine/plugins/Hud.tsx (consumers)
  */
 
 export interface ListRegistry<T extends { id: string }> {
@@ -26,6 +31,8 @@ export interface ListRegistry<T extends { id: string }> {
     /** Stable snapshot of all items in registration order — safe as a
      *  `useSyncExternalStore` getSnapshot (same reference until the next mutation). */
     getAll: () => T[];
+    /** Remove all items (uninstall / test-reset). Notifies subscribers. */
+    clear: () => void;
     subscribe: (listener: () => void) => () => void;
 }
 
@@ -51,6 +58,10 @@ export const createListRegistry = <T extends { id: string }>(): ListRegistry<T> 
             if (items.delete(id)) rebuild();
         },
         getAll: () => snapshot,
+        clear: () => {
+            items.clear();
+            rebuild();
+        },
         subscribe: (listener) => {
             listeners.add(listener);
             return () => { listeners.delete(listener); };

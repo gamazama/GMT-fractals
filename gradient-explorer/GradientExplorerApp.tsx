@@ -17,6 +17,7 @@ import React, { useMemo, useEffect, useRef, useState, Suspense } from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { useGlobalContextMenu } from '../hooks/useGlobalContextMenu';
 import GlobalContextMenu from '../components/GlobalContextMenu';
+import { CaretRight } from '../components/Icons2';
 import { TopBarHost } from '../engine/plugins/TopBar';
 import { HudHost } from '../engine/plugins/Hud';
 import { HelpOverlay } from '../engine/plugins/Help';
@@ -187,9 +188,7 @@ const PICKER_SECTIONS: { id: string; label: string; group: string }[] = [
 ];
 
 const SectionChevron: React.FC<{ open: boolean }> = ({ open }) => (
-  <svg className={`w-2.5 h-2.5 shrink-0 text-gray-500 transition-transform ${open ? 'rotate-90' : ''}`} viewBox="0 0 6 10" fill="currentColor">
-    <path d="M0 0l6 5-6 5z" />
-  </svg>
+  <CaretRight className={`w-2.5 h-2.5 shrink-0 text-gray-500 transition-transform ${open ? 'rotate-90' : ''}`} />
 );
 
 const MobilePickerControls: React.FC = () => {

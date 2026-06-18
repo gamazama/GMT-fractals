@@ -47,3 +47,17 @@ export const ChevronDown = chevron('6 9 12 15 18 9');
 export const ChevronUp = chevron('18 15 12 9 6 15');
 export const ChevronRight = chevron('9 18 15 12 9 6');
 export const ChevronLeft = chevron('15 18 9 12 15 6');
+
+/**
+ * Filled disclosure caret — a solid right-pointing triangle, the panel/section
+ * collapse glyph (distinct from the OUTLINE {@link ChevronRight}). Shared by
+ * CollapsibleSection, DynamicList, and the Gradient Explorer section headers,
+ * which previously each inlined the identical `viewBox="0 0 6 10"` triangle.
+ * Size, colour, and the rotate-90-on-open all come from `className` (callers
+ * pass e.g. `w-2 h-2 transition-transform rotate-90`).
+ */
+export const CaretRight: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 6 10" fill="currentColor">
+    <path d="M0 0l6 5-6 5z" />
+  </svg>
+);

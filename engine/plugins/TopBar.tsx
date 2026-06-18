@@ -33,6 +33,7 @@ import { ProjectName } from './topbar/ProjectName';
 import { FpsCounter } from './topbar/FpsCounter';
 import { AdaptiveResolutionBadge } from './viewport/AdaptiveResolutionBadge';
 import { useEngineStore } from '../../store/engineStore';
+import { createListRegistry } from '../../store/createListRegistry';
 
 export type TopBarSlot = 'left' | 'center' | 'right';
 
@@ -44,28 +45,16 @@ export interface TopBarItem {
     when?: () => boolean;
 }
 
-// Module-level registry + subscribers. Keep registration synchronous
-// (no store) so item availability matches module-load order.
-const _items = new Map<string, TopBarItem>();
-const _subscribers = new Set<() => void>();
-let _rev = 0;
-const _notify = () => { _rev++; _subscribers.forEach((fn) => fn()); };
+// Module-level registry. Keep registration synchronous (no store) so item
+// availability matches module-load order. Backed by the shared id-keyed
+// `createListRegistry` primitive.
+const _registry = createListRegistry<TopBarItem>();
 
 export const topbar = {
-    register(item: TopBarItem) {
-        _items.set(item.id, item);
-        _notify();
-    },
-    unregister(id: string) {
-        if (_items.delete(id)) _notify();
-    },
-    list(): TopBarItem[] {
-        return Array.from(_items.values());
-    },
-    clear() {
-        _items.clear();
-        _notify();
-    },
+    register(item: TopBarItem) { _registry.register(item); },
+    unregister(id: string) { _registry.unregister(id); },
+    list(): TopBarItem[] { return _registry.getAll(); },
+    clear() { _registry.clear(); },
 };
 
 let _installed = false;
@@ -103,26 +92,19 @@ interface TopBarHostProps {
 }
 
 export const TopBarHost: React.FC<TopBarHostProps> = ({ hidden = false, className = '' }) => {
-    // useSyncExternalStore subscribes to the module-level registry so
-    // registrations after mount still propagate.
-    const rev = useSyncExternalStore(
-        (onStoreChange) => { _subscribers.add(onStoreChange); return () => { _subscribers.delete(onStoreChange); }; },
-        () => _rev,
-        () => _rev,
-    );
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    void rev; // consumed only for re-render trigger
+    // Subscribe to the module-level registry so registrations after mount
+    // still propagate. getAll() is a stable snapshot (safe getSnapshot).
+    const items = useSyncExternalStore(_registry.subscribe, _registry.getAll, _registry.getAll);
     // Subscribe to mobile-state flags so `when:` predicates that read
     // `isMobileSnapshot()` re-evaluate when the user toggles Force
     // Mobile / Force Desktop or rotates / resizes across the breakpoint.
     useEngineStore((s) => s.uiModePreference);
     useEngineStore((s) => s.isDeviceMobile);
-    const items = _items;
 
     if (hidden) return null;
 
     const slotItems = (slot: TopBarSlot) =>
-        Array.from(items.values())
+        items
             .filter((i) => i.slot === slot && (!i.when || i.when()))
             .sort((a, b) => a.order - b.order);
 

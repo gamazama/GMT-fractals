@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { SectionLabel } from './SectionLabel';
-import { PlusIcon, TrashIcon } from './Icons';
+import { PlusIcon, TrashIcon, CloseIcon } from './Icons';
+import { CaretRight } from './Icons2';
 
 // ─── Accent color presets ──────────────────────────────────────────────────
 // Each preset defines border, background, and text classes for active/inactive states.
@@ -96,9 +97,7 @@ export const DynamicListSearch: React.FC<DynamicListSearchProps> = ({
                     onClick={() => onChange('')}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white transition-colors"
                 >
-                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
+                    <CloseIcon size={8} />
                 </button>
             )}
         </div>
@@ -138,13 +137,7 @@ interface DynamicListItemProps {
 }
 
 const ChevronIcon: React.FC<{ open: boolean }> = ({ open }) => (
-    <svg
-        className={`w-2 h-2 transition-transform ${open ? 'rotate-90' : ''}`}
-        viewBox="0 0 6 10"
-        fill="currentColor"
-    >
-        <path d="M0 0l6 5-6 5z" />
-    </svg>
+    <CaretRight className={`w-2 h-2 transition-transform ${open ? 'rotate-90' : ''}`} />
 );
 
 export const DynamicListItem: React.FC<DynamicListItemProps> = ({

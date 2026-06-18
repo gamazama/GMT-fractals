@@ -7,7 +7,8 @@
  * gallery's Esc handler doesn't also fire); Enter triggers "Open in GMT".
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { GalleryItem } from './GalleryClient';
+import { GalleryItem, GALLERY_FEATURED_BADGE } from './GalleryClient';
+import { Modal, Z } from '../../components/ui';
 
 interface Props {
     item: GalleryItem;
@@ -122,11 +123,20 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
     };
 
     return (
+        <Modal
+            onClose={onClose}
+            z={Z.overlayNested}
+            dismissOnEscape={false}
+            backdropClassName="bg-black/95 backdrop-blur-md"
+            className="p-0"
+        >
         <div
-            className="fixed inset-0 z-[2050] bg-black/95 backdrop-blur-md flex flex-col"
-            // Only a click on the backdrop itself closes — guard against clicks
+            className="w-full h-full flex flex-col"
+            // Only a click on the dark area itself closes — guard against clicks
             // bubbling up from the sidebar / content inside, which would
-            // otherwise dismiss the lightbox on a stray mis-click.
+            // otherwise dismiss the lightbox on a stray mis-click. Esc (zoom-aware)
+            // + ←/→/Enter are owned by the capture-phase keydown effect above, so
+            // Modal's own Escape dismissal is disabled.
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
             <div className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/40 flex-shrink-0">
@@ -223,7 +233,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                                 <span title={new Date(item.created_at).toLocaleString()}>{formatRelative(item.created_at)}</span>
                             </div>
                             {item.featured && (
-                                <span className="inline-block mt-2 text-[8px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 uppercase tracking-wider font-bold">
+                                <span className={`inline-block mt-2 text-[8px] px-1.5 py-0.5 rounded ${GALLERY_FEATURED_BADGE} uppercase tracking-wider font-bold`}>
                                     Featured
                                 </span>
                             )}
@@ -323,5 +333,6 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                 </aside>
             </div>
         </div>
+        </Modal>
     );
 };
