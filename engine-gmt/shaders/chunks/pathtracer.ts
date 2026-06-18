@@ -1,4 +1,5 @@
 
+import { getVNDFSamplerGLSL } from './vndf';
 
 export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochasticShadows: boolean = true, areaLightsActive: boolean = false) => {
 
@@ -86,65 +87,13 @@ vec3 cosineSampleHemisphere(vec3 n, vec2 seedVec) {
     return normalize(t * p.x + b * p.y + n * rz);
 }
 
-vec3 importanceSampleGGX(vec3 n, float roughness, vec2 seedVec) {
-    vec2 xi = vec2(
-        fract(seedVec.x * phi),
-        fract(seedVec.y * phi + 0.5)
-    );
-    float a = roughness * roughness;
-    float azimuth = TAU * xi.x;
-    float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a*a - 1.0) * xi.y));
-    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta*cosTheta));
-    vec3 h = vec3(cos(azimuth) * sinTheta, sin(azimuth) * sinTheta, cosTheta);
-    vec3 t, b;
-    buildTangentBasis(n, t, b);
-    return normalize(t * h.x + b * h.y + n * h.z);
-}
-
-// Heitz 2018 — "Sampling the GGX Distribution of Visible Normals."
-// Returns a half-vector h in WORLD space, sampled from the visible normal
-// distribution conditioned on viewDir. Compared to half-vector sampling
-// (importanceSampleGGX above): the resulting BRDF/PDF weight collapses to
-// F * G2/G1 (bounded), eliminating the grazing-angle fireflies of the
-// classical NdotH/(NdotV*NdotH) form. Same compute cost; isotropic case.
-vec3 sampleGGXVNDF(vec3 n, vec3 viewDir, float roughness, vec2 seedVec) {
-    vec2 u = vec2(
-        fract(seedVec.x * phi),
-        fract(seedVec.y * phi + 0.5)
-    );
-    float a = roughness * roughness;
-
-    // 1. Build tangent basis around n; transform viewDir into tangent space
-    //    (z-up = surface normal).
-    vec3 t, b;
-    buildTangentBasis(n, t, b);
-    vec3 Ve = vec3(dot(viewDir, t), dot(viewDir, b), dot(viewDir, n));
-
-    // 2. Heitz §3.2: stretch view direction into the hemisphere config.
-    vec3 Vh = normalize(vec3(a * Ve.x, a * Ve.y, Ve.z));
-
-    // 3. Heitz §4.1: orthonormal basis aligned with Vh.
-    float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
-    vec3 T1 = lensq > 0.0 ? vec3(-Vh.y, Vh.x, 0.0) * inversesqrt(lensq) : vec3(1.0, 0.0, 0.0);
-    vec3 T2 = cross(Vh, T1);
-
-    // 4. Heitz §4.2: sample uniformly in the projected disk, then warp.
-    float r = sqrt(u.x);
-    float phiVN = TAU * u.y;
-    float t1 = r * cos(phiVN);
-    float t2 = r * sin(phiVN);
-    float s = 0.5 * (1.0 + Vh.z);
-    t2 = (1.0 - s) * sqrt(1.0 - t1 * t1) + s * t2;
-
-    // 5. Heitz §4.3: reproject onto the hemisphere.
-    vec3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - t1 * t1 - t2 * t2)) * Vh;
-
-    // 6. Unstretch back to ellipsoid configuration → tangent-space half-vector.
-    vec3 Ne = normalize(vec3(a * Nh.x, a * Nh.y, max(0.0, Nh.z)));
-
-    // 7. Transform back to world space.
-    return normalize(t * Ne.x + b * Ne.y + n * Ne.z);
-}
+// GGX VNDF bounce sampler — bounded spherical caps, shared with the raymarched
+// reflection path via one emitter (no duplicate algorithm). The previous Heitz
+// 2018 routine is superseded: spherical caps is cheaper, never samples below the
+// horizon, and the bound trims occluded normals on rough surfaces. The bounce
+// seed is passed straight through (sobol/CP or blue-noise is already a good 2D
+// sample — no extra fract*phi hash needed). @see docs/adr/0068
+${getVNDFSamplerGLSL('sampleGGXVNDF')}
 
 #ifdef PT_AREA_LIGHTS
 // Closest-hit test against type-2 sphere area lights for the path tracer's
@@ -396,10 +345,49 @@ float pdfEnvImportance(vec3 dir) {
 }
 #endif
 
-// Direction sampling + PDF for the env estimator. Default branch is uniform
-// sphere (Marsaglia 1972, pdf = 1/(4π)). The CDF branch lights up under
-// PT_ENV_MIS_IS — same call sites, two implementations.
+// Procedural-sky sun importance sampling. The procedural sky has no luminance
+// CDF (that's texture-only), so its concentrated sun lobe — proceduralSunDir(),
+// pow(cos,100) in env.ts — was sampled only by the uniform sphere, hitting the
+// ~7° sun cone <1% of the time → noise on rough/diffuse surfaces. Sample a
+// MIXTURE: probability PROC_SUN_PROB a uniform cone around the sun, else a
+// uniform sphere. The mixture pdf keeps the env-vs-BSDF MIS exactly correct
+// (sampleEnvDirection and pdfEnvSample return the SAME density). @see docs/adr/0070
+const float PROC_SUN_COS_MAX = 0.98;  // ~11° cone — covers the bright sun lobe
+const float PROC_SUN_PROB    = 0.5;   // mixture weight for the sun branch
+
+float pdfProceduralEnv(vec3 dir) {
+    float coneInside = (dot(dir, proceduralSunDir()) >= PROC_SUN_COS_MAX)
+        ? 1.0 / (TAU * (1.0 - PROC_SUN_COS_MAX)) : 0.0;
+    return PROC_SUN_PROB * coneInside + (1.0 - PROC_SUN_PROB) * (1.0 / (4.0 * PI));
+}
+
+vec3 sampleProceduralEnv(vec2 seed, out float pdf) {
+    vec3 sunDir = proceduralSunDir();
+    vec3 dir;
+    if (seed.x < PROC_SUN_PROB) {
+        // Uniform cone around the sun. Reuse seed.x (rescaled) as a sample dim.
+        float u1 = seed.x / PROC_SUN_PROB;
+        float cosT = 1.0 - u1 * (1.0 - PROC_SUN_COS_MAX);
+        float sinT = sqrt(max(0.0, 1.0 - cosT * cosT));
+        float ph = TAU * seed.y;
+        vec3 t, b; buildTangentBasis(sunDir, t, b);
+        dir = normalize(t * (sinT * cos(ph)) + b * (sinT * sin(ph)) + sunDir * cosT);
+    } else {
+        float u1 = (seed.x - PROC_SUN_PROB) / (1.0 - PROC_SUN_PROB);
+        float z = 1.0 - 2.0 * u1;
+        float r = sqrt(max(0.0, 1.0 - z * z));
+        float ph = TAU * seed.y;
+        dir = vec3(r * cos(ph), r * sin(ph), z);
+    }
+    pdf = pdfProceduralEnv(dir);  // full mixture density, not the chosen branch's
+    return dir;
+}
+
+// Direction sampling + PDF for the env estimator. Procedural sky → analytic sun
+// mixture; texture env under PT_ENV_MIS_IS → luminance CDF; otherwise uniform
+// sphere (Marsaglia 1972, pdf = 1/(4π)). Same call sites, runtime-selected.
 vec3 sampleEnvDirection(vec2 seed, out float pdf) {
+    if (uEnvSource < 0.5 && uUseEnvMap < 0.5) return sampleProceduralEnv(seed, pdf);
 #ifdef PT_ENV_MIS_IS
     return sampleEnvImportance(seed, pdf);
 #else
@@ -412,13 +400,38 @@ vec3 sampleEnvDirection(vec2 seed, out float pdf) {
 }
 
 // PDF lookup for the BSDF-side MIS weight at the !hit branch. Argument is
-// the world-space direction the bounce ray escaped along.
+// the world-space direction the bounce ray escaped along. Must mirror
+// sampleEnvDirection's density branch-for-branch or MIS goes biased.
 float pdfEnvSample(vec3 dir) {
+    if (uEnvSource < 0.5 && uUseEnvMap < 0.5) return pdfProceduralEnv(dir);
 #ifdef PT_ENV_MIS_IS
     return pdfEnvImportance(dir);
 #else
     return 1.0 / (4.0 * PI);
 #endif
+}
+
+// Geometry-only any-hit visibility march for the env-NEE shadow ray. Cheaper
+// than routing it through tracePTBounce/traceSceneLean, which also compute the
+// color, trap, glow and volumetric data the env-NEE then discards — here we
+// march DE_Dist alone and early-out at the first hit. Returns true when the ray
+// reaches the sky (MAX_DIST) unobstructed by geometry. Deliberately independent
+// of the shadow feature: GetHardShadow is stubbed to 1.0 when shadows aren't
+// compiled, which would leak the environment straight through solid geometry.
+// Budget mirrors the shadow march (uShadowSteps); on exhaustion it returns
+// visible, matching GetHardShadow. @see docs/adr/0070
+bool envVisibility(vec3 ro, vec3 rd) {
+    float t = 0.0;
+    float fudge = uFudgeFactor;
+    int limit = uShadowSteps;
+    for (int i = 0; i < 256; i++) {
+        if (i >= limit) break;
+        float h = DE_Dist(ro + rd * t);
+        if (h < max(1.0e-6, t * 0.0002)) return false;  // hit geometry → occluded
+        t += h * fudge;
+        if (t > MAX_DIST) return true;                   // reached the sky
+    }
+    return true;
 }
 #endif
 
@@ -840,14 +853,20 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
             float envNdotL = max(0.0, dot(n, envDir));
             if (envNdotL > 0.001 && pdf_env_nee > 1.0e-10) {
                 vec3 envOrigin = p_ray + n * (biasEps * 2.0);
-                float envD; vec4 envResult; vec3 envGlow = vec3(0.0); float envVol = 0.0; vec3 envScatter = vec3(0.0);
-                int  envLightHit;
-                bool envHit = tracePTBounce(envOrigin, envDir, envD, envResult, envGlow, seed + float(bounce) * 5.31, envVol, envScatter, envLightHit);
-                // Sky reached only when nothing intercepted: no fractal AND no
-                // sphere light. Light occlusion suppresses env contribution; the
-                // light's own emission is delivered by the dedicated NEE block
-                // above (or BSDF-side hit at the next iter) — not double-counted.
-                if (!envHit && envLightHit < 0) {
+                // Cheap geometry-only visibility (was a full tracePTBounce that
+                // discarded its color/glow/volumetric work). Env is added only
+                // when nothing intercepts: no geometry AND no sphere light.
+                bool envBlocked = !envVisibility(envOrigin, envDir);
+                #ifdef PT_AREA_LIGHTS
+                    // A sphere light across the env ray suppresses the env
+                    // contribution — its emission is delivered by the light-NEE
+                    // block / BSDF-side hit, not double-counted here.
+                    if (!envBlocked) {
+                        int envLightIdx;
+                        if (intersectAreaLight(envOrigin, envDir, MAX_DIST, envLightIdx) > 0.0) envBlocked = true;
+                    }
+                #endif
+                if (!envBlocked) {
                     // Full BSDF eval at envDir (matches the bounce-direction
                     // sampler's mixture: VNDF specular + Lambert diffuse).
                     vec3 hEnv = normalize(envDir + viewDir);

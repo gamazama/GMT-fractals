@@ -4,6 +4,17 @@
 **Status:** Accepted
 **Scope:** `engine-gmt/features/reflections/index.ts` (`REFL_RAYMARCH_SHADING`), `engine-gmt/features/reflections/shader.ts` (`getReflectionsGLSL`)
 
+> **Update 2026-06-19 (sampler unified with the PT path; decision unchanged):**
+> The bounded spherical-cap VNDF sampler is now a single source of truth in
+> `engine-gmt/shaders/chunks/vndf.ts` (`getVNDFSamplerGLSL(fnName)`), emitted as
+> `sampleReflVNDF` in the reflection chunk and as `sampleGGXVNDF` in the path
+> tracer (`pathtracer.ts`), which **replaces the PT's former Heitz 2018
+> sampler**. The emitter is self-contained (inlines a Duff 2017 ONB) so it can be
+> emitted under either name into the mutually-exclusive PT / Direct shaders with
+> no collision and no Balanced-profile cost. The now-orphaned `importanceSampleGGX`
+> half-vector sampler was removed from `pathtracer.ts`. The technique choice
+> (bounded spherical-cap VNDF) is unchanged — it now also governs PT bounces.
+
 ## Context
 
 The raymarched reflection mode (`reflectionMode === REFL_MODE_RAYMARCH`,

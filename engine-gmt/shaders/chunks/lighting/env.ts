@@ -5,6 +5,11 @@ export const LIGHTING_ENV = `
 // ENVIRONMENT MAP
 // ------------------------------------------------------------------
 
+// Direction of the procedural sky's sun. Single source of truth — the
+// procedural branch of GetEnvMap and the path tracer's analytic sun NEE
+// (sampleProceduralEnv) both read it, so they can't drift. @see docs/adr/0070
+vec3 proceduralSunDir() { return normalize(vec3(1.0, 4.0, 2.0)); }
+
 vec3 GetEnvMap(vec3 dir, float roughness) {
     // 1. Apply Rotation (CPU Optimized: uEnvRotationMatrix, identity when rotation is 0)
     dir.xz = uEnvRotationMatrix * dir.xz;
@@ -53,7 +58,7 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
         float specPower = mix(100.0, 0.5, roughness * roughness);  // Sharp (100) for mirrors, soft (0.5) for rough
         float rimPower = mix(10.0, 1.0, roughness);  // Rim falloff exponent
 
-        vec3 sunDir = normalize(vec3(1.0, 4.0, 2.0));  // Fixed upper-right sun position
+        vec3 sunDir = proceduralSunDir();  // Fixed upper-right sun position
         float sunDot = max(0.0, dot(dir, sunDir));
         float light = pow(sunDot, specPower);
 

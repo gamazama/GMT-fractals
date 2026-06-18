@@ -252,7 +252,7 @@ export const LightingFeature: FeatureDefinition = {
             description: 'Evaluates every active light per bounce instead of one random light. Reduces shadow noise at the cost of N× more shadow rays.'
         },
         ptReflMode: {
-            type: 'float', default: 0.0, label: 'Env Sampling', shortId: 'prm',
+            type: 'float', default: 2.0, label: 'Env Sampling', shortId: 'prm',
             group: 'engine_settings', parentId: 'ptEnabled',
             options: [
                 { label: 'Off',           value: 0.0, estCompileMs: 0 },
@@ -263,7 +263,7 @@ export const LightingFeature: FeatureDefinition = {
             description: 'Direct env-map sampling with MIS for path-traced reflections. Env MIS handles broad skies; Env MIS + IS adds importance sampling for HDR maps with sun discs / concentrated lights. Replaces the older Environment NEE (which only handled diffuse).'
         },
         ptSobolBounce: {
-            type: 'boolean', default: false, label: 'Sobol Bounce Sampling', shortId: 'psb',
+            type: 'boolean', default: true, label: 'Sobol Bounce Sampling', shortId: 'psb',
             group: 'engine_settings', parentId: 'ptEnabled',
             ui: 'checkbox', onUpdate: 'compile', noReset: true,
             estCompileMs: 50,
@@ -410,9 +410,9 @@ export const LightingFeature: FeatureDefinition = {
             // existed) lack `ptReflMode` entirely — when they also have
             // `ptEnvNEE = true`, auto-promote to Env MIS so their look
             // doesn't regress on first load. New scenes always write
-            // `ptReflMode` explicitly (default 0), so the migration branch
-            // never fires past the upgrade — explicitly turning the mode off
-            // sticks even if the orphan ptEnvNEE field is still true.
+            // `ptReflMode` explicitly (default Env MIS + IS = 2.0), so the
+            // migration branch never fires past the upgrade — explicitly turning
+            // the mode off sticks even if the orphan ptEnvNEE field is still true.
             const reflModeRaw = state?.ptReflMode;
             let reflMode: number;
             if (reflModeRaw === undefined && state?.ptEnvNEE === true) {
