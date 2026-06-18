@@ -19,6 +19,7 @@ import { CanonicalHero } from './CanonicalHero';
 import { HeroSlot } from './HeroSlot';
 import { fitRampToStops } from '../core/stopFit';
 import { clamp01 } from '../../utils/stopOps';
+import { useFlash } from './useFlash';
 
 const MODES: { id: Img2GradMode; label: string }[] = [
   { id: 'distill', label: 'Distill' },
@@ -104,11 +105,7 @@ export const ImageStage: React.FC = () => {
   );
 
   const [over, setOver] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const flash = useCallback((m: string) => {
-    setToast(m);
-    window.setTimeout(() => setToast(null), 1400);
-  }, []);
+  const { toast, flash } = useFlash(1400);
 
   // --- image loading: decode → downsample to ≤160px → ingest (shared with the scene
   // document round-trip via decodeAndIngest) ---

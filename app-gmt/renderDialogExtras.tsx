@@ -11,6 +11,7 @@ import { getProxy } from '../engine-gmt/engine/worker/WorkerProxy';
 import { VIDEO_FORMATS } from '../data/constants';
 import { canEncodeFormat } from '../engine/export/videoEncoder';
 import { formatDurationMs, formatTimeWithUnits } from '../components/timeline/exportHelpers';
+import { WarningNote } from '../components/WarningNote';
 import type {
     RenderDialogExtraFieldsProps,
     RenderDialogConfig,
@@ -103,9 +104,9 @@ export const AppGmtExtraWarning: React.FC<{ cfg: RenderDialogConfig; extra: AppG
     const tripped = isFirefox && fmt.codec === 'avc' && cfg.bitrate > 12;
     if (!tripped) return null;
     return (
-        <div className="mx-1 mb-2 px-2 py-1 text-[9px] text-amber-400/90 leading-tight bg-amber-900/20 border border-amber-500/30 rounded">
+        <WarningNote className="mx-1 mb-2 px-2 py-1 text-[9px] text-amber-400/90 leading-tight">
             Firefox caps H.264 output at ~31 Mbps regardless of this setting.
-        </div>
+        </WarningNote>
     );
 };
 
@@ -289,9 +290,9 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
                     </div>
                 )}
                 {showImageSeqHint && (
-                    <div className="px-2 py-1 mb-1 bg-amber-900/20 border border-amber-500/30 rounded text-[9px] text-amber-400/90 leading-tight">
+                    <WarningNote className="px-2 py-1 mb-1 text-[9px] text-amber-400/90 leading-tight">
                         Image sequences need the File System Access API (directory picker), available in Chrome / Edge.
-                    </div>
+                    </WarningNote>
                 )}
             </div>
         </div>

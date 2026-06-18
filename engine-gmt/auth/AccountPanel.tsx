@@ -435,13 +435,14 @@ export const AccountPanel: React.FC = () => {
                                         >
                                             Cancel
                                         </GhostButton>
-                                        <button
+                                        <GhostButton
+                                            variant="danger"
                                             onClick={deleteAccount}
                                             disabled={busy}
-                                            className="flex-1 py-1.5 rounded text-[10px] bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/40"
+                                            className="flex-1 py-1.5 rounded text-[10px]"
                                         >
                                             Delete forever
-                                        </button>
+                                        </GhostButton>
                                     </div>
                                 </ErrorNote>
                             )}

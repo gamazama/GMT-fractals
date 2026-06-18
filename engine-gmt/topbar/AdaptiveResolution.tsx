@@ -1,16 +1,10 @@
 import React from 'react';
 import { useEngineStore } from '../../store/engineStore';
+import { AdaptiveIcon } from '../../components/Icons2';
 import { isMouseOverCanvas } from '../engine/worker/ViewportRefs';
 import { getProxy } from '../engine/worker/WorkerProxy';
 
 const engine = getProxy();
-
-const AdaptiveIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-        <polyline points="22 2 13 11 9 7" />
-    </svg>
-);
 
 export const AdaptiveResolution: React.FC = () => {
     const quality = useEngineStore(s => (s as any).quality);

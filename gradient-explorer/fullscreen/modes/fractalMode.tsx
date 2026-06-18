@@ -22,8 +22,9 @@
  * @see engine/fractal/FractalColorRenderer.ts (the renderer it drives)
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { ScalarInput } from '../../../components/inputs/ScalarInput';
+import { useClipboardCopy } from '../../../hooks/useClipboardCopy';
 import { createLogMapping } from '../../../components/inputs/primitives/FormatUtils';
 import { getFullscreenState } from '../../../palette/store/fullscreenStore';
 import {
@@ -366,15 +367,14 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
  *  store setters; Reset/Copy reach the live renderer through the module-scoped {@link activeControl}. */
 const FractalControls: React.FC = () => {
   const fr = useFractalState();
-  const [coordsCopied, setCoordsCopied] = useState(false);
+  const clip = useClipboardCopy(1500);
+  const coordsCopied = clip.state === 'copied';
 
   const copyCoords = useCallback(() => {
     const json = activeControl?.copyCoords();
     if (json == null) return;
-    const done = (): void => { setCoordsCopied(true); setTimeout(() => setCoordsCopied(false), 1500); };
-    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(json).then(done).catch(done);
-    else done();
-  }, []);
+    void clip.copy(json);
+  }, [clip]);
 
   return (
     <div className="flex flex-wrap items-center gap-3">

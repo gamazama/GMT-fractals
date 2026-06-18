@@ -14,6 +14,7 @@
  */
 import React from 'react';
 import { menu } from '../../engine/plugins/Menu';
+import { NetworkIcon } from '../../components/Icons';
 import { useGalleryStore } from './galleryStore';
 import { SubmitGalleryModal } from './SubmitGalleryModal';
 
@@ -30,16 +31,6 @@ export const SubmitGalleryOverlay: React.FC = () => {
     const close  = useGalleryStore((s) => s.closeSubmit);
     return <SubmitGalleryModal open={isOpen} onClose={close} />;
 };
-
-const GalleryIcon: React.FC = () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" />
-        <rect x="14" y="3" width="7" height="7" />
-        <rect x="14" y="14" width="7" height="7" />
-        <path d="M10 7h4" />
-        <path d="M17 10v4" />
-    </svg>
-);
 
 const SubmitIcon: React.FC = () => (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -67,7 +58,7 @@ export const installGallery = (options: InstallGalleryOptions = {}) => {
         id: 'browse-gallery',
         type: 'button',
         label: options.label ?? 'Browse Online Gallery',
-        icon: <GalleryIcon />,
+        icon: <NetworkIcon />,
         order: options.order ?? 25,
         onSelect: () => {
             useGalleryStore.getState().openGallery();

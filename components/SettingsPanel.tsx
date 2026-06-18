@@ -116,16 +116,20 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
     }, [settings]);
 
     // Group by section, preserving registration order, then `order` within a section.
+    // `when?` predicates gate visibility; re-evaluated via `tick` so a pref change can
+    // reveal/hide a gated descriptor.
     const sections = useMemo(() => {
+        void tick;
         const bySection = new Map<string, SettingDescriptor[]>();
         for (const s of settings) {
+            if (s.when && !s.when()) continue;
             const arr = bySection.get(s.section) ?? [];
             arr.push(s);
             bySection.set(s.section, arr);
         }
         for (const arr of bySection.values()) arr.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         return [...bySection.entries()];
-    }, [settings]);
+    }, [settings, tick]);
 
     // Raw storage inspector — recomputed on each tick (after deletes / writes).
     const storageEntries = useMemo(() => {
@@ -200,12 +204,13 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
                                         <div className="flex items-center gap-2">
                                             <span className="text-[10px] text-red-300">Delete all stored data?</span>
                                             <GhostButton onClick={() => setConfirmClear(false)} className="rounded px-2 py-1 text-[10px] text-gray-300 transition-colors">Cancel</GhostButton>
-                                            <button
+                                            <GhostButton
+                                                variant="danger"
                                                 onClick={() => { storageEntries.forEach(({ key }) => safeLocalRemove(key)); setConfirmClear(false); bump(); }}
-                                                className="rounded px-2 py-1 text-[10px] bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/40 transition-colors"
+                                                className="rounded px-2 py-1 text-[10px] transition-colors"
                                             >
                                                 Clear all
-                                            </button>
+                                            </GhostButton>
                                         </div>
                                     ) : (
                                         <GhostButton onClick={() => setConfirmClear(true)} className="rounded px-2 py-1 text-[10px] text-gray-400 transition-colors">

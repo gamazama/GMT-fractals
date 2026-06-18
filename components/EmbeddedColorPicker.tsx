@@ -15,6 +15,7 @@ import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { useInteractionDrag } from '../engine/hooks/useInteractionDrag';
 import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
 import { collectHelpIds } from '../utils/helpUtils';
+import { useClipboardCopy } from '../hooks/useClipboardCopy';
 import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisionTrackDrag';
 
@@ -195,7 +196,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const [hsb, setHsb] = useState<HSB>(() => safeHsb(color));
     const [recents, setRecents] = useState<string[]>(recentsCache);
     const [hexDraft, setHexDraft] = useState(color.toUpperCase());
-    const [copied, setCopied] = useState(false);
+    const clip = useClipboardCopy(1000);
+    const copied = clip.state === 'copied';
     const [eyedropError, setEyedropError] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState<boolean>(() => loadDetailsOpen());
 
@@ -419,9 +421,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     };
     const endHue = endDrag(hueDrag);
 
-    const doCopy = () => {
-        navigator.clipboard?.writeText(hex).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1000); }).catch(() => {});
-    };
+    const doCopy = () => { void clip.copy(hex); };
     const doEyedrop = async () => {
         const ED = getEyeDropper();
         if (!ED) { setEyedropError(true); setTimeout(() => setEyedropError(false), 2000); return; }

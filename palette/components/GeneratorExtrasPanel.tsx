@@ -13,6 +13,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { GenericDropdown } from '../../components/GenericDropdown';
 import { EXPORT_FORMATS, getExportFormat, grdStopCount, aiReductionError, aiStopCount, AI_LOSSY_DELTA, AI_STOP_LIMIT } from '../core/exportFormats';
 import { useGeneratorStore, useGeneratorDerived } from '../store/generatorStore';
+import { useFlash } from './useFlash';
 
 export const GeneratorExtrasPanel: React.FC = () => {
   const exportFmt = useGeneratorStore((s) => s.exportFmt);
@@ -20,12 +21,8 @@ export const GeneratorExtrasPanel: React.FC = () => {
   const resetAll = useGeneratorStore((s) => s.resetAll);
   const { ramp } = useGeneratorDerived();
 
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, flash } = useFlash(1400);
   const [showPreview, setShowPreview] = useState(false);
-  const flash = useCallback((m: string) => {
-    setToast(m);
-    window.setTimeout(() => setToast(null), 1400);
-  }, []);
 
   const fmtDef = useMemo(() => getExportFormat(exportFmt) ?? EXPORT_FORMATS[0], [exportFmt]);
   // .ai / .idml flatten the ramp to ≤AI_STOP_LIMIT stops; warn if this one loses detail.

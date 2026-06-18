@@ -38,6 +38,7 @@ import { setDragOrigin, markPickLanded } from '../store/dragVisual';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { configToName } from '../core/facetName';
 import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
+import { useFlash } from './useFlash';
 import { FavientsIcon } from './FavientsIcon';
 import type { RGB } from '../core/oklab';
 import { useEngineStore } from '../../store/engineStore';
@@ -682,7 +683,7 @@ export const FavientsPanel: React.FC = () => {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
   const [focusGroup, setFocusGroup] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, flash } = useFlash(1300);
   const depth = useRef(0);
 
   // Shelf layout (grid|list) — persisted per-host (favientsPanelPersist). Search is
@@ -712,11 +713,6 @@ export const FavientsPanel: React.FC = () => {
 
   const query = search.trim().toLowerCase();
   const filterActive = query.length > 0;
-
-  const flash = (m: string) => {
-    setToast(m);
-    window.setTimeout(() => setToast(null), 1300);
-  };
 
   const pf = useEngineStore((s) => (s as Record<string, any>).paletteFilters) as Record<string, any> | undefined;
   const swatchW = Math.max(8, Math.round(pf?.swatchSize?.x ?? DEFAULT_SWATCH_W));

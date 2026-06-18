@@ -48,6 +48,10 @@ export interface SettingDescriptor {
     subscribe?: (cb: () => void) => () => void;
     /** Sort order within the section (ascending; default 0). */
     order?: number;
+    /** Optional visibility predicate — the panel hides this descriptor when it returns
+     *  false (e.g. advanced-only prefs gated on a mode flag). Re-evaluated on each panel
+     *  render; omit for always-visible prefs. */
+    when?: () => boolean;
 }
 
 const registry = createListRegistry<SettingDescriptor>();

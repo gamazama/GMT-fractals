@@ -287,12 +287,13 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                                 >
                                     Done
                                 </GhostButton>
-                                <button
+                                <GhostButton
+                                    variant="primary"
                                     onClick={openGalleryFromSuccess}
-                                    className="flex-1 py-2 px-3 rounded text-[11px] font-bold bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-100 border border-cyan-500/50"
+                                    className="flex-1 py-2 px-3 rounded text-[11px] font-bold text-cyan-100"
                                 >
                                     View gallery
-                                </button>
+                                </GhostButton>
                             </div>
                         </div>
                     )}
@@ -456,13 +457,14 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                                 >
                                     Cancel
                                 </GhostButton>
-                                <button
+                                <GhostButton
                                     type="submit"
+                                    variant="primary"
                                     disabled={!canSubmit}
-                                    className="flex-[2] py-2 px-3 rounded text-[11px] font-bold bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-100 border border-cyan-500/50 disabled:opacity-30 disabled:cursor-not-allowed"
+                                    className="flex-[2] py-2 px-3 rounded text-[11px] font-bold text-cyan-100 disabled:opacity-30 disabled:cursor-not-allowed"
                                 >
                                     {submitting ? 'Submitting…' : 'Submit to Gallery'}
-                                </button>
+                                </GhostButton>
                             </footer>
                         </form>
                     )}

@@ -11,6 +11,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { GenericDropdown } from '../../components/GenericDropdown';
 import { EXPORT_FORMATS, getExportFormat, grdStopCount, aiReductionError, aiStopCount, AI_LOSSY_DELTA, AI_STOP_LIMIT } from '../core/exportFormats';
 import { useImageStore, useImageDerived } from '../store/imageStore';
+import { useFlash } from './useFlash';
 
 export const ImageExtrasPanel: React.FC = () => {
   const exportFmt = useImageStore((s) => s.exportFmt);
@@ -18,12 +19,8 @@ export const ImageExtrasPanel: React.FC = () => {
   const derived = useImageDerived();
   const ramp = derived?.ramp ?? null;
 
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, flash } = useFlash(1400);
   const [showPreview, setShowPreview] = useState(false);
-  const flash = useCallback((m: string) => {
-    setToast(m);
-    window.setTimeout(() => setToast(null), 1400);
-  }, []);
 
   const fmtDef = useMemo(() => getExportFormat(exportFmt) ?? EXPORT_FORMATS[0], [exportFmt]);
   // .ai / .idml flatten the ramp to ≤AI_STOP_LIMIT stops; warn if this one loses detail.

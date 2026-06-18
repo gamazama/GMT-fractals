@@ -144,12 +144,13 @@ export const BucketRenderResultModal: React.FC = () => {
                         >
                             Skip
                         </GhostButton>
-                        <button
+                        <GhostButton
+                            variant="primary"
                             onClick={onSubmit}
-                            className="flex-1 py-2 px-3 rounded text-[11px] font-bold bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-100 border border-cyan-500/50"
+                            className="flex-1 py-2 px-3 rounded text-[11px] font-bold text-cyan-100"
                         >
                             Submit to Gallery
-                        </button>
+                        </GhostButton>
                     </div>
                 </div>
             </div>

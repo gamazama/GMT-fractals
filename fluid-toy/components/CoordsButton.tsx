@@ -5,8 +5,9 @@
  * the JSON back to set center/centerLow/zoom/juliaC/colorMapping/etc.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { useSlice } from '../../engine/typedSlices';
+import { useClipboardCopy } from '../../hooks/useClipboardCopy';
 import { useDeepZoomDiag } from '../deepZoom/diagnostics';
 
 export const CoordsButton: React.FC = () => {
@@ -14,7 +15,8 @@ export const CoordsButton: React.FC = () => {
     const palette = useSlice('palette');
     const deepZoom = useSlice('deepZoom');
     const diag = useDeepZoomDiag();
-    const [copied, setCopied] = useState(false);
+    const clip = useClipboardCopy(1500);
+    const copied = clip.state === 'copied';
 
     const copy = useCallback(() => {
         const json = JSON.stringify({
@@ -38,10 +40,8 @@ export const CoordsButton: React.FC = () => {
         }, null, 0);
         // eslint-disable-next-line no-console
         console.log('[fluid-toy coords]', json);
-        const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1500); };
-        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(json).then(done).catch(done);
-        else done();
-    }, [julia, palette, deepZoom, diag]);
+        void clip.copy(json);
+    }, [julia, palette, deepZoom, diag, clip]);
 
     return (
         <button

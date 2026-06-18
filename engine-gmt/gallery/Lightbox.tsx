@@ -245,14 +245,15 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                         )}
 
                         <div className="space-y-2 pt-1">
-                            <button
+                            <GhostButton
+                                variant="primary"
                                 onClick={() => onLoadScene(item)}
                                 disabled={loading}
                                 title="Opens this scene in the editor — tweak params, colours, camera, then re-share your own version"
-                                className="w-full py-2 px-3 rounded text-[11px] font-bold bg-cyan-600/30 hover:bg-cyan-600/50 text-white border border-cyan-500/50 disabled:opacity-50"
+                                className="w-full py-2 px-3 rounded text-[11px] font-bold text-white disabled:opacity-50"
                             >
                                 {loading ? 'Loading scene…' : '▶ Open & Remix'}
-                            </button>
+                            </GhostButton>
                             <button
                                 onClick={copyShareLink}
                                 className={`w-full py-2 px-3 rounded text-[11px] font-bold border transition-colors ${

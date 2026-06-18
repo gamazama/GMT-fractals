@@ -13,6 +13,7 @@
 import React, { useState } from 'react';
 import { collectBootDiagnostics } from '../engine-gmt/engine/webglDiagnostics';
 import { submitFeedback } from '../engine-gmt/feedback/FeedbackClient';
+import { useClipboardCopy } from '../hooks/useClipboardCopy';
 
 const diagRequested = (): boolean => {
     try { return new URLSearchParams(window.location.search).has('diag'); }
@@ -23,7 +24,7 @@ export const DiagnosticsOverlay: React.FC = () => {
     const [open, setOpen] = useState(diagRequested);
     const [report] = useState(() => (diagRequested() ? collectBootDiagnostics() : ''));
     const [sent, setSent] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
-    const [copied, setCopied] = useState(false);
+    const clip = useClipboardCopy(1500);
 
     if (!open) return null;
 
@@ -35,13 +36,7 @@ export const DiagnosticsOverlay: React.FC = () => {
         } catch { setSent('error'); }
     };
 
-    const copy = async () => {
-        try {
-            await navigator.clipboard.writeText(report);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-        } catch { /* clipboard may be unavailable — the text is on-screen to read anyway */ }
-    };
+    const copy = () => clip.copy(report);
 
     return (
         <div className="fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-black/90 p-4">
@@ -65,7 +60,7 @@ export const DiagnosticsOverlay: React.FC = () => {
                         onClick={copy}
                         className="px-4 py-2 text-xs font-bold rounded border border-white/15 bg-white/5 text-gray-200 hover:bg-white/10 hover:text-white transition-colors"
                     >
-                        {copied ? 'Copied ✓' : 'Copy'}
+                        {clip.state === 'copied' ? 'Copied ✓' : 'Copy'}
                     </button>
                     <button
                         onClick={() => setOpen(false)}
