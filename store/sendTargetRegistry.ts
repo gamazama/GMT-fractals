@@ -1,13 +1,12 @@
 /**
  * sendTargetRegistry — engine-core SEND-TARGET kernel (W2 generic, P0e interface (c)).
  *
- * The click/keyboard twin of the drag path: where a destination is reached by
- * dragging onto its on-screen anchor (`components/DropTargetLayer.tsx`), a send
- * target is reached from a "Send to ▾" menu. A target is a named destination
- * ("Generator · Slot A", "Stops · edit", a host coloring layer) that knows how to
- * `apply` a payload. This module is the generic registry + selector;
- * `components/SendToMenu.tsx` is the reusable click affordance, and
- * `components/DropTargetLayer.tsx` is the drag/drop one — both over this registry.
+ * A target is a named destination ("Generator · Slot A", "Stops · edit", a host
+ * coloring layer) that knows how to `apply` a payload. This module is the generic
+ * registry + selector; `components/DropTargetLayer.tsx` is the drag/drop affordance
+ * over it (an app reaches a destination by dragging onto its on-screen anchor). The
+ * `targetsForPayload` selector is also the basis for any click "send to" affordance an
+ * app cares to build — but none ships today.
  *
  * It generalizes the gradient-specific list `palette/core/favientTargets.ts` once
  * owned (`apply(config, name)`) into a payload-generic registry. P2 FOLDED those
@@ -24,8 +23,8 @@
  * @invariant Host-agnostic: imports nothing app-specific. Hosts register INTO it.
  * @invariant Idempotent by id (re-registering replaces) — mirrors
  *   `registerHistoryProvider`.
- * @invariant `<SendToMenu/>` derives its visible set from `targetsForPayload`, so
- *   the node harness covers the menu's contents + self-filtering by construction.
+ * @invariant `DropTargetLayer` derives its visible set from `targetsForPayload`, so
+ *   the node harness covers the consumer's contents + self-filtering by construction.
  *
  * @see components/DropTargetLayer.tsx (the drag/drop affordance over this registry)
  * @see palette/core/favientTargets.ts (host-capability flags; its target list folded here in P2)
@@ -130,9 +129,9 @@ export interface TargetsForPayloadOptions {
 
 /**
  * Pure selector: the targets applicable to a payload — drops the self target and
- * any whose `accepts(payload)` is false. This is exactly what `<SendToMenu/>`
- * lists, so testing it tests the menu's contents without a DOM. A throwing
- * `accepts` excludes the target (fail-safe).
+ * any whose `accepts(payload)` is false. This is exactly what `DropTargetLayer`
+ * lists (and any "send to" affordance would), so testing it tests the consumer's
+ * contents without a DOM. A throwing `accepts` excludes the target (fail-safe).
  */
 export const targetsForPayload = <P>(
     payload: P,
