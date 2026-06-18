@@ -67,14 +67,19 @@ float luminance(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
 
-// HDR firefly suppression. Caps per-sample radiance contribution at Rec.709
-// luminance ≤ uPTMaxLuminance. Applied AFTER throughput, so deep-bounce
-// paths catching a sun-disc HDR (Le * w_bsdf can be in the thousands) get
-// clamped at the radiance step rather than per-bounce. Slightly dim-biased
-// where it fires; raise uPTMaxLuminance to disable.
+// HDR firefly suppression with a SOFT knee. A hard clamp (min(1, max/l)) maps
+// every bright sample to exactly uPTMaxLuminance, collapsing bright reflected
+// regions into a flat plateau. Instead, pass through luminance ≤ t unchanged
+// and smoothly compress the excess toward an asymptote of 2·t — monotonic, so
+// brighter stays brighter (relative contrast preserved) while rare extreme
+// spikes are still bounded (≤ 2·t). Less biased than the hard clamp; raise
+// uPTMaxLuminance to push the knee up. Applied AFTER throughput. @see docs/adr/0071
 vec3 clampByLuminance(vec3 c) {
     float l = luminance(c);
-    return c * min(1.0, uPTMaxLuminance / max(l, 0.001));
+    float t = uPTMaxLuminance;
+    if (l <= t) return c;
+    float ln = t + t * (1.0 - exp(-(l - t) / t));   // -> 2·t as l -> inf
+    return c * (ln / max(l, 0.001));
 }
 
 vec3 cosineSampleHemisphere(vec3 n, vec2 seedVec) {
@@ -585,7 +590,11 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
             }
 #endif
             float skyIntensity = (bounce == 0) ? uEnvBackgroundStrength : uEnvStrength;
-            vec3 env = sampleMiss(currentRo, currentRd, 0.0) * skyIntensity;
+            // Primary-ray sky gets the subtle camera-blur softening (mip-LOD
+            // scaled by DoF aperture, additive on the jittered ray); indirect
+            // bounce misses keep a sharp env. Mirrors main.ts. @see docs/adr/0072
+            float skyBlur = (bounce == 0) ? min(0.4, sqrt(uDOFStrength) * 0.35) : 0.0;
+            vec3 env = sampleMiss(currentRo, currentRd, skyBlur) * skyIntensity;
             if (bounce == 0 && uFogFar < 1000.0) {
                 float fogFactor = smoothstep(uFogNear, uFogFar, uFogFar * 0.95);
                 env = mix(env, uFogColorLinear, fogFactor * 0.5);

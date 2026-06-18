@@ -32,13 +32,18 @@ float reflLuminance(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
 
-// Firefly clamp — caps a single reflection sample's Rec.709 luminance at
-// uPTMaxLuminance (the shared "Firefly Clamp" control). Without this, a
-// jittered reflection ray landing on a bright highlight spikes and never
-// averages out across accumulation frames.
+// Firefly clamp with a SOFT knee (shared "Firefly Clamp" control, uPTMaxLuminance).
+// A hard clamp maps every bright reflection sample to exactly the ceiling, which
+// flattens bright reflected regions; instead we pass luminance ≤ t through and
+// compress the excess toward an asymptote of 2·t (monotonic → relative contrast
+// preserved, extreme spikes still bounded). Mirrors the PT clampByLuminance.
+// @see docs/adr/0071
 vec3 clampReflLum(vec3 c) {
     float l = reflLuminance(c);
-    return c * min(1.0, uPTMaxLuminance / max(l, 0.001));
+    float t = uPTMaxLuminance;
+    if (l <= t) return c;
+    float ln = t + t * (1.0 - exp(-(l - t) / t));   // -> 2·t as l -> inf
+    return c * (ln / max(l, 0.001));
 }
 
 // GGX VNDF reflection-direction sampler (bounded spherical caps) — shared with

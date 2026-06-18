@@ -44,7 +44,14 @@ vec3 renderPixel(vec2 uvCoord, float seedOffset, out float outDepth) {
     vec3 safeFog = uFogColorLinear;
 
     if (uEnvBackgroundStrength > 0.001) {
-        vec3 env = GetEnvMap(rd, 0.0) * uEnvBackgroundStrength;
+        // Subtle camera-blur softening of the sky: a small mip-LOD blur scaled by
+        // the DoF aperture, ADDED on top of the aperture-jittered ray direction
+        // (rd, not rdClean) so the sky keeps the same grain as the fractal's DoF
+        // instead of reading artificially clean. Sky is at infinity → max
+        // defocus; sqrt makes modest apertures responsive, capped to stay subtle.
+        // uDOFStrength == 0 → skyBlur 0 → unchanged. @see docs/adr/0072
+        float skyBlur = min(0.4, sqrt(uDOFStrength) * 0.35);
+        vec3 env = GetEnvMap(rd, skyBlur) * uEnvBackgroundStrength;
         bgCol = mix(env, safeFog, clamp(uFogIntensity, 0.0, 1.0));
     } else {
         bgCol = mix(safeFog + vec3(0.01), safeFog, abs(rd.y));
