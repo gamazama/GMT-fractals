@@ -11,9 +11,8 @@
  */
 
 import React from 'react';
-import { useEngineStore } from '../store/engineStore';
 import { FpsCounter } from '../engine/plugins/TopBar';
-import { FavientsIcon, FAVIENTS_ACCENT } from '../palette/components/FavientsIcon';
+import { FavientsToggleButton } from '../palette/components/FavientsToggleButton';
 import { GmtWordmark } from '../engine-gmt/topbar/GmtWordmark';
 
 /** FPS readout, desktop-only. The top bar is tight on phones and an FPS number is
@@ -48,35 +47,8 @@ export const BackToGmtButton: React.FC = () => (
   </a>
 );
 
-/** Toggle the Favients shelf. Docked left in the Explorer, so we collapse /
- *  expand the left dock — `togglePanel('Favients', true)` re-activates the tab
- *  and un-collapses in one shot (see uiSlice.togglePanel). */
-export const FavientsTopBarButton: React.FC = () => {
-  const collapsed = useEngineStore((s) => s.isLeftDockCollapsed);
-  const isOpen = useEngineStore(
-    (s) => (s as unknown as { panels?: Record<string, { isOpen?: boolean }> }).panels?.Favients?.isOpen ?? false,
-  );
-  const togglePanel = useEngineStore((s) => s.togglePanel);
-  const setDockCollapsed = useEngineStore((s) => s.setDockCollapsed);
-
-  const shown = !collapsed && isOpen;
-  const onClick = () => {
-    if (shown) setDockCollapsed('left', true);
-    else togglePanel('Favients', true); // un-collapses + activates the tab
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      title="Toggle the Favients shelf (saved gradients)"
-      // Desktop-only: on a phone the Favients shelf is a dedicated tab (hidden md:flex),
-      // so this top-bar toggle would be redundant there.
-      className={`hidden md:flex items-center gap-1.5 px-2 h-7 rounded text-[12px] transition-colors ${
-        shown ? `${FAVIENTS_ACCENT.text} bg-white/10` : 'text-gray-400 hover:text-white hover:bg-white/10'
-      }`}
-    >
-      <FavientsIcon className="text-sm leading-none" />
-      <span className="hidden md:inline">Favients</span>
-    </button>
-  );
-};
+/** Toggle the Favients shelf. The shared button is dock-aware (it collapses/expands the
+ *  left dock here, where the shelf is docked, via toggleFavientsPanel), so the Explorer
+ *  just opts into the desktop-only treatment — on a phone the shelf is a dedicated tab,
+ *  making a top-bar toggle redundant. */
+export const FavientsTopBarButton: React.FC = () => <FavientsToggleButton desktopOnly />;

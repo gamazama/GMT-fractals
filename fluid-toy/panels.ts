@@ -19,6 +19,7 @@
  */
 
 import type { PanelManifest } from '../engine/PanelManifest';
+import { favientsPanelEntry } from '../palette/installFavients';
 
 // Fluid is "on" when the sim isn't paused. The fluid-specific panels
 // (Coupling / Fluid / Collision / Brush / Composite) only make sense while
@@ -158,10 +159,9 @@ export const FluidToyPanels: PanelManifest = [
 
     // ── Favients shelf ───────────────────────────────────────────────
     // The persistent gradient-favourites bar. Registered with a dock so the
-    // manifest accepts it, but main.tsx floats it via restoreFavientsPanel()
+    // manifest accepts it, but main.tsx floats it via mountFavientsPanel()
     // (it lives as a floating window, not a docked tab). The `panel-favients`
-    // component is registered by registerPaletteUI(). isCore:false so the
-    // floating window shows a close button.
-    { id: 'Favients', dock: 'right', order: 90, component: 'panel-favients', isCore: false },
+    // component is registered by registerPaletteUI().
+    favientsPanelEntry({ dock: 'right', order: 90 }),
 
 ];

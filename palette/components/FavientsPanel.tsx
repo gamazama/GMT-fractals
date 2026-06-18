@@ -764,6 +764,8 @@ export const FavientsPanel: React.FC = () => {
       return;
     }
     activeTarget.apply({ config: fav.config, name: fav.name, source: fav.source });
+    // Surface WHERE it landed: activate the destination's panel tab + open its section.
+    activeTarget.reveal?.();
     flash(`${fav.name} → ${activeTarget.label}`);
   };
 
@@ -891,11 +893,12 @@ export const FavientsPanel: React.FC = () => {
         }
       }}
     >
-      <div className="px-2.5 py-2 border-b border-white/10 shrink-0 flex items-center gap-1.5">
-        {/* Destination dropdown — only for dropdown hosts (app-gmt). Select-mode hosts
-            route applies through the dock instead, so the dropdown is hidden there. */}
-        {!selectMode &&
-          (targets.length ? (
+      {/* Destination dropdown — own line, above the toolbar. Only for dropdown hosts
+          (app-gmt); select-mode hosts (the Explorer) route applies through the dock, so
+          the row is omitted there and the toolbar below fills the header on its own. */}
+      {!selectMode && (
+        <div className="px-2.5 pt-2 pb-1.5 border-b border-white/10 shrink-0 flex items-center gap-1.5">
+          {targets.length ? (
             <>
               <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Destination</span>
               <GenericDropdown
@@ -907,11 +910,14 @@ export const FavientsPanel: React.FC = () => {
             </>
           ) : (
             <span className="text-[10px] text-gray-600 italic">no targets in this app</span>
-          ))}
-        {/* Select-mode hosts (the Explorer) have no Destination dropdown to fill the row, so
-            push the header tools to the right edge. app-gmt's full-width dropdown already
-            does this, so the spacer is select-mode only. */}
-        {selectMode && <div className="flex-1" />}
+          )}
+        </div>
+      )}
+
+      <div className="px-2.5 py-2 border-b border-white/10 shrink-0 flex items-center gap-1.5">
+        {/* Toolbar row — pushed to the right edge (the Destination row above carries the
+            host-specific dropdown; this row is purely the shelf's own controls). */}
+        <div className="flex-1" />
         {browse && (
           <button
             onClick={() => browse()}

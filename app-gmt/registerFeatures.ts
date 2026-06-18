@@ -24,13 +24,41 @@ registerPaletteUI();
 // HOST-group send targets in the shared registry (the panel's "Destination" dropdown lists
 // the host group); the apply payload carries the favourite's GradientConfig.
 import { setFavientBrowseAction, setFavientStudioAction } from '../palette/core/favientTargets';
+import { openGradientExplorer } from '../palette/installFavients';
 import { registerSendTarget } from '../store/sendTargetRegistry';
 import type { FavientDragPayload } from '../palette/core/favientDnd';
 import { applyGradientConfig, applyEnvGradient } from '../palette/core/gradientSeam';
 import { usePaletteOverlayStore } from './paletteOverlayStore';
-registerSendTarget<FavientDragPayload>({ id: 'coloring-1', label: 'Coloring · Layer 1', group: 'host', apply: (p) => applyGradientConfig(p.config, 1) });
-registerSendTarget<FavientDragPayload>({ id: 'coloring-2', label: 'Coloring · Layer 2', group: 'host', apply: (p) => applyGradientConfig(p.config, 2) });
-registerSendTarget<FavientDragPayload>({ id: 'env-gradient', label: 'Environment · Sky', group: 'host', apply: (p) => applyEnvGradient(p.config) });
+import { useEngineStore } from '../store/engineStore';
+import { requestAccordionOpen } from '../components/accordionReveal';
+
+// Reveal a destination's editor: activate its panel tab, then (next frame, once the
+// tab's content has mounted) open its accordion section. `section` omitted → the editor
+// sits in a flat panel (env gradient in the Shader tab), so the tab switch is enough.
+const revealGradientSection = (panel: string, section?: string): void => {
+  const setActiveTab = (useEngineStore.getState() as { setActiveTab?: (id: string) => void }).setActiveTab;
+  setActiveTab?.(panel);
+  if (section) requestAnimationFrame(() => requestAccordionOpen(section));
+};
+
+registerSendTarget<FavientDragPayload>({
+  id: 'coloring-1', label: 'Coloring · Layer 1', group: 'host',
+  apply: (p) => applyGradientConfig(p.config, 1),
+  editsParam: { featureId: 'coloring', paramKey: 'gradient' },
+  reveal: () => revealGradientSection('Gradient', 'layer1'),
+});
+registerSendTarget<FavientDragPayload>({
+  id: 'coloring-2', label: 'Coloring · Layer 2', group: 'host',
+  apply: (p) => applyGradientConfig(p.config, 2),
+  editsParam: { featureId: 'coloring', paramKey: 'gradient2' },
+  reveal: () => revealGradientSection('Gradient', 'layer2'),
+});
+registerSendTarget<FavientDragPayload>({
+  id: 'env-gradient', label: 'Environment · Sky', group: 'host',
+  apply: (p) => applyEnvGradient(p.config),
+  editsParam: { featureId: 'materials', paramKey: 'envGradientStops' },
+  reveal: () => revealGradientSection('Shader'),
+});
 
 // Favients header "Palettes" button → TOGGLE the full-width Palette Picker overlay.
 setFavientBrowseAction(() => {
@@ -39,7 +67,7 @@ setFavientBrowseAction(() => {
 });
 
 // Favients header studio button → open the standalone GMT Gradient Explorer app (new tab).
-setFavientStudioAction(() => window.open('gradient-explorer.html', '_blank', 'noopener'));
+setFavientStudioAction(openGradientExplorer);
 
 // One-time import of the legacy saved-gradient library into Favients (no data loss).
 import { migrateSavedGradientsToFavients } from './favientsMigration';

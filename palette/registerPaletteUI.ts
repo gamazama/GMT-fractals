@@ -79,7 +79,7 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
   // that don't (fluid-toy) leave the slot empty — the old `hasFavients` behaviour.
   setGradientEditorEntrance({
     id: 'favients',
-    render: (ctx) => React.createElement(FavientsEditorEntrance, { config: ctx.config }),
+    render: (ctx) => React.createElement(FavientsEditorEntrance, { config: ctx.config, featureId: ctx.featureId, paramKey: ctx.paramKey }),
   });
 
   // The Stops editor's menus ("Send to Favients") AND its header Favients button add the

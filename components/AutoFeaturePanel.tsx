@@ -487,6 +487,8 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                          <AdvancedGradientEditor
                             value={val}
                             onChange={(s) => handleUpdate(key, s)}
+                            featureId={featureId}
+                            paramKey={key}
                          />
                      </Suspense>
                  </div>

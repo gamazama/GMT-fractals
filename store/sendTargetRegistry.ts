@@ -62,6 +62,23 @@ export interface SendTarget<P = unknown> {
     /** Apply the payload to this destination. */
     apply: (payload: P) => void;
     /**
+     * Optional: reveal this destination's editor in the host UI (activate its panel
+     * tab, open its accordion section, scroll it into view). Called by the panel
+     * AFTER `apply` so applying a favourite surfaces where it landed. The registry
+     * never interprets it — the host wires the actual panel/accordion navigation
+     * (app-gmt: setActiveTab + the accordion-reveal bus). Absent → apply is silent.
+     */
+    reveal?: () => void;
+    /**
+     * Optional: the DDFS gradient param this target WRITES to, as a generic
+     * `{ featureId, paramKey }` identity (e.g. coloring/gradient → "Coloring · Layer 1").
+     * Lets the in-panel gradient editor — which knows only its own (featureId, paramKey)
+     * — find the matching destination and point the Favients "Destination" dropdown at
+     * itself (the editor's Favients star). Engine-core stays generic: the editor passes
+     * its identity, the registry holds the reverse map, the host declares the link.
+     */
+    editsParam?: { featureId: string; paramKey: string };
+    /**
      * Optional live on-screen rect of this target's anchor element. Additive
      * §4(c) amendment (mirrors `(b)`'s optional `render?`): when present, the
      * target is a SPATIAL drop zone — a drop-target layer renders its dropbox

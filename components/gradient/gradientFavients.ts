@@ -23,6 +23,7 @@
  */
 
 import type { GradientConfig } from '../../types';
+import { createSingleSlot } from '../../store/createSingleSlot';
 
 export interface GradientFavientsBridge {
   /** Add the gradient to the Favients shelf. Host names + dedupes; a repeat add is a no-op. */
@@ -31,24 +32,15 @@ export interface GradientFavientsBridge {
   isFav: (config: GradientConfig) => boolean;
 }
 
-let _bridge: GradientFavientsBridge | null = null;
-const _listeners = new Set<() => void>();
+const _slot = createSingleSlot<GradientFavientsBridge>();
 
 /** Register (or clear, with `null`) the favients bridge. */
-export const setGradientFavientsBridge = (bridge: GradientFavientsBridge | null): void => {
-  _bridge = bridge;
-  _listeners.forEach((l) => l());
-};
+export const setGradientFavientsBridge = (bridge: GradientFavientsBridge | null): void => _slot.set(bridge);
 
 /** The currently registered bridge, or `null`. Stable reference between
  *  registrations, so it is a safe `useSyncExternalStore` snapshot. */
-export const getGradientFavientsBridge = (): GradientFavientsBridge | null => _bridge;
+export const getGradientFavientsBridge = (): GradientFavientsBridge | null => _slot.get();
 
 /** Subscribe to bridge changes (registration normally happens once at boot; the
  *  editor subscribes defensively in case a host registers late). Returns unsubscribe. */
-export const subscribeGradientFavientsBridge = (l: () => void): (() => void) => {
-  _listeners.add(l);
-  return () => {
-    _listeners.delete(l);
-  };
-};
+export const subscribeGradientFavientsBridge = (l: () => void): (() => void) => _slot.subscribe(l);

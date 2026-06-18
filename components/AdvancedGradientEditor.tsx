@@ -69,6 +69,11 @@ interface AdvancedGradientEditorProps {
     onEditStart?: () => void;
     onEditEnd?: () => void;
     edit?: (mutate: () => void) => void;
+    /** Generic identity of the DDFS param this editor edits (set by AutoFeaturePanel
+     *  when the editor is a feature-panel gradient widget). Forwarded to the host
+     *  header entrance so its Favients button can resolve the matching send target. */
+    featureId?: string;
+    paramKey?: string;
 }
 
 const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
@@ -93,7 +98,7 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
     </svg>
 );
 
-const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId, onEditStart, onEditEnd, edit }) => {
+const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey }) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -639,7 +644,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                     {/* Host-injected header entrance (app-gmt / explorer mount the
                         Favients saved-gradients shelf button here; engine-core renders
                         whatever the host registered, or nothing). */}
-                    {entrance && entrance.render({ config: currentConfig })}
+                    {entrance && entrance.render({ config: currentConfig, featureId, paramKey })}
 
                     {/* Utility menu (clipboard) */}
                     <button

@@ -36,8 +36,8 @@ import { setupFluidToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar, topbar } from '../engine/plugins/TopBar';
 import { FluidToggleButton } from './components/FluidToggleButton';
-import { FavientsToggleButton } from './components/FavientsToggleButton';
-import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
+import { FavientsToggleButton } from '../palette/components/FavientsToggleButton';
+import { mountFavientsPanel } from '../palette/installFavients';
 import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
 import { installBucketRender } from '../engine/plugins/topbar/installBucketRender';
@@ -348,13 +348,8 @@ setupFluidToy();
 // 'Favients' panel. A per-host storage key keeps fluid-toy's panel position
 // independent of app-gmt's (the favourite COLLECTION itself stays shared via
 // the 'gmt.favients' key, so saved gradients follow the user across apps).
-const FAVIENTS_PANEL_KEY = 'fluid-toy.favients.panel';
-const fh = typeof window !== 'undefined' ? window.innerHeight : 800;
-restoreFavientsPanel(
-    { x: 20, y: Math.max(20, Math.round(fh / 2 - 160)), w: 296, h: 320, open: true },
-    { storageKey: FAVIENTS_PANEL_KEY },
-);
-watchFavientsPanel({ storageKey: FAVIENTS_PANEL_KEY });
+// No picker UI here, so the picker-filter prefs are skipped.
+mountFavientsPanel({ storageKey: 'fluid-toy.favients.panel', paletteFilters: false });
 
 // Apply the incoming GX handoff (parsed above, before the view library seeded its
 // default view so its tween can't clobber the camera). Only julia + palette +

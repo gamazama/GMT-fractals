@@ -20,7 +20,8 @@
  * styling beyond the GMT-canonical neutral-800 row look.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { subscribeAccordionOpen, consumePendingAccordionOpen } from './accordionReveal';
 
 export interface AccordionSection {
     id: string;
@@ -125,6 +126,38 @@ export const Accordion: React.FC<AccordionProps> = ({ sections, className = '' }
         },
         [sections],
     );
+
+    // External reveal: force a section open by id (e.g. applying a Favients gradient
+    // to Layer 2 opens the Layer 2 section). Respects exclusive-group rules and is a
+    // no-op for ids this accordion doesn't own or sections already open.
+    const forceOpen = useCallback(
+        (sectionId: string) => {
+            setOpenMap((prev) => {
+                const section = sections.find((s) => s.id === sectionId);
+                if (!section || prev[sectionId]) return prev;
+                const next = { ...prev };
+                if (section.group) {
+                    const members = sections.filter((s) => s.group === section.group);
+                    for (const m of members) next[m.id] = m.id === sectionId;
+                } else {
+                    next[sectionId] = true;
+                }
+                for (const s of sections) {
+                    if (!!prev[s.id] !== !!next[s.id]) s.onOpenChange?.(!!next[s.id]);
+                }
+                return next;
+            });
+        },
+        [sections],
+    );
+
+    useEffect(() => {
+        // Consume a request that fired just before this accordion mounted (panel was
+        // being activated), then subscribe for live requests.
+        const pending = consumePendingAccordionOpen((id) => sections.some((s) => s.id === id));
+        if (pending) forceOpen(pending);
+        return subscribeAccordionOpen(forceOpen);
+    }, [forceOpen, sections]);
 
     return (
         <div className={`flex flex-col ${className}`}>

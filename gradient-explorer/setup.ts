@@ -9,8 +9,7 @@
 
 import { useEngineStore } from '../store/engineStore';
 import { applyPanelManifest } from '../engine/PanelManifest';
-import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
-import { restorePaletteFilters, watchPaletteFilters } from '../palette/store/paletteFiltersPersist';
+import { favientsPanelEntry, mountFavientsPanel } from '../palette/installFavients';
 import { feedbackPanelEntry } from '../engine-gmt/feedback';
 
 export const wireGradientExplorer = (): void => {
@@ -24,7 +23,7 @@ export const wireGradientExplorer = (): void => {
     { id: 'Generator', dock: 'right', order: 1, features: ['paletteGenerator'], floatable: false },
     { id: 'Image', dock: 'right', order: 2, features: ['paletteImage'], floatable: false },
     // Favients shelf — docked into the left tab strip by default here.
-    { id: 'Favients', dock: 'left', order: 0, component: 'panel-favients', isCore: false },
+    favientsPanelEntry({ dock: 'left', order: 0 }),
     // Feedback — shared GMT Help-menu plumbing ("Send Feedback"), floats on demand.
     feedbackPanelEntry(),
   ]);
@@ -39,16 +38,13 @@ export const wireGradientExplorer = (): void => {
   // app-gmt it floats — different host, different default). We persist under an
   // Explorer-specific key so the two apps don't inherit each other's docking state via
   // same-origin localStorage; open-state/location/position/size are remembered once the
-  // user moves it. Float pos/size below are the fallback spot if it's ever undocked.
-  const FAVIENTS_LS = 'gmt.gradientExplorer.favients.panel';
+  // user moves it. The float rect below is the fallback spot if it's ever undocked.
+  // mountFavientsPanel also restores+watches the picker filter prefs (default on).
   const fh = typeof window !== 'undefined' ? window.innerHeight : 800;
-  restoreFavientsPanel(
-    { x: 20, y: Math.max(20, Math.round(fh / 2 - 150)), w: 296, h: 300, open: true, location: 'left', order: 0 },
-    { storageKey: FAVIENTS_LS },
-  );
-  watchFavientsPanel({ storageKey: FAVIENTS_LS });
-
-  // Remember the picker's swatch-size / padding / arrangement across sessions.
-  restorePaletteFilters();
-  watchPaletteFilters();
+  mountFavientsPanel({
+    storageKey: 'gmt.gradientExplorer.favients.panel',
+    location: 'left',
+    order: 0,
+    float: { y: Math.max(20, Math.round(fh / 2 - 150)), h: 300 },
+  });
 };

@@ -18,25 +18,37 @@
 import React from 'react';
 import type { GradientConfig } from '../../types';
 import { getGradientFavientsBridge } from '../../components/gradient/gradientFavients';
+import { getSendTargets } from '../../store/sendTargetRegistry';
 import { FavientsIcon, FAVIENTS_ACCENT } from './FavientsIcon';
-import { openFavientsPanel, useFavientsPanelOpen } from '../store/favientsPanelPersist';
+import { revealFavientsPanel, useFavientsPanelShown } from '../store/favientsPanelPersist';
+import { useFavientsStore } from '../store/favientsStore';
 
-export const FavientsEditorEntrance: React.FC<{ config: GradientConfig }> = ({ config }) => {
-  const panelOpen = useFavientsPanelOpen();
+export const FavientsEditorEntrance: React.FC<{ config: GradientConfig; featureId?: string; paramKey?: string }> = ({ config, featureId, paramKey }) => {
+  const panelShown = useFavientsPanelShown();
   const handleClick = (): void => {
-    if (panelOpen) {
-      // Shelf already up — add via the SAME bridge the menu's "Send to Favients" uses, so
-      // dedup + auto-name + provenance stay defined in exactly one place (registerPaletteUI).
+    // Point the shelf's "Destination" dropdown at THIS editor's send target, when one
+    // declares it edits this (featureId, paramKey) — so the star says "save/apply here".
+    if (featureId && paramKey) {
+      const target = getSendTargets().find(
+        (t) => t.editsParam?.featureId === featureId && t.editsParam?.paramKey === paramKey,
+      );
+      if (target) useFavientsStore.getState().setSelectedTarget(target.id);
+    }
+    if (panelShown) {
+      // Shelf already on screen — add via the SAME bridge the menu's "Send to Favients"
+      // uses, so dedup + auto-name + provenance stay defined in one place (registerPaletteUI).
       getGradientFavientsBridge()?.add(config);
     } else {
-      openFavientsPanel();
+      // Not visible — bring it into view where it lives: a docked-but-hidden shelf is
+      // revealed in its dock; only a floating/unplaced shelf comes up as a float.
+      revealFavientsPanel();
     }
   };
   return (
     <button
       className={`gradient-interactive-element flex items-center px-1.5 py-0.5 rounded border border-white/10 ${FAVIENTS_ACCENT.border} hover:bg-white/10 text-[11px] leading-none transition-colors active:scale-95`}
       onClick={handleClick}
-      title={panelOpen ? 'Add this gradient to Favients' : 'Favients — saved gradients & presets'}
+      title={panelShown ? 'Add this gradient to Favients' : 'Favients — saved gradients & presets'}
     >
       <FavientsIcon />
     </button>

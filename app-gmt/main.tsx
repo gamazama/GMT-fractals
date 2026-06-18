@@ -32,8 +32,7 @@ import '../engine-gmt/store/gmtPresetFields';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { usePaletteOverlayStore } from './paletteOverlayStore';
-import { restoreFavientsPanel, watchFavientsPanel } from '../palette/store/favientsPanelPersist';
-import { restorePaletteFilters, watchPaletteFilters } from '../palette/store/paletteFiltersPersist';
+import { favientsPanelEntry, mountFavientsPanel } from '../palette/installFavients';
 import { isMobileSnapshot } from '../hooks/useMobileLayout';
 import { topbar } from '../engine/plugins/TopBar';
 import { AppGmt } from './AppGmt';
@@ -589,20 +588,13 @@ applyPanelManifest([
   // Palette picker now lives in a full-width overlay (topbar "Palettes" button →
   // PalettePickerOverlay), which embeds the paletteFilters controls in a sidebar —
   // no cramped right-dock panels.
-  // Favients shelf — registered here so it can float; restoreFavientsPanel() floats it.
-  { id: 'Favients', dock: 'right', order: 90, component: 'panel-favients', isCore: false },
+  // Favients shelf — registered here so it can float; mountFavientsPanel() floats it.
+  favientsPanelEntry({ dock: 'right', order: 90 }),
 ]);
 
-// Float the Favients shelf at its remembered (or default MIDDLE-LEFT) spot, open by
-// default, and persist later open/move/resize.
-{
-  const fh = typeof window !== 'undefined' ? window.innerHeight : 800;
-  restoreFavientsPanel({ x: 20, y: Math.max(20, Math.round(fh / 2 - 160)), w: 296, h: 320, open: true });
-  watchFavientsPanel();
-  // Remember the picker's swatch-size / padding / arrangement across sessions.
-  restorePaletteFilters();
-  watchPaletteFilters();
-}
+// Float the Favients shelf at its remembered (or default middle-left) spot, open by
+// default, persist later open/move/resize, and restore the picker filter prefs.
+mountFavientsPanel();
 
 // Boot is now driven by LoadingScreen → useAppStartup.bootEngine, which
 // fires after the LoadingScreen's progress reaches 100% (gives

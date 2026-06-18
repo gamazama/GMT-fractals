@@ -70,20 +70,81 @@ type PanelEntry = {
 type StoreActions = Record<string, (...a: unknown[]) => void>;
 
 /** Float + open the Favients panel (bring it up if docked/closed). Shared entrance
- *  used by the picker link, the overlay header, and the gradient editor. */
+ *  used by the picker link and the overlay header. Editor stars prefer
+ *  `revealFavientsPanel` (which respects an existing dock rather than force-floating). */
 export const openFavientsPanel = (): void => {
   const st = useEngineStore.getState() as unknown as StoreActions;
   st.movePanel?.(PANEL_ID, 'float');
   st.togglePanel?.(PANEL_ID, true);
 };
 
-/** Reactive: is the Favients panel currently open? Lets a header affordance (the editor's
- *  Favients button) switch between "open the shelf" and "add the current gradient to the
- *  already-open shelf". Keeps the PANEL_ID contract in this module. */
+/** Shape of the dock/panel state this module reads to decide visibility. */
+type DockState = {
+  panels?: Record<string, PanelEntry>;
+  activeLeftTab?: string | null;
+  activeRightTab?: string | null;
+  isLeftDockCollapsed?: boolean;
+  isRightDockCollapsed?: boolean;
+};
+
+/** Is the Favients shelf actually ON SCREEN? Floating + open is shown; a docked shelf
+ *  is shown only while its dock is expanded AND it's that dock's active tab. A
+ *  docked-but-collapsed (or background-tab) shelf is NOT shown — it needs revealing.
+ *  app-gmt's shelf has no centre-stage mirror, so dock-expanded is required (unlike the
+ *  Gradient Explorer's mode panels). */
+const computeShown = (s: DockState): boolean => {
+  const panel = s.panels?.[PANEL_ID];
+  if (!panel?.isOpen) return false;
+  const loc = panel.location ?? 'float';
+  if (loc === 'float') return true;
+  if (loc === 'left') return s.activeLeftTab === PANEL_ID && !s.isLeftDockCollapsed;
+  return s.activeRightTab === PANEL_ID && !s.isRightDockCollapsed;
+};
+
+/** Reactive: is the Favients panel currently open? */
 export const useFavientsPanelOpen = (): boolean =>
   useEngineStore(
     (s) => !!(s as unknown as { panels?: Record<string, { isOpen?: boolean }> }).panels?.[PANEL_ID]?.isOpen,
   );
+
+/** Reactive: is the Favients shelf currently visible to the user (see computeShown)?
+ *  The editor's Favients star uses this to switch between "reveal the shelf" and "add
+ *  the current gradient to the already-visible shelf". */
+export const useFavientsPanelShown = (): boolean =>
+  useEngineStore((s) => computeShown(s as unknown as DockState));
+
+/** Bring the Favients shelf into view, RESPECTING where it already lives: a docked
+ *  shelf is revealed in its own dock (un-collapse that side + make it the active tab);
+ *  only a floating (or not-yet-placed) shelf is brought up as a floating window. This is
+ *  what the editor star calls — pressing it should never yank a docked shelf out into a
+ *  float. */
+export const revealFavientsPanel = (): void => {
+  const st = useEngineStore.getState() as unknown as StoreActions & DockState;
+  const loc = st.panels?.[PANEL_ID]?.location ?? 'float';
+  if (loc === 'left' || loc === 'right') {
+    st.setDockCollapsed?.(loc, false);
+    st.togglePanel?.(PANEL_ID, true);
+  } else {
+    st.movePanel?.(PANEL_ID, 'float');
+    st.togglePanel?.(PANEL_ID, true);
+  }
+};
+
+/** Hide the Favients shelf where it lives: collapse its dock if docked, else close the
+ *  floating window. The inverse of revealFavientsPanel. */
+export const hideFavientsPanel = (): void => {
+  const st = useEngineStore.getState() as unknown as StoreActions & DockState;
+  const loc = st.panels?.[PANEL_ID]?.location ?? 'float';
+  if (loc === 'left' || loc === 'right') st.setDockCollapsed?.(loc, true);
+  else st.togglePanel?.(PANEL_ID, false);
+};
+
+/** Toggle shelf visibility (dock-aware): reveal it if hidden, hide it if shown. The
+ *  single entry point every host's topbar Favients button uses. */
+export const toggleFavientsPanel = (): void => {
+  if (computeShown(useEngineStore.getState() as unknown as DockState)) hideFavientsPanel();
+  else revealFavientsPanel();
+};
 
 /** Restore the panel at its remembered (or default) location + open-state. Call after
  *  the host's applyPanelManifest registered the `Favients` panel. */

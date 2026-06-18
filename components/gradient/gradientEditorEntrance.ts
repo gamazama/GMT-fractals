@@ -20,12 +20,19 @@
 
 import type { ReactNode } from 'react';
 import type { GradientConfig } from '../../types';
+import { createSingleSlot } from '../../store/createSingleSlot';
 
 /** Live editor context handed to the entrance on every render. */
 export interface GradientEditorEntranceContext {
   /** The editor's CURRENT gradient (stops + colour/blend space) — lets the entrance
    *  act on it (e.g. the Favients button adds it when the shelf is already open). */
   config: GradientConfig;
+  /** Generic identity of the DDFS param this editor edits, when mounted inside a
+   *  feature panel (AutoFeaturePanel passes it). Absent for standalone editors (the
+   *  Gradient Explorer / Generator stage). Lets the host map the editor to a Favients
+   *  send target — e.g. the star pointing the "Destination" dropdown at this section. */
+  featureId?: string;
+  paramKey?: string;
 }
 
 export interface GradientEditorEntrance {
@@ -36,25 +43,16 @@ export interface GradientEditorEntrance {
   render: (ctx: GradientEditorEntranceContext) => ReactNode;
 }
 
-let _entrance: GradientEditorEntrance | null = null;
-const _listeners = new Set<() => void>();
+const _slot = createSingleSlot<GradientEditorEntrance>();
 
 /** Register (or clear, with `null`) the editor's header entrance. */
-export const setGradientEditorEntrance = (entrance: GradientEditorEntrance | null): void => {
-  _entrance = entrance;
-  _listeners.forEach((l) => l());
-};
+export const setGradientEditorEntrance = (entrance: GradientEditorEntrance | null): void => _slot.set(entrance);
 
 /** The currently registered entrance, or `null`. Stable reference between
  *  registrations, so it is a safe `useSyncExternalStore` snapshot. */
-export const getGradientEditorEntrance = (): GradientEditorEntrance | null => _entrance;
+export const getGradientEditorEntrance = (): GradientEditorEntrance | null => _slot.get();
 
 /** Subscribe to entrance changes. Registration normally happens once at boot
  *  (pre-render), but the editor subscribes defensively in case a host registers
  *  late. Returns an unsubscribe. */
-export const subscribeGradientEditorEntrance = (l: () => void): (() => void) => {
-  _listeners.add(l);
-  return () => {
-    _listeners.delete(l);
-  };
-};
+export const subscribeGradientEditorEntrance = (l: () => void): (() => void) => _slot.subscribe(l);
