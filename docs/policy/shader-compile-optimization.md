@@ -24,15 +24,24 @@ That ratio is the *why*: it proves the cold compile itself is the expensive
 thing, and it tells you that the warm path is already nearly free, so all the
 cost is in the one-time fxc translation+link of the active shader.
 
-**Scope decision (2026-06-19, user direction): the goal is to make our *shaders
-compile faster* — reduce the per-cold-compile cost of the active variant — not to
-engineer around the framework.** Cache-hit gaming, idle pre-warm, and parallel-
-compile tuning would dodge the cost rather than reduce it; they are documented
-here as context (§7) and parked as out-of-scope alternatives (§8 Appendix), not
-pursued. The work is shader-side: **emit less code into the active variant, avoid
-the GLSL constructs fxc is slow to translate (constant-bounded loop unrolling,
-high register pressure), keep `#define`s honest, and simplify algorithmically** —
-each change measured cold and reverted if it isn't a win (§5).
+**Scope decision (2026-06-19, user direction): the goal is to optimize the
+*shader code itself so a given variant compiles faster* — with the same features
+enabled. It is NOT to change defaults / load order / which features are on, and
+NOT to engineer around the framework.** Two whole classes of "win" are therefore
+out of scope:
+
+- **Config / load-order changes** (e.g. flipping a default feature off so the
+  default shader is smaller). That reduces *what gets compiled*, not *how fast a
+  shader compiles*. Parked in §8 Appendix.
+- **Framework workarounds** — cache-hit gaming, idle pre-warm, parallel-compile
+  tuning. They dodge the cost rather than reduce it. Documented as context (§7),
+  parked in §8 Appendix.
+
+The work is shader-side: take the GLSL a variant emits and make fxc translate it
+faster — **avoid the constructs fxc is slow on (constant-bounded loops it
+unrolls, high register pressure), remove genuinely dead/redundant emitted GLSL
+within a chunk, and simplify algorithmically** — feature set unchanged, each
+change measured cold and reverted if it isn't a win (§5).
 
 A caveat carried from prior sessions: per-compile micro-optimization of *straight-
 line* GLSL on a code-reading hunch is low-yield and repeatedly falsified by
@@ -176,9 +185,9 @@ These are the recent PT quality ADRs (VNDF reflections, env `textureLod` blur,
 procedural-sun NEE, soft-knee firefly, camera-blur sky). Each ADR's "zero
 compile cost" note is **scoped to the default/Direct branch only** — the work was
 done in the PT branch, so it is *not* compile-neutral there; it is a contributor
-to the PT default-change toll in §2.2. Do not read 0068–0072 as a backlog of
-things to optimize; read them as the *context* for why PT defaults got more
-expensive. The one lever they touch is the `ptReflMode` default (backlog L1).
+to the PT default-change toll in §2.2. Read them as the *context* for why the PT
+shader got more expensive (and as the code whose GLSL the shrink work in §8
+targets), not as a backlog of features to remove.
 
 ---
 
@@ -392,93 +401,86 @@ latency-hiding and offers no further wall-time win (§7.2).
 
 ## 8. Prioritized backlog (levers → execution sessions)
 
-**Scope:** make the active shader compile faster (§0). Ranked by **expected
-payoff × applicability ÷ risk**. Payoff is *cold `gpu=` ms saved* on the active
-variant. Every lever is measured cold per §5 and reverted if it isn't a win.
-Status: 🔲 not started.
+**Scope (§0):** make a given shader variant's GLSL compile faster with the same
+features on. Ranked by **expected payoff × applicability ÷ risk**. Payoff is
+*cold `gpu=` ms saved* on a fixed-feature variant. Every lever is measured cold
+per §5 and reverted if it isn't a win. Status: 🔲 not started.
 
-### Tier A — high payoff, low risk (do first)
+### Tier A — the core work: make the expensive GLSL compile faster
 
-- 🔲 **L1 — Default `ptReflMode` → Env MIS (1) instead of Env MIS+IS (2).**
-  This is shader-shrinking, not a workaround: the default procedural/gradient sky
-  doesn't use the CDF, so the +IS chunk (~1.2–2.4s of straight-line trig + ~8
-  texture fetches + `sampleEnvAtCDFMip`) is **pure dead weight in the default
-  shader**. Drop it from the default; emit it only when an HDR texture env is
-  loaded. Sobol stays on (free). One-line default change in
-  [`features/lighting/index.ts`](../../engine-gmt/features/lighting/index.ts) +
-  an ADR note extending ADR-0070. **Payoff ~1.2–2.4s; risk low** (procedural sky
-  visually identical without the CDF). *Decision needed: confirm the auto-
-  promote-on-HDR-load condition.* **~½ session.**
+These take the measured hogs (§2.3) and rewrite the GLSL so fxc translates it
+faster — **feature set unchanged**. The win class is **algorithmic + structural
+only** (§4.3): cheaper-to-translate constructs, less work for fxc — never hand-
+hoisting expressions ANGLE/fxc already optimizes.
+
+- 🔲 **L5 — Rewrite the biggest PT chunks to compile faster, hog-first.** Ordered
+  by measured marginal cost: **Env MIS+IS (+2579ms)** → **Area lights (+2027ms)**
+  → **Env MIS (+1361ms)** → **NEE (+832ms)**. In
+  [`shaders/chunks/pathtracer.ts`](../../engine-gmt/shaders/chunks/pathtracer.ts)
+  + the lighting chunks, with the feature *on*: simplify the algorithm, remove
+  genuinely dead/redundant emitted GLSL *inside* the chunk, collapse duplicate
+  helper emissions, swap heavy functions for lighter equivalents (DE→DE_Dist
+  style). The session-1 finding localizes the Env MIS+IS hog to the straight-line
+  trig + ~8 texture fetches + `sampleEnvAtCDFMip` (the CDF loop was already
+  cheap) — that block is the first target. Measure each change cold (§5.3); revert
+  non-wins; gate quality on `BENCH_SHADER` thresholds. **Payoff: ~10–30% of
+  `gpu=` per BENCH_SHADER S2/S3 precedent; risk medium** (quality regressions).
+  **~1–2 sessions, iterative.**
+
+- 🔲 **L4 — fxc-construct audit (avoid what fxc is slow on).** Find the GLSL
+  constructs that make fxc slow (§7.3) inside the active shader: constant-bounded
+  loops it will unroll (convert to runtime/`[loop]`-bounded where correctness
+  allows), high register-pressure blocks, and code emitted into a variant that is
+  provably unreachable for that variant (remove it from the chunk — this is
+  fixing the shader source, *not* gating a feature off by default). **Payoff:
+  medium-high, compounds with L5; risk medium** (must not regress the
+  compile/runtime split ADR-0055 or quality). **~1–2 sessions.** Depends on L7.
+
+### Tier B — measurement + hygiene (enables Tier A)
 
 - 🔲 **L7 — Instrument the first-draw/"unfold" phase.** Add a timer around the
   post-swap `pipelineRender()` ([`CompileScheduler.ts:351`](../../engine-gmt/engine/CompileScheduler.ts#L351))
   and add `firstDraw=` to the `[Compile]` log so the protocol can attribute the
-  third compile phase (§1.1). Without this we can't tell whether a code change
-  helps fxc or first-draw. **Payoff: measurement clarity (prerequisite for L5);
+  third compile phase (§1.1). Without this we can't tell whether a GLSL change
+  helped fxc or first-draw. **Prerequisite for cleanly reading L5/L4 results;
   risk low.** **~¼ session.**
 
 - 🔲 **L6 — Recalibrate `estCompileMs` against §2.3.** Make the Engine-panel
   estimate honest for PT (currently ~3–5× low). Pure data change in
   [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts); no shader risk.
-  Also recalibrate `BASE_COMPILE_MS`. **Payoff: trustworthy UX estimate; risk
-  ~none.** **~¼ session.** (Refresh again after each L1/L4/L5 win lands.)
-
-### Tier B — the core work: shrink + structurally simplify the active variant
-
-These attack the measured hogs (§2.3) in the GLSL the active shader actually
-emits. The win class is **algorithmic + structural only** (§4.3): less emitted
-code, cheaper-to-translate constructs — never hand-hoisting.
-
-- 🔲 **L5 — Shrink/simplify the biggest PT chunks, hog-first.** Ordered by
-  measured marginal cost: **Env MIS+IS (+2579ms)** → **Area lights (+2027ms)** →
-  **Env MIS (+1361ms)** → **NEE (+832ms)**. For each, in
-  [`shaders/chunks/pathtracer.ts`](../../engine-gmt/shaders/chunks/pathtracer.ts)
-  + [`features/lighting/index.ts`](../../engine-gmt/features/lighting/index.ts):
-  remove dead-but-emitted code, collapse redundant gated branches, swap heavy
-  functions for lighter equivalents (DE→DE_Dist style), fold duplicate helper
-  emissions. Measure each change cold (§5.3); revert non-wins; gate quality on
-  `BENCH_SHADER` thresholds. **Payoff: ~10–30% of `gpu=` per BENCH_SHADER S2/S3
-  precedent; risk medium** (quality regressions). **~1–2 sessions, iterative.**
-
-- 🔲 **L4 — fxc-construct + emitted-code audit.** Find the GLSL constructs fxc is
-  slow to translate (§7.3): constant-bounded loops it will unroll (convert to
-  runtime/`[loop]`-bounded where correctness allows), high register-pressure
-  blocks, and chunks emitted into the active variant that a given config never
-  executes (tighten the `#define` gating so they're not in the string at all —
-  this is shrinking the *one* active shader, distinct from the parked variant-
-  *count* idea in the appendix). **Payoff: medium-high, compounds with L5; risk
-  medium** (must not regress the compile/runtime split ADR-0055 or quality).
-  **~1–2 sessions.** Depends on L7 (need first-draw attribution to read results).
-
-### Tier C — hygiene
+  Also recalibrate `BASE_COMPILE_MS`. **Payoff: trustworthy UX estimate (not
+  compile time itself); risk ~none.** **~¼ session.** Refresh after each L5/L4
+  win lands.
 
 - 🔲 **L8 — Fix the `BENCH_SHADER_HANDOFF.md` `dev/` path drift** (§6 stale
   flag). `@stale` / fold on next touch. **Trivial.**
 
 ### Suggested sequencing
 
-1. **Session 2:** L1 + L7 + L6 — default-shader shrink + first-draw timer +
-   honest estimate. Low-risk, lands a measurable win and the instrumentation L5
-   needs.
-2. **Session 3:** L5 starting with the Env MIS+IS hog (the measured +2579ms).
-3. **Session 4:** L4 (fxc-construct audit) + continue L5 down the hog list.
+1. **Session 2:** L7 + L6 first (cheap; gives clean attribution + an honest
+   estimate), then open L5 on the Env MIS+IS hog (the measured +2579ms).
+2. **Session 3:** continue L5 down the hog list (Area lights → Env MIS → NEE).
+3. **Session 4:** L4 (fxc-construct audit) once the per-chunk rewrites plateau.
 4. Re-run L6 after each landed win so the estimate tracks reality.
 
-### Appendix — framework-level alternatives (out of scope per §0)
+### Appendix — out of scope (do NOT pursue under the current scope decision §0)
 
-Documented so a future session doesn't re-derive them or mistake them for wins.
-These reduce *cold-compile count* or *latency* by working around the framework
-rather than making shaders compile faster — explicitly **not** pursued under the
-current scope decision. Revisit only if shader-side levers are exhausted and a
-deliberate scope change is made.
+Documented so a future session doesn't re-derive these or mistake them for the
+work. They either change *what* compiles (config/load-order) or *work around* the
+compile rather than making the shader compile faster. Revisit only with a
+deliberate scope change.
 
-- **Cache-hit determinism** — ensure byte-identical source per config so the
-  Chrome GPU program cache (§7.1) hits across reloads. Turns repeat colds warm;
-  doesn't make any single compile faster.
-- **Idle pre-warm** — compile common variants during idle so they enter the
-  cache before the user reaches them. Hides cost; doesn't remove it.
+- **Changing feature defaults / load order** — e.g. defaulting `ptReflMode` to
+  Env MIS so the default shader omits the +IS CDF chunk. Reduces *what gets
+  compiled by default*, not how fast a shader compiles. **Explicitly not the
+  work.**
+- **Cache-hit determinism** — byte-identical source per config so the Chrome GPU
+  program cache (§7.1) hits across reloads. Turns repeat colds warm; doesn't make
+  any single compile faster.
+- **Idle pre-warm** — compile common variants during idle so they enter the cache
+  before the user reaches them. Hides cost; doesn't remove it.
 - **Parallel-compile tuning** — already correctly used (ADR-0040); §7.2 confirms
-  no further wall-time win is available. Nothing to do.
+  no further wall-time win is available.
 
 ---
 
@@ -487,7 +489,7 @@ deliberate scope change is made.
 - ADR-0040 — two-stage shader compile (the async pipeline this builds on).
 - ADR-0043/0044 — 17-position assembly, canonical uniform syncframe.
 - ADR-0050/0055 — compile/runtime split (the constraint in §4.1).
-- ADR-0070 — procedural-sun NEE (the PT_ENV_MIS gate L1 tunes).
+- ADR-0070 — procedural-sun NEE (lives in the PT_ENV_MIS chunk L5 rewrites).
 - ADR-0073 — adopts the measure-pt-* diagnostics as protocol tooling.
 - `docs/BENCH_SHADER_HANDOFF.md` — render-perf + quality bench harness (S1–S3
   optimization log; the proof-record for "ANGLE is smart, only algorithmic wins").
