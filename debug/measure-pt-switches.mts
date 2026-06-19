@@ -67,6 +67,10 @@ await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
 await page.waitForFunction('window.__gmtProxy && window.__gmtProxy.isBooted && window.__gmtProxy.hasCompiledShader && !window.__gmtProxy.isCompiling', { timeout: TIMEOUT, polling: 100 });
 console.log('[switches] booted');
 
+// Raise the accumulation sample cap (default 64 → converges + halts in ~1s) so
+// the scene accumulates continuously and measureFps can read a steady rate.
+await page.evaluate('window.__store.getState().setSampleCap(99999)');
+
 const settle = () => page.evaluate(`(async () => {
   const p = window.__gmtProxy; const t0 = performance.now(); let q = -1;
   while (performance.now() - t0 < 40000) {
@@ -79,7 +83,8 @@ const settle = () => page.evaluate(`(async () => {
 function parseCompile(line: string) {
     const tot = line.match(/(?:Two-stage|Single-stage):\s*(\d+)ms/); if (!tot) return null;
     const gpu = line.match(/gpu=(\d+)ms/);
-    return { totalMs: parseInt(tot[1], 10), gpuMs: gpu ? parseInt(gpu[1], 10) : parseInt(tot[1], 10) };
+    const fd = line.match(/firstDraw=(\d+)ms/);
+    return { totalMs: parseInt(tot[1], 10), gpuMs: gpu ? parseInt(gpu[1], 10) : parseInt(tot[1], 10), firstDrawMs: fd ? parseInt(fd[1], 10) : 0 };
 }
 async function measure(label: string, patch: any): Promise<number> {
     const before = compileLogs.length;
@@ -98,9 +103,44 @@ async function measure(label: string, patch: any): Promise<number> {
     const logs = compileLogs.slice(before);
     const parsed = logs.length ? parseCompile(logs[logs.length - 1]) : null;
     const gpu = parsed?.gpuMs ?? Math.round(r.ms);
-    console.log(`[switches] ${label}: gpu=${gpu}ms (window=${Math.round(r.ms)}ms)${r.started ? '' : ' (NO recompile)'}`);
+    const fd = parsed?.firstDrawMs ?? 0;
+    console.log(`[switches] ${label}: gpu=${gpu}ms firstDraw=${fd}ms (window=${Math.round(r.ms)}ms)${r.started ? '' : ' (NO recompile)'}`);
     return gpu;
 }
+// Accumulated-frames FPS — the rate at which PROGRESSIVE accumulation samples
+// are produced (NOT a RAF-frame count; the old raf telemetry predates progressive
+// render). `accumulationCount` is the proxy's worker-synced sample counter (it
+// updates on every FRAME_READY). Call this right after a compile, while the PT
+// image is still actively converging from the post-swap reset — once converged
+// the worker stops producing frames and the rate reads 0. We anchor timing on the
+// first observed advance (so post-compile idle isn't counted) then time N samples.
+// Secondary to compile time, but surfaces render-perf wins/losses from a GLSL change.
+// Accumulated-frames FPS — the rate at which PROGRESSIVE accumulation samples
+// are produced (NOT a raf-frame count; that telemetry predates progressive
+// render). The default sampleCap is 64, so the scene converges + halts within a
+// second; we raise the cap to NEVER_CONVERGE (see boot) so accumulation runs
+// continuously, then count samples over a fixed window. accumulationCount syncs
+// to the proxy every FRAME_READY. Secondary to compile time, but surfaces
+// render-perf wins/losses from a GLSL change.
+async function measureFps(windowMs = 3000): Promise<number> {
+    return await page.evaluate(`(async () => {
+      const p = window.__gmtProxy;
+      // Pre-roll: wait until accumulation is actively flowing (cap is raised so it
+      // won't converge) so the timing window doesn't start during a post-compile stall.
+      const pr = performance.now(); let last = p.accumulationCount;
+      while (performance.now() - pr < 3000) {
+        await new Promise(r => setTimeout(r, 50));
+        if (p.accumulationCount > last) break;
+        last = p.accumulationCount;
+      }
+      const c0 = p.accumulationCount, t0 = performance.now();
+      await new Promise(r => setTimeout(r, ${windowMs}));
+      const c1 = p.accumulationCount, t1 = performance.now();
+      const dt = t1 - t0;
+      return dt > 0 ? Math.max(0, c1 - c0) * 1000 / dt : 0;
+    })()`) as number;
+}
+
 async function resolveFormula(want: string) {
     return await page.evaluate(`(() => {
       const reg = window.__fractalRegistry;
@@ -111,28 +151,33 @@ async function resolveFormula(want: string) {
     })()`) as string | null;
 }
 
-const table: { id: string; baseMs: number; rows: { label: string; ms: number; delta: number }[] }[] = [];
+const table: { id: string; baseMs: number; baseFps: number; rows: { label: string; ms: number; delta: number; fps: number }[] }[] = [];
 for (const want of FORMULAS) {
     const id = await resolveFormula(want);
     if (!id) { console.log(`[switches] '${want}' not found — skipping`); continue; }
     console.log(`\n=== ${id} ===`);
     await measure(`-> Direct`, { renderMode: 'Direct' }); await settle();
     await measure(`switch -> ${id} (Direct)`, { formula: id }); await settle();
-    const baseMs = await measure(`PT baseline (all gates off)`, { lighting: { ...BASELINE }, renderMode: 'PathTracing' }); await settle();
-    const rows: { label: string; ms: number; delta: number }[] = [];
+    const baseMs = await measure(`PT baseline (all gates off)`, { lighting: { ...BASELINE }, renderMode: 'PathTracing' });
+    const baseFps = await measureFps();
+    console.log(`[switches] PT baseline: ${baseFps.toFixed(1)} accum-fps`);
+    await settle();
+    const rows: { label: string; ms: number; delta: number; fps: number }[] = [];
     for (const sw of SWITCHES) {
         const ms = await measure(`baseline + ${sw.label}`, { lighting: { ...BASELINE, ...sw.patch } });
+        const fps = await measureFps();
+        console.log(`[switches] baseline + ${sw.label}: ${fps.toFixed(1)} accum-fps`);
         await settle();
-        rows.push({ label: sw.label, ms, delta: ms - baseMs });
+        rows.push({ label: sw.label, ms, delta: ms - baseMs, fps });
     }
-    table.push({ id, baseMs, rows });
+    table.push({ id, baseMs, baseFps, rows });
 }
 
-console.log('\n========== SUMMARY: PT compile cost per switch (cold gpu ms) ==========');
+console.log('\n========== SUMMARY: PT compile cost per switch (cold gpu ms) + accum-fps ==========');
 for (const t of table) {
-    console.log(`\n${t.id}   baseline = ${t.baseMs}ms`);
+    console.log(`\n${t.id}   baseline = ${t.baseMs}ms  (${t.baseFps.toFixed(1)} accum-fps)`);
     for (const r of [...t.rows].sort((a, b) => b.delta - a.delta)) {
-        console.log(`  +${String(Math.round(r.delta)).padStart(6)}ms   ${r.label.padEnd(24)} (total ${r.ms}ms)`);
+        console.log(`  +${String(Math.round(r.delta)).padStart(6)}ms   ${r.label.padEnd(24)} (total ${r.ms}ms, ${r.fps.toFixed(1)} accum-fps)`);
     }
 }
 await browser.close();

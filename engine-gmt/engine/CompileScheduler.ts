@@ -355,12 +355,18 @@ export class CompileScheduler {
         this.deps.resetAccumulation();
         this.deps.materials.shaderDirty = false;
         this.lastCompiledFormula = compiledFormulaKey;
+        // first-draw / "unfold" timer (L7): ANGLE defers final D3D program/PSO
+        // realization to the first draw call. This post-swap pipelineRender is
+        // that draw — isolate it so the protocol can attribute it separately
+        // from gpu= (fxc translate+link). @see docs/policy/shader-compile-optimization.md §1.1
+        const tFirstDrawStart = performance.now();
         this.deps.pipelineRender(renderer);
+        const tFirstDrawEnd = performance.now();
 
         const totalElapsed = performance.now() - t0;
         this.lastDuration = totalElapsed / 1000;
         // Permanent compile timing log — do not remove
-        console.log(`[Compile] Two-stage: ${totalElapsed.toFixed(0)}ms (${config.formula}, gen=${tGenEnd - tGenStart | 0}ms, gpu=${tGpuEnd - tGpuStart | 0}ms)`);
+        console.log(`[Compile] Two-stage: ${totalElapsed.toFixed(0)}ms (${config.formula}, gen=${tGenEnd - tGenStart | 0}ms, gpu=${tGpuEnd - tGpuStart | 0}ms, firstDraw=${tFirstDrawEnd - tFirstDrawStart | 0}ms)`);
         if (this.lastDuration > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, this.lastDuration);
 
         this.isCompiling = false;

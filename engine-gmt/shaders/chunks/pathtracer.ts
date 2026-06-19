@@ -12,8 +12,29 @@ export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochast
     // ANGLE/D3D11 was likely predicating both paths in case 2 — running both
     // shadow marches per shadow-casting light. Compile-gating eliminates one.
     const useSoft = !stochasticShadows || isMobile || !areaLightsActive;
-    const baseShadowLogic = useSoft ? `
-        shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight, blueNoise.r);
+    // Sphere area lights (type 2): the NEE site already sampled a point on the
+    // sphere surface, with lDir/distToLight pointing at it, so the shadow ray
+    // wants a HARD result toward that exact sample (its penumbra comes from
+    // accumulating different sphere-surface samples across frames, NOT from an
+    // analytic march). The previous code expressed that as a SEPARATE
+    // `GetHardShadow(...)` call wrapping the default soft/stochastic march —
+    // which made fxc inline a SECOND full 256-step DE_Dist shadow march into the
+    // NEE loop. That second march was measured at ~969ms of the area-lights cold
+    // compile (>half of it; §2.3/§8 L5). It is removed here by FOLDING the sphere
+    // case into the single march already present: in the soft variant, drive the
+    // softness hard for spheres (high k → GetSoftShadow returns ~binary); in the
+    // stochastic variant, point the (already-GetHardShadow) march straight at the
+    // sphere sample with no re-jitter. One march per shadow-casting light, not
+    // two — same feature, fewer instructions for fxc to translate.
+    // @see docs/adr/0074-area-light-shadow-single-march.md
+    const shadowLogic = useSoft ? `
+        float shK = uShadowSoftness;
+        #ifdef PT_AREA_LIGHTS
+        // Sphere: near-hard march toward the per-frame sphere sample; the soft
+        // penumbra is supplied by accumulating those samples, not by k.
+        if (uLightType[lightIdx] > 1.5) shK = 2000.0;
+        #endif
+        shadow = GetSoftShadow(shadowRo, lDir, shK, distToLight, blueNoise.r);
     ` : `
         // Stochastic area-light path (areaLights checkbox ON, compile-gated).
         vec2 jitter = blueNoise.gb;
@@ -37,25 +58,13 @@ export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochast
             shadowDir = tVec / max(1.0e-5, shadowDist);
         }
 
-        shadow = GetHardShadow(shadowRo, shadowDir, shadowDist);
-    `;
-    // Sphere area lights override both shadow paths: the NEE site already
-    // sampled a point on the sphere surface and lDir/distToLight point to that
-    // sample. Adding GetSoftShadow's penumbra would double-soften; the
-    // stochastic path's uLightPos-based re-jitter would defeat sphere sampling
-    // entirely. GetHardShadow on the sphere-sampled direction, accumulated
-    // across frames, is the physically-correct integration of an area light.
-    // Runtime branch is gated by PT_AREA_LIGHTS so default builds are unaffected
-    // and ANGLE doesn't get double-emitted shadow paths in non-area-light scenes.
-    const shadowLogic = `
         #ifdef PT_AREA_LIGHTS
-        if (uLightType[lightIdx] > 1.5) {
-            shadow = GetHardShadow(shadowRo, lDir, distToLight);
-        } else
+        // Sphere: shadow straight toward the sphere sample — re-jittering here
+        // (uLightPos-based) would defeat sphere sampling. Same single march.
+        if (uLightType[lightIdx] > 1.5) { shadowDir = lDir; shadowDist = distToLight; }
         #endif
-        {
-            ${baseShadowLogic}
-        }
+
+        shadow = GetHardShadow(shadowRo, shadowDir, shadowDist);
     `;
 
     return `

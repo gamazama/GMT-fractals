@@ -5,9 +5,11 @@
 // Compile time estimates (Windows/ANGLE/fxc):
 //   Fastest: ~3-4s | Lite: ~5-6s | Balanced: ~7-8s | Ultra: ~17s+
 //
-// @stale estCompileMs / estimateCompileTime under-count PT switches ~3-5×
-//   (e.g. Env MIS+IS annotated 650ms, measured ~2579ms cold). Recalibrate
-//   against measured data — backlog L6.
+// PT-switch estCompileMs annotations recalibrated against measured cold data
+// (L6, 2026-06-19) — see docs/policy/shader-compile-optimization.md §2.3. The
+// per-switch numbers live on the lighting feature's params (features/lighting),
+// not here; BASE_COMPILE_MS below was confirmed against the measured PT baseline
+// (4200 base + ptEnabled + Robust shadows ≈ 11000 est vs 10341 measured).
 // @see docs/policy/shader-compile-optimization.md §3 (estCompileMs calibration gap)
 
 export const ENGINE_PROFILES = {
@@ -161,10 +163,10 @@ import { featureRegistry, type ParamConfig, type ParamOption } from '../../engin
 /**
  * Estimate total shader compile time (ms) from current engine state.
  * Uses estCompileMs annotations on feature params.
- * Base cost (~4900ms) covers the core trace + shading pipeline.
+ * Base cost (~4200ms) covers the core trace + shading pipeline.
  */
 export const estimateCompileTime = (state: any): number => {
-    const BASE_COMPILE_MS = 4200; // Core shader without optional features (measured: Fastest ~4.0s)
+    const BASE_COMPILE_MS = 4200; // Core shader without optional features (measured: Fastest ~4.0s; confirmed vs §2.3 PT baseline)
     let total = BASE_COMPILE_MS;
 
     for (const feat of featureRegistry.getAll()) {

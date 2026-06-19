@@ -250,22 +250,25 @@ export const LightingFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'True Area Lights', shortId: 'pal2',
             group: 'engine_settings', parentId: 'ptEnabled',
             ui: 'checkbox', onUpdate: 'compile', noReset: true,
-            estCompileMs: 600,
-            description: 'Physically-correct sphere area light integration (sphere-surface sampling + MIS). Required for lights with type=Sphere. Enable + change a light type to Sphere via the per-light menu. Costs ~600ms compile + one extra sphere intersection per bounce.'
+            estCompileMs: 1230,  // post-ADR-0074 single-march fix (was 2027; within-run A/B saved ~630ms/39% on Mandelbulb). @see docs/policy/shader-compile-optimization.md §8 L5
+            description: 'Physically-correct sphere area light integration (sphere-surface sampling + MIS). Required for lights with type=Sphere. Enable + change a light type to Sphere via the per-light menu. Costs ~1s compile + one extra sphere intersection per bounce.'
         },
         ptNEEAllLights: {
             type: 'boolean', default: false, label: 'Sample All Lights', shortId: 'pal',
             group: 'engine_settings', parentId: 'ptEnabled',
             ui: 'checkbox', onUpdate: 'compile', noReset: true,
+            estCompileMs: 832,  // measured cold marginal (§2.3); was unannotated
             description: 'Evaluates every active light per bounce instead of one random light. Reduces shadow noise at the cost of N× more shadow rays.'
         },
         ptReflMode: {
             type: 'float', default: 2.0, label: 'Env Sampling', shortId: 'prm',
             group: 'engine_settings', parentId: 'ptEnabled',
             options: [
+                // estCompileMs recalibrated to measured cold marginal (§2.3);
+                // were 250 / 650 (~5× / ~4× low).
                 { label: 'Off',           value: 0.0, estCompileMs: 0 },
-                { label: 'Env MIS',       value: 1.0, estCompileMs: 250 },
-                { label: 'Env MIS + IS',  value: 2.0, estCompileMs: 650 },
+                { label: 'Env MIS',       value: 1.0, estCompileMs: 1361 },
+                { label: 'Env MIS + IS',  value: 2.0, estCompileMs: 2579 },
             ],
             onUpdate: 'compile', noReset: true,
             description: 'Direct env-map sampling with MIS for path-traced reflections. Env MIS handles broad skies; Env MIS + IS adds importance sampling for HDR maps with sun discs / concentrated lights. Replaces the older Environment NEE (which only handled diffuse).'
@@ -274,7 +277,7 @@ export const LightingFeature: FeatureDefinition = {
             type: 'boolean', default: true, label: 'Sobol Bounce Sampling', shortId: 'psb',
             group: 'engine_settings', parentId: 'ptEnabled',
             ui: 'checkbox', onUpdate: 'compile', noReset: true,
-            estCompileMs: 50,
+            estCompileMs: 25,  // measured cold marginal ~23ms (§2.3) — effectively free; was 50
             description: 'Low-discrepancy 2D sequence (Sobol) with per-pixel rotation for the bounce-direction seed. Measurably less variance on shiny surfaces; no effect on rough/diffuse-heavy scenes.'
         },
         ptEnvNEE: {

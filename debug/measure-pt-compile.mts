@@ -76,6 +76,10 @@ await page.waitForFunction(
 );
 console.log('[measure] booted');
 
+// Raise the accumulation sample cap (default 64 → converges + halts in ~1s) so
+// the scene accumulates continuously and measureFps can read a steady rate.
+await page.evaluate('window.__store.getState().setSampleCap(99999)');
+
 const settleBody = `(async () => {
   const p = window.__gmtProxy; const t0 = performance.now(); let quiet = -1;
   while (performance.now() - t0 < 40000) {
@@ -102,20 +106,53 @@ function measureBody(patch: any): string {
       return { started, ms: performance.now() - ts };
     })()`;
 }
-function parseCompile(line: string): { totalMs: number; gpuMs: number } | null {
+function parseCompile(line: string): { totalMs: number; gpuMs: number; firstDrawMs: number } | null {
     const tot = line.match(/(?:Two-stage|Single-stage):\s*(\d+)ms/);
     if (!tot) return null;
     const gpu = line.match(/gpu=(\d+)ms/);
-    return { totalMs: parseInt(tot[1], 10), gpuMs: gpu ? parseInt(gpu[1], 10) : parseInt(tot[1], 10) };
+    const fd = line.match(/firstDraw=(\d+)ms/);
+    return { totalMs: parseInt(tot[1], 10), gpuMs: gpu ? parseInt(gpu[1], 10) : parseInt(tot[1], 10), firstDrawMs: fd ? parseInt(fd[1], 10) : 0 };
 }
-async function measure(label: string, patch: any): Promise<{ winMs: number; totalMs: number; gpuMs: number; started: boolean }> {
+async function measure(label: string, patch: any): Promise<{ winMs: number; totalMs: number; gpuMs: number; firstDrawMs: number; started: boolean }> {
     const before = compileLogs.length;
     const r = await page.evaluate(measureBody(patch)) as { started: boolean; ms: number };
     const logs = compileLogs.slice(before);
     const last = logs.length ? logs[logs.length - 1] : '';
     const parsed = last ? parseCompile(last) : null;
-    console.log(`[measure] ${label}: window=${Math.round(r.ms)}ms${parsed ? ` compile=${parsed.totalMs}ms (gpu=${parsed.gpuMs}ms)` : ''}${r.started ? '' : ' (NO recompile detected)'}`);
-    return { winMs: r.ms, totalMs: parsed?.totalMs ?? Math.round(r.ms), gpuMs: parsed?.gpuMs ?? Math.round(r.ms), started: r.started };
+    console.log(`[measure] ${label}: window=${Math.round(r.ms)}ms${parsed ? ` compile=${parsed.totalMs}ms (gpu=${parsed.gpuMs}ms, firstDraw=${parsed.firstDrawMs}ms)` : ''}${r.started ? '' : ' (NO recompile detected)'}`);
+    return { winMs: r.ms, totalMs: parsed?.totalMs ?? Math.round(r.ms), gpuMs: parsed?.gpuMs ?? Math.round(r.ms), firstDrawMs: parsed?.firstDrawMs ?? 0, started: r.started };
+}
+
+// Accumulated-frames FPS — the rate progressive accumulation samples are
+// produced (NOT a RAF-frame count; the old raf telemetry predates progressive
+// render). Call right after a compile, while the PT image is still converging
+// from the post-swap reset — once converged the worker stops and the rate reads
+// 0. Anchor timing on the first observed advance, then time N samples. Secondary
+// to compile time, but catches render-perf wins/losses. accumulationCount syncs
+// to the proxy on every FRAME_READY.
+// Accumulated-frames FPS — the rate progressive accumulation samples are
+// produced (NOT a raf-frame count; that telemetry predates progressive render).
+// The default sampleCap is 64, so the scene converges + halts in ~1s; we raise
+// the cap (see boot) so accumulation runs continuously, then count samples over
+// a fixed window. accumulationCount syncs every FRAME_READY. Secondary to
+// compile time, but catches render-perf wins/losses.
+async function measureFps(windowMs = 3000): Promise<number> {
+    return await page.evaluate(`(async () => {
+      const p = window.__gmtProxy;
+      // Pre-roll: wait until accumulation is actively flowing (cap is raised so it
+      // won't converge) so the timing window doesn't start during a post-compile stall.
+      const pr = performance.now(); let last = p.accumulationCount;
+      while (performance.now() - pr < 3000) {
+        await new Promise(r => setTimeout(r, 50));
+        if (p.accumulationCount > last) break;
+        last = p.accumulationCount;
+      }
+      const c0 = p.accumulationCount, t0 = performance.now();
+      await new Promise(r => setTimeout(r, ${windowMs}));
+      const c1 = p.accumulationCount, t1 = performance.now();
+      const dt = t1 - t0;
+      return dt > 0 ? Math.max(0, c1 - c0) * 1000 / dt : 0;
+    })()`) as number;
 }
 
 async function resolveFormula(want: string): Promise<string | null> {
@@ -128,7 +165,7 @@ async function resolveFormula(want: string): Promise<string | null> {
     })()`) as string | null;
 }
 
-const results: { id: string; oldMs: number; newMs: number }[] = [];
+const results: { id: string; oldMs: number; newMs: number; oldFps: number; newFps: number }[] = [];
 for (const want of FORMULAS) {
     const id = await resolveFormula(want);
     if (!id) { console.log(`[measure] formula '${want}' not found in registry — skipping`); continue; }
@@ -143,16 +180,18 @@ for (const want of FORMULAS) {
     // variant would hit the DXBC cache (~50ms) and lie; old/new are distinct
     // shaders so each first compile is genuinely cold.
     const oldR = await measure(`PT old-default (Env MIS off, Sobol off) COLD`, { lighting: { ptEnabled: true, ptReflMode: 0, ptSobolBounce: false }, renderMode: 'PathTracing' });
+    const oldFps = await measureFps();
     await settle();
     const newR = await measure(`PT new-default (Env MIS+IS, Sobol on)  COLD`, { lighting: { ptReflMode: 2, ptSobolBounce: true } });
+    const newFps = await measureFps();
     await settle();
-    results.push({ id, oldMs: oldR.gpuMs, newMs: newR.gpuMs });
-    console.log(`  ${id}: old=${oldR.gpuMs}ms new=${newR.gpuMs}ms  toll=+${newR.gpuMs - oldR.gpuMs}ms (${((newR.gpuMs / oldR.gpuMs - 1) * 100).toFixed(0)}%)  [gpu compile ms]`);
+    results.push({ id, oldMs: oldR.gpuMs, newMs: newR.gpuMs, oldFps, newFps });
+    console.log(`  ${id}: old=${oldR.gpuMs}ms new=${newR.gpuMs}ms  toll=+${newR.gpuMs - oldR.gpuMs}ms (${((newR.gpuMs / oldR.gpuMs - 1) * 100).toFixed(0)}%)  [gpu compile ms];  accum-fps old=${oldFps.toFixed(1)} new=${newFps.toFixed(1)}`);
 }
 
 console.log('\n========== SUMMARY: PT cold-compile toll @ HEAD (gpu compile ms) ==========');
 console.log('(old = pre-session defaults: Env MIS off + Sobol off; new = current defaults)');
 for (const r of results) {
-    console.log(`  ${r.id.padEnd(30)} old=${String(r.oldMs).padStart(6)}ms  new=${String(r.newMs).padStart(6)}ms  toll=+${r.newMs - r.oldMs}ms (${((r.newMs / r.oldMs - 1) * 100).toFixed(0)}%)`);
+    console.log(`  ${r.id.padEnd(30)} old=${String(r.oldMs).padStart(6)}ms  new=${String(r.newMs).padStart(6)}ms  toll=+${r.newMs - r.oldMs}ms (${((r.newMs / r.oldMs - 1) * 100).toFixed(0)}%)  accum-fps old=${r.oldFps.toFixed(1)} new=${r.newFps.toFixed(1)}`);
 }
 await browser.close();

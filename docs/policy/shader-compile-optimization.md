@@ -64,16 +64,29 @@ isolates the first two:**
 |---|---|---|---|
 | **gen** | `buildFullMaterial()` assembles the GLSL string (JS, ShaderFactory iterates all features) | `gen=` in the `[Compile]` log | small (tens–hundreds ms) |
 | **gpu** | `renderer.compileAsync()` → ANGLE translates GLSL→HLSL→DXBC via fxc, links the program | `gpu=` in the `[Compile]` log | **dominant — the ~11–20s** |
-| **first-draw / "unfold"** | driver realizes the program object and does first-draw setup before pixels appear | **not isolated** — absorbed into `totalElapsed − gen − gpu` along with the preview stage | unknown; ANGLE is known to defer D3D program realization to first draw |
+| **first-draw / "unfold"** | driver realizes the program object and does first-draw setup before pixels appear | `firstDraw=` in the two-stage `[Compile]` log (L7, 2026-06-19) | unknown; ANGLE is known to defer D3D program realization to first draw |
 
 The third phase is real (empirically: there's a stall *after* compile before the
 first frame draws, and a warm cache collapses it to ~instant alongside the
 compile). It corresponds to ANGLE deferring final D3D program/PSO realization to
 the first `draw` call — here, the post-swap `pipelineRender()` at
-[`CompileScheduler.ts:351`](../../engine-gmt/engine/CompileScheduler.ts#L351),
-which runs *before* `totalElapsed` is taken at line 353 but *after* the `gpu=`
-timer closes at line 329. **Attributing this phase requires a new timer around
-the post-swap first render** — see backlog L7.
+[`CompileScheduler.ts:363`](../../engine-gmt/engine/CompileScheduler.ts#L363).
+**L7 (done 2026-06-19) wraps that render in a `tFirstDrawStart/End` timer and
+appends `firstDraw=…ms` to the two-stage log line**, so the protocol can now
+attribute fxc (`gpu=`) vs first-draw separately. Note: `firstDraw=` is emitted on
+the **two-stage** path only — the single-stage path returns before the post-swap
+render and has no isolated unfold phase.
+
+> **L7 finding (2026-06-19, D3D11/ANGLE, session-2 machine):** across the full
+> per-switch sweep, **`firstDraw` measured ~0–2ms** — i.e. the post-swap unfold
+> is effectively free, and **the entire cold cost lives in `gpu=`**. The
+> `compileAsync` call already runs a dummy render on the scratch scene, which
+> realizes the D3D program/PSO *during* the `gpu=` window; by the time the
+> post-swap `pipelineRender` draws to the real target the program is already hot.
+> So the "third phase" the model hypothesized is, on this path, absorbed into
+> `gpu=` (compileAsync), not deferred to first draw. **Practical consequence:**
+> `gpu=` is the honest, complete cold-compile cost — optimize against it; don't
+> chase first-draw.
 
 ### 1.2 The two-stage strategy (ADR-0040)
 
@@ -102,12 +115,12 @@ in-flight compiles superseded by a newer one.
 ### 1.3 The canonical instrumentation (do not remove)
 
 ```
-[Compile] Two-stage: 13459ms (Mandelbulb, gen=42ms, gpu=13366ms)
+[Compile] Two-stage: 13459ms (Mandelbulb, gen=42ms, gpu=13366ms, firstDraw=110ms)
 [Compile] Single-stage: 5200ms (GreatStellatedDodecahedron)
 ```
 
-Emitted at [`CompileScheduler.ts:356`](../../engine-gmt/engine/CompileScheduler.ts#L356)
-(two-stage) and [`:264`](../../engine-gmt/engine/CompileScheduler.ts#L264)
+Emitted at [`CompileScheduler.ts:368`](../../engine-gmt/engine/CompileScheduler.ts#L368)
+(two-stage) and [`:271`](../../engine-gmt/engine/CompileScheduler.ts#L271)
 (single-stage), both marked "do not remove" — the diagnostics (§6) and
 `debug/bench-shader.mts` parse these lines. Also: `CompileScheduler.lastDuration`
 (seconds), `FRACTAL_EVENTS.COMPILE_TIME`, and `engine.lastCompileDuration`
@@ -165,7 +178,7 @@ Defaults changed to `ptReflMode = 2` (Env MIS+IS) and `ptSobolBounce = on`:
 | Switch | marginal cold cost |
 |---|---|
 | **Env MIS+IS (reflMode=2)** | **+2579ms** ← biggest default-on cost |
-| Area lights | +2027ms |
+| Area lights | ~~+2027ms~~ → **+345–977ms after ADR-0074** (session 3 single-march fix) |
 | Env MIS (reflMode=1) | +1361ms |
 | NEE all lights | +832ms |
 | **Sobol bounce** | **+23ms (≈free)** |
@@ -198,20 +211,24 @@ targets), not as a backlog of features to remove.
 per-param `estCompileMs` annotations for enabled `onUpdate:'compile'` params. It
 feeds the Engine panel's predicted-compile-time readout.
 
-**It under-counts PT switches badly:**
+**It under-counted PT switches badly — recalibrated to measured cold (L6, 2026-06-19):**
 
-| Switch | annotated `estCompileMs` | measured cold | factor |
+| Switch | old `estCompileMs` | measured cold | now annotated |
 |---|---|---|---|
-| `ptReflMode` Env MIS+IS | 650ms | ~2579ms | ~4× |
-| `ptReflMode` Env MIS | 250ms | ~1361ms | ~5× |
-| `ptAreaLights` | 600ms | ~2027ms | ~3× |
-| `ptSobolBounce` | 50ms | ~23ms | ~ok (over) |
+| `ptReflMode` Env MIS+IS | 650ms | ~2579ms (~4× low) | **2579ms** |
+| `ptReflMode` Env MIS | 250ms | ~1361ms (~5× low) | **1361ms** |
+| `ptAreaLights` | 600ms | ~2027ms (~3× low) | **2027ms** |
+| `ptNEEAllLights` | *(unannotated)* | ~832ms | **832ms** |
+| `ptSobolBounce` | 50ms | ~23ms | **25ms** |
 
 The session-1 default change was annotated ~+700ms; the real cold toll was
-+2–4s. Note the *direction* is PT-specific: `BENCH_SHADER_HANDOFF` shows the
-Direct-scene base compiling *faster* than its estimate, so this is not a blanket
-error — the annotations are calibrated for Direct and under-count PT. Recalibrate
-against §2.3 (backlog L6).
++2–4s. The *direction* was PT-specific: `BENCH_SHADER_HANDOFF` shows the
+Direct-scene base compiling *faster* than its estimate, so this was not a blanket
+error — the annotations were calibrated for Direct and under-counted PT. The PT
+switches now carry their measured marginal costs. `BASE_COMPILE_MS` was kept at
+4200 (confirmed: 4200 base + ptEnabled 1500 + Robust shadows 3800 ≈ 11000 est vs
+10341 measured PT baseline — within formula/noise variance). Refresh these as
+L5/L4 wins land.
 
 ---
 
@@ -294,6 +311,31 @@ The methodology the execution sessions run. Built on the diagnostics in §6.
 `npm run dev` separately**; the diagnostics wait for the port. They connect to
 `localhost` (Vite binds `::1`/IPv6 on Windows), not `127.0.0.1`.
 
+### 5.5 Render-perf side-metric: accumulated-frames FPS (secondary)
+
+Compile time is the focus, but a GLSL change can also move *per-frame* render
+cost. Both `measure-pt-*.mts` now report **accum-fps** alongside each compile so
+wins/losses there surface too (added 2026-06-19).
+
+- It measures the rate **progressive accumulation samples** are produced
+  (`window.__gmtProxy.accumulationCount`, synced every `FRAME_READY`), **not a
+  RAF-frame count** — the older raf-frame telemetry predates the progressive
+  renderer and is meaningless for convergence throughput.
+- **The scene must not converge during the window.** The default `sampleCap` is
+  **64** → the PT image converges and the worker *halts* tracing within ~1s, so a
+  passive window reads 0. The harnesses raise the cap
+  (`__store.getState().setSampleCap(99999)`) once after boot so accumulation runs
+  continuously; a fixed window then reads the steady rate. A short pre-roll waits
+  for frames to flow so the window doesn't start during a post-compile stall.
+- **Interpretation.** Under progressive *tiling* the band count adapts toward a
+  target fps, so accum-fps is only a clean render-cost signal when render-bound
+  (the harness scene sits ~2.7 fps ≪ the 30-fps target → max bands → render-bound,
+  so it does track cost). Session-2 reading: env-MIS / area-light switches are
+  ~flat at 2.7 fps across the board — they are **compile-heavy but runtime-cheap**
+  (the fractal DE march dominates per-frame cost, not the env sampling). Treat
+  accum-fps as a coarse regression tripwire; for authoritative full-frame render
+  cost use `bench-shader.mts`'s GPU-timer p50 (not adaptive-confounded).
+
 ---
 
 ## 6. Tooling inventory
@@ -303,8 +345,8 @@ canonical tools (adopted this session — `@see` ADR-0073).
 
 | Tool | Purpose |
 |---|---|
-| [`debug/measure-pt-compile.mts`](../../debug/measure-pt-compile.mts) | Cold PT compile per formula, old-vs-new defaults. `MEASURE_FORMULAS=…` override. Produces §2.2. |
-| [`debug/measure-pt-switches.mts`](../../debug/measure-pt-switches.mts) | Per-switch marginal cold cost (baseline + each gate alone). Produces §2.3. |
+| [`debug/measure-pt-compile.mts`](../../debug/measure-pt-compile.mts) | Cold PT compile per formula, old-vs-new defaults. `MEASURE_FORMULAS=…` override. Produces §2.2. Also reports `firstDraw=` (L7) and **accum-fps** (§5.5). |
+| [`debug/measure-pt-switches.mts`](../../debug/measure-pt-switches.mts) | Per-switch marginal cold cost (baseline + each gate alone). Produces §2.3. Also reports `firstDraw=` (L7) and **accum-fps** (§5.5). |
 | [`debug/bench-shader.mts`](../../debug/bench-shader.mts) | GPU timing + reference-image diff harness (render perf + compile; parses the `[Compile]` log). Quality-regression gate. See `docs/BENCH_SHADER_HANDOFF.md`. |
 | [`debug/native-config-sweep.mts`](../../debug/native-config-sweep.mts) | Compiles every formula, gates on `webglCompile`, records per-formula `timeMs`. Whole-set correctness + timing regression guard. |
 | `CompileScheduler` telemetry | `lastDuration`, `gen/gpu` split, `FRACTAL_EVENTS.COMPILE_TIME`, `engine.lastCompileDuration`. |
@@ -413,19 +455,75 @@ faster — **feature set unchanged**. The win class is **algorithmic + structura
 only** (§4.3): cheaper-to-translate constructs, less work for fxc — never hand-
 hoisting expressions ANGLE/fxc already optimizes.
 
-- 🔲 **L5 — Rewrite the biggest PT chunks to compile faster, hog-first.** Ordered
+- 🟡 **L5 — Rewrite the biggest PT chunks to compile faster, hog-first.** Ordered
   by measured marginal cost: **Env MIS+IS (+2579ms)** → **Area lights (+2027ms)**
   → **Env MIS (+1361ms)** → **NEE (+832ms)**. In
   [`shaders/chunks/pathtracer.ts`](../../engine-gmt/shaders/chunks/pathtracer.ts)
   + the lighting chunks, with the feature *on*: simplify the algorithm, remove
   genuinely dead/redundant emitted GLSL *inside* the chunk, collapse duplicate
   helper emissions, swap heavy functions for lighter equivalents (DE→DE_Dist
-  style). The session-1 finding localizes the Env MIS+IS hog to the straight-line
-  trig + ~8 texture fetches + `sampleEnvAtCDFMip` (the CDF loop was already
-  cheap) — that block is the first target. Measure each change cold (§5.3); revert
-  non-wins; gate quality on `BENCH_SHADER` thresholds. **Payoff: ~10–30% of
-  `gpu=` per BENCH_SHADER S2/S3 precedent; risk medium** (quality regressions).
-  **~1–2 sessions, iterative.**
+  style). Measure each change cold (§5.3); revert non-wins; gate quality on
+  `BENCH_SHADER` thresholds.
+
+  **Session 2 (2026-06-19) — Env MIS+IS hog opened. Two structural levers tried,
+  both measured cold, both sub-noise → reverted (no GLSL shipped):**
+  - **Dedup the duplicated CDF-cell pdf reconstruction** (the 4-`textureLod` +
+    successive-difference block is identical in `sampleEnvImportance` and
+    `pdfEnvImportance`) — factored into shared `envCDFCellDiffs`/`envCellPdf`
+    helpers. Env MIS+IS delta 2790→2526ms, within a run whose noise floor was
+    demonstrably ≥1s (Env MIS read *higher* than Env MIS+IS — impossible since
+    MIS+IS is a superset). **Verdict: no measurable win.** Re-confirms §4.3 — fxc
+    inlines helpers, so "collapse duplicate emissions" is a no-op for translation
+    cost on straight-line GLSL.
+  - **Force the two CDF binary-search loops to a runtime `[loop]`** (bound on the
+    uniform-derived `N`/`W` instead of `const ENV_CDF_SEARCH_STEPS=9`, so fxc
+    can't unroll the constant-trip loop — the §7.3 "primary fxc cost" hypothesis).
+    Env MIS+IS delta 2790→2161ms, but that run's **Sobol control read −496ms**
+    (deltas biased ~500ms low); adjusted, indistinguishable from baseline. **No
+    >1s drop → the loops were already emitted as `[loop]`; not unrolled.** This
+    independently re-confirms session-1's falsification and the
+    `feedback_angle_d3d11_optimizer` prior.
+
+  **Conclusion for the +IS hog:** its ~1.2s marginal (Env MIS+IS − Env MIS) is the
+  *irreducible* fxc translate+register cost of the texture-sampling + trig math —
+  there is **no structural/algorithmic GLSL win available without changing what it
+  computes** (quality regression). The only lever for that specific cost is the
+  out-of-scope default change (reflMode→1; parked in the §8 Appendix).
+
+  **Session 3 (2026-06-19) — Area lights hog localized + a real win shipped
+  (ADR-0074).** Split `PT_AREA_LIGHTS` into measured sub-pieces via temporary
+  sub-gates (bounce-side light-hit, NEE-side sphere sampling, env-NEE occlusion,
+  and the sphere **shadow override**) and measured each cold (§5).
+  - **Localization (Mandelbulb, baseline 11107ms):** the sphere shadow override
+    alone = **+969ms** (>half the area-lights cost); bounce+nee+envocc together
+    only ~+496ms (sub-noise individually). The override was the hog because it
+    issued a **separate `GetHardShadow(...)` call** for sphere lights, wrapping the
+    default `GetSoftShadow` march — two *different* functions, each a full 256-step
+    `DE_Dist` raymarch, both inlined into the NEE loop. (This also explains why the
+    first sub-gate run showed a non-additive ~1150ms floor across every subset: the
+    override was still gated on `PT_AREA_LIGHTS`, present in all of them.)
+  - **Fix (shipped):** fold the sphere case into the single march already present —
+    soft variant drives `k=2000` (near-binary) for spheres and reuses the one
+    `GetSoftShadow` call; stochastic variant points its (already-`GetHardShadow`)
+    march at the sphere sample with no re-jitter. `GetHardShadow` then DCEs in the
+    soft variant → one march, not two. **Same feature on**; non-sphere lights are
+    byte-identical.
+  - **Measured saving (within-run A/B, noise-canceled, Sobol control clean):**
+    **−630ms Mandelbulb** (13055→12425ms total), **−1356ms Great Stellated Dodec.**
+    (19044→17688ms total). The saving scales with DE weight = the signature of a
+    removed `DE_Dist` march. Post-fix production marginal for `ptAreaLights`:
+    **+345–977ms** (was +2027). Cold-compile variance is real here — the absolute
+    marginal swings run-to-run; the within-run A/B is the trustworthy figure.
+  - **Lesson:** unlike function-level dedup (§4.3, a fxc no-op), removing a
+    *duplicated inlined `DE_Dist` march* is a real, large win. Prefer one
+    parameterized march over a second near-identical inlined march — the cost is
+    the inlined body, not the call.
+
+  **Next: Env MIS (+1361ms) and NEE (+832ms), not yet localized.** Apply the same
+  sub-gate localization; look for any other duplicated heavy-function inline (the
+  triplicated GGX specular eval across light-NEE / env-NEE / `pdfVNDF` is a
+  candidate, but per §4.3 only ships if it MEASURES a win). **Payoff: medium; risk
+  medium** (quality).
 
 - 🔲 **L4 — fxc-construct audit (avoid what fxc is slow on).** Find the GLSL
   constructs that make fxc slow (§7.3) inside the active shader: constant-bounded
@@ -438,30 +536,45 @@ hoisting expressions ANGLE/fxc already optimizes.
 
 ### Tier B — measurement + hygiene (enables Tier A)
 
-- 🔲 **L7 — Instrument the first-draw/"unfold" phase.** Add a timer around the
-  post-swap `pipelineRender()` ([`CompileScheduler.ts:351`](../../engine-gmt/engine/CompileScheduler.ts#L351))
-  and add `firstDraw=` to the `[Compile]` log so the protocol can attribute the
-  third compile phase (§1.1). Without this we can't tell whether a GLSL change
-  helped fxc or first-draw. **Prerequisite for cleanly reading L5/L4 results;
-  risk low.** **~¼ session.**
+- ✅ **L7 — Instrument the first-draw/"unfold" phase.** *(Done 2026-06-19.)*
+  Wrapped the post-swap `pipelineRender()` ([`CompileScheduler.ts:363`](../../engine-gmt/engine/CompileScheduler.ts#L363))
+  in a `tFirstDrawStart/End` timer and appended `firstDraw=…ms` to the two-stage
+  `[Compile]` log (§1.1). Both `measure-pt-*.mts` parsers now capture and print
+  it. The protocol can now attribute fxc (`gpu=`) vs first-draw. Emitted on the
+  two-stage path only (single-stage returns before the post-swap render).
 
-- 🔲 **L6 — Recalibrate `estCompileMs` against §2.3.** Make the Engine-panel
-  estimate honest for PT (currently ~3–5× low). Pure data change in
-  [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts); no shader risk.
-  Also recalibrate `BASE_COMPILE_MS`. **Payoff: trustworthy UX estimate (not
-  compile time itself); risk ~none.** **~¼ session.** Refresh after each L5/L4
-  win lands.
+- ✅ **L6 — Recalibrate `estCompileMs` against §2.3.** *(Done 2026-06-19;
+  Area lights re-recalibrated session 3.)* PT switch annotations updated to
+  measured cold marginals (Env MIS+IS 650→2579, Env MIS 250→1361, NEE +832 added,
+  Sobol 50→25) on the lighting feature params; `@stale` cleared from
+  [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts). `BASE_COMPILE_MS`
+  kept at 4200 (confirmed honest vs the §2.3 PT baseline). **Area lights: 600→2027
+  (session 1/2) → 1230 (session 3, after ADR-0074's single-march fix removed the
+  duplicate shadow march; ≈2027 × the within-run new/old marginal ratio 0.61).**
+  Refresh after each L5/L4 win lands.
 
 - 🔲 **L8 — Fix the `BENCH_SHADER_HANDOFF.md` `dev/` path drift** (§6 stale
   flag). `@stale` / fold on next touch. **Trivial.**
 
 ### Suggested sequencing
 
-1. **Session 2:** L7 + L6 first (cheap; gives clean attribution + an honest
-   estimate), then open L5 on the Env MIS+IS hog (the measured +2579ms).
-2. **Session 3:** continue L5 down the hog list (Area lights → Env MIS → NEE).
-3. **Session 4:** L4 (fxc-construct audit) once the per-chunk rewrites plateau.
-4. Re-run L6 after each landed win so the estimate tracks reality.
+1. ✅ **Session 2 (2026-06-19):** L7 (firstDraw timer — found first-draw ~0ms,
+   all cost is `gpu=`) + L6 (estCompileMs recalibrated to measured) done. Opened
+   L5 on the Env MIS+IS hog: dedup + loop-bound both measured sub-noise →
+   reverted → hog confirmed compile-tight. Also added the accum-fps side-metric
+   (§5.5).
+2. ✅ **Session 3 (2026-06-19):** localized **Area lights (+2027ms)** via temporary
+   sub-gates → the sphere shadow override (a *second* full `DE_Dist` march from a
+   separate `GetHardShadow` call) was +969ms, >half the cost. Shipped the
+   single-march fold (ADR-0074): within-run A/B saving −630ms (Mandelbulb) /
+   −1356ms (Great Stellated). L6 re-recalibrated (2027→1230). **First real L5 win.**
+3. **Session 4:** continue L5 down the hog list — **Env MIS (+1361ms)** then
+   **NEE (+832ms)**, not yet localized. Same sub-gate method; hunt for any other
+   duplicated heavy-function inline (a `DE_Dist`/full-march or texture-heavy block
+   emitted twice), which session 3 proved IS a real win (unlike function dedup).
+   Any win must clear the ~1s noise floor; use within-run A/B + the Sobol control.
+4. **Session 5:** L4 (fxc-construct audit) once the per-chunk rewrites plateau.
+5. Re-run L6 after each landed win so the estimate tracks reality.
 
 ### Appendix — out of scope (do NOT pursue under the current scope decision §0)
 
@@ -491,6 +604,7 @@ deliberate scope change.
 - ADR-0050/0055 — compile/runtime split (the constraint in §4.1).
 - ADR-0070 — procedural-sun NEE (lives in the PT_ENV_MIS chunk L5 rewrites).
 - ADR-0073 — adopts the measure-pt-* diagnostics as protocol tooling.
+- ADR-0074 — area-light PT shadows fold into a single march (first L5 win).
 - `docs/BENCH_SHADER_HANDOFF.md` — render-perf + quality bench harness (S1–S3
   optimization log; the proof-record for "ANGLE is smart, only algorithmic wins").
 - Memories: `feedback_angle_d3d11_optimizer`, `feedback_no_compile_gate_realtime`,
