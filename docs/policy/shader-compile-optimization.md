@@ -542,11 +542,63 @@ hoisting expressions ANGLE/fxc already optimizes.
     inlines, collapse any kept alive only because a *runtime* predicate keeps both
     `if/else` branches live in a variant.
 
-  **Next: Env MIS (+1361ms) and NEE (+832ms), not yet localized.** Apply the same
-  sub-gate localization + shader-dump inline census; look for any other duplicated
-  heavy-function inline (the triplicated GGX specular eval across light-NEE /
-  env-NEE / `pdfVNDF` is a candidate, but it's straight-line ALU — per §4.3 only
-  ships if it MEASURES a win). **Payoff: medium; risk medium** (quality).
+  **Session-4 leads (3-agent shader-dump dig, 2026-06-19).** Ranked candidates for
+  the next session; all need cold within-run A/B (§5) before believing. The cost
+  model is confirmed: `DE_Dist` is a 1-line wrapper over `mapDist` (the geometry
+  fractal march), and `map()` is the *full* fractal body (march + orbit-trap +
+  decomposition + coloring snapshot, ~177 lines, `de.ts:26-198`) — the **heaviest
+  body in the shader**. Census of LIVE heavy inlines in PT: `map()` ×6,
+  `mapDist`/`DE_Dist` ×6.
+
+  1. 🎯 **`traceScene` vs `traceSceneLean` — a 3×`map()` duplicate march (biggest
+     lead).** `trace.ts`/`ShaderBuilder.ts:585-588` emit two near-identical trace
+     functions (camera ray vs bounce ray) differing ONLY in injected volume code;
+     each inlines **3 full `map()`** (march + refinement + recovery). That's the
+     ADR-0074 "second inlined march" pattern on the heaviest body. **Experiment:**
+     point `tracePTBounce` at a single shared trace fn (compile-gate the volume
+     body) and measure cold `gpu=`. **Risk/uncertainty:** fxc *may* already share
+     one translated body when the lean volume injection is empty (→ no-op, negative
+     result) — the A/B settles it in one run. Watch: `traceScene` carries volume
+     accum the bounce discards (DCE'd, harmless).
+  2. ⚡ **Dead heavy bodies emitted into PT (cheapest experiment, tests a key
+     assumption).** `GetAO` (`ao/` — 32-trip loop + a `DE_Dist` tap) and
+     `GetFastNormal` (`material_eval.ts:22` — 4 `DE_Dist` taps) are **emitted but
+     never called** in PT (AO is gated on `aoEnabled`/`variant`, not render mode;
+     PT forces `ao=1.0` and calls only `GetNormal` post-ADR-0075). If fxc inlines
+     the heavy `DE_Dist`/`mapDist` body *before* DCE-ing the uncalled function,
+     stubbing them in PT is free output-identical savings. **Experiment:** wrap both
+     definitions in `#ifndef RENDER_MODE_PATHTRACING` (or stub `GetAO`→`1.0` in PT);
+     A/B both together. **If flat → confirms fxc DCEs uncalled fns cheaply** and
+     closes this sub-tier; if it moves, sweep for every `GetX` whose only call sites
+     are in Direct-only chunks.
+  3. **Env MIS (+1361ms): fold `envVisibility` into `GetHardShadow`.** `envVisibility`
+     (`pathtracer.ts:437`) is a standalone `DE_Dist` march that is a near-clone of
+     `GetHardShadow` (`shadows.ts:100`) — the only *new* heavy march Env MIS adds.
+     ADR-0074 pattern. **Localize first** with sub-gates `…VIS / …EVAL / …BSDFSIDE /
+     …DIRPDF` (march vs GGX-eval vs miss-side MIS vs dir-pdf); predict `…VIS` carries
+     ≳1s. If `…VIS` is sub-noise → Env MIS is compile-tight like +IS; document + stop.
+  4. **Refinement-loop `map()`→`mapDist()` (measure with care).** The surface-
+     refinement loop (`trace.ts:131-143`) iterates on distance only (`h_ref.x`) but
+     inlines the *full* `map()`. Swapping to `mapDist` + one final `map()` on hit
+     trims a heavy inline. **But:** a prior map/mapDist *main-march* split was reverted
+     (+5% runtime; `trace.ts:33-38`), and bounce shading may consume `result.yzw`
+     coloring from the lean trace — verify before swapping; gate on BENCH render p50.
+  5. **NEE-all-lights (+832ms): NOT a march — likely L4 (loop/register).** Adds no
+     new heavy body; only flips the const-3 NEE loop (`pathtracer.ts:710`) from
+     compile-peeled-1 to a runtime trip. The +832ms is most plausibly loop-realization
+     / register pressure (§7.3), not march duplication. **Pre-check:** dump the shader
+     gate-on vs gate-off and diff the `DE_Dist` count (expect identical → confirms no
+     march to collapse). Sub-gate `…LOOPONLY` vs `…PDFONLY`; candidate rewrite: bound
+     the loop on `neeCount` not the literal `3`. Lower priority.
+
+  **Confirmed negatives (don't re-pursue):** the triplicated GGX specular eval
+  (light-NEE / env-NEE / `pdfVNDF`) is straight-line ALU → dedup is a fxc no-op
+  (§4.3); `intersectAreaLight` ×2 is a small analytic loop, not a march → no-op;
+  CDF binary-search loops already `[loop]` (session 2); `GetNormal`/`GetSoftShadow`/
+  `envVisibility` are each already a single march at the floor. **Sequencing:** do
+  lead 2 first (cheapest, one run, answers the inline-before-DCE question that
+  bounds leads 1+3), then lead 1 (biggest), then lead 3. **Payoff: high (lead 1);
+  risk medium** (quality/correctness on leads 1+4).
 
 - 🔲 **L4 — fxc-construct audit (avoid what fxc is slow on).** Find the GLSL
   constructs that make fxc slow (§7.3) inside the active shader: constant-bounded
