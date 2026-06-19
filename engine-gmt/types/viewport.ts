@@ -176,6 +176,55 @@ export const SUBSYSTEM_LIGHTING: SubsystemDefinition = {
     ],
 };
 
+// Path Tracer quality — the PT analogue of SUBSYSTEM_REFLECTIONS (which is the
+// Direct-render reflection tier). Active only when PT is the render mode; dims
+// in Direct (mirror of how the 'direct' subsystems dim in PT). Each tier bundles
+// the PT-specific compile switches + max shadows so picking one tier sets up a
+// complete PT look. Placed LAST in ALL_SUBSYSTEMS so its lighting overrides win
+// over SUBSYSTEM_LIGHTING's (single owner of ptNEEAllLights in PT).
+//
+// Cost basis: docs/policy/shader-compile-optimization.md §2.5 (per-switch map).
+// Only THREE PT switches are >1s: the PT module itself and the two Env-sampling
+// modes. So Balanced (no Env MIS) is cheap; Full adds Env MIS+IS (+~1.7s) and
+// area lights (+~0.4s). NEE / Sobol / shadow-tier are all sub-second.
+export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
+    id: 'pathtracer',
+    label: 'Path Tracer',
+    renderContext: 'pathtracer',
+    controlledParams: [
+        'lighting.ptReflMode',
+        'lighting.ptAreaLights',
+        'lighting.ptNEEAllLights',
+    ],
+    tiers: [
+        {
+            // NEE + max shadows. Env still REFLECTS (bounce rays hit the sky);
+            // reflMode 0 just drops the env MIS/importance-sampling — cheap, and
+            // the only visible loss is slower convergence on bright sun discs.
+            label: 'Balanced',
+            overrides: {
+                lighting: {
+                    ptReflMode: 0.0, ptAreaLights: false, ptNEEAllLights: true, ptSobolBounce: true,
+                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true,
+                },
+            },
+            estCompileMs: 100,   // NEE (~80) only; shadows counted by SUBSYSTEM_SHADOWS
+        },
+        {
+            // Env MIS+IS (importance sampling for HDR sun discs) + area lights +
+            // NEE + max shadows. The full-quality PT look.
+            label: 'Full',
+            overrides: {
+                lighting: {
+                    ptReflMode: 2.0, ptAreaLights: true, ptNEEAllLights: true, ptSobolBounce: true,
+                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true,
+                },
+            },
+            estCompileMs: 2200,  // Env MIS+IS (~1700) + area lights (~400) + NEE (~80)
+        },
+    ],
+};
+
 export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
     id: 'atmosphere_quality',
     label: 'Atmosphere',
@@ -226,6 +275,9 @@ export const ALL_SUBSYSTEMS: SubsystemDefinition[] = [
     SUBSYSTEM_REFLECTIONS,
     SUBSYSTEM_LIGHTING,
     SUBSYSTEM_ATMOSPHERE,
+    // LAST: its lighting overrides (ptReflMode/ptAreaLights/ptNEEAllLights) win
+    // over SUBSYSTEM_LIGHTING's in the applyTierOverrides merge (last-assign-wins).
+    SUBSYSTEM_PATHTRACER,
 ];
 
 // ─── Master Presets ─────────────────────────────────────────
@@ -243,6 +295,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
             reflections: 0,          // Off
             lighting_quality: 0,     // Preview (no advanced lighting)
             atmosphere_quality: 0,   // Off
+            pathtracer: 0,           // Balanced (inert until PT mode active)
         },
     },
     {
@@ -254,6 +307,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
             reflections: 0,          // Off
             lighting_quality: 1,     // Path Traced
             atmosphere_quality: 1,   // Fast Glow
+            pathtracer: 0,           // Balanced
         },
     },
     {
@@ -265,6 +319,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
             reflections: 1,          // Env Map
             lighting_quality: 1,     // Path Traced
             atmosphere_quality: 2,   // Color Glow
+            pathtracer: 0,           // Balanced
         },
     },
     {
@@ -276,6 +331,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
             reflections: 1,          // Env Map
             lighting_quality: 1,     // Path Traced
             atmosphere_quality: 2,   // Color Glow
+            pathtracer: 0,           // Balanced (PT: NEE + max shadows)
         },
     },
     {
@@ -287,6 +343,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
             reflections: 3,          // Full (raymarched + bounce shadows)
             lighting_quality: 1,     // Path Traced
             atmosphere_quality: 3,   // Volumetric
+            pathtracer: 1,           // Full (PT: Env MIS+IS + area lights + NEE)
         },
     },
     {
@@ -299,6 +356,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
             reflections: 3,          // Full
             lighting_quality: 2,     // PT + NEE
             atmosphere_quality: 3,   // Volumetric
+            pathtracer: 1,           // Full
         },
     },
 ];

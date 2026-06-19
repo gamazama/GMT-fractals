@@ -11,9 +11,8 @@ import {
     estimateScalabilityCompileTime,
 } from '../types/viewport';
 
-// PT section color tokens
+// PT section color token
 const PT_COLOR = 'text-purple-400';
-const PT_BG = 'bg-purple-900/30 border-purple-500/30';
 
 /**
  * Top-bar dropdown for viewport quality control.
@@ -34,12 +33,11 @@ export const ViewportQuality: React.FC = () => {
     const renderMode = useEngineStore(s => (s as any).lighting?.renderMode ?? 0);
     const isPT = ptEnabled && renderMode === 1.0;
 
-    // PT runtime params — editable inline when PT is active
+    // PT runtime params — editable inline when PT is active. (Compile-time PT
+    // quality — NEE / env sampling / area lights — is owned by the Path Tracer
+    // quality tier in the Per Subsystem list, not by inline toggles.)
     const ptBounces = useEngineStore(s => (s as any).lighting?.ptBounces ?? 3);
     const ptGIStrength = useEngineStore(s => (s as any).lighting?.ptGIStrength ?? 1.0);
-    // PT compile-time params — batched with Apply
-    const ptNEEAllLights = useEngineStore(s => (s as any).lighting?.ptNEEAllLights ?? false);
-    const ptEnvNEE = useEngineStore(s => (s as any).lighting?.ptEnvNEE ?? false);
 
     const [isOpen, setIsOpen] = useState(false);
 
@@ -51,25 +49,16 @@ export const ViewportQuality: React.FC = () => {
     useEffect(() => { setVpQualityOpen(isOpen); }, [isOpen]);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Local pending state for batching (changes staged until Apply)
-    //
-    // @invariant Two distinct paths for PT params. Runtime params
-    //   (`ptBounces`, `ptGIStrength`) push through `setLighting`
-    //   instantly. Compile-time params (`ptNEEAllLights`, `ptEnvNEE`)
-    //   stay in `pendingPTCompile` until Apply, then the compile pipeline
-    //   rebuilds.
+    // Local pending state for batching (changes staged until Apply).
+    // Subsystem tier changes (incl. the Path Tracer quality tier) stage here;
+    // runtime params (`ptBounces`, `ptGIStrength`) push through `setLighting`
+    // instantly and aren't batched.
     const [pendingSubsystems, setPendingSubsystems] = useState<Record<string, number> | null>(null);
     const [pendingPreset, setPendingPreset] = useState<string | null>(null);
-    // Pending compile-time PT params (NEE toggles require recompile)
-    const [pendingPTCompile, setPendingPTCompile] = useState<Record<string, any> | null>(null);
 
     // Effective state: pending overrides on top of current
     const effectiveSubsystems = pendingSubsystems ?? scalability.subsystems;
-    const hasPending = pendingSubsystems !== null || pendingPTCompile !== null;
-
-    // Effective PT compile state for display
-    const effectiveNEEAllLights = pendingPTCompile?.ptNEEAllLights ?? ptNEEAllLights;
-    const effectiveNEEEnv = pendingPTCompile?.ptEnvNEE ?? ptEnvNEE;
+    const hasPending = pendingSubsystems !== null;
 
     const estimatedMs = useMemo(
         () => estimateScalabilityCompileTime(effectiveSubsystems),
@@ -86,7 +75,6 @@ export const ViewportQuality: React.FC = () => {
                 setIsOpen(false);
                 setPendingSubsystems(null);
                 setPendingPreset(null);
-                setPendingPTCompile(null);
             }
         };
         window.addEventListener('mousedown', handleClick);
@@ -106,20 +94,6 @@ export const ViewportQuality: React.FC = () => {
         setPendingPreset(null);
     };
 
-    const handlePTCompileToggle = (param: string, current: boolean) => {
-        const base = pendingPTCompile ?? {};
-        const newVal = !current;
-        // If toggling back to store value, remove from pending
-        const storeVal = param === 'ptNEEAllLights' ? ptNEEAllLights : ptEnvNEE;
-        if (newVal === storeVal) {
-            const next = { ...base };
-            delete next[param];
-            setPendingPTCompile(Object.keys(next).length > 0 ? next : null);
-        } else {
-            setPendingPTCompile({ ...base, [param]: newVal });
-        }
-    };
-
     const handleApply = () => {
         if (!hasPending) return;
 
@@ -135,13 +109,8 @@ export const ViewportQuality: React.FC = () => {
             }
         }
 
-        if (pendingPTCompile && setLighting) {
-            setLighting(pendingPTCompile);
-        }
-
         setPendingSubsystems(null);
         setPendingPreset(null);
-        setPendingPTCompile(null);
         setIsOpen(false);
     };
 
@@ -215,7 +184,11 @@ export const ViewportQuality: React.FC = () => {
                             <div className="space-y-1">
                                 {ALL_SUBSYSTEMS.filter(s => !s.isAdvanced || advancedMode).map(sub => {
                                     const currentTier = effectiveSubsystems[sub.id] ?? 0;
-                                    const isDimmed = isPT && sub.renderContext === 'direct';
+                                    // Direct subsystems are irrelevant in PT and vice-versa — dim the
+                                    // off-mode ones. The Path Tracer tier is the PT analogue of the
+                                    // Reflections (Direct) tier.
+                                    const isDimmed = (isPT && sub.renderContext === 'direct')
+                                        || (!isPT && sub.renderContext === 'pathtracer');
                                     return (
                                         <div
                                             key={sub.id}
@@ -275,34 +248,9 @@ export const ViewportQuality: React.FC = () => {
                                             <span className={`text-[10px] ${PT_COLOR} font-mono w-7 text-right`}>{ptGIStrength.toFixed(2)}</span>
                                         </div>
                                     </div>
-                                    {/* Sample All Lights — compile-time, batched with Apply */}
-                                    <div className="flex items-center justify-between px-2">
-                                        <span className={`text-[10px] ${PT_COLOR}`}>Sample All Lights</span>
-                                        <button
-                                            onClick={() => handlePTCompileToggle('ptNEEAllLights', effectiveNEEAllLights)}
-                                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors ${
-                                                effectiveNEEAllLights
-                                                    ? `${PT_BG} ${PT_COLOR}`
-                                                    : 'border-white/10 text-gray-600 hover:text-gray-400'
-                                            }`}
-                                        >
-                                            {effectiveNEEAllLights ? 'On' : 'Off'}
-                                        </button>
-                                    </div>
-                                    {/* Environment NEE — compile-time, batched with Apply */}
-                                    <div className="flex items-center justify-between px-2">
-                                        <span className={`text-[10px] ${PT_COLOR}`}>Environment NEE</span>
-                                        <button
-                                            onClick={() => handlePTCompileToggle('ptEnvNEE', effectiveNEEEnv)}
-                                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors ${
-                                                effectiveNEEEnv
-                                                    ? `${PT_BG} ${PT_COLOR}`
-                                                    : 'border-white/10 text-gray-600 hover:text-gray-400'
-                                            }`}
-                                        >
-                                            {effectiveNEEEnv ? 'On' : 'Off'}
-                                        </button>
-                                    </div>
+                                    {/* Sample All Lights / Env sampling are now owned by the
+                                        Path Tracer quality tier (Balanced / Full) in the Per
+                                        Subsystem list above — no separate inline toggles. */}
                                 </div>
                             </div>
                         )}
