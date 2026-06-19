@@ -205,9 +205,9 @@ export const LightingFeature: FeatureDefinition = {
             group: 'engine_settings',
             options: [
                 { label: 'Blinn-Phong (Fast)', value: 0.0, estCompileMs: 0 },
-                { label: 'Cook-Torrance (Quality)', value: 1.0, estCompileMs: 400 }
+                { label: 'Cook-Torrance (Quality)', value: 1.0, estCompileMs: 30 }  // L6: measured ~free (+6/29ms; §2.6); was 400
             ],
-            description: 'BRDF model for direct lighting. Cook-Torrance is physically accurate but increases shader compile time.',
+            description: 'BRDF model for direct lighting. Cook-Torrance is physically accurate, with negligible compile cost.',
             onUpdate: 'compile',
             noReset: true
         },
@@ -219,16 +219,20 @@ export const LightingFeature: FeatureDefinition = {
             noReset: true,
             onUpdate: 'compile',
             description: 'Compiles the shadow raymarching loop. Disable to save ~5s compile time.',
-            estCompileMs: 1500 // Base cost of having shadow engine enabled (measured: ~1.5s)
+            estCompileMs: 500 // L6: shadow march over no-shadows ~500 cold (§2.6); was 1500
         },
         shadowAlgorithm: {
             type: 'float', default: 0.0, label: 'Shadow Quality', shortId: 'sa',
             group: 'engine_settings',
             parentId: 'shadowsCompile',
             options: [
-                { label: 'Hard Only (Fastest)', value: 2.0, estCompileMs: 500 },
-                { label: 'Lite Soft (Fast)', value: 1.0, estCompileMs: 1500 },
-                { label: 'Robust Soft (Quality)', value: 0.0, estCompileMs: 3000 }
+                // L6: shadow algorithm tier is ~compile-free — all tiers measured
+                // within noise (~0-150ms over the shadow-march base; §2.5/§2.6).
+                // Was 500/1500/3000 (~5-10x high). The march cost lives in
+                // shadowsCompile above; the penumbra-quality upgrade is cheap.
+                { label: 'Hard Only (Fastest)', value: 2.0, estCompileMs: 0 },
+                { label: 'Lite Soft (Fast)', value: 1.0, estCompileMs: 100 },
+                { label: 'Robust Soft (Quality)', value: 0.0, estCompileMs: 100 }
             ],
             description: 'Shadow algorithm. Hard = binary occlusion, Lite = fast penumbra, Robust = accurate penumbra.',
             onUpdate: 'compile',
@@ -250,25 +254,25 @@ export const LightingFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'True Area Lights', shortId: 'pal2',
             group: 'engine_settings', parentId: 'ptEnabled',
             ui: 'checkbox', onUpdate: 'compile', noReset: true,
-            estCompileMs: 1230,  // post-ADR-0074 single-march fix (was 2027; within-run A/B saved ~630ms/39% on Mandelbulb). @see docs/policy/shader-compile-optimization.md §8 L5
+            estCompileMs: 400,  // L6: measured +389/221 cold over minimal PT (§2.5); was 1230 (session-3 estimate, on a slower baseline). @see docs/policy/shader-compile-optimization.md §2.5
             description: 'Physically-correct sphere area light integration (sphere-surface sampling + MIS). Required for lights with type=Sphere. Enable + change a light type to Sphere via the per-light menu. Costs ~1s compile + one extra sphere intersection per bounce.'
         },
         ptNEEAllLights: {
             type: 'boolean', default: false, label: 'Sample All Lights', shortId: 'pal',
             group: 'engine_settings', parentId: 'ptEnabled',
             ui: 'checkbox', onUpdate: 'compile', noReset: true,
-            estCompileMs: 832,  // measured cold marginal (§2.3); was unannotated
+            estCompileMs: 80,  // L6: measured +77/247 cold over minimal PT (§2.5); was 832 (session-1, slower/fuller baseline)
             description: 'Evaluates every active light per bounce instead of one random light. Reduces shadow noise at the cost of N× more shadow rays.'
         },
         ptReflMode: {
             type: 'float', default: 2.0, label: 'Env Sampling', shortId: 'prm',
             group: 'engine_settings', parentId: 'ptEnabled',
             options: [
-                // estCompileMs recalibrated to measured cold marginal (§2.3);
-                // were 250 / 650 (~5× / ~4× low).
+                // L6 (§2.5): measured cold over minimal PT — Env MIS +1122/1177,
+                // Env MIS+IS +1683/1873. Were 1361/2579 (session-1, slower baseline).
                 { label: 'Off',           value: 0.0, estCompileMs: 0 },
-                { label: 'Env MIS',       value: 1.0, estCompileMs: 1361 },
-                { label: 'Env MIS + IS',  value: 2.0, estCompileMs: 2579 },
+                { label: 'Env MIS',       value: 1.0, estCompileMs: 1150 },
+                { label: 'Env MIS + IS',  value: 2.0, estCompileMs: 1700 },
             ],
             onUpdate: 'compile', noReset: true,
             description: 'Direct env-map sampling with MIS for path-traced reflections. Env MIS handles broad skies; Env MIS + IS adds importance sampling for HDR maps with sun discs / concentrated lights. Replaces the older Environment NEE (which only handled diffuse).'

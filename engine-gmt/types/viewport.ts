@@ -92,21 +92,21 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
             overrides: {
                 lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0, ptStochasticShadows: false },
             },
-            estCompileMs: 500,
+            estCompileMs: 300,   // L6: measured ~250-425 cold (§2.6); was 500
         },
         {
             label: 'Soft',
             overrides: {
                 lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: false },
             },
-            estCompileMs: 3000,
+            estCompileMs: 350,   // L6: shadow tiers cost ~the same (~280-440); was 3000 (~8x high) (§2.6)
         },
         {
             label: 'Full',
             overrides: {
                 lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true },
             },
-            estCompileMs: 3800,
+            estCompileMs: 400,   // L6: jitter is compile-free over soft (~265-433); was 3800 (~9x high) (§2.6)
         },
     ],
 };
@@ -134,12 +134,12 @@ export const SUBSYSTEM_REFLECTIONS: SubsystemDefinition = {
         {
             label: 'Raymarched',
             overrides: { reflections: { reflectionMode: 3.0, bounceShadows: false, bounces: 1 } },
-            estCompileMs: 7500,
+            estCompileMs: 1500,  // L6: measured ~1500-2000 cold (§2.6.1); was 7500 (~4x high)
         },
         {
             label: 'Full',
             overrides: { reflections: { reflectionMode: 3.0, bounceShadows: true, bounces: 2 } },
-            estCompileMs: 12000,
+            estCompileMs: 1600,  // L6: bounceShadows is ~free (+42ms); was 12000 (~7x high) (§2.6)
         },
     ],
 };
@@ -248,7 +248,7 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
                 atmosphere: { glowEnabled: true, glowQuality: 1.0 },
                 volumetric: { ptVolumetric: false },
             },
-            estCompileMs: 200,
+            estCompileMs: 650,   // L6: Fast Glow measured +635/774 — costs MORE than Color (§2.6); was 200
         },
         {
             label: 'Color Glow',
@@ -256,7 +256,7 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
                 atmosphere: { glowEnabled: true, glowQuality: 0.0 },
                 volumetric: { ptVolumetric: false },
             },
-            estCompileMs: 400,
+            estCompileMs: 200,   // L6: Color Glow measured +205/198 (§2.6); was 400
         },
         {
             label: 'Volumetric',

@@ -897,6 +897,27 @@ hoisting expressions ANGLE/fxc already optimizes.
   much larger PT-baseline drop is a PT-only effect the per-toggle model can't
   separately represent). Refresh after each L5/L4 win.
 
+  **Session 5 (2026-06-19) — full recalibration against the §2.5/§2.6 comprehensive
+  cost maps** (the structural passes are exhausted, so the maps are now ground
+  truth). Calibrated to the session-5 machine (the current one). Fixed the gross
+  (4–100×) errors across both estimators:
+  - **viewport.ts subsystem tiers (the Viewport Quality dropdown):** Shadows
+    500/3000/3800 → 300/350/400 (tiers are ~equal, §2.6); Reflections Raymarched
+    7500→1500 & Full 12000→1600 (§2.6.1); Glow Fast 200→650 & Color 400→200
+    (swapped — Fast measured higher). New `pathtracer` subsystem tiers (Balanced
+    100 / Full 2200) were set from the map at creation.
+  - **Feature params (Engine-panel estimator):** reflections Raymarched 7500→1500,
+    bounceShadows 4500→**50** (~free); lighting Cook-Torrance 400→30 (~free),
+    shadowsCompile 1500→500, shadowAlgorithm tiers 500/1500/3000→0/100/100 (cheap),
+    ptReflMode 1361/2579→1150/1700, ptAreaLights 1230→400, ptNEEAllLights 832→80.
+  - **Deliberately deferred (not gross, and entangled):** `BASE_COMPILE_MS` (both
+    3600 profiles / 4200 viewport — calibrated to the slower session-1 scale, so a
+    uniform over-read remains) and the `lighting_quality` Preview/Path-Traced/PT+NEE
+    tiers (the PT-module-vs-`renderMode` accounting is tangled — `ptEnabled`
+    compiles the PT module independent of which shader is active). Per-switch
+    *deltas* are now right (relative tier comparisons accurate); the absolute base
+    offset is a separate follow-up. Volumetric (5900, PT, unmeasured) left as-is.
+
 - 🔲 **L8 — Fix the `BENCH_SHADER_HANDOFF.md` `dev/` path drift** (§6 stale
   flag). `@stale` / fold on next touch. **Trivial.**
 

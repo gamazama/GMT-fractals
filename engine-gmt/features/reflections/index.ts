@@ -193,9 +193,9 @@ export const ReflectionsFeature: FeatureDefinition = {
             options: [
                 { label: 'Off', value: REFL_MODE_OFF, estCompileMs: 0 },
                 { label: 'Environment Map', value: REFL_MODE_ENV, estCompileMs: 0 },
-                { label: 'Raymarched (Quality)', value: REFL_MODE_RAYMARCH, estCompileMs: 7500 }
+                { label: 'Raymarched (Quality)', value: REFL_MODE_RAYMARCH, estCompileMs: 1500 }  // L6: measured ~1500-2000 cold (§2.6.1); was 7500
             ],
-            description: 'Reflection technique. Higher quality = longer compile time. Raymarched adds ~9s.',
+            description: 'Reflection technique. Higher quality = longer compile time. Raymarched adds ~1.5-2s.',
             onUpdate: 'compile',
             noReset: true
         },
@@ -206,10 +206,10 @@ export const ReflectionsFeature: FeatureDefinition = {
             group: 'engine_settings',
             ui: 'checkbox',
             condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH },
-            description: 'Compute shadows on reflected surfaces. Adds ~3-4s compile time.',
+            description: 'Compute shadows on reflected surfaces. Negligible extra compile time.',
             onUpdate: 'compile',
             noReset: true,
-            estCompileMs: 4500
+            estCompileMs: 50  // L6: measured ~free (+42ms — calculatePBRContribution body already inlined; §2.6); was 4500 (~100x high)
         },
 
         // --- QUALITY PARAMS (Engine Panel, only for Raymarched) ---
