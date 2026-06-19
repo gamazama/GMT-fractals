@@ -560,17 +560,16 @@ hoisting expressions ANGLE/fxc already optimizes.
      one translated body when the lean volume injection is empty (→ no-op, negative
      result) — the A/B settles it in one run. Watch: `traceScene` carries volume
      accum the bounce discards (DCE'd, harmless).
-  2. ⚡ **Dead heavy bodies emitted into PT (cheapest experiment, tests a key
-     assumption).** `GetAO` (`ao/` — 32-trip loop + a `DE_Dist` tap) and
-     `GetFastNormal` (`material_eval.ts:22` — 4 `DE_Dist` taps) are **emitted but
-     never called** in PT (AO is gated on `aoEnabled`/`variant`, not render mode;
-     PT forces `ao=1.0` and calls only `GetNormal` post-ADR-0075). If fxc inlines
-     the heavy `DE_Dist`/`mapDist` body *before* DCE-ing the uncalled function,
-     stubbing them in PT is free output-identical savings. **Experiment:** wrap both
-     definitions in `#ifndef RENDER_MODE_PATHTRACING` (or stub `GetAO`→`1.0` in PT);
-     A/B both together. **If flat → confirms fxc DCEs uncalled fns cheaply** and
-     closes this sub-tier; if it moves, sweep for every `GetX` whose only call sites
-     are in Direct-only chunks.
+  2. ❌ **Dead heavy bodies emitted into PT — TESTED, NEGATIVE (session 3, 2026-06-19).**
+     `GetAO` (32-trip loop + a `DE_Dist` tap) and `GetFastNormal` (4 `DE_Dist` taps)
+     are emitted but never called in PT. Stripped both from PT builds (gated on
+     `RENDER_MODE_PATHTRACING`) and A/B-measured cold: **Mandelbulb −467ms, Great
+     Stellated −5ms** — both below the ~1s floor (the other two cells were
+     in-process-cache flakes, discarded). **Verdict: fxc DCEs uncalled functions
+     cheaply — there is no meaningful inline-before-DCE cost.** This closes the
+     dead-body sub-tier AND confirms a load-bearing assumption for leads 1/3/4: the
+     wins must come from *removing **live** duplicated heavy inlines*, not from
+     stripping dead ones. Don't re-pursue dead-code stripping for compile time.
   3. **Env MIS (+1361ms): fold `envVisibility` into `GetHardShadow`.** `envVisibility`
      (`pathtracer.ts:437`) is a standalone `DE_Dist` march that is a near-clone of
      `GetHardShadow` (`shadows.ts:100`) — the only *new* heavy march Env MIS adds.
@@ -595,10 +594,12 @@ hoisting expressions ANGLE/fxc already optimizes.
   (light-NEE / env-NEE / `pdfVNDF`) is straight-line ALU → dedup is a fxc no-op
   (§4.3); `intersectAreaLight` ×2 is a small analytic loop, not a march → no-op;
   CDF binary-search loops already `[loop]` (session 2); `GetNormal`/`GetSoftShadow`/
-  `envVisibility` are each already a single march at the floor. **Sequencing:** do
-  lead 2 first (cheapest, one run, answers the inline-before-DCE question that
-  bounds leads 1+3), then lead 1 (biggest), then lead 3. **Payoff: high (lead 1);
-  risk medium** (quality/correctness on leads 1+4).
+  `envVisibility` are each already a single march at the floor. **Sequencing
+  (updated after lead 2 closed negative):** lead 1 first (biggest — the
+  `traceScene`/`traceSceneLean` 3×`map()` duplicate), then lead 3
+  (`envVisibility`→`GetHardShadow` fold), then lead 4 (refinement `map`→`mapDist`,
+  with the render-perf caveat). Lead 5 (NEE) is L4-flavoured, lowest priority.
+  **Payoff: high (lead 1); risk medium** (quality/correctness on leads 1+4).
 
 - 🔲 **L4 — fxc-construct audit (avoid what fxc is slow on).** Find the GLSL
   constructs that make fxc slow (§7.3) inside the active shader: constant-bounded
