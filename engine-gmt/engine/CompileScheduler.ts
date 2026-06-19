@@ -18,6 +18,13 @@
  * compile-state fields. External `engine.isCompiling` /
  * `engine.hasCompiledShader` / `engine.lastCompileDuration` are now
  * getters that delegate here.
+ *
+ * The `[Compile] Two-stage/Single-stage: …ms (…, gen=…, gpu=…)` log lines
+ * below are the canonical compile-time instrumentation — do not remove; the
+ * measurement protocol parses them.
+ * @see docs/policy/shader-compile-optimization.md (compile-time model, protocol, backlog)
+ * @see docs/adr/0040-two-stage-shader-compile.md
+ * @see docs/adr/0073-compile-time-measurement-protocol.md
  */
 
 import * as THREE from 'three';

@@ -4,6 +4,11 @@
 //
 // Compile time estimates (Windows/ANGLE/fxc):
 //   Fastest: ~3-4s | Lite: ~5-6s | Balanced: ~7-8s | Ultra: ~17s+
+//
+// @stale estCompileMs / estimateCompileTime under-count PT switches ~3-5×
+//   (e.g. Env MIS+IS annotated 650ms, measured ~2579ms cold). Recalibrate
+//   against measured data — backlog L6.
+// @see docs/policy/shader-compile-optimization.md §3 (estCompileMs calibration gap)
 
 export const ENGINE_PROFILES = {
     fastest: {

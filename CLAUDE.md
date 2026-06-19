@@ -73,6 +73,7 @@ The table below covers **domain topics** (specific subsystems). If your task is 
 | **Tutorial / lessons** | JSDoc on `engine/plugins/Tutorial.tsx` + `app-gmt/tutorial/*` | ADR-0012 |
 | **Engine-gmt: GMT renderer** — FractalEngine + MaterialController + CompileScheduler | JSDoc on `engine-gmt/engine/FractalEngine.ts` + `engine-gmt/engine/CompileScheduler.ts` | ADRs 0036-0042 |
 | **Engine-gmt: shader pipeline** — 17-position assembly, UniformManager.syncFrame, ConfigManager.update diff | JSDoc on `engine-gmt/engine/ShaderBuilder.ts` + `managers/UniformManager.ts` | ADRs 0043-0044 |
+| **Shader compile time** — cold/cached model, measure→attribute→validate protocol, per-switch cost, optimization backlog | [`docs/policy/shader-compile-optimization.md`](./docs/policy/shader-compile-optimization.md) + JSDoc on `engine-gmt/engine/CompileScheduler.ts` | ADRs 0040, 0073 |
 | **Engine-gmt: bucket render + export** | JSDoc on `engine-gmt/engine/GmtBucketHost.ts` + `worker/WorkerExporter.ts` | ADR-0045 |
 | **Engine-gmt: navigation + cursor-anchored gestures** | JSDoc header `engine-gmt/navigation/Navigation.tsx:1-97` | ADRs 0046-0047 |
 | **Engine-gmt: formula registry** — FractalDefinition, alias drift, FormulaType union | JSDoc on `engine-gmt/engine/FractalRegistry.ts` + `formulas/index.ts` | ADRs 0048-0049 |

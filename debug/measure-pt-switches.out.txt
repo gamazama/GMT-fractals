@@ -1,0 +1,38 @@
+[switches] waiting for dev server at http://localhost:3400
+[switches] booted
+
+=== Mandelbulb ===
+[switches] -> Direct: gpu=0ms (window=0ms) (NO recompile)
+[switches] switch -> Mandelbulb (Direct): gpu=0ms (window=0ms) (NO recompile)
+[switches] PT baseline (all gates off): gpu=10341ms (window=10562ms)
+[switches] baseline + Env MIS (reflMode=1): gpu=11702ms (window=11924ms)
+[switches] baseline + Env MIS + IS (reflMode=2): gpu=12920ms (window=13161ms)
+[switches] baseline + Sobol bounce: gpu=10364ms (window=10585ms)
+[switches] baseline + NEE all lights: gpu=11173ms (window=11393ms)
+[switches] baseline + Area lights: gpu=12368ms (window=12596ms)
+
+=== GreatStellatedDodecahedron ===
+[switches] -> Direct: gpu=2633ms (window=2854ms)
+[switches] switch -> GreatStellatedDodecahedron (Direct): gpu=3614ms (window=5121ms)
+[switches] PT baseline (all gates off): gpu=15140ms (window=15360ms)
+[switches] baseline + Env MIS (reflMode=1): gpu=18561ms (window=18825ms)
+[switches] baseline + Env MIS + IS (reflMode=2): gpu=22414ms (window=22645ms)
+[switches] baseline + Sobol bounce: gpu=18005ms (window=18224ms)
+[switches] baseline + NEE all lights: gpu=17968ms (window=18187ms)
+[switches] baseline + Area lights: gpu=19521ms (window=19739ms)
+
+========== SUMMARY: PT compile cost per switch (cold gpu ms) ==========
+
+Mandelbulb   baseline = 10341ms
+  +  2579ms   Env MIS + IS (reflMode=2) (total 12920ms)
+  +  2027ms   Area lights              (total 12368ms)
+  +  1361ms   Env MIS (reflMode=1)     (total 11702ms)
+  +   832ms   NEE all lights           (total 11173ms)
+  +    23ms   Sobol bounce             (total 10364ms)
+
+GreatStellatedDodecahedron   baseline = 15140ms
+  +  7274ms   Env MIS + IS (reflMode=2) (total 22414ms)
+  +  4381ms   Area lights              (total 19521ms)
+  +  3421ms   Env MIS (reflMode=1)     (total 18561ms)
+  +  2865ms   Sobol bounce             (total 18005ms)
+  +  2828ms   NEE all lights           (total 17968ms)

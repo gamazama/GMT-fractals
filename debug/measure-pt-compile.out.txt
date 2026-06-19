@@ -1,0 +1,30 @@
+[measure] waiting for dev server at http://localhost:3400
+[measure] goto http://localhost:3400/app-gmt.html
+[measure] booted
+
+=== Mandelbulb ===
+[measure] -> Direct: window=0ms (NO recompile detected)
+[measure] switch -> Mandelbulb (Direct): window=0ms (NO recompile detected)
+[measure] PT old-default (Env MIS off, Sobol off) COLD: window=11588ms compile=11399ms (gpu=11366ms)
+[measure] PT new-default (Env MIS+IS, Sobol on)  COLD: window=13682ms compile=13491ms (gpu=13459ms)
+  Mandelbulb: old=11366ms new=13459ms  toll=+2093ms (18%)  [gpu compile ms]
+
+=== MixPinski ===
+[measure] -> Direct: window=210ms compile=20ms (gpu=0ms)
+[measure] switch -> MixPinski (Direct): window=5210ms compile=5213ms (gpu=3681ms)
+[measure] PT old-default (Env MIS off, Sobol off) COLD: window=17481ms compile=17293ms (gpu=17259ms)
+[measure] PT new-default (Env MIS+IS, Sobol on)  COLD: window=20577ms compile=20380ms (gpu=20357ms)
+  MixPinski: old=17259ms new=20357ms  toll=+3098ms (18%)  [gpu compile ms]
+
+=== GreatStellatedDodecahedron ===
+[measure] -> Direct: window=241ms compile=46ms (gpu=0ms)
+[measure] switch -> GreatStellatedDodecahedron (Direct): window=5201ms compile=5200ms (gpu=3634ms)
+[measure] PT old-default (Env MIS off, Sobol off) COLD: window=16267ms compile=16078ms (gpu=16013ms)
+[measure] PT new-default (Env MIS+IS, Sobol on)  COLD: window=20335ms compile=20140ms (gpu=20088ms)
+  GreatStellatedDodecahedron: old=16013ms new=20088ms  toll=+4075ms (25%)  [gpu compile ms]
+
+========== SUMMARY: PT cold-compile toll @ HEAD (gpu compile ms) ==========
+(old = pre-session defaults: Env MIS off + Sobol off; new = current defaults)
+  Mandelbulb                     old= 11366ms  new= 13459ms  toll=+2093ms (18%)
+  MixPinski                      old= 17259ms  new= 20357ms  toll=+3098ms (18%)
+  GreatStellatedDodecahedron     old= 16013ms  new= 20088ms  toll=+4075ms (25%)

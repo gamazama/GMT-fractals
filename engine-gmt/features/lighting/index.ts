@@ -1,4 +1,8 @@
 
+// Emits the PT compile-gated #defines (PT_ENV_MIS, PT_ENV_MIS_IS, PT_AREA_LIGHTS,
+// PT_NEE_ALL_LIGHTS, PT_SOBOL_BOUNCE). These gates' bodies are the measured
+// cold-compile hogs — see the per-switch cost table and shrink backlog.
+// @see docs/policy/shader-compile-optimization.md §2.3 + §8 (L1/L5)
 import { FeatureDefinition } from '../../engine/FeatureSystem';
 import { LightParams, generateLightId } from '../../types';
 import { MAX_LIGHTS } from '../../../data/constants';
