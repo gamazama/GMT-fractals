@@ -254,9 +254,51 @@ marginals slightly *over*-estimates a multi-gate config.
    1.11×). For estimation: scale the PT-module base by a formula-complexity factor;
    the gate marginals are roughly formula-stable adders.
 
----
+### 2.6 Direct-render cost map (cold, session-5 machine, 2026-06-19)
 
-## 3. The `estCompileMs` calibration gap
+The Direct twin of §2.5 — Direct (`renderMode 0`) is the **default** experience and
+a separate, mutually-exclusive shader (§1.4), never decomposed until now. Marginals
+over a minimal Direct baseline (Direct on, no shadows/reflections/AO/glow,
+Blinn-Phong), one switch at a time. Tool:
+[`debug/measure-direct-costmap.mts`](../../debug/measure-direct-costmap.mts).
+Control = `Reflections: Env Map` (annotated 0) — clean (MB +1ms, GSD −5ms).
+
+| Switch | Marginal — Mandelbulb | Marginal — Gt. Stellated | Class |
+|---|---:|---:|---|
+| **Reflections: Raymarched** (`REFL_MODE_RAYMARCH`) | **+1505ms** | **+2042ms** | **the one hog** |
+| Reflections: Full (Raymarched + `bounceShadows`) | +1547ms | +2026ms | (bounceShadows ≈ free) |
+| Glow: Fast (`glowQuality`=1) | +635ms | +774ms | moderate |
+| Shadows: Soft (`shadowAlgorithm`=0) | +263ms | +441ms | negligible |
+| Shadows: Hard (`shadowAlgorithm`=2) | +212ms | +396ms | negligible |
+| Glow: Color (`glowQuality`=0) | +205ms | +198ms | negligible |
+| AO on / AO + stochastic | +144 / +155ms | +218 / +214ms | negligible |
+| Cook-Torrance (`specularModel`=1) | +6ms | +29ms | free |
+| Reflections: Env Map — *control* | +1ms | −5ms | free |
+| Direct **minimal baseline** | 1162ms | 1389ms | — |
+| **MAXIMAL (all on)** | **4403ms** | **6405ms** | total |
+
+**Load-bearing findings:**
+1. **Direct is bimodal too — only ONE switch is >1s: Raymarched reflections**
+   (+1.5–2.0s). It's a *second full DE march* in the shading path, so it's the
+   Direct analogue of the PT area-light second-march that ADR-0074 folded — **the
+   prime candidate for a Direct structural pass** (does the reflection march
+   re-inline `map`/`DE_Dist` that the primary trace already computed?). NB it's a
+   power-user feature; the default is Env Map / Off (both free), so the *default*
+   Direct compile has no >1s switch at all.
+2. **Maximal Direct (4.4s) < minimal PT (5.3s)** — Direct is genuinely the cheap
+   path end-to-end.
+3. **Shadow tiers cost the same in Direct too** (Hard +212/+396 ≈ Soft +263/+441,
+   sub-noise) — confirms the §2.5 PT finding holds here. **Stochastic shadows /
+   the "Full" shadow tier is a no-op in Direct** (it's PT/area-light-only — no
+   shader change, no recompile). So Direct shadows are really just Off / Hard ≈
+   Soft, and the tier choice is not a compile lever in either path. **Conclusion
+   for the open UX question: defaulting to soft shadows from Balanced up costs
+   nothing over Hard — safe in both render modes.**
+4. **The Direct `estCompileMs` annotations are wildly off** (worse than PT's were):
+   Raymarched 7500→~1500-2000 (~4× high), `bounceShadows` 4500→~50 (~free,
+   ~100× high), Cook-Torrance 400→~20 (~free). And **Fast Glow reproducibly costs
+   *more* than Color Glow** (+635/774 vs +205/198) — the reverse of its annotation
+   (Fast 200 / Color 400); worth a glow-chunk look. Refresh in L6.
 
 [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts) has
 `estimateCompileTime(state)` (≈L161–196): `BASE_COMPILE_MS = 4200` plus a sum of
@@ -400,6 +442,7 @@ canonical tools (adopted this session — `@see` ADR-0073).
 | [`debug/measure-pt-compile.mts`](../../debug/measure-pt-compile.mts) | Cold PT compile per formula, old-vs-new defaults. `MEASURE_FORMULAS=…` override. Produces §2.2. Also reports `firstDraw=` (L7) and **accum-fps** (§5.5). |
 | [`debug/measure-pt-switches.mts`](../../debug/measure-pt-switches.mts) | Per-switch marginal cold cost (baseline + each gate alone). Produces §2.3. Also reports `firstDraw=` (L7) and **accum-fps** (§5.5). |
 | [`debug/measure-pt-costmap.mts`](../../debug/measure-pt-costmap.mts) | **Full per-switch cost map** — every PT-relevant compile switch (PT module, shadow tiers, all quality gates) decomposed as a clean marginal over a *minimal* PT baseline, plus the Direct→PT structural delta and the MAXIMAL total. Produces §2.5. The estimation + UX-grouping reference. |
+| [`debug/measure-direct-costmap.mts`](../../debug/measure-direct-costmap.mts) | **Direct-render cost map** — the Direct twin of the above: every Direct switch (shadows, reflections, lighting model, AO, glow) as a marginal over a minimal Direct baseline. Produces §2.6. Found Raymarched reflections is the one Direct hog (+1.5–2s) and the Direct `estCompileMs` are wildly off. |
 | [`debug/bench-shader.mts`](../../debug/bench-shader.mts) | GPU timing + reference-image diff harness (render perf + compile; parses the `[Compile]` log). Quality-regression gate. See `docs/BENCH_SHADER_HANDOFF.md`. |
 | [`debug/native-config-sweep.mts`](../../debug/native-config-sweep.mts) | Compiles every formula, gates on `webglCompile`, records per-formula `timeMs`. Whole-set correctness + timing regression guard. |
 | [`debug/dump-pt-shader.mts`](../../debug/dump-pt-shader.mts) | Dumps the live-assembled maximal-PT fragment shader (`window.__gmtProxy._lastGeneratedFrag`) to a file. Source for the `DE_Dist`/heavy-body **inline census** that found the ADR-0074/0075 wins. NB: output retains `#ifdef` directives (pre-preprocessor) — grep counts include inactive branches. |
