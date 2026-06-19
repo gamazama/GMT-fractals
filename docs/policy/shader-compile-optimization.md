@@ -307,6 +307,38 @@ Control = `Reflections: Env Map` (annotated 0) — clean (MB +1ms, GSD −5ms).
    *more* than Color Glow** (+635/774 vs +205/198) — the reverse of its annotation
    (Fast 200 / Color 400); worth a glow-chunk look. Refresh in L6.
 
+### 2.6.1 Raymarched-reflection structural pass — compile-tight (no free fold)
+
+Investigated the one Direct hog (Raymarched reflections, +1.5–2s) for an
+ADR-0074-style duplicate-march fold. Dumped the maximal Direct shader
+([`debug/dump-direct-shader.mts`](../../debug/dump-direct-shader.mts)) and
+censused; then localized by temporarily stubbing the reflection-hit surface shade.
+
+- **The reflection does a genuine *second surface shade*, not a duplicate.**
+  `traceReflectionRay` ([`reflections/shader.ts:57`](../../engine-gmt/features/reflections/shader.ts#L57))
+  marches a *distinct* ray with `DE_Dist` (already geometry-only, runtime-`[loop]`-
+  bounded), then `getSurfaceMaterial` + `calculatePBRContribution` + `GetAO` shade
+  the reflected hit. None of it duplicates the primary trace (`map()` is inlined
+  only in the primary march; the reflection uses `getTextureColor` on zero trap
+  data → gradient default, already lean). The full `DE()` coloring wrapper is
+  uncalled → already DCE'd. **No ADR-0074 duplicate, no ADR-0075 runtime double-
+  branch** (the reflection's `getSurfaceMaterial` passes a *constant* `highQuality
+  = false` → fxc already DCEs to the 4-tap `GetFastNormal`).
+- **Localized hog (within-run A/B, control clean):** stubbing the reflection's
+  `getSurfaceMaterial` dropped the Raymarched marginal **+1505 → +612ms** — so the
+  reflection-hit surface shade is **~893ms ≈ 60%** of the cost, and it's the
+  **4-tap `GetFastNormal`** (4 `DE_Dist`/`mapDist` geometry marches at the hit,
+  ~223ms each). The remaining ~612ms is the reflection march + `GetAO` + lighting +
+  env fill.
+- **Verdict: compile-tight, like NEE (§8-L4).** The dominant cost is the 4 geometry
+  marches for the reflected-surface normal — *genuine necessary work*, irreducible
+  without a **quality tradeoff** (fewer normal taps → the documented diagonal-skew
+  artifact [`GetFastNormal`](../../engine-gmt/shaders/chunks/lighting/shading.ts);
+  or skip the reflection `GetAO`). fxc inlines `getSurfaceMaterial` per call-site
+  and GLSL can't force `[noinline]`, so the second shade can't be shared. **No free
+  structural win shipped.** Any cut here is an owner quality decision, not a
+  compile-neutral fold.
+
 [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts) has
 `estimateCompileTime(state)` (≈L161–196): `BASE_COMPILE_MS = 4200` plus a sum of
 per-param `estCompileMs` annotations for enabled `onUpdate:'compile'` params. It
@@ -453,6 +485,7 @@ canonical tools (adopted this session — `@see` ADR-0073).
 | [`debug/bench-shader.mts`](../../debug/bench-shader.mts) | GPU timing + reference-image diff harness (render perf + compile; parses the `[Compile]` log). Quality-regression gate. See `docs/BENCH_SHADER_HANDOFF.md`. |
 | [`debug/native-config-sweep.mts`](../../debug/native-config-sweep.mts) | Compiles every formula, gates on `webglCompile`, records per-formula `timeMs`. Whole-set correctness + timing regression guard. |
 | [`debug/dump-pt-shader.mts`](../../debug/dump-pt-shader.mts) | Dumps the live-assembled maximal-PT fragment shader (`window.__gmtProxy._lastGeneratedFrag`) to a file. Source for the `DE_Dist`/heavy-body **inline census** that found the ADR-0074/0075 wins. NB: output retains `#ifdef` directives (pre-preprocessor) — grep counts include inactive branches. |
+| [`debug/dump-direct-shader.mts`](../../debug/dump-direct-shader.mts) | Direct twin of the above — dumps the maximal Direct shader (Raymarched reflections + bounce shadows + AO + Cook-Torrance) for the §2.6.1 reflection census. |
 | `CompileScheduler` telemetry | `lastDuration`, `gen/gpu` split, `FRACTAL_EVENTS.COMPILE_TIME`, `engine.lastCompileDuration`. |
 
 > **Stale flag:** `docs/BENCH_SHADER_HANDOFF.md` references `dev/debug/bench-shader.mts`
