@@ -49,7 +49,11 @@ const SWITCHES: { label: string; group: string; patch: Patch; control?: boolean 
     // Shadow ladder (the "do the tiers cost the same in Direct?" question).
     { label: 'Shadows: Hard',  group: 'shadow', patch: { lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0 } } },
     { label: 'Shadows: Soft',  group: 'shadow', patch: { lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0 } } },
-    { label: 'Shadows: Full',  group: 'shadow', patch: { lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true } } },
+    // Full = soft + stochastic area-light jitter. The jitter block (pbr.ts:77,
+    // a per-light GetHardShadow offset-sample path = different light blending) is
+    // gated on `stochasticShadows && areaLightsActive` — so areaLights MUST be on
+    // for it to engage. (Without areaLights it silently falls to the soft branch.)
+    { label: 'Shadows: Full (stochastic, areaLights on)', group: 'shadow', patch: { lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true } } },
     // Reflections (the prime suspects). Env Map = near-free CONTROL.
     { label: 'Reflections: Env Map (control)', group: 'refl', patch: { reflections: { reflectionMode: 1.0 } }, control: true },
     { label: 'Reflections: Raymarched',        group: 'refl', patch: { reflections: { reflectionMode: 3.0, bounceShadows: false } } },
@@ -64,7 +68,7 @@ const SWITCHES: { label: string; group: string; patch: Patch; control?: boolean 
 
 // Maximal Direct (all on): full shadows + full reflections + cook-torrance + AO + color glow.
 const MAXIMAL: Patch = {
-    lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, specularModel: 1.0 },
+    lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true, specularModel: 1.0 },
     reflections: { reflectionMode: 3.0, bounceShadows: true },
     ao: { aoEnabled: true, aoStochasticCp: true },
     atmosphere: { glowEnabled: true, glowQuality: 0.0 },

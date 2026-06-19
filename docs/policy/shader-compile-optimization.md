@@ -268,6 +268,7 @@ Control = `Reflections: Env Map` (annotated 0) — clean (MB +1ms, GSD −5ms).
 | **Reflections: Raymarched** (`REFL_MODE_RAYMARCH`) | **+1505ms** | **+2042ms** | **the one hog** |
 | Reflections: Full (Raymarched + `bounceShadows`) | +1547ms | +2026ms | (bounceShadows ≈ free) |
 | Glow: Fast (`glowQuality`=1) | +635ms | +774ms | moderate |
+| Shadows: Full (stochastic jitter, areaLights on) | +265ms | +433ms | negligible |
 | Shadows: Soft (`shadowAlgorithm`=0) | +263ms | +441ms | negligible |
 | Shadows: Hard (`shadowAlgorithm`=2) | +212ms | +396ms | negligible |
 | Glow: Color (`glowQuality`=0) | +205ms | +198ms | negligible |
@@ -287,13 +288,19 @@ Control = `Reflections: Env Map` (annotated 0) — clean (MB +1ms, GSD −5ms).
    Direct compile has no >1s switch at all.
 2. **Maximal Direct (4.4s) < minimal PT (5.3s)** — Direct is genuinely the cheap
    path end-to-end.
-3. **Shadow tiers cost the same in Direct too** (Hard +212/+396 ≈ Soft +263/+441,
-   sub-noise) — confirms the §2.5 PT finding holds here. **Stochastic shadows /
-   the "Full" shadow tier is a no-op in Direct** (it's PT/area-light-only — no
-   shader change, no recompile). So Direct shadows are really just Off / Hard ≈
-   Soft, and the tier choice is not a compile lever in either path. **Conclusion
-   for the open UX question: defaulting to soft shadows from Balanced up costs
-   nothing over Hard — safe in both render modes.**
+3. **All three Direct shadow tiers cost the same** (Hard +212/+396 ≈ Soft +263/+441
+   ≈ Full +265/+433, sub-noise) — confirms the §2.5 PT finding. **The "Full" tier
+   (stochastic jitter) is NOT a no-op** — it emits a real per-light *jittered
+   area-light sampling* path (`GetHardShadow` offset-sampling, [`pbr.ts:77`](../../engine-gmt/shaders/chunks/lighting/pbr.ts#L77)),
+   gated on `stochasticShadows && areaLightsActive` — so it changes the light
+   *blending*, it just costs nothing extra to compile vs soft. (An earlier
+   measurement read it as a no-op only because that baseline left `areaLights`
+   off, so the gate fell through to the plain soft branch.) Net: the shadow tier
+   is not a *compile* lever in either render mode, but Full **is** a real
+   quality/blend upgrade. **Conclusion for the open UX question: defaulting to
+   Full (soft + jitter) shadows from Balanced up costs nothing over Hard at
+   compile time and gives better blending — safe and strictly better in both
+   render modes.**
 4. **The Direct `estCompileMs` annotations are wildly off** (worse than PT's were):
    Raymarched 7500→~1500-2000 (~4× high), `bounceShadows` 4500→~50 (~free,
    ~100× high), Cook-Torrance 400→~20 (~free). And **Fast Glow reproducibly costs
