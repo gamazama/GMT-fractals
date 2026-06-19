@@ -669,14 +669,75 @@ hoisting expressions ANGLE/fxc already optimizes.
   controls, not a benchmark dodge. A re-confirmation of the relax=ALU=no-op model
   came free.)
 
-- 🔲 **L4 — fxc-construct audit (avoid what fxc is slow on).** Find the GLSL
-  constructs that make fxc slow (§7.3) inside the active shader: constant-bounded
-  loops it will unroll (convert to runtime/`[loop]`-bounded where correctness
-  allows), high register-pressure blocks, and code emitted into a variant that is
-  provably unreachable for that variant (remove it from the chunk — this is
-  fixing the shader source, *not* gating a feature off by default). **Payoff:
-  medium-high, compounds with L5; risk medium** (must not regress the
-  compile/runtime split ADR-0055 or quality). **~1–2 sessions.** Depends on L7.
+- ⛔ **L4 — fxc-construct audit (avoid what fxc is slow on). WORKED, no win —
+  every PT loop is already `[loop]`; the chunk is compile-tight at the construct
+  level.** Find the GLSL constructs that make fxc slow (§7.3) inside the active
+  shader: constant-bounded loops it will unroll, high register-pressure blocks,
+  and code emitted into a variant that is provably unreachable for that variant.
+
+  **Session 5 (2026-06-19) — RESULTS. All measured cold (Mandelbulb, within-run
+  marginals + Sobol control); no GLSL shipped. The session confirms the §7.3
+  unroll hypothesis is falsified for *every* loop in the PT shader, small and
+  large.** Note: this session's machine baselined faster (PT baseline ~5.7s vs
+  the session-1 ~10.3s), so absolute marginals are smaller than §2.3 — read the
+  *deltas*, and the ~1s noise floor still applies.
+
+  - ❌ **NEE-all-lights (+832ms §2.3) loop construct — FALSIFIED → compile-tight.**
+    The const-3 NEE loop (`pathtracer.ts:710`: `for(nee_i<3){ if(nee_i>=neeCount)
+    break; }`) carries one `GetSoftShadow` inline (the shadow march). Hypothesis:
+    the literal-3 bound is unrolled → 3 march inlines when NEE-all flips
+    `neeCount` 1→activeCount. **Two-run A/B (both Sobol-clean): NEE marginal
+    +385ms (literal-3) → +218ms (loop rebounded on runtime `neeCount`), a 167ms
+    swing that is deep sub-noise — and the control itself drifted 76ms run-to-run.
+    Baseline byte-identical (5699↔5715ms), confirming the NEE-OFF peeled-1 case is
+    unchanged.** Decisive magnitude argument: an unrolled 3× would add **two** full
+    shadow marches ≈ +1.9s (cf. ADR-0074's single extra march = +969ms); the
+    observed marginal is *below one march* → the body is inlined **once** → the
+    loop is already `[loop]`. **NEE's marginal is loop-realization + register
+    pressure (§7.3), irreducible by the construct change.** Reverted the
+    `<neeCount` rewrite (a no-op, even if marginally cleaner) to keep the
+    change-set to measured wins only — exactly as session 2 handled the +IS hog.
+
+  - ❌ **The 8-bounce PT loop construct (the biggest, never-before-probed loop) —
+    FALSIFIED.** Prior sessions only tested *small* loops (NEE ≤3, CDF ≤9, AO 32,
+    shadow 256); a 3-agent dig on the live dump flagged the main bounce loop
+    (`pathtracer.ts:561`: `for(bounce<8){ if(bounce>=maxBounces) break; }`,
+    `maxBounces=uPTBounces`∈[1,8]) as the one untested big-ticket construct — its
+    ~450-line body wraps the *entire* NEE / env-MIS / BSDF chunk, so an 8× unroll
+    would be the single largest lever in the shader. **Rebounded it on runtime
+    `maxBounces` (`for(bounce<maxBounces)`, behaviour-identical since uPTBounces is
+    clamped ≤8) and measured the PT baseline: 5270ms (run 1, noisy — Sobol control
+    +247ms) then 5651ms (run 2, clean — control +97ms) vs the literal-8 baselines
+    5699/5715ms. The clean run is ~50ms below → sub-noise; the run-1 437ms drop was
+    thermal noise flagged by its elevated control.** Decisive: an unrolled-8×
+    bounce body collapsing to `[loop]` would drop the baseline by *seconds*, not
+    ~50ms. **The bounce loop is already `[loop]` — its ~450-line body's many
+    function calls (getSurfaceMaterial / tracePTBounce / GetSoftShadow) trigger
+    ANGLE's `[loop]` emission, exactly as the cost model predicts.** This extends
+    the "already `[loop]`" finding to the largest loop in the shader.
+
+  - ❌ **Census for a new DCE-able heavy body — NEGATIVE (re-confirms the model).**
+    Dumped the maximal-PT shader (`debug/dump-pt-shader.mts`) and censused every
+    heavy-body call-site. **Live** heavy inlines in maximal PT: `map()` ×2 (the two
+    inner-march calls, 1755/1956 — the historically-reverted `map`→`mapDist` split,
+    don't touch), `mapDist` via `DE_Dist` (shadow/normal marches), one `GetNormal`
+    (ADR-0075 single 4-tap), one `GetSoftShadow` (NEE), `envVisibility`,
+    `intersectAreaLight`. Every **dead** heavy body (`DE()` coloring wrapper,
+    `GetHardShadow`, `GetAO`, `GetFastNormal`-in-PT) is already uncalled → fxc DCEs
+    it cheaply (S4 lead 2). No heavy body is kept live by a runtime double-branch
+    that a compile-gate could collapse — the ADR-0075 normal-estimator collapse was
+    the last such case. **Nothing left to harvest** — the win classes ADR-0074/75/
+    76/77 exploited are exhausted.
+
+  **Conclusion: the maximal-PT shader is compile-tight at the construct level.**
+  Every loop is `[loop]`; there is no unrolled body to collapse, no live heavy
+  body kept alive by a removable runtime branch, no dead body with meaningful
+  inline-before-DCE cost. The remaining cold cost is the irreducible fxc
+  translate + register-allocation of the genuinely-live IR. Further compile
+  reduction would require either an *algorithmic* change to what the shader
+  computes (a quality trade, e.g. fewer DE taps / cheaper sampling) or the
+  out-of-scope §8-Appendix levers (default/load-order changes). **L4/L5 closed
+  for structural wins.** **Payoff: none remaining at this level.**
 
 ### Tier B — measurement + hygiene (enables Tier A)
 
@@ -726,13 +787,22 @@ hoisting expressions ANGLE/fxc already optimizes.
    uncalled/DCE'd," not "dedup." Also removed two never-useful quality controls
    (Edge Polish + Step Relaxation, ADR-0077): +~1.2–1.7s, and re-confirmed
    Step Relaxation's ALU is a fxc no-op. L6: `BASE_COMPILE_MS` 4200→3600.
-4. **Session 5:** L4 (fxc-construct audit). Per the corrected model, hunt for a
-   genuine heavy *inline* to remove or a distinct heavy *body* to make uncalled
-   (DCE) — **not** function dedup (fxc folds it). NEE-all-lights (+832ms) is the
-   open L4 item (loop-realization/register, no march to collapse). The two
-   remaining `map()` inlines are the inner-march calls (the `map`→`mapDist` split
-   there is the reverted +5%-runtime one — don't touch).
-5. Re-run L6 after each landed win so the estimate tracks reality.
+4. ⛔ **Session 5 (2026-06-19):** L4 (fxc-construct audit) — **worked, no win;
+   L4/L5 closed for structural wins.** Falsified the NEE-all-lights loop construct
+   (literal-3 → runtime `neeCount`: sub-noise; the loop is already `[loop]`, the
+   +832ms is irreducible loop-realization/register) and — prompted by a 3-agent
+   dump dig — the never-before-probed **8-bounce PT loop** (literal-8 → runtime
+   `maxBounces`: ~50ms = sub-noise; the biggest loop is `[loop]` too, its
+   function-call-laden body triggers ANGLE's `[loop]` emission). Census found no
+   new DCE-able live heavy body (the ADR-0074/75/76/77 win classes are exhausted).
+   **The maximal-PT shader is compile-tight at the construct level** — every loop
+   is `[loop]`, the remaining cold cost is the irreducible fxc translate+register
+   of live IR. Further reduction needs an *algorithmic* quality trade or the
+   out-of-scope §8-Appendix levers. No GLSL shipped; no ADR (no change).
+5. Re-run L6 after each landed win so the estimate tracks reality. *(No L6 refresh
+   after session 5 — nothing shipped; the §2.3 marginals stand. Note the session-5
+   machine baselined ~1.8× faster, so its absolute marginals aren't comparable to
+   §2.3's — only its within-run deltas are.)*
 
 ### Appendix — out of scope (do NOT pursue under the current scope decision §0)
 
