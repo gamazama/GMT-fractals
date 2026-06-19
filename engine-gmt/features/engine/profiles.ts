@@ -166,7 +166,14 @@ import { featureRegistry, type ParamConfig, type ParamOption } from '../../engin
  * Base cost (~4200ms) covers the core trace + shading pipeline.
  */
 export const estimateCompileTime = (state: any): number => {
-    const BASE_COMPILE_MS = 4200; // Core shader without optional features (measured: Fastest ~4.0s; confirmed vs §2.3 PT baseline)
+    // Core shader without optional features. Session-4 trace-template work cut the
+    // always-present march code: 4200→3900 (ADR-0076: refine→mapDist + recovery
+    // reuse) →3600 (ADR-0077: Edge Polish + Step Relaxation removed — the refine
+    // loop is gone entirely). These are Direct-measurable core-trace savings; the
+    // PT-baseline drop is larger (the same trace code lives in traceSceneLean too)
+    // but is a PT-only effect the per-toggle model can't separately represent.
+    // @see docs/policy/shader-compile-optimization.md §8 L5 (session 4)
+    const BASE_COMPILE_MS = 3600;
     let total = BASE_COMPILE_MS;
 
     for (const feat of featureRegistry.getAll()) {

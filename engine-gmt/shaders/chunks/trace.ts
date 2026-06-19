@@ -75,8 +75,9 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
 
     // --- CANDIDATE TRACKING (Overstep Recovery) ---
     // Tracks the closest the ray ever got to a surface, normalized by the required precision at that depth.
-    float minCandidateRatio = 1.0e10; 
+    float minCandidateRatio = 1.0e10;
     float candidateD = -1.0;
+    vec4 candidateH = vec4(0.0);
 
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= limit) break;
@@ -119,28 +120,9 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
             // inner loop when innerVolumeBodyEmpty is true. No-op otherwise.
             ${hitFinalizeCall}
 
-            // --- SURFACE REFINEMENT (Edge Polish) ---
-            // If enabled, take a few extra tiny steps to settle exactly on the surface.
-            // Helps significantly when uFudgeFactor is low but step count limited.
-            int refine = uRefinementSteps;
-            if (refine > 0) {
-                float refineStep = h.x; 
-                // We use a safe fraction to converge without overshooting
-                float convergeFactor = uFudgeFactor * 0.8;  // 80% of fudge factor — conservative to prevent overshooting surface
-                
-                for(int j=0; j<5; j++) {
-                    if (j >= refine) break;
-                    d += refineStep * convergeFactor;
-                    vec3 p_ref = ro + rd * d;
-                    vec4 h_ref = map(p_ref + uCameraPosition);
-                    
-                    // If we went inside (negative or very small), or improvement is negligible, stop
-                    if (h_ref.x < floatPrecision * 0.1) break;
-                    
-                    h = h_ref;
-                    refineStep = h.x;
-                }
-            }
+            // (Surface "Edge Polish" refinement removed 2026-06-19 — it was a
+            // never-useful control, default-0 and inert, and its loop carried a
+            // live mapDist inline worth ~1.2–1.7s of cold compile. @see docs/adr/0076)
 
             // Apply Final Volumetric Resolve (Inlined)
             vec3 p_final = ro + rd * d; 
@@ -162,15 +144,16 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
             if (ratio < minCandidateRatio) {
                 minCandidateRatio = ratio;
                 candidateD = d;
+                // Snapshot the full map() result already computed this step so
+                // recovery can reuse it instead of re-inlining map() below.
+                candidateH = h;
             }
         }
         
-        // F. Step Advance (Dynamic Step Relaxation)
-        // Interpolate between uFudgeFactor and 1.0 based on distance-to-surface ratio.
-        // When uStepRelaxation == 0, relax * 0 == 0 so mix returns uFudgeFactor (no-op).
-        float safeZone = h.x / (finalEps * 10.0);
-        float relax = smoothstep(0.0, 1.0, safeZone);
-        float currentFudge = mix(uFudgeFactor, 1.0, relax * uStepRelaxation);
+        // F. Step Advance
+        // (Dynamic "Step Relaxation" removed 2026-06-19 — never-useful control,
+        // default-0 and inert; straight-line ALU so removal is compile-neutral.)
+        float currentFudge = uFudgeFactor;
 
         // Stochastic step jitter: break up deterministic DE banding.
         // Asymmetric [1-jitter, 1.0] — biased short to avoid overshoot.
@@ -195,7 +178,10 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
              // Re-evaluate map at the candidate position to get correct Trap/Color data
              // We can't trust 'h' because it's from the last missed step at infinity
              vec3 p_cand = ro + rd * d;
-             result = map(p_cand + uCameraPosition);
+             // Reuse the full map() captured at the candidate step (same
+             // position ro+rd*candidateD) — byte-identical to re-evaluating
+             // map(p_cand), without re-inlining the heaviest body. @see docs/adr/0076
+             result = candidateH;
              result.x = 0.0; // Force hit
              
              // Finalize volume for the recovered path? 

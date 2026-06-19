@@ -601,6 +601,74 @@ hoisting expressions ANGLE/fxc already optimizes.
   with the render-perf caveat). Lead 5 (NEE) is L4-flavoured, lowest priority.
   **Payoff: high (lead 1); risk medium** (quality/correctness on leads 1+4).
 
+  **Session 4 (2026-06-19) — RESULTS: two `map()`-inline wins shipped (ADR-0076);
+  leads 1, 3 falsified; lead 5 deferred. The session corrected the cost model.**
+  All measured cold, within-run A/B, clean Sobol controls.
+
+  **The corrected cost model (load-bearing):** the duplicate-*function* premise
+  was wrong; the right unit is the **`map()` *inline*.**
+  - ANGLE/fxc **folds byte-identical functions.** `traceScene`/`traceSceneLean`
+    are byte-identical when the volume injection is empty (the default — no
+    glow/fog), so collapsing them (lead 1) was a measured **no-op** (Mandelbulb
+    B−A +335ms / D−C −570ms; Great Stellated +134 / −297 — signs flip, control
+    read ±700ms). The doc's "no-op risk when volume empty" was realized.
+  - But fxc **inlines `map()` per call-site, each inline ≈2s of cold translate**
+    (`map()` is the ~177-line heaviest body). Removing one genuine `map()`
+    inline is a large win — *that* is what ADR-0074/0075 actually did (made a
+    distinct body uncalled/DCE'd), not "dedup."
+  - ✅ **Lead 4 — refine loop `map`→`mapDist` (SHIPPED).** The refinement loop
+    converges on distance only, so it uses `mapDist` (geometry-only twin) and
+    keeps `h.yzw` coloring from the hit-point `map()`. **−1986ms Mandelbulb /
+    −2412ms Great Stellated** (B−A; D−C −1779 / −1553; control −339 / −449).
+    Quality: byte-identical at the default (`refinementSteps`=0 → loop off);
+    sub-pixel coloring shift only with Edge Polish on.
+  - ✅ **Lead 4b — overstep-recovery reuses the captured candidate `map()`
+    (SHIPPED, byte-identical).** The inner march already computes the full
+    `map()` each step; candidate tracking now snapshots `h`→`candidateH` and the
+    recovery block reuses it instead of re-evaluating `map(p_cand)` (same
+    position → identical output). **−1650ms Mandelbulb / −2763ms Great Stellated**
+    (B−A; D−C −1851 / −2099; control +123 / −319).
+  - **Combined (ADR-0076): PT baseline ~13.4s→~10.0s Mandelbulb (−25%),
+    ~17.2s→~12.8s Great Stellated (−26%).** Census: maximal-PT `map()` call-sites
+    **6→2**. 44/44 formulas `webglCompile`-green. L6: `BASE_COMPILE_MS` 4200→3900
+    (Direct-measurable trace saving; the PT-baseline drop is a PT-only effect the
+    per-toggle model doesn't separately represent).
+  - ❌ **Lead 3 — env-NEE visibility reuse GetSoftShadow (FALSIFIED).** Routing
+    env-NEE through the already-live `GetSoftShadow` (high `k`) to DCE
+    `envVisibility` was **sub-noise / marginally positive** (B−A +408 / +134;
+    D−C −55 / −297; controls +378 / +749). Reusing GetSoftShadow's heavier
+    penumbra body roughly cancels the `envVisibility` removal — unlike ADR-0074,
+    where the removed march was a per-light NEE-loop inline. **Env MIS is
+    compile-tight at this level** (matches session 2's +IS conclusion).
+  - **Lead 5 (NEE-all-lights) — deferred to L4.** By inspection NEE-all flips
+    `neeCount` 1→activeCount + the `lightIdx` source; it adds **no new `DE_Dist`
+    site** (shadow march body unchanged), so there is no march to collapse. Its
+    +832ms is loop-realization/register (an L4/fxc-construct item); the candidate
+    "bound the loop on `neeCount` not literal 3" lever is predicted no-op by
+    session 2's finding that define-bounded loops are already emitted `[loop]`.
+  - **Confirmed negatives added:** collapsing byte-identical trace functions
+    (fxc folds them — lead 1); env-NEE→shadow-march reuse (lead 3). **The
+    remaining `map()` inlines are the 2 inner-march calls** — the inner-march
+    `map`→`mapDist` split is the historically-reverted +5%-runtime one
+    (`trace.ts:33-38`); don't touch. Future L5 wins must remove a genuine heavy
+    inline or make a distinct heavy body uncalled (DCE) — not "dedup a function."
+
+  **Session 4 (cont.) — Edge Polish + Step Relaxation removed (ADR-0077, owner
+  decision; +~1.2–1.7s).** Two never-useful quality controls (`refinementSteps`,
+  `stepRelaxation`), both default-0 and inert there, with no formula/preset
+  setting them non-zero → removal is invisible. A cold within-run A/B (two runs,
+  formula-paired) attributed each: **Step Relaxation −53/+55ms (Mandelbulb),
+  −127/+97ms (Great Stellated) → ~0** (it's straight-line `smoothstep`/`mix` ALU
+  in the march loop — the §4.3 fxc no-op, confirmed yet again); **Edge Polish
+  −692/−1689ms / −1451/−1365ms → real ~1.2–1.7s** (its refine loop carried a live
+  `mapDist` inline + the loop). The refine-loop removal **supersedes ADR-0076's
+  refine `map`→`mapDist`** (loop gone); ADR-0076's recovery-reuse stands.
+  maximal-PT `map()` sites **6→2**; 44/44 `webglCompile`-green; `BASE_COMPILE_MS`
+  3900→3600. (Note: this is a feature *removal*, not the §0 "make the same
+  variant compile faster" scope — but it removes genuinely dead, owner-retired
+  controls, not a benchmark dodge. A re-confirmation of the relax=ALU=no-op model
+  came free.)
+
 - 🔲 **L4 — fxc-construct audit (avoid what fxc is slow on).** Find the GLSL
   constructs that make fxc slow (§7.3) inside the active shader: constant-bounded
   loops it will unroll (convert to runtime/`[loop]`-bounded where correctness
@@ -623,11 +691,14 @@ hoisting expressions ANGLE/fxc already optimizes.
   Area lights re-recalibrated session 3.)* PT switch annotations updated to
   measured cold marginals (Env MIS+IS 650→2579, Env MIS 250→1361, NEE +832 added,
   Sobol 50→25) on the lighting feature params; `@stale` cleared from
-  [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts). `BASE_COMPILE_MS`
-  kept at 4200 (confirmed honest vs the §2.3 PT baseline). **Area lights: 600→2027
-  (session 1/2) → 1230 (session 3, after ADR-0074's single-march fix removed the
-  duplicate shadow march; ≈2027 × the within-run new/old marginal ratio 0.61).**
-  Refresh after each L5/L4 win lands.
+  [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts). **Area lights:
+  600→2027 (session 1/2) → 1230 (session 3, after ADR-0074's single-march fix
+  removed the duplicate shadow march; ≈2027 × the within-run new/old marginal
+  ratio 0.61).** **Session 4: `BASE_COMPILE_MS` 4200→3600** — ADR-0076 (refine→mapDist +
+  recovery reuse) then ADR-0077 (Edge Polish refine loop removed entirely) cut the
+  always-present trace code; the Direct-measurable trace saving drove the −600 (the
+  much larger PT-baseline drop is a PT-only effect the per-toggle model can't
+  separately represent). Refresh after each L5/L4 win.
 
 - 🔲 **L8 — Fix the `BENCH_SHADER_HANDOFF.md` `dev/` path drift** (§6 stale
   flag). `@stale` / fold on next touch. **Trivial.**
@@ -644,12 +715,23 @@ hoisting expressions ANGLE/fxc already optimizes.
    separate `GetHardShadow` call) was +969ms, >half the cost. Shipped the
    single-march fold (ADR-0074): within-run A/B saving −630ms (Mandelbulb) /
    −1356ms (Great Stellated). L6 re-recalibrated (2027→1230). **First real L5 win.**
-3. **Session 4:** continue L5 down the hog list — **Env MIS (+1361ms)** then
-   **NEE (+832ms)**, not yet localized. Same sub-gate method; hunt for any other
-   duplicated heavy-function inline (a `DE_Dist`/full-march or texture-heavy block
-   emitted twice), which session 3 proved IS a real win (unlike function dedup).
-   Any win must clear the ~1s noise floor; use within-run A/B + the Sobol control.
-4. **Session 5:** L4 (fxc-construct audit) once the per-chunk rewrites plateau.
+3. ✅ **Session 4 (2026-06-19):** shipped **ADR-0076** — dropped two `map()`
+   inlines from the trace template (refine→`mapDist`; recovery reuses the
+   captured candidate `map()`). **PT baseline −25/26%** (Mandelbulb ~13.4→10.0s,
+   Great Stellated ~17.2→12.8s). Falsified lead 1 (collapse `traceScene`/
+   `traceSceneLean` — fxc folds identical functions → no-op) and lead 3
+   (env-NEE→GetSoftShadow reuse — sub-noise; Env MIS compile-tight). **Corrected
+   the cost model:** the unit is the `map()` *inline* (≈2s each), not the
+   duplicate *function* — ADR-0074/0075 wins were "make a distinct body
+   uncalled/DCE'd," not "dedup." Also removed two never-useful quality controls
+   (Edge Polish + Step Relaxation, ADR-0077): +~1.2–1.7s, and re-confirmed
+   Step Relaxation's ALU is a fxc no-op. L6: `BASE_COMPILE_MS` 4200→3600.
+4. **Session 5:** L4 (fxc-construct audit). Per the corrected model, hunt for a
+   genuine heavy *inline* to remove or a distinct heavy *body* to make uncalled
+   (DCE) — **not** function dedup (fxc folds it). NEE-all-lights (+832ms) is the
+   open L4 item (loop-realization/register, no march to collapse). The two
+   remaining `map()` inlines are the inner-march calls (the `map`→`mapDist` split
+   there is the reverted +5%-runtime one — don't touch).
 5. Re-run L6 after each landed win so the estimate tracks reality.
 
 ### Appendix — out of scope (do NOT pursue under the current scope decision §0)
@@ -682,6 +764,12 @@ deliberate scope change.
 - ADR-0073 — adopts the measure-pt-* diagnostics as protocol tooling.
 - ADR-0074 — area-light PT shadows fold into a single march (first L5 win).
 - ADR-0075 — PT single normal estimator (8→4 DE_Dist taps; biggest L5 win).
+- ADR-0076 — trace fn drops two `map()` inlines (refine→mapDist + recovery reuse;
+  PT baseline −25/26%; corrected the cost model: fxc folds identical functions
+  but inlines `map()` per-site ≈2s each).
+- ADR-0077 — remove Edge Polish + Step Relaxation (never-useful, default-inert
+  controls; +~1.2–1.7s from the refine loop; re-confirmed Step Relaxation's ALU
+  is a fxc no-op).
 - `docs/BENCH_SHADER_HANDOFF.md` — render-perf + quality bench harness (S1–S3
   optimization log; the proof-record for "ANGLE is smart, only algorithmic wins").
 - Memories: `feedback_angle_d3d11_optimizer`, `feedback_no_compile_gate_realtime`,

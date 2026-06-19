@@ -6,9 +6,7 @@ import { registry } from '../engine/FractalRegistry';
 export interface QualityState {
     engineQuality: boolean; // Master Anchor
     fudgeFactor: number;
-    stepRelaxation: number; // New: Dynamic Fudge
     stepJitter: number; // Stochastic step jitter strength
-    refinementSteps: number; // New: Edge Polish
     detail: number;
     pixelThreshold: number;
     maxSteps: number;
@@ -142,26 +140,12 @@ export const QualityFeature: FeatureDefinition = {
             helpId: 'quality.fudge',
             format: (v) => v.toFixed(2)
         },
-        stepRelaxation: {
-            type: 'float', default: 0.0, label: 'Step Relaxation', shortId: 'sr', uniform: 'uStepRelaxation',
-            min: 0.0, max: 1.0, step: 0.01, group: 'kernel',
-            description: 'Dynamic Step Size. 0 = Fixed Fudge. 1 = Variable (Fudge near surface, 1.0 in void). Saves steps.',
-            helpId: 'quality.relaxation',
-            isAdvanced: true
-        },
         stepJitter: {
             type: 'float', default: 0.15, label: 'Step Jitter', shortId: 'sj', uniform: 'uStepJitter',
             min: 0.0, max: 1.0, step: 0.01, group: 'kernel',
             description: 'Stochastic step variation. Breaks banding artifacts. Higher = softer edges, artistic blur.',
             helpId: 'quality.jitter',
             format: (v: number) => v.toFixed(2)
-        },
-        refinementSteps: {
-            type: 'int', default: 0, label: 'Edge Polish', shortId: 'rf', uniform: 'uRefinementSteps',
-            min: 0, max: 5, step: 1, group: 'kernel',
-            description: 'Extra micro-steps after hitting surface. Fixes slicing/banding artifacts.',
-            helpId: 'quality.detail',
-            isAdvanced: true
         },
         detail: {
             type: 'float', default: 1.0, label: 'Ray detail', shortId: 'rd', uniform: 'uDetail',

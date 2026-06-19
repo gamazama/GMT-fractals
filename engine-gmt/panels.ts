@@ -429,7 +429,7 @@ export const GmtPanels: PanelManifest = [
             {
                 type: 'feature',
                 id: 'quality',
-                whitelistParams: ['fudgeFactor', 'stepRelaxation', 'stepJitter'],
+                whitelistParams: ['fudgeFactor', 'stepJitter'],
             },
 
             { type: 'separator' },
@@ -438,7 +438,7 @@ export const GmtPanels: PanelManifest = [
             {
                 type: 'feature',
                 id: 'quality',
-                whitelistParams: ['refinementSteps', 'detail', 'pixelThreshold', 'overstepTolerance'],
+                whitelistParams: ['detail', 'pixelThreshold', 'overstepTolerance'],
             },
 
             // Distance Estimator + Metric live in the Formula tab (compile-
