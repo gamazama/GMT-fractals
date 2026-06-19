@@ -202,6 +202,58 @@ to the PT default-change toll in §2.2. Read them as the *context* for why the P
 shader got more expensive (and as the code whose GLSL the shrink work in §8
 targets), not as a backlog of features to remove.
 
+### 2.5 Full per-switch cost map (cold, session-5 machine, 2026-06-19)
+
+The complete decomposition of *every* PT-relevant compile switch, measured as a
+clean marginal over a **minimal PT baseline** (PT on, cheapest Hard shadows, all
+quality gates off), one switch flipped at a time. Tool:
+[`debug/measure-pt-costmap.mts`](../../debug/measure-pt-costmap.mts) (§6).
+Sobol control clean (MB −10ms). **This machine baselines ~1.8× faster than
+§2.1–2.3's** (Direct ~1.8s, PT-min ~5.3s) — read the *marginals and the ratios*,
+not the absolutes; ~1s noise floor still applies, so the sub-second rows are
+"negligible," not precise.
+
+| Switch (`#define`) | Marginal — Mandelbulb | Marginal — Gt. Stellated | Class |
+|---|---:|---:|---|
+| **PT module** (Direct→PT, `RENDER_MODE_PATHTRACING`) | **+3515ms** | **+4414ms** | **structural** |
+| **Env MIS + IS** (`ptReflMode`=2, `PT_ENV_MIS_IS`) | **+1683ms** | **+1873ms** | **expensive** |
+| **Env MIS** (`ptReflMode`=1, `PT_ENV_MIS`) | **+1122ms** | **+1177ms** | **expensive** |
+| Area lights (`PT_AREA_LIGHTS`) | +389ms | +221ms | moderate |
+| Shadow tier Hard→Lite Soft (`SHADOW_QUALITY`) | +314ms | +334ms | negligible |
+| Shadow tier Hard→Robust Soft | +301ms | +193ms | negligible |
+| NEE all lights (`PT_NEE_ALL_LIGHTS`) | +77ms | +247ms | negligible |
+| Sobol bounce (`PT_SOBOL_BOUNCE`) — *control* | ~0ms | ~0ms | free |
+| Soft Shadow Jitter (`ptStochasticShadows`) | **0ms** | **0ms** | free† |
+| Shadows OFF (vs Hard, `DISABLE_SHADOWS`) | −537ms | −478ms | — |
+| **MAXIMAL (all on)** | **8421ms** | *(harness miss)* | total |
+
+**Derived:** the `+IS` (CDF importance-sampling) half of Env MIS+IS alone =
++561ms MB / +696ms GSD (MIS+IS − MIS) — matches §2.3's "the +IS half is the
+irreducible hog." Maximal − minimal = +3129ms MB vs sum-of-marginals +3886ms →
+mild **sub-additivity** (gates share infrastructure when co-enabled), so summing
+marginals slightly *over*-estimates a multi-gate config.
+
+**Load-bearing findings:**
+1. **The cost is bimodal.** Only three switches are user-perceptible (>1s): the
+   PT-core toggle itself (~3.5s, unavoidable for PT) and the two **Env-sampling
+   modes** (MIS +1.1s, MIS+IS +1.7s). *Everything else* — Area lights, NEE-all,
+   Sobol, Soft Shadow Jitter, and the entire shadow-algorithm tier — is **sub-
+   second** (most sub-noise). The Env-sampling mode is the *only* PT quality knob
+   worth a compile-cost hint / preset gating.
+2. **The shadow-*algorithm* tier is NOT a compile lever** (~+300ms Hard→Lite≈
+   Robust, sub-noise). This **contradicts the old `estCompileMs` 500/1500/3000
+   ladder** (§3) — those were ~5–10× high. The shadow *march* lives in the PT
+   module base (the +3.5s); the penumbra-quality upgrade on top is cheap.
+3. **† Soft Shadow Jitter (`ptStochasticShadows`) has zero standalone compile
+   cost** — it changes the shader *only* via the area-light path
+   (`areaLightsActive = areaLights && stochasticShadows`,
+   [`lighting/index.ts:447`](../../engine-gmt/features/lighting/index.ts#L447)),
+   and ADR-0074 folds it into the single area-light march. Toggling it without
+   Area Lights on is a no-op (no recompile).
+4. **Cross-formula scaling ≈ 1.1–1.3×** (GSD/MB: PT module 1.26×, Env MIS+IS
+   1.11×). For estimation: scale the PT-module base by a formula-complexity factor;
+   the gate marginals are roughly formula-stable adders.
+
 ---
 
 ## 3. The `estCompileMs` calibration gap
@@ -347,6 +399,7 @@ canonical tools (adopted this session — `@see` ADR-0073).
 |---|---|
 | [`debug/measure-pt-compile.mts`](../../debug/measure-pt-compile.mts) | Cold PT compile per formula, old-vs-new defaults. `MEASURE_FORMULAS=…` override. Produces §2.2. Also reports `firstDraw=` (L7) and **accum-fps** (§5.5). |
 | [`debug/measure-pt-switches.mts`](../../debug/measure-pt-switches.mts) | Per-switch marginal cold cost (baseline + each gate alone). Produces §2.3. Also reports `firstDraw=` (L7) and **accum-fps** (§5.5). |
+| [`debug/measure-pt-costmap.mts`](../../debug/measure-pt-costmap.mts) | **Full per-switch cost map** — every PT-relevant compile switch (PT module, shadow tiers, all quality gates) decomposed as a clean marginal over a *minimal* PT baseline, plus the Direct→PT structural delta and the MAXIMAL total. Produces §2.5. The estimation + UX-grouping reference. |
 | [`debug/bench-shader.mts`](../../debug/bench-shader.mts) | GPU timing + reference-image diff harness (render perf + compile; parses the `[Compile]` log). Quality-regression gate. See `docs/BENCH_SHADER_HANDOFF.md`. |
 | [`debug/native-config-sweep.mts`](../../debug/native-config-sweep.mts) | Compiles every formula, gates on `webglCompile`, records per-formula `timeMs`. Whole-set correctness + timing regression guard. |
 | [`debug/dump-pt-shader.mts`](../../debug/dump-pt-shader.mts) | Dumps the live-assembled maximal-PT fragment shader (`window.__gmtProxy._lastGeneratedFrag`) to a file. Source for the `DE_Dist`/heavy-body **inline census** that found the ADR-0074/0075 wins. NB: output retains `#ifdef` directives (pre-preprocessor) — grep counts include inactive branches. |
