@@ -65,7 +65,22 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
     vec3 p_fractal = p_fractal_in;
     
     // --- ADAPTIVE NORMAL ESTIMATION ---
-    
+#ifdef RENDER_MODE_PATHTRACING
+    // PT: a SINGLE tetrahedron-normal call for all bounces (4 DE_Dist taps).
+    // The if(highQuality) GetNormal / else GetFastNormal form inlined BOTH
+    // estimators (8 DE_Dist taps) because highQuality (= bounce==0) is RUNTIME
+    // in PT — fxc can't DCE either branch. Collapsing to one call halves the
+    // DE_Dist inlines in the bounce loop: measured ~-0.9..-2.5s (Mandelbulb) /
+    // ~-4.6s (Great Stellated) cold PT compile. Bounce 0 is byte-identical
+    // (GetNormal(eps)); indirect bounces upgrade from forward-difference to the
+    // (better, symmetric) tetrahedron normal as a bonus.
+    // @see docs/adr/0075-pt-single-normal-estimator.md
+    n = GetNormal(p_ray, highQuality ? eps : eps * 1.5);
+#else
+    // Direct: highQuality is a COMPILE-TIME CONSTANT at every call site (false
+    // in calculateShading + raymarched reflections), so fxc already DCEs the
+    // unused branch → only one estimator is inlined (4 taps). Kept exactly as-is
+    // — byte-identical, no win to take here (measured ~0).
     if (highQuality) {
         n = GetNormal(p_ray, eps);
     } else {
@@ -73,6 +88,7 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
         // FIX: Removed invalid 'd' argument. FastNormal calculates relative to 0.0 surface.
         n = GetFastNormal(p_ray, eps * 1.5);
     }
+#endif
     
     // --- Layer 3: Procedural Noise & Bump Mapping ---
     // Calculate if needed for Surface OR Emission (Mode 3)

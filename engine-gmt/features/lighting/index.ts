@@ -172,7 +172,7 @@ export const LightingFeature: FeatureDefinition = {
             description: 'Compiles the Path Tracing module. Disable to reduce shader size.',
             onUpdate: 'compile',
             noReset: true,
-            estCompileMs: 1500
+            estCompileMs: 700  // was 1500; PT-baseline dropped ~1-2s after ADR-0075 (single normal estimator, 8->4 DE_Dist taps). @see docs/policy/shader-compile-optimization.md §8 L5
         },
         renderMode: {
             type: 'float', default: 0.0, label: 'Active Mode', shortId: 'rm',

@@ -349,6 +349,7 @@ canonical tools (adopted this session — `@see` ADR-0073).
 | [`debug/measure-pt-switches.mts`](../../debug/measure-pt-switches.mts) | Per-switch marginal cold cost (baseline + each gate alone). Produces §2.3. Also reports `firstDraw=` (L7) and **accum-fps** (§5.5). |
 | [`debug/bench-shader.mts`](../../debug/bench-shader.mts) | GPU timing + reference-image diff harness (render perf + compile; parses the `[Compile]` log). Quality-regression gate. See `docs/BENCH_SHADER_HANDOFF.md`. |
 | [`debug/native-config-sweep.mts`](../../debug/native-config-sweep.mts) | Compiles every formula, gates on `webglCompile`, records per-formula `timeMs`. Whole-set correctness + timing regression guard. |
+| [`debug/dump-pt-shader.mts`](../../debug/dump-pt-shader.mts) | Dumps the live-assembled maximal-PT fragment shader (`window.__gmtProxy._lastGeneratedFrag`) to a file. Source for the `DE_Dist`/heavy-body **inline census** that found the ADR-0074/0075 wins. NB: output retains `#ifdef` directives (pre-preprocessor) — grep counts include inactive branches. |
 | `CompileScheduler` telemetry | `lastDuration`, `gen/gpu` split, `FRACTAL_EVENTS.COMPILE_TIME`, `engine.lastCompileDuration`. |
 
 > **Stale flag:** `docs/BENCH_SHADER_HANDOFF.md` references `dev/debug/bench-shader.mts`
@@ -519,11 +520,33 @@ hoisting expressions ANGLE/fxc already optimizes.
     parameterized march over a second near-identical inlined march — the cost is
     the inlined body, not the call.
 
+  **Session 3 (cont.) — biggest L5 win: PT single normal estimator (ADR-0075).**
+  Dumped the live assembled PT shader (new tool `debug/dump-pt-shader.mts` →
+  `window.__gmtProxy._lastGeneratedFrag`, §6) and counted `DE_Dist` (heavy-body)
+  inlines: 13 sites, the largest being the adaptive normal in `getSurfaceMaterial`:
+  `if (highQuality) GetNormal(4 taps) else GetFastNormal(4 taps)` = **8 `DE_Dist`
+  taps**. Both branches inline only in **PT**, where `highQuality = bounce==0` is
+  *runtime* (fxc can't DCE either). In **Direct** every call site passes a constant
+  `highQuality` → fxc already DCEs one branch (4 taps).
+  - **Fix (shipped):** gate on `RENDER_MODE_PATHTRACING` — PT collapses to one
+    `GetNormal(p, highQuality ? eps : eps*1.5)` call (4 taps, 8→4); Direct keeps its
+    `if/else` (byte-identical). The win needs ONE call site — two sites of the same
+    function still inline 8 taps.
+  - **Measured (within-run A/B, cold; in-process program-cache hits identified +
+    discarded):** **PT −0.9..−2.5s Mandelbulb, ~−4.6s Great Stellated Dodec.**
+    (19963→15351ms); **Direct ~0** (≈50ms) — fxc already optimal there. Cross-run
+    production PT-baseline confirmation: −994ms Mandelbulb (11003→10009), −2120ms
+    Great Stellated (15822→13702). The PT saving scales with DE weight. PT bounce 0
+    byte-identical; indirect bounces upgrade forward-diff → tetrahedron (better).
+  - **Method for L4:** dump the assembled shader, count `DE_Dist`/heavy-body
+    inlines, collapse any kept alive only because a *runtime* predicate keeps both
+    `if/else` branches live in a variant.
+
   **Next: Env MIS (+1361ms) and NEE (+832ms), not yet localized.** Apply the same
-  sub-gate localization; look for any other duplicated heavy-function inline (the
-  triplicated GGX specular eval across light-NEE / env-NEE / `pdfVNDF` is a
-  candidate, but per §4.3 only ships if it MEASURES a win). **Payoff: medium; risk
-  medium** (quality).
+  sub-gate localization + shader-dump inline census; look for any other duplicated
+  heavy-function inline (the triplicated GGX specular eval across light-NEE /
+  env-NEE / `pdfVNDF` is a candidate, but it's straight-line ALU — per §4.3 only
+  ships if it MEASURES a win). **Payoff: medium; risk medium** (quality).
 
 - 🔲 **L4 — fxc-construct audit (avoid what fxc is slow on).** Find the GLSL
   constructs that make fxc slow (§7.3) inside the active shader: constant-bounded
@@ -605,6 +628,7 @@ deliberate scope change.
 - ADR-0070 — procedural-sun NEE (lives in the PT_ENV_MIS chunk L5 rewrites).
 - ADR-0073 — adopts the measure-pt-* diagnostics as protocol tooling.
 - ADR-0074 — area-light PT shadows fold into a single march (first L5 win).
+- ADR-0075 — PT single normal estimator (8→4 DE_Dist taps; biggest L5 win).
 - `docs/BENCH_SHADER_HANDOFF.md` — render-perf + quality bench harness (S1–S3
   optimization log; the proof-record for "ANGLE is smart, only algorithmic wins").
 - Memories: `feedback_angle_d3d11_optimizer`, `feedback_no_compile_gate_realtime`,
