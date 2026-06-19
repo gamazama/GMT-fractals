@@ -297,7 +297,13 @@ Control = `Reflections: Env Map` (annotated 0) — clean (MB +1ms, GSD −5ms).
    measurement read it as a no-op only because that baseline left `areaLights`
    off, so the gate fell through to the plain soft branch.) Net: the shadow tier
    is not a *compile* lever in either render mode, but Full **is** a real
-   quality/blend upgrade. **Conclusion for the open UX question: defaulting to
+   quality/blend upgrade. **Tier-wiring fix (session 5):** the viewport quality
+   tiers set `ptStochasticShadows` but had been missing the *second* required flag
+   `areaLights` (default false, gated behind `ptStochasticShadows`) — so the
+   shipped "Full" tier silently delivered plain soft, not jitter. The
+   `SUBSYSTEM_SHADOWS` "Full" and `pathtracer` Balanced/Full tiers now set
+   `areaLights: true` (compile-neutral; `areaLights` gates only the shadow jitter,
+   not PT sphere lights = `ptAreaLights`). **Conclusion for the open UX question: defaulting to
    Full (soft + jitter) shadows from Balanced up costs nothing over Hard at
    compile time and gives better blending — safe and strictly better in both
    render modes.**

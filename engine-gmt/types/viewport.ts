@@ -90,21 +90,27 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
         {
             label: 'Hard',
             overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0, ptStochasticShadows: false },
+                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0, ptStochasticShadows: false, areaLights: false },
             },
             estCompileMs: 300,   // L6: measured ~250-425 cold (§2.6); was 500
         },
         {
             label: 'Soft',
             overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: false },
+                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: false, areaLights: false },
             },
             estCompileMs: 350,   // L6: shadow tiers cost ~the same (~280-440); was 3000 (~8x high) (§2.6)
         },
         {
             label: 'Full',
             overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true },
+                // areaLights:true is REQUIRED to actually engage the stochastic
+                // jitter path — useSoft = !stochastic || !areaLightsActive, and
+                // areaLightsActive = areaLights && stochastic (pbr.ts:14 /
+                // pathtracer.ts:14). Without it ptStochasticShadows is inert and
+                // this falls through to plain analytic GetSoftShadow. (areaLights
+                // gates ONLY the shadow jitter, not PT sphere lights = ptAreaLights.)
+                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true },
             },
             estCompileMs: 400,   // L6: jitter is compile-free over soft (~265-433); was 3800 (~9x high) (§2.6)
         },
@@ -205,7 +211,9 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
             overrides: {
                 lighting: {
                     ptReflMode: 0.0, ptAreaLights: false, ptNEEAllLights: true, ptSobolBounce: true,
-                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true,
+                    // areaLights:true engages the stochastic jitter path (else
+                    // ptStochasticShadows is inert — see SUBSYSTEM_SHADOWS Full).
+                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true,
                 },
             },
             estCompileMs: 100,   // NEE (~80) only; shadows counted by SUBSYSTEM_SHADOWS
@@ -217,7 +225,9 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
             overrides: {
                 lighting: {
                     ptReflMode: 2.0, ptAreaLights: true, ptNEEAllLights: true, ptSobolBounce: true,
-                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true,
+                    // areaLights:true engages the stochastic jitter path (else
+                    // ptStochasticShadows is inert — see SUBSYSTEM_SHADOWS Full).
+                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true,
                 },
             },
             estCompileMs: 2200,  // Env MIS+IS (~1700) + area lights (~400) + NEE (~80)
