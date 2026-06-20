@@ -90,29 +90,22 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
         {
             label: 'Hard',
             overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0, ptStochasticShadows: false, areaLights: false },
+                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0, ptStochasticShadows: false },
             },
             estCompileMs: 300,   // L6: measured ~250-425 cold (§2.6); was 500
         },
         {
+            // Analytic IQ penumbra + the jitter ALU compiled in, so "Shadow Jitter"
+            // (areaLights) is a RUNTIME toggle within this tier — there is no longer
+            // a separate compile tier for jittered shadows. This collapsed the old
+            // "Full" tier: once areaLights became a runtime uniform, jitter stopped
+            // being a compile distinction (the ALU is ~70ms, sub-noise). Tiers no
+            // longer set areaLights — it persists as the user's runtime toggle.
             label: 'Soft',
             overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: false, areaLights: false },
+                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true },
             },
-            estCompileMs: 350,   // L6: shadow tiers cost ~the same (~280-440); was 3000 (~8x high) (§2.6)
-        },
-        {
-            label: 'Full',
-            overrides: {
-                // ptStochasticShadows compiles the jitter ALU into the unified
-                // shadow march; areaLights turns it ON at runtime (uAreaLights
-                // uniform — NO longer a compile gate, no recompile to toggle).
-                // Both are set so the Full tier actually shows jittered soft
-                // shadows. (areaLights drives ONLY the shadow jitter, not PT
-                // sphere lights = ptAreaLights.)
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true },
-            },
-            estCompileMs: 400,   // L6: jitter is compile-free over soft (~265-433); was 3800 (~9x high) (§2.6)
+            estCompileMs: 400,   // Robust soft + jitter ALU (~70ms over plain soft, sub-noise; §2.6)
         },
     ],
 };
@@ -211,9 +204,9 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
             overrides: {
                 lighting: {
                     ptReflMode: 0.0, ptAreaLights: false, ptNEEAllLights: true, ptSobolBounce: true,
-                    // areaLights:true engages the stochastic jitter path (else
-                    // ptStochasticShadows is inert — see SUBSYSTEM_SHADOWS Full).
-                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true,
+                    // Shadow march config. "Shadow Jitter" (areaLights) is a RUNTIME
+                    // toggle now, so tiers don't set it — it persists across presets.
+                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true,
                 },
             },
             estCompileMs: 100,   // NEE (~80) only; shadows counted by SUBSYSTEM_SHADOWS
@@ -225,9 +218,9 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
             overrides: {
                 lighting: {
                     ptReflMode: 2.0, ptAreaLights: true, ptNEEAllLights: true, ptSobolBounce: true,
-                    // areaLights:true engages the stochastic jitter path (else
-                    // ptStochasticShadows is inert — see SUBSYSTEM_SHADOWS Full).
-                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true,
+                    // Shadow march config. "Shadow Jitter" (areaLights) is a RUNTIME
+                    // toggle now, so tiers don't set it — it persists across presets.
+                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true,
                 },
             },
             estCompileMs: 2200,  // Env MIS+IS (~1700) + area lights (~400) + NEE (~80)
@@ -335,9 +328,9 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
     {
         id: 'balanced',
         label: 'Balanced',
-        description: 'Full shadows, env map reflections, color glow.',
+        description: 'Soft shadows, env map reflections, color glow.',
         subsystems: {
-            shadows: 3,              // Full
+            shadows: 2,              // Soft
             reflections: 1,          // Env Map
             lighting_quality: 1,     // Path Traced
             atmosphere_quality: 2,   // Color Glow
@@ -347,9 +340,9 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
     {
         id: 'full',
         label: 'Full',
-        description: 'Full shadows, raymarched reflections, volumetric.',
+        description: 'Soft shadows, raymarched reflections, volumetric.',
         subsystems: {
-            shadows: 3,              // Full
+            shadows: 2,              // Soft
             reflections: 3,          // Full (raymarched + bounce shadows)
             lighting_quality: 1,     // Path Traced
             atmosphere_quality: 3,   // Volumetric
@@ -362,7 +355,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
         description: 'Full + PT NEE. Experimental.',
         isAdvanced: true,
         subsystems: {
-            shadows: 3,              // Full
+            shadows: 2,              // Soft
             reflections: 3,          // Full
             lighting_quality: 2,     // PT + NEE
             atmosphere_quality: 3,   // Volumetric
