@@ -496,8 +496,12 @@ void main() {
         let disjointBatches = 0;
 
         if (timerExt) {
-            // Pipeline N queries to keep GPU busy. Reading too eagerly stalls.
-            const PIPELINE = 4;
+            // Pipeline N queries to keep GPU busy. Reading too eagerly stalls
+            // AND idles the GPU between draws (the per-drain rAF yield spaces
+            // bursts ~16ms apart → boost-clock flutter → wide p5/p95). A deep
+            // pipeline keeps many draws in flight so the GPU stays saturated at a
+            // stable clock — much tighter variance on a quiet machine.
+            const PIPELINE = Math.min(64, measureDraws);
             const queries = [];
 
             const issueDraw = (i) => {

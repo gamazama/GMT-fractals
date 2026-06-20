@@ -15,7 +15,7 @@ export const getShadowsGLSL = (enabled: boolean, qualityLevel: number) => {
     // Hard Only mode: compile only the hard shadow function, stub the soft one
     // This minimizes DE call sites — one loop instead of two
     if (qualityLevel === 3) {
-        const MAX_HARD_STEPS = 128;
+        const MAX_HARD_STEPS = 512;
         return `
 // ------------------------------------------------------------------
 // SHADOWS (Hard Only — Fastest)
@@ -23,16 +23,35 @@ export const getShadowsGLSL = (enabled: boolean, qualityLevel: number) => {
 float GetHardShadow(vec3 ro, vec3 rd, float lightDist) {
     if (uShadowIntensity < 0.001) return 1.0;
 
+    // Enhanced sphere tracing (Keinert et al. 2014): over-relax each step by
+    // OMEGA so the ray covers more open distance per DE tap, then guard against
+    // overshoot — if the current and previous unbounding spheres fail to overlap
+    // (radius + prevRadius < stepLength), undo the step and continue at the safe
+    // (un-relaxed) radius. Reaches occluders in far fewer steps, which kills the
+    // "ray exhaustion" cracks (march ran out of step budget before hitting the
+    // caster) WITHOUT the light-leak/tunnelling a blind step floor risks.
+    const float OMEGA = 1.6;   // over-relaxation factor in [1,2)
     float t = 0.01;
+    float prevRadius = 0.0;
+    float stepLength = 0.0;
+    float omega = OMEGA;
     int limit = min(uShadowSteps, ${MAX_HARD_STEPS});
 
     for(int i = 0; i < ${MAX_HARD_STEPS}; i++) {
         if (i >= limit) break;
 
-        float h = DE_Dist(ro + rd * t);
-        if(h < max(1.0e-5, t * 0.0005)) return 0.0;  // Distance-adaptive hit threshold (0.05% of ray distance)
-        t += h;
-        if(t > lightDist) return 1.0;
+        float radius = DE_Dist(ro + rd * t);
+        bool sorFail = omega > 1.0 && (radius + prevRadius) < stepLength;
+        if (sorFail) {
+            stepLength -= omega * stepLength;   // back out the overshoot
+            omega = 1.0;                        // fall back to safe sphere tracing
+        } else {
+            if (radius < max(1.0e-5, t * 0.0005)) return 0.0;  // hit → occluded
+            stepLength = radius * omega;
+        }
+        prevRadius = radius;
+        t += stepLength;
+        if (t > lightDist) return 1.0;
     }
     return 1.0;
 }
@@ -43,7 +62,7 @@ float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) {
 `;
     }
 
-    const MAX_SHADOW_STEPS = 256;
+    const MAX_SHADOW_STEPS = 512;
 
     const settings = qualityLevel < 1.5 ? `
         float t = 0.05;
