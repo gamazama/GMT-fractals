@@ -30,11 +30,17 @@ float GetHardShadow(vec3 ro, vec3 rd, float lightDist) {
     // (un-relaxed) radius. Reaches occluders in far fewer steps, which kills the
     // "ray exhaustion" cracks (march ran out of step budget before hitting the
     // caster) WITHOUT the light-leak/tunnelling a blind step floor risks.
-    const float OMEGA = 1.6;   // over-relaxation factor in [1,2)
+    // Over-relaxation factor. Keinert over-relaxation is safe ONLY for DEs that
+    // are proper distance bounds. A formula's fudgeFactor < 1 means its DE
+    // OVERESTIMATES distance — set deliberately to stop slicing (e.g. Mandelbox /
+    // AmazingSurf 0.5, Bristorbrot 0.6). Over-relaxing those tunnels surfaces →
+    // false self-occlusion (over-dark) + slicing. So over-relax (1.6) only when
+    // fudge>=1; otherwise step at the formula's conservative fudge (omega<1 → the
+    // overlap check never fires → plain t += h*fudge, matching the soft march).
+    float omega = uFudgeFactor >= 1.0 ? 1.6 : uFudgeFactor;
     float t = 0.01;
     float prevRadius = 0.0;
     float stepLength = 0.0;
-    float omega = OMEGA;
     int limit = min(uShadowSteps, ${MAX_HARD_STEPS});
 
     for(int i = 0; i < ${MAX_HARD_STEPS}; i++) {
@@ -86,13 +92,16 @@ float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) {
             float thresh = max(1.0e-6, t * 0.0001);
             if(h < thresh) return 0.0;
             // IQ + Aaltonen penumbra correction: triangulate the true closest
-            // approach between the previous and current samples instead of the
-            // crude h/t ratio — removes silhouette banding, especially on
-            // sharp-cornered occluders. First step (ph huge) collapses to the
-            // old k*h/t form. @see https://iquilezles.org/articles/rmshadows/
+            // approach between the previous and current samples (removes silhouette
+            // banding on smooth DEs). GUARD: on abrupt-DE formulas (folding boxes —
+            // Mandelbox / AmazingSurf, whose DE jumps between steps) h can exceed
+            // 2*ph → y>h → the triangulation is degenerate (dseg=0 → spurious BLACK,
+            // the "over-dark box fractal" bug). Use the IQ refinement only when it's
+            // valid (y<h); otherwise fall back to the plain h/t ratio.
+            // @see https://iquilezles.org/articles/rmshadows/
             float y = h * h / (2.0 * ph);
-            float dseg = sqrt(max(0.0, h * h - y * y));
-            res = min(res, k * dseg / max(1.0e-5, t - y));
+            float pen = (y < h) ? (sqrt(h * h - y * y) / max(1.0e-5, t - y)) : (h / max(t, 1.0e-5));
+            res = min(res, k * pen);
             ph = h;
             if (res < 0.005) return 0.0;
             t += h * fudge;
