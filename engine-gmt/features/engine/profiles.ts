@@ -5,12 +5,13 @@
 // Compile time estimates (Windows/ANGLE/fxc):
 //   Fastest: ~3-4s | Lite: ~5-6s | Balanced: ~7-8s | Ultra: ~17s+
 //
-// PT-switch estCompileMs annotations recalibrated against measured cold data
-// (L6, 2026-06-19) — see docs/policy/shader-compile-optimization.md §2.3. The
-// per-switch numbers live on the lighting feature's params (features/lighting),
-// not here; BASE_COMPILE_MS below was confirmed against the measured PT baseline
-// (4200 base + ptEnabled + Robust shadows ≈ 11000 est vs 10341 measured).
-// @see docs/policy/shader-compile-optimization.md §3 (estCompileMs calibration gap)
+// estCompileMs annotations recalibrated against measured cold data (L6 2026-06-19;
+// ptEnabled re-measured 2026-06-20) — see docs/policy/shader-compile-optimization.md
+// §2.5. The per-switch numbers live on the feature params (features/*), not here.
+// BASE_COMPILE_MS (3600) is the calibrated core-trace cost after the ADR-0076/0077
+// trace-template work; the engine-core tier estimator (types/viewport.ts) shares
+// this BASE so its preview agrees with this live estimate.
+// @see docs/adr/0079-compile-system-profile-seam.md (the unified "Compile" system)
 
 export const ENGINE_PROFILES = {
     fastest: {

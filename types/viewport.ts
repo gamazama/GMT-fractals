@@ -191,9 +191,12 @@ export function getScalabilityLabel(state: ScalabilityState): string {
 
 /** Estimate compile time for a given tier selection.
  *  Sums the selected tiers' estCompileMs over BASE_COMPILE_MS.
- *  @see docs/adr/0079 — Stage 2 unifies this with the live-state per-param
- *  estimator (`estimateCompileTime`) so both report the same number. */
-export const BASE_COMPILE_MS = 4200;
+ *  BASE aligned to the live-state estimator's BASE (engine-gmt profiles.ts,
+ *  3600 — cut from 4200 via ADR-0076/0077 trace-template work) so the EnginePanel
+ *  preview and the real compile-progress estimate agree. The two estimators still
+ *  differ in granularity (tier-sum vs live per-param); full delegation is the
+ *  remaining Stage-2 follow-up in ADR-0079. */
+export const BASE_COMPILE_MS = 3600;
 
 export function estimateScalabilityCompileTime(subsystems: Record<string, number>): number {
     let total = BASE_COMPILE_MS;
