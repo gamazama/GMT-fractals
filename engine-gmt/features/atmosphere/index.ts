@@ -81,14 +81,22 @@ export const AtmosphereFeature: FeatureDefinition = {
         glowEnabled: {
             type: 'boolean', default: true, label: 'Enable Glow', shortId: 'ge', group: 'main',
             hidden: true, noAccumReset: true,
-            onUpdate: 'compile'
+            onUpdate: 'compile',
+            estCompileMs: 200  // base glow compile (= Accurate quality). Measured §2.6 (Color/Accurate +205/198). The Fast EXTRA lives on the glowQuality option below. (Restored to the estimate after ADR-0079 Stage 4 moved costs onto per-param annotations; glow had none.)
         },
 
         // --- ENGINE SETTINGS (Compile Time) ---
         glowQuality: {
             type: 'float', default: 0.0, label: 'Glow Algo', shortId: 'gq',
             group: 'engine_settings',
-            options: [{ label: 'Accurate (Vector)', value: 0.0 }, { label: 'Fast (Scalar)', value: 1.0 }],
+            options: [
+                { label: 'Accurate (Vector)', value: 0.0, estCompileMs: 0 },
+                // Counter-intuitively the scalar path compiles SLOWER (§2.6: Fast Glow
+                // +635/774 vs Color +205/198). This is the EXTRA over glowEnabled's
+                // base; it only adds up when glow is on (the Accurate default is 0, so
+                // a glow-off config with default quality contributes nothing).
+                { label: 'Fast (Scalar)', value: 1.0, estCompileMs: 450 },
+            ],
             description: 'Vector accumulates color per-step. Scalar accumulates intensity only (faster).',
             onUpdate: 'compile',
             noAccumReset: true
