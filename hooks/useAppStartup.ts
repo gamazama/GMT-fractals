@@ -152,19 +152,22 @@ export const useAppStartup = (options?: UseAppStartupOptions) => {
             }
         }
 
-        // Mobile auto-pick: downgrade scalability preset for first
-        // paint. Compile times on mobile GPUs are 2–3× longer than
-        // desktop, and `balanced` (the engine default) typically takes
-        // ~10s. `fastest` lands at ~5s with path tracing still on.
-        //
-        // Only override the *default*: if the user previously chose a
-        // different preset (preview/lite/full/ultra), we respect it.
+        // Mobile auto-pick: downgrade scalability preset for first paint.
+        // Compile times on mobile GPUs are 2–3× longer than desktop, and
+        // `balanced` (the engine default) typically takes ~10s. `fastest` is
+        // much cheaper. Only override the *default*: if the user previously
+        // chose a different preset (preview/full/ultra), we respect it.
         // Persisted-preset hydration runs before this hook.
+        //
+        // Mobile also force-disables the path-tracer capability (ptEnabled) —
+        // PT is far too heavy for mobile GPUs. Per the rule "ptEnabled always on
+        // EXCEPT mobile + preview". Optional-chained so non-GMT apps skip it.
         if (hwProfile.isMobile) {
             const current = (state as any).scalability?.activePreset;
             if (current === 'balanced' && (state as any).applyScalabilityPreset) {
                 (state as any).applyScalabilityPreset('fastest');
             }
+            (state as any).setLighting?.({ ptEnabled: false });
         }
 
         // Mobile mid- and low-tier devices: default adaptive resolution to

@@ -232,24 +232,18 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
     {
         id: 'fastest',
         label: 'Fastest',
-        description: 'Hard shadows, path traced lighting with fast glow.',
+        // Highest FPS: no shadow march, no reflection march, no glow — the
+        // expensive runtime passes are all off. Keeps full PBR lighting + the
+        // path-tracer capability (ptEnabled, free in Direct), so it still looks
+        // good and can switch to PT on demand. Preview is the bare/instant one;
+        // this is the fast-but-lit one. Compile time ≈ the others (that's fine —
+        // the differentiation here is FPS, not compile).
+        description: 'Highest FPS — full lighting, no shadows / reflections / glow.',
         subsystems: {
-            shadows: 1,              // Hard
+            shadows: 0,              // Off (the shadow march is the biggest FPS cost)
             reflections: 0,          // Off
-            lighting_quality: 1,     // Path Traced
-            atmosphere_quality: 1,   // Fast Glow
-            pathtracer: 0,           // Balanced
-        },
-    },
-    {
-        id: 'lite',
-        label: 'Lite',
-        description: 'Soft shadows, env map reflections, color glow.',
-        subsystems: {
-            shadows: 2,              // Soft
-            reflections: 1,          // Env Map
-            lighting_quality: 1,     // Path Traced
-            atmosphere_quality: 2,   // Color Glow
+            lighting_quality: 1,     // Path Traced (PBR + ptEnabled capability)
+            atmosphere_quality: 0,   // Off
             pathtracer: 0,           // Balanced
         },
     },
@@ -292,10 +286,11 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
     },
 ];
 
-/** Default scalability state (desktop) */
+/** Default scalability state (desktop) — Balanced. Referenced by id (not index)
+ *  so preset list edits (e.g. removing 'lite') don't silently shift the default. */
 export const DEFAULT_SCALABILITY: ScalabilityState = {
     activePreset: 'balanced',
-    subsystems: { ...SCALABILITY_PRESETS[3].subsystems },
+    subsystems: { ...(SCALABILITY_PRESETS.find(p => p.id === 'balanced')!.subsystems) },
     isCustomized: false,
 };
 

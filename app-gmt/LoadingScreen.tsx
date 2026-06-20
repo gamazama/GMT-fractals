@@ -175,7 +175,9 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
 
     const handleLiteToggle = () => {
         const s = useEngineStore.getState() as any;
-        s.applyScalabilityPreset?.(isLiteRender ? 'balanced' : 'lite');
+        // 'lite' preset was removed (ADR-0079 follow-up); 'fastest' is now the
+        // lightest non-preview preset.
+        s.applyScalabilityPreset?.(isLiteRender ? 'balanced' : 'fastest');
     };
 
     const formulas = useMemo(() => registry.getAll(), [isMenuOpen]);
