@@ -34,19 +34,22 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
             },
         },
         {
-            label: 'Hard',
+            // Lite soft (shadowAlgorithm 1.0) — step-floored march. MEASURED ~2×
+            // faster than Hard (2026-06-20: ~2.1–3.0ms vs Hard ~4.8–5.9ms @1280×720
+            // Mandelbulb) AND it has a penumbra, so it dominates Hard on both speed
+            // and looks. The old "Hard" tier was dropped as redundant; Hard
+            // (shadowAlgorithm 2.0, crisp/binary) stays a manual shadowAlgorithm
+            // option for the sharp-shadow aesthetic. The jitter ALU is compiled in
+            // with the march (runtime "Shadow Jitter" uAreaLights toggle).
+            label: 'Soft',
             overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0 },
+                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 1.0 },
             },
         },
         {
-            // Analytic IQ penumbra. The jitter ALU is compiled in unconditionally
-            // with the shadow march now (every tier pays the ~44ms), so "Shadow
-            // Jitter" (areaLights) is a RUNTIME toggle available at any tier ≥ Hard
-            // — there is no separate compile tier for it. This collapsed the old
-            // "Full" tier. Tiers no longer set areaLights — it persists as the
-            // user's runtime toggle.
-            label: 'Soft',
+            // Robust soft (shadowAlgorithm 0.0) — analytic IQ+Aaltonen penumbra,
+            // the accurate (slowest) option.
+            label: 'Soft HQ',
             overrides: {
                 lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0 },
             },
@@ -232,15 +235,15 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
     {
         id: 'fastest',
         label: 'Fastest',
-        // Highest FPS: no shadow march, no reflection march, no glow — the
-        // expensive runtime passes are all off. Keeps full PBR lighting + the
-        // path-tracer capability (ptEnabled, free in Direct), so it still looks
-        // good and can switch to PT on demand. Preview is the bare/instant one;
-        // this is the fast-but-lit one. Compile time ≈ the others (that's fine —
-        // the differentiation here is FPS, not compile).
-        description: 'Highest FPS — full lighting, no shadows / reflections / glow.',
+        // Highest FPS that still has shadows (it's the VJ preset — shadows are
+        // wanted). Uses Lite soft shadows (the measured-fastest shadow, ~2× Hard),
+        // no reflection march, no glow. Keeps full PBR lighting + the path-tracer
+        // capability (ptEnabled, free in Direct). Preview is the bare/instant one;
+        // this is the fast-but-lit-with-shadows one. Compile time ≈ the others
+        // (that's fine — the differentiation here is FPS, not compile).
+        description: 'Highest FPS — Lite soft shadows, no reflections / glow.',
         subsystems: {
-            shadows: 0,              // Off (the shadow march is the biggest FPS cost)
+            shadows: 1,              // Soft (Lite) — fastest shadow, ~2× faster than Hard
             reflections: 0,          // Off
             lighting_quality: 1,     // Path Traced (PBR + ptEnabled capability)
             atmosphere_quality: 0,   // Off
