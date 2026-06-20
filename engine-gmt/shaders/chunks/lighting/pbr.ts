@@ -2,16 +2,16 @@
 // Shared light loop infrastructure (shadows, attenuation, light types).
 // Each BRDF variant gets its own complete function to avoid dead-code overhead.
 // stochasticShadows: compile-time gate — when false, the stochastic jitter block
-// and its GetHardShadow dependency are stripped, saving significant compile time.
-// areaLightsActive: compile-time gate within the stochastic-shadow build —
-// session-2 found that the runtime `if (uAreaLights > 0.5)` was emitting BOTH
-// the stochastic and soft shadow paths and ANGLE/D3D11 was likely predicating
-// (running both 128-step shadow marches). When areaLightsActive=false (default
-// for `uAreaLights=false`), only the soft path is emitted; when true, only the
-// stochastic+GetHardShadow path. Toggling the `areaLights` checkbox triggers a
-// recompile, consistent with the existing compile-toggle UX.
+// is stripped entirely (no uAreaLights reference, no jitter ALU). When true, the
+// jitter is compiled in behind a RUNTIME `if (uAreaLights > 0.5)` branch that only
+// perturbs the shadow-ray direction ahead of a SINGLE GetSoftShadow march (hard =
+// soft with high k). Because there is structurally one march, ANGLE has nothing to
+// predicate — FPS is identical when the toggle is off, and flipping `areaLights`
+// needs no recompile. This SUPERSEDES the earlier areaLightsActive compile-gate,
+// which emitted two separate marches (GetSoftShadow + GetHardShadow) and forced a
+// recompile on toggle to dodge the predication it feared.
 
-const getLoopOpen = (stochasticShadows: boolean, areaLightsActive: boolean = false) => `
+const getLoopOpen = (stochasticShadows: boolean) => `
 vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughness, float metallic, float stochasticSeed, bool calcShadows) {
     vec3 Lo = vec3(0.0);
 
@@ -73,34 +73,35 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
 
         float shadow = 1.0;
         if (calcShadows && uShadows > 0.5 && uLightShadows[i] > 0.5) {
-            float s = 1.0;
-${stochasticShadows && areaLightsActive ? `
-            // Stochastic area-light path (areaLights checkbox ON, compile-gated).
-            float samplingSeed = fract(stochasticSeed + float(i) * 1.618);
-
-            vec3 u, v;
-            buildTangentBasis(l, u, v);
-
-            float r_jitter = sqrt(samplingSeed);
-            float theta = samplingSeed * TAU * 1.618033;
-            float spread = 2.0 / max(uShadowSoftness, 0.1);
-
-            vec3 offset = (u * cos(theta) + v * sin(theta)) * r_jitter * spread;
-
-            vec3 jitteredLDir = normalize(l + offset);
-            float jitteredDist = distToLight;
-
-            if (!isDirectional) {
-                vec3 jitteredTarget = uLightPos[i] + offset * distToLight;
-                vec3 jVec = jitteredTarget - p;
-                jitteredDist = length(jVec);
-                jitteredLDir = jVec / jitteredDist;
+            vec3 shadowL = l;
+            float shadowDist = distToLight;
+            float shK = uShadowSoftness;
+${stochasticShadows ? `
+            // Stochastic jitter (runtime toggle uAreaLights — no recompile).
+            // Perturb the shadow ray within the light's disc and march
+            // near-binary (high shK); the soft penumbra emerges from
+            // accumulating jittered samples across frames. Only this cheap ALU
+            // is conditional — there is a SINGLE GetSoftShadow march either way,
+            // so fxc has nothing to predicate and FPS is unchanged when off.
+            if (uAreaLights > 0.5) {
+                float samplingSeed = fract(stochasticSeed + float(i) * 1.618);
+                vec3 ju, jv;
+                buildTangentBasis(l, ju, jv);
+                float r_jitter = sqrt(samplingSeed);
+                float theta = samplingSeed * TAU * 1.618033;
+                float spread = 2.0 / max(uShadowSoftness, 0.1);
+                vec3 offset = (ju * cos(theta) + jv * sin(theta)) * r_jitter * spread;
+                shadowL = normalize(l + offset);
+                if (!isDirectional) {
+                    vec3 jitteredTarget = uLightPos[i] + offset * distToLight;
+                    vec3 jVec = jitteredTarget - p;
+                    shadowDist = length(jVec);
+                    shadowL = jVec / shadowDist;
+                }
+                shK = 2000.0;
             }
-
-            s = GetHardShadow(shadowRo, jitteredLDir, jitteredDist);
-` : `
-            s = GetSoftShadow(shadowRo, l, uShadowSoftness, distToLight, stochasticSeed);
-`}
+` : ``}
+            float s = GetSoftShadow(shadowRo, shadowL, shK, shadowDist, stochasticSeed);
             shadow = mix(1.0, s, uShadowIntensity);
         }
 
@@ -123,11 +124,11 @@ const LOOP_CLOSE = `
 `;
 
 // Simple Blinn-Phong (fast compile, good visual quality)
-export const getLightingPBRSimple = (stochasticShadows: boolean, areaLightsActive: boolean = false) => `
+export const getLightingPBRSimple = (stochasticShadows: boolean) => `
 // ------------------------------------------------------------------
 // PBR HELPERS (Blinn-Phong)
 // ------------------------------------------------------------------
-${getLoopOpen(stochasticShadows, areaLightsActive)}
+${getLoopOpen(stochasticShadows)}
         // Blinn-Phong specular — uses hoisted bpShininess / bpSpecNorm /
         // specularTint / diffuseTerm from the prelude (per-pixel invariants).
         vec3 h = normalize(l + v);
@@ -140,11 +141,11 @@ ${LOOP_CLOSE}
 `;
 
 // Full Cook-Torrance (GGX + Smith-GGX + Schlick — slower compile)
-export const getLightingPBRFull = (stochasticShadows: boolean, areaLightsActive: boolean = false) => `
+export const getLightingPBRFull = (stochasticShadows: boolean) => `
 // ------------------------------------------------------------------
 // PBR HELPERS (Cook-Torrance GGX)
 // ------------------------------------------------------------------
-${getLoopOpen(stochasticShadows, areaLightsActive)}
+${getLoopOpen(stochasticShadows)}
         // F0 / NdotV / ggxA2 / ggxKG / ggxG1V are hoisted in the prelude.
         vec3 h = normalize(l + v);
         float HdotV = max(0.0, dot(h, v));

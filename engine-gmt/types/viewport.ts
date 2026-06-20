@@ -104,12 +104,12 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
         {
             label: 'Full',
             overrides: {
-                // areaLights:true is REQUIRED to actually engage the stochastic
-                // jitter path — useSoft = !stochastic || !areaLightsActive, and
-                // areaLightsActive = areaLights && stochastic (pbr.ts:14 /
-                // pathtracer.ts:14). Without it ptStochasticShadows is inert and
-                // this falls through to plain analytic GetSoftShadow. (areaLights
-                // gates ONLY the shadow jitter, not PT sphere lights = ptAreaLights.)
+                // ptStochasticShadows compiles the jitter ALU into the unified
+                // shadow march; areaLights turns it ON at runtime (uAreaLights
+                // uniform — NO longer a compile gate, no recompile to toggle).
+                // Both are set so the Full tier actually shows jittered soft
+                // shadows. (areaLights drives ONLY the shadow jitter, not PT
+                // sphere lights = ptAreaLights.)
                 lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true },
             },
             estCompileMs: 400,   // L6: jitter is compile-free over soft (~265-433); was 3800 (~9x high) (§2.6)

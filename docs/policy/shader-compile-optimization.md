@@ -250,6 +250,16 @@ marginals slightly *over*-estimates a multi-gate config.
    [`lighting/index.ts:447`](../../engine-gmt/features/lighting/index.ts#L447)),
    and ADR-0074 folds it into the single area-light march. Toggling it without
    Area Lights on is a no-op (no recompile).
+   > **Update 2026-06-20 (compile→runtime; finding partly superseded):** the
+   > `areaLightsActive` compile-gate is **removed**. The jitter ALU is now
+   > compiled in by `ptStochasticShadows` ALONE and toggled purely at RUNTIME via
+   > `uAreaLights` — a SINGLE shadow march handles both states (jitter just
+   > perturbs the ray direction; hard = soft with high k). See the JSDoc atop
+   > [`pbr.ts`](../../engine-gmt/shaders/chunks/lighting/pbr.ts) /
+   > [`pathtracer.ts`](../../engine-gmt/shaders/chunks/pathtracer.ts). The PT cost
+   > map previously *under-counted* the jitter ALU (it set `ptStochasticShadows`
+   > without `areaLights`, so the gate fell through); both cost maps are corrected
+   > and a runtime-toggle PASS/FAIL probe was added to `measure-direct-costmap.mts`.
 4. **Cross-formula scaling ≈ 1.1–1.3×** (GSD/MB: PT module 1.26×, Env MIS+IS
    1.11×). For estimation: scale the PT-module base by a formula-complexity factor;
    the gate marginals are roughly formula-stable adders.
@@ -297,7 +307,14 @@ Control = `Reflections: Env Map` (annotated 0) — clean (MB +1ms, GSD −5ms).
    measurement read it as a no-op only because that baseline left `areaLights`
    off, so the gate fell through to the plain soft branch.) Net: the shadow tier
    is not a *compile* lever in either render mode, but Full **is** a real
-   quality/blend upgrade. **Tier-wiring fix (session 5):** the viewport quality
+   quality/blend upgrade.
+   > **Update 2026-06-20:** the `areaLightsActive` gate is gone — the jitter ALU
+   > now compiles on `ptStochasticShadows` alone and `areaLights` is a runtime
+   > uniform (compile→runtime; see the §2.5 finding-3 update). This Direct
+   > measurement still stands (it had `areaLights:true`, so it counted the jitter
+   > ALU correctly); only the *gating wording* above is superseded.
+
+   **Tier-wiring fix (session 5):** the viewport quality
    tiers set `ptStochasticShadows` but had been missing the *second* required flag
    `areaLights` (default false, gated behind `ptStochasticShadows`) — so the
    shipped "Full" tier silently delivered plain soft, not jitter. The

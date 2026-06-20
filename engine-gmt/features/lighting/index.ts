@@ -245,8 +245,8 @@ export const LightingFeature: FeatureDefinition = {
             ui: 'checkbox',
             onUpdate: 'compile',
             noReset: true,
-            estCompileMs: 800,
-            description: 'Stochastic shadow jitter for Point lights — fakes soft penumbras via accumulation. Independent of True Area Lights (which uses physical sphere sampling for type=Sphere lights).'
+            estCompileMs: 80,  // measured jitter-ALU marginal over soft: Direct +67/79, PT +20/36 (sub-noise). Was 800 (~10x high). The on/off toggle (areaLights) is now RUNTIME — no recompile. @see docs/policy/shader-compile-optimization.md §2.5 finding-3 update (2026-06-20)
+            description: 'Stochastic shadow jitter for Point lights — fakes soft penumbras via accumulation. Compiles the jitter capability; toggle it on/off at runtime via the Jitter button (no recompile). Independent of True Area Lights (which uses physical sphere sampling for type=Sphere lights).'
         },
 
         // --- PATH TRACING QUALITY (Engine Panel) ---
@@ -312,11 +312,11 @@ export const LightingFeature: FeatureDefinition = {
             condition: { param: 'ptStochasticShadows', bool: true },
             description: 'Stochastic area light shadows. Disable for sharp analytical shadows.',
             helpId: 'shadows',
-            // Compile-gated. ANGLE/D3D11 was likely predicating the runtime
-            // `if (uAreaLights > 0.5)` shadow-path switch — running both
-            // GetSoftShadow AND GetHardShadow per shadow-casting light. The
-            // compile gate emits exactly one path. Toggle triggers recompile.
-            onUpdate: 'compile', noReset: true
+            // RUNTIME toggle (uAreaLights uniform) — no recompile. The jitter is a
+            // cheap perturbation of the shadow-ray direction ahead of a SINGLE
+            // shadow march (see pbr.ts / pathtracer.ts), so both on/off states
+            // share one compiled path with nothing for ANGLE to predicate.
+            noReset: true
         },
         shadowIntensity: {
             type: 'float', default: 1.0, label: 'Opacity', shortId: 'si', uniform: 'uShadowIntensity',
@@ -443,12 +443,12 @@ export const LightingFeature: FeatureDefinition = {
         }
 
         const stochasticShadows = state?.ptStochasticShadows === true && shadowsCompiled;
-        // areaLightsActive: compile-gates the *runtime* `if (uAreaLights > 0.5)`
-        // branch in the shadow path. When false (default), only soft shadows
-        // are emitted; when true, only the stochastic+GetHardShadow path. This
-        // resolves the case where ANGLE was likely predicating both paths.
-        // Toggling the `areaLights` checkbox now triggers a recompile.
-        const areaLightsActive = state?.areaLights === true && stochasticShadows;
+        // The stochastic JITTER ALU is compiled in when stochasticShadows is
+        // true; its on/off toggle (`uAreaLights`) is a RUNTIME uniform, not a
+        // compile gate. A single shadow march handles both states (the jitter
+        // only perturbs the ray direction ahead of it — see pbr.ts /
+        // pathtracer.ts), so there is nothing for ANGLE to predicate and no
+        // recompile when the user toggles it.
 
         const isPathTracing = config.renderMode === 'PathTracing' || state?.renderMode === 1.0;
         const quality = config.quality as QualityState;
@@ -458,12 +458,12 @@ export const LightingFeature: FeatureDefinition = {
             builder.addIntegrator(LIGHTING_SHARED); // PT needs fresnelSchlick
             builder.setRenderMode('PathTracing');
             builder.addDefine('RENDER_MODE_PATHTRACING', '1');
-            builder.addIntegrator(getPathTracerGLSL(isLite, MAX_LIGHTS, stochasticShadows, areaLightsActive));
+            builder.addIntegrator(getPathTracerGLSL(isLite, MAX_LIGHTS, stochasticShadows));
         } else {
             const useCookTorrance = state?.specularModel === 1.0;
             builder.addIntegrator(useCookTorrance ? LIGHTING_SHARED : LIGHTING_SHARED_CORE);
             builder.setRenderMode('Direct');
-            builder.addIntegrator(useCookTorrance ? getLightingPBRFull(stochasticShadows, areaLightsActive) : getLightingPBRSimple(stochasticShadows, areaLightsActive));
+            builder.addIntegrator(useCookTorrance ? getLightingPBRFull(stochasticShadows) : getLightingPBRSimple(stochasticShadows));
             // Shading integrator (calculateShading) is deferred to buildFragment() via requestShading()
             // so that reflection code from ReflectionsFeature is available at generation time.
             builder.requestShading();

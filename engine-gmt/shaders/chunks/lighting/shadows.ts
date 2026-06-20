@@ -51,6 +51,7 @@ float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) {
     ` : `
         float t = 0.0;
         float fudge = uFudgeFactor;
+        float ph = 1.0e10;
     `;
 
     // Early-out when res saturates: GetSoftShadow returns clamp(res, 0, 1)
@@ -65,7 +66,15 @@ float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) {
     ` : `
             float thresh = max(1.0e-6, t * 0.0001);
             if(h < thresh) return 0.0;
-            res = min(res, k * h / max(t, 1.0e-5));
+            // IQ + Aaltonen penumbra correction: triangulate the true closest
+            // approach between the previous and current samples instead of the
+            // crude h/t ratio — removes silhouette banding, especially on
+            // sharp-cornered occluders. First step (ph huge) collapses to the
+            // old k*h/t form. @see https://iquilezles.org/articles/rmshadows/
+            float y = h * h / (2.0 * ph);
+            float dseg = sqrt(max(0.0, h * h - y * y));
+            res = min(res, k * dseg / max(1.0e-5, t - y));
+            ph = h;
             if (res < 0.005) return 0.0;
             t += h * fudge;
     `;

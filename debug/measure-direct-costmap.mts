@@ -49,11 +49,13 @@ const SWITCHES: { label: string; group: string; patch: Patch; control?: boolean 
     // Shadow ladder (the "do the tiers cost the same in Direct?" question).
     { label: 'Shadows: Hard',  group: 'shadow', patch: { lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0 } } },
     { label: 'Shadows: Soft',  group: 'shadow', patch: { lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0 } } },
-    // Full = soft + stochastic area-light jitter. The jitter block (pbr.ts:77,
-    // a per-light GetHardShadow offset-sample path = different light blending) is
-    // gated on `stochasticShadows && areaLightsActive` — so areaLights MUST be on
-    // for it to engage. (Without areaLights it silently falls to the soft branch.)
-    { label: 'Shadows: Full (stochastic, areaLights on)', group: 'shadow', patch: { lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true } } },
+    // Soft + stochastic JITTER ALU compiled into the unified GetSoftShadow march.
+    // Gated on `ptStochasticShadows` ALONE now; the on/off toggle (uAreaLights) is
+    // a RUNTIME uniform sharing this one compiled march (no separate compile path,
+    // nothing to predicate). So this switch's marginal = the jitter ALU's compile
+    // cost; areaLights state is compile-irrelevant. The runtime no-recompile claim
+    // is asserted by the runtime-toggle probe at the end of the run.
+    { label: 'Shadows: Soft + Jitter ALU (ptStochasticShadows)', group: 'shadow', patch: { lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true } } },
     // Reflections (the prime suspects). Env Map = near-free CONTROL.
     { label: 'Reflections: Env Map (control)', group: 'refl', patch: { reflections: { reflectionMode: 1.0 } }, control: true },
     { label: 'Reflections: Raymarched',        group: 'refl', patch: { reflections: { reflectionMode: 3.0, bounceShadows: false } } },
@@ -190,4 +192,31 @@ for (const t of table) {
     console.log(`  ---- totals ----`);
     console.log(`  MAXIMAL (all on):         ${t.maxMs}ms  (maximal − minimal = ${t.maxMs - t.minMs}ms)`);
 }
+
+// ---- RUNTIME-TOGGLE ASSERTION ----
+// The compile→runtime move's load-bearing claim: with the jitter ALU compiled in
+// (ptStochasticShadows on), flipping `areaLights` is a pure uniform write and must
+// NOT trigger a recompile. If this regresses (e.g. someone re-adds onUpdate:'compile'
+// or an areaLightsActive compile gate), this prints FAIL.
+console.log('\n\n===================== RUNTIME-TOGGLE ASSERTION =====================');
+// 1. Compile once with jitter capability present, areaLights OFF.
+await page.evaluate(`(async () => {
+  const p = window.__gmtProxy; const st = window.__store.getState();
+  st.setLighting({ advancedLighting: true, ptEnabled: false, shadows: true, shadowsCompile: true,
+                   shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: false });
+  st.setRenderMode('Direct');
+})()`);
+await settle();
+// 2. Flip ONLY areaLights at runtime; expect NO recompile.
+const beforeToggle = compileLogs.length;
+const toggle = await page.evaluate(`(async () => {
+  const p = window.__gmtProxy; const st = window.__store.getState();
+  st.setLighting({ areaLights: true });
+  const t0 = performance.now();
+  while (performance.now() - t0 < 3000 && !p.isCompiling) await new Promise(r => setTimeout(r, 4));
+  return { started: p.isCompiling };
+})()`) as { started: boolean };
+const recompiled = toggle.started || compileLogs.length > beforeToggle;
+console.log(`  areaLights OFF→ON (jitter compiled): ${recompiled ? 'FAIL — recompiled (should be a runtime uniform)' : 'PASS — no recompile'}`);
+
 await browser.close();

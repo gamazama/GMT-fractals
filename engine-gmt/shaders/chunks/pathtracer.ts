@@ -1,69 +1,59 @@
 
 import { getVNDFSamplerGLSL } from './vndf';
 
-export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochasticShadows: boolean = true, areaLightsActive: boolean = false) => {
+export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochasticShadows: boolean = true) => {
 
     const loopLimit = isMobile ? '2' : 'maxBounces';
-    // Three cases collapse to a single emitted shadow call:
-    //   1. !stochasticShadows or mobile → soft only (compile-stripped)
-    //   2. stochasticShadows && !areaLightsActive → soft only (NEW: was both
-    //      paths emitted with runtime `if (uAreaLights > 0.5)`)
-    //   3. stochasticShadows && areaLightsActive → stochastic only
-    // ANGLE/D3D11 was likely predicating both paths in case 2 — running both
-    // shadow marches per shadow-casting light. Compile-gating eliminates one.
-    const useSoft = !stochasticShadows || isMobile || !areaLightsActive;
-    // Sphere area lights (type 2): the NEE site already sampled a point on the
-    // sphere surface, with lDir/distToLight pointing at it, so the shadow ray
-    // wants a HARD result toward that exact sample (its penumbra comes from
-    // accumulating different sphere-surface samples across frames, NOT from an
-    // analytic march). The previous code expressed that as a SEPARATE
-    // `GetHardShadow(...)` call wrapping the default soft/stochastic march —
-    // which made fxc inline a SECOND full 256-step DE_Dist shadow march into the
-    // NEE loop. That second march was measured at ~969ms of the area-lights cold
-    // compile (>half of it; §2.3/§8 L5). It is removed here by FOLDING the sphere
-    // case into the single march already present: in the soft variant, drive the
-    // softness hard for spheres (high k → GetSoftShadow returns ~binary); in the
-    // stochastic variant, point the (already-GetHardShadow) march straight at the
-    // sphere sample with no re-jitter. One march per shadow-casting light, not
-    // two — same feature, fewer instructions for fxc to translate.
-    // @see docs/adr/0074-area-light-shadow-single-march.md
-    const shadowLogic = useSoft ? `
-        float shK = uShadowSoftness;
-        #ifdef PT_AREA_LIGHTS
-        // Sphere: near-hard march toward the per-frame sphere sample; the soft
-        // penumbra is supplied by accumulating those samples, not by k.
-        if (uLightType[lightIdx] > 1.5) shK = 2000.0;
-        #endif
-        shadow = GetSoftShadow(shadowRo, lDir, shK, distToLight, blueNoise.r);
+    // PT shadows are ALWAYS a single binary-visibility march (GetHardShadow):
+    // delta lights (point/directional) are physically hard-shadowed, and sphere
+    // area lights aim lDir/distToLight at the per-frame surface sample (NEE), so
+    // a hard test toward it is correct — their penumbra comes from accumulation,
+    // not an analytic march. @see docs/adr/0074
+    //
+    // The stochastic JITTER (Soft Shadow Jitter, fake-soft for Point lights) is
+    // now a RUNTIME toggle (`uAreaLights`), not a compile gate. The old design
+    // emitted two separate marches behind `if (uAreaLights)` and feared ANGLE
+    // would predicate both. Here the jitter is only a cheap perturbation of the
+    // shadow-ray DIRECTION computed before the march — there is structurally ONE
+    // GetHardShadow call, so there is nothing to predicate: FPS is identical
+    // when off, and toggling jitter needs no recompile. `jitterCapable` is the
+    // remaining compile gate (ptStochasticShadows / mobile) for whether the
+    // jitter ALU is compiled in at all.
+    const jitterCapable = stochasticShadows && !isMobile;
+    const shadowLogic = !jitterCapable ? `
+        shadow = GetHardShadow(shadowRo, lDir, distToLight);
     ` : `
-        // Stochastic area-light path (areaLights checkbox ON, compile-gated).
-        vec2 jitter = blueNoise.gb;
-        vec3 sT, sB;
-        buildTangentBasis(lDir, sT, sB);
-
-        float spread = 2.0 / max(uShadowSoftness, 0.1);
-        float r = sqrt(jitter.x) * spread;
-        float theta = jitter.y * TAU;
-
-        vec3 offsetDir = sT * cos(theta) * r + sB * sin(theta) * r;
-        vec3 shadowDir = normalize(lDir + offsetDir);
+        vec3 shadowDir = lDir;
         float shadowDist = distToLight;
+        if (uAreaLights > 0.5) {
+            // Stochastic jitter (runtime): perturb the ray within the light's
+            // disc; softness emerges from accumulating jittered samples.
+            vec2 jitter = blueNoise.gb;
+            vec3 sT, sB;
+            buildTangentBasis(lDir, sT, sB);
 
-        if (!isDirectional) {
-            float radius = spread * distToLight;
-            vec3 jitterOffset = (sT * cos(theta) + sB * sin(theta)) * sqrt(jitter.x) * radius;
-            vec3 targetPos = uLightPos[lightIdx] + jitterOffset;
-            vec3 tVec = targetPos - p_ray;
-            shadowDist = length(tVec);
-            shadowDir = tVec / max(1.0e-5, shadowDist);
+            float spread = 2.0 / max(uShadowSoftness, 0.1);
+            float r = sqrt(jitter.x) * spread;
+            float theta = jitter.y * TAU;
+
+            vec3 offsetDir = sT * cos(theta) * r + sB * sin(theta) * r;
+            shadowDir = normalize(lDir + offsetDir);
+
+            if (!isDirectional) {
+                float radius = spread * distToLight;
+                vec3 jitterOffset = (sT * cos(theta) + sB * sin(theta)) * sqrt(jitter.x) * radius;
+                vec3 targetPos = uLightPos[lightIdx] + jitterOffset;
+                vec3 tVec = targetPos - p_ray;
+                shadowDist = length(tVec);
+                shadowDir = tVec / max(1.0e-5, shadowDist);
+            }
+
+            #ifdef PT_AREA_LIGHTS
+            // Sphere: shadow straight toward the NEE sphere sample — re-jittering
+            // (uLightPos-based) would defeat sphere sampling.
+            if (uLightType[lightIdx] > 1.5) { shadowDir = lDir; shadowDist = distToLight; }
+            #endif
         }
-
-        #ifdef PT_AREA_LIGHTS
-        // Sphere: shadow straight toward the sphere sample — re-jittering here
-        // (uLightPos-based) would defeat sphere sampling. Same single march.
-        if (uLightType[lightIdx] > 1.5) { shadowDir = lDir; shadowDist = distToLight; }
-        #endif
-
         shadow = GetHardShadow(shadowRo, shadowDir, shadowDist);
     `;
 

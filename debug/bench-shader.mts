@@ -176,6 +176,16 @@ const PT_REFL_MODE = argVal('--pt-refl-mode') !== undefined ? parseInt(argVal('-
 const PT_SOBOL_BOUNCE = parseBool(argVal('--pt-sobol-bounce'));
 const IS_PT = RENDER_MODE === 'PathTracing';
 
+// Shadow FPS-sweep flags (shadow benchmark matrix):
+//   --shadow-algorithm=hard|lite|robust  → shadowAlgorithm 2.0/1.0/0.0 (compile)
+//   --area-lights=on|off                 → RUNTIME jitter toggle (uAreaLights).
+//     Sets ptStochasticShadows=true so the jitter ALU is compiled in, then flips
+//     the uniform — so on=true exercises the jittered GetSoftShadow(k=2000) /
+//     GetHardShadow path, off=false the plain soft/binary path. No recompile to
+//     toggle (that's the whole point of the compile→runtime move).
+const SHADOW_ALGORITHM = (argVal('--shadow-algorithm') ?? '').toLowerCase();
+const AREA_LIGHTS = parseBool(argVal('--area-lights'));
+
 // Volumetric scatter overrides. ptVolumetric is a compile gate (recompiles
 // the trace loop with the per-step body); volEnabled is the runtime gate;
 // remaining knobs are sliders. --volumetric=on flips both compile + runtime.
@@ -506,6 +516,8 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         ptAreaLights: boolean | null;
         ptReflMode: number | null;
         ptSobolBounce: boolean | null;
+        areaLights: boolean | null;
+        shadowAlgorithm: string;
         volumetric: boolean | null;
         volDensity: number | null;
         volEmissive: number | null;
@@ -598,7 +610,8 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         const wantsLightingOverride = opts.renderMode === 'PathTracing'
             || opts.ptNeeAll !== null || opts.ptEnvNee !== null
             || opts.ptAreaLights !== null || opts.ptBounces !== null
-            || opts.ptReflMode !== null || opts.ptSobolBounce !== null;
+            || opts.ptReflMode !== null || opts.ptSobolBounce !== null
+            || opts.areaLights !== null || !!opts.shadowAlgorithm;
         if (wantsLightingOverride && setters.setLighting) {
             const lightingPatch: any = {};
             if (opts.renderMode === 'PathTracing') lightingPatch.ptEnabled = true;
@@ -608,6 +621,16 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             if (opts.ptBounces !== null) lightingPatch.ptBounces = opts.ptBounces;
             if (opts.ptReflMode !== null) lightingPatch.ptReflMode = opts.ptReflMode;
             if (opts.ptSobolBounce !== null) lightingPatch.ptSobolBounce = opts.ptSobolBounce;
+            if (opts.shadowAlgorithm) {
+                const algMap: Record<string, number> = { hard: 2.0, lite: 1.0, robust: 0.0 };
+                const a = algMap[opts.shadowAlgorithm];
+                if (a !== undefined) { lightingPatch.shadows = true; lightingPatch.shadowsCompile = true; lightingPatch.shadowAlgorithm = a; }
+            }
+            if (opts.areaLights !== null) {
+                lightingPatch.shadows = true; lightingPatch.shadowsCompile = true;
+                lightingPatch.ptStochasticShadows = true;   // compile the jitter ALU in
+                lightingPatch.areaLights = opts.areaLights;  // RUNTIME toggle (uAreaLights)
+            }
             setters.setLighting(lightingPatch);
         }
         if (opts.renderMode && setters.setRenderMode) {
@@ -665,6 +688,8 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         ptAreaLights: PT_AREA_LIGHTS,
         ptReflMode: PT_REFL_MODE,
         ptSobolBounce: PT_SOBOL_BOUNCE,
+        areaLights: AREA_LIGHTS,
+        shadowAlgorithm: SHADOW_ALGORITHM,
         volumetric: VOLUMETRIC,
         volDensity: VOL_DENSITY,
         volEmissive: VOL_EMISSIVE,
@@ -807,6 +832,13 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
     uniforms.uFrameCount = { int: 0 };
     uniforms.uJitter = [0, 0];
     uniforms.uBlendFactor = 1.0;  // 100% fresh pixel — ignore (dummy) history
+    // FULL FRAME. The tiled progressive idle renderer (BandScheduler) confines the
+    // trace to a band via uRegionMin/uRegionMax — the region check in main.ts skips
+    // (history-copies) every pixel outside it. A snapshot taken mid-band would make
+    // the bench shade only a strip → cheap, inconsistent timing. Force the whole
+    // [0,1]×[0,1] frame so every draw renders all pixels. @see engine-gmt/engine/BandScheduler.ts
+    uniforms.uRegionMin = [0, 0];
+    uniforms.uRegionMax = [1, 1];
 
     // Lights come straight from the snapshot (the formula's defaultPreset).
     // Stochastic shadow noise is converged by the accumulation pass that
@@ -928,7 +960,7 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
     // reference produces meaningless "FAIL" verdicts. Users still get the
     // bench image saved for visual inspection; they just don't get a diff
     // metric until a per-scene reference is established.
-    const isSceneVariant = !!(REFLECTION_MODE || MATERIAL_PRESET || IS_PT || SCENE_FILE || IS_VOL);
+    const isSceneVariant = !!(REFLECTION_MODE || MATERIAL_PRESET || IS_PT || SCENE_FILE || IS_VOL || SHADOW_ALGORITHM || AREA_LIGHTS !== null);
     let diff: { mae: number; rmse: number; maxErr: number; diffDataUrl: string } | null = null;
     if (isSceneVariant) {
         const variantParts = [

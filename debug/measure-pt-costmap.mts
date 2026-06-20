@@ -46,14 +46,22 @@ const SWITCHES: { label: string; patch: Record<string, any>; control?: boolean; 
     { label: 'Shadows OFF',          group: 'shadow', patch: { shadowsCompile: false, shadows: false } },
     { label: 'Shadows: Lite Soft',   group: 'shadow', patch: { shadowAlgorithm: 1.0 } },
     { label: 'Shadows: Robust Soft', group: 'shadow', patch: { shadowAlgorithm: 0.0 } },
-    // Jitter only changes the shader via the area-light path; measure it over
-    // Robust (where it's default-on). Its own marginal = this − 'Robust Soft'.
-    { label: 'Robust + Soft Jitter',  group: 'shadow', patch: { shadowAlgorithm: 0.0, ptStochasticShadows: true } },
+    // Stochastic JITTER ALU. Compiled in by `ptStochasticShadows` ALONE — the
+    // on/off toggle (uAreaLights) is a RUNTIME uniform sharing this one compiled
+    // shadow march, so it has NO compile cost (validated by the runtime-toggle
+    // probe at the end). NOTE: pre-refactor this switch under-counted to ~0
+    // because the jitter ALU was gated on `areaLightsActive` too, which this
+    // patch never set. Marginal = this − 'Robust Soft'. Distinct from 'Area
+    // lights' below (True Area Lights = PT_AREA_LIGHTS, a separate compile gate).
+    { label: 'Robust + Jitter ALU (ptStochasticShadows)',  group: 'shadow', patch: { shadowAlgorithm: 0.0, ptStochasticShadows: true } },
     // PT quality gates (PT-specific).
     { label: 'Env MIS (reflMode=1)',     group: 'pt-quality', patch: { ptReflMode: 1 } },
     { label: 'Env MIS + IS (reflMode=2)', group: 'pt-quality', patch: { ptReflMode: 2 } },
     { label: 'NEE all lights',            group: 'pt-quality', patch: { ptNEEAllLights: true } },
-    { label: 'Area lights',               group: 'pt-quality', patch: { ptAreaLights: true } },
+    // True Area Lights — physical sphere-surface sampling + MIS (PT_AREA_LIGHTS).
+    // A SEPARATE compile gate from the stochastic jitter above (different feature:
+    // real sphere lights vs fake-soft point-light jitter).
+    { label: 'True Area Lights (ptAreaLights)', group: 'pt-quality', patch: { ptAreaLights: true } },
     { label: 'Sobol bounce (control)',    group: 'pt-quality', patch: { ptSobolBounce: true }, control: true },
 ];
 
