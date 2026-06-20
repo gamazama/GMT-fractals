@@ -1,4 +1,10 @@
-# ADR-0079 — The "Compile" system: generic compile-switch mechanism + app-registered profiles
+# ADR-0079 — The "Shader Compiler" system: generic compile-switch mechanism + app-registered profiles
+
+> **Naming note:** the system is user-facing-named **"Shader Compiler"** ("Compile"
+> alone was deemed too generic — we may compile other things later). Code uses the
+> `ShaderCompiler*` prefix (feature id `shaderCompiler`, panel `ShaderCompilerPanel`,
+> seam `registerShaderCompilerProfiles`/`getShaderCompiler{Subsystems,Presets}`). The
+> old `engineSettings` feature id is migrated via app-gmt/migrations.ts v2.
 
 Status: Accepted
 Date: 2026-06-20
@@ -50,7 +56,7 @@ time (a recompile + wait), as opposed to runtime sliders.
    it applies overrides through `set${Feature}` setters), the helpers, and the
    single estimator. The GMT compile-switch subsystems + profiles + measured
    `estCompileMs` live in engine-gmt and register via
-   `registerCompileProfiles({ subsystems, presets, default })` **before
+   `registerShaderCompilerProfiles({ subsystems, presets, default })` **before
    `createEngineStore()`** (alongside `featureRegistry.register`, in
    `app-gmt/registerFeatures.ts`). This is the same seam pattern as
    `setFormulaPresetResolver` / `setCompileEstimator`. The duplicate

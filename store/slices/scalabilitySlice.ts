@@ -4,7 +4,7 @@
  * the app REGISTERS its switch subsystems + profiles via
  * `registerCompileProfiles()` (engine-gmt: `registerGmtCompileProfiles()`)
  * BEFORE createEngineStore; this slice reads them through the
- * `getCompileSubsystems()` / `getCompilePresets()` / `getDefaultScalability()`
+ * `getShaderCompilerSubsystems()` / `getShaderCompilerPresets()` / `getDefaultScalability()`
  * getters. Apps using the tier system get the behaviour for free.
  * @see docs/adr/0079-compile-system-profile-seam.md
  *
@@ -19,8 +19,8 @@
 
 import type { ScalabilityState, HardwareProfile } from '../../types/viewport';
 import {
-    getCompileSubsystems,
-    getCompilePresets,
+    getShaderCompilerSubsystems,
+    getShaderCompilerPresets,
     getDefaultScalability,
     detectScalabilityPreset,
 } from '../../types/viewport';
@@ -36,7 +36,7 @@ function applyTierOverrides(subsystems: Record<string, number>, get: any) {
     const state = get();
     const updatesByFeature: Record<string, Record<string, any>> = {};
 
-    for (const sub of getCompileSubsystems()) {
+    for (const sub of getShaderCompilerSubsystems()) {
         const tierIndex = subsystems[sub.id] ?? 0;
         const tier = sub.tiers[tierIndex];
         if (!tier) continue;
@@ -70,7 +70,7 @@ export const createScalabilitySlice = (set: any, get: any) => ({
     // --- Actions ---
 
     applyScalabilityPreset: (presetId: string) => {
-        const preset = getCompilePresets().find(p => p.id === presetId);
+        const preset = getShaderCompilerPresets().find(p => p.id === presetId);
         if (!preset) return;
 
         set({
@@ -90,7 +90,7 @@ export const createScalabilitySlice = (set: any, get: any) => ({
 
         let isCustomized = false;
         if (current.activePreset) {
-            const preset = getCompilePresets().find(p => p.id === current.activePreset);
+            const preset = getShaderCompilerPresets().find(p => p.id === current.activePreset);
             if (preset) {
                 isCustomized = Object.keys(newSubsystems).some(
                     k => newSubsystems[k] !== preset.subsystems[k]

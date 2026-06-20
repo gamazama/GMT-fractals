@@ -163,11 +163,11 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             return;
         }
 
-        // Route compile-time params to Engine Panel instead of updating store
-        // directly. Composed params don't carry `onUpdate: 'compile'` today,
-        // but the per-scalar dispatch handles it correctly if they ever do.
+        // Route compile-time params to the Shader Compiler panel instead of
+        // updating store directly. Composed params don't carry `onUpdate:
+        // 'compile'` today, but the per-scalar dispatch handles it if they ever do.
         if (config?.onUpdate === 'compile') {
-            useEngineStore.getState().movePanel('Engine', 'left');
+            useEngineStore.getState().movePanel('ShaderCompiler', 'left');
             setTimeout(() => {
                 for (const [k, v] of Object.entries(updates)) {
                     FractalEvents.emit('engine_queue', { featureId, param: k, value: v });

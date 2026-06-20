@@ -28,7 +28,7 @@
  *         they always did instead of falling back to the deBailout default.
  */
 
-import { registerMigration } from '../engine/migrations';
+import { registerMigration, renameSlice } from '../engine/migrations';
 
 registerMigration({
     version: 1,
@@ -61,6 +61,20 @@ registerMigration({
             }
         }
 
+        return p;
+    },
+});
+
+// v2 (2026-06-20) — the "Engine" feature/panel was renamed to "Shader Compiler"
+// to kill the overload with the engine-core/engine-gmt code LAYERS. The DDFS
+// feature id `engineSettings` (which serializes its `showEngineTab` flag into
+// saved scenes + a handful of formula defaultPresets) becomes `shaderCompiler`.
+// @see docs/adr/0079-compile-system-profile-seam.md
+registerMigration({
+    version: 2,
+    id: 'app-gmt.engineSettings-to-shaderCompiler',
+    apply: (p: any) => {
+        renameSlice(p, 'engineSettings', 'shaderCompiler');
         return p;
     },
 });

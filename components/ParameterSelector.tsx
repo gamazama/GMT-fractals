@@ -29,7 +29,7 @@ interface ParameterSelectorProps {
 }
 
 // Features excluded from modulation (not visual params)
-const EXCLUDED_IDS = new Set(['audio', 'navigation', 'drawing', 'webcam', 'debugTools', 'engineSettings', 'quality', 'reflections']);
+const EXCLUDED_IDS = new Set(['audio', 'navigation', 'drawing', 'webcam', 'debugTools', 'shaderCompiler', 'quality', 'reflections']);
 // Display ordering for the dropdown menu
 const PRIORITY_ORDER = ['coreMath', 'geometry', 'materials', 'coloring', 'atmosphere', 'lighting', 'optics'];
 

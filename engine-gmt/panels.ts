@@ -472,18 +472,19 @@ export const GmtPanels: PanelManifest = [
         helpId: 'panel.drawing',
     },
 
-    // Engine — dev-only tab, hidden unless explicitly enabled. Mirrors
-    // GMT's engineSettings.showEngineTab param-flag. Custom bespoke
-    // component (EnginePanel) instead of AutoFeaturePanel stacking —
-    // the panel has its own layout (per-feature rows with ON/OFF toggles
-    // + compile-estimate row). Lives on the LEFT dock to match GMT's
-    // original (keeps the right dock tidy; Engine is a dev surface).
+    // Shader Compiler — dev-only tab, hidden unless explicitly enabled. Gated by
+    // shaderCompiler.showEngineTab. Custom bespoke component (ShaderCompilerPanel)
+    // instead of AutoFeaturePanel stacking — the panel has its own layout
+    // (per-feature rows with ON/OFF toggles + compile-estimate row). Lives on the
+    // LEFT dock (keeps the right dock tidy; it's a dev surface). The serialized
+    // panel id stays short ('ShaderCompiler'); `label` is the user-facing string.
     {
-        id: 'Engine',
+        id: 'ShaderCompiler',
+        label: 'Shader Compiler',
         dock: 'left',
         order: 10,
-        component: 'panel-engine',
-        showIf: 'engineSettings.showEngineTab',
+        component: 'panel-shader-compiler',
+        showIf: 'shaderCompiler.showEngineTab',
         helpId: 'panel.engine',
     },
 

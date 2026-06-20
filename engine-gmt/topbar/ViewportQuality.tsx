@@ -5,8 +5,8 @@ import { Popover } from '../../components/Popover';
 import { useRenderPause } from '../../hooks/useRenderPause';
 import { useTutorAnchor, tutorAnchors } from '../../engine/plugins/Tutorial';
 import {
-    getCompileSubsystems,
-    getCompilePresets,
+    getShaderCompilerSubsystems,
+    getShaderCompilerPresets,
     getScalabilityLabel,
     estimateScalabilityCompileTime,
 } from '../../types/viewport';
@@ -82,7 +82,7 @@ export const ViewportQuality: React.FC = () => {
     }, [isOpen]);
 
     const handlePresetSelect = (presetId: string) => {
-        const preset = getCompilePresets().find(p => p.id === presetId);
+        const preset = getShaderCompilerPresets().find(p => p.id === presetId);
         if (!preset) return;
         setPendingSubsystems({ ...preset.subsystems });
         setPendingPreset(presetId);
@@ -117,7 +117,7 @@ export const ViewportQuality: React.FC = () => {
     // Determine which preset radio is active in the pending state
     const activePresetInPending = pendingPreset ?? (() => {
         if (!pendingSubsystems) return scalability.activePreset;
-        for (const p of getCompilePresets()) {
+        for (const p of getShaderCompilerPresets()) {
             if (Object.keys(p.subsystems).every(k => p.subsystems[k] === effectiveSubsystems[k])) {
                 return p.id;
             }
@@ -153,7 +153,7 @@ export const ViewportQuality: React.FC = () => {
                         <div>
                             <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Viewport Quality</div>
                             <div className="space-y-1">
-                                {getCompilePresets().filter(p => !p.isAdvanced || advancedMode).map(preset => {
+                                {getShaderCompilerPresets().filter(p => !p.isAdvanced || advancedMode).map(preset => {
                                     const est = estimateScalabilityCompileTime(preset.subsystems);
                                     const isActive = activePresetInPending === preset.id;
                                     return (
@@ -182,7 +182,7 @@ export const ViewportQuality: React.FC = () => {
                         <div>
                             <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Per Subsystem</div>
                             <div className="space-y-1">
-                                {getCompileSubsystems().filter(s => !s.isAdvanced || advancedMode).map(sub => {
+                                {getShaderCompilerSubsystems().filter(s => !s.isAdvanced || advancedMode).map(sub => {
                                     const currentTier = effectiveSubsystems[sub.id] ?? 0;
                                     // Direct subsystems are irrelevant in PT and vice-versa — dim the
                                     // off-mode ones. The Path Tracer tier is the PT analogue of the

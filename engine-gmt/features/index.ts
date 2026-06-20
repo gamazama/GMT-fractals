@@ -16,7 +16,7 @@ import { LightSpheresFeature } from './lighting/light_spheres';
 import { OpticsFeature } from './optics';
 import { NavigationFeature } from './navigation';
 import { DrawingFeature } from './drawing/index';
-import { EngineSettingsFeature } from './engine/index';
+import { ShaderCompilerFeature } from './engine/index';
 import { AOFeature } from './ao/index';
 import { ReflectionsFeature } from './reflections/index';
 import { WaterPlaneFeature } from './water_plane';
@@ -91,7 +91,7 @@ export const registerFeatures = () => {
     featureRegistry.register(ModulationFeature);
     featureRegistry.register(WebcamFeature);
     featureRegistry.register(DebugToolsFeature);
-    featureRegistry.register(EngineSettingsFeature);
+    featureRegistry.register(ShaderCompilerFeature);
 };
 
 // --- EXPORT TYPES ---

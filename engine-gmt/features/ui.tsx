@@ -11,7 +11,7 @@
  *     feature's `customUI` entries (ColoringHistogram, scene widgets,
  *     HybridAdvancedLock, JuliaRandomize).
  *   - Bespoke `panel-*` components that the manifest's panel entries
- *     reference by `component:` (EnginePanel, CameraManagerPanel).
+ *     reference by `component:` (ShaderCompilerPanel, CameraManagerPanel).
  *
  * Deferred:
  *   - FormulaPanel / ScenePanel / RenderPanel / ColoringPanel /
@@ -63,7 +63,7 @@ import {
 } from '../components/panels/scene_widgets';
 
 // --- Bespoke panel components ---
-import { EnginePanel } from '../components/panels/EnginePanel';
+import { ShaderCompilerPanel } from '../components/panels/ShaderCompilerPanel';
 import { CameraManagerPanel } from './camera_manager/CameraManagerPanel';
 import { FeedbackPanel } from '../feedback/FeedbackPanel';
 import React_FlowEditor from '../components/panels/flow/FlowEditor';
@@ -194,7 +194,7 @@ export const registerGmtUi = () => {
     componentRegistry.register('navigation-controls', NavigationControls);
 
     // Bespoke panels — manifest references these by `component:`.
-    componentRegistry.register('panel-engine', EnginePanel);
+    componentRegistry.register('panel-shader-compiler', ShaderCompilerPanel);
     componentRegistry.register('panel-cameramanager', CameraManagerPanel);
     componentRegistry.register('panel-feedback', FeedbackPanel);
     componentRegistry.register('panel-graph', React_FlowEditor);

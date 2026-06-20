@@ -2,13 +2,15 @@
 import { FeatureDefinition } from '../../engine/FeatureSystem';
 import { ENGINE_PROFILES } from './profiles';
 
-export const EngineSettingsFeature: FeatureDefinition = {
-    id: 'engineSettings',
+export const ShaderCompilerFeature: FeatureDefinition = {
+    // id renamed engineSettings -> shaderCompiler (ADR-0079); saved scenes migrate
+    // via app-gmt/migrations.ts v2 (renameSlice). Setter is now setShaderCompiler.
+    id: 'shaderCompiler',
     shortId: 'eng',
-    name: 'Engine Config',
+    name: 'Shader Compiler',
     category: 'System',
     tabConfig: {
-        label: 'Engine',
+        label: 'Shader Compiler',
         condition: { param: 'showEngineTab', bool: true } // Hidden by default
     },
     params: {

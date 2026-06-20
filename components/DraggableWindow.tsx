@@ -76,7 +76,7 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
             const actions = useEngineStore.getState() as any;
             if (id === 'Audio') actions.setAudio({ isEnabled: false });
             else if (id === 'Drawing') actions.setDrawing({ enabled: false });
-            else if (id === 'Engine') actions.setEngineSettings({ showEngineTab: false });
+            else if (id === 'ShaderCompiler') actions.setShaderCompiler({ showEngineTab: false });
             togglePanel(id, false);
         }
     };

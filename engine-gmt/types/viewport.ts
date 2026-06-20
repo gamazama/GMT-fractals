@@ -3,7 +3,7 @@
 // system (engine-core owns the mechanism; this registers GMT's switch
 // subsystems + profiles). The subsystem defs name GMT feature params
 // (lighting.shadowAlgorithm, reflections.reflectionMode, …) so they live here,
-// not in engine-core. Registered via `registerGmtCompileProfiles()` from
+// not in engine-core. Registered via `registerGmtShaderCompilerProfiles()` from
 // app-gmt/registerFeatures.ts, BEFORE createEngineStore().
 // @see docs/adr/0079-compile-system-profile-seam.md
 //
@@ -13,7 +13,7 @@
 // §2.5/§2.6 (L6) + the 2026-06-20 re-measure.
 
 import type { SubsystemDefinition, ScalabilityPreset, ScalabilityState } from '../../types/viewport';
-import { registerCompileProfiles } from '../../types/viewport';
+import { registerShaderCompilerProfiles } from '../../types/viewport';
 
 // ─── Subsystem Definitions ──────────────────────────────────
 
@@ -318,8 +318,8 @@ export const DEFAULT_SCALABILITY: ScalabilityState = {
 /** Register GMT's compile-switch subsystems + profiles into the engine-core
  *  Compile system. MUST be called before createEngineStore() (the scalability
  *  slice seeds its state from getDefaultScalability() at construction time). */
-export function registerGmtCompileProfiles(): void {
-    registerCompileProfiles({
+export function registerGmtShaderCompilerProfiles(): void {
+    registerShaderCompilerProfiles({
         subsystems: ALL_SUBSYSTEMS,
         presets: SCALABILITY_PRESETS,
         default: DEFAULT_SCALABILITY,

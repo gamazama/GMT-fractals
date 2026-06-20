@@ -10,7 +10,7 @@ import { OpticsState } from '../features/optics';
 import type { ScalabilityState, HardwareProfile } from '../../types/viewport';
 import type { UiModePreference } from '../../types';
 
-export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager' | 'Feedback';
+export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'ShaderCompiler' | 'Camera Manager' | 'Feedback';
 
 export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region' | 'selecting_preview';
 

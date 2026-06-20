@@ -13,7 +13,7 @@ import { getScalabilityLabel, estimateScalabilityCompileTime } from '../../../ty
 import { SectionLabel } from '../../../components/SectionLabel';
 import { accent, warn, text as themeText, surface, border as themeBorder } from '../../../data/theme';
 
-interface EnginePanelProps {
+interface ShaderCompilerPanelProps {
     className?: string;
 }
 
@@ -21,7 +21,7 @@ interface EnginePanelProps {
 // the breathing room. The legacy `-m-4` here was a leftover from an
 // older dock layout that had `p-4`; it caused the panel to render
 // 32px wider than its parent (see check-engine-deep diagnostic).
-export const EnginePanel: React.FC<EnginePanelProps> = ({ className = '' }) => {
+export const ShaderCompilerPanel: React.FC<ShaderCompilerPanelProps> = ({ className = '' }) => {
     const store = useEngineStore();
     const [pendingChanges, setPendingChanges] = useState<Record<string, unknown>>({});
     const [compileFeedback, setCompileFeedback] = useState<string | null>(null);

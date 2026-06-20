@@ -227,9 +227,9 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
         setPendingToggle(null);
     }, [setter, compileParam, runtimeToggleParam]);
 
-    // Open engine panel and queue compile flag + any pending compile settings
+    // Open the Shader Compiler panel and queue compile flag + pending settings
     const handleOpenEngine = useCallback(() => {
-        useEngineStore.getState().movePanel('Engine', 'left');
+        useEngineStore.getState().movePanel('ShaderCompiler', 'left');
         setTimeout(() => {
             if (!isCompiled) {
                 FractalEvents.emit('engine_queue', { featureId, param: compileParam, value: true });

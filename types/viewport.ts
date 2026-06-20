@@ -6,7 +6,7 @@
 // sliders. This module is the GENERIC MECHANISM only — the interfaces, the
 // app-registered profile seam, and the helpers/estimator. The actual switch
 // subsystems + profiles are GMT-specific DATA and are registered by the app
-// (engine-gmt) via `registerCompileProfiles()` before `createEngineStore()`.
+// (engine-gmt) via `registerShaderCompilerProfiles()` before `createEngineStore()`.
 // @see docs/adr/0079-compile-system-profile-seam.md
 //
 // How tiers reach the shader:
@@ -133,7 +133,7 @@ let _subsystems: SubsystemDefinition[] = [];
 let _presets: ScalabilityPreset[] = [];
 let _defaultScalability: ScalabilityState = { activePreset: null, subsystems: {}, isCustomized: false };
 
-export interface CompileProfileConfig {
+export interface ShaderCompilerProfileConfig {
     subsystems: SubsystemDefinition[];
     presets: ScalabilityPreset[];
     /** Initial scalability state (which preset/tiers are selected at boot). */
@@ -141,26 +141,26 @@ export interface CompileProfileConfig {
 }
 
 /** App registers its compile-switch subsystems + profiles (call before createEngineStore). */
-export function registerCompileProfiles(cfg: CompileProfileConfig): void {
+export function registerShaderCompilerProfiles(cfg: ShaderCompilerProfileConfig): void {
     _subsystems = cfg.subsystems;
     _presets = cfg.presets;
     if (cfg.default) _defaultScalability = cfg.default;
 }
 
-export const getCompileSubsystems = (): SubsystemDefinition[] => _subsystems;
-export const getCompilePresets = (): ScalabilityPreset[] => _presets;
+export const getShaderCompilerSubsystems = (): SubsystemDefinition[] => _subsystems;
+export const getShaderCompilerPresets = (): ScalabilityPreset[] => _presets;
 export const getDefaultScalability = (): ScalabilityState => _defaultScalability;
 
 // ─── Helpers ────────────────────────────────────────────────
 
 /** Get a preset by ID */
 export function getScalabilityPreset(id: string): ScalabilityPreset | undefined {
-    return getCompilePresets().find(p => p.id === id);
+    return getShaderCompilerPresets().find(p => p.id === id);
 }
 
 /** Check if subsystem tiers match a named preset */
 export function detectScalabilityPreset(subsystems: Record<string, number>): string | null {
-    for (const preset of getCompilePresets()) {
+    for (const preset of getShaderCompilerPresets()) {
         const match = Object.keys(preset.subsystems).every(
             k => preset.subsystems[k] === subsystems[k]
         );
@@ -178,7 +178,7 @@ export function getScalabilityLabel(state: ScalabilityState): string {
 
     // Build override description
     const overrides: string[] = [];
-    for (const sub of getCompileSubsystems()) {
+    for (const sub of getShaderCompilerSubsystems()) {
         const presetTier = preset.subsystems[sub.id];
         const actualTier = state.subsystems[sub.id];
         if (presetTier !== actualTier) {
@@ -200,7 +200,7 @@ export const BASE_COMPILE_MS = 3600;
 
 export function estimateScalabilityCompileTime(subsystems: Record<string, number>): number {
     let total = BASE_COMPILE_MS;
-    for (const sub of getCompileSubsystems()) {
+    for (const sub of getShaderCompilerSubsystems()) {
         const tierIndex = subsystems[sub.id] ?? 0;
         const tier = sub.tiers[tierIndex];
         if (tier) total += tier.estCompileMs;

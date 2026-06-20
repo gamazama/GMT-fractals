@@ -37,7 +37,7 @@ import { ViewportQuality } from './topbar/ViewportQuality';
 import { installBucketRender } from '../engine/plugins/topbar/installBucketRender';
 import { GmtBucketController } from './topbar/GmtBucketController';
 import { useMobileLayout, isMobileSnapshot } from '../hooks/useMobileLayout';
-import { getCompilePresets, getScalabilityLabel } from '../types/viewport';
+import { getShaderCompilerPresets, getScalabilityLabel } from '../types/viewport';
 
 const TopBarDivider: React.FC = () => (
     <div className="h-6 w-px bg-white/10 mx-1" />
@@ -538,25 +538,25 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         when: () => useEngineStore.getState().advancedMode,
     });
 
-    // Engine Settings toggle — reveals the Engine panel (the bespoke
-    // compile-time feature toggles panel). Flips engineSettings.showEngineTab
-    // which the panel manifest's `showIf: 'engineSettings.showEngineTab'`
+    // Shader Compiler toggle — reveals the Shader Compiler panel (the bespoke
+    // compile-time feature toggles panel). Flips shaderCompiler.showEngineTab
+    // which the panel manifest's `showIf: 'shaderCompiler.showEngineTab'`
     // watches.
     menu.registerItem('system', {
-        id: 'engine-settings',
+        id: 'shader-compiler',
         type: 'toggle',
-        label: 'Engine Config Panel',
-        title: 'Show the bespoke Engine panel (compile-time toggles + profiles).',
+        label: 'Shader Compiler Panel',
+        title: 'Show the bespoke Shader Compiler panel (compile-time toggles + profiles).',
         when: () => useEngineStore.getState().advancedMode,
-        isActive: () => !!(useEngineStore.getState() as any).engineSettings?.showEngineTab,
+        isActive: () => !!(useEngineStore.getState() as any).shaderCompiler?.showEngineTab,
         onToggle: () => {
             const s = useEngineStore.getState() as any;
-            const cur = !!s.engineSettings?.showEngineTab;
-            s.setEngineSettings?.({ showEngineTab: !cur });
-            // Surface the left dock + switch to Engine when revealing
+            const cur = !!s.shaderCompiler?.showEngineTab;
+            s.setShaderCompiler?.({ showEngineTab: !cur });
+            // Surface the left dock + switch to the panel when revealing
             // (matches the View Manager / Camera Manager flow). Closing
             // hides the tab via the manifest's showIf.
-            if (!cur) s.togglePanel?.('Engine', true);
+            if (!cur) s.togglePanel?.('ShaderCompiler', true);
         },
     });
 
@@ -590,7 +590,7 @@ const MobileQualityMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
     return (
         <div className="px-3 py-2">
             <div className="grid grid-cols-3 gap-1">
-                {getCompilePresets().map((p) => {
+                {getShaderCompilerPresets().map((p) => {
                     const active = currentLabel === p.label;
                     return (
                         <button
