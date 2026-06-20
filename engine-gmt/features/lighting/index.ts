@@ -221,22 +221,25 @@ export const LightingFeature: FeatureDefinition = {
             description: 'Compiles the shadow raymarching loop. Disable to save ~5s compile time.',
             estCompileMs: 500 // L6: shadow march over no-shadows ~500 cold (§2.6); was 1500
         },
+        // Soft-shadow penumbra QUALITY — RUNTIME now (uniform uShadowQuality, no
+        // recompile). Both Lite + HQ bodies compile into GetSoftShadow and a
+        // uniform-coherent branch selects one (shadows.ts). Lite/HQ compile
+        // identically, so this costs ~nothing to keep both available. Driven by
+        // the "HQ" toggle in ShadowControls (next to Jitter). No noAccumReset —
+        // changing quality changes the converged image, so accumulation resets.
+        // (Old "Hard" binary option dropped — redundant: Lite is faster + softer,
+        // and sharp shadows come from a high Hardness/uShadowSoftness.)
         shadowAlgorithm: {
             type: 'float', default: 0.0, label: 'Shadow Quality', shortId: 'sa',
-            group: 'engine_settings',
+            group: 'shadows',
             parentId: 'shadowsCompile',
+            uniform: 'uShadowQuality',
+            hidden: true,
             options: [
-                // L6: shadow algorithm tier is ~compile-free — all tiers measured
-                // within noise (~0-150ms over the shadow-march base; §2.5/§2.6).
-                // Was 500/1500/3000 (~5-10x high). The march cost lives in
-                // shadowsCompile above; the penumbra-quality upgrade is cheap.
-                { label: 'Hard Only (Fastest)', value: 2.0, estCompileMs: 0 },
-                { label: 'Lite Soft (Fast)', value: 1.0, estCompileMs: 100 },
-                { label: 'Robust Soft (Quality)', value: 0.0, estCompileMs: 100 }
+                { label: 'Lite (Fast)', value: 1.0 },
+                { label: 'HQ (Robust)', value: 0.0 },
             ],
-            description: 'Shadow algorithm. Hard = binary occlusion, Lite = fast penumbra, Robust = accurate penumbra.',
-            onUpdate: 'compile',
-            noAccumReset: true
+            description: 'Soft-shadow penumbra quality (runtime): Lite = fast step-floor, HQ = accurate IQ penumbra (~2x slower). Toggle via the HQ button next to Jitter.',
         },
         // @deprecated VESTIGIAL — no longer gates anything. The jitter ALU is now
         // compiled in unconditionally whenever the shadow march is (see
@@ -415,16 +418,12 @@ export const LightingFeature: FeatureDefinition = {
         }
 
         const shadowsCompiled = state?.shadowsCompile !== false;
-        // Map UI values to quality levels: 2.0=Hard(3), 1.0=Lite(1), 0.0=Robust(2)
-        const alg = state?.shadowAlgorithm ?? 0.0;
-        const shadowQuality = alg === 2.0 ? 3 : alg === 1.0 ? 1 : 2;
-
-        builder.addPostDEFunction(getShadowsGLSL(shadowsCompiled, shadowQuality));
+        // Soft-shadow quality (Lite/HQ) is a RUNTIME uniform (uShadowQuality) now —
+        // both bodies compile in, no per-quality compile variant. @see shadows.ts
+        builder.addPostDEFunction(getShadowsGLSL(shadowsCompiled));
 
         if (!shadowsCompiled && !state?.shadows) {
             builder.addDefine('DISABLE_SHADOWS', '1');
-        } else {
-            builder.addDefine('SHADOW_QUALITY', '2');
         }
 
         // Light spheres: extracted to LightSpheresFeature (features/lighting/light_spheres.ts)
