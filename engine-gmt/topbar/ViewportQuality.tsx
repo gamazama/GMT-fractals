@@ -8,8 +8,8 @@ import {
     getShaderCompilerSubsystems,
     getShaderCompilerPresets,
     getScalabilityLabel,
-    estimateScalabilityCompileTime,
 } from '../../types/viewport';
+import { estimateShaderCompilerCompileTime } from '../features/engine/profiles';
 
 // PT section color token
 const PT_COLOR = 'text-purple-400';
@@ -61,7 +61,7 @@ export const ViewportQuality: React.FC = () => {
     const hasPending = pendingSubsystems !== null;
 
     const estimatedMs = useMemo(
-        () => estimateScalabilityCompileTime(effectiveSubsystems),
+        () => estimateShaderCompilerCompileTime(effectiveSubsystems),
         [effectiveSubsystems]
     );
 
@@ -154,7 +154,7 @@ export const ViewportQuality: React.FC = () => {
                             <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Viewport Quality</div>
                             <div className="space-y-1">
                                 {getShaderCompilerPresets().filter(p => !p.isAdvanced || advancedMode).map(preset => {
-                                    const est = estimateScalabilityCompileTime(preset.subsystems);
+                                    const est = estimateShaderCompilerCompileTime(preset.subsystems);
                                     const isActive = activePresetInPending === preset.id;
                                     return (
                                         <button

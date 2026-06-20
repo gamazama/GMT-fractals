@@ -1,7 +1,7 @@
 
 import { ShaderConfig } from '../ShaderFactory';
 import { featureRegistry } from '../FeatureSystem';
-import { detectEngineProfile, estimateCompileTime } from '../../features/engine/profiles';
+import { estimateCompileTime } from '../../features/engine/profiles';
 import { FractalEvents } from '../FractalEvents';
 import * as THREE from 'three';
 import { DEFAULT_HARD_CAP } from '../../../data/constants';
@@ -51,10 +51,8 @@ export class ConfigManager {
         if (this.pendingLogChanges.length === 0) return;
 
         const changes = this.pendingLogChanges.splice(0);
-        const profile = detectEngineProfile(this.config);
-        const profileLabel = profile === 'custom' ? 'Custom' : profile.charAt(0).toUpperCase() + profile.slice(1);
         const estMs = estimateCompileTime(this.config);
-        if (import.meta.env.DEV) console.log(`[ConfigManager] Rebuild: ${changes.length} change(s) → Profile: ${profileLabel} (~${(estMs / 1000).toFixed(1)}s) | ${changes.join(' | ')}`);
+        if (import.meta.env.DEV) console.log(`[ConfigManager] Rebuild: ${changes.length} change(s) (~${(estMs / 1000).toFixed(1)}s) | ${changes.join(' | ')}`);
         FractalEvents.emit('compile_estimate', estMs);
     }
 

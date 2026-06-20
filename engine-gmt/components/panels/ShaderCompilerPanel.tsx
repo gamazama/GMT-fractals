@@ -9,7 +9,8 @@ import { AlertIcon, CheckIcon, InfoIcon, SpinnerIcon } from '../../../components
 import { FractalEvents } from '../../../engine/FractalEvents';
 import { EngineFeatureRow, EngineStatus } from '../../../components/panels/engine/EngineFeatureRow';
 import { AutoFeaturePanel } from '../../../components/AutoFeaturePanel';
-import { getScalabilityLabel, estimateScalabilityCompileTime } from '../../../types/viewport';
+import { getScalabilityLabel } from '../../../types/viewport';
+import { estimateShaderCompilerCompileTime } from '../../features/engine/profiles';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { accent, warn, text as themeText, surface, border as themeBorder } from '../../../data/theme';
 
@@ -30,7 +31,7 @@ export const ShaderCompilerPanel: React.FC<ShaderCompilerPanelProps> = ({ classN
     // Scalability label from viewport quality system + compile time estimate
     const scalability = useEngineStore(s => s.scalability);
     const scalabilityLabel = getScalabilityLabel(scalability);
-    const estCompileMs = useMemo(() => estimateScalabilityCompileTime(scalability.subsystems), [scalability.subsystems]);
+    const estCompileMs = useMemo(() => estimateShaderCompilerCompileTime(scalability.subsystems), [scalability.subsystems]);
     const estCompileSec = (estCompileMs / 1000).toFixed(1);
 
     const engineFeatures = featureRegistry.getEngineFeatures();

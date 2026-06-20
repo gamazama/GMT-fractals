@@ -1,182 +1,35 @@
-
-// Centralized definition for Engine Quality Profiles
-// This ensures Startup Logic and Runtime Switching use identical settings.
+// Shader Compiler — compile-time estimators.
 //
-// Compile time estimates (Windows/ANGLE/fxc):
-//   Fastest: ~3-4s | Lite: ~5-6s | Balanced: ~7-8s | Ultra: ~17s+
+// One source of per-switch cost truth: the DDFS `estCompileMs` annotations on
+// feature params (features/*). Both estimators sum those through the SAME core
+// (`sumParamCompileMs`), so the EnginePanel/ViewportQuality preview and the live
+// compile-progress bar report the same number for the same config.
 //
+//   - estimateCompileTime(state)            — live store state (compile-progress).
+//   - estimateShaderCompilerCompileTime(idx) — a tier selection (preview), via a
+//       synthetic state = feature defaults + the selected tiers' overrides.
+//
+// BASE_COMPILE_MS (3600) = the calibrated core-trace cost after ADR-0076/0077.
 // estCompileMs annotations recalibrated against measured cold data (L6 2026-06-19;
-// ptEnabled re-measured 2026-06-20) — see docs/policy/shader-compile-optimization.md
-// §2.5. The per-switch numbers live on the feature params (features/*), not here.
-// BASE_COMPILE_MS (3600) is the calibrated core-trace cost after the ADR-0076/0077
-// trace-template work; the engine-core tier estimator (types/viewport.ts) shares
-// this BASE so its preview agrees with this live estimate.
-// @see docs/adr/0079-compile-system-profile-seam.md (the unified "Compile" system)
-
-export const ENGINE_PROFILES = {
-    fastest: {
-        lighting: {
-            shadows: false,
-            shadowsCompile: false,
-            ptEnabled: false,
-            specularModel: 0.0,     // Blinn-Phong
-        },
-        ao: {
-            aoEnabled: false,
-            aoStochasticCp: false
-        },
-        geometry: {
-            hybridComplex: false,
-            preRotMaster: false,
-            preRotEnabled: false
-        },
-        reflections: {
-            enabled: true,
-            reflectionMode: 0.0,    // Off
-            bounceShadows: false,
-        },
-        quality: {
-            precisionMode: 1.0,
-            bufferPrecision: 1.0,
-            compilerHardCap: 128
-        },
-        atmosphere: {
-            glowEnabled: false
-        }
-    },
-    lite: {
-        lighting: {
-            shadows: true,
-            shadowsCompile: true,
-            shadowAlgorithm: 2.0,   // Hard Only (fastest shadow)
-            shadowSteps: 32,
-            ptStochasticShadows: false,
-            areaLights: true,
-            shadowSoftness: 16.0,
-            ptEnabled: false,
-            specularModel: 0.0,     // Blinn-Phong
-        },
-        ao: {
-            aoEnabled: true,
-            aoSamples: 2,
-            aoStochasticCp: false,
-            aoMode: false,
-            aoMaxSamples: 16
-        },
-        geometry: {
-            hybridComplex: false,
-            preRotMaster: false,
-            preRotEnabled: false
-        },
-        reflections: {
-            enabled: true,
-            reflectionMode: 1.0,    // Environment Map
-            bounceShadows: false,
-        },
-        quality: {
-            precisionMode: 1.0,
-            bufferPrecision: 1.0,
-        },
-        atmosphere: {
-            glowQuality: 1.0
-        }
-    },
-    balanced: {
-        lighting: {
-            shadows: true,
-            shadowsCompile: true,
-            shadowAlgorithm: 0.0,   // Robust Soft
-            shadowSoftness: 16.0,
-            ptStochasticShadows: true,  // Area lights compiled
-            areaLights: true,
-            shadowSteps: 64,
-            ptEnabled: false,
-            specularModel: 0.0,     // Blinn-Phong
-        },
-        ao: {
-            aoEnabled: true,
-            aoSamples: 5,
-            aoStochasticCp: true,
-            aoMode: true,
-            aoMaxSamples: 32
-        },
-        geometry: {
-            hybridComplex: false,
-            preRotMaster: true,
-            preRotEnabled: true
-        },
-        reflections: {
-            enabled: true,
-            reflectionMode: 1.0,    // Environment Map
-            bounceShadows: false,
-        },
-        quality: {
-            precisionMode: 0.0,
-            bufferPrecision: 0.0,
-        },
-        atmosphere: {
-            glowQuality: 0.0
-        }
-    },
-    ultra: {
-        lighting: {
-            shadows: true,
-            shadowsCompile: true,
-            shadowAlgorithm: 0.0,   // Robust Soft
-            shadowSoftness: 64.0,
-            ptStochasticShadows: true,
-            areaLights: true,
-            shadowSteps: 256,
-            ptEnabled: true,
-            specularModel: 1.0,     // Cook-Torrance
-        },
-        ao: {
-            aoEnabled: true,
-            aoSamples: 8,
-            aoStochasticCp: true,
-            aoMode: true,
-            aoMaxSamples: 64
-        },
-        reflections: {
-            enabled: true,
-            reflectionMode: 3.0,    // Raymarched
-            bounceShadows: true,
-            steps: 64,
-            bounces: 2
-        },
-        geometry: {
-            hybridComplex: true,
-            preRotMaster: true,
-            preRotEnabled: true
-        },
-        quality: {
-            precisionMode: 0.0,
-            bufferPrecision: 0.0,
-        },
-        atmosphere: {
-            glowQuality: 0.0
-        }
-    }
-};
+// ptEnabled re-measured 2026-06-20). The old monolithic ENGINE_PROFILES + the
+// orphaned applyPreset action were retired here (ADR-0079) — Viewport Quality
+// profiles (types/viewport.ts data, registered from engine-gmt) supersede them.
+// @see docs/policy/shader-compile-optimization.md §2.5
+// @see docs/adr/0079-shader-compiler-profile-seam.md
 
 import { featureRegistry, type ParamConfig, type ParamOption } from '../../engine/FeatureSystem';
+import { getShaderCompilerSubsystems } from '../../../types/viewport';
+
+/** Core trace + always-present shading pipeline (no optional compile switches). */
+export const BASE_COMPILE_MS = 3600;
 
 /**
- * Estimate total shader compile time (ms) from current engine state.
- * Uses estCompileMs annotations on feature params.
- * Base cost (~4200ms) covers the core trace + shading pipeline.
+ * Sum the estCompileMs of every active compile switch in a state-like object.
+ * Shared by both estimators — `state` can be the live store state or a synthetic
+ * tier state. Booleans cost when truthy; dropdowns cost the matching option.
  */
-export const estimateCompileTime = (state: any): number => {
-    // Core shader without optional features. Session-4 trace-template work cut the
-    // always-present march code: 4200→3900 (ADR-0076: refine→mapDist + recovery
-    // reuse) →3600 (ADR-0077: Edge Polish + Step Relaxation removed — the refine
-    // loop is gone entirely). These are Direct-measurable core-trace savings; the
-    // PT-baseline drop is larger (the same trace code lives in traceSceneLean too)
-    // but is a PT-only effect the per-toggle model can't separately represent.
-    // @see docs/policy/shader-compile-optimization.md §8 L5 (session 4)
-    const BASE_COMPILE_MS = 3600;
-    let total = BASE_COMPILE_MS;
-
+const sumParamCompileMs = (state: any): number => {
+    let total = 0;
     for (const feat of featureRegistry.getAll()) {
         const slice = state[feat.id];
         if (!slice) continue;
@@ -187,12 +40,10 @@ export const estimateCompileTime = (state: any): number => {
 
             const value = slice[paramKey];
 
-            // Boolean params: add estCompileMs when truthy
             if (pc.type === 'boolean' && value && pc.estCompileMs) {
                 total += pc.estCompileMs;
             }
 
-            // Dropdown params: find the matching option's estCompileMs
             if (pc.options) {
                 const match = pc.options.find((o: ParamOption) => {
                     if (typeof o.value === 'number' && typeof value === 'number') {
@@ -200,35 +51,45 @@ export const estimateCompileTime = (state: any): number => {
                     }
                     return o.value === value;
                 });
-                if (match?.estCompileMs) {
-                    total += match.estCompileMs;
-                }
+                if (match?.estCompileMs) total += match.estCompileMs;
             }
         }
     }
-
     return total;
 };
 
-export const detectEngineProfile = (state: any): string => {
-    for (const [name, profile] of Object.entries(ENGINE_PROFILES)) {
-        let match = true;
-        for (const [featureId, params] of Object.entries(profile)) {
-            const slice = state[featureId];
-            if (!slice) { match = false; break; }
-            
-            for (const [key, val] of Object.entries(params)) {
-                const currentVal = (slice as Record<string, unknown>)[key];
-                if (typeof val === 'number' && typeof currentVal === 'number') {
-                     // Fuzzy match for floats
-                     if (Math.abs(val - currentVal) > 0.001) { match = false; break; }
-                } else if (val !== currentVal) {
-                    match = false; break;
-                }
-            }
-            if (!match) break;
+/** Estimate compile time (ms) from the live store state. */
+export const estimateCompileTime = (state: any): number =>
+    BASE_COMPILE_MS + sumParamCompileMs(state);
+
+/**
+ * Estimate compile time (ms) for a Viewport-Quality tier selection, BEFORE it is
+ * applied to the store. Builds a synthetic state from feature defaults + the
+ * selected tiers' overrides and runs it through the same per-param summer, so the
+ * preview matches `estimateCompileTime` for the resulting config. A tier's
+ * optional `estCompileMs` is a small ADJUSTMENT for costs the per-param model
+ * can't express (e.g. the Preview lighting tier stripping the PBR pipeline).
+ */
+export const estimateShaderCompilerCompileTime = (subsystems: Record<string, number>): number => {
+    const state: Record<string, any> = {};
+    for (const feat of featureRegistry.getAll()) {
+        const slice: Record<string, any> = {};
+        for (const [k, pc] of Object.entries(feat.params)) {
+            slice[k] = (pc as ParamConfig).default;
         }
-        if (match) return name;
+        state[feat.id] = slice;
     }
-    return 'custom';
+
+    let adjust = 0;
+    for (const sub of getShaderCompilerSubsystems()) {
+        const tier = sub.tiers[subsystems[sub.id] ?? 0];
+        if (!tier) continue;
+        for (const [featId, overrides] of Object.entries(tier.overrides)) {
+            if (!state[featId]) state[featId] = {};
+            Object.assign(state[featId], overrides);
+        }
+        if (tier.estCompileMs) adjust += tier.estCompileMs;
+    }
+
+    return BASE_COMPILE_MS + sumParamCompileMs(state) + adjust;
 };

@@ -1,16 +1,17 @@
 
-// GMT Compile profiles — the app-specific DATA for the engine-core "Compile"
-// system (engine-core owns the mechanism; this registers GMT's switch
-// subsystems + profiles). The subsystem defs name GMT feature params
+// GMT Shader Compiler profiles — the app-specific DATA for the engine-core
+// Shader Compiler system (engine-core owns the mechanism; this registers GMT's
+// switch subsystems + profiles). The subsystem defs name GMT feature params
 // (lighting.shadowAlgorithm, reflections.reflectionMode, …) so they live here,
 // not in engine-core. Registered via `registerGmtShaderCompilerProfiles()` from
 // app-gmt/registerFeatures.ts, BEFORE createEngineStore().
-// @see docs/adr/0079-compile-system-profile-seam.md
+// @see docs/adr/0079-shader-compiler-profile-seam.md
 //
 // User-facing name: "Viewport Quality" (the topbar dropdown). The switches it
 // flips are baked into the shader at compile time (recompile + wait) vs runtime
-// sliders. estCompileMs values: docs/policy/shader-compile-optimization.md
-// §2.5/§2.6 (L6) + the 2026-06-20 re-measure.
+// sliders. Per-switch COST lives on the feature params' `estCompileMs`
+// annotations (features/*) — the single source the estimator sums; tiers carry
+// only the OVERRIDES + an optional non-per-param adjustment (the Preview strip).
 
 import type { SubsystemDefinition, ScalabilityPreset, ScalabilityState } from '../../types/viewport';
 import { registerShaderCompilerProfiles } from '../../types/viewport';
@@ -31,14 +32,12 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
             overrides: {
                 lighting: { shadows: false, shadowsCompile: false },
             },
-            estCompileMs: 0,
         },
         {
             label: 'Hard',
             overrides: {
                 lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0 },
             },
-            estCompileMs: 300,   // 2026-06-20 re-measure: Hard march +267 cold (Mandelbulb §2.6)
         },
         {
             // Analytic IQ penumbra. The jitter ALU is compiled in unconditionally
@@ -51,7 +50,6 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
             overrides: {
                 lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0 },
             },
-            estCompileMs: 350,   // 2026-06-20 re-measure: Robust soft +304, +jitter ALU +44 = ~348 cold (§2.6)
         },
     ],
 };
@@ -69,22 +67,18 @@ export const SUBSYSTEM_REFLECTIONS: SubsystemDefinition = {
         {
             label: 'Off',
             overrides: { reflections: { reflectionMode: 0.0, bounceShadows: false } },
-            estCompileMs: 0,
         },
         {
             label: 'Env Map',
             overrides: { reflections: { reflectionMode: 1.0, bounceShadows: false } },
-            estCompileMs: 0,
         },
         {
             label: 'Raymarched',
             overrides: { reflections: { reflectionMode: 3.0, bounceShadows: false, bounces: 1 } },
-            estCompileMs: 1500,  // L6: measured ~1500-2000 cold (§2.6.1); was 7500 (~4x high)
         },
         {
             label: 'Full',
             overrides: { reflections: { reflectionMode: 3.0, bounceShadows: true, bounces: 2 } },
-            estCompileMs: 1600,  // L6: bounceShadows is ~free (+42ms); was 12000 (~7x high) (§2.6)
         },
     ],
 };
@@ -105,18 +99,19 @@ export const SUBSYSTEM_LIGHTING: SubsystemDefinition = {
             // Used by the Preview preset — not normally selectable standalone.
             label: 'Preview',
             overrides: { lighting: { advancedLighting: false, ptEnabled: false } },
-            estCompileMs: -2500,  // Saves ~2.5s by stripping PBR/shading pipeline
+            // Non-per-param adjustment: stripping advancedLighting drops the whole
+            // PBR/shading pipeline (~2.5s) that BASE_COMPILE_MS bakes in — the
+            // per-param model can't express it, so it lives here. @see ADR-0079.
+            estCompileMs: -2500,
         },
         {
             label: 'Path Traced',
             overrides: { lighting: { specularModel: 1.0, ptEnabled: true, advancedLighting: true, ptNEEAllLights: false, ptEnvNEE: false } },
-            estCompileMs: 1900,
         },
         {
             // NEE may not provide visible benefit — needs further research.
             label: 'PT + NEE',
             overrides: { lighting: { specularModel: 1.0, ptEnabled: true, advancedLighting: true, ptNEEAllLights: true, ptEnvNEE: true } },
-            estCompileMs: 2500,
         },
     ],
 };
@@ -124,14 +119,9 @@ export const SUBSYSTEM_LIGHTING: SubsystemDefinition = {
 // Path Tracer quality — the PT analogue of SUBSYSTEM_REFLECTIONS (which is the
 // Direct-render reflection tier). Active only when PT is the render mode; dims
 // in Direct (mirror of how the 'direct' subsystems dim in PT). Each tier bundles
-// the PT-specific compile switches + max shadows so picking one tier sets up a
-// complete PT look. Placed LAST in ALL_SUBSYSTEMS so its lighting overrides win
-// over SUBSYSTEM_LIGHTING's (single owner of ptNEEAllLights in PT).
-//
-// Cost basis: docs/policy/shader-compile-optimization.md §2.5 (per-switch map).
-// Only THREE PT switches are >1s: the PT module itself and the two Env-sampling
-// modes. So Balanced (no Env MIS) is cheap; Full adds Env MIS+IS (+~1.7s) and
-// area lights (+~0.4s). NEE / Sobol / shadow-tier are all sub-second.
+// the PT-specific compile switches so picking one tier sets up a complete PT
+// look. Placed LAST in ALL_SUBSYSTEMS so its lighting overrides win over
+// SUBSYSTEM_LIGHTING's (single owner of ptNEEAllLights in PT).
 export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
     id: 'pathtracer',
     label: 'Path Tracer',
@@ -155,11 +145,10 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
                     ptReflMode: 0.0, ptAreaLights: false, ptNEEAllLights: true, ptSobolBounce: true,
                 },
             },
-            estCompileMs: 100,   // NEE (~80) only; shadows counted by SUBSYSTEM_SHADOWS
         },
         {
             // Env MIS+IS (importance sampling for HDR sun discs) + area lights +
-            // NEE + max shadows. The full-quality PT look.
+            // NEE. The full-quality PT look.
             label: 'Full',
             overrides: {
                 // Shadow params owned solely by SUBSYSTEM_SHADOWS (see Balanced note).
@@ -167,7 +156,6 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
                     ptReflMode: 2.0, ptAreaLights: true, ptNEEAllLights: true, ptSobolBounce: true,
                 },
             },
-            estCompileMs: 2200,  // Env MIS+IS (~1700) + area lights (~400) + NEE (~80)
         },
     ],
 };
@@ -187,7 +175,6 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
                 atmosphere: { glowEnabled: false },
                 volumetric: { ptVolumetric: false },
             },
-            estCompileMs: 0,
         },
         {
             label: 'Fast Glow',
@@ -195,7 +182,6 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
                 atmosphere: { glowEnabled: true, glowQuality: 1.0 },
                 volumetric: { ptVolumetric: false },
             },
-            estCompileMs: 650,   // L6: Fast Glow measured +635/774 — costs MORE than Color (§2.6); was 200
         },
         {
             label: 'Color Glow',
@@ -203,7 +189,6 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
                 atmosphere: { glowEnabled: true, glowQuality: 0.0 },
                 volumetric: { ptVolumetric: false },
             },
-            estCompileMs: 200,   // L6: Color Glow measured +205/198 (§2.6); was 400
         },
         {
             label: 'Volumetric',
@@ -211,7 +196,6 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
                 atmosphere: { glowEnabled: true, glowQuality: 0.0 },
                 volumetric: { ptVolumetric: true },
             },
-            estCompileMs: 5900,
         },
     ],
 };
@@ -316,8 +300,8 @@ export const DEFAULT_SCALABILITY: ScalabilityState = {
 };
 
 /** Register GMT's compile-switch subsystems + profiles into the engine-core
- *  Compile system. MUST be called before createEngineStore() (the scalability
- *  slice seeds its state from getDefaultScalability() at construction time). */
+ *  Shader Compiler system. MUST be called before createEngineStore() (the
+ *  scalability slice seeds its state from getDefaultScalability() at construction). */
 export function registerGmtShaderCompilerProfiles(): void {
     registerShaderCompilerProfiles({
         subsystems: ALL_SUBSYSTEMS,

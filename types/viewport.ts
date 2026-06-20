@@ -66,8 +66,12 @@ export interface SubsystemTierDef {
     label: string;
     /** Sparse override map: featureId → { param → value } */
     overrides: Record<string, Record<string, any>>;
-    /** Estimated compile time contribution (ms) for this tier */
-    estCompileMs: number;
+    /** Optional compile-time ADJUSTMENT (ms) for costs the per-param model can't
+     *  express (e.g. a tier that strips the PBR pipeline). The bulk of the
+     *  estimate comes from the per-param `estCompileMs` annotations summed over
+     *  this tier's overrides — see estimateShaderCompilerCompileTime in
+     *  engine-gmt/features/engine/profiles.ts. Default 0. @see docs/adr/0079 */
+    estCompileMs?: number;
 }
 
 /** A rendering subsystem with ordered quality tiers */
@@ -189,21 +193,7 @@ export function getScalabilityLabel(state: ScalabilityState): string {
     return `${preset.label} (${overrides.join(', ')})`;
 }
 
-/** Estimate compile time for a given tier selection.
- *  Sums the selected tiers' estCompileMs over BASE_COMPILE_MS.
- *  BASE aligned to the live-state estimator's BASE (engine-gmt profiles.ts,
- *  3600 — cut from 4200 via ADR-0076/0077 trace-template work) so the EnginePanel
- *  preview and the real compile-progress estimate agree. The two estimators still
- *  differ in granularity (tier-sum vs live per-param); full delegation is the
- *  remaining Stage-2 follow-up in ADR-0079. */
-export const BASE_COMPILE_MS = 3600;
-
-export function estimateScalabilityCompileTime(subsystems: Record<string, number>): number {
-    let total = BASE_COMPILE_MS;
-    for (const sub of getShaderCompilerSubsystems()) {
-        const tierIndex = subsystems[sub.id] ?? 0;
-        const tier = sub.tiers[tierIndex];
-        if (tier) total += tier.estCompileMs;
-    }
-    return total;
-}
+// The compile-time ESTIMATOR lives in engine-gmt/features/engine/profiles.ts
+// (`estimateShaderCompilerCompileTime`) — it needs featureRegistry to sum the
+// per-param `estCompileMs` annotations, the single source of per-switch cost
+// truth, so it can't live in this engine-core leaf module. @see ADR-0079.
