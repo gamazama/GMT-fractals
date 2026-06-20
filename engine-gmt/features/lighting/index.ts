@@ -160,7 +160,7 @@ export const LightingFeature: FeatureDefinition = {
         // --- ENGINE MASTER ---
         advancedLighting: {
             type: 'boolean', default: true, label: 'Light Engine', shortId: 'le', group: 'main',
-            noReset: true, hidden: true, onUpdate: 'compile',
+            noAccumReset: true, hidden: true, onUpdate: 'compile',
             description: 'Master switch for lighting logic. Disabling provides stubs only.'
         },
 
@@ -171,7 +171,7 @@ export const LightingFeature: FeatureDefinition = {
             ui: 'checkbox',
             description: 'Compiles the Path Tracing module. Disable to reduce shader size.',
             onUpdate: 'compile',
-            noReset: true,
+            noAccumReset: true,
             estCompileMs: 700  // was 1500; PT-baseline dropped ~1-2s after ADR-0075 (single normal estimator, 8->4 DE_Dist taps). @see docs/policy/shader-compile-optimization.md §8 L5
         },
         renderMode: {
@@ -181,7 +181,7 @@ export const LightingFeature: FeatureDefinition = {
             options: [{ label: 'Direct (Fast)', value: 0.0 }, { label: 'Path Tracing (GI)', value: 1.0 }],
             description: 'Switches between fast direct lighting and physically based Global Illumination.',
             onUpdate: 'compile',
-            noReset: true
+            noAccumReset: true
         },
         ptBounces: { 
             type: 'int', default: 3, label: 'Max Bounces', shortId: 'pb', uniform: 'uPTBounces', 
@@ -209,14 +209,14 @@ export const LightingFeature: FeatureDefinition = {
             ],
             description: 'BRDF model for direct lighting. Cook-Torrance is physically accurate, with negligible compile cost.',
             onUpdate: 'compile',
-            noReset: true
+            noAccumReset: true
         },
 
         // --- SHADOWS COMPILER (Engine Panel) ---
         shadowsCompile: {
             type: 'boolean', default: true, label: 'Shadow Engine', shortId: 'sc', group: 'engine_settings',
             ui: 'checkbox',
-            noReset: true,
+            noAccumReset: true,
             onUpdate: 'compile',
             description: 'Compiles the shadow raymarching loop. Disable to save ~5s compile time.',
             estCompileMs: 500 // L6: shadow march over no-shadows ~500 cold (§2.6); was 1500
@@ -236,7 +236,7 @@ export const LightingFeature: FeatureDefinition = {
             ],
             description: 'Shadow algorithm. Hard = binary occlusion, Lite = fast penumbra, Robust = accurate penumbra.',
             onUpdate: 'compile',
-            noReset: true
+            noAccumReset: true
         },
         ptStochasticShadows: {
             type: 'boolean', default: true, label: 'Soft Shadow Jitter', shortId: 'ps',
@@ -244,7 +244,7 @@ export const LightingFeature: FeatureDefinition = {
             parentId: 'shadowsCompile',
             ui: 'checkbox',
             onUpdate: 'compile',
-            noReset: true,
+            noAccumReset: true,
             estCompileMs: 80,  // measured jitter-ALU marginal over soft: Direct +67/79, PT +20/36 (sub-noise). Was 800 (~10x high). The on/off toggle (areaLights) is now RUNTIME — no recompile. @see docs/policy/shader-compile-optimization.md §2.5 finding-3 update (2026-06-20)
             description: 'Stochastic shadow jitter for Point lights — fakes soft penumbras via accumulation. Compiles the jitter capability; toggle it on/off at runtime via the Jitter button (no recompile). Independent of True Area Lights (which uses physical sphere sampling for type=Sphere lights).'
         },
@@ -253,14 +253,14 @@ export const LightingFeature: FeatureDefinition = {
         ptAreaLights: {
             type: 'boolean', default: false, label: 'True Area Lights', shortId: 'pal2',
             group: 'engine_settings', parentId: 'ptEnabled',
-            ui: 'checkbox', onUpdate: 'compile', noReset: true,
+            ui: 'checkbox', onUpdate: 'compile', noAccumReset: true,
             estCompileMs: 400,  // L6: measured +389/221 cold over minimal PT (§2.5); was 1230 (session-3 estimate, on a slower baseline). @see docs/policy/shader-compile-optimization.md §2.5
             description: 'Physically-correct sphere area light integration (sphere-surface sampling + MIS). Required for lights with type=Sphere. Enable + change a light type to Sphere via the per-light menu. Costs ~1s compile + one extra sphere intersection per bounce.'
         },
         ptNEEAllLights: {
             type: 'boolean', default: false, label: 'Sample All Lights', shortId: 'pal',
             group: 'engine_settings', parentId: 'ptEnabled',
-            ui: 'checkbox', onUpdate: 'compile', noReset: true,
+            ui: 'checkbox', onUpdate: 'compile', noAccumReset: true,
             estCompileMs: 80,  // L6: measured +77/247 cold over minimal PT (§2.5); was 832 (session-1, slower/fuller baseline)
             description: 'Evaluates every active light per bounce instead of one random light. Reduces shadow noise at the cost of N× more shadow rays.'
         },
@@ -274,19 +274,19 @@ export const LightingFeature: FeatureDefinition = {
                 { label: 'Env MIS',       value: 1.0, estCompileMs: 1150 },
                 { label: 'Env MIS + IS',  value: 2.0, estCompileMs: 1700 },
             ],
-            onUpdate: 'compile', noReset: true,
+            onUpdate: 'compile', noAccumReset: true,
             description: 'Direct env-map sampling with MIS for path-traced reflections. Env MIS handles broad skies; Env MIS + IS adds importance sampling for HDR maps with sun discs / concentrated lights. Replaces the older Environment NEE (which only handled diffuse).'
         },
         ptSobolBounce: {
             type: 'boolean', default: true, label: 'Sobol Bounce Sampling', shortId: 'psb',
             group: 'engine_settings', parentId: 'ptEnabled',
-            ui: 'checkbox', onUpdate: 'compile', noReset: true,
+            ui: 'checkbox', onUpdate: 'compile', noAccumReset: true,
             estCompileMs: 25,  // measured cold marginal ~23ms (§2.3) — effectively free; was 50
             description: 'Low-discrepancy 2D sequence (Sobol) with per-pixel rotation for the bounce-direction seed. Measurably less variance on shiny surfaces; no effect on rough/diffuse-heavy scenes.'
         },
         ptEnvNEE: {
             type: 'boolean', default: false, hidden: true, label: 'Environment NEE (legacy)', shortId: 'pen',
-            group: 'engine_settings', parentId: 'ptEnabled', noReset: true,
+            group: 'engine_settings', parentId: 'ptEnabled', noAccumReset: true,
             description: 'Deprecated — kept so old scene files load without dropping state. Migrated to ptReflMode at boot.'
         },
         ptMaxLuminance: {
@@ -305,18 +305,24 @@ export const LightingFeature: FeatureDefinition = {
             description: 'Toggle shadow casting at runtime without recompiling.',
             helpId: 'shadows',
         },
+        // NB: this is the "Jitter" toggle (stochastic soft-shadow jitter for
+        // Point/Directional lights) — NOT "True Area Lights" (that's ptAreaLights,
+        // physical sphere sampling). The param key stays `areaLights` for scene
+        // back-compat; the user-facing name is "Shadow Jitter".
         areaLights: {
-            type: 'boolean', default: false, label: 'Area Lights', shortId: 'al', uniform: 'uAreaLights',
+            type: 'boolean', default: false, label: 'Shadow Jitter', shortId: 'al', uniform: 'uAreaLights',
             group: 'shadows',
             hidden: true,
             condition: { param: 'ptStochasticShadows', bool: true },
-            description: 'Stochastic area light shadows. Disable for sharp analytical shadows.',
+            description: 'Stochastic soft-shadow jitter for Point/Directional lights (penumbra via accumulation). Off = sharp analytic shadows.',
             helpId: 'shadows',
             // RUNTIME toggle (uAreaLights uniform) — no recompile. The jitter is a
             // cheap perturbation of the shadow-ray direction ahead of a SINGLE
             // shadow march (see pbr.ts / pathtracer.ts), so both on/off states
             // share one compiled path with nothing for ANGLE to predicate.
-            noReset: true
+            // NO noAccumReset: toggling jitter changes the converged image, so it MUST
+            // reset accumulation — otherwise the old (jittered/un-jittered) frame
+            // stays on screen and the toggle looks like it did nothing.
         },
         shadowIntensity: {
             type: 'float', default: 1.0, label: 'Opacity', shortId: 'si', uniform: 'uShadowIntensity',
@@ -333,7 +339,7 @@ export const LightingFeature: FeatureDefinition = {
             helpId: 'shadows',
         },
         shadowSteps: {
-            type: 'int', default: 128, label: 'Steps', shortId: 'st',
+            type: 'int', default: 128, label: 'Quality (Steps)', shortId: 'st',
             min: 16, max: 512, step: 16,
             group: 'shadows',
             condition: { bool: true },
@@ -346,11 +352,12 @@ export const LightingFeature: FeatureDefinition = {
             type: 'float', default: 0.002, label: 'Bias', shortId: 'sb', uniform: 'uShadowBias',
             min: 0.0, max: 1.0, step: 0.000001, group: 'shadows', scale: 'log',
             condition: { bool: true },
+            isAdvanced: true,
             description: 'Too low: acne. Too high: detached.',
             helpId: 'shadows',
         },
         
-        lights: { type: 'complex', default: DEFAULT_LIGHTS, label: 'Light List', shortId: 'll', group: 'data', hidden: true, noReset: true }
+        lights: { type: 'complex', default: DEFAULT_LIGHTS, label: 'Light List', shortId: 'll', group: 'data', hidden: true, noAccumReset: true, preserveOnApply: true }
     },
     inject: (builder, config, variant) => {
         if (variant !== 'Main') {

@@ -320,15 +320,16 @@ export function loadSceneWithFilter(useFilter: boolean): void {
 
         const structural = filter.formula || filter.camera || filter.animation;
         if (!structural) {
-            // Look-only: apply just the selected feature slices live. The whole
-            // file slice (incl. noReset params like the lights array) replaces
-            // the live one; params absent from the file fall back to defaults.
+            // Look-only: apply just the selected feature slices live. The light
+            // rig IS part of the lighting look here, so pass respectPreserve:false
+            // to copy the file's lights array too (its only preserveOnApply member
+            // in the look groups); params absent from the file fall back to defaults.
             const featureIds: string[] = [];
             for (const group of LOOK_GROUPS) {
                 if (filter[group]) featureIds.push(...GROUP_FEATURES[group]);
             }
             if (featureIds.length) {
-                applyPartialPreset({ source: filePreset, featureIds, respectNoReset: false });
+                applyPartialPreset({ source: filePreset, featureIds, respectPreserve: false });
             }
             return;
         }

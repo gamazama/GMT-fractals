@@ -267,7 +267,7 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
         // uHistogramLayer only selects which colour layer the histogram READBACK
         // samples (ShaderBuilder histogram variant) — it does not affect the main
         // render, so it must not reset accumulation.
-        FractalEvents.emit('uniform', { key: Uniforms.HistogramLayer, value: v, noReset: true });
+        FractalEvents.emit('uniform', { key: Uniforms.HistogramLayer, value: v, noAccumReset: true });
         set((state) => ({ histogramTrigger: state.histogramTrigger + 1 }));
     },
     

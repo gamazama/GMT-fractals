@@ -31,8 +31,8 @@ const engine = getProxy();
 // GmtRendererTickDriver) receive them. Engine-core's WorkerProxy
 // is a stub — calling engine.setUniform directly would be a no-op and
 // the modulated uniform never reaches the render pipeline.
-const emitUniform = (key: string, value: unknown, noReset = false) => {
-    FractalEvents.emit(FRACTAL_EVENTS.UNIFORM, { key, value, noReset });
+const emitUniform = (key: string, value: unknown, noAccumReset = false) => {
+    FractalEvents.emit(FRACTAL_EVENTS.UNIFORM, { key, value, noAccumReset });
 };
 const emitResetAccum = () => {
     FractalEvents.emit(FRACTAL_EVENTS.RESET_ACCUM, undefined);
@@ -269,7 +269,7 @@ export const tick = (delta: number) => {
                             // Map to individual uniform components
                             uniformName = `${paramConfig.uniform}_${axis}`;
                         }
-                        if (paramConfig.noReset) isNoReset = true;
+                        if (paramConfig.noAccumReset) isNoReset = true;
                         isDDFSResolved = true;
                     }
                 } else {
@@ -283,7 +283,7 @@ export const tick = (delta: number) => {
                         if (paramConfig.uniform) {
                             uniformName = paramConfig.uniform;
                         }
-                        if (paramConfig.noReset) isNoReset = true;
+                        if (paramConfig.noAccumReset) isNoReset = true;
                         isDDFSResolved = true;
                     }
                 }

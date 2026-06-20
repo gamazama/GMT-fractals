@@ -428,7 +428,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 break;
 
             case 'UNIFORM':
-                engine?.setUniform(msg.key, msg.value, msg.noReset);
+                engine?.setUniform(msg.key, msg.value, msg.noAccumReset);
                 break;
 
             case 'RENDER_TICK':
@@ -462,12 +462,12 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
             case 'OFFSET_SET':
                 if (engine) {
                     engine.virtualSpace.state = msg.offset;
-                    if (!msg.noReset) {
+                    if (!msg.noAccumReset) {
                         engine.resetAccumulation();
                     }
                 }
                 // Always discard buffered tick — its camera/offset data is stale.
-                // noReset preserves accumulated samples (inflate/absorb don't change
+                // noAccumReset preserves accumulated samples (inflate/absorb don't change
                 // unified position), but the pending tick would render with the old
                 // camera at the new offset, producing a wrong frame.
                 _pendingTick = null;

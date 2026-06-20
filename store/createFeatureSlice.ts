@@ -154,7 +154,7 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                             : (typeof newVal !== 'object' && typeof oldVal !== 'object') ? newVal !== oldVal
                             : true;
 
-                        if (paramChanged && !config.noReset) shouldReset = true;
+                        if (paramChanged && !config.noAccumReset) shouldReset = true;
 
                         // Sync ALL changed params to ConfigManager via CONFIG event.
                         // ConfigManager.update() only triggers recompile for onUpdate:'compile'
@@ -181,12 +181,12 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                                     // Auto-enable environment map when image is loaded
                                     if (paramKey === 'envMapData' && next['useEnvMap'] === false) {
                                         next['useEnvMap'] = true;
-                                        FractalEvents.emit('uniform', { key: 'uUseEnvMap', value: 1.0, noReset: false });
+                                        FractalEvents.emit('uniform', { key: 'uUseEnvMap', value: 1.0, noAccumReset: false });
                                     }
                                     // Auto-enable texturing when image is loaded
                                     if (paramKey === 'layer1Data' && next['active'] === false) {
                                         next['active'] = true;
-                                        FractalEvents.emit('uniform', { key: 'uUseTexture', value: 1.0, noReset: false });
+                                        FractalEvents.emit('uniform', { key: 'uUseTexture', value: 1.0, noAccumReset: false });
                                     }
                                 } else {
                                     FractalEvents.emit('texture', { textureType, dataUrl: null });
@@ -194,12 +194,12 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                                     // Auto-disable environment map when image is cleared
                                     if (paramKey === 'envMapData' && next['useEnvMap'] === true) {
                                         next['useEnvMap'] = false;
-                                        FractalEvents.emit('uniform', { key: 'uUseEnvMap', value: 0.0, noReset: false });
+                                        FractalEvents.emit('uniform', { key: 'uUseEnvMap', value: 0.0, noAccumReset: false });
                                     }
                                     // Auto-disable texturing when image is cleared
                                     if (paramKey === 'layer1Data' && next['active'] === true) {
                                         next['active'] = false;
-                                        FractalEvents.emit('uniform', { key: 'uUseTexture', value: 0.0, noReset: false });
+                                        FractalEvents.emit('uniform', { key: 'uUseTexture', value: 0.0, noAccumReset: false });
                                     }
                                 }
                             }
@@ -209,7 +209,7 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                                 FractalEvents.emit('uniform', { 
                                     key: config.uniform!, 
                                     value: { isGradientBuffer: true, buffer }, 
-                                    noReset: !!config.noReset 
+                                    noAccumReset: !!config.noAccumReset 
                                 });
                             }
                             else {
@@ -217,7 +217,7 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                                 if (config.type === 'boolean') finalVal = val ? 1.0 : 0.0;
                                 if (config.type === 'color' && !(finalVal instanceof THREE.Color)) finalVal = new THREE.Color(finalVal);
                                 
-                                FractalEvents.emit('uniform', { key: config.uniform, value: finalVal, noReset: !!config.noReset || !paramChanged });
+                                FractalEvents.emit('uniform', { key: config.uniform, value: finalVal, noAccumReset: !!config.noAccumReset || !paramChanged });
                             }
                         }
                     }
@@ -243,20 +243,20 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                                 FractalEvents.emit('uniform', { 
                                     key: config.uniform, 
                                     value: { isGradientBuffer: true, buffer }, 
-                                    noReset: !!config.noReset 
+                                    noAccumReset: !!config.noAccumReset 
                                 });
-                                if (!config.noReset) shouldReset = true;
+                                if (!config.noAccumReset) shouldReset = true;
                             }
                         }
                         else if (config.type === 'vec2') {
                             const compositeVal = new THREE.Vector2(values[0], values[1]);
-                            FractalEvents.emit('uniform', { key: config.uniform, value: compositeVal, noReset: !!config.noReset });
-                            if (!config.noReset) shouldReset = true;
+                            FractalEvents.emit('uniform', { key: config.uniform, value: compositeVal, noAccumReset: !!config.noAccumReset });
+                            if (!config.noAccumReset) shouldReset = true;
                         }
                         else if (config.type === 'vec3') {
                             const compositeVal = new THREE.Vector3(values[0], values[1], values[2]);
-                            FractalEvents.emit('uniform', { key: config.uniform, value: compositeVal, noReset: !!config.noReset });
-                            if (!config.noReset) shouldReset = true;
+                            FractalEvents.emit('uniform', { key: config.uniform, value: compositeVal, noAccumReset: !!config.noAccumReset });
+                            if (!config.noAccumReset) shouldReset = true;
                         }
                     }
                 });

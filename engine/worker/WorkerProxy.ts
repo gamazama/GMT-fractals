@@ -175,7 +175,7 @@ export class WorkerProxy implements AccumulationController {
 
     // ─── Commands (no-op in stub) ──────────────────────────────────────
 
-    setUniform(_key: string, _value: unknown, _noReset = false) {}
+    setUniform(_key: string, _value: unknown, _noAccumReset = false) {}
     setPreviewSampleCap(_n: number) {}
     resetAccumulation() {}
     markInteraction() {}

@@ -22,7 +22,7 @@ export const PostEffectsFeature: FeatureDefinition = {
             uniform: 'uBloomIntensity',
             min: 0.0, max: 5.0, step: 0.01,
             group: 'bloom',
-            noReset: true,
+            noAccumReset: true,
             format: (v) => {
                 const n = v as number;
                 if (n === 0) return '0.0 (off)';
@@ -39,7 +39,7 @@ export const PostEffectsFeature: FeatureDefinition = {
             group: 'bloom',
             parentId: 'bloomIntensity',
             condition: { gt: 0.0 },
-            noReset: true
+            noAccumReset: true
         },
         bloomRadius: {
             type: 'float',
@@ -51,7 +51,7 @@ export const PostEffectsFeature: FeatureDefinition = {
             group: 'bloom',
             parentId: 'bloomIntensity',
             condition: { gt: 0.0 },
-            noReset: true
+            noAccumReset: true
         },
         caStrength: {
             type: 'float',
@@ -61,7 +61,7 @@ export const PostEffectsFeature: FeatureDefinition = {
             uniform: 'uCAStrength',
             min: 0.0, max: 10.0, step: 0.01,
             group: 'lens',
-            noReset: true,
+            noAccumReset: true,
             format: (v) => {
                 const n = v as number;
                 if (n === 0) return '0.0 (off)';

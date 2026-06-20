@@ -228,7 +228,7 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEnvMapColorSpace',
             group: 'env',
             hidden: true
-            // Removed noReset: true to ensure accumulation resets on change
+            // Removed noAccumReset: true to ensure accumulation resets on change
         },
         useEnvMap: {
             type: 'boolean',

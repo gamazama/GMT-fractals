@@ -149,11 +149,15 @@ export const WaterPlaneFeature: FeatureDefinition = {
         // --- MASTER SWITCH (Compile Time) ---
         waterEnabled: {
             type: 'boolean', default: false, label: 'Enable Water', shortId: 'we', group: 'engine_settings',
-            onUpdate: 'compile', noReset: true, hidden: true
+            onUpdate: 'compile', noAccumReset: true, hidden: true
         },
 
         // --- RUNTIME SWITCH ---
-        active: { type: 'boolean', default: true, label: 'Visible', shortId: 'on', uniform: 'uWaterActive', group: 'main', condition: { param: 'waterEnabled', bool: true }, noReset: true,
+        // NOTE: no noAccumReset — toggling uWaterActive adds/removes the water
+        // surface from the SDF map(), so the converged image changes and the
+        // accumulation buffer MUST reset (matching the sibling runtime params
+        // height/color/roughness). See ADR-0078.
+        active: { type: 'boolean', default: true, label: 'Visible', shortId: 'on', uniform: 'uWaterActive', group: 'main', condition: { param: 'waterEnabled', bool: true },
             description: 'Toggle the water plane on or off without recompiling.',
             helpId: 'water.settings',
         },

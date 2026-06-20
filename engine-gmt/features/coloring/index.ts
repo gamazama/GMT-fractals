@@ -304,7 +304,7 @@ export const ColoringFeature: FeatureDefinition = {
             ui: 'checkbox',
             description: 'Compiles simplex noise into the shader. Disable to reduce compile time when Layer 3 is not needed.',
             onUpdate: 'compile',
-            noReset: true
+            noAccumReset: true
         },
 
         // --- GEOMETRIC ORBIT TRAP ---

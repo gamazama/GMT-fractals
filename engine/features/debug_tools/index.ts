@@ -25,8 +25,8 @@ export const DebugToolsFeature: FeatureDefinition = {
         { label: 'Interaction Session', toggleParam: 'interactionSessionOpen', icon: 'Activity', advancedOnly: true }
     ],
     params: {
-        shaderDebuggerOpen: { type: 'boolean', default: false, label: 'GLSL Debugger', shortId: 'sd', group: 'tools', noReset: true },
-        stateDebuggerOpen: { type: 'boolean', default: false, label: 'State Debugger', shortId: 'st', group: 'tools', noReset: true },
-        interactionSessionOpen: { type: 'boolean', default: false, label: 'Interaction Session', shortId: 'is', group: 'tools', noReset: true }
+        shaderDebuggerOpen: { type: 'boolean', default: false, label: 'GLSL Debugger', shortId: 'sd', group: 'tools', noAccumReset: true, preserveOnApply: true },
+        stateDebuggerOpen: { type: 'boolean', default: false, label: 'State Debugger', shortId: 'st', group: 'tools', noAccumReset: true, preserveOnApply: true },
+        interactionSessionOpen: { type: 'boolean', default: false, label: 'Interaction Session', shortId: 'is', group: 'tools', noAccumReset: true, preserveOnApply: true }
     }
 };

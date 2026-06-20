@@ -38,7 +38,7 @@ export const FRACTAL_EVENTS = {
 } as const;
 
 type EventMap = {
-    [FRACTAL_EVENTS.UNIFORM]: { key: string; value: any; noReset?: boolean };
+    [FRACTAL_EVENTS.UNIFORM]: { key: string; value: any; noAccumReset?: boolean };
     [FRACTAL_EVENTS.CONFIG]: Partial<ShaderConfig>;
     [FRACTAL_EVENTS.CONFIG_DONE]: void;
     [FRACTAL_EVENTS.RESET_ACCUM]: void;

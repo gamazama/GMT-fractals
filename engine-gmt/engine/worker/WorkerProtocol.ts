@@ -58,10 +58,10 @@ export type MainToWorkerMessage =
     | { type: 'RESIZE'; width: number; height: number; dpr: number }
     | { type: 'CONFIG'; config: Partial<ShaderConfig> }
     | { type: 'BOOT'; config: ShaderConfig; camera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number } }
-    | { type: 'UNIFORM'; key: string; value: unknown; noReset?: boolean }
+    | { type: 'UNIFORM'; key: string; value: unknown; noAccumReset?: boolean }
     | { type: 'RENDER_TICK'; camera: SerializedCamera; offset: SerializedOffset; delta: number; timestamp: number; renderState: Partial<EngineRenderState>; syncOffset?: boolean }
     | { type: 'RESET_ACCUM' }
-    | { type: 'OFFSET_SET'; offset: SerializedOffset; noReset?: boolean }
+    | { type: 'OFFSET_SET'; offset: SerializedOffset; noAccumReset?: boolean }
     | { type: 'OFFSET_SHIFT'; x: number; y: number; z: number }
     | { type: 'SET_SAMPLE_CAP'; n: number }
     | { type: 'PAUSE'; paused: boolean }

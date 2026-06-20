@@ -33,14 +33,14 @@ export const AudioFeature: FeatureDefinition = {
         toggleParam: 'isEnabled'
     },
     params: {
-        isEnabled: { type: 'boolean', default: false, label: 'Enable Audio Engine', shortId: 'en', group: 'system', noReset: true },
-        smoothing: { type: 'float', default: 0.8, label: 'FFT Smoothing', shortId: 'sm', group: 'system', noReset: true, min: 0, max: 0.99, step: 0.01 },
-        threshold: { type: 'float', default: 0.1, label: 'Gate Threshold', shortId: 'gt', group: 'hidden', hidden: true, noReset: true },
-        agcEnabled: { type: 'boolean', default: false, label: 'AGC', shortId: 'ag', group: 'hidden', hidden: true, noReset: true },
-        attack: { type: 'float', default: 0.1, label: 'Global Attack', shortId: 'ga', group: 'hidden', hidden: true, noReset: true },
-        decay: { type: 'float', default: 0.3, label: 'Global Decay', shortId: 'gd', group: 'hidden', hidden: true, noReset: true },
-        highPass: { type: 'float', default: 20, label: 'High Pass', shortId: 'hp', group: 'hidden', hidden: true, noReset: true },
-        lowPass: { type: 'float', default: 20000, label: 'Low Pass', shortId: 'lp', group: 'hidden', hidden: true, noReset: true },
-        gain: { type: 'float', default: 0.8, label: 'Volume', shortId: 'vl', group: 'system', noReset: true, min: 0, max: 2, step: 0.01 }
+        isEnabled: { type: 'boolean', default: false, label: 'Enable Audio Engine', shortId: 'en', group: 'system', noAccumReset: true, preserveOnApply: true },
+        smoothing: { type: 'float', default: 0.8, label: 'FFT Smoothing', shortId: 'sm', group: 'system', noAccumReset: true, preserveOnApply: true, min: 0, max: 0.99, step: 0.01 },
+        threshold: { type: 'float', default: 0.1, label: 'Gate Threshold', shortId: 'gt', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
+        agcEnabled: { type: 'boolean', default: false, label: 'AGC', shortId: 'ag', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
+        attack: { type: 'float', default: 0.1, label: 'Global Attack', shortId: 'ga', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
+        decay: { type: 'float', default: 0.3, label: 'Global Decay', shortId: 'gd', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
+        highPass: { type: 'float', default: 20, label: 'High Pass', shortId: 'hp', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
+        lowPass: { type: 'float', default: 20000, label: 'Low Pass', shortId: 'lp', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
+        gain: { type: 'float', default: 0.8, label: 'Volume', shortId: 'vl', group: 'system', noAccumReset: true, preserveOnApply: true, min: 0, max: 2, step: 0.01 }
     },
 };

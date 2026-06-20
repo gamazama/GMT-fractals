@@ -157,7 +157,7 @@ export class UniformManager {
             // preserved at the GMT consumer site, not baked into the core slice.
             // Adaptive must engage ONLY for buffer-invalidating activity, never for
             // display-only slider/picker drags (bloom, colour-mapping, post FX) — those
-            // are noReset and must re-grade without downscaling (a downscale resizes the
+            // are noAccumReset and must re-grade without downscaling (a downscale resizes the
             // FBO → resetAccumulation → the fractal re-renders, which they must not).
             // `sessionHoldActive` is the camera/gizmo/scrub-filtered set (always engages).
             //
@@ -186,7 +186,7 @@ export class UniformManager {
                 // Re-enabled (was true): the accum-drop is how buffer-invalidating
                 // slider/picker/drawing gestures (which DON'T set sessionHoldActive)
                 // engage adaptive — they drop the accumulation count. Display-only
-                // (noReset) params drop nothing, so they correctly stay non-adaptive.
+                // (noAccumReset) params drop nothing, so they correctly stay non-adaptive.
                 // `selfResized` already excludes adaptive's own resize from this.
                 ignoreAccumDrop: false,
                 // Idle frames are cheap tiled bands, not full-screen renders — keep

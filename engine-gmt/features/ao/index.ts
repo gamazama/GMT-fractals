@@ -81,7 +81,7 @@ export const AOFeature: FeatureDefinition = {
              ui: 'numeric',
              description: "Compile-time limit. Increasing this allows higher runtime samples but compiles slower.",
              onUpdate: 'compile',
-             noReset: true,
+             noAccumReset: true,
              condition: [{ param: 'aoEnabled', bool: true }]
         },
         aoStochasticCp: {
@@ -90,13 +90,13 @@ export const AOFeature: FeatureDefinition = {
             ui: 'checkbox', 
             description: "Compiles High-Quality noise logic into the shader.",
             onUpdate: 'compile', 
-            noReset: true
+            noAccumReset: true
         },
         
         // Master Switch (Kernel)
         aoEnabled: {
             type: 'boolean', default: true, label: 'Enable AO', shortId: 'ae', group: 'main',
-            hidden: true, noReset: true,
+            hidden: true, noAccumReset: true,
             onUpdate: 'compile',
             estCompileMs: 200
         }

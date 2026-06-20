@@ -166,7 +166,7 @@ export const InterlaceFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'Formula Interlacing', shortId: 'ilc',
             group: 'engine_settings', ui: 'checkbox',
             description: 'Compiles a secondary formula into the shader for per-iteration alternation.',
-            onUpdate: 'compile', noReset: true,
+            onUpdate: 'compile', noAccumReset: true,
             estCompileMs: 1500
         },
         interlaceFormula: {
@@ -176,7 +176,7 @@ export const InterlaceFeature: FeatureDefinition = {
                 return getFormulaOptions().map(o => ({ label: o.label, value: o.value, estCompileMs: 800 }));
             },
             description: 'Formula to alternate with the primary formula each iteration.',
-            onUpdate: 'compile', noReset: true,
+            onUpdate: 'compile', noAccumReset: true,
             condition: { param: 'interlaceCompiled', bool: true },
             // When the secondary formula changes, load its parameter defaults
             onSet: (newFormulaId: string) => buildInterlaceDefaults(newFormulaId),

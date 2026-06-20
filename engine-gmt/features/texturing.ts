@@ -35,7 +35,7 @@ export const TexturingFeature: FeatureDefinition = {
             // on every surface eval when textures are off (default). Mirrors the
             // burningEnabled pattern. Runtime sync is preserved for completeness
             // (toggling re-compiles, then sets the uniform; both sides agree).
-            onUpdate: 'compile', noReset: true
+            onUpdate: 'compile', noAccumReset: true
         },
         layer1Data: {
             type: 'image',
@@ -64,7 +64,7 @@ export const TexturingFeature: FeatureDefinition = {
             uniform: 'uTextureColorSpace',
             group: 'main',
             hidden: true
-            // Removed noReset: true to ensure accumulation resets on change
+            // Removed noAccumReset: true to ensure accumulation resets on change
         },
         mapU: {
             type: 'float',

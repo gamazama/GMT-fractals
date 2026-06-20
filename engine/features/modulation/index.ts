@@ -102,7 +102,7 @@ export const ModulationFeature: FeatureDefinition = {
     },
     params: {
         // Expose to DDFS for persistence and URL shortening
-        rules: { type: 'complex', default: [], label: 'Rules', shortId: 'rl', group: 'data', hidden: true, noReset: true },
-        selectedRuleId: { type: 'complex', default: null, label: 'Selection', shortId: 'sr', group: 'data', hidden: true, noReset: true }
+        rules: { type: 'complex', default: [], label: 'Rules', shortId: 'rl', group: 'data', hidden: true, noAccumReset: true, preserveOnApply: true },
+        selectedRuleId: { type: 'complex', default: null, label: 'Selection', shortId: 'sr', group: 'data', hidden: true, noAccumReset: true, preserveOnApply: true }
     }
 };

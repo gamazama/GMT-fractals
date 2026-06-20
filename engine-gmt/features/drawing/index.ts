@@ -60,20 +60,20 @@ export const DrawingFeature: FeatureDefinition = {
         activeParam: 'active'
     },
     params: {
-        enabled: { type: 'boolean', default: false, label: 'Show Tab', shortId: 'en', group: 'system', hidden: true, noReset: true },
-        active: { type: 'boolean', default: false, label: 'Enable Tool', shortId: 'ac', group: 'main', noReset: true, hidden: true },
-        activeTool: { type: 'float', default: 0, label: 'Tool Type', shortId: 'tt', group: 'main', noReset: true, hidden: true }, // Mapped in UI (0=rect, 1=circle for now handled as strings in interface)
+        enabled: { type: 'boolean', default: false, label: 'Show Tab', shortId: 'en', group: 'system', hidden: true, noAccumReset: true, preserveOnApply: true },
+        active: { type: 'boolean', default: false, label: 'Enable Tool', shortId: 'ac', group: 'main', noAccumReset: true, preserveOnApply: true, hidden: true },
+        activeTool: { type: 'float', default: 0, label: 'Tool Type', shortId: 'tt', group: 'main', noAccumReset: true, preserveOnApply: true, hidden: true }, // Mapped in UI (0=rect, 1=circle for now handled as strings in interface)
         originMode: {
-            type: 'float', default: 1.0, label: 'Origin Plane', shortId: 'om', group: 'settings', noReset: true,
+            type: 'float', default: 1.0, label: 'Origin Plane', shortId: 'om', group: 'settings', noAccumReset: true, preserveOnApply: true,
             options: [{ label: 'Global Zero', value: 0.0 }, { label: 'Surface (Probe)', value: 1.0 }],
             description: 'Where the drawing plane starts.'
         },
-        color: { type: 'color', default: new THREE.Color('#00ffff'), label: 'Line Color', shortId: 'cl', group: 'settings', noReset: true },
-        lineWidth: { type: 'float', default: 1.0, label: 'Line Width', shortId: 'lw', min: 1.0, max: 10.0, step: 1.0, group: 'settings', noReset: true, hidden: true },
-        showLabels: { type: 'boolean', default: true, label: 'Show Measurements', shortId: 'sl', group: 'settings', noReset: true },
-        showAxes: { type: 'boolean', default: false, label: 'Show Axis Ruler', shortId: 'ax', group: 'settings', noReset: true, description: 'Displays a reference grid at the drawing origin.' },
-        shapes: { type: 'complex', default: [], label: 'Shapes', shortId: 'sh', group: 'data', hidden: true, noReset: true },
-        refreshTrigger: { type: 'float', default: 0, label: 'Refresh Trigger', group: 'system', hidden: true, noReset: true }
+        color: { type: 'color', default: new THREE.Color('#00ffff'), label: 'Line Color', shortId: 'cl', group: 'settings', noAccumReset: true, preserveOnApply: true },
+        lineWidth: { type: 'float', default: 1.0, label: 'Line Width', shortId: 'lw', min: 1.0, max: 10.0, step: 1.0, group: 'settings', noAccumReset: true, preserveOnApply: true, hidden: true },
+        showLabels: { type: 'boolean', default: true, label: 'Show Measurements', shortId: 'sl', group: 'settings', noAccumReset: true, preserveOnApply: true },
+        showAxes: { type: 'boolean', default: false, label: 'Show Axis Ruler', shortId: 'ax', group: 'settings', noAccumReset: true, preserveOnApply: true, description: 'Displays a reference grid at the drawing origin.' },
+        shapes: { type: 'complex', default: [], label: 'Shapes', shortId: 'sh', group: 'data', hidden: true, noAccumReset: true, preserveOnApply: true },
+        refreshTrigger: { type: 'float', default: 0, label: 'Refresh Trigger', group: 'system', hidden: true, noAccumReset: true, preserveOnApply: true }
     },
     state: {
         activeTool: 'rect'

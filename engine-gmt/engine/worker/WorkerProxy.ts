@@ -573,8 +573,8 @@ export class WorkerProxy implements AccumulationController {
         this._bootSent = true;
     }
 
-    setUniform(key: string, value: unknown, noReset = false) {
-        this.post({ type: 'UNIFORM', key, value, noReset });
+    setUniform(key: string, value: unknown, noAccumReset = false) {
+        this.post({ type: 'UNIFORM', key, value, noAccumReset });
     }
 
     setPreviewSampleCap(n: number) {

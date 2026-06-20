@@ -31,7 +31,7 @@ export const ColorGradingFeature: FeatureDefinition = {
             shortId: 'ac',
             uniform: 'uGradingActive',
             group: 'grading',
-            noReset: true
+            noAccumReset: true
         },
         toneMapping: {
             type: 'float',
@@ -41,7 +41,7 @@ export const ColorGradingFeature: FeatureDefinition = {
             uniform: 'uToneMapping',
             group: 'grading',
             parentId: 'active',
-            noReset: true,
+            noAccumReset: true,
             options: [
                 { label: 'ACES', value: 0.0 },
                 { label: 'AgX', value: 1.0 },
@@ -60,7 +60,7 @@ export const ColorGradingFeature: FeatureDefinition = {
             group: 'grading',
             parentId: 'active',
             condition: { bool: true },
-            noReset: true
+            noAccumReset: true
         },
         levelsMin: {
             type: 'float',
@@ -72,7 +72,7 @@ export const ColorGradingFeature: FeatureDefinition = {
             group: 'grading',
             parentId: 'active',
             condition: { bool: true },
-            noReset: true, 
+            noAccumReset: true, 
             hidden: true 
         },
         levelsMax: {
@@ -85,7 +85,7 @@ export const ColorGradingFeature: FeatureDefinition = {
             group: 'grading',
             parentId: 'active',
             condition: { bool: true },
-            noReset: true,
+            noAccumReset: true,
             hidden: true 
         },
         levelsGamma: {
@@ -98,7 +98,7 @@ export const ColorGradingFeature: FeatureDefinition = {
             group: 'grading',
             parentId: 'active',
             condition: { bool: true },
-            noReset: true,
+            noAccumReset: true,
             hidden: true 
         }
     },

@@ -98,7 +98,16 @@ export interface ParamConfig {
      *  alongside the description (clicking it calls `openHelp`). */
     helpId?: string;
     hidden?: boolean;
-    noReset?: boolean;
+    /** Changing this param at runtime must NOT clear the path-trace accumulation
+     *  buffer. Set for params that don't alter the converged image: post-process
+     *  / compositing (bloom, colour-grade, droste UV-remap), pure UI/editor state
+     *  that never renders, device perf prefs, and compile-gated switches (whose
+     *  recompile already resets, so a second reset would be redundant). Flows to
+     *  `FractalEngine.setUniform` via the UNIFORM event so the buffer survives.
+     *  NOTE: this is the *accumulation* axis only — whether a bulk apply/reset may
+     *  overwrite the param is the separate `preserveOnApply` axis (see
+     *  applyPartialPreset). @see docs/adr/0078-noreset-axis-split.md */
+    noAccumReset?: boolean;
     /** User/device-local preference, NOT scene content. Persisted live state
      *  (e.g. via localStorage / device prefs) — a loaded scene or formula
      *  switch must NEVER overwrite it. `applyPresetState` keeps the live value
@@ -106,6 +115,15 @@ export interface ParamConfig {
      *  Use for things like adaptive resolution and hardware precision that
      *  belong to the machine the user is on, not the artwork. */
     userScoped?: boolean;
+    /** Bulk slice-apply operations (per-feature Reset button, New-Scene shading
+     *  copy, look-only Load) must NOT overwrite this param — it holds authored
+     *  *content* (the light rig, drawn shapes, modulation rules) or session/UI
+     *  state (open panels, webcam overlay layout, audio-engine config), not a
+     *  "look" setting. `applyPartialPreset` skips a param when
+     *  `userScoped || preserveOnApply`. This is the bulk-copy axis, orthogonal to
+     *  `noAccumReset` (accumulation) — many params carry both for unrelated
+     *  reasons. @see docs/adr/0078-noreset-axis-split.md */
+    preserveOnApply?: boolean;
     confirmation?: string;      
     isAdvanced?: boolean;       
     isCollapsible?: boolean;    

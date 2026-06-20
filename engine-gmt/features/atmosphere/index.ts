@@ -80,7 +80,7 @@ export const AtmosphereFeature: FeatureDefinition = {
         // --- MASTER SWITCH (Compile Time) ---
         glowEnabled: {
             type: 'boolean', default: true, label: 'Enable Glow', shortId: 'ge', group: 'main',
-            hidden: true, noReset: true,
+            hidden: true, noAccumReset: true,
             onUpdate: 'compile'
         },
 
@@ -91,7 +91,7 @@ export const AtmosphereFeature: FeatureDefinition = {
             options: [{ label: 'Accurate (Vector)', value: 0.0 }, { label: 'Fast (Scalar)', value: 1.0 }],
             description: 'Vector accumulates color per-step. Scalar accumulates intensity only (faster).',
             onUpdate: 'compile',
-            noReset: true
+            noAccumReset: true
         },
 
         // --- FOG (Runtime) ---

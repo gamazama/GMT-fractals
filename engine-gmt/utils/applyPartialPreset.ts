@@ -27,9 +27,10 @@ export interface ApplyPartialPresetOptions {
   source: Partial<Preset>;
   /** Feature ids whose slices to copy. Features not listed are untouched. */
   featureIds: string[];
-  /** Respect ParamConfig.noReset and skip those keys. Default: true.
-   *  Pass false only for explicit "scrub everything" use cases (rare). */
-  respectNoReset?: boolean;
+  /** Honour the bulk-copy guards (`userScoped` device prefs + `preserveOnApply`
+   *  authored content / session state) and skip those keys. Default: true.
+   *  Pass false only for an explicit "scrub everything" copy (rare). */
+  respectPreserve?: boolean;
   /** When true, also include compile-flagged params (triggers rebuild via
    *  the existing onUpdate:'compile' event path). Default: true.
    *  Pass false to do a runtime-only copy (e.g. cosmetic styling tweak
@@ -44,10 +45,15 @@ export interface ApplyPartialPresetOptions {
  * For each featureId in selection:
  * - Reads `source.features?.[featureId]` (may be undefined).
  * - For each declared param in the feature's DDFS config:
- *   - Skips if param has `noReset: true` and `respectNoReset !== false`.
+ *   - Skips if param is `userScoped` or `preserveOnApply` and `respectPreserve !== false`
+ *     (device prefs + authored content / session state — see ADR-0078).
  *   - Skips if param has `onUpdate: 'compile'` and `includeCompileParams === false`.
  *   - Value = source[paramKey] ?? ParamConfig.default.
  * - Calls the feature's auto-generated `set${FeatureId}` setter with the batch.
+ *
+ * Note: `noAccumReset` (the accumulation axis) is deliberately NOT consulted here —
+ * a param being display-only does not mean a Reset/copy should leave it alone. That
+ * conflation (the old `respectNoReset`) is what ADR-0078 split apart.
  *
  * Does NOT touch:
  * - camera state, animations, audio clips, modular pipeline, lights, savedCameras
@@ -58,7 +64,7 @@ export function applyPartialPreset(opts: ApplyPartialPresetOptions): void {
   const {
     source,
     featureIds,
-    respectNoReset = true,
+    respectPreserve = true,
     includeCompileParams = true,
   } = opts;
 
@@ -80,7 +86,7 @@ export function applyPartialPreset(opts: ApplyPartialPresetOptions): void {
 
       const updates: Record<string, any> = {};
       for (const [paramKey, config] of Object.entries(feat.params)) {
-        if (respectNoReset && config.noReset) continue;
+        if (respectPreserve && (config.userScoped || config.preserveOnApply)) continue;
         if (!includeCompileParams && config.onUpdate === 'compile') continue;
         const sourceValue = sourceSlice[paramKey];
         updates[paramKey] = sourceValue !== undefined ? sourceValue : config.default;

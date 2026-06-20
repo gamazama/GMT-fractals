@@ -194,8 +194,8 @@ export class ConfigManager {
                             rebuildNeeded = true;
                         }
                     }
-                    // Track whether any non-noReset param actually changed
-                    if (paramConfig && !paramConfig.noReset) {
+                    // Track whether any non-noAccumReset param actually changed
+                    if (paramConfig && !paramConfig.noAccumReset) {
                         const newVal = newFeatData[paramKey];
                         const oldVal = oldFeatData[paramKey] !== undefined ? oldFeatData[paramKey] : paramConfig.default;
                         if (!this.areValuesEqual(newVal, oldVal)) {

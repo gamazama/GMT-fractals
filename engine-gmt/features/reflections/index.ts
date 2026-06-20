@@ -197,7 +197,7 @@ export const ReflectionsFeature: FeatureDefinition = {
             ],
             description: 'Reflection technique. Higher quality = longer compile time. Raymarched adds ~1.5-2s.',
             onUpdate: 'compile',
-            noReset: true
+            noAccumReset: true
         },
 
         // --- BOUNCE SHADOWS (Engine Panel, only for Raymarched) ---
@@ -208,7 +208,7 @@ export const ReflectionsFeature: FeatureDefinition = {
             condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH },
             description: 'Compute shadows on reflected surfaces. Negligible extra compile time.',
             onUpdate: 'compile',
-            noReset: true,
+            noAccumReset: true,
             estCompileMs: 50  // L6: measured ~free (+42ms — calculatePBRContribution body already inlined; §2.6); was 4500 (~100x high)
         },
 
@@ -233,7 +233,7 @@ export const ReflectionsFeature: FeatureDefinition = {
             uniform: 'uReflBounces',
             ui: 'numeric',
             description: "Maximum recursion depth. Clamped to 3. Default 1 for performance.",
-            noReset: true,
+            noAccumReset: true,
             onUpdate: 'compile',
             condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH }
         },
@@ -243,14 +243,14 @@ export const ReflectionsFeature: FeatureDefinition = {
             uniform: 'uReflSteps',
             ui: 'numeric',
             description: "Precision of the reflection ray.",
-            noReset: true,
+            noAccumReset: true,
             condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH }
         },
 
         // Master Switch (Compile Time) — hidden, controlled by engine toggle
         enabled: {
             type: 'boolean', default: true, label: 'Enable Reflections', shortId: 're', group: 'main',
-            hidden: true, noReset: true,
+            hidden: true, noAccumReset: true,
             onUpdate: 'compile'
         }
     },

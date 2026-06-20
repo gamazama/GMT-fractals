@@ -43,7 +43,7 @@ export const LightSpheresFeature: FeatureDefinition = {
             group: 'engine_settings',
             ui: 'checkbox',
             onUpdate: 'compile',
-            noReset: true,
+            noAccumReset: true,
             description: 'Compiles visible emitter sphere rendering for point lights with radius > 0.',
             estCompileMs: 150
         },

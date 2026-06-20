@@ -40,7 +40,7 @@ export const QualityFeature: FeatureDefinition = {
         // --- MASTER ANCHOR ---
         engineQuality: {
             type: 'boolean', default: true, label: 'Quality Core', shortId: 'qc', group: 'main',
-            noReset: true, hidden: true
+            noAccumReset: true, hidden: true
         },
 
         // --- KERNEL (Engine Panel) ---
@@ -50,7 +50,7 @@ export const QualityFeature: FeatureDefinition = {
             ui: 'numeric',
             description: "Safety limit for ray/DE loops (MAX_HARD_ITERATIONS define). Requires recompile but does not affect compile time — ANGLE/D3D does not unroll define-bounded loops.",
             onUpdate: 'compile',
-            noReset: true,
+            noAccumReset: true,
             userScoped: true,
             hidden: true  // Managed by Hardware Preferences modal (hardwareProfile.caps)
         },
@@ -60,7 +60,7 @@ export const QualityFeature: FeatureDefinition = {
             options: [{ label: 'High (Desktop)', value: 0.0 }, { label: 'Standard (Mobile)', value: 1.0 }],
             description: 'Sets the minimum epsilon (ray hit distance). Standard prevents GPU hangs on mobile.',
             onUpdate: 'compile',
-            noReset: true,
+            noAccumReset: true,
             userScoped: true,
             hidden: true  // Managed by Hardware Preferences modal (hardwareProfile.caps)
         },
@@ -70,7 +70,7 @@ export const QualityFeature: FeatureDefinition = {
             options: [{ label: 'Float32 (HDR)', value: 0.0 }, { label: 'HalfFloat16', value: 1.0 }],
             description: 'Controls render target bit-depth. 16-bit is faster and required on some mobile GPUs.',
             onUpdate: 'compile',
-            noReset: true,
+            noAccumReset: true,
             userScoped: true,
             hidden: true  // Managed by Hardware Preferences modal (hardwareProfile.caps)
         },
@@ -125,7 +125,7 @@ export const QualityFeature: FeatureDefinition = {
             description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix, Cutting Plane=Knighty fold-and-cut polyhedra.',
             helpId: 'quality.estimator',
             onUpdate: 'compile',
-            noReset: true,
+            noAccumReset: true,
         },
         deBailout: {
             type: 'float', default: 100.0, label: 'DE Bailout', shortId: 'eb', uniform: 'uDeBailout',
@@ -175,7 +175,7 @@ export const QualityFeature: FeatureDefinition = {
             label: 'Adaptive Resolution',
             shortId: 'ds',
             group: 'performance',
-            noReset: true,
+            noAccumReset: true,
             userScoped: true,
             description: 'Drop resolution while moving and during slow frames; restore when idle.',
             helpId: 'quality.scale',
@@ -189,7 +189,7 @@ export const QualityFeature: FeatureDefinition = {
             group: 'performance',
             condition: { and: [{ param: 'dynamicScaling', bool: true }, { param: 'adaptiveTarget', eq: 0 }] },
             format: (v) => `1/${v}x`,
-            noReset: true,
+            noAccumReset: true,
             userScoped: true,
             description: 'How aggressively to downscale resolution during camera movement.',
             helpId: 'quality.scale',
@@ -202,7 +202,7 @@ export const QualityFeature: FeatureDefinition = {
             min: 15, max: 60, step: 5,
             group: 'performance',
             condition: { param: 'dynamicScaling', bool: true },
-            noReset: true,
+            noAccumReset: true,
             userScoped: true,
             description: 'Frame rate the adaptive resolver tries to maintain.',
             helpId: 'quality.scale',
@@ -220,7 +220,7 @@ export const QualityFeature: FeatureDefinition = {
             ],
             description: 'GPU Probe: Reads distance from render target. Manual: Fixed value for orbit control.',
             helpId: 'panel.quality',
-            noReset: true
+            noAccumReset: true, preserveOnApply: true
         },
         manualDistance: {
             type: 'float',
@@ -235,7 +235,7 @@ export const QualityFeature: FeatureDefinition = {
             description: 'Manual distance value. Used for orbit control calculations.',
             helpId: 'panel.quality',
             format: (v) => v.toFixed(1),
-            noReset: true
+            noAccumReset: true, preserveOnApply: true
         }
     },
     inject: (builder, config) => {

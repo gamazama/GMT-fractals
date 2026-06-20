@@ -86,22 +86,37 @@ assert(
   'materials.roughness fell back to default (not in source)',
 );
 
-// --- Test 3: noReset honored ---
-console.log('\n[3] noReset honored — flagged keys preserved');
-const aoFeat = featureRegistry.get('ao')!;
-const noResetKeys = Object.entries(aoFeat.params)
-  .filter(([, c]) => (c as any).noReset)
+// --- Test 3: preserveOnApply honored (ADR-0078) ---
+// Authored content / session state (preserveOnApply) or device prefs (userScoped)
+// must survive a bulk apply/reset. noAccumReset (accumulation axis) does NOT
+// guard here — a display-only param still resets/copies normally.
+console.log('\n[3] preserveOnApply honored — authored content preserved');
+const lightingFeat = featureRegistry.get('lighting')!;
+const preserveKeys = Object.entries(lightingFeat.params)
+  .filter(([, c]) => (c as any).preserveOnApply || (c as any).userScoped)
   .map(([k]) => k);
-if (noResetKeys.length === 0) {
-  console.log('  skip: no params with noReset:true on ao feature');
+if (preserveKeys.length === 0) {
+  console.log('  skip: no preserveOnApply/userScoped params on lighting feature');
 } else {
-  const sentinelKey = noResetKeys[0];
-  fakeStore.ao = { ...fakeStore.ao, [sentinelKey]: 'SENTINEL' };
-  applyPartialPreset({ source: {}, featureIds: ['ao'] });
+  const sentinelKey = preserveKeys[0];
+  fakeStore.lighting = { ...fakeStore.lighting, [sentinelKey]: 'SENTINEL' };
+  applyPartialPreset({ source: {}, featureIds: ['lighting'] });
   assert(
-    fakeStore.ao[sentinelKey] === 'SENTINEL',
-    `ao.${sentinelKey} (noReset) preserved through reset`,
+    fakeStore.lighting[sentinelKey] === 'SENTINEL',
+    `lighting.${sentinelKey} (preserveOnApply) preserved through reset`,
   );
+  // And the inverse: a noAccumReset-but-not-preserved param DOES reset.
+  const resettableKey = Object.entries(lightingFeat.params)
+    .filter(([, c]) => (c as any).noAccumReset && !(c as any).preserveOnApply && !(c as any).userScoped)
+    .map(([k]) => k)[0];
+  if (resettableKey) {
+    fakeStore.lighting = { ...fakeStore.lighting, [resettableKey]: 'SENTINEL2' };
+    applyPartialPreset({ source: {}, featureIds: ['lighting'] });
+    assert(
+      fakeStore.lighting[resettableKey] !== 'SENTINEL2',
+      `lighting.${resettableKey} (noAccumReset, not preserved) reset to default`,
+    );
+  }
 }
 
 // --- Test 4: empty featureIds is no-op ---

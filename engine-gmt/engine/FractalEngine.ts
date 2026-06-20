@@ -348,7 +348,7 @@ export class FractalEngine {
     public get isBucketRendering() { return this.state.isBucketRendering; }
 
     private bindEvents() {
-        FractalEvents.on(FRACTAL_EVENTS.UNIFORM, ({ key, value, noReset }) => { this.setUniform(key, value, noReset); });
+        FractalEvents.on(FRACTAL_EVENTS.UNIFORM, ({ key, value, noAccumReset }) => { this.setUniform(key, value, noAccumReset); });
         FractalEvents.on(FRACTAL_EVENTS.CONFIG, (newConfig) => { this.updateConfigInternal(newConfig as any); });
         FractalEvents.on(FRACTAL_EVENTS.RESET_ACCUM, () => { this.resetAccumulation(); });
         FractalEvents.on(FRACTAL_EVENTS.OFFSET_SHIFT, ({ x, y, z }) => { this.virtualSpace.move(x, y, z); this.resetAccumulation(); });
@@ -511,8 +511,8 @@ export class FractalEngine {
                 if (this.configManager.config.pipeline) {
                     this.materials.syncModularUniforms(this.configManager.config.pipeline, this.configManager.config.graph?.edges ?? []);
                 }
-                // Only reset accumulation if a non-noReset param actually changed.
-                // Post-process params (bloom, CA, color grading) are noReset and should
+                // Only reset accumulation if a non-noAccumReset param actually changed.
+                // Post-process params (bloom, CA, color grading) are noAccumReset and should
                 // not disrupt the accumulated buffer.
                 if (needsAccumReset) {
                     this.resetAccumulation();
@@ -528,13 +528,13 @@ export class FractalEngine {
     public fireCompile() { this.compiler.fire(); }
 
 
-    public setUniform(key: string, value: any, noReset: boolean = false) {
+    public setUniform(key: string, value: any, noAccumReset: boolean = false) {
         const changed = this.materials.setUniform(key, value);
         this.configManager.syncUniform(key, value);
         // Only reset accumulation when the uniform's value actually changed.
         // Re-emitting an unchanged value (display-only uniforms, redundant
         // param writes, probe-driven no-ops) must not disturb the buffer.
-        if (!noReset && changed) this.resetAccumulation();
+        if (!noAccumReset && changed) this.resetAccumulation();
     }
     
     public setRenderState(partial: Partial<EngineRenderState>) {

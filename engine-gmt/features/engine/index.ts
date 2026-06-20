@@ -18,7 +18,7 @@ export const EngineSettingsFeature: FeatureDefinition = {
             label: 'Show Engine Tab',
             shortId: 'se',
             group: 'system',
-            noReset: true,
+            noAccumReset: true, preserveOnApply: true,
             hidden: true // Hide from auto-panel since it's in System Menu
         }
     },

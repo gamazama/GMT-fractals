@@ -52,7 +52,7 @@ export const VolumetricFeature: FeatureDefinition = {
         // --- COMPILE-TIME TOGGLE ---
         ptVolumetric: {
             type: 'boolean', default: false, label: 'Volume Scatter', shortId: 'pvs',
-            group: 'engine_settings', noReset: true,
+            group: 'engine_settings', noAccumReset: true,
             onUpdate: 'compile',
             estCompileMs: 5500,
         },

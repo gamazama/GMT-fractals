@@ -205,8 +205,8 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
                 // skipping the 200ms scheduleCompile debounce.
                 if (proxy.isBooted) proxy.post({ type: 'CONFIG_DONE' });
             }),
-            FractalEvents.on(FRACTAL_EVENTS.UNIFORM, ({ key, value, noReset }) => {
-                if (proxy.isBooted) proxy.setUniform(key, value, noReset);
+            FractalEvents.on(FRACTAL_EVENTS.UNIFORM, ({ key, value, noAccumReset }) => {
+                if (proxy.isBooted) proxy.setUniform(key, value, noAccumReset);
             }),
             FractalEvents.on(FRACTAL_EVENTS.RESET_ACCUM, () => {
                 if (proxy.isBooted) proxy.resetAccumulation();

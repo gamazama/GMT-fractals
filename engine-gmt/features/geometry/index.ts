@@ -218,14 +218,14 @@ export const GeometryFeature: FeatureDefinition = {
         // --- MASTER CONTAINER SWITCH ---
         applyTransformLogic: {
             type: 'boolean', default: true, label: 'Geometry Engine', shortId: 'gt', group: 'main',
-            description: 'Master switch for geometry modifiers (Julia, Rotation, Hybrid).', noReset: true, hidden: true
+            description: 'Master switch for geometry modifiers (Julia, Rotation, Hybrid).', noAccumReset: true, hidden: true
         },
 
         // --- ENGINE SETTINGS (Compiled) ---
         preRotMaster: {
             type: 'boolean', default: true, label: 'Enable Rotation', shortId: 'rm', group: 'engine_settings',
             ui: 'checkbox',
-            description: 'Compiles rotation matrix logic. Disable for speed.', onUpdate: 'compile', noReset: true,
+            description: 'Compiles rotation matrix logic. Disable for speed.', onUpdate: 'compile', noAccumReset: true,
             estCompileMs: 600
         },
 
@@ -234,7 +234,7 @@ export const GeometryFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'Hybrid Box Fold', shortId: 'hcm',
             group: 'engine_settings', ui: 'checkbox',
             description: 'Compiles hybrid box fold system into shader. Toggle effect on/off instantly from Formula panel.',
-            onUpdate: 'compile', noReset: true,
+            onUpdate: 'compile', noAccumReset: true,
             estCompileMs: 1200
         },
 
@@ -250,7 +250,7 @@ export const GeometryFeature: FeatureDefinition = {
             group: 'engine_settings',
             options: FOLD_OPTIONS.map(o => ({ ...o, estCompileMs: 400 })),
             description: 'Box fold algorithm. Each type produces fundamentally different geometry.',
-            onUpdate: 'compile', noReset: true,
+            onUpdate: 'compile', noAccumReset: true,
             condition: { param: 'hybridCompiled', bool: true }
         },
 
@@ -259,7 +259,7 @@ export const GeometryFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'Interleaved Mode', shortId: 'hx',
             group: 'engine_settings', ui: 'checkbox',
             description: 'Interleaves fold with fractal formula (Box \u2192 Fractal \u2192 Box). Slow compile.',
-            onUpdate: 'compile', noReset: true,
+            onUpdate: 'compile', noAccumReset: true,
             estCompileMs: 1500,
             condition: { param: 'hybridCompiled', bool: true }
         },
@@ -277,7 +277,7 @@ export const GeometryFeature: FeatureDefinition = {
                 { label: 'ZYX', value: 5 },
             ],
             description: 'Permutes the constant (c) axis mapping. Changes fractal topology.',
-            onUpdate: 'compile', noReset: true,
+            onUpdate: 'compile', noAccumReset: true,
             condition: { param: 'hybridCompiled', bool: true }
         },
 
@@ -293,7 +293,7 @@ export const GeometryFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'Burning Mode', shortId: 'bm', group: 'burning',
             description: 'Applies absolute value to coordinates every iteration. Creates "Burning Ship" variations.',
             uniform: 'uBurningEnabled',
-            onUpdate: 'compile', noReset: true
+            onUpdate: 'compile', noAccumReset: true
         },
         // Runtime instant-toggle (hidden — controlled by the section header
         // once compiled). Default matches burningEnabled (false) so a fresh
@@ -347,7 +347,7 @@ export const GeometryFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'Swap Order', shortId: 'hw',
             group: 'engine_settings', ui: 'checkbox',
             description: 'Start with fractal formula instead of box fold.',
-            onUpdate: 'compile', noReset: true,
+            onUpdate: 'compile', noAccumReset: true,
             condition: [{ param: 'hybridCompiled', bool: true }, { param: 'hybridComplex', bool: true }]
         },
         hybridSkip: {

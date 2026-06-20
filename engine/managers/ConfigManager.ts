@@ -142,7 +142,7 @@ export class ConfigManager {
                 if (paramConfig.onUpdate === 'compile' && !this.areValuesEqual(newVal, oldVal)) {
                     rebuildNeeded = true;
                 }
-                if (!paramConfig.noReset && !this.areValuesEqual(newVal, oldVal)) {
+                if (!paramConfig.noAccumReset && !this.areValuesEqual(newVal, oldVal)) {
                     needsAccumReset = true;
                 }
             }
