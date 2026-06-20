@@ -8,7 +8,11 @@ import { useTutorAnchor } from '../../../../engine/plugins/Tutorial';
 
 const ShadowSettingsPopup = () => {
     const shadows = useEngineStore(s => s.lighting?.shadows);
-    const areaLightsCompiled = useEngineStore(s => s.lighting?.ptStochasticShadows);
+    // Jitter is available whenever the shadow march is compiled — the jitter ALU
+    // is now always compiled with shadows (no separate compile gate), so the
+    // button is present whenever shadows can cast. (Was gated on the now-deprecated
+    // ptStochasticShadows, which got stuck false across formula switches.)
+    const jitterAvailable = useEngineStore(s => s.lighting?.shadowsCompile !== false);
     const areaLights = useEngineStore(s => s.lighting?.areaLights);
     const setLighting = useEngineStore(s => s.setLighting);
     const handleInteractionStart = useEngineStore(s => s.handleInteractionStart);
@@ -21,7 +25,7 @@ const ShadowSettingsPopup = () => {
                 <div className="flex items-center justify-between border-b border-white/10 pb-2 px-3">
                     <SectionLabel>Shadows</SectionLabel>
                     <div className="flex items-center gap-1.5">
-                        {areaLightsCompiled && (
+                        {jitterAvailable && (
                             <button
                                 ref={areaAnchor}
                                 onClick={() => {

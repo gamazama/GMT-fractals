@@ -77,35 +77,34 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
     controlledParams: [
         'lighting.shadowsCompile',
         'lighting.shadowAlgorithm',
-        'lighting.ptStochasticShadows',
     ],
     tiers: [
         {
             label: 'Off',
             overrides: {
-                lighting: { shadows: false, shadowsCompile: false, ptStochasticShadows: false },
+                lighting: { shadows: false, shadowsCompile: false },
             },
             estCompileMs: 0,
         },
         {
             label: 'Hard',
             overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0, ptStochasticShadows: false },
+                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0 },
             },
-            estCompileMs: 300,   // L6: measured ~250-425 cold (§2.6); was 500
+            estCompileMs: 300,   // 2026-06-20 re-measure: Hard march +267 cold (Mandelbulb §2.6)
         },
         {
-            // Analytic IQ penumbra + the jitter ALU compiled in, so "Shadow Jitter"
-            // (areaLights) is a RUNTIME toggle within this tier — there is no longer
-            // a separate compile tier for jittered shadows. This collapsed the old
-            // "Full" tier: once areaLights became a runtime uniform, jitter stopped
-            // being a compile distinction (the ALU is ~70ms, sub-noise). Tiers no
-            // longer set areaLights — it persists as the user's runtime toggle.
+            // Analytic IQ penumbra. The jitter ALU is compiled in unconditionally
+            // with the shadow march now (every tier pays the ~44ms), so "Shadow
+            // Jitter" (areaLights) is a RUNTIME toggle available at any tier ≥ Hard
+            // — there is no separate compile tier for it. This collapsed the old
+            // "Full" tier. Tiers no longer set areaLights — it persists as the
+            // user's runtime toggle.
             label: 'Soft',
             overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true },
+                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0 },
             },
-            estCompileMs: 400,   // Robust soft + jitter ALU (~70ms over plain soft, sub-noise; §2.6)
+            estCompileMs: 350,   // 2026-06-20 re-measure: Robust soft +304, +jitter ALU +44 = ~348 cold (§2.6)
         },
     ],
 };
@@ -206,7 +205,7 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
                     ptReflMode: 0.0, ptAreaLights: false, ptNEEAllLights: true, ptSobolBounce: true,
                     // Shadow march config. "Shadow Jitter" (areaLights) is a RUNTIME
                     // toggle now, so tiers don't set it — it persists across presets.
-                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true,
+                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0,
                 },
             },
             estCompileMs: 100,   // NEE (~80) only; shadows counted by SUBSYSTEM_SHADOWS
@@ -220,7 +219,7 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
                     ptReflMode: 2.0, ptAreaLights: true, ptNEEAllLights: true, ptSobolBounce: true,
                     // Shadow march config. "Shadow Jitter" (areaLights) is a RUNTIME
                     // toggle now, so tiers don't set it — it persists across presets.
-                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true,
+                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0,
                 },
             },
             estCompileMs: 2200,  // Env MIS+IS (~1700) + area lights (~400) + NEE (~80)

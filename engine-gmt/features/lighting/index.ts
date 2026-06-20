@@ -238,15 +238,21 @@ export const LightingFeature: FeatureDefinition = {
             onUpdate: 'compile',
             noAccumReset: true
         },
+        // @deprecated VESTIGIAL — no longer gates anything. The jitter ALU is now
+        // compiled in unconditionally whenever the shadow march is (see
+        // `stochasticShadows = shadowsCompiled` below), so jitter availability is
+        // tied to shadows, not to this flag. Kept (hidden, no onUpdate) only so
+        // old scene files / tiers that still set it deserialize without error.
+        // Was a `onUpdate:'compile'` gate that, preserved across setFormula, got
+        // stuck false and hid the runtime Jitter button on some formulas.
         ptStochasticShadows: {
             type: 'boolean', default: true, label: 'Soft Shadow Jitter', shortId: 'ps',
             group: 'engine_settings',
             parentId: 'shadowsCompile',
             ui: 'checkbox',
-            onUpdate: 'compile',
+            hidden: true,
             noAccumReset: true,
-            estCompileMs: 80,  // measured jitter-ALU marginal over soft: Direct +67/79, PT +20/36 (sub-noise). Was 800 (~10x high). The on/off toggle (areaLights) is now RUNTIME — no recompile. @see docs/policy/shader-compile-optimization.md §2.5 finding-3 update (2026-06-20)
-            description: 'Stochastic shadow jitter for Point lights — fakes soft penumbras via accumulation. Compiles the jitter capability; toggle it on/off at runtime via the Jitter button (no recompile). Independent of True Area Lights (which uses physical sphere sampling for type=Sphere lights).'
+            description: 'Deprecated — jitter capability is always compiled with shadows now. Use the runtime Jitter button (areaLights). Retained for scene back-compat.'
         },
 
         // --- PATH TRACING QUALITY (Engine Panel) ---
@@ -313,7 +319,7 @@ export const LightingFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'Shadow Jitter', shortId: 'al', uniform: 'uAreaLights',
             group: 'shadows',
             hidden: true,
-            condition: { param: 'ptStochasticShadows', bool: true },
+            condition: { param: 'shadowsCompile', bool: true },
             description: 'Stochastic soft-shadow jitter for Point/Directional lights (penumbra via accumulation). Off = sharp analytic shadows.',
             helpId: 'shadows',
             // RUNTIME toggle (uAreaLights uniform) — no recompile. The jitter is a
@@ -449,13 +455,17 @@ export const LightingFeature: FeatureDefinition = {
             // PT_VOLUMETRIC moved to features/volumetric
         }
 
-        const stochasticShadows = state?.ptStochasticShadows === true && shadowsCompiled;
-        // The stochastic JITTER ALU is compiled in when stochasticShadows is
-        // true; its on/off toggle (`uAreaLights`) is a RUNTIME uniform, not a
-        // compile gate. A single shadow march handles both states (the jitter
-        // only perturbs the ray direction ahead of it — see pbr.ts /
-        // pathtracer.ts), so there is nothing for ANGLE to predicate and no
-        // recompile when the user toggles it.
+        // The stochastic JITTER ALU is compiled in whenever the shadow march is
+        // compiled — it is NOT gated on a separate compile toggle. Its on/off
+        // state (`uAreaLights`) is a RUNTIME uniform, and a single shadow march
+        // handles both states (the jitter only perturbs the ray direction ahead
+        // of it — see pbr.ts / pathtracer.ts), so there is nothing for ANGLE to
+        // predicate and no recompile when the user toggles it. The ALU is ~44ms
+        // Direct / ~3ms PT (sub-noise; §2.6), cheap enough to always pay so the
+        // runtime Jitter button is ALWAYS available. Decoupling from the old
+        // `ptStochasticShadows` compile gate also fixes the stuck-false quirk
+        // where that gate, preserved across setFormula, hid the button forever.
+        const stochasticShadows = shadowsCompiled;
 
         const isPathTracing = config.renderMode === 'PathTracing' || state?.renderMode === 1.0;
         const quality = config.quality as QualityState;
