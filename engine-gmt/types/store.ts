@@ -7,7 +7,7 @@ import { ContextMenuItem } from './help';
 import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
 import { LightParams } from './graphics';
 import { OpticsState } from '../features/optics';
-import type { ScalabilityState, HardwareProfile } from './viewport';
+import type { ScalabilityState, HardwareProfile } from '../../types/viewport';
 import type { UiModePreference } from '../../types';
 
 export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager' | 'Feedback';

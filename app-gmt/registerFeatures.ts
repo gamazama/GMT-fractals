@@ -14,6 +14,13 @@
 import { registerFeatures as registerGmtFeatures } from '../engine-gmt/features/index';
 registerGmtFeatures();
 
+// GMT Compile profiles (the "Viewport Quality" switch subsystems + presets) into
+// the engine-core Compile system. MUST run before createEngineStore so the
+// scalability slice seeds its initial state from the registered default.
+// @see docs/adr/0079-compile-system-profile-seam.md
+import { registerGmtCompileProfiles } from '../engine-gmt/types/viewport';
+registerGmtCompileProfiles();
+
 // Palette tools (picker/generator/image) — features + custom-UI components. The
 // Picker's "apply" seam (palette/core/gradientSeam) sets the coloring gradient.
 import { registerPaletteUI } from '../palette/registerPaletteUI';

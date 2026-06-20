@@ -1,14 +1,22 @@
 
-// Viewport Quality System — Per-subsystem scalability tiers
+// Compile system — per-subsystem compile-switch tiers ("Viewport Quality")
 //
-// The store always holds the user's full-quality authored intent.
-// The viewport quality layer applies non-destructive overrides at
-// getShaderConfigFromState() to control what actually compiles.
+// The "Compile" system governs which features are baked into the shader at
+// compile time (each change costs a recompile + wait), as opposed to runtime
+// sliders. This module is the GENERIC MECHANISM only — the interfaces, the
+// app-registered profile seam, and the helpers/estimator. The actual switch
+// subsystems + profiles are GMT-specific DATA and are registered by the app
+// (engine-gmt) via `registerCompileProfiles()` before `createEngineStore()`.
+// @see docs/adr/0079-compile-system-profile-seam.md
 //
-// Three layers:
-//   1. Authored state (Zustand store)
-//   2. Subsystem tier overrides (this system)
-//   3. Hardware caps (device physical limits)
+// How tiers reach the shader:
+//   1. Authored state (Zustand store) — the user's full-quality intent.
+//   2. Tier overrides — `scalabilitySlice.applyTierOverrides` writes each
+//      tier's `overrides` through the matching `set${Feature}` setter. These
+//      are DESTRUCTIVE store writes, applied only on explicit preset/tier
+//      selection (NOT at boot). (The old "non-destructive at
+//      getShaderConfigFromState" model is gone.)
+//   3. Hardware caps (device physical limits).
 
 // ─── Adaptive Resolution Config ─────────────────────────────
 //
@@ -109,258 +117,50 @@ export interface HardwareProfile {
     };
 }
 
-// ─── Subsystem Definitions ──────────────────────────────────
+// ─── App-registered Compile profiles (the seam) ──────────────
+//
+// Engine-core owns the mechanism; the app registers the actual switch
+// subsystems + profiles. The subsystem defs name app-specific feature params
+// (GMT: lighting.shadowAlgorithm, reflections.reflectionMode, …) so they MUST
+// NOT live in engine-core — they arrive here via registration, the same way
+// formulas/resolvers/features do. Register BEFORE `createEngineStore()`
+// (alongside `featureRegistry.register`); the scalability slice seeds its
+// initial state from `getDefaultScalability()` at store-construction time, so a
+// late registration leaves the quality UI inert.
+// @see docs/adr/0079-compile-system-profile-seam.md
 
-export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
-    id: 'shadows',
-    label: 'Shadows',
-    renderContext: 'direct',
-    controlledParams: [
-        'lighting.shadowsCompile',
-        'lighting.shadowAlgorithm',
-        'lighting.ptStochasticShadows',
-    ],
-    tiers: [
-        {
-            label: 'Off',
-            overrides: {
-                lighting: { shadows: false, shadowsCompile: false, ptStochasticShadows: false },
-            },
-            estCompileMs: 0,
-        },
-        {
-            label: 'Hard',
-            overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 2.0, ptStochasticShadows: false },
-            },
-            estCompileMs: 500,
-        },
-        {
-            label: 'Soft',
-            overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: false },
-            },
-            estCompileMs: 3000,
-        },
-        {
-            label: 'Full',
-            overrides: {
-                lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true },
-            },
-            estCompileMs: 3800,
-        },
-    ],
-};
+let _subsystems: SubsystemDefinition[] = [];
+let _presets: ScalabilityPreset[] = [];
+let _defaultScalability: ScalabilityState = { activePreset: null, subsystems: {}, isCustomized: false };
 
-export const SUBSYSTEM_REFLECTIONS: SubsystemDefinition = {
-    id: 'reflections',
-    label: 'Reflections (Direct)',
-    renderContext: 'direct',
-    controlledParams: [
-        'reflections.reflectionMode',
-        'reflections.bounceShadows',
-        'reflections.bounces',
-    ],
-    tiers: [
-        {
-            label: 'Off',
-            overrides: { reflections: { reflectionMode: 0.0, bounceShadows: false } },
-            estCompileMs: 0,
-        },
-        {
-            label: 'Env Map',
-            overrides: { reflections: { reflectionMode: 1.0, bounceShadows: false } },
-            estCompileMs: 0,
-        },
-        {
-            label: 'Raymarched',
-            overrides: { reflections: { reflectionMode: 3.0, bounceShadows: false, bounces: 1 } },
-            estCompileMs: 7500,
-        },
-        {
-            label: 'Full',
-            overrides: { reflections: { reflectionMode: 3.0, bounceShadows: true, bounces: 2 } },
-            estCompileMs: 12000,
-        },
-    ],
-};
+export interface CompileProfileConfig {
+    subsystems: SubsystemDefinition[];
+    presets: ScalabilityPreset[];
+    /** Initial scalability state (which preset/tiers are selected at boot). */
+    default?: ScalabilityState;
+}
 
-export const SUBSYSTEM_LIGHTING: SubsystemDefinition = {
-    id: 'lighting_quality',
-    label: 'Lighting',
-    isAdvanced: true,
-    controlledParams: [
-        'lighting.specularModel',
-        'lighting.ptEnabled',
-        'lighting.ptNEEAllLights',
-        'lighting.ptEnvNEE',
-    ],
-    tiers: [
-        {
-            // Preview-only: strips advanced lighting for instant compile.
-            // Used by the Preview preset — not normally selectable standalone.
-            label: 'Preview',
-            overrides: { lighting: { advancedLighting: false, ptEnabled: false } },
-            estCompileMs: -2500,  // Saves ~2.5s by stripping PBR/shading pipeline
-        },
-        {
-            label: 'Path Traced',
-            overrides: { lighting: { specularModel: 1.0, ptEnabled: true, advancedLighting: true, ptNEEAllLights: false, ptEnvNEE: false } },
-            estCompileMs: 1900,
-        },
-        {
-            // NEE may not provide visible benefit — needs further research.
-            label: 'PT + NEE',
-            overrides: { lighting: { specularModel: 1.0, ptEnabled: true, advancedLighting: true, ptNEEAllLights: true, ptEnvNEE: true } },
-            estCompileMs: 2500,
-        },
-    ],
-};
+/** App registers its compile-switch subsystems + profiles (call before createEngineStore). */
+export function registerCompileProfiles(cfg: CompileProfileConfig): void {
+    _subsystems = cfg.subsystems;
+    _presets = cfg.presets;
+    if (cfg.default) _defaultScalability = cfg.default;
+}
 
-export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
-    id: 'atmosphere_quality',
-    label: 'Atmosphere',
-    controlledParams: [
-        'atmosphere.glowEnabled',
-        'atmosphere.glowQuality',
-        'volumetric.ptVolumetric',
-    ],
-    tiers: [
-        {
-            label: 'Off',
-            overrides: {
-                atmosphere: { glowEnabled: false },
-                volumetric: { ptVolumetric: false },
-            },
-            estCompileMs: 0,
-        },
-        {
-            label: 'Fast Glow',
-            overrides: {
-                atmosphere: { glowEnabled: true, glowQuality: 1.0 },
-                volumetric: { ptVolumetric: false },
-            },
-            estCompileMs: 200,
-        },
-        {
-            label: 'Color Glow',
-            overrides: {
-                atmosphere: { glowEnabled: true, glowQuality: 0.0 },
-                volumetric: { ptVolumetric: false },
-            },
-            estCompileMs: 400,
-        },
-        {
-            label: 'Volumetric',
-            overrides: {
-                atmosphere: { glowEnabled: true, glowQuality: 0.0 },
-                volumetric: { ptVolumetric: true },
-            },
-            estCompileMs: 5900,
-        },
-    ],
-};
-
-/** All subsystems in display order */
-export const ALL_SUBSYSTEMS: SubsystemDefinition[] = [
-    SUBSYSTEM_SHADOWS,
-    SUBSYSTEM_REFLECTIONS,
-    SUBSYSTEM_LIGHTING,
-    SUBSYSTEM_ATMOSPHERE,
-];
-
-// ─── Master Presets ─────────────────────────────────────────
-// These replace ENGINE_PROFILES as the user-facing quality bundles.
-// They set all subsystem tiers at once. Users can override individual
-// subsystems, which marks the state as "customized."
-
-export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
-    {
-        id: 'preview',
-        label: 'Preview',
-        description: 'Instant preview shader — navigate without waiting for compile.',
-        subsystems: {
-            shadows: 0,              // Off
-            reflections: 0,          // Off
-            lighting_quality: 0,     // Preview (no advanced lighting)
-            atmosphere_quality: 0,   // Off
-        },
-    },
-    {
-        id: 'fastest',
-        label: 'Fastest',
-        description: 'Hard shadows, path traced lighting with fast glow.',
-        subsystems: {
-            shadows: 1,              // Hard
-            reflections: 0,          // Off
-            lighting_quality: 1,     // Path Traced
-            atmosphere_quality: 1,   // Fast Glow
-        },
-    },
-    {
-        id: 'lite',
-        label: 'Lite',
-        description: 'Soft shadows, env map reflections, color glow.',
-        subsystems: {
-            shadows: 2,              // Soft
-            reflections: 1,          // Env Map
-            lighting_quality: 1,     // Path Traced
-            atmosphere_quality: 2,   // Color Glow
-        },
-    },
-    {
-        id: 'balanced',
-        label: 'Balanced',
-        description: 'Full shadows, env map reflections, color glow.',
-        subsystems: {
-            shadows: 3,              // Full
-            reflections: 1,          // Env Map
-            lighting_quality: 1,     // Path Traced
-            atmosphere_quality: 2,   // Color Glow
-        },
-    },
-    {
-        id: 'full',
-        label: 'Full',
-        description: 'Full shadows, raymarched reflections, volumetric.',
-        subsystems: {
-            shadows: 3,              // Full
-            reflections: 3,          // Full (raymarched + bounce shadows)
-            lighting_quality: 1,     // Path Traced
-            atmosphere_quality: 3,   // Volumetric
-        },
-    },
-    {
-        id: 'ultra',
-        label: 'Ultra',
-        description: 'Full + PT NEE. Experimental.',
-        isAdvanced: true,
-        subsystems: {
-            shadows: 3,              // Full
-            reflections: 3,          // Full
-            lighting_quality: 2,     // PT + NEE
-            atmosphere_quality: 3,   // Volumetric
-        },
-    },
-];
-
-/** Default scalability state (desktop) */
-export const DEFAULT_SCALABILITY: ScalabilityState = {
-    activePreset: 'balanced',
-    subsystems: { ...SCALABILITY_PRESETS[3].subsystems },
-    isCustomized: false,
-};
+export const getCompileSubsystems = (): SubsystemDefinition[] => _subsystems;
+export const getCompilePresets = (): ScalabilityPreset[] => _presets;
+export const getDefaultScalability = (): ScalabilityState => _defaultScalability;
 
 // ─── Helpers ────────────────────────────────────────────────
 
 /** Get a preset by ID */
 export function getScalabilityPreset(id: string): ScalabilityPreset | undefined {
-    return SCALABILITY_PRESETS.find(p => p.id === id);
+    return getCompilePresets().find(p => p.id === id);
 }
 
 /** Check if subsystem tiers match a named preset */
 export function detectScalabilityPreset(subsystems: Record<string, number>): string | null {
-    for (const preset of SCALABILITY_PRESETS) {
+    for (const preset of getCompilePresets()) {
         const match = Object.keys(preset.subsystems).every(
             k => preset.subsystems[k] === subsystems[k]
         );
@@ -378,7 +178,7 @@ export function getScalabilityLabel(state: ScalabilityState): string {
 
     // Build override description
     const overrides: string[] = [];
-    for (const sub of ALL_SUBSYSTEMS) {
+    for (const sub of getCompileSubsystems()) {
         const presetTier = preset.subsystems[sub.id];
         const actualTier = state.subsystems[sub.id];
         if (presetTier !== actualTier) {
@@ -389,13 +189,15 @@ export function getScalabilityLabel(state: ScalabilityState): string {
     return `${preset.label} (${overrides.join(', ')})`;
 }
 
-/** Estimate compile time for a given scalability + authored state.
- *  Uses subsystem tier costs + the existing DDFS-based estimator for creative params. */
+/** Estimate compile time for a given tier selection.
+ *  Sums the selected tiers' estCompileMs over BASE_COMPILE_MS.
+ *  @see docs/adr/0079 — Stage 2 unifies this with the live-state per-param
+ *  estimator (`estimateCompileTime`) so both report the same number. */
 export const BASE_COMPILE_MS = 4200;
 
 export function estimateScalabilityCompileTime(subsystems: Record<string, number>): number {
     let total = BASE_COMPILE_MS;
-    for (const sub of ALL_SUBSYSTEMS) {
+    for (const sub of getCompileSubsystems()) {
         const tierIndex = subsystems[sub.id] ?? 0;
         const tier = sub.tiers[tierIndex];
         if (tier) total += tier.estCompileMs;

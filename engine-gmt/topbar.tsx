@@ -37,7 +37,7 @@ import { ViewportQuality } from './topbar/ViewportQuality';
 import { installBucketRender } from '../engine/plugins/topbar/installBucketRender';
 import { GmtBucketController } from './topbar/GmtBucketController';
 import { useMobileLayout, isMobileSnapshot } from '../hooks/useMobileLayout';
-import { SCALABILITY_PRESETS, getScalabilityLabel } from '../types/viewport';
+import { getCompilePresets, getScalabilityLabel } from '../types/viewport';
 
 const TopBarDivider: React.FC = () => (
     <div className="h-6 w-px bg-white/10 mx-1" />
@@ -590,7 +590,7 @@ const MobileQualityMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
     return (
         <div className="px-3 py-2">
             <div className="grid grid-cols-3 gap-1">
-                {SCALABILITY_PRESETS.map((p) => {
+                {getCompilePresets().map((p) => {
                     const active = currentLabel === p.label;
                     return (
                         <button

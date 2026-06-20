@@ -1,72 +1,19 @@
 
-// Viewport Quality System — Per-subsystem scalability tiers
+// GMT Compile profiles — the app-specific DATA for the engine-core "Compile"
+// system (engine-core owns the mechanism; this registers GMT's switch
+// subsystems + profiles). The subsystem defs name GMT feature params
+// (lighting.shadowAlgorithm, reflections.reflectionMode, …) so they live here,
+// not in engine-core. Registered via `registerGmtCompileProfiles()` from
+// app-gmt/registerFeatures.ts, BEFORE createEngineStore().
+// @see docs/adr/0079-compile-system-profile-seam.md
 //
-// The store always holds the user's full-quality authored intent.
-// The viewport quality layer applies non-destructive overrides at
-// getShaderConfigFromState() to control what actually compiles.
-//
-// Three layers:
-//   1. Authored state (Zustand store)
-//   2. Subsystem tier overrides (this system)
-//   3. Hardware caps (device physical limits)
+// User-facing name: "Viewport Quality" (the topbar dropdown). The switches it
+// flips are baked into the shader at compile time (recompile + wait) vs runtime
+// sliders. estCompileMs values: docs/policy/shader-compile-optimization.md
+// §2.5/§2.6 (L6) + the 2026-06-20 re-measure.
 
-// ─── Core Types ──────────────────────────────────────────────
-
-/** A single quality level within a rendering subsystem */
-export interface SubsystemTierDef {
-    label: string;
-    /** Sparse override map: featureId → { param → value } */
-    overrides: Record<string, Record<string, any>>;
-    /** Estimated compile time contribution (ms) for this tier */
-    estCompileMs: number;
-}
-
-/** A rendering subsystem with ordered quality tiers */
-export interface SubsystemDefinition {
-    id: string;
-    label: string;
-    /** Ordered from cheapest (index 0) to most expensive */
-    tiers: SubsystemTierDef[];
-    /** Params this subsystem controls — "featureId.paramKey" paths */
-    controlledParams: string[];
-    /** Only show in advanced mode */
-    isAdvanced?: boolean;
-    /** If set, this subsystem only affects the specified render path */
-    renderContext?: 'direct' | 'pathtracer';
-}
-
-/** A named master preset that sets all subsystem tiers at once */
-export interface ScalabilityPreset {
-    id: string;
-    label: string;
-    description: string;
-    /** Per-subsystem tier index */
-    subsystems: Record<string, number>;
-    /** Only show in advanced mode */
-    isAdvanced?: boolean;
-}
-
-/** Active viewport quality state */
-export interface ScalabilityState {
-    /** Named preset last applied, or null if set individually */
-    activePreset: string | null;
-    /** Per-subsystem tier index */
-    subsystems: Record<string, number>;
-    /** True if any subsystem deviates from activePreset */
-    isCustomized: boolean;
-}
-
-/** Device capability profile, detected at boot */
-export interface HardwareProfile {
-    tier: 'low' | 'mid' | 'high';
-    isMobile: boolean;
-    supportsFloat32: boolean;
-    caps: {
-        precisionMode: number;      // 0=High, 1=Standard
-        bufferPrecision: number;    // 0=Float32, 1=HalfFloat16
-        compilerHardCap: number;    // device max loop iterations
-    };
-}
+import type { SubsystemDefinition, ScalabilityPreset, ScalabilityState } from '../../types/viewport';
+import { registerCompileProfiles } from '../../types/viewport';
 
 // ─── Subsystem Definitions ──────────────────────────────────
 
@@ -201,11 +148,11 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
             // the only visible loss is slower convergence on bright sun discs.
             label: 'Balanced',
             overrides: {
+                // Shadow params are owned solely by SUBSYSTEM_SHADOWS — the PT tier
+                // must NOT set shadows/shadowsCompile/shadowAlgorithm or it clobbers
+                // the shadow tier (pathtracer is last in the merge → last-assign-wins).
                 lighting: {
                     ptReflMode: 0.0, ptAreaLights: false, ptNEEAllLights: true, ptSobolBounce: true,
-                    // Shadow march config. "Shadow Jitter" (areaLights) is a RUNTIME
-                    // toggle now, so tiers don't set it — it persists across presets.
-                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0,
                 },
             },
             estCompileMs: 100,   // NEE (~80) only; shadows counted by SUBSYSTEM_SHADOWS
@@ -215,11 +162,9 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
             // NEE + max shadows. The full-quality PT look.
             label: 'Full',
             overrides: {
+                // Shadow params owned solely by SUBSYSTEM_SHADOWS (see Balanced note).
                 lighting: {
                     ptReflMode: 2.0, ptAreaLights: true, ptNEEAllLights: true, ptSobolBounce: true,
-                    // Shadow march config. "Shadow Jitter" (areaLights) is a RUNTIME
-                    // toggle now, so tiers don't set it — it persists across presets.
-                    shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0,
                 },
             },
             estCompileMs: 2200,  // Env MIS+IS (~1700) + area lights (~400) + NEE (~80)
@@ -283,9 +228,9 @@ export const ALL_SUBSYSTEMS: SubsystemDefinition[] = [
 ];
 
 // ─── Master Presets ─────────────────────────────────────────
-// These replace ENGINE_PROFILES as the user-facing quality bundles.
-// They set all subsystem tiers at once. Users can override individual
-// subsystems, which marks the state as "customized."
+// User-facing quality bundles (the "Viewport Quality" dropdown). They set all
+// subsystem tiers at once. Users can override individual subsystems, which marks
+// the state as "customized."
 
 export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
     {
@@ -370,54 +315,13 @@ export const DEFAULT_SCALABILITY: ScalabilityState = {
     isCustomized: false,
 };
 
-// ─── Helpers ────────────────────────────────────────────────
-
-/** Get a preset by ID */
-export function getScalabilityPreset(id: string): ScalabilityPreset | undefined {
-    return SCALABILITY_PRESETS.find(p => p.id === id);
-}
-
-/** Check if subsystem tiers match a named preset */
-export function detectScalabilityPreset(subsystems: Record<string, number>): string | null {
-    for (const preset of SCALABILITY_PRESETS) {
-        const match = Object.keys(preset.subsystems).every(
-            k => preset.subsystems[k] === subsystems[k]
-        );
-        if (match) return preset.id;
-    }
-    return null;
-}
-
-/** Build a human-readable label for current scalability state */
-export function getScalabilityLabel(state: ScalabilityState): string {
-    if (!state.activePreset) return 'Custom';
-    const preset = getScalabilityPreset(state.activePreset);
-    if (!preset) return 'Custom';
-    if (!state.isCustomized) return preset.label;
-
-    // Build override description
-    const overrides: string[] = [];
-    for (const sub of ALL_SUBSYSTEMS) {
-        const presetTier = preset.subsystems[sub.id];
-        const actualTier = state.subsystems[sub.id];
-        if (presetTier !== actualTier) {
-            const tierDef = sub.tiers[actualTier];
-            overrides.push(`${sub.label}=${tierDef?.label ?? '?'}`);
-        }
-    }
-    return `${preset.label} (${overrides.join(', ')})`;
-}
-
-/** Estimate compile time for a given scalability + authored state.
- *  Uses subsystem tier costs + the existing DDFS-based estimator for creative params. */
-export const BASE_COMPILE_MS = 4200;
-
-export function estimateScalabilityCompileTime(subsystems: Record<string, number>): number {
-    let total = BASE_COMPILE_MS;
-    for (const sub of ALL_SUBSYSTEMS) {
-        const tierIndex = subsystems[sub.id] ?? 0;
-        const tier = sub.tiers[tierIndex];
-        if (tier) total += tier.estCompileMs;
-    }
-    return total;
+/** Register GMT's compile-switch subsystems + profiles into the engine-core
+ *  Compile system. MUST be called before createEngineStore() (the scalability
+ *  slice seeds its state from getDefaultScalability() at construction time). */
+export function registerGmtCompileProfiles(): void {
+    registerCompileProfiles({
+        subsystems: ALL_SUBSYSTEMS,
+        presets: SCALABILITY_PRESETS,
+        default: DEFAULT_SCALABILITY,
+    });
 }
