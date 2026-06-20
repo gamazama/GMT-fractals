@@ -172,7 +172,7 @@ export const LightingFeature: FeatureDefinition = {
             description: 'Compiles the Path Tracing module. Disable to reduce shader size.',
             onUpdate: 'compile',
             noAccumReset: true,
-            estCompileMs: 2000  // 2026-06-20 re-measure: PT module marginal is +3780 cold over Direct (the single biggest switch), but the additive BASE+Σ model double-counts the core trace, so a 3780 literal overshoots PT-minimal. 2000 balances the fit (PT-min est 6.2s vs 5.6s measured; PT-max est 8.9s vs 9.4s). Was 700 (~3x low — PT estimates undershot by 2s+). The per-toggle model can't perfectly represent PT (it's a wholesale-different shader). @see docs/policy/shader-compile-optimization.md §2.5
+            estCompileMs: 2500  // PT-integrator base. MEASURED 2026-06-20: ptEnabled is ~FREE in Direct render (2028 vs 2021ms — only adds #defines); the PT integrator's ~6.5s compiles ONLY when renderMode=PathTracing. So the estimator GATES this (and the rest of the PT family) on render mode — it's counted only in PT (estimateShaderCompilerCompileTime / estimateCompileTime in profiles.ts). @see docs/policy/shader-compile-optimization.md §2.5
         },
         renderMode: {
             type: 'float', default: 0.0, label: 'Active Mode', shortId: 'rm',

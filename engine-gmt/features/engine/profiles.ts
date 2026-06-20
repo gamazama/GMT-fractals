@@ -23,12 +23,29 @@ import { getShaderCompilerSubsystems } from '../../../types/viewport';
 /** Core trace + always-present shading pipeline (no optional compile switches). */
 export const BASE_COMPILE_MS = 3600;
 
+/** Is this state rendering with the path tracer? Uses the RELIABLE top-level
+ *  `renderMode` (string set by setRenderMode) — NOT the fragile `lighting.renderMode`
+ *  float mirror, which isn't synced on a live render-mode toggle. */
+const isPathTracing = (state: any): boolean =>
+    state?.renderMode === 'PathTracing' || state?.renderMode === 1.0 || state?.lighting?.renderMode === 1.0;
+
+/** The PT-family compile switches (ptEnabled + everything parented under it:
+ *  ptReflMode, ptAreaLights, ptNEEAllLights, ptSobolBounce, …). MEASURED
+ *  2026-06-20: these cost ~nothing in Direct render — the path-tracer GLSL only
+ *  compiles when renderMode=PathTracing. So they're counted ONLY in PT, else
+ *  Direct estimates were inflated by ~3.7s (ptEnabled 2.5s + ptReflMode 1.7s) for
+ *  costs that never compiled. @see docs/adr/0079 */
+const isPtFamily = (paramKey: string, pc: ParamConfig): boolean =>
+    paramKey === 'ptEnabled' || (pc as any).parentId === 'ptEnabled';
+
 /**
  * Sum the estCompileMs of every active compile switch in a state-like object.
  * Shared by both estimators — `state` can be the live store state or a synthetic
  * tier state. Booleans cost when truthy; dropdowns cost the matching option.
+ * PT-family switches are skipped unless the state is in PT render mode.
  */
 const sumParamCompileMs = (state: any): number => {
+    const pt = isPathTracing(state);
     let total = 0;
     for (const feat of featureRegistry.getAll()) {
         const slice = state[feat.id];
@@ -37,6 +54,8 @@ const sumParamCompileMs = (state: any): number => {
         for (const [paramKey, paramConfig] of Object.entries(feat.params)) {
             const pc = paramConfig as ParamConfig;
             if (!pc.onUpdate || pc.onUpdate !== 'compile') continue;
+            // PT-family compiles only in PT render mode (free in Direct).
+            if (!pt && isPtFamily(paramKey, pc)) continue;
 
             const value = slice[paramKey];
 
