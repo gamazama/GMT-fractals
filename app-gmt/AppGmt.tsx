@@ -246,7 +246,7 @@ export const AppGmt: React.FC = () => {
                 <EngineBridge />
                 <DropZones />
 
-                {floatingPanels.map((p) => (
+                {!isBroadcastMode && floatingPanels.map((p) => (
                     <BenchProfiler key={p.id} id={`FloatingPanel:${p.id}`}>
                         {/* Favients floats ABOVE the Palettes overlay (Z.modal) so the user can
                             drag picker swatches onto it while browsing. */}
@@ -261,7 +261,10 @@ export const AppGmt: React.FC = () => {
                     </BenchProfiler>
                 ))}
 
-                <BenchProfiler id="TopBarHost"><TopBarHost /></BenchProfiler>
+                {/* Broadcast / "Hide Interface" — strip all chrome (topbar, docks,
+                    timeline, floating panels) for a clean recording feed, leaving
+                    just the viewport. Mirrors App.tsx's clean-feed gating. */}
+                <BenchProfiler id="TopBarHost"><TopBarHost hidden={isBroadcastMode} /></BenchProfiler>
 
                 <div className="flex-1 flex overflow-hidden relative">
                     {workshopOpen ? (
@@ -275,17 +278,19 @@ export const AppGmt: React.FC = () => {
                             </BenchProfiler>
                         </React.Suspense>
                     ) : (
-                        !isMobile && <BenchProfiler id="Dock:left"><Dock side="left" /></BenchProfiler>
+                        !isBroadcastMode && !isMobile && <BenchProfiler id="Dock:left"><Dock side="left" /></BenchProfiler>
                     )}
 
                     <ViewportFrame
                         className="flex-1"
-                        outerOverlay={
+                        showModeControls={!isBroadcastMode}
+                        outerOverlay={!isBroadcastMode && (
                             <>
                                 {/* Bottom HUD region — viewport-area-relative,
                                     doesn't shrink with the canvas in Fixed mode.
                                     Top region (crosshair / reticle) stays inside
-                                    children where it follows the canvas. */}
+                                    children where it follows the canvas.
+                                    Hidden in broadcast / clean-feed mode. */}
                                 <BenchProfiler id="GmtNavigationHud:bottom">
                                     <GmtNavigationHud
                                         isMobile={isMobile}
@@ -295,7 +300,7 @@ export const AppGmt: React.FC = () => {
                                 </BenchProfiler>
                                 <BenchProfiler id="HudHost:bottom"><HudHost region="bottom" /></BenchProfiler>
                             </>
-                        }
+                        )}
                     >
                         {/* Wrapper div gives useInteractionManager a ref
                             to measure pointer coords against. */}
@@ -334,20 +339,29 @@ export const AppGmt: React.FC = () => {
 
                         {/* Top HUD region — crosshair + reticle. Lives inside
                             children so it stays canvas-relative (centred on the
-                            rendered fractal in Fixed mode). */}
-                        <BenchProfiler id="GmtNavigationHud:top">
-                            <GmtNavigationHud
-                                isMobile={isMobile}
-                                hudRefs={hudRefs}
-                                region="top"
-                            />
-                        </BenchProfiler>
+                            rendered fractal in Fixed mode). Hidden in broadcast /
+                            clean-feed mode. */}
+                        {!isBroadcastMode && (
+                            <>
+                                <BenchProfiler id="GmtNavigationHud:top">
+                                    <GmtNavigationHud
+                                        isMobile={isMobile}
+                                        hudRefs={hudRefs}
+                                        region="top"
+                                    />
+                                </BenchProfiler>
 
-                        <BenchProfiler id="HudHost:top"><HudHost region="top" /></BenchProfiler>
+                                <BenchProfiler id="HudHost:top"><HudHost region="top" /></BenchProfiler>
+                            </>
+                        )}
 
                         {/* DOM viewport overlays — LightGizmo, DrawingOverlay, etc.
-                            Iterated from featureRegistry.getViewportOverlays() */}
-                        <BenchProfiler id="DomOverlays"><DomOverlays /></BenchProfiler>
+                            Iterated from featureRegistry.getViewportOverlays().
+                            Hidden in broadcast / clean-feed mode (editing gizmos
+                            are chrome; the light/draw state they expose is already
+                            committed to the worker, so hiding the handle is purely
+                            visual). */}
+                        {!isBroadcastMode && <BenchProfiler id="DomOverlays"><DomOverlays /></BenchProfiler>}
 
                         {/* Region-selection overlay — mounted inside
                             viewportRef so useRegionSelection's mouse
@@ -399,7 +413,7 @@ export const AppGmt: React.FC = () => {
                         layout doubling. Right dock also hides in Fly
                         mode on mobile for joystick reach. */}
                     <MobileMenuHost />
-                    {!isMobileMenuOpen && !(isMobile && cameraMode === 'Fly') && (
+                    {!isBroadcastMode && !isMobileMenuOpen && !(isMobile && cameraMode === 'Fly') && (
                         <BenchProfiler id="Dock:right"><Dock side="right" /></BenchProfiler>
                     )}
                 </div>
@@ -409,7 +423,7 @@ export const AppGmt: React.FC = () => {
                     the workflow needs precise multi-track interaction
                     that doesn't translate to touch. Skip mounting on
                     mobile entirely. */}
-                {!isMobile && <BenchProfiler id="TimelineHost"><TimelineHost /></BenchProfiler>}
+                {!isMobile && <BenchProfiler id="TimelineHost"><TimelineHost hidden={isBroadcastMode} /></BenchProfiler>}
 
                 <HelpOverlay />
                 <GalleryOverlay />
