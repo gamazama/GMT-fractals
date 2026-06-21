@@ -29,6 +29,7 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
     tiers: [
         {
             label: 'Off',
+            desc: 'No shadows — fastest.',
             overrides: {
                 lighting: { shadows: false, shadowsCompile: false },
             },
@@ -42,6 +43,7 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
             // option for the sharp-shadow aesthetic. The jitter ALU is compiled in
             // with the march (runtime "Shadow Jitter" uAreaLights toggle).
             label: 'Soft',
+            desc: 'Lite soft shadows — fast march with a soft penumbra. Best FPS with shadows.',
             overrides: {
                 lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 1.0 },
             },
@@ -50,6 +52,7 @@ export const SUBSYSTEM_SHADOWS: SubsystemDefinition = {
             // Robust soft (shadowAlgorithm 0.0) — analytic IQ+Aaltonen penumbra,
             // the accurate (slowest) option.
             label: 'Soft HQ',
+            desc: 'Robust soft shadows — accurate analytic penumbra. Slowest, cleanest.',
             overrides: {
                 lighting: { shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0 },
             },
@@ -69,18 +72,22 @@ export const SUBSYSTEM_REFLECTIONS: SubsystemDefinition = {
     tiers: [
         {
             label: 'Off',
+            desc: 'No reflections.',
             overrides: { reflections: { reflectionMode: 0.0, bounceShadows: false } },
         },
         {
             label: 'Env Map',
+            desc: 'Cheap environment-map reflections (sky only, not the scene).',
             overrides: { reflections: { reflectionMode: 1.0, bounceShadows: false } },
         },
         {
             label: 'Raymarched',
+            desc: 'Marched reflections of the actual scene, single bounce.',
             overrides: { reflections: { reflectionMode: 3.0, bounceShadows: false, bounces: 1 } },
         },
         {
             label: 'Full',
+            desc: 'Marched reflections with shadows and 2 bounces. Slowest.',
             overrides: { reflections: { reflectionMode: 3.0, bounceShadows: true, bounces: 2 } },
         },
     ],
@@ -101,6 +108,7 @@ export const SUBSYSTEM_LIGHTING: SubsystemDefinition = {
             // Preview-only: strips advanced lighting for instant compile.
             // Used by the Preview preset — not normally selectable standalone.
             label: 'Preview',
+            desc: 'Flat preview shading — strips advanced lighting for an instant compile.',
             overrides: { lighting: { advancedLighting: false, ptEnabled: false } },
             // Non-per-param adjustment: stripping advancedLighting drops the whole
             // PBR/shading pipeline (~2.5s) that BASE_COMPILE_MS bakes in — the
@@ -109,11 +117,13 @@ export const SUBSYSTEM_LIGHTING: SubsystemDefinition = {
         },
         {
             label: 'Path Traced',
+            desc: 'Full PBR shading + path-tracer capability (free until you switch to PT render mode).',
             overrides: { lighting: { specularModel: 1.0, ptEnabled: true, advancedLighting: true, ptNEEAllLights: false, ptEnvNEE: false } },
         },
         {
             // NEE may not provide visible benefit — needs further research.
             label: 'PT + NEE',
+            desc: 'Adds next-event estimation (direct-light sampling) — cleaner lighting, more compile time.',
             overrides: { lighting: { specularModel: 1.0, ptEnabled: true, advancedLighting: true, ptNEEAllLights: true, ptEnvNEE: true } },
         },
     ],
@@ -140,6 +150,7 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
             // reflMode 0 just drops the env MIS/importance-sampling — cheap, and
             // the only visible loss is slower convergence on bright sun discs.
             label: 'Balanced',
+            desc: 'Faster. Full bounce lighting + direct-light sampling; skips sky importance-sampling, so bright sun discs converge a little slower.',
             overrides: {
                 // Shadow params are owned solely by SUBSYSTEM_SHADOWS — the PT tier
                 // must NOT set shadows/shadowsCompile/shadowAlgorithm or it clobbers
@@ -153,6 +164,7 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
             // Env MIS+IS (importance sampling for HDR sun discs) + area lights +
             // NEE. The full-quality PT look.
             label: 'Full',
+            desc: 'Best quality. Adds sky importance-sampling (cleaner bright suns) and soft area-light shadows. Slower to converge.',
             overrides: {
                 // Shadow params owned solely by SUBSYSTEM_SHADOWS (see Balanced note).
                 lighting: {
@@ -174,6 +186,7 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
     tiers: [
         {
             label: 'Off',
+            desc: 'No glow or volumetrics.',
             overrides: {
                 atmosphere: { glowEnabled: false },
                 volumetric: { ptVolumetric: false },
@@ -181,6 +194,7 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
         },
         {
             label: 'Fast Glow',
+            desc: 'Cheap bloom-style glow.',
             overrides: {
                 atmosphere: { glowEnabled: true, glowQuality: 1.0 },
                 volumetric: { ptVolumetric: false },
@@ -188,6 +202,7 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
         },
         {
             label: 'Color Glow',
+            desc: 'Higher-quality coloured glow.',
             overrides: {
                 atmosphere: { glowEnabled: true, glowQuality: 0.0 },
                 volumetric: { ptVolumetric: false },
@@ -195,6 +210,7 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
         },
         {
             label: 'Volumetric',
+            desc: 'Coloured glow + volumetric fog/light (path-traced). Slowest.',
             overrides: {
                 atmosphere: { glowEnabled: true, glowQuality: 0.0 },
                 volumetric: { ptVolumetric: true },

@@ -64,6 +64,10 @@ export interface ViewportAdaptiveConfig {
 /** A single quality level within a rendering subsystem */
 export interface SubsystemTierDef {
     label: string;
+    /** One-line plain-language explanation of what this tier does and its
+     *  speed/quality trade-off. Surfaced as a tooltip on the tier picker so
+     *  users don't have to guess what e.g. "Balanced" vs "Full" means. */
+    desc?: string;
     /** Sparse override map: featureId → { param → value } */
     overrides: Record<string, Record<string, any>>;
     /** Optional compile-time ADJUSTMENT (ms) for costs the per-param model can't

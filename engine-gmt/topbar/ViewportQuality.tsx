@@ -200,12 +200,15 @@ export const ViewportQuality: React.FC = () => {
                                             <select
                                                 value={currentTier}
                                                 onChange={(e) => handleSubsystemChange(sub.id, parseInt(e.target.value))}
+                                                // Tooltip explains the current tier; per-option titles
+                                                // explain each choice when the list is open.
+                                                title={sub.tiers[currentTier]?.desc ?? ''}
                                                 className={`bg-gray-900 border border-white/10 rounded px-1.5 py-0.5 text-[10px] outline-none cursor-pointer ${
                                                     isDimmed ? 'text-gray-600' : 'text-white focus:border-cyan-500'
                                                 }`}
                                             >
                                                 {sub.tiers.map((tier, i) => (
-                                                    <option key={i} value={i}>{tier.label}</option>
+                                                    <option key={i} value={i} title={tier.desc ?? ''}>{tier.label}</option>
                                                 ))}
                                             </select>
                                         </div>
