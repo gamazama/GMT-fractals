@@ -123,6 +123,12 @@ export const viewport = {
         useEngineStore.getState().reportFps(fps);
     },
 
+    /** Report the actual rendered-frame rate (worker FRAME_READY cadence) for
+     *  the FPS readout. Display-only — does not drive adaptive resolution. */
+    reportRenderFps(fps: number): void {
+        useEngineStore.getState().reportRenderFps(fps);
+    },
+
     /** Hold the adaptive loop at its current quality for the next
      *  durationMs (defaults to adaptiveConfig.graceMs). Call after
      *  events the user expects full quality for: loading a preset,
@@ -162,11 +168,13 @@ export const useViewportSize = () => {
     return { canvasPixelSize, dpr };
 };
 
-/** Subscribe to the current FPS values (smoothed + instantaneous). */
+/** Subscribe to the current FPS values. `fps`/`fpsSmoothed` are the main-thread
+ *  RAF rate ("UI fps"); `renderFps` is the worker's actual delivered-frame rate. */
 export const useViewportFps = () => {
     const fps = useEngineStore((s) => s.fps);
     const fpsSmoothed = useEngineStore((s) => s.fpsSmoothed);
-    return { fps, fpsSmoothed };
+    const renderFps = useEngineStore((s) => s.renderFps);
+    return { fps, fpsSmoothed, renderFps };
 };
 
 /** Subscribe to interaction state. True when user is dragging a

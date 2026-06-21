@@ -143,6 +143,15 @@ export interface AdaptiveResolutionInput {
      *  seed under-downscales, and adaptive rediscovers the scale from full res on
      *  every interaction (visible handover lag). */
     costSampleInteractingOnly?: boolean;
+    /** Override the post-activity grace (ms) before adaptive disengages and
+     *  the frame settles to full res. When omitted, the FPS-scaled
+     *  `getAdaptiveGrace(stillFps)` default applies (100..3000ms) — right for
+     *  apps that infer end-of-activity from the sparse accum-drop signal
+     *  (fluid-toy). Apps with an EXPLICIT gesture-end signal (GMT's
+     *  InteractionSession, which carries its own 200ms re-grab tail) pass a
+     *  small constant so a heavy scene sharpens immediately on release instead
+     *  of waiting out the multi-second FPS-scaled grace. */
+    graceMs?: number;
 }
 
 export interface AdaptiveResolutionResult {
@@ -248,7 +257,7 @@ export function tickAdaptiveResolution(
         state.firstWindow = false;
         state.prevAccumCount = accumCount;
         state.selfResized = false;
-        return { scale: 1.0, needsAdaptive: false, grace: getAdaptiveGrace(state.stillFps) };
+        return { scale: 1.0, needsAdaptive: false, grace: input.graceMs ?? getAdaptiveGrace(state.stillFps) };
     }
 
     // ── Activity tracking ─────────────────────────────────────────────
@@ -270,7 +279,7 @@ export function tickAdaptiveResolution(
     state.prevAccumCount = accumCount;
     state.selfResized = false;
 
-    const grace = getAdaptiveGrace(state.stillFps);
+    const grace = input.graceMs ?? getAdaptiveGrace(state.stillFps);
     const timeSinceActivity = now - state.lastActivityTime;
 
     // ── Deep-accumulation protection ──────────────────────────────────

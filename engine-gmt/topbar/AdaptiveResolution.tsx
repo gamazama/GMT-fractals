@@ -13,11 +13,15 @@ export const AdaptiveResolution: React.FC = () => {
 
     if (!quality || !setQuality) return null;
 
-    const isActive = quality.dynamicScaling && (quality.adaptiveTarget ?? 0) > 0 && !adaptiveSuppressed;
+    // "UI Responsiveness" > 0 is the single source of truth (the slider can be set
+    // directly, so don't also require the dynamicScaling field — it may lag).
+    const isActive = (quality.adaptiveTarget ?? 0) > 0 && !adaptiveSuppressed;
 
     const handleToggle = () => {
         if (isActive) {
-            setQuality({ dynamicScaling: false });
+            // Off ⇒ also zero the "UI Responsiveness" slider so the toggle and the
+            // quality-panel slider stay in sync (slider reads 0 when off).
+            setQuality({ dynamicScaling: false, adaptiveTarget: 0 });
         } else {
             setQuality({ dynamicScaling: true, adaptiveTarget: 30 });
         }

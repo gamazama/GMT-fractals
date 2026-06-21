@@ -416,16 +416,16 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         isActive: () => {
             const q = (useEngineStore.getState() as any).quality;
             const sup = (useEngineStore.getState() as any).adaptiveSuppressed;
-            return !!(q?.dynamicScaling && !sup);
+            return !!((q?.adaptiveTarget ?? 0) > 0 && !sup);
         },
         onToggle: () => {
             const s = useEngineStore.getState() as any;
             const q = s.quality;
-            const isOn = !!q?.dynamicScaling;
-            // Manual mode: targetFps=0 means "drop on interaction, lift
-            // on idle" — no FPS-driven scaling. interactionDownsample
-            // stays whatever boot-time set it to (1.5 for mid mobile).
-            s.setQuality?.(isOn ? { dynamicScaling: false } : { dynamicScaling: true, adaptiveTarget: 0 });
+            const isOn = (q?.adaptiveTarget ?? 0) > 0;
+            // "UI Responsiveness" is the single switch now (manual mode retired). On
+            // ⇒ target a frame rate; off ⇒ 0. Mobile previously used adaptiveTarget=0
+            // (interaction-only manual downscale) — repointed to a real target.
+            s.setQuality?.(isOn ? { dynamicScaling: false, adaptiveTarget: 0 } : { dynamicScaling: true, adaptiveTarget: 30 });
         },
     });
     menu.registerItem('system', {

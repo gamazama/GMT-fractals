@@ -180,8 +180,9 @@ export interface EngineStoreState extends FeatureStateMap {
   // adaptiveConfig.targetFps and isUserInteracting. See
   // docs/10_Viewport.md.
   qualityFraction: number;
-  fps: number;               // last-sample instantaneous FPS
-  fpsSmoothed: number;       // exponential smoothing, adaptive-loop driver
+  fps: number;               // last-sample main-thread RAF rate ("UI fps") — adaptive-loop input
+  fpsSmoothed: number;       // exponential smoothing of `fps`
+  renderFps: number;         // actual rendered-frame rate (worker FRAME_READY cadence); 0 = idle/converged, -1 = app reports none
   adaptiveConfig: ViewportAdaptiveConfig;
   renderRegion: { minX: number, minY: number, maxX: number, maxY: number } | null;
   // Preview Region — export-resolution preview of a canvas slice. See docs/44_Preview_Region_Plan.md.
@@ -354,6 +355,9 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     // and ramps qualityFraction based on target FPS + interaction state
     // + grace period. See engine/plugins/Viewport.ts.
     reportFps: (fps: number) => void;
+    /** Report the actual rendered-frame rate (worker FRAME_READY cadence).
+     *  Display-only — does NOT drive the adaptive loop (reportFps does). */
+    reportRenderFps: (fps: number) => void;
     holdAdaptive: (durationMs?: number) => void;
     setAdaptiveConfig: (cfg: Partial<EngineStoreState['adaptiveConfig']>) => void;
 

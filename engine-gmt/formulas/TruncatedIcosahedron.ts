@@ -243,8 +243,6 @@ export const TruncatedIcosahedron: FractalDefinition = {
             quality: {
                 engineQuality: true,
                 compilerHardCap: 2000,
-                precisionMode: 0,
-                bufferPrecision: 0,
                 maxSteps: 300,
                 distanceMetric: 0,
                 estimator: 5,

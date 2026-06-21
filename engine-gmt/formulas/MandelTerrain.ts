@@ -493,8 +493,6 @@ export const MandelTerrain: FractalDefinition = {
                 "engineQuality": true,
                 "deBailout": 20,
                 "compilerHardCap": 500,
-                "precisionMode": 0,
-                "bufferPrecision": 0,
                 "maxSteps": 300,
                 "distanceMetric": 2,
                 "estimator": 0,

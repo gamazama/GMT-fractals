@@ -463,8 +463,6 @@ export const Mandelorus: FractalDefinition = {
     "quality": {
       "engineQuality": true,
       "compilerHardCap": 500,
-      "precisionMode": 0,
-      "bufferPrecision": 0,
       "maxSteps": 300,
       "distanceMetric": 0,
       "estimator": 0,

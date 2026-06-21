@@ -66,7 +66,11 @@ function getShadowState(): WorkerShadowState {
         centerIsSky: engine.centerIsSky,
         accumulationCount: engine.pipeline?.accumulationCount ?? 0,
         convergenceValue: engine.pipeline?.getLastConvergenceResult() ?? 1.0,
-        frameCount: 0,
+        // Delivered-frame counter — drives the topbar's render-rate readout
+        // (sampled as a delta on the main thread). Bumped once per non-skipped
+        // tick; gate-skipped frames don't advance it, so it tracks the real
+        // render cadence, not the dispatch rate.
+        frameCount: _tickCount,
         fboResizes: getAdaptiveResizeCount(),
         sceneOffset: {
             x: offset.x, y: offset.y, z: offset.z,
@@ -278,8 +282,8 @@ FractalEvents.on(FRACTAL_EVENTS.SHADER_CODE, (code) => {
 
 let _tickCount = 0;
 
-function handleRenderTick(msg: Extract<MainToWorkerMessage, { type: 'RENDER_TICK' }>) {
-    runRenderTick(
+function handleRenderTick(msg: Extract<MainToWorkerMessage, { type: 'RENDER_TICK' }>): boolean {
+    return runRenderTick(
         { engine, renderer, canvas, camera, displayScene, displayCamera, displayMesh,
           bloomPass, depthReadback, exporter },
         msg,
@@ -316,10 +320,31 @@ _tickChannel.port1.onmessage = () => {
     _tickScheduled = false;
     if (_rendering || !_pendingTick || _contextLost) return;
     _rendering = true;
-    const tick = _pendingTick;
-    _pendingTick = null;
-    handleRenderTick(tick);
-    _rendering = false;
+    // try/finally is load-bearing: handleRenderTick now makes WebGL calls
+    // (clientWaitSync/fenceSync/getContext) that can throw on a GPU hiccup /
+    // lost context. Without resetting _rendering in finally, one throw strands
+    // it true and `if (_rendering ...) return` wedges the scheduler forever — a
+    // permanent freeze with no recovery short of reload.
+    let rendered = false;
+    try {
+        const tick = _pendingTick;
+        rendered = handleRenderTick(tick);
+        // Frames-in-flight gate: a skipped tick (GPU still busy) keeps _pendingTick
+        // so the retry renders the LATEST camera; clear it only once rendered.
+        if (rendered) _pendingTick = null;
+    } finally {
+        _rendering = false;
+    }
+    // Skipped → poll again shortly until the GPU frees up (the fence usually
+    // signals within one GPU frame). 4ms avoids a busy-spin; an incoming
+    // RENDER_TICK also re-triggers the channel, so this is just the backstop.
+    if (!rendered && _pendingTick && !_tickScheduled) {
+        _tickScheduled = true;
+        setTimeout(() => {
+            _tickScheduled = false;
+            _tickChannel.port2.postMessage(null);
+        }, 4);
+    }
 };
 
 self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {

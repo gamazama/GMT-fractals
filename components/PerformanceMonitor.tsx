@@ -245,8 +245,8 @@ export const PerformanceMonitor = () => {
     };
 
     // 4. Adaptive Resolution (especially useful on Firefox)
-    const dynamicScaling = (qState as any)?.dynamicScaling;
-    const canEnableAdaptive = !dynamicScaling;
+    // "UI Responsiveness" (adaptiveTarget) is the single switch; 0 = off.
+    const canEnableAdaptive = ((qState as any)?.adaptiveTarget ?? 0) <= 0;
     const handleAdaptive = () => {
         const setQuality = (useEngineStore.getState() as any).setQuality;
         if (setQuality) setQuality({ dynamicScaling: true, adaptiveTarget: 30 });

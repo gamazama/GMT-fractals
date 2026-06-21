@@ -301,8 +301,6 @@ export const MandelBolic: FractalDefinition = {
             quality: {
                 engineQuality: true,
                 compilerHardCap: 500,
-                precisionMode: 0,
-                bufferPrecision: 0,
                 maxSteps: 534,
                 distanceMetric: 0,
                 estimator: 0,
@@ -312,8 +310,6 @@ export const MandelBolic: FractalDefinition = {
                 detail: 6.1,
                 pixelThreshold: 0.2,
                 overstepTolerance: 2.7,
-                dynamicScaling: false,
-                interactionDownsample: 2,
                 physicsProbeMode: 0,
                 manualDistance: 10
             },

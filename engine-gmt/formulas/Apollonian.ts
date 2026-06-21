@@ -276,8 +276,6 @@ if (uParamD > 0.5) {
             quality: {
                 engineQuality: true,
                 compilerHardCap: 2000,
-                precisionMode: 0,
-                bufferPrecision: 0,
                 maxSteps: 500,
                 distanceMetric: 2,
                 estimator: 0,
@@ -288,8 +286,6 @@ if (uParamD > 0.5) {
                 detail: 2.5,
                 pixelThreshold: 0.2,
                 overstepTolerance: 0,
-                dynamicScaling: false,
-                interactionDownsample: 2,
                 physicsProbeMode: 0,
                 manualDistance: 10,
             },

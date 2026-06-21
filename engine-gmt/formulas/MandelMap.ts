@@ -458,8 +458,6 @@ export const MandelMap: FractalDefinition = {
     "quality": {
       "engineQuality": true,
       "compilerHardCap": 500,
-      "precisionMode": 0,
-      "bufferPrecision": 0,
       "maxSteps": 300,
       "distanceMetric": 0,
       "estimator": 0,
@@ -468,9 +466,7 @@ export const MandelMap: FractalDefinition = {
       "refinementSteps": 0,
       "detail": 2,
       "pixelThreshold": 0.5,
-      "overstepTolerance": 0,
-      "dynamicScaling": false,
-      "interactionDownsample": 2
+      "overstepTolerance": 0
     },
     "droste": {
       "active": false,

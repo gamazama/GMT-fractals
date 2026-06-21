@@ -656,7 +656,8 @@ export class FractalEngine {
         // expires and full res kicks in — resetting accumulation a second time (double kick).
         // By keeping hold active for the adaptive grace period + a small buffer, the resize
         // happens while hold is still active (a no-op), so accumulation starts once at full res.
-        const adaptiveEnabled = this.state.quality?.dynamicScaling ?? false;
+        // Adaptive on ⇔ "UI Responsiveness" > 0 (single switch; manual mode retired).
+        const adaptiveEnabled = (this.state.quality?.adaptiveTarget ?? 0) > 0;
         const timeSinceCam = now - this._lastCameraInUseTime;
         const holdForAdaptive = adaptiveEnabled && timeSinceCam < this.uniformManager.getAdaptiveGrace() + 50;
 
@@ -724,32 +725,40 @@ export class FractalEngine {
             //     convergence speed when there's headroom), deadband between to avoid
             //     oscillation. setBandCount defers to a pass boundary, so per-tick
             //     calls are safe.
-            // The "Target FPS" responsiveness slider (quality.adaptiveTarget) is the
-            // target; fall back to 30 when it's off.
-            const targetFps = (this.state.quality?.adaptiveTarget ?? 0) > 0
-                ? (this.state.quality!.adaptiveTarget as number)
-                : 30;
-            if (this.pipeline.accumulationCount === 0 || this._bandCountCtrl <= 0) {
-                // Fresh accumulation (new scene/view) — reseed from the analytic estimate.
-                const fullMs = this.uniformManager.getFullResFrameMs();
-                const seed = fullMs > 0 ? Math.ceil(fullMs / (1000 / targetFps)) : 24;
-                this._bandCountCtrl = Math.max(1, Math.min(64, seed));
-                this._lastBandAdjustTime = now;
-            } else if (!wasTiling) {
-                // Just re-entered steady tiling — let it settle a window before the
-                // loop reads fps (the last reading reflects the interaction, not bands).
-                this._lastBandAdjustTime = now;
+            // The "Target FPS" slider (quality.adaptiveTarget) is the band-count target.
+            // 0 = OFF → NO progressive banding: one full-screen band per tick (max
+            // accumulation throughput — the "disable banding for fastest SPS" mode).
+            // It must NOT fall back to a 30fps target: now that the band loop is fed the
+            // TRUE (low) render rate, chasing a 30fps target it can't hit at high strain
+            // bands up toward the cap, splitting the first frame into strips and
+            // converging only traced bands ("holes"). Off ⇒ no rate to chase ⇒ 1 band.
+            const adaptiveTarget = this.state.quality?.adaptiveTarget ?? 0;
+            if (adaptiveTarget <= 0) {
+                this._bandCountCtrl = 1;
             } else {
-                const fps = this.state.fps ?? 0;
-                if (fps > 0 && now - this._lastBandAdjustTime >= 500) {
+                const targetFps = adaptiveTarget;
+                if (this.pipeline.accumulationCount === 0 || this._bandCountCtrl <= 0) {
+                    // Fresh accumulation (new scene/view) — reseed from the analytic estimate.
+                    const fullMs = this.uniformManager.getFullResFrameMs();
+                    const seed = fullMs > 0 ? Math.ceil(fullMs / (1000 / targetFps)) : 24;
+                    this._bandCountCtrl = Math.max(1, Math.min(64, seed));
                     this._lastBandAdjustTime = now;
-                    if (fps < targetFps * 0.92) {
-                        // Too slow → more (thinner) bands. Step scales with the deficit.
-                        const factor = Math.min(1.6, Math.max(1.05, targetFps / fps));
-                        this._bandCountCtrl = Math.min(64, this._bandCountCtrl * factor);
-                    } else if (fps > targetFps * 1.12 && this._bandCountCtrl > 1) {
-                        // Headroom → fewer bands, one at a time (slow reclaim).
-                        this._bandCountCtrl = Math.max(1, this._bandCountCtrl - 1);
+                } else if (!wasTiling) {
+                    // Just re-entered steady tiling — let it settle a window before the
+                    // loop reads fps (the last reading reflects the interaction, not bands).
+                    this._lastBandAdjustTime = now;
+                } else {
+                    const fps = this.state.fps ?? 0;
+                    if (fps > 0 && now - this._lastBandAdjustTime >= 500) {
+                        this._lastBandAdjustTime = now;
+                        if (fps < targetFps * 0.92) {
+                            // Too slow → more (thinner) bands. Step scales with the deficit.
+                            const factor = Math.min(1.6, Math.max(1.05, targetFps / fps));
+                            this._bandCountCtrl = Math.min(64, this._bandCountCtrl * factor);
+                        } else if (fps > targetFps * 1.12 && this._bandCountCtrl > 1) {
+                            // Headroom → fewer bands, one at a time (slow reclaim).
+                            this._bandCountCtrl = Math.max(1, this._bandCountCtrl - 1);
+                        }
                     }
                 }
             }
@@ -765,15 +774,24 @@ export class FractalEngine {
             if (this.pipeline.accumulationCount === 0) {
                 this.bandScheduler.reset();
             } else if (!wasTiling) {
-                // Re-entering tiling after a full-frame interlude (a display-only /
-                // no-reset param flips `interacting` for the gesture's duration). Those
-                // full-frame frames advanced accumulationCount uniformly over the whole
-                // screen; resume the scheduler from that count so the count stays
-                // MONOTONIC. Otherwise the re-entry overwrites accumulationCount back
-                // down to the frozen passIndex+1, which the adaptive accum-drop heuristic
-                // misreads as a buffer-invalidating gesture → phantom downscale → reset →
-                // the whole scene restarts accumulating on every no-reset param change.
-                this.bandScheduler.resumeFrom(this.pipeline.accumulationCount);
+                // Re-entering tiling after a full-frame interlude. Two cases:
+                //  • The interlude GENUINELY accumulated (count > 1 — e.g. a display-only/
+                //    no-reset param drag rendered several full frames). Resume from that
+                //    count so the sample count stays MONOTONIC; a backward jump would read
+                //    as a buffer-invalidating gesture → phantom downscale → restart.
+                //  • The interlude was a camera MOVE that reset accumulation. The move's
+                //    last full frame leaves count at 1 (RenderPipeline sets 0→1 on render),
+                //    NOT 0, so it slips past the `===0` check above. resumeFrom would then
+                //    do max(passIndex, 1), KEEPING a stale-high passIndex from a previous
+                //    converged session → the first tiling frame blends at ~1/N, freezing
+                //    the re-entry frame's noise in (the "first frame keeps a high blend
+                //    weight" bug). count <= 1 ⇒ fresh start ⇒ reset to pass 0 (blend 1.0).
+                //    (1→1 is no backward jump, so this doesn't trip the phantom-downscale.)
+                if (this.pipeline.accumulationCount > 1) {
+                    this.bandScheduler.resumeFrom(this.pipeline.accumulationCount);
+                } else {
+                    this.bandScheduler.reset();
+                }
             }
             const cap = this.pipeline.getSampleCap();
             if (cap > 0 && this.bandScheduler.passCount >= cap) {

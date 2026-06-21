@@ -269,7 +269,7 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
 
     // Performance throttle: when FPS < 20, yield 1 frame/sec to let React
     // render UI (keeps the app responsive during heavy compile/bucket-render).
-    const throttleRef = React.useRef({ lastYield: 0, fps: 60, frames: 0, lastSample: 0 });
+    const throttleRef = React.useRef({ lastYield: 0, fps: 60, renderFps: 0, frames: 0, lastSample: 0, lastFrameCount: 0 });
 
     useFrame((_state, delta) => {
         if (!isReady) return;
@@ -291,10 +291,29 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         const t = throttleRef.current;
         t.frames++;
         if (now - t.lastSample >= 500) {
-            t.fps = t.frames * 1000 / (now - t.lastSample);
+            const dt = now - t.lastSample;
+            // UI fps — how often the main-thread RAF loop runs (≈60 when unblocked).
+            // Feeds the adaptive loop and the advanced-mode "UI" readout.
+            t.fps = t.frames * 1000 / dt;
             t.frames = 0;
             t.lastSample = now;
             viewport.reportFps(t.fps);
+
+            // Render fps — the worker's TRUE delivered-frame rate, from its
+            // FRAME_READY-mirrored frame counter. Decoupled from UI fps: with the
+            // frames-in-flight gate the main thread runs at 60 while the worker may
+            // render far slower, so this is the honest "how fast is the fractal
+            // updating" number the topbar shows by default.
+            const fc = proxy.frameCount;
+            // A negative delta means the worker restarted (GPU crash / recompile) and
+            // its frameCount reset to 0 — report 0 this window and re-baseline, rather
+            // than emitting a large negative rate that lingers until the count climbs
+            // back past the old high-water mark.
+            const dframes = fc - t.lastFrameCount;
+            t.lastFrameCount = fc;
+            t.renderFps = dframes >= 0 ? dframes * 1000 / dt : 0;
+            viewport.reportRenderFps(t.renderFps);
+
             reportAccumulationToStore(useEngineStore, proxy);
         }
         if (t.fps < 20 && now - t.lastYield >= 1000) {
@@ -371,7 +390,14 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             quality:  storeState.quality  ?? null,
             geometry: storeState.geometry ?? null,
             adaptiveSuppressed: !!storeState.adaptiveSuppressed,
-            fps: t.fps, // M5b: feeds the worker's adaptive band-count feedback loop
+            // M5b band loop wants the ACTUAL render rate, not the main-thread RAF
+            // rate. Post-gate the main loop runs at 60 while the worker may render
+            // far slower, so feeding t.fps would make the band loop think there's
+            // headroom and shed bands when it should be adding them. renderFps is
+            // the worker's true delivered-frame rate. (The worker's adaptive
+            // RESOLUTION self-measures via its own call frequency — only this
+            // relayed-value consumer needed repointing.)
+            fps: t.renderFps,
             ...interactionBlock, // interacting + isSceneAnimating + sessionHoldActive (ADR-0061)
         };
 
@@ -403,6 +429,15 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             || Math.abs(serializedCamera.quaternion[3] - lc.quaternion[3]) > 1e-7
             || serializedCamera.fov !== lc.fov;
         const busy = !!storeState.isBucketRendering || !!storeState.isExporting || !!storeState.adaptiveSuppressed;
+        // Keep the loop alive for 500ms after any camera activity. `converged` reads
+        // proxy.accumulationCount — a FRAME_READY mirror the worker stops updating
+        // while the frames-in-flight gate skips frames. On a quick move-and-stop the
+        // mirror can still read "converged" (stale at the old cap) after the camera
+        // settles, so without this grace the loop would stop dispatching BEFORE the
+        // worker renders the post-move accumulation reset → frozen on the first
+        // accumulation frame. Once a fresh FRAME_READY drops the count, `!converged`
+        // keeps it alive on its own. (cap=0 never converges, so this is a no-op there.)
+        if (camMoved || interactionBlock.interacting) lastInvalidateRef.current = now;
         const wantsRender = !converged || camMoved || busy
             || interactionBlock.interacting || interactionBlock.isSceneAnimating
             || (now - lastInvalidateRef.current) < 500;

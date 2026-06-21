@@ -60,10 +60,10 @@ const defaultDpr = () => {
 
 export type ViewportSlice = Pick<EngineStoreState,
     'canvasPixelSize' | 'dpr' | 'resolutionMode' | 'fixedResolution' | 'renderScale' |
-    'qualityFraction' | 'fps' | 'fpsSmoothed' | 'adaptiveConfig'
+    'qualityFraction' | 'fps' | 'fpsSmoothed' | 'renderFps' | 'adaptiveConfig'
 > & Pick<EngineActions,
     'setCanvasPixelSize' | 'setDpr' | 'setResolutionMode' | 'setFixedResolution' | 'setRenderScale' |
-    'reportFps' | 'holdAdaptive' | 'setAdaptiveConfig'
+    'reportFps' | 'reportRenderFps' | 'holdAdaptive' | 'setAdaptiveConfig'
 >;
 
 /** Discrete render-scale steps the UI snaps to. Multipliers on top of
@@ -107,6 +107,7 @@ export const createViewportSlice: StateCreator<
     qualityFraction: 1.0,
     fps: 60,
     fpsSmoothed: 60,
+    renderFps: -1, // -1 = app reports no worker render-rate (FpsCounter falls back to UI fps)
     adaptiveConfig: { ...DEFAULT_ADAPTIVE },
 
     setCanvasPixelSize: (w, h) => set({ canvasPixelSize: [w, h] }),
@@ -116,6 +117,14 @@ export const createViewportSlice: StateCreator<
     setRenderScale: (v) => set({ renderScale: Math.max(0.1, Math.min(4, v)) }),
 
     setAdaptiveConfig: (cfg) => set((s) => ({ adaptiveConfig: { ...s.adaptiveConfig, ...cfg } })),
+
+    // Display-only render-rate readout. The renderer's tick driver reports the
+    // worker's true delivered-frame rate here (≠ the main-thread RAF rate that
+    // reportFps feeds the adaptive loop). Skips no-op writes to avoid churn.
+    reportRenderFps: (renderFps) => {
+        if (get().renderFps === renderFps) return;
+        set({ renderFps });
+    },
 
     holdAdaptive: (durationMs) => {
         const now = performance.now();

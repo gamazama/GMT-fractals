@@ -217,8 +217,6 @@ export const Octahedron: FractalDefinition = {
             quality: {
                 engineQuality: true,
                 compilerHardCap: 2000,
-                precisionMode: 0,
-                bufferPrecision: 0,
                 maxSteps: 300,
                 distanceMetric: 2,
                 estimator: 5,
@@ -229,8 +227,6 @@ export const Octahedron: FractalDefinition = {
                 detail: 2,
                 pixelThreshold: 0.2,
                 overstepTolerance: 0,
-                dynamicScaling: false,
-                interactionDownsample: 2,
                 physicsProbeMode: 0,
                 manualDistance: 10,
             },

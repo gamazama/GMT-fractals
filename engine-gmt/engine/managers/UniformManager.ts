@@ -11,7 +11,6 @@ import type { GeometryState } from '../../features/geometry';
 import {
     type AdaptiveResolutionState,
     createAdaptiveResolutionState,
-    getAdaptiveGrace,
     tickAdaptiveResolution,
 } from '../../../engine/AdaptiveResolution';
 
@@ -54,10 +53,20 @@ export class UniformManager {
     // See engine/AdaptiveResolution.ts.
     private _adaptive: AdaptiveResolutionState = createAdaptiveResolutionState();
 
-    /** Returns the current FPS-scaled adaptive grace period (ms). Used by FractalEngine
-     *  to hold accumulation until adaptive resolution has settled at full res. */
+    /** Post-release grace before adaptive disengages and the frame settles to
+     *  full res. GMT declares every gesture via the InteractionSession (which
+     *  already carries a 200ms re-grab tail), so we DON'T need the shared
+     *  module's FPS-scaled grace — that gave a 1fps scene a ~2s frozen low-res
+     *  tail after release. A small constant settles the image immediately on
+     *  gesture-end while still spanning the one-frame adaptive→full resize
+     *  (FractalEngine's holdForAdaptive uses this + 50ms) so accumulation starts
+     *  once at full res (no double-kick flicker). */
+    private static readonly INTERACTION_SETTLE_GRACE_MS = 100;
+
+    /** Adaptive grace (ms) the FractalEngine hold reads to keep accumulation
+     *  frozen until resolution has settled at full res. */
     public getAdaptiveGrace(): number {
-        return getAdaptiveGrace(this._adaptive.stillFps);
+        return UniformManager.INTERACTION_SETTLE_GRACE_MS;
     }
 
     /** Scale-normalized EMA of one FULL-RES frame's trace cost in ms (0 until the
@@ -193,7 +202,12 @@ export class UniformManager {
                 // them out of the full-res cost EMA so the interaction seed stays
                 // accurate and adaptive doesn't rediscover the scale from full res.
                 costSampleInteractingOnly: true,
-                dynamicScaling: !!runtimeState.quality?.dynamicScaling,
+                // adaptiveTarget ("UI Responsiveness") is the single switch: 0 = off
+                // (no adaptive resolution, no banding — full-res frames). >0 targets that
+                // FPS. The Dynamic Scale toggle keeps adaptiveTarget in sync (off ⇒ 0), so
+                // gating on `adaptiveTarget > 0` here also retires the old manual mode
+                // (dynamicScaling=true + adaptiveTarget=0), which no longer exists.
+                dynamicScaling: adaptiveTarget > 0,
                 adaptiveTarget,
                 interactionDownsample: runtimeState.quality?.interactionDownsample ?? 2.0,
                 // Mobile gets a lower minQuality → a HIGHER max downscale so smart
@@ -212,6 +226,10 @@ export class UniformManager {
                 // scaling while the popup is open — each scale change resizes the
                 // FBO, briefly displaying the cleared (black) buffer.
                 suppressed: runtimeState.adaptiveSuppressed,
+                // Explicit-gesture grace: GMT knows exactly when a gesture ends
+                // (InteractionSession), so skip the FPS-scaled multi-second grace
+                // and sharpen right after release. See INTERACTION_SETTLE_GRACE_MS.
+                graceMs: UniformManager.INTERACTION_SETTLE_GRACE_MS,
             });
 
             if (adaptive.needsAdaptive) {
