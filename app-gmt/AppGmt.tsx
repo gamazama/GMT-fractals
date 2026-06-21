@@ -159,8 +159,14 @@ export const AppGmt: React.FC = () => {
         (state: any) => estimateCompileTime(state),
         [],
     );
+    // GMT mobile cap: PT is far too heavy for mobile GPUs — disable the
+    // path-tracer capability on first paint. (engine-core stays PT-agnostic.)
+    const applyMobileCaps = useCallback(
+        (state: any) => { state.setLighting?.({ ptEnabled: false }); },
+        [],
+    );
     const { startupMode, bootEngine, isStartupReady } = useAppStartup({
-        bootRenderer, pushOffset, isBootedOrRequested, estimateBootCompileMs,
+        bootRenderer, pushOffset, isBootedOrRequested, estimateBootCompileMs, applyMobileCaps,
     });
     const handleSceneReady = useCallback(() => setIsSceneReady(true), []);
     const handleLoadingFinished = useCallback(() => setLoadingVisible(false), []);

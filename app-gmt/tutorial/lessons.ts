@@ -386,11 +386,13 @@ const lesson4: TutorialLesson = {
         },
         {
             id: 'l4-vp-apply',
-            text: 'Set Shadows to Full and click Apply.',
-            subtext: 'Full mode compiles in area light shadows and takes a few seconds.',
+            text: 'Set Shadows to Soft (or higher) and click Apply.',
+            subtext: 'Enabling shadows compiles in area-light shadows and takes a few seconds.',
             highlightTargets: [ANCHOR.vpQualityRow('shadows'), ANCHOR.viewportQualityBtn],
             position: { target: ANCHOR.vpQualityRow('shadows') },
-            trigger: { kind: 'value', path: 'scalability.subsystems.shadows', compare: 'gte', value: 3 },
+            // Shadows now has 3 tiers (0 Off / 1 Soft / 2 Soft HQ); enabling any
+            // shadow tier (>=1) compiles the march + area-light jitter in.
+            trigger: { kind: 'value', path: 'scalability.subsystems.shadows', compare: 'gte', value: 1 },
         },
         {
             id: 'l4-area-toggle',

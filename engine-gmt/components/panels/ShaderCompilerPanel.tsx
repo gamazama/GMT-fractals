@@ -30,8 +30,9 @@ export const ShaderCompilerPanel: React.FC<ShaderCompilerPanelProps> = ({ classN
     
     // Scalability label from viewport quality system + compile time estimate
     const scalability = useEngineStore(s => s.scalability);
+    const renderMode = useEngineStore(s => s.renderMode);
     const scalabilityLabel = getScalabilityLabel(scalability);
-    const estCompileMs = useMemo(() => estimateShaderCompilerCompileTime(scalability.subsystems), [scalability.subsystems]);
+    const estCompileMs = useMemo(() => estimateShaderCompilerCompileTime(scalability.subsystems, renderMode), [scalability.subsystems, renderMode]);
     const estCompileSec = (estCompileMs / 1000).toFixed(1);
 
     const engineFeatures = featureRegistry.getEngineFeatures();

@@ -2,11 +2,11 @@
  * Compile / scalability slice — master preset + per-subsystem tier
  * overrides (the "Viewport Quality" UI drives this). Generic mechanism:
  * the app REGISTERS its switch subsystems + profiles via
- * `registerCompileProfiles()` (engine-gmt: `registerGmtCompileProfiles()`)
+ * `registerShaderCompilerProfiles()` (engine-gmt: `registerGmtShaderCompilerProfiles()`)
  * BEFORE createEngineStore; this slice reads them through the
  * `getShaderCompilerSubsystems()` / `getShaderCompilerPresets()` / `getDefaultScalability()`
  * getters. Apps using the tier system get the behaviour for free.
- * @see docs/adr/0079-compile-system-profile-seam.md
+ * @see docs/adr/0079-shader-compiler-profile-seam.md
  *
  * Ported verbatim from `h:/GMT/gmt-0.8.5/store/slices/scalabilitySlice.ts`
  * with only an import-path rewrite. Used by the Viewport Quality topbar

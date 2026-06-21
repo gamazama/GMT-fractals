@@ -38,6 +38,10 @@ export const ViewportQuality: React.FC = () => {
     // quality tier in the Per Subsystem list, not by inline toggles.)
     const ptBounces = useEngineStore(s => (s as any).lighting?.ptBounces ?? 3);
     const ptGIStrength = useEngineStore(s => (s as any).lighting?.ptGIStrength ?? 1.0);
+    // Seeds the PT-family gate in the compile estimate (PT integrator compiles
+    // only in PathTracing mode; the quality tiers only enable the capability).
+    // Uses the reliable top-level `renderMode` string, not the lighting float mirror.
+    const topRenderMode = useEngineStore(s => (s as any).renderMode);
 
     const [isOpen, setIsOpen] = useState(false);
 
@@ -61,8 +65,8 @@ export const ViewportQuality: React.FC = () => {
     const hasPending = pendingSubsystems !== null;
 
     const estimatedMs = useMemo(
-        () => estimateShaderCompilerCompileTime(effectiveSubsystems),
-        [effectiveSubsystems]
+        () => estimateShaderCompilerCompileTime(effectiveSubsystems, topRenderMode),
+        [effectiveSubsystems, topRenderMode]
     );
 
     const currentLabel = getScalabilityLabel(scalability);
@@ -154,7 +158,7 @@ export const ViewportQuality: React.FC = () => {
                             <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Viewport Quality</div>
                             <div className="space-y-1">
                                 {getShaderCompilerPresets().filter(p => !p.isAdvanced || advancedMode).map(preset => {
-                                    const est = estimateShaderCompilerCompileTime(preset.subsystems);
+                                    const est = estimateShaderCompilerCompileTime(preset.subsystems, topRenderMode);
                                     const isActive = activePresetInPending === preset.id;
                                     return (
                                         <button

@@ -96,7 +96,10 @@ ${stochasticShadows ? `
                     vec3 jitteredTarget = uLightPos[i] + offset * distToLight;
                     vec3 jVec = jitteredTarget - p;
                     shadowDist = length(jVec);
-                    shadowL = jVec / shadowDist;
+                    // Floor the divisor: a high-softness jitter can land the
+                    // target on the surface point (shadowDist→0) → NaN that the
+                    // accumulator never clears. Mirrors the PT path's guard.
+                    shadowL = jVec / max(1.0e-5, shadowDist);
                 }
                 shK = 2000.0;
             }

@@ -69,7 +69,7 @@ registerMigration({
 // to kill the overload with the engine-core/engine-gmt code LAYERS. The DDFS
 // feature id `engineSettings` (which serializes its `showEngineTab` flag into
 // saved scenes + a handful of formula defaultPresets) becomes `shaderCompiler`.
-// @see docs/adr/0079-compile-system-profile-seam.md
+// @see docs/adr/0079-shader-compiler-profile-seam.md
 registerMigration({
     version: 2,
     id: 'app-gmt.engineSettings-to-shaderCompiler',

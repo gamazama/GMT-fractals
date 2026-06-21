@@ -48,6 +48,12 @@ interface UseAppStartupOptions {
      *  equivalent estimator. Optional — without it, the indicator falls
      *  back to its 15s default. */
     estimateBootCompileMs?: (state: any) => number;
+    /** App-specific mobile hardware tuning, invoked once on a mobile device
+     *  after the generic preset/adaptive overrides. Keeps engine-core
+     *  domain-agnostic: GMT uses this to disable its path-tracer capability
+     *  (too heavy for mobile GPUs); other apps tune their own params or omit
+     *  it. Receives the live store state and the detected hardware profile. */
+    applyMobileCaps?: (state: any, profile: { isMobile: boolean; tier: string }) => void;
 }
 
 /**
@@ -159,15 +165,16 @@ export const useAppStartup = (options?: UseAppStartupOptions) => {
         // chose a different preset (preview/full/ultra), we respect it.
         // Persisted-preset hydration runs before this hook.
         //
-        // Mobile also force-disables the path-tracer capability (ptEnabled) —
-        // PT is far too heavy for mobile GPUs. Per the rule "ptEnabled always on
-        // EXCEPT mobile + preview". Optional-chained so non-GMT apps skip it.
+        // Mobile also applies any app-specific hardware caps via the
+        // `applyMobileCaps` seam (e.g. GMT disables its path-tracer capability,
+        // far too heavy for mobile GPUs). Engine-core stays domain-agnostic —
+        // the app owns which params to tune.
         if (hwProfile.isMobile) {
             const current = (state as any).scalability?.activePreset;
             if (current === 'balanced' && (state as any).applyScalabilityPreset) {
                 (state as any).applyScalabilityPreset('fastest');
             }
-            (state as any).setLighting?.({ ptEnabled: false });
+            opts?.applyMobileCaps?.(state, hwProfile);
         }
 
         // Mobile mid- and low-tier devices: default adaptive resolution to

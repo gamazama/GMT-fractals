@@ -223,9 +223,15 @@ void main() {
     // 6. Ordered dither — breaks 8-bit banding in dark gradients (e.g. the
     // default near-black background). Triangular-PDF noise of ±1 LSB applied in
     // output (sRGB) space; static (not frame-animated) so a converged still
-    // image stays steady and accumulation is unaffected. Gated on uEncodeOutput
-    // so the linear/export passes stay bit-exact. Cost: a few ALU ops on a
-    // single full-screen pass — unmeasurable.
+    // image stays steady and accumulation is unaffected. Cost: a few ALU ops on
+    // a single full-screen pass — unmeasurable.
+    //
+    // DETERMINISM NOTE: this is gated on uEncodeOutput, but the PNG/bucket export
+    // path also sets uEncodeOutput=1.0 (GmtBucketHost / FractalEngine readback),
+    // so encoded exports DO receive this ±1 LSB noise — they are NOT byte-exact.
+    // Any reference-image / reproducibility test (e.g. debug/bench-shader-refs)
+    // can and SHOULD disable this block (comment it out, or gate it behind a
+    // uDither uniform set to 0) before byte-comparing renders.
     if (uEncodeOutput > 0.5) {
         float n1 = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
         float n2 = fract(sin(dot(gl_FragCoord.xy + 0.5, vec2(12.9898, 78.233))) * 43758.5453);

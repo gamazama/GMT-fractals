@@ -17,7 +17,7 @@ registerGmtFeatures();
 // GMT Compile profiles (the "Viewport Quality" switch subsystems + presets) into
 // the engine-core Compile system. MUST run before createEngineStore so the
 // scalability slice seeds its initial state from the registered default.
-// @see docs/adr/0079-compile-system-profile-seam.md
+// @see docs/adr/0079-shader-compiler-profile-seam.md
 import { registerGmtShaderCompilerProfiles } from '../engine-gmt/types/viewport';
 registerGmtShaderCompilerProfiles();
 

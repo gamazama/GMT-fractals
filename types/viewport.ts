@@ -7,7 +7,7 @@
 // app-registered profile seam, and the helpers/estimator. The actual switch
 // subsystems + profiles are GMT-specific DATA and are registered by the app
 // (engine-gmt) via `registerShaderCompilerProfiles()` before `createEngineStore()`.
-// @see docs/adr/0079-compile-system-profile-seam.md
+// @see docs/adr/0079-shader-compiler-profile-seam.md
 //
 // How tiers reach the shader:
 //   1. Authored state (Zustand store) — the user's full-quality intent.
@@ -131,7 +131,7 @@ export interface HardwareProfile {
 // (alongside `featureRegistry.register`); the scalability slice seeds its
 // initial state from `getDefaultScalability()` at store-construction time, so a
 // late registration leaves the quality UI inert.
-// @see docs/adr/0079-compile-system-profile-seam.md
+// @see docs/adr/0079-shader-compiler-profile-seam.md
 
 let _subsystems: SubsystemDefinition[] = [];
 let _presets: ScalabilityPreset[] = [];

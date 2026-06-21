@@ -88,9 +88,18 @@ export const estimateCompileTime = (state: any): number =>
  * preview matches `estimateCompileTime` for the resulting config. A tier's
  * optional `estCompileMs` is a small ADJUSTMENT for costs the per-param model
  * can't express (e.g. the Preview lighting tier stripping the PBR pipeline).
+ *
+ * `renderMode` seeds the PT-family gate: the tiers only enable the PT *capability*
+ * (`ptEnabled`, free in Direct) — the ~6.5s PT integrator compiles solely in
+ * PathTracing mode, a separate top-level control the tiers don't set. Pass the
+ * live `state.renderMode` so the preview counts (or skips) PT cost the same way
+ * `estimateCompileTime` will once applied. Omitted → treated as Direct.
  */
-export const estimateShaderCompilerCompileTime = (subsystems: Record<string, number>): number => {
-    const state: Record<string, any> = {};
+export const estimateShaderCompilerCompileTime = (
+    subsystems: Record<string, number>,
+    renderMode?: 'Direct' | 'PathTracing' | number,
+): number => {
+    const state: Record<string, any> = { renderMode };
     for (const feat of featureRegistry.getAll()) {
         const slice: Record<string, any> = {};
         for (const [k, pc] of Object.entries(feat.params)) {
