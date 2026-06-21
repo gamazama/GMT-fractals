@@ -8,6 +8,7 @@ import {
     getShaderCompilerSubsystems,
     getShaderCompilerPresets,
     getScalabilityLabel,
+    detectScalabilityPreset,
 } from '../../types/viewport';
 import { estimateShaderCompilerCompileTime } from '../features/engine/profiles';
 
@@ -118,16 +119,10 @@ export const ViewportQuality: React.FC = () => {
         setIsOpen(false);
     };
 
-    // Determine which preset radio is active in the pending state
-    const activePresetInPending = pendingPreset ?? (() => {
-        if (!pendingSubsystems) return scalability.activePreset;
-        for (const p of getShaderCompilerPresets()) {
-            if (Object.keys(p.subsystems).every(k => p.subsystems[k] === effectiveSubsystems[k])) {
-                return p.id;
-            }
-        }
-        return null;
-    })();
+    // Determine which preset radio is active in the pending state. Reuses the
+    // canonical matcher (same predicate scalabilitySlice uses for isCustomized).
+    const activePresetInPending = pendingPreset
+        ?? (pendingSubsystems ? detectScalabilityPreset(effectiveSubsystems) : scalability.activePreset);
 
     return (
         <div className="relative" ref={containerRef}>
