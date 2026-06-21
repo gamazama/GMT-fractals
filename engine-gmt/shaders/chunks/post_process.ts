@@ -220,6 +220,18 @@ void main() {
         col = linearToSRGB(col);
     }
 
+    // 6. Ordered dither — breaks 8-bit banding in dark gradients (e.g. the
+    // default near-black background). Triangular-PDF noise of ±1 LSB applied in
+    // output (sRGB) space; static (not frame-animated) so a converged still
+    // image stays steady and accumulation is unaffected. Gated on uEncodeOutput
+    // so the linear/export passes stay bit-exact. Cost: a few ALU ops on a
+    // single full-screen pass — unmeasurable.
+    if (uEncodeOutput > 0.5) {
+        float n1 = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+        float n2 = fract(sin(dot(gl_FragCoord.xy + 0.5, vec2(12.9898, 78.233))) * 43758.5453);
+        col += (n1 + n2 - 1.0) / 255.0;  // triangular PDF, ±1/255
+    }
+
     pc_fragColor = vec4(col, 1.0);
 }
 `;
