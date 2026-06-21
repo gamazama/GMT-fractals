@@ -259,6 +259,12 @@ export class WorkerProxy implements AccumulationController {
             case 'COMPILING': {
                 this._shadow.isCompiling = !!msg.status;
                 this._shadow.hasCompiledShader = !msg.status || this._shadow.hasCompiledShader;
+                // Compile resets accumulation worker-side (CompileScheduler), but posts
+                // no frame — drop the converged-mirror so the gate keeps requesting ticks
+                // through the whole compile and renders the instant the new shader lands.
+                // Without this the mirror stays pinned at the old cap and the post-load
+                // frame never advances (the "stuck after formula load" deadlock).
+                if (msg.status) this.invalidateConvergedMirror();
                 if (this._onCompiling) this._onCompiling(msg.status);
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, msg.status);
 
@@ -501,6 +507,14 @@ export class WorkerProxy implements AccumulationController {
     get isBucketRendering() { return this._isBucketRendering; }
     get sceneOffset() { return this._localOffset; }
     get lastGeneratedFrag() { return this._lastGeneratedFrag; }
+    /**
+     * @invariant Mirror of the worker's sample index, refreshed ONLY on FRAME_READY.
+     * The convergence-stop gate (GmtRendererTickDriver) reads this to decide whether
+     * the path-traced image is settled. Any reset (compile, RESET_ACCUM, offset
+     * teleport) MUST drop this to 0 via invalidateConvergedMirror() — otherwise it
+     * stays pinned at the old cap and the gate stops requesting frames (stuck-on-first-
+     * frame deadlock, only cleared by a camera move).
+     */
     get accumulationCount() { return this._shadow.accumulationCount; }
     /** Read-only diagnostic (present-path workstream): cumulative adaptive FBO resizes. */
     get fboResizes() { return this._shadow.fboResizes ?? 0; }
@@ -582,7 +596,29 @@ export class WorkerProxy implements AccumulationController {
     }
 
     resetAccumulation() {
+        this.invalidateConvergedMirror();
         this.post({ type: 'RESET_ACCUM' });
+    }
+
+    /**
+     * Drop the converged-mirror (`_shadow.accumulationCount`) back to 0 so the
+     * convergence-stop gate in GmtRendererTickDriver re-arms IMMEDIATELY after a
+     * reset — instead of waiting for the next FRAME_READY to refresh it.
+     *
+     * WHY this is load-bearing: `_shadow.accumulationCount` is updated in exactly
+     * one place — the FRAME_READY handler — and the worker posts FRAME_READY ONLY
+     * in response to a RENDER_TICK. A reset (RESET_ACCUM, compile, offset teleport)
+     * zeroes the worker's real count but posts no frame, so the mirror stays pinned
+     * at the old sample cap. The gate then reads `accumulationCount >= cap` →
+     * `converged` → stops sending ticks → the worker never renders → never reports a
+     * fresh count → DEADLOCK ("stuck on the first frame") until a camera move forces a
+     * tick. Zeroing here keeps `converged` false until a genuine fresh FRAME_READY
+     * re-confirms it. FRAME_READY does a full `_shadow = msg.state` replace, so the
+     * true value is restored the instant the worker renders again — worst case the
+     * gate sends one redundant tick.
+     */
+    invalidateConvergedMirror() {
+        this._shadow.accumulationCount = 0;
     }
 
     markInteraction() {

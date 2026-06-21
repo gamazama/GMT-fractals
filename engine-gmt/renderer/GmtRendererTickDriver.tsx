@@ -245,12 +245,24 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
     // wouldn't otherwise re-arm the loop. (Camera moves + interaction are picked up
     // directly by the gate; these are the discrete worker-bound changes.)
     useEffect(() => {
-        const wake = () => { lastInvalidateRef.current = performance.now(); };
+        // Each wake bumps the invalidation timestamp (re-arms the 500ms window) AND
+        // drops the proxy's converged-mirror to 0. The mirror-drop is the robust half:
+        // a reset that races past the 500ms window (e.g. a compile longer than 500ms)
+        // would otherwise leave `accumulationCount` pinned at the old cap → the gate
+        // reads `converged` → stops ticking → the worker never renders a fresh frame →
+        // stuck on the first frame until a camera move. Zeroing the mirror keeps the
+        // gate ticking until a genuine fresh FRAME_READY re-confirms convergence.
+        // IS_COMPILING is included so compile-completion re-arms the loop for the new
+        // shader (the dominant "stuck after formula load" case).
+        const wake = () => {
+            lastInvalidateRef.current = performance.now();
+            proxy.invalidateConvergedMirror();
+        };
         const unsubs = [
             FRACTAL_EVENTS.UNIFORM, FRACTAL_EVENTS.CONFIG, FRACTAL_EVENTS.CONFIG_DONE,
             FRACTAL_EVENTS.RESET_ACCUM, FRACTAL_EVENTS.OFFSET_SET, FRACTAL_EVENTS.OFFSET_SHIFT,
             FRACTAL_EVENTS.CAMERA_SNAP, FRACTAL_EVENTS.CAMERA_TELEPORT, FRACTAL_EVENTS.TEXTURE,
-            FRACTAL_EVENTS.REGISTER_FORMULA,
+            FRACTAL_EVENTS.REGISTER_FORMULA, FRACTAL_EVENTS.IS_COMPILING,
         ].map((e) => FractalEvents.on(e, wake));
         return () => unsubs.forEach((u) => u());
     }, []);
@@ -339,10 +351,17 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             // cameraInUse (which ORed isPlaying/isScrubbing) loses nothing.
             sessionHoldActive: storeState.isInteracting({ only: [INTERACTION_SOURCES.camera, INTERACTION_SOURCES.gizmo, INTERACTION_SOURCES.scrub] }),
             isPlaying: animState.isPlaying,
-            // Active LFO ≈ LFOs enabled with at least one animation bound. This is
-            // the autonomous-animation axis (NOT a gesture) adaptive + hold
+            // Active LFO ≈ master switch on AND at least one ENABLED animation.
+            // This is the autonomous-animation axis (NOT a gesture) adaptive + hold
             // compose with `interacting`.
-            hasActiveModulation: !!storeState.lfosEnabled && (storeState.animations?.length ?? 0) > 0,
+            //
+            // MUST mirror ModulationEngine.updateOscillators' per-anim gate
+            // (`if (!anim.enabled) continue`): a `.length > 0` test counts
+            // DISABLED entries too, so a scene saved with inert/leftover animation
+            // entries (all enabled:false) produces zero actual modulation yet pins
+            // isSceneAnimating true forever → adaptive stuck at low res, accumulation
+            // never converges (the "stuck after loading some gallery items" bug).
+            hasActiveModulation: !!storeState.lfosEnabled && !!storeState.animations?.some((a: { enabled?: boolean }) => a.enabled),
         });
 
         const renderState = {
