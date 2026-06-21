@@ -6,7 +6,7 @@
  * engineStore only to pause/resume rendering while the overlay is open.
  */
 import { create } from 'zustand';
-import { useEngineStore } from '../../store/engineStore';
+import { pushUiPause, popUiPause } from '../../hooks/useRenderPause';
 
 interface GalleryFilter {
   formula?: string;
@@ -18,8 +18,6 @@ interface GalleryStore {
   isSubmitOpen: boolean;
   isMySubsOpen: boolean;
   filter: GalleryFilter;
-  // Snapshot of engine pause state at open time so we can restore on close.
-  prevPaused: boolean | null;
   // Monotonic counter — bumped after successful submit / approve / delete
   // to invalidate the cached browse query and force useGalleryItems to refetch.
   refreshTick: number;
@@ -55,33 +53,27 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
   isSubmitOpen: false,
   isMySubsOpen: false,
   filter: {},
-  prevPaused: null,
   refreshTick: 0,
   submitSource: null,
   pendingLightboxSlug: null,
 
   openGallery: () => {
     if (get().isOpen) return;
-    const s = useEngineStore.getState() as any;
-    set({ isOpen: true, prevPaused: s.isPaused ?? false });
-    s.setIsPaused?.(true);
+    set({ isOpen: true });
+    pushUiPause(); // pause render while the overlay covers the viewport
   },
 
   closeGallery: () => {
     if (!get().isOpen) return;
-    const { prevPaused } = get();
-    set({ isOpen: false, prevPaused: null, pendingLightboxSlug: null });
-    if (prevPaused !== null) {
-      (useEngineStore.getState() as any).setIsPaused?.(prevPaused);
-    }
+    set({ isOpen: false, pendingLightboxSlug: null });
+    popUiPause();
   },
 
   openGalleryAtSlug: (slug) => {
     set({ pendingLightboxSlug: slug });
     if (!get().isOpen) {
-      const s = useEngineStore.getState() as any;
-      set({ isOpen: true, prevPaused: s.isPaused ?? false });
-      s.setIsPaused?.(true);
+      set({ isOpen: true });
+      pushUiPause();
     }
   },
 
