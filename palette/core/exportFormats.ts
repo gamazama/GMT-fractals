@@ -284,6 +284,88 @@ export const buildAiSwatchLibrary = (items: { name: string; ramp: RGB[] }[]): st
   return [...header, ...defs, '%AI5_End_NonPrinting--', '%%EndSetup', ...palette, '%%Trailer', '%%EOF', ''].join('\n');
 };
 
+// ---- Ultra Fractal / IFS gradient (.ugr) ----
+//
+// The classic 1D flame-fractal palette format (Ultra Fractal, Apophysis/flam3
+// `.gradient`, ChaosHelper, and bezo97's IFSRenderer all read it). One or more
+// named blocks, each a 400-entry index→colour ring:
+//
+//   MyGrad {
+//   gradient:
+//    title="MyGrad" smooth=no
+//    index=0 color=12573686
+//    ...
+//    index=399 color=101873
+//   }
+//
+// Importer contract (verified against IFSRenderer's FlamePalette.FromFileAsync):
+//   • colour int is RGB with R as the LEAST-significant byte: R + G·256 + B·65536
+//     (NOT 0xRRGGBB). Must be a non-negative integer 0..16777215.
+//   • palettes are matched with `{[^{]+}` → no `{` may appear inside a block.
+//   • the title regex needs whitespace after the closing quote; every
+//     `index=.. color=..` token (the last one included) needs trailing whitespace
+//     → end every line, and the file, with a newline.
+//   • default ring size is 400 and the importer lerps linearly in RGB between the
+//     stops we give. We emit a Douglas-Peucker–reduced set of control nodes
+//     (≤UGR_MAX_STOPS) mapped onto the 0..399 ring, with smooth=no — NOT all 400.
+//     Every consumer then interpolates LINEARLY between the same nodes: IFSRenderer
+//     rebuilds its 400-entry buffer, Apophysis resamples its 256-colour palette, and
+//     Ultra Fractal's node-based editor stays editable (a handful of draggable nodes
+//     instead of one per ring slot). RDP picks the nodes against linear-interp error,
+//     so the reconstruction tracks our ramp within tolerance — the same near-lossless
+//     bar the .ai/.idml/.grd swatch exports use. The ramp endpoints (0 and last) are
+//     always kept (→ index 0 and 399), so there's no wrap-blend region the importer
+//     would otherwise synthesise from the last stop back to the first.
+
+const UGR_INDICES = 400; // Ultra Fractal's native gradient resolution (index 0..399)
+// Editable node budget. RDP emits far fewer for the smooth ramps fractal palettes
+// almost always are (a 3-colour blend reduces to ~4 nodes, near-lossless); the cap
+// only bites on complex multi-lobe ramps, where more nodes = better fidelity and 64
+// is still comfortable to hand-edit in UF (vs a wall of 400). Sharp-edged ramps soften
+// by ~1 ring slot at each seam under any reduced format — that's inherent to linear
+// interp, not this budget; dense-400 would be needed for pixel-exact band edges.
+const UGR_MAX_STOPS = 64;
+
+/** UF colour integer: R is the least-significant byte (R + G·256 + B·65536). */
+const ugrInt = (c: RGB): number => {
+  const [r, g, b] = ri(c);
+  return r + g * 256 + b * 65536;
+};
+
+/** A UF entry/title identifier: strip block- and title-breaking chars, collapse
+ *  whitespace to underscores so it round-trips through Ultra Fractal too. */
+const ugrName = (name: string): string =>
+  (name || 'gradient').replace(/[{}"\r\n]+/g, '').replace(/\s+/g, '_').slice(0, 48) || 'gradient';
+
+const ugrBlock = (name: string, ramp: RGB[]): string => {
+  const safe = ugrName(name);
+  const span = ramp.length - 1 || 1;
+  const lines = [`${safe} {`, 'gradient:', ` title="${safe}" smooth=no`];
+  let lastIdx = -1;
+  for (const i of reduceStopIndices(ramp, UGR_MAX_STOPS)) {
+    // Map the ramp position (0..len-1) onto the UF 0..399 ring; force strictly
+    // increasing indices so no two stops land on the same slot (overwrite-on-import).
+    const idx = Math.min(UGR_INDICES - 1, Math.max(lastIdx + 1, Math.round((i / span) * (UGR_INDICES - 1))));
+    lines.push(` index=${idx} color=${ugrInt(ramp[i])}`);
+    lastIdx = idx;
+  }
+  lines.push('}');
+  return lines.join('\n');
+};
+
+/** Build a `.ugr` holding one or more named gradients (de-duped like the .ai
+ *  builder so same-named palettes stay distinct in Ultra Fractal). */
+const buildUgr = (items: { name: string; ramp: RGB[] }[]): string => {
+  const seen = new Map<string, number>();
+  const blocks = items.map((it) => {
+    const base = ugrName(it.name);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return ugrBlock(n ? `${base}_${n + 1}` : base, it.ramp);
+  });
+  return blocks.join('\n\n') + '\n';
+};
+
 // ---- the suite ----
 
 export const EXPORT_FORMATS: ExportFormatDef[] = [
@@ -369,6 +451,13 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     binary: true,
     build: (r) => buildIdmlSwatchLibrary([{ name: 'gradient', ramp: r }]),
     collection: (items) => buildIdmlSwatchLibrary(items),
+  },
+  {
+    key: 'ugr',
+    label: 'IFS / Ultra Fractal .ugr',
+    ext: 'ugr',
+    build: (r) => buildUgr([{ name: 'gradient', ramp: r }]),
+    collection: (items) => buildUgr(items),
   },
 ];
 
