@@ -62,7 +62,7 @@ export const ParentSection: React.FC<ParentSectionProps> = ({
                         <div key={i} className="flex">
                             <div className={`w-2 shrink-0 self-stretch border-l border-line/20 bg-line/[0.12] ${isLast ? 'border-b border-b-white/20 rounded-bl-lg' : ''}`} />
                             <div className={`flex-1 min-w-0 relative ${isLast ? 'border-b border-b-white/20' : ''}`}>
-                                <div className="absolute inset-0 bg-surface-section pointer-events-none z-10" />
+                                <div className="absolute inset-0 bg-black/20 pointer-events-none z-10" />
                                 {child}
                             </div>
                         </div>
