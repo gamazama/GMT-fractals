@@ -90,10 +90,10 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
 
     return (
         <div className="flex flex-col h-full">
-            <div className="px-3 py-1 bg-black/20 border-b border-white/5 flex justify-between items-center shrink-0">
+            <div className="px-3 py-1 bg-surface-section border-b border-line/5 flex justify-between items-center shrink-0">
                 <span className="t-label">{currentFormat.container.toUpperCase()} • {currentFormat.codec.toUpperCase()} • {cfg.fps} FPS</span>
                 <span
-                    className={`text-[8px] font-bold px-1.5 py-0.5 rounded border ${isDiskMode ? 'bg-green-900/30 text-green-400 border-green-500/30' : 'bg-amber-900/30 text-amber-400 border-amber-500/30'}`}
+                    className={`text-[8px] font-bold px-1.5 py-0.5 rounded border ${isDiskMode ? 'bg-ok/15 text-ok border-ok/30' : 'bg-warn/15 text-warn border-warn/30'}`}
                     title={isDiskMode ? 'Direct disk write' : 'In-memory buffer (large videos may exceed RAM)'}
                 >
                     {isDiskMode ? 'DISK' : 'RAM'}
@@ -115,7 +115,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                 <div className="flex gap-1 mb-1.5">
                     <div className="flex-1">
                         <label className="t-label mb-0.5 block">Width</label>
-                        <div className="h-5 bg-black/40 rounded border border-white/10 relative">
+                        <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
                             <DraggableNumber
                                 value={cfg.width}
                                 onChange={(v) => setCfg({ width: Math.max(32, Math.round(v)) })}
@@ -126,7 +126,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                     </div>
                     <div className="flex-1">
                         <label className="t-label mb-0.5 block">Height</label>
-                        <div className="h-5 bg-black/40 rounded border border-white/10 relative">
+                        <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
                             <DraggableNumber
                                 value={cfg.height}
                                 onChange={(v) => setCfg({ height: Math.max(32, Math.round(v)) })}
@@ -146,7 +146,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                 />
 
                 {!isFormatSupported && (
-                    <div className="mx-1 mb-2 p-1.5 bg-red-900/20 border border-red-500/30 rounded flex items-center gap-2 text-[9px] text-red-300">
+                    <div className="mx-1 mb-2 p-1.5 bg-danger/10 border border-danger/30 rounded flex items-center gap-2 text-[9px] text-danger">
                         <AlertIcon />
                         <span>{formatSupportError ?? 'Format incompatible with browser/GPU.'}</span>
                     </div>
@@ -157,28 +157,30 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                 <div className="flex gap-1">
                     <div className="flex-1">
                         <label className="t-label mb-0.5 block">Start</label>
-                        <div className="h-5 bg-black/40 rounded border border-white/10 relative">
+                        <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
                             <DraggableNumber
                                 value={cfg.startFrame}
                                 onChange={(v) => setCfg({ startFrame: Math.max(0, Math.min(Math.round(v), cfg.endFrame)) })}
-                                step={1} highlight overrideText={cfg.startFrame.toFixed(0)}
+                                step={1} hardMin={0} hardMax={cfg.endFrame}
+                                highlight overrideText={cfg.startFrame.toFixed(0)}
                             />
                         </div>
                     </div>
                     <div className="flex-1">
                         <label className="t-label mb-0.5 block">End</label>
-                        <div className="h-5 bg-black/40 rounded border border-white/10 relative">
+                        <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
                             <DraggableNumber
                                 value={cfg.endFrame}
                                 onChange={(v) => setCfg({ endFrame: Math.max(cfg.startFrame, Math.min(Math.round(v), durationFrames)) })}
-                                step={1} highlight overrideText={cfg.endFrame.toFixed(0)}
+                                step={1} hardMin={cfg.startFrame} hardMax={durationFrames}
+                                highlight overrideText={cfg.endFrame.toFixed(0)}
                             />
                         </div>
                     </div>
                     {showFrameStep && (
                         <div className="flex-[0.7]">
                             <label className="t-label mb-0.5 block">Step</label>
-                            <div className="h-5 bg-black/40 rounded border border-white/10 relative">
+                            <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
                                 <DraggableNumber
                                     value={cfg.frameStep}
                                     onChange={(v) => setCfg({ frameStep: Math.max(1, Math.round(v)) })}
@@ -208,7 +210,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                             onChange={(v) => setCfg({ samplesPerFrame: v })}
                             overrideInputText={cfg.samplesPerFrame.toFixed(0)}
                         />
-                        <div className="px-2 -mt-1 mb-1 text-[8px] text-gray-500 leading-tight">
+                        <div className="px-2 -mt-1 mb-1 text-[8px] text-fg-dim leading-tight">
                             Samples per output frame. Higher = cleaner image but slower export.
                         </div>
                     </>
@@ -225,14 +227,14 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                     />
                 )}
 
-                <div className="flex flex-col gap-1 px-2 py-1.5 mt-2 bg-white/5 rounded border border-white/5 text-[10px]">
-                    <div className="flex justify-between"><span className="text-gray-400">Frames</span><span className="font-mono text-gray-200">{totalFrames}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Duration</span><span className="font-mono text-cyan-300">{durationSec.toFixed(2)}s</span></div>
+                <div className="flex flex-col gap-1 px-2 py-1.5 mt-2 bg-line/5 rounded border border-line/5 text-[10px]">
+                    <div className="flex justify-between"><span className="text-fg-muted">Frames</span><span className="font-mono text-fg-secondary">{totalFrames}</span></div>
+                    <div className="flex justify-between"><span className="text-fg-muted">Duration</span><span className="font-mono text-accent-300">{durationSec.toFixed(2)}s</span></div>
                     {ExtraInfoRows && <ExtraInfoRows cfg={cfg} extra={extra} />}
                 </div>
             </div>
 
-            <div className="p-1.5 bg-gray-900/50 border-t border-white/10 shrink-0">
+            <div className="p-1.5 bg-surface-sunken/50 border-t border-line/10 shrink-0">
                 <Button
                     onClick={onStart}
                     label={

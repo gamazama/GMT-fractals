@@ -9,6 +9,7 @@
 import React, { useState } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { registry } from '../engine/FractalRegistry';
+import { showToast } from '../../engine/store/toastStore';
 
 export type ShareLinkStatus = 'idle' | 'copied' | 'long' | 'na';
 type Status = ShareLinkStatus;
@@ -26,7 +27,11 @@ export const copyShareLink = async (): Promise<Status> => {
     const formula = (useEngineStore.getState() as any).formula;
     const getShareString = (useEngineStore.getState() as any).getShareString;
     const def = registry.get(formula);
-    if (!def) return 'na';
+    // Imported/Workshop formulas live only in this session's registry —
+    // a recipient opening the link wouldn't have the formula, so the
+    // share URL would be broken. Refuse to copy (matches the disabled
+    // title + the Workshop Edit-button gate in FormulaSelect).
+    if (!def || def.importSource) return 'na';
 
     try {
         let shareStr = getShareString({ includeAnimations: true });
@@ -58,13 +63,35 @@ export const ShareLinkButton: React.FC = () => {
     // Subscribe so the disabled-title updates when the formula changes
     // (Workshop/imported formulas show "Share unavailable").
     const formula = useEngineStore((s: any) => s.formula);
+    const def = registry.get(formula as any);
+    const shareable = !!def && !def.importSource;
 
     const flash = (s: Status) => {
         setStatus(s);
         setTimeout(() => setStatus('idle'), 2500);
     };
 
-    const handleClick = async () => { flash(await copyShareLink()); };
+    const handleClick = async () => {
+        // Imported/Workshop formulas can't be shared by URL — explain why
+        // rather than silently flashing "N/A", which leaves the user
+        // guessing. (The small badge still flashes for at-a-glance state.)
+        if (!shareable) {
+            flash('na');
+            showToast(
+                "Can't share this formula by link — imported & Workshop formulas only exist in your browser, so the link wouldn't open for anyone else. Save the scene as a .gmf file, or post it to the gallery, to share it.",
+                'warning',
+                5500,
+            );
+            return;
+        }
+        const result = await copyShareLink();
+        flash(result);
+        if (result === 'long') {
+            showToast("Link copied without animation — the full version was too long for a URL.", 'warning', 4000);
+        } else if (result === 'na') {
+            showToast("Couldn't copy the share link to your clipboard.", 'error');
+        }
+    };
 
     const label: Record<Status, string> = {
         idle:   '',
@@ -74,22 +101,22 @@ export const ShareLinkButton: React.FC = () => {
     };
     const color: Record<Status, string> = {
         idle:   '',
-        copied: 'bg-green-600',
-        long:   'bg-amber-600',
-        na:     'bg-gray-700',
+        copied: 'bg-ok-strong',
+        long:   'bg-warn-strong',
+        na:     'bg-fg-ghost',
     };
 
     return (
         <div className="relative flex items-center">
             <button
                 onClick={handleClick}
-                title={!registry.get(formula as any) ? 'Share unavailable for imported formulas' : 'Copy share link'}
-                className="flex items-center justify-center w-7 h-7 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                title={!shareable ? 'Share unavailable for imported formulas' : 'Copy share link'}
+                className="flex items-center justify-center w-7 h-7 rounded text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
             >
                 <LinkIcon active={status === 'copied'} />
             </button>
             {status !== 'idle' && (
-                <div className={`absolute top-full mt-1 left-1/2 -translate-x-1/2 px-2 py-0.5 ${color[status]} text-white text-[9px] font-bold rounded whitespace-nowrap animate-fade-in pointer-events-none z-50`}>
+                <div className={`absolute top-full mt-1 left-1/2 -translate-x-1/2 px-2 py-0.5 ${color[status]} text-fg text-[9px] font-bold rounded whitespace-nowrap animate-fade-in pointer-events-none z-50`}>
                     {label[status]}
                 </div>
             )}

@@ -103,6 +103,23 @@ function RenderDialogShell<TExtra>(
     const patchExtra = (patch: Partial<TExtra>) =>
         setExtraState((e) => ({ ...e, ...patch }));
 
+    // Re-clamp the frame range when the timeline duration changes. The
+    // dialog is a non-modal DraggableWindow, so the user can shrink the
+    // timeline's LEN while it's open; without this, a stale endFrame
+    // (e.g. 300) stays above the new max (e.g. 100) until the End field
+    // is touched, and the render would emit frames past the timeline.
+    // Only shrinks — growing the duration leaves the range for the user
+    // to extend. Also catches an out-of-range `defaults.endFrame`.
+    useEffect(() => {
+        setCfgState((c) => {
+            const endFrame   = Math.min(c.endFrame, animStore.durationFrames);
+            const startFrame = Math.min(c.startFrame, endFrame);
+            return (endFrame === c.endFrame && startFrame === c.startFrame)
+                ? c
+                : { ...c, endFrame, startFrame };
+        });
+    }, [animStore.durationFrames]);
+
     // Auto-track fps from the animation store — cfg.fps is mutable
     // through the form for apps that want it, but defaults to the
     // current store value and follows it until the user touches the
