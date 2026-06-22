@@ -1052,6 +1052,11 @@ export class FluidEngine {
    *  changed. */
   resetAccumulation(): void { this.tsaaSampleIndex = 0; }
 
+  /** Live TSAA convergence target. Bucket render saves + overrides this so a
+   *  sub-bucket accumulates to the EXPORT's sample count instead of being
+   *  clamped at the (usually lower) live-viewport cap. */
+  getTsaaSampleCap(): number { return this.params.tsaaSampleCap; }
+
   /**
    * Upload a baked LUT (`GRADIENT_LUT_WIDTH × 1 RGBA`, length = 4×width).
    * Shared helper: both the main colour gradient and the collision B&W gradient

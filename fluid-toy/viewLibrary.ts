@@ -144,12 +144,14 @@ const isViewModified = (snap: JuliaViewState): boolean => {
     return false;
 };
 
-/** Capture the live canvas as a 128px JPEG data URL. fluid-toy mounts
- *  a single canvas inside ViewportFrame; we query by tag. Returns
- *  undefined on any error so the snapshot just goes thumbnail-less. */
+/** Capture the live canvas as a 128px JPEG data URL. Targets the render
+ *  canvas by its stable id (set in FluidToyApp) — a loose querySelector('canvas')
+ *  can return a Favients swatch / picker preview canvas when those panels are
+ *  open. Returns undefined on any error so the snapshot just goes thumbnail-less. */
 const captureCanvasThumbnail = async (): Promise<string | undefined> => {
     try {
-        const src = document.querySelector('canvas');
+        const src = (document.getElementById('ft-render-canvas')
+            ?? document.querySelector('canvas')) as HTMLCanvasElement | null;
         if (!src) return undefined;
         const size = 128;
         const out = document.createElement('canvas');

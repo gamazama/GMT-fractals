@@ -201,6 +201,7 @@ export class FluidBucketController implements BucketRenderController {
         const savedH = canvas.height;
         const savedJuliaOnly = engine.isForceJuliaOnly();
         const savedFluidPaused = engine.isForceFluidPaused();
+        const savedSampleCap = engine.getTsaaSampleCap();
 
         const outW = Math.max(1, Math.floor(config.outputWidth));
         const outH = Math.max(1, Math.floor(config.outputHeight));
@@ -226,6 +227,12 @@ export class FluidBucketController implements BucketRenderController {
         engine.setForceJuliaOnly(true);
         engine.setForceFluidPaused(true);
         engine.setBucketOutputSize(outW, outH);
+        // Converge each sub-bucket to the EXPORT's sample count. The live
+        // viewport TSAA cap (driven by the topbar Samples control) is usually
+        // lower; without this override accumulation clamps below the target and
+        // the wait below can never complete — it bails under-converged, which
+        // leaves a noise step at sub-bucket boundaries (seams/"cuts").
+        engine.setParams({ tsaaSampleCap: sampleCap });
 
         this.emitStatus(0, true, totalSubBuckets, 0);
 
@@ -269,13 +276,36 @@ export class FluidBucketController implements BucketRenderController {
 
                     engine.resetAccumulation();
 
-                    // Wait for TSAA convergence on this sub-rect.
-                    const maxWaitFrames = sampleCap * 4 + 32;
-                    let frames = 0;
-                    while (engine.getAccumulationCount() < sampleCap && frames < maxWaitFrames) {
-                        if (this.cancelled) break;
+                    // Wait for this sub-rect to reach the export sample cap.
+                    // Gate on accumulation PROGRESS, not a fixed frame/wall-clock
+                    // budget: large or shader-heavy renders run slower per frame,
+                    // so the old fixed budget (`sampleCap * 4 + 32` frames) timed
+                    // slow renders out mid-convergence — and detail-heavy
+                    // sub-buckets (slower) stopped at fewer samples than empty ones,
+                    // leaving a visible noise step at every sub-bucket boundary
+                    // ("cuts" in the tile). Now we keep waiting as long as the count
+                    // keeps climbing and only bail on a genuine stall (no progress
+                    // for a few seconds — e.g. a lost context), so every sub-bucket
+                    // reaches the SAME sample count regardless of render speed.
+                    if (sampleCap <= 1) {
+                        // TSAA off — a single direct sample, nothing accumulates.
+                        // Give the region a couple of frames to draw, then read.
                         await sleep(16);
-                        frames++;
+                        await sleep(16);
+                    } else {
+                        let lastCount = -1;
+                        let stalledMs = 0;
+                        // No-progress bail-out only — generous enough that a single
+                        // very heavy frame on a large render isn't mistaken for a
+                        // stall. A real hang (lost context / paused) still recovers.
+                        const STALL_LIMIT_MS = 8000;
+                        while (engine.getAccumulationCount() < sampleCap) {
+                            if (this.cancelled) break;
+                            await sleep(16);
+                            const c = engine.getAccumulationCount();
+                            if (c > lastCount) { lastCount = c; stalledMs = 0; }
+                            else { stalledMs += 16; if (stalledMs >= STALL_LIMIT_MS) break; }
+                        }
                     }
                     if (this.cancelled) break;
 
@@ -323,6 +353,7 @@ export class FluidBucketController implements BucketRenderController {
             engine.setRenderSize(savedW, savedH);
             engine.setForceJuliaOnly(savedJuliaOnly);
             engine.setForceFluidPaused(savedFluidPaused);
+            engine.setParams({ tsaaSampleCap: savedSampleCap });
             engine.resetAccumulation();
             this.running = false;
             this.cancelled = false;

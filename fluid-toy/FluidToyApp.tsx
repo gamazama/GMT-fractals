@@ -109,6 +109,9 @@ export const FluidToyApp: React.FC = () => {
     const accumulation = useEngineStore((s) => s.accumulation);
     const isPaused     = useEngineStore((s) => s.isPaused);
     const sampleCap    = useEngineStore((s) => s.sampleCap);
+    // Bucket render owns the canvas size while it runs; the adaptive-quality
+    // resolution effect below must stand down so it can't resize mid-render.
+    const isBucketRendering = useEngineStore((s) => s.isBucketRendering);
 
     // The fluid sim's own Pause (fluidSim.paused) and the topbar render-control
     // Pause (isPaused) both gate the SINGLE engine.params.paused. We merge them
@@ -156,6 +159,13 @@ export const FluidToyApp: React.FC = () => {
     useEffect(() => {
         const engine = engineRef.current;
         if (!engine) return;
+        // While a bucket render is in flight the controller holds the canvas at
+        // the current tile's pixel size and renders sub-buckets in place. If the
+        // adaptive-quality multiplier resizes the engine here mid-render, the
+        // in-flight tile's render target is reallocated to a window-derived size
+        // and the sub-bucket reads misalign → cut/garbled tiles. Stand down; this
+        // effect re-runs when isBucketRendering clears and restores the live size.
+        if (isBucketRendering) return;
         const dpr = window.devicePixelRatio || 1;
         const [baseW, baseH] = resolutionMode === 'Fixed'
             ? fixedResolution
@@ -165,11 +175,11 @@ export const FluidToyApp: React.FC = () => {
         const finalH = Math.max(1, Math.round(baseH * renderScale * quality));
         engine.setRenderSize(finalW, finalH);
         engine.redraw();
-    }, [canvasPixelSize, resolutionMode, fixedResolution, renderScale, quality]);
+    }, [canvasPixelSize, resolutionMode, fixedResolution, renderScale, quality, isBucketRendering]);
 
     return (
         <StoreCallbacksProvider value={storeCallbacks}>
-        <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden flex flex-col">
+        <div className="fixed inset-0 w-full h-full bg-black text-fg select-none overflow-hidden flex flex-col">
             <EngineBridge />
             <RenderLoopDriver />
             <DropZones />
@@ -198,6 +208,7 @@ export const FluidToyApp: React.FC = () => {
                 <ViewportFrame className="flex-1">
                     <canvas
                         ref={canvasRef}
+                        id="ft-render-canvas"
                         className="absolute inset-0 w-full h-full block touch-none"
                     />
                     <FluidPointerLayer canvasRef={canvasRef} engineRef={engineRef} />

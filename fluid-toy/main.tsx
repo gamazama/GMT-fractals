@@ -159,11 +159,15 @@ FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, (data) => {
     s.setIsExporting?.(data.isRendering);
 });
 
-// @engine/scene-io — Save + Load buttons into the topbar. PNG save
-// reads from the single canvas the app mounts (query by tag since
-// fluid-toy has one top-level canvas).
+// @engine/scene-io — Save + Load buttons into the topbar. PNG save reads
+// from the render canvas by its stable id (set in FluidToyApp). A loose
+// querySelector('canvas') returns the FIRST canvas in the DOM, which can be a
+// Favients gradient swatch or a fractal-picker preview canvas when those panels
+// are open — that's how snapshots were grabbing the wrong surface. Mirrors
+// app-gmt's getElementById approach.
 installSceneIO({
-    getCanvas: () => document.querySelector('canvas'),
+    getCanvas: () => (document.getElementById('ft-render-canvas')
+        ?? document.querySelector('canvas')) as HTMLCanvasElement | null,
 });
 
 // Camera tracks for the shared TimelineToolbar's Key Cam button.
