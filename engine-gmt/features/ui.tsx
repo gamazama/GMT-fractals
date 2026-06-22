@@ -144,7 +144,7 @@ const HintsFooter: React.FC = () => {
     const showHints = useEngineStore((s) => s.showHints);
     if (!showHints) return null;
     return (
-        <div className="text-[9px] text-gray-500 text-center mt-6 pb-2 opacity-50 font-mono">
+        <div className="text-[9px] text-fg-dim text-center mt-6 pb-2 opacity-50 font-mono">
             PRESS 'H' TO TOGGLE HINTS
         </div>
     );

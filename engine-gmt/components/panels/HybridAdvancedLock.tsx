@@ -28,7 +28,7 @@ export const HybridAdvancedLock: React.FC<FeatureComponentProps> = ({ sliceState
     };
 
     return (
-        <div className="relative mt-2 pt-2 border-t border-white/5">
+        <div className="relative mt-2 pt-2 border-t border-line/5">
             {/* The Controls Area */}
             <div 
                 className={`transition-all duration-300 ${!isUnlocked ? 'opacity-30 blur-[0.5px] pointer-events-none grayscale' : ''}`}
@@ -62,12 +62,12 @@ export const HybridAdvancedLock: React.FC<FeatureComponentProps> = ({ sliceState
             {/* Minimal Grey Overlay */}
             {!isUnlocked && !showDialog && (
                 <div 
-                    className="absolute inset-0 cursor-pointer z-10 bg-gray-900/50 hover:bg-gray-800/40 transition-colors flex items-center justify-center group rounded"
+                    className="absolute inset-0 cursor-pointer z-10 bg-surface-sunken/50 hover:bg-surface-header transition-colors flex items-center justify-center group rounded"
                     onClick={handleLockedClick}
                     title="Click to enable Advanced Hybrid Mode"
                 >
                     {/* Subtle Lock Icon on Hover */}
-                    <div className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity transform scale-75">
+                    <div className="text-fg-muted opacity-0 group-hover:opacity-100 transition-opacity transform scale-75">
                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
@@ -80,30 +80,30 @@ export const HybridAdvancedLock: React.FC<FeatureComponentProps> = ({ sliceState
             {showDialog && (
                 <div className="absolute top-[-20px] left-0 right-0 z-50 animate-pop-in">
                     <div 
-                        className="bg-black/95 border border-white/20 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.9)] backdrop-blur-md overflow-hidden cursor-pointer hover:border-cyan-500/50 transition-colors"
+                        className="bg-surface border border-line/20 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.9)] backdrop-blur-md overflow-hidden cursor-pointer hover:border-accent-500/50 transition-colors"
                         onClick={handleUnlock}
                     >
-                         <div className="flex items-start justify-between p-2 border-b border-white/10 bg-white/5">
-                            <div className="flex items-center gap-2 text-gray-300">
+                         <div className="flex items-start justify-between p-2 border-b border-line/10 bg-line/5">
+                            <div className="flex items-center gap-2 text-fg-tertiary">
                                 <AlertIcon />
                                 <SectionLabel>Advanced Shader</SectionLabel>
                             </div>
                             <button 
                                 onClick={(e) => { e.stopPropagation(); setShowDialog(false); }}
-                                className="text-gray-500 hover:text-white -mt-0.5 -mr-0.5 p-1"
+                                className="text-fg-dim hover:text-fg -mt-0.5 -mr-0.5 p-1"
                             >
                                 <CloseIcon />
                             </button>
                          </div>
                          
                          <div className="p-3">
-                             <p className="text-[10px] text-gray-400 leading-relaxed mb-3">
+                             <p className="text-[10px] text-fg-muted leading-relaxed mb-3">
                                  Enable Advanced Hybrid Integration?<br/>
                                  This allows <strong>alternating formulas</strong> between Box Folds and the Main Fractal.<br/><br/>
-                                 <span className="text-orange-300">Compilation may take 30-60 seconds.</span>
+                                 <span className="text-warn">Compilation may take 30-60 seconds.</span>
                              </p>
                              
-                             <div className="flex items-center justify-center p-1.5 bg-white/5 rounded border border-white/10 text-cyan-400 text-[9px] font-bold group-hover:bg-cyan-900/30 group-hover:text-cyan-200 group-hover:border-cyan-500/30 transition-all">
+                             <div className="flex items-center justify-center p-1.5 bg-line/5 rounded border border-line/10 text-accent-400 text-[9px] font-bold group-hover:bg-accent-900/30 group-hover:text-cyan-200 group-hover:border-accent-500/30 transition-all">
                                  Click to Load
                              </div>
                          </div>

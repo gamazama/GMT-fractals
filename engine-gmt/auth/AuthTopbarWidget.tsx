@@ -5,7 +5,7 @@
  * Signed out → person glyph; click opens AuthOverlay.
  * Signed in  → initial in a gradient circle; click opens a Popover with
  *              account header, "Account…", and "Sign out". Styling matches
- *              the engine's Menu plugin dropdowns (bg-black/95 + p-1 items).
+ *              the engine's Menu plugin dropdowns (bg-surface + p-1 items).
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from './authStore';
@@ -40,11 +40,11 @@ export const AuthTopbarWidget: React.FC = () => {
     const CHIP_BASE =
         'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ' +
         'border transition-colors';
-    const CHIP_IDLE  = 'bg-cyan-900/20 border-cyan-500/20 text-cyan-300 hover:bg-cyan-900/40';
-    const CHIP_OPEN  = 'bg-cyan-900/40 border-cyan-500/40 text-cyan-200';
+    const CHIP_IDLE  = 'bg-accent-900/20 border-accent-500/20 text-accent-300 hover:bg-accent-900/40';
+    const CHIP_OPEN  = 'bg-accent-900/40 border-accent-500/40 text-cyan-200';
 
     if (status === 'loading') {
-        return <div className={`${CHIP_BASE} bg-white/[0.03] border-white/10 animate-pulse`} />;
+        return <div className={`${CHIP_BASE} bg-line/[0.03] border-line/10 animate-pulse`} />;
     }
 
     // Signed out (or pre-profile): single click opens the auth flow. No
@@ -80,14 +80,14 @@ export const AuthTopbarWidget: React.FC = () => {
             {open && (
                 <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute top-full left-0 mt-2 w-56 bg-black/95 border border-white/15 rounded-lg shadow-2xl z-50 p-1"
+                    className="absolute top-full left-0 mt-2 w-56 bg-surface border border-line/15 rounded-lg shadow-2xl z-50 p-1"
                 >
                     {/* Account header — name + handle + tier hint */}
-                    <div className="px-2 py-1.5 border-b border-white/5 mb-1">
-                        <div className="text-[11px] font-bold text-white truncate">{profile.display_name}</div>
-                        <div className="text-[9px] text-gray-500 truncate font-mono">@{profile.username}</div>
+                    <div className="px-2 py-1.5 border-b border-line/5 mb-1">
+                        <div className="text-[11px] font-bold text-fg truncate">{profile.display_name}</div>
+                        <div className="text-[9px] text-fg-dim truncate font-mono">@{profile.username}</div>
                         {user?.email && (
-                            <div className="text-[9px] text-gray-600 truncate mt-0.5">{user.email}</div>
+                            <div className="text-[9px] text-fg-faint truncate mt-0.5">{user.email}</div>
                         )}
                     </div>
 
@@ -101,12 +101,12 @@ export const AuthTopbarWidget: React.FC = () => {
                     />
 
                     {isAdmin && (
-                        <div className="px-2 py-1 text-[9px] text-amber-400 font-bold uppercase tracking-wider">
+                        <div className="px-2 py-1 text-[9px] text-warn font-bold uppercase tracking-wider">
                             Admin · use backend/admin
                         </div>
                     )}
 
-                    <div className="h-px bg-white/5 my-1" />
+                    <div className="h-px bg-line/5 my-1" />
 
                     <MenuButton
                         label="Sign out"
@@ -126,7 +126,7 @@ const MenuButton: React.FC<{ label: string; onClick: () => void; muted?: boolean
     <button
         onClick={onClick}
         className={`w-full text-left px-2 py-1.5 rounded text-[11px] font-bold transition-colors ${
-            muted ? 'text-gray-400 hover:text-white hover:bg-white/5' : 'text-gray-200 hover:text-white hover:bg-white/5'
+            muted ? 'text-fg-muted hover:text-fg hover:bg-line/5' : 'text-fg-secondary hover:text-fg hover:bg-line/5'
         }`}
     >
         {label}

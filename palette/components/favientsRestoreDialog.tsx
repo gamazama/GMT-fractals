@@ -78,14 +78,14 @@ const FavientsRestoreCard: React.FC<FavientsRestoreOpts & { onChoose: (c: Favien
     return (
         <Modal onClose={() => onChoose('omit')} labelledBy="favients-restore-title">
             <div
-                className="w-[22rem] max-w-[90vw] rounded-lg border border-white/10 bg-gray-900 p-4 shadow-2xl"
+                className="w-[22rem] max-w-[90vw] rounded-lg border border-line/10 bg-surface-sunken p-4 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
-                <h2 id="favients-restore-title" className="text-sm font-semibold text-gray-100">
+                <h2 id="favients-restore-title" className="text-sm font-semibold text-fg-secondary">
                     Saved gradients in this scene
                 </h2>
-                <p className="mt-2 text-xs leading-relaxed text-gray-400">{headline}</p>
-                <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                <p className="mt-2 text-xs leading-relaxed text-fg-muted">{headline}</p>
+                <p className="mt-1 text-xs leading-relaxed text-fg-dim">
                     {canAppend
                         ? 'Append adds them (keeping yours), Replace swaps your shelf for the scene’s, Omit keeps your shelf as-is.'
                         : 'Replace swaps your shelf for the scene’s, Omit keeps your shelf as-is.'}
@@ -93,14 +93,14 @@ const FavientsRestoreCard: React.FC<FavientsRestoreOpts & { onChoose: (c: Favien
                 <div className="mt-4 flex justify-end gap-2">
                     <button
                         type="button"
-                        className={`${btn} text-gray-300 hover:text-white hover:bg-white/10`}
+                        className={`${btn} text-fg-tertiary hover:text-fg hover:bg-line/10`}
                         onClick={() => onChoose('omit')}
                     >
                         Omit
                     </button>
                     <button
                         type="button"
-                        className={`${btn} text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30`}
+                        className={`${btn} text-warn bg-warn/10 hover:bg-warn/20 border border-warn/30`}
                         onClick={() => onChoose('replace')}
                     >
                         Replace
@@ -108,7 +108,7 @@ const FavientsRestoreCard: React.FC<FavientsRestoreOpts & { onChoose: (c: Favien
                     {canAppend && (
                         <button
                             type="button"
-                            className={`${btn} text-cyan-100 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40`}
+                            className={`${btn} text-accent-300 bg-accent-500/20 hover:bg-accent-500/30 border border-accent-400/40`}
                             onClick={() => onChoose('append')}
                         >
                             Append

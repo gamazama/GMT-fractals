@@ -47,11 +47,11 @@ const MiniSlider = ({ value, onChange }: { value: number, onChange: (v: number) 
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
         >
-            <div className="absolute inset-0 bg-white/[0.12]" />
-            <div className="absolute top-0 bottom-0 left-0 bg-cyan-500/20 transition-[width] duration-75 ease-out" style={{ width: `${fillPct}%` }} />
+            <div className="absolute inset-0 bg-line/[0.12]" />
+            <div className="absolute top-0 bottom-0 left-0 bg-accent-500/20 transition-[width] duration-75 ease-out" style={{ width: `${fillPct}%` }} />
             <div className="absolute inset-0 flex items-center justify-between px-2 pointer-events-none">
-                <span className="text-[10px] text-gray-400 font-medium">Random Strength</span>
-                <span className="text-[10px] text-gray-300 tabular-nums">{value >= 10 ? Math.round(value) : value.toFixed(2)}%</span>
+                <span className="text-[10px] text-fg-muted font-medium">Random Strength</span>
+                <span className="text-[10px] text-fg-tertiary tabular-nums">{value >= 10 ? Math.round(value) : value.toFixed(2)}%</span>
             </div>
         </div>
     );
@@ -69,11 +69,11 @@ const RandomizeSection = ({ onRandomizeParams, onRandomizeFull }: {
                 <MiniSlider value={pct} onChange={setPct} />
             </div>
             <button onClick={() => onRandomizeParams(pct / 100)}
-                className="w-full text-left px-4 py-2 text-xs flex items-center gap-2 text-gray-300 hover:bg-white/10 hover:text-white transition-colors">
+                className="w-full text-left px-4 py-2 text-xs flex items-center gap-2 text-fg-tertiary hover:bg-line/10 hover:text-fg transition-colors">
                 <DiceIcon /> Parameters
             </button>
             <button onClick={() => onRandomizeFull(pct / 100)}
-                className="w-full text-left px-4 py-2 text-xs flex items-center gap-2 text-gray-300 hover:bg-white/10 hover:text-white transition-colors">
+                className="w-full text-left px-4 py-2 text-xs flex items-center gap-2 text-fg-tertiary hover:bg-line/10 hover:text-fg transition-colors">
                 <ShuffleIcon /> Full (inc. Box/Julia)
             </button>
         </div>

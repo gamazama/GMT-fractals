@@ -32,9 +32,9 @@ const Toggle: React.FC<{ on: boolean; onClick: () => void }> = ({ on, onClick })
         role="switch"
         aria-checked={on}
         onClick={onClick}
-        className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${on ? 'bg-cyan-600' : 'bg-white/15'}`}
+        className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${on ? 'bg-accent-600' : 'bg-line/15'}`}
     >
-        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${on ? 'translate-x-4' : ''}`} />
+        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-fg transition-transform ${on ? 'translate-x-4' : ''}`} />
     </button>
 );
 
@@ -45,7 +45,7 @@ const SettingRow: React.FC<{ d: SettingDescriptor; onChanged: () => void }> = ({
     if (ctrl.kind === 'custom') {
         return (
             <div className="py-2">
-                {d.label && <div className="text-[12px] text-gray-200 mb-1.5">{d.label}</div>}
+                {d.label && <div className="text-[12px] text-fg-secondary mb-1.5">{d.label}</div>}
                 {ctrl.render()}
             </div>
         );
@@ -67,9 +67,9 @@ const SettingRow: React.FC<{ d: SettingDescriptor; onChanged: () => void }> = ({
                     max={ctrl.max}
                     step={ctrl.step ?? 1}
                     onChange={(e) => apply(Number(e.target.value))}
-                    className="w-20 bg-black/40 border border-white/10 rounded px-2 py-1 text-[11px] text-gray-200 outline-none focus:border-cyan-500/50"
+                    className="w-20 bg-surface-sunken border border-line/10 rounded px-2 py-1 text-[11px] text-fg-secondary outline-none focus:border-accent-500/50"
                 />
-                {ctrl.unit && <span className="text-[10px] text-gray-500">{ctrl.unit}</span>}
+                {ctrl.unit && <span className="text-[10px] text-fg-dim">{ctrl.unit}</span>}
             </div>
         );
     } else if (ctrl.kind === 'enum') {
@@ -86,7 +86,7 @@ const SettingRow: React.FC<{ d: SettingDescriptor; onChanged: () => void }> = ({
         );
     } else {
         control = (
-            <GhostButton onClick={() => apply()} className="rounded px-3 py-1 text-[11px] text-gray-300 transition-colors shrink-0">
+            <GhostButton onClick={() => apply()} className="rounded px-3 py-1 text-[11px] text-fg-tertiary transition-colors shrink-0">
                 {ctrl.buttonLabel}
             </GhostButton>
         );
@@ -95,8 +95,8 @@ const SettingRow: React.FC<{ d: SettingDescriptor; onChanged: () => void }> = ({
     return (
         <div className="flex items-center justify-between gap-4 py-2">
             <div className="min-w-0">
-                <div className="text-[12px] text-gray-200">{d.label}</div>
-                {d.description && <div className="text-[10px] text-gray-500 leading-snug mt-0.5">{d.description}</div>}
+                <div className="text-[12px] text-fg-secondary">{d.label}</div>
+                {d.description && <div className="text-[10px] text-fg-dim leading-snug mt-0.5">{d.description}</div>}
             </div>
             {control}
         </div>
@@ -142,57 +142,57 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
     return (
         <Modal onClose={onClose} z={Z.modal} backdropClassName="bg-black/70 backdrop-blur-sm">
             <div
-                className="bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[460px] max-h-[85vh] flex flex-col"
+                className="bg-surface-sunken border border-line/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[460px] max-h-[85vh] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
-                <header className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
-                    <h2 className="text-sm font-bold text-white">Settings</h2>
-                    <button onClick={onClose} title="Close" className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                <header className="flex items-center justify-between px-4 py-3 border-b border-line/10 shrink-0">
+                    <h2 className="text-sm font-bold text-fg">Settings</h2>
+                    <button onClick={onClose} title="Close" className="p-1 rounded hover:bg-line/10 text-fg-muted hover:text-fg transition-colors">
                         <CloseIcon />
                     </button>
                 </header>
 
                 <div className="overflow-y-auto px-4 py-2">
                     {sections.length === 0 && (
-                        <div className="text-[11px] text-gray-500 py-4 text-center">No preferences registered.</div>
+                        <div className="text-[11px] text-fg-dim py-4 text-center">No preferences registered.</div>
                     )}
                     {sections.map(([section, items]) => (
                         <section key={section} className="py-2">
-                            <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-1">{section}</div>
-                            <div className="divide-y divide-white/5">
+                            <div className="text-[10px] uppercase tracking-wider text-fg-dim font-bold mb-1">{section}</div>
+                            <div className="divide-y divide-line/5">
                                 {items.map((d) => <SettingRow key={d.id} d={d} onChanged={bump} />)}
                             </div>
                         </section>
                     ))}
 
                     {/* Advanced: raw localStorage inspector */}
-                    <section className="py-2 border-t border-white/10 mt-2">
+                    <section className="py-2 border-t border-line/10 mt-2">
                         <button
                             onClick={() => setShowStorage((v) => !v)}
-                            className="w-full flex items-center justify-between text-[10px] uppercase tracking-wider text-gray-500 font-bold py-1 hover:text-gray-300 transition-colors"
+                            className="w-full flex items-center justify-between text-[10px] uppercase tracking-wider text-fg-dim font-bold py-1 hover:text-fg-tertiary transition-colors"
                         >
                             <span>Storage ({storageEntries.length})</span>
                             <span>{showStorage ? '−' : '+'}</span>
                         </button>
                         {showStorage && (
                             <div className="mt-1">
-                                <div className="text-[10px] text-gray-500 mb-2 leading-snug">
+                                <div className="text-[10px] text-fg-dim mb-2 leading-snug">
                                     All locally-stored keys for this app. Deleting one resets that option to its default.
                                 </div>
-                                <div className="max-h-52 overflow-y-auto divide-y divide-white/5 rounded border border-white/10 bg-black/30">
+                                <div className="max-h-52 overflow-y-auto divide-y divide-line/5 rounded border border-line/10 bg-surface-section">
                                     {storageEntries.length === 0 && (
-                                        <div className="text-[10px] text-gray-600 px-2 py-2">empty</div>
+                                        <div className="text-[10px] text-fg-faint px-2 py-2">empty</div>
                                     )}
                                     {storageEntries.map(({ key, value }) => (
                                         <div key={key} className="flex items-center gap-2 px-2 py-1.5">
                                             <div className="min-w-0 flex-1">
-                                                <div className="text-[10px] font-mono text-gray-300 truncate">{key}</div>
-                                                <div className="text-[9px] font-mono text-gray-600 truncate">{value}</div>
+                                                <div className="text-[10px] font-mono text-fg-tertiary truncate">{key}</div>
+                                                <div className="text-[9px] font-mono text-fg-faint truncate">{value}</div>
                                             </div>
                                             <button
                                                 onClick={() => { safeLocalRemove(key); bump(); }}
                                                 title={`Delete ${key}`}
-                                                className="p-1 rounded hover:bg-red-500/20 text-gray-600 hover:text-red-300 transition-colors shrink-0"
+                                                className="p-1 rounded hover:bg-danger/20 text-fg-faint hover:text-danger transition-colors shrink-0"
                                             >
                                                 <CloseIcon size={9} />
                                             </button>
@@ -202,8 +202,8 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
                                 <div className="flex justify-end mt-2">
                                     {confirmClear ? (
                                         <div className="flex items-center gap-2">
-                                            <span className="text-[10px] text-red-300">Delete all stored data?</span>
-                                            <GhostButton onClick={() => setConfirmClear(false)} className="rounded px-2 py-1 text-[10px] text-gray-300 transition-colors">Cancel</GhostButton>
+                                            <span className="text-[10px] text-danger">Delete all stored data?</span>
+                                            <GhostButton onClick={() => setConfirmClear(false)} className="rounded px-2 py-1 text-[10px] text-fg-tertiary transition-colors">Cancel</GhostButton>
                                             <GhostButton
                                                 variant="danger"
                                                 onClick={() => { storageEntries.forEach(({ key }) => safeLocalRemove(key)); setConfirmClear(false); bump(); }}
@@ -213,7 +213,7 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
                                             </GhostButton>
                                         </div>
                                     ) : (
-                                        <GhostButton onClick={() => setConfirmClear(true)} className="rounded px-2 py-1 text-[10px] text-gray-400 transition-colors">
+                                        <GhostButton onClick={() => setConfirmClear(true)} className="rounded px-2 py-1 text-[10px] text-fg-muted transition-colors">
                                             Clear all data…
                                         </GhostButton>
                                     )}

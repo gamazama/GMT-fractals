@@ -514,19 +514,19 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
                 
                 {/* TOOL FEEDBACK OVERLAYS */}
                 {tools.isSmoothing && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 text-cyan-300 px-3 py-1.5 rounded-full border border-cyan-500/50 text-xs font-bold shadow-xl animate-fade-in z-50 pointer-events-none flex items-center gap-2">
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface/80 text-accent-300 px-3 py-1.5 rounded-full border border-accent-500/50 text-xs font-bold shadow-xl animate-fade-in z-50 pointer-events-none flex items-center gap-2">
                         <WaveIcon active={true} />
                         <span>{tools.smoothingRadius > 0 ? `Constrained Smooth: ${tools.smoothingRadius.toFixed(1)}` : `Bounce: ${Math.abs(tools.smoothingRadius).toFixed(1)}`}</span>
                     </div>
                 )}
                 {tools.isBaking && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 text-purple-300 px-3 py-1.5 rounded-full border border-purple-500/50 text-xs font-bold shadow-xl animate-fade-in z-50 pointer-events-none flex items-center gap-2">
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface/80 text-secondary px-3 py-1.5 rounded-full border border-secondary/50 text-xs font-bold shadow-xl animate-fade-in z-50 pointer-events-none flex items-center gap-2">
                         <BakeIcon active={true} />
                         <span>Bake Interval: {tools.bakeStep} frames</span>
                     </div>
                 )}
                 {tools.isSimplifying && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 text-amber-300 px-3 py-1.5 rounded-full border border-amber-500/50 text-xs font-bold shadow-xl animate-fade-in z-50 pointer-events-none flex items-center gap-2">
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface/80 text-warn px-3 py-1.5 rounded-full border border-warn/50 text-xs font-bold shadow-xl animate-fade-in z-50 pointer-events-none flex items-center gap-2">
                         <MagicIcon active={true} />
                         <span>Fit Strength: {(tools.simplifyStrength * 100).toFixed(0)}%</span>
                     </div>

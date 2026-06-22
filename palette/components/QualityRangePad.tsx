@@ -154,7 +154,7 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
 
   const numberCell = (val: number, set: (v: number) => void, hardMin: number, hardMax: number) => (
     <div
-      className="relative flex-1 min-w-0 border-l border-white/10 bg-white/[0.02] touch-none"
+      className="relative flex-1 min-w-0 border-l border-line/10 bg-line/[0.02] touch-none"
       style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.03) 5px, rgba(255,255,255,0.03) 10px)' }}
     >
       <DraggableNumber
@@ -173,11 +173,11 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
   return (
     <div className={`mb-px ${className ?? ''}`}>
       {/* Header — GMT slider chrome: label + two value cells */}
-      <div className="flex items-stretch bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5">
+      <div className="flex items-stretch bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-line/5">
         <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
           {headerRight}
-          <label className="text-[10px] font-medium tracking-tight select-none truncate pointer-events-none text-gray-400">
-            {loLabel} <span className="text-gray-600">↔</span> {hiLabel}
+          <label className="text-[10px] font-medium tracking-tight select-none truncate pointer-events-none text-fg-muted">
+            {loLabel} <span className="text-fg-faint">↔</span> {hiLabel}
           </label>
         </div>
         {/* Value region = w-1/2 (matches a GMT slider's value area), split into two equal fields. */}
@@ -207,7 +207,7 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
         <div className="absolute top-0 bottom-0 bg-black/60 pointer-events-none" style={{ left: `${b * 100}%`, width: `${(1 - b) * 100}%` }} />
         {/* selected window with GMT-style edge thumbs */}
         <div
-          className="absolute top-0 bottom-0 border-l-2 border-r-2 border-white/80 box-border pointer-events-none"
+          className="absolute top-0 bottom-0 border-l-2 border-r-2 border-line/80 box-border pointer-events-none"
           style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%` }}
         />
       </div>

@@ -240,13 +240,13 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
     return (
         <div className="flex flex-col items-center mb-2">
             <div className="w-full flex justify-between items-center mb-1 px-1">
-                <label className="text-[9px] font-bold text-gray-500">Heliotrope</label>
+                <label className="text-[9px] font-bold text-fg-dim">Heliotrope</label>
                 <KeyframeButton status={keyStatus} onClick={handleKeyToggle} />
             </div>
             
             <div 
                 ref={containerRef}
-                className="relative cursor-crosshair touch-none rounded-[30px] border border-white/10 shadow-inner group overflow-hidden"
+                className="relative cursor-crosshair touch-none rounded-[30px] border border-line/10 shadow-inner group overflow-hidden"
                 style={{ 
                     width: w, 
                     height: h, 
@@ -265,26 +265,26 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
                 {/* Zones */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
                     {/* The 90 Degree Ring (Ellipse) */}
-                    <div className="border border-cyan-500 rounded-full" style={{ width: rx*2, height: ry*2 }} /> 
+                    <div className="border border-accent-500 rounded-full" style={{ width: rx*2, height: ry*2 }} /> 
                     {/* Crosshairs */}
-                    <div className="absolute w-full h-px bg-white/20" />
-                    <div className="absolute h-full w-px bg-white/20" />
+                    <div className="absolute w-full h-px bg-line/20" />
+                    <div className="absolute h-full w-px bg-line/20" />
                 </div>
                 
                 {/* Labels */}
-                <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[7px] text-gray-600 font-bold pointer-events-none">TOP</div>
-                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[7px] text-gray-600 font-bold pointer-events-none">BTM</div>
-                <div className="absolute left-1 top-1/2 -translate-y-1/2 text-[7px] text-gray-600 font-bold pointer-events-none">L</div>
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 text-[7px] text-gray-600 font-bold pointer-events-none">R</div>
+                <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[7px] text-fg-faint font-bold pointer-events-none">TOP</div>
+                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[7px] text-fg-faint font-bold pointer-events-none">BTM</div>
+                <div className="absolute left-1 top-1/2 -translate-y-1/2 text-[7px] text-fg-faint font-bold pointer-events-none">L</div>
+                <div className="absolute right-1 top-1/2 -translate-y-1/2 text-[7px] text-fg-faint font-bold pointer-events-none">R</div>
 
                 {/* Backlight Warning Zone */}
                 <div 
-                    className={`absolute inset-0 rounded-[30px] border-2 border-red-500/30 pointer-events-none transition-opacity duration-300 ${handlePos.isBacklit ? 'opacity-100 animate-pulse' : 'opacity-0'}`} 
+                    className={`absolute inset-0 rounded-[30px] border-2 border-danger/30 pointer-events-none transition-opacity duration-300 ${handlePos.isBacklit ? 'opacity-100 animate-pulse' : 'opacity-0'}`}
                 />
 
                 {/* Sun Handle */}
                 <div 
-                    className={`absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full shadow-[0_0_10px_white] pointer-events-none transition-transform duration-75 ${isDragging ? 'scale-125 bg-white' : 'bg-yellow-400'} ${handlePos.isBacklit ? 'border-2 border-red-500' : ''}`}
+                    className={`absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full shadow-[0_0_10px_white] pointer-events-none transition-transform duration-75 ${isDragging ? 'scale-125 bg-fg' : 'bg-yellow-400'} ${handlePos.isBacklit ? 'border-2 border-red-500' : ''}`}
                     style={{ 
                         left: handlePos.x, 
                         top: handlePos.y 
@@ -293,8 +293,8 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
             </div>
             
             <div className="flex gap-2 w-full mt-2 px-1">
-                <div className="flex-1 bg-black/40 rounded border border-white/10 flex items-center px-2 py-1">
-                    <span className="text-[8px] text-gray-500 font-bold mr-2">Pitch</span>
+                <div className="flex-1 bg-surface-section rounded border border-line/10 flex items-center px-2 py-1">
+                    <span className="text-[8px] text-fg-dim font-bold mr-2">Pitch</span>
                     <DraggableNumber 
                         value={safeValue.x * 180 / Math.PI} 
                         onChange={(v) => onChange({ ...safeValue, x: v * Math.PI / 180 })} 
@@ -305,8 +305,8 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
                         onDragEnd={() => handleInteractionEnd()}
                     />
                 </div>
-                <div className="flex-1 bg-black/40 rounded border border-white/10 flex items-center px-2 py-1">
-                    <span className="text-[8px] text-gray-500 font-bold mr-2">Yaw</span>
+                <div className="flex-1 bg-surface-section rounded border border-line/10 flex items-center px-2 py-1">
+                    <span className="text-[8px] text-fg-dim font-bold mr-2">Yaw</span>
                     <DraggableNumber 
                         value={safeValue.y * 180 / Math.PI} 
                         onChange={(v) => onChange({ ...safeValue, y: v * Math.PI / 180 })} 

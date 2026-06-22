@@ -217,17 +217,17 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
    </div>
 
    <div className="mb-4 space-y-3" data-help-id="panel.light">
-       <div className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-white/5">
+       <div className="flex items-center justify-between p-3 bg-surface-header rounded-lg border border-line/5">
           <ToggleSwitch 
               label="Enabled"
               value={currentLight.visible}
               onChange={() => actions.updateLight({ index: activeLight, params: { visible: !currentLight.visible } })}
-              color="bg-green-500"
+              color="bg-ok-strong"
           />
           {lighting.lights.length > 1 && (
               <button 
                 onClick={handleRemoveLight}
-                className="p-1.5 text-red-500 hover:text-red-300 hover:bg-red-900/20 rounded ml-2 transition-colors"
+                className="p-1.5 text-danger hover:text-danger hover:bg-danger/10 rounded ml-2 transition-colors"
                 title="Delete Light"
               >
                   <TrashIcon />
@@ -236,7 +236,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
        </div>
 
        <div className={`transition-opacity duration-200 ${currentLight.visible ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-           <div className="mb-4 p-3 bg-gray-800/50 rounded-lg" data-help-id="light.mode" onContextMenu={handleHeaderContextMenu}>
+           <div className="mb-4 p-3 bg-surface-header rounded-lg" data-help-id="light.mode" onContextMenu={handleHeaderContextMenu}>
               <div className="flex gap-1 mb-2" data-help-id="light.type">
                  <ToggleSwitch 
                       value={currentLight.type}
@@ -362,7 +362,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                      trackId={`${prefix}_falloff`}
                      liveValue={liveModulations[`${prefix}_falloff`]}
                    />
-                   <p className="text-[9px] text-gray-500 mb-2 -mt-2">0 = Infinite reach. Sets distance where light fades to ~1%.</p>
+                   <p className="text-[9px] text-fg-dim mb-2 -mt-2">0 = Infinite reach. Sets distance where light fades to ~1%.</p>
 
                    <div className="mb-1 px-3" data-help-id="light.falloff">
                        <ToggleSwitch
@@ -379,15 +379,15 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                </>
            )}
 
-           <div className="mt-4 pt-3 border-t border-white/10 space-y-2">
-               <label className="text-xs text-gray-400 font-bold mb-2 block">Color</label>
+           <div className="mt-4 pt-3 border-t border-line/10 space-y-2">
+               <label className="text-xs text-fg-muted font-bold mb-2 block">Color</label>
                <EmbeddedColorPicker 
                    color={currentLight.color} 
                    onColorChange={(c) => actions.updateLight({ index: activeLight, params: { color: c } })} 
                />
 
                <div className="flex items-center justify-between pt-1">
-                   <label className="text-xs text-gray-400 font-medium">Cast Shadows</label>
+                   <label className="text-xs text-fg-muted font-medium">Cast Shadows</label>
                    <input 
                        type="checkbox" 
                        checked={currentLight.castShadow}
@@ -396,26 +396,26 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                            actions.updateLight({ index: activeLight, params: { castShadow: e.target.checked } });
                            actions.handleInteractionEnd();
                        }}
-                       className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded cursor-pointer"
+                       className="w-3 h-3 accent-cyan-500 bg-surface-header border-line/20 rounded cursor-pointer"
                    />
                </div>
            </div>
        </div>
    </div>
    
-   <div className="h-px bg-gray-800 my-4" />
+   <div className="h-px bg-surface-header my-4" />
    
-   <div className="flex items-center justify-between mb-4 p-3 bg-gray-800/50 rounded-lg">
+   <div className="flex items-center justify-between mb-4 p-3 bg-surface-header rounded-lg">
       <ToggleSwitch 
           label="Show 3d helpers"
           value={state.showLightGizmo}
           onChange={actions.setShowLightGizmo}
-          color="bg-cyan-600"
+          color="bg-accent-600"
       />
    </div>
    
    {lighting && (
-        <div className="mt-4 p-3 bg-gray-800/50 rounded-lg" data-help-id="shadows">
+        <div className="mt-4 p-3 bg-surface-header rounded-lg" data-help-id="shadows">
              <div className="flex items-center justify-between mb-2">
                  <SectionLabel>Shadows (Global)</SectionLabel>
                  <div className="w-[60px]">

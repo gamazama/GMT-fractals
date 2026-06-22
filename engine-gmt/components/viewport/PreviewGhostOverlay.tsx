@@ -20,7 +20,7 @@ export const PreviewGhostOverlay: React.FC<{
     const rectH = Math.round((region.maxY - region.minY) * outputHeight);
     return (
         <div
-            className="absolute z-40 pointer-events-none border-2 border-dashed border-fuchsia-400/90"
+            className="absolute z-40 pointer-events-none border-2 border-dashed border-secondary/90"
             style={{
                 left: `${region.minX * 100}%`,
                 bottom: `${region.minY * 100}%`,
@@ -28,7 +28,7 @@ export const PreviewGhostOverlay: React.FC<{
                 top: `${(1 - region.maxY) * 100}%`,
             }}
         >
-            <div className="absolute -top-4 left-0 bg-fuchsia-500/70 text-white text-[9px] font-bold px-1 py-0.5 rounded-sm whitespace-nowrap">
+            <div className="absolute -top-4 left-0 bg-secondary/70 text-fg text-[9px] font-bold px-1 py-0.5 rounded-sm whitespace-nowrap">
                 Click to preview · {rectW}×{rectH}px @ export
             </div>
         </div>

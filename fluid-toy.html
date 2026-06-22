@@ -24,19 +24,21 @@
       #ft-boot-splash {
         position: fixed; inset: 0; z-index: 99999;
         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
-        background: #000; color: #9ca3af;
+        background: rgb(var(--app-bg)); color: rgb(var(--fg-dim));
         font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
         font-size: 12px; letter-spacing: 0.04em;
         transition: opacity 450ms ease;
       }
       #ft-boot-splash .ft-spinner {
         width: 32px; height: 32px; border-radius: 9999px;
-        border: 2px solid rgba(255,255,255,0.15); border-top-color: #22d3ee;
+        border: 2px solid rgb(var(--line) / 0.15); border-top-color: rgb(var(--accent-400));
         animation: ft-spin 0.8s linear infinite;
       }
       #ft-boot-splash.ft-hidden { opacity: 0; pointer-events: none; }
     </style>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <!-- Apply the saved UI color scheme before first paint (shared gmt.colorScheme). -->
+    <script>try{var t=localStorage.getItem('gmt.colorScheme');if(t&&t!=='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
   </head>
   <body>
     <div id="root"></div>

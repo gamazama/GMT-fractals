@@ -375,30 +375,30 @@ function SplineControls(): React.ReactElement {
 
   return (
     <div className="flex items-center gap-2">
-      <label className="flex items-center gap-1.5 text-[11px] text-gray-400" title="How broadly each colour bleeds off the path">
+      <label className="flex items-center gap-1.5 text-[11px] text-fg-muted" title="How broadly each colour bleeds off the path">
         Spread
         <input
           type="range" min={0} max={1} step={0.01} value={spline.spread}
           onChange={(e) => setSpread(parseFloat(e.target.value))}
-          className="w-20 accent-cyan-400" aria-label="Spline diffusion spread"
+          className="w-20 accent-accent" aria-label="Spline diffusion spread"
         />
       </label>
-      <label className="flex items-center gap-1.5 text-[11px] text-gray-400" title="Perpendicular depth — left glows near the path, right vignettes the edges">
+      <label className="flex items-center gap-1.5 text-[11px] text-fg-muted" title="Perpendicular depth — left glows near the path, right vignettes the edges">
         Depth
         <input
           type="range" min={-1} max={1} step={0.01} value={spline.depth}
           onChange={(e) => setDepth(parseFloat(e.target.value))}
-          className="w-20 accent-cyan-400" aria-label="Spline depth shading"
+          className="w-20 accent-accent" aria-label="Spline depth shading"
         />
       </label>
       <button
         onClick={resetCurve}
         title="Reset to the default curve"
-        className="px-2.5 py-1 text-[12px] rounded-md border border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+        className="px-2.5 py-1 text-[12px] rounded-md border border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06] transition-colors"
       >
         ⟳ Reset curve
       </button>
-      <span className="text-[11px] text-gray-500 hidden sm:inline">
+      <span className="text-[11px] text-fg-dim hidden sm:inline">
         click to add · drag to move · click the line to insert · Del removes
       </span>
       {stage && createPortal(<SplineEditor />, stage)}
@@ -617,8 +617,8 @@ function SplineEditor(): React.ReactElement {
           key={i}
           className={`absolute rounded-full border-2 shadow -translate-x-1/2 -translate-y-1/2 pointer-events-none ${
             spline.selected === i
-              ? 'w-[18px] h-[18px] border-cyan-300 bg-cyan-400/40'
-              : 'w-[14px] h-[14px] border-white/90 bg-black/40'
+              ? 'w-[18px] h-[18px] border-accent-300 bg-accent-400/40'
+              : 'w-[14px] h-[14px] border-line/90 bg-black/40'
           }`}
           style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
         />

@@ -95,15 +95,15 @@ export const CompilingIndicator: React.FC = () => {
             ref={pingRef}
             className={`fixed top-16 left-1/2 -translate-x-1/2 z-[99999] pointer-events-none ${isBackgroundCompile ? 'opacity-60' : 'opacity-100'}`}
         >
-            <div className="bg-black/80 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-full flex flex-col items-center gap-1.5 shadow-lg min-w-[200px]">
+            <div className="bg-surface/80 backdrop-blur-sm border border-line/10 px-3 py-1.5 rounded-full flex flex-col items-center gap-1.5 shadow-lg min-w-[200px]">
                 <div className="flex items-center gap-2">
-                    <SpinnerIcon className={`animate-spin h-3 w-3 ${isBackgroundCompile ? 'text-amber-400' : 'text-cyan-400'}`} />
-                    <span className={`text-[9px] font-bold ${isBackgroundCompile ? 'text-amber-200' : 'text-cyan-200'}`}>
+                    <SpinnerIcon className={`animate-spin h-3 w-3 ${isBackgroundCompile ? 'text-warn' : 'text-accent-400'}`} />
+                    <span className={`text-[9px] font-bold ${isBackgroundCompile ? 'text-warn' : 'text-cyan-200'}`}>
                         {displayMessage}
                     </span>
-                    <span className="text-[9px] font-mono text-gray-500">{Math.floor(progress)}%</span>
+                    <span className="text-[9px] font-mono text-fg-dim">{Math.floor(progress)}%</span>
                 </div>
-                <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                <div className="w-full h-1 bg-line/5 rounded-full overflow-hidden">
                     {/* transform: scaleX runs on the compositor thread, so the
                         bar keeps animating even when the worker's synchronous
                         WebGL compile stalls main-thread paint on Firefox /
@@ -112,8 +112,8 @@ export const CompilingIndicator: React.FC = () => {
                     <div
                         className={`h-full w-full rounded-full origin-left transition-transform duration-150 ease-linear ${
                             progress >= 100
-                                ? 'bg-green-400'
-                                : isBackgroundCompile ? 'bg-amber-400/60' : 'bg-cyan-400/60'
+                                ? 'bg-ok'
+                                : isBackgroundCompile ? 'bg-warn/60' : 'bg-accent-400/60'
                         }`}
                         style={{ transform: `scaleX(${Math.max(0, Math.min(1, progress / 100))})`, willChange: 'transform' }}
                     />

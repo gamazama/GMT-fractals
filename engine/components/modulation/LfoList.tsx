@@ -182,7 +182,7 @@ export const LfoList: React.FC = () => {
 
                             <div className="grid grid-cols-2 gap-1 mb-1">
                                 <div>
-                                    <label className="text-[9px] text-gray-500 font-bold block mb-0.5">Target</label>
+                                    <label className="text-[9px] text-fg-dim font-bold block mb-0.5">Target</label>
                                     <ParameterSelector
                                         value={anim.target}
                                         onChange={(val) => {
@@ -193,11 +193,11 @@ export const LfoList: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-[9px] text-gray-500 font-bold block mb-0.5">Shape</label>
+                                    <label className="text-[9px] text-fg-dim font-bold block mb-0.5">Shape</label>
                                     <select
                                         value={anim.shape}
                                         onChange={(e) => updateAnimation(anim.id, { shape: e.target.value as AnimationParams['shape'] })}
-                                        className="t-select text-white focus:border-purple-500"
+                                        className="t-select text-fg focus:border-purple-500"
                                     >
                                         <option value="Sine">Sine</option>
                                         <option value="Triangle">Triangle</option>

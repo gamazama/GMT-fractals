@@ -13,10 +13,10 @@ import React from 'react';
 import { useToastStore, type ToastTone } from '../store/toastStore';
 
 const TONE: Record<ToastTone, { border: string; dot: string; text: string }> = {
-    success: { border: 'border-cyan-500/40', dot: 'bg-cyan-400', text: 'text-cyan-200' },
-    warning: { border: 'border-amber-500/50', dot: 'bg-amber-400', text: 'text-amber-200' },
-    error:   { border: 'border-red-500/50',   dot: 'bg-red-400',   text: 'text-red-200' },
-    info:    { border: 'border-white/20',     dot: 'bg-white/60',  text: 'text-gray-200' },
+    success: { border: 'border-accent-500/40', dot: 'bg-accent-400', text: 'text-accent-300' },
+    warning: { border: 'border-warn/50', dot: 'bg-warn', text: 'text-warn' },
+    error:   { border: 'border-danger/50',   dot: 'bg-danger',   text: 'text-danger' },
+    info:    { border: 'border-line/20',     dot: 'bg-line/60',  text: 'text-fg-secondary' },
 };
 
 export const ToastHost: React.FC = () => {
@@ -33,7 +33,7 @@ export const ToastHost: React.FC = () => {
                         type="button"
                         onClick={() => dismiss(t.id)}
                         title="Dismiss"
-                        className={`pointer-events-auto flex items-center gap-2 px-3.5 py-2 bg-gray-900/95 border ${c.border} rounded-lg shadow-xl backdrop-blur-md animate-fade-in max-w-[90vw]`}
+                        className={`pointer-events-auto flex items-center gap-2 px-3.5 py-2 bg-surface-sunken/95 border ${c.border} rounded-lg shadow-xl backdrop-blur-md animate-fade-in max-w-[90vw]`}
                     >
                         <span className={`w-1.5 h-1.5 rounded-full ${c.dot} shrink-0`} />
                         <span className={`text-[11px] font-semibold ${c.text} whitespace-pre-wrap text-left`}>{t.message}</span>

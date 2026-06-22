@@ -53,8 +53,8 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
         <div className={`flex flex-col h-full select-none ${className}`} data-help-id="panel.drawing">
             
             {/* --- HEADER --- */}
-            <div className="p-3 bg-black/40 border-b border-white/5">
-                <PanelHeader label="Measurement Tools" icon={<span className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_5px_cyan]" />} />
+            <div className="p-3 bg-surface-tabbar border-b border-line/5">
+                <PanelHeader label="Measurement Tools" icon={<span className="w-2 h-2 rounded-full bg-accent-500 shadow-[0_0_5px_rgb(var(--accent-glow))]" />} />
                 
                 <div className="flex gap-2 mb-2">
                     <Button 
@@ -69,17 +69,17 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                 </div>
                 
                 {/* TOOL SELECTOR */}
-                <div className="flex bg-gray-800/50 rounded p-1 mb-3">
+                <div className="flex bg-surface-header rounded p-1 mb-3">
                      <button
                         onClick={() => setDrawing({ activeTool: 'rect' })}
-                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded text-[9px] font-bold transition-colors ${activeTool === 'rect' ? 'bg-cyan-900 text-cyan-200 shadow-sm' : 'text-gray-500 hover:text-white'}`}
+                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded text-[9px] font-bold transition-colors ${activeTool === 'rect' ? 'bg-accent-900 text-cyan-200 shadow-sm' : 'text-fg-dim hover:text-fg'}`}
                         title="Rectangle"
                      >
                          <SquareIcon /> RECT
                      </button>
                      <button
                         onClick={() => setDrawing({ activeTool: 'circle' })}
-                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded text-[9px] font-bold transition-colors ${activeTool === 'circle' ? 'bg-cyan-900 text-cyan-200 shadow-sm' : 'text-gray-500 hover:text-white'}`}
+                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded text-[9px] font-bold transition-colors ${activeTool === 'circle' ? 'bg-accent-900 text-cyan-200 shadow-sm' : 'text-fg-dim hover:text-fg'}`}
                         title="Circle / Ellipse"
                      >
                          <CircleIcon /> CIRCLE
@@ -96,7 +96,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                 </div>
                 
                 {active && (
-                    <div className="mt-2 px-2 py-1.5 bg-cyan-900/20 border border-cyan-500/20 rounded flex flex-col items-center gap-1 text-[9px] text-cyan-200 animate-fade-in text-center font-mono">
+                    <div className="mt-2 px-2 py-1.5 bg-accent-900/20 border border-accent-500/20 rounded flex flex-col items-center gap-1 text-[9px] text-cyan-200 animate-fade-in text-center font-mono">
                         <div>Hold <strong>X</strong> to snap to World Axis</div>
                         <div>Hold <strong>SHIFT</strong> for 1:1 Ratio</div>
                         <div>Hold <strong>ALT</strong> for Center Draw</div>
@@ -106,7 +106,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
             </div>
 
             {/* --- SETTINGS --- */}
-            <div className="p-3 border-b border-white/5 space-y-3 bg-white/[0.02]">
+            <div className="p-3 border-b border-line/5 space-y-3 bg-line/[0.02]">
                 
                 {/* 1. Origin Mode & Depth */}
                 <div className="space-y-1">
@@ -121,11 +121,11 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                     />
                     
                     {originMode === 1.0 && (
-                        <div className="flex items-center justify-between bg-black/40 rounded border border-white/10 p-1.5 mt-1 animate-fade-in">
-                            <span className="text-[9px] text-gray-400 font-mono pl-1">Depth: <span className="text-cyan-400 font-bold">{currentDepth.toFixed(4)}</span></span>
+                        <div className="flex items-center justify-between bg-surface-section rounded border border-line/10 p-1.5 mt-1 animate-fade-in">
+                            <span className="text-[9px] text-fg-muted font-mono pl-1">Depth: <span className="text-accent-400 font-bold">{currentDepth.toFixed(4)}</span></span>
                             <button 
                                 onClick={handleReProbe}
-                                className="px-2 py-0.5 bg-gray-800 hover:bg-white/10 text-gray-300 text-[9px] font-bold rounded border border-white/5 hover:border-white/20 transition-all"
+                                className="px-2 py-0.5 bg-surface-header hover:bg-line/10 text-fg-tertiary text-[9px] font-bold rounded border border-line/5 hover:border-line/20 transition-all"
                                 title="Update axis position to current probe location"
                             >
                                 Refresh Axis
@@ -137,21 +137,21 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                 {/* 3. Toggles */}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                     <label className="flex items-center gap-2 cursor-pointer group">
-                        <div className={`w-3 h-3 border rounded transition-colors ${showLabels ? 'bg-cyan-500 border-cyan-500' : 'border-gray-600 bg-transparent'}`} />
+                        <div className={`w-3 h-3 border rounded transition-colors ${showLabels ? 'bg-accent-500 border-accent-500' : 'border-line/20 bg-transparent'}`} />
                         <input type="checkbox" className="hidden" checked={showLabels} onChange={(e) => setDrawing({ showLabels: e.target.checked })} />
-                        <span className="text-[10px] font-bold text-gray-400 group-hover:text-white transition-colors">Show Labels</span>
+                        <span className="text-[10px] font-bold text-fg-muted group-hover:text-fg transition-colors">Show Labels</span>
                     </label>
                     
                     <label className="flex items-center gap-2 cursor-pointer group">
-                        <div className={`w-3 h-3 border rounded transition-colors ${showAxes ? 'bg-cyan-500 border-cyan-500' : 'border-gray-600 bg-transparent'}`} />
+                        <div className={`w-3 h-3 border rounded transition-colors ${showAxes ? 'bg-accent-500 border-accent-500' : 'border-line/20 bg-transparent'}`} />
                         <input type="checkbox" className="hidden" checked={showAxes} onChange={(e) => setDrawing({ showAxes: e.target.checked })} />
-                        <span className="text-[10px] font-bold text-gray-400 group-hover:text-white transition-colors">Show Axes</span>
+                        <span className="text-[10px] font-bold text-fg-muted group-hover:text-fg transition-colors">Show Axes</span>
                     </label>
                 </div>
             </div>
             
             {/* --- OBJECT LIST --- */}
-            <div className="flex-1 overflow-y-auto custom-scroll p-3 bg-black/20">
+            <div className="flex-1 overflow-y-auto custom-scroll p-3 bg-surface-section">
                  <CollapsibleSection
                     label="Measurement List"
                     count={(shapes || []).length}
@@ -160,7 +160,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                         (shapes || []).length > 0 ? (
                             <button
                                 onClick={() => clearDrawnShapes()}
-                                className="text-[9px] text-red-500 hover:text-red-300 font-bold transition-colors px-2 py-0.5"
+                                className="text-[9px] text-danger hover:text-danger font-bold transition-colors px-2 py-0.5"
                             >
                                 Clear
                             </button>
@@ -168,7 +168,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                     }
                  >
                      {(shapes || []).length === 0 ? (
-                         <div className="text-center py-4 text-[10px] text-gray-600 italic">
+                         <div className="text-center py-4 text-[10px] text-fg-faint italic">
                              No measurements drawn.
                          </div>
                      ) : (
@@ -176,7 +176,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                              {(shapes || []).map((shape: any, i: number) => {
                                      const isCube = shape.type === 'rect' && (shape.size.z || 0) > 0.001;
                                      return (
-                                         <div key={shape.id} className="flex flex-col bg-white/5 rounded border border-white/5 hover:border-cyan-500/30 transition-colors group">
+                                         <div key={shape.id} className="flex flex-col bg-line/5 rounded border border-line/5 hover:border-accent-500/30 transition-colors group">
                                              <div className="flex items-center justify-between p-2">
                                                  <div className="flex items-center gap-3">
                                                      <div className="transform scale-75 origin-left">
@@ -188,10 +188,10 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                                                      </div>
                                                      <div className="flex flex-col">
                                                          <div className="flex items-center gap-2">
-                                                             <span className="text-[10px] text-gray-300 font-mono font-bold">#{i+1}</span>
-                                                             <span className="text-[8px] text-gray-500 font-bold bg-black/40 px-1 rounded">{isCube ? 'CUBE' : shape.type}</span>
+                                                             <span className="text-[10px] text-fg-tertiary font-mono font-bold">#{i+1}</span>
+                                                             <span className="text-[8px] text-fg-dim font-bold bg-surface/80 px-1 rounded">{isCube ? 'CUBE' : shape.type}</span>
                                                          </div>
-                                                         <span className="text-[9px] text-gray-500 font-mono">
+                                                         <span className="text-[9px] text-fg-dim font-mono">
                                                              {shape.size.x.toFixed(4)} x {shape.size.y.toFixed(4)} {isCube ? `x ${shape.size.z?.toFixed(4)}` : ''}
                                                          </span>
                                                      </div>
@@ -205,7 +205,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                                                                 const newZ = currentZ > 0 ? 0 : Math.min(shape.size.x, shape.size.y);
                                                                 updateDrawnShape({ id: shape.id, updates: { size: { ...shape.size, z: newZ } } });
                                                             }}
-                                                            className={`p-1.5 rounded transition-colors ${isCube ? 'text-cyan-300 bg-cyan-900/40' : 'text-gray-600 hover:text-cyan-400 hover:bg-white/5'}`}
+                                                            className={`p-1.5 rounded transition-colors ${isCube ? 'text-accent-300 bg-accent-900/40' : 'text-fg-faint hover:text-accent-400 hover:bg-line/5'}`}
                                                             title={isCube ? "Convert to Rect" : "Extrude to Cube"}
                                                         >
                                                             <CubeIcon />
@@ -213,7 +213,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                                                      )}
                                                      <button 
                                                          onClick={() => removeDrawnShape(shape.id)}
-                                                         className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                                         className="text-fg-faint hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity p-1"
                                                          title="Delete"
                                                      >
                                                          <TrashIcon />
@@ -223,7 +223,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                                              
                                              {/* Sliders for Cubes */}
                                              {isCube && (
-                                                <div className="px-2 pb-2 pt-0 space-y-1 animate-slider-entry bg-black/20 mt-1 rounded border border-white/5 mx-1">
+                                                <div className="px-2 pb-2 pt-0 space-y-1 animate-slider-entry bg-surface-section mt-1 rounded border border-line/5 mx-1">
                                                     <Slider 
                                                         label="Depth" 
                                                         value={shape.size.z || 0}

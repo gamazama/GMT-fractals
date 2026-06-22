@@ -54,12 +54,12 @@ export const PauseControls: React.FC = () => {
     // than per-frame snapping.
     const tone = isEffectivePaused ? 'paused' : isDone ? 'done' : 'active';
     const TONES = {
-        paused: { border: 'border-amber-500/40',                          fill: 'bg-amber-500/30', edge: 'bg-amber-400/60', text: 'text-amber-300' },
-        done:   { border: 'border-green-500/40',                          fill: 'bg-green-500/35', edge: 'bg-green-400/60', text: 'text-green-300' },
-        active: { border: 'border-white/10 hover:border-white/25',        fill: 'bg-cyan-500/30',  edge: 'bg-cyan-400/60',  text: 'text-cyan-200'  },
+        paused: { border: 'border-warn/40',                          fill: 'bg-warn/30', edge: 'bg-warn/60', text: 'text-warn' },
+        done:   { border: 'border-ok/40',                          fill: 'bg-ok/35', edge: 'bg-ok/60', text: 'text-ok' },
+        active: { border: 'border-line/10 hover:border-line/25',        fill: 'bg-accent-500/30',  edge: 'bg-accent-400/60',  text: 'text-accent-300'  },
     } as const;
     const { border: borderClass, fill: fillColor, edge: fillEdge, text: activeColor } = TONES[tone];
-    const inactiveColor = 'text-gray-600';
+    const inactiveColor = 'text-fg-faint';
 
     return (
         <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
@@ -102,13 +102,13 @@ export const PauseControls: React.FC = () => {
                         overrideInputText={sampleCap === 0 ? 'Infinite' : sampleCap.toFixed(0)}
                     />
                     {sampleCap > 0 && (
-                        <div className="text-[8px] text-gray-500 text-center mt-1.5">
+                        <div className="text-[8px] text-fg-dim text-center mt-1.5">
                             {accumCount} / {sampleCap} samples
-                            {isDone && <span className="text-green-400 ml-1">✓ done</span>}
+                            {isDone && <span className="text-ok ml-1">✓ done</span>}
                         </div>
                     )}
                     {sampleCap === 0 && (
-                        <div className="text-[8px] text-gray-600 text-center mt-1">0 = never stop</div>
+                        <div className="text-[8px] text-fg-faint text-center mt-1">0 = never stop</div>
                     )}
                 </Popover>
             )}

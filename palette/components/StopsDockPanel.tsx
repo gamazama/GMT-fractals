@@ -39,7 +39,7 @@ export const StopsDockPanel: React.FC = () => {
 
     return (
         <div className="flex flex-col gap-2 px-3 py-1">
-            <p className="text-[11px] leading-relaxed text-gray-500">
+            <p className="text-[11px] leading-relaxed text-fg-dim">
                 Edit the gradient on the stage — click the bar to add a stop, drag to move, drag away to
                 remove. These settings apply to the whole gradient:
             </p>
@@ -62,7 +62,7 @@ export const StopsDockPanel: React.FC = () => {
             <button
                 onClick={() => editorEdit(reset)}
                 title="Reset the gradient to the default"
-                className="mt-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-300 hover:bg-white/10 transition-colors self-start"
+                className="mt-1 text-[11px] px-2 py-1 rounded-sm bg-line/[0.06] text-fg-tertiary hover:bg-line/10 transition-colors self-start"
             >
                 Reset to default
             </button>

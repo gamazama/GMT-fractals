@@ -359,11 +359,11 @@ export const WebcamOverlay: React.FC<FeatureComponentProps> = ({ sliceState, act
             {/* LAYER 2: UI CONTAINER (Settings, Handles - No Blending, No Tilt) */}
             <div className="absolute inset-0 w-full h-full">
                 <div className={`absolute top-2 right-2 transition-opacity duration-200 z-50 ${isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-                     <button onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} className="p-1.5 rounded bg-black/60 text-gray-400 hover:text-white hover:bg-black/80 border border-white/10 shadow-lg backdrop-blur-sm"><GearIcon /></button>
+                     <button onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} className="p-1.5 rounded bg-surface/80 text-fg-muted hover:text-fg hover:bg-surface border border-line/10 shadow-lg backdrop-blur-sm"><GearIcon /></button>
                 </div>
                 
                 {showSettings && (
-                    <div className="settings-panel absolute top-10 right-2 w-48 bg-[#151515] border border-white/20 rounded p-2 shadow-2xl z-50 animate-fade-in" onMouseDown={(e) => e.stopPropagation()}>
+                    <div className="settings-panel absolute top-10 right-2 w-48 bg-surface-raised border border-line/20 rounded p-2 shadow-2xl z-50 animate-fade-in" onMouseDown={(e) => e.stopPropagation()}>
                          <div className="space-y-2 text-[10px]">
                             <div>
                                 <SectionLabel className="block mb-1">Blend Mode</SectionLabel>
@@ -376,31 +376,31 @@ export const WebcamOverlay: React.FC<FeatureComponentProps> = ({ sliceState, act
                                 </select>
                             </div>
                             <div>
-                                <div className="flex justify-between text-gray-500 font-bold mb-1"><span>Opacity</span><span>{Math.round(opacity*100)}%</span></div>
-                                <input type="range" min="0" max="3" step="0.05" value={opacity} onChange={(e) => setWebcam({ opacity: parseFloat(e.target.value) })} className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
+                                <div className="flex justify-between text-fg-dim font-bold mb-1"><span>Opacity</span><span>{Math.round(opacity*100)}%</span></div>
+                                <input type="range" min="0" max="3" step="0.05" value={opacity} onChange={(e) => setWebcam({ opacity: parseFloat(e.target.value) })} className="w-full h-1 bg-fg-ghost rounded-lg appearance-none cursor-pointer" />
                             </div>
                             <div>
-                                <div className="flex justify-between text-gray-500 font-bold mb-1"><span>3D Tilt</span><span>{tilt}°</span></div>
-                                <input type="range" min="-45" max="45" step="1" value={tilt} onChange={(e) => setWebcam({ tilt: parseInt(e.target.value) })} className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
+                                <div className="flex justify-between text-fg-dim font-bold mb-1"><span>3D Tilt</span><span>{tilt}°</span></div>
+                                <input type="range" min="-45" max="45" step="1" value={tilt} onChange={(e) => setWebcam({ tilt: parseInt(e.target.value) })} className="w-full h-1 bg-fg-ghost rounded-lg appearance-none cursor-pointer" />
                             </div>
                             <div>
-                                <div className="flex justify-between text-gray-500 font-bold mb-1"><span>Font Size</span><span>{fontSize}px</span></div>
-                                <input type="range" min="8" max="32" step="1" value={fontSize} onChange={(e) => setWebcam({ fontSize: parseInt(e.target.value) })} className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
+                                <div className="flex justify-between text-fg-dim font-bold mb-1"><span>Font Size</span><span>{fontSize}px</span></div>
+                                <input type="range" min="8" max="32" step="1" value={fontSize} onChange={(e) => setWebcam({ fontSize: parseInt(e.target.value) })} className="w-full h-1 bg-fg-ghost rounded-lg appearance-none cursor-pointer" />
                             </div>
-                            <label className="flex items-center gap-2 cursor-pointer mt-1 pt-1 border-t border-white/10">
+                            <label className="flex items-center gap-2 cursor-pointer mt-1 pt-1 border-t border-line/10">
                                 <input type="checkbox" checked={crtMode} onChange={(e) => setWebcam({ crtMode: e.target.checked })} className="cursor-pointer" />
-                                <span className="text-gray-400 font-bold">CRT Scanlines</span>
+                                <span className="text-fg-muted font-bold">CRT Scanlines</span>
                             </label>
                          </div>
                     </div>
                 )}
 
                 <div className={`transition-opacity duration-200 ${isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-                    <div className="absolute bottom-[-6px] right-[-6px] w-6 h-6 bg-cyan-500/50 cursor-nwse-resize hover:bg-cyan-400 z-20 rounded-full border-2 border-black" onMouseDown={(e) => handleDown(e, 'scale')} />
-                    <div className="absolute top-4 bottom-4 left-[-4px] w-3 cursor-e-resize group/l z-10 flex items-center justify-center" onMouseDown={(e) => handleDown(e, 'crop-l')}><div className="w-1 h-8 bg-red-500/50 group-hover/l:bg-red-400 rounded-full" /></div>
-                    <div className="absolute top-4 bottom-4 right-[-4px] w-3 cursor-w-resize group/r z-10 flex items-center justify-center" onMouseDown={(e) => handleDown(e, 'crop-r')}><div className="w-1 h-8 bg-red-500/50 group-hover/r:bg-red-400 rounded-full" /></div>
-                    <div className="absolute left-4 right-4 top-[-4px] h-3 cursor-s-resize group/t z-10 flex items-center justify-center" onMouseDown={(e) => handleDown(e, 'crop-t')}><div className="h-1 w-8 bg-red-500/50 group-hover/t:bg-red-400 rounded-full" /></div>
-                    <div className="absolute left-4 right-4 bottom-[-4px] h-3 cursor-n-resize group/b z-10 flex items-center justify-center" onMouseDown={(e) => handleDown(e, 'crop-b')}><div className="h-1 w-8 bg-red-500/50 group-hover/b:bg-red-400 rounded-full" /></div>
+                    <div className="absolute bottom-[-6px] right-[-6px] w-6 h-6 bg-accent-500/50 cursor-nwse-resize hover:bg-accent-400 z-20 rounded-full border-2 border-black" onMouseDown={(e) => handleDown(e, 'scale')} />
+                    <div className="absolute top-4 bottom-4 left-[-4px] w-3 cursor-e-resize group/l z-10 flex items-center justify-center" onMouseDown={(e) => handleDown(e, 'crop-l')}><div className="w-1 h-8 bg-danger/50 group-hover/l:bg-danger rounded-full" /></div>
+                    <div className="absolute top-4 bottom-4 right-[-4px] w-3 cursor-w-resize group/r z-10 flex items-center justify-center" onMouseDown={(e) => handleDown(e, 'crop-r')}><div className="w-1 h-8 bg-danger/50 group-hover/r:bg-danger rounded-full" /></div>
+                    <div className="absolute left-4 right-4 top-[-4px] h-3 cursor-s-resize group/t z-10 flex items-center justify-center" onMouseDown={(e) => handleDown(e, 'crop-t')}><div className="h-1 w-8 bg-danger/50 group-hover/t:bg-danger rounded-full" /></div>
+                    <div className="absolute left-4 right-4 bottom-[-4px] h-3 cursor-n-resize group/b z-10 flex items-center justify-center" onMouseDown={(e) => handleDown(e, 'crop-b')}><div className="h-1 w-8 bg-danger/50 group-hover/b:bg-danger rounded-full" /></div>
                 </div>
             </div>
         </div>

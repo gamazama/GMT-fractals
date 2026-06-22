@@ -26,13 +26,13 @@ export const SelectionTransformBar: React.FC<SelectionTransformBarProps> = ({ mi
             className="absolute top-0 bottom-0 left-0 w-3 cursor-ew-resize flex items-center justify-center group/l"
             onMouseDown={(e) => onStart(e, 'scale_left', minFrame, maxFrame)}
         >
-            <div className="w-1 h-3 bg-orange-400 rounded-full shadow-sm group-hover/l:bg-white" />
+            <div className="w-1 h-3 bg-orange-400 rounded-full shadow-sm group-hover/l:bg-fg" />
         </div>
         <div
             className="absolute top-0 bottom-0 right-0 w-3 cursor-ew-resize flex items-center justify-center group/r"
             onMouseDown={(e) => onStart(e, 'scale_right', minFrame, maxFrame)}
         >
-            <div className="w-1 h-3 bg-orange-400 rounded-full shadow-sm group-hover/r:bg-white" />
+            <div className="w-1 h-3 bg-orange-400 rounded-full shadow-sm group-hover/r:bg-fg" />
         </div>
     </div>
 );

@@ -15,6 +15,7 @@ import {
 import { buildTrackDiamonds, buildGroupDiamonds } from './DopeSheetRendererBuilder';
 import { isFlatTrack } from './dopeSheetTrackFlags';
 import { traceKeyframeShape } from './keyframeShape';
+import { getThemeColor, onThemeChange } from '../engine/store/colorSchemeStore';
 
 /** Row in the dope-sheet's vertical stack. Either a group header row (collapsible)
  *  or a per-track keyframe row. */
@@ -41,6 +42,15 @@ export interface DopeSheetRowLayout {
  *  in practice, but global makes the bench probe + clear-on-unmount story simpler. */
 export const trackDiamondCache = new TrackDiamondCache();
 export const groupDiamondCache = new GroupDiamondCache();
+
+// The per-row diamond canvases bake the active DIAMOND_THEME palette into their
+// pixels; their viewKeys don't include the scheme. Drop them on scheme change so
+// the next drawDopeSheetBack rebuilds with the new colours (DopeSheetCanvas
+// re-fires its draw effect via its `scheme` dep). @see engine/store/colorSchemeStore.ts
+onThemeChange(() => {
+    trackDiamondCache.clear();
+    groupDiamondCache.clear();
+});
 
 const HIT_RADIUS_PX = 8;     // mouse can land within ±8 px of a diamond centre and still hit.
 
@@ -202,9 +212,6 @@ export interface DrawDopeSheetSelectionArgs {
     selectedKeyframeIds: string[];
 }
 
-const SELECTION_FILL = '#ffffff';
-const SELECTION_RING = '#ffffff';
-
 export const drawDopeSheetSelection = (args: DrawDopeSheetSelectionArgs): void => {
     const { ctx, canvasWidth, rows, tracks, scaleX, panX, selectedKeyframeIds } = args;
     // No clearRect: paints on top of the back layer in the same canvas. The back
@@ -230,8 +237,9 @@ export const drawDopeSheetSelection = (args: DrawDopeSheetSelectionArgs): void =
         arr.push(kid);
     }
 
-    ctx.fillStyle = SELECTION_FILL;
-    ctx.strokeStyle = SELECTION_RING;
+    // Selected diamonds — themed fg fill + ring (was hard white).
+    ctx.fillStyle = getThemeColor('--fg');
+    ctx.strokeStyle = getThemeColor('--fg');
     ctx.lineWidth = 1;
 
     for (const [tid, kids] of selectedByTrack) {
@@ -287,12 +295,13 @@ export interface DrawDopeSheetHoverArgs {
     hover: HoverTarget | null;
 }
 
-const HOVER_STROKE = '#22d3ee';   // cyan-400; matches the previous group-hover/key:bg-cyan-400 affordance.
-const HOVER_GROUP_STROKE = '#ffffff';
-
 export const drawDopeSheetHover = (args: DrawDopeSheetHoverArgs): void => {
     const { ctx, rows, tracks, scaleX, panX, hover } = args;
     if (!hover) return;
+
+    // Hover affordance — accent ring on a track diamond, fg ring on a group diamond.
+    const HOVER_STROKE = getThemeColor('--accent-400');       // matches the key:bg-accent-400 affordance.
+    const HOVER_GROUP_STROKE = getThemeColor('--fg');
 
     ctx.save();
     ctx.lineWidth = 2;

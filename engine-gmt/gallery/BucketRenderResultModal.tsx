@@ -109,16 +109,16 @@ export const BucketRenderResultModal: React.FC = () => {
     return (
         <Modal onClose={dismiss} z={Z.overlayResult} dismissOnBackdrop={false} backdropClassName="bg-black/70 backdrop-blur-sm" className="">
             <div
-                className="bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[420px] max-h-[90vh] overflow-y-auto"
+                className="bg-surface-sunken border border-line/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[420px] max-h-[90vh] overflow-y-auto"
                 {...stopNavKeys({ allowEscape: true })}
             >
-                <header className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                    <h2 className="text-sm font-bold text-white">Render complete</h2>
-                    <button onClick={dismiss} aria-label="Close" className="text-gray-500 hover:text-white"><CloseIcon /></button>
+                <header className="flex items-center justify-between px-4 py-3 border-b border-line/10">
+                    <h2 className="text-sm font-bold text-fg">Render complete</h2>
+                    <button onClick={dismiss} aria-label="Close" className="text-fg-dim hover:text-fg"><CloseIcon /></button>
                 </header>
 
                 <div className="p-4 space-y-3">
-                    <div className="aspect-[4/3] bg-black/40 border border-white/10 rounded overflow-hidden flex items-center justify-center">
+                    <div className="aspect-[4/3] bg-surface-section border border-line/10 rounded overflow-hidden flex items-center justify-center">
                         <img
                             src={pending.previewUrl}
                             alt="Rendered output"
@@ -126,13 +126,13 @@ export const BucketRenderResultModal: React.FC = () => {
                         />
                     </div>
 
-                    <div className="text-[10px] text-gray-400 leading-relaxed">
-                        <span className="text-gray-300 font-mono">{pending.filename}</span> — {pending.width}×{pending.height} downloaded.
+                    <div className="text-[10px] text-fg-muted leading-relaxed">
+                        <span className="text-fg-tertiary font-mono">{pending.filename}</span> — {pending.width}×{pending.height} downloaded.
                         Submit this hi-res output to the gallery?
                     </div>
 
                     {extraCount > 0 && (
-                        <div className="text-[10px] text-amber-300/80 leading-relaxed">
+                        <div className="text-[10px] text-warn/80 leading-relaxed">
                             +{extraCount} more frame{extraCount === 1 ? '' : 's'} rendered &amp; downloaded while this was open.
                         </div>
                     )}
@@ -140,7 +140,7 @@ export const BucketRenderResultModal: React.FC = () => {
                     <div className="flex gap-2 pt-1">
                         <GhostButton
                             onClick={dismiss}
-                            className="flex-1 py-2 px-3 rounded text-[11px] font-bold text-gray-300"
+                            className="flex-1 py-2 px-3 rounded text-[11px] font-bold text-fg-tertiary"
                         >
                             Skip
                         </GhostButton>

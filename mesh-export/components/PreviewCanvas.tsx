@@ -822,7 +822,7 @@ export function PreviewCanvas() {
         ref={glCanvasRef}
         width={CANVAS_SIZE}
         height={CANVAS_SIZE}
-        className="border border-white/10 rounded-sm"
+        className="border border-line/10 rounded-sm"
         style={{
           imageRendering: 'pixelated',
           display: mode === 'fractal' ? 'block' : 'none',
@@ -843,7 +843,7 @@ export function PreviewCanvas() {
         ref={sliceCanvasRef}
         width={CANVAS_SIZE}
         height={CANVAS_SIZE}
-        className="border border-white/10 rounded-sm"
+        className="border border-line/10 rounded-sm"
         style={{
           imageRendering: 'pixelated',
           display: mode === 'slice' ? 'block' : 'none',
@@ -855,7 +855,7 @@ export function PreviewCanvas() {
         ref={meshCanvasRef}
         width={CANVAS_SIZE}
         height={CANVAS_SIZE}
-        className="border border-white/10 rounded-sm"
+        className="border border-line/10 rounded-sm"
         style={{
           cursor: 'grab',
           display: mode === 'mesh' ? 'block' : 'none',
@@ -863,7 +863,7 @@ export function PreviewCanvas() {
       />
 
       {/* Mode label */}
-      <div className="absolute top-2 left-2 text-[10px] text-gray-500 uppercase tracking-wider pointer-events-none">
+      <div className="absolute top-2 left-2 text-[10px] text-fg-dim uppercase tracking-wider pointer-events-none">
         {mode === 'fractal' && 'SDF Preview'}
         {mode === 'slice' && 'Sampling...'}
         {mode === 'mesh' && 'Mesh Preview'}
@@ -871,22 +871,22 @@ export function PreviewCanvas() {
 
       {/* Camera preset toolbar — visible in fractal and mesh modes */}
       {mode !== 'slice' && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 bg-black/70 backdrop-blur rounded px-1 py-0.5 pointer-events-auto">
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 bg-surface/70 backdrop-blur rounded px-1 py-0.5 pointer-events-auto">
           {CAMERA_PRESETS.map((p) => (
             <button
               key={p.label}
               title={p.title}
               onClick={() => setCameraPreset(p.angle, p.pitch, p.label)}
-              className="w-[22px] h-[20px] text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+              className="w-[22px] h-[20px] text-[10px] font-bold text-fg-muted hover:text-fg hover:bg-line/10 rounded transition-colors"
             >
               {p.label}
             </button>
           ))}
-          <div className="w-px h-3 bg-gray-700 mx-0.5" />
+          <div className="w-px h-3 bg-fg-ghost mx-0.5" />
           <button
             title="Reset pan (re-center view)"
             onClick={resetPan}
-            className="w-[22px] h-[20px] text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+            className="w-[22px] h-[20px] text-[10px] font-bold text-fg-muted hover:text-fg hover:bg-line/10 rounded transition-colors"
           >
             C
           </button>
@@ -895,20 +895,20 @@ export function PreviewCanvas() {
 
       {/* Clip-to-bounds toggle — top right of preview */}
       {mode === 'fractal' && (
-        <label className="absolute top-2 right-2 flex items-center gap-1 bg-black/70 backdrop-blur rounded px-1.5 py-0.5 cursor-pointer pointer-events-auto select-none">
+        <label className="absolute top-2 right-2 flex items-center gap-1 bg-surface/70 backdrop-blur rounded px-1.5 py-0.5 cursor-pointer pointer-events-auto select-none">
           <input
             type="checkbox"
             checked={_clipOutsideBounds}
             onChange={(e) => useMeshExportStore.getState().setClipOutsideBounds(e.target.checked)}
             className="accent-amber-500 w-3 h-3"
           />
-          <span className="text-[9px] text-gray-400">Clip bounds</span>
+          <span className="text-[9px] text-fg-muted">Clip bounds</span>
         </label>
       )}
 
       {/* Controls hint */}
       {mode !== 'slice' && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-[9px] text-gray-600 pointer-events-none whitespace-nowrap">
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-[9px] text-fg-faint pointer-events-none whitespace-nowrap">
           LMB orbit · RMB pan · Scroll zoom · Shift snap
         </div>
       )}

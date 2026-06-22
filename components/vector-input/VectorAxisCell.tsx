@@ -37,8 +37,8 @@ export const VectorAxisCell: React.FC<VectorAxisCellProps> = ({
             <div
                 className={`
                     absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center
-                    border-r border-white/10 bg-white/[0.05] select-none z-20
-                    cursor-pointer hover:bg-white/[0.15] active:bg-white/20 transition-colors
+                    border-r border-line/10 bg-line/[0.05] select-none z-20
+                    cursor-pointer hover:bg-line/[0.15] active:bg-line/20 transition-colors
                 `}
                 onDoubleClick={(e) => {
                     e.preventDefault();

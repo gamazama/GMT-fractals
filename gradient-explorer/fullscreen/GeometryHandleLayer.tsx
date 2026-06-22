@@ -56,7 +56,7 @@ const IDLE_FADE_MS = 3000;
 const REARM_MS = 250;
 
 /** Liquify's signifier palette — one visual language across the fullscreen modes. */
-const HANDLE_FILL = 'rgba(34,211,238,0.95)'; // cyan
+const HANDLE_FILL = 'rgb(var(--accent-400)/0.95)'; // accent
 const HANDLE_STROKE = 'rgba(0,0,0,0.55)';
 const GUIDE_FAINT = 'rgba(255,255,255,0.12)';
 const GUIDE_SOFT = 'rgba(255,255,255,0.30)';

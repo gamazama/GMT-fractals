@@ -378,12 +378,12 @@ const FractalControls: React.FC = () => {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <label className="flex items-center gap-1.5 text-[11px] text-gray-400">
+      <label className="flex items-center gap-1.5 text-[11px] text-fg-muted">
         Mapping
         <select
           value={fr.mapping}
           onChange={(e) => setFractalMapping(parseInt(e.target.value, 10))}
-          className="bg-zinc-900 border border-white/10 rounded px-1.5 py-1 text-[11px] text-gray-200"
+          className="bg-surface border border-line/10 rounded px-1.5 py-1 text-[11px] text-fg-secondary"
           aria-label="Colormap mapping mode"
         >
           {FRACTAL_MAPPINGS.map((m) => (
@@ -450,8 +450,8 @@ const FractalControls: React.FC = () => {
           title="Distance look: Glow = soft boundary falloff; Rings = even log-distance contour bands."
           className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
             fr.deLogBands
-              ? 'border-violet-500/40 bg-violet-500/20 text-violet-100'
-              : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+              ? 'border-secondary/40 bg-secondary/20 text-secondary'
+              : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
           }`}
         >
           {fr.deLogBands ? '◉ Rings' : '◯ Glow'}
@@ -463,7 +463,7 @@ const FractalControls: React.FC = () => {
           <button
             onClick={() => activeControl?.fitIterView()}
             title="Fit the gradient to this view's iteration range. Colours then hold until you re-fit or reset."
-            className="px-2.5 py-1 text-[12px] rounded-md border border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+            className="px-2.5 py-1 text-[12px] rounded-md border border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06] transition-colors"
           >
             ⊞ Fit to view
           </button>
@@ -471,7 +471,7 @@ const FractalControls: React.FC = () => {
             <button
               onClick={resetFractalIterFit}
               title="Clear the Fit-to-view anchor (back to absolute log — full range, colours hold)"
-              className="px-2 py-1 text-[12px] rounded-md border border-violet-500/30 text-violet-200 hover:bg-violet-500/10 transition-colors"
+              className="px-2 py-1 text-[12px] rounded-md border border-secondary/30 text-secondary hover:bg-secondary/10 transition-colors"
             >
               ↺ fit
             </button>
@@ -512,8 +512,8 @@ const FractalControls: React.FC = () => {
         title="Depth-normalized colour — every mode keeps a sane Density (~1) at any zoom. Off = the original look."
         className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
           fr.colorNormV2
-            ? 'border-violet-500/40 bg-violet-500/20 text-violet-100'
-            : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+            ? 'border-secondary/40 bg-secondary/20 text-secondary'
+            : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
         }`}
       >
         {fr.colorNormV2 ? '✦ Norm v2' : '○ Norm v1'}
@@ -526,8 +526,8 @@ const FractalControls: React.FC = () => {
           title="Slope lighting — shade the fractal as a lit surface using the escape-gradient normal. Works on any colour mode."
           className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
             fr.lightEnabled
-              ? 'border-amber-500/40 bg-amber-500/20 text-amber-100'
-              : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+              ? 'border-warn/40 bg-warn/20 text-warn'
+              : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
           }`}
         >
           {fr.lightEnabled ? '☀ Lit' : '○ Lit'}
@@ -592,8 +592,8 @@ const FractalControls: React.FC = () => {
         title="Auto-cycle the colormap phase (palette cycling)"
         className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
           fr.animate
-            ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100'
-            : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+            ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
+            : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
         }`}
       >
         {fr.animate ? '❚❚ Cycling' : '▶ Cycle'}
@@ -603,8 +603,8 @@ const FractalControls: React.FC = () => {
         title="Copy the exact view coordinates (for reporting a render artifact)"
         className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
           coordsCopied
-            ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-100'
-            : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+            ? 'border-ok/40 bg-ok/20 text-ok'
+            : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
         }`}
       >
         {coordsCopied ? '✓ Copied' : '⧉ Copy coords'}
@@ -612,7 +612,7 @@ const FractalControls: React.FC = () => {
       <button
         onClick={() => activeControl?.resetView()}
         title="Reset pan / zoom to the full set"
-        className="px-2.5 py-1 text-[12px] rounded-md border border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+        className="px-2.5 py-1 text-[12px] rounded-md border border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06] transition-colors"
       >
         ⌖ Reset view
       </button>

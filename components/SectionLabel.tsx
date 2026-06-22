@@ -8,7 +8,7 @@ interface SectionLabelProps {
     children: React.ReactNode;
     variant?: SectionLabelVariant;
     className?: string;
-    color?: string; // Override text color, e.g. 'text-cyan-400'
+    color?: string; // Override text color, e.g. 'text-accent-400'
 }
 
 const variantClasses: Record<SectionLabelVariant, string> = {

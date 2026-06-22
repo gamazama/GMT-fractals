@@ -29,8 +29,8 @@ export const FavientsToggleButton: React.FC<{ desktopOnly?: boolean; className?:
       desktopOnly={desktopOnly}
       icon={<FavientsIcon className="text-sm leading-none" />}
       label="Favients"
-      activeClassName={`${FAVIENTS_ACCENT.text} bg-white/10`}
-      inactiveClassName="text-gray-400 hover:text-white hover:bg-white/10"
+      activeClassName={`${FAVIENTS_ACCENT.text} bg-line/10`}
+      inactiveClassName="text-fg-muted hover:text-fg hover:bg-line/10"
       className={className}
     />
   );

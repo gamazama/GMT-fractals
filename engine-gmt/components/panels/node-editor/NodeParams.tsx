@@ -51,13 +51,13 @@ const BoundSlider = memo(({
                 onChange={(e) => onBindingChange(e.target.value || undefined)}
                 className={`mt-6 text-[9px] rounded px-1 h-6 cursor-pointer border transition-colors outline-none shrink-0 ${
                     binding
-                        ? 'bg-cyan-900/40 border-cyan-500/50 text-cyan-300'
-                        : 'bg-gray-900/50 border-gray-700 text-gray-500 hover:border-gray-500'
+                        ? 'bg-accent-900/40 border-accent-500/50 text-accent-300'
+                        : 'bg-surface-sunken/50 border-line/20 text-fg-dim hover:border-line/20'
                 }`}
                 title="Bind to global parameter"
             >
                 {BINDING_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value} className="bg-gray-900 text-white">{o.label}</option>
+                    <option key={o.value} value={o.value} className="bg-surface-sunken text-fg">{o.label}</option>
                 ))}
             </select>
         </div>
@@ -101,7 +101,7 @@ export const NodeParams: React.FC<NodeParamsProps> = ({ node, index = 0, updateP
     if (node.type === 'Note') {
         return (
             <textarea 
-                className="w-full bg-black/20 text-gray-300 text-xs p-2 rounded border border-white/5 focus:border-cyan-500 outline-none resize-none font-sans leading-relaxed"
+                className="w-full bg-surface-section text-fg-tertiary text-xs p-2 rounded border border-line/5 focus:border-accent-500 outline-none resize-none font-sans leading-relaxed"
                 rows={3}
                 value={node.text || ""}
                 onChange={(e) => updateNode(index, { text: e.target.value })}
@@ -131,15 +131,15 @@ export const NodeParams: React.FC<NodeParamsProps> = ({ node, index = 0, updateP
                     />
                 ))
             ) : (
-                <div className="text-red-500 text-[10px]">Unknown Node Type: {node.type}</div>
+                <div className="text-danger text-[10px]">Unknown Node Type: {node.type}</div>
             )}
             
             {/* Logic Toggle */}
-            <div className="mt-2 border-t border-white/10 pt-2">
+            <div className="mt-2 border-t border-line/10 pt-2">
                 <div className="flex items-center justify-between">
                     <button 
                         onClick={() => setShowLogic(!showLogic)}
-                        className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-white font-bold"
+                        className="flex items-center gap-1 text-[10px] text-fg-dim hover:text-fg font-bold"
                     >
                         <LogicIcon active={!!node.condition?.active} />
                         Logic / Condition
@@ -153,8 +153,8 @@ export const NodeParams: React.FC<NodeParamsProps> = ({ node, index = 0, updateP
                 </div>
                 
                 {showLogic && node.condition?.active && (
-                    <div className="mt-2 bg-amber-900/10 p-2 rounded border border-amber-500/20">
-                        <div className="text-[9px] text-amber-200 mb-2">
+                    <div className="mt-2 bg-warn/10 p-2 rounded border border-warn/20">
+                        <div className="text-[9px] text-warn mb-2">
                             Run every {node.condition.mod} iterations, starting at #{node.condition.rem}
                         </div>
                         <Slider

@@ -104,7 +104,7 @@ export const AppGmtExtraWarning: React.FC<{ cfg: RenderDialogConfig; extra: AppG
     const tripped = isFirefox && fmt.codec === 'avc' && cfg.bitrate > 12;
     if (!tripped) return null;
     return (
-        <WarningNote className="mx-1 mb-2 px-2 py-1 text-[9px] text-amber-400/90 leading-tight">
+        <WarningNote className="mx-1 mb-2 px-2 py-1 text-[9px] text-warn/90 leading-tight">
             Firefox caps H.264 output at ~31 Mbps regardless of this setting.
         </WarningNote>
     );
@@ -179,19 +179,19 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
             <div className="px-1 mb-1.5">
                 <label className="t-label mb-0.5 block">Passes</label>
                 <div className="flex gap-3 items-center">
-                    <label className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer select-none">
+                    <label className="flex items-center gap-1 text-[10px] text-fg-tertiary cursor-pointer select-none">
                         <input type="checkbox" checked={extra.exportBeauty}
                                onChange={(e) => patchExtra({ exportBeauty: e.target.checked })}
                                className="accent-cyan-400" />
                         Beauty
                     </label>
-                    <label className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer select-none">
+                    <label className="flex items-center gap-1 text-[10px] text-fg-tertiary cursor-pointer select-none">
                         <input type="checkbox" checked={extra.exportAlpha}
                                onChange={(e) => patchExtra({ exportAlpha: e.target.checked })}
                                className="accent-cyan-400" />
                         Alpha
                     </label>
-                    <label className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer select-none">
+                    <label className="flex items-center gap-1 text-[10px] text-fg-tertiary cursor-pointer select-none">
                         <input type="checkbox" checked={extra.exportDepth}
                                onChange={(e) => patchExtra({ exportDepth: e.target.checked })}
                                className="accent-cyan-400" />
@@ -199,14 +199,14 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
                     </label>
                 </div>
                 {passCount > 1 && (
-                    <div className="text-[8px] text-gray-500 mt-0.5 leading-tight">
+                    <div className="text-[8px] text-fg-dim mt-0.5 leading-tight">
                         One file per pass, named {'{project}'}_{'{pass}'}_v{'{n}'}.{fmt.ext}
                     </div>
                 )}
 
                 {/* Depth-range fields surface only when depth pass is selected */}
                 {extra.exportDepth && (
-                    <div className="mt-1.5 pt-1 border-t border-white/5">
+                    <div className="mt-1.5 pt-1 border-t border-line/5">
                         <div className="flex items-center justify-between mb-0.5">
                             <label className="t-label">Depth range (world units)</label>
                             <button
@@ -217,7 +217,7 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
                                     patchExtra({ depthMin: atm.fogNear ?? 0, depthMax: atm.fogFar ?? 5 });
                                 }}
                                 disabled={!((useEngineStore.getState() as any).atmosphere?.fogIntensity > 0)}
-                                className="text-[9px] text-cyan-300 hover:text-cyan-200 disabled:text-gray-600 disabled:cursor-not-allowed underline-offset-2 hover:underline"
+                                className="text-[9px] text-accent-300 hover:text-fg disabled:text-fg-faint disabled:cursor-not-allowed underline-offset-2 hover:underline"
                                 title="Copy the atmosphere feature's fog start/end into the depth range (only when fog is enabled)."
                             >
                                 Use fog range
@@ -226,7 +226,7 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
                         <div className="flex gap-1">
                             <div className="flex-1">
                                 <label className="t-label mb-0.5 block">Near</label>
-                                <div className="h-5 bg-black/40 rounded border border-white/10 relative">
+                                <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
                                     <DraggableNumber
                                         value={extra.depthMin}
                                         onChange={(v) => patchExtra({ depthMin: Math.max(0, Math.min(v, extra.depthMax - 0.001)) })}
@@ -237,7 +237,7 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
                             </div>
                             <div className="flex-1">
                                 <label className="t-label mb-0.5 block">Far</label>
-                                <div className="h-5 bg-black/40 rounded border border-white/10 relative">
+                                <div className="h-5 bg-surface-sunken rounded border border-line/10 relative">
                                     <DraggableNumber
                                         value={extra.depthMax}
                                         onChange={(v) => patchExtra({ depthMax: Math.max(extra.depthMin + 0.001, v) })}
@@ -260,7 +260,7 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
                 overrideInputText={`${extra.internalScale}x`}
                 highlight={extra.internalScale > 1.0}
             />
-            <div className="px-2 text-[8px] text-gray-500 mb-2">
+            <div className="px-2 text-[8px] text-fg-dim mb-2">
                 Use 1.5x or 2.0x for sharper details (Supersampling).
             </div>
 
@@ -268,29 +268,29 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
              *  intuition for "how long will this render take" before
              *  they commit. */}
             <div className="p-1.5 pt-0.5 space-y-1">
-                <div className="relative flex justify-between items-center px-2 py-0.5 bg-white/5 rounded border border-white/5 overflow-hidden">
+                <div className="relative flex justify-between items-center px-2 py-0.5 bg-line/5 rounded border border-line/5 overflow-hidden">
                     <div
-                        className="absolute inset-0 bg-cyan-500/10 origin-left transition-transform duration-75 ease-linear pointer-events-none"
+                        className="absolute inset-0 bg-accent-500/10 origin-left transition-transform duration-75 ease-linear pointer-events-none"
                         style={{ transform: `scaleX(${frameStats.progress})` }}
                     />
-                    <span className="t-label-sm relative z-10 text-gray-400">Viewport Sample</span>
-                    <span className={`text-[10px] font-mono font-bold relative z-10 ${frameStats.duration > 0 ? 'text-green-400' : 'text-gray-500 animate-pulse'}`}>
+                    <span className="t-label-sm relative z-10 text-fg-muted">Viewport Sample</span>
+                    <span className={`text-[10px] font-mono font-bold relative z-10 ${frameStats.duration > 0 ? 'text-ok' : 'text-fg-dim animate-pulse'}`}>
                         {frameStats.duration > 0 ? formatDurationMs(frameStats.duration) : 'Estimating...'}
                     </span>
                 </div>
                 {frameStats.duration > 0 && (
-                    <div className="flex flex-col gap-1 px-1 bg-white/5 rounded border border-white/5 p-2">
+                    <div className="flex flex-col gap-1 px-1 bg-line/5 rounded border border-line/5 p-2">
                         <div className="flex justify-between items-center t-label-sm">
                             <span>Est. Total</span>
-                            <span className="font-mono text-cyan-300">{formatTimeWithUnits(estTotalSeconds)}</span>
+                            <span className="font-mono text-accent-300">{formatTimeWithUnits(estTotalSeconds)}</span>
                         </div>
-                        <p className="text-[8px] text-gray-500 italic leading-tight">
+                        <p className="text-[8px] text-fg-dim italic leading-tight">
                             Calculated based on target resolution pixels vs current viewport.
                         </p>
                     </div>
                 )}
                 {showImageSeqHint && (
-                    <WarningNote className="px-2 py-1 mb-1 text-[9px] text-amber-400/90 leading-tight">
+                    <WarningNote className="px-2 py-1 mb-1 text-[9px] text-warn/90 leading-tight">
                         Image sequences need the File System Access API (directory picker), available in Chrome / Edge.
                     </WarningNote>
                 )}

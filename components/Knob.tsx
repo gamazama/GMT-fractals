@@ -24,7 +24,7 @@ interface KnobProps {
 
 export const RawKnob: React.FC<KnobProps> = ({ 
     label, value, min, max, step = 0.01, onChange, 
-    size = 40, color = "#22d3ee", tooltip, unconstrained = false, defaultValue,
+    size = 40, color = "rgb(var(--accent-400))", tooltip, unconstrained = false, defaultValue,
     onDragStart, onDragEnd
 }) => {
     const [isDragging, setIsDragging] = useState(false);
@@ -133,7 +133,7 @@ export const RawKnob: React.FC<KnobProps> = ({
                     />
                 </svg>
                 <div 
-                    className="absolute w-1.5 h-1.5 bg-white rounded-full shadow-sm pointer-events-none"
+                    className="absolute w-1.5 h-1.5 bg-fg rounded-full shadow-sm pointer-events-none"
                     style={{
                         top: '50%',
                         left: '50%',
@@ -144,7 +144,7 @@ export const RawKnob: React.FC<KnobProps> = ({
                 />
             </div>
 
-            <div className="h-3 min-w-[30px] flex items-center justify-center bg-black/40 rounded px-1 border border-white/5 hover:border-white/20 transition-colors">
+            <div className="h-3 min-w-[30px] flex items-center justify-center bg-surface-sunken rounded px-1 border border-line/5 hover:border-line/20 transition-colors">
                 <RawDraggableNumber 
                     value={value} 
                     onChange={onChange}
@@ -157,7 +157,7 @@ export const RawKnob: React.FC<KnobProps> = ({
             </div>
             
             {label && (
-                <span className="text-[8px] text-gray-500 font-bold group-hover:text-gray-300 transition-colors -mt-0.5">
+                <span className="text-[8px] text-fg-dim font-bold group-hover:text-fg-tertiary transition-colors -mt-0.5">
                     {label}
                 </span>
             )}

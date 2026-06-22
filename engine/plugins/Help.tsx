@@ -83,13 +83,13 @@ const renderBody = (body: React.ReactNode | React.FC): React.ReactNode => {
 
 const ACCENT_TEXT: Record<'pink' | 'cyan' | 'purple', string> = {
     pink: 'text-pink-300',
-    cyan: 'text-cyan-300',
-    purple: 'text-purple-300',
+    cyan: 'text-accent-300',
+    purple: 'text-secondary',
 };
 const ACCENT_HOVER: Record<'pink' | 'cyan' | 'purple', string> = {
     pink: 'hover:bg-pink-500/10 text-pink-300/80 group-hover:text-pink-200',
-    cyan: 'hover:bg-cyan-500/10 text-cyan-300/80 group-hover:text-cyan-200',
-    purple: 'hover:bg-purple-500/10 text-purple-300/80 group-hover:text-purple-200',
+    cyan: 'hover:bg-accent-500/10 text-accent-300/80 group-hover:text-accent-300',
+    purple: 'hover:bg-secondary/10 text-secondary/80 group-hover:text-secondary',
 };
 
 // ── Support modal — module singleton ───────────────────────────────────
@@ -149,13 +149,13 @@ const SupportModalHost: React.FC = () => {
     const close = () => _setSupportModal(null);
     return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={close}>
-            <div className="bg-gray-900 border border-white/10 rounded-lg p-5 w-80 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-surface-sunken border border-line/10 rounded-lg p-5 w-80 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-3">
                     <div className={`text-xs font-bold ${ACCENT_TEXT[m.accent]}`}>{m.modalTitle}</div>
-                    <button onClick={close} className="text-gray-500 hover:text-white transition-colors text-sm leading-none">&times;</button>
+                    <button onClick={close} className="text-fg-dim hover:text-fg transition-colors text-sm leading-none">&times;</button>
                 </div>
                 {m.intro && (
-                    <p className="text-[10px] text-gray-400 leading-relaxed mb-4">{m.intro}</p>
+                    <p className="text-[10px] text-fg-muted leading-relaxed mb-4">{m.intro}</p>
                 )}
                 {renderBody(m.body)}
             </div>
@@ -175,13 +175,13 @@ const AboutItem: React.FC<AboutItemProps> = ({ label, body }) => {
         <>
             <button
                 onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
-                className={`w-full flex items-center justify-between p-2 rounded transition-colors ${open ? 'bg-white/10 text-cyan-400' : 'hover:bg-white/5 text-gray-300'}`}
+                className={`w-full flex items-center justify-between p-2 rounded transition-colors ${open ? 'bg-line/10 text-accent-400' : 'hover:bg-line/5 text-fg-tertiary'}`}
             >
                 <span className="text-xs font-bold">{label}</span>
                 <SmileyIcon />
             </button>
             {open && (
-                <div className="p-3 bg-white/5 rounded-lg border border-white/5 mt-1">
+                <div className="p-3 bg-line/5 rounded-lg border border-line/5 mt-1">
                     {renderBody(body)}
                 </div>
             )}
@@ -192,7 +192,7 @@ const AboutItem: React.FC<AboutItemProps> = ({ label, body }) => {
 // ── Tutorials list ─────────────────────────────────────────────────────
 
 const CheckIcon: React.FC = () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-400">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-ok">
         <polyline points="20 6 9 17 4 12" />
     </svg>
 );
@@ -209,7 +209,7 @@ const TutorialsList: React.FC<{ close: () => void; lessonIds?: number[] }> = ({ 
         : all;
 
     if (filtered.length === 0) {
-        return <div className="px-2 py-1 text-[10px] text-gray-600 italic">(no tutorials registered)</div>;
+        return <div className="px-2 py-1 text-[10px] text-fg-faint italic">(no tutorials registered)</div>;
     }
 
     return (
@@ -220,9 +220,9 @@ const TutorialsList: React.FC<{ close: () => void; lessonIds?: number[] }> = ({ 
                     <button
                         key={lesson.id}
                         onClick={(e) => { e.stopPropagation(); startTutorial(lesson.id); close(); }}
-                        className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group"
+                        className="w-full flex items-center justify-between p-2 rounded hover:bg-line/5 text-fg-tertiary transition-colors group"
                     >
-                        <span className="text-xs font-bold group-hover:text-cyan-400">
+                        <span className="text-xs font-bold group-hover:text-accent-400">
                             Lesson {lesson.id}: {lesson.title}
                         </span>
                         {done && <CheckIcon />}
@@ -465,15 +465,15 @@ export interface HudHintConfig {
 const DefaultHudHint: React.FC<{ keys: HudHintKey[]; badge?: string }> = ({ keys, badge }) => {
     return (
         <div
-            className="text-[10px] font-medium text-white/60 whitespace-nowrap pointer-events-none"
+            className="text-[10px] font-medium text-fg/60 whitespace-nowrap pointer-events-none"
             style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}
         >
-            {badge && <span className="text-cyan-400/70 font-bold mr-2">{badge}</span>}
+            {badge && <span className="text-accent-400/70 font-bold mr-2">{badge}</span>}
             {keys.map((k, i) => (
                 <span key={`${k.key}-${i}`}>
-                    {i > 0 && <span className="text-white/25 mx-1.5">·</span>}
-                    <span className="inline-block px-1 py-px mr-1 border border-white/15 rounded bg-white/5 text-white/80 text-[9px] font-mono">{k.key}</span>
-                    <span className="text-white/60">{k.label}</span>
+                    {i > 0 && <span className="text-fg/25 mx-1.5">·</span>}
+                    <span className="inline-block px-1 py-px mr-1 border border-line/15 rounded bg-line/5 text-fg/80 text-[9px] font-mono">{k.key}</span>
+                    <span className="text-fg/60">{k.label}</span>
                 </span>
             ))}
         </div>

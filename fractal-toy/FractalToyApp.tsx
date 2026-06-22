@@ -62,7 +62,7 @@ export const FractalToyApp: React.FC = () => {
 
     return (
         <StoreCallbacksProvider value={storeCallbacks}>
-            <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden flex flex-col">
+            <div className="fixed inset-0 w-full h-full bg-black text-fg select-none overflow-hidden flex flex-col">
                 <EngineBridge />
                 <DropZones />
 
@@ -101,10 +101,10 @@ export const FractalToyApp: React.FC = () => {
                     />
                 )}
 
-                <div className="absolute bottom-3 left-3 text-[10px] text-white/40 font-mono pointer-events-none">
+                <div className="absolute bottom-3 left-3 text-[10px] text-fg/40 font-mono pointer-events-none">
                     {fpsSmoothed.toFixed(0)} fps · q{(quality * 100).toFixed(0)}%
                 </div>
-                <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none">
+                <div className="absolute top-3 left-3 text-[10px] text-fg/60 font-mono pointer-events-none">
                     Fractal Toy · {state.formula || '…'}
                 </div>
             </div>

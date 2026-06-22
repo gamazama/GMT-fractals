@@ -173,7 +173,7 @@ function getOrCreateLabelGroup(labelsEl: HTMLDivElement, id: string): HTMLDivEle
         el.style.left = '0';
         el.style.top = '0';
         el.style.pointerEvents = 'none';
-        el.innerHTML = `<div data-role="width" class="absolute text-[10px] font-mono font-bold whitespace-nowrap text-cyan-300 opacity-90 px-1" style="pointer-events:none"></div><div data-role="height" class="absolute text-[10px] font-mono font-bold whitespace-nowrap text-cyan-300 opacity-90 px-1" style="pointer-events:none"></div><div data-role="delete" class="drawing-ui absolute cursor-pointer flex items-center justify-center w-4 h-4 bg-red-900/80 hover:bg-red-500 text-white rounded-full transition-colors shadow-sm border border-white/20" style="pointer-events:auto" title="Delete Shape"><span class="text-[10px] font-bold leading-none mb-[1px]">✕</span></div>`;
+        el.innerHTML = `<div data-role="width" class="absolute text-[10px] font-mono font-bold whitespace-nowrap text-accent-300 opacity-90 px-1" style="pointer-events:none"></div><div data-role="height" class="absolute text-[10px] font-mono font-bold whitespace-nowrap text-accent-300 opacity-90 px-1" style="pointer-events:none"></div><div data-role="delete" class="drawing-ui absolute cursor-pointer flex items-center justify-center w-4 h-4 bg-red-900/80 hover:bg-red-500 text-fg rounded-full transition-colors shadow-sm border border-line/20" style="pointer-events:auto" title="Delete Shape"><span class="text-[10px] font-bold leading-none mb-[1px]">✕</span></div>`;
         const deleteBtn = el.querySelector('[data-role="delete"]') as HTMLElement;
         if (deleteBtn) {
             deleteBtn.addEventListener('click', (e) => {

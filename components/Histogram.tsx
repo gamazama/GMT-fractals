@@ -292,10 +292,10 @@ const Histogram: React.FC<HistogramProps> = ({
     };
 
     return (
-        <div className="py-2 bg-gray-900/40" data-help-id="ui.histogram" onContextMenu={handleContextMenu}>
+        <div className="py-2 bg-surface-sunken/40" data-help-id="ui.histogram" onContextMenu={handleContextMenu}>
             <div className="flex justify-between items-center mb-2 px-3">
                 <div className="flex items-center gap-2">
-                    <label className="text-[10px] text-gray-500 font-bold">{labelTitle}</label>
+                    <label className="text-[10px] text-fg-dim font-bold">{labelTitle}</label>
                     {/* Stale Indicator */}
                     {isStale && !autoUpdate && (
                         <span className="text-[8px] text-amber-400 bg-amber-900/30 px-1.5 py-0.5 rounded border border-amber-500/30">
@@ -304,15 +304,15 @@ const Histogram: React.FC<HistogramProps> = ({
                     )}
                     {onToggleAuto && (
                         <div 
-                            className="flex items-center justify-center w-4 h-4 cursor-pointer group rounded hover:bg-white/10"
+                            className="flex items-center justify-center w-4 h-4 cursor-pointer group rounded hover:bg-line/10"
                             onClick={onToggleAuto}
                             title="Auto-update histogram (Live)"
                         >
-                            <div className={`w-2 h-2 rounded-full transition-all duration-300 ${isLoading ? 'bg-orange-500 shadow-[0_0_5px_rgba(249,115,22,0.8)]' : autoUpdate ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.8)]' : 'bg-gray-600'}`} />
+                            <div className={`w-2 h-2 rounded-full transition-all duration-300 ${isLoading ? 'bg-orange-500 shadow-[0_0_5px_rgba(249,115,22,0.8)]' : autoUpdate ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.8)]' : 'bg-fg-faint'}`} />
                         </div>
                     )}
                     {onRefresh && !autoUpdate && (
-                         <button onClick={onRefresh} className="text-[9px] text-cyan-500 hover:text-white ml-1">
+                         <button onClick={onRefresh} className="text-[9px] text-accent-500 hover:text-fg ml-1">
                               Refresh
                          </button>
                     )}
@@ -321,7 +321,7 @@ const Histogram: React.FC<HistogramProps> = ({
                     {/* 0-1 Range Button */}
                     <button
                         onClick={() => commitLevels({ min: 0, max: 1, gamma: 1.0 })}
-                        className="px-2 py-0.5 bg-gray-800/50 hover:bg-gray-700 text-gray-400 hover:text-white text-[8px] rounded border border-gray-600 transition-colors font-bold"
+                        className="px-2 py-0.5 bg-surface-header hover:bg-fg-ghost text-fg-muted hover:text-fg text-[8px] rounded border border-line/20 transition-colors font-bold"
                         title="Reset to 0-1 range"
                     >
                         0-1
@@ -329,7 +329,7 @@ const Histogram: React.FC<HistogramProps> = ({
                     {onToggleAuto && (
                         <button 
                             onClick={handleAuto}
-                            className="px-2 py-0.5 bg-cyan-900/40 hover:bg-cyan-700 text-cyan-400 text-[9px] rounded border border-cyan-800 transition-colors font-bold"
+                            className="px-2 py-0.5 bg-accent-900/40 hover:bg-accent-700 text-accent-400 text-[9px] rounded border border-accent-800 transition-colors font-bold"
                             title="Fit range to current data"
                         >
                             Fit
@@ -339,7 +339,7 @@ const Histogram: React.FC<HistogramProps> = ({
             </div>
             
             <div 
-                className={`relative w-full bg-black/60 overflow-hidden select-none border-y border-white/5 transition-colors group/hist ${onRefresh && !autoUpdate ? 'cursor-pointer hover:bg-black/40' : ''}`}
+                className={`relative w-full bg-black/60 overflow-hidden select-none border-y border-line/5 transition-colors group/hist ${onRefresh && !autoUpdate ? 'cursor-pointer hover:bg-black/40' : ''}`}
                 style={{ height }}
                 onClick={onRefresh && !autoUpdate ? onRefresh : undefined}
             >
@@ -362,7 +362,7 @@ const Histogram: React.FC<HistogramProps> = ({
                         style={{ left: `${leftPct}%` }}
                         onMouseDown={(e) => handleMouseDown(e, 'min')}
                     >
-                        <div className="w-px h-full bg-white/60 group-hover/min:bg-white group-hover/min:w-0.5 transition-all shadow-[0_0_5px_rgba(0,0,0,0.8)]" />
+                        <div className="w-px h-full bg-line/60 group-hover/min:bg-fg group-hover/min:w-0.5 transition-all shadow-[0_0_5px_rgba(0,0,0,0.8)]" />
                         <div className="absolute top-0 w-0 h-0 border-l-[4px] border-r-[4px] border-t-[6px] border-l-transparent border-r-transparent border-t-white" />
                     </div>
 
@@ -372,7 +372,7 @@ const Histogram: React.FC<HistogramProps> = ({
                         style={{ left: `${rightPct}%` }}
                         onMouseDown={(e) => handleMouseDown(e, 'max')}
                     >
-                        <div className="w-px h-full bg-white/60 group-hover/max:bg-white group-hover/max:w-0.5 transition-all shadow-[0_0_5px_rgba(0,0,0,0.8)]" />
+                        <div className="w-px h-full bg-line/60 group-hover/max:bg-fg group-hover/max:w-0.5 transition-all shadow-[0_0_5px_rgba(0,0,0,0.8)]" />
                         <div className="absolute bottom-0 w-0 h-0 border-l-[4px] border-r-[4px] border-b-[6px] border-l-transparent border-r-transparent border-b-white" />
                     </div>
                     
@@ -383,7 +383,7 @@ const Histogram: React.FC<HistogramProps> = ({
                             style={{ left: `${gammaHandleAbsPct}%` }}
                             onMouseDown={(e) => handleMouseDown(e, 'gamma')}
                         >
-                            <div className="w-2 h-2 rotate-45 bg-gray-400 border border-black group-hover/gamma:bg-white group-hover/gamma:scale-125 transition-transform shadow-md" />
+                            <div className="w-2 h-2 rotate-45 bg-fg-muted border border-black group-hover/gamma:bg-fg group-hover/gamma:scale-125 transition-transform shadow-md" />
                         </div>
                     )}
                     
@@ -398,18 +398,18 @@ const Histogram: React.FC<HistogramProps> = ({
                 {/* Hidden Reset Button - Outside the interactive area */}
                 <button 
                     onClick={handleReset}
-                    className="absolute top-0 bottom-0 right-0 w-4 bg-red-900/50 hover:bg-red-700/80 border-l border-white/10 z-40 opacity-0 group-hover/hist:opacity-100 transition-opacity flex items-center justify-center"
+                    className="absolute top-0 bottom-0 right-0 w-4 bg-red-900/50 hover:bg-red-700/80 border-l border-line/10 z-40 opacity-0 group-hover/hist:opacity-100 transition-opacity flex items-center justify-center"
                     title="Reset Range"
                 >
-                     <div className="w-px h-2 bg-white/80 rotate-45 transform origin-center absolute" />
-                     <div className="w-px h-2 bg-white/80 -rotate-45 transform origin-center absolute" />
+                     <div className="w-px h-2 bg-line/80 rotate-45 transform origin-center absolute" />
+                     <div className="w-px h-2 bg-line/80 -rotate-45 transform origin-center absolute" />
                 </button>
             </div>
             
             {/* Numeric Inputs */}
             <div className="flex justify-between items-center mt-2 px-3">
                 <div className="flex flex-col items-start w-16">
-                    <span className="text-[8px] text-gray-600">{labelLeft}</span>
+                    <span className="text-[8px] text-fg-faint">{labelLeft}</span>
                     <DraggableNumber 
                         value={min} 
                         onChange={(v) => onChange({ min: v, max, gamma })}
@@ -420,7 +420,7 @@ const Histogram: React.FC<HistogramProps> = ({
                 </div>
                 
                 <div className="flex flex-col items-center w-16">
-                    <span className="text-[8px] text-gray-600">{labelMid}</span>
+                    <span className="text-[8px] text-fg-faint">{labelMid}</span>
                     <DraggableNumber 
                         value={gamma} 
                         onChange={(v) => onChange({ min, max, gamma: v })}
@@ -431,7 +431,7 @@ const Histogram: React.FC<HistogramProps> = ({
                 </div>
                 
                 <div className="flex flex-col items-end w-16">
-                    <span className="text-[8px] text-gray-600">{labelRight}</span>
+                    <span className="text-[8px] text-fg-faint">{labelRight}</span>
                     <DraggableNumber 
                         value={max} 
                         onChange={(v) => onChange({ min, max: v, gamma })}

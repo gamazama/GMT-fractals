@@ -92,7 +92,7 @@ export const JuliaRandomize: React.FC = () => {
             onPointerDown={handleStart}
             onPointerUp={handleEnd}
             onPointerLeave={handleEnd}
-            className="w-full h-[26px] flex items-center justify-center gap-1.5 bg-white/[0.06] border-b border-white/5 hover:bg-cyan-500/10 text-gray-500 hover:text-cyan-300 transition-colors cursor-pointer select-none"
+            className="w-full h-[26px] flex items-center justify-center gap-1.5 bg-line/[0.06] border-b border-line/5 hover:bg-accent-500/10 text-fg-dim hover:text-accent-300 transition-colors cursor-pointer select-none"
             title="Hold to randomize — Shift: faster, Alt: slower"
         >
             <DiceIcon />

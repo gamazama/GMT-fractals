@@ -14,7 +14,7 @@ import { useQualityFraction } from '../../engine/plugins/Viewport';
 export const QualityBadge: React.FC = () => {
     const quality = useQualityFraction();
     return (
-        <span className="text-[10px] text-white/40 font-mono pointer-events-none">
+        <span className="text-[10px] text-fg/40 font-mono pointer-events-none">
             q{(quality * 100).toFixed(0)}%
         </span>
     );

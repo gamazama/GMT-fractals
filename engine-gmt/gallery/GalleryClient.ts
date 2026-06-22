@@ -20,7 +20,7 @@ export const galleryEnabled = supabaseEnabled;
 /** Shared "Featured" badge colour cluster (cyan). Only the colour treatment is
  *  shared across the gallery surfaces (GalleryTile, MySubmissionsOverlay,
  *  Lightbox); each keeps its own layout classes (size / padding / position). */
-export const GALLERY_FEATURED_BADGE = 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40';
+export const GALLERY_FEATURED_BADGE = 'bg-accent-500/20 text-accent-300 border border-accent-500/40';
 
 const client = getSupabase;
 

@@ -309,10 +309,10 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
 
     // Shared toggle button colors per axis
     const toggleColors = [
-        { on: 'bg-red-500/30 text-red-300 border-red-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
-        { on: 'bg-green-500/30 text-green-300 border-green-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
-        { on: 'bg-blue-500/30 text-blue-300 border-blue-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
-        { on: 'bg-purple-500/30 text-purple-300 border-purple-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+        { on: 'bg-red-500/30 text-red-300 border-red-500/40', off: 'bg-line/[0.04] text-fg-faint border-line/5' },
+        { on: 'bg-green-500/30 text-green-300 border-green-500/40', off: 'bg-line/[0.04] text-fg-faint border-line/5' },
+        { on: 'bg-blue-500/30 text-blue-300 border-blue-500/40', off: 'bg-line/[0.04] text-fg-faint border-line/5' },
+        { on: 'bg-purple-500/30 text-purple-300 border-purple-500/40', off: 'bg-line/[0.04] text-fg-faint border-line/5' },
     ];
     const renderToggleButton = (axis: 'x' | 'y' | 'z' | 'w', axisIdx: number, className?: string) => {
         const val = (localValue as VecIndexable)[axis];
@@ -342,8 +342,8 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                 onClick={() => setCurrentMode(prev => prev === 'rotation' ? 'normal' : 'rotation')}
                 className={`text-[10px] p-1 rounded transition-colors mr-2 ${
                     currentMode === 'rotation' 
-                        ? 'text-cyan-400 bg-cyan-500/20' 
-                        : 'text-gray-500 hover:text-gray-300'
+                        ? 'text-accent-400 bg-accent-500/20' 
+                        : 'text-fg-dim hover:text-fg-tertiary'
                 }`}
                 title={currentMode === 'rotation' ? 'Rotation mode (π units)' : 'Normal mode'}
             >
@@ -361,8 +361,8 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                 onClick={() => setIsLinked(prev => !prev)}
                 className={`p-1 rounded transition-colors mr-2 ${
                     isLinked 
-                        ? 'text-cyan-400 bg-cyan-500/20' 
-                        : 'text-gray-600 hover:text-gray-400'
+                        ? 'text-accent-400 bg-accent-500/20' 
+                        : 'text-fg-faint hover:text-fg-muted'
                 }`}
                 title={isLinked ? 'Axes linked (uniform)' : 'Link axes'}
             >
@@ -441,17 +441,17 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
         <div className="mb-px animate-slider-entry">
             {/* Header row with label and keyframe button */}
             {label && (
-                <div className="flex items-stretch bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5">
+                <div className="flex items-stretch bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-line/5">
                     <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
                         {modeToggleable && renderModeToggle()}
                         {headerRight}
-                        <label className={`text-[10px] font-medium tracking-tight select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-gray-600' : 'text-gray-400'}`}>
+                        <label className={`text-[10px] font-medium tracking-tight select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-fg-faint' : 'text-fg-muted'}`}>
                             {label}
                         </label>
                     </div>
                     {/* Right side: link toggle */}
                     {linkable && !isRotationMode && (
-                        <div className="flex items-center px-1 border-l border-white/5">
+                        <div className="flex items-center px-1 border-l border-line/5">
                             {renderLinkToggle()}
                         </div>
                     )}

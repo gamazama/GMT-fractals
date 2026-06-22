@@ -1,3 +1,4 @@
+import { getThemeColor } from '../engine/store/colorSchemeStore';
 
 export interface GraphViewTransform {
     panX: number; // Frame offset
@@ -8,16 +9,20 @@ export interface GraphViewTransform {
     height: number;
 }
 
+/** Curve-editor / graph chrome palette. Each property resolves LIVE from the
+ *  active color scheme via getThemeColor (cached; one getComputedStyle per
+ *  scheme change, not per draw). Call sites keep using `THEME.gridColor` etc.
+ *  and automatically follow the runtime theme. @see engine/store/colorSchemeStore.ts */
 export const THEME = {
-    gridColor: '#333',
-    subGridColor: '#222',
-    zeroLineColor: '#666',
-    keyColor: '#fbbf24', // Amber-400
-    keySelectedColor: '#fff',
-    handleColor: '#a855f7', // Purple-500
-    handleLineColor: '#6b21a8', // Purple-800
-    curveColor: '#22d3ee', // Cyan-400
-    backgroundColor: '#050505'
+    get gridColor() { return getThemeColor('--line', 0.18); },
+    get subGridColor() { return getThemeColor('--line', 0.10); },
+    get zeroLineColor() { return getThemeColor('--fg-dim'); },
+    get keyColor() { return getThemeColor('--warn'); },
+    get keySelectedColor() { return getThemeColor('--fg'); },
+    get handleColor() { return getThemeColor('--secondary'); },
+    get handleLineColor() { return getThemeColor('--secondary-strong'); },
+    get curveColor() { return getThemeColor('--accent-400'); },
+    get backgroundColor() { return getThemeColor('--surface-viewport'); },
 };
 
 // Transform Data (Frame, Value) -> Screen (X, Y)

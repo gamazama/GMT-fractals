@@ -97,7 +97,7 @@ const ToolButton: React.FC<{
     onPointerDown={onPointerDown}
     title={tooltip}
     className={`group/btn relative w-6 h-6 flex items-center justify-center rounded border transition-all ${
-      active ? 'bg-cyan-900/80 text-cyan-300 border-cyan-500/50' : 'bg-black/60 text-gray-400 border-white/10 hover:text-white'
+      active ? 'bg-accent-900/80 text-accent-300 border-accent-500/50' : 'bg-surface/80 text-fg-muted border-line/10 hover:text-fg'
     }`}
   >
     {icon}
@@ -784,7 +784,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             p2v={p2v}
           />
           {(tools.isSmoothing || tools.isBaking || tools.isSimplifying) && (
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/80 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/40 text-[10px] z-30 pointer-events-none">
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-surface/80 text-accent-300 px-2 py-0.5 rounded-full border border-accent-500/40 text-[10px] z-30 pointer-events-none">
               {tools.isSmoothing
                 ? tools.smoothingRadius >= 0
                   ? `Smooth ${tools.smoothingRadius.toFixed(1)}`
@@ -795,7 +795,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             </div>
           )}
           {pencilMode && (
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/80 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/40 text-[10px] z-30 pointer-events-none">
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-surface/80 text-accent-300 px-2 py-0.5 rounded-full border border-accent-500/40 text-[10px] z-30 pointer-events-none">
               Pencil — drag to draw {CHANNELS.find((c) => c.key === activeChannel)?.label}
             </div>
           )}

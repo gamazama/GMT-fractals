@@ -200,17 +200,17 @@ export const FormulaSelector: React.FC = () => {
       />
       <button
         onClick={() => fileInputRef.current?.click()}
-        className="text-[11px] px-3 py-1.5 bg-sky-800/60 text-sky-200 border border-sky-600/40 rounded hover:bg-sky-700/60 cursor-pointer font-mono"
+        className="text-[11px] px-3 py-1.5 bg-info/60 text-info border border-info/40 rounded hover:bg-info/60 cursor-pointer font-mono"
       >
         Load GMF...
       </button>
       {loadedFilename && (
-        <div className="text-[10px] text-gray-400 truncate px-0.5" title={loadedFilename}>
+        <div className="text-[10px] text-fg-muted truncate px-0.5" title={loadedFilename}>
           {loadedFilename}
         </div>
       )}
       {loadError && (
-        <div className="text-[10px] text-red-400 bg-red-900/20 px-2 py-1 rounded">
+        <div className="text-[10px] text-danger bg-danger/20 px-2 py-1 rounded">
           {loadError}
         </div>
       )}

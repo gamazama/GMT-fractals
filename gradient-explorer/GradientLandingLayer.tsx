@@ -69,7 +69,7 @@ const LandingAvatar: React.FC<{ landing: Landing }> = ({ landing }) => {
     const lerp = (a: number, b: number): number => a + (b - a) * e;
     return createPortal(
         <div
-            className="fixed pointer-events-none overflow-hidden rounded-md border border-white/20"
+            className="fixed pointer-events-none overflow-hidden rounded-md border border-line/20"
             style={{
                 left: lerp(from.left, to.left),
                 top: lerp(from.top, to.top),
@@ -78,7 +78,7 @@ const LandingAvatar: React.FC<{ landing: Landing }> = ({ landing }) => {
                 opacity: 1 - e,
                 zIndex: LANDING_Z,
                 boxShadow: '0 6px 18px -6px rgba(0,0,0,0.5)',
-                background: '#0a0a0b',
+                background: 'rgb(var(--surface-dock))',
             }}
         >
             <canvas ref={ref} className="block h-full w-full" />
@@ -103,7 +103,7 @@ const CancelAvatar: React.FC<{ cancel: Cancel }> = ({ cancel }) => {
     const mask = `linear-gradient(to right, transparent ${wipe}%, #000 ${wipe}%)`;
     return createPortal(
         <div
-            className="fixed pointer-events-none overflow-hidden rounded-md border border-white/15"
+            className="fixed pointer-events-none overflow-hidden rounded-md border border-line/15"
             style={{
                 left: at.left,
                 top: at.top,
@@ -117,7 +117,7 @@ const CancelAvatar: React.FC<{ cancel: Cancel }> = ({ cancel }) => {
                 opacity: 1 - e * e, // fade a touch faster toward the tail
                 zIndex: LANDING_Z,
                 boxShadow: '0 6px 18px -6px rgba(0,0,0,0.5)',
-                background: '#0a0a0b',
+                background: 'rgb(var(--surface-dock))',
             }}
         >
             <canvas ref={ref} className="block h-full w-full" />

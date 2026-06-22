@@ -97,10 +97,10 @@ export const installBucketRender = (options: InstallBucketRenderOptions): void =
                     title="High-res render"
                     className={`flex items-center justify-center p-1 rounded border transition-colors ${
                         isBucketRendering
-                            ? 'text-cyan-300 bg-cyan-900/30 border-cyan-500/40 animate-pulse'
+                            ? 'text-accent-300 bg-accent-900/30 border-accent-500/40 animate-pulse'
                             : open
-                                ? 'text-cyan-300 border-cyan-500/40'
-                                : 'text-gray-500 border-white/10 hover:text-white hover:border-cyan-500/40'
+                                ? 'text-accent-300 border-accent-500/40'
+                                : 'text-fg-dim border-line/10 hover:text-fg hover:border-accent-500/40'
                     }`}
                 >
                     <RenderGridIcon />

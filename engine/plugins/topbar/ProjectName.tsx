@@ -54,7 +54,7 @@ export const ProjectName: React.FC = () => {
                     if (e.key === 'Escape') { setDraft(name); setEditing(false); }
                 }}
                 onKeyUp={(e) => e.stopPropagation()}
-                className="text-xs font-semibold text-white bg-black/60 border border-cyan-500/40 rounded px-2 py-1 outline-none"
+                className="text-xs font-semibold text-fg bg-surface-sunken border border-accent-500/40 rounded px-2 py-1 outline-none"
                 style={{ width: Math.max(80, draft.length * 8 + 24) }}
             />
         );
@@ -64,11 +64,11 @@ export const ProjectName: React.FC = () => {
         <button
             type="button"
             onClick={() => setEditing(true)}
-            className="flex items-center gap-2 text-xs text-gray-300 hover:text-white hover:bg-white/5 rounded px-2 py-1 transition-colors"
+            className="flex items-center gap-2 text-xs text-fg-tertiary hover:text-fg hover:bg-line/5 rounded px-2 py-1 transition-colors"
             title="Click to rename project"
         >
             <span className="font-semibold truncate max-w-[240px]">{name}</span>
-            {version > 0 && <span className="text-[9px] text-gray-500 font-mono">v{version}</span>}
+            {version > 0 && <span className="text-[9px] text-fg-dim font-mono">v{version}</span>}
         </button>
     );
 };

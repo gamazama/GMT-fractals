@@ -61,6 +61,8 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <!-- PWA manifest injected by vite-plugin-pwa at build time -->
+    <!-- Apply the saved UI color scheme before first paint (shared gmt.colorScheme). -->
+    <script>try{var t=localStorage.getItem('gmt.colorScheme');if(t&&t!=='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 </head>
   <body>
     <div id="root"></div>

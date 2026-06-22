@@ -81,12 +81,12 @@ export const ViewLibraryPanel: React.FC = () => {
 
     if (!addView) {
         // Slice not installed yet — render placeholder rather than crash.
-        return <div className="p-4 text-[10px] text-gray-600 italic">View library not initialized.</div>;
+        return <div className="p-4 text-[10px] text-fg-faint italic">View library not initialized.</div>;
     }
 
     return (
         <StateLibraryPanel<JuliaViewState>
-            className="flex flex-col bg-[#080808] -m-3"
+            className="flex flex-col bg-surface-dock -m-3"
             snapshots={savedViews}
             activeId={activeViewId}
             onSelect={selectView!}
@@ -101,11 +101,11 @@ export const ViewLibraryPanel: React.FC = () => {
             presets={presets}
             presetGridCols={3}
             toolbarBefore={
-                <div className="px-2 pb-2 bg-black/40 border-b border-white/10">
+                <div className="px-2 pb-2 bg-surface-tabbar border-b border-line/10">
                     <button
                         type="button"
                         onClick={handleAdd}
-                        className="w-full bg-cyan-900/40 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1"
+                        className="w-full bg-accent-900/40 hover:bg-accent-800 text-accent-300 border border-accent-500/30 rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1"
                     >
                         <PlusIcon /> New View
                     </button>
@@ -119,7 +119,7 @@ export const ViewLibraryPanel: React.FC = () => {
                         label="Active View"
                         onDeselect={() => selectView?.(null)}
                     />
-                    <div className="border-t border-white/10 bg-black/40 p-2">
+                    <div className="border-t border-line/10 bg-surface-tabbar p-2">
                         <CompositionOverlayControls />
                     </div>
                 </>

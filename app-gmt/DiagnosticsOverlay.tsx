@@ -39,17 +39,17 @@ export const DiagnosticsOverlay: React.FC = () => {
     const copy = () => clip.copy(report);
 
     return (
-        <div className="fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-black/90 p-4">
-            <div className="w-[520px] max-w-full bg-gray-900/90 border border-cyan-500/40 rounded-xl p-5 shadow-[0_0_50px_rgba(34,211,238,0.15)]">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-cyan-400/80 mb-2">Renderer diagnostics</div>
-                <div className="font-mono text-[10px] leading-relaxed text-gray-200 whitespace-pre-wrap break-words max-h-[55vh] overflow-auto bg-black/40 rounded p-2 border border-white/5">
+        <div className="fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-surface p-4">
+            <div className="w-[520px] max-w-full bg-surface-sunken/90 border border-accent-500/40 rounded-xl p-5 shadow-[0_0_50px_rgb(var(--accent-glow)/0.15)]">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-accent-400/80 mb-2">Renderer diagnostics</div>
+                <div className="font-mono text-[10px] leading-relaxed text-fg-secondary whitespace-pre-wrap break-words max-h-[55vh] overflow-auto bg-surface-section rounded p-2 border border-line/5">
                     {report || '(none)'}
                 </div>
                 <div className="mt-4 flex gap-2 flex-wrap">
                     <button
                         onClick={send}
                         disabled={sent === 'sending' || sent === 'sent'}
-                        className="px-4 py-2 text-xs font-bold rounded border border-cyan-500/40 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/40 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-default"
+                        className="px-4 py-2 text-xs font-bold rounded border border-accent-500/40 bg-accent-900/30 text-accent-300 hover:bg-accent-800/40 hover:text-fg transition-colors disabled:opacity-50 disabled:cursor-default"
                     >
                         {sent === 'idle' && 'Send report'}
                         {sent === 'sending' && 'Sending…'}
@@ -58,13 +58,13 @@ export const DiagnosticsOverlay: React.FC = () => {
                     </button>
                     <button
                         onClick={copy}
-                        className="px-4 py-2 text-xs font-bold rounded border border-white/15 bg-white/5 text-gray-200 hover:bg-white/10 hover:text-white transition-colors"
+                        className="px-4 py-2 text-xs font-bold rounded border border-line/15 bg-line/5 text-fg-secondary hover:bg-line/10 hover:text-fg transition-colors"
                     >
                         {clip.state === 'copied' ? 'Copied ✓' : 'Copy'}
                     </button>
                     <button
                         onClick={() => setOpen(false)}
-                        className="px-4 py-2 text-xs font-bold rounded border border-white/15 bg-white/5 text-gray-400 hover:text-white transition-colors"
+                        className="px-4 py-2 text-xs font-bold rounded border border-line/15 bg-line/5 text-fg-muted hover:text-fg transition-colors"
                     >
                         Close
                     </button>

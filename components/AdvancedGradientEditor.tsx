@@ -596,7 +596,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
     return (
         <div 
-            className="w-full select-none bg-[#1f1f1f] rounded"
+            className="w-full select-none bg-surface-raised rounded"
             ref={containerRef}
             data-help-id={helpId || "ui.gradient_editor"}
             onContextMenu={handleWrapperContextMenu}
@@ -615,7 +615,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
                     <div
-                        className="flex items-center cursor-pointer text-[10px] font-semibold text-gray-400 hover:text-white gradient-interactive-element"
+                        className="flex items-center cursor-pointer text-[10px] font-semibold text-fg-muted hover:text-fg gradient-interactive-element"
                         onClick={() => setIsExpanded(!isExpanded)}
                     >
                         <span className={`transform transition-transform duration-200 text-base ${isExpanded ? 'rotate-90' : ''}`}>›</span>
@@ -623,7 +623,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
                     {/* Blend space indicator */}
                     <div
-                        className={`text-[8px] font-bold cursor-pointer transition-colors select-none ${blendSpace === 'oklab' ? 'text-gray-600 hover:text-cyan-400' : 'text-cyan-400 hover:text-cyan-300'}`}
+                        className={`text-[8px] font-bold cursor-pointer transition-colors select-none ${blendSpace === 'oklab' ? 'text-fg-faint hover:text-accent-400' : 'text-accent-400 hover:text-accent-300'}`}
                         onClick={cycleBlendSpace}
                         title="Click to switch Blend Mode (RGB → HSV → HSV Far → Oklab)"
                     >
@@ -634,7 +634,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                 <div className="flex items-center gap-2">
                     {/* Output color space indicator */}
                     <div
-                        className="text-[8px] font-bold text-gray-600 cursor-pointer hover:text-cyan-400 transition-colors select-none"
+                        className="text-[8px] font-bold text-fg-faint cursor-pointer hover:text-accent-400 transition-colors select-none"
                         onClick={cycleColorSpace}
                         title="Click to switch Output Color Profile"
                     >
@@ -648,7 +648,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
                     {/* Utility menu (clipboard) */}
                     <button
-                        className="gradient-interactive-element flex items-center px-1.5 py-0.5 rounded border border-white/10 hover:border-white/25 hover:bg-white/10 text-gray-500 hover:text-white text-[9px] font-medium transition-colors active:scale-95"
+                        className="gradient-interactive-element flex items-center px-1.5 py-0.5 rounded border border-line/10 hover:border-line/25 hover:bg-line/10 text-fg-dim hover:text-fg text-[9px] font-medium transition-colors active:scale-95"
                         onClick={handlePresetsClick}
                         title="Menu"
                     >
@@ -668,7 +668,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
             <div className="relative px-2" onContextMenu={openTrackContextMenu}>
                 <div
-                    className="h-8 w-full rounded-t border border-white/20 relative mb-0 cursor-pointer overflow-hidden"
+                    className="h-8 w-full rounded-t border border-line/20 relative mb-0 cursor-pointer overflow-hidden"
                     onDoubleClick={(e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }}
                     title="Double-click to select all"
                 >
@@ -702,7 +702,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
                 <div 
                     ref={knotTrackRef} 
-                    className="h-6 w-full bg-white/5 border-x border-b border-white/10 relative rounded-b cursor-crosshair"
+                    className="h-6 w-full bg-line/5 border-x border-b border-line/10 relative rounded-b cursor-crosshair"
                     onMouseDown={handleTrackMouseDown} 
                     title="Click & drag to add/move knot"
                 >
@@ -751,7 +751,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                         <>
                             {/* Selection background — solid fill behind handles, dashed bottom for drag affordance */}
                             <div
-                                className="gradient-interactive-element absolute top-0 z-[5] cursor-move bg-cyan-400/10 border-b-[2px] border-dashed border-cyan-400/40"
+                                className="gradient-interactive-element absolute top-0 z-[5] cursor-move bg-accent-400/10 border-b-[2px] border-dashed border-accent-400/40"
                                 style={{ left: `calc(${selectionRange.min * 100}% - 8px)`, width: `calc(${(selectionRange.max - selectionRange.min) * 100}% + 16px)`, bottom: '-6px' }}
                                 onMouseDown={(e) => {
                                     if (e.button !== 0) return;
@@ -843,12 +843,12 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                              </div>
                         </>
                     ) : (
-                        <div className="h-1 bg-white/5 opacity-50 mt-1" />
+                        <div className="h-1 bg-line/5 opacity-50 mt-1" />
                     )}
                 </div>
             )}
 
-            {marqueeRect && createPortal(<div className="fixed border border-blue-400 bg-blue-500/20 z-[9999] pointer-events-none" style={{ left: marqueeRect.x, top: marqueeRect.y, width: marqueeRect.w, height: marqueeRect.h }} />, document.body)}
+            {marqueeRect && createPortal(<div className="fixed border border-info bg-info/20 z-[9999] pointer-events-none" style={{ left: marqueeRect.x, top: marqueeRect.y, width: marqueeRect.w, height: marqueeRect.h }} />, document.body)}
         </div>
     );
 };

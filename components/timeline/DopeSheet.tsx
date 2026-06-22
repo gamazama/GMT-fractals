@@ -31,8 +31,8 @@ interface DopeSheetProps {
  *  rendered via the same canvas-group pipeline as ordinary groups, with the colour
  *  overrides set in rowsLayout. */
 const ROOT_SUMMARY_ROW_ID = '__rootSummary__';
-const ROOT_SUMMARY_FILL = '#0891b2';   // cyan-600 — matches the previous DOM bg-cyan-600.
-const ROOT_SUMMARY_STROKE = '#67e8f9'; // cyan-300 — matches the previous DOM border-cyan-300.
+const ROOT_SUMMARY_FILL = '#0891b2';   // cyan-600 — matches the previous DOM bg-accent-600.
+const ROOT_SUMMARY_STROKE = '#67e8f9'; // cyan-300 — matches the previous DOM border-accent-300.
 
 const PlayheadCursor = ({ frameWidth }: { frameWidth: number }) => {
     const currentFrame = useAnimationStore(s => s.currentFrame);
@@ -417,7 +417,7 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
     return (
         <div 
             ref={contentRef}
-            className="relative min-h-full bg-[#111]" 
+            className="relative min-h-full bg-surface" 
             style={{ minWidth: totalContentWidth }}
             onMouseDown={handleContentMouseDown}
             data-help-id="ui.timeline"
@@ -444,7 +444,7 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
 
             {selectionBox && (
                 <div 
-                    className="absolute bg-cyan-500/20 border border-cyan-400/50 z-50 pointer-events-none"
+                    className="absolute bg-accent-500/20 border border-accent-400/50 z-50 pointer-events-none"
                     style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.w, height: selectionBox.h }}
                 />
             )}
@@ -481,14 +481,14 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
                     matching the existing TrackGroup chrome pattern. */}
                 <div
                     ref={globalSummaryRef}
-                    className="flex border-b border-white/5 bg-white/5"
+                    className="flex border-b border-line/5 bg-line/5"
                     style={{ height: TIMELINE_GROUP_HEIGHT }}
                 >
                     <div
-                        className="sticky left-0 z-30 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 select-none"
+                        className="sticky left-0 z-30 bg-surface/80 backdrop-blur-sm border-r border-line/10 shrink-0 flex items-center px-2 select-none"
                         style={{ width: sidebarWidth }}
                     >
-                        <span className="text-[10px] font-bold text-cyan-400 pl-4">Global Summary</span>
+                        <span className="text-[10px] font-bold text-accent-400 pl-4">Global Summary</span>
                     </div>
                     <div className="flex-1 relative group/track" style={{ pointerEvents: 'none' }}>
                         {selectionRange && (

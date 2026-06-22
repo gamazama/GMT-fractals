@@ -36,27 +36,27 @@ export const GeneratorSlotMods: React.FC<{ which: 'A' | 'B' }> = ({ which }) => 
         onClick={() => setOpen((o) => !o)}
         title={`Slot ${which} modifiers`}
         className={`text-[10px] px-1.5 py-0.5 rounded-sm transition-colors ${
-          open ? 'bg-cyan-500/25 text-cyan-100' : 'bg-white/[0.06] text-gray-400 hover:text-gray-200'
+          open ? 'bg-accent-500/25 text-accent-300' : 'bg-line/[0.06] text-fg-muted hover:text-fg-secondary'
         }`}
       >
         ⚙ mods
       </button>
       {open && (
-        <div className="absolute left-full top-0 ml-2 z-30 w-56 rounded-md border border-white/15 bg-zinc-900/95 backdrop-blur-sm shadow-xl p-2 flex flex-col gap-1">
+        <div className="absolute left-full top-0 ml-2 z-30 w-56 rounded-md border border-line/15 bg-surface/95 backdrop-blur-sm shadow-xl p-2 flex flex-col gap-1">
           <div className="flex items-center gap-1 mb-0.5">
-            <span className="text-[10px] uppercase tracking-wide text-gray-500">Slot {which}</span>
+            <span className="text-[10px] uppercase tracking-wide text-fg-dim">Slot {which}</span>
             <div className="ml-auto flex gap-1">
               <button
                 onClick={() => bakeSlot(which)}
                 title="Bake the modifiers into the source ramp and reset the dials"
-                className="text-[10px] px-1.5 py-0.5 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30"
+                className="text-[10px] px-1.5 py-0.5 rounded-sm bg-accent-500/20 text-accent-300 hover:bg-accent-500/30"
               >
                 Bake
               </button>
               <button
                 onClick={() => resetSlot(which)}
                 title="Reset the slot modifiers to neutral"
-                className="text-[10px] px-1.5 py-0.5 rounded-sm bg-white/[0.06] text-gray-300 hover:bg-white/10"
+                className="text-[10px] px-1.5 py-0.5 rounded-sm bg-line/[0.06] text-fg-tertiary hover:bg-line/10"
               >
                 Reset
               </button>

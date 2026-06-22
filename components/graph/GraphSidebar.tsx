@@ -33,7 +33,7 @@ const LiveValueDisplay = ({ tid }: { tid: string }) => {
         update();
         return () => cancelAnimationFrame(rafId);
     }, [tid]);
-    return <span ref={ref} className="text-[9px] font-mono text-gray-400">--</span>;
+    return <span ref={ref} className="text-[9px] font-mono text-fg-muted">--</span>;
 };
 
 export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, setVisibleTracks }) => {
@@ -227,18 +227,18 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
         return (
             <div
                 key={tid}
-                className={`flex items-center justify-between px-3 py-1.5 cursor-pointer border-b border-white/5 transition-colors group ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'} ${flat ? 'opacity-50' : ''}`}
+                className={`flex items-center justify-between px-3 py-1.5 cursor-pointer border-b border-line/5 transition-colors group ${isSelected ? 'bg-line/10' : 'hover:bg-line/5'} ${flat ? 'opacity-50' : ''}`}
                 onClick={(e) => handleSelect(e, tid)}
                 onContextMenu={(e) => handleContextMenu(e, tid)}
             >
                 <div className="flex items-center gap-2 min-w-0">
                     <div className={`w-1.5 h-1.5 rounded-full shrink-0 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-0'}`} style={{ backgroundColor: color }} />
-                    <span className={`text-[10px] truncate ${isSelected ? 'text-white font-bold' : (isVisible ? 'text-gray-300' : 'text-gray-500')}`} title={track.label}>
+                    <span className={`text-[10px] truncate ${isSelected ? 'text-fg font-bold' : (isVisible ? 'text-fg-tertiary' : 'text-fg-dim')}`} title={track.label}>
                         {track.label}
                     </span>
                     {/* Indicator for non-default behavior */}
                     {track.postBehavior && track.postBehavior !== 'Hold' && (
-                        <span className="text-[8px] text-cyan-500 font-mono tracking-tighter opacity-50 ml-1">
+                        <span className="text-[8px] text-accent-500 font-mono tracking-tighter opacity-50 ml-1">
                             [{track.postBehavior.substring(0, 1)}]
                         </span>
                     )}
@@ -246,7 +246,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                 <div className="flex items-center gap-2">
                     {/* Select All Keys */}
                     <button 
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/20 text-gray-500 hover:text-cyan-400 transition-all"
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-line/20 text-fg-dim hover:text-accent-400 transition-all"
                         onClick={(e) => selectAllKeysInTracks(e, [tid])}
                         title="Select All Keys"
                     >
@@ -257,7 +257,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                     
                     {/* Visibility Eye */}
                     <div 
-                        className="p-1 rounded hover:bg-white/20 text-gray-500 hover:text-white"
+                        className="p-1 rounded hover:bg-line/20 text-fg-dim hover:text-fg"
                         onClick={(e) => { e.stopPropagation(); toggleVisibility(tid); }}
                     >
                         <EyeIcon active={isVisible} />
@@ -269,23 +269,23 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
 
     return (
         <div
-            className="bg-black/80 backdrop-blur-sm border-r border-white/10 flex flex-col shrink-0 overflow-y-auto custom-scroll relative"
+            className="bg-surface/80 backdrop-blur-sm border-r border-line/10 flex flex-col shrink-0 overflow-y-auto custom-scroll relative"
             style={{ width: sidebarWidth }}
         >
-            <div className="h-6 flex items-center justify-between px-2 border-b border-white/5 text-[9px] text-gray-500 font-bold bg-black sticky top-0 z-10">
+            <div className="h-6 flex items-center justify-between px-2 border-b border-line/5 text-[9px] text-fg-dim font-bold bg-surface sticky top-0 z-10">
                 <span>Curves</span>
                 {/* Drag handle — pinned to the absolute right edge, runs full sidebar height. */}
                 <div
-                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-40 group/resize hover:bg-cyan-500/20"
+                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-40 group/resize hover:bg-accent-500/20"
                     onMouseDown={handleSidebarResizeStart}
                     title="Drag to resize sidebar"
                 >
-                    <div className="absolute right-0 top-0 h-full w-px bg-white/0 group-hover/resize:bg-cyan-400 transition-colors" />
+                    <div className="absolute right-0 top-0 h-full w-px bg-line/0 group-hover/resize:bg-accent-400 transition-colors" />
                 </div>
                 <div className="flex gap-2">
                      <button 
                         onClick={() => setVisibleTracks([])}
-                        className="hover:text-white text-gray-600 px-1"
+                        className="hover:text-fg text-fg-faint px-1"
                         title="Hide All"
                      >
                          None
@@ -295,7 +295,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                             const all = (Object.values(sequence.tracks) as Track[]).filter(t => !t.hidden).map(t => t.id);
                             setVisibleTracks(all);
                         }}
-                        className="hover:text-white text-gray-600 px-1"
+                        className="hover:text-fg text-fg-faint px-1"
                         title="Show All"
                      >
                          All
@@ -312,16 +312,16 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                 return (
                     <div key={groupName}>
                          <div
-                            className={`flex items-center justify-between px-2 py-1 border-b border-white/[0.06] cursor-pointer select-none group bg-transparent hover:bg-white/[0.04]`}
+                            className={`flex items-center justify-between px-2 py-1 border-b border-line/[0.06] cursor-pointer select-none group bg-transparent hover:bg-line/[0.04]`}
                         >
                             <div className="flex items-center gap-2 flex-1" onClick={(e) => toggleGroupCollapse(groupName, e.altKey)}>
-                                <span className="text-gray-600 w-4"><FolderIcon open={!collapsedGroups.has(groupName)} /></span>
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 group-hover:text-gray-300">{groupName}</span>
+                                <span className="text-fg-faint w-4"><FolderIcon open={!collapsedGroups.has(groupName)} /></span>
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-fg-dim group-hover:text-fg-tertiary">{groupName}</span>
                             </div>
                             
                             <div className="flex items-center gap-1">
                                 <button 
-                                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/20 text-gray-500 hover:text-cyan-400 transition-all mr-1"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-line/20 text-fg-dim hover:text-accent-400 transition-all mr-1"
                                     onClick={(e) => selectAllKeysInTracks(e, ids)}
                                     title="Select All Keys in Group"
                                 >
@@ -329,7 +329,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                                 </button>
                                 
                                 <div 
-                                    className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white"
+                                    className="p-1 rounded hover:bg-line/10 text-fg-dim hover:text-fg"
                                     onClick={(e) => toggleGroupVisibility(ids)}
                                 >
                                     <EyeIcon active={isAllVisible || isPartiallyVisible} />
@@ -345,7 +345,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
             {organizedTracks.standalone.map(tid => renderRow(tid))}
             
             {(!sequence || Object.keys(sequence.tracks).length === 0) && (
-                <div className="p-4 text-xs text-gray-600 text-center italic">No tracks yet</div>
+                <div className="p-4 text-xs text-fg-faint text-center italic">No tracks yet</div>
             )}
             
             <div className="h-10" />

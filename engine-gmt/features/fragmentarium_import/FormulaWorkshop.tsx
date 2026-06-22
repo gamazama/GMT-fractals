@@ -102,7 +102,7 @@ function SlotPicker({ value, paramType, groups, occupancyMap, scalarUsed, onChan
                 ref={buttonRef}
                 type="button"
                 onClick={handleClick}
-                className="t-select text-white w-28 text-left truncate"
+                className="t-select text-fg w-28 text-left truncate"
             >
                 {slotLabel(value)}
             </button>
@@ -336,7 +336,7 @@ function ParamTable({ mappings, onMappingChange }: ParamTableProps) {
         <div className="overflow-x-auto">
             <table className="w-full text-[10px]">
                 <thead>
-                    <tr className="text-gray-600 border-b border-white/10">
+                    <tr className="text-fg-faint border-b border-line/10">
                         <th className="text-left pb-1 pr-2 font-semibold">Variable</th>
                         <th className="text-left pb-1 pr-2 font-semibold">Type</th>
                         <th className="text-left pb-1 pr-2 font-semibold">→ Slot</th>
@@ -372,7 +372,7 @@ function ParamTable({ mappings, onMappingChange }: ParamTableProps) {
                                             <span className="text-amber-400/70 text-[9px] font-semibold">
                                                 ⚑ Flags · {groupSize} bits packed into {m.mappedSlot} · slider 0–{Math.pow(2, groupSize) - 1}
                                             </span>
-                                            <span className="text-gray-600 text-[9px] ml-2 normal-case">assign bools to the same slot to group them</span>
+                                            <span className="text-fg-faint text-[9px] ml-2 normal-case">assign bools to the same slot to group them</span>
                                         </td>
                                     </tr>
                                 )}
@@ -382,17 +382,17 @@ function ParamTable({ mappings, onMappingChange }: ParamTableProps) {
                                             <span className="text-sky-400/70 text-[9px] font-semibold">
                                                 ⊞ Vec · {vecGroupIndices.length} floats packed into {compInfo!.base} · one vec{vecGroupIndices.length > 2 ? '3' : '2'} control
                                             </span>
-                                            <span className="text-gray-600 text-[9px] ml-2 normal-case">assign floats to {compInfo!.base}.x / .y / .z to group them</span>
+                                            <span className="text-fg-faint text-[9px] ml-2 normal-case">assign floats to {compInfo!.base}.x / .y / .z to group them</span>
                                         </td>
                                     </tr>
                                 )}
-                                <tr className={`border-b border-white/5 hover:bg-white/[0.02] ${isBoolInGroup && groupSize > 1 ? 'bg-amber-500/[0.03]' : isInVecGroup ? 'bg-sky-500/[0.03]' : ''}`}>
-                                    <td className="py-1 pr-2 font-mono text-gray-300">
+                                <tr className={`border-b border-line/5 hover:bg-line/[0.02] ${isBoolInGroup && groupSize > 1 ? 'bg-amber-500/[0.03]' : isInVecGroup ? 'bg-sky-500/[0.03]' : ''}`}>
+                                    <td className="py-1 pr-2 font-mono text-fg-tertiary">
                                         {isBoolInGroup && groupSize > 1 && <span className="text-amber-400/50 mr-1">│</span>}
                                         {isInVecGroup && <span className="text-sky-400/50 mr-1">│</span>}
                                         {m.name}
                                     </td>
-                                    <td className="py-1 pr-2 text-gray-500">{m.type}</td>
+                                    <td className="py-1 pr-2 text-fg-dim">{m.type}</td>
                                     <td className="py-1 pr-2">
                                         <SlotPicker
                                             value={m.mappedSlot}
@@ -418,18 +418,18 @@ function ParamTable({ mappings, onMappingChange }: ParamTableProps) {
                                                 type="text"
                                                 value={m.fixedValue}
                                                 onChange={e => onMappingChange(i, 'fixedValue', e.target.value)}
-                                                className="bg-black/50 border border-white/10 rounded px-1 py-0.5 text-[10px] font-mono text-white focus:outline-none focus:border-white/30 w-20"
+                                                className="bg-surface-sunken border border-line/10 rounded px-1 py-0.5 text-[10px] font-mono text-fg focus:outline-none focus:border-line/30 w-20"
                                                 placeholder="1.0"
                                             />
                                         </td>
                                     ) : showRange ? (
                                         <>
-                                            <td className="py-1 pr-1"><input type="number" value={m.uiMin} onChange={e => onMappingChange(i, 'uiMin', parseFloat(e.target.value) || 0)} className="bg-black/50 border border-white/10 rounded px-1 py-0.5 text-[10px] text-white focus:outline-none w-12" /></td>
-                                            <td className="py-1 pr-1"><input type="number" value={m.uiMax} onChange={e => onMappingChange(i, 'uiMax', parseFloat(e.target.value) || 0)} className="bg-black/50 border border-white/10 rounded px-1 py-0.5 text-[10px] text-white focus:outline-none w-12" /></td>
-                                            <td className="py-1"><input type="number" value={m.uiStep} onChange={e => onMappingChange(i, 'uiStep', parseFloat(e.target.value) || 0.001)} className="bg-black/50 border border-white/10 rounded px-1 py-0.5 text-[10px] text-white focus:outline-none w-12" /></td>
+                                            <td className="py-1 pr-1"><input type="number" value={m.uiMin} onChange={e => onMappingChange(i, 'uiMin', parseFloat(e.target.value) || 0)} className="bg-surface-sunken border border-line/10 rounded px-1 py-0.5 text-[10px] text-fg focus:outline-none w-12" /></td>
+                                            <td className="py-1 pr-1"><input type="number" value={m.uiMax} onChange={e => onMappingChange(i, 'uiMax', parseFloat(e.target.value) || 0)} className="bg-surface-sunken border border-line/10 rounded px-1 py-0.5 text-[10px] text-fg focus:outline-none w-12" /></td>
+                                            <td className="py-1"><input type="number" value={m.uiStep} onChange={e => onMappingChange(i, 'uiStep', parseFloat(e.target.value) || 0.001)} className="bg-surface-sunken border border-line/10 rounded px-1 py-0.5 text-[10px] text-fg focus:outline-none w-12" /></td>
                                         </>
                                     ) : (
-                                        <td colSpan={3} className="py-1 text-gray-700 italic">—</td>
+                                        <td colSpan={3} className="py-1 text-fg-ghost italic">—</td>
                                     )}
                                 </tr>
                             </React.Fragment>
@@ -1029,55 +1029,55 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
     // ── Render ──
     return (
         <div
-            className="relative z-[60] w-1/2 max-w-[640px] bg-[#0d0d0d] border-r border-white/10 flex flex-col overflow-hidden shrink-0"
+            className="relative z-[60] w-1/2 max-w-[640px] bg-surface border-r border-line/10 flex flex-col overflow-hidden shrink-0"
             data-help-id="panel.workshop"
         >
 
             {/* Success overlay */}
             {success && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80">
-                    <div className="flex flex-col items-center gap-4 text-green-400">
+                    <div className="flex flex-col items-center gap-4 text-ok">
                         <CheckCircleIcon />
-                        <p className="text-base font-semibold text-white">Formula imported!</p>
-                        <p className="text-sm text-gray-400">Switching to {formulaName}…</p>
+                        <p className="text-base font-semibold text-fg">Formula imported!</p>
+                        <p className="text-sm text-fg-muted">Switching to {formulaName}…</p>
                     </div>
                 </div>
             )}
 
             {/* Header */}
-            <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 bg-black/40 shrink-0">
+            <div className="flex items-center justify-between px-3 py-2.5 border-b border-line/10 bg-surface-tabbar shrink-0">
                 <div className="flex items-center gap-2">
                     <CodeIcon size={16} />
-                    <h2 className="text-[12px] font-semibold text-white leading-tight">Formula Workshop</h2>
+                    <h2 className="text-[12px] font-semibold text-fg leading-tight">Formula Workshop</h2>
                 </div>
-                <button onClick={handleClose} className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-gray-500 hover:text-white">
+                <button onClick={handleClose} className="p-1.5 hover:bg-line/10 rounded-md transition-colors text-fg-dim hover:text-fg">
                     <CloseIcon size={16} strokeWidth={2.5} />
                 </button>
             </div>
 
             {/* Formula loading toolbar */}
-            <div className="flex flex-col border-b border-white/10 bg-black/20 shrink-0">
+            <div className="flex flex-col border-b border-line/10 bg-surface-section shrink-0">
                 {/* Row 1: Frag browse + DEC browse + Load */}
                 <div className="flex items-center gap-1.5 px-3 py-1.5">
                     {/* Frag section */}
                     <button
                         ref={browseFragRef}
                         onClick={() => { setBrowseFragOpen(v => !v); setBrowseDECOpen(false); }}
-                        className="text-[10px] px-2.5 py-1 rounded border border-white/10 hover:border-cyan-500/40 text-gray-400 hover:text-cyan-300 transition-colors"
+                        className="text-[10px] px-2.5 py-1 rounded border border-line/10 hover:border-accent-500/40 text-fg-muted hover:text-accent-300 transition-colors"
                         disabled={!libraryReady}
                     >
                         {browseMode === 'folder' ? 'Frag Examples' : 'Frag Categories'}
                     </button>
                     <button
                         onClick={() => setBrowseMode(m => m === 'category' ? 'folder' : 'category')}
-                        className="text-[10px] px-1.5 py-1 rounded border border-white/5 hover:border-white/20 text-gray-500 hover:text-gray-300 transition-colors"
+                        className="text-[10px] px-1.5 py-1 rounded border border-line/5 hover:border-line/20 text-fg-dim hover:text-fg-tertiary transition-colors"
                         title={`Switch to ${browseMode === 'category' ? 'folder' : 'category'} view`}
                     >
                         {browseMode === 'folder' ? '📁' : '🏷️'}
                     </button>
                     <button
                         onClick={handleRandomFrag}
-                        className="text-[10px] px-1.5 py-1 rounded border border-white/10 hover:border-amber-500/40 text-gray-400 hover:text-amber-300 transition-colors"
+                        className="text-[10px] px-1.5 py-1 rounded border border-line/10 hover:border-amber-500/40 text-fg-muted hover:text-amber-300 transition-colors"
                         disabled={!libraryReady}
                         title="Random Fragmentarium formula"
                     >
@@ -1102,20 +1102,20 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                         );
                     })()}
 
-                    <span className="w-px h-4 bg-white/10" />
+                    <span className="w-px h-4 bg-line/10" />
 
                     {/* DEC section */}
                     <button
                         ref={browseDECRef}
                         onClick={() => { setBrowseDECOpen(v => !v); setBrowseFragOpen(false); }}
-                        className="text-[10px] px-2.5 py-1 rounded border border-white/10 hover:border-amber-500/40 text-gray-400 hover:text-amber-300 transition-colors"
+                        className="text-[10px] px-2.5 py-1 rounded border border-line/10 hover:border-amber-500/40 text-fg-muted hover:text-amber-300 transition-colors"
                         disabled={!libraryReady}
                     >
                         DEC Formulas
                     </button>
                     <button
                         onClick={handleRandomDEC}
-                        className="text-[10px] px-1.5 py-1 rounded border border-white/10 hover:border-amber-500/40 text-gray-400 hover:text-amber-300 transition-colors"
+                        className="text-[10px] px-1.5 py-1 rounded border border-line/10 hover:border-amber-500/40 text-fg-muted hover:text-amber-300 transition-colors"
                         disabled={!libraryReady}
                         title="Random DEC formula"
                     >
@@ -1146,7 +1146,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                         catalog picker header (opened from the browse buttons). */}
                     <button
                         onClick={() => fileRef.current?.click()}
-                        className="text-[10px] px-2.5 py-1 rounded border border-white/10 hover:border-white/30 text-gray-400 hover:text-white transition-colors"
+                        className="text-[10px] px-2.5 py-1 rounded border border-line/10 hover:border-line/30 text-fg-muted hover:text-fg transition-colors"
                     >
                         Load File
                     </button>
@@ -1157,7 +1157,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                 <div className="px-3 pb-1.5 flex items-center gap-2">
                     <label
                         title="Show formulas that neither Iteration nor Standalone mode can render (for debugging). Off by default."
-                        className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer select-none shrink-0"
+                        className="flex items-center gap-1 text-[10px] text-fg-dim hover:text-fg-tertiary cursor-pointer select-none shrink-0"
                     >
                         <input
                             type="checkbox"
@@ -1177,12 +1177,12 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                 <section className="space-y-2 shrink-0">
                     <button
                         onClick={() => setSourceCollapsed(v => !v)}
-                        className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-500 hover:text-gray-300 transition-colors"
+                        className="flex items-center gap-1.5 text-[10px] font-semibold text-fg-dim hover:text-fg-tertiary transition-colors"
                     >
                         {sourceCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
                         <span>1 · Source Code</span>
                         {detected && sourceCollapsed && (
-                            <span className="ml-1.5 font-normal normal-case tracking-normal text-green-400/70">
+                            <span className="ml-1.5 font-normal normal-case tracking-normal text-ok/70">
                                 {detected.candidates.length} function{detected.candidates.length !== 1 ? 's' : ''} detected
                             </span>
                         )}
@@ -1205,25 +1205,25 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                                 className="h-1.5 cursor-row-resize flex items-center justify-center group -my-0.5"
                                 title="Drag to resize"
                             >
-                                <div className="w-8 h-0.5 rounded-full bg-white/10 group-hover:bg-white/30 transition-colors" />
+                                <div className="w-8 h-0.5 rounded-full bg-line/10 group-hover:bg-line/30 transition-colors" />
                             </div>
 
                             {/* Detect Variables toggle + legend */}
                             {detectVarsActive && detectedVars.length > 0 && (
-                                <div className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[9px] text-gray-500">
+                                <div className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[9px] text-fg-dim">
                                     {detectedVars.map(v => (
                                         <button
                                             key={v.id}
                                             onClick={() => handleHighlightClick(v.id)}
-                                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/10 transition-colors cm-${v.colorClass}`}
+                                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-line/10 transition-colors cm-${v.colorClass}`}
                                             title={`Promote "${v.originalText}" → uniform ${v.name}`}
                                             style={{
                                                 borderBottom: 'none',
                                             }}
                                         >
-                                            <span className="font-mono text-white/80">{v.name}</span>
-                                            <span className="text-gray-600">= {Array.isArray(v.defaultValue) ? `(${(v.defaultValue as number[]).join(', ')})` : v.defaultValue}</span>
-                                            <span className="text-gray-700">({v.occurrences.length}x)</span>
+                                            <span className="font-mono text-fg/80">{v.name}</span>
+                                            <span className="text-fg-faint">= {Array.isArray(v.defaultValue) ? `(${(v.defaultValue as number[]).join(', ')})` : v.defaultValue}</span>
+                                            <span className="text-fg-ghost">({v.occurrences.length}x)</span>
                                         </button>
                                     ))}
                                 </div>
@@ -1239,10 +1239,10 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                                             onChange={e => setDetectVarsActive(e.target.checked)}
                                             className="sr-only peer"
                                         />
-                                        <div className="w-7 h-4 bg-white/10 peer-checked:bg-amber-600/60 rounded-full transition-colors" />
-                                        <div className="absolute left-0.5 top-0.5 w-3 h-3 bg-gray-400 peer-checked:bg-amber-300 rounded-full transition-all peer-checked:translate-x-3" />
+                                        <div className="w-7 h-4 bg-line/10 peer-checked:bg-amber-600/60 rounded-full transition-colors" />
+                                        <div className="absolute left-0.5 top-0.5 w-3 h-3 bg-fg-muted peer-checked:bg-amber-300 rounded-full transition-all peer-checked:translate-x-3" />
                                     </div>
-                                    <span className={`text-[10px] font-semibold transition-colors ${detectVarsActive ? 'text-amber-300' : 'text-gray-500 group-hover:text-gray-300'}`}>
+                                    <span className={`text-[10px] font-semibold transition-colors ${detectVarsActive ? 'text-amber-300' : 'text-fg-dim group-hover:text-fg-tertiary'}`}>
                                         Detect Variables
                                     </span>
                                     {detectVarsActive && detectedVars.length > 0 && (
@@ -1255,7 +1255,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                                 <button
                                     onClick={() => runDetect(source)}
                                     disabled={!source.trim()}
-                                    className="px-4 py-1.5 bg-cyan-900/60 hover:bg-cyan-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[11px] font-semibold text-cyan-300 transition-colors border border-cyan-700/30"
+                                    className="px-4 py-1.5 bg-accent-900/60 hover:bg-accent-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[11px] font-semibold text-accent-300 transition-colors border border-accent-700/30"
                                 >
                                     Detect Functions ▶
                                 </button>
@@ -1266,15 +1266,15 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
 
                 {/* Section 2: Function Selection */}
                 {detected && (
-                    <section className="space-y-2 border border-white/10 rounded-lg p-2.5 bg-white/[0.02]">
-                        <h3 className="text-[10px] font-semibold text-gray-500">2 · Iteration Function</h3>
+                    <section className="space-y-2 border border-line/10 rounded-lg p-2.5 bg-line/[0.02]">
+                        <h3 className="text-[10px] font-semibold text-fg-dim">2 · Iteration Function</h3>
 
                         <div className="flex items-center gap-2">
-                            <label className="text-[11px] text-gray-400 shrink-0 w-16">Function:</label>
+                            <label className="text-[11px] text-fg-muted shrink-0 w-16">Function:</label>
                             <select
                                 value={selectedFunctionName}
                                 onChange={e => handleSelectFunction(e.target.value)}
-                                className="flex-1 t-select font-mono text-white"
+                                className="flex-1 t-select font-mono text-fg"
                             >
                                 {detected.candidates.map(c => (
                                     <option key={c.name} value={c.name}>
@@ -1289,23 +1289,23 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                             <div className="space-y-1.5">
                                 <p className="text-[10px]">
                                     {selectedCandidate.loopInfo
-                                        ? <span className="text-green-500/80">
+                                        ? <span className="text-ok/80">
                                             Loop detected: <span className="font-mono">{selectedCandidate.loopInfo.type}(…)</span>
-                                            {selectedCandidate.loopInfo.hasBreak && <span className="text-yellow-500/80"> — break will be removed</span>}
+                                            {selectedCandidate.loopInfo.hasBreak && <span className="text-warn/80"> — break will be removed</span>}
                                           </span>
-                                        : <span className="text-yellow-500/80">No loop detected — treating as single-iteration</span>
+                                        : <span className="text-warn/80">No loop detected — treating as single-iteration</span>
                                     }
                                 </p>
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => setLoopMode('loop')}
-                                        className={`px-2.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${loopMode === 'loop' ? 'bg-cyan-900/60 text-cyan-300 border border-cyan-700/30' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent'}`}
+                                        className={`px-2.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${loopMode === 'loop' ? 'bg-accent-900/60 text-accent-300 border border-accent-700/30' : 'bg-line/5 text-fg-muted hover:bg-line/10 border border-transparent'}`}
                                     >
                                         Extract loop body
                                     </button>
                                     <button
                                         onClick={() => setLoopMode('single')}
-                                        className={`px-2.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${loopMode === 'single' ? 'bg-cyan-900/60 text-cyan-300 border border-cyan-700/30' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent'}`}
+                                        className={`px-2.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${loopMode === 'single' ? 'bg-accent-900/60 text-accent-300 border border-accent-700/30' : 'bg-line/5 text-fg-muted hover:bg-line/10 border border-transparent'}`}
                                     >
                                         Whole function
                                     </button>
@@ -1317,15 +1317,15 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
 
                 {/* Section 3: Parameters & Mapping */}
                 {detected && selectedFunctionName && (
-                    <section className="space-y-2 border border-white/10 rounded-lg p-2.5 bg-white/[0.02]">
-                        <h3 className="text-[10px] font-semibold text-gray-500">3 · Parameters</h3>
+                    <section className="space-y-2 border border-line/10 rounded-lg p-2.5 bg-line/[0.02]">
+                        <h3 className="text-[10px] font-semibold text-fg-dim">3 · Parameters</h3>
 
                         <div className="flex items-center gap-2">
-                            <label className="text-[11px] text-gray-400 shrink-0 w-24">Formula name:</label>
+                            <label className="text-[11px] text-fg-muted shrink-0 w-24">Formula name:</label>
                             <input
                                 value={formulaName}
                                 onChange={e => setFormulaName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
-                                className="flex-1 bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[11px] font-mono text-white focus:outline-none focus:border-white/30"
+                                className="flex-1 bg-surface-sunken border border-line/10 rounded-lg px-2 py-1 text-[11px] font-mono text-fg focus:outline-none focus:border-line/30"
                                 placeholder="MyFormula"
                             />
                         </div>
@@ -1333,7 +1333,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                         {mappings.length > 0 ? (
                             <ParamTable mappings={mappings} onMappingChange={handleMappingChange} />
                         ) : (
-                            <p className="text-[10px] text-gray-600 italic">No uniforms detected — formula has no user parameters.</p>
+                            <p className="text-[10px] text-fg-faint italic">No uniforms detected — formula has no user parameters.</p>
                         )}
                     </section>
                 )}
@@ -1342,8 +1342,8 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                 {detected && selectedFunctionName && (
                     <section className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-[10px] font-semibold text-gray-500">4 · Transformed Output</h3>
-                            <span className="text-[9px] text-gray-600 italic">① uniforms · ② function · ③ loop init · ④ loop body · ⑤ getDist</span>
+                            <h3 className="text-[10px] font-semibold text-fg-dim">4 · Transformed Output</h3>
+                            <span className="text-[9px] text-fg-faint italic">① uniforms · ② function · ③ loop init · ④ loop body · ⑤ getDist</span>
                         </div>
                         <GlslEditor
                             value={transformedCode}
@@ -1357,32 +1357,32 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
 
                 {/* Warnings */}
                 {detected && detected.warnings.length > 0 && (
-                    <div className="space-y-1 p-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5">
+                    <div className="space-y-1 p-2 rounded-lg border border-warn/20 bg-warn/5">
                         {detected.warnings.map((w, i) => (
-                            <p key={i} className="text-[10px] text-yellow-400/80">⚠ {w}</p>
+                            <p key={i} className="text-[10px] text-warn/80">⚠ {w}</p>
                         ))}
                     </div>
                 )}
 
                 {/* Error */}
                 {error && (
-                    <div className="p-2 rounded-lg border border-red-500/30 bg-red-500/10">
-                        <p className="text-[11px] text-red-400 font-mono">{error}</p>
+                    <div className="p-2 rounded-lg border border-danger/30 bg-danger/10">
+                        <p className="text-[11px] text-danger font-mono">{error}</p>
                     </div>
                 )}
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-3 py-2 border-t border-white/10 bg-black/30 shrink-0">
+            <div className="flex items-center justify-between px-3 py-2 border-t border-line/10 bg-surface-tabbar shrink-0">
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleClose}
-                        className="px-3 py-1.5 rounded-lg text-[11px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                        className="px-3 py-1.5 rounded-lg text-[11px] text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
                     >
                         Cancel
                     </button>
                     <div
-                        className="flex items-center gap-1 text-[11px] text-gray-400 select-none"
+                        className="flex items-center gap-1 text-[11px] text-fg-muted select-none"
                         title={
                             pipelineMode === 'auto'
                                 ? `Auto-picks per formula: Iteration when possible (engine-feature compat — interlace, hybrid fold, burning ship); else Standalone. Current: ${effectivePipeline === 'v3' ? 'Iteration' : 'Standalone'}.`
@@ -1391,7 +1391,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                                     : 'Force Standalone mode (self-contained DE; simpler but no engine-feature composition).'
                         }
                     >
-                        <span className="text-gray-500 mr-1">mode:</span>
+                        <span className="text-fg-dim mr-1">mode:</span>
                         {(['auto', 'v3', 'v4'] as const).map(mode => {
                             const label = mode === 'auto'
                                 ? `Auto (${effectivePipeline === 'v3' ? 'Iter' : 'Solo'})`
@@ -1403,8 +1403,8 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                                     className={
                                         'px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors '
                                         + (pipelineMode === mode
-                                            ? 'bg-cyan-900/50 text-cyan-200 border border-cyan-500/40'
-                                            : 'text-gray-500 hover:text-gray-300 border border-transparent')
+                                            ? 'bg-accent-900/50 text-cyan-200 border border-accent-500/40'
+                                            : 'text-fg-dim hover:text-fg-tertiary border border-transparent')
                                     }
                                 >
                                     {label}
@@ -1417,14 +1417,14 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                     <button
                         onClick={handlePreview}
                         disabled={!canImport && !useV4Pipeline}
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-white/10"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-fg-tertiary hover:text-fg bg-line/5 hover:bg-line/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-line/10"
                     >
                         Preview
                     </button>
                     <button
                         onClick={handleImport}
                         disabled={(!canImport && !useV4Pipeline) || !formulaName.trim()}
-                        className="px-4 py-1.5 bg-cyan-900/50 hover:bg-cyan-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[11px] font-semibold text-cyan-300 transition-colors border border-cyan-500/30"
+                        className="px-4 py-1.5 bg-accent-900/50 hover:bg-accent-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[11px] font-semibold text-accent-300 transition-colors border border-accent-500/30"
                     >
                         Import Formula
                     </button>

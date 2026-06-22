@@ -231,7 +231,7 @@ export const GlslEditor: React.FC<GlslEditorProps> = ({
             ref={containerRef}
             onKeyDown={stopPropagation}
             onKeyUp={stopPropagation}
-            className="w-full border border-white/10 rounded-lg overflow-hidden focus-within:border-white/30 transition-colors"
+            className="w-full border border-line/10 rounded-lg overflow-hidden focus-within:border-line/30 transition-colors"
             style={{ height }}
         />
     );

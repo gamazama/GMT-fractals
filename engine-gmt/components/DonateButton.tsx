@@ -69,7 +69,7 @@ const GuyReveal: React.FC<{ compact?: boolean; divider?: boolean }> = ({ compact
                     style={{ height: h, width: 'auto', transform: 'scale(0)', transformOrigin: 'bottom center' }}
                 />
             </div>
-            {divider && <div className="w-full h-px bg-white/10 mb-1.5" />}
+            {divider && <div className="w-full h-px bg-line/10 mb-1.5" />}
         </div>
     );
 };
@@ -82,7 +82,7 @@ const DonateLinks: React.FC<{ compact?: boolean }> = ({ compact }) => (
             href={KOFI_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className={`inline-flex items-center justify-center gap-2 rounded-lg bg-[#13C3FF] hover:bg-[#00b0f0] text-white font-bold transition-colors ${
+            className={`inline-flex items-center justify-center gap-2 rounded-lg bg-[#13C3FF] hover:bg-[#00b0f0] text-fg font-bold transition-colors ${
                 compact ? 'px-3 py-1.5 text-[11px]' : 'px-4 py-2 text-xs'
             }`}
         >
@@ -93,7 +93,7 @@ const DonateLinks: React.FC<{ compact?: boolean }> = ({ compact }) => (
             href={PAYPAL_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className={`inline-flex items-center justify-center gap-2 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] text-white font-bold transition-colors ${
+            className={`inline-flex items-center justify-center gap-2 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] text-fg font-bold transition-colors ${
                 compact ? 'px-3 py-1.5 text-[11px]' : 'px-4 py-2 text-xs'
             }`}
         >
@@ -138,7 +138,7 @@ export const SupportBadge: React.FC<{ corner?: 'br' | 'bl'; label?: string }> = 
     >
         <GuyReveal compact />
         <DonateLinks compact />
-        <div className="mt-1 text-center text-[9px] font-bold uppercase tracking-wide text-white/40">
+        <div className="mt-1 text-center text-[9px] font-bold uppercase tracking-wide text-fg/40">
             {label}
         </div>
     </div>

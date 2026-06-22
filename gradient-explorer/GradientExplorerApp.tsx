@@ -142,7 +142,7 @@ const useIsMobile = (): boolean => {
 const MOBILE_MODES: PanelId[] = ['Picker', 'Generator', 'Image'] as PanelId[];
 const tabClass = (on: boolean): string =>
   `flex-1 py-2.5 text-[12px] font-medium transition-colors border-b-2 flex items-center justify-center gap-1 ${
-    on ? 'text-cyan-200 border-cyan-400 bg-white/[0.04]' : 'text-gray-400 border-transparent hover:text-gray-200'
+    on ? 'text-accent-300 border-accent-400 bg-line/[0.04]' : 'text-fg-muted border-transparent hover:text-fg-secondary'
   }`;
 
 // Phone mode selector — the three studio modes plus Favients, which on a phone is a
@@ -157,7 +157,7 @@ const MobileModeTabs: React.FC = () => {
   const setDockCollapsed = useEngineStore((s) => s.setDockCollapsed);
   const favShown = !leftCollapsed && favOpen;
   return (
-    <div className="shrink-0 flex border-b border-white/10 bg-zinc-950">
+    <div className="shrink-0 flex border-b border-line/10 bg-surface-dock">
       {MOBILE_MODES.map((id) => (
         <button
           key={id}
@@ -188,7 +188,7 @@ const PICKER_SECTIONS: { id: string; label: string; group: string }[] = [
 ];
 
 const SectionChevron: React.FC<{ open: boolean }> = ({ open }) => (
-  <CaretRight className={`w-2.5 h-2.5 shrink-0 text-gray-500 transition-transform ${open ? 'rotate-90' : ''}`} />
+  <CaretRight className={`w-2.5 h-2.5 shrink-0 text-fg-dim transition-transform ${open ? 'rotate-90' : ''}`} />
 );
 
 const MobilePickerControls: React.FC = () => {
@@ -202,28 +202,28 @@ const MobilePickerControls: React.FC = () => {
   const search = usePickerSearch();
   return (
     <div>
-      <div className="px-3 py-2 border-b border-white/5">
-        <div className="flex items-center gap-2 h-9 rounded border border-white/10 bg-black/30 px-2">
-          <SearchIcon className="w-3.5 h-3.5 shrink-0 text-gray-500" />
+      <div className="px-3 py-2 border-b border-line/5">
+        <div className="flex items-center gap-2 h-9 rounded border border-line/10 bg-surface-section px-2">
+          <SearchIcon className="w-3.5 h-3.5 shrink-0 text-fg-dim" />
           <input
             value={search}
             onChange={(e) => setPickerSearch(e.target.value)}
             placeholder="Search name · theme · source"
-            className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-gray-200 placeholder-gray-500"
+            className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-fg-secondary placeholder-gray-500"
           />
           {search && (
-            <button onClick={() => setPickerSearch('')} title="Clear search" className="px-1 text-gray-500 hover:text-gray-200">×</button>
+            <button onClick={() => setPickerSearch('')} title="Clear search" className="px-1 text-fg-dim hover:text-fg-secondary">×</button>
           )}
         </div>
       </div>
       {PICKER_SECTIONS.map((s) => {
         const isOpen = open === s.id;
         return (
-          <div key={s.id} className="border-b border-white/5">
+          <div key={s.id} className="border-b border-line/5">
             <button
               onClick={() => setOpen((o) => (o === s.id ? '' : s.id))}
               aria-expanded={isOpen}
-              className="w-full flex items-center gap-2 px-3 py-3 text-left text-[13px] font-medium text-gray-200 hover:bg-white/[0.03] transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-3 text-left text-[13px] font-medium text-fg-secondary hover:bg-line/[0.03] transition-colors"
             >
               <SectionChevron open={isOpen} />
               {s.label}
@@ -348,14 +348,14 @@ const GradientExplorerApp: React.FC = () => {
                       controls scroll beneath it. min-h guards the one frame before it fills. */}
                   <div
                     ref={setHeroRailEl}
-                    className="shrink-0 min-h-[64px] flex flex-col justify-center px-4 py-2 border-b border-white/10 bg-zinc-950"
+                    className="shrink-0 min-h-[64px] flex flex-col justify-center px-4 py-2 border-b border-line/10 bg-surface-dock"
                   />
                   <div className="flex-1 min-h-0 overflow-y-auto custom-scroll relative flex flex-col">
                     <div className="shrink-0 h-[58vh] min-h-[320px] flex flex-col">
                       <Stage />
                     </div>
-                    <div className="shrink-0 border-t border-white/10 bg-zinc-950">
-                      <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-gray-500 bg-black/30 border-b border-white/5">
+                    <div className="shrink-0 border-t border-line/10 bg-surface-dock">
+                      <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-fg-dim bg-surface-section border-b border-line/5">
                         {(state.activeRightTab as string) ?? 'Mode'} controls
                       </div>
                       {state.activeRightTab === 'Picker' ? (

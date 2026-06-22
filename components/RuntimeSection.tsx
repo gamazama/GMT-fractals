@@ -56,7 +56,7 @@ export const RuntimeSection: React.FC<RuntimeSectionProps> = (props) => {
                 enabled={isOn}
                 onToggle={handleToggle}
             >
-                <div className="bg-white/[0.02]">
+                <div className="bg-line/[0.02]">
                     <AutoFeaturePanel
                         featureId={featureId}
                         groupFilter={runtimeGroup}

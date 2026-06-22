@@ -382,7 +382,7 @@ const restoreAutosave = async (): Promise<void> => {
 // Amber restore glyph — only shown on the File ▸ Restore item when a recovery
 // session exists, so it stands out from the plain text items.
 const RestoreIcon = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgb(var(--warn))" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 7v6h6" />
         <path d="M3.5 13a9 9 0 1 0 2.3-9.4L3 7" />
     </svg>
@@ -396,8 +396,8 @@ const AutosaveMenuItem: React.FC<{ close: () => void }> = () => {
     const setIntervalSec = useAutosaveSettings((s) => s.setIntervalSec);
     return (
         <div className="px-3 py-2 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
-            <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-200">
-                <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-cyan-400" />
+            <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-fg-secondary">
+                <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-accent" />
                 Autosave
             </label>
             {enabled && (
@@ -405,7 +405,7 @@ const AutosaveMenuItem: React.FC<{ close: () => void }> = () => {
                     value={intervalSec}
                     onChange={(e) => setIntervalSec(Number(e.target.value))}
                     title="Autosave interval"
-                    className="bg-gray-900 border border-white/10 rounded text-[11px] text-gray-200 px-1 py-0.5 outline-none focus:border-cyan-500"
+                    className="bg-surface-sunken border border-line/10 rounded text-[11px] text-fg-secondary px-1 py-0.5 outline-none focus:border-accent-500"
                 >
                     <option value={15}>15s</option>
                     <option value={30}>30s</option>
@@ -483,7 +483,7 @@ const LoadSceneMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
             <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
-                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-fg-tertiary hover:text-fg hover:bg-line/10 transition-colors"
             >
                 <span className="flex items-center gap-2 min-w-0">
                     <span className="truncate">Load Scene (PNG/{_fileExtension.toUpperCase()})</span>
@@ -502,7 +502,7 @@ export const SnapshotButton: React.FC = () => {
             ref={tutAnchor}
             type="button"
             onClick={() => { void saveScenePng(); }}
-            className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
+            className="flex items-center gap-1 text-[10px] font-medium text-fg-tertiary hover:text-fg bg-surface-tabbar hover:bg-line/5 border border-line/10 hover:border-accent-500/40 rounded px-2 py-1 transition-colors"
             title="Save PNG snapshot (Alt+S)"
             aria-label="Save PNG snapshot"
         >

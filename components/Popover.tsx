@@ -88,11 +88,11 @@ export const Popover: React.FC<PopoverProps> = ({
             // from exceeding the visible viewport on mobile (the Light
             // Studio popup in particular has unbounded internal layout).
             // mobile-scroll gives a thicker scroll surface for touch.
-            className={`absolute top-full mt-3 ${a.container} ${width} max-h-[80dvh] overflow-y-auto mobile-scroll bg-black border border-white/20 rounded-xl ${padding === 'none' ? 'py-3' : 'p-3'} shadow-2xl z-[70] animate-fade-in ${className}`}
+            className={`absolute top-full mt-3 ${a.container} ${width} max-h-[80dvh] overflow-y-auto mobile-scroll bg-surface border border-line/20 rounded-xl ${padding === 'none' ? 'py-3' : 'p-3'} shadow-2xl z-[70] animate-fade-in ${className}`}
             onClick={e => e.stopPropagation()}
         >
             {arrow && (
-                <div className={`absolute -top-1.5 ${a.arrow} w-3 h-3 bg-black border-t border-l border-white/20 transform rotate-45`} />
+                <div className={`absolute -top-1.5 ${a.arrow} w-3 h-3 bg-surface border-t border-l border-line/20 transform rotate-45`} />
             )}
             {children}
         </div>

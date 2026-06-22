@@ -396,7 +396,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
           the per-bucket left gutter so a sparse bucket's gutter is a single short line
           that fits inside the swatch-row height (no leftover vertical gap). */}
       {group.label && (
-        <div data-wall-header className="px-2 py-px text-[11px] leading-tight text-zinc-200 font-medium border-t border-white/10 truncate">
+        <div data-wall-header className="px-2 py-px text-[11px] leading-tight text-fg-secondary font-medium border-t border-line/10 truncate">
           {group.label}
         </div>
       )}
@@ -411,9 +411,9 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
           style={{ width: labelW, paddingLeft: labelW >= 28 ? 8 : 0, paddingRight: labelW >= 28 ? 8 : 0 }}
         >
           {labelW >= 28 && (
-            <div className="text-[10px] text-zinc-400 truncate w-full">
+            <div className="text-[10px] text-fg-muted truncate w-full">
               {group.sublabel ? `${group.sublabel} ` : ''}
-              <span className="text-zinc-600 tabular-nums">({group.entries.length})</span>
+              <span className="text-fg-faint tabular-nums">({group.entries.length})</span>
             </div>
           )}
         </div>
@@ -1058,14 +1058,14 @@ export const PickerWall: React.FC<PickerWallProps> = ({
 
       {selectionTool === 'paint' && brushCursor && (
         <div
-          className="absolute pointer-events-none rounded-full border border-cyan-300/90"
+          className="absolute pointer-events-none rounded-full border border-accent-300/90"
           style={{
             left: brushCursor.x - brushRadius,
             top: brushCursor.y - brushRadius,
             width: brushRadius * 2,
             height: brushRadius * 2,
             zIndex: 6,
-            background: 'rgba(34,211,238,0.10)',
+            background: 'rgb(var(--accent-400)/0.10)',
             boxShadow: '0 0 0 1px rgba(0,0,0,0.5)',
           }}
         />

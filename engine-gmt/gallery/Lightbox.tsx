@@ -114,7 +114,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
             onClose={onClose}
             z={Z.overlayNested}
             dismissOnEscape={false}
-            backdropClassName="bg-black/95 backdrop-blur-md"
+            backdropClassName="bg-surface backdrop-blur-md"
             className="p-0"
         >
         <div
@@ -126,14 +126,14 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
             // Modal's own Escape dismissal is disabled.
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
-            <div className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/40 flex-shrink-0">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-line/10 bg-surface-tabbar flex-shrink-0">
                 <GhostButton
                     onClick={(e) => { e.stopPropagation(); onClose(); }}
-                    className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded"
+                    className="text-xs text-fg-muted hover:text-fg px-3 py-1.5 rounded"
                 >
                     ← Back to gallery
                 </GhostButton>
-                <div className="text-[10px] text-gray-500 font-mono">
+                <div className="text-[10px] text-fg-dim font-mono">
                     {index >= 0 && `${index + 1} / ${navItems.length}`}
                 </div>
             </div>
@@ -145,12 +145,12 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
             >
                 {/* Image pane — fit mode centres + contains; 100 mode scrolls. */}
                 <div
-                    className={`flex-1 relative bg-black/40 min-h-0 ${
+                    className={`flex-1 relative bg-surface-section min-h-0 ${
                         zoomMode === 'fit' ? 'flex items-center justify-center overflow-hidden' : 'overflow-auto'
                     }`}
                 >
                     {!imgLoaded && (
-                        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-gray-500 pointer-events-none">
+                        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-fg-dim pointer-events-none">
                             loading image…
                         </div>
                     )}
@@ -169,7 +169,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
 
                     {/* Zoom pill */}
                     {imgLoaded && (
-                        <div className="absolute top-2 left-2 px-2 py-0.5 text-[9px] font-bold bg-black/60 border border-white/10 rounded text-gray-300 pointer-events-none">
+                        <div className="absolute top-2 left-2 px-2 py-0.5 text-[9px] font-bold bg-surface/80 border border-line/10 rounded text-fg-tertiary pointer-events-none">
                             {zoomMode === 'fit' ? 'Fit · click to zoom' : '100% · click to fit'}
                         </div>
                     )}
@@ -178,7 +178,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                     {zoomMode === 'fit' && prevItem && (
                         <button
                             onClick={() => onNavigate(prevItem)}
-                            className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 border border-white/10 text-gray-300 hover:text-white flex items-center justify-center text-lg leading-none"
+                            className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-surface/80 hover:bg-surface border border-line/10 text-fg-tertiary hover:text-fg flex items-center justify-center text-lg leading-none"
                             title={`Previous (${prevItem.title})`}
                         >
                             ‹
@@ -187,7 +187,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                     {zoomMode === 'fit' && nextItem && (
                         <button
                             onClick={() => onNavigate(nextItem)}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 border border-white/10 text-gray-300 hover:text-white flex items-center justify-center text-lg leading-none"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-surface/80 hover:bg-surface border border-line/10 text-fg-tertiary hover:text-fg flex items-center justify-center text-lg leading-none"
                             title={`Next (${nextItem.title})`}
                         >
                             ›
@@ -196,27 +196,27 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                 </div>
 
                 {/* Sidebar */}
-                <aside className="w-full md:w-80 md:flex-shrink-0 border-t md:border-t-0 md:border-l border-white/10 bg-black/60 overflow-y-auto">
+                <aside className="w-full md:w-80 md:flex-shrink-0 border-t md:border-t-0 md:border-l border-line/10 bg-surface overflow-y-auto">
                     <div className="p-5 space-y-4">
                         <div>
-                            <h2 className="text-base font-bold text-white leading-tight">{item.title}</h2>
-                            <div className="mt-1 flex items-center gap-2 flex-wrap text-[10px] text-gray-400">
+                            <h2 className="text-base font-bold text-fg leading-tight">{item.title}</h2>
+                            <div className="mt-1 flex items-center gap-2 flex-wrap text-[10px] text-fg-muted">
                                 {/* @username is the immutable handle; author/display_name
                                     is the friendly label that hangs alongside. */}
                                 {(item.username || item.author) && (
                                     <span>
                                         by{' '}
                                         {item.username
-                                            ? <span className="text-cyan-300">@{item.username}</span>
-                                            : <span className="text-gray-300">{item.author}</span>}
+                                            ? <span className="text-accent-300">@{item.username}</span>
+                                            : <span className="text-fg-tertiary">{item.author}</span>}
                                         {item.username && item.author && item.author !== item.username && (
-                                            <span className="text-gray-500"> · {item.author}</span>
+                                            <span className="text-fg-dim"> · {item.author}</span>
                                         )}
                                     </span>
                                 )}
-                                <span className="text-gray-600">·</span>
+                                <span className="text-fg-faint">·</span>
                                 <span>{item.formula}</span>
-                                <span className="text-gray-600">·</span>
+                                <span className="text-fg-faint">·</span>
                                 <span title={new Date(item.created_at).toLocaleString()}>{formatRelative(item.created_at)}</span>
                             </div>
                             {item.featured && (
@@ -227,19 +227,19 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                         </div>
 
                         {item.description && (
-                            <p className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap">{item.description}</p>
+                            <p className="text-[11px] text-fg-tertiary leading-relaxed whitespace-pre-wrap">{item.description}</p>
                         )}
 
                         {item.tags && item.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1">
                                 {item.tags.map(t => (
-                                    <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-white/[0.05] text-gray-400">#{t}</span>
+                                    <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-line/[0.05] text-fg-muted">#{t}</span>
                                 ))}
                             </div>
                         )}
 
                         {loadError && (
-                            <ErrorNote className="text-[10px] text-red-300 p-2">
+                            <ErrorNote className="text-[10px] text-danger p-2">
                                 {loadError}
                             </ErrorNote>
                         )}
@@ -250,7 +250,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                                 onClick={() => onLoadScene(item)}
                                 disabled={loading}
                                 title="Opens this scene in the editor — tweak params, colours, camera, then re-share your own version"
-                                className="w-full py-2 px-3 rounded text-[11px] font-bold text-white disabled:opacity-50"
+                                className="w-full py-2 px-3 rounded text-[11px] font-bold text-fg disabled:opacity-50"
                             >
                                 {loading ? 'Loading scene…' : '▶ Open & Remix'}
                             </GhostButton>
@@ -258,10 +258,10 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                                 onClick={copyShareLink}
                                 className={`w-full py-2 px-3 rounded text-[11px] font-bold border transition-colors ${
                                     shareState === 'copied'
-                                        ? 'bg-green-500/15 border-green-500/40 text-green-300'
+                                        ? 'bg-ok/15 border-ok/40 text-ok'
                                         : shareState === 'failed'
-                                            ? 'bg-red-500/15 border-red-500/40 text-red-300'
-                                            : 'bg-white/[0.04] hover:bg-white/[0.08] text-gray-200 border-white/10'
+                                            ? 'bg-danger/15 border-danger/40 text-danger'
+                                            : 'bg-line/[0.04] hover:bg-line/[0.08] text-fg-secondary border-line/10'
                                 }`}
                                 title="Copy a link to THIS gallery entry (opens the lightbox). To share your own edited scene instead, use Copy Share Link in the editor."
                             >
@@ -272,7 +272,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                                     href={item.image_url}
                                     download={`${item.slug}.${item.image_format ?? 'jpg'}`}
                                     onClick={(e) => e.stopPropagation()}
-                                    className="block py-2 px-3 rounded text-[11px] font-bold bg-white/[0.04] hover:bg-white/[0.08] text-gray-200 border border-white/10 text-center no-underline"
+                                    className="block py-2 px-3 rounded text-[11px] font-bold bg-line/[0.04] hover:bg-line/[0.08] text-fg-secondary border border-line/10 text-center no-underline"
                                 >
                                     ↓ Download
                                 </a>
@@ -281,10 +281,10 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                                     title="Copy the direct URL to the watermarked JPG"
                                     className={`py-2 px-3 rounded text-[11px] font-bold border transition-colors ${
                                         copyState === 'copied'
-                                            ? 'bg-green-500/15 border-green-500/40 text-green-300'
+                                            ? 'bg-ok/15 border-ok/40 text-ok'
                                             : copyState === 'failed'
-                                                ? 'bg-red-500/15 border-red-500/40 text-red-300'
-                                                : 'bg-white/[0.04] hover:bg-white/[0.08] text-gray-200 border-white/10'
+                                                ? 'bg-danger/15 border-danger/40 text-danger'
+                                                : 'bg-line/[0.04] hover:bg-line/[0.08] text-fg-secondary border-line/10'
                                     }`}
                                 >
                                     {copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Failed' : '🖼 Copy image URL'}
@@ -292,23 +292,23 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                             </div>
                         </div>
 
-                        <div className="text-[9px] text-gray-600 leading-relaxed pt-1">
+                        <div className="text-[9px] text-fg-faint leading-relaxed pt-1">
                             Keyboard: <kbd className="font-mono">←</kbd> <kbd className="font-mono">→</kbd> previous / next ·
                             <kbd className="font-mono"> Enter</kbd> open &amp; remix ·
                             <kbd className="font-mono"> Esc</kbd> close
                         </div>
 
                         {moreFromUploader.length > 0 && (
-                            <div className="border-t border-white/5 pt-4">
-                                <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-                                    More from <span className="text-cyan-300">@{item.username ?? '…'}</span>
+                            <div className="border-t border-line/5 pt-4">
+                                <div className="text-[9px] font-bold text-fg-dim uppercase tracking-wider mb-2">
+                                    More from <span className="text-accent-300">@{item.username ?? '…'}</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-1.5">
                                     {moreFromUploader.map(m => (
                                         <button
                                             key={m.id}
                                             onClick={() => onNavigate(m)}
-                                            className="aspect-square block rounded overflow-hidden bg-black/40 border border-white/10 hover:border-cyan-500/60 transition-colors"
+                                            className="aspect-square block rounded overflow-hidden bg-surface-section border border-line/10 hover:border-accent-500/60 transition-colors"
                                             title={m.title}
                                         >
                                             <img src={m.thumbnail_url} alt={m.title} className="w-full h-full object-cover" loading="lazy" />

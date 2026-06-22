@@ -137,30 +137,30 @@ export const GradientSourcePicker: React.FC<GradientSourcePickerProps> = ({ titl
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-[min(420px,92vw)] max-h-[72vh] flex flex-col bg-zinc-900 border border-white/15 rounded-md shadow-2xl overflow-hidden">
-      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-white/10">
-        <span className="text-[11px] font-semibold text-gray-300">{title}</span>
+      <div className="w-[min(420px,92vw)] max-h-[72vh] flex flex-col bg-surface border border-line/15 rounded-md shadow-2xl overflow-hidden">
+      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-line/10">
+        <span className="text-[11px] font-semibold text-fg-tertiary">{title}</span>
         <input
           ref={inputRef}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search gradients…"
-          className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-sm text-[11px] text-gray-200 px-2 py-1 outline-none focus:border-cyan-500/50"
+          className="flex-1 min-w-0 bg-surface-section border border-line/10 rounded-sm text-[11px] text-fg-secondary px-2 py-1 outline-none focus:border-accent-500/50"
         />
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-200 text-sm leading-none px-1">
+        <button onClick={onClose} className="text-fg-muted hover:text-fg-secondary text-sm leading-none px-1">
           ✕
         </button>
       </div>
-      <div className="px-2 py-1 text-[10px] text-gray-500 border-b border-white/5">
+      <div className="px-2 py-1 text-[10px] text-fg-dim border-b border-line/5">
         {total} match{total === 1 ? '' : 'es'}
         {total > MAX_ROWS && ` · showing ${MAX_ROWS} — refine search`}
       </div>
       <div className="overflow-y-auto">
-        {shownSections.length === 0 && <div className="px-3 py-6 text-center text-[11px] text-gray-500">No gradients match “{q}”.</div>}
+        {shownSections.length === 0 && <div className="px-3 py-6 text-center text-[11px] text-fg-dim">No gradients match “{q}”.</div>}
         {shownSections.map((s) => (
           <div key={s.label}>
-            <div className="sticky top-0 z-10 px-2 py-1 text-[9px] uppercase tracking-wide text-gray-500 bg-zinc-900/95 border-b border-white/5">
-              {s.label} <span className="text-gray-600">· {s.rows.length}</span>
+            <div className="sticky top-0 z-10 px-2 py-1 text-[9px] uppercase tracking-wide text-fg-dim bg-surface/95 border-b border-line/5">
+              {s.label} <span className="text-fg-faint">· {s.rows.length}</span>
             </div>
             {s.rows.map((r) => {
               const selected = r.kind === 'catalog' && r.idx === value;
@@ -168,10 +168,10 @@ export const GradientSourcePicker: React.FC<GradientSourcePickerProps> = ({ titl
                 <button
                   key={r.key}
                   onClick={() => select(r)}
-                  className={`flex items-center gap-2 w-full px-2 py-1.5 text-left hover:bg-white/[0.06] ${selected ? 'bg-cyan-500/15' : ''}`}
+                  className={`flex items-center gap-2 w-full px-2 py-1.5 text-left hover:bg-line/[0.06] ${selected ? 'bg-accent-500/15' : ''}`}
                 >
                   <Swatch ramp={r.ramp} />
-                  <span className={`text-[11px] truncate ${selected ? 'text-cyan-200' : 'text-gray-300'}`}>{r.name}</span>
+                  <span className={`text-[11px] truncate ${selected ? 'text-accent-300' : 'text-fg-tertiary'}`}>{r.name}</span>
                 </button>
               );
             })}

@@ -87,7 +87,7 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
 
     return (
         <StateLibraryPanel<SavedCamera['state']>
-            className={`flex flex-col bg-[#080808] ${className}`}
+            className={`flex flex-col bg-surface-dock ${className}`}
             snapshots={savedCameras}
             activeId={activeCameraId}
             onSelect={selectCamera}
@@ -110,24 +110,24 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                 { id: 'reset', label: 'RESET', onSelect: handleReset, title: 'Reset camera to formula default' },
             ]}
             toolbarBefore={
-                <div className="px-2 pb-2 bg-black/40 border-b border-white/10" data-help-id="panel.camera_manager">
+                <div className="px-2 pb-2 bg-surface-tabbar border-b border-line/10" data-help-id="panel.camera_manager">
                     <button
                         type="button"
                         onClick={handleAddCamera}
-                        className="w-full bg-cyan-900/40 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1"
+                        className="w-full bg-accent-900/40 hover:bg-accent-800 text-accent-300 border border-accent-500/30 rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1"
                     >
                         <PlusIcon /> New Camera
                     </button>
                 </div>
             }
             footer={
-                <div className="border-t border-white/10 bg-black/40 p-2 space-y-2">
+                <div className="border-t border-line/10 bg-surface-tabbar p-2 space-y-2">
                     <div className="flex items-center justify-between">
                         <SectionLabel>{activeCameraId ? 'Active Settings' : 'Free Camera'}</SectionLabel>
                         {activeCameraId && (
                             <button
                                 onClick={() => selectCamera(null)}
-                                className="text-[9px] text-gray-500 hover:text-white px-2 py-0.5 rounded border border-white/10 hover:bg-white/5 transition-colors"
+                                className="text-[9px] text-fg-dim hover:text-fg px-2 py-0.5 rounded border border-line/10 hover:bg-line/5 transition-colors"
                             >
                                 Deselect
                             </button>
@@ -140,11 +140,11 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                         </div>
                     </CollapsibleSection>
 
-                    <div className="bg-white/5 rounded p-1">
+                    <div className="bg-line/5 rounded p-1">
                         <AutoFeaturePanel featureId="optics" />
                     </div>
 
-                    <div className="border-t border-white/10 pt-2">
+                    <div className="border-t border-line/10 pt-2">
                         <CompositionOverlayControls />
                     </div>
                 </div>

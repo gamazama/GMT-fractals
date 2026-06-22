@@ -113,17 +113,17 @@ const SwatchRow: React.FC<{ label: string; colors: string[]; onPick: (hex: strin
     current,
 }) => (
     <div className="flex items-center gap-1.5">
-        <div className="w-[52px] shrink-0 text-[9px] uppercase tracking-wide text-gray-500 font-bold">{label}</div>
+        <div className="w-[52px] shrink-0 text-[9px] uppercase tracking-wide text-fg-dim font-bold">{label}</div>
         <div className="flex-1 flex gap-[2px] overflow-hidden">
             {colors.length === 0 ? (
-                <div className="text-[9px] text-gray-600 italic py-[3px]">—</div>
+                <div className="text-[9px] text-fg-faint italic py-[3px]">—</div>
             ) : (
                 colors.map((c, i) => (
                     <button
                         key={`${c}-${i}`}
                         onClick={() => onPick(c)}
                         className={`h-4 flex-1 min-w-0 rounded-[2px] border transition-transform hover:scale-110 hover:z-10 ${
-                            current && c.toUpperCase() === current.toUpperCase() ? 'border-white' : 'border-white/10'
+                            current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/10'
                         }`}
                         style={{ backgroundColor: c }}
                         title={c}
@@ -156,7 +156,7 @@ const GradientSlider: React.FC<{
     const pct = ((value - min) / (max - min)) * 100;
     return (
         <div className="flex items-center gap-1.5">
-            <div className="w-3 shrink-0 text-[9px] font-bold text-gray-400 text-center select-none">{label}</div>
+            <div className="w-3 shrink-0 text-[9px] font-bold text-fg-muted text-center select-none">{label}</div>
             <div
                 className="relative flex-1 h-3.5 rounded-sm cursor-ew-resize touch-none overflow-hidden"
                 style={{ background: trackBg }}
@@ -168,7 +168,7 @@ const GradientSlider: React.FC<{
             >
                 {/* GMT-style thumb: a vertical bar spanning the track, dark-outlined for legibility on any gradient. */}
                 <div
-                    className="absolute top-0 bottom-0 w-3.5 -ml-[7px] z-10 border-x-2 border-white/80 bg-white/10 shadow-[0_0_0_1px_rgba(0,0,0,0.45)] pointer-events-none"
+                    className="absolute top-0 bottom-0 w-3.5 -ml-[7px] z-10 border-x-2 border-line/80 bg-line/10 shadow-[0_0_0_1px_rgba(0,0,0,0.45)] pointer-events-none"
                     style={{ left: `${pct}%` }}
                 />
             </div>
@@ -180,7 +180,7 @@ const GradientSlider: React.FC<{
                 onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value))))}
                 onFocus={onStart}
                 onBlur={onEnd}
-                className="w-9 shrink-0 bg-black/40 border border-white/10 rounded text-[9px] text-gray-300 px-1 py-[1px] text-right tabular-nums"
+                className="w-9 shrink-0 bg-black/40 border border-line/10 rounded text-[9px] text-fg-tertiary px-1 py-[1px] text-right tabular-nums"
             />
         </div>
     );
@@ -471,7 +471,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                         onLostPointerCapture={endField}
                     />
                     <div
-                        className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-white shadow pointer-events-none mix-blend-difference"
+                        className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-fg shadow pointer-events-none mix-blend-difference"
                         style={{ left: `${hsb.s}%`, top: `${100 - hsb.v}%` }}
                     />
                 </div>
@@ -488,7 +488,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                         onLostPointerCapture={endHue}
                     />
                     <div
-                        className="absolute left-0 w-full h-[3px] -mt-[1.5px] bg-white/90 rounded-full pointer-events-none shadow"
+                        className="absolute left-0 w-full h-[3px] -mt-[1.5px] bg-line/90 rounded-full pointer-events-none shadow"
                         style={{ top: `${(hsb.h / 360) * 100}%` }}
                     />
                 </div>
@@ -496,19 +496,19 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
 
             {/* Hex + copy + eyedropper */}
             <div className="flex items-center gap-1.5">
-                <div className="w-6 h-6 shrink-0 rounded border border-white/10" style={{ backgroundColor: hex }} />
+                <div className="w-6 h-6 shrink-0 rounded border border-line/10" style={{ backgroundColor: hex }} />
                 <input
                     value={hexDraft}
                     onChange={(e) => setHexDraft(e.target.value)}
                     onBlur={(e) => setFromHex(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                    className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded text-[11px] font-mono text-gray-200 px-1.5 py-1 uppercase"
+                    className="flex-1 min-w-0 bg-black/40 border border-line/10 rounded text-[11px] font-mono text-fg-secondary px-1.5 py-1 uppercase"
                     spellCheck={false}
                 />
-                <button onClick={doCopy} title="Copy hex" className="w-6 h-6 shrink-0 grid place-items-center rounded border border-white/10 hover:bg-white/10 text-gray-300 text-[10px]">
+                <button onClick={doCopy} title="Copy hex" className="w-6 h-6 shrink-0 grid place-items-center rounded border border-line/10 hover:bg-line/10 text-fg-tertiary text-[10px]">
                     {copied ? '✓' : '⧉'}
                 </button>
-                <button onClick={doEyedrop} title={eyedropError ? 'Eyedropper unsupported' : 'Pick from screen'} className={`w-6 h-6 shrink-0 grid place-items-center rounded border hover:bg-white/10 text-[11px] ${eyedropError ? 'border-amber-500/60 text-amber-400' : 'border-white/10 text-gray-300'}`}>
+                <button onClick={doEyedrop} title={eyedropError ? 'Eyedropper unsupported' : 'Pick from screen'} className={`w-6 h-6 shrink-0 grid place-items-center rounded border hover:bg-line/10 text-[11px] ${eyedropError ? 'border-amber-500/60 text-amber-400' : 'border-line/10 text-fg-tertiary'}`}>
                     ⦿
                 </button>
             </div>
@@ -524,7 +524,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 onChange={(g) => rgbEdit({ g })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
                 onChange={(b) => rgbEdit({ b })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <div className="h-px bg-white/5 my-0.5" />
+            <div className="h-px bg-line/5 my-0.5" />
             <GradientSlider label="H" value={hsb.h} min={0} max={360} step={1} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
                 onChange={(h) => emit(clampHsb(h, hsb.s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             <GradientSlider label="S" value={hsb.s} min={0} max={100} step={1} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
@@ -546,7 +546,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
             <SwatchRow label="Mono" colors={harmonies?.monochromatic ?? []} onPick={(c) => setFromHex(c)} current={hex} />
             <SwatchRow label="Comp" colors={harmonies?.complementary ?? []} onPick={(c) => setFromHex(c)} current={hex} />
             <SwatchRow label="Split" colors={harmonies?.split ?? []} onPick={(c) => setFromHex(c)} current={hex} />
-            <div className="h-px bg-white/5 my-0.5" />
+            <div className="h-px bg-line/5 my-0.5" />
             <SwatchRow label="Recent" colors={recents} onPick={(c) => setFromHex(c)} current={hex} />
             <SwatchRow label="Palette" colors={palette} onPick={(c) => setFromHex(c)} current={hex} />
         </>
@@ -555,7 +555,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     return (
         <div
             ref={rootRef}
-            className="flex flex-col gap-1.5 w-full bg-black/40 border border-white/5 rounded p-2 gradient-interactive-element"
+            className="flex flex-col gap-1.5 w-full bg-black/40 border border-line/5 rounded p-2 gradient-interactive-element"
             data-help-id="ui.colorpicker"
             onContextMenu={handleContainerContextMenu}
         >
@@ -570,7 +570,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 // Medium — pads on top, channels | swatches side by side below.
                 <>
                     <div className="flex flex-col gap-1.5">{padsBlock}</div>
-                    <div className="flex gap-3 items-start pt-0.5 border-t border-white/5">
+                    <div className="flex gap-3 items-start pt-0.5 border-t border-line/5">
                         <div className="flex-1 min-w-0 flex flex-col gap-1">{channelsBlock}</div>
                         <div className="flex-1 min-w-0 flex flex-col gap-1">{swatchesBlock}</div>
                     </div>
@@ -580,10 +580,10 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 // persisted collapse toggle to keep the footprint small.
                 <>
                     {padsBlock}
-                    <div className="flex flex-col gap-1 pt-0.5 border-t border-white/5">
+                    <div className="flex flex-col gap-1 pt-0.5 border-t border-line/5">
                         <button
                             onClick={toggleDetails}
-                            className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-gray-500 hover:text-gray-300 font-bold select-none"
+                            className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-fg-dim hover:text-fg-tertiary font-bold select-none"
                         >
                             <span className="inline-block w-2 text-center">{detailsOpen ? '▾' : '▸'}</span>
                             Channels &amp; swatches
@@ -591,7 +591,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                         {detailsOpen && (
                             <div className="flex flex-col gap-1">
                                 {channelsBlock}
-                                <div className="h-px bg-white/10 my-1" />
+                                <div className="h-px bg-line/10 my-1" />
                                 {swatchesBlock}
                             </div>
                         )}

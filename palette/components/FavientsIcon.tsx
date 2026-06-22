@@ -14,15 +14,15 @@ import React from 'react';
 
 export const FAVIENTS_ACCENT = {
   /** Filled star colour. */
-  iconFilled: 'text-cyan-400',
+  iconFilled: 'text-accent-400',
   /** Dimmed / outline star colour. */
-  iconDim: 'text-white/60',
+  iconDim: 'text-fg/60',
   /** Inline "Favients" text-link buttons (picker hero, overlay header). */
-  link: 'text-cyan-300/90 hover:text-cyan-200 transition-colors',
+  link: 'text-accent-300/90 hover:text-accent-300 transition-colors',
   /** Solid accent text for an active / selected state (topbar toggle). */
-  text: 'text-cyan-300',
+  text: 'text-accent-300',
   /** Hover border accent for compact icon buttons (gradient editor). */
-  border: 'hover:border-cyan-300/40',
+  border: 'hover:border-accent-300/40',
 } as const;
 
 interface FavientsIconProps {

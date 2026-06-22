@@ -56,7 +56,7 @@ export const CompositionOverlayControls: React.FC<CompositionOverlayControlsProp
     const body = (
         <div className="mt-2 space-y-2">
             <div className="flex items-center gap-2">
-                <label className="text-[9px] text-gray-500 w-16">Type</label>
+                <label className="text-[9px] text-fg-dim w-16">Type</label>
                 <select
                     title="Composition guide overlay"
                     value={compositionOverlay}
@@ -79,7 +79,7 @@ export const CompositionOverlayControls: React.FC<CompositionOverlayControlsProp
                         onChange={(v) => setSettings({ lineThickness: v })} />
 
                     <div className="flex items-center gap-2">
-                        <label className="text-[9px] text-gray-500 w-16">Color</label>
+                        <label className="text-[9px] text-fg-dim w-16">Color</label>
                         <SmallColorPicker
                             color={settings.color}
                             onChange={(c: string) => setSettings({ color: c })}
@@ -122,15 +122,15 @@ export const CompositionOverlayControls: React.FC<CompositionOverlayControlsProp
                             <input type="checkbox"
                                 checked={settings.showCenterMark}
                                 onChange={(e) => setSettings({ showCenterMark: e.target.checked })}
-                                className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded" />
-                            <span className="text-[9px] text-gray-400">Center</span>
+                                className="w-3 h-3 accent-cyan-500 bg-surface-header border-line/20 rounded" />
+                            <span className="text-[9px] text-fg-muted">Center</span>
                         </label>
                         <label className="flex items-center gap-1 cursor-pointer">
                             <input type="checkbox"
                                 checked={settings.showSafeAreas}
                                 onChange={(e) => setSettings({ showSafeAreas: e.target.checked })}
-                                className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded" />
-                            <span className="text-[9px] text-gray-400">Safe Areas</span>
+                                className="w-3 h-3 accent-cyan-500 bg-surface-header border-line/20 rounded" />
+                            <span className="text-[9px] text-fg-muted">Safe Areas</span>
                         </label>
                     </div>
                 </>
@@ -147,7 +147,7 @@ export const CompositionOverlayControls: React.FC<CompositionOverlayControlsProp
                 defaultOpen={defaultOpen}
                 rightContent={
                     compositionOverlay !== 'none'
-                        ? <span className="text-[8px] text-cyan-400">{OVERLAY_OPTIONS.find((o) => o.type === compositionOverlay)?.label}</span>
+                        ? <span className="text-[8px] text-accent-400">{OVERLAY_OPTIONS.find((o) => o.type === compositionOverlay)?.label}</span>
                         : null
                 }
             >

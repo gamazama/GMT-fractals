@@ -248,7 +248,7 @@ const accordionSectionToProp = (
         : undefined;
     const closedBadge =
         !isActive && s.closedBadge ? (
-            <span className="text-[8px] text-gray-600">{s.closedBadge}</span>
+            <span className="text-[8px] text-fg-faint">{s.closedBadge}</span>
         ) : undefined;
     const defaultOpen =
         typeof s.defaultOpen === 'boolean'
@@ -296,7 +296,7 @@ const PanelRouterInner: React.FC<PanelRouterProps> = ({
 
     if (!def) {
         return (
-            <div className="flex h-full items-center justify-center text-gray-600 text-xs italic">
+            <div className="flex h-full items-center justify-center text-fg-faint text-xs italic">
                 Select a module
             </div>
         );
@@ -308,7 +308,7 @@ const PanelRouterInner: React.FC<PanelRouterProps> = ({
         if (!Component) {
             console.warn(`[PanelRouter] panel "${def.id}" references unregistered component "${def.component}"`);
             return (
-                <div className="flex h-full items-center justify-center text-gray-600 text-xs italic">
+                <div className="flex h-full items-center justify-center text-fg-faint text-xs italic">
                     Component not registered: {def.component}
                 </div>
             );
@@ -327,7 +327,7 @@ const PanelRouterInner: React.FC<PanelRouterProps> = ({
 
     if (items.length === 0) {
         return (
-            <div className="flex h-full items-center justify-center text-gray-600 text-xs italic">
+            <div className="flex h-full items-center justify-center text-fg-faint text-xs italic">
                 Select a module
             </div>
         );

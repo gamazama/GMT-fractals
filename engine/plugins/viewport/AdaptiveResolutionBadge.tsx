@@ -56,20 +56,20 @@ export const AdaptiveResolutionBadge: React.FC<AdaptiveResolutionBadgeProps> = (
     let stateLabel: string;
 
     if (!isEnabled) {
-        colorClass = 'text-gray-600 hover:text-gray-400';
+        colorClass = 'text-fg-faint hover:text-fg-muted';
         stateLabel = 'Off';
     } else if (suppressed) {
         // Something externally forced adaptive off (e.g. export flow).
-        colorClass = 'text-green-400 bg-green-900/30 border border-green-500/30';
+        colorClass = 'text-ok bg-ok/15 border border-ok/30';
         stateLabel = 'Locked';
     } else if (cfg.alwaysActive) {
         // Always-active mode (live sims) — adaptive runs without idle-grace
         // recovery (there's no idle state to recover to).
-        colorClass = 'text-amber-400 bg-amber-900/30 border border-amber-500/30';
+        colorClass = 'text-warn bg-warn/15 border border-warn/30';
         stateLabel = 'Always';
     } else {
         // GMT-style: active with the grace-period idle recovery.
-        colorClass = 'text-cyan-400 bg-cyan-900/30 border border-cyan-500/30';
+        colorClass = 'text-accent-400 bg-accent-900/30 border border-accent-500/30';
         stateLabel = 'Auto';
     }
 

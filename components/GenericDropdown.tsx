@@ -56,34 +56,34 @@ export function GenericDropdown<T extends string | number>({
 
     return (
         <div
-            className={`flex items-stretch bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5 ${fullWidth ? 'w-full' : ''} ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
+            className={`flex items-stretch bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-line/5 ${fullWidth ? 'w-full' : ''} ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
             data-help-id={rest['data-help-id']}
             onContextMenu={onContextMenu}
         >
             {label && (
                 <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
-                    <label className="text-[10px] font-medium tracking-tight select-none truncate pointer-events-none text-gray-400">
+                    <label className="text-[10px] font-medium tracking-tight select-none truncate pointer-events-none text-fg-muted">
                         {label}{labelSuffix}
                     </label>
                 </div>
             )}
             <div
-                className={`${label ? 'w-1/2' : 'w-full'} relative border-l border-white/10 bg-white/[0.02] border-t border-t-white/5`}
+                className={`${label ? 'w-1/2' : 'w-full'} relative border-l border-line/10 bg-line/[0.02] border-t border-t-white/5`}
             >
                 <select
                     value={value}
                     onChange={handleChange}
                     disabled={disabled}
                     {...selectHandlers}
-                    className={`w-full h-full bg-transparent text-[10px] font-medium text-gray-200 px-2 pr-6 outline-none cursor-pointer appearance-none text-center ${selectClassName}`}
+                    className={`w-full h-full bg-transparent text-[10px] font-medium text-fg-secondary px-2 pr-6 outline-none cursor-pointer appearance-none text-center ${selectClassName}`}
                 >
                     {options.map((opt) => (
-                        <option key={String(opt.value)} value={String(opt.value)} disabled={opt.disabled} className="bg-[#111] text-gray-300">
+                        <option key={String(opt.value)} value={String(opt.value)} disabled={opt.disabled} className="bg-surface text-fg-tertiary">
                             {opt.label}
                         </option>
                     ))}
                 </select>
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-fg-dim">
                    <div className="w-2.5 h-2.5"><ChevronDown /></div>
                 </div>
             </div>

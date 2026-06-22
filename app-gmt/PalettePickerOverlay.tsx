@@ -24,8 +24,8 @@ import { openFavientsPanel } from '../palette/store/favientsPanelPersist';
 
 const PalettePickerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
   <div className="w-full h-full flex flex-col">
-    <div className="shrink-0 h-11 flex items-center gap-3 px-4 border-b border-white/10 bg-black/60">
-      <span className="text-sm font-medium text-gray-200">Gradient Library</span>
+    <div className="shrink-0 h-11 flex items-center gap-3 px-4 border-b border-line/10 bg-surface/80">
+      <span className="text-sm font-medium text-fg-secondary">Gradient Library</span>
       <button
         onClick={openFavientsPanel}
         title="Open the Favients shelf"
@@ -36,7 +36,7 @@ const PalettePickerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       <button
         onClick={onClose}
         title="Close (Esc)"
-        className="ml-auto flex items-center gap-1.5 px-2.5 h-7 rounded text-[12px] text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+        className="ml-auto flex items-center gap-1.5 px-2.5 h-7 rounded text-[12px] text-fg-tertiary hover:text-fg hover:bg-line/10 transition-colors"
       >
         <CloseIcon size={13} strokeWidth={2.2} />
         Close
@@ -45,7 +45,7 @@ const PalettePickerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
     <div className="flex-1 flex min-h-0">
       {/* Quality filters only. Favourites live in the FLOATING Favients shelf (★ above /
           topbar) — favourite a picked gradient via the ★ on the picker hero. */}
-      <div className="w-[300px] shrink-0 overflow-y-auto border-r border-white/10 bg-zinc-900/60">
+      <div className="w-[300px] shrink-0 overflow-y-auto border-r border-line/10 bg-surface-sunken/60">
         <AutoFeaturePanel featureId="paletteFilters" />
       </div>
       <div className="flex-1 relative min-w-0">

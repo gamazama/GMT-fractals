@@ -10,10 +10,10 @@ interface PanelHeaderProps {
 
 export const PanelHeader: React.FC<PanelHeaderProps> = ({ label, icon, rightContent, className = '' }) => {
     return (
-        <div className={`flex items-center justify-between px-3 py-2 bg-black/40 border-b border-white/5 ${className}`}>
+        <div className={`flex items-center justify-between px-3 py-2 bg-surface-section border-b border-line/5 ${className}`}>
             <div className="flex items-center gap-2">
                 {icon}
-                <span className="text-[10px] font-bold text-gray-300">{label}</span>
+                <span className="text-[10px] font-bold text-fg-tertiary">{label}</span>
             </div>
             {rightContent && <div className="flex items-center gap-2">{rightContent}</div>}
         </div>

@@ -127,7 +127,7 @@ export function StateLibraryPanel<T>({
     toolbarBefore,
     toolbarAfter,
     footer,
-    className = 'flex flex-col bg-[#080808]',
+    className = 'flex flex-col bg-surface-dock',
 }: StateLibraryPanelProps<T>) {
     const [editId, setEditId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
@@ -178,7 +178,7 @@ export function StateLibraryPanel<T>({
         <div className={className}>
             {presets && presets.length > 0 && (
                 <div
-                    className="p-2 border-b border-white/10 bg-black/40 grid gap-1"
+                    className="p-2 border-b border-line/10 bg-surface-section grid gap-1"
                     // Dynamic column count — Tailwind's JIT can't statically
                     // extract a class built from a prop, so an inline style
                     // is the right tool here.
@@ -191,7 +191,7 @@ export function StateLibraryPanel<T>({
                             type="button"
                             onClick={p.onSelect}
                             title={p.title ?? p.label}
-                            className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 hover:text-gray-200 rounded py-1 transition-colors"
+                            className="bg-line/5 hover:bg-line/10 text-[9px] text-fg-muted hover:text-fg-secondary rounded py-1 transition-colors"
                         >
                             {p.label}
                         </button>
@@ -202,7 +202,7 @@ export function StateLibraryPanel<T>({
 
             <div className="p-2 space-y-1">
                 {snapshots.length === 0 && (
-                    <div className="text-center text-gray-600 text-[10px] italic py-4 px-2 break-words">
+                    <div className="text-center text-fg-faint text-[10px] italic py-4 px-2 break-words">
                         {emptyState}
                     </div>
                 )}
@@ -219,9 +219,9 @@ export function StateLibraryPanel<T>({
                             onClick={() => onSelect(snap.id)}
                             className={`flex items-center gap-1.5 p-1.5 rounded border transition-all group ${
                                 isActive
-                                    ? 'bg-cyan-900/20 border-cyan-500/50'
-                                    : 'bg-white/5 border-transparent hover:border-white/10'
-                            } ${isDragOver ? 'border-cyan-400/70 border-dashed' : ''}`}
+                                    ? 'bg-accent-900/20 border-accent-500/50'
+                                    : 'bg-line/5 border-transparent hover:border-line/10'
+                            } ${isDragOver ? 'border-accent-400/70 border-dashed' : ''}`}
                         >
                             {/* Drag handle — only this child is draggable */}
                             <div
@@ -235,11 +235,11 @@ export function StateLibraryPanel<T>({
                             </div>
 
                             {/* Thumbnail */}
-                            <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0 bg-black/50 border border-white/5">
+                            <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0 bg-surface-section border border-line/5">
                                 {snap.thumbnail ? (
                                     <img src={snap.thumbnail} alt="" className="w-full h-full object-cover" />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-gray-700 text-[7px]">
+                                    <div className="w-full h-full flex items-center justify-center text-fg-ghost text-[7px]">
                                         {index + 1}
                                     </div>
                                 )}
@@ -257,17 +257,17 @@ export function StateLibraryPanel<T>({
                                         onBlur={handleRenameSubmit}
                                         onKeyDown={handleKeyDown}
                                         autoFocus
-                                        className="bg-black border border-white/20 text-xs text-white px-1 py-0.5 rounded w-full outline-none"
+                                        className="bg-surface border border-line/20 text-xs text-fg px-1 py-0.5 rounded w-full outline-none"
                                         onClick={(e) => e.stopPropagation()}
                                     />
                                 ) : (
                                     <span
                                         className={`text-xs font-bold truncate block cursor-text ${
                                             modified
-                                                ? 'text-amber-300 italic'
+                                                ? 'text-warn italic'
                                                 : isActive
-                                                    ? 'text-white'
-                                                    : 'text-gray-400 group-hover:text-gray-300'
+                                                    ? 'text-fg'
+                                                    : 'text-fg-muted group-hover:text-fg-tertiary'
                                         }`}
                                         onDoubleClick={(e) => { e.stopPropagation(); handleRenameStart(snap); }}
                                         title="Double-click to rename"
@@ -276,7 +276,7 @@ export function StateLibraryPanel<T>({
                                     </span>
                                 )}
                                 {slotHintPrefix !== null && index < 9 && (
-                                    <span className="text-[7px] text-gray-600">
+                                    <span className="text-[7px] text-fg-faint">
                                         {slotHintPrefix}{index + 1}
                                     </span>
                                 )}
@@ -290,8 +290,8 @@ export function StateLibraryPanel<T>({
                                         onClick={(e) => { e.stopPropagation(); onUpdate(snap.id); }}
                                         className={`p-1 transition-colors ${
                                             modified
-                                                ? 'text-amber-400 hover:text-amber-200'
-                                                : 'text-gray-600 hover:text-gray-400 opacity-0 group-hover:opacity-100'
+                                                ? 'text-warn hover:text-warn'
+                                                : 'text-fg-faint hover:text-fg-muted opacity-0 group-hover:opacity-100'
                                         }`}
                                         title={modified ? 'Modified — click to save current state' : 'Update snapshot to current state'}
                                     >
@@ -301,7 +301,7 @@ export function StateLibraryPanel<T>({
                                 <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); onDuplicate(snap.id); }}
-                                    className="p-1 text-gray-600 hover:text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="p-1 text-fg-faint hover:text-accent-400 opacity-0 group-hover:opacity-100 transition-opacity"
                                     title="Duplicate"
                                 >
                                     <CopyIcon />
@@ -309,7 +309,7 @@ export function StateLibraryPanel<T>({
                                 <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); onDelete(snap.id); }}
-                                    className="p-1 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="p-1 text-fg-faint hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
                                     title="Delete"
                                 >
                                     <TrashIcon />

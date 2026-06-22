@@ -7,14 +7,47 @@
  *
  * @invariant Engine-core (store/) — host-agnostic; idempotent.
  */
+import { createElement } from 'react';
 import { registerSetting } from './settingsRegistry';
 import { useAutosaveSettings } from '../engine/store/autosaveStore';
+import { useColorScheme, COLOR_SCHEMES, type ColorScheme } from '../engine/store/colorSchemeStore';
+import { AccentHueControl, SecondaryHueControl } from '../components/HueControl';
 
 let registered = false;
 
 export const registerCoreSettings = (): void => {
     if (registered) return;
     registered = true;
+
+    registerSetting({
+        id: 'color-scheme',
+        section: 'Interface',
+        label: 'Color scheme',
+        description: 'Recolor the entire interface. Applies across all GMT apps; fractal output and gradients are unaffected.',
+        control: { kind: 'enum', options: COLOR_SCHEMES.map((s) => ({ value: s.value, label: s.label })) },
+        get: () => useColorScheme.getState().scheme,
+        set: (v) => useColorScheme.getState().setScheme(v as ColorScheme),
+        subscribe: (cb) => useColorScheme.subscribe(cb),
+        order: 0,
+    });
+
+    registerSetting({
+        id: 'accent-hue',
+        section: 'Interface',
+        label: 'Accent colour',
+        description: 'Hue of the primary interface accent. Applies on top of any colour scheme.',
+        control: { kind: 'custom', render: () => createElement(AccentHueControl) },
+        order: 1,
+    });
+
+    registerSetting({
+        id: 'secondary-hue',
+        section: 'Interface',
+        label: 'Secondary accent',
+        description: 'Hue of the secondary accent (audio, modulation, Path Tracer).',
+        control: { kind: 'custom', render: () => createElement(SecondaryHueControl) },
+        order: 2,
+    });
 
     registerSetting({
         id: 'autosave.enabled',

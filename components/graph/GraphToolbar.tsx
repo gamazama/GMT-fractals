@@ -32,7 +32,7 @@ interface GraphToolbarProps {
 }
 
 const SimpleTooltip = ({ text }: { text: string }) => (
-    <div className="absolute left-full ml-1 top-1/2 -translate-y-1/2 bg-black text-white text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap pointer-events-none z-50 opacity-0 group-hover/btn:opacity-100 transition-opacity">
+    <div className="absolute left-full ml-1 top-1/2 -translate-y-1/2 bg-surface-raised text-fg text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap pointer-events-none z-50 opacity-0 group-hover/btn:opacity-100 transition-opacity">
         {text}
         <div className="absolute top-1/2 -left-1 -translate-y-1/2 border-t-4 border-b-4 border-r-4 border-t-transparent border-b-transparent border-r-black" />
     </div>
@@ -45,10 +45,10 @@ const ToolButton = ({ onClick, active, icon, tooltip, onPointerDown, danger, onC
         onContextMenu={onContextMenu}
         className={`group/btn relative w-6 h-6 flex items-center justify-center rounded border transition-all ${
             active 
-            ? 'bg-cyan-900/80 text-cyan-300 border-cyan-500/50' 
+            ? 'bg-accent-900/80 text-accent-300 border-accent-500/50' 
             : danger 
-                ? 'bg-red-900/20 text-red-400 border-red-500/30 animate-pulse'
-                : 'bg-black/60 text-gray-400 border-white/10 hover:text-white'
+                ? 'bg-danger/15 text-danger border-danger/30 animate-pulse'
+                : 'bg-surface/60 text-fg-muted border-line/10 hover:text-fg'
         }`}
     >
         {icon}
@@ -87,7 +87,7 @@ const BounceSettingsMenu = () => {
              <div className="px-3 pt-1">
                  <button 
                     onClick={() => setBouncePhysics(0.5, 0.6)}
-                    className="w-full py-1 text-[9px] font-bold text-gray-500 hover:text-white border border-white/10 rounded hover:bg-white/5 transition-colors"
+                    className="w-full py-1 text-[9px] font-bold text-fg-dim hover:text-fg border border-line/10 rounded hover:bg-line/5 transition-colors"
                  >
                     Reset Defaults
                  </button>

@@ -13,7 +13,7 @@ import {
 import { estimateShaderCompilerCompileTime } from '../features/engine/profiles';
 
 // PT section color token
-const PT_COLOR = 'text-purple-400';
+const PT_COLOR = 'text-secondary';
 
 /**
  * Top-bar dropdown for viewport quality control.
@@ -131,8 +131,8 @@ export const ViewportQuality: React.FC = () => {
                 ref={tutAnchor}
                 className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
                     hasPending
-                        ? 'text-amber-300 bg-amber-900/30 border border-amber-500/30'
-                        : 'text-cyan-300 bg-cyan-900/20 border border-cyan-500/20 hover:bg-cyan-900/40'
+                        ? 'text-warn bg-warn/15 border border-warn/30'
+                        : 'text-accent-300 bg-accent-900/20 border border-accent-500/20 hover:bg-accent-900/40'
                 }`}
                 title="Viewport Quality"
             >
@@ -150,7 +150,7 @@ export const ViewportQuality: React.FC = () => {
                     <div className="space-y-3">
                         {/* Master Presets */}
                         <div>
-                            <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Viewport Quality</div>
+                            <div className="text-[9px] font-bold text-fg-dim uppercase tracking-wider mb-1.5">Viewport Quality</div>
                             <div className="space-y-1">
                                 {getShaderCompilerPresets().filter(p => !p.isAdvanced || advancedMode).map(preset => {
                                     const est = estimateShaderCompilerCompileTime(preset.subsystems, topRenderMode);
@@ -161,16 +161,16 @@ export const ViewportQuality: React.FC = () => {
                                             onClick={() => handlePresetSelect(preset.id)}
                                             className={`w-full flex items-center justify-between px-2 py-1 rounded text-[10px] transition-colors ${
                                                 isActive
-                                                    ? 'bg-cyan-900/40 text-cyan-300 border border-cyan-500/30'
-                                                    : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                                                    ? 'bg-accent-900/40 text-accent-300 border border-accent-500/30'
+                                                    : 'text-fg-muted hover:bg-line/5 hover:text-fg'
                                             }`}
                                         >
                                             <div className="flex items-center gap-2">
-                                                <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-cyan-400' : 'bg-gray-700'}`} />
+                                                <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-accent-400' : 'bg-fg-ghost'}`} />
                                                 <span className="font-semibold">{preset.label}</span>
-                                                {preset.id === 'preview' && <span className="text-amber-400/70 text-[8px] font-normal ml-1">lighting disabled</span>}
+                                                {preset.id === 'preview' && <span className="text-warn/70 text-[8px] font-normal ml-1">lighting disabled</span>}
                                             </div>
-                                            <span className="text-gray-600 text-[9px]">~{(est / 1000).toFixed(0)}s</span>
+                                            <span className="text-fg-faint text-[9px]">~{(est / 1000).toFixed(0)}s</span>
                                         </button>
                                     );
                                 })}
@@ -179,7 +179,7 @@ export const ViewportQuality: React.FC = () => {
 
                         {/* Per-Subsystem Overrides */}
                         <div>
-                            <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Per Subsystem</div>
+                            <div className="text-[9px] font-bold text-fg-dim uppercase tracking-wider mb-1.5">Per Subsystem</div>
                             <div className="space-y-1">
                                 {getShaderCompilerSubsystems().filter(s => !s.isAdvanced || advancedMode).map(sub => {
                                     const currentTier = effectiveSubsystems[sub.id] ?? 0;
@@ -194,7 +194,7 @@ export const ViewportQuality: React.FC = () => {
                                             ref={(el) => { if (el) tutorAnchors.register(`vp-quality-row-${sub.id}`, el); }}
                                             className={`flex items-center justify-between px-2 transition-opacity ${isDimmed ? 'opacity-35' : ''}`}
                                         >
-                                            <span className={`text-[10px] ${isDimmed ? 'text-gray-600' : 'text-gray-400'}`}>
+                                            <span className={`text-[10px] ${isDimmed ? 'text-fg-faint' : 'text-fg-muted'}`}>
                                                 {sub.label}
                                             </span>
                                             <select
@@ -203,8 +203,8 @@ export const ViewportQuality: React.FC = () => {
                                                 // Tooltip explains the current tier; per-option titles
                                                 // explain each choice when the list is open.
                                                 title={sub.tiers[currentTier]?.desc ?? ''}
-                                                className={`bg-gray-900 border border-white/10 rounded px-1.5 py-0.5 text-[10px] outline-none cursor-pointer ${
-                                                    isDimmed ? 'text-gray-600' : 'text-white focus:border-cyan-500'
+                                                className={`bg-surface-sunken border border-line/10 rounded px-1.5 py-0.5 text-[10px] outline-none cursor-pointer ${
+                                                    isDimmed ? 'text-fg-faint' : 'text-fg focus:border-accent-500'
                                                 }`}
                                             >
                                                 {sub.tiers.map((tier, i) => (
@@ -258,8 +258,8 @@ export const ViewportQuality: React.FC = () => {
                         )}
 
                         {/* Apply Bar */}
-                        <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                            <span className="text-[9px] text-gray-500">
+                        <div className="flex items-center justify-between pt-2 border-t border-line/10">
+                            <span className="text-[9px] text-fg-dim">
                                 Est. ~{(estimatedMs / 1000).toFixed(1)}s
                             </span>
                             <button
@@ -267,8 +267,8 @@ export const ViewportQuality: React.FC = () => {
                                 disabled={!hasPending}
                                 className={`px-3 py-1 rounded text-[10px] font-bold transition-colors ${
                                     hasPending
-                                        ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                                        : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                                        ? 'bg-accent-600 hover:bg-accent-500 text-fg'
+                                        : 'bg-surface-header text-fg-faint cursor-not-allowed'
                                 }`}
                             >
                                 Apply

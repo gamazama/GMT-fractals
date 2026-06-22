@@ -38,7 +38,7 @@ const NextStepsList: React.FC = () => {
                         onClick={() => click(item.target)}
                         style={{
                             fontSize: 11,
-                            color: hovered === item.target ? 'rgba(103, 232, 249, 1)' : 'rgba(255,255,255,0.7)',
+                            color: hovered === item.target ? 'rgb(var(--accent-300))' : 'rgb(var(--fg) / 0.7)',
                             padding: '3px 0', cursor: 'pointer', transition: 'color 0.15s',
                         }}
                     >

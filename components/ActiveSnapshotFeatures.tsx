@@ -75,14 +75,14 @@ export const ActiveSnapshotFeatures: React.FC<ActiveSnapshotFeaturesProps> = ({
     if (!activeId && inactiveLabel === null) return null;
 
     return (
-        <div className="border-t border-white/10 bg-black/40 p-2 space-y-2">
+        <div className="border-t border-line/10 bg-surface-section p-2 space-y-2">
             <div className="flex items-center justify-between">
                 <SectionLabel>{activeId ? label : (inactiveLabel ?? '')}</SectionLabel>
                 {activeId && onDeselect && (
                     <button
                         type="button"
                         onClick={onDeselect}
-                        className="text-[9px] text-gray-500 hover:text-white px-2 py-0.5 rounded border border-white/10 hover:bg-white/5 transition-colors"
+                        className="text-[9px] text-fg-dim hover:text-fg px-2 py-0.5 rounded border border-line/10 hover:bg-line/5 transition-colors"
                     >
                         Deselect
                     </button>
@@ -90,7 +90,7 @@ export const ActiveSnapshotFeatures: React.FC<ActiveSnapshotFeaturesProps> = ({
             </div>
 
             {activeId && featureIds.map((fid) => (
-                <div key={fid} className="bg-white/5 rounded p-1">
+                <div key={fid} className="bg-line/5 rounded p-1">
                     <AutoFeaturePanel
                         featureId={fid}
                         groupFilter={groupFilter}

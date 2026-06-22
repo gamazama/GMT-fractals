@@ -46,7 +46,7 @@ export const FavientsEditorEntrance: React.FC<{ config: GradientConfig; featureI
   };
   return (
     <button
-      className={`gradient-interactive-element flex items-center px-1.5 py-0.5 rounded border border-white/10 ${FAVIENTS_ACCENT.border} hover:bg-white/10 text-[11px] leading-none transition-colors active:scale-95`}
+      className={`gradient-interactive-element flex items-center px-1.5 py-0.5 rounded border border-line/10 ${FAVIENTS_ACCENT.border} hover:bg-line/10 text-[11px] leading-none transition-colors active:scale-95`}
       onClick={handleClick}
       title={panelShown ? 'Add this gradient to Favients' : 'Favients — saved gradients & presets'}
     >

@@ -39,11 +39,11 @@ export const LoadSceneFilterMenuItem: React.FC<{ close: () => void }> = ({ close
     useLoadFilterState(); // subscribe so the label re-renders live
     const stuck = isLoadFilterStuck();
     return (
-        <div className="w-full flex items-center gap-1 px-2 py-1.5 rounded text-xs text-gray-300 hover:bg-white/10 transition-colors">
+        <div className="w-full flex items-center gap-1 px-2 py-1.5 rounded text-xs text-fg-tertiary hover:bg-line/10 transition-colors">
             <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); loadSceneWithFilter(getKeepOptions()); close(); }}
-                className={`flex-1 flex items-center min-w-0 text-left hover:text-white transition-colors ${stuck ? 'italic' : ''}`}
+                className={`flex-1 flex items-center min-w-0 text-left hover:text-fg transition-colors ${stuck ? 'italic' : ''}`}
                 title={stuck ? 'Loads only the kept parts — click the gear to change' : 'Load a scene file (PNG / GMF)'}
             >
                 <span className="truncate">Load Scene (PNG/GMF){stuck ? ' *' : ''}</span>
@@ -51,7 +51,7 @@ export const LoadSceneFilterMenuItem: React.FC<{ close: () => void }> = ({ close
             <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); openLoadFilterPanel(); close(); }}
-                className={`shrink-0 p-1 rounded transition-colors ${stuck ? 'text-cyan-300' : 'text-gray-500'} hover:text-cyan-300 hover:bg-white/10`}
+                className={`shrink-0 p-1 rounded transition-colors ${stuck ? 'text-accent-300' : 'text-fg-dim'} hover:text-accent-300 hover:bg-line/10`}
                 title="Choose which parts of the file to load"
                 aria-label="Load options"
             >
@@ -89,16 +89,16 @@ export const LoadFilterPanel: React.FC = () => {
             dismissOnEscape
             showClose={false}
             onClose={closeLoadFilterPanel}
-            className="top-12 right-4 w-64 bg-neutral-900 border border-white/10 rounded-md shadow-2xl flex flex-col overflow-hidden"
+            className="top-12 right-4 w-64 bg-surface border border-line/10 rounded-md shadow-2xl flex flex-col overflow-hidden"
             bodyClassName=""
         >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-gray-300">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-line/10">
+                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-fg-tertiary">
                     Load — which parts?
                 </h3>
                 <button
                     onClick={closeLoadFilterPanel}
-                    className="text-gray-500 hover:text-gray-300 transition-colors text-[10px] leading-none"
+                    className="text-fg-dim hover:text-fg-tertiary transition-colors text-[10px] leading-none"
                     aria-label="Close"
                 >
                     ✕
@@ -117,17 +117,17 @@ export const LoadFilterPanel: React.FC = () => {
                             onChange={e => setLoadFilterGroup(g.id, e.target.checked)}
                             className="w-3 h-3 accent-cyan-500"
                         />
-                        <span className="text-[11px] text-gray-300">{g.label}</span>
+                        <span className="text-[11px] text-fg-tertiary">{g.label}</span>
                     </label>
                 ))}
-                <p className="text-[9px] text-gray-500 leading-snug pt-1">
+                <p className="text-[9px] text-fg-dim leading-snug pt-1">
                     {active
                         ? 'Unchecked parts keep their current values.'
                         : 'All parts on — a normal full load.'}
                 </p>
             </div>
 
-            <div className="px-3 py-2 border-t border-white/10">
+            <div className="px-3 py-2 border-t border-line/10">
                 <label
                     className="flex items-center gap-2 cursor-pointer"
                     title="When on, the Load menu uses these toggles. When off, the menu does a full load and the toggles apply only to the button below."
@@ -138,20 +138,20 @@ export const LoadFilterPanel: React.FC = () => {
                         onChange={e => setKeepOptions(e.target.checked)}
                         className="w-3 h-3 accent-cyan-500"
                     />
-                    <span className="text-[11px] text-gray-300">Always filter</span>
+                    <span className="text-[11px] text-fg-tertiary">Always filter</span>
                 </label>
             </div>
 
-            <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-white/10 bg-neutral-950">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-line/10 bg-surface-dock">
                 <button
                     onClick={resetLoadFilter}
-                    className="px-2 py-1 text-[10px] font-medium text-gray-400 hover:text-gray-200 hover:bg-white/5 rounded transition-colors"
+                    className="px-2 py-1 text-[10px] font-medium text-fg-muted hover:text-fg-secondary hover:bg-line/5 rounded transition-colors"
                 >
                     Reset
                 </button>
                 <button
                     onClick={() => { loadSceneWithFilter(true); closeLoadFilterPanel(); }}
-                    className="px-3 py-1 text-[10px] font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded transition-colors"
+                    className="px-3 py-1 text-[10px] font-bold bg-accent-600 hover:bg-accent-500 text-fg rounded transition-colors"
                 >
                     Load…
                 </button>

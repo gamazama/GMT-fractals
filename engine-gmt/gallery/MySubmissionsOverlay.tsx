@@ -41,14 +41,14 @@ function slotCapForTier(tier: Profile['tier']): number {
 }
 
 const STATUS_PILL: Record<string, string> = {
-    pending:  'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    approved: 'bg-green-500/20 text-green-300 border-green-500/40',
-    rejected: 'bg-gray-700/40 text-gray-400 border-gray-600/40',
+    pending:  'bg-warn/20 text-warn border-warn/40',
+    approved: 'bg-ok/20 text-ok border-ok/40',
+    rejected: 'bg-line/10 text-fg-muted border-line/20',
 };
 
 const VIS_PILL: Record<string, string> = {
-    public:  'bg-blue-500/20 text-blue-300 border-blue-500/40',
-    private: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+    public:  'bg-info/20 text-info border-info/40',
+    private: 'bg-secondary/20 text-secondary border-secondary/40',
 };
 
 export const MySubmissionsOverlay: React.FC = () => {
@@ -98,8 +98,8 @@ export const MySubmissionsOverlay: React.FC = () => {
     if (!isOpen) return null;
     if (!profile) {
         return createPortal(
-            <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center" style={{ zIndex: Z.overlayNested }}>
-                <div className="text-sm text-gray-400">Sign in to view your submissions.</div>
+            <div className="fixed inset-0 bg-surface/85 backdrop-blur-md flex items-center justify-center" style={{ zIndex: Z.overlayNested }}>
+                <div className="text-sm text-fg-muted">Sign in to view your submissions.</div>
             </div>,
             document.body,
         );
@@ -131,11 +131,11 @@ export const MySubmissionsOverlay: React.FC = () => {
     };
 
     return createPortal(
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex flex-col" style={{ zIndex: Z.overlayNested }}>
-            <header className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/40 flex-shrink-0">
+        <div className="fixed inset-0 bg-surface/85 backdrop-blur-md flex flex-col" style={{ zIndex: Z.overlayNested }}>
+            <header className="flex items-center justify-between px-6 py-3 border-b border-line/10 bg-surface-tabbar flex-shrink-0">
                 <div className="flex items-baseline gap-3">
-                    <h1 className="text-lg font-bold text-white">My Submissions</h1>
-                    <span className="text-[10px] text-gray-500">
+                    <h1 className="text-lg font-bold text-fg">My Submissions</h1>
+                    <span className="text-[10px] text-fg-dim">
                         {loading
                             ? 'loading…'
                             : `${items.length} item${items.length === 1 ? '' : 's'} · ${nonFeatured} of ${cap >= 1000 ? '∞' : cap} slot${cap === 1 ? '' : 's'} used`}
@@ -145,13 +145,13 @@ export const MySubmissionsOverlay: React.FC = () => {
                     <GhostButton
                         onClick={() => void refresh()}
                         disabled={loading}
-                        className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded disabled:opacity-50"
+                        className="text-xs text-fg-muted hover:text-fg px-3 py-1.5 rounded disabled:opacity-50"
                     >
                         Refresh
                     </GhostButton>
                     <GhostButton
                         onClick={close}
-                        className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded"
+                        className="text-xs text-fg-muted hover:text-fg px-3 py-1.5 rounded"
                     >
                         Close (Esc)
                     </GhostButton>
@@ -160,15 +160,15 @@ export const MySubmissionsOverlay: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto px-6 py-4">
                 {error && (
-                    <ErrorNote className="text-xs text-red-400 max-w-3xl mx-auto mb-4 p-3">
+                    <ErrorNote className="text-xs text-danger max-w-3xl mx-auto mb-4 p-3">
                         {error}
                     </ErrorNote>
                 )}
 
                 {!loading && items.length === 0 && (
-                    <div className="text-sm text-gray-500 max-w-xl mx-auto mt-12 text-center leading-relaxed">
+                    <div className="text-sm text-fg-dim max-w-xl mx-auto mt-12 text-center leading-relaxed">
                         No submissions yet.<br/>
-                        <span className="text-[11px] text-gray-600">
+                        <span className="text-[11px] text-fg-faint">
                             Compose a scene and use File → Submit to Gallery to share it.
                         </span>
                     </div>
@@ -182,15 +182,15 @@ export const MySubmissionsOverlay: React.FC = () => {
                                 item.status === 'rejected' ? 'opacity-60' : ''
                             } ${
                                 item.status === 'pending'
-                                    ? 'bg-amber-500/[0.04] border-amber-500/20'
-                                    : 'bg-white/[0.02] border-white/10'
+                                    ? 'bg-warn/[0.04] border-warn/20'
+                                    : 'bg-line/[0.02] border-line/10'
                             } ${busyId === item.id ? 'pointer-events-none opacity-50' : ''}`}
                         >
                             <a
                                 href={item.image_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex-shrink-0 block w-20 h-20 rounded overflow-hidden bg-black/40 border border-white/5 hover:border-cyan-500/40 transition-colors"
+                                className="flex-shrink-0 block w-20 h-20 rounded overflow-hidden bg-surface-section border border-line/5 hover:border-accent-500/40 transition-colors"
                                 title="Open full image in new tab"
                             >
                                 <img src={item.thumbnail_url} alt={item.title} className="w-full h-full object-cover" />
@@ -198,7 +198,7 @@ export const MySubmissionsOverlay: React.FC = () => {
 
                             <div className="flex-1 min-w-0 flex flex-col gap-1">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-xs font-bold text-white truncate">{item.title}</span>
+                                    <span className="text-xs font-bold text-fg truncate">{item.title}</span>
                                     <span className={`text-[8px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-bold ${STATUS_PILL[item.status]}`}>
                                         {item.status}
                                     </span>
@@ -210,20 +210,20 @@ export const MySubmissionsOverlay: React.FC = () => {
                                             featured
                                         </span>
                                     )}
-                                    <span className="text-[9px] text-gray-500 ml-auto font-mono">{item.slug}</span>
+                                    <span className="text-[9px] text-fg-dim ml-auto font-mono">{item.slug}</span>
                                 </div>
 
-                                <div className="text-[10px] text-gray-400">
+                                <div className="text-[10px] text-fg-muted">
                                     {item.formula}
-                                    <span className="text-gray-600"> · {new Date(item.created_at).toLocaleString()}</span>
+                                    <span className="text-fg-faint"> · {new Date(item.created_at).toLocaleString()}</span>
                                 </div>
 
                                 {item.description && (
-                                    <div className="text-[10px] text-gray-500 line-clamp-2">{item.description}</div>
+                                    <div className="text-[10px] text-fg-dim line-clamp-2">{item.description}</div>
                                 )}
 
                                 {item.status === 'rejected' && (
-                                    <div className="text-[10px] text-gray-400 leading-relaxed mt-0.5">
+                                    <div className="text-[10px] text-fg-muted leading-relaxed mt-0.5">
                                         Not accepted into the gallery — you can adjust the scene and resubmit.
                                     </div>
                                 )}
@@ -233,7 +233,7 @@ export const MySubmissionsOverlay: React.FC = () => {
                                 {item.status !== 'rejected' && (
                                     <GhostButton
                                         onClick={() => onToggleVisibility(item)}
-                                        className="text-[10px] font-bold px-3 py-1.5 rounded text-gray-300"
+                                        className="text-[10px] font-bold px-3 py-1.5 rounded text-fg-tertiary"
                                         title={item.visibility === 'public'
                                             ? 'Hide from public browse'
                                             : 'Submit for public listing'}
@@ -243,7 +243,7 @@ export const MySubmissionsOverlay: React.FC = () => {
                                 )}
                                 <button
                                     onClick={() => onDelete(item)}
-                                    className="text-[10px] font-bold px-3 py-1.5 rounded bg-red-700/30 hover:bg-red-700/60 text-red-200 border border-red-500/50"
+                                    className="text-[10px] font-bold px-3 py-1.5 rounded bg-danger/30 hover:bg-danger/60 text-danger border border-danger/50"
                                 >
                                     Delete
                                 </button>

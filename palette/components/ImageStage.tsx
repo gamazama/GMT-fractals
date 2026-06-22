@@ -428,9 +428,9 @@ export const ImageStage: React.FC = () => {
   // (select the result or drag it onto a bin) — no hardcoded buttons here.
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-zinc-950 relative overflow-hidden">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-surface-dock relative overflow-hidden">
       {over && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-zinc-950/85 border-[3px] border-dashed border-cyan-400 text-cyan-100 text-lg pointer-events-none">
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-surface-dock/85 border-[3px] border-dashed border-accent-400 text-accent-300 text-lg pointer-events-none">
           Drop image to load
         </div>
       )}
@@ -440,31 +440,31 @@ export const ImageStage: React.FC = () => {
           {/* Keep the always-visible mobile hero rail from showing a bare band before any
               image exists — rail-only, so desktop's no-image screen is unchanged. */}
           <HeroSlot railOnly>
-            <div className="text-[11px] text-gray-500 flex items-center h-full">
+            <div className="text-[11px] text-fg-dim flex items-center h-full">
               The image’s gradient appears here once you load one.
             </div>
           </HeroSlot>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="max-w-md text-center border border-dashed border-zinc-700 hover:border-cyan-500/60 rounded-xl px-10 py-12 transition-colors"
+            className="max-w-md text-center border border-dashed border-line/20 hover:border-accent-500/60 rounded-xl px-10 py-12 transition-colors"
           >
             <div className="text-3xl mb-3">🖼️</div>
-            <div className="text-base text-zinc-200 mb-1">Drop, paste, or click an image</div>
-            <div className="text-xs text-zinc-500">Pull out its soul as a 256-step gradient · OKLab-perceptual, never muddy</div>
-            {loading && <div className="mt-3 text-xs text-cyan-300">reading image…</div>}
+            <div className="text-base text-fg-secondary mb-1">Drop, paste, or click an image</div>
+            <div className="text-xs text-fg-dim">Pull out its soul as a 256-step gradient · OKLab-perceptual, never muddy</div>
+            {loading && <div className="mt-3 text-xs text-accent-300">reading image…</div>}
           </button>
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 flex flex-col gap-4">
           {/* Mode tabs */}
           <div className="flex items-center gap-2">
-            <div className="flex gap-1 rounded-md bg-white/[0.04] p-0.5">
+            <div className="flex gap-1 rounded-md bg-line/[0.04] p-0.5">
               {MODES.map((m, i) => (
                 <button
                   key={m.id}
                   onClick={() => switchMode(m.id, i)}
                   className={`px-3 py-1 rounded text-xs transition-colors ${
-                    mode === m.id ? 'bg-cyan-500/25 text-cyan-100' : 'text-gray-400 hover:text-gray-200'
+                    mode === m.id ? 'bg-accent-500/25 text-accent-300' : 'text-fg-muted hover:text-fg-secondary'
                   }`}
                 >
                   {m.label}
@@ -473,7 +473,7 @@ export const ImageStage: React.FC = () => {
             </div>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="ml-auto text-[11px] text-gray-400 hover:text-gray-200 px-2 py-1 rounded-sm bg-white/[0.04]"
+              className="ml-auto text-[11px] text-fg-muted hover:text-fg-secondary px-2 py-1 rounded-sm bg-line/[0.04]"
             >
               Replace image
             </button>
@@ -494,10 +494,10 @@ export const ImageStage: React.FC = () => {
               />
             ) : (
               <div>
-                <div className="text-xs text-gray-400 mb-1.5">
-                  Result <span className="ml-1 text-gray-500 capitalize">{mode}</span>
+                <div className="text-xs text-fg-muted mb-1.5">
+                  Result <span className="ml-1 text-fg-dim capitalize">{mode}</span>
                 </div>
-                <div className="rounded-md border border-white/15 bg-black/30 p-2 shadow-lg">
+                <div className="rounded-md border border-line/15 bg-surface-section p-2 shadow-lg">
                   <div className="h-24" />
                 </div>
               </div>
@@ -507,33 +507,33 @@ export const ImageStage: React.FC = () => {
           {/* Cloud + image pane */}
           <div className="flex gap-4 flex-wrap">
             <div className="flex-1 min-w-[280px]">
-              <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">
+              <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1">
                 Colour cloud (OKLab) — drag to rotate · line = your gradient
               </div>
-              <canvas ref={cloudRef} width={640} height={340} className="w-full rounded-md border border-zinc-800 bg-[#08080c] cursor-grab touch-none block" style={{ aspectRatio: '640/340' }} />
+              <canvas ref={cloudRef} width={640} height={340} className="w-full rounded-md border border-line/10 bg-surface-dock cursor-grab touch-none block" style={{ aspectRatio: '640/340' }} />
             </div>
             <div className="flex-1 min-w-[280px]">
-              <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">
+              <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1">
                 {mode === 'trace'
                   ? drawing
                     ? 'Draw path — drag across the image'
                     : 'Trace path — drag the points'
                   : 'Source image'}
               </div>
-              <canvas ref={paneRef} width={640} height={340} className={`w-full rounded-md border border-zinc-800 bg-[#08080c] touch-none block ${mode === 'trace' ? (drawing ? 'cursor-crosshair' : 'cursor-grab') : ''}`} style={{ aspectRatio: '640/340' }} />
+              <canvas ref={paneRef} width={640} height={340} className={`w-full rounded-md border border-line/10 bg-surface-dock touch-none block ${mode === 'trace' ? (drawing ? 'cursor-crosshair' : 'cursor-grab') : ''}`} style={{ aspectRatio: '640/340' }} />
               {mode === 'trace' && (
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <button
                     onClick={() => setDrawing((d) => !d)}
                     className={`text-[11px] px-2 py-1 rounded-sm ${
-                      drawing ? 'bg-cyan-500/30 text-cyan-100' : 'bg-white/[0.06] text-gray-200 hover:bg-white/10'
+                      drawing ? 'bg-accent-500/30 text-accent-300' : 'bg-line/[0.06] text-fg-secondary hover:bg-line/10'
                     }`}
                   >
                     {drawing ? 'Drawing…' : 'Draw path'}
                   </button>
                   <button
                     onClick={() => model && (setDrawing(false), setPath(autoPath(model)))}
-                    className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors"
+                    className="text-[11px] px-2 py-1 rounded-sm bg-line/[0.06] text-fg-secondary hover:bg-line/10 transition-colors"
                   >
                     Auto path
                   </button>
@@ -541,7 +541,7 @@ export const ImageStage: React.FC = () => {
                     onClick={() => setPath({ x0: path.x0, y0: path.y0, x1: path.x1, y1: path.y1 })}
                     disabled={!path.points}
                     title="Reset to a straight line between the endpoints"
-                    className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/[0.06]"
+                    className="text-[11px] px-2 py-1 rounded-sm bg-line/[0.06] text-fg-secondary hover:bg-line/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-line/[0.06]"
                   >
                     Straight
                   </button>
@@ -561,7 +561,7 @@ export const ImageStage: React.FC = () => {
       />
 
       {toast && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/85 text-gray-100 text-xs px-3 py-1.5 rounded-full border border-white/10 shadow-xl z-40">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-surface/80 text-fg-secondary text-xs px-3 py-1.5 rounded-full border border-line/10 shadow-xl z-40">
           {toast}
         </div>
       )}

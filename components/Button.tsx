@@ -16,10 +16,10 @@ export const Button: React.FC<ButtonProps> = ({
 }) => {
     const handleContextMenu = useHelpContextMenu();
 
-    let activeClass = 'bg-cyan-900 text-cyan-200 border-cyan-700 shadow-inner';
-    if (variant === 'danger') activeClass = 'bg-red-900 text-red-200 border-red-700 shadow-inner';
-    if (variant === 'success') activeClass = 'bg-green-900 text-green-200 border-green-700 shadow-inner';
-    if (variant === 'warning') activeClass = 'bg-amber-900 text-amber-200 border-amber-700 shadow-inner';
+    let activeClass = 'bg-accent-900 text-cyan-200 border-accent-700 shadow-inner';
+    if (variant === 'danger') activeClass = 'bg-danger/30 text-danger border-danger/40 shadow-inner';
+    if (variant === 'success') activeClass = 'bg-ok/30 text-ok border-ok/40 shadow-inner';
+    if (variant === 'warning') activeClass = 'bg-warn/30 text-warn border-warn/40 shadow-inner';
 
     const sizeClass = size === 'small' ? 't-btn-sm' : 't-btn';
 

@@ -91,7 +91,7 @@ export const TimelineHost: React.FC<TimelineHostProps> = ({ hidden = false }) =>
                         type="button"
                         onClick={() => setShowTimeline(true)}
                         onContextMenu={handleContextMenu}
-                        className={`flex items-center gap-1.5 rounded-full border shadow-lg transition-all bg-gray-800 border-gray-600 text-gray-400 hover:text-white ${showHints ? 'pl-2 pr-3 py-2' : 'p-2'}`}
+                        className={`flex items-center gap-1.5 rounded-full border shadow-lg transition-all bg-surface-header border-line/20 text-fg-muted hover:text-fg ${showHints ? 'pl-2 pr-3 py-2' : 'p-2'}`}
                         title="Open Timeline (T) — animate with keyframes"
                     >
                         <TimelineOpenIcon />

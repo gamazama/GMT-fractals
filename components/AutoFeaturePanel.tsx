@@ -297,7 +297,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 return <div className={`mb-px pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><EmbeddedColorPicker color={hex} onColorChange={(c) => handleUpdate(key, c)} /></div>;
             } else {
                 return (
-                    <div className={`flex items-center justify-between px-3 py-1 bg-gray-800/20 mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
+                    <div className={`flex items-center justify-between px-3 py-1 bg-surface-header mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
                         <SectionLabel>{config.label}</SectionLabel>
                         <SmallColorPicker color={hex} onChange={(c) => handleUpdate(key, c)} label={config.label} />
                     </div>
@@ -387,7 +387,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 );
             }
             
-            if (config.ui === 'knob') return <div className={config.layout === 'half' ? "flex flex-col items-center justify-center py-2" : "flex justify-center p-2"}><Knob label={config.label} value={val} min={config.min ?? 0} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, v)} color={val > (config.min ?? 0) ? "#22d3ee" : "#444"} size={40} /></div>;
+            if (config.ui === 'knob') return <div className={config.layout === 'half' ? "flex flex-col items-center justify-center py-2" : "flex justify-center p-2"}><Knob label={config.label} value={val} min={config.min ?? 0} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, v)} color={val > (config.min ?? 0) ? "rgb(var(--accent-400))" : "#444"} size={40} /></div>;
             
             const mapping = getMapping(config);
             let overrideText = config.format ? config.format(val) : undefined;
@@ -462,14 +462,14 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
 
             return (
                 <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
-                     <div className="bg-gray-800/30 border border-white/5 text-center overflow-hidden relative group">
+                     <div className="bg-surface-header border border-line/5 text-center overflow-hidden relative group">
                         <input type="file" accept="image/*,.hdr,.exr" onChange={(e) => handleFileChange(e, key)} className="hidden" id={`file-input-${key}`} />
-                        <label htmlFor={`file-input-${key}`} className="block bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-300 w-full py-2 text-xs font-bold transition-colors cursor-pointer">{val ? "Replace Texture" : config.label}</label>
+                        <label htmlFor={`file-input-${key}`} className="block bg-accent-900/40 hover:bg-accent-800/60 text-accent-300 w-full py-2 text-xs font-bold transition-colors cursor-pointer">{val ? "Replace Texture" : config.label}</label>
                         
                         {/* Overlay for Color Space */}
                         {colorSpaceParam && (
                             <div 
-                                className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] font-bold text-gray-500 bg-black/50 px-1.5 py-0.5 rounded cursor-pointer hover:text-white hover:bg-cyan-900/80 transition-colors select-none"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] font-bold text-fg-dim bg-surface/50 px-1.5 py-0.5 rounded cursor-pointer hover:text-fg hover:bg-accent-900/80 transition-colors select-none"
                                 onClick={(e) => { e.preventDefault(); cycleColorSpace(); }}
                                 title="Input Color Profile: sRGB / Linear / ACES"
                             >
@@ -535,7 +535,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 data-help-id={config.helpId}
                 className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}
             >
-                {isParentSlider && <div className={`absolute inset-0 bg-white/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
+                {isParentSlider && <div className={`absolute inset-0 bg-line/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
                 {control}
                 {showDescription && !isParentSlider && <Hint key={`leaf-desc-${id}`} text={config.description!} helpId={config.helpId} />}
                 {renderedChildren.length > 0 && (
@@ -551,9 +551,9 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                                 const isLast = i === renderedChildren.length - 1;
                                 return (
                                     <div key={i} className="flex">
-                                        <div className={`w-2 shrink-0 self-stretch border-l border-white/20 bg-white/[0.12] ${isLast ? 'border-b border-b-white/20 rounded-bl-lg' : ''}`} />
+                                        <div className={`w-2 shrink-0 self-stretch border-l border-line/20 bg-line/[0.12] ${isLast ? 'border-b border-b-white/20 rounded-bl-lg' : ''}`} />
                                         <div className={`flex-1 min-w-0 relative ${isLast ? 'border-b border-b-white/20' : ''}`}>
-                                            <div className="absolute inset-0 bg-black/20 pointer-events-none z-10" />
+                                            <div className="absolute inset-0 bg-surface-section pointer-events-none z-10" />
                                             {child}
                                         </div>
                                     </div>
@@ -703,7 +703,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                                 {filtered.map((item, idx) => (
                                     <div key={idx}>{item}</div>
                                 ))}
-                                <div className="ml-[9px] border-b border-white/10 rounded-bl mb-0.5" />
+                                <div className="ml-[9px] border-b border-line/10 rounded-bl mb-0.5" />
                             </div>
                         </CollapsibleSection>
                     </div>
@@ -747,16 +747,16 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             {renderItems}
             {confirming && (
                 <div className="absolute inset-0 z-50 animate-pop-in">
-                    <div className="bg-black/95 border border-white/20 rounded shadow-2xl overflow-hidden h-full flex flex-col">
-                        <div className="flex items-center gap-2 p-2 border-b border-white/10 bg-white/5">
+                    <div className="bg-surface border border-line/20 rounded shadow-2xl overflow-hidden h-full flex flex-col">
+                        <div className="flex items-center gap-2 p-2 border-b border-line/10 bg-line/5">
                             <AlertIcon />
-                            <SectionLabel color="text-gray-300">Warning</SectionLabel>
+                            <SectionLabel color="text-fg-tertiary">Warning</SectionLabel>
                         </div>
                         <div className="p-3 flex-1 flex flex-col justify-between">
-                            <p className="text-[10px] text-gray-400 leading-relaxed whitespace-pre-wrap">{confirming.message}</p>
+                            <p className="text-[10px] text-fg-muted leading-relaxed whitespace-pre-wrap">{confirming.message}</p>
                             <div className="flex gap-1 mt-4">
-                                <button onClick={() => setConfirming(null)} className="flex-1 py-1.5 bg-gray-800 text-gray-300 text-[9px] font-bold rounded border border-white/10 hover:bg-gray-700 transition-colors">Cancel</button>
-                                <button onClick={handleConfirmedUpdate} className="flex-1 py-1.5 bg-cyan-900/50 text-cyan-300 text-[9px] font-bold rounded border border-cyan-500/30 hover:bg-cyan-900 transition-colors">Confirm</button>
+                                <button onClick={() => setConfirming(null)} className="flex-1 py-1.5 bg-surface-header text-fg-tertiary text-[9px] font-bold rounded border border-line/10 hover:bg-fg-ghost transition-colors">Cancel</button>
+                                <button onClick={handleConfirmedUpdate} className="flex-1 py-1.5 bg-accent-900/50 text-accent-300 text-[9px] font-bold rounded border border-accent-500/30 hover:bg-accent-900 transition-colors">Confirm</button>
                             </div>
                         </div>
                     </div>

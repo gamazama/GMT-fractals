@@ -18,8 +18,8 @@ function InterlaceControls() {
   if (!interlaceState) return null;
 
   return (
-    <div className="flex flex-col gap-1.5 border border-purple-700/40 rounded px-2 py-1.5 bg-purple-900/10 mt-1">
-      <div className="text-[11px] text-purple-300 font-bold flex items-center justify-between">
+    <div className="flex flex-col gap-1.5 border border-secondary/40 rounded px-2 py-1.5 bg-secondary/10 mt-1">
+      <div className="text-[11px] text-secondary font-bold flex items-center justify-between">
         <span>Interlace: {interlaceState.definition.name}</span>
         <label className="flex items-center gap-1 cursor-pointer">
           <input
@@ -27,17 +27,17 @@ function InterlaceControls() {
             checked={interlaceState.enabled}
             onChange={(e) => store.setInterlaceState({ ...interlaceState, enabled: e.target.checked })}
           />
-          <span className="text-[10px] text-purple-400">enabled</span>
+          <span className="text-[10px] text-secondary">enabled</span>
         </label>
       </div>
-      <div className="flex gap-3 text-[11px] text-gray-400">
+      <div className="flex gap-3 text-[11px] text-fg-muted">
         <label className="flex items-center gap-1">
           Interval
           <input
             type="number" min={1} max={16} step={1}
             value={interlaceState.interval}
             onChange={(e) => store.setInterlaceState({ ...interlaceState, interval: Math.max(1, parseInt(e.target.value) || 1) })}
-            className="w-12 bg-gray-800 border border-gray-700 rounded px-1 text-gray-200 text-center"
+            className="w-12 bg-surface-header border border-line/20 rounded px-1 text-fg-secondary text-center"
           />
         </label>
         <label className="flex items-center gap-1">
@@ -46,7 +46,7 @@ function InterlaceControls() {
             type="number" min={0} max={64} step={1}
             value={interlaceState.startIter}
             onChange={(e) => store.setInterlaceState({ ...interlaceState, startIter: Math.max(0, parseInt(e.target.value) || 0) })}
-            className="w-12 bg-gray-800 border border-gray-700 rounded px-1 text-gray-200 text-center"
+            className="w-12 bg-surface-header border border-line/20 rounded px-1 text-fg-secondary text-center"
           />
         </label>
       </div>
@@ -126,7 +126,7 @@ function MeshDonateButton() {
         href="https://ko-fi.com/gmtfractals"
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center justify-center gap-2 px-3 py-1 rounded bg-[#13C3FF] hover:bg-[#00b0f0] text-white text-[11px] font-bold transition-colors"
+        className="inline-flex items-center justify-center gap-2 px-3 py-1 rounded bg-[#13C3FF] hover:bg-[#00b0f0] text-fg text-[11px] font-bold transition-colors"
       >
         Support on Ko-fi
       </a>
@@ -134,7 +134,7 @@ function MeshDonateButton() {
         href="https://www.paypal.com/ncp/payment/WHMZWATKN6GEY"
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-1 inline-flex items-center justify-center gap-2 px-3 py-1 rounded bg-[#0070ba] hover:bg-[#005ea6] text-white text-[11px] font-bold transition-colors"
+        className="mt-1 inline-flex items-center justify-center gap-2 px-3 py-1 rounded bg-[#0070ba] hover:bg-[#005ea6] text-fg text-[11px] font-bold transition-colors"
       >
         Support via PayPal
       </a>
@@ -147,8 +147,8 @@ export function MeshExportPage() {
   const setIters = useMeshExportStore((s) => s.setIters);
 
   return (
-    <div className="font-mono bg-[#080808] text-gray-200 h-screen flex flex-col overflow-hidden">
-      <h1 className="text-sm font-bold text-white tracking-wide px-5 pt-4 pb-2 shrink-0">
+    <div className="font-mono bg-surface-dock text-fg-secondary h-screen flex flex-col overflow-hidden">
+      <h1 className="text-sm font-bold text-fg tracking-wide px-5 pt-4 pb-2 shrink-0">
         GMT — Fractal Mesh Export
       </h1>
 
@@ -156,19 +156,19 @@ export function MeshExportPage() {
         {/* Left column: export + pipeline + bounds */}
         <div className="flex flex-col gap-2.5 w-[340px] shrink-0 overflow-y-auto pr-1">
           {/* Export controls */}
-          <div className="bg-black/60 border border-white/10 rounded p-3">
+          <div className="bg-surface-section border border-line/10 rounded p-3">
             <CollapsibleSection label="Export" defaultOpen>
               <ExportPanel />
             </CollapsibleSection>
           </div>
 
           {/* Pipeline */}
-          <div className="bg-black/60 border border-white/10 rounded p-3">
+          <div className="bg-surface-section border border-line/10 rounded p-3">
             <PipelineControls />
           </div>
 
           {/* Bounds */}
-          <div className="bg-black/60 border border-white/10 rounded p-3">
+          <div className="bg-surface-section border border-line/10 rounded p-3">
             <CollapsibleSection label="Bounds" defaultOpen>
               <BoundsPanel />
             </CollapsibleSection>
@@ -184,7 +184,7 @@ export function MeshExportPage() {
         {/* Right column: formula + params (like main GMT panel) — pinned right */}
         <div className="flex flex-col gap-2.5 w-[300px] shrink-0 overflow-y-auto pl-1">
           {/* Formula selector + iterations */}
-          <div className="bg-black/60 border border-white/10 rounded p-3">
+          <div className="bg-surface-section border border-line/10 rounded p-3">
             <CollapsibleSection label="Formula" defaultOpen>
               <div className="flex flex-col gap-2 mt-1">
                 <FormulaSelector />
@@ -200,7 +200,7 @@ export function MeshExportPage() {
           </div>
 
           {/* Formula parameters */}
-          <div className="bg-black/60 border border-white/10 rounded p-3">
+          <div className="bg-surface-section border border-line/10 rounded p-3">
             <CollapsibleSection label="Parameters" defaultOpen>
               <div className="flex flex-col gap-1 mt-1">
                 <FormulaParams />

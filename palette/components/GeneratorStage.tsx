@@ -94,9 +94,9 @@ const SourceRow: React.FC<{
     // as broken. The host shows a "bake/reset to edit sources" hint above.
     <div className={`relative min-w-0 transition-opacity ${dimmed ? 'opacity-40 pointer-events-none select-none' : ''}`} aria-disabled={dimmed || undefined}>
       <div className="flex items-center gap-2 mb-0.5">
-        <span className="text-[10px] uppercase tracking-wide text-gray-500 w-14 shrink-0">Source {which}</span>
-        <span className="text-[11px] text-gray-200 truncate">{name}</span>
-        <span className="ml-auto text-[10px] shrink-0 text-gray-500">click to select · drag to place</span>
+        <span className="text-[10px] uppercase tracking-wide text-fg-dim w-14 shrink-0">Source {which}</span>
+        <span className="text-[11px] text-fg-secondary truncate">{name}</span>
+        <span className="ml-auto text-[10px] shrink-0 text-fg-dim">click to select · drag to place</span>
       </div>
       {/* gradient (the pick/drag surface + gen-a/gen-b drop anchor) + the slot-mods trigger */}
       <div className="flex items-center gap-2">
@@ -118,7 +118,7 @@ const SourceRow: React.FC<{
           }}
           title={`Source ${which} — click to select, drag onto a target, or drop a gradient here to load it`}
           className={`block flex-1 min-w-0 rounded-sm ring-1 transition cursor-grab active:cursor-grabbing ${
-            selected ? 'ring-2 ring-cyan-400' : 'ring-white/10 hover:ring-cyan-500/40'
+            selected ? 'ring-2 ring-accent-400' : 'ring-line/10 hover:ring-accent-500/40'
           }`}
         >
           <GradientStrip ramp={ramp} height={height} />
@@ -152,8 +152,8 @@ const GeneratorModeToggle: React.FC = () => {
   ];
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] uppercase tracking-wide text-gray-500">Mode</span>
-      <div className="flex rounded-sm overflow-hidden ring-1 ring-white/10">
+      <span className="text-[10px] uppercase tracking-wide text-fg-dim">Mode</span>
+      <div className="flex rounded-sm overflow-hidden ring-1 ring-line/10">
         {opts.map((o) => (
           <button
             key={o.value}
@@ -162,7 +162,7 @@ const GeneratorModeToggle: React.FC = () => {
             title={o.title}
             aria-pressed={m === o.value}
             className={`text-[11px] px-2.5 py-0.5 transition-colors ${
-              m === o.value ? 'bg-cyan-500/25 text-cyan-100' : 'bg-white/[0.04] text-gray-400 hover:text-gray-200'
+              m === o.value ? 'bg-accent-500/25 text-accent-300' : 'bg-line/[0.04] text-fg-muted hover:text-fg-secondary'
             }`}
           >
             {o.label}
@@ -210,7 +210,7 @@ const EasingSelect: React.FC<{ param: string }> = ({ param }) => {
       <button
         onClick={() => setOpen(true)}
         title={`Easing: ${name} — click to change`}
-        className="ml-auto flex items-center gap-1.5 text-[11px] bg-zinc-800 text-gray-200 rounded-sm pl-1 pr-1.5 py-0.5 ring-1 ring-white/10 hover:ring-cyan-500/40 transition"
+        className="ml-auto flex items-center gap-1.5 text-[11px] bg-surface-raised text-fg-secondary rounded-sm pl-1 pr-1.5 py-0.5 ring-1 ring-line/10 hover:ring-accent-500/40 transition"
       >
         {thumb && <img src={thumb} width={28} height={18} alt="" className="rounded-[1px]" />}
         <span className="truncate max-w-[88px]">{name}</span>
@@ -259,9 +259,9 @@ const ColorBoxChannelRow: React.FC<{
   def: { start: number; end: number };
   track: string;
 }> = ({ ch, label, min, max, step, def, track }) => (
-  <div className="flex flex-col gap-1 rounded-md border border-white/10 bg-white/[0.02] p-2">
+  <div className="flex flex-col gap-1 rounded-md border border-line/10 bg-line/[0.02] p-2">
     <div className="flex items-center gap-2">
-      <span className="text-[10px] uppercase tracking-wide text-gray-400">{label}</span>
+      <span className="text-[10px] uppercase tracking-wide text-fg-muted">{label}</span>
       <EasingSelect param={`cb${ch}Easing`} />
     </div>
     <GenParamSlider param={`cb${ch}Start`} label="start" min={min} max={max} step={step} def={def.start} trackBackground={track} />
@@ -289,11 +289,11 @@ const ColorBoxControls: React.FC = () => {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wide text-gray-500">Per-channel sweep</span>
+        <span className="text-[10px] uppercase tracking-wide text-fg-dim">Per-channel sweep</span>
         <button
           onClick={() => setPickOpen(true)}
           title="Approximate an existing gradient as ColorBox sweeps (the closest per-channel match)"
-          className="ml-auto text-[11px] px-2 py-0.5 rounded-sm bg-white/[0.06] text-gray-300 hover:text-gray-100 hover:bg-white/10 transition-colors"
+          className="ml-auto text-[11px] px-2 py-0.5 rounded-sm bg-line/[0.06] text-fg-tertiary hover:text-fg-secondary hover:bg-line/10 transition-colors"
         >
           Fit from gradient…
         </button>
@@ -362,7 +362,7 @@ export const GeneratorStage: React.FC = () => {
   const padRight = tightInset ? 12 : CHANNEL_PLOT_INSET_RIGHT;
 
   return (
-    <div ref={rootRef} className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">
+    <div ref={rootRef} className="flex-1 flex flex-col min-w-0 bg-surface-dock overflow-hidden">
       {/* Top: sources → blend → source → result, inset to line up with the graph PLOT
           below (so the gradients and the curve t-axis share a left/right edge). Takes
           the slack so the graph stays compact with no dead space under it. */}
@@ -390,8 +390,8 @@ export const GeneratorStage: React.FC = () => {
         ) : (
           <>
             {curvesOn && (
-              <div className="text-[10px] text-cyan-300/70 bg-cyan-500/[0.06] border border-cyan-500/20 rounded-sm px-2 py-1 mb-0.5">
-                Curves drive the output — sources are locked. <span className="text-cyan-200">Re-fit</span> or <span className="text-cyan-200">Reset points</span> below to edit the sources again.
+              <div className="text-[10px] text-accent-300/70 bg-accent-500/[0.06] border border-accent-500/20 rounded-sm px-2 py-1 mb-0.5">
+                Curves drive the output — sources are locked. <span className="text-accent-300">Re-fit</span> or <span className="text-accent-300">Reset points</span> below to edit the sources again.
               </div>
             )}
             <SourceRow which="A" ramp={stripA} preset={slotA} height={40} dimmed={curvesOn} />
@@ -429,7 +429,7 @@ export const GeneratorStage: React.FC = () => {
               autoName
               source="Generator"
               mode="generator"
-              trailing={<span className="text-[11px] text-gray-500">{config.stops.length} stops</span>}
+              trailing={<span className="text-[11px] text-fg-dim">{config.stops.length} stops</span>}
             />
           </HeroSlot>
         </div>
@@ -442,35 +442,35 @@ export const GeneratorStage: React.FC = () => {
           channels directly and Stops authors the gradient explicitly, so neither has a
           curve surface. */}
       {!colorbox && !stops && (
-      <div className="shrink-0 flex flex-col border-t border-white/10 bg-zinc-950">
+      <div className="shrink-0 flex flex-col border-t border-line/10 bg-surface-dock">
         <div className="flex items-center gap-2 flex-wrap px-3 py-1.5 shrink-0">
-          <span className="text-[10px] uppercase tracking-wide text-gray-500">Curves</span>
+          <span className="text-[10px] uppercase tracking-wide text-fg-dim">Curves</span>
           <button
             onClick={commitFit}
             title={curvesOn ? 'Re-fit the curves from the source at the current detail/smooth — replaces the current curves (undoable)' : 'Decompose the current mix into editable Lightness / Chroma / Hue curves'}
-            className="text-[11px] px-2 py-1 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30"
+            className="text-[11px] px-2 py-1 rounded-sm bg-accent-500/20 text-accent-300 hover:bg-accent-500/30"
           >
             {curvesOn ? 'Re-fit from source' : 'Fit from source'}
           </button>
-          <button onClick={resetCurves} className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-300 hover:bg-white/10">
+          <button onClick={resetCurves} className="text-[11px] px-2 py-1 rounded-sm bg-line/[0.06] text-fg-tertiary hover:bg-line/10">
             Reset points
           </button>
           <label
             title={tracks ? 'Drive the output from the edited curves (sources are dimmed)' : 'Fit from source first to create editable curves'}
-            className={`flex items-center gap-1.5 text-[11px] select-none ${tracks ? 'text-gray-300 cursor-pointer' : 'text-gray-600 cursor-not-allowed'}`}
+            className={`flex items-center gap-1.5 text-[11px] select-none ${tracks ? 'text-fg-tertiary cursor-pointer' : 'text-fg-faint cursor-not-allowed'}`}
           >
-            <input type="checkbox" checked={curvesOn} disabled={!tracks} onChange={(e) => setCurvesOn(e.target.checked)} className="accent-cyan-500 disabled:opacity-50" />
+            <input type="checkbox" checked={curvesOn} disabled={!tracks} onChange={(e) => setCurvesOn(e.target.checked)} className="accent-accent-500 disabled:opacity-50" />
             use curves
           </label>
-          <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+          <div className="flex items-center gap-1.5 text-[11px] text-fg-muted">
             detail
-            <input type="range" min={1} max={10} step={1} value={detail} onChange={(e) => setDetail(+e.target.value)} className="w-20 accent-cyan-500" />
-            <span className="w-4 text-gray-300">{detail}</span>
+            <input type="range" min={1} max={10} step={1} value={detail} onChange={(e) => setDetail(+e.target.value)} className="w-20 accent-accent-500" />
+            <span className="w-4 text-fg-tertiary">{detail}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+          <div className="flex items-center gap-1.5 text-[11px] text-fg-muted">
             smooth
-            <input type="range" min={1} max={15} step={1} value={smooth} onChange={(e) => setSmooth(+e.target.value)} className="w-20 accent-cyan-500" />
-            <span className="w-4 text-gray-300">{smooth}</span>
+            <input type="range" min={1} max={15} step={1} value={smooth} onChange={(e) => setSmooth(+e.target.value)} className="w-20 accent-accent-500" />
+            <span className="w-4 text-fg-tertiary">{smooth}</span>
           </div>
         </div>
         {/* The editor is ALWAYS mounted: editable when curves exist, otherwise a dimmed
@@ -498,8 +498,8 @@ export const GeneratorStage: React.FC = () => {
             interactive={!!tracks}
           />
           {!tracks && (
-            <div className="absolute inset-x-0 bottom-1 text-center text-[10px] text-gray-500 pointer-events-none">
-              Channel scope — <span className="text-cyan-300">Fit from source</span> to make these curves editable.
+            <div className="absolute inset-x-0 bottom-1 text-center text-[10px] text-fg-dim pointer-events-none">
+              Channel scope — <span className="text-accent-300">Fit from source</span> to make these curves editable.
             </div>
           )}
         </div>

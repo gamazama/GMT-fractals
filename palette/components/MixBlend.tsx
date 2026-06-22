@@ -21,7 +21,7 @@ import { useGenParam, genEditStart, genEditEnd } from '../store/generatorStore';
 const HATCH = 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.03) 5px, rgba(255,255,255,0.03) 10px)';
 // A faint top→bottom tint so the track reads directionally: empty at A (top), cyan
 // toward B (bottom). Layered UNDER the hatch + the live fill.
-const DIR_TINT = 'linear-gradient(to bottom, rgba(34,211,238,0.0), rgba(34,211,238,0.12))';
+const DIR_TINT = 'linear-gradient(to bottom, rgb(var(--accent-400)/0.0), rgb(var(--accent-400)/0.12))';
 
 const VerticalMixSlider: React.FC<{ param: string; label: string; height: number }> = ({ param, label, height }) => {
   const [v, setV] = useGenParam<number>(param);
@@ -33,18 +33,18 @@ const VerticalMixSlider: React.FC<{ param: string; label: string; height: number
     <div className="flex flex-col items-center gap-1">
       <div className="flex items-center gap-0.5">
         <KeyframeButton status={status} onClick={toggleKey} />
-        <span className="text-[10px] text-gray-400">{label}</span>
+        <span className="text-[10px] text-fg-muted">{label}</span>
       </div>
       <div
-        className="relative w-9 rounded-sm overflow-visible bg-white/[0.12]"
+        className="relative w-9 rounded-sm overflow-visible bg-line/[0.12]"
         style={{ height, backgroundImage: `${HATCH}, ${DIR_TINT}` }}
         title={`${label}: grab the handle and slide A (top) ↔ B (bottom) · drag past for beyond-A / beyond-B`}
       >
         {/* fill from the top (A = 0) down to the value — grows downward toward B */}
-        <div className="absolute left-0 right-0 top-0 rounded-t-sm bg-cyan-500/20 pointer-events-none" style={{ height: `${pct}%` }} />
+        <div className="absolute left-0 right-0 top-0 rounded-t-sm bg-accent-500/20 pointer-events-none" style={{ height: `${pct}%` }} />
         {/* the grabbable THUMB — a clear round handle the child slides between A and B */}
         <div
-          className="absolute left-1/2 z-10 w-5 h-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow ring-2 ring-cyan-500 pointer-events-none"
+          className="absolute left-1/2 z-10 w-5 h-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-fg shadow ring-2 ring-accent-500 pointer-events-none"
           style={{ top: `${pct}%` }}
         />
         {/* the GMT draggable number drives the value — vertical scrub + click-to-edit +
@@ -67,7 +67,7 @@ export const MixBlend: React.FC<{ onSwap: () => void; onReset?: () => void; heig
 }) => (
   <div className={`flex items-stretch justify-center gap-5 py-1 transition-opacity ${dimmed ? 'opacity-40 pointer-events-none select-none' : ''}`} aria-disabled={dimmed || undefined}>
     {/* A↔B end markers, aligned to the slider track */}
-    <div className="flex flex-col justify-between items-end text-sm font-semibold uppercase tracking-wide text-gray-500 py-5">
+    <div className="flex flex-col justify-between items-end text-sm font-semibold uppercase tracking-wide text-fg-dim py-5">
       <span>A</span>
       <span>B</span>
     </div>
@@ -78,7 +78,7 @@ export const MixBlend: React.FC<{ onSwap: () => void; onReset?: () => void; heig
       <button
         onClick={onSwap}
         title="Swap A and B"
-        className="text-[11px] text-gray-300 px-2.5 py-1 rounded-sm bg-white/[0.06] hover:bg-white/10"
+        className="text-[11px] text-fg-tertiary px-2.5 py-1 rounded-sm bg-line/[0.06] hover:bg-line/10"
       >
         ⇅ Swap
       </button>
@@ -86,7 +86,7 @@ export const MixBlend: React.FC<{ onSwap: () => void; onReset?: () => void; heig
         <button
           onClick={onReset}
           title="Reset the Mix blend to all-A (Lightness / Chroma / Hue → A)"
-          className="text-[11px] text-gray-300 px-2.5 py-1 rounded-sm bg-white/[0.06] hover:bg-white/10"
+          className="text-[11px] text-fg-tertiary px-2.5 py-1 rounded-sm bg-line/[0.06] hover:bg-line/10"
         >
           ↺ Reset
         </button>

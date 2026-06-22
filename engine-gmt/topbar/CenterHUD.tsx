@@ -238,7 +238,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                     <div key={i} className="flex justify-center items-center w-8 h-8">
                         <button
                             onClick={handleAddLight}
-                            className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-gray-500 hover:text-cyan-400 hover:border-cyan-500/50 hover:bg-white/5 transition-all"
+                            className="w-8 h-8 rounded-full border border-line/10 flex items-center justify-center text-fg-dim hover:text-accent-400 hover:border-accent-500/50 hover:bg-line/5 transition-all"
                             title="Add Light"
                         >
                             <PlusIcon />
@@ -274,7 +274,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
     return (
         <>
         {bridgePortal}
-        <div ref={hudRef} className="flex items-center bg-white/5 pr-2 pl-6 py-1.5 rounded-full border border-white/5 shadow-inner z-[65]">
+        <div ref={hudRef} className="flex items-center bg-line/5 pr-2 pl-6 py-1.5 rounded-full border border-line/5 shadow-inner z-[65]">
 
             <div className="relative">
                 {/* COLLAPSED VIEW */}
@@ -289,7 +289,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                         <button
                             onClick={() => { vibrate(5); setIsExpanded(true); }}
                             ref={expandAnchor}
-                            className="expand-trigger w-5 h-5 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors ml-[-8px]"
+                            className="expand-trigger w-5 h-5 flex items-center justify-center rounded-full bg-line/5 hover:bg-line/10 text-fg-muted hover:text-fg transition-colors ml-[-8px]"
                             title="Expand Light Studio"
                         >
                             <ChevronDown />
@@ -302,7 +302,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                     <div
                         ref={expandRef}
                         // Positioning: left/top at -20px offsets the p-5 padding, aligning Grid Slot 0 with Collapsed Slot 0
-                        className="absolute top-[-20px] left-[-20px] bg-black/95 border border-white/20 p-5 rounded-2xl shadow-2xl animate-fade-in z-[80]"
+                        className="absolute top-[-20px] left-[-20px] bg-surface border border-line/20 p-5 rounded-2xl shadow-2xl animate-fade-in z-[80]"
                     >
                         <div className="grid grid-cols-3 gap-6">
                              {/* 8 Light Slots */}
@@ -312,7 +312,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                              <div className="flex justify-center items-center w-8 h-8">
                                 <button
                                     onClick={() => setIsExpanded(false)}
-                                    className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
+                                    className="w-8 h-8 rounded-full border border-line/10 flex items-center justify-center text-fg-dim hover:text-fg hover:bg-line/10 transition-colors"
                                     title="Collapse"
                                 >
                                     <ChevronUp />
@@ -323,7 +323,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                 )}
             </div>
 
-            <div className="h-6 w-px bg-white/10 mx-4" />
+            <div className="h-6 w-px bg-line/10 mx-4" />
 
             <div className="flex items-center gap-2">
                 <div className="relative" ref={shadowMenuRef}>
@@ -332,7 +332,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                         onClick={(e) => { e.stopPropagation(); vibrate(5); setShadowPanelOpen(!showShadowMenu); }}
                         onContextMenu={(e) => handleContextMenu(e, ['shadows'])}
                         ref={shadowAnchor}
-                        className={`shadow-toggle-btn p-2 rounded-full border transition-all duration-300 ${lighting?.shadows ? 'bg-yellow-500/10 border-yellow-500/50 text-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.1)]' : 'bg-transparent border-transparent text-gray-600 hover:text-gray-300 hover:bg-white/5'}`}
+                        className={`shadow-toggle-btn p-2 rounded-full border transition-all duration-300 ${lighting?.shadows ? 'bg-yellow-500/10 border-yellow-500/50 text-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.1)]' : 'bg-transparent border-transparent text-fg-faint hover:text-fg-tertiary hover:bg-line/5'}`}
                         title="Shadow Settings"
                     >
                         <ShadowIcon />
@@ -348,7 +348,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                     }}
                     onContextMenu={(e) => handleContextMenu(e, ['ui.viewport'])}
                     ref={gizmoAnchor}
-                    className={`p-2 rounded-full border transition-all duration-300 ${state.showLightGizmo ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.2)]' : 'bg-transparent border-transparent text-gray-600 hover:text-gray-300 hover:bg-white/5'}`}
+                    className={`p-2 rounded-full border transition-all duration-300 ${state.showLightGizmo ? 'bg-accent-500/20 border-accent-500 text-accent-300 shadow-[0_0_10px_rgb(var(--accent-glow)/0.2)]' : 'bg-transparent border-transparent text-fg-faint hover:text-fg-tertiary hover:bg-line/5'}`}
                 >
                     <GizmoIcon />
                 </button>

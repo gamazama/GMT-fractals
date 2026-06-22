@@ -29,12 +29,12 @@ interface DotToggleProps {
 
 const ON_CLASS: Record<DotToggleAccent, Record<DotToggleVariant, string>> = {
     purple: {
-        master: 'bg-purple-500 border-purple-400',
-        item:   'bg-purple-500/40 border-purple-500/60',
+        master: 'bg-secondary border-secondary',
+        item:   'bg-secondary/40 border-secondary/60',
     },
     cyan: {
-        master: 'bg-cyan-500 border-cyan-400',
-        item:   'bg-cyan-500/40 border-cyan-500/60',
+        master: 'bg-accent-500 border-accent-400',
+        item:   'bg-accent-500/40 border-accent-500/60',
     },
 };
 
@@ -58,7 +58,7 @@ export const DotToggle: React.FC<DotToggleProps> = ({
                 onChange(!value);
             }}
             className={`${sizeClass} rounded-full border transition-colors ${
-                value ? onClass : 'bg-transparent border-white/20 hover:border-white/40'
+                value ? onClass : 'bg-transparent border-line/20 hover:border-line/40'
             }`}
             title={title}
         />

@@ -137,10 +137,10 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
 
     if (isCollapsed) {
         return (
-            <div className={`flex flex-col w-8 bg-black border-${side === 'left' ? 'r' : 'l'} border-white/10 z-40 shrink-0`}>
+            <div className={`flex flex-col w-8 bg-surface-dock border-${side === 'left' ? 'r' : 'l'} border-line/10 z-40 shrink-0`}>
                  <button 
                     onClick={() => setDockCollapsed(side, false)}
-                    className="h-10 flex items-center justify-center text-gray-500 hover:text-white"
+                    className="h-10 flex items-center justify-center text-fg-dim hover:text-fg"
                  >
                      {side === 'left' ? <ChevronRight /> : <ChevronLeft />}
                  </button>
@@ -189,7 +189,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
 
             <button 
                 onClick={() => setDockCollapsed(side, true)}
-                className="absolute top-1 right-1 p-1 text-gray-600 hover:text-white z-20"
+                className="absolute top-1 right-1 p-1 text-fg-faint hover:text-fg z-20"
             >
                 {side === 'left' ? <ChevronLeft /> : <ChevronRight />}
             </button>
@@ -228,7 +228,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                         })()}
                      </BenchProfiler>
                 ) : (
-                    <div className="flex h-full items-center justify-center text-gray-700 text-xs italic">
+                    <div className="flex h-full items-center justify-center text-fg-ghost text-xs italic">
                         Select a panel
                     </div>
                 )}
@@ -286,7 +286,7 @@ const DockTab: React.FC<DockTabProps> = ({
         >
             {!isMobile && (
                 <div
-                    className={`cursor-move ${isActive ? `${dragHandleActive} group-hover:text-cyan-600` : `${dragHandleInactive} group-hover:text-white`} transition-colors`}
+                    className={`cursor-move ${isActive ? `${dragHandleActive} group-hover:text-accent-600` : `${dragHandleInactive} group-hover:text-fg`} transition-colors`}
                     onMouseDown={(e) => {
                         e.stopPropagation();
                         startPanelDrag(p.id);

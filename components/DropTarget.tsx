@@ -87,10 +87,10 @@ export const DropTargetTile: React.FC<DropTargetTileProps> = ({
                 // only for bottom wells; anchored tiles stay translucent so the element
                 // underneath (tab / slot / strip) reads through them.
                 armed
-                    ? 'border-cyan-300 bg-cyan-400/20 text-cyan-50 shadow-[0_0_0_2px_rgba(34,211,238,0.5),0_0_22px_rgba(34,211,238,0.28)]'
+                    ? 'border-accent-300 bg-accent-400/20 text-cyan-50 shadow-[0_0_0_2px_rgb(var(--accent-glow)/0.5),0_0_22px_rgb(var(--accent-glow)/0.28)]'
                     : opaque
-                      ? 'border-cyan-400/70 bg-zinc-800/95 text-zinc-100'
-                      : 'border-cyan-400/70 bg-cyan-400/[0.05] text-cyan-100',
+                      ? 'border-accent-400/70 bg-surface-raised/95 text-fg-secondary'
+                      : 'border-accent-400/70 bg-accent-400/[0.05] text-cyan-100',
             ].join(' ')}
             data-drop-target={label}
             data-gx-keepselect=""
@@ -99,7 +99,7 @@ export const DropTargetTile: React.FC<DropTargetTileProps> = ({
             {dwell > 0 && dwell < 1 && (
                 <div className="absolute inset-0 overflow-hidden rounded-md pointer-events-none" aria-hidden>
                     <div
-                        className="absolute left-0 top-0 h-full bg-white/25"
+                        className="absolute left-0 top-0 h-full bg-line/25"
                         style={{ width: `${Math.round(dwell * 100)}%`, transition: 'width 60ms linear' }}
                     />
                 </div>

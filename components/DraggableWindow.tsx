@@ -108,7 +108,7 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
             headerLeft={
                 isManaged && id ? (
                     <div
-                        className="cursor-grab text-gray-500 hover:text-white"
+                        className="cursor-grab text-fg-dim hover:text-fg"
                         onPointerDown={(e) => { e.stopPropagation(); startPanelDrag(id); }}
                     >
                         <DragHandleIcon />

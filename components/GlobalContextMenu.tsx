@@ -100,7 +100,7 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
     const content = (
         <div 
             ref={menuRef}
-            className="fractal-context-menu fixed z-[9999] bg-[#1a1a1a] border border-white/20 rounded shadow-[0_4px_20px_rgba(0,0,0,0.8)] py-1 min-w-[200px] max-h-[80dvh] overflow-y-auto mobile-scroll animate-fade-in [&_.animate-slider-entry]:!animate-none"
+            className="fractal-context-menu fixed z-[9999] bg-surface-raised border border-line/20 rounded shadow-[0_4px_20px_rgba(0,0,0,0.8)] py-1 min-w-[200px] max-h-[80dvh] overflow-y-auto mobile-scroll animate-fade-in [&_.animate-slider-entry]:!animate-none"
             style={{ left: layout.x, top: layout.y, opacity: layout.opacity }}
             onContextMenu={(e) => e.preventDefault()}
         >
@@ -112,7 +112,7 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
 
                 if (item.isHeader) {
                     return (
-                        <div key={i} className="px-4 py-1 text-[9px] text-gray-500 font-bold border-b border-white/10 mt-1 mb-1 bg-white/5">
+                        <div key={i} className="px-4 py-1 text-[9px] text-fg-dim font-bold border-b border-line/10 mt-1 mb-1 bg-line/5">
                             {item.label}
                         </div>
                     );
@@ -148,15 +148,15 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
                         disabled={item.disabled}
                         className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between transition-colors group relative ${
                             item.disabled
-                            ? 'text-gray-600 cursor-not-allowed opacity-50'
+                            ? 'text-fg-faint cursor-not-allowed opacity-50'
                             : item.danger 
-                                ? 'text-red-400 hover:bg-red-900/30 hover:text-red-300' 
-                                : 'text-gray-300 hover:bg-white/10 hover:text-white'
+                                ? 'text-danger hover:bg-danger/15 hover:text-danger'
+                                : 'text-fg-tertiary hover:bg-line/10 hover:text-fg'
                         }`}
                     >
                         <div className="flex items-center gap-2">
-                            {item.icon && <span className={item.disabled ? "text-gray-600" : "text-gray-500"}>{item.icon}</span>}
-                            <span className={item.checked ? 'text-cyan-400 font-bold' : ''}>{item.label}</span>
+                            {item.icon && <span className={item.disabled ? "text-fg-faint" : "text-fg-dim"}>{item.icon}</span>}
+                            <span className={item.checked ? 'text-accent-400 font-bold' : ''}>{item.label}</span>
                         </div>
                         {item.checked && <CheckIcon />}
                         {item.children && <ChevronRight />}
@@ -164,13 +164,13 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
                 );
             })}
 
-            {items.length > 0 && helpTopics.length > 0 && <div className="h-px bg-cyan-500/15 my-1" />}
+            {items.length > 0 && helpTopics.length > 0 && <div className="h-px bg-accent-500/15 my-1" />}
 
             {/* Help Items with Hierarchy */}
             {helpTopics.length > 0 && (
-                <div className="bg-cyan-950/20 border-t border-cyan-500/10 pt-0.5 pb-0.5">
-                    <div className="px-3 py-1 text-[9px] text-cyan-600 font-semibold tracking-wider uppercase flex items-center gap-1.5 select-none">
-                        <span className="text-cyan-500 opacity-70"><HelpIcon /></span> Help
+                <div className="bg-cyan-950/20 border-t border-accent-500/10 pt-0.5 pb-0.5">
+                    <div className="px-3 py-1 text-[9px] text-accent-600 font-semibold tracking-wider uppercase flex items-center gap-1.5 select-none">
+                        <span className="text-accent-500 opacity-70"><HelpIcon /></span> Help
                     </div>
                     {helpTopics.map((topic, i) => (
                         <button
@@ -178,14 +178,14 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
                             onClick={() => { onOpenHelp(topic.id); onClose(); }}
                             className={`w-full text-left py-1.5 text-xs transition-colors flex items-center gap-2 group ${
                                 i === 0
-                                ? 'text-cyan-300 hover:bg-cyan-800/30 hover:text-cyan-100 font-medium'
-                                : 'text-cyan-600 hover:bg-cyan-900/20 hover:text-cyan-300'
+                                ? 'text-accent-300 hover:bg-accent-800/30 hover:text-cyan-100 font-medium'
+                                : 'text-accent-600 hover:bg-accent-900/20 hover:text-accent-300'
                             }`}
                             style={{ paddingLeft: `${14 + i * 10}px`, paddingRight: '16px' }}
                         >
-                            <span className={`text-[10px] ${i === 0 ? 'text-cyan-500' : 'text-cyan-700'}`}>?</span>
+                            <span className={`text-[10px] ${i === 0 ? 'text-accent-500' : 'text-accent-700'}`}>?</span>
                             <span>{topic.title}</span>
-                            {i === 0 && <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-cyan-500"><ArrowIcon /></span>}
+                            {i === 0 && <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-accent-500"><ArrowIcon /></span>}
                         </button>
                     ))}
                 </div>

@@ -84,12 +84,12 @@ const KeyCap: React.FC<{ label: string; pressed: boolean }> = ({ label, pressed 
         display: 'inline-block', padding: '2px 7px', margin: '0 2px',
         fontSize: 11, fontWeight: 700, fontFamily: 'monospace',
         borderRadius: 4,
-        border: `1px solid ${pressed ? 'rgba(103,232,249,0.8)' : 'rgba(255,255,255,0.25)'}`,
-        background: pressed ? 'rgba(103,232,249,0.25)' : 'rgba(255,255,255,0.08)',
-        color: pressed ? 'rgba(103,232,249,1)' : 'rgba(255,255,255,0.7)',
+        border: `1px solid ${pressed ? 'rgb(var(--accent-300) / 0.8)' : 'rgb(var(--line) / 0.25)'}`,
+        background: pressed ? 'rgb(var(--accent-300) / 0.25)' : 'rgb(var(--line) / 0.08)',
+        color: pressed ? 'rgb(var(--accent-300) / 1)' : 'rgb(var(--fg) / 0.7)',
         transition: 'all 0.15s ease',
         transform: pressed ? 'scale(1.1)' : 'scale(1)',
-        boxShadow: pressed ? '0 0 8px rgba(103,232,249,0.3)' : 'none',
+        boxShadow: pressed ? '0 0 8px rgb(var(--accent-300) / 0.3)' : 'none',
         minWidth: 22, textAlign: 'center' as const,
     }}>{label}</span>
 );
@@ -98,12 +98,12 @@ const KeyCap: React.FC<{ label: string; pressed: boolean }> = ({ label, pressed 
 const TextStepBody: React.FC<{ step: TutorialStep; pressedKeys: Set<string> }> = ({ step, pressedKeys }) => (
     <>
         {step.text && (
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', margin: 0, lineHeight: 1.5 }}>
+            <p style={{ fontSize: 12, color: 'rgb(var(--fg) / 0.9)', margin: 0, lineHeight: 1.5 }}>
                 {step.text}
             </p>
         )}
         {step.subtext && (
-            <p style={{ fontSize: 12, color: 'rgba(103, 232, 249, 0.75)', margin: '4px 0 0', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 12, color: 'rgb(var(--accent-300) / 0.75)', margin: '4px 0 0', lineHeight: 1.5 }}>
                 {step.subtext.split('\n').map((line, i, arr) => (
                     <React.Fragment key={i}>{line}{i < arr.length - 1 && <br />}</React.Fragment>
                 ))}
@@ -255,25 +255,25 @@ const TutorialOverlayInner: React.FC = () => {
             )}
             <div style={posStyle}>
                 <div style={{
-                    background: 'rgba(0, 0, 0, 0.88)', borderRadius: 8,
-                    border: '1px solid rgba(255, 255, 255, 0.15)', padding: '10px 14px',
+                    background: 'rgb(var(--surface) / 0.88)', borderRadius: 8,
+                    border: '1px solid rgb(var(--line) / 0.15)', padding: '10px 14px',
                     backdropFilter: 'blur(12px)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
                 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             {displayedIndex === 0 && (
                                 <>
-                                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>
+                                    <span style={{ fontSize: 9, color: 'rgb(var(--fg) / 0.35)', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>
                                         Tutorial {lesson.id}
                                     </span>
-                                    <span style={{ color: 'rgba(255,255,255,0.2)' }}>{'•'}</span>
+                                    <span style={{ color: 'rgb(var(--fg) / 0.2)' }}>{'•'}</span>
                                 </>
                             )}
-                            <span style={{ fontSize: 10, color: 'rgba(103, 232, 249, 0.7)', fontWeight: 600, letterSpacing: '0.05em' }}>
+                            <span style={{ fontSize: 10, color: 'rgb(var(--accent-300) / 0.7)', fontWeight: 600, letterSpacing: '0.05em' }}>
                                 {lesson.title}
                             </span>
                         </div>
-                        <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>
+                        <span style={{ fontSize: 9, color: 'rgb(var(--fg) / 0.4)' }}>
                             {displayedIndex + 1} / {totalSteps}
                         </span>
                     </div>
@@ -283,22 +283,22 @@ const TutorialOverlayInner: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
                         {!isLastStep && (
                             <button onClick={skipTutorial} style={{
-                                fontSize: 10, color: 'rgba(255,255,255,0.4)', background: 'none',
+                                fontSize: 10, color: 'rgb(var(--fg) / 0.4)', background: 'none',
                                 border: 'none', cursor: 'pointer', padding: '4px 8px',
                             }}
-                                onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-                                onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}>
+                                onMouseEnter={(e) => (e.currentTarget.style.color = 'rgb(var(--fg) / 0.7)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = 'rgb(var(--fg) / 0.4)')}>
                                 Skip Tutorial
                             </button>
                         )}
                         {isLastStep && displayedStep.autoStartLesson ? (
                             <>
                                 <button onClick={completeTutorial} style={{
-                                    fontSize: 10, color: 'rgba(255,255,255,0.4)', background: 'none',
+                                    fontSize: 10, color: 'rgb(var(--fg) / 0.4)', background: 'none',
                                     border: 'none', cursor: 'pointer', padding: '4px 8px',
                                 }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-                                    onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}>
+                                    onMouseEnter={(e) => (e.currentTarget.style.color = 'rgb(var(--fg) / 0.7)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.color = 'rgb(var(--fg) / 0.4)')}>
                                     Finish
                                 </button>
                                 <button onClick={advanceTutorialStep} style={primaryBtnStyle}>
@@ -318,7 +318,7 @@ const TutorialOverlayInner: React.FC = () => {
 };
 
 const primaryBtnStyle: React.CSSProperties = {
-    fontSize: 10, color: 'rgba(103, 232, 249, 0.9)',
-    background: 'rgba(103, 232, 249, 0.1)', border: '1px solid rgba(103, 232, 249, 0.3)',
+    fontSize: 10, color: 'rgb(var(--accent-300) / 0.9)',
+    background: 'rgb(var(--accent-300) / 0.1)', border: '1px solid rgb(var(--accent-300) / 0.3)',
     borderRadius: 4, cursor: 'pointer', padding: '4px 12px', fontWeight: 600,
 };

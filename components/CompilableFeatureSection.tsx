@@ -352,7 +352,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                 onUnload={isCompiled ? handleUnload : undefined}
                 onReset={advancedMode ? handleReset : undefined}
             >
-                <div className="bg-white/[0.02]">
+                <div className="bg-line/[0.02]">
                     {/* CompileBar — the "compile question". Shown at the top of
                      *  the body whenever there's pending work: not compiled,
                      *  pending compile-settings change, or pending toggle. */}
@@ -446,7 +446,7 @@ const CompileBar: React.FC<{
                 {onOpenEngine && (
                     <button
                         onClick={(e) => { e.stopPropagation(); onOpenEngine(); }}
-                        className="p-1 text-gray-500 hover:text-amber-400 transition-colors"
+                        className="p-1 text-fg-dim hover:text-warn transition-colors"
                         title="Open Engine Panel"
                     >
                         <EngineIcon />

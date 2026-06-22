@@ -933,7 +933,7 @@ function PopoverShell({
     return createPortal(
         <>
             <div style={boxStyle}>
-                <div className="formula-picker-shell h-full w-full bg-[#121212] border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col animate-fade-in-down">
+                <div className="formula-picker-shell h-full w-full bg-surface border border-line/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col animate-fade-in-down">
                     {children}
                 </div>
             </div>
@@ -954,7 +954,7 @@ function ModalShell({ onClose, children }: { onClose?: () => void; children: Rea
     return (
         <Modal onClose={() => onClose?.()} z={Z.modal} backdropClassName="bg-black/60 backdrop-blur-sm">
             <div
-                className="formula-picker-shell bg-[#121212] border border-white/10 rounded-lg shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col"
+                className="formula-picker-shell bg-surface border border-line/10 rounded-lg shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col"
                 style={{ width: 'min(760px, 100%)', height: 'min(640px, 100%)' }}
             >
                 {children}
@@ -1009,7 +1009,7 @@ function InlineShell({ children }: { children: React.ReactNode }) {
         return () => root.removeEventListener('wheel', onWheel);
     }, []);
     return (
-        <div ref={rootRef} className="formula-picker-shell bg-[#121212] border border-white/10 rounded-lg overflow-hidden flex flex-col h-[400px] w-full">
+        <div ref={rootRef} className="formula-picker-shell bg-surface border border-line/10 rounded-lg overflow-hidden flex flex-col h-[400px] w-full">
             {children}
         </div>
     );
@@ -1071,10 +1071,10 @@ function PickerBody(p: PickerBodyProps) {
             className="flex flex-col h-full min-h-0 outline-none"
         >
             {/* Header */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-[#181818]">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-line/10 bg-surface-raised">
                 <div className="flex items-center gap-2 min-w-0">
                     {p.headerSlot ?? (
-                        <span className="text-[11px] font-bold text-gray-300 tracking-tight">Pick a formula</span>
+                        <span className="text-[11px] font-bold text-fg-tertiary tracking-tight">Pick a formula</span>
                     )}
                 </div>
                 {p.headerLinks && p.headerLinks.length > 0 && (
@@ -1086,9 +1086,9 @@ function PickerBody(p: PickerBodyProps) {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 title={link.href}
-                                className="text-[10px] font-semibold text-cyan-400/90 hover:text-cyan-300 underline decoration-cyan-500/40 hover:decoration-cyan-300 underline-offset-2 truncate transition-colors"
+                                className="text-[10px] font-semibold text-accent-400/90 hover:text-accent-300 underline decoration-accent-500/40 hover:decoration-accent-300 underline-offset-2 truncate transition-colors"
                             >
-                                {link.label} <span className="text-cyan-500/70">↗</span>
+                                {link.label} <span className="text-accent-500/70">↗</span>
                             </a>
                         ))}
                     </div>
@@ -1098,7 +1098,7 @@ function PickerBody(p: PickerBodyProps) {
                         onClick={p.onPickRandom}
                         aria-label="Pick a random formula"
                         title="Pick a random formula"
-                        className="px-1.5 py-1 rounded border text-gray-500 hover:text-cyan-300 hover:border-cyan-500/40 bg-black/40 border-white/10 transition-colors flex items-center justify-center"
+                        className="px-1.5 py-1 rounded border text-fg-dim hover:text-accent-300 hover:border-accent-500/40 bg-surface-tabbar border-line/10 transition-colors flex items-center justify-center"
                     >
                         <DiceIcon />
                     </button>
@@ -1109,8 +1109,8 @@ function PickerBody(p: PickerBodyProps) {
                             title="Search (or just start typing)"
                             className={`px-2 py-1 rounded border text-[10px] font-bold transition-colors ${
                                 p.searchVisible
-                                    ? 'bg-cyan-900/40 text-cyan-300 border-cyan-500/40'
-                                    : 'bg-black/40 text-gray-500 hover:text-white border-white/10'
+                                    ? 'bg-accent-900/40 text-accent-300 border-accent-500/40'
+                                    : 'bg-surface-tabbar text-fg-dim hover:text-fg border-line/10'
                             }`}
                         >
                             🔍
@@ -1122,21 +1122,21 @@ function PickerBody(p: PickerBodyProps) {
 
             {/* Search (only when visible) */}
             {p.searchVisible && (
-                <div className="px-3 py-2 border-b border-white/5 bg-[#121212]">
+                <div className="px-3 py-2 border-b border-line/5 bg-surface">
                     <div className="relative flex items-center">
-                        <span className="absolute left-2 text-gray-500 pointer-events-none text-[11px]">🔍</span>
+                        <span className="absolute left-2 text-fg-dim pointer-events-none text-[11px]">🔍</span>
                         <input
                             ref={p.searchRef}
                             type="text"
                             value={p.query}
                             onChange={(e) => p.onQuery(e.target.value)}
                             placeholder="type to search"
-                            className="w-full bg-black/40 border border-white/10 focus:border-cyan-500/50 outline-none text-[11px] text-gray-200 rounded pl-7 pr-7 py-1.5 placeholder:text-gray-600"
+                            className="w-full bg-surface-sunken border border-line/10 focus:border-accent-500/50 outline-none text-[11px] text-fg-secondary rounded pl-7 pr-7 py-1.5 placeholder:text-fg-faint"
                         />
                         {p.query && (
                             <button
                                 onClick={p.onClearQuery}
-                                className="absolute right-1.5 text-gray-500 hover:text-white p-1"
+                                className="absolute right-1.5 text-fg-dim hover:text-fg p-1"
                                 aria-label="Clear search"
                             >
                                 <CloseIcon />
@@ -1159,7 +1159,7 @@ function PickerBody(p: PickerBodyProps) {
                     />
                 )}
 
-                <div className="flex-1 min-w-0 overflow-y-auto custom-scroll bg-[#0e0e0e]" ref={p.gridContainerRef}>
+                <div className="flex-1 min-w-0 overflow-y-auto custom-scroll bg-surface" ref={p.gridContainerRef}>
                     {p.isSpecialActive && p.activeCatObj?.kind === 'special' ? (
                         <SpecialPane id={p.activeCatObj.id} onCommit={p.onCommitSpecial} />
                     ) : p.isSceneGroupActive && p.activeCatObj?.kind === 'scene-group' ? (
@@ -1177,7 +1177,7 @@ function PickerBody(p: PickerBodyProps) {
                     ) : p.searching ? (
                         (p.paneItems.length === 0 && p.catalogSearchHits.length === 0) ? (
                             <div className="p-3">
-                                <div className="py-8 text-center text-gray-600 text-[11px] italic">No matches</div>
+                                <div className="py-8 text-center text-fg-faint text-[11px] italic">No matches</div>
                             </div>
                         ) : (
                             <>
@@ -1238,7 +1238,7 @@ function PickerBody(p: PickerBodyProps) {
             </div>
 
             {p.footerSlot && (
-                <div className="border-t border-white/10 px-3 py-2 bg-[#181818]">{p.footerSlot}</div>
+                <div className="border-t border-line/10 px-3 py-2 bg-surface-raised">{p.footerSlot}</div>
             )}
         </div>
     );
@@ -1259,7 +1259,7 @@ function Sidebar({
     onActivate: (id: string) => void;
 }) {
     return (
-        <div className="w-40 shrink-0 border-r border-white/10 bg-[#141414] overflow-y-auto custom-scroll py-1">
+        <div className="w-40 shrink-0 border-r border-line/10 bg-surface overflow-y-auto custom-scroll py-1">
             {cats.map((c, i) => {
                 const prev = cats[i - 1];
                 const showSpecialSeparator = c.kind === 'special' && (!prev || prev.kind !== 'special');
@@ -1276,16 +1276,16 @@ function Sidebar({
                 return (
                     <React.Fragment key={c.id}>
                         {showSpecialSeparator && (
-                            <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-gray-600">Special</div>
+                            <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-fg-faint">Special</div>
                         )}
                         {catalogSectionLabel && (
-                            <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-gray-600">{catalogSectionLabel}</div>
+                            <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-fg-faint">{catalogSectionLabel}</div>
                         )}
                         {showScenesSeparator && !showSpecialSeparator && (
-                            <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-gray-600">Scenes</div>
+                            <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-fg-faint">Scenes</div>
                         )}
                         {showCustomSeparator && (
-                            <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-gray-600">Custom</div>
+                            <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-fg-faint">Custom</div>
                         )}
                         <SidebarRow
                             cat={c}
@@ -1322,26 +1322,26 @@ function SidebarRow({
     } else if (cat.kind === 'catalog') {
         label = <span className="flex items-center gap-2 min-w-0">
             <span className="truncate">{cat.name}</span>
-            <span className="text-[9px] text-gray-600 shrink-0">{cat.items.length}</span>
+            <span className="text-[9px] text-fg-faint shrink-0">{cat.items.length}</span>
         </span>;
         extraClass = 'text-amber-300';
     } else if (cat.kind === 'scene-group') {
         label = <span className="flex items-center gap-2">
             <span className="truncate">{cat.name}</span>
             {cat.group.isLoading && (
-                <span className="text-[9px] text-gray-500 italic">…</span>
+                <span className="text-[9px] text-fg-dim italic">…</span>
             )}
             {!cat.group.isLoading && cat.group.items.length > 0 && (
-                <span className="text-[9px] text-gray-600">{cat.group.items.length}</span>
+                <span className="text-[9px] text-fg-faint">{cat.group.items.length}</span>
             )}
         </span>;
-        extraClass = 'text-cyan-300';
+        extraClass = 'text-accent-300';
     } else if (cat.id === 'modular') {
         label = 'Modular';
-        icon = <span className="text-cyan-400"><NetworkIcon /></span>;
-        extraClass = 'text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-purple-300 font-bold';
+        icon = <span className="text-accent-400"><NetworkIcon /></span>;
+        extraClass = 'text-transparent bg-clip-text bg-gradient-to-r from-accent-300 to-purple-300 font-bold';
     } else { // workshop
-        label = <>Workshop <span className="text-gray-500">↗</span></>;
+        label = <>Workshop <span className="text-fg-dim">↗</span></>;
         icon = <span className="text-purple-400"><CodeIcon /></span>;
         extraClass = 'text-purple-300';
     }
@@ -1351,11 +1351,11 @@ function SidebarRow({
             ref={register}
             onClick={onClick}
             className={`relative w-full text-left px-3 py-1.5 text-[11px] font-medium flex items-center gap-2 transition-colors ${
-                active ? 'bg-cyan-900/40 text-white' : `text-gray-400 hover:bg-white/5 hover:text-white ${extraClass}`
-            } ${keyboardFocused ? 'ring-1 ring-cyan-500/60 ring-inset' : ''}`}
+                active ? 'bg-accent-900/40 text-fg' : `text-fg-muted hover:bg-line/5 hover:text-fg ${extraClass}`
+            } ${keyboardFocused ? 'ring-1 ring-accent-500/60 ring-inset' : ''}`}
         >
             {keyboardFocused && (
-                <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-cyan-400" />
+                <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-accent-400" />
             )}
             {icon}
             <span className="truncate">{label}</span>
@@ -1373,20 +1373,20 @@ function SpecialPane({ id, onCommit }: { id: string; onCommit: (id: string) => v
 
     return (
         <div className="p-6 flex flex-col items-center justify-center h-full text-center gap-3">
-            <div className="w-16 h-16 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center text-cyan-400">
+            <div className="w-16 h-16 rounded-lg bg-surface-section border border-line/10 flex items-center justify-center text-accent-400">
                 {isModular ? <NetworkIcon /> : <CodeIcon />}
             </div>
-            <div className="text-[13px] font-bold text-white">
+            <div className="text-[13px] font-bold text-fg">
                 {isModular ? 'Modular (graph editor)' : 'Open Formula Workshop'}
             </div>
-            <p className="text-[10px] text-gray-500 max-w-xs leading-relaxed">
+            <p className="text-[10px] text-fg-dim max-w-xs leading-relaxed">
                 {isModular
                     ? 'Switch the active formula to Modular and edit the graph.'
                     : 'Import a Fragmentarium / DEC formula or edit an existing one. Opens in a separate modal.'}
             </p>
             <button
                 onClick={() => onCommit(id)}
-                className="mt-2 px-3 py-1.5 bg-cyan-900/40 hover:bg-cyan-900/70 text-cyan-300 hover:text-white text-[11px] font-bold rounded border border-cyan-500/30 transition-colors"
+                className="mt-2 px-3 py-1.5 bg-accent-900/40 hover:bg-accent-900/70 text-accent-300 hover:text-fg text-[11px] font-bold rounded border border-accent-500/30 transition-colors"
             >
                 {isModular ? 'Switch to Modular' : 'Open Workshop'}
             </button>
@@ -1401,15 +1401,15 @@ function ScenePane({
     if (group.isLoading && group.items.length === 0) {
         return (
             <div className="p-6 flex flex-col items-center justify-center h-full text-center gap-2">
-                <div className="text-[11px] text-gray-500 italic">Loading {group.name}…</div>
+                <div className="text-[11px] text-fg-dim italic">Loading {group.name}…</div>
             </div>
         );
     }
     if (group.items.length === 0) {
         return (
             <div className="p-6 flex flex-col items-center justify-center h-full text-center gap-2">
-                <div className="text-[13px] font-bold text-gray-400">{group.name}</div>
-                <p className="text-[10px] text-gray-500 max-w-xs leading-relaxed">
+                <div className="text-[13px] font-bold text-fg-muted">{group.name}</div>
+                <p className="text-[10px] text-fg-dim max-w-xs leading-relaxed">
                     {group.emptyMessage ?? 'No items.'}
                 </p>
             </div>
@@ -1418,7 +1418,7 @@ function ScenePane({
     const isList = viewMode === 'list';
     return (
         <div className="p-3">
-            <div className="px-1 pb-2 text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+            <div className="px-1 pb-2 text-[10px] uppercase tracking-wider text-fg-dim font-bold">
                 {group.name}
             </div>
             {isList ? (
@@ -1441,8 +1441,8 @@ function ScenePane({
                         disabled={group.isLoadingMore}
                         className={`px-4 py-1.5 text-[11px] font-bold rounded border transition-colors ${
                             group.isLoadingMore
-                                ? 'bg-black/40 text-gray-600 border-white/5 cursor-wait'
-                                : 'bg-cyan-900/20 hover:bg-cyan-900/40 text-cyan-300 hover:text-white border-cyan-500/30'
+                                ? 'bg-surface-tabbar text-fg-faint border-line/5 cursor-wait'
+                                : 'bg-accent-900/20 hover:bg-accent-900/40 text-accent-300 hover:text-fg border-accent-500/30'
                         }`}
                     >
                         {group.isLoadingMore ? 'Loading…' : 'Load more'}
@@ -1461,12 +1461,12 @@ function SceneCard({ item, onCommit }: { item: SceneItem; onCommit: (item: Scene
             title={item.disabled ? item.disabledReason : (item.description ?? item.name)}
             className={`relative flex flex-col items-stretch text-left rounded border overflow-hidden transition-all group ${
                 item.disabled
-                    ? 'opacity-40 cursor-not-allowed border-white/5'
-                    : 'border-white/10 hover:border-cyan-500/40 bg-black/30 hover:bg-white/[0.04]'
+                    ? 'opacity-40 cursor-not-allowed border-line/5'
+                    : 'border-line/10 hover:border-accent-500/40 bg-surface-section hover:bg-line/[0.04]'
             }`}
         >
-            <div className="aspect-square w-full bg-black relative">
-                <div className="absolute inset-0 flex items-center justify-center text-gray-700">
+            <div className="aspect-square w-full bg-surface-viewport relative">
+                <div className="absolute inset-0 flex items-center justify-center text-fg-ghost">
                     <CubeIcon />
                 </div>
                 {item.thumbnailUrl && (
@@ -1479,12 +1479,12 @@ function SceneCard({ item, onCommit }: { item: SceneItem; onCommit: (item: Scene
                     />
                 )}
                 {item.badge && (
-                    <div className={`absolute top-1 left-1 px-1 py-0.5 text-[8px] font-bold rounded ${item.badge.className ?? 'bg-black/70 text-gray-300'}`}>
+                    <div className={`absolute top-1 left-1 px-1 py-0.5 text-[8px] font-bold rounded ${item.badge.className ?? 'bg-surface/80 text-fg-tertiary'}`}>
                         {item.badge.text}
                     </div>
                 )}
             </div>
-            <div className="px-1.5 py-1 text-[10px] font-bold text-gray-200 truncate group-hover:text-white">
+            <div className="px-1.5 py-1 text-[10px] font-bold text-fg-secondary truncate group-hover:text-fg">
                 {item.name}
             </div>
         </button>
@@ -1500,18 +1500,18 @@ function SceneRow({ item, onCommit }: { item: SceneItem; onCommit: (item: SceneI
             className={`w-full text-left px-2 py-1.5 rounded flex items-center gap-2 transition-colors ${
                 item.disabled
                     ? 'opacity-40 cursor-not-allowed'
-                    : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                    : 'text-fg-tertiary hover:bg-line/5 hover:text-fg'
             }`}
         >
             {item.badge && (
-                <span className={`shrink-0 px-1 py-0.5 text-[8px] font-bold rounded ${item.badge.className ?? 'bg-black/40 text-gray-400'}`}>
+                <span className={`shrink-0 px-1 py-0.5 text-[8px] font-bold rounded ${item.badge.className ?? 'bg-surface/80 text-fg-muted'}`}>
                     {item.badge.text}
                 </span>
             )}
             <div className="flex-1 min-w-0">
                 <div className="text-[11px] font-bold truncate">{item.name}</div>
                 {item.description && (
-                    <div className="text-[9px] text-gray-500 truncate">{item.description}</div>
+                    <div className="text-[9px] text-fg-dim truncate">{item.description}</div>
                 )}
             </div>
         </button>
@@ -1529,11 +1529,11 @@ function CatalogPane({
     const isList = viewMode === 'list';
     return (
         <div className="p-3">
-            <div className="px-1 pb-2 text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+            <div className="px-1 pb-2 text-[10px] uppercase tracking-wider text-fg-dim font-bold">
                 {group.name}
             </div>
             {group.items.length === 0 ? (
-                <div className="py-8 text-center text-gray-600 text-[11px] italic">No formulas</div>
+                <div className="py-8 text-center text-fg-faint text-[11px] italic">No formulas</div>
             ) : isList ? (
                 <div className="flex flex-col gap-0.5">
                     {group.items.map(item => <CatalogRow key={item.id} item={item} onCommit={onCommit} />)}
@@ -1554,18 +1554,18 @@ const CatalogCard = React.memo(function CatalogCard({
         <button
             onClick={() => onCommit(item)}
             title={`${item.name} — ${item.artist}`}
-            className="relative flex flex-col items-stretch text-left rounded border overflow-hidden transition-all group border-white/10 hover:border-amber-500/40 bg-black/30 hover:bg-white/[0.04]"
+            className="relative flex flex-col items-stretch text-left rounded border overflow-hidden transition-all group border-line/10 hover:border-amber-500/40 bg-surface-section hover:bg-line/[0.04]"
         >
-            <div className="aspect-square w-full bg-black relative">
-                <div className="absolute inset-0 flex items-center justify-center text-gray-700"><CubeIcon /></div>
+            <div className="aspect-square w-full bg-surface-viewport relative">
+                <div className="absolute inset-0 flex items-center justify-center text-fg-ghost"><CubeIcon /></div>
                 <div className="absolute inset-0">
                     <LazyThumbnail id={item.id} label={item.name} src={item.thumbSrc} />
                 </div>
-                <div className="absolute top-1 left-1 px-1 py-0.5 text-[8px] font-bold rounded bg-black/70 text-amber-300/90 uppercase">
+                <div className="absolute top-1 left-1 px-1 py-0.5 text-[8px] font-bold rounded bg-surface/80 text-amber-300/90 uppercase">
                     {item.source}
                 </div>
             </div>
-            <div className="px-1.5 py-1 text-[10px] font-bold text-gray-200 truncate group-hover:text-white">
+            <div className="px-1.5 py-1 text-[10px] font-bold text-fg-secondary truncate group-hover:text-fg">
                 {item.name}
             </div>
         </button>
@@ -1579,12 +1579,12 @@ function CatalogRow({
         <button
             onClick={() => onCommit(item)}
             title={`${item.name} — ${item.artist}`}
-            className="w-full text-left px-2 py-1.5 rounded flex items-center gap-2 transition-colors text-gray-300 hover:bg-white/5 hover:text-white"
+            className="w-full text-left px-2 py-1.5 rounded flex items-center gap-2 transition-colors text-fg-tertiary hover:bg-line/5 hover:text-fg"
         >
-            <span className="shrink-0 px-1 py-0.5 text-[8px] font-bold rounded bg-black/40 text-amber-400/80 uppercase">{item.source}</span>
+            <span className="shrink-0 px-1 py-0.5 text-[8px] font-bold rounded bg-surface/80 text-amber-400/80 uppercase">{item.source}</span>
             <div className="flex-1 min-w-0">
                 <div className="text-[11px] font-bold truncate">{item.name}</div>
-                <div className="text-[9px] text-gray-500 truncate">{item.artist}</div>
+                <div className="text-[9px] text-fg-dim truncate">{item.artist}</div>
             </div>
         </button>
     );
@@ -1616,12 +1616,12 @@ function ItemPane(p: ItemPaneProps) {
     return (
         <div className="p-3">
             {p.categoryLabel && (
-                <div className="px-1 pb-2 text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                <div className="px-1 pb-2 text-[10px] uppercase tracking-wider text-fg-dim font-bold">
                     {p.categoryLabel}
                 </div>
             )}
             {p.items.length === 0 ? (
-                <div className="py-8 text-center text-gray-600 text-[11px] italic">No matches</div>
+                <div className="py-8 text-center text-fg-faint text-[11px] italic">No matches</div>
             ) : isList ? (
                 <ListItems {...p} />
             ) : (
@@ -1702,16 +1702,16 @@ function FormulaCard({
             title={disabled ? disabledReason : label}
             className={`relative flex flex-col items-stretch text-left rounded border overflow-hidden transition-all group ${
                 disabled
-                    ? 'opacity-40 cursor-not-allowed border-white/5'
+                    ? 'opacity-40 cursor-not-allowed border-line/5'
                     : selected
-                        ? 'border-cyan-500/70 bg-cyan-900/20'
+                        ? 'border-accent-500/70 bg-accent-900/20'
                         : focused
-                            ? 'border-cyan-500/40 bg-white/[0.04]'
-                            : 'border-white/10 hover:border-white/30 bg-black/30 hover:bg-white/[0.04]'
+                            ? 'border-accent-500/40 bg-line/[0.04]'
+                            : 'border-line/10 hover:border-line/30 bg-surface-section hover:bg-line/[0.04]'
             }`}
         >
-            <div className="aspect-square w-full bg-black relative">
-                <div className="absolute inset-0 flex items-center justify-center text-gray-700">
+            <div className="aspect-square w-full bg-surface-viewport relative">
+                <div className="absolute inset-0 flex items-center justify-center text-fg-ghost">
                     {isModular ? <NetworkIcon /> : <CubeIcon />}
                 </div>
                 {!isModular && (
@@ -1720,14 +1720,14 @@ function FormulaCard({
                     </div>
                 )}
                 {selected && (
-                    <div className="absolute inset-0 bg-cyan-500/20 flex items-center justify-center">
-                        <div className="w-4 h-4 bg-white rounded-full flex items-center justify-center text-cyan-900 shadow-lg">
+                    <div className="absolute inset-0 bg-accent-500/20 flex items-center justify-center">
+                        <div className="w-4 h-4 bg-fg rounded-full flex items-center justify-center text-accent-900 shadow-lg">
                             <CheckIcon />
                         </div>
                     </div>
                 )}
             </div>
-            <div className="px-1.5 py-1 text-[10px] font-bold text-gray-200 truncate group-hover:text-white">
+            <div className="px-1.5 py-1 text-[10px] font-bold text-fg-secondary truncate group-hover:text-fg">
                 {label}
             </div>
         </button>
@@ -1752,17 +1752,17 @@ function FormulaRow({
                 disabled
                     ? 'opacity-40 cursor-not-allowed'
                     : selected
-                        ? 'bg-cyan-900/30 text-cyan-300'
+                        ? 'bg-accent-900/30 text-accent-300'
                         : focused
-                            ? 'bg-white/[0.05] text-white'
-                            : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                            ? 'bg-line/[0.05] text-fg'
+                            : 'text-fg-tertiary hover:bg-line/5 hover:text-fg'
             }`}
         >
             {selected && <CheckIcon />}
             <div className="flex-1 min-w-0">
                 <div className="text-[11px] font-bold truncate">{label}</div>
                 {def?.shortDescription && (
-                    <div className="text-[9px] text-gray-500 truncate">{def.shortDescription}</div>
+                    <div className="text-[9px] text-fg-dim truncate">{def.shortDescription}</div>
                 )}
             </div>
         </button>
@@ -1776,7 +1776,7 @@ function FormulaRow({
 function HoverPreviewCard({ id }: { id: string }) {
     const def = registry.get(id as FormulaType);
     return (
-        <div className="w-full h-full bg-black border border-cyan-500/50 rounded-lg shadow-[0_0_40px_rgba(0,0,0,1),0_0_20px_rgba(34,211,238,0.25)] overflow-hidden animate-fade-in">
+        <div className="w-full h-full bg-surface-viewport border border-accent-500/50 rounded-lg shadow-[0_0_40px_rgba(0,0,0,1),0_0_20px_rgb(var(--accent-glow)/0.25)] overflow-hidden animate-fade-in">
             <img
                 src={`thumbnails/fractal_${id}.jpg`}
                 className="w-full h-full object-cover"
@@ -1784,7 +1784,7 @@ function HoverPreviewCard({ id }: { id: string }) {
                 onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none'; }}
             />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-3">
-                <div className="text-[10px] font-bold text-cyan-400 drop-shadow-md">
+                <div className="text-[10px] font-bold text-accent-400 drop-shadow-md">
                     {def?.name ?? id}
                 </div>
             </div>
@@ -1800,13 +1800,13 @@ function ViewToggle({
     mode, onChange,
 }: { mode: 'grid' | 'list'; onChange: (m: 'grid' | 'list') => void }) {
     return (
-        <div className="inline-flex bg-black/40 rounded border border-white/10 overflow-hidden">
+        <div className="inline-flex bg-surface-tabbar rounded border border-line/10 overflow-hidden">
             <button
                 onClick={() => onChange('grid')}
                 aria-label="Grid view"
                 title="Grid view"
                 className={`px-2 py-1 text-[10px] font-bold transition-colors ${
-                    mode === 'grid' ? 'bg-cyan-900/40 text-cyan-300' : 'text-gray-500 hover:text-white'
+                    mode === 'grid' ? 'bg-accent-900/40 text-accent-300' : 'text-fg-dim hover:text-fg'
                 }`}
             >
                 ▦
@@ -1816,7 +1816,7 @@ function ViewToggle({
                 aria-label="List view"
                 title="List view"
                 className={`px-2 py-1 text-[10px] font-bold transition-colors ${
-                    mode === 'list' ? 'bg-cyan-900/40 text-cyan-300' : 'text-gray-500 hover:text-white'
+                    mode === 'list' ? 'bg-accent-900/40 text-accent-300' : 'text-fg-dim hover:text-fg'
                 }`}
             >
                 ≡

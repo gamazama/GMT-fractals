@@ -320,12 +320,12 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
             {/* BIAS handle — a circle above the move handle. Drag to redistribute the
                 selected points (↔ time · ↕ value · Shift axis · Alt fine). */}
             <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-cyan-500/30 border border-cyan-300/70 cursor-crosshair flex items-center justify-center pointer-events-auto hover:bg-cyan-500/60 group/bias"
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-accent-500/30 border border-accent-300/70 cursor-crosshair flex items-center justify-center pointer-events-auto hover:bg-accent-500/60 group/bias"
                 style={{ transform: 'translate(-50%, calc(-50% - 17px))' }}
                 onMouseDown={(e) => startDrag(e, 'bias')}
                 title="Bias — redistribute the selected points (↔ time · ↕ value · Shift = lock axis · Alt = fine)"
             >
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="text-cyan-100 group-hover/bias:text-white">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="text-cyan-100 group-hover/bias:text-fg">
                     <path d="M12 4v16M4 12h16" strokeOpacity="0.6" />
                     <circle cx="9" cy="9" r="2" fill="currentColor" stroke="none" />
                     <circle cx="16" cy="15" r="2" fill="currentColor" stroke="none" />
@@ -337,12 +337,12 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
                 onMouseDown={(e) => startDrag(e, 'move')}
                 title="Move selection (drag)"
             >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-200 group-hover/mv:text-white">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-200 group-hover/mv:text-fg">
                     <path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" />
                 </svg>
             </div>
             {biasInfo && (
-                <div className="absolute left-1/2 -translate-x-1/2 -top-6 whitespace-nowrap bg-black/80 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/40 text-[10px] pointer-events-none">
+                <div className="absolute left-1/2 -translate-x-1/2 -top-6 whitespace-nowrap bg-surface/80 text-accent-300 px-2 py-0.5 rounded-full border border-accent-500/40 text-[10px] pointer-events-none">
                     Bias ↔ {biasInfo.gx.toFixed(2)} · ↕ {biasInfo.gy.toFixed(2)}
                 </div>
             )}
@@ -351,14 +351,14 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
                 onMouseDown={(e) => startDrag(e, 'scale_left')}
                 title="Scale time from left"
             >
-                <div className="w-1 h-3 bg-orange-400 rounded-full shadow-sm group-hover/lh:bg-white" />
+                <div className="w-1 h-3 bg-orange-400 rounded-full shadow-sm group-hover/lh:bg-fg" />
             </div>
             <div
                 className="absolute top-0 bottom-0 right-0 w-3 cursor-ew-resize flex items-center justify-center pointer-events-auto group/rh"
                 onMouseDown={(e) => startDrag(e, 'scale_right')}
                 title="Scale time from right"
             >
-                <div className="w-1 h-3 bg-orange-400 rounded-full shadow-sm group-hover/rh:bg-white" />
+                <div className="w-1 h-3 bg-orange-400 rounded-full shadow-sm group-hover/rh:bg-fg" />
             </div>
             {!normalized && (
                 <>
@@ -367,14 +367,14 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
                         onMouseDown={(e) => startDrag(e, 'scale_top')}
                         title="Scale value from top"
                     >
-                        <div className="h-1 w-3 bg-orange-400 rounded-full shadow-sm group-hover/th:bg-white" />
+                        <div className="h-1 w-3 bg-orange-400 rounded-full shadow-sm group-hover/th:bg-fg" />
                     </div>
                     <div
                         className="absolute left-0 right-0 bottom-0 h-3 cursor-ns-resize flex items-center justify-center pointer-events-auto group/bh"
                         onMouseDown={(e) => startDrag(e, 'scale_bottom')}
                         title="Scale value from bottom"
                     >
-                        <div className="h-1 w-3 bg-orange-400 rounded-full shadow-sm group-hover/bh:bg-white" />
+                        <div className="h-1 w-3 bg-orange-400 rounded-full shadow-sm group-hover/bh:bg-fg" />
                     </div>
                 </>
             )}

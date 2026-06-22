@@ -116,8 +116,8 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     headerLeft,
     showClose = true,
     className = 'glass-panel flex flex-col overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.5)]',
-    bodyClassName = 'p-3 overflow-y-auto overflow-x-hidden custom-scroll flex-1 bg-black/80 backdrop-blur-md',
-    headerClassName = 'flex items-center justify-between px-2 py-1.5 bg-gray-800/90 border-b border-white/10',
+    bodyClassName = 'p-3 overflow-y-auto overflow-x-hidden custom-scroll flex-1 bg-surface/80 backdrop-blur-md',
+    headerClassName = 'flex items-center justify-between px-2 py-1.5 bg-surface-header border-b border-line/10',
 }) => {
     const panelRef = useRef<HTMLDivElement>(null);
 
@@ -231,7 +231,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
                 >
                     <div className="flex items-center gap-2 min-w-0">
                         {headerLeft}
-                        <span className="t-label text-gray-200 truncate">{title}</span>
+                        <span className="t-label text-fg-secondary truncate">{title}</span>
                     </div>
                     {showClose && onClose && (
                         <button onClick={onClose} className="icon-btn" title="Close" aria-label="Close">
@@ -245,7 +245,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
 
             {resizable && effectiveSize && (
                 <div
-                    className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize touch-none text-gray-500"
+                    className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize touch-none text-fg-dim"
                     {...resize}
                 >
                     <ResizeHandleIcon />

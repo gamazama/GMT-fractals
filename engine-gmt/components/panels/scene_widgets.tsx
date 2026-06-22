@@ -36,7 +36,7 @@ export const ColorGradingHistogram: React.FC<FeatureComponentProps> = ({ sliceSt
     const modGamma = liveModulations?.['colorGrading.levelsGamma'] ?? levelsGamma;
 
     return (
-        <div className="mt-2 pt-2 border-t border-white/5">
+        <div className="mt-2 pt-2 border-t border-line/5">
              <Histogram 
                 data={data}
                 min={modMin ?? 0.0}
@@ -333,7 +333,7 @@ export const NavigationControls: React.FC<FeatureComponentProps> = () => {
                         { label: 'Fly', value: 'Fly' }
                     ]}
                 />
-                {isOrtho && <p className="text-[9px] text-gray-500 mt-1 text-center">Fly Mode disabled in Orthographic view</p>}
+                {isOrtho && <p className="text-[9px] text-fg-dim mt-1 text-center">Fly Mode disabled in Orthographic view</p>}
             </div>
 
             {cameraMode === 'Fly' && (

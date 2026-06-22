@@ -34,7 +34,7 @@ export const BackToGmtButton: React.FC = () => (
     href="app-gmt.html"
     title="Back to the GMT fractal studio"
     aria-label="Back to the GMT fractal studio"
-    className="group flex items-center gap-1.5 pl-1.5 pr-2 h-7 rounded text-gray-400 hover:bg-white/10 transition-colors no-underline"
+    className="group flex items-center gap-1.5 pl-1.5 pr-2 h-7 rounded text-fg-muted hover:bg-line/10 transition-colors no-underline"
   >
     <BackArrowIcon />
     <GmtWordmark className="h-3.5 w-auto opacity-80 group-hover:opacity-100 transition-opacity" />

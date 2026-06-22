@@ -179,15 +179,15 @@ export const TimeNavigator: React.FC<TimeNavigatorProps> = ({
     return (
         <div 
             ref={navRef}
-            className="flex-1 h-3 bg-black border border-gray-700 rounded mx-4 relative select-none group cursor-pointer"
+            className="flex-1 h-3 bg-surface-sunken border border-line/20 rounded mx-4 relative select-none group cursor-pointer"
             onMouseDown={(e) => handleMouseDown(e, 'scroll')}
             title="Drag bar to Scroll, Drag handles or Wheel to Zoom"
         >
-            <div className="absolute inset-0 bg-gray-800/30 rounded" />
+            <div className="absolute inset-0 bg-surface-header rounded" />
             
             {/* The Thumb */}
             <div 
-                className="absolute top-0 bottom-0 bg-gray-600 border border-gray-500 rounded-sm opacity-80 group-hover:bg-cyan-600 group-hover:border-cyan-400 transition-colors cursor-grab active:cursor-grabbing"
+                className="absolute top-0 bottom-0 bg-fg-faint border border-line/20 rounded-sm opacity-80 group-hover:bg-accent-600 group-hover:border-accent-400 transition-colors cursor-grab active:cursor-grabbing"
                 style={{ 
                     left: `${offsetPct}%`, 
                     width: `${viewPct}%` 
@@ -196,13 +196,13 @@ export const TimeNavigator: React.FC<TimeNavigatorProps> = ({
             >
                 {/* Left Resize Handle */}
                 <div 
-                    className="absolute left-0 top-0 bottom-0 w-2 -ml-1 cursor-ew-resize hover:bg-white/50 z-10"
+                    className="absolute left-0 top-0 bottom-0 w-2 -ml-1 cursor-ew-resize hover:bg-line/50 z-10"
                     onMouseDown={(e) => handleMouseDown(e, 'resizeLeft')}
                 />
                 
                 {/* Right Resize Handle */}
                 <div 
-                    className="absolute right-0 top-0 bottom-0 w-2 -mr-1 cursor-ew-resize hover:bg-white/50 z-10"
+                    className="absolute right-0 top-0 bottom-0 w-2 -mr-1 cursor-ew-resize hover:bg-line/50 z-10"
                     onMouseDown={(e) => handleMouseDown(e, 'resizeRight')}
                 />
             </div>

@@ -126,7 +126,7 @@ export const CategoryPickerMenu: React.FC<CategoryPickerMenuProps> = ({
         >
             {/* Level 1: Categories */}
             <div
-                className={`bg-[#1a1a1a] border border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col py-1 overflow-y-auto custom-scroll whitespace-nowrap ${layout.flip ? 'rounded-r -ml-px' : 'rounded-l'}`}
+                className={`bg-surface-raised border border-line/20 shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col py-1 overflow-y-auto custom-scroll whitespace-nowrap ${layout.flip ? 'rounded-r -ml-px' : 'rounded-l'}`}
                 style={{ minWidth: categoryWidth, maxHeight: layout.maxHeight }}
             >
                 {categories.map(cat => (
@@ -135,12 +135,12 @@ export const CategoryPickerMenu: React.FC<CategoryPickerMenuProps> = ({
                         onMouseEnter={() => setHoveredCategory(cat.id)}
                         className={`px-3 py-1.5 cursor-pointer flex justify-between items-center transition-colors ${
                             hoveredCategory === cat.id
-                                ? 'bg-cyan-900/60 text-white'
-                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                ? 'bg-accent-900/60 text-fg'
+                                : 'text-fg-muted hover:text-fg hover:bg-line/5'
                         }`}
                     >
-                        <span className={`truncate ${cat.highlight ? 'font-bold text-cyan-300' : ''}`}>{cat.name}</span>
-                        {layout.flip ? <span className="text-gray-600">‹</span> : <ChevronRight />}
+                        <span className={`truncate ${cat.highlight ? 'font-bold text-accent-300' : ''}`}>{cat.name}</span>
+                        {layout.flip ? <span className="text-fg-faint">‹</span> : <ChevronRight />}
                     </div>
                 ))}
             </div>
@@ -148,13 +148,13 @@ export const CategoryPickerMenu: React.FC<CategoryPickerMenuProps> = ({
             {/* Level 2: Items */}
             {hoveredCategory && (
                 <div
-                    className={`bg-[#222] border-y border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.5)] overflow-y-auto custom-scroll py-1 ${
+                    className={`bg-surface-raised border-y border-line/20 shadow-[0_10px_30px_rgba(0,0,0,0.5)] overflow-y-auto custom-scroll py-1 ${
                         layout.flip ? 'border-l rounded-l animate-fade-in-right' : 'border-r rounded-r -ml-px animate-fade-in-left'
                     }`}
                     style={{ width: itemWidth, maxHeight: layout.maxHeight }}
                 >
                     {items.length === 0 && (
-                        <div className="px-3 py-2 text-gray-500 text-xs italic">No items</div>
+                        <div className="px-3 py-2 text-fg-dim text-xs italic">No items</div>
                     )}
                     {items.map(item => (
                         <button
@@ -162,10 +162,10 @@ export const CategoryPickerMenu: React.FC<CategoryPickerMenuProps> = ({
                             onClick={item.disabled ? undefined : () => { onSelect(item.key); onClose(); }}
                             className={`w-full px-3 py-1.5 text-left transition-colors truncate flex items-center gap-1.5 ${
                                 item.disabled
-                                    ? 'text-gray-600 cursor-not-allowed'
+                                    ? 'text-fg-faint cursor-not-allowed'
                                     : item.selected
-                                        ? 'text-cyan-400 hover:bg-cyan-600 hover:text-white'
-                                        : 'text-gray-300 hover:bg-cyan-600 hover:text-white'
+                                        ? 'text-accent-400 hover:bg-accent-600 hover:text-fg'
+                                        : 'text-fg-tertiary hover:bg-accent-600 hover:text-fg'
                             }`}
                             title={item.description || item.label}
                         >

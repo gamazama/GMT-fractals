@@ -48,13 +48,13 @@ export const HardwarePrefsControls: React.FC = () => {
 
     return (
         <div>
-            <div className="text-[9px] text-gray-500 mb-3">
+            <div className="text-[9px] text-fg-dim mb-3">
                 Detected: {tierLabel}{hardwareProfile?.isMobile && ' — mobile device'}
             </div>
 
             <div className="space-y-3">
                 <div>
-                    <label className="text-[9px] text-gray-500 font-bold block mb-1">Ray Precision</label>
+                    <label className="text-[9px] text-fg-dim font-bold block mb-1">Ray Precision</label>
                     <Dropdown
                         value={effective.precisionMode === 0 ? 'High (Desktop)' : 'Standard (Mobile)'}
                         onChange={(v) => handleChange('precisionMode', v === 'High (Desktop)' ? 0 : 1)}
@@ -67,7 +67,7 @@ export const HardwarePrefsControls: React.FC = () => {
                 </div>
 
                 <div>
-                    <label className="text-[9px] text-gray-500 font-bold block mb-1">Buffer Precision</label>
+                    <label className="text-[9px] text-fg-dim font-bold block mb-1">Buffer Precision</label>
                     <Dropdown
                         value={effective.bufferPrecision === 0 ? 'Float32 (HDR)' : 'HalfFloat16'}
                         onChange={(v) => handleChange('bufferPrecision', v === 'Float32 (HDR)' ? 0 : 1)}
@@ -80,26 +80,26 @@ export const HardwarePrefsControls: React.FC = () => {
                 </div>
 
                 <div>
-                    <label className="text-[9px] text-gray-500 font-bold block mb-1">Hard Loop Cap</label>
+                    <label className="text-[9px] text-fg-dim font-bold block mb-1">Hard Loop Cap</label>
                     <input
                         type="number"
                         value={effective.compilerHardCap}
                         onChange={(e) => handleChange('compilerHardCap', Math.max(64, Math.min(DEFAULT_HARD_CAP, parseInt(e.target.value) || DEFAULT_HARD_CAP)))}
-                        className="w-full bg-gray-800 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500"
+                        className="w-full bg-surface-header border border-line/10 rounded px-2 py-1 text-xs text-fg outline-none focus:border-accent-500"
                         min={64}
                         max={DEFAULT_HARD_CAP}
                     />
                 </div>
             </div>
 
-            <div className="text-[8px] text-gray-600 mt-3">
+            <div className="text-[8px] text-fg-faint mt-3">
                 Changes require a shader recompile.
             </div>
 
             <div className="flex items-center justify-between mt-3">
                 <button
                     onClick={handleReset}
-                    className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+                    className="text-[10px] text-fg-dim hover:text-fg-tertiary transition-colors"
                 >
                     Reset to Detected
                 </button>
@@ -108,8 +108,8 @@ export const HardwarePrefsControls: React.FC = () => {
                     disabled={!hasPending}
                     className={`px-3 py-1 rounded text-[10px] font-bold transition-colors ${
                         hasPending
-                            ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                            : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                            ? 'bg-accent-600 hover:bg-accent-500 text-fg'
+                            : 'bg-surface-header text-fg-faint cursor-not-allowed'
                     }`}
                 >
                     Apply

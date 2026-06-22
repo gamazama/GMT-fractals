@@ -7,8 +7,8 @@ import { ScalarInput } from '../../components/inputs/ScalarInput';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-px border-t border-white/5 first:border-t-0 pt-1 first:pt-0">
-      <span className="text-[9px] text-gray-500 uppercase tracking-wide px-0.5 mb-0.5">{label}</span>
+    <div className="flex flex-col gap-px border-t border-line/5 first:border-t-0 pt-1 first:pt-0">
+      <span className="text-[9px] text-fg-dim uppercase tracking-wide px-0.5 mb-0.5">{label}</span>
       {children}
     </div>
   );
@@ -102,7 +102,7 @@ export function PipelineControls() {
                 const v = Math.max(16, Math.min(8192, parseInt(e.target.value) || 512));
                 s.setResolution(v);
               }}
-              className="w-[60px] h-[26px] bg-gray-800 border border-gray-700 rounded text-[11px] text-gray-200 text-center font-mono"
+              className="w-[60px] h-[26px] bg-surface-header border border-line/20 rounded text-[11px] text-fg-secondary text-center font-mono"
               title="Custom resolution (16–8192)"
             />
           </div>

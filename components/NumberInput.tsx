@@ -24,7 +24,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 }) => (
     <div className={className}>
         {label && <SectionLabel variant="secondary" className="block mb-0.5">{label}</SectionLabel>}
-        <div className="h-6 bg-black/40 rounded border border-white/10 relative">
+        <div className="h-6 bg-surface-sunken rounded border border-line/10 relative">
             <DraggableNumber
                 value={value}
                 onChange={onChange}

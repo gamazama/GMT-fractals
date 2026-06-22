@@ -55,11 +55,11 @@ export const EasingPicker: React.FC<{
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-[min(420px,92vw)] max-h-[72vh] flex flex-col bg-zinc-900 border border-white/15 rounded-md shadow-2xl overflow-hidden">
-        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/10">
-          <span className="text-[11px] font-semibold text-gray-300">Easing curve</span>
-          <span className="text-[10px] text-gray-500">hover to enlarge · click to choose</span>
-          <button onClick={onClose} className="ml-auto text-gray-400 hover:text-gray-200 text-sm leading-none px-1">
+      <div className="w-[min(420px,92vw)] max-h-[72vh] flex flex-col bg-surface border border-line/15 rounded-md shadow-2xl overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-line/10">
+          <span className="text-[11px] font-semibold text-fg-tertiary">Easing curve</span>
+          <span className="text-[10px] text-fg-dim">hover to enlarge · click to choose</span>
+          <button onClick={onClose} className="ml-auto text-fg-muted hover:text-fg-secondary text-sm leading-none px-1">
             ✕
           </button>
         </div>
@@ -78,15 +78,15 @@ export const EasingPicker: React.FC<{
                 title={name}
                 aria-pressed={selected}
                 className={`flex flex-col items-center gap-1 rounded-sm p-1.5 transition-colors ${
-                  selected ? 'bg-cyan-500/20 ring-1 ring-cyan-400/60' : 'hover:bg-white/[0.06]'
+                  selected ? 'bg-accent-500/20 ring-1 ring-accent-400/60' : 'hover:bg-line/[0.06]'
                 }`}
               >
                 {src ? (
                   <img src={src} width={TILE_W} height={TILE_H} alt={name} className="rounded-[2px]" />
                 ) : (
-                  <div style={{ width: TILE_W, height: TILE_H }} className="rounded-[2px] bg-black/40" />
+                  <div style={{ width: TILE_W, height: TILE_H }} className="rounded-[2px] bg-surface-section" />
                 )}
-                <span className={`text-[9px] leading-tight truncate w-full text-center ${selected ? 'text-cyan-200' : 'text-gray-400'}`}>
+                <span className={`text-[9px] leading-tight truncate w-full text-center ${selected ? 'text-accent-300' : 'text-fg-muted'}`}>
                   {name}
                 </span>
               </button>

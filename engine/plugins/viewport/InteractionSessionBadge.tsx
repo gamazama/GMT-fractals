@@ -63,31 +63,31 @@ export const InteractionSessionBadge: React.FC<InteractionSessionBadgeProps> = (
     const polledInteracting = st.isInteracting();
 
     const dot = (on: boolean) => (
-        <span className={`inline-block w-2 h-2 rounded-full ${on ? 'bg-cyan-400' : 'bg-gray-600'}`} />
+        <span className={`inline-block w-2 h-2 rounded-full ${on ? 'bg-accent-400' : 'bg-fg-faint'}`} />
     );
 
     return (
         <div
-            className={`fixed left-[50px] top-1/2 -translate-y-1/2 z-50 pointer-events-none select-none font-mono text-[10px] leading-tight px-2 py-1.5 rounded bg-black/70 border border-cyan-500/30 text-cyan-200 ${className}`}
+            className={`fixed left-[50px] top-1/2 -translate-y-1/2 z-50 pointer-events-none select-none font-mono text-[10px] leading-tight px-2 py-1.5 rounded bg-surface/80 border border-accent-500/30 text-accent-300 ${className}`}
             title="ADR-0061 InteractionSession (dev overlay)"
         >
-            <div className="flex items-center gap-1.5 text-cyan-400 font-semibold mb-0.5">
+            <div className="flex items-center gap-1.5 text-accent-400 font-semibold mb-0.5">
                 {dot(polledInteracting)} Interaction Session
             </div>
             <div>
-                <span className="text-gray-400">interacting:</span>{' '}
-                <span className={polledInteracting ? 'text-cyan-300' : 'text-gray-500'}>
+                <span className="text-fg-muted">interacting:</span>{' '}
+                <span className={polledInteracting ? 'text-accent-300' : 'text-fg-dim'}>
                     {String(polledInteracting)}
                 </span>
-                <span className="text-gray-600">{edgeInteracting === polledInteracting ? '' : ' (tail)'}</span>
+                <span className="text-fg-faint">{edgeInteracting === polledInteracting ? '' : ' (tail)'}</span>
             </div>
             <div>
-                <span className="text-gray-400">sources:</span>{' '}
-                <span className={sources.length ? 'text-cyan-300' : 'text-gray-500'}>
+                <span className="text-fg-muted">sources:</span>{' '}
+                <span className={sources.length ? 'text-accent-300' : 'text-fg-dim'}>
                     {sources.length ? sources.join(', ') : '—'}
                 </span>
                 {tailOnly.length > 0 && (
-                    <span className="text-gray-500"> +{tailOnly.join(', ')} (tail)</span>
+                    <span className="text-fg-dim"> +{tailOnly.join(', ')} (tail)</span>
                 )}
             </div>
         </div>

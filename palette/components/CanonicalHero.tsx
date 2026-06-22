@@ -155,9 +155,9 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
     <div className={className} data-gx-target={targetId} data-gx-selectable="">
       <div className="flex items-center justify-between mb-1 gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs text-gray-300 font-medium truncate">{name}</span>
+          <span className="text-xs text-fg-tertiary font-medium truncate">{name}</span>
           {source && source !== name && (
-            <span className="text-[10px] text-gray-500 truncate shrink-0">{source}</span>
+            <span className="text-[10px] text-fg-dim truncate shrink-0">{source}</span>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -173,7 +173,7 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
             aria-pressed={!!savedId}
             className={`flex items-center gap-1 leading-none rounded-sm transition-colors ${
               inRail ? 'text-[12px] px-2.5 py-2' : 'text-[11px] px-1.5 py-1'
-            } ${savedId ? 'bg-amber-400/20 text-amber-200' : 'bg-white/[0.06] text-gray-300 hover:text-white'}`}
+            } ${savedId ? 'bg-warn/20 text-warn' : 'bg-line/[0.06] text-fg-tertiary hover:text-fg'}`}
           >
             <span aria-hidden>{savedId ? '★' : '☆'}</span>
             {inRail && (savedId ? 'Saved' : 'Save')}
@@ -186,7 +186,7 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
             aria-label="Toggle hero height"
             aria-pressed={enlarged}
             className={`text-[11px] leading-none rounded-sm transition-colors ${inRail ? 'px-2.5 py-2' : 'px-1.5 py-1'} ${
-              enlarged ? 'bg-cyan-500/20 text-cyan-200' : 'bg-white/[0.06] text-gray-400 hover:text-gray-200'
+              enlarged ? 'bg-accent-500/20 text-accent-300' : 'bg-line/[0.06] text-fg-muted hover:text-fg-secondary'
             }`}
           >
             ⬍
@@ -229,10 +229,10 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
         }
         className={`overflow-hidden rounded-md cursor-grab active:cursor-grabbing transition-[box-shadow,background-color] duration-150 ${
           active
-            ? 'ring-2 ring-cyan-400 shadow-[0_0_16px_rgba(34,211,238,0.30)] bg-cyan-500/15 p-1'
+            ? 'ring-2 ring-accent-400 shadow-[0_0_16px_rgb(var(--accent-glow)/0.30)] bg-accent-500/15 p-1'
             : isSelected
-              ? 'ring-2 ring-cyan-400/50'
-              : 'ring-1 ring-white/15 hover:ring-white/30'
+              ? 'ring-2 ring-accent-400/50'
+              : 'ring-1 ring-line/15 hover:ring-line/30'
         }`}
       >
         {/* Shrink the ramp by the p-1 frame (8px) when active so the matte appears WITHOUT

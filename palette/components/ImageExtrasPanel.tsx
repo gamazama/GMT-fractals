@@ -96,8 +96,8 @@ export const ImageExtrasPanel: React.FC = () => {
   }, [ramp, flash, guard]);
 
   return (
-    <div className="px-1 pt-2 mt-1 border-t border-white/10">
-      <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Export</div>
+    <div className="px-1 pt-2 mt-1 border-t border-line/10">
+      <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1">Export</div>
       <GenericDropdown
         value={exportFmt}
         options={EXPORT_FORMATS.map((f) => ({ label: f.label, value: f.key }))}
@@ -105,23 +105,23 @@ export const ImageExtrasPanel: React.FC = () => {
         fullWidth
       />
       {aiWarn > 0 && (
-        <div className="mt-1 text-[10px] leading-snug text-gray-400">
+        <div className="mt-1 text-[10px] leading-snug text-fg-muted">
           Heads up: swatch libraries (.ai/.idml) hold up to {AI_STOP_LIMIT} colour stops, so this one exports with {aiWarn}. Most apps cap stops similarly.
         </div>
       )}
       {showPreview && (
-        <pre className="mt-1.5 max-h-32 overflow-auto text-[10px] leading-tight text-gray-400 bg-black/50 rounded-sm p-2 border border-white/5 whitespace-pre">
+        <pre className="mt-1.5 max-h-32 overflow-auto text-[10px] leading-tight text-fg-muted bg-surface-section rounded-sm p-2 border border-line/5 whitespace-pre">
           {previewText}
         </pre>
       )}
       <div className="flex items-center gap-1.5 mt-1.5">
-        <button onClick={doCopy} disabled={fmtDef.binary} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/[0.06]">
+        <button onClick={doCopy} disabled={fmtDef.binary} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-line/[0.06] text-fg-secondary hover:bg-line/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-line/[0.06]">
           Copy
         </button>
-        <button onClick={doDownload} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors">
+        <button onClick={doDownload} className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-line/[0.06] text-fg-secondary hover:bg-line/10 transition-colors">
           Download
         </button>
-        <button onClick={doPng} className="text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors">
+        <button onClick={doPng} className="text-[11px] px-2 py-1 rounded-sm bg-line/[0.06] text-fg-secondary hover:bg-line/10 transition-colors">
           PNG
         </button>
         <button
@@ -129,13 +129,13 @@ export const ImageExtrasPanel: React.FC = () => {
           title={showPreview ? 'Hide output preview' : 'Show output preview'}
           aria-label="Toggle output preview"
           aria-pressed={showPreview}
-          className="ml-0.5 pl-1.5 border-l border-white/10 text-[11px] px-2 py-1 rounded-sm text-gray-400 hover:text-gray-200 transition-colors"
+          className="ml-0.5 pl-1.5 border-l border-line/10 text-[11px] px-2 py-1 rounded-sm text-fg-muted hover:text-fg-secondary transition-colors"
         >
           {showPreview ? '▾' : '▸'}
         </button>
       </div>
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/85 text-gray-100 text-xs px-3 py-1.5 rounded-full border border-white/10 shadow-xl z-50">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-surface/80 text-fg-secondary text-xs px-3 py-1.5 rounded-full border border-line/10 shadow-xl z-50">
           {toast}
         </div>
       )}

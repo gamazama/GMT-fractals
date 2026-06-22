@@ -40,7 +40,7 @@ import { useMobileLayout, isMobileSnapshot } from '../hooks/useMobileLayout';
 import { getShaderCompilerPresets, getScalabilityLabel } from '../types/viewport';
 
 const TopBarDivider: React.FC = () => (
-    <div className="h-6 w-px bg-white/10 mx-1" />
+    <div className="h-6 w-px bg-line/10 mx-1" />
 );
 
 // `when:` predicate for topbar items that should hide on mobile.
@@ -56,8 +56,8 @@ const desktopOnly = () => !isMobileSnapshot();
 // Quality preset). Kept here rather than in theme.ts because it's
 // specific to the menu-embedded pill row pattern.
 const PILL_BASE = 'text-[11px] px-2 py-1 rounded border transition-colors';
-const PILL_ACTIVE = 'bg-cyan-500/20 text-cyan-200 border-cyan-500/40';
-const PILL_INACTIVE = 'bg-black/40 text-gray-400 border-white/10 hover:text-white hover:border-white/30';
+const PILL_ACTIVE = 'bg-accent-500/20 text-cyan-200 border-accent-500/40';
+const PILL_INACTIVE = 'bg-surface-tabbar text-fg-muted border-line/10 hover:text-fg hover:border-line/30';
 const pillClass = (active: boolean, extra = ''): string =>
     `${PILL_BASE} ${active ? PILL_ACTIVE : PILL_INACTIVE} ${extra}`.trim();
 
@@ -86,8 +86,8 @@ const PathTracingToggle: React.FC = () => {
             title="Path tracing — physically-based lighting with accumulation"
             className={`flex items-center justify-center gap-1 text-[10px] font-medium px-2 py-1 rounded border transition-colors ${
                 active
-                    ? 'bg-purple-500/30 text-purple-200 border-purple-500/40'
-                    : 'bg-black/40 text-gray-400 border-white/10 hover:text-white hover:border-purple-500/40'
+                    ? 'bg-secondary/30 text-secondary border-secondary/40'
+                    : 'bg-surface-tabbar text-fg-muted border-line/10 hover:text-fg hover:border-secondary/40'
             }`}
         >
             PT
@@ -118,10 +118,10 @@ const RenderRegionToggle: React.FC = () => {
     };
 
     const cls = active
-        ? 'text-green-400 bg-green-900/30 border border-green-500/30'
+        ? 'text-ok bg-ok/15 border border-ok/30'
         : selecting
-            ? 'text-cyan-400 bg-cyan-900/30 border border-cyan-500/30'
-            : 'text-gray-500 border border-white/10 hover:text-white hover:border-cyan-500/40';
+            ? 'text-accent-400 bg-accent-900/30 border border-accent-500/30'
+            : 'text-fg-dim border border-line/10 hover:text-fg hover:border-accent-500/40';
     const title = active ? 'Clear Region' : selecting ? 'Cancel Selection' : 'Select Render Region';
 
     return (
@@ -148,7 +148,7 @@ const PlayingBadge: React.FC = () => {
     );
     if (!isPlaying) return null;
     return (
-        <span className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-green-300 bg-green-500/20 border border-green-500/40 rounded animate-pulse">
+        <span className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-ok bg-ok/20 border border-ok/40 rounded animate-pulse">
             ● Playing
         </span>
     );

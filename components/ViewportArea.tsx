@@ -173,7 +173,7 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ onSceneReady }) => {
     return (
         <div
             ref={viewportRef}
-            className="relative flex-1 flex items-center justify-center overflow-hidden bg-[#050505] touch-none"
+            className="relative flex-1 flex items-center justify-center overflow-hidden bg-surface-viewport touch-none"
             style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, #111 0%, #050505 100%)' : 'none' }}
             onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
             onMouseEnter={() => setMouseOverCanvas(true)}
@@ -185,7 +185,7 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ onSceneReady }) => {
             {!isCleanFeed && <PerformanceMonitor />}
             {!isCleanFeed && <AnimationSystem />}
 
-            <div ref={canvasContainerRef} style={wrapperStyle} className="relative bg-[#111] group z-0">
+            <div ref={canvasContainerRef} style={wrapperStyle} className="relative bg-surface group z-0">
                 {/* R3F Canvas — transparent overlay. Apps install a render
                     surface via SceneOverlays or by replacing this component. */}
                 <Canvas

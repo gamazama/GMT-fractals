@@ -166,7 +166,7 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
               transform: `scale(${fitScale})`,
               transformOrigin: 'center center',
               boxShadow: '0 0 50px rgba(0,0,0,0.5)',
-              border: '1px solid rgba(255,255,255,0.1)',
+              border: '1px solid rgb(var(--line) / 0.1)',
               flexShrink: 0,
           }
         : { width: '100%', height: '100%' };
@@ -183,8 +183,8 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
     return (
         <div
             ref={outerRef}
-            className={`relative flex-1 flex items-center justify-center overflow-hidden bg-[#050505] touch-none ${className}`}
-            style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, #111 0%, #050505 100%)' : 'none' }}
+            className={`relative flex-1 flex items-center justify-center overflow-hidden bg-surface-viewport touch-none ${className}`}
+            style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, rgb(var(--surface)) 0%, rgb(var(--surface-viewport)) 100%)' : 'none' }}
             // Track mouse-over-canvas for the adaptive-resolution loop's
             // settle-on-idle behaviour. The legacy ViewportArea wired
             // these handlers; the modern ViewportFrame missed them, so
@@ -205,7 +205,7 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
                 />
             )}
 
-            <div style={innerStyle} className={`relative bg-[#111] ${innerClassName}`}>
+            <div style={innerStyle} className={`relative bg-surface ${innerClassName}`}>
                 {children}
                 {/* Composition guides overlay — rendered on top of
                     children, sized to the inner container. Both apps

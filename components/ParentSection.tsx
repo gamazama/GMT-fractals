@@ -44,11 +44,11 @@ export const ParentSection: React.FC<ParentSectionProps> = ({
     return (
         <div className={`w-full flex flex-col rounded-t-sm relative ${className}`}>
             {/* Soft highlight overlay behind the whole block */}
-            <div className="absolute inset-0 bg-white/[0.06] rounded-t-sm pointer-events-none" />
+            <div className="absolute inset-0 bg-line/[0.06] rounded-t-sm pointer-events-none" />
 
             {/* Header row */}
-            <div className="flex items-center bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5 px-2">
-                <span className={`text-[10px] text-gray-400 font-medium tracking-tight select-none ${headerClassName}`}>
+            <div className="flex items-center bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-line/5 px-2">
+                <span className={`text-[10px] text-fg-muted font-medium tracking-tight select-none ${headerClassName}`}>
                     {label}
                 </span>
             </div>
@@ -60,9 +60,9 @@ export const ParentSection: React.FC<ParentSectionProps> = ({
                     const isLast = i === rows.length - 1;
                     return (
                         <div key={i} className="flex">
-                            <div className={`w-2 shrink-0 self-stretch border-l border-white/20 bg-white/[0.12] ${isLast ? 'border-b border-b-white/20 rounded-bl-lg' : ''}`} />
+                            <div className={`w-2 shrink-0 self-stretch border-l border-line/20 bg-line/[0.12] ${isLast ? 'border-b border-b-white/20 rounded-bl-lg' : ''}`} />
                             <div className={`flex-1 min-w-0 relative ${isLast ? 'border-b border-b-white/20' : ''}`}>
-                                <div className="absolute inset-0 bg-black/20 pointer-events-none z-10" />
+                                <div className="absolute inset-0 bg-surface-section pointer-events-none z-10" />
                                 {child}
                             </div>
                         </div>

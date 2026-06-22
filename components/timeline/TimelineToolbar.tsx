@@ -126,11 +126,11 @@ const KeyCamButton: React.FC = () => {
     return (
         <div
             className={`flex items-center gap-2 px-2 py-1 rounded transition-colors cursor-pointer border ${
-                status === 'keyed' ? 'bg-amber-900/40 hover:bg-amber-800/60 text-amber-200 border-amber-500/30' :
-                status === 'keyed-dirty' ? 'bg-red-900/40 hover:bg-red-800/60 text-red-200 border-red-500/30' :
-                status === 'dirty' ? 'bg-red-900/20 hover:bg-red-800/40 text-red-200 border-red-500/20' :
-                status === 'partial' ? 'bg-amber-900/20 hover:bg-amber-800/40 text-amber-100/70 border-amber-500/20' :
-                'bg-white/5 hover:bg-white/10 text-gray-400 border-white/10'
+                status === 'keyed' ? 'bg-warn/15 hover:bg-warn/25 text-warn border-warn/30' :
+                status === 'keyed-dirty' ? 'bg-danger/15 hover:bg-danger/25 text-danger border-danger/30' :
+                status === 'dirty' ? 'bg-danger/10 hover:bg-danger/20 text-danger border-danger/20' :
+                status === 'partial' ? 'bg-warn/10 hover:bg-warn/20 text-warn/70 border-warn/20' :
+                'bg-line/5 hover:bg-line/10 text-fg-muted border-line/10'
             }`}
             data-help-id="anim.camera"
             onClick={handleKeyCam}
@@ -268,15 +268,15 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
     };
 
     return (
-        <div className="h-8 border-b border-white/10 flex items-center px-2 gap-2 bg-white/5 shrink-0 z-50 select-none relative" data-help-id="ui.timeline" onContextMenu={handleContextMenu}>
+        <div className="h-8 border-b border-line/10 flex items-center px-2 gap-2 bg-line/5 shrink-0 z-50 select-none relative" data-help-id="ui.timeline" onContextMenu={handleContextMenu}>
             <div className="flex items-center gap-1 pr-2 mr-1" data-help-id="anim.transport">
                 <button onClick={stop} className="icon-btn"><StopIcon /></button>
-                <button onClick={isPlaying ? pause : play} className={`p-1.5 rounded text-white ${isPlaying ? (isRecordingModulation ? 'bg-red-600 animate-pulse' : 'bg-cyan-700') : 'bg-gray-700 hover:bg-gray-600'}`} title="Space">
+                <button onClick={isPlaying ? pause : play} className={`p-1.5 rounded text-fg ${isPlaying ? (isRecordingModulation ? 'bg-danger-strong animate-pulse' : 'bg-accent-700') : 'bg-fg-ghost hover:bg-fg-faint'}`} title="Space">
                     {isPlaying ? <PauseIcon /> : <PlayIcon />}
                 </button>
 
                 {/* Auto Key */}
-                <button onClick={toggleRecording} className={`icon-btn ${isRecording ? 'text-red-500 bg-red-900/20 shadow-[inset_0_0_8px_rgba(239,68,68,0.2)]' : 'hover:text-red-400'}`} title="Auto-Keyframe Mode (Record)">
+                <button onClick={toggleRecording} className={`icon-btn ${isRecording ? 'text-danger bg-danger/10 shadow-[inset_0_0_8px_rgb(var(--danger)/0.2)]' : 'hover:text-danger'}`} title="Auto-Keyframe Mode (Record)">
                     <RecordIcon active={isRecording} />
                 </button>
 
@@ -285,9 +285,9 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                     onClick={toggleArmModulation}
                     disabled={isPlaying && !isRecordingModulation}
                     className={`icon-btn ${
-                        isRecordingModulation ? 'text-white bg-red-600 animate-pulse' :
-                        isArmingModulation ? 'text-red-200 bg-red-900/40 border border-red-500/40' :
-                        'hover:text-red-200'
+                        isRecordingModulation ? 'text-fg bg-danger-strong animate-pulse' :
+                        isArmingModulation ? 'text-danger bg-danger/15 border border-danger/40' :
+                        'hover:text-danger'
                     }`}
                     title={isRecordingModulation ? "Recording Modulation..." : isArmingModulation ? "Modulation Record Armed (Press Play)" : "Record Audio/LFO Modulation"}
                 >
@@ -297,7 +297,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                 {/* Loop Toggle */}
                 <button
                     onClick={() => setLoopMode(loopMode === 'Loop' ? 'Once' : 'Loop')}
-                    className={`icon-btn ${loopMode === 'Loop' ? 'text-green-400' : 'text-gray-500'}`}
+                    className={`icon-btn ${loopMode === 'Loop' ? 'text-ok' : 'text-fg-dim'}`}
                     title={loopMode === 'Loop' ? "Looping" : "Play Once"}
                 >
                     <LoopIcon mode={loopMode} />
@@ -306,7 +306,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 
             {/* View Switcher: Dark Background, No external dividers, Wider Padding */}
             <div className="flex items-center h-full px-1">
-                <div className="flex bg-black rounded-md px-3 py-1 gap-2 shadow-sm items-center border border-white/10">
+                <div className="flex bg-surface rounded-md px-3 py-1 gap-2 shadow-sm items-center border border-line/10">
                     <button
                         onClick={() => setMode('DopeSheet')}
                         className={`icon-btn ${mode === 'DopeSheet' ? 'icon-btn-active' : ''}`}
@@ -328,8 +328,8 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5 t-label pl-1 pr-3">
-                <span className="text-gray-600">FRM</span>
-                <div className="w-10 h-5 bg-black/40 rounded border border-white/10 relative">
+                <span className="text-fg-faint">FRM</span>
+                <div className="w-10 h-5 bg-surface-sunken rounded border border-line/10 relative">
                     <DraggableNumber
                         value={Math.floor(currentFrame)}
                         onChange={handleSeek}
@@ -359,8 +359,8 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 
             <div className="flex gap-2">
                 <div className="flex items-center gap-1 t-label">
-                    <span className="text-gray-600">LEN</span>
-                    <div className="w-10 h-5 bg-black/40 rounded border border-white/10 relative">
+                    <span className="text-fg-faint">LEN</span>
+                    <div className="w-10 h-5 bg-surface-sunken rounded border border-line/10 relative">
                         <DraggableNumber
                             value={storeDuration}
                             onChange={setDuration}
@@ -372,12 +372,12 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                     </div>
                 </div>
 
-                {RenderPopupComponent && <div className="w-px bg-white/10 h-4 mx-1" />}
+                {RenderPopupComponent && <div className="w-px bg-line/10 h-4 mx-1" />}
 
                 {RenderPopupComponent && (
                     <button
                         onClick={() => setShowRender(!showRender)}
-                        className={`flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors text-[10px] ${showRender ? 'bg-cyan-900 border-cyan-500 text-white' : 'bg-transparent border-gray-700 text-gray-400 hover:text-white hover:bg-white/5'}`}
+                        className={`flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors text-[10px] ${showRender ? 'bg-accent-900 border-accent-500 text-fg' : 'bg-transparent border-line/20 text-fg-muted hover:text-fg hover:bg-line/5'}`}
                         title="Render Video"
                         data-help-id="export.video"
                     >
@@ -391,20 +391,20 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                 <button
                     ref={menuButtonRef}
                     onClick={toggleMenu}
-                    className={`ml-1 icon-btn ${showMenu ? 'bg-white/20 text-white' : ''}`}
+                    className={`ml-1 icon-btn ${showMenu ? 'bg-line/20 text-fg' : ''}`}
                 >
                     <MenuIcon />
                 </button>
                 {showMenu && menuPos && createPortal((
                     <div
                         ref={menuPanelRef}
-                        className="fixed w-48 bg-[#1a1f3a] border border-white/20 rounded shadow-xl z-[100] p-1 flex flex-col gap-1"
+                        className="fixed w-48 bg-[#1a1f3a] border border-line/20 rounded shadow-xl z-[100] p-1 flex flex-col gap-1"
                         style={{ top: menuPos.top, right: menuPos.right }}
                     >
 
-                        <div className="flex items-center justify-between px-3 py-2 text-xs text-gray-300">
+                        <div className="flex items-center justify-between px-3 py-2 text-xs text-fg-tertiary">
                             <span className="font-bold">FPS</span>
-                            <div className="w-12 h-5 bg-black/40 rounded border border-white/10 relative">
+                            <div className="w-12 h-5 bg-surface-sunken rounded border border-line/10 relative">
                                 <DraggableNumber
                                     value={fps}
                                     onChange={(v) => setFps(v, fpsMode)}
@@ -414,7 +414,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                             </div>
                         </div>
                         <div
-                            className="flex items-center justify-between px-3 pb-2 -mt-1 text-[10px] text-gray-400"
+                            className="flex items-center justify-between px-3 pb-2 -mt-1 text-[10px] text-fg-muted"
                             title={
                                 fpsMode === 'keep'
                                     ? "Keep frames: keys stay at the same frame index (visual time shifts)."
@@ -422,13 +422,13 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                             }
                         >
                             <span>On FPS change</span>
-                            <div className="flex bg-black/40 border border-white/10 rounded overflow-hidden">
+                            <div className="flex bg-surface-section border border-line/10 rounded overflow-hidden">
                                 <button
-                                    className={`px-2 py-0.5 ${fpsMode === 'keep' ? 'bg-cyan-700 text-white' : 'text-gray-400 hover:bg-white/5'}`}
+                                    className={`px-2 py-0.5 ${fpsMode === 'keep' ? 'bg-accent-700 text-fg' : 'text-fg-muted hover:bg-line/5'}`}
                                     onClick={() => setFpsMode('keep')}
                                 >Keep frames</button>
                                 <button
-                                    className={`px-2 py-0.5 ${fpsMode === 'match' ? 'bg-cyan-700 text-white' : 'text-gray-400 hover:bg-white/5'}`}
+                                    className={`px-2 py-0.5 ${fpsMode === 'match' ? 'bg-accent-700 text-fg' : 'text-fg-muted hover:bg-line/5'}`}
                                     onClick={() => setFpsMode('match')}
                                 >Match time</button>
                             </div>
@@ -436,29 +436,29 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 
                         <button
                             onClick={() => { toggleRecordCamera(); }}
-                            className="flex items-center justify-between px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded transition-colors"
+                            className="flex items-center justify-between px-3 py-2 text-xs text-fg-tertiary hover:bg-line/10 rounded transition-colors"
                         >
                             <span>Record Camera</span>
-                            {recordCamera && <span className="text-cyan-400"><CheckIcon /></span>}
+                            {recordCamera && <span className="text-accent-400"><CheckIcon /></span>}
                         </button>
 
                         <button
                             onClick={() => { setDeterministicPlayback(!deterministicPlayback); }}
-                            className="flex items-center justify-between px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded transition-colors"
+                            className="flex items-center justify-between px-3 py-2 text-xs text-fg-tertiary hover:bg-line/10 rounded transition-colors"
                             title="Throttle live playback to the project FPS so the preview matches the exported video frame-for-frame, regardless of monitor refresh."
                         >
                             <span>Deterministic Playback</span>
-                            {deterministicPlayback && <span className="text-cyan-400"><CheckIcon /></span>}
+                            {deterministicPlayback && <span className="text-accent-400"><CheckIcon /></span>}
                         </button>
 
                         {renderAdjuncts.length > 0 && (
                             <>
-                                <div className="h-px bg-white/10 mx-1"/>
+                                <div className="h-px bg-line/10 mx-1"/>
                                 {renderAdjuncts.map((adj) => (
                                     <button
                                         key={adj.label}
                                         onClick={() => { setActiveAdjunct(adj); setShowMenu(false); }}
-                                        className="text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded transition-colors"
+                                        className="text-left px-3 py-2 text-xs text-fg-tertiary hover:bg-line/10 rounded transition-colors"
                                         title={adj.title}
                                     >
                                         {adj.label}
@@ -467,16 +467,16 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                             </>
                         )}
 
-                        <div className="h-px bg-white/10 mx-1"/>
+                        <div className="h-px bg-line/10 mx-1"/>
                         <button
                             onClick={() => { deleteAllKeys(); setShowMenu(false); }}
-                            className="text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded transition-colors"
+                            className="text-left px-3 py-2 text-xs text-fg-tertiary hover:bg-line/10 rounded transition-colors"
                         >
                             Delete All Keys
                         </button>
                         <button
                             onClick={() => { deleteAllTracks(); setShowMenu(false); }}
-                            className="text-left px-3 py-2 text-xs text-red-400 hover:bg-red-900/20 hover:text-red-300 rounded transition-colors"
+                            className="text-left px-3 py-2 text-xs text-danger hover:bg-danger/10 hover:text-danger rounded transition-colors"
                         >
                             Delete All Tracks
                         </button>

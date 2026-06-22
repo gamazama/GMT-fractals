@@ -127,17 +127,17 @@ const EmptyDeckSlot: React.FC<{ deckIndex: 0 | 1; sidebarWidth: number }> = ({ d
     };
 
     return (
-        <div className="flex border-b border-white/5 bg-transparent" style={{ height: STRIP_HEIGHT }}>
+        <div className="flex border-b border-line/5 bg-transparent" style={{ height: STRIP_HEIGHT }}>
             <div
-                className="sticky left-0 z-30 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-3"
+                className="sticky left-0 z-30 bg-surface/80 backdrop-blur-sm border-r border-line/10 shrink-0 flex items-center px-3"
                 style={{ width: sidebarWidth }}
             >
-                <span className="text-[10px] font-bold text-gray-500">Audio {String.fromCharCode(65 + deckIndex)}</span>
+                <span className="text-[10px] font-bold text-fg-dim">Audio {String.fromCharCode(65 + deckIndex)}</span>
             </div>
             <div className="flex-1 flex items-center justify-start pl-2">
                 <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="px-3 py-1 border border-dashed border-white/10 rounded text-[9px] text-gray-500 hover:text-cyan-400 hover:border-cyan-500/30 transition-all font-bold flex items-center gap-1"
+                    className="px-3 py-1 border border-dashed border-line/10 rounded text-[9px] text-fg-dim hover:text-accent-400 hover:border-accent-500/30 transition-all font-bold flex items-center gap-1"
                 >
                     <UploadIcon /> Load Audio
                 </button>
@@ -217,17 +217,17 @@ const AudioStripInner: React.FC<AudioStripProps> = ({ clip, frameWidth, sidebarW
     };
 
     return (
-        <div className="flex border-b border-white/5 bg-transparent" style={{ height: STRIP_HEIGHT }}>
+        <div className="flex border-b border-line/5 bg-transparent" style={{ height: STRIP_HEIGHT }}>
             <div
-                className="sticky left-0 z-30 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center justify-between px-3 group select-none"
+                className="sticky left-0 z-30 bg-surface/80 backdrop-blur-sm border-r border-line/10 shrink-0 flex items-center justify-between px-3 group select-none"
                 style={{ width: sidebarWidth }}
             >
-                <span className="truncate text-[10px] font-bold text-purple-300" title={clip.fileName}>
+                <span className="truncate text-[10px] font-bold text-secondary" title={clip.fileName}>
                     {clip.fileName}
                 </span>
                 <button
                     onClick={handleRemove}
-                    className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-0.5"
+                    className="opacity-0 group-hover:opacity-100 text-danger hover:text-danger p-0.5"
                     title="Remove audio clip"
                 >
                     <CloseIcon />
@@ -235,7 +235,7 @@ const AudioStripInner: React.FC<AudioStripProps> = ({ clip, frameWidth, sidebarW
             </div>
             <div className="flex-1 relative overflow-visible">
                 <div
-                    className="absolute top-2 bg-purple-900/30 border border-purple-500/40 rounded cursor-grab active:cursor-grabbing overflow-hidden"
+                    className="absolute top-2 bg-secondary/30 border border-secondary/40 rounded cursor-grab active:cursor-grabbing overflow-hidden"
                     style={{ left: leftPx, width: Math.max(8, widthPx), height: STRIP_HEIGHT - 16 }}
                     onMouseDown={startDrag('move')}
                     title="Drag to move clip"
@@ -249,18 +249,18 @@ const AudioStripInner: React.FC<AudioStripProps> = ({ clip, frameWidth, sidebarW
                         />
                     ) : (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <span className="text-[9px] font-bold text-purple-300/70 tracking-wider animate-pulse">
+                            <span className="text-[9px] font-bold text-secondary/70 tracking-wider animate-pulse">
                                 Decoding…
                             </span>
                         </div>
                     )}
                     <div
-                        className="absolute top-0 left-0 bottom-0 w-2 cursor-ew-resize bg-purple-400/40 hover:bg-white/60"
+                        className="absolute top-0 left-0 bottom-0 w-2 cursor-ew-resize bg-secondary/40 hover:bg-line/60"
                         onMouseDown={startDrag('trim_left')}
                         title="Trim start"
                     />
                     <div
-                        className="absolute top-0 right-0 bottom-0 w-2 cursor-ew-resize bg-purple-400/40 hover:bg-white/60"
+                        className="absolute top-0 right-0 bottom-0 w-2 cursor-ew-resize bg-secondary/40 hover:bg-line/60"
                         onMouseDown={startDrag('trim_right')}
                         title="Trim end"
                     />
@@ -290,14 +290,14 @@ export const AudioGroup: React.FC<AudioGroupProps> = ({ frameWidth, sidebarWidth
     return (
         <>
             <div
-                className="flex border-b border-white/5 bg-purple-950/40 sticky top-6 z-20"
+                className="flex border-b border-line/5 bg-secondary/40 sticky top-6 z-20"
                 style={{ height: 24 }}
             >
                 <div
-                    className="sticky left-0 z-30 bg-purple-900/40 border-r border-white/10 shrink-0 flex items-center px-2 select-none"
+                    className="sticky left-0 z-30 bg-secondary/40 border-r border-line/10 shrink-0 flex items-center px-2 select-none"
                     style={{ width: sidebarWidth }}
                 >
-                    <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Audio</span>
+                    <span className="text-[10px] font-bold text-secondary uppercase tracking-wider">Audio</span>
                 </div>
                 <div className="flex-1" />
             </div>

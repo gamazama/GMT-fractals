@@ -312,11 +312,11 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
         
         return parts.map((part, j) => {
             if (part.startsWith('**') && part.endsWith('**')) {
-                return <strong key={j} className="text-white font-bold">{part.slice(2, -2)}</strong>;
+                return <strong key={j} className="text-fg font-bold">{part.slice(2, -2)}</strong>;
             }
             if (part.startsWith('$') && part.endsWith('$')) {
                 // Math styling: Serif, Italic, Cyan tint
-                return <span key={j} className="font-serif italic text-cyan-300 px-0.5">{part.slice(1, -1)}</span>;
+                return <span key={j} className="font-serif italic text-accent-300 px-0.5">{part.slice(1, -1)}</span>;
             }
             if (part.startsWith('[') && part.includes('](') && part.endsWith(')')) {
                 const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
@@ -327,7 +327,7 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                             href={match[2]} 
                             target="_blank" 
                             rel="noopener noreferrer" 
-                            className="text-cyan-400 hover:underline hover:text-cyan-300 transition-colors cursor-pointer"
+                            className="text-accent-400 hover:underline hover:text-accent-300 transition-colors cursor-pointer"
                             onClick={(e) => e.stopPropagation()}
                         >
                             {match[1]}
@@ -342,27 +342,27 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
     // Simple Markdown Parser
     const renderContent = (content: string) => {
         return content.split('\n').map((line, i) => {
-            if (line.startsWith('### ')) return <h3 key={i} className="text-sm font-bold text-white mt-4 mb-2">{line.replace('### ', '')}</h3>;
-            if (line.startsWith('## ')) return <h2 key={i} className="text-base font-bold text-cyan-400 mt-5 mb-2 border-b border-white/10 pb-1">{line.replace('## ', '')}</h2>;
+            if (line.startsWith('### ')) return <h3 key={i} className="text-sm font-bold text-fg mt-4 mb-2">{line.replace('### ', '')}</h3>;
+            if (line.startsWith('## ')) return <h2 key={i} className="text-base font-bold text-accent-400 mt-5 mb-2 border-b border-line/10 pb-1">{line.replace('## ', '')}</h2>;
             
             // Block Math: $$ ... $$
             if (line.startsWith('$$')) {
                 const mathText = line.replace(/^\$\$\s*/, '').replace(/\s*\$\$$/, '');
                 return (
-                    <div key={i} className="font-serif italic text-center text-cyan-200 bg-black/30 p-3 rounded-lg my-3 text-sm border border-white/10 shadow-sm overflow-x-auto">
+                    <div key={i} className="font-serif italic text-center text-cyan-200 bg-surface-section p-3 rounded-lg my-3 text-sm border border-line/10 shadow-sm overflow-x-auto">
                         {mathText}
                     </div>
                 );
             }
             
             if (line.startsWith('- ')) {
-                return <li key={i} className="ml-4 text-xs text-gray-300 mb-1">{parseInline(line.replace('- ', ''))}</li>;
+                return <li key={i} className="ml-4 text-xs text-fg-tertiary mb-1">{parseInline(line.replace('- ', ''))}</li>;
             }
             
             if (line.trim() === '') return <div key={i} className="h-2" />;
             
             return (
-                <p key={i} className="text-xs text-gray-300 leading-relaxed mb-1">
+                <p key={i} className="text-xs text-fg-tertiary leading-relaxed mb-1">
                     {parseInline(line)}
                 </p>
             );
@@ -403,7 +403,7 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                         <button
                             onClick={() => handleSidebarNavigate(t.id)}
                             className={`flex-1 text-left py-1.5 text-xs rounded-l transition-colors truncate flex items-center ${
-                                isSelected ? 'bg-cyan-900/50 text-cyan-300 border-l-2 border-cyan-500' : 'text-gray-400 hover:text-white hover:bg-white/5 border-l-2 border-transparent'
+                                isSelected ? 'bg-accent-900/50 text-accent-300 border-l-2 border-accent-500' : 'text-fg-muted hover:text-fg hover:bg-line/5 border-l-2 border-transparent'
                             }`}
                             style={{ paddingLeft: `${8 + depth * 12}px` }}
                         >
@@ -412,7 +412,7 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                         {hasChildren && (
                             <button 
                                 onClick={(e) => toggleExpand(t.id, e)}
-                                className={`p-2 hover:text-white transition-colors rounded-r ${isSelected ? 'bg-cyan-900/50 text-cyan-400' : 'text-gray-600 hover:bg-white/5'}`}
+                                className={`p-2 hover:text-fg transition-colors rounded-r ${isSelected ? 'bg-accent-900/50 text-accent-400' : 'text-fg-faint hover:bg-line/5'}`}
                             >
                                 {isExpanded ? <ChevronDown /> : <ChevronRight />}
                             </button>
@@ -440,20 +440,20 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
         >
             <div className="flex h-full -m-3">
                 {/* Sidebar */}
-                <div className="w-[30%] bg-black/40 border-r border-white/10 flex flex-col shrink-0">
-                    <div className="p-2 border-b border-white/10">
+                <div className="w-[30%] bg-surface-section border-r border-line/10 flex flex-col shrink-0">
+                    <div className="p-2 border-b border-line/10">
                         <input 
                             type="text" 
                             placeholder="Search..." 
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500 transition-colors"
+                            className="w-full bg-surface-sunken border border-line/20 rounded px-2 py-1 text-xs text-fg outline-none focus:border-accent-500 transition-colors"
                         />
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scroll p-2">
                         {Object.entries(categories).map(([cat, topics]) => (
                             <div key={cat} className="mb-3">
-                                <div className="text-[10px] font-bold text-gray-500 mb-1 px-2 sticky top-0 bg-[#151515]/95 z-10 backdrop-blur-sm py-1 border-b border-white/5">
+                                <div className="text-[10px] font-bold text-fg-dim mb-1 px-2 sticky top-0 bg-surface-raised/95 z-10 backdrop-blur-sm py-1 border-b border-line/5">
                                     {cat}
                                 </div>
                                 {renderTopicTree(topics as HelpSection[])}
@@ -465,11 +465,11 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                 {/* Content - SCROLLABLE AREA */}
                 <div
                     ref={contentRef}
-                    className="flex-1 bg-gray-900/50 overflow-y-auto custom-scroll p-6"
+                    className="flex-1 bg-surface-sunken/50 overflow-y-auto custom-scroll p-6"
                 >
                     {!searchTerm && (
-                        <div className="mb-6 pb-2 border-b border-white/10">
-                            <h2 className="text-2xl font-bold text-gray-700 tracking-tighter">{activeCategory}</h2>
+                        <div className="mb-6 pb-2 border-b border-line/10">
+                            <h2 className="text-2xl font-bold text-fg-ghost tracking-tighter">{activeCategory}</h2>
                         </div>
                     )}
 
@@ -483,10 +483,10 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                                 className={`transition-all duration-500 scroll-mt-24 ${topic.id === activeTopicId ? 'opacity-100 scale-100' : 'opacity-40 scale-[0.98] blur-[0.5px] grayscale hover:opacity-80 hover:grayscale-0 hover:blur-0 cursor-pointer'}`}
                                 onClick={() => { if(topic.id !== activeTopicId) onNavigate(topic.id); }}
                             >
-                                <div className="flex items-baseline justify-between border-b border-white/10 pb-2 mb-4">
-                                    <h1 className="text-xl font-bold text-white">{topic.title}</h1>
+                                <div className="flex items-baseline justify-between border-b border-line/10 pb-2 mb-4">
+                                    <h1 className="text-xl font-bold text-fg">{topic.title}</h1>
                                     {searchTerm && (
-                                        <span className="text-[9px] font-mono text-gray-600 bg-black/40 px-2 py-1 rounded">
+                                        <span className="text-[9px] font-mono text-fg-faint bg-surface-section px-2 py-1 rounded">
                                             {topic.category}
                                         </span>
                                     )}
@@ -497,11 +497,11 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                             </div>
                         ))}
                         {visibleTopics.length === 0 && (
-                            <div className="text-center text-gray-500 italic mt-10">No matching topics found.</div>
+                            <div className="text-center text-fg-dim italic mt-10">No matching topics found.</div>
                         )}
                     </div>
                     
-                    <div className="h-32 flex items-center justify-center text-gray-600 text-xs italic">
+                    <div className="h-32 flex items-center justify-center text-fg-faint text-xs italic">
                         End of Section
                     </div>
                 </div>

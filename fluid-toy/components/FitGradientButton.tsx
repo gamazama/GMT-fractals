@@ -44,10 +44,10 @@ export const FitGradientButton: React.FC = () => {
                 title="Fit the gradient to this view's iteration range. Colours then hold until you re-fit or reset."
                 className={`px-2 h-6 rounded text-[10px] border transition-colors ${
                     flash === 'ok'
-                        ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-200'
+                        ? 'border-ok/40 bg-ok/20 text-ok'
                         : flash === 'empty'
-                            ? 'border-amber-500/40 bg-amber-500/20 text-amber-200'
-                            : 'border-white/10 bg-black/30 text-gray-300 hover:text-white hover:bg-white/10'
+                            ? 'border-warn/40 bg-warn/20 text-warn'
+                            : 'border-line/10 bg-surface/80 text-fg-tertiary hover:text-fg hover:bg-line/10'
                 }`}
             >
                 {flash === 'empty' ? 'no range' : '⊞ Fit gradient'}
@@ -57,7 +57,7 @@ export const FitGradientButton: React.FC = () => {
                     type="button"
                     onClick={reset}
                     title="Clear the Fit anchor (back to absolute log — colours hold, full range)"
-                    className="px-2 h-6 rounded text-[10px] border border-violet-500/30 text-violet-200 hover:bg-violet-500/10 transition-colors"
+                    className="px-2 h-6 rounded text-[10px] border border-secondary/30 text-secondary hover:bg-secondary/10 transition-colors"
                 >
                     ↺ fit
                 </button>

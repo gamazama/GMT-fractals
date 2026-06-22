@@ -61,9 +61,9 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
     const handleMouseLeave = () => setShowTooltip(false);
 
     // Dense spreadsheet styling
-    const textColor = status === 'overridden' ? 'text-purple-400/60'
-        : status === 'pending' ? 'text-amber-400'
-        : isActive ? 'text-gray-300' : 'text-gray-500';
+    const textColor = status === 'overridden' ? 'text-secondary/60'
+        : status === 'pending' ? 'text-warn'
+        : isActive ? 'text-fg-tertiary' : 'text-fg-dim';
 
     // Status Light Logic
     let statusClass = '';
@@ -71,20 +71,20 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
 
     switch (status) {
         case 'overridden':
-            statusClass = 'bg-purple-500/50';
+            statusClass = 'bg-secondary/50';
             statusTitle = 'Controlled by Viewport Quality';
             break;
         case 'pending':
-            statusClass = 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)] animate-pulse';
+            statusClass = 'bg-warn-strong shadow-[0_0_6px_rgba(245,158,11,0.6)] animate-pulse';
             statusTitle = 'Pending Compilation (Click Apply)';
             break;
         case 'runtime':
-            statusClass = 'bg-blue-500 shadow-[0_0_4px_rgba(59,130,246,0.5)]';
+            statusClass = 'bg-info shadow-[0_0_4px_rgba(59,130,246,0.5)]';
             statusTitle = 'Runtime Uniform (Instant Update)';
             break;
         case 'synced':
         default:
-            statusClass = isActive ? 'bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.4)]' : 'bg-gray-700';
+            statusClass = isActive ? 'bg-ok-strong shadow-[0_0_4px_rgba(34,197,94,0.4)]' : 'bg-fg-ghost';
             statusTitle = 'Compiled & Active';
             break;
     }
@@ -111,7 +111,7 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
         <>
             <div 
                 ref={rowRef}
-                className={`flex items-center justify-between px-3 py-1.5 border-b border-white/5 hover:bg-white/5 transition-colors ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
+                className={`flex items-center justify-between px-3 py-1.5 border-b border-line/5 hover:bg-line/5 transition-colors ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
             >
@@ -129,7 +129,7 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
                 
                 <div className="flex items-center gap-3">
                     {options && onOptionChange ? (
-                         <div className="relative w-20 h-4 bg-black/40 border border-white/10 rounded-sm hover:border-white/30 transition-colors">
+                         <div className="relative w-20 h-4 bg-surface-sunken border border-line/10 rounded-sm hover:border-line/30 transition-colors">
                             <select
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                 value={numericValue}
@@ -142,12 +142,12 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
                                 {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                             <div className="absolute inset-0 flex items-center justify-between px-1.5 pointer-events-none">
-                                 <span className="text-[9px] text-cyan-400 font-mono font-medium truncate pr-1">{activeLabel}</span>
-                                 <span className="text-[6px] text-gray-500">▼</span>
+                                 <span className="text-[9px] text-accent-400 font-mono font-medium truncate pr-1">{activeLabel}</span>
+                                 <span className="text-[6px] text-fg-dim">▼</span>
                             </div>
                          </div>
                     ) : onNumericChange && numericValue !== undefined && typeof numericValue === 'number' && (
-                        <div className="w-10 h-4 bg-black/40 border border-white/10 relative overflow-hidden rounded-sm">
+                        <div className="w-10 h-4 bg-surface-sunken border border-line/10 relative overflow-hidden rounded-sm">
                              <DraggableNumber
                                 value={numericValue}
                                 onChange={onNumericChange} 
@@ -167,8 +167,8 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
                             onChange={() => onToggle(!isActive)}
                             className={`w-3 h-3 appearance-none border rounded-[2px] cursor-pointer transition-colors ${
                                 isActive 
-                                ? (status === 'pending' ? 'bg-amber-600 border-amber-500' : 'bg-cyan-600 border-cyan-500') 
-                                : 'bg-black/40 border-gray-600 hover:border-gray-400'
+                                ? (status === 'pending' ? 'bg-warn-strong border-warn' : 'bg-accent-600 border-accent-500')
+                                : 'bg-surface-sunken border-line/20 hover:border-line/20'
                             }`}
                         />
                     )}
@@ -185,7 +185,7 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
                         transform: 'translateY(-50%)'
                     }}
                 >
-                    <div className="bg-black text-white text-[9px] px-2 py-1 rounded border border-white/20 shadow-xl whitespace-nowrap">
+                    <div className="bg-surface-raised text-fg text-[9px] px-2 py-1 rounded border border-line/20 shadow-xl whitespace-nowrap">
                         {description}
                         {tooltipPos.side === 'left' ? (
                             <>

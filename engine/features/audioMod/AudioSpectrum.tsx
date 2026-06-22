@@ -394,7 +394,7 @@ export const AudioSpectrum: React.FC = () => {
     return (
         <div 
             ref={containerRef}
-            className="w-full h-32 bg-black border border-white/10 rounded overflow-hidden cursor-crosshair relative group"
+            className="w-full h-32 bg-black border border-line/10 rounded overflow-hidden cursor-crosshair relative group"
             style={{ display: audioState?.isEnabled ? 'block' : 'none' }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
@@ -407,14 +407,14 @@ export const AudioSpectrum: React.FC = () => {
             
             {/* Legend / Overlay */}
             <div className="absolute top-1 right-2 flex gap-2 pointer-events-none">
-                <div className="text-[8px] font-bold text-gray-500 bg-black/50 px-1 rounded">Ctrl+Drag = Gain</div>
-                <div className="text-[8px] font-bold text-gray-600 bg-black/50 px-1 rounded">
+                <div className="text-[8px] font-bold text-fg-dim bg-surface/80 px-1 rounded">Ctrl+Drag = Gain</div>
+                <div className="text-[8px] font-bold text-fg-faint bg-surface/80 px-1 rounded">
                     {isLogScale ? 'LOG' : 'LIN'}
                 </div>
             </div>
             
             {rules.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-gray-600 text-[10px]">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-fg-faint text-[10px]">
                     Double-click to add modulator
                 </div>
             )}

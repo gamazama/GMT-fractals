@@ -36,11 +36,11 @@ export interface GenericToggleSwitchProps<T> {
 
 // Map color prop string to vec-style toggle classes
 const getToggleColor = (color: string) => {
-    if (color.includes('red')) return { on: 'bg-red-500/30 text-red-300 border-red-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' };
-    if (color.includes('green')) return { on: 'bg-green-500/30 text-green-300 border-green-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' };
-    if (color.includes('amber') || color.includes('yellow')) return { on: 'bg-amber-500/30 text-amber-300 border-amber-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' };
-    if (color.includes('purple')) return { on: 'bg-purple-500/30 text-purple-300 border-purple-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' };
-    return { on: 'bg-cyan-500/30 text-cyan-300 border-cyan-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' };
+    if (color.includes('red')) return { on: 'bg-red-500/30 text-red-300 border-red-500/40', off: 'bg-line/[0.04] text-fg-faint border-line/5' };
+    if (color.includes('green')) return { on: 'bg-green-500/30 text-green-300 border-green-500/40', off: 'bg-line/[0.04] text-fg-faint border-line/5' };
+    if (color.includes('amber') || color.includes('yellow')) return { on: 'bg-amber-500/30 text-amber-300 border-amber-500/40', off: 'bg-line/[0.04] text-fg-faint border-line/5' };
+    if (color.includes('purple')) return { on: 'bg-purple-500/30 text-purple-300 border-purple-500/40', off: 'bg-line/[0.04] text-fg-faint border-line/5' };
+    return { on: 'bg-accent-500/30 text-accent-300 border-accent-500/40', off: 'bg-line/[0.04] text-fg-faint border-line/5' };
 };
 
 export function GenericToggleSwitch<T extends string | number | boolean>({
@@ -48,7 +48,7 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
     value,
     onChange,
     options,
-    color = 'bg-cyan-600',
+    color = 'bg-accent-600',
     onLfoToggle,
     isLfoActive,
     icon,
@@ -75,14 +75,14 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
         const tc = getToggleColor(color);
         return (
              <div
-                className={`flex items-center justify-between px-3 py-1 border-b border-white/5 hover:bg-white/5 transition-colors ${disabled ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
+                className={`flex items-center justify-between px-3 py-1 border-b border-line/5 hover:bg-line/5 transition-colors ${disabled ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
                 data-help-id={rest['data-help-id']}
                 onContextMenu={onContextMenu}
                 onClick={handleBooleanClick}
              >
                 <div className="flex items-center gap-2">
                     {icon}
-                    <span className="text-[10px] text-gray-400 font-medium tracking-tight truncate select-none">
+                    <span className="text-[10px] text-fg-muted font-medium tracking-tight truncate select-none">
                         {label}
                     </span>
                 </div>
@@ -105,9 +105,9 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
                 onContextMenu={onContextMenu}
             >
                 {label && (
-                    <div className="flex items-center bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5 px-2 gap-2">
+                    <div className="flex items-center bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-line/5 px-2 gap-2">
                         {icon}
-                        <span className="text-[10px] text-gray-400 font-medium tracking-tight truncate select-none pointer-events-none">
+                        <span className="text-[10px] text-fg-muted font-medium tracking-tight truncate select-none pointer-events-none">
                             {label}
                         </span>
                     </div>
@@ -125,10 +125,10 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
                                 onClick={() => handleClick(opt.value)}
                                 disabled={disabled}
                                 className={`
-                                    flex-1 min-w-0 flex items-center justify-center text-[9px] font-bold border-r border-white/5 last:border-r-0 transition-all truncate
+                                    flex-1 min-w-0 flex items-center justify-center text-[9px] font-bold border-r border-line/5 last:border-r-0 transition-all truncate
                                     ${value === opt.value
                                         ? optActive.on
-                                        : 'bg-white/[0.04] text-gray-600 hover:brightness-125'}
+                                        : 'bg-line/[0.04] text-fg-faint hover:brightness-125'}
                                 `}
                                 title={opt.tooltip || opt.label}
                             >
@@ -149,19 +149,19 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
             onContextMenu={onContextMenu}
         >
             <div
-                className={`group/toggle flex items-stretch h-9 md:h-[26px] overflow-hidden rounded-sm transition-colors ${label ? 'bg-white/[0.12]' : ''} ${disabled ? '' : 'cursor-pointer hover:bg-white/[0.18]'}`}
+                className={`group/toggle flex items-stretch h-9 md:h-[26px] overflow-hidden rounded-sm transition-colors ${label ? 'bg-line/[0.12]' : ''} ${disabled ? '' : 'cursor-pointer hover:bg-line/[0.18]'}`}
                 onClick={handleBooleanClick}
             >
                 {label && (
                     <div className="flex-1 flex items-center gap-2 px-2 min-w-0 select-none">
                         {icon}
-                        <span className="text-[10px] text-gray-400 group-hover/toggle:text-gray-300 font-medium tracking-tight truncate transition-colors">
+                        <span className="text-[10px] text-fg-muted group-hover/toggle:text-fg-tertiary font-medium tracking-tight truncate transition-colors">
                             {label}
                         </span>
                         {labelSuffix}
                     </div>
                 )}
-                <div className={`flex ${label ? 'border-l border-white/5' : 'flex-1'}`}>
+                <div className={`flex ${label ? 'border-l border-line/5' : 'flex-1'}`}>
                     <div
                         className={`
                             flex items-center justify-center gap-1 px-3 text-[10px] font-bold transition-all border-0 ${
@@ -177,10 +177,10 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
                             onClick={(e) => { e.stopPropagation(); if (!disabled) onLfoToggle(); }}
                             disabled={disabled}
                             className={`
-                                flex items-center justify-center px-2 text-[10px] font-bold transition-all border-l border-white/5 ${
+                                flex items-center justify-center px-2 text-[10px] font-bold transition-all border-l border-line/5 ${
                                 isLfoActive
-                                    ? 'bg-purple-500/30 text-purple-300'
-                                    : 'bg-white/[0.04] text-gray-600 hover:brightness-125'}
+                                    ? 'bg-secondary/30 text-secondary'
+                                    : 'bg-line/[0.04] text-fg-faint hover:brightness-125'}
                             `}
                             title="LFO"
                         >

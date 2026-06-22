@@ -58,7 +58,7 @@ export interface AccordionProps {
 
 const ChevronDown: React.FC<{ open: boolean }> = ({ open }) => (
     <svg
-        className={`w-3 h-3 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`}
+        className={`w-3 h-3 text-fg-dim transition-transform ${open ? 'rotate-180' : ''}`}
         viewBox="0 0 20 20"
         fill="currentColor"
     >
@@ -168,12 +168,12 @@ export const Accordion: React.FC<AccordionProps> = ({ sections, className = '' }
                     <div key={section.id} data-help-id={section.helpId} className="flex flex-col">
                         <div
                             className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors ${
-                                open ? 'bg-neutral-800' : 'bg-neutral-800/50 hover:bg-white/5'
+                                open ? 'bg-surface-raised' : 'bg-surface-raised/50 hover:bg-line/5'
                             }`}
                             onClick={() => toggle(section)}
                         >
                             <span
-                                className={`text-[10px] font-bold ${section.dimmed ? 'text-gray-600' : 'text-gray-300'}`}
+                                className={`text-[10px] font-bold ${section.dimmed ? 'text-fg-faint' : 'text-fg-tertiary'}`}
                             >
                                 {section.label}
                             </span>
@@ -184,7 +184,7 @@ export const Accordion: React.FC<AccordionProps> = ({ sections, className = '' }
                         {open && (
                             <div className="flex flex-col animate-fade-in">{section.children}</div>
                         )}
-                        {!isLast && <div className="h-px bg-white/10" />}
+                        {!isLast && <div className="h-px bg-line/10" />}
                     </div>
                 );
             })}

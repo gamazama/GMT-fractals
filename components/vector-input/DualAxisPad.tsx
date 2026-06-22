@@ -164,8 +164,8 @@ export const DualAxisPad: React.FC<DualAxisPadProps> = ({
                 w-6 h-9 md:h-[26px] flex-shrink-0 cursor-move overflow-hidden
                 transition-all duration-150 ease-out relative
                 ${isActive
-                    ? 'bg-white/10 border border-white/30'
-                    : 'bg-white/[0.08] border border-white/5'
+                    ? 'bg-line/10 border border-line/30'
+                    : 'bg-line/[0.08] border border-line/5'
                 }
                 ${disabled ? 'opacity-30 pointer-events-none' : ''}
             `}
@@ -226,8 +226,8 @@ export const DualAxisPad: React.FC<DualAxisPadProps> = ({
                     `}
                 >
                     <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-full h-[1px] bg-cyan-400/50 rotate-45" />
-                        <div className="absolute w-full h-[1px] bg-cyan-400/50 -rotate-45" />
+                        <div className="w-full h-[1px] bg-accent-400/50 rotate-45" />
+                        <div className="absolute w-full h-[1px] bg-accent-400/50 -rotate-45" />
                     </div>
                 </div>
             </div>

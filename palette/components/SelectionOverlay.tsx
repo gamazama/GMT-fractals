@@ -22,7 +22,7 @@ export interface SelectionOverlayState {
   dimInside: boolean;
 }
 
-const STROKE = '#22d3ee';
+const STROKE = 'rgb(var(--accent-400))';
 const MASK_ID = 'gx-sel-dim-mask';
 
 const shapeNodes = (shape: SelShape, fill: string, stroke?: string): React.ReactNode => {
@@ -60,7 +60,7 @@ export const SelectionOverlay: React.FC<{ overlay: SelectionOverlayState }> = ({
         </>
       )}
       {/* the painted swatches read better with a faint fill under the outline */}
-      {shape.kind === 'paint' && shapeNodes(shape, 'rgba(34,211,238,0.18)')}
+      {shape.kind === 'paint' && shapeNodes(shape, 'rgb(var(--accent-400)/0.18)')}
       {shapeNodes(shape, 'none', STROKE)}
     </svg>
   );

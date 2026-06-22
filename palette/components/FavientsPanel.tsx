@@ -85,7 +85,7 @@ const KebabIcon = () => (
 );
 
 const menuItemCls =
-  'w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-gray-300 hover:text-white hover:bg-white/10 transition-colors';
+  'w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-fg-tertiary hover:text-fg hover:bg-line/10 transition-colors';
 
 /** `accept` attribute for the gradient-file import picker (the text formats we parse). */
 const GRADIENT_FILE_ACCEPT = IMPORT_EXTENSIONS.map((e) => '.' + e).join(',');
@@ -320,14 +320,14 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
       <button
         onClick={() => setOpen((o) => !o)}
         title="Collection — save, load, export"
-        className={`flex items-center justify-center w-6 h-6 rounded transition-colors ${open ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+        className={`flex items-center justify-center w-6 h-6 rounded transition-colors ${open ? 'text-fg bg-line/10' : 'text-fg-muted hover:text-fg hover:bg-line/10'}`}
       >
         <KebabIcon />
       </button>
       {open && (
         <div
           ref={menuRef}
-          className="absolute right-0 top-full mt-1 w-52 bg-black/95 border border-white/15 rounded-lg shadow-2xl z-50 p-1"
+          className="absolute right-0 top-full mt-1 w-52 bg-surface border border-line/15 rounded-lg shadow-2xl z-50 p-1"
           style={{
             opacity: placed ? 1 : 0,
             transform: nudge.x || nudge.y ? `translate(${nudge.x}px, ${nudge.y}px)` : undefined,
@@ -338,16 +338,16 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
           <button className={menuItemCls} onClick={saveCollection}>Save collection (.json)</button>
           <button className={menuItemCls} onClick={() => pickFile('merge')}>Load &amp; merge…</button>
           <button className={menuItemCls} onClick={() => pickFile('replace')}>Replace from file…</button>
-          <button className={`${menuItemCls} hover:!text-red-300`} onClick={doClear}>Clear collection</button>
+          <button className={`${menuItemCls} hover:!text-danger`} onClick={doClear}>Clear collection</button>
 
-          <div className="h-px bg-white/10 my-1" />
-          <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider px-2 py-1">Export</div>
+          <div className="h-px bg-line/10 my-1" />
+          <div className="text-[9px] font-bold text-fg-dim uppercase tracking-wider px-2 py-1">Export</div>
           <div className="flex items-center gap-1 px-2 py-1" onClick={(e) => e.stopPropagation()}>
             <select
               value={zipFmt}
               onChange={(e) => setZipFmt(e.target.value)}
               title={isCollection ? 'Bundles every favourite into one file' : 'Per-gradient file format for the .zip'}
-              className="flex-1 min-w-0 bg-gray-900 border border-white/10 rounded text-[11px] text-gray-200 px-1 py-0.5 outline-none focus:border-cyan-500"
+              className="flex-1 min-w-0 bg-surface-sunken border border-line/10 rounded text-[11px] text-fg-secondary px-1 py-0.5 outline-none focus:border-accent-500"
             >
               {EXPORT_FORMATS.map((f) => (
                 <option key={f.key} value={f.key}>{f.label}</option>
@@ -356,13 +356,13 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
             <button
               onClick={exportFmt}
               title={isCollection ? `Export all ${favients.length} as one .${selFmt!.ext}` : `Export ${favients.length} files in a .zip`}
-              className="shrink-0 text-[11px] px-2 py-0.5 rounded bg-white/[0.06] text-gray-200 hover:bg-white/10 transition-colors"
+              className="shrink-0 text-[11px] px-2 py-0.5 rounded bg-line/[0.06] text-fg-secondary hover:bg-line/10 transition-colors"
             >
               {isCollection ? `.${selFmt!.ext}` : '.zip'}
             </button>
           </div>
           {lossy.length > 0 && (
-            <div className="px-2 pb-1 text-[10px] leading-snug text-gray-400">
+            <div className="px-2 pb-1 text-[10px] leading-snug text-fg-muted">
               {lossy.length} of {favients.length} use more than {AI_STOP_LIMIT} colour stops, so they export simplified to .{selFmt!.ext}. Most apps cap stops similarly.
             </div>
           )}
@@ -514,7 +514,7 @@ const FavientSwatch: React.FC<{
         data-slot
         {...(selectMode ? { 'data-gx-selectable': '' } : {})}
         {...dragProps}
-        className={`group flex items-center gap-2 px-1 py-1 rounded transition ${selected ? 'bg-cyan-500/10 ring-1 ring-cyan-400/40' : 'hover:bg-white/[0.06]'} ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
+        className={`group flex items-center gap-2 px-1 py-1 rounded transition ${selected ? 'bg-accent-500/10 ring-1 ring-accent-400/40' : 'hover:bg-line/[0.06]'} ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
       >
         {/* Strip selects/applies; name double-click renames (separate targets so renaming
             doesn't fire it). */}
@@ -522,7 +522,7 @@ const FavientSwatch: React.FC<{
           ref={ref}
           onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
           style={{ width: cw, height: ch }}
-          className="block shrink-0 rounded-[2px] ring-1 ring-white/10 overflow-hidden cursor-pointer"
+          className="block shrink-0 rounded-[2px] ring-1 ring-line/10 overflow-hidden cursor-pointer"
         />
         <div className="min-w-0 flex-1">
           {editing ? (
@@ -537,18 +537,18 @@ const FavientSwatch: React.FC<{
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               placeholder="Name"
-              className="w-full bg-transparent text-[11px] text-gray-100 outline-none border-b border-white/25"
+              className="w-full bg-transparent text-[11px] text-fg-secondary outline-none border-b border-line/25"
             />
           ) : (
             <div
-              className="text-[11px] text-gray-200 truncate cursor-text"
+              className="text-[11px] text-fg-secondary truncate cursor-text"
               onClick={(e) => { e.stopPropagation(); setEditing(true); }}
               title="Click to rename"
             >
               {fav.name}
             </div>
           )}
-          {caption && <div className="text-[9px] text-gray-500 truncate">{caption}</div>}
+          {caption && <div className="text-[9px] text-fg-dim truncate">{caption}</div>}
         </div>
       </div>
     );
@@ -568,7 +568,7 @@ const FavientSwatch: React.FC<{
       <button
         onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
         className={`block rounded-[2px] origin-center transition-transform cursor-grab active:cursor-grabbing overflow-hidden ${
-          selected ? 'scale-[1.4] ring-2 ring-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.45)]' : 'ring-1 ring-white/10 hover:ring-amber-300/80'
+          selected ? 'scale-[1.4] ring-2 ring-accent-400 shadow-[0_0_12px_rgb(var(--accent-glow)/0.45)]' : 'ring-1 ring-line/10 hover:ring-warn/80'
         }`}
       >
         <canvas ref={ref} style={{ width: cw, height: ch }} className="block" />
@@ -579,9 +579,9 @@ const FavientSwatch: React.FC<{
 
 const Placeholder: React.FC<{ w: number; h: number; list?: boolean }> = ({ w, h, list }) =>
   list ? (
-    <div className="h-0.5 my-0.5 rounded-full bg-cyan-300/70" />
+    <div className="h-0.5 my-0.5 rounded-full bg-accent-300/70" />
   ) : (
-    <div className="shrink-0 rounded-[2px] border border-dashed border-cyan-300/70 bg-cyan-300/10" style={{ width: w, height: h }} />
+    <div className="shrink-0 rounded-[2px] border border-dashed border-accent-300/70 bg-accent-300/10" style={{ width: w, height: h }} />
   );
 
 const GroupDivider: React.FC<{ label: string; onRename: (v: string) => void; autoFocus: boolean }> = ({ label, onRename, autoFocus }) => {
@@ -600,9 +600,9 @@ const GroupDivider: React.FC<{ label: string; onRename: (v: string) => void; aut
         onBlur={favEditEnd}
         onChange={(e) => onRename(e.target.value)}
         placeholder="Group name"
-        className="bg-transparent text-[10px] uppercase tracking-wide text-gray-300 placeholder-gray-600 outline-none border-b border-transparent focus:border-white/25 w-28"
+        className="bg-transparent text-[10px] uppercase tracking-wide text-fg-tertiary placeholder-gray-600 outline-none border-b border-transparent focus:border-line/25 w-28"
       />
-      <div className="flex-1 h-px bg-white/10" />
+      <div className="flex-1 h-px bg-line/10" />
     </div>
   );
 };
@@ -875,7 +875,7 @@ export const FavientsPanel: React.FC = () => {
 
   return (
     <div
-      className="flex flex-col h-full min-h-0 bg-zinc-900/95 text-gray-200 relative"
+      className="flex flex-col h-full min-h-0 bg-surface/95 text-fg-secondary relative"
       onDragEnter={(e) => {
         if (filterActive || !e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
         depth.current++;
@@ -893,10 +893,10 @@ export const FavientsPanel: React.FC = () => {
           (app-gmt); select-mode hosts (the Explorer) route applies through the dock, so
           the row is omitted there and the toolbar below fills the header on its own. */}
       {!selectMode && (
-        <div className="px-2.5 pt-2 pb-1.5 border-b border-white/10 shrink-0 flex items-center gap-1.5">
+        <div className="px-2.5 pt-2 pb-1.5 border-b border-line/10 shrink-0 flex items-center gap-1.5">
           {targets.length ? (
             <>
-              <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Destination</span>
+              <span className="text-[10px] uppercase tracking-wide text-fg-dim shrink-0">Destination</span>
               <GenericDropdown
                 value={activeTarget?.id ?? ''}
                 options={targets.map((t) => ({ label: t.label, value: t.id }))}
@@ -905,12 +905,12 @@ export const FavientsPanel: React.FC = () => {
               />
             </>
           ) : (
-            <span className="text-[10px] text-gray-600 italic">no targets in this app</span>
+            <span className="text-[10px] text-fg-faint italic">no targets in this app</span>
           )}
         </div>
       )}
 
-      <div className="px-2.5 py-2 border-b border-white/10 shrink-0 flex items-center gap-1.5">
+      <div className="px-2.5 py-2 border-b border-line/10 shrink-0 flex items-center gap-1.5">
         {/* Toolbar row — pushed to the right edge (the Destination row above carries the
             host-specific dropdown; this row is purely the shelf's own controls). */}
         <div className="flex-1" />
@@ -918,7 +918,7 @@ export const FavientsPanel: React.FC = () => {
           <button
             onClick={() => browse()}
             title="Browse the gradient library (Palettes)"
-            className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
           >
             <PaletteIcon />
           </button>
@@ -927,7 +927,7 @@ export const FavientsPanel: React.FC = () => {
           <button
             onClick={() => studio()}
             title="Open GMT Gradient Explorer (new tab)"
-            className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
           >
             <StudioIcon />
           </button>
@@ -936,7 +936,7 @@ export const FavientsPanel: React.FC = () => {
           onClick={toggleSearch}
           title="Filter favourites by name, source, or group"
           className={`shrink-0 flex items-center justify-center w-6 h-6 rounded transition-colors ${
-            searchOpen ? 'text-white bg-white/10' : 'text-gray-400 hover:text-white hover:bg-white/10'
+            searchOpen ? 'text-fg bg-line/10' : 'text-fg-muted hover:text-fg hover:bg-line/10'
           }`}
         >
           <SearchIcon />
@@ -944,12 +944,12 @@ export const FavientsPanel: React.FC = () => {
         <button
           onClick={toggleViewMode}
           title={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
-          className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+          className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
         >
           {viewMode === 'grid' ? <ListIcon /> : <GridIcon />}
         </button>
         <span
-          className="text-[10px] text-gray-500 tabular-nums shrink-0"
+          className="text-[10px] text-fg-dim tabular-nums shrink-0"
           title={`${favients.length} saved gradient${favients.length === 1 ? '' : 's'}`}
         >
           {filterActive ? `${filtered.length}/${favients.length}` : favients.length}
@@ -961,7 +961,7 @@ export const FavientsPanel: React.FC = () => {
           While a query is active, drag-reorder is disabled — the cue surfaces only on a
           drag ATTEMPT (FavientSwatch onDragBlocked → flash), not persistently here. */}
       {searchOpen && (
-        <div className="px-2.5 py-1.5 border-b border-white/10 shrink-0">
+        <div className="px-2.5 py-1.5 border-b border-line/10 shrink-0">
           <div className="flex items-center gap-1.5">
             <SearchIcon />
             <input
@@ -972,13 +972,13 @@ export const FavientsPanel: React.FC = () => {
                 if (e.key === 'Escape') toggleSearch();
               }}
               placeholder="Filter by name, source, group…"
-              className="flex-1 min-w-0 bg-transparent text-[11px] text-gray-200 placeholder-gray-600 outline-none"
+              className="flex-1 min-w-0 bg-transparent text-[11px] text-fg-secondary placeholder-gray-600 outline-none"
             />
             {filterActive && (
               <button
                 onClick={() => setSearch('')}
                 title="Clear filter"
-                className="shrink-0 text-[10px] text-gray-500 hover:text-white px-1"
+                className="shrink-0 text-[10px] text-fg-dim hover:text-fg px-1"
               >
                 ✕
               </button>
@@ -996,16 +996,16 @@ export const FavientsPanel: React.FC = () => {
       <div data-gx-target="favients" className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col">
         {favients.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-center px-4">
-            <div className="text-[11px] text-gray-500 leading-relaxed">
+            <div className="text-[11px] text-fg-dim leading-relaxed">
               <FavientsIcon className="text-2xl mb-2 opacity-60 block mx-auto" />
               Drag a gradient here from the Picker, Generator, Image, or Stops to save it.
-              <div className="mt-1 text-gray-600">Click a swatch to {selectMode ? 'select' : 'apply'} · drag to reorder · drag onto a target.</div>
-              <div className="mt-1.5 text-gray-600">Saved gradients are shared with the main GMT studio.</div>
+              <div className="mt-1 text-fg-faint">Click a swatch to {selectMode ? 'select' : 'apply'} · drag to reorder · drag onto a target.</div>
+              <div className="mt-1.5 text-fg-faint">Saved gradients are shared with the main GMT studio.</div>
             </div>
           </div>
         ) : filterActive && filtered.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-center px-4">
-            <div className="text-[11px] text-gray-500">No favourites match “{search.trim()}”.</div>
+            <div className="text-[11px] text-fg-dim">No favourites match “{search.trim()}”.</div>
           </div>
         ) : (
           <>
@@ -1061,7 +1061,7 @@ export const FavientsPanel: React.FC = () => {
             {!filterActive && (
               <div
                 className={`flex-1 min-h-[44px] mt-1 rounded-md transition-colors ${
-                  dropTarget?.kind === 'newgroup' ? 'border border-dashed border-cyan-300/70 bg-cyan-300/5' : dragging ? 'border border-dashed border-white/10' : ''
+                  dropTarget?.kind === 'newgroup' ? 'border border-dashed border-accent-300/70 bg-accent-300/5' : dragging ? 'border border-dashed border-line/10' : ''
                 }`}
                 onDragOver={(e) => {
                   if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
@@ -1084,7 +1084,7 @@ export const FavientsPanel: React.FC = () => {
                 }}
               >
                 {dragging && (
-                  <div className="h-full flex items-center justify-center text-[10px] text-cyan-300/80 pointer-events-none">
+                  <div className="h-full flex items-center justify-center text-[10px] text-accent-300/80 pointer-events-none">
                     {dropTarget?.kind === 'newgroup' ? 'New group' : 'Drop in the lower area for a new group'}
                   </div>
                 )}
@@ -1098,7 +1098,7 @@ export const FavientsPanel: React.FC = () => {
       {dragging && (
         <div
           className={`absolute top-9 right-2 z-40 flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] transition-colors ${
-            dropTarget?.kind === 'trash' ? 'border-red-400 bg-red-500/30 text-white' : 'border-white/15 bg-black/70 text-gray-300'
+            dropTarget?.kind === 'trash' ? 'border-danger bg-danger/30 text-fg' : 'border-line/15 bg-surface/80 text-fg-tertiary'
           }`}
           onDragOver={(e) => {
             if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
@@ -1117,7 +1117,7 @@ export const FavientsPanel: React.FC = () => {
       )}
 
       {toast && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/85 text-gray-100 text-[11px] px-3 py-1.5 rounded-full border border-white/10 shadow-xl z-50 whitespace-nowrap">
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-surface/80 text-fg-secondary text-[11px] px-3 py-1.5 rounded-full border border-line/10 shadow-xl z-50 whitespace-nowrap">
           {toast}
         </div>
       )}

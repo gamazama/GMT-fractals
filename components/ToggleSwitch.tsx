@@ -40,7 +40,7 @@ function ToggleSwitch<T extends string | number | boolean>({
     onChange,
     options,
     helpId,
-    color = "bg-cyan-600",
+    color = "bg-accent-600",
     onLfoToggle,
     isLfoActive,
     icon,

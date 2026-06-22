@@ -179,7 +179,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
             >
                 {/* Background with pattern */}
                 <div 
-                    className="absolute inset-0 bg-white/[0.12]"
+                    className="absolute inset-0 bg-line/[0.12]"
                     style={!disabled ? {
                         backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.03) 5px, rgba(255,255,255,0.03) 10px)'
                     } : {}}
@@ -190,7 +190,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                     <div
                         ref={fillBarRef}
                         data-role="fill"
-                        className={`absolute top-0 bottom-0 left-0 pointer-events-none ${disabled ? 'bg-gray-500/20' : isActive ? 'bg-cyan-500/30' : 'bg-cyan-500/20'}`}
+                        className={`absolute top-0 bottom-0 left-0 pointer-events-none ${disabled ? 'bg-fg-dim/20' : isActive ? 'bg-accent-500/30' : 'bg-accent-500/20'}`}
                         style={{ width: `${valuePct}%` }}
                     />
                 )}
@@ -198,7 +198,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 {/* Live value indicator */}
                 {showLiveIndicator && liveValue !== undefined && !disabled && hasBounds && (
                     <div
-                        className="absolute top-0 bottom-0 w-1.5 bg-purple-500 blur-[1px] transition-all duration-75 ease-out z-0"
+                        className="absolute top-0 bottom-0 w-1.5 bg-secondary blur-[1px] transition-all duration-75 ease-out z-0"
                         style={{ left: `calc(${livePct}% - 0.75px)` }}
                     />
                 )}
@@ -225,7 +225,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 
                 {/* Active overlay */}
                 {isActive && !disabled && (
-                    <div className="absolute inset-0 bg-cyan-500/10 pointer-events-none" />
+                    <div className="absolute inset-0 bg-accent-500/10 pointer-events-none" />
                 )}
             </div>
         );
@@ -242,21 +242,21 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         >
             {/* Header */}
             {label && (
-                <div className={`flex items-stretch bg-white/[0.12] rounded-t-sm ${headerHeight} overflow-hidden border-b border-white/5`}>
+                <div className={`flex items-stretch bg-line/[0.12] rounded-t-sm ${headerHeight} overflow-hidden border-b border-line/5`}>
                     <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
                         {headerRight}
-                        <label className={`text-[10px] font-medium tracking-tight select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-gray-600' : 'text-gray-400'}`}>
+                        <label className={`text-[10px] font-medium tracking-tight select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-fg-faint' : 'text-fg-muted'}`}>
                             {label}
                             {labelSuffix}
                             {liveValue !== undefined && !disabled && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse shadow-[0_0_4px_#a855f7]"></span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse shadow-[0_0_4px_rgb(var(--secondary))]"></span>
                             )}
                         </label>
                     </div>
                     
                     {/* Value display */}
                     <div 
-                        className="w-1/2 relative bg-white/[0.02] border-l border-white/10 group/num-area touch-none"
+                        className="w-1/2 relative bg-line/[0.02] border-l border-line/10 group/num-area touch-none"
                         style={!disabled ? { backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.03) 5px, rgba(255,255,255,0.03) 10px)' } : {}}
                     >
                         <DraggableNumber
@@ -292,7 +292,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                     onLostPointerCapture={track.onPointerUp}
                 >
                     {/* Background track */}
-                    <div className="absolute inset-0 bg-white/10">
+                    <div className="absolute inset-0 bg-line/10">
                         {/* Optional meaningful track background (hue/lightness/chroma ramp). */}
                         {trackBackground && <div className="absolute inset-0" style={{ background: trackBackground }} />}
                         {/* Progress fill — suppressed when a track background carries the meaning,
@@ -300,13 +300,13 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                             stays mounted either way so drag-time DOM updates remain harmless. */}
                         <div
                             ref={fullTrackFillRef}
-                            className={`absolute top-0 bottom-0 left-0 ${trackBackground ? 'bg-transparent' : disabled ? 'bg-gray-400/20' : 'bg-cyan-500/30'}`}
+                            className={`absolute top-0 bottom-0 left-0 ${trackBackground ? 'bg-transparent' : disabled ? 'bg-fg-muted/20' : 'bg-accent-500/30'}`}
                             style={{ width: `${valuePct}%` }}
                         />
 
                         {/* Live value indicator */}
                         {showLiveIndicator && liveValue !== undefined && !disabled && (
-                            <div className="absolute top-0 bottom-0 w-1.5 bg-purple-500 blur-[1px] transition-all duration-75 ease-out z-0" style={{ left: `calc(${livePct}% - 0.75px)` }} />
+                            <div className="absolute top-0 bottom-0 w-1.5 bg-secondary blur-[1px] transition-all duration-75 ease-out z-0" style={{ left: `calc(${livePct}% - 0.75px)` }} />
                         )}
                     </div>
 
@@ -324,7 +324,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                     {defaultPct !== null && (
                         <>
                             <div 
-                                className="absolute w-0.5 h-full bg-white/40 pointer-events-none z-0 transform -translate-x-1/2"
+                                className="absolute w-0.5 h-full bg-line/40 pointer-events-none z-0 transform -translate-x-1/2"
                                 style={{ left: `${defaultPct}%` }}
                             />
                             <button
@@ -337,7 +337,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                                     e.stopPropagation();
                                     handleReset();
                                 }}
-                                className="absolute top-0 bottom-0 right-0 w-2 bg-gray-500/20 hover:bg-gray-400/50 cursor-pointer z-20 transition-colors border-l border-black/10"
+                                className="absolute top-0 bottom-0 right-0 w-2 bg-fg-dim/20 hover:bg-fg-muted/50 cursor-pointer z-20 transition-colors border-l border-black/10"
                                 title={`Reset to ${defaultValue}`}
                                 aria-label="Reset to default"
                                 tabIndex={-1}

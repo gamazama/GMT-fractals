@@ -33,6 +33,9 @@
             .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
             .mobile-scroll::-webkit-scrollbar-track { background: transparent; }
         </style>
+        <!-- Apply the saved UI color scheme before first paint (gmt.colorScheme
+             is shared across all GMT apps; absent/"dark" = the :root default). -->
+        <script>try{var t=localStorage.getItem('gmt.colorScheme');if(t&&t!=='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
     </head>
     <body>
         <div id="root"></div>

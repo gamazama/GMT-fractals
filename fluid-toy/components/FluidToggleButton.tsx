@@ -51,8 +51,8 @@ export const FluidToggleButton: React.FC = () => {
             onClick={toggle}
             title={on ? 'Fluid simulation is running — click to freeze (pure fractal)' : 'Start the fluid simulation and play with it'}
             className="border"
-            activeClassName="text-cyan-300 bg-cyan-900/30 border-cyan-500/40"
-            inactiveClassName="text-gray-400 border-white/10 hover:text-white hover:border-cyan-500/40"
+            activeClassName="text-accent-300 bg-accent-900/30 border-accent-500/40"
+            inactiveClassName="text-fg-muted border-line/10 hover:text-fg hover:border-accent-500/40"
             icon={
                 /* water-drop glyph */
                 <svg width="13" height="13" viewBox="0 0 24 24" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

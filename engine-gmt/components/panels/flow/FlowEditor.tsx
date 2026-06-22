@@ -527,49 +527,49 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
                 {/* Add Node UI Overlay */}
                 <div className="absolute top-4 left-4 z-10 flex flex-wrap gap-2 max-w-[90%]">
                     {/* Add Node Dropdown */}
-                    <div className="flex items-center bg-gray-900 border border-gray-700 rounded shadow-lg overflow-hidden">
-                        <span className="px-2 text-[10px] text-gray-500 font-bold select-none">Add:</span>
+                    <div className="flex items-center bg-surface-sunken border border-line/20 rounded shadow-lg overflow-hidden">
+                        <span className="px-2 text-[10px] text-fg-dim font-bold select-none">Add:</span>
                         <select
                             onChange={(e) => { if(e.target.value) { const t = e.target.value as NodeType; setTimeout(() => setPendingNodeType(t), 0); } e.target.value=""; }}
-                            className="t-select text-white hover:text-cyan-400 border-l border-gray-800"
+                            className="t-select text-fg hover:text-accent-400 border-l border-line/10"
                         >
-                            <option value="" className="bg-gray-900 text-gray-500">Select Node...</option>
+                            <option value="" className="bg-surface-sunken text-fg-dim">Select Node...</option>
                             {Object.entries(groups).map(([category, ids]) => {
                                 // Skip Utils as they are special
                                 if (category === 'Utils' && ids.length === 1 && ids[0] === 'Note') return null;
                                 return (
-                                    <optgroup key={category} label={category} className="bg-gray-900 text-gray-400 font-bold">
+                                    <optgroup key={category} label={category} className="bg-surface-sunken text-fg-muted font-bold">
                                         {ids.map(id => {
                                             const def = nodeRegistry.get(id);
-                                            return <option key={id} value={id} className="bg-gray-900 text-white font-normal">{def?.label || id}</option>;
+                                            return <option key={id} value={id} className="bg-surface-sunken text-fg font-normal">{def?.label || id}</option>;
                                         })}
                                     </optgroup>
                                 );
                             })}
-                            <option value="Note" className="bg-gray-900 text-white">Comment / Note</option>
+                            <option value="Note" className="bg-surface-sunken text-fg">Comment / Note</option>
                         </select>
                     </div>
 
                     {/* Presets Dropdown */}
-                    <div className="flex items-center bg-gray-900 border border-gray-700 rounded shadow-lg overflow-hidden">
-                        <span className="px-2 text-[10px] text-gray-500 font-bold select-none">Load:</span>
+                    <div className="flex items-center bg-surface-sunken border border-line/20 rounded shadow-lg overflow-hidden">
+                        <span className="px-2 text-[10px] text-fg-dim font-bold select-none">Load:</span>
                         <select 
                             onChange={(e) => { if(e.target.value) loadPreset(e.target.value); e.target.value=""; }}
-                            className="t-select text-white hover:text-purple-400 border-l border-gray-800"
+                            className="t-select text-fg hover:text-purple-400 border-l border-line/10"
                         >
-                            <option value="" className="bg-gray-900 text-gray-500">Select Preset...</option>
+                            <option value="" className="bg-surface-sunken text-fg-dim">Select Preset...</option>
                             {MODULAR_PRESETS.map(p => (
-                                <option key={p.name} value={p.name} className="bg-gray-900 text-white">{p.name}</option>
+                                <option key={p.name} value={p.name} className="bg-surface-sunken text-fg">{p.name}</option>
                             ))}
                         </select>
                     </div>
 
                     {/* Toggles */}
-                    <label className="flex items-center gap-1.5 bg-gray-900 border border-gray-700 rounded px-2 shadow-lg cursor-pointer text-[10px] text-gray-400 font-bold hover:border-gray-500 hover:text-gray-300 transition-colors select-none">
+                    <label className="flex items-center gap-1.5 bg-surface-sunken border border-line/20 rounded px-2 shadow-lg cursor-pointer text-[10px] text-fg-muted font-bold hover:border-line/20 hover:text-fg-tertiary transition-colors select-none">
                         <input type="checkbox" checked={state.autoCompile} onChange={(e) => actions.setAutoCompile(e.target.checked)} className="cursor-pointer accent-cyan-500" />
                         Auto Compile
                     </label>
-                    <button onClick={actions.refreshPipeline} className={`text-[10px] font-bold px-3 py-1.5 rounded border shadow-lg transition-all ${state.autoCompile ? 'bg-gray-800 text-gray-600 border-gray-700' : 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400 animate-pulse'}`} title="Force Recompile Shader">COMPILE</button>
+                    <button onClick={actions.refreshPipeline} className={`text-[10px] font-bold px-3 py-1.5 rounded border shadow-lg transition-all ${state.autoCompile ? 'bg-surface-header text-fg-faint border-line/20' : 'bg-purple-600 hover:bg-purple-500 text-fg border-purple-400 animate-pulse'}`} title="Force Recompile Shader">COMPILE</button>
                 </div>
             </ReactFlow>
             
@@ -587,9 +587,9 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
                     className="fixed pointer-events-none z-50 opacity-70 select-none"
                     style={{ left: mousePos.x + 14, top: mousePos.y + 14 }}
                 >
-                    <div className="bg-gray-900/95 border border-cyan-500/70 rounded-lg px-3 py-2 text-xs text-cyan-300 font-bold shadow-2xl whitespace-nowrap">
+                    <div className="bg-surface-sunken/95 border border-accent-500/70 rounded-lg px-3 py-2 text-xs text-accent-300 font-bold shadow-2xl whitespace-nowrap">
                         + {nodeRegistry.get(pendingNodeType)?.label || pendingNodeType}
-                        <div className="text-[9px] text-gray-500 font-normal mt-0.5">Click edge to insert · Click pane to place · Esc to cancel</div>
+                        <div className="text-[9px] text-fg-dim font-normal mt-0.5">Click edge to insert · Click pane to place · Esc to cancel</div>
                     </div>
                 </div>
             )}

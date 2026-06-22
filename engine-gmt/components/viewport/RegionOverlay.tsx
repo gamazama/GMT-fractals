@@ -76,10 +76,10 @@ export const RegionOverlay: React.FC<{
     }, [sampleCap, setSampleCap]);
 
     const borderClass = isDrawing
-        ? 'border-cyan-400 border-dashed opacity-70'
+        ? 'border-accent-400 border-dashed opacity-70'
         : isGhostDragging
-            ? 'border-cyan-400 border-dashed opacity-80'
-            : 'border-cyan-500 opacity-100';
+            ? 'border-accent-400 border-dashed opacity-80'
+            : 'border-accent-500 opacity-100';
 
     return (
         <div
@@ -92,28 +92,28 @@ export const RegionOverlay: React.FC<{
             }}
         >
             {!isDrawing && (
-                <div className="absolute top-0 right-0 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 flex items-center gap-1.5 pointer-events-auto shadow-md select-none" style={{ backdropFilter: 'blur(4px)' }}>
-                    <span className="text-gray-400">{regionW}×{regionH}</span>
-                    <div className="w-px h-2.5 bg-white/10" />
-                    <span className={capReached ? 'text-green-400' : 'text-cyan-300'}>{samples}</span>
-                    <span className="text-gray-500">/ {sampleCap === 0 ? '∞' : sampleCap}</span>
+                <div className="absolute top-0 right-0 bg-surface/80 text-fg text-[9px] font-bold px-1.5 py-0.5 flex items-center gap-1.5 pointer-events-auto shadow-md select-none" style={{ backdropFilter: 'blur(4px)' }}>
+                    <span className="text-fg-muted">{regionW}×{regionH}</span>
+                    <div className="w-px h-2.5 bg-line/10" />
+                    <span className={capReached ? 'text-ok' : 'text-accent-300'}>{samples}</span>
+                    <span className="text-fg-dim">/ {sampleCap === 0 ? '∞' : sampleCap}</span>
                     <button
                         onClick={(e) => { e.stopPropagation(); cycleSampleCap(); }}
-                        className="text-gray-500 hover:text-cyan-300 transition-colors px-0.5"
+                        className="text-fg-dim hover:text-accent-300 transition-colors px-0.5"
                         title={`Sample cap: ${sampleCap === 0 ? 'Infinite' : sampleCap}. Click to cycle.`}
                     >
                         ⟳
                     </button>
-                    <div className="w-px h-2.5 bg-white/10" />
-                    <span className={isConverged ? 'text-green-400' : 'text-gray-400'} title={`Convergence: ${(convergence * 100).toFixed(3)}% (threshold: ${convergenceThreshold.toFixed(2)}%)`}>
+                    <div className="w-px h-2.5 bg-line/10" />
+                    <span className={isConverged ? 'text-ok' : 'text-fg-muted'} title={`Convergence: ${(convergence * 100).toFixed(3)}% (threshold: ${convergenceThreshold.toFixed(2)}%)`}>
                         {(convergence * 100).toFixed(2)}%
                     </span>
-                    <span className="text-gray-600">/</span>
-                    <span className="text-gray-500">{convergenceThreshold.toFixed(2)}%</span>
-                    <div className="w-px h-2.5 bg-white/10" />
+                    <span className="text-fg-faint">/</span>
+                    <span className="text-fg-dim">{convergenceThreshold.toFixed(2)}%</span>
+                    <div className="w-px h-2.5 bg-line/10" />
                     <button
                         onClick={(e) => { e.stopPropagation(); onClear(); }}
-                        className="text-gray-400 hover:text-red-400 transition-colors"
+                        className="text-fg-muted hover:text-danger transition-colors"
                         title="Clear Region"
                     >✕</button>
                 </div>
@@ -123,7 +123,7 @@ export const RegionOverlay: React.FC<{
                 <div
                     key={dir}
                     data-handle={dir}
-                    className={`absolute w-2.5 h-2.5 bg-cyan-500 border border-cyan-300 rounded-sm pointer-events-auto opacity-0 group-hover/box:opacity-100 transition-opacity ${HANDLE_STYLES[dir]}`}
+                    className={`absolute w-2.5 h-2.5 bg-accent-500 border border-accent-300 rounded-sm pointer-events-auto opacity-0 group-hover/box:opacity-100 transition-opacity ${HANDLE_STYLES[dir]}`}
                 />
             ))}
         </div>

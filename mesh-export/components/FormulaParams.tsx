@@ -85,7 +85,7 @@ export const FormulaParams: React.FC<FormulaParamsProps> = ({ definition, params
       })}
 
       {/* Julia controls */}
-      <div className="border-t border-white/5 mt-1 pt-1">
+      <div className="border-t border-line/5 mt-1 pt-1">
         <GenericToggleSwitch
           label="Julia Mode"
           value={juliaMode > 0.5}

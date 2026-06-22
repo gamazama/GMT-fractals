@@ -65,35 +65,35 @@ export const FbxExportDialog: React.FC<FbxExportDialogProps> = (props) => {
 
     return (
         <Modal onClose={props.onClose} dismissOnBackdrop={false} z={Z.overlayNested} labelledBy="fbx-export-title">
-            <div className="bg-gray-900 border border-white/15 rounded-lg p-5 w-full max-w-sm text-gray-200 shadow-2xl">
+            <div className="bg-surface-sunken border border-line/15 rounded-lg p-5 w-full max-w-sm text-fg-secondary shadow-2xl">
                 <h2 id="fbx-export-title" className="text-sm font-bold mb-1">Export to FBX (3D camera)</h2>
-                <p className="text-[10px] text-gray-400 mb-3 leading-snug">
+                <p className="text-[10px] text-fg-muted mb-3 leading-snug">
                     Exports the camera animation, lens and positional-light positions as a binary
-                    <span className="text-cyan-300"> .fbx</span> — import it in C4D, Blender, Maya or
+                    <span className="text-accent-300"> .fbx</span> — import it in C4D, Blender, Maya or
                     DaVinci&nbsp;Resolve (Fusion). The fractal isn't 3D geometry, so render your video
                     separately and place it on a plane at the scene origin to composite behind the move.
                 </p>
 
-                <div className="flex items-center justify-between mb-3 px-2 py-1.5 bg-black/30 border border-white/10 rounded">
+                <div className="flex items-center justify-between mb-3 px-2 py-1.5 bg-surface-section border border-line/10 rounded">
                     <span className="t-label">Animation</span>
-                    <span className="text-[11px] font-mono text-cyan-300">
+                    <span className="text-[11px] font-mono text-accent-300">
                         {frameCount} frames @ {props.fps}fps
                     </span>
                 </div>
-                <p className="text-[8px] text-gray-500 mb-3 -mt-2 leading-tight">
+                <p className="text-[8px] text-fg-dim mb-3 -mt-2 leading-tight">
                     Y-up, baked per-frame. Z-up apps (3ds Max / Unreal / Blender) convert on import.
                 </p>
 
                 {/* Optional camera-locked backdrop plate */}
-                <label className="t-label mb-0.5 block">Backdrop plate footage <span className="text-gray-500 normal-case">(optional)</span></label>
+                <label className="t-label mb-0.5 block">Backdrop plate footage <span className="text-fg-dim normal-case">(optional)</span></label>
                 <input
                     type="text"
                     value={footage}
                     onChange={(e) => setFootage(e.target.value)}
-                    className="w-full mb-1 px-2 py-1 text-[11px] bg-black/40 border border-white/10 rounded text-gray-100 focus:border-cyan-500/60 outline-none"
+                    className="w-full mb-1 px-2 py-1 text-[11px] bg-surface-sunken border border-line/10 rounded text-fg-secondary focus:border-accent-500/60 outline-none"
                     placeholder="myRender.mp4  (blank = no plate)"
                 />
-                <p className="text-[8px] text-gray-500 mb-3 leading-tight">
+                <p className="text-[8px] text-fg-dim mb-3 leading-tight">
                     Adds a camera-locked plane showing this file (render it separately, keep it beside the .fbx).
                     Leave blank to skip and composite manually.
                 </p>
@@ -104,37 +104,37 @@ export const FbxExportDialog: React.FC<FbxExportDialogProps> = (props) => {
                     {paramCandidates.length > 0 && (
                         <button type="button"
                                 onClick={() => setSelected(selected.size === paramCandidates.length ? new Set() : new Set(paramCandidates.map(c => c.id)))}
-                                className="text-[9px] text-cyan-300 hover:text-cyan-200 underline-offset-2 hover:underline">
+                                className="text-[9px] text-accent-300 hover:text-cyan-200 underline-offset-2 hover:underline">
                             {selected.size === paramCandidates.length ? 'None' : 'All'}
                         </button>
                     )}
                 </div>
                 {paramCandidates.length === 0 ? (
-                    <p className="text-[9px] text-gray-500 italic mb-3">No animated (non-camera) params on the timeline.</p>
+                    <p className="text-[9px] text-fg-dim italic mb-3">No animated (non-camera) params on the timeline.</p>
                 ) : (
                     <>
-                        <div className="max-h-32 overflow-y-auto mb-1 border border-white/5 rounded bg-black/20 p-1.5 space-y-0.5">
+                        <div className="max-h-32 overflow-y-auto mb-1 border border-line/5 rounded bg-surface-section p-1.5 space-y-0.5">
                             {paramCandidates.map((c) => (
-                                <label key={c.id} className="flex items-center gap-2 text-[10px] cursor-pointer hover:bg-white/5 rounded px-1 py-0.5">
+                                <label key={c.id} className="flex items-center gap-2 text-[10px] cursor-pointer hover:bg-line/5 rounded px-1 py-0.5">
                                     <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="accent-cyan-400" />
                                     <span className="flex-1 truncate">{c.label}</span>
-                                    <span className="text-gray-600 text-[8px]">{c.count} keys</span>
+                                    <span className="text-fg-faint text-[8px]">{c.count} keys</span>
                                 </label>
                             ))}
                         </div>
-                        <p className="text-[8px] text-gray-500 mb-3 leading-tight">
-                            Each becomes a null named <span className="text-cyan-300">GMT_param_&lt;name&gt;</span>; read its value off Position Y.
+                        <p className="text-[8px] text-fg-dim mb-3 leading-tight">
+                            Each becomes a null named <span className="text-accent-300">GMT_param_&lt;name&gt;</span>; read its value off Position Y.
                         </p>
                     </>
                 )}
 
                 <div className="flex gap-2 justify-end">
                     <button onClick={props.onClose}
-                            className="px-3 py-1.5 rounded border border-white/15 text-[11px] text-gray-300 hover:bg-white/5">
+                            className="px-3 py-1.5 rounded border border-line/15 text-[11px] text-fg-tertiary hover:bg-line/5">
                         Cancel
                     </button>
                     <button onClick={handleExport}
-                            className="px-3 py-1.5 rounded border border-cyan-500/60 bg-cyan-900/40 text-[11px] text-cyan-100 hover:bg-cyan-800/50">
+                            className="px-3 py-1.5 rounded border border-accent-500/60 bg-accent-900/40 text-[11px] text-cyan-100 hover:bg-accent-800/50">
                         Save .fbx
                     </button>
                 </div>

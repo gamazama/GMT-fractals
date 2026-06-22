@@ -117,7 +117,7 @@ export const KeyIcon = ({ status }: { status: KeyStatus }) => {
     );
 };
 
-export const LinkIcon = ({ active }: { active?: boolean }) => <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={active ? "#22d3ee" : "#666"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>;
+export const LinkIcon = ({ active }: { active?: boolean }) => <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={active ? "rgb(var(--accent-400))" : "#666"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>;
 export const BrokenIcon = () => <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13l-4 4" /><path d="M14 11l4 -4" /></svg>;
 export const LogicIcon = ({ active }: { active?: boolean }) => <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={active ? "#f59e0b" : "#666"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>;
 export const FolderIcon = ({ open }: { open: boolean }) => <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? 'rotate-90' : ''}`}><path d="M9 18l6-6-6-6" /></svg>;
@@ -142,12 +142,12 @@ export const CameraKeyIcon = () => (
     </svg>
 );
 export const CurveIcon = ({ active }: { active: boolean }) => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={active ? "#22d3ee" : "currentColor"} strokeWidth="2">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={active ? "rgb(var(--accent-400))" : "currentColor"} strokeWidth="2">
         <path d="M3 18C3 18 6 5 12 12C18 19 21 5 21 5" />
     </svg>
 );
 export const BarsIcon = ({ active }: { active: boolean }) => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={active ? "#22d3ee" : "currentColor"} strokeWidth="2">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={active ? "rgb(var(--accent-400))" : "currentColor"} strokeWidth="2">
         <rect x="3" y="8" width="6" height="8" />
         <rect x="15" y="8" width="6" height="8" />
     </svg>
@@ -215,7 +215,7 @@ export const MagnetIcon = ({ active }: { active: boolean }) => (
 );
 
 export const NormIcon = ({ active }: { active: boolean }) => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "#22d3ee" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "rgb(var(--accent-400))" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <line x1="4" y1="20" x2="20" y2="20"></line>
         <line x1="4" y1="4" x2="20" y2="4"></line>
         <polyline points="4 14 8 10 12 14 16 10 20 14"></polyline>
@@ -232,40 +232,40 @@ export const FilterIcon = () => (
 );
 
 export const MagicIcon = ({ active }: { active?: boolean }) => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "#22d3ee" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "rgb(var(--accent-400))" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M19 13l-7-7-7 7" />
         <path d="M5 19l7-7 7 7" />
-        <path d="M12 5l2-2 2 2-2 2-2-2z" fill={active ? "#22d3ee" : "none"} stroke="none" />
-        <path d="M12 5l-2-2-2 2 2 2 2-2z" fill={active ? "#22d3ee" : "none"} stroke="none" />
+        <path d="M12 5l2-2 2 2-2 2-2-2z" fill={active ? "rgb(var(--accent-400))" : "none"} stroke="none" />
+        <path d="M12 5l-2-2-2 2 2 2 2-2z" fill={active ? "rgb(var(--accent-400))" : "none"} stroke="none" />
     </svg>
 );
 
 export const WaveIcon = ({ active }: { active?: boolean }) => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "#22d3ee" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "rgb(var(--accent-400))" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M2 12s3-7 7-7 7 7 7 7 3-7 7-7" />
     </svg>
 );
 
 export const PencilIcon = ({ active }: { active?: boolean }) => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "#22d3ee" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "rgb(var(--accent-400))" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 20h9" />
-        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" fill={active ? "#22d3ee33" : "none"} />
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" fill={active ? "rgb(var(--accent-400)/0.2)" : "none"} />
     </svg>
 );
 
 // Bias / redistribute: a 4-way arrow over points pushed off-centre — drag in 2D to
 // bias the selection's time (↔) and value (↕) distribution.
 export const BiasIcon = ({ active }: { active?: boolean }) => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "#22d3ee" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "rgb(var(--accent-400))" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3v18M3 12h18" strokeOpacity="0.5" />
-        <circle cx="8" cy="9" r="1.4" fill={active ? "#22d3ee" : "currentColor"} stroke="none" />
-        <circle cx="15" cy="8" r="1.4" fill={active ? "#22d3ee" : "currentColor"} stroke="none" />
-        <circle cx="17" cy="15" r="1.4" fill={active ? "#22d3ee" : "currentColor"} stroke="none" />
+        <circle cx="8" cy="9" r="1.4" fill={active ? "rgb(var(--accent-400))" : "currentColor"} stroke="none" />
+        <circle cx="15" cy="8" r="1.4" fill={active ? "rgb(var(--accent-400))" : "currentColor"} stroke="none" />
+        <circle cx="17" cy="15" r="1.4" fill={active ? "rgb(var(--accent-400))" : "currentColor"} stroke="none" />
     </svg>
 );
 
 export const EyeIcon = ({ active }: { active: boolean }) => (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={active ? 'text-gray-200' : 'text-gray-600'}>
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={active ? 'text-fg-secondary' : 'text-fg-faint'}>
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
         <circle cx="12" cy="12" r="3"></circle>
     </svg>

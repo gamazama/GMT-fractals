@@ -97,18 +97,18 @@ export function BoundsPanel() {
       <div className="flex items-center gap-2 mt-1 px-0.5">
         <button
           onClick={resetBounds}
-          className="text-[10px] px-2 py-0.5 bg-white/10 text-gray-300 border border-white/10 rounded-sm hover:bg-white/15 cursor-pointer"
+          className="text-[10px] px-2 py-0.5 bg-line/10 text-fg-tertiary border border-line/10 rounded-sm hover:bg-line/15 cursor-pointer"
         >
           Reset
         </button>
         <button
           onClick={handleAutoFit}
           disabled={fitting}
-          className="text-[10px] px-2 py-0.5 bg-emerald-900/40 text-emerald-300 border border-emerald-700/30 rounded-sm hover:bg-emerald-800/40 cursor-pointer disabled:opacity-50 disabled:cursor-default"
+          className="text-[10px] px-2 py-0.5 bg-ok/40 text-ok border border-ok/30 rounded-sm hover:bg-ok/40 cursor-pointer disabled:opacity-50 disabled:cursor-default"
         >
           {fitting ? 'Fitting...' : 'Auto-fit'}
         </button>
-        <span className="text-[10px] text-gray-600">
+        <span className="text-[10px] text-fg-faint">
           {size[0].toFixed(1)} × {size[1].toFixed(1)} × {size[2].toFixed(1)}
         </span>
       </div>

@@ -189,11 +189,11 @@ export function useSceneGroups(opts: UseSceneGroupsOptions = {}): SceneGroup[] {
                 description: item.description ?? undefined,
                 thumbnailUrl: item.thumbnail_url,
                 badge: item.status === 'pending'
-                        ? { text: 'pending', className: 'bg-amber-500/20 text-amber-300' }
+                        ? { text: 'pending', className: 'bg-warn/20 text-warn' }
                     : item.status === 'rejected'
-                        ? { text: 'rejected', className: 'bg-gray-700/40 text-gray-400' }
+                        ? { text: 'rejected', className: 'bg-fg-ghost/40 text-fg-muted' }
                     : item.visibility === 'private'
-                        ? { text: 'private', className: 'bg-purple-500/20 text-purple-300' }
+                        ? { text: 'private', className: 'bg-secondary/20 text-secondary' }
                         : undefined,
                 onSelect: () => pickMySub(item),
             })),

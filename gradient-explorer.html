@@ -32,6 +32,8 @@
       .custom-scroll.relative.py-2 { scrollbar-gutter: stable; }
     </style>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <!-- Apply the saved UI color scheme before first paint (shared gmt.colorScheme). -->
+    <script>try{var t=localStorage.getItem('gmt.colorScheme');if(t&&t!=='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
   </head>
   <body>
     <div id="root"></div>

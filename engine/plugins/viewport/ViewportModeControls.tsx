@@ -44,11 +44,11 @@ const RenderScaleControl: React.FC = () => {
     return source ? <CustomScalePill source={source} /> : <DefaultScalePill />;
 };
 
-const PILL_OUTER = 'flex flex-nowrap items-center gap-0.5 bg-black/80 px-1 py-1 rounded border border-white/10 shadow-sm backdrop-blur-md whitespace-nowrap';
+const PILL_OUTER = 'flex flex-nowrap items-center gap-0.5 bg-surface/80 px-1 py-1 rounded border border-line/10 shadow-sm backdrop-blur-md whitespace-nowrap';
 const PILL_BTN = (active: boolean) =>
     `text-[9px] font-mono px-1.5 py-0.5 rounded transition-colors ${active
-        ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/40'
-        : 'text-gray-500 hover:text-gray-200 border border-transparent'}`;
+        ? 'bg-accent-500/20 text-accent-300 border border-accent-500/40'
+        : 'text-fg-dim hover:text-fg-secondary border border-transparent'}`;
 const PILL_TITLE = 'Render scale — pixel multiplier on top of the viewport size. 1.0 = match CSS pixels (cheap); 2.0 = supersampled (4× cost).';
 
 const DefaultScalePill: React.FC = () => {
@@ -142,7 +142,7 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
         <div className="absolute z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap" style={{ top, left }}>
             <button
                 onClick={(e) => { e.stopPropagation(); setMode('Fixed'); }}
-                className="flex items-center gap-1.5 text-[9px] font-bold text-gray-300 bg-black/80 px-2 py-1 rounded border border-white/10 hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-900/30 transition-all shadow-sm backdrop-blur-md group"
+                className="flex items-center gap-1.5 text-[9px] font-bold text-fg-tertiary bg-surface/80 px-2 py-1 rounded border border-line/10 hover:border-accent-500/50 hover:text-accent-400 hover:bg-accent-900/30 transition-all shadow-sm backdrop-blur-md group"
                 title="Switch to Fixed Resolution Mode"
             >
                 <span className="w-2 h-2 border border-current rounded-sm group-hover:scale-110 transition-transform" />

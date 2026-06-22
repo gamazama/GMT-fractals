@@ -22,15 +22,15 @@ export const FirstRunHint: React.FC = () => {
 
     return (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[800] pointer-events-none">
-            <div className="pointer-events-auto flex items-center gap-3 px-3.5 py-1.5 bg-gray-900/95 border border-cyan-500/30 rounded-full shadow-xl backdrop-blur-md animate-fade-in">
+            <div className="pointer-events-auto flex items-center gap-3 px-3.5 py-1.5 bg-surface-sunken/95 border border-accent-500/30 rounded-full shadow-xl backdrop-blur-md animate-fade-in">
                 <span className="text-[11px] text-cyan-100">
-                    👋 New here? Open the <span className="font-bold text-cyan-300">?</span> menu for help &amp; tutorials, or pick a formula to start.
+                    👋 New here? Open the <span className="font-bold text-accent-300">?</span> menu for help &amp; tutorials, or pick a formula to start.
                 </span>
                 <button
                     onClick={close}
                     title="Dismiss"
                     aria-label="Dismiss"
-                    className="text-gray-400 hover:text-white text-sm leading-none shrink-0"
+                    className="text-fg-muted hover:text-fg text-sm leading-none shrink-0"
                 >
                     ×
                 </button>

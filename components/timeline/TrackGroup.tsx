@@ -58,19 +58,19 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
     return (
         <>
             <div
-                className="flex border-b border-white/5 bg-white/10"
+                className="flex border-b border-line/5 bg-line/10"
                 style={{ height: 24 }}
             >
                 <div
                     // z-30 matches TrackRow's sticky sidebar so the group header sits above scrolling keyframes.
-                    className="sticky left-0 z-30 bg-[#1a1a1a] border-r border-white/10 shrink-0 flex items-center px-2 cursor-pointer hover:bg-gray-700 select-none"
+                    className="sticky left-0 z-30 bg-surface-raised border-r border-line/10 shrink-0 flex items-center px-2 cursor-pointer hover:bg-fg-ghost select-none"
                     style={{ width: sidebarWidth }}
                     onClick={(e) => { e.stopPropagation(); onToggle(groupName, e.altKey); }}
                     onMouseDown={(e) => e.stopPropagation()}
                     data-help-id="anim.tracks"
                 >
-                    <span className="text-gray-500 w-4"><FolderIcon open={!collapsed} /></span>
-                    <span className="text-[10px] font-bold text-gray-300">{groupName}</span>
+                    <span className="text-fg-dim w-4"><FolderIcon open={!collapsed} /></span>
+                    <span className="text-[10px] font-bold text-fg-tertiary">{groupName}</span>
                 </div>
                 {/* Keyframe area: group diamonds now live on the shared DopeSheetCanvas overlay.
                     pointer-events:none lets the empty row fall through to the canvas hit-test;

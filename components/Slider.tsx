@@ -277,7 +277,7 @@ const Slider: React.FC<SliderProps> = ({
     // Construct Footer (default value marker)
     const footer = (defaultValue !== undefined && !props.disabled) ? (
         <>
-            <div className="absolute w-0.5 h-full bg-white/40 pointer-events-none z-0 transform -translate-x-1/2" 
+            <div className="absolute w-0.5 h-full bg-line/40 pointer-events-none z-0 transform -translate-x-1/2" 
                 style={{ left: `${((props.customMapping ? props.customMapping.toSlider(defaultValue) : defaultValue) - (props.customMapping?.min ?? props.min ?? 0)) / ((props.customMapping?.max ?? props.max ?? 1) - (props.customMapping?.min ?? props.min ?? 0)) * 100}%` }} 
             />
             <button 
@@ -289,7 +289,7 @@ const Slider: React.FC<SliderProps> = ({
                     autoKeyOnChange(defaultValue); 
                     handleInteractionEnd();
                 }} 
-                className="absolute top-0 bottom-0 right-0 w-2 bg-gray-500/20 hover:bg-gray-400/50 cursor-pointer z-20 transition-colors border-l border-black/10" 
+                className="absolute top-0 bottom-0 right-0 w-2 bg-fg-dim/20 hover:bg-fg-muted/50 cursor-pointer z-20 transition-colors border-l border-black/10" 
                 title={`Reset to ${defaultValue}`} 
                 aria-label="Reset to default" 
                 tabIndex={-1} 

@@ -13,12 +13,12 @@ export const KeyframeButton: React.FC<KeyframeButtonProps> = ({ status, onClick,
         <button
             onClick={(e) => { e.stopPropagation(); onClick(); }}
             tabIndex={-1}
-            className={`p-0.5 rounded hover:bg-white/10 transition-colors shrink-0 ${
-                status === 'keyed' ? 'text-amber-400' :
-                status === 'keyed-dirty' ? 'text-red-500' :
-                status === 'dirty' ? 'text-red-500' :
-                status === 'partial' ? 'text-orange-500 hover:text-amber-300' :
-                'text-gray-600 hover:text-amber-200'
+            className={`p-0.5 rounded hover:bg-line/10 transition-colors shrink-0 ${
+                status === 'keyed' ? 'text-warn' :
+                status === 'keyed-dirty' ? 'text-danger' :
+                status === 'dirty' ? 'text-danger' :
+                status === 'partial' ? 'text-warn hover:text-warn' :
+                'text-fg-faint hover:text-warn'
             } ${className}`}
             title={
                 status === 'none' ? "Add Keyframe" : 

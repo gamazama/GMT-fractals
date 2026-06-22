@@ -26,7 +26,7 @@ const ShadowSettingsPopup = () => {
     return (
         <Popover width="w-52" tutAnchor="shadow-panel" padding="none">
             <div className="relative space-y-2">
-                <div className="flex items-center justify-between border-b border-white/10 pb-2 px-3">
+                <div className="flex items-center justify-between border-b border-line/10 pb-2 px-3">
                     <SectionLabel>Shadows</SectionLabel>
                     <div className="flex items-center gap-1.5">
                         {jitterAvailable && (
@@ -36,7 +36,7 @@ const ShadowSettingsPopup = () => {
                                     setLighting({ shadowAlgorithm: shadowHQ ? 1.0 : 0.0 });
                                     handleInteractionEnd();
                                 }}
-                                className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${shadowHQ ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50' : 'bg-gray-800 text-gray-500 border-gray-600'}`}
+                                className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${shadowHQ ? 'bg-accent-500/20 text-accent-300 border-accent-500/50' : 'bg-surface-header text-fg-dim border-line/20'}`}
                                 title="HQ soft shadows — accurate IQ penumbra. Off = Lite (faster, simpler penumbra). Runtime toggle, no recompile."
                             >
                                 HQ
@@ -50,7 +50,7 @@ const ShadowSettingsPopup = () => {
                                     setLighting({ areaLights: !areaLights });
                                     handleInteractionEnd();
                                 }}
-                                className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${areaLights ? 'bg-purple-500/20 text-purple-300 border-purple-500/50' : 'bg-gray-800 text-gray-500 border-gray-600'}`}
+                                className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${areaLights ? 'bg-secondary/20 text-secondary border-secondary/50' : 'bg-surface-header text-fg-dim border-line/20'}`}
                                 title="Stochastic shadow jitter — softens Point-light shadows via accumulation. For physical area lights, use a Sphere light type instead."
                             >
                                 Jitter
@@ -62,7 +62,7 @@ const ShadowSettingsPopup = () => {
                                 setLighting({ shadows: !shadows });
                                 handleInteractionEnd();
                             }}
-                            className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${shadows ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50' : 'bg-gray-800 text-gray-500 border-gray-600'}`}
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${shadows ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50' : 'bg-surface-header text-fg-dim border-line/20'}`}
                         >
                             {shadows ? 'ON' : 'OFF'}
                         </button>

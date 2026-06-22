@@ -135,27 +135,27 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
             onContextMenu={handleContextMenu}
         >
             <div 
-                className="relative text-[10px] font-mono text-gray-400 bg-black/80 px-2 py-1 rounded border border-white/10 shadow-sm backdrop-blur-md cursor-ns-resize hover:text-white hover:border-cyan-500/50 transition-colors select-none flex items-center gap-2"
+                className="relative text-[10px] font-mono text-fg-muted bg-surface/80 px-2 py-1 rounded border border-line/10 shadow-sm backdrop-blur-md cursor-ns-resize hover:text-fg hover:border-accent-500/50 transition-colors select-none flex items-center gap-2"
                 onPointerDown={handleResDown}
                 onPointerMove={handleResMove}
                 onPointerUp={handleResUp}
                 title="Drag Up or Left to Increase Size"
             >
-                <span>{width} <span className="text-gray-600">x</span> {height}</span>
+                <span>{width} <span className="text-fg-faint">x</span> {height}</span>
                 <span className="opacity-50"><ChevronDown /></span>
             </div>
             
             {showResMenu && (
                 <div 
                     ref={presetMenuRef}
-                    className="absolute top-8 left-0 w-48 bg-black border border-white/20 rounded shadow-xl z-50 overflow-hidden flex flex-col py-1 animate-fade-in"
+                    className="absolute top-8 left-0 w-48 bg-surface border border-line/20 rounded shadow-xl z-50 overflow-hidden flex flex-col py-1 animate-fade-in"
                 >
-                    <div className="px-3 py-1 text-[8px] font-bold text-gray-500 border-b border-white/10 mb-1">Fit to Window</div>
+                    <div className="px-3 py-1 text-[8px] font-bold text-fg-dim border-b border-line/10 mb-1">Fit to Window</div>
                     {ASPECT_RATIOS.map(p => (
                         <button 
                             key={p.label}
                             onClick={() => applyPreset(p.ratio)}
-                            className="text-left px-3 py-1.5 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors flex justify-between whitespace-nowrap"
+                            className="text-left px-3 py-1.5 text-[10px] text-fg-tertiary hover:bg-line/10 hover:text-fg transition-colors flex justify-between whitespace-nowrap"
                         >
                             <span>{p.label}</span>
                         </button>
@@ -165,7 +165,7 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
 
             <button
                 onClick={(e) => { e.stopPropagation(); onSetMode('Full'); }}
-                className="flex items-center gap-1.5 text-[9px] font-bold text-gray-300 bg-black/80 px-2 py-1 rounded border border-white/10 hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-900/30 transition-all shadow-sm backdrop-blur-md group"
+                className="flex items-center gap-1.5 text-[9px] font-bold text-fg-tertiary bg-surface/80 px-2 py-1 rounded border border-line/10 hover:border-accent-500/50 hover:text-accent-400 hover:bg-accent-900/30 transition-all shadow-sm backdrop-blur-md group"
                 title="Return to Fullscreen Mode"
             >
                 <span className="w-2 h-2 border border-current rounded-sm group-hover:scale-110 transition-transform"></span>
@@ -217,8 +217,8 @@ const CustomResolutionDialog: React.FC<CustomResolutionDialogProps> = ({
 
     return createPortal(
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60" onClick={onClose}>
-            <div className="bg-gray-900 border border-white/10 rounded-lg p-5 w-72 shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="text-xs font-bold text-white mb-3">Custom Resolution</div>
+            <div className="bg-surface-sunken border border-line/10 rounded-lg p-5 w-72 shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="text-xs font-bold text-fg mb-3">Custom Resolution</div>
                 <div className="flex gap-2 mb-4">
                     <NumberInput label="Width"  value={w} onChange={setW} step={8} min={64} max={32768} />
                     <NumberInput label="Height" value={h} onChange={setH} step={8} min={64} max={32768} />

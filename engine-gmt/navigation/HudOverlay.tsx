@@ -171,15 +171,15 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                     <div className="absolute pointer-events-none opacity-50" style={{ filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.8))' }}>
                         {state.cameraMode === 'Fly' ? (
                             <>
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40px] h-[2px] bg-cyan-400" />
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[2px] h-[40px] bg-cyan-400" />
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40px] h-[2px] bg-accent-400" />
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[2px] h-[40px] bg-accent-400" />
                             </>
                         ) : (
                             <div className="relative flex items-center justify-center">
                                 {/* Orbit Mode: Smaller Cross + Circle */}
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[20px] h-[2px] bg-cyan-400" />
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[2px] h-[20px] bg-cyan-400" />
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[24px] h-[24px] rounded-full border border-cyan-400 opacity-60" />
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[20px] h-[2px] bg-accent-400" />
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[2px] h-[20px] bg-accent-400" />
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[24px] h-[24px] rounded-full border border-accent-400 opacity-60" />
                             </div>
                         )}
                     </div>
@@ -190,8 +190,8 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                         className="absolute top-1/2 left-1/2 w-8 h-8 pointer-events-none opacity-0 transition-opacity duration-150 ease-out will-change-transform"
                         style={{ transform: 'translate(-50%, -50%)' }}
                     >
-                        <div className="absolute inset-0 border-2 border-cyan-400 rounded-full shadow-[0_0_15px_cyan] opacity-80"></div>
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 bg-white rounded-full"></div>
+                        <div className="absolute inset-0 border-2 border-accent-400 rounded-full shadow-[0_0_15px_rgb(var(--accent-glow))] opacity-80"></div>
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 bg-fg rounded-full"></div>
                     </div>
                 </div>
             </div>
@@ -229,7 +229,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                                     if (navigator.vibrate) navigator.vibrate(30);
                                 }}
                                 title={isStepBack ? 'Step the camera back one unit (already at default view)' : 'Reset camera to default view'}
-                                className="flex-1 pointer-events-auto px-2 py-1.5 bg-black/60 hover:bg-cyan-900/80 text-cyan-400 hover:text-white text-[9px] font-bold rounded-tl-lg border-l border-t border-white/10 backdrop-blur-md hidden animate-fade-in shadow-xl whitespace-nowrap"
+                                className="flex-1 pointer-events-auto px-2 py-1.5 bg-surface/80 hover:bg-accent-900/80 text-accent-400 hover:text-fg text-[9px] font-bold rounded-tl-lg border-l border-t border-line/10 backdrop-blur-md hidden animate-fade-in shadow-xl whitespace-nowrap"
                             >
                                 {isStepBack ? 'Step Back' : 'Reset'}
                             </button>
@@ -238,13 +238,13 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                                 onClick={() => { undoCamera?.(); actionBus.fire('camera.undo'); if (navigator.vibrate) navigator.vibrate(30); }}
                                 disabled={!canUndoCamera}
                                 title="Revert the last camera movement (Ctrl+Shift+Z)"
-                                className="flex-1 pointer-events-auto px-2 py-1.5 bg-black/60 hover:bg-cyan-900/80 text-cyan-400 hover:text-white text-[9px] font-bold rounded-tr-lg border-r border-t border-white/10 backdrop-blur-md hidden animate-fade-in shadow-xl whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-black/60 disabled:hover:text-cyan-400"
+                                className="flex-1 pointer-events-auto px-2 py-1.5 bg-surface/80 hover:bg-accent-900/80 text-accent-400 hover:text-fg text-[9px] font-bold rounded-tr-lg border-r border-t border-line/10 backdrop-blur-md hidden animate-fade-in shadow-xl whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-surface/80 disabled:hover:text-accent-400"
                             >
                                 Undo Cam
                             </button>
                         </div>
 
-                        <div className="flex items-stretch gap-px bg-black/40 rounded-full border border-white/10 backdrop-blur-md overflow-hidden pointer-events-auto shadow-2xl">
+                        <div className="flex items-stretch gap-px bg-surface-tabbar rounded-full border border-line/10 backdrop-blur-md overflow-hidden pointer-events-auto shadow-2xl">
                             {/* Interactive Speed Component - Hidden in Orbit Mode */}
                             {state.cameraMode === 'Fly' && (
                                 <>
@@ -254,14 +254,14 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                                         className="relative flex items-center px-6 py-3 cursor-ew-resize group min-w-[120px]"
                                     >
                                         <div
-                                            className="absolute inset-0 bg-cyan-500/10 border-r border-cyan-500/20 transition-all duration-300 ease-out"
+                                            className="absolute inset-0 bg-accent-500/10 border-r border-accent-500/20 transition-all duration-300 ease-out"
                                             style={{ width: `${speedProgress * 100}%` }}
                                         />
-                                        <span ref={hudRefs.speed} className="relative z-10 font-bold text-cyan-300 font-mono text-[10px] group-hover:text-white transition-colors">
+                                        <span ref={hudRefs.speed} className="relative z-10 font-bold text-accent-300 font-mono text-[10px] group-hover:text-fg transition-colors">
                                             Spd x{flySpeed.toFixed(3)}
                                         </span>
                                     </div>
-                                    <div className="w-px bg-white/5" />
+                                    <div className="w-px bg-line/5" />
                                 </>
                             )}
 
@@ -270,8 +270,8 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                                 cursor-anchored orbit (rotates/zooms around
                                 whatever's under the mouse). Default on;
                                 falls back to centre-pivot on empty space. */}
-                            <div className={`px-6 py-3 bg-white/5 flex items-center gap-2 min-w-[100px] justify-center ${state.cameraMode === 'Orbit' ? 'ring-1 ring-cyan-400/40 rounded-r-full' : ''}`}>
-                                <span ref={hudRefs.dist} className="text-cyan-500/80 font-mono text-[10px]">
+                            <div className={`px-6 py-3 bg-line/5 flex items-center gap-2 min-w-[100px] justify-center ${state.cameraMode === 'Orbit' ? 'ring-1 ring-accent-400/40 rounded-r-full' : ''}`}>
+                                <span ref={hudRefs.dist} className="text-accent-500/80 font-mono text-[10px]">
                                     Dst ---
                                 </span>
                                 {state.cameraMode === 'Orbit' && !isMobile && (() => {
@@ -284,8 +284,8 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                                             aria-label="Toggle cursor-anchored orbit"
                                             className={`pointer-events-auto w-4 h-4 flex items-center justify-center rounded-full border transition-colors ${
                                                 on
-                                                    ? 'border-cyan-400/70 text-cyan-300 hover:bg-cyan-500/20'
-                                                    : 'border-white/20 text-gray-500 hover:text-gray-300 hover:border-white/30'
+                                                    ? 'border-accent-400/70 text-accent-300 hover:bg-accent-500/20'
+                                                    : 'border-line/20 text-fg-dim hover:text-fg-tertiary hover:border-line/30'
                                             }`}
                                         >
                                             {/* Crosshair-with-dot glyph. Even size + viewBox so
@@ -313,8 +313,8 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                             ported — re-enable <HintDisplay> here when it lands. Gated on
                             showHints + desktop; fades with the bottom cluster (10s). */}
                         {state.showHints && !isMobile && (
-                            <div className="mt-2 text-[9px] font-medium text-white/60 text-center whitespace-nowrap" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
-                                <span className="text-cyan-400/60 font-bold mr-2">[{state.cameraMode}]</span>
+                            <div className="mt-2 text-[9px] font-medium text-fg/60 text-center whitespace-nowrap" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+                                <span className="text-accent-400/60 font-bold mr-2">[{state.cameraMode}]</span>
                                 {state.cameraMode === 'Fly'
                                     ? 'WASD Move · Space/C Vert · Shift Boost'
                                     : 'L-Drag Rotate · R-Drag Pan · Scroll Zoom'}
@@ -323,8 +323,8 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
 
                         {/* Persistent Mode Switch Hint */}
                         {tabSwitchCount < 2 && !isMobile && state.showHints && (
-                             <div className="mt-2 text-[10px] font-bold text-cyan-300 animate-pulse bg-cyan-950/40 px-3 py-1 rounded border border-cyan-500/30 shadow-lg">
-                                 Press <span className="text-white border border-white/20 rounded px-1 bg-white/10 mx-0.5">Tab</span> for {state.cameraMode === 'Orbit' ? 'Fly' : 'Orbit'} navigation
+                             <div className="mt-2 text-[10px] font-bold text-accent-300 animate-pulse bg-cyan-950/40 px-3 py-1 rounded border border-accent-500/30 shadow-lg">
+                                 Press <span className="text-fg border border-line/20 rounded px-1 bg-line/10 mx-0.5">Tab</span> for {state.cameraMode === 'Orbit' ? 'Fly' : 'Orbit'} navigation
                              </div>
                         )}
                     </div>

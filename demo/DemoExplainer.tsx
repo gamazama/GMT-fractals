@@ -44,25 +44,25 @@ export const DemoExplainer: React.FC = React.memo(() => {
     return (
         <>
             <div className="absolute top-4 left-4 max-w-[420px] pointer-events-none select-none">
-                <div className="text-cyan-500/80 text-[10px] font-mono tracking-wider mb-2">
+                <div className="text-accent-500/80 text-[10px] font-mono tracking-wider mb-2">
                     // GMT engine — generic plugin host
                 </div>
-                <p className="text-xs leading-relaxed text-gray-400 mb-3">
+                <p className="text-xs leading-relaxed text-fg-muted mb-3">
                     Everything in this app — the right-dock Demo panel, sliders, undo,
                     save / load, PNG snapshot (Alt+S), video export, keyboard
                     shortcuts, modulation timeline — boots up from the lines below.
-                    The <code className="text-gray-300">DemoFeature</code> itself is a
+                    The <code className="text-fg-tertiary">DemoFeature</code> itself is a
                     single declarative object whose params become a Zustand slice, an
                     auto-generated panel, and a save/load round-trip — for free.
                 </p>
-                <pre className="text-[10px] font-mono leading-relaxed text-gray-500 bg-black/30 border border-white/5 rounded px-3 py-2.5 whitespace-pre overflow-x-auto pointer-events-auto select-text">
+                <pre className="text-[10px] font-mono leading-relaxed text-fg-dim bg-surface-section border border-line/5 rounded px-3 py-2.5 whitespace-pre overflow-x-auto pointer-events-auto select-text">
                     {BOOT_SNIPPET}
                 </pre>
                 <div className="mt-3 flex items-center gap-3 pointer-events-auto">
                     <button
                         type="button"
                         onClick={() => setShowSource(true)}
-                        className="text-[10px] font-mono text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 hover:border-cyan-400/60 rounded px-2.5 py-1 transition-colors"
+                        className="text-[10px] font-mono text-accent-400 hover:text-accent-300 border border-accent-500/30 hover:border-accent-400/60 rounded px-2.5 py-1 transition-colors"
                     >
                         Show full source ({SOURCES.length} files, {TOTAL_LINES} lines)
                     </button>
@@ -98,21 +98,21 @@ const SourceModal: React.FC<SourceModalProps> = ({ onClose }) => {
             onClick={onClose}
         >
             <div
-                className="bg-neutral-950 border border-white/10 rounded-lg shadow-2xl w-[min(960px,100%)] h-[min(800px,100%)] flex flex-col"
+                className="bg-surface-dock border border-line/10 rounded-lg shadow-2xl w-[min(960px,100%)] h-[min(800px,100%)] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-line/10">
                     <div>
-                        <div className="text-cyan-400 text-sm font-semibold">Demo source</div>
-                        <div className="text-gray-500 text-[10px] font-mono">
+                        <div className="text-accent-400 text-sm font-semibold">Demo source</div>
+                        <div className="text-fg-dim text-[10px] font-mono">
                             {SOURCES.length} files · {TOTAL_LINES} lines · live from this build
                         </div>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="text-gray-400 hover:text-white text-lg leading-none px-2"
+                        className="text-fg-muted hover:text-fg text-lg leading-none px-2"
                         aria-label="Close source viewer"
                     >
                         ✕
@@ -120,7 +120,7 @@ const SourceModal: React.FC<SourceModalProps> = ({ onClose }) => {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex flex-wrap gap-1 px-3 py-2 border-b border-white/10 bg-black/30">
+                <div className="flex flex-wrap gap-1 px-3 py-2 border-b border-line/10 bg-surface-tabbar">
                     {SOURCES.map((f, i) => (
                         <button
                             key={f.path}
@@ -129,19 +129,19 @@ const SourceModal: React.FC<SourceModalProps> = ({ onClose }) => {
                             className={
                                 'text-[11px] font-mono px-2.5 py-1 rounded transition-colors ' +
                                 (i === activeIdx
-                                    ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/40'
-                                    : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent')
+                                    ? 'bg-accent-500/15 text-accent-300 border border-accent-500/40'
+                                    : 'text-fg-muted hover:text-fg hover:bg-line/5 border border-transparent')
                             }
                         >
                             {f.path}
-                            <span className="text-gray-600 ml-1.5">{countLines(f.code)}L</span>
+                            <span className="text-fg-faint ml-1.5">{countLines(f.code)}L</span>
                         </button>
                     ))}
                 </div>
 
                 {/* Source */}
-                <div className="flex-1 overflow-auto bg-black/40 p-4">
-                    <pre className="text-[11px] font-mono leading-relaxed text-gray-300 whitespace-pre select-text">
+                <div className="flex-1 overflow-auto bg-surface-section p-4">
+                    <pre className="text-[11px] font-mono leading-relaxed text-fg-tertiary whitespace-pre select-text">
                         {active.code.replace(/\s+$/, '')}
                     </pre>
                 </div>

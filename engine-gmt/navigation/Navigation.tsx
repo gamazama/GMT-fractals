@@ -1033,14 +1033,14 @@ const Navigation: React.FC<NavigationProps> = ({
           'pointer-events:none',
           'width:14px',
           'height:14px',
-          'border:2px solid rgb(34, 211, 238)', // cyan-400
-          'background:rgba(34, 211, 238, 0.2)',
+          'border:2px solid rgb(var(--accent-400))', // accent
+          'background:rgb(var(--accent-400) / 0.2)',
           'border-radius:50%',
           'transform:translate(-50%, -50%)',
           'opacity:0',
           'transition:opacity 120ms ease-out',
           'z-index:5',
-          'box-shadow:0 0 6px rgba(34, 211, 238, 0.6)',
+          'box-shadow:0 0 6px rgb(var(--accent-glow) / 0.6)',
       ].join(';');
       parent.appendChild(dot);
       pivotMarkerRef.current = dot;

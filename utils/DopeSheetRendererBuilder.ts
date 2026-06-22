@@ -15,20 +15,22 @@
 
 import type { Track } from '../types';
 import { CacheCanvas, createCacheCanvas, getCacheCtx2D, CacheCtx2D } from './DopeSheetRendererCache';
+import { getThemeColor } from '../engine/store/colorSchemeStore';
 
-/** Tailwind theme colours mirrored as RGB so canvas can paint them.
- *  - cyan-900  / dark fill for default (un-selected, non-dirty) diamonds
- *  - cyan-400  / bright stroke for the same
- *  - gray-500/50 + gray-400/50 for group rows
+/** Default diamond palette for the DopeSheet back canvas. Each property resolves
+ *  LIVE from the active color scheme via getThemeColor (cached per scheme).
+ *  - accent dark fill / accent stroke for default (un-selected) track diamonds
+ *  - neutral grey fill + stroke for aggregated group rows
  *
- *  These match the original TrackRow.tsx KeyframeDiamond CSS so the canvas
- *  port produces a visual diff of zero at default state.
- */
+ *  These are theme chrome (the neutral default diamond look), NOT group-type
+ *  identity colours, so they follow the scheme. Callers that pass an explicit
+ *  fillColor/strokeColor (e.g. a synthetic Root Summary row) override these.
+ *  @see engine/store/colorSchemeStore.ts */
 export const DIAMOND_THEME = {
-    trackFill: '#164e63',     // cyan-900
-    trackStroke: '#22d3ee',   // cyan-400
-    groupFill: 'rgba(107, 114, 128, 0.5)',  // gray-500/50
-    groupStroke: 'rgba(156, 163, 175, 0.5)', // gray-400/50
+    get trackFill() { return getThemeColor('--accent-700'); },
+    get trackStroke() { return getThemeColor('--accent-400'); },
+    get groupFill() { return getThemeColor('--fg-muted', 0.5); },
+    get groupStroke() { return getThemeColor('--fg-tertiary', 0.5); },
 };
 
 export interface BuildTrackDiamondsArgs {

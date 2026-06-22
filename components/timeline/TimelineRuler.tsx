@@ -7,6 +7,7 @@ import { TIMELINE_RULER_HEIGHT } from '../../data/constants';
 import { useSidebarResize } from '../../hooks/useSidebarResize';
 import { useInteractionGesture } from '../../engine/hooks/useInteractionDrag';
 import { INTERACTION_SOURCES } from '../../engine-gmt/interaction/interactionSources';
+import { getThemeColor, useColorScheme } from '../../engine/store/colorSchemeStore';
 
 interface TimelineRulerProps {
     FRAME_WIDTH: number;
@@ -29,6 +30,9 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
     // boundary (ADR-0061 P3b). Window mouse-listener gesture — unmount cleanup +
     // watchdog back the release.
     const scrub = useInteractionGesture(INTERACTION_SOURCES.scrub);
+    // Re-render (and thus repaint the canvas below) when the color scheme changes;
+    // canvas pixels don't observe CSS vars, so the draw effect lists `scheme` as a dep.
+    const scheme = useColorScheme((s) => s.scheme);
 
     const canvasWidth = Math.max(1, visibleWidth - sidebarWidth);
 
@@ -46,9 +50,9 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
         
-        ctx.fillStyle = '#080808'; 
+        ctx.fillStyle = getThemeColor('--surface-header');
         ctx.fillRect(0, 0, canvasWidth, 24);
-        
+
         ctx.save();
         // Translate context to match the scroll position
         // Since we counter-translate the DOM element by +scrollLeft to keep it in view,
@@ -72,17 +76,17 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
             const x = i * FRAME_WIDTH;
             
             if (i % textStep === 0) {
-                ctx.fillStyle = '#9ca3af'; // gray-400
+                ctx.fillStyle = getThemeColor('--fg-muted');
                 ctx.fillRect(x, 0, 1, 12);
                 ctx.fillText(i.toString(), x + 4, 2);
             } else {
-                ctx.fillStyle = '#374151'; // gray-700
+                ctx.fillStyle = getThemeColor('--fg-ghost');
                 ctx.fillRect(x, 16, 1, 8);
             }
         }
-        
+
         // Draw bottom border
-        ctx.fillStyle = '#374151';
+        ctx.fillStyle = getThemeColor('--fg-ghost');
         ctx.fillRect(scrollLeft, 23, canvasWidth, 1);
         
         // Draw End of Sequence marker
@@ -110,7 +114,7 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
                 }
             }
             
-            ctx.fillStyle = '#666';
+            ctx.fillStyle = getThemeColor('--fg-dim');
             ctx.fillRect(limitPx, 0, 1, 24);
         }
 
@@ -118,7 +122,7 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
         const playheadX = currentFrame * FRAME_WIDTH;
         // Only draw if within current view buffer (expanded slightly)
         if (playheadX >= scrollLeft - 10 && playheadX <= scrollLeft + canvasWidth + 10) {
-             ctx.fillStyle = '#ef4444';
+             ctx.fillStyle = getThemeColor('--danger');
              ctx.beginPath();
              ctx.moveTo(playheadX - 6, 0);
              ctx.lineTo(playheadX + 6, 0);
@@ -128,7 +132,7 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
 
         ctx.restore();
 
-    }, [durationFrames, FRAME_WIDTH, canvasWidth, scrollLeft, currentFrame]);
+    }, [durationFrames, FRAME_WIDTH, canvasWidth, scrollLeft, currentFrame, scheme]);
 
     const handleScrubStart = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -167,22 +171,22 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
 
     return (
         <div 
-            className="flex bg-black/20 border-b border-white/10 z-30 sticky top-0"
+            className="flex bg-surface-section border-b border-line/10 z-30 sticky top-0"
             style={{ height: TIMELINE_RULER_HEIGHT }}
         >
             {/* Fixed Sidebar Header */}
             <div
-                className="sticky left-0 z-30 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 text-[9px] text-gray-500 font-bold relative"
+                className="sticky left-0 z-30 bg-surface/80 backdrop-blur-sm border-r border-line/10 shrink-0 flex items-center px-2 text-[9px] text-fg-dim font-bold relative"
                 style={{ width: sidebarWidth }}
             >
                 <span>Tracks</span>
                 {/* Drag handle — 6px hit zone at the right edge, 1px visible bar */}
                 <div
-                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-40 group/resize hover:bg-cyan-500/20"
+                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-40 group/resize hover:bg-accent-500/20"
                     onMouseDown={handleSidebarResizeStart}
                     title="Drag to resize sidebar"
                 >
-                    <div className="absolute right-0 top-0 h-full w-px bg-white/0 group-hover/resize:bg-cyan-400 transition-colors" />
+                    <div className="absolute right-0 top-0 h-full w-px bg-line/0 group-hover/resize:bg-accent-400 transition-colors" />
                 </div>
             </div>
             

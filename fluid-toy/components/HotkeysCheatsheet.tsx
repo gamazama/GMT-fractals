@@ -20,7 +20,7 @@
 import React, { useState } from 'react';
 
 const Key: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <span className="inline-block px-1 py-px text-[9px] font-mono border border-white/20 rounded bg-white/10 text-white/90 mx-0.5">
+    <span className="inline-block px-1 py-px text-[9px] font-mono border border-line/20 rounded bg-line/10 text-fg/90 mx-0.5">
         {children}
     </span>
 );
@@ -30,12 +30,12 @@ export const HotkeysCheatsheet: React.FC = () => {
 
     if (expanded) {
         return (
-            <div className="px-3 py-2 text-[10px] text-gray-300 bg-black/70 rounded border border-white/10 max-w-[360px] pointer-events-auto shadow-xl">
+            <div className="px-3 py-2 text-[10px] text-fg-tertiary bg-surface/80 rounded border border-line/10 max-w-[360px] pointer-events-auto shadow-xl">
                 <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] uppercase text-cyan-300 tracking-wide">Hotkeys</div>
+                    <div className="text-[10px] uppercase text-accent-300 tracking-wide">Hotkeys</div>
                     <button
                         onClick={() => setExpanded(false)}
-                        className="text-gray-500 hover:text-gray-200 text-[12px] px-1 leading-none"
+                        className="text-fg-dim hover:text-fg-secondary text-[12px] px-1 leading-none"
                         title="Hide (click ? to reopen)"
                     >×</button>
                 </div>
@@ -56,7 +56,7 @@ export const HotkeysCheatsheet: React.FC = () => {
     return (
         <button
             onClick={() => setExpanded(true)}
-            className="px-2 py-1 text-[10px] text-cyan-300 bg-black/50 rounded border border-white/10 hover:bg-black/70 pointer-events-auto"
+            className="px-2 py-1 text-[10px] text-accent-300 bg-surface/80 rounded border border-line/10 hover:bg-surface pointer-events-auto"
             title="Show hotkeys"
         >? hotkeys</button>
     );

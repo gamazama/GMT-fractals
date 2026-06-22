@@ -108,12 +108,12 @@ export const FpsCounter: React.FC = () => {
                 : 'UI frame rate — main-thread refresh, debug (click to cycle)';
 
     const color = isPaused
-        ? 'text-gray-600'
+        ? 'text-fg-faint'
         : metric === 'sps'
-            ? 'text-amber-500/80'
+            ? 'text-warn/80'
             : metric === 'ui'
-                ? 'text-purple-400/70'
-                : 'text-cyan-500/80';
+                ? 'text-secondary/70'
+                : 'text-accent-500/80';
 
     return (
         <span
@@ -121,7 +121,7 @@ export const FpsCounter: React.FC = () => {
             role="button"
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') cycle(); }}
-            className={`text-[10px] font-mono w-14 text-right cursor-pointer select-none transition-colors duration-300 hover:text-cyan-300 ${color}`}
+            className={`text-[10px] font-mono w-14 text-right cursor-pointer select-none transition-colors duration-300 hover:text-accent-300 ${color}`}
             title={title}
         >
             {text}

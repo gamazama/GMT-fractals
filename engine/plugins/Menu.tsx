@@ -361,7 +361,7 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
             <button
                 type="button"
                 onClick={handleClick}
-                className={`flex items-center gap-1 text-[10px] font-medium ${isOpenForVisual ? 'text-cyan-300 border-cyan-500/40' : 'text-gray-300 hover:text-white border-white/10 hover:border-cyan-500/40'} bg-black/40 hover:bg-white/5 border rounded px-2 py-1 transition-colors`}
+                className={`flex items-center gap-1 text-[10px] font-medium ${isOpenForVisual ? 'text-accent-300 border-accent-500/40' : 'text-fg-tertiary hover:text-fg border-line/10 hover:border-accent-500/40'} bg-surface-tabbar hover:bg-line/5 border rounded px-2 py-1 transition-colors`}
                 title={def.title}
                 aria-label={def.title || def.label || def.id}
             >
@@ -375,14 +375,14 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
             {/* Popover path — desktop, or mobile when no MobileMenuHost. */}
             {open && !useSidePanel && (
                 <div
-                    className={`absolute top-full ${def.align === 'end' ? 'right-0' : def.align === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0'} mt-2 ${def.width || 'w-56'} bg-black/95 border border-white/15 rounded-lg shadow-2xl z-50 p-1`}
+                    className={`absolute top-full ${def.align === 'end' ? 'right-0' : def.align === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0'} mt-2 ${def.width || 'w-56'} bg-surface border border-line/15 rounded-lg shadow-2xl z-50 p-1`}
                     onClick={(e) => e.stopPropagation()}
                 >
                     {items.map((item) => (
                         <MenuItemView key={item.id} item={item} close={close} />
                     ))}
                     {items.length === 0 && (
-                        <div className="px-3 py-2 text-[10px] text-gray-600 italic">(empty)</div>
+                        <div className="px-3 py-2 text-[10px] text-fg-faint italic">(empty)</div>
                     )}
                 </div>
             )}
@@ -399,9 +399,9 @@ _subscribers.add(_bumpRev);
 // ── Item renderers ─────────────────────────────────────────────────────
 
 const BADGE_COLORS = {
-    cyan:   { on: 'bg-cyan-500/30 text-cyan-300 border-cyan-500/40',     off: 'bg-white/[0.04] text-gray-600 border-white/5' },
-    green:  { on: 'bg-green-500/30 text-green-300 border-green-500/40',  off: 'bg-white/[0.04] text-gray-600 border-white/5' },
-    purple: { on: 'bg-purple-500/30 text-purple-300 border-purple-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+    cyan:   { on: 'bg-accent-500/30 text-accent-300 border-accent-500/40',     off: 'bg-line/[0.04] text-fg-faint border-line/5' },
+    green:  { on: 'bg-ok/30 text-ok border-ok/40',  off: 'bg-line/[0.04] text-fg-faint border-line/5' },
+    purple: { on: 'bg-secondary/30 text-secondary border-secondary/40', off: 'bg-line/[0.04] text-fg-faint border-line/5' },
 };
 
 const OnOffBadge: React.FC<{ active: boolean; color: 'cyan' | 'green' | 'purple' }> = ({ active, color }) => (
@@ -418,10 +418,10 @@ interface MenuItemViewProps {
 const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
     switch (item.type) {
         case 'separator':
-            return <div className={`h-px bg-white/10 my-1 ${item.className || ''}`} />;
+            return <div className={`h-px bg-line/10 my-1 ${item.className || ''}`} />;
         case 'section':
             return (
-                <div className={`text-[9px] font-bold text-gray-500 uppercase tracking-wider px-2 py-1 ${item.className || ''}`}>
+                <div className={`text-[9px] font-bold text-fg-dim uppercase tracking-wider px-2 py-1 ${item.className || ''}`}>
                     {item.label}
                 </div>
             );
@@ -440,13 +440,13 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
                         b.onSelect();
                         if (b.closeOnSelect !== false) close();
                     }}
-                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs transition-colors ${isDisabled ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:text-white hover:bg-white/10'} ${b.className || ''}`}
+                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs transition-colors ${isDisabled ? 'text-fg-faint cursor-not-allowed' : 'text-fg-tertiary hover:text-fg hover:bg-line/10'} ${b.className || ''}`}
                 >
                     <span className="flex items-center gap-2 min-w-0">
                         {renderIcon(b.icon)}
                         <span className="truncate">{labelText}</span>
                         {b.shortcut && (
-                            <span className="text-[9px] text-gray-500 font-mono">[{b.shortcut}]</span>
+                            <span className="text-[9px] text-fg-dim font-mono">[{b.shortcut}]</span>
                         )}
                     </span>
                 </button>
@@ -463,13 +463,13 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
                     title={t.title}
                     disabled={isDisabled}
                     onClick={(e) => { e.stopPropagation(); if (!isDisabled) t.onToggle(); }}
-                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs transition-colors ${isDisabled ? 'text-gray-600 cursor-not-allowed' : active ? 'text-white hover:bg-white/10' : 'text-gray-300 hover:text-white hover:bg-white/10'} ${t.className || ''}`}
+                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs transition-colors ${isDisabled ? 'text-fg-faint cursor-not-allowed' : active ? 'text-fg hover:bg-line/10' : 'text-fg-tertiary hover:text-fg hover:bg-line/10'} ${t.className || ''}`}
                 >
                     <span className="flex items-center gap-2 min-w-0">
                         {renderIcon(t.icon)}
                         <span className="truncate">{labelText}</span>
                         {t.shortcut && (
-                            <span className="text-[9px] text-gray-500 font-mono">[{t.shortcut}]</span>
+                            <span className="text-[9px] text-fg-dim font-mono">[{t.shortcut}]</span>
                         )}
                     </span>
                     <OnOffBadge active={active} color={t.color || 'cyan'} />
@@ -534,20 +534,20 @@ export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', 
     return (
         <aside
             ref={asideRef}
-            className={`${width} h-full flex flex-col bg-black/95 border-l border-white/10 ${className}`}
+            className={`${width} h-full flex flex-col bg-surface border-l border-line/10 ${className}`}
             // Touch panning inside the scroll region; prevents the page
             // from absorbing vertical-scroll gestures meant for the menu.
             style={{ touchAction: 'pan-y' }}
         >
-            <header className="flex items-center justify-between px-3 py-2 border-b border-white/10 shrink-0">
-                <div className="flex items-center gap-2 text-xs text-gray-200 font-medium">
+            <header className="flex items-center justify-between px-3 py-2 border-b border-line/10 shrink-0">
+                <div className="flex items-center gap-2 text-xs text-fg-secondary font-medium">
                     {renderIcon(def.icon)}
                     <span>{def.label || def.title || activeId}</span>
                 </div>
                 <button
                     type="button"
                     onClick={close}
-                    className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition-colors"
+                    className="text-fg-muted hover:text-fg px-2 py-1 rounded hover:bg-line/10 transition-colors"
                     aria-label="Close menu"
                     title="Close"
                 >
@@ -559,7 +559,7 @@ export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', 
                     <MenuItemView key={item.id} item={item} close={close} />
                 ))}
                 {items.length === 0 && (
-                    <div className="px-3 py-2 text-[10px] text-gray-600 italic">(empty)</div>
+                    <div className="px-3 py-2 text-[10px] text-fg-faint italic">(empty)</div>
                 )}
             </div>
         </aside>

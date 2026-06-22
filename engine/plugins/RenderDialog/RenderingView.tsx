@@ -36,54 +36,54 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
         <div className="flex flex-col h-full space-y-4 p-2">
             <div className="space-y-1">
                 <div className="flex justify-between items-baseline t-label-sm">
-                    <span className="text-cyan-300 font-bold">{progress.toFixed(1)}%</span>
-                    <span className="text-[9px] text-gray-400 font-normal truncate max-w-[200px]">{statusText}</span>
+                    <span className="text-accent-300 font-bold">{progress.toFixed(1)}%</span>
+                    <span className="text-[9px] text-fg-muted font-normal truncate max-w-[200px]">{statusText}</span>
                 </div>
-                <div className="h-3 w-full bg-gray-900 rounded-full overflow-hidden border border-white/10">
+                <div className="h-3 w-full bg-surface-sunken rounded-full overflow-hidden border border-line/10">
                     {/* No transition on width — runners push setProgress
                      *  faster than 300ms in many cases (each call kicks
                      *  off a new tween that the next call interrupts at
                      *  a fraction of the way through), so the bar
                      *  visibly stalls. Snap to the latest value. */}
                     <div
-                        className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 relative"
+                        className="h-full bg-gradient-to-r from-accent-600 to-accent-400 relative"
                         style={{ width: `${progress}%` }}
                     >
-                        <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                        <div className="absolute inset-0 bg-line/20 animate-pulse" />
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 bg-white/5 p-3 rounded border border-white/5">
+            <div className="grid grid-cols-2 gap-3 bg-line/5 p-3 rounded border border-line/5">
                 <div className="flex flex-col">
-                    <span className="t-label-sm text-gray-500 mb-0.5">Elapsed</span>
-                    <span className="font-mono text-sm font-bold text-white">{formatTimeWithUnits(elapsedTime)}</span>
+                    <span className="t-label-sm text-fg-dim mb-0.5">Elapsed</span>
+                    <span className="font-mono text-sm font-bold text-fg">{formatTimeWithUnits(elapsedTime)}</span>
                 </div>
                 <div className="flex flex-col text-right">
-                    <span className="t-label-sm text-gray-500 mb-0.5">Remaining</span>
-                    <span className="font-mono text-sm font-bold text-cyan-300">
+                    <span className="t-label-sm text-fg-dim mb-0.5">Remaining</span>
+                    <span className="font-mono text-sm font-bold text-accent-300">
                         {formatTimeWithUnits(etaRange.min)} – {formatTimeWithUnits(etaRange.max)}
                     </span>
                 </div>
-                <div className="flex flex-col pt-2 border-t border-white/5">
-                    <span className="t-label-sm text-gray-500 mb-0.5">Last Frame</span>
-                    <span className={`font-mono text-xs ${lastFrameTime > 2.0 ? 'text-amber-400' : 'text-gray-300'}`}>
+                <div className="flex flex-col pt-2 border-t border-line/5">
+                    <span className="t-label-sm text-fg-dim mb-0.5">Last Frame</span>
+                    <span className={`font-mono text-xs ${lastFrameTime > 2.0 ? 'text-warn' : 'text-fg-tertiary'}`}>
                         {lastFrameTime.toFixed(2)}s
                     </span>
                 </div>
-                <div className="flex flex-col text-right pt-2 border-t border-white/5">
-                    <span className="t-label-sm text-gray-500 mb-0.5">Est. Total</span>
-                    <span className="font-mono text-xs text-gray-300">
+                <div className="flex flex-col text-right pt-2 border-t border-line/5">
+                    <span className="t-label-sm text-fg-dim mb-0.5">Est. Total</span>
+                    <span className="font-mono text-xs text-fg-tertiary">
                         {elapsedTime > 0 && progress > 0 ? formatTimeWithUnits(elapsedTime / (progress / 100)) : '--'}
                     </span>
                 </div>
             </div>
 
-            <div className="text-[9px] text-gray-500 grid grid-cols-2 gap-y-1 border-t border-white/5 pt-3">
-                <span>Resolution: <span className="text-gray-300">{cfg.width}x{cfg.height}</span></span>
-                <span>Format: <span className="text-gray-300">{fmt?.label.split(' ')[0] ?? '?'}</span></span>
+            <div className="text-[9px] text-fg-dim grid grid-cols-2 gap-y-1 border-t border-line/5 pt-3">
+                <span>Resolution: <span className="text-fg-tertiary">{cfg.width}x{cfg.height}</span></span>
+                <span>Format: <span className="text-fg-tertiary">{fmt?.label.split(' ')[0] ?? '?'}</span></span>
                 {showSamplesPerFrame && (
-                    <span>Samples: <span className="text-gray-300">{cfg.samplesPerFrame}</span></span>
+                    <span>Samples: <span className="text-fg-tertiary">{cfg.samplesPerFrame}</span></span>
                 )}
                 {extraSummary}
             </div>

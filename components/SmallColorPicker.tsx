@@ -66,11 +66,11 @@ const PickerPortal = ({
 
     return createPortal(
         <div 
-            className="picker-popup fixed z-[9999] bg-black border border-white/20 p-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-64 animate-fade-in"
+            className="picker-popup fixed z-[9999] bg-surface border border-line/20 p-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-64 animate-fade-in"
             style={{ left: coords.x, top: coords.y }}
             onMouseDown={(e) => e.stopPropagation()} 
         >
-            {label && <div className="text-[10px] font-bold text-gray-500 mb-2 text-center">{label}</div>}
+            {label && <div className="text-[10px] font-bold text-fg-dim mb-2 text-center">{label}</div>}
             <EmbeddedColorPicker color={color} onColorChange={onChange} />
         </div>,
         document.body
@@ -88,11 +88,11 @@ export const SmallColorPicker: React.FC<SmallColorPickerProps> = ({ color, onCha
                 ref={btnRef}
                 onClick={() => setIsOpen(!isOpen)}
                 onContextMenu={handleContextMenu}
-                className="w-16 h-6 rounded border border-white/10 shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center overflow-hidden"
+                className="w-16 h-6 rounded border border-line/10 shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center overflow-hidden"
                 style={{ backgroundColor: color }}
                 title={label || "Pick Color"}
             >
-                <div className="text-[8px] font-mono font-bold mix-blend-difference text-white">{color}</div>
+                <div className="text-[8px] font-mono font-bold mix-blend-difference text-fg">{color}</div>
             </button>
             
             {isOpen && (

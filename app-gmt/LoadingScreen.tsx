@@ -237,21 +237,21 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
         return (
             <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black" style={{ opacity }}>
                 <div className="text-center mb-8 relative animate-fade-in-up z-10">
-                    <GmtWordmark accent="#f87171" className="h-16 w-auto mx-auto block drop-shadow-[0_0_15px_rgba(239,68,68,0.5)] mb-2" />
-                    <div className="text-xs text-red-400/80 font-mono uppercase tracking-[0.4em]">Engine failed to start</div>
+                    <GmtWordmark accent="rgb(var(--danger))" className="h-16 w-auto mx-auto block drop-shadow-[0_0_15px_rgb(var(--danger)/0.5)] mb-2" />
+                    <div className="text-xs text-danger/80 font-mono uppercase tracking-[0.4em]">Engine failed to start</div>
                 </div>
 
-                <div className="relative z-10 w-[500px] max-w-[90vw] bg-gray-900/80 border border-red-500/40 rounded-xl p-5 shadow-[0_0_50px_rgba(239,68,68,0.15)] backdrop-blur-sm">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-red-400/80 mb-2">Reason</div>
-                    <div className="font-mono text-xs text-gray-200 whitespace-pre-wrap break-words max-h-[140px] overflow-auto">
+                <div className="relative z-10 w-[500px] max-w-[90vw] bg-surface-sunken/80 border border-danger/40 rounded-xl p-5 shadow-[0_0_50px_rgb(var(--danger)/0.15)] backdrop-blur-sm">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-danger/80 mb-2">Reason</div>
+                    <div className="font-mono text-xs text-fg-secondary whitespace-pre-wrap break-words max-h-[140px] overflow-auto">
                         {bootError}
                     </div>
 
                     <details className="mt-4">
-                        <summary className="text-[10px] font-bold uppercase tracking-widest text-gray-500 cursor-pointer hover:text-gray-300 select-none">
+                        <summary className="text-[10px] font-bold uppercase tracking-widest text-fg-dim cursor-pointer hover:text-fg-tertiary select-none">
                             Technical details
                         </summary>
-                        <div className="mt-2 font-mono text-[10px] leading-relaxed text-gray-400 whitespace-pre-wrap break-words max-h-[180px] overflow-auto bg-black/40 rounded p-2 border border-white/5">
+                        <div className="mt-2 font-mono text-[10px] leading-relaxed text-fg-muted whitespace-pre-wrap break-words max-h-[180px] overflow-auto bg-surface-section rounded p-2 border border-line/5">
                             {diagnostics || 'Collecting…'}
                         </div>
                     </details>
@@ -260,14 +260,14 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
                 <div className="mt-6 flex gap-2 z-20">
                     <button
                         onClick={() => window.location.reload()}
-                        className="px-4 py-2 text-xs font-bold rounded border border-cyan-500/40 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/40 hover:text-white transition-colors"
+                        className="px-4 py-2 text-xs font-bold rounded border border-accent-500/40 bg-accent-900/30 text-accent-300 hover:bg-accent-800/40 hover:text-fg transition-colors"
                     >
                         Reload
                     </button>
                     <button
                         onClick={sendReport}
                         disabled={reportState === 'sending' || reportState === 'sent'}
-                        className="px-4 py-2 text-xs font-bold rounded border border-white/15 bg-white/5 text-gray-200 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-default"
+                        className="px-4 py-2 text-xs font-bold rounded border border-line/15 bg-line/5 text-fg-secondary hover:bg-line/10 hover:text-fg transition-colors disabled:opacity-50 disabled:cursor-default"
                     >
                         {reportState === 'idle' && 'Send report'}
                         {reportState === 'sending' && 'Sending…'}
@@ -276,7 +276,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
                     </button>
                 </div>
 
-                <div className="mt-4 max-w-[500px] text-center text-[10px] font-mono text-gray-500 px-4">
+                <div className="mt-4 max-w-[500px] text-center text-[10px] font-mono text-fg-dim px-4">
                     Sending the report shares the technical details above (no scene data) so we can fix it.
                     Common causes: WebGL2 / OffscreenCanvas disabled, a lost GPU context, or a shader-compile failure on this device.
                 </div>
@@ -288,16 +288,16 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black transition-opacity duration-1000" style={{ opacity }}>
             <div className="text-center mb-10 relative animate-fade-in-up z-10">
                 <div className="relative inline-block mb-2">
-                    <GmtWordmark className="h-16 w-auto block drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]" />
+                    <GmtWordmark className="h-16 w-auto block drop-shadow-[0_0_15px_rgb(var(--accent-glow)/0.5)]" />
                     {/* Version badge: left edge anchored to the logo's top-right corner. */}
-                    <span className="absolute top-0 left-full font-mono text-[10px] font-bold leading-none text-white select-none">
+                    <span className="absolute top-0 left-full font-mono text-[10px] font-bold leading-none text-fg select-none">
                         {__APP_VERSION__}
                     </span>
                 </div>
-                <div className="text-xs text-gray-400 font-mono uppercase tracking-[0.4em]">{subtitle}</div>
+                <div className="text-xs text-fg-muted font-mono uppercase tracking-[0.4em]">{subtitle}</div>
             </div>
 
-            <div className="relative z-10 w-[500px] h-16 bg-gray-900/80 rounded-full border border-gray-700/50 overflow-hidden shadow-[0_0_50px_rgba(0,255,255,0.1)] backdrop-blur-sm">
+            <div className="relative z-10 w-[500px] h-16 bg-surface-sunken/80 rounded-full border border-line/20 overflow-hidden shadow-[0_0_50px_rgb(var(--accent-glow)/0.1)] backdrop-blur-sm">
                 {/* clip-path masks the canvas reveal — canvas paints once at
                     full width and the clip animates on the compositor thread,
                     so the bar keeps moving even when the worker's synchronous
@@ -311,63 +311,63 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
                 >
                     <canvas ref={fgCanvasRef} className="absolute top-0 left-0 w-[500px] h-16" />
                 </div>
-                <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-b from-line/5 to-transparent pointer-events-none" />
             </div>
 
-            <div className="mt-6 font-mono text-sm text-cyan-500/80 z-20 flex flex-col items-center h-10">
+            <div className="mt-6 font-mono text-sm text-accent-500/80 z-20 flex flex-col items-center h-10">
                 {startupMode === 'url' ? (
                     <span className="animate-pulse">LOADING SHARED SCENE... {Math.floor(progress)}%</span>
                 ) : (
                     <div className="relative flex flex-col items-center">
                         <div className="flex items-center gap-2">
-                            <span className="text-cyan-600/80">LOADING</span>
+                            <span className="text-accent-600/80">LOADING</span>
                             <button
                                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                                 title="Click to explore other fractals or load a file"
-                                className="flex items-center gap-1 text-cyan-400 hover:text-white transition-colors border-b border-dashed border-cyan-500/30 hover:border-cyan-400 pb-0.5 outline-none"
+                                className="flex items-center gap-1 text-accent-400 hover:text-fg transition-colors border-b border-dashed border-accent-500/30 hover:border-accent-400 pb-0.5 outline-none"
                             >
                                 <span className="font-bold">[{activeFormula}]</span>
                                 <span className={`text-[10px] transform transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}><ChevronDown /></span>
                             </button>
-                            <span className="text-cyan-600/80">{Math.floor(progress)}%</span>
+                            <span className="text-accent-600/80">{Math.floor(progress)}%</span>
                         </div>
 
                         <button
                             onClick={handleLiteToggle}
                             className={`mt-4 px-3 py-1.5 text-[9px] font-bold rounded border transition-all ${
                                 isLiteRender
-                                    ? 'bg-orange-900/40 text-orange-200 border-orange-500/40 hover:bg-orange-800/50'
-                                    : 'bg-white/5 text-gray-500 border-white/5 hover:text-white hover:border-white/20'
+                                    ? 'bg-warn/40 text-warn border-warn/40 hover:bg-warn/50'
+                                    : 'bg-line/5 text-fg-dim border-line/5 hover:text-fg hover:border-line/20'
                             }`}
                         >
                             {isLiteRender ? 'Lite Render Active' : 'Enable Lite Render'}
                         </button>
 
                         {isMenuOpen && (
-                            <div className="absolute bottom-full mb-4 w-[340px] bg-black/95 border border-white/20 rounded-xl shadow-[0_10px_60px_rgba(0,0,0,0.9)] backdrop-blur-xl animate-fade-in text-xs z-[110]"
+                            <div className="absolute bottom-full mb-4 w-[340px] bg-surface border border-line/20 rounded-xl shadow-[0_10px_60px_rgba(0,0,0,0.9)] backdrop-blur-xl animate-fade-in text-xs z-[110]"
                                 onMouseLeave={() => setHoveredId(null)}>
                                 {hoveredId && hoveredId !== 'Modular' && (
-                                    <div className="absolute left-[350px] bottom-0 w-[256px] h-[256px] bg-black border border-cyan-500/50 rounded-lg shadow-[0_0_50px_rgba(0,0,0,1)] overflow-hidden animate-fade-in pointer-events-none">
+                                    <div className="absolute left-[350px] bottom-0 w-[256px] h-[256px] bg-black border border-accent-500/50 rounded-lg shadow-[0_0_50px_rgba(0,0,0,1)] overflow-hidden animate-fade-in pointer-events-none">
                                         <img src={getThumbPath(hoveredId)} className="w-full h-full object-cover" alt="Preview"
                                             onError={e => { e.currentTarget.style.display = 'none'; }} />
                                         <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03))] bg-[length:100%_4px,4px_100%] pointer-events-none" />
-                                        <div className="absolute bottom-0 left-0 right-0 p-3 bg-black/60 text-cyan-300 font-bold text-[9px] border-t border-white/5">
+                                        <div className="absolute bottom-0 left-0 right-0 p-3 bg-surface/80 text-accent-300 font-bold text-[9px] border-t border-line/5">
                                             {registry.get(hoveredId as any)?.name}
                                         </div>
                                     </div>
                                 )}
                                 <div className="p-1 max-h-[400px] overflow-y-auto custom-scroll">
                                     <button onClick={() => fileInputRef.current?.click()}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-gray-300 hover:bg-white/10 hover:text-white rounded transition-colors mb-1 border-b border-white/10">
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-fg-tertiary hover:bg-line/10 hover:text-fg rounded transition-colors mb-1 border-b border-line/10">
                                         <UploadIcon /> <span className="font-bold text-[10px]">Load From File...</span>
                                     </button>
                                     <input type="file" ref={fileInputRef} className="hidden" accept=".gmf,.json,.png" onChange={handleFile} />
 
-                                    <div className="px-3 py-1.5 text-[9px] font-bold text-gray-500 bg-white/5 mb-1">Select Engine</div>
+                                    <div className="px-3 py-1.5 text-[9px] font-bold text-fg-dim bg-line/5 mb-1">Select Engine</div>
                                     {formulas.map(f => (
                                         <button key={f.id} onClick={() => handleSelectFormula(f.id)} onMouseEnter={() => setHoveredId(f.id)}
-                                            className={`w-full text-left px-3 py-2.5 transition-all flex gap-3 border-b border-white/5 last:border-b-0 ${f.id === activeFormula ? 'bg-cyan-900/30' : 'hover:bg-white/5'}`}>
-                                            <div className="w-16 h-10 shrink-0 bg-black rounded border border-white/10 overflow-hidden relative">
+                                            className={`w-full text-left px-3 py-2.5 transition-all flex gap-3 border-b border-line/5 last:border-b-0 ${f.id === activeFormula ? 'bg-accent-900/30' : 'hover:bg-line/5'}`}>
+                                            <div className="w-16 h-10 shrink-0 bg-black rounded border border-line/10 overflow-hidden relative">
                                                 {f.id !== 'Modular' ? (
                                                     <img src={getThumbPath(f.id)} alt={f.name} className="w-full h-full object-cover"
                                                         onError={e => {
@@ -376,12 +376,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
                                                             if (sib) sib.style.display = 'flex';
                                                         }} />
                                                 ) : null}
-                                                <div className={`w-full h-full items-center justify-center text-gray-700 bg-gray-900 ${f.id !== 'Modular' ? 'hidden' : 'flex'}`}>
+                                                <div className={`w-full h-full items-center justify-center text-fg-ghost bg-surface-sunken ${f.id !== 'Modular' ? 'hidden' : 'flex'}`}>
                                                     {f.id === 'Modular' ? <NetworkIcon /> : <CubeIcon />}
                                                 </div>
                                             </div>
                                             <div className="flex flex-col min-w-0">
-                                                <span className={`text-[11px] font-bold tracking-tight mb-0.5 ${f.id === activeFormula ? 'text-cyan-400' : 'text-gray-200'}`}>{f.name}</span>
+                                                <span className={`text-[11px] font-bold tracking-tight mb-0.5 ${f.id === activeFormula ? 'text-accent-400' : 'text-fg-secondary'}`}>{f.name}</span>
                                             </div>
                                         </button>
                                     ))}

@@ -450,33 +450,33 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                 <div className="space-y-2" data-help-id="bucket.render">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                            <span className="text-[10px] font-bold text-gray-300">Rendering</span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-accent-400 animate-pulse" />
+                            <span className="text-[10px] font-bold text-fg-tertiary">Rendering</span>
                         </div>
-                        <span className="font-mono tabular-nums text-[10px] text-cyan-300">
+                        <span className="font-mono tabular-nums text-[10px] text-accent-300">
                             {progress.toFixed(1)}%
                         </span>
                     </div>
 
-                    <div className="w-full h-1.5 bg-black rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-surface-sunken rounded-full overflow-hidden">
                         <div
-                            className="h-full bg-cyan-500 transition-all duration-300 ease-linear"
+                            className="h-full bg-accent-500 transition-all duration-300 ease-linear"
                             style={{ width: `${progress}%` }}
                         />
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 pt-1 text-center">
                         <div>
-                            <div className="text-[8px] uppercase tracking-wider text-gray-500">Tile</div>
-                            <div className="font-mono tabular-nums text-[10px] text-gray-200">{tileLabel}</div>
+                            <div className="text-[8px] uppercase tracking-wider text-fg-dim">Tile</div>
+                            <div className="font-mono tabular-nums text-[10px] text-fg-secondary">{tileLabel}</div>
                         </div>
                         <div>
-                            <div className="text-[8px] uppercase tracking-wider text-gray-500">Elapsed</div>
-                            <div className="font-mono tabular-nums text-[10px] text-gray-200">{formatTimeWithUnits(elapsed)}</div>
+                            <div className="text-[8px] uppercase tracking-wider text-fg-dim">Elapsed</div>
+                            <div className="font-mono tabular-nums text-[10px] text-fg-secondary">{formatTimeWithUnits(elapsed)}</div>
                         </div>
                         <div>
-                            <div className="text-[8px] uppercase tracking-wider text-gray-500">ETA</div>
-                            <div className="font-mono tabular-nums text-[10px] text-gray-200">{etaLabel}</div>
+                            <div className="text-[8px] uppercase tracking-wider text-fg-dim">ETA</div>
+                            <div className="font-mono tabular-nums text-[10px] text-fg-secondary">{etaLabel}</div>
                         </div>
                     </div>
 
@@ -498,7 +498,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
         <Popover width="w-72" align={align}>
             <div className="relative space-y-2.5" data-help-id="bucket.render">
                 <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">High-Res Render</span>
+                    <span className="text-[10px] font-bold text-fg-muted uppercase tracking-wider">High-Res Render</span>
                     <div className="flex items-center gap-2">
                         {previewEngaged && supportsPreview && (
                             <button
@@ -510,22 +510,22 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                                         state.setInteractionMode('none');
                                     }
                                 }}
-                                className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-fuchsia-400/60 bg-fuchsia-900/40 text-fuchsia-200 hover:bg-fuchsia-800/50 transition-colors flex items-center gap-1"
+                                className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-secondary/60 bg-secondary/40 text-secondary hover:bg-secondary/50 transition-colors flex items-center gap-1"
                                 title={state.previewRegion ? 'Exit Preview Region (Esc)' : 'Cancel preview pick (Esc)'}
                             >
-                                <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
                                 {state.previewRegion ? 'Exit Preview' : 'Cancel Pick'}
                             </button>
                         )}
                         <label
-                            className="flex items-center gap-1 text-[9px] text-gray-400 hover:text-gray-200 cursor-pointer select-none"
+                            className="flex items-center gap-1 text-[9px] text-fg-muted hover:text-fg-secondary cursor-pointer select-none"
                             title="Embed scene data (GMF) in the exported PNG's iTXt chunk"
                         >
                             <input
                                 type="checkbox"
                                 checked={includeGmf}
                                 onChange={(e) => setIncludeGmf(e.target.checked)}
-                                className="accent-cyan-500 w-3 h-3"
+                                className="accent-accent-500 w-3 h-3"
                             />
                             include GMF
                         </label>
@@ -540,14 +540,14 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                     const cappedSamples = Math.min(previewSamples, cap);
                     const atCap = previewSamples >= cap;
                     return (
-                        <div className="flex items-center justify-between text-[9px] bg-fuchsia-900/20 border border-fuchsia-400/20 rounded px-2 py-1">
-                            <span className="text-fuchsia-300 font-bold">Preview</span>
-                            <span className="text-gray-400 font-mono tabular-nums">
+                        <div className="flex items-center justify-between text-[9px] bg-secondary/20 border border-secondary/20 rounded px-2 py-1">
+                            <span className="text-secondary font-bold">Preview</span>
+                            <span className="text-fg-muted font-mono tabular-nums">
                                 {outputWidth}×{outputHeight}
-                                <span className="text-gray-600 mx-1">·</span>
+                                <span className="text-fg-faint mx-1">·</span>
                                 {rW}×{rH}
                             </span>
-                            <span className={`font-mono tabular-nums ${atCap ? 'text-green-400' : 'text-cyan-300'}`} title={atCap ? 'Sample cap reached' : `Accumulating (cap ${cap})`}>
+                            <span className={`font-mono tabular-nums ${atCap ? 'text-ok' : 'text-accent-300'}`} title={atCap ? 'Sample cap reached' : `Accumulating (cap ${cap})`}>
                                 {cappedSamples}/{cap}
                             </span>
                         </div>
@@ -559,12 +559,12 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                     so canvas-pick mode stays legible even with the action row
                     hidden. */}
                 {state.interactionMode === 'selecting_preview' && !state.previewRegion && supportsPreview && (
-                    <div className="flex items-center justify-between text-[9px] bg-fuchsia-900/20 border border-fuchsia-400/20 rounded px-2 py-1">
-                        <span className="text-fuchsia-300 font-bold flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse" />
+                    <div className="flex items-center justify-between text-[9px] bg-secondary/20 border border-secondary/20 rounded px-2 py-1">
+                        <span className="text-secondary font-bold flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
                             Picking preview
                         </span>
-                        <span className="text-gray-500">drag on canvas to select</span>
+                        <span className="text-fg-dim">drag on canvas to select</span>
                     </div>
                 )}
 
@@ -628,7 +628,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                             onClick={() => setPreviewExpanded(v => !v)}
                             title={previewExpanded ? 'Hide render settings' : 'Show render settings'}
                             aria-label={previewExpanded ? 'Hide render settings' : 'Show render settings'}
-                            className="flex items-center justify-center w-9 h-5 rounded border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                            className="flex items-center justify-center w-9 h-5 rounded border border-line/10 text-fg-muted hover:text-fg hover:bg-line/5 transition-colors"
                         >
                             <ChevronDown size={12} className={`transition-transform ${previewExpanded ? 'rotate-180' : ''}`} />
                         </button>
@@ -651,7 +651,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                     <div className="pt-1">
                         <div className="flex items-center justify-between mb-1">
                             <SectionLabel>Output Size</SectionLabel>
-                            <span className={`font-mono tabular-nums text-[9px] ${vram > 1500 ? 'text-red-400' : vram > 500 ? 'text-yellow-400' : 'text-gray-500'}`}>
+                            <span className={`font-mono tabular-nums text-[9px] ${vram > 1500 ? 'text-danger' : vram > 500 ? 'text-warn' : 'text-fg-dim'}`}>
                                 ~{vram < 1024 ? `${Math.round(vram)} MB` : `${(vram / 1024).toFixed(1)} GB`} / tile
                             </span>
                         </div>
@@ -682,12 +682,12 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                         </div>
 
                         <div className="flex items-center justify-between mt-1.5 px-1 gap-2">
-                            <label className="flex items-center gap-1.5 text-[9px] text-gray-400 cursor-pointer">
+                            <label className="flex items-center gap-1.5 text-[9px] text-fg-muted cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={matchViewportAspect}
                                     onChange={(e) => state.setMatchViewportAspect(e.target.checked)}
-                                    className="accent-cyan-500"
+                                    className="accent-accent-500"
                                 />
                                 Lock to viewport aspect
                             </label>
@@ -704,19 +704,19 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                     <div className="pt-1">
                         <div className="flex items-center justify-between mb-1">
                             <SectionLabel>Tile Grid</SectionLabel>
-                            <span className="font-mono tabular-nums text-[9px] text-gray-500">
+                            <span className="font-mono tabular-nums text-[9px] text-fg-dim">
                                 {fileCount > 1 ? `${fileCount} files · ${tilePixels[0]}×${tilePixels[1]}` : '1 file'}
                             </span>
                         </div>
                         <div className="flex items-center gap-2">
                             <SectionLabel variant="secondary" className="shrink-0">Columns</SectionLabel>
                             <NumberInput value={tileCols} onChange={state.setTileCols} step={1} min={1} max={32} />
-                            <span className="text-[10px] text-gray-500">×</span>
+                            <span className="text-[10px] text-fg-dim">×</span>
                             <SectionLabel variant="secondary" className="shrink-0">Rows</SectionLabel>
                             <NumberInput value={tileRows} onChange={state.setTileRows} step={1} min={1} max={32} />
                         </div>
                         {showBloomSeamWarning && (
-                            <p className="text-[8px] text-amber-400/80 mt-1.5 px-1">
+                            <p className="text-[8px] text-warn/80 mt-1.5 px-1">
                                 ⚠ Bloom and chromatic aberration may seam at tile boundaries — disable in Lighting / Post for seamless stitching.
                             </p>
                         )}

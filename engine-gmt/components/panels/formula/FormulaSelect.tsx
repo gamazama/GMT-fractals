@@ -160,29 +160,29 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                 ref={btnRef}
                 onClick={toggle}
                 onContextMenu={handleContextMenu}
-                className={`flex-1 flex items-center justify-between border text-xs text-white rounded-lg px-2 py-1.5 outline-none transition-all group ${
+                className={`flex-1 flex items-center justify-between border text-xs text-fg rounded-lg px-2 py-1.5 outline-none transition-all group ${
                     isOpen
-                    ? 'bg-gray-900 border-cyan-500 ring-1 ring-cyan-900'
+                    ? 'bg-surface-sunken border-accent-500 ring-1 ring-accent-900'
                     : isModular
-                        ? 'bg-gray-900 border-purple-500/50 shadow-[inset_0_0_10px_rgba(168,85,247,0.1)]'
-                        : 'bg-gradient-to-t from-white/[0.06] to-white/[0.03] border-white/10 hover:border-white/20 shadow-[inset_0_-1px_0_rgba(255,255,255,0.04)]'
+                        ? 'bg-surface-sunken border-purple-500/50 shadow-[inset_0_0_10px_rgba(168,85,247,0.1)]'
+                        : 'bg-gradient-to-t from-line/[0.06] to-line/[0.03] border-line/10 hover:border-line/20 shadow-[inset_0_-1px_0_rgb(var(--line)/0.04)]'
                 }`}
             >
                 <div className="flex items-center gap-2">
                     {isModular && (
                         <span className="flex w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse shadow-[0_0_5px_#a855f7]" />
                     )}
-                    <span className={`font-bold ${isModular ? 'text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-purple-300' : ''}`}>
+                    <span className={`font-bold ${isModular ? 'text-transparent bg-clip-text bg-gradient-to-r from-accent-300 to-purple-300' : ''}`}>
                         {displayLabel}
                     </span>
                 </div>
-                <div className={`w-3 h-3 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}><ChevronDown /></div>
+                <div className={`w-3 h-3 text-fg-dim transition-transform ${isOpen ? 'rotate-180' : ''}`}><ChevronDown /></div>
             </button>
 
             <button
                 ref={mergeRefs(menuBtnRef, hamburgerAnchorRef)}
                 onClick={handleMenuButtonClick}
-                className="w-4 flex items-center justify-center bg-white/[0.04] border border-white/10 hover:border-white/20 hover:bg-white/[0.08] text-gray-400 hover:text-white rounded-lg transition-colors"
+                className="w-4 flex items-center justify-center bg-line/[0.04] border border-line/10 hover:border-line/20 hover:bg-line/[0.08] text-fg-muted hover:text-fg rounded-lg transition-colors"
                 title="Formula options"
             >
                 <MenuIcon />
@@ -192,7 +192,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                 <button
                     onClick={handleExportClick}
                     onContextMenu={handleExportContextMenu}
-                    className="w-8 flex items-center justify-center bg-white/[0.04] border border-white/10 hover:border-white/20 hover:bg-white/[0.08] text-gray-400 hover:text-white rounded-lg transition-colors"
+                    className="w-8 flex items-center justify-center bg-line/[0.04] border border-line/10 hover:border-line/20 hover:bg-line/[0.08] text-fg-muted hover:text-fg rounded-lg transition-colors"
                     title={exportIncludeScene ? "Export Full Preset (Right-click for options)" : "Export Formula Only (Right-click for options)"}
                 >
                     <DownloadIcon />
@@ -203,7 +203,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             {registry.get(value)?.importSource && (
                 <button
                     onClick={() => openWorkshop(value)}
-                    className="w-8 flex items-center justify-center bg-white/[0.04] border border-white/10 hover:border-white/20 hover:bg-white/[0.08] text-gray-400 hover:text-white rounded-lg transition-colors"
+                    className="w-8 flex items-center justify-center bg-line/[0.04] border border-line/10 hover:border-line/20 hover:bg-line/[0.08] text-fg-muted hover:text-fg rounded-lg transition-colors"
                     title="Re-edit imported formula in Workshop"
                 >
                     <CodeIcon />
@@ -238,7 +238,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                     footerSlot={advancedMode ? (
                         <button
                             onClick={() => { fileRef.current?.click(); setIsOpen(false); }}
-                            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-cyan-900/20 hover:bg-cyan-900/40 text-cyan-400 text-[10px] font-bold rounded border border-cyan-500/20 hover:border-cyan-500/50 transition-colors"
+                            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-accent-900/20 hover:bg-accent-900/40 text-accent-400 text-[10px] font-bold rounded border border-accent-500/20 hover:border-accent-500/50 transition-colors"
                         >
                             <UploadIcon />
                             Import Formula (.GMF)

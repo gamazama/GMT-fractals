@@ -85,16 +85,16 @@ export const GradientHoverPreview: React.FC<{ hover: GradientHover | null }> = (
     <>
       <canvas
         ref={ref}
-        className="fixed pointer-events-none border border-white rounded-[2px]"
+        className="fixed pointer-events-none border border-fg rounded-[2px]"
         style={{ left: hover.ex, top: hover.ey, width: hover.ew, height: hover.eh, zIndex: Z_PREVIEW, boxShadow: '0 0 28px rgba(0,0,0,0.92)' }}
       />
       <div
         ref={tipRef}
-        className="fixed pointer-events-none px-2 py-1 rounded bg-zinc-900/95 border border-zinc-700 text-[11px] text-zinc-200 shadow-xl whitespace-nowrap"
+        className="fixed pointer-events-none px-2 py-1 rounded bg-surface/95 border border-line/20 text-[11px] text-fg-secondary shadow-xl whitespace-nowrap"
         style={{ left: hover.ex, top: hover.ey + hover.eh + 8, zIndex: Z_PREVIEW }}
       >
         <span className="font-medium">{hover.name}</span>
-        {hover.sub != null && <span className="text-zinc-500"> {hover.sub}</span>}
+        {hover.sub != null && <span className="text-fg-dim"> {hover.sub}</span>}
       </div>
     </>,
     document.body,

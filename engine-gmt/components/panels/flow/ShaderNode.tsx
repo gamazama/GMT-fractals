@@ -14,8 +14,8 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
     const def = nodeRegistry.get(node.type);
 
     // Determine color based on category/type
-    let headerColor = "text-gray-400";
-    let borderColor = selected ? "border-cyan-500" : "border-gray-700";
+    let headerColor = "text-fg-muted";
+    let borderColor = selected ? "border-accent-500" : "border-line/20";
     let headerBg = "";
     
     // Auto-detect inputs (A/B) for handle rendering
@@ -28,7 +28,7 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
     if (def?.category === 'Fractals') headerColor = "text-pink-400";
     if (def?.category === 'Transforms' || def?.category === 'Distortion') headerColor = "text-blue-400";
     if (def?.category === 'Primitives') headerColor = "text-purple-400";
-    if (def?.category === 'Utils') headerColor = "text-gray-400";
+    if (def?.category === 'Utils') headerColor = "text-fg-muted";
     if (isCSG) {
         headerColor = "text-green-400";
         headerBg = "bg-green-900/20";
@@ -37,37 +37,37 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
     const isDisabled = node.enabled === false;
 
     return (
-        <div className={`w-64 bg-gray-900/90 backdrop-blur-md rounded-lg border shadow-xl transition-all ${borderColor} ${isDisabled ? 'opacity-40' : ''}`}>
+        <div className={`w-64 bg-surface-sunken/90 backdrop-blur-md rounded-lg border shadow-xl transition-all ${borderColor} ${isDisabled ? 'opacity-40' : ''}`}>
 
             {/* Input Handles */}
             {isCSG ? (
                 <>
-                    <div className="absolute -top-3 left-8 text-[9px] text-gray-500 font-bold">A</div>
+                    <div className="absolute -top-3 left-8 text-[9px] text-fg-dim font-bold">A</div>
                     <Handle 
                         type="target" 
                         position={Position.Top} 
                         id="a"
-                        className="!bg-cyan-500 !w-3 !h-3 !border-none -mt-1.5 !left-8" 
+                        className="!bg-accent-500 !w-3 !h-3 !border-none -mt-1.5 !left-8" 
                     />
                     
-                    <div className="absolute -top-3 right-8 text-[9px] text-gray-500 font-bold">B</div>
+                    <div className="absolute -top-3 right-8 text-[9px] text-fg-dim font-bold">B</div>
                     <Handle 
                         type="target" 
                         position={Position.Top} 
                         id="b"
-                        className="!bg-cyan-500 !w-3 !h-3 !border-none -mt-1.5 !left-auto !right-8" 
+                        className="!bg-accent-500 !w-3 !h-3 !border-none -mt-1.5 !left-auto !right-8" 
                     />
                 </>
             ) : (
                 <Handle 
                     type="target" 
                     position={Position.Top} 
-                    className="!bg-cyan-500 !w-3 !h-3 !border-none -mt-1.5" 
+                    className="!bg-accent-500 !w-3 !h-3 !border-none -mt-1.5" 
                 />
             )}
 
             {/* Header */}
-            <div className={`flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/5 rounded-t-lg handle cursor-move ${headerBg}`}>
+            <div className={`flex items-center justify-between px-3 py-2 border-b border-line/10 bg-line/5 rounded-t-lg handle cursor-move ${headerBg}`}>
                 <div className="flex items-center gap-2">
                     <input
                         type="checkbox"
@@ -83,7 +83,7 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
                 </div>
                 <button
                     onClick={(e) => { e.stopPropagation(); removeNode(id); }}
-                    className="text-gray-600 hover:text-red-400 transition-colors"
+                    className="text-fg-faint hover:text-red-400 transition-colors"
                 >
                     <CloseIcon />
                 </button>
@@ -105,7 +105,7 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
             <Handle 
                 type="source" 
                 position={Position.Bottom} 
-                className="!bg-cyan-500 !w-3 !h-3 !border-none -mb-1.5" 
+                className="!bg-accent-500 !w-3 !h-3 !border-none -mb-1.5" 
             />
         </div>
     );

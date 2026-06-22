@@ -52,7 +52,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
       className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center transition-opacity duration-500"
       style={{ opacity }}
     >
-      <div className="text-white text-sm font-mono tracking-widest opacity-60">
+      <div className="text-fg text-sm font-mono tracking-widest opacity-60">
         {isStartupReady ? 'Booting…' : 'Loading…'}
       </div>
     </div>

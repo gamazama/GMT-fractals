@@ -45,10 +45,10 @@ export interface TabStripProps<T extends string | number> {
 }
 
 const ACCENTS = {
-    cyan:   { bg: 'bg-cyan-900/50',   border: 'border-cyan-500/50',   text: 'text-cyan-200',   dot: 'bg-cyan-400'   },
-    purple: { bg: 'bg-purple-900/50', border: 'border-purple-500/50', text: 'text-purple-200', dot: 'bg-purple-400' },
-    green:  { bg: 'bg-green-900/50',  border: 'border-green-500/50',  text: 'text-green-200',  dot: 'bg-green-400'  },
-    amber:  { bg: 'bg-amber-900/50',  border: 'border-amber-500/50',  text: 'text-amber-200',  dot: 'bg-amber-400'  },
+    cyan:   { bg: 'bg-accent-900/50',   border: 'border-accent-500/50',   text: 'text-cyan-200',   dot: 'bg-accent-400'   },
+    purple: { bg: 'bg-secondary/50', border: 'border-secondary/50', text: 'text-secondary', dot: 'bg-secondary' },
+    green:  { bg: 'bg-ok/50',  border: 'border-ok/50',  text: 'text-ok',  dot: 'bg-ok'  },
+    amber:  { bg: 'bg-warn/50',  border: 'border-warn/50',  text: 'text-warn',  dot: 'bg-warn'  },
 } as const;
 
 const PlusIcon: React.FC = () => (
@@ -70,7 +70,7 @@ export function TabStrip<T extends string | number>({
 }: TabStripProps<T>) {
     const a = ACCENTS[accent];
     return (
-        <div className={`flex flex-wrap gap-1 bg-black/40 p-1 rounded border border-white/5 ${className}`}>
+        <div className={`flex flex-wrap gap-1 bg-surface-tabbar p-1 rounded border border-line/5 ${className}`}>
             {items.map((item) => {
                 const isActive = item.id === activeId;
                 return (
@@ -82,7 +82,7 @@ export function TabStrip<T extends string | number>({
                         className={`flex-1 py-1.5 px-2 text-[9px] font-bold rounded border transition-all relative ${
                             isActive
                                 ? `${a.bg} ${a.border} ${a.text} shadow-sm`
-                                : 'bg-transparent border-transparent text-gray-500 hover:bg-white/5 hover:text-gray-300'
+                                : 'bg-transparent border-transparent text-fg-dim hover:bg-line/5 hover:text-fg-tertiary'
                         }`}
                     >
                         {item.label}
@@ -97,7 +97,7 @@ export function TabStrip<T extends string | number>({
                     onClick={onAdd}
                     disabled={addDisabled}
                     title={addTitle ?? 'Add'}
-                    className="w-8 flex items-center justify-center text-gray-500 hover:text-cyan-400 hover:bg-white/5 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-500"
+                    className="w-8 flex items-center justify-center text-fg-dim hover:text-accent-400 hover:bg-line/5 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-fg-dim"
                 >
                     <PlusIcon />
                 </button>

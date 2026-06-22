@@ -135,8 +135,8 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
     const containerClasses = `
         w-full h-full flex items-center justify-center
         text-xs font-mono select-none transition-colors touch-none outline-none
-        ${disabled ? 'cursor-not-allowed opacity-50 text-gray-600' : `${axis === 'y' ? 'cursor-ns-resize' : 'cursor-ew-resize'} focus:ring-1 focus:ring-cyan-500/50`}
-        ${isDragging ? 'bg-cyan-500/20 text-cyan-300' : (isActive && !disabled ? 'text-cyan-400' : (disabled ? '' : 'text-gray-300 hover:text-white'))}
+        ${disabled ? 'cursor-not-allowed opacity-50 text-fg-faint' : `${axis === 'y' ? 'cursor-ns-resize' : 'cursor-ew-resize'} focus:ring-1 focus:ring-accent-500/50`}
+        ${isDragging ? 'bg-accent-500/20 text-accent-300' : (isActive && !disabled ? 'text-accent-400' : (disabled ? '' : 'text-fg-tertiary hover:text-fg'))}
     `;
 
     if (isEditing) {
@@ -149,7 +149,7 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
                 onChange={(e) => handleInputChange(e.target.value)}
                 onBlur={handleBlur}
                 onKeyDown={handleKeyDown}
-                className="w-full h-full bg-gray-900 text-white text-xs border-none outline-none font-mono text-center px-1"
+                className="w-full h-full bg-surface-sunken text-fg text-xs border-none outline-none font-mono text-center px-1"
                 onClick={(e) => e.stopPropagation()}
                 autoFocus
             />

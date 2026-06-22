@@ -27,8 +27,8 @@ const T_PATH = 'M338.7,37.7V2.6h116.3v35.2h-37.4v113.7h-41.6V37.7h-37.4Z';
 
 export const GmtWordmark: React.FC<GmtWordmarkProps> = ({
     className,
-    accent = '#22d3ee',
-    base = '#ffffff',
+    accent = 'rgb(var(--accent-400))',
+    base = 'rgb(var(--fg))',
     title = 'GMT',
 }) => (
     <svg

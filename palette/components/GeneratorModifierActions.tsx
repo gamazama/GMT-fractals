@@ -18,27 +18,27 @@ export const GeneratorModifierActions: React.FC = () => {
   const reseedNoise = useGeneratorStore((s) => s.reseedNoise);
 
   return (
-    <div className="px-1 pt-2 mt-1 border-t border-white/10">
-      <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1.5">Modifier actions</div>
+    <div className="px-1 pt-2 mt-1 border-t border-line/10">
+      <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1.5">Modifier actions</div>
       <div className="flex items-center gap-1.5">
         <button
           onClick={bakeMainToCurve}
           title="Bake the global Modify chain into the L/C/h curves, then reset the dials (result unchanged)"
-          className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30"
+          className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-accent-500/20 text-accent-300 hover:bg-accent-500/30"
         >
           Bake → curve
         </button>
         <button
           onClick={resetMainMods}
           title="Reset the global Modify + noise dials to neutral"
-          className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10"
+          className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-line/[0.06] text-fg-secondary hover:bg-line/10"
         >
           Reset mods
         </button>
         <button
           onClick={reseedNoise}
           title="Generate a new noise seed"
-          className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-white/[0.06] text-gray-200 hover:bg-white/10"
+          className="flex-1 text-[11px] px-2 py-1 rounded-sm bg-line/[0.06] text-fg-secondary hover:bg-line/10"
         >
           Reseed
         </button>

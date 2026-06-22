@@ -100,10 +100,10 @@ export const SceneFileDropZone: React.FC = () => {
 
     if (!active) return null;
     return (
-        <div className="fixed inset-0 z-[1500] pointer-events-none flex items-center justify-center bg-cyan-950/40 backdrop-blur-sm">
-            <div className="px-8 py-6 rounded-2xl border-2 border-dashed border-cyan-400/70 bg-black/70 text-center shadow-2xl">
-                <div className="text-cyan-100 font-bold text-lg">Drop to load scene</div>
-                <div className="text-cyan-400/70 text-xs mt-1">.png snapshot · .gmf · .json</div>
+        <div className="fixed inset-0 z-[1500] pointer-events-none flex items-center justify-center bg-accent-900/40 backdrop-blur-sm">
+            <div className="px-8 py-6 rounded-2xl border-2 border-dashed border-accent-400/70 bg-surface text-center shadow-2xl">
+                <div className="text-accent-300 font-bold text-lg">Drop to load scene</div>
+                <div className="text-accent-400/70 text-xs mt-1">.png snapshot · .gmf · .json</div>
             </div>
         </div>
     );

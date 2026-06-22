@@ -264,10 +264,10 @@ export const PerformanceMonitor = () => {
             data-help-id="ui.performance"
             onContextMenu={handleContextMenu}
         >
-            <div className="flex flex-col gap-1 bg-red-950/90 border border-red-500/30 rounded-lg shadow-xl backdrop-blur-md p-2">
+            <div className="flex flex-col gap-1 bg-danger/90 border border-danger/30 rounded-lg shadow-xl backdrop-blur-md p-2">
                 
                 <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2 text-red-200 text-[10px] font-bold">
+                    <div className="flex items-center gap-2 text-danger text-[10px] font-bold">
                         <AlertIcon />
                         <span>Low FPS ({currentFps.toFixed(1)})</span>
                     </div>
@@ -276,7 +276,7 @@ export const PerformanceMonitor = () => {
                             setShowWarning(false);
                             lowFpsBuffer.current = -40; // Long grace period (20s)
                         }}
-                        className="text-red-400 hover:text-white transition-colors p-0.5"
+                        className="text-danger hover:text-fg transition-colors p-0.5"
                         title="Dismiss"
                     >
                         <CloseIcon />
@@ -284,7 +284,7 @@ export const PerformanceMonitor = () => {
                 </div>
                 
                 {_isFirefox && (
-                    <p className="text-red-300/70 text-[8px] leading-tight mb-0.5">
+                    <p className="text-danger/70 text-[8px] leading-tight mb-0.5">
                         Firefox has a known rendering overhead with OffscreenCanvas that reduces frame rate.
                     </p>
                 )}
@@ -293,40 +293,40 @@ export const PerformanceMonitor = () => {
                     {canEnableAdaptive && (
                         <button
                             onClick={handleAdaptive}
-                            className="flex items-center justify-between bg-black/40 hover:bg-white/10 text-gray-300 text-[9px] px-2 py-1.5 rounded transition-colors border border-white/5"
+                            className="flex items-center justify-between bg-surface-section hover:bg-line/10 text-fg-tertiary text-[9px] px-2 py-1.5 rounded transition-colors border border-line/5"
                         >
                             <span className="flex items-center gap-1.5"><CheckIcon /> Adaptive Resolution</span>
-                            <span className="text-cyan-400 font-bold">Fix</span>
+                            <span className="text-accent-400 font-bold">Fix</span>
                         </button>
                     )}
 
                     {canResetScale && (
                         <button
                             onClick={handleResetScale}
-                            className="flex items-center justify-between bg-black/40 hover:bg-white/10 text-gray-300 text-[9px] px-2 py-1.5 rounded transition-colors border border-white/5"
+                            className="flex items-center justify-between bg-surface-section hover:bg-line/10 text-fg-tertiary text-[9px] px-2 py-1.5 rounded transition-colors border border-line/5"
                         >
                             <span className="flex items-center gap-1.5"><LayersIcon /> Reset Scale (1x)</span>
-                            <span className="text-cyan-400 font-bold">Fix</span>
+                            <span className="text-accent-400 font-bold">Fix</span>
                         </button>
                     )}
 
                     {canSwitchLite && (
                         <button
                             onClick={handleLiteMode}
-                            className="flex items-center justify-between bg-black/40 hover:bg-white/10 text-gray-300 text-[9px] px-2 py-1.5 rounded transition-colors border border-white/5"
+                            className="flex items-center justify-between bg-surface-section hover:bg-line/10 text-fg-tertiary text-[9px] px-2 py-1.5 rounded transition-colors border border-line/5"
                         >
                             <span className="flex items-center gap-1.5"><CubeIcon /> Enable Lite Mode</span>
-                            <span className="text-cyan-400 font-bold">Fix</span>
+                            <span className="text-accent-400 font-bold">Fix</span>
                         </button>
                     )}
 
                     {canReduce && (
                         <button
                             onClick={handleReduce}
-                            className="flex items-center justify-between bg-black/40 hover:bg-white/10 text-gray-300 text-[9px] px-2 py-1.5 rounded transition-colors border border-white/5"
+                            className="flex items-center justify-between bg-surface-section hover:bg-line/10 text-fg-tertiary text-[9px] px-2 py-1.5 rounded transition-colors border border-line/5"
                         >
                             <span className="flex items-center gap-1.5"><CheckIcon /> Reduce Resolution</span>
-                            <span className="text-cyan-400 font-bold">-33%</span>
+                            <span className="text-accent-400 font-bold">-33%</span>
                         </button>
                     )}
                 </div>

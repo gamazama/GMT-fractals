@@ -48,7 +48,7 @@ export const UndoButton: React.FC = () => {
         <button
             onClick={() => undo('param')}
             disabled={!canUndo}
-            className={`p-1.5 rounded transition-colors ${canUndo ? 'text-gray-300 hover:text-white hover:bg-white/10' : 'text-gray-700 cursor-not-allowed'}`}
+            className={`p-1.5 rounded transition-colors ${canUndo ? 'text-fg-tertiary hover:text-fg hover:bg-line/10' : 'text-fg-ghost cursor-not-allowed'}`}
             title={label}
         >
             <UndoIcon />
@@ -66,7 +66,7 @@ export const RedoButton: React.FC = () => {
         <button
             onClick={() => redo('param')}
             disabled={!canRedo}
-            className={`p-1.5 rounded transition-colors ${canRedo ? 'text-gray-300 hover:text-white hover:bg-white/10' : 'text-gray-700 cursor-not-allowed'}`}
+            className={`p-1.5 rounded transition-colors ${canRedo ? 'text-fg-tertiary hover:text-fg hover:bg-line/10' : 'text-fg-ghost cursor-not-allowed'}`}
             title={label}
         >
             <RedoIcon />

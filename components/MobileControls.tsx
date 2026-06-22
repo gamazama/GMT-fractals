@@ -87,23 +87,23 @@ const Joystick = ({ onMove, label, active }: { onMove: (x: number, y: number) =>
         <div 
             ref={containerRef}
             className={`w-36 h-36 rounded-full transition-all duration-200 relative flex items-center justify-center touch-none select-none ${
-                isDragging ? 'scale-110 shadow-[0_0_30px_rgba(34,211,238,0.1)]' : 'scale-100'
+                isDragging ? 'scale-110 shadow-[0_0_30px_rgb(var(--accent-glow)/0.1)]' : 'scale-100'
             } ${active ? 'pointer-events-auto' : 'pointer-events-none'}`}
             style={{ touchAction: 'none' }}
             onPointerDown={handleStart}
         >
             <div className={`w-24 h-24 rounded-full border transition-all duration-500 flex items-center justify-center ${
-                 isDragging ? 'bg-cyan-500/10 border-cyan-400' : 'bg-white/5 border-white/10'
+                 isDragging ? 'bg-accent-500/10 border-accent-400' : 'bg-line/5 border-line/10'
             } ${active ? 'opacity-100' : 'opacity-0 scale-50'}`}>
-                <div className={`absolute -top-6 text-[8px] font-bold pointer-events-none transition-colors ${isDragging ? 'text-cyan-400' : 'text-white/30'}`}>
+                <div className={`absolute -top-6 text-[8px] font-bold pointer-events-none transition-colors ${isDragging ? 'text-accent-400' : 'text-fg/30'}`}>
                     {label}
                 </div>
-                <div className="absolute inset-2 rounded-full border border-white/5 pointer-events-none" />
+                <div className="absolute inset-2 rounded-full border border-line/5 pointer-events-none" />
                 <div 
                     className={`w-10 h-10 rounded-full border shadow-xl transition-transform duration-75 pointer-events-none ${
                         isDragging 
-                        ? 'bg-cyan-400 border-white shadow-[0_0_20px_rgba(34,211,238,0.5)]' 
-                        : 'bg-white/10 border-white/20'
+                        ? 'bg-accent-400 border-fg shadow-[0_0_20px_rgb(var(--accent-glow)/0.5)]'
+                        : 'bg-line/10 border-line/20'
                     }`}
                     style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
                 />
@@ -143,10 +143,10 @@ const MobileControls: React.FC = () => {
                         if (navigator.vibrate) navigator.vibrate(20);
                         setCameraMode(isFly ? 'Orbit' : 'Fly');
                     }}
-                    className="pointer-events-auto flex items-center gap-2 bg-black/80 border border-white/20 px-4 py-2.5 rounded-full backdrop-blur-xl shadow-2xl active:scale-90 transition-all active:border-cyan-400"
+                    className="pointer-events-auto flex items-center gap-2 bg-surface/80 border border-line/20 px-4 py-2.5 rounded-full backdrop-blur-xl shadow-2xl active:scale-90 transition-all active:border-accent-400"
                 >
-                    <div className={`w-2 h-2 rounded-full ${isFly ? 'bg-cyan-400 animate-pulse shadow-[0_0_5px_cyan]' : 'bg-purple-400'}`} />
-                    <span className="text-[10px] font-bold text-white">
+                    <div className={`w-2 h-2 rounded-full ${isFly ? 'bg-accent-400 animate-pulse shadow-[0_0_5px_rgb(var(--accent-glow))]' : 'bg-secondary'}`} />
+                    <span className="text-[10px] font-bold text-fg">
                         {cameraMode} Mode
                     </span>
                 </button>

@@ -55,9 +55,9 @@ const PwaUpdateButton: React.FC = () => {
             type="button"
             onClick={handleApply}
             title="App update available — click to reload"
-            className="px-2 py-1 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 transition-colors text-[10px] font-bold flex items-center gap-1.5"
+            className="px-2 py-1 rounded bg-warn/15 border border-warn/30 text-warn hover:bg-warn/25 transition-colors text-[10px] font-bold flex items-center gap-1.5"
         >
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-warn animate-pulse" />
             Update
         </button>
     );

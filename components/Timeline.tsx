@@ -290,7 +290,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
 
     return (
         <div 
-            className="flex-shrink-0 bg-black/95 border-t border-white/10 flex flex-col z-40 select-none shadow-[0_-4px_20px_rgba(0,0,0,0.5)] relative backdrop-blur-md"
+            className="flex-shrink-0 bg-surface border-t border-line/10 flex flex-col z-40 select-none shadow-[0_-4px_20px_rgba(0,0,0,0.5)] relative backdrop-blur-md"
             style={{ height: panelHeight }}
             data-help-id="ui.timeline"
             onMouseEnter={() => setIsTimelineHovered(true)}
@@ -305,8 +305,8 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                 className="absolute top-[-4px] left-0 right-0 h-3 cursor-row-resize z-[100] group flex items-center justify-center"
                 onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); document.body.style.cursor = 'row-resize'; }}
             >
-                <div className="w-full h-px bg-cyan-500/0 group-hover:bg-cyan-500/50 transition-colors" />
-                <div className="absolute w-16 h-1 bg-gray-600 rounded-full group-hover:bg-cyan-400 opacity-50 group-hover:opacity-100 transition-all" />
+                <div className="w-full h-px bg-accent-500/0 group-hover:bg-accent-500/50 transition-colors" />
+                <div className="absolute w-16 h-1 bg-fg-faint rounded-full group-hover:bg-accent-400 opacity-50 group-hover:opacity-100 transition-all" />
             </div>
 
             <div className="flex flex-col flex-1 overflow-hidden h-full">
@@ -332,8 +332,8 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                 />
 
                 <div className="flex flex-1 overflow-hidden">
-                    {/* Changed bg-transparent to bg-[#080808] */}
-                    <div className="flex-1 flex flex-col min-w-0 bg-[#080808] relative">
+                    {/* Changed bg-transparent to bg-surface-dock */}
+                    <div className="flex-1 flex flex-col min-w-0 bg-surface-dock relative">
                         {mode === 'DopeSheet' ? (
                             <BenchProfiler id="Timeline:DopeSheet">
                                 <div

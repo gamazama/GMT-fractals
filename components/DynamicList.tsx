@@ -10,52 +10,52 @@ import { CaretRight } from './Icons2';
 
 const accentPresets = {
     cyan: {
-        activeBg:       'bg-cyan-900/10',
-        activeBorder:   'border-cyan-500/20',
-        activeText:     'text-cyan-400',
-        activeLabel:    'text-cyan-300',
-        itemBorder:     'border-cyan-500/10',
-        itemActiveBg:   'bg-cyan-500/[0.03]',
-        selectedBg:     'bg-cyan-500/20',
-        selectedBorder: 'border-cyan-500/40',
-        selectedText:   'text-cyan-300',
-        addBg:          'bg-cyan-500/20',
-        addBorder:      'border-cyan-500/50',
-        addText:        'text-cyan-300',
-        addHoverBg:     'hover:bg-cyan-500',
-        searchFocus:    'focus:border-cyan-500/50',
+        activeBg:       'bg-accent-900/10',
+        activeBorder:   'border-accent-500/20',
+        activeText:     'text-accent-400',
+        activeLabel:    'text-accent-300',
+        itemBorder:     'border-accent-500/10',
+        itemActiveBg:   'bg-accent-500/[0.03]',
+        selectedBg:     'bg-accent-500/20',
+        selectedBorder: 'border-accent-500/40',
+        selectedText:   'text-accent-300',
+        addBg:          'bg-accent-500/20',
+        addBorder:      'border-accent-500/50',
+        addText:        'text-accent-300',
+        addHoverBg:     'hover:bg-accent-500',
+        searchFocus:    'focus:border-accent-500/50',
     },
     purple: {
-        activeBg:       'bg-purple-900/10',
-        activeBorder:   'border-purple-500/20',
-        activeText:     'text-purple-400',
-        activeLabel:    'text-purple-300',
-        itemBorder:     'border-purple-500/10',
-        itemActiveBg:   'bg-purple-500/[0.03]',
-        selectedBg:     'bg-purple-500/20',
-        selectedBorder: 'border-purple-500/40',
-        selectedText:   'text-purple-300',
-        addBg:          'bg-purple-500/20',
-        addBorder:      'border-purple-500/50',
-        addText:        'text-purple-300',
-        addHoverBg:     'hover:bg-purple-500',
-        searchFocus:    'focus:border-purple-500/50',
+        activeBg:       'bg-secondary/10',
+        activeBorder:   'border-secondary/20',
+        activeText:     'text-secondary',
+        activeLabel:    'text-secondary',
+        itemBorder:     'border-secondary/10',
+        itemActiveBg:   'bg-secondary/[0.03]',
+        selectedBg:     'bg-secondary/20',
+        selectedBorder: 'border-secondary/40',
+        selectedText:   'text-secondary',
+        addBg:          'bg-secondary/20',
+        addBorder:      'border-secondary/50',
+        addText:        'text-secondary',
+        addHoverBg:     'hover:bg-secondary',
+        searchFocus:    'focus:border-secondary/50',
     },
     amber: {
-        activeBg:       'bg-amber-900/10',
-        activeBorder:   'border-amber-500/20',
-        activeText:     'text-amber-400',
-        activeLabel:    'text-amber-300',
-        itemBorder:     'border-amber-500/10',
-        itemActiveBg:   'bg-amber-500/[0.03]',
-        selectedBg:     'bg-amber-500/20',
-        selectedBorder: 'border-amber-500/40',
-        selectedText:   'text-amber-300',
-        addBg:          'bg-amber-500/20',
-        addBorder:      'border-amber-500/50',
-        addText:        'text-amber-300',
-        addHoverBg:     'hover:bg-amber-500',
-        searchFocus:    'focus:border-amber-500/50',
+        activeBg:       'bg-warn/10',
+        activeBorder:   'border-warn/20',
+        activeText:     'text-warn',
+        activeLabel:    'text-warn',
+        itemBorder:     'border-warn/10',
+        itemActiveBg:   'bg-warn/[0.03]',
+        selectedBg:     'bg-warn/20',
+        selectedBorder: 'border-warn/40',
+        selectedText:   'text-warn',
+        addBg:          'bg-warn/20',
+        addBorder:      'border-warn/50',
+        addText:        'text-warn',
+        addHoverBg:     'hover:bg-warn',
+        searchFocus:    'focus:border-warn/50',
     },
 } as const;
 
@@ -82,7 +82,7 @@ export const DynamicListSearch: React.FC<DynamicListSearchProps> = ({
     const colors = accentPresets[accent];
     return (
         <div className="relative px-2 py-1.5">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-fg-faint pointer-events-none">
                 <SearchIcon />
             </div>
             <input
@@ -90,12 +90,12 @@ export const DynamicListSearch: React.FC<DynamicListSearchProps> = ({
                 value={value}
                 onChange={e => onChange(e.target.value)}
                 placeholder={placeholder}
-                className={`w-full bg-black/40 border border-white/10 rounded pl-7 pr-2 py-1 text-[10px] text-white placeholder:text-gray-600 focus:outline-none ${colors.searchFocus} transition-colors`}
+                className={`w-full bg-surface-sunken border border-line/10 rounded pl-7 pr-2 py-1 text-[10px] text-fg placeholder:text-fg-faint focus:outline-none ${colors.searchFocus} transition-colors`}
             />
             {value && (
                 <button
                     onClick={() => onChange('')}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white transition-colors"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg transition-colors"
                 >
                     <CloseIcon size={8} />
                 </button>
@@ -156,36 +156,36 @@ export const DynamicListItem: React.FC<DynamicListItemProps> = ({
     };
 
     const borderClass = selected ? colors.selectedBorder : colors.itemBorder;
-    const bgClass = selected ? colors.selectedBg : 'bg-black/40';
+    const bgClass = selected ? colors.selectedBg : 'bg-surface-section';
 
     return (
         <div className={`${bgClass} rounded border ${borderClass} animate-fade-in transition-colors ${className}`}>
             {/* Item header */}
             {(title || actions || onRemove || expandable) && (
                 <div
-                    className={`flex items-center justify-between px-2 min-h-[26px] mb-0.5 ${onSelect ? 'cursor-pointer hover:bg-white/5' : ''}`}
+                    className={`flex items-center justify-between px-2 min-h-[26px] mb-0.5 ${onSelect ? 'cursor-pointer hover:bg-line/5' : ''}`}
                     onClick={onSelect}
                 >
                     <div className="flex items-center gap-1.5 min-w-0">
                         {expandable && (
-                            <button onClick={(e) => { e.stopPropagation(); handleToggle(); }} className="shrink-0 text-gray-600 hover:text-gray-300 transition-colors p-0.5">
+                            <button onClick={(e) => { e.stopPropagation(); handleToggle(); }} className="shrink-0 text-fg-faint hover:text-fg-tertiary transition-colors p-0.5">
                                 <ChevronIcon open={isExpanded} />
                             </button>
                         )}
                         {title && (
-                            <span className={`text-[9px] font-bold truncate ${titleColor || (selected ? colors.selectedText : 'text-gray-500')}`}>
+                            <span className={`text-[9px] font-bold truncate ${titleColor || (selected ? colors.selectedText : 'text-fg-dim')}`}>
                                 {title}
                             </span>
                         )}
                         {subtitle && (
-                            <span className="text-[8px] text-gray-600 truncate">{subtitle}</span>
+                            <span className="text-[8px] text-fg-faint truncate">{subtitle}</span>
                         )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         {onRemove && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                                className="text-red-500 hover:text-white transition-colors opacity-50 hover:opacity-100"
+                                className="text-danger hover:text-fg transition-colors opacity-50 hover:opacity-100"
                                 title="Remove"
                             >
                                 <TrashIcon />
@@ -235,12 +235,12 @@ export const DynamicListGroup: React.FC<DynamicListGroupProps> = ({
         <div>
             <button
                 onClick={() => setOpen(v => !v)}
-                className="flex items-center gap-1.5 w-full px-2 py-1 text-left select-none hover:bg-white/5 transition-colors rounded-sm"
+                className="flex items-center gap-1.5 w-full px-2 py-1 text-left select-none hover:bg-line/5 transition-colors rounded-sm"
             >
                 <ChevronIcon open={open} />
                 <SectionLabel variant="secondary">{label}</SectionLabel>
                 {count !== undefined && (
-                    <span className="text-[8px] bg-white/10 text-gray-400 px-1.5 py-0.5 rounded ml-1">
+                    <span className="text-[8px] bg-line/10 text-fg-muted px-1.5 py-0.5 rounded ml-1">
                         {count}
                     </span>
                 )}
@@ -297,15 +297,15 @@ export const DynamicList: React.FC<DynamicListProps> = ({
     const isEmpty = childArray.length === 0;
 
     return (
-        <div className={`flex flex-col border-t border-white/5 ${isActive ? colors.activeBg : 'bg-white/[0.02]'} ${className}`} data-help-id={dataHelpId}>
+        <div className={`flex flex-col border-t border-line/5 ${isActive ? colors.activeBg : 'bg-line/[0.02]'} ${className}`} data-help-id={dataHelpId}>
             {/* Header */}
-            <div className={`flex items-center justify-between px-3 py-2 border-b ${isActive ? colors.activeBorder : 'border-white/5'}`}>
+            <div className={`flex items-center justify-between px-3 py-2 border-b ${isActive ? colors.activeBorder : 'border-line/5'}`}>
                 <div className="flex items-center gap-1.5">
-                    <label className={`text-[10px] font-bold ${isActive ? colors.activeLabel : 'text-gray-500'}`}>
+                    <label className={`text-[10px] font-bold ${isActive ? colors.activeLabel : 'text-fg-dim'}`}>
                         {label}
                     </label>
                     {count !== undefined && (
-                        <span className="text-[8px] bg-white/10 text-gray-400 px-1.5 py-0.5 rounded">
+                        <span className="text-[8px] bg-line/10 text-fg-muted px-1.5 py-0.5 rounded">
                             {count}
                         </span>
                     )}
@@ -318,8 +318,8 @@ export const DynamicList: React.FC<DynamicListProps> = ({
                             disabled={addDisabled}
                             className={`w-5 h-5 flex items-center justify-center rounded border disabled:opacity-30 transition-all ${
                                 isActive
-                                    ? `${colors.addBg} ${colors.addBorder} ${colors.addText} ${colors.addHoverBg} hover:text-white`
-                                    : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'
+                                    ? `${colors.addBg} ${colors.addBorder} ${colors.addText} ${colors.addHoverBg} hover:text-fg`
+                                    : 'bg-line/10 border-line/10 text-fg-muted hover:bg-line/20 hover:text-fg'
                             }`}
                             title={addTitle}
                         >
@@ -339,7 +339,7 @@ export const DynamicList: React.FC<DynamicListProps> = ({
                 style={maxHeight ? { maxHeight: typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight } : undefined}
             >
                 {isEmpty ? (
-                    <p className="text-[9px] text-gray-600 italic text-center py-3">{emptyMessage}</p>
+                    <p className="text-[9px] text-fg-faint italic text-center py-3">{emptyMessage}</p>
                 ) : (
                     children
                 )}

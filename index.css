@@ -2,12 +2,326 @@
    (app-gmt, gradient-explorer, fluid-toy, fractal-toy, mesh-export, demo).
    Replaces the runtime cdn.tailwindcss.com Play CDN. `@tailwind base` is
    Preflight — the same reset the Play CDN injected, so layout is unchanged.
-   Per-app resets / scrollbars / boot splashes stay in each entry's inline
-   <style>; the engine's t-btn/glass-panel utilities are still injected at
-   runtime by engine/styles/componentClasses.ts. */
+
+   This file is ALSO the home of the runtime color-scheme system: the semantic
+   CSS variables (`:root` = Dark default, `[data-theme="…"]` overrides) that the
+   Tailwind tokens in tailwind.config.js resolve to, plus the themeable global
+   plain CSS (html background, scrollbars, color-scheme). Because every app
+   imports this file, one `data-theme` attribute on <html> re-colors the whole
+   suite. Spec + migration mapping: plans/color-scheme-spec.md. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────
+   COLOR-SCHEME VARIABLES
+
+   Values are space-separated RGB channels so Tailwind's `rgb(var(--x) /
+   <alpha-value>)` tokens keep the `/opacity` modifier working. `:root` is the
+   Dark default (accent/text/border channels are byte-identical to the cyan/
+   gray/white classes they replace; surfaces are solids that match the current
+   look over the dark viewport). `[data-theme]` blocks override per scheme —
+   the accent-variant schemes (violet/rose/amber) only swap the accent ladder,
+   inheriting Dark surfaces; `light` overrides everything.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+
+  /* Accent ladder (cyan) */
+  --accent-300: 103 232 249;
+  --accent-400: 34 211 238;
+  --accent-500: 6 182 212;
+  --accent-600: 8 145 178;
+  --accent-700: 14 116 144;
+  --accent-800: 21 94 117;
+  --accent-900: 22 78 99;
+  --accent-fg: 255 255 255;
+  --accent-glow: 34 211 238;
+
+  /* Foreground ink (text) — exact Tailwind gray ladder */
+  --fg: 255 255 255;
+  --fg-secondary: 229 231 235;
+  --fg-tertiary: 209 213 219;
+  --fg-muted: 156 163 175;
+  --fg-dim: 107 114 128;
+  --fg-faint: 75 85 99;
+  --fg-ghost: 55 65 81;
+
+  /* Hairline (borders + tint overlays) — white in dark, inverts in light */
+  --line: 255 255 255;
+
+  /* Surfaces (solids) */
+  --surface-viewport: 5 5 5;
+  --surface-dock: 8 8 8;
+  --surface: 13 13 13;
+  --surface-section: 10 10 10;
+  --surface-raised: 26 26 26;
+  --surface-sunken: 17 24 39;
+  --surface-header: 31 41 55;
+  --surface-tabbar: 10 10 10;
+
+  /* Status (meaning-bearing) */
+  --warn: 251 191 36;
+  --warn-strong: 217 119 6;
+  --warn-fg: 0 0 0;
+  --danger: 239 68 68;
+  --danger-strong: 220 38 38;
+  --ok: 74 222 128;
+  --ok-strong: 22 163 74;
+  --info: 56 189 248;
+  --secondary: 168 85 247;
+  --secondary-strong: 126 34 206;
+
+  /* Global plain-CSS surfaces */
+  --app-bg: 0 0 0;
+  --scrollbar-track: 0 0 0;
+  --scrollbar-thumb: 51 51 51;
+  --scrollbar-thumb-strong: 68 68 68;
+}
+
+/* ── Light ────────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Accent shifted darker so it reads on light surfaces; accent-900 becomes a
+     pale tint (subtle accent backgrounds invert from dark teal to pale cyan). */
+  --accent-300: 8 145 178;
+  --accent-400: 14 116 144;
+  --accent-500: 6 182 212;
+  --accent-600: 8 145 178;
+  --accent-700: 14 116 144;
+  --accent-800: 21 94 117;
+  --accent-900: 207 250 254;
+  --accent-fg: 255 255 255;
+  --accent-glow: 8 145 178;
+
+  /* Ink inverts: primary near-black, dimmer steps fade toward the light bg */
+  --fg: 17 17 17;
+  --fg-secondary: 38 38 38;
+  --fg-tertiary: 55 65 81;
+  --fg-muted: 75 85 99;
+  --fg-dim: 107 114 128;
+  --fg-faint: 156 163 175;
+  --fg-ghost: 209 213 219;
+
+  /* Hairline = dark ink at low alpha over light surfaces */
+  --line: 17 24 39;
+
+  /* Surfaces: app light-grey, panels white, raised brighter */
+  --surface-viewport: 224 224 224;
+  --surface-dock: 236 236 236;
+  --surface: 255 255 255;
+  --surface-section: 241 243 245;
+  --surface-raised: 255 255 255;
+  --surface-sunken: 233 236 239;
+  --surface-header: 238 240 243;
+  --surface-tabbar: 235 238 241;
+
+  /* Status darkened for contrast on light */
+  --warn: 180 83 9;
+  --warn-strong: 217 119 6;
+  --warn-fg: 255 255 255;
+  --danger: 220 38 38;
+  --danger-strong: 185 28 28;
+  --ok: 21 128 61;
+  --ok-strong: 22 163 74;
+  --info: 2 132 199;
+  --secondary: 147 51 234;
+  --secondary-strong: 126 34 206;
+
+  --app-bg: 245 245 245;
+  --scrollbar-track: 235 235 235;
+  --scrollbar-thumb: 184 184 184;
+  --scrollbar-thumb-strong: 150 150 150;
+}
+
+/* Accent colour is hue-driven at runtime (colorSchemeStore.applyAccentHue sets
+   inline `--accent-*` vars on <html>), so there are no per-accent theme blocks.
+   The cyan ladder in `:root` / `[data-theme=light]` is the pre-JS fallback. */
+
+/* ── Light Grey — light theme with grey (not white) surfaces; softer than Light ── */
+[data-theme="light-grey"] {
+  color-scheme: light;
+
+  --accent-300: 8 145 178;
+  --accent-400: 14 116 144;
+  --accent-500: 6 182 212;
+  --accent-600: 8 145 178;
+  --accent-700: 14 116 144;
+  --accent-800: 21 94 117;
+  --accent-900: 207 250 254;
+  --accent-fg: 255 255 255;
+  --accent-glow: 8 145 178;
+
+  --fg: 24 24 24;
+  --fg-secondary: 48 48 48;
+  --fg-tertiary: 70 70 70;
+  --fg-muted: 96 96 96;
+  --fg-dim: 124 124 124;
+  --fg-faint: 152 152 152;
+  --fg-ghost: 182 182 182;
+
+  --line: 24 24 24;
+
+  --surface-viewport: 198 198 198;
+  --surface-dock: 210 210 210;
+  --surface: 230 230 230;
+  --surface-section: 220 220 220;
+  --surface-raised: 240 240 240;
+  --surface-sunken: 214 214 214;
+  --surface-header: 224 224 224;
+  --surface-tabbar: 218 218 218;
+
+  --warn: 180 83 9;
+  --warn-strong: 217 119 6;
+  --warn-fg: 255 255 255;
+  --danger: 220 38 38;
+  --danger-strong: 185 28 28;
+  --ok: 21 128 61;
+  --ok-strong: 22 163 74;
+  --info: 2 132 199;
+  --secondary: 147 51 234;
+  --secondary-strong: 126 34 206;
+
+  --app-bg: 208 208 208;
+  --scrollbar-track: 204 204 204;
+  --scrollbar-thumb: 150 150 150;
+  --scrollbar-thumb-strong: 120 120 120;
+}
+
+/* ── Neutral Grey — dark graphite theme; true neutral greys (no blue/black
+   tint), keeps the cyan accent + bright status from :root (Dark). ── */
+[data-theme="neutral-grey"] {
+  --fg: 240 240 240;
+  --fg-secondary: 218 218 218;
+  --fg-tertiary: 198 198 198;
+  --fg-muted: 160 160 160;
+  --fg-dim: 125 125 125;
+  --fg-faint: 100 100 100;
+  --fg-ghost: 78 78 78;
+
+  --surface-viewport: 26 26 26;
+  --surface-dock: 32 32 32;
+  --surface: 40 40 40;
+  --surface-section: 34 34 34;
+  --surface-raised: 52 52 52;
+  --surface-sunken: 30 30 30;
+  --surface-header: 46 46 46;
+  --surface-tabbar: 34 34 34;
+
+  --app-bg: 26 26 26;
+  --scrollbar-track: 32 32 32;
+  --scrollbar-thumb: 90 90 90;
+  --scrollbar-thumb-strong: 110 110 110;
+}
+
+/* ── Dark High Contrast — pure-black surfaces, max-legibility text ── */
+[data-theme="dark-high-contrast"] {
+  --fg: 255 255 255;
+  --fg-secondary: 240 240 240;
+  --fg-tertiary: 225 225 225;
+  --fg-muted: 205 205 205;
+  --fg-dim: 180 180 180;
+  --fg-faint: 155 155 155;
+  --fg-ghost: 130 130 130;
+
+  --line: 255 255 255;
+
+  --surface-viewport: 0 0 0;
+  --surface-dock: 0 0 0;
+  --surface: 0 0 0;
+  --surface-section: 13 13 13;
+  --surface-raised: 28 28 28;
+  --surface-sunken: 0 0 0;
+  --surface-header: 18 18 18;
+  --surface-tabbar: 0 0 0;
+
+  --app-bg: 0 0 0;
+  --scrollbar-track: 0 0 0;
+  --scrollbar-thumb: 120 120 120;
+  --scrollbar-thumb-strong: 160 160 160;
+}
+
+/* ── Light High Contrast — pure-white surfaces, near-black text + borders ── */
+[data-theme="light-high-contrast"] {
+  color-scheme: light;
+
+  --fg: 0 0 0;
+  --fg-secondary: 20 20 20;
+  --fg-tertiary: 35 35 35;
+  --fg-muted: 55 55 55;
+  --fg-dim: 75 75 75;
+  --fg-faint: 100 100 100;
+  --fg-ghost: 130 130 130;
+
+  --line: 0 0 0;
+
+  --surface-viewport: 255 255 255;
+  --surface-dock: 250 250 250;
+  --surface: 255 255 255;
+  --surface-section: 244 244 244;
+  --surface-raised: 255 255 255;
+  --surface-sunken: 248 248 248;
+  --surface-header: 246 246 246;
+  --surface-tabbar: 248 248 248;
+
+  --warn: 146 64 14;
+  --warn-strong: 180 83 9;
+  --warn-fg: 255 255 255;
+  --danger: 185 28 28;
+  --danger-strong: 153 27 27;
+  --ok: 21 128 61;
+  --ok-strong: 22 101 52;
+  --info: 3 105 161;
+  --secondary: 126 34 206;
+  --secondary-strong: 107 33 168;
+
+  --app-bg: 245 245 245;
+  --scrollbar-track: 240 240 240;
+  --scrollbar-thumb: 120 120 120;
+  --scrollbar-thumb-strong: 90 90 90;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THEMEABLE GLOBAL PLAIN CSS
+
+   html background, color-scheme, and scrollbars — driven by the variables
+   above so they follow the scheme. Lives here (not per-app HTML heads or the
+   runtime-injected componentClasses.ts) so every app gets it from the single
+   index.css import, including mesh-export which never calls registerUI().
+   `:root` selectors are used for html-level rules so they win over the
+   hardcoded `html { … }` rules still present in each app's boot <style>.
+   ───────────────────────────────────────────────────────────────────────── */
+/* `:root` + `body` so the themed background wins over the hardcoded
+   `html, body, #root { background:#000 }` rules still in each app's boot
+   <style> (index.css loads after them and `:root` out-specifies `html`). */
+:root, body { background-color: rgb(var(--app-bg)); }
+:root {
+  color: rgb(var(--fg));
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--scrollbar-thumb)) rgb(var(--app-bg));
+}
+body::-webkit-scrollbar { width: 3px; }
+body::-webkit-scrollbar-track { background: rgb(var(--app-bg)); }
+body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-strong)); border-radius: 3px; }
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgb(var(--scrollbar-thumb)); border-radius: 2px; }
+.custom-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--line) / 0.15) transparent;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+.custom-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.custom-scroll::-webkit-scrollbar-track { background: transparent; }
+.custom-scroll::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--line) / 0.15);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--line) / 0.25); }
 
 /* Engine component-utility classes (t-btn, glass-panel, t-section-*, icon-btn,
    t-input, t-dropdown, t-select, panel-*) that shared UI components reference.
@@ -15,26 +329,27 @@
    block in engine/styles/componentClasses.ts — but ONLY the Tailwind Play CDN's
    runtime JIT compiled those @apply blocks. With the CDN removed they must be
    compiled at build time, so they live here (the build-time Tailwind entry,
-   imported by every app). engine/styles/componentClasses.ts remains the owner
-   of intent; keep the two in sync. */
+   imported by every app). They now `@apply` the semantic color tokens (so they
+   follow the active scheme); engine/styles/componentClasses.ts remains the
+   owner of intent — keep the two in sync. */
 @layer components {
-  .t-label { @apply text-[10px] font-bold text-gray-500; }
-  .t-label-sm { @apply text-[9px] font-bold text-gray-500; }
-  .t-value { @apply text-xs font-mono text-gray-200; }
-  .t-section-header { @apply px-3 py-1.5 bg-black/20 border-b border-white/5 flex items-center justify-between shrink-0; }
-  .t-section-title { @apply text-[9px] font-bold text-gray-500; }
-  .glass-panel { @apply bg-black/95 backdrop-blur-xl border border-white/20 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.5)]; }
-  .panel-header { @apply flex items-center justify-between px-2 py-1.5 bg-gray-800/80 border-b border-white/10 select-none shrink-0; }
-  .panel-section { @apply px-3 py-1.5 bg-black/20 border-b border-white/5 flex justify-between items-center shrink-0; }
-  .icon-btn { @apply p-1.5 rounded transition-colors text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer; }
-  .icon-btn-active { @apply bg-cyan-900/50 text-cyan-300 border border-cyan-700/50; }
-  .icon-btn-danger { @apply text-red-500 hover:text-red-300 hover:bg-red-900/20; }
-  .t-input { @apply w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500 transition-colors; }
-  .t-dropdown { @apply w-full bg-gradient-to-b from-[#1a1a1a] to-transparent border border-white/5 text-[10px] font-medium text-gray-300 tracking-tight rounded px-2 py-1 outline-none focus:border-cyan-500 appearance-none hover:bg-white/5 transition-colors cursor-pointer text-center; }
-  .t-dropdown option { @apply bg-[#1a1a1a] text-gray-300; }
+  .t-label { @apply text-[10px] font-bold text-fg-dim; }
+  .t-label-sm { @apply text-[9px] font-bold text-fg-dim; }
+  .t-value { @apply text-xs font-mono text-fg-secondary; }
+  .t-section-header { @apply px-3 py-1.5 bg-surface-section border-b border-line/5 flex items-center justify-between shrink-0; }
+  .t-section-title { @apply text-[9px] font-bold text-fg-dim; }
+  .glass-panel { @apply bg-surface backdrop-blur-xl border border-line/20 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.5)]; }
+  .panel-header { @apply flex items-center justify-between px-2 py-1.5 bg-surface-header border-b border-line/10 select-none shrink-0; }
+  .panel-section { @apply px-3 py-1.5 bg-surface-section border-b border-line/5 flex justify-between items-center shrink-0; }
+  .icon-btn { @apply p-1.5 rounded transition-colors text-fg-muted hover:text-fg hover:bg-line/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer; }
+  .icon-btn-active { @apply bg-accent-900/50 text-accent-300 border border-accent-700/50; }
+  .icon-btn-danger { @apply text-danger hover:text-danger hover:bg-danger/10; }
+  .t-input { @apply w-full bg-surface-sunken border border-line/20 rounded px-2 py-1 text-xs text-fg outline-none focus:border-accent-500 transition-colors; }
+  .t-dropdown { @apply w-full bg-gradient-to-b from-surface-raised to-transparent border border-line/5 text-[10px] font-medium text-fg-tertiary tracking-tight rounded px-2 py-1 outline-none focus:border-accent-500 appearance-none hover:bg-line/5 transition-colors cursor-pointer text-center; }
+  .t-dropdown option { @apply bg-surface-raised text-fg-tertiary; }
   .t-btn { @apply min-h-[26px] py-1 px-3 text-[9px] font-bold border rounded transition-all truncate flex items-center justify-center gap-2 select-none; }
   .t-btn-sm { @apply py-0.5 px-2 text-[9px] font-bold border rounded transition-all truncate flex items-center justify-center gap-1 select-none; }
-  .t-btn-default { @apply bg-gradient-to-b from-[#1a1a1a] to-transparent border-white/10 text-gray-400 hover:text-white hover:bg-white/5 hover:border-white/20; }
-  .t-select { @apply w-full bg-black/40 border border-white/10 text-[10px] font-medium text-gray-300 rounded px-2 py-1 outline-none focus:border-cyan-500/50 appearance-none hover:border-white/20 transition-colors cursor-pointer; }
-  .t-select option { @apply bg-[#111] text-gray-300; }
+  .t-btn-default { @apply bg-gradient-to-b from-surface-raised to-transparent border-line/10 text-fg-muted hover:text-fg hover:bg-line/5 hover:border-line/20; }
+  .t-select { @apply w-full bg-surface-section border border-line/10 text-[10px] font-medium text-fg-tertiary rounded px-2 py-1 outline-none focus:border-accent-500/50 appearance-none hover:border-line/20 transition-colors cursor-pointer; }
+  .t-select option { @apply bg-surface text-fg-tertiary; }
 }

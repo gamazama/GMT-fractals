@@ -1,11 +1,16 @@
 
 import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, pixelToValue, getGridStep, getTimeGridSteps, THEME } from './GraphUtils';
+import { getThemeColor, onThemeChange } from '../engine/store/colorSchemeStore';
 import { AnimationSequence } from '../types';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
 import { PolylineCache, SoftSelectionMaskCache, buildPolylineViewKey, buildMaskViewKey } from './GraphRendererCache';
 import { buildTrackPolyline, buildSoftSelectionMask } from './GraphRendererBuilder';
 import { traceKeyframeShape } from './keyframeShape';
 
+// Per-track identity palette — each visible track is assigned a distinct hue so
+// curves can be told apart. This is functional data-viz (a categorical colour
+// scale), NOT theme chrome, so it is intentionally NOT routed through the color
+// scheme. Same rationale as DopeSheet's group-identity colours.
 export const TRACK_COLORS = [
     '#22d3ee', '#a855f7', '#22c55e', '#f59e0b', '#ef4444', '#ec4899'
 ];
@@ -50,6 +55,15 @@ export interface GraphOverlayProps {
  *  call via evictStale(visibleTrackIds). */
 const _polylineCache = new PolylineCache();
 const _softMaskCache = new SoftSelectionMaskCache();
+
+// Cached polyline/mask canvases bake the active theme palette into their pixels;
+// their viewKeys don't include the scheme. Drop them on scheme change so the next
+// drawGraph rebuilds with the new colours (GraphCanvas re-fires its draw effect via
+// its `scheme` dep). @see engine/store/colorSchemeStore.ts
+onThemeChange(() => {
+    _polylineCache.clear();
+    _softMaskCache.clear();
+});
 
 let _limitPattern: CanvasPattern | null = null;
 
@@ -146,7 +160,7 @@ export const drawGraph = (props: GraphRenderProps) => {
     if (normalized) {
         const y0 = valueToPixel(0, view);
         const y1 = valueToPixel(1, view);
-        ctx.strokeStyle = '#444';
+        ctx.strokeStyle = getThemeColor('--line', 0.27);
         ctx.beginPath(); ctx.moveTo(LEFT_GUTTER_WIDTH, y0); ctx.lineTo(width, y0); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(LEFT_GUTTER_WIDTH, y1); ctx.lineTo(width, y1); ctx.stroke();
     } else {
@@ -291,14 +305,14 @@ export const drawGraph = (props: GraphRenderProps) => {
             traceKeyframeShape(ctx, kx, ky, k.interpolation, selSize);
             ctx.fill();
 
-            ctx.strokeStyle = '#fff';
+            ctx.strokeStyle = THEME.keySelectedColor;
             ctx.lineWidth = 1;
             ctx.beginPath(); ctx.arc(kx, ky, 6, 0, Math.PI * 2); ctx.stroke();
 
             // Soft-radius circle for the adjusting anchor key. Rebuilt compositeId
             // because softInteraction.anchorKey is keyed by the full "tid::kid" form.
             if (softSelectionEnabled && softInteraction.isAdjusting && softInteraction.anchorKey === `${tid}::${kid}`) {
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.strokeStyle = getThemeColor('--fg', 0.4);
                 ctx.lineWidth = 1;
                 ctx.setLineDash([4, 4]);
                 ctx.beginPath();
@@ -306,7 +320,7 @@ export const drawGraph = (props: GraphRenderProps) => {
                 ctx.arc(kx, ky, rPx, 0, Math.PI * 2);
                 ctx.stroke();
                 ctx.setLineDash([]);
-                ctx.fillStyle = softSelectionRadius > 0 ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 100, 100, 0.1)';
+                ctx.fillStyle = softSelectionRadius > 0 ? getThemeColor('--fg', 0.05) : getThemeColor('--danger', 0.1);
                 ctx.fill();
             }
         }
@@ -320,29 +334,29 @@ export const drawGraph = (props: GraphRenderProps) => {
 
     ctx.restore();
 
-    ctx.fillStyle = '#080808';
+    ctx.fillStyle = getThemeColor('--surface-header');
     ctx.fillRect(LEFT_GUTTER_WIDTH, 0, width, graphTop);
-    ctx.beginPath(); ctx.strokeStyle='#444'; ctx.moveTo(LEFT_GUTTER_WIDTH, graphTop); ctx.lineTo(width, graphTop); ctx.stroke();
-    
+    ctx.beginPath(); ctx.strokeStyle = getThemeColor('--line', 0.27); ctx.moveTo(LEFT_GUTTER_WIDTH, graphTop); ctx.lineTo(width, graphTop); ctx.stroke();
+
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    ctx.fillStyle = '#888';
-    
+    ctx.fillStyle = getThemeColor('--fg-muted');
+
     for (let f = firstGridFrame; f <= endFrame; f += textStep) {
         const x = frameToCanvasPixel(f);
         if (x < LEFT_GUTTER_WIDTH) continue;
         ctx.fillRect(x, graphTop - 8, 1, 8);
         ctx.fillText(f.toString(), x + 4, 2);
     }
-    
-    ctx.fillStyle = '#080808'; 
+
+    ctx.fillStyle = getThemeColor('--surface-header');
     ctx.fillRect(0, 0, LEFT_GUTTER_WIDTH, height);
-    ctx.fillStyle = '#374151'; 
+    ctx.fillStyle = getThemeColor('--fg-ghost');
     ctx.fillRect(LEFT_GUTTER_WIDTH - 1, 0, 1, height);
-    
+
     ctx.textAlign = "right";
     ctx.font = "9px monospace";
-    ctx.fillStyle = "#9ca3af";
+    ctx.fillStyle = getThemeColor('--fg-muted');
     
     if (normalized) {
         const y0 = valueToPixel(0, view);
@@ -384,11 +398,11 @@ export const drawGraph = (props: GraphRenderProps) => {
             ctx.restore();
         }
         
-        ctx.strokeStyle = '#666';
+        ctx.strokeStyle = getThemeColor('--fg-dim');
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(limitX, 0); ctx.lineTo(limitX, height); ctx.stroke();
     }
-    
+
 };
 
 /** Paint the per-frame overlay layer: playhead + selection box. The overlay
@@ -403,38 +417,39 @@ export const drawGraphOverlay = (props: GraphOverlayProps) => {
     ctx.clearRect(0, 0, width, height);
 
     if (selectionBox) {
-        ctx.fillStyle = 'rgba(0, 200, 255, 0.1)';
-        ctx.strokeStyle = 'rgba(0, 200, 255, 0.5)';
+        ctx.fillStyle = getThemeColor('--accent-400', 0.1);
+        ctx.strokeStyle = getThemeColor('--accent-400', 0.5);
         ctx.lineWidth = 1;
         ctx.fillRect(selectionBox.x, selectionBox.y, selectionBox.w, selectionBox.h);
         ctx.strokeRect(selectionBox.x, selectionBox.y, selectionBox.w, selectionBox.h);
     }
 
     const phX = frameToCanvasPixel(currentFrame);
+    const playheadColor = getThemeColor('--danger');
 
     if (phX < LEFT_GUTTER_WIDTH) {
-        ctx.fillStyle = '#ef4444';
+        ctx.fillStyle = playheadColor;
         ctx.beginPath();
         ctx.moveTo(LEFT_GUTTER_WIDTH + 8, height / 2 - 6);
         ctx.lineTo(LEFT_GUTTER_WIDTH + 2, height / 2);
         ctx.lineTo(LEFT_GUTTER_WIDTH + 8, height / 2 + 6);
         ctx.fill();
     } else if (phX > width) {
-        ctx.fillStyle = '#ef4444';
+        ctx.fillStyle = playheadColor;
         ctx.beginPath();
         ctx.moveTo(width - 8, height / 2 - 6);
         ctx.lineTo(width - 2, height / 2);
         ctx.lineTo(width - 8, height / 2 + 6);
         ctx.fill();
     } else {
-        ctx.strokeStyle = '#ef4444';
+        ctx.strokeStyle = playheadColor;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(phX, 0);
         ctx.lineTo(phX, height);
         ctx.stroke();
 
-        ctx.fillStyle = '#ef4444';
+        ctx.fillStyle = playheadColor;
         ctx.beginPath();
         ctx.moveTo(phX, 0);
         ctx.lineTo(phX + 5, 0);

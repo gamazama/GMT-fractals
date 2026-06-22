@@ -10,10 +10,10 @@ interface StatusDotProps {
 }
 
 const dotClasses: Record<StatusDotVariant, string> = {
-    active:  'bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.4)]',
-    pending: 'bg-amber-500 animate-pulse shadow-[0_0_4px_rgba(245,158,11,0.4)]',
-    off:     'bg-red-900',
-    instant: 'bg-cyan-500 shadow-[0_0_4px_rgba(6,182,212,0.4)]',
+    active:  'bg-ok-strong shadow-[0_0_4px_rgba(34,197,94,0.4)]',
+    pending: 'bg-warn-strong animate-pulse shadow-[0_0_4px_rgba(245,158,11,0.4)]',
+    off:     'bg-danger/40',
+    instant: 'bg-accent-500 shadow-[0_0_4px_rgb(var(--accent-glow)/0.4)]',
 };
 
 export const StatusDot: React.FC<StatusDotProps> = ({ status, className = '', title }) => {

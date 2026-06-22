@@ -142,18 +142,18 @@ export const ShaderCompilerPanel: React.FC<ShaderCompilerPanelProps> = ({ classN
 
     return (
         <div className={`flex flex-col h-full ${surface.dock} min-h-0 overflow-hidden ${className}`} data-help-id="panel.engine">
-            <div className={`px-3 py-2 bg-black/60 border-b ${themeBorder.standard} flex items-center justify-between shrink-0`}>
+            <div className={`px-3 py-2 bg-surface-header border-b ${themeBorder.standard} flex items-center justify-between shrink-0`}>
                 <SectionLabel>Engine Configuration</SectionLabel>
                 <span className={`text-[10px] font-bold ${accent.text}`}>{scalabilityLabel}</span>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scroll p-0 min-h-0">
-                <div className={`flex gap-2 items-center px-3 py-2 bg-blue-900/10 border-b ${themeBorder.subtle} mb-1 shrink-0`}>
-                    <div className="text-blue-400"><InfoIcon /></div>
-                    <p className="text-[9px] text-blue-200/80 leading-tight">
-                        <span className="text-green-400">●</span> Compiled &nbsp;
+                <div className={`flex gap-2 items-center px-3 py-2 bg-info/10 border-b ${themeBorder.subtle} mb-1 shrink-0`}>
+                    <div className="text-info"><InfoIcon /></div>
+                    <p className="text-[9px] text-info/80 leading-tight">
+                        <span className="text-ok">●</span> Compiled &nbsp;
                         <span className={`${warn.text}`}>●</span> Pending &nbsp;
-                        <span className="text-blue-400">●</span> Instant
+                        <span className="text-info">●</span> Instant
                     </p>
                 </div>
 
@@ -218,7 +218,7 @@ export const ShaderCompilerPanel: React.FC<ShaderCompilerPanelProps> = ({ classN
                         <button
                             onClick={applyPendingChanges}
                             disabled={isCompiling}
-                            className={`px-4 py-1 ${warn.btnBg} ${warn.btnHover} disabled:bg-gray-600 disabled:cursor-not-allowed ${warn.btnText} font-bold text-[10px] rounded transition-colors flex items-center gap-1`}
+                            className={`px-4 py-1 ${warn.btnBg} ${warn.btnHover} disabled:bg-fg-faint disabled:cursor-not-allowed ${warn.btnText} font-bold text-[10px] rounded transition-colors flex items-center gap-1`}
                         >
                             <CheckIcon /> Apply
                         </button>
@@ -230,7 +230,7 @@ export const ShaderCompilerPanel: React.FC<ShaderCompilerPanelProps> = ({ classN
                              <span className={`text-[9px] ${themeText.faint} font-mono`}>~{estCompileSec}s</span>
                          </div>
                          {compileFeedback && (
-                             <div className="text-[10px] text-green-400 font-bold animate-fade-in flex items-center gap-1">
+                             <div className="text-[10px] text-ok font-bold animate-fade-in flex items-center gap-1">
                                  <CheckIcon /> {compileFeedback}
                              </div>
                          )}

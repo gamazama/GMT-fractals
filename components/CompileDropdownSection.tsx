@@ -94,7 +94,7 @@ export const CompileDropdownSection: React.FC<CompileDropdownSectionProps> = (pr
                 defaultOpen={false}
                 statusContent={hasPendingChanges ? <StatusDot status="pending" /> : <StatusDot status="active" />}
             >
-                <div className="bg-white/[0.02]">
+                <div className="bg-line/[0.02]">
                     {compileSettingsParams.length > 0 && (
                         <div>
                             <AutoFeaturePanel

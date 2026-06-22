@@ -116,15 +116,15 @@ const DragAvatar: React.FC<{ ramp: Uint8Array; x: number; y: number; origin: Dra
     const b = box.current;
     return createPortal(
         <div
-            className="fixed pointer-events-none overflow-hidden rounded-md border border-white/25"
+            className="fixed pointer-events-none overflow-hidden rounded-md border border-line/25"
             style={{
                 left: b.left,
                 top: b.top,
                 width: b.w,
                 height: b.h,
                 zIndex: AVATAR_Z,
-                boxShadow: '0 10px 24px -6px rgba(0,0,0,0.6), 0 0 0 1px rgba(34,211,238,0.35)',
-                background: '#0a0a0b',
+                boxShadow: '0 10px 24px -6px rgba(0,0,0,0.6), 0 0 0 1px rgb(var(--accent-400)/0.35)',
+                background: 'rgb(var(--surface-dock))',
             }}
         >
             <canvas ref={ref} className="block h-full w-full" />

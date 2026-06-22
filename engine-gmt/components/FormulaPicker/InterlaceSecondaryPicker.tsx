@@ -76,21 +76,21 @@ export const InterlaceSecondaryPicker: React.FC<InterlaceSecondaryPickerProps> =
 
     return (
         <>
-            <div className={`flex items-stretch bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5 w-full mb-px ${disabled ? 'opacity-30 pointer-events-none' : ''}`}>
+            <div className={`flex items-stretch bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-line/5 w-full mb-px ${disabled ? 'opacity-30 pointer-events-none' : ''}`}>
                 <div className="flex items-center gap-2 px-2 min-w-0 shrink-0">
-                    <label className="text-[10px] font-medium tracking-tight select-none truncate text-gray-400">
+                    <label className="text-[10px] font-medium tracking-tight select-none truncate text-fg-muted">
                         {label}
                     </label>
                 </div>
                 <button
                     ref={btnRef}
                     onClick={handleOpen}
-                    className={`flex-1 flex items-center justify-between gap-1.5 px-2 text-[11px] font-bold text-white hover:bg-white/[0.08] transition-colors min-w-0 ${
-                        open ? 'bg-white/[0.08]' : ''
+                    className={`flex-1 flex items-center justify-between gap-1.5 px-2 text-[11px] font-bold text-fg hover:bg-line/[0.08] transition-colors min-w-0 ${
+                        open ? 'bg-line/[0.08]' : ''
                     }`}
                 >
                     <span className="truncate">{display}</span>
-                    <span className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`}>
+                    <span className={`text-fg-dim transition-transform ${open ? 'rotate-180' : ''}`}>
                         <ChevronDown />
                     </span>
                 </button>

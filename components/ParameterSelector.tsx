@@ -257,7 +257,7 @@ export const ParameterSelector: React.FC<ParameterSelectorProps> = ({ value, onC
             <button
                 ref={buttonRef}
                 onClick={handleClick}
-                className={`text-left px-2 py-1 bg-black/40 border border-white/10 rounded text-[10px] text-cyan-400 hover:bg-white/5 truncate ${className}`}
+                className={`text-left px-2 py-1 bg-surface-section border border-line/10 rounded text-[10px] text-accent-400 hover:bg-line/5 truncate ${className}`}
                 title={label}
             >
                 {label}

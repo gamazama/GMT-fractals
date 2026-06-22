@@ -93,7 +93,7 @@ export const WaveformPreview: React.FC<WaveformPreviewProps> = ({ shape, period,
     }, [shape, period, phase, enabled]);
 
     return (
-        <div className="relative h-12 bg-black/40 rounded border border-white/5 mb-3 overflow-hidden">
+        <div className="relative h-12 bg-surface-section rounded border border-line/5 mb-3 overflow-hidden">
             <canvas ref={canvasRef} width={280} height={48} className="w-full h-full" />
             <div className="absolute top-1 left-2 text-[7px] font-bold text-purple-400/50 pointer-events-none">Signal (5 second window)</div>
         </div>

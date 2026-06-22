@@ -326,8 +326,8 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
   if (hiddenBundles.length) narrowers.push('sources');
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-zinc-950">
-      <div className="px-4 pt-3 pb-2 border-b border-zinc-800 shrink-0">
+    <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-surface-dock">
+      <div className="px-4 pt-3 pb-2 border-b border-line/10 shrink-0">
         {/* HeroSlot: inline on desktop; on mobile it portals into the dedicated hero rail
             so the current pick stays visible while the wall + controls scroll. */}
         <HeroSlot>
@@ -348,13 +348,13 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
             // deselecting (empty-wall click / Esc) doesn't jump the layout.
             <div>
               <div className="flex items-center mb-1 h-[19px]">
-                <span className="text-[10px] text-zinc-600">No gradient picked</span>
+                <span className="text-[10px] text-fg-faint">No gradient picked</span>
               </div>
               <div
-                className="w-full rounded-md border border-dashed border-zinc-700/70 bg-zinc-900/40 flex items-center justify-center"
+                className="w-full rounded-md border border-dashed border-line/20 bg-surface/40 flex items-center justify-center"
                 style={{ height: heroH }}
               >
-                <span className="text-[10px] text-zinc-600">Click a swatch below to preview it here</span>
+                <span className="text-[10px] text-fg-faint">Click a swatch below to preview it here</span>
               </div>
             </div>
           )}
@@ -363,11 +363,11 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
           {/* The ★ + name now live in the hero above; this row keeps the bundle provenance
               (when picked) on the left and the search/count/hint controls on the right. */}
           <span className="flex items-center gap-2 min-w-0">
-            {selected?.bundle && <span className="text-[10px] text-zinc-600 truncate">{selected.bundle}</span>}
+            {selected?.bundle && <span className="text-[10px] text-fg-faint truncate">{selected.bundle}</span>}
           </span>
           <span className="flex items-center gap-2 shrink-0">
             {hintPhase !== 'done' && (
-              <span className="hidden md:inline-flex items-center text-[10px] text-cyan-300/80 bg-cyan-500/10 px-1.5 py-0.5 rounded whitespace-nowrap">
+              <span className="hidden md:inline-flex items-center text-[10px] text-accent-300/80 bg-accent-500/10 px-1.5 py-0.5 rounded whitespace-nowrap">
                 {hintPhase === 'zoom' ? 'Middle-drag to zoom' : hintPhase === 'pan' ? 'Right-drag to pan' : 'Middle-click to reset zoom'}
               </span>
             )}
@@ -383,8 +383,8 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
                 expands to one inline input (stays expanded while a query is active). */}
             <span className="hidden md:inline-flex items-center">
               {searchOpen || search ? (
-                <span className="inline-flex items-center gap-1 h-[22px] rounded border border-zinc-700 bg-zinc-900 pl-1.5 pr-1">
-                  <SearchIcon className="w-3 h-3 text-zinc-500 shrink-0" />
+                <span className="inline-flex items-center gap-1 h-[22px] rounded border border-line/20 bg-surface pl-1.5 pr-1">
+                  <SearchIcon className="w-3 h-3 text-fg-dim shrink-0" />
                   <input
                     autoFocus
                     value={search}
@@ -393,12 +393,12 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
                       if (e.key === 'Escape') { setPickerSearch(''); setSearchOpen(false); (e.target as HTMLInputElement).blur(); }
                     }}
                     placeholder="name · theme · source"
-                    className="w-28 md:w-32 bg-transparent outline-none text-[11px] text-zinc-200 placeholder-zinc-600"
+                    className="w-28 md:w-32 bg-transparent outline-none text-[11px] text-fg-secondary placeholder-zinc-600"
                   />
                   <button
                     onClick={() => { setPickerSearch(''); setSearchOpen(false); }}
                     title={search ? 'Clear search' : 'Close search'}
-                    className="px-0.5 text-zinc-500 hover:text-zinc-200"
+                    className="px-0.5 text-fg-dim hover:text-fg-secondary"
                   >
                     ×
                   </button>
@@ -407,22 +407,22 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
                 <button
                   onClick={() => setSearchOpen(true)}
                   title="Search the catalog by name, theme, or source"
-                  className="p-0.5 text-zinc-500 hover:text-zinc-200"
+                  className="p-0.5 text-fg-dim hover:text-fg-secondary"
                 >
                   <SearchIcon className="w-3.5 h-3.5" />
                 </button>
               )}
             </span>
-            <span className="text-zinc-500 tabular-nums">
+            <span className="text-fg-dim tabular-nums">
               {!loaded ? 'loading…' : (
                 <>
                   {count} of {catalog.length}
                   {narrowers.length > 0 && (
                     <>
                       {' — '}
-                      <span className="text-zinc-400">{narrowers.join(' · ')}</span>
+                      <span className="text-fg-muted">{narrowers.join(' · ')}</span>
                       {' · '}
-                      <button onClick={clearAll} className="text-cyan-300 hover:text-cyan-200 underline" title="Clear every active filter (search, carve, quality, themes, sources)">
+                      <button onClick={clearAll} className="text-accent-300 hover:text-accent-300 underline" title="Clear every active filter (search, carve, quality, themes, sources)">
                         clear
                       </button>
                     </>
@@ -436,7 +436,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
         {/* Spatial selection tools — carve the wall by drawing a region, then click inside
             (isolate) or outside (cut). Desktop affordance (pointer-driven). */}
         <div ref={toolbarRef} className="mt-1.5 hidden md:flex items-center gap-1.5 text-[11px]">
-          <span className="text-zinc-600">Select</span>
+          <span className="text-fg-faint">Select</span>
           {(['rect', 'lasso', 'paint'] as const).map((t) => {
             const on = tool === t;
             const label = t === 'rect' ? 'Rect' : t === 'lasso' ? 'Lasso' : 'Paint';
@@ -445,7 +445,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
                 key={t}
                 onClick={() => setTool((p) => (p === t ? null : t))}
                 className={`px-1.5 py-0.5 rounded border transition-colors ${
-                  on ? 'border-cyan-400 text-cyan-300 bg-cyan-500/10' : 'border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500'
+                  on ? 'border-accent-400 text-accent-300 bg-accent-500/10' : 'border-line/20 text-fg-muted hover:text-fg-secondary hover:border-line/20'
                 }`}
               >
                 {label}
@@ -455,28 +455,28 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
           {keptIds && (
             <button
               onClick={clearCarve}
-              className="px-1.5 py-0.5 rounded border border-cyan-500/40 text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20"
+              className="px-1.5 py-0.5 rounded border border-accent-500/40 text-accent-300 bg-accent-500/10 hover:bg-accent-500/20"
               title="Clear the selection filter and show the full wall"
             >
               ▣ {keptIds.length} kept · clear
             </button>
           )}
           {tool && (
-            <span className="text-zinc-500">
-              drag to select · click <span className="text-zinc-300">inside</span> isolates ·{' '}
-              <span className="text-zinc-300">outside</span> cuts
-              {tool === 'paint' && <span className="text-zinc-600"> · Shift add · Ctrl erase · [ ] size</span>}
-              <span className="text-zinc-600"> · Esc cancels</span>
+            <span className="text-fg-dim">
+              drag to select · click <span className="text-fg-tertiary">inside</span> isolates ·{' '}
+              <span className="text-fg-tertiary">outside</span> cuts
+              {tool === 'paint' && <span className="text-fg-faint"> · Shift add · Ctrl erase · [ ] size</span>}
+              <span className="text-fg-faint"> · Esc cancels</span>
             </span>
           )}
           <span className="ml-auto flex items-center gap-1.5">
-            <span className="text-zinc-500 tabular-nums" title="Wall zoom (×horizontal · ×vertical)">
+            <span className="text-fg-dim tabular-nums" title="Wall zoom (×horizontal · ×vertical)">
               zoom {wallZoom.x.toFixed(1)}×{wallZoom.y.toFixed(1)}
             </span>
             {zoomed && (
               <button
                 onClick={() => setResetZoomSignal((n) => n + 1)}
-                className="px-1.5 py-0.5 rounded border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500"
+                className="px-1.5 py-0.5 rounded border border-line/20 text-fg-muted hover:text-fg-secondary hover:border-line/20"
                 title="Reset zoom to 1:1 (or middle-click the wall)"
               >
                 reset
@@ -491,7 +491,7 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
           every swatch pick would close-then-reopen the dock (a flicker). */}
       <div ref={wallHostRef} data-gx-keepselect="" className="flex-1 min-h-0 relative">
         {!loaded ? (
-          <div className="h-full flex items-center justify-center text-sm text-zinc-600">Loading gradient library…</div>
+          <div className="h-full flex items-center justify-center text-sm text-fg-faint">Loading gradient library…</div>
         ) : count > 0 ? (
           <PickerWall
             groups={groups}
@@ -512,16 +512,16 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
             inHand={gradientInHand}
           />
         ) : (
-          <div className="h-full flex items-center justify-center text-sm text-zinc-400 px-6 text-center">
+          <div className="h-full flex items-center justify-center text-sm text-fg-muted px-6 text-center">
             {search.trim() ? (
               <span>
                 No gradients match “{search.trim()}”{keptIds ? ' in the current carve' : ''} —{' '}
-                <button onClick={() => setPickerSearch('')} className="text-cyan-300 underline">clear search</button>
-                {keptIds && <> · <button onClick={clearCarve} className="text-cyan-300 underline">clear carve</button></>}.
+                <button onClick={() => setPickerSearch('')} className="text-accent-300 underline">clear search</button>
+                {keptIds && <> · <button onClick={clearCarve} className="text-accent-300 underline">clear carve</button></>}.
               </span>
             ) : keptIds ? (
               <span>
-                No gradients in the current carve — <button onClick={clearCarve} className="text-cyan-300 underline">clear the selection filter</button>.
+                No gradients in the current carve — <button onClick={clearCarve} className="text-accent-300 underline">clear the selection filter</button>.
               </span>
             ) : (
               'No gradients match — widen the Quality Filters or clear theme/source toggles.'

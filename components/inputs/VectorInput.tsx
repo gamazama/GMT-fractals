@@ -38,13 +38,13 @@ const DualAxisPad: React.FC<DualAxisPadProps> = ({
     onHover
 }) => (
     <div
-        className={`w-6 h-9 md:h-[26px] flex-shrink-0 cursor-move overflow-hidden transition-all duration-150 ease-out relative bg-white/[0.08] border border-white/5 ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
+        className={`w-6 h-9 md:h-[26px] flex-shrink-0 cursor-move overflow-hidden transition-all duration-150 ease-out relative bg-line/[0.08] border border-line/5 ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
         onMouseEnter={() => onHover?.(true)}
         onMouseLeave={() => onHover?.(false)}
         title={`Drag: Horizontal=${primaryAxis.toUpperCase()}, Vertical=${secondaryAxis.toUpperCase()}`}
     >
         <div className="absolute inset-0 flex items-center justify-center opacity-50">
-            <div className="w-3 h-3 border border-white/20 rotate-45" />
+            <div className="w-3 h-3 border border-line/20 rotate-45" />
         </div>
     </div>
 );
@@ -184,8 +184,8 @@ export const VectorInput: React.FC<VectorInputProps> = ({
                 onClick={() => setCurrentMode(prev => prev === 'rotation' ? 'normal' : 'rotation')}
                 className={`text-[10px] p-1 rounded transition-colors ${
                     currentMode === 'rotation' 
-                        ? 'text-cyan-400 bg-cyan-500/20' 
-                        : 'text-gray-500 hover:text-gray-300'
+                        ? 'text-accent-400 bg-accent-500/20' 
+                        : 'text-fg-dim hover:text-fg-tertiary'
                 }`}
                 title={currentMode === 'rotation' ? 'Rotation mode (π units)' : 'Normal mode'}
             >
@@ -202,13 +202,13 @@ export const VectorInput: React.FC<VectorInputProps> = ({
         >
             {/* Header */}
             {label && (
-                <div className="flex items-stretch bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5">
+                <div className="flex items-stretch bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-line/5">
                     <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
                         {modeToggleable && renderModeToggle()}
                         {headerRight}
-                        <label className={`text-[10px] font-medium tracking-tight select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-gray-600' : 'text-gray-400'}`}>
+                        <label className={`text-[10px] font-medium tracking-tight select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-fg-faint' : 'text-fg-muted'}`}>
                             {label}
-                            {isRotationMode && <span className="text-[8px] text-cyan-400/60">(π)</span>}
+                            {isRotationMode && <span className="text-[8px] text-accent-400/60">(π)</span>}
                         </label>
                     </div>
                 </div>
@@ -219,7 +219,7 @@ export const VectorInput: React.FC<VectorInputProps> = ({
                 <div className="flex gap-px w-full h-full">
                     {/* X Axis */}
                     <div className="flex-1 flex items-center relative group">
-                        <div className={`absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center border-r border-white/10 bg-white/[0.05] pointer-events-none select-none z-10 ${AXIS_CONFIG[0].text}`}>
+                        <div className={`absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center border-r border-line/10 bg-line/[0.05] pointer-events-none select-none z-10 ${AXIS_CONFIG[0].text}`}>
                             <span className="text-[10px] font-bold">X</span>
                         </div>
                         <div className="flex-1 pl-5">
@@ -253,7 +253,7 @@ export const VectorInput: React.FC<VectorInputProps> = ({
                     
                     {/* Y Axis */}
                     <div className="flex-1 flex items-center relative group">
-                        <div className={`absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center border-r border-white/10 bg-white/[0.05] pointer-events-none select-none z-10 ${AXIS_CONFIG[1].text}`}>
+                        <div className={`absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center border-r border-line/10 bg-line/[0.05] pointer-events-none select-none z-10 ${AXIS_CONFIG[1].text}`}>
                             <span className="text-[10px] font-bold">Y</span>
                         </div>
                         <div className="flex-1 pl-5">
@@ -288,7 +288,7 @@ export const VectorInput: React.FC<VectorInputProps> = ({
                     {/* Z Axis - only for vec3/vec4 */}
                     {isVec3 && (
                         <div className="flex-1 flex items-center relative group">
-                            <div className={`absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center border-r border-white/10 bg-white/[0.05] pointer-events-none select-none z-10 ${AXIS_CONFIG[2].text}`}>
+                            <div className={`absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center border-r border-line/10 bg-line/[0.05] pointer-events-none select-none z-10 ${AXIS_CONFIG[2].text}`}>
                                 <span className="text-[10px] font-bold">Z</span>
                             </div>
                             <div className="flex-1 pl-5">
@@ -324,7 +324,7 @@ export const VectorInput: React.FC<VectorInputProps> = ({
                     {/* W Axis - only for vec4 */}
                     {isVec4 && (
                         <div className="flex-1 flex items-center relative group">
-                            <div className={`absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center border-r border-white/10 bg-white/[0.05] pointer-events-none select-none z-10 ${AXIS_CONFIG[3].text}`}>
+                            <div className={`absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center border-r border-line/10 bg-line/[0.05] pointer-events-none select-none z-10 ${AXIS_CONFIG[3].text}`}>
                                 <span className="text-[10px] font-bold">W</span>
                             </div>
                             <div className="flex-1 pl-5">

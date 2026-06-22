@@ -65,15 +65,15 @@ export const FeedbackPanel: React.FC = () => {
         <div className="flex flex-col text-left p-4" {...stopNavKeys()}>
             {done ? (
                 <>
-                    <p className="text-xs text-gray-300 leading-relaxed mb-1">
+                    <p className="text-xs text-fg-tertiary leading-relaxed mb-1">
                         Thanks — your message is on its way. I read every report personally and
                         usually reply within a few days.
                     </p>
-                    <p className="text-[11px] text-gray-500 italic mb-4">— Guy Zack</p>
+                    <p className="text-[11px] text-fg-dim italic mb-4">— Guy Zack</p>
                     <div className="flex justify-end">
                         <button
                             onClick={close}
-                            className="px-3 py-1.5 text-xs font-bold rounded bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 transition-colors"
+                            className="px-3 py-1.5 text-xs font-bold rounded bg-accent-500/20 text-cyan-200 hover:bg-accent-500/30 transition-colors"
                         >
                             Close
                         </button>
@@ -81,13 +81,13 @@ export const FeedbackPanel: React.FC = () => {
                 </>
             ) : (
                 <>
-                    <p className="text-[10px] text-gray-400 leading-relaxed mb-4">
+                    <p className="text-[10px] text-fg-muted leading-relaxed mb-4">
                         Bug reports, feature ideas, or questions — all welcome. Anonymous is fine,
                         but if you want a reply, include an email or sign in.
                     </p>
 
                     {/* Category */}
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-fg-muted mb-1">
                         What kind of feedback?
                     </label>
                     <div className="grid grid-cols-3 gap-1 mb-1">
@@ -98,20 +98,20 @@ export const FeedbackPanel: React.FC = () => {
                                 disabled={submitting}
                                 className={`px-2 py-1.5 text-[11px] font-bold rounded transition-colors ${
                                     category === c.value
-                                        ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/40'
-                                        : 'bg-white/5 text-gray-400 border border-transparent hover:bg-white/10'
+                                        ? 'bg-accent-500/25 text-cyan-200 border border-accent-400/40'
+                                        : 'bg-line/5 text-fg-muted border border-transparent hover:bg-line/10'
                                 }`}
                             >
                                 {c.label}
                             </button>
                         ))}
                     </div>
-                    <p className="text-[9px] text-gray-500 italic mb-3">
+                    <p className="text-[9px] text-fg-dim italic mb-3">
                         {CATEGORIES.find((c) => c.value === category)!.hint}
                     </p>
 
                     {/* Message */}
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-fg-muted mb-1">
                         Message
                     </label>
                     <textarea
@@ -128,15 +128,15 @@ export const FeedbackPanel: React.FC = () => {
                                 ? 'What would you like to see, and why?'
                                 : 'What are you trying to do?'
                         }
-                        className="w-full px-2 py-1.5 text-xs bg-black/30 text-gray-200 border border-white/10 rounded focus:outline-none focus:border-cyan-400/50 resize-none mb-1"
+                        className="w-full px-2 py-1.5 text-xs bg-surface-sunken text-fg-secondary border border-line/10 rounded focus:outline-none focus:border-accent-400/50 resize-none mb-1"
                     />
-                    <p className="text-[9px] text-gray-500 text-right mb-3">
+                    <p className="text-[9px] text-fg-dim text-right mb-3">
                         {message.length} / 4000
                     </p>
 
                     {/* Contact email */}
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">
-                        Email for reply <span className="text-gray-600 font-normal normal-case">(optional)</span>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-fg-muted mb-1">
+                        Email for reply <span className="text-fg-faint font-normal normal-case">(optional)</span>
                     </label>
                     <input
                         type="email"
@@ -144,7 +144,7 @@ export const FeedbackPanel: React.FC = () => {
                         onChange={(e) => setContactEmail(e.target.value)}
                         disabled={submitting}
                         placeholder={profile ? `(default: your account email)` : 'you@example.com'}
-                        className="w-full px-2 py-1.5 text-xs bg-black/30 text-gray-200 border border-white/10 rounded focus:outline-none focus:border-cyan-400/50 mb-3"
+                        className="w-full px-2 py-1.5 text-xs bg-surface-sunken text-fg-secondary border border-line/10 rounded focus:outline-none focus:border-accent-400/50 mb-3"
                     />
 
                     {/* Include scene */}
@@ -157,10 +157,10 @@ export const FeedbackPanel: React.FC = () => {
                             className="mt-0.5 accent-cyan-400"
                         />
                         <div className="flex-1">
-                            <div className="text-[11px] font-bold text-gray-300 group-hover:text-cyan-300 transition-colors">
+                            <div className="text-[11px] font-bold text-fg-tertiary group-hover:text-accent-300 transition-colors">
                                 Include current scene
                             </div>
-                            <div className="text-[9px] text-gray-500 leading-snug">
+                            <div className="text-[9px] text-fg-dim leading-snug">
                                 Attaches a .gmf file of your scene (sky + heavy data stripped)
                                 so I can reproduce what you're seeing.
                             </div>
@@ -168,7 +168,7 @@ export const FeedbackPanel: React.FC = () => {
                     </label>
 
                     {error && (
-                        <ErrorNote className="text-[11px] text-red-300 px-2 py-1.5 mb-3">
+                        <ErrorNote className="text-[11px] text-danger px-2 py-1.5 mb-3">
                             {error}
                         </ErrorNote>
                     )}
@@ -177,14 +177,14 @@ export const FeedbackPanel: React.FC = () => {
                         <button
                             onClick={close}
                             disabled={submitting}
-                            className="px-3 py-1.5 text-xs font-bold rounded text-gray-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-40"
+                            className="px-3 py-1.5 text-xs font-bold rounded text-fg-muted hover:text-fg hover:bg-line/5 transition-colors disabled:opacity-40"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={trySubmit}
                             disabled={submitting || !message.trim()}
-                            className="px-3 py-1.5 text-xs font-bold rounded bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="px-3 py-1.5 text-xs font-bold rounded bg-accent-500/20 text-cyan-200 hover:bg-accent-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             {submitting ? 'Sending…' : 'Send'}
                         </button>

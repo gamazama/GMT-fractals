@@ -98,20 +98,20 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
     };
 
     return (
-        <div className="flex flex-col border-t border-white/5">
+        <div className="flex flex-col border-t border-line/5">
             {/* Header — clicking toggles collapse (collapsible) or enables the feature (when off) */}
             <div
-                className={`flex items-center justify-between px-3 py-1 ${isEnabled ? 'bg-neutral-800' : 'bg-neutral-800/50 cursor-pointer hover:bg-white/5'} ${collapsible ? 'cursor-pointer hover:bg-white/5' : ''} ${headerClassName}`}
+                className={`flex items-center justify-between px-3 py-1 ${isEnabled ? 'bg-surface-raised' : 'bg-surface-raised/50 cursor-pointer hover:bg-line/5'} ${collapsible ? 'cursor-pointer hover:bg-line/5' : ''} ${headerClassName}`}
                 onClick={collapsible ? () => setOpen(o => !o) : (!isEnabled ? () => handleToggle(true) : undefined)}
             >
                 <div className="flex items-center gap-1.5">
                     {collapsible && (
-                        <span className="text-[8px] text-gray-500 w-2">{open ? '▾' : '▸'}</span>
+                        <span className="text-[8px] text-fg-dim w-2">{open ? '▾' : '▸'}</span>
                     )}
-                    <span className={`text-[10px] font-bold ${isEnabled ? 'text-gray-300' : 'text-gray-600'}`}>
+                    <span className={`text-[10px] font-bold ${isEnabled ? 'text-fg-tertiary' : 'text-fg-faint'}`}>
                         {label}
                     </span>
-                    {!isEnabled && <span className="text-[8px] text-gray-600">off</span>}
+                    {!isEnabled && <span className="text-[8px] text-fg-faint">off</span>}
                     {statusContent}
                 </div>
 
@@ -119,7 +119,7 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
                     {onReset && (
                         <button
                             onClick={onReset}
-                            className="p-1 text-gray-500 hover:text-cyan-400 transition-colors"
+                            className="p-1 text-fg-dim hover:text-accent-400 transition-colors"
                             title="Reset this feature's parameters to defaults"
                         >
                             <ResetIcon />
@@ -128,7 +128,7 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
                     {onUnload && (
                         <button
                             onClick={onUnload}
-                            className="p-1 text-gray-500 hover:text-amber-400 transition-colors"
+                            className="p-1 text-fg-dim hover:text-warn transition-colors"
                             title="Unload — recompile shader without this feature"
                         >
                             <UnloadIcon />
@@ -151,7 +151,7 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
             {(isEnabled || forceBodyOpen) && (!collapsible || open) && (
                 <div>
                     {description && (
-                        <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{description}</p>
+                        <p className="px-3 py-1.5 text-[9px] text-fg-faint leading-tight bg-line/[0.06] hover:text-fg-tertiary transition-colors cursor-default">{description}</p>
                     )}
                     {children}
                 </div>

@@ -15,7 +15,7 @@ const MEM_COLORS: Record<string, string> = {
   meshPos: '#f80', meshNrm: '#fa0', meshIdx: '#fc0', meshCol: '#f5a', exportBlob: '#5af',
 };
 
-const btnCls = 'font-mono text-[13px] font-bold border-none rounded px-4 py-2 cursor-pointer transition-opacity disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-default';
+const btnCls = 'font-mono text-[13px] font-bold border-none rounded px-4 py-2 cursor-pointer transition-opacity disabled:bg-surface-header disabled:text-fg-faint disabled:cursor-default';
 
 export const ExportPanel: React.FC = () => {
   const store = useMeshExportStore();
@@ -181,25 +181,25 @@ export const ExportPanel: React.FC = () => {
 
       {/* Custom filename */}
       <div className="flex items-center gap-2">
-        <span className="text-[10px] text-gray-500 uppercase tracking-wide shrink-0">Filename</span>
+        <span className="text-[10px] text-fg-dim uppercase tracking-wide shrink-0">Filename</span>
         <input
           type="text"
           value={customFilename}
           onChange={(e) => store.setCustomFilename(e.target.value)}
           placeholder={(loadedDefinition?.name || selectedFormulaId || 'fractal').toLowerCase().replace(/\s+/g, '-')}
-          className="flex-1 h-[26px] bg-gray-800 border border-gray-700 rounded px-2 text-[11px] text-gray-200 font-mono placeholder:text-gray-600"
+          className="flex-1 h-[26px] bg-surface-header border border-line/20 rounded px-2 text-[11px] text-fg-secondary font-mono placeholder:text-fg-faint"
         />
-        <span className="text-[10px] text-gray-600">.{exportFormat}</span>
+        <span className="text-[10px] text-fg-faint">.{exportFormat}</span>
       </div>
 
       {isVDB && (
-        <div className="text-[11px] text-sky-400 bg-sky-900/20 px-2 py-1 rounded">
+        <div className="text-[11px] text-info bg-info/20 px-2 py-1 rounded">
           VDB exports directly — no Generate needed
         </div>
       )}
 
       {isVDB && (
-        <label className="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer select-none">
+        <label className="flex items-center gap-2 text-[11px] text-fg-tertiary cursor-pointer select-none">
           <input
             type="checkbox"
             checked={vdbColor}
@@ -214,27 +214,27 @@ export const ExportPanel: React.FC = () => {
       <div className="flex gap-2 flex-wrap">
         {!isVDB && (
           <button disabled={isRunning || !hasDefinition} onClick={handleGenerate}
-            className={`${btnCls} bg-emerald-700 text-white hover:bg-emerald-600`}>
-            <span className="bg-white/15 rounded px-1 mr-1 text-[10px]">1</span>
+            className={`${btnCls} bg-ok-strong text-fg hover:bg-ok-strong`}>
+            <span className="bg-line/15 rounded px-1 mr-1 text-[10px]">1</span>
             Generate
           </button>
         )}
 
         {isRunning && (
-          <button onClick={handleCancel} className={`${btnCls} bg-red-700 text-white hover:bg-red-600`}>
+          <button onClick={handleCancel} className={`${btnCls} bg-danger-strong text-fg hover:bg-danger-strong`}>
             Cancel
           </button>
         )}
 
         <button disabled={isRunning || (!lastMesh && !isVDB)} onClick={handleExport}
-          className={`${btnCls} bg-amber-700 text-white hover:bg-amber-600`}>
-          <span className="bg-white/15 rounded px-1 mr-1 text-[10px]">{isVDB ? '1' : '2'}</span>
+          className={`${btnCls} bg-warn-strong text-fg hover:bg-warn-strong`}>
+          <span className="bg-line/15 rounded px-1 mr-1 text-[10px]">{isVDB ? '1' : '2'}</span>
           Export
         </button>
 
         <button disabled={!lastBlob} onClick={handleDownload}
-          className={`${btnCls} bg-sky-700 text-white hover:bg-sky-600`}>
-          <span className="bg-white/15 rounded px-1 mr-1 text-[10px]">{isVDB ? '2' : '3'}</span>
+          className={`${btnCls} bg-info text-fg hover:bg-info`}>
+          <span className="bg-line/15 rounded px-1 mr-1 text-[10px]">{isVDB ? '2' : '3'}</span>
           Download{lastFilename ? ` (${lastFilename})` : ''}
         </button>
       </div>

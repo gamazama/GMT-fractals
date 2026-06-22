@@ -559,13 +559,13 @@ export const NewSceneModal: React.FC = () => {
 
     return (
         <Modal onClose={closeNewScene} z={Z.modal} dismissOnBackdrop={false}>
-            <div className="bg-neutral-900 border border-white/10 rounded-md shadow-2xl w-[min(720px,95vw)] max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="bg-surface border border-line/10 rounded-md shadow-2xl w-[min(720px,95vw)] max-h-[90vh] flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                    <h2 className="text-sm font-bold text-gray-200 tracking-tight">New Scene</h2>
+                <div className="flex items-center justify-between px-4 py-3 border-b border-line/10">
+                    <h2 className="text-sm font-bold text-fg-secondary tracking-tight">New Scene</h2>
                     <button
                         onClick={closeNewScene}
-                        className="text-gray-500 hover:text-gray-300 transition-colors"
+                        className="text-fg-dim hover:text-fg-tertiary transition-colors"
                         aria-label="Close"
                     >
                         <CloseIcon />
@@ -576,11 +576,11 @@ export const NewSceneModal: React.FC = () => {
                 <div className="flex-1 overflow-auto p-4 space-y-4">
                     <section>
                         <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                                 Formula
                             </h3>
                             {formulaSceneState && (
-                                <span className="text-[9px] text-gray-500">
+                                <span className="text-[9px] text-fg-dim">
                                     {formulaSceneState.isLoading
                                         ? `loading ${formulaSceneState.label}…`
                                         : formulaSceneState.error
@@ -592,7 +592,7 @@ export const NewSceneModal: React.FC = () => {
                                                 setFormulaScenePreset(undefined);
                                                 setFormulaSceneState(undefined);
                                             }}
-                                            className="ml-2 text-gray-500 hover:text-amber-400 px-1.5 py-0.5 rounded hover:bg-white/5"
+                                            className="ml-2 text-fg-dim hover:text-warn px-1.5 py-0.5 rounded hover:bg-line/5"
                                         >
                                             Clear
                                         </button>
@@ -601,7 +601,7 @@ export const NewSceneModal: React.FC = () => {
                             )}
                         </div>
                         {formulaSceneState?.error && (
-                            <p className="text-[9px] text-red-500/90 px-1 mb-1">
+                            <p className="text-[9px] text-danger/90 px-1 mb-1">
                                 Couldn't load scene: {formulaSceneState.error}
                             </p>
                         )}
@@ -659,24 +659,24 @@ export const NewSceneModal: React.FC = () => {
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-white/10 bg-neutral-950">
+                <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-line/10 bg-surface-dock">
                     <button
                         onClick={closeNewScene}
-                        className="px-3 py-1 text-[10px] font-medium text-gray-400 hover:text-gray-200 hover:bg-white/5 rounded transition-colors"
+                        className="px-3 py-1 text-[10px] font-medium text-fg-muted hover:text-fg-secondary hover:bg-line/5 rounded transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleDiceClicked}
                         title="Surprise me — random formula, shading, and maybe interlace"
-                        className="px-2 py-1 text-[12px] font-bold bg-neutral-800 hover:bg-neutral-700 text-cyan-300 rounded transition-colors"
+                        className="px-2 py-1 text-[12px] font-bold bg-surface-raised hover:bg-line/15 text-accent-300 rounded transition-colors"
                     >
                         🎲
                     </button>
                     <button
                         onClick={handleCreateClicked}
                         disabled={!canCreate}
-                        className="px-3 py-1 text-[10px] font-bold bg-cyan-600 hover:bg-cyan-500 disabled:bg-neutral-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white rounded transition-colors"
+                        className="px-3 py-1 text-[10px] font-bold bg-accent-600 hover:bg-accent-500 disabled:bg-surface-raised disabled:text-fg-dim disabled:cursor-not-allowed text-fg rounded transition-colors"
                     >
                         Create Scene
                     </button>
@@ -690,18 +690,18 @@ export const NewSceneModal: React.FC = () => {
              *  flow shallow and avoids re-implementing the existing save UI. */}
             {confirmDiscard && (
                 <Modal onClose={() => setConfirmDiscard(false)} z={Z.modalNested}>
-                    <div className="bg-neutral-900 border border-amber-500/30 rounded-md shadow-2xl w-[420px] p-4 space-y-3">
-                        <h3 className="text-[12px] font-bold text-amber-400">
+                    <div className="bg-surface border border-warn/30 rounded-md shadow-2xl w-[420px] p-4 space-y-3">
+                        <h3 className="text-[12px] font-bold text-warn">
                             Discard current scene?
                         </h3>
-                        <p className="text-[11px] text-gray-300 leading-snug">
+                        <p className="text-[11px] text-fg-tertiary leading-snug">
                             The current scene has unsaved changes. Creating a new scene
-                            will discard them. Save first via <span className="text-gray-400">File → Save Scene</span> if you want to keep them.
+                            will discard them. Save first via <span className="text-fg-muted">File → Save Scene</span> if you want to keep them.
                         </p>
                         <div className="flex items-center justify-end gap-2 pt-1">
                             <button
                                 onClick={() => setConfirmDiscard(false)}
-                                className="px-3 py-1 text-[10px] font-medium text-gray-300 hover:bg-white/5 rounded transition-colors"
+                                className="px-3 py-1 text-[10px] font-medium text-fg-tertiary hover:bg-line/5 rounded transition-colors"
                             >
                                 Cancel
                             </button>
@@ -712,7 +712,7 @@ export const NewSceneModal: React.FC = () => {
                                     else handleCreate();
                                     setPendingAction('create');
                                 }}
-                                className="px-3 py-1 text-[10px] font-bold bg-amber-600 hover:bg-amber-500 text-white rounded transition-colors"
+                                className="px-3 py-1 text-[10px] font-bold bg-warn-strong hover:bg-warn text-fg rounded transition-colors"
                             >
                                 Discard &amp; Create
                             </button>
@@ -746,15 +746,15 @@ const GeometrySection: React.FC<GeometrySectionProps> = ({
     }, [state, hybridBoxDisabled]);
 
     return (
-        <section className="border border-white/5 rounded bg-white/[0.02]">
+        <section className="border border-line/5 rounded bg-line/[0.02]">
             <button
                 onClick={() => setOpen(o => !o)}
-                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/[0.04] transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-line/[0.04] transition-colors"
             >
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                     {open ? '▾' : '▸'} Geometry
                 </span>
-                <span className="text-[9px] text-gray-500">
+                <span className="text-[9px] text-fg-dim">
                     {activeCount > 0 ? `${activeCount} enabled` : 'optional'}
                 </span>
             </button>
@@ -770,14 +770,14 @@ const GeometrySection: React.FC<GeometrySectionProps> = ({
                     {state.hybridBox && !hybridBoxDisabled && (
                         <div className="pl-5">
                             <label className="flex items-center gap-2">
-                                <span className="text-[10px] text-gray-400">Fold type</span>
+                                <span className="text-[10px] text-fg-muted">Fold type</span>
                                 <select
                                     value={state.hybridFoldType}
                                     onChange={(e) => setState(s => ({ ...s, hybridFoldType: parseInt(e.target.value, 10) }))}
-                                    className="bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-[11px] text-gray-200 focus:outline-none focus:border-cyan-500"
+                                    className="bg-surface-sunken border border-line/10 rounded px-1.5 py-0.5 text-[11px] text-fg-secondary focus:outline-none focus:border-accent-500"
                                 >
                                     {foldOptions.map(o => (
-                                        <option key={o.value} value={o.value} className="bg-[#111] text-gray-300">
+                                        <option key={o.value} value={o.value} className="bg-surface text-fg-tertiary">
                                             {o.label}
                                         </option>
                                     ))}
@@ -818,28 +818,28 @@ const InterlaceSection: React.FC<InterlaceSectionProps> = ({
             : 'optional';
 
     return (
-        <section className={`border border-white/5 rounded ${disabled ? 'bg-white/[0.01] opacity-50' : 'bg-white/[0.02]'}`}>
+        <section className={`border border-line/5 rounded ${disabled ? 'bg-line/[0.01] opacity-50' : 'bg-line/[0.02]'}`}>
             <button
                 onClick={() => !disabled && setOpen(o => !o)}
                 disabled={disabled}
                 title={disabled ? disabledReason : undefined}
-                className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${disabled ? 'cursor-not-allowed' : 'hover:bg-white/[0.04]'}`}
+                className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${disabled ? 'cursor-not-allowed' : 'hover:bg-line/[0.04]'}`}
             >
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                     {!disabled && (open ? '▾' : '▸')} Interleave with second formula
                 </span>
-                <span className="text-[9px] text-gray-500">{headerSubtitle}</span>
+                <span className="text-[9px] text-fg-dim">{headerSubtitle}</span>
             </button>
             {open && !disabled && (
                 <div className="px-3 pb-3 space-y-2">
                     <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-gray-400">
+                        <span className="text-[10px] text-fg-muted">
                             Pick a secondary formula — selecting one enables interleave.
                         </span>
                         {state.secondary && (
                             <button
                                 onClick={() => setState({ secondary: undefined })}
-                                className="text-[10px] text-gray-500 hover:text-amber-400 transition-colors px-2 py-0.5 rounded hover:bg-white/5"
+                                className="text-[10px] text-fg-dim hover:text-warn transition-colors px-2 py-0.5 rounded hover:bg-line/5"
                             >
                                 Clear (none)
                             </button>
@@ -900,15 +900,15 @@ const ShadingSection: React.FC<ShadingSectionProps> = ({
     const pickerValue = state.source?.kind === 'formula' ? state.source.id : undefined;
 
     return (
-        <section className="border border-white/5 rounded bg-white/[0.02]">
+        <section className="border border-line/5 rounded bg-line/[0.02]">
             <button
                 onClick={() => setOpen(o => !o)}
-                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/[0.04] transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-line/[0.04] transition-colors"
             >
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                     {open ? '▾' : '▸'} Shading style
                 </span>
-                <span className="text-[9px] text-gray-500">{headerSubtitle}</span>
+                <span className="text-[9px] text-fg-dim">{headerSubtitle}</span>
             </button>
             {open && (
                 <div className="px-3 pb-3 space-y-2">
@@ -916,22 +916,22 @@ const ShadingSection: React.FC<ShadingSectionProps> = ({
                      *  the top so they're always visible. Picker stays accessible
                      *  below for source changes. */}
                     {state.source && (
-                        <div className="bg-white/[0.04] border border-cyan-500/20 rounded p-2 space-y-2">
+                        <div className="bg-line/[0.04] border border-accent-500/20 rounded p-2 space-y-2">
                             <div className="flex items-center justify-between">
-                                <span className="text-[10px] text-gray-300">
+                                <span className="text-[10px] text-fg-tertiary">
                                     {state.source.kind === 'scene' && state.source.isLoading
                                         ? `Loading ${state.source.label}…`
                                         : `Source: ${state.source.label}`}
                                 </span>
                                 <button
                                     onClick={() => setState(s => ({ ...s, source: undefined }))}
-                                    className="text-[10px] text-gray-500 hover:text-amber-400 transition-colors px-2 py-0.5 rounded hover:bg-white/5"
+                                    className="text-[10px] text-fg-dim hover:text-warn transition-colors px-2 py-0.5 rounded hover:bg-line/5"
                                 >
                                     Clear (use defaults)
                                 </button>
                             </div>
                             {state.source.kind === 'scene' && state.source.error && (
-                                <p className="text-[9px] text-red-500/90">
+                                <p className="text-[9px] text-danger/90">
                                     Couldn't extract shading: {state.source.error}
                                 </p>
                             )}
@@ -942,7 +942,7 @@ const ShadingSection: React.FC<ShadingSectionProps> = ({
                         </div>
                     )}
                     <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-gray-400">
+                        <span className="text-[10px] text-fg-muted">
                             {state.source
                                 ? 'Change source — pick a different formula or scene.'
                                 : 'Pick a formula or scene to copy lighting, materials, atmosphere, color.'}
@@ -984,7 +984,7 @@ const ShadingGroupsControl: React.FC<{
     onChange: (g: ShadingGroups) => void;
 }> = ({ groups, onChange }) => (
     <div className="pl-1 pt-1 space-y-1">
-        <div className="text-[10px] text-gray-400">What to copy:</div>
+        <div className="text-[10px] text-fg-muted">What to copy:</div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-1">
             <Toggle
                 label="Lighting + lights"
@@ -1035,6 +1035,6 @@ const Toggle: React.FC<{
             onChange={e => onChange(e.target.checked)}
             className="w-3 h-3 accent-cyan-500"
         />
-        <span className="text-[11px] text-gray-300">{label}</span>
+        <span className="text-[11px] text-fg-tertiary">{label}</span>
     </label>
 );

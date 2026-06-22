@@ -33,9 +33,9 @@ export const PickerThemeChips: React.FC<FeatureComponentProps> = ({ featureId, s
   return (
     <div className="px-2 py-1.5">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] uppercase tracking-wide text-gray-500">Themes</span>
+        <span className="text-[10px] uppercase tracking-wide text-fg-dim">Themes</span>
         {active.length > 0 && (
-          <button onClick={() => setter?.({ activeThemes: [] })} className="text-[10px] text-cyan-400 hover:text-cyan-300">
+          <button onClick={() => setter?.({ activeThemes: [] })} className="text-[10px] text-accent-400 hover:text-accent-300">
             clear
           </button>
         )}
@@ -49,7 +49,7 @@ export const PickerThemeChips: React.FC<FeatureComponentProps> = ({ featureId, s
               onClick={() => toggle(theme)}
               style={chipStyle(theme)}
               className={`px-1.5 py-0.5 rounded text-[10px] border whitespace-nowrap transition-all ${
-                on ? 'border-white ring-1 ring-white' : 'border-black/30 opacity-80 hover:opacity-100'
+                on ? 'border-fg ring-1 ring-white' : 'border-black/30 opacity-80 hover:opacity-100'
               }`}
             >
               {theme} <b className="opacity-70 font-semibold">{count}</b>
@@ -98,7 +98,7 @@ export const PickerBundleToggles: React.FC<FeatureComponentProps> = ({ featureId
 
   return (
     <div className="px-2 py-1.5">
-      <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Sources</div>
+      <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1">Sources</div>
       <div className="flex flex-col gap-0.5">
         {ids.map((id) => {
           const info = bundles[id];
@@ -112,20 +112,20 @@ export const PickerBundleToggles: React.FC<FeatureComponentProps> = ({ featureId
             else if (gid) setGroupLoaded(gid, !on);
           };
           return (
-            <label key={id} className="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={on} disabled={loading} onChange={onToggle} className="accent-cyan-500" />
-              <span className={`flex-1 truncate ${!isCore && !on ? 'text-gray-500' : ''}`} title={info?.attribution}>
+            <label key={id} className="flex items-center gap-2 text-[11px] text-fg-tertiary cursor-pointer">
+              <input type="checkbox" checked={on} disabled={loading} onChange={onToggle} className="accent-accent-500" />
+              <span className={`flex-1 truncate ${!isCore && !on ? 'text-fg-dim' : ''}`} title={info?.attribution}>
                 {info?.label ?? id}
-                {!isCore && <span className="ml-1 text-amber-500/70" title={`${info?.license ?? 'licensed source'} — loaded on demand`}>•</span>}
+                {!isCore && <span className="ml-1 text-warn/70" title={`${info?.license ?? 'licensed source'} — loaded on demand`}>•</span>}
               </span>
-              <span className="text-gray-600 tabular-nums">{loading ? '…' : counts[id]}</span>
+              <span className="text-fg-faint tabular-nums">{loading ? '…' : counts[id]}</span>
               {info?.url && (
                 <a
                   href={info.url}
                   target="_blank"
                   rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="text-gray-500 hover:text-cyan-300"
+                  className="text-fg-dim hover:text-accent-300"
                   title={`${info.attribution} — ${info.license}`}
                 >
                   ↗
@@ -135,8 +135,8 @@ export const PickerBundleToggles: React.FC<FeatureComponentProps> = ({ featureId
           );
         })}
       </div>
-      <div className="mt-1 text-[9px] text-gray-600 leading-tight">
-        <span className="text-amber-500/70">•</span> licensed source — loaded on demand, omittable from a public build
+      <div className="mt-1 text-[9px] text-fg-faint leading-tight">
+        <span className="text-warn/70">•</span> licensed source — loaded on demand, omittable from a public build
       </div>
     </div>
   );

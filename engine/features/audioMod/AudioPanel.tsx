@@ -57,10 +57,10 @@ const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: s
     if (!isActive) return null;
 
     return (
-        <div className="flex flex-col bg-white/5 border border-white/10 rounded overflow-hidden relative group">
+        <div className="flex flex-col bg-line/5 border border-line/10 rounded overflow-hidden relative group">
             {/* Background Progress Bar */}
             <div
-                className="absolute inset-0 bg-cyan-900/20 origin-left pointer-events-none transition-transform duration-200 ease-linear"
+                className="absolute inset-0 bg-accent-900/20 origin-left pointer-events-none transition-transform duration-200 ease-linear"
                 style={{ transform: `scaleX(${progress / 100})` }}
             />
 
@@ -69,7 +69,7 @@ const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: s
                 <button
                     onClick={togglePlay}
                     disabled={!status.hasTrack}
-                    className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${isPlaying ? 'text-green-400 bg-green-900/30' : 'text-gray-400 hover:text-white bg-white/5'}`}
+                    className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${isPlaying ? 'text-ok bg-ok/15' : 'text-fg-muted hover:text-fg bg-line/5'}`}
                 >
                     {isPlaying ? <PauseIcon /> : <PlayIcon />}
                 </button>
@@ -77,10 +77,10 @@ const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: s
                 {/* Track Info & Seek */}
                 <div className="flex-1 flex flex-col justify-center min-w-0 h-8 relative">
                     <div className="flex justify-between items-baseline">
-                         <span className="text-[9px] font-bold text-gray-400 truncate pr-2" title={status.fileName || "No File"}>
+                         <span className="text-[9px] font-bold text-fg-muted truncate pr-2" title={status.fileName || "No File"}>
                              {status.fileName || label}
                          </span>
-                         <span className="text-[8px] font-mono text-cyan-500">
+                         <span className="text-[8px] font-mono text-accent-500">
                             {Math.floor(status.currentTime / 60)}:{Math.floor(status.currentTime % 60).toString().padStart(2, '0')}
                          </span>
                     </div>
@@ -101,7 +101,7 @@ const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: s
                 <div className="flex items-center gap-1">
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="p-1 text-gray-500 hover:text-cyan-400 transition-colors"
+                        className="p-1 text-fg-dim hover:text-accent-400 transition-colors"
                         title="Load File"
                     >
                         <UploadIcon />
@@ -113,7 +113,7 @@ const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: s
                                 setIsPlaying(false);
                                 onClose();
                             }}
-                            className="p-1 text-gray-500 hover:text-red-400 transition-colors"
+                            className="p-1 text-fg-dim hover:text-danger transition-colors"
                             title="Remove Track"
                         >
                             <CloseIcon />
@@ -154,9 +154,9 @@ const AudioModulationList: React.FC = () => {
             label="Active Links"
             count={allRules.length}
             defaultOpen={false}
-            labelColor="text-cyan-400"
-            className="bg-black/30 border border-white/10 rounded mb-2 overflow-hidden"
-            headerClassName="px-3 py-2 bg-white/5 hover:bg-white/10"
+            labelColor="text-accent-400"
+            className="bg-surface-section border border-line/10 rounded mb-2 overflow-hidden"
+            headerClassName="px-3 py-2 bg-line/5 hover:bg-line/10"
             rightContent={
                 <DotToggle
                     value={audioEnabled}
@@ -178,8 +178,8 @@ const AudioModulationList: React.FC = () => {
                         <div
                             key={rule.id}
                             onClick={() => selectModulation(rule.id)}
-                            className={`px-3 py-1.5 flex justify-between items-center cursor-pointer text-[10px] border-b border-white/5 last:border-0 transition-colors ${
-                                isSelected ? 'bg-cyan-900/30 text-cyan-300' : 'text-gray-400 hover:bg-white/5'
+                            className={`px-3 py-1.5 flex justify-between items-center cursor-pointer text-[10px] border-b border-line/5 last:border-0 transition-colors ${
+                                isSelected ? 'bg-accent-900/30 text-accent-300' : 'text-fg-muted hover:bg-line/5'
                             } ${dim ? 'opacity-50' : ''}`}
                         >
                             <div className="flex items-center gap-2">
@@ -190,11 +190,11 @@ const AudioModulationList: React.FC = () => {
                                 <span className="font-mono">{index + 1}. {targetName}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className={`text-[8px] px-1 rounded ${dim ? 'bg-white/5 text-gray-500' : (isAudio ? 'bg-purple-900/50 text-purple-300' : 'bg-green-900/50 text-green-300')}`}>
+                                <span className={`text-[8px] px-1 rounded ${dim ? 'bg-line/5 text-fg-dim' : (isAudio ? 'bg-secondary/30 text-secondary' : 'bg-ok/30 text-ok')}`}>
                                     {getSourceLabel(rule.source)}
                                 </span>
                                 {isAudio && (
-                                    <span className="text-gray-600">
+                                    <span className="text-fg-faint">
                                         {Math.round(rule.freqStart * 100)}-{Math.round(rule.freqEnd * 100)}%
                                     </span>
                                 )}
@@ -208,7 +208,7 @@ const AudioModulationList: React.FC = () => {
                                 />
                                 <button
                                     onClick={(e) => { e.stopPropagation(); removeModulation(rule.id); }}
-                                    className="text-red-500/50 hover:text-red-400 px-1"
+                                    className="text-danger/50 hover:text-danger px-1"
                                 >
                                     ×
                                 </button>
@@ -271,11 +271,11 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
             onContextMenu={handleContextMenu}
         >
              {/* Header */}
-             <div className="p-2 bg-black/40 border-b border-white/5">
+             <div className="p-2 bg-surface-tabbar border-b border-line/5">
                  <div className="flex justify-between items-center mb-2">
                      <div className="flex items-center gap-2">
-                        <span className={`w-1.5 h-1.5 rounded-full ${isEnabled ? 'bg-green-500 animate-pulse' : 'bg-red-900'}`} />
-                        <h3 className="text-[10px] font-bold text-gray-300">Audio Engine</h3>
+                        <span className={`w-1.5 h-1.5 rounded-full ${isEnabled ? 'bg-ok-strong animate-pulse' : 'bg-danger/40'}`} />
+                        <h3 className="text-[10px] font-bold text-fg-tertiary">Audio Engine</h3>
                      </div>
                      <Slider
                         label="FFT Smooth"
@@ -295,10 +295,10 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
 
                  {/* Live Inputs */}
                  <div className="flex gap-1 mb-2" data-help-id="audio.sources">
-                     <button onClick={() => audioAnalysisEngine.connectMicrophone()} className="flex-1 py-1.5 bg-gray-800 hover:bg-white/10 text-[9px] font-bold text-gray-400 hover:text-white rounded border border-white/5 transition-all">
+                     <button onClick={() => audioAnalysisEngine.connectMicrophone()} className="flex-1 py-1.5 bg-surface-header hover:bg-line/10 text-[9px] font-bold text-fg-muted hover:text-fg rounded border border-line/5 transition-all">
                          Microphone
                      </button>
-                     <button onClick={() => audioAnalysisEngine.connectSystemAudio()} className="flex-1 py-1.5 bg-gray-800 hover:bg-white/10 text-[9px] font-bold text-gray-400 hover:text-white rounded border border-white/5 transition-all">
+                     <button onClick={() => audioAnalysisEngine.connectSystemAudio()} className="flex-1 py-1.5 bg-surface-header hover:bg-line/10 text-[9px] font-bold text-fg-muted hover:text-fg rounded border border-line/5 transition-all">
                          System Audio
                      </button>
                  </div>
@@ -308,7 +308,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
                      {!deck1Active && !deck2Active && (
                          <button
                             onClick={() => setDeck1Active(true)}
-                            className="w-full py-2 border border-dashed border-white/10 rounded text-[9px] text-gray-500 hover:text-cyan-400 hover:border-cyan-500/30 transition-all font-bold"
+                            className="w-full py-2 border border-dashed border-line/10 rounded text-[9px] text-fg-dim hover:text-accent-400 hover:border-accent-500/30 transition-all font-bold"
                          >
                              + Load Audio File
                          </button>
@@ -320,7 +320,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
                          <div className="flex justify-center -my-1 z-10">
                              <button
                                 onClick={() => setDeck2Active(true)}
-                                className="bg-black border border-white/20 rounded-full w-5 h-5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                                className="bg-surface-sunken border border-line/20 rounded-full w-5 h-5 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-surface-header transition-colors"
                                 title="Add 2nd Track"
                              >
                                  <PlusIcon />

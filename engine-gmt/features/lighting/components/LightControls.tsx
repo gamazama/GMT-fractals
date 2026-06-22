@@ -59,9 +59,9 @@ export const LightOrb = ({ index, color, active, type, rotation, onClick, onDrag
             }}
         >
             {!active && (
-                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-black border border-white/20 text-[9px] font-bold text-gray-300 px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-surface-raised border border-line/20 text-[9px] font-bold text-fg-tertiary px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                     Drag to Screen
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-black border-t border-l border-white/20 transform rotate-45" />
+                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-surface-raised border-t border-l border-line/20 transform rotate-45" />
                 </div>
             )}
 
@@ -103,7 +103,7 @@ export const LightOrb = ({ index, color, active, type, rotation, onClick, onDrag
                 {/* LAYER 3: Surface & Gradient (Strictly Clipped) */}
                 {/* 'isolate' creates a new stacking context, helping WebKit clip children correctly */}
                 <div 
-                    className="absolute inset-0 rounded-full border border-white overflow-hidden z-10 shadow-[inset_0_0_6px_rgba(255,255,255,0.4)] isolate"
+                    className="absolute inset-0 rounded-full border border-fg overflow-hidden z-10 shadow-[inset_0_0_6px_rgba(255,255,255,0.4)] isolate"
                     style={{
                         backgroundColor: type === 'Directional' ? '#000000' : color
                     }}
@@ -123,7 +123,7 @@ export const LightOrb = ({ index, color, active, type, rotation, onClick, onDrag
                 
                 {/* LAYER 4: Ping Animation (Point Light) */}
                 {active && type !== 'Directional' && (
-                    <div className="absolute inset-0 rounded-full border border-white/50 animate-ping opacity-20 pointer-events-none" />
+                    <div className="absolute inset-0 rounded-full border border-line/50 animate-ping opacity-20 pointer-events-none" />
                 )}
             </div>
             
@@ -297,13 +297,13 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
         return (
             <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                    <label className="text-xs text-gray-400 font-medium">Visible Sphere</label>
+                    <label className="text-xs text-fg-muted font-medium">Visible Sphere</label>
                     <button
                         onClick={onToggle}
                         className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${
                             emitterShown
-                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                                : 'bg-white/5 text-gray-400 border-white/20 hover:border-white/40'
+                                ? 'bg-accent-500/20 text-accent-300 border-accent-500/50'
+                                : 'bg-line/5 text-fg-muted border-line/20 hover:border-line/40'
                         }`}
                         title={isSphereLight
                             ? 'Show or hide the visible emitter ball. Light continues to integrate as an area light either way.'
@@ -346,7 +346,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
     return (
         <Popover width="w-52" onClose={onClose}>
             <div className="relative space-y-3">
-                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                <div className="flex items-center justify-between border-b border-line/10 pb-2">
                     <div className="flex items-center gap-2">
                         {light.type !== 'Directional' && <KeyframeButton status={posStatus} onClick={handlePositionKey} />}
                         <SectionLabel>Light {index + 1}</SectionLabel>
@@ -360,7 +360,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                                 handleInteractionEnd();
                             }}
                             ref={lightAnchorRef}
-                            className={`p-1 rounded transition-colors ${light.fixed ? 'text-orange-300 hover:text-orange-200 hover:bg-orange-900/20' : 'text-cyan-400 hover:text-cyan-200 hover:bg-cyan-900/20'}`}
+                            className={`p-1 rounded transition-colors ${light.fixed ? 'text-warn hover:text-warn hover:bg-warn/15' : 'text-accent-400 hover:text-cyan-200 hover:bg-accent-900/20'}`}
                             title={light.fixed ? 'Attached to Camera (click to unanchor)' : 'World Anchored (click to attach to camera)'}
                         >
                             {light.fixed ? <UnanchoredIcon /> : <AnchorIcon />}
@@ -368,7 +368,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                         <button
                             ref={mergeRefs(menuBtnRef, lightMenuAnchorRef)}
                             onClick={handleMenuClick}
-                            className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                            className="p-1 text-fg-muted hover:text-fg hover:bg-line/10 rounded transition-colors"
                             title="Light options"
                         >
                             <MenuIcon />
@@ -377,7 +377,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                 </div>
 
                 {light.type === 'Sphere' && (renderMode !== 1.0 || !ptAreaLights) && (
-                    <div className="text-[10px] text-amber-300/90 bg-amber-900/20 border border-amber-500/30 rounded px-2 py-1 leading-tight space-y-1">
+                    <div className="text-[10px] text-warn bg-warn/15 border border-warn/30 rounded px-2 py-1 leading-tight space-y-1">
                         <div>
                             Sphere area lights need Path Tracing mode + True Area Lights. Currently rendering as a Point at the sphere center.
                         </div>
@@ -391,7 +391,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                                 // CompileScheduler emits is_compiling on rebuild boundary.
                                 setLighting(updates);
                             }}
-                            className="px-2 py-0.5 bg-amber-500/30 hover:bg-amber-500/50 text-amber-100 text-[9px] font-bold rounded transition-colors w-full"
+                            className="px-2 py-0.5 bg-warn/30 hover:bg-warn/50 text-warn text-[9px] font-bold rounded transition-colors w-full"
                             title="Switches to Path Tracing and compiles in True Area Lights support."
                         >
                             Enable & Compile
@@ -479,7 +479,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                     {renderEmitterSection()}
                 </div>
 
-                <div className="pt-2 border-t border-white/10 space-y-2">
+                <div className="pt-2 border-t border-line/10 space-y-2">
                     {/* Color/Temperature Toggle - Color first */}
                     <div className="flex items-center gap-1 mb-2">
                         <button
@@ -489,8 +489,8 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                             }}
                             className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${
                                 !useTempMode 
-                                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50' 
-                                    : 'bg-white/5 text-gray-400 border-white/20 hover:border-white/40'
+                                    ? 'bg-accent-500/20 text-accent-300 border-accent-500/50' 
+                                    : 'bg-line/5 text-fg-muted border-line/20 hover:border-line/40'
                             }`}
                         >
                             COLOR
@@ -510,7 +510,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                             className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${
                                 useTempMode 
                                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' 
-                                    : 'bg-white/5 text-gray-400 border-white/20 hover:border-white/40'
+                                    : 'bg-line/5 text-fg-muted border-line/20 hover:border-line/40'
                             }`}
                         >
                             TEMPERATURE
@@ -521,8 +521,8 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                         /* Temperature Slider */
                         <div className="space-y-1">
                             <div className="flex items-center justify-between">
-                                <label className="text-[10px] text-gray-400 font-medium">Temperature (K)</label>
-                                <span className="text-[10px] text-gray-300 font-mono">{tempKelvin}</span>
+                                <label className="text-[10px] text-fg-muted font-medium">Temperature (K)</label>
+                                <span className="text-[10px] text-fg-tertiary font-mono">{tempKelvin}</span>
                             </div>
                             <input
                                 type="range"
@@ -551,7 +551,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                     )}
                     
                     <div className="flex items-center justify-between pt-1">
-                        <label className="text-xs text-gray-400 font-medium">Cast Shadows</label>
+                        <label className="text-xs text-fg-muted font-medium">Cast Shadows</label>
                         <input 
                             type="checkbox" 
                             checked={light.castShadow}
@@ -560,7 +560,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                                 updateLight({ index, params: { castShadow: e.target.checked } });
                                 handleInteractionEnd();
                             }}
-                            className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded cursor-pointer"
+                            className="w-3 h-3 accent-cyan-500 bg-surface-header border-line/20 rounded cursor-pointer"
                         />
                     </div>
                 </div>

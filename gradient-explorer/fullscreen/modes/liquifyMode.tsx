@@ -316,15 +316,15 @@ const Slider: React.FC<{
   label: string; value: number; min: number; max: number; step: number;
   onChange: (v: number) => void; fmt?: (v: number) => string;
 }> = ({ label, value, min, max, step, onChange, fmt }) => (
-  <label className="flex items-center gap-1.5 text-[11px] text-gray-400">
+  <label className="flex items-center gap-1.5 text-[11px] text-fg-muted">
     {label}
     <input
       type="range" min={min} max={max} step={step} value={value}
       onChange={(e) => onChange(parseFloat(e.target.value))}
-      className="w-20 accent-cyan-400"
+      className="w-20 accent-accent"
       aria-label={label}
     />
-    <span className="tabular-nums w-6 text-right text-gray-500">{(fmt ?? ((v) => String(Math.round(v * 100))))(value)}</span>
+    <span className="tabular-nums w-6 text-right text-fg-dim">{(fmt ?? ((v) => String(Math.round(v * 100))))(value)}</span>
   </label>
 );
 
@@ -333,7 +333,7 @@ const LiquifyControls: React.FC = () => {
   return (
     <div className="flex flex-wrap items-center gap-2.5">
       {/* brush palette — always visible, no hidden modes */}
-      <div className="flex items-center rounded-md border border-white/10 overflow-hidden divide-x divide-white/10">
+      <div className="flex items-center rounded-md border border-line/10 overflow-hidden divide-x divide-line/10">
         {BRUSHES.map((b) => (
           <button
             key={b.id}
@@ -341,7 +341,7 @@ const LiquifyControls: React.FC = () => {
             title={b.label}
             aria-pressed={st.brush === b.id}
             className={`px-2 py-1.5 text-[13px] leading-none transition-colors ${
-              st.brush === b.id ? 'bg-cyan-500/25 text-cyan-100' : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.05]'
+              st.brush === b.id ? 'bg-accent-500/25 text-accent-300' : 'text-fg-muted hover:text-fg-secondary hover:bg-line/[0.05]'
             }`}
           >
             {b.icon}
@@ -360,7 +360,7 @@ const LiquifyControls: React.FC = () => {
         title="Jiggle physics — the sculpt stays authoritative; physics springs toward it (off leaves the sculpt intact)"
         aria-pressed={st.physics}
         className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
-          st.physics ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100' : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+          st.physics ? 'border-accent-500/40 bg-accent-500/20 text-accent-300' : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
         }`}
       >
         {st.physics ? '❚❚ Jiggle' : '▶ Jiggle'}
@@ -372,7 +372,7 @@ const LiquifyControls: React.FC = () => {
         </>
       )}
 
-      <div className="flex items-center rounded-md border border-white/10 overflow-hidden divide-x divide-white/10">
+      <div className="flex items-center rounded-md border border-line/10 overflow-hidden divide-x divide-line/10">
         {DENSITIES.map((d) => (
           <button
             key={d.id}
@@ -380,7 +380,7 @@ const LiquifyControls: React.FC = () => {
             title={`Mesh density: ${d.label}`}
             aria-pressed={st.density === d.id}
             className={`px-2 py-1.5 text-[11px] transition-colors ${
-              st.density === d.id ? 'bg-cyan-500/25 text-cyan-100' : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.05]'
+              st.density === d.id ? 'bg-accent-500/25 text-accent-300' : 'text-fg-muted hover:text-fg-secondary hover:bg-line/[0.05]'
             }`}
           >
             {d.label}
@@ -393,7 +393,7 @@ const LiquifyControls: React.FC = () => {
         title="Smooth subdivision — Catmull-Rom upsamples the mesh at render time so heavy warps stay smooth instead of faceting into triangles (off = raw grid, for comparison)"
         aria-pressed={st.subdiv}
         className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
-          st.subdiv ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100' : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+          st.subdiv ? 'border-accent-500/40 bg-accent-500/20 text-accent-300' : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
         }`}
       >
         ◆ Subdiv
@@ -402,7 +402,7 @@ const LiquifyControls: React.FC = () => {
       <button
         onClick={() => activeControl?.reset()}
         title="Reset the deformation back to a flat gradient"
-        className="px-2.5 py-1 text-[12px] rounded-md border border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+        className="px-2.5 py-1 text-[12px] rounded-md border border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06] transition-colors"
       >
         ⌖ Reset
       </button>

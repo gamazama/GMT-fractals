@@ -23,12 +23,12 @@ interface TutorialHighlightProps {
 
 const PULSE_STYLE = `
 @keyframes tutorial-pulse {
-    0%, 100% { opacity: 0.85; box-shadow: 0 0 14px 2px rgba(103,232,249,0.45), inset 0 0 8px rgba(103,232,249,0.15); }
-    50%      { opacity: 1;    box-shadow: 0 0 28px 4px rgba(103,232,249,0.75), inset 0 0 12px rgba(103,232,249,0.30); }
+    0%, 100% { opacity: 0.85; box-shadow: 0 0 14px 2px rgb(var(--accent-300) / 0.45), inset 0 0 8px rgb(var(--accent-300) / 0.15); }
+    50%      { opacity: 1;    box-shadow: 0 0 28px 4px rgb(var(--accent-300) / 0.75), inset 0 0 12px rgb(var(--accent-300) / 0.30); }
 }
 @keyframes tutorial-flash {
-    0%   { opacity: 1;    box-shadow: 0 0 36px 6px rgba(103,232,249,0.95); border-color: rgba(103,232,249,1); }
-    100% { opacity: 0.85; box-shadow: 0 0 14px 2px rgba(103,232,249,0.45); border-color: rgba(103,232,249,0.85); }
+    0%   { opacity: 1;    box-shadow: 0 0 36px 6px rgb(var(--accent-300) / 0.95); border-color: rgb(var(--accent-300) / 1); }
+    100% { opacity: 0.85; box-shadow: 0 0 14px 2px rgb(var(--accent-300) / 0.45); border-color: rgb(var(--accent-300) / 0.85); }
 }
 `;
 
@@ -82,7 +82,7 @@ export const TutorialHighlight: React.FC<TutorialHighlightProps> = ({ targets, f
                         top: rect.top - 6,
                         width: rect.width + 12,
                         height: rect.height + 12,
-                        border: `2.5px solid ${flash ? 'rgba(103,232,249,1)' : 'rgba(103,232,249,0.85)'}`,
+                        border: `2.5px solid ${flash ? 'rgb(var(--accent-300) / 1)' : 'rgb(var(--accent-300) / 0.85)'}`,
                         borderRadius: '6px',
                         pointerEvents: 'none',
                         zIndex: 9999,

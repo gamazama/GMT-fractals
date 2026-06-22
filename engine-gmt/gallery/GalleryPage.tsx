@@ -109,17 +109,17 @@ export const GalleryPage: React.FC = () => {
 
   return createPortal(
     <>
-      <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex flex-col" style={{ zIndex: Z.overlay }}>
-        <div className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/40">
+      <div className="fixed inset-0 bg-surface/85 backdrop-blur-md flex flex-col" style={{ zIndex: Z.overlay }}>
+        <div className="flex items-center justify-between px-6 py-3 border-b border-line/10 bg-surface-tabbar">
           <div className="flex items-baseline gap-3">
-            <h1 className="text-lg font-bold text-white">Gallery</h1>
-            <span className="text-[10px] text-gray-500">
+            <h1 className="text-lg font-bold text-fg">Gallery</h1>
+            <span className="text-[10px] text-fg-dim">
               {loading ? 'loading…' : `${items.length} scene${items.length === 1 ? '' : 's'}`}
             </span>
           </div>
           <GhostButton
             onClick={closeGallery}
-            className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded"
+            className="text-xs text-fg-muted hover:text-fg px-3 py-1.5 rounded"
           >
             Close (Esc)
           </GhostButton>
@@ -127,27 +127,27 @@ export const GalleryPage: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {!galleryEnabled && (
-            <div className="text-sm text-gray-400 max-w-xl mx-auto mt-12 text-center">
-              Gallery isn't configured for this build. Set <code className="text-cyan-300">VITE_SUPABASE_URL</code> and{' '}
-              <code className="text-cyan-300">VITE_SUPABASE_ANON_KEY</code> to enable it.
+            <div className="text-sm text-fg-muted max-w-xl mx-auto mt-12 text-center">
+              Gallery isn't configured for this build. Set <code className="text-accent-300">VITE_SUPABASE_URL</code> and{' '}
+              <code className="text-accent-300">VITE_SUPABASE_ANON_KEY</code> to enable it.
             </div>
           )}
 
           {error && (
-            <div className="text-sm text-red-400 max-w-xl mx-auto mt-12 text-center">
+            <div className="text-sm text-danger max-w-xl mx-auto mt-12 text-center">
               Failed to load gallery: {error.message}
             </div>
           )}
 
           {!loading && !error && galleryEnabled && items.length === 0 && (
-            <div className="text-sm text-gray-500 max-w-xl mx-auto mt-12 text-center">
+            <div className="text-sm text-fg-dim max-w-xl mx-auto mt-12 text-center">
               No scenes yet.
             </div>
           )}
 
           {featured.length > 0 && (
             <section className="mb-6">
-              <h2 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Featured</h2>
+              <h2 className="text-[10px] font-bold text-fg-dim uppercase tracking-wider mb-2">Featured</h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 {featured.map(item => (
                   <GalleryTile
@@ -163,7 +163,7 @@ export const GalleryPage: React.FC = () => {
           {rest.length > 0 && (
             <section>
               {featured.length > 0 && (
-                <h2 className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">All scenes</h2>
+                <h2 className="text-[10px] font-bold text-fg-dim uppercase tracking-wider mb-2">All scenes</h2>
               )}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {rest.map(item => (
@@ -178,10 +178,10 @@ export const GalleryPage: React.FC = () => {
           )}
 
           {myPrivate.length > 0 && (
-            <section className="mt-8 pt-6 border-t border-white/10">
+            <section className="mt-8 pt-6 border-t border-line/10">
               <div className="flex items-baseline gap-2 mb-2">
-                <h2 className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">My Private Scenes</h2>
-                <span className="text-[9px] text-gray-500">only visible to you</span>
+                <h2 className="text-[10px] font-bold text-secondary uppercase tracking-wider">My Private Scenes</h2>
+                <span className="text-[9px] text-fg-dim">only visible to you</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {myPrivate.map(item => (

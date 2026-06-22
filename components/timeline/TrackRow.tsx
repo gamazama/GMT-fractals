@@ -6,7 +6,7 @@ import { TrashIcon, EyeIcon, SelectAllIcon } from '../Icons';
 import { isFlatTrack } from '../../utils/dopeSheetTrackFlags';
 
 const LiveValueDisplay = () => (
-    <span className="text-[9px] font-mono text-gray-600 w-12 text-right">--</span>
+    <span className="text-[9px] font-mono text-fg-faint w-12 text-right">--</span>
 );
 
 interface TrackRowProps {
@@ -34,26 +34,26 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
 
     return (
         <div
-            className={`flex border-b border-white/5 bg-transparent hover:bg-white/5 ${flat ? 'opacity-50' : ''}`}
+            className={`flex border-b border-line/5 bg-transparent hover:bg-line/5 ${flat ? 'opacity-50' : ''}`}
             style={{ height: 32 }}
             data-help-id="anim.tracks"
         >
             <div
-                className={`sticky left-0 z-30 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center justify-between px-3 cursor-pointer group select-none ${isSelected ? 'border-l-2 border-l-cyan-500' : ''}`}
+                className={`sticky left-0 z-30 bg-surface/80 backdrop-blur-sm border-r border-line/10 shrink-0 flex items-center justify-between px-3 cursor-pointer group select-none ${isSelected ? 'border-l-2 border-l-accent-500' : ''}`}
                 style={{ width: sidebarWidth }}
                 onClick={(e) => onSelect(e, tid)}
                 onMouseDown={(e) => e.stopPropagation()}
                 onContextMenu={handleContextMenu}
                 data-help-id="anim.tracks"
             >
-                <div className="truncate text-[10px] font-bold text-gray-400 group-hover:text-cyan-400 pl-4" title={sequence.tracks[tid].label}>
+                <div className="truncate text-[10px] font-bold text-fg-muted group-hover:text-accent-400 pl-4" title={sequence.tracks[tid].label}>
                     {sequence.tracks[tid].label}
                 </div>
                 <div className="flex items-center gap-1.5">
                     {onSelectAllKeys && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onSelectAllKeys(tid, e.shiftKey || e.ctrlKey || e.metaKey); }}
-                            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-500 hover:text-cyan-400 hover:bg-white/10"
+                            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-fg-dim hover:text-accent-400 hover:bg-line/10"
                             title="Select all keys on this track"
                         >
                             <SelectAllIcon />
@@ -63,13 +63,13 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
                     {onToggleVisibility && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onToggleVisibility(tid); }}
-                            className="p-0.5 rounded text-gray-500 hover:text-white hover:bg-white/10"
+                            className="p-0.5 rounded text-fg-dim hover:text-fg hover:bg-line/10"
                             title={isVisible ? 'Hide in graph' : 'Show in graph'}
                         >
                             <EyeIcon active={!!isVisible} />
                         </button>
                     )}
-                    <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400"><TrashIcon /></button>
+                    <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="opacity-0 group-hover:opacity-100 text-danger hover:text-danger"><TrashIcon /></button>
                 </div>
             </div>
             {/* Keyframe area: diamonds, double-click-to-add, and right-click context

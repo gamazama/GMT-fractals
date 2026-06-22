@@ -96,11 +96,11 @@ export const QualityRenderControls: React.FC = () => {
         () => [
             // Per-option colors mirror GMT — Direct renders cyan
             // (default), Path Tracer renders purple.
-            { label: 'Direct (Fast)',   value: 'Direct',      color: 'bg-cyan-500'   },
+            { label: 'Direct (Fast)',   value: 'Direct',      color: 'bg-accent-500'   },
             {
                 label: 'Path Tracer (GI)',
                 value: 'PathTracing',
-                color: 'bg-purple-500',
+                color: 'bg-secondary',
                 tooltip: ptEnabled ? 'Switch to Path Tracer (GI)' : 'Path Tracer disabled in Engine Panel',
             },
         ],
@@ -156,7 +156,7 @@ export const QualityRenderControls: React.FC = () => {
                 />
 
                 {state.resolutionMode === 'Fixed' && (
-                    <div className="animate-fade-in flex flex-col gap-2 px-3 py-2 bg-neutral-800/50">
+                    <div className="animate-fade-in flex flex-col gap-2 px-3 py-2 bg-surface-raised/50">
                         <Dropdown
                             label="Preset"
                             value={currentPreset}

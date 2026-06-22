@@ -213,11 +213,11 @@ export const AccountPanel: React.FC = () => {
 
     const usernameMsg = () => {
         switch (usernameStatus) {
-            case 'checking':  return <span className="text-gray-500">checking…</span>;
-            case 'available': return <span className="text-green-400">available</span>;
-            case 'taken':     return <span className="text-red-400">taken</span>;
-            case 'invalid':   return <span className="text-red-400">3–24 chars, a–z 0–9 _ -</span>;
-            case 'reserved':  return <span className="text-red-400">reserved name</span>;
+            case 'checking':  return <span className="text-fg-dim">checking…</span>;
+            case 'available': return <span className="text-ok">available</span>;
+            case 'taken':     return <span className="text-danger">taken</span>;
+            case 'invalid':   return <span className="text-danger">3–24 chars, a–z 0–9 _ -</span>;
+            case 'reserved':  return <span className="text-danger">reserved name</span>;
             default:          return null;
         }
     };
@@ -232,32 +232,32 @@ export const AccountPanel: React.FC = () => {
             className=""
         >
             <div
-                className="bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[420px] max-h-[90vh] overflow-y-auto"
+                className="bg-surface-sunken border border-line/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[420px] max-h-[90vh] overflow-y-auto"
                 {...stopNavKeys({ allowEscape: true })}
             >
-                <header className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                    <h2 className="text-sm font-bold text-white">
+                <header className="flex items-center justify-between px-4 py-3 border-b border-line/10">
+                    <h2 className="text-sm font-bold text-fg">
                         {setupMode ? 'Pick a username' : 'Account'}
                     </h2>
                     {!setupMode && (
-                        <button onClick={closeAccountPanel} className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
+                        <button onClick={closeAccountPanel} className="text-fg-dim hover:text-fg text-lg leading-none">&times;</button>
                     )}
                 </header>
 
                 {error && (
-                    <ErrorNote className="m-4 p-3 text-[10px] text-red-300">{error}</ErrorNote>
+                    <ErrorNote className="m-4 p-3 text-[10px] text-danger">{error}</ErrorNote>
                 )}
 
                 {setupMode && (
                     <form onSubmit={createProfile} className="p-4 space-y-3">
-                        <div className="text-[10px] text-gray-400 leading-relaxed">
-                            You're signed in as <span className="font-mono text-cyan-300">{user?.email}</span>.
+                        <div className="text-[10px] text-fg-muted leading-relaxed">
+                            You're signed in as <span className="font-mono text-accent-300">{user?.email}</span>.
                             Pick a username so your submissions can be attributed to you.
                         </div>
 
                         <div>
-                            <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider flex items-center justify-between mb-1">
-                                <span>Username <span className="text-red-400">*</span></span>
+                            <label className="text-[9px] text-fg-dim font-bold uppercase tracking-wider flex items-center justify-between mb-1">
+                                <span>Username <span className="text-danger">*</span></span>
                                 <span className="font-normal normal-case">{usernameMsg()}</span>
                             </label>
                             <input
@@ -267,29 +267,29 @@ export const AccountPanel: React.FC = () => {
                                 onChange={(e) => setUsername(e.target.value.toLowerCase())}
                                 disabled={busy}
                                 maxLength={24}
-                                className="w-full bg-gray-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white font-mono outline-none focus:border-cyan-500"
+                                className="w-full bg-surface-dock border border-line/10 rounded px-2 py-1.5 text-xs text-fg font-mono outline-none focus:border-accent-500"
                                 placeholder="alice_42"
                             />
                         </div>
 
                         <div>
-                            <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Display name</label>
+                            <label className="text-[9px] text-fg-dim font-bold uppercase tracking-wider block mb-1">Display name</label>
                             <input
                                 type="text"
                                 value={setupDisplayName}
                                 onChange={(e) => setSetupDisplayName(e.target.value)}
                                 disabled={busy}
                                 maxLength={60}
-                                className="w-full bg-gray-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-500"
+                                className="w-full bg-surface-dock border border-line/10 rounded px-2 py-1.5 text-xs text-fg outline-none focus:border-accent-500"
                                 placeholder={username || 'Optional'}
                             />
-                            <div className="text-[9px] text-gray-600 mt-1">Optional — defaults to your username</div>
+                            <div className="text-[9px] text-fg-faint mt-1">Optional — defaults to your username</div>
                         </div>
 
                         <button
                             type="submit"
                             disabled={busy || usernameStatus !== 'available'}
-                            className="w-full py-2 rounded text-[11px] font-bold bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="w-full py-2 rounded text-[11px] font-bold bg-accent-600/20 hover:bg-accent-600/40 text-accent-300 border border-accent-500/40 disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                             {busy ? 'Creating profile…' : 'Continue'}
                         </button>
@@ -298,7 +298,7 @@ export const AccountPanel: React.FC = () => {
                             type="button"
                             onClick={signOut}
                             disabled={busy}
-                            className="w-full text-center text-[10px] text-gray-500 hover:text-white"
+                            className="w-full text-center text-[10px] text-fg-dim hover:text-fg"
                         >
                             Cancel and sign out
                         </button>
@@ -309,42 +309,42 @@ export const AccountPanel: React.FC = () => {
                     <div className="p-4 space-y-4">
                         <form onSubmit={saveEdits} className="space-y-3">
                             <div>
-                                <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Email</label>
-                                <div className="text-xs text-gray-400 font-mono">{user?.email}</div>
+                                <label className="text-[9px] text-fg-dim font-bold uppercase tracking-wider block mb-1">Email</label>
+                                <div className="text-xs text-fg-muted font-mono">{user?.email}</div>
                             </div>
 
                             <div>
-                                <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Username</label>
-                                <div className="text-xs text-cyan-300 font-mono">@{profile.username}</div>
-                                <div className="text-[9px] text-gray-600 mt-1">Cannot be changed</div>
+                                <label className="text-[9px] text-fg-dim font-bold uppercase tracking-wider block mb-1">Username</label>
+                                <div className="text-xs text-accent-300 font-mono">@{profile.username}</div>
+                                <div className="text-[9px] text-fg-faint mt-1">Cannot be changed</div>
                             </div>
 
                             <div>
-                                <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Display name</label>
+                                <label className="text-[9px] text-fg-dim font-bold uppercase tracking-wider block mb-1">Display name</label>
                                 <input
                                     type="text"
                                     value={editDisplayName}
                                     onChange={(e) => setEditDisplayName(e.target.value)}
                                     disabled={busy}
                                     maxLength={60}
-                                    className="w-full bg-gray-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-500"
+                                    className="w-full bg-surface-dock border border-line/10 rounded px-2 py-1.5 text-xs text-fg outline-none focus:border-accent-500"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Bio</label>
+                                <label className="text-[9px] text-fg-dim font-bold uppercase tracking-wider block mb-1">Bio</label>
                                 <textarea
                                     value={editBio}
                                     onChange={(e) => setEditBio(e.target.value)}
                                     disabled={busy}
                                     maxLength={280}
                                     rows={2}
-                                    className="w-full bg-gray-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-500 resize-none"
+                                    className="w-full bg-surface-dock border border-line/10 rounded px-2 py-1.5 text-xs text-fg outline-none focus:border-accent-500 resize-none"
                                     placeholder="A line or two about yourself"
                                 />
                             </div>
 
-                            <div className="border-t border-white/5 pt-3">
+                            <div className="border-t border-line/5 pt-3">
                                 <label className="flex items-start gap-2 cursor-pointer select-none">
                                     <input
                                         type="checkbox"
@@ -354,8 +354,8 @@ export const AccountPanel: React.FC = () => {
                                         className="accent-cyan-500 mt-0.5"
                                     />
                                     <div className="flex-1 -mt-0.5">
-                                        <div className="text-[10px] text-gray-300">Bake author signature into gallery submissions</div>
-                                        <div className="text-[9px] text-gray-600 mt-0.5 leading-relaxed">
+                                        <div className="text-[10px] text-fg-tertiary">Bake author signature into gallery submissions</div>
+                                        <div className="text-[9px] text-fg-faint mt-0.5 leading-relaxed">
                                             Adds a small line of text in the bottom corner of your submitted images. You can override per-submission in the Submit dialog.
                                         </div>
                                     </div>
@@ -389,7 +389,7 @@ export const AccountPanel: React.FC = () => {
                                                 disabled={busy}
                                                 maxLength={80}
                                                 placeholder="e.g. © Alice 2026"
-                                                className="w-full mt-1 bg-gray-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-500"
+                                                className="w-full mt-1 bg-surface-dock border border-line/10 rounded px-2 py-1.5 text-xs text-fg outline-none focus:border-accent-500"
                                             />
                                         )}
                                     </div>
@@ -399,17 +399,17 @@ export const AccountPanel: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={busy}
-                                className="w-full py-2 rounded text-[11px] font-bold bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/40 disabled:opacity-30"
+                                className="w-full py-2 rounded text-[11px] font-bold bg-accent-600/20 hover:bg-accent-600/40 text-accent-300 border border-accent-500/40 disabled:opacity-30"
                             >
                                 {busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
                             </button>
                         </form>
 
-                        <div className="border-t border-white/5 pt-4 space-y-2">
+                        <div className="border-t border-line/5 pt-4 space-y-2">
                             <GhostButton
                                 onClick={signOut}
                                 disabled={busy}
-                                className="w-full py-2 rounded text-[11px] font-bold text-gray-300"
+                                className="w-full py-2 rounded text-[11px] font-bold text-fg-tertiary"
                             >
                                 Sign out
                             </GhostButton>
@@ -418,20 +418,20 @@ export const AccountPanel: React.FC = () => {
                                 <button
                                     onClick={() => setConfirmDelete(true)}
                                     disabled={busy}
-                                    className="w-full py-2 rounded text-[10px] text-red-400 hover:text-red-300"
+                                    className="w-full py-2 rounded text-[10px] text-danger hover:text-danger"
                                 >
                                     Delete account
                                 </button>
                             ) : (
                                 <ErrorNote className="p-3 space-y-2">
-                                    <div className="text-[10px] text-red-300 leading-relaxed">
+                                    <div className="text-[10px] text-danger leading-relaxed">
                                         This deletes your profile and removes your submissions from the gallery. Cannot be undone.
                                     </div>
                                     <div className="flex gap-2">
                                         <GhostButton
                                             onClick={() => setConfirmDelete(false)}
                                             disabled={busy}
-                                            className="flex-1 py-1.5 rounded text-[10px] text-gray-300"
+                                            className="flex-1 py-1.5 rounded text-[10px] text-fg-tertiary"
                                         >
                                             Cancel
                                         </GhostButton>
@@ -468,6 +468,6 @@ const WatermarkChoice: React.FC<{
             disabled={disabled}
             className="accent-cyan-500"
         />
-        <span className="text-[10px] text-gray-300">{label}</span>
+        <span className="text-[10px] text-fg-tertiary">{label}</span>
     </label>
 );

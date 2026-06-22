@@ -63,12 +63,12 @@ export const MobileScrollIntro: React.FC<MobileScrollIntroProps> = ({
 
     return (
         <div
-            className="w-full flex flex-col items-center justify-center bg-black text-white text-center px-8"
+            className="w-full flex flex-col items-center justify-center bg-surface text-fg text-center px-8"
             style={{ height: '100svh', scrollSnapAlign: 'start' }}
         >
             {logo ?? <h1 className="text-3xl font-bold tracking-tight mb-2">{title}</h1>}
-            <p className="text-gray-500 text-sm font-mono mt-2 mb-8">{subtitle}</p>
-            <div className="text-cyan-400 animate-bounce">
+            <p className="text-fg-dim text-sm font-mono mt-2 mb-8">{subtitle}</p>
+            <div className="text-accent-400 animate-bounce">
                 <ChevronDown size={32} />
             </div>
         </div>

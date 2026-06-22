@@ -246,17 +246,17 @@ export const RotationHeliotrope: React.FC<RotationHeliotropeProps> = ({
         <div
             ref={containerRef}
             className={`
-                relative rounded-full border border-white/10 bg-black/40
+                relative rounded-full border border-line/10 bg-surface/40
                 cursor-crosshair touch-none overflow-hidden
                 transition-all duration-200
                 ${disabled ? 'opacity-50 pointer-events-none' : ''}
-                ${isActive ? 'scale-105 border-cyan-500/50' : 'hover:border-white/20'}
+                ${isActive ? 'scale-105 border-accent-500/50' : 'hover:border-line/20'}
             `}
             style={{ 
                 width: size, 
                 height: size, 
                 touchAction: 'none',
-                boxShadow: isActive ? '0 0 20px rgba(34, 211, 238, 0.3)' : 'none'
+                boxShadow: isActive ? '0 0 20px rgb(var(--accent-glow) / 0.3)' : 'none'
             }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -279,7 +279,7 @@ export const RotationHeliotrope: React.FC<RotationHeliotropeProps> = ({
         >
             {/* 90-degree boundary ring */}
             <div 
-                className="absolute rounded-full border border-white/10 pointer-events-none"
+                className="absolute rounded-full border border-line/10 pointer-events-none"
                 style={{ 
                     width: radius * 2, 
                     height: radius * 2,
@@ -289,12 +289,12 @@ export const RotationHeliotrope: React.FC<RotationHeliotropeProps> = ({
             />
 
             {/* Crosshairs */}
-            <div className="absolute w-full h-px bg-white/10 pointer-events-none" style={{ top: center }} />
-            <div className="absolute h-full w-px bg-white/10 pointer-events-none" style={{ left: center }} />
+            <div className="absolute w-full h-px bg-line/10 pointer-events-none" style={{ top: center }} />
+            <div className="absolute h-full w-px bg-line/10 pointer-events-none" style={{ left: center }} />
 
             {/* Center reference dot */}
             <div 
-                className="absolute w-1.5 h-1.5 bg-white/40 rounded-full pointer-events-none"
+                className="absolute w-1.5 h-1.5 bg-line/40 rounded-full pointer-events-none"
                 style={{ 
                     left: center - 3, 
                     top: center - 3 
@@ -430,7 +430,7 @@ export const RotationHeliotrope: React.FC<RotationHeliotropeProps> = ({
                     {/* Info text - only shown when active */}
                     {isActive && (
                         <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                            <span className="text-[9px] text-cyan-400 font-mono bg-black/60 px-1 rounded">
+                            <span className="text-[9px] text-accent-400 font-mono bg-surface/60 px-1 rounded">
                                 {(azimuth * 180 / Math.PI).toFixed(0)}° / {(pitch * 180 / Math.PI).toFixed(0)}°
                             </span>
                         </div>

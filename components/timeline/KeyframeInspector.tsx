@@ -20,8 +20,8 @@ const ActionBtn = ({ label, onClick, title, active }: ActionBtnProps) => (
         onClick={onClick}
         className={`flex-1 py-1.5 text-[9px] font-bold rounded border transition-colors ${
             active 
-            ? 'bg-cyan-900/50 text-cyan-300 border-cyan-500/50' 
-            : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
+            ? 'bg-accent-900/50 text-accent-300 border-accent-500/50' 
+            : 'bg-line/5 text-fg-muted border-line/5 hover:bg-line/10 hover:text-fg'
         }`}
         title={title}
     >
@@ -30,15 +30,15 @@ const ActionBtn = ({ label, onClick, title, active }: ActionBtnProps) => (
 );
 
 const ToggleGroup = ({ options, value, onChange }: { options: {label: string, value: boolean}[], value: boolean, onChange: (v: boolean) => void }) => (
-    <div className="flex bg-black/40 rounded p-0.5 border border-white/10 w-full">
+    <div className="flex bg-surface-section rounded p-0.5 border border-line/10 w-full">
         {options.map((opt) => (
             <button
                 key={opt.label}
                 onClick={() => onChange(opt.value)}
                 className={`flex-1 py-1 text-[9px] font-bold rounded transition-colors flex items-center justify-center gap-1 ${
                     value === opt.value
-                    ? 'bg-cyan-900 text-cyan-300 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-300'
+                    ? 'bg-accent-900 text-accent-300 shadow-sm'
+                    : 'text-fg-dim hover:text-fg-tertiary'
                 }`}
             >
                 {opt.value ? <BrokenIcon /> : <LinkIcon />}
@@ -49,8 +49,8 @@ const ToggleGroup = ({ options, value, onChange }: { options: {label: string, va
 );
 
 const InspectorRow = ({ label, children }: { label: string, children?: React.ReactNode }) => (
-    <div className="flex items-center justify-between h-[26px] bg-white/[0.02] border-b border-white/5 px-2">
-        <label className="text-[10px] text-gray-400 font-medium tracking-tight w-24 shrink-0 truncate" title={label}>{label}</label>
+    <div className="flex items-center justify-between h-[26px] bg-line/[0.02] border-b border-line/5 px-2">
+        <label className="text-[10px] text-fg-muted font-medium tracking-tight w-24 shrink-0 truncate" title={label}>{label}</label>
         <div className="flex-1 min-w-0 flex justify-end">
             {children}
         </div>
@@ -273,17 +273,17 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
     if (collapsed) {
         return (
             <div
-                className="w-7 bg-[#111] border-l border-white/10 flex flex-col items-center shrink-0 select-none h-full pt-1.5 gap-2"
+                className="w-7 bg-surface border-l border-line/10 flex flex-col items-center shrink-0 select-none h-full pt-1.5 gap-2"
                 data-help-id="anim.keyframes"
             >
                 <button
                     onClick={toggleCollapsed}
                     title="Show keyframe inspector"
-                    className="text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded"
+                    className="text-fg-muted hover:text-fg p-1 hover:bg-line/10 rounded"
                 >
                     <ChevronLeft />
                 </button>
-                <span className="text-[9px] font-bold text-gray-500 tracking-wide [writing-mode:vertical-rl]">
+                <span className="text-[9px] font-bold text-fg-dim tracking-wide [writing-mode:vertical-rl]">
                     Keyframe
                 </span>
             </div>
@@ -292,22 +292,22 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
 
     return (
         <div
-            className="w-64 bg-[#111] border-l border-white/10 flex flex-col shrink-0 overflow-y-auto animate-fade-in-left select-none h-full"
+            className="w-64 bg-surface border-l border-line/10 flex flex-col shrink-0 overflow-y-auto animate-fade-in-left select-none h-full"
             data-help-id="anim.keyframes"
         >
-            <div className="flex items-center gap-1 px-2 py-2 border-b border-white/10 bg-white/5 shrink-0 h-8">
+            <div className="flex items-center gap-1 px-2 py-2 border-b border-line/10 bg-line/5 shrink-0 h-8">
                 <button
                     onClick={toggleCollapsed}
                     title="Hide keyframe inspector"
-                    className="text-gray-400 hover:text-white p-0.5 hover:bg-white/10 rounded shrink-0"
+                    className="text-fg-muted hover:text-fg p-0.5 hover:bg-line/10 rounded shrink-0"
                 >
                     <ChevronRight />
                 </button>
-                <span className="text-[10px] font-bold text-gray-400 truncate flex-1" title={headerTitle}>
+                <span className="text-[10px] font-bold text-fg-muted truncate flex-1" title={headerTitle}>
                     {headerTitle}
                 </span>
                 {hasSelection && canDelete && (
-                    <button onClick={() => ds.deleteSelectedKeyframes?.()} className="text-red-400 hover:text-red-300 p-1 hover:bg-white/10 rounded shrink-0">
+                    <button onClick={() => ds.deleteSelectedKeyframes?.()} className="text-danger hover:text-danger p-1 hover:bg-line/10 rounded shrink-0">
                         <TrashIcon />
                     </button>
                 )}
@@ -315,7 +315,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
 
             {/* Quick Actions (Context Sensitive) — needs setTangents + setGlobalInterpolation */}
             {canQuickActions && (
-            <div className="flex gap-1 px-2 py-2 border-b border-white/5 bg-black/20">
+            <div className="flex gap-1 px-2 py-2 border-b border-line/5 bg-surface-section">
                 <ActionBtn
                     label="Linear"
                     onClick={() => handleQuickAction('Linear')}
@@ -342,7 +342,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
                         <div className="w-20">
                             {sameFrame ? (
                                 <DraggableNumber value={firstKey!.frame} onChange={handleFrameChange} step={1} min={0} highlight onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
-                            ) : <div className="text-center text-[10px] text-gray-600">---</div>}
+                            ) : <div className="text-center text-[10px] text-fg-faint">---</div>}
                         </div>
                     </InspectorRow>
                     
@@ -350,7 +350,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
                         <div className="w-20">
                             {sameValue ? (
                                 <DraggableNumber value={displayValue} onChange={handleValueChange} step={isAllRotation ? 1 : 0.01} highlight onDragStart={handleDragStart} onDragEnd={handleDragEnd} overrideText={formatTimelineValue(displayValue, 3)} />
-                            ) : <div className="text-center text-[10px] text-gray-600">---</div>}
+                            ) : <div className="text-center text-[10px] text-fg-faint">---</div>}
                         </div>
                     </InspectorRow>
 
@@ -362,7 +362,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
                                 const val = e.target.value as 'Linear' | 'Step' | 'Bezier';
                                 updateKeyframes(selectedKeys.map(x => ({ trackId: x.tid, keyId: x.kid, patch: { interpolation: val } })));
                             }}
-                            className="t-select text-cyan-400 font-bold text-right w-20"
+                            className="t-select text-accent-400 font-bold text-right w-20"
                         >
                             {(!sameInterp) && <option value="Mixed">Mixed</option>}
                             <option value="Bezier">Bezier</option>
@@ -372,20 +372,20 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
                     </InspectorRow>
 
                     {/* --- SOFT SELECTION --- */}
-                    <div className="border-t border-white/5 mt-2 bg-purple-900/10">
-                        <div className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-white/5" onClick={() => setSoftSelection(softSelectionRadius || 10, !softSelectionEnabled)}>
-                            <span className="text-[9px] font-bold text-purple-300">Soft Selection</span>
-                            <div className={`w-2 h-2 rounded-full ${softSelectionEnabled ? 'bg-purple-500 shadow-[0_0_5px_rgba(168,85,247,0.8)]' : 'bg-gray-700'}`} />
+                    <div className="border-t border-line/5 mt-2 bg-secondary/10">
+                        <div className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-line/5" onClick={() => setSoftSelection(softSelectionRadius || 10, !softSelectionEnabled)}>
+                            <span className="text-[9px] font-bold text-secondary">Soft Selection</span>
+                            <div className={`w-2 h-2 rounded-full ${softSelectionEnabled ? 'bg-secondary shadow-[0_0_5px_rgb(var(--secondary)/0.8)]' : 'bg-fg-ghost'}`} />
                         </div>
                         {softSelectionEnabled && (
                             <div className="px-3 pb-2 pt-1 animate-fade-in space-y-2">
                                 {canSoftType && (
                                 <div className="flex items-center justify-between">
-                                    <label className="text-[9px] text-gray-400 font-medium">Falloff</label>
+                                    <label className="text-[9px] text-fg-muted font-medium">Falloff</label>
                                     <select
                                         value={softSelectionType}
                                         onChange={(e) => ds.setSoftSelectionType?.(e.target.value as SoftSelectionType)}
-                                        className="t-select text-purple-300"
+                                        className="t-select text-secondary"
                                     >
                                         <option value="Linear">Linear</option>
                                         <option value="Dome">Dome</option>
@@ -401,7 +401,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
                                     onChange={(v) => setSoftSelection(v, true)}
                                     highlight
                                 />
-                                <div className="text-[8px] text-gray-500 italic pl-1">
+                                <div className="text-[8px] text-fg-dim italic pl-1">
                                     Ctrl+Drag Key to adjust size
                                 </div>
                             </div>
@@ -412,41 +412,41 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
                     {firstKey!.interpolation === 'Bezier' && (
                         <>
                             <div 
-                                className="px-3 py-2 border-y border-white/5 bg-black/20 mt-2"
+                                className="px-3 py-2 border-y border-line/5 bg-surface-section mt-2"
                                 data-help-id="anim.graph"
                             >
-                                <span className="text-[9px] font-bold text-gray-500 block mb-2">Tangents</span>
+                                <span className="text-[9px] font-bold text-fg-dim block mb-2">Tangents</span>
                                 
                                 <div className="grid grid-cols-2 gap-3 mb-3">
                                     <div>
-                                        <span className="text-[8px] text-gray-500 font-bold block mb-1">Left Handle</span>
-                                        <div className="flex flex-col gap-1 pl-1 border-l border-white/5">
+                                        <span className="text-[8px] text-fg-dim font-bold block mb-1">Left Handle</span>
+                                        <div className="flex flex-col gap-1 pl-1 border-l border-line/5">
                                             <div className="flex justify-between items-center h-5">
-                                                <span className="text-[9px] text-gray-400">Angle</span> 
-                                                <div className="w-12 bg-black/40 rounded px-1">
+                                                <span className="text-[9px] text-fg-muted">Angle</span> 
+                                                <div className="w-12 bg-surface-sunken rounded px-1">
                                                     <DraggableNumber value={leftStats.angle} onChange={v => handleTangentChange('left','angle',v)} step={1} onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
                                                 </div>
                                             </div>
                                             <div className="flex justify-between items-center h-5">
-                                                <span className="text-[9px] text-gray-400">Weight</span> 
-                                                <div className="w-12 bg-black/40 rounded px-1">
+                                                <span className="text-[9px] text-fg-muted">Weight</span> 
+                                                <div className="w-12 bg-surface-sunken rounded px-1">
                                                     <DraggableNumber value={leftStats.length} onChange={v => handleTangentChange('left','length',v)} step={1} min={0} onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                     <div>
-                                        <span className="text-[8px] text-gray-500 font-bold block mb-1">Right Handle</span>
-                                        <div className="flex flex-col gap-1 pl-1 border-l border-white/5">
+                                        <span className="text-[8px] text-fg-dim font-bold block mb-1">Right Handle</span>
+                                        <div className="flex flex-col gap-1 pl-1 border-l border-line/5">
                                             <div className="flex justify-between items-center h-5">
-                                                <span className="text-[9px] text-gray-400">Angle</span> 
-                                                <div className="w-12 bg-black/40 rounded px-1">
+                                                <span className="text-[9px] text-fg-muted">Angle</span> 
+                                                <div className="w-12 bg-surface-sunken rounded px-1">
                                                     <DraggableNumber value={rightStats.angle} onChange={v => handleTangentChange('right','angle',v)} step={1} onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
                                                 </div>
                                             </div>
                                             <div className="flex justify-between items-center h-5">
-                                                <span className="text-[9px] text-gray-400">Weight</span> 
-                                                <div className="w-12 bg-black/40 rounded px-1">
+                                                <span className="text-[9px] text-fg-muted">Weight</span> 
+                                                <div className="w-12 bg-surface-sunken rounded px-1">
                                                     <DraggableNumber value={rightStats.length} onChange={v => handleTangentChange('right','length',v)} step={1} min={0} onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
                                                 </div>
                                             </div>
@@ -469,7 +469,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
                     )}
                 </div>
             ) : (
-                <div className="p-4 text-[9px] text-gray-500 italic text-center leading-relaxed opacity-75">
+                <div className="p-4 text-[9px] text-fg-dim italic text-center leading-relaxed opacity-75">
                     No keys selected.<br/><br/>
                     Use the buttons above to change interpolation for <strong>the entire animation</strong>.
                 </div>

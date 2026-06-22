@@ -269,10 +269,10 @@ export const MandelbrotPicker: React.FC<Props> = ({
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-[10px] text-gray-400 uppercase tracking-wide">Pick Julia c</div>
+      <div className="text-[10px] text-fg-muted uppercase tracking-wide">Pick Julia c</div>
       <canvas
         ref={canvasRef}
-        className="rounded border border-white/10 cursor-crosshair"
+        className="rounded border border-line/10 cursor-crosshair"
         style={{ width: size, height: size, imageRendering: 'pixelated' }}
         onPointerDown={(e) => {
           draggingRef.current = true;
@@ -287,7 +287,7 @@ export const MandelbrotPicker: React.FC<Props> = ({
           }
         }}
       />
-      <div className="text-[10px] font-mono text-gray-500">
+      <div className="text-[10px] font-mono text-fg-dim">
         c = ({cx.toFixed(4)}, {cy.toFixed(4)})
       </div>
     </div>

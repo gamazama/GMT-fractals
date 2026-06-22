@@ -230,10 +230,10 @@ export const AppGmt: React.FC = () => {
                 <MobileScrollIntro
                     title="GMT"
                     subtitle="Swipe up to enter"
-                    logo={<GmtWordmark className="h-14 w-auto drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]" />}
+                    logo={<GmtWordmark className="h-14 w-auto drop-shadow-[0_0_15px_rgb(var(--accent-glow)/0.5)]" />}
                 />
             )}
-            <MobileViewportShell className="bg-black text-white select-none overflow-hidden flex flex-col">
+            <MobileViewportShell className="bg-black text-fg select-none overflow-hidden flex flex-col">
                 {loadingVisible && (
                     <LoadingScreen
                         isReady={isSceneReady}
@@ -381,7 +381,7 @@ export const AppGmt: React.FC = () => {
                             />
                         )}
                         {isSelectingRegion && (
-                            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-cyan-900/80 text-cyan-100 text-[10px] font-bold px-3 py-1 rounded-full border border-cyan-500/50 shadow-lg animate-pulse pointer-events-none z-[60]">
+                            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-accent-900/80 text-cyan-100 text-[10px] font-bold px-3 py-1 rounded-full border border-accent-500/50 shadow-lg animate-pulse pointer-events-none z-[60]">
                                 Drag to select render region
                             </div>
                         )}

@@ -353,8 +353,8 @@ export const FullscreenGradientOverlay: React.FC = () => {
     <div
       className={`fixed flex flex-col select-none ${
         fs.split
-          ? 'bg-zinc-950/95 border-t border-white/15 shadow-[0_-12px_40px_rgba(0,0,0,0.5)]'
-          : 'inset-0 bg-black/95 backdrop-blur-sm'
+          ? 'bg-surface-dock/95 border-t border-line/15 shadow-[0_-12px_40px_rgba(0,0,0,0.5)]'
+          : 'inset-0 bg-surface backdrop-blur-sm'
       }`}
       style={fs.split ? { zIndex: Z.overlay, top: `${fs.splitY * 100}%`, left: 0, right: 0, bottom: 0 } : { zIndex: Z.overlay }}
       data-testid="fullscreen-gradient-overlay"
@@ -387,26 +387,26 @@ export const FullscreenGradientOverlay: React.FC = () => {
           }}
           className="absolute left-0 right-0 -top-3 h-6 z-10 flex items-center justify-center cursor-row-resize group focus:outline-none touch-none"
         >
-          <div className="h-1 w-16 rounded-full bg-white/25 group-hover:bg-cyan-400/70 group-focus:bg-cyan-400/70 transition-colors" />
+          <div className="h-1 w-16 rounded-full bg-line/25 group-hover:bg-accent-400/70 group-focus:bg-accent-400/70 transition-colors" />
         </div>
       )}
 
       {/* Toolbar: mode selector + the active mode's own controls + split/dither/export/close. */}
-      <div className="shrink-0 flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-white/10 bg-zinc-950/80">
-        <div className="text-sm font-medium text-zinc-200 mr-1 truncate max-w-[28ch] flex items-center gap-1.5">
-          {fs.split && <span className="text-[9px] font-semibold tracking-wide px-1 py-0.5 rounded bg-cyan-500/25 text-cyan-200">LIVE</span>}
+      <div className="shrink-0 flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-line/10 bg-surface-dock/80">
+        <div className="text-sm font-medium text-fg-secondary mr-1 truncate max-w-[28ch] flex items-center gap-1.5">
+          {fs.split && <span className="text-[9px] font-semibold tracking-wide px-1 py-0.5 rounded bg-accent-500/25 text-accent-300">LIVE</span>}
           {sourceName}
         </div>
 
-        <div className="flex items-center rounded-md border border-white/10 overflow-hidden divide-x divide-white/10">
+        <div className="flex items-center rounded-md border border-line/10 overflow-hidden divide-x divide-line/10">
           {listFullscreenModes().map((m) => (
             <button
               key={m.id}
               onClick={() => setFullscreenGeom(m.id)}
               className={`px-3 py-1.5 text-[12px] transition-colors ${
                 fs.geom === m.id
-                  ? 'bg-cyan-500/25 text-cyan-100 font-medium'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.05]'
+                  ? 'bg-accent-500/25 text-accent-300 font-medium'
+                  : 'text-fg-muted hover:text-fg-secondary hover:bg-line/[0.05]'
               }`}
             >
               {m.label}
@@ -431,8 +431,8 @@ export const FullscreenGradientOverlay: React.FC = () => {
             aria-pressed={fs.split}
             className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
               fs.split
-                ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100'
-                : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+                ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
+                : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
             }`}
           >
             ⇅ Split
@@ -444,8 +444,8 @@ export const FullscreenGradientOverlay: React.FC = () => {
               aria-pressed={fs.handles}
               className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
                 fs.handles
-                  ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100'
-                  : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+                  ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
+                  : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
               }`}
             >
               ◉ Handles
@@ -457,8 +457,8 @@ export const FullscreenGradientOverlay: React.FC = () => {
             aria-pressed={fs.dither}
             className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
               fs.dither
-                ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-100'
-                : 'border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06]'
+                ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
+                : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
             }`}
           >
             ▦ Dither
@@ -470,14 +470,14 @@ export const FullscreenGradientOverlay: React.FC = () => {
                 if (coords) openInFluidToy(coords, sourceConfig, sourceName);
               }}
               title="Open this fractal view (and its gradient) in the Fluid Toy"
-              className="px-3 py-1 text-[12px] rounded-md border border-violet-500/30 bg-violet-500/15 text-violet-100 hover:bg-violet-500/25 transition-colors"
+              className="px-3 py-1 text-[12px] rounded-md border border-secondary/30 bg-secondary/15 text-secondary hover:bg-secondary/25 transition-colors"
             >
               ≈ Open in Fluid Toy
             </button>
           )}
           <button
             onClick={exportPng}
-            className="px-3 py-1 text-[12px] rounded-md border border-cyan-500/30 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 transition-colors"
+            className="px-3 py-1 text-[12px] rounded-md border border-accent-500/30 bg-accent-500/15 text-accent-300 hover:bg-accent-500/25 transition-colors"
           >
             Export PNG
           </button>
@@ -485,7 +485,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
             onClick={closeFullscreen}
             title="Close (Esc)"
             aria-label="Close fullscreen preview"
-            className="px-2.5 py-1 text-[14px] leading-none rounded-md border border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+            className="px-2.5 py-1 text-[14px] leading-none rounded-md border border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06] transition-colors"
           >
             ✕
           </button>
@@ -508,16 +508,16 @@ export const FullscreenGradientOverlay: React.FC = () => {
         {!isOwnCanvas && <GeometryHandleLayer />}
         {isOwnCanvas && ownError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/60 text-center px-6">
-            <div className="text-[13px] text-gray-200">Couldn’t start {activeMode!.label}</div>
-            <div className="text-[11px] text-gray-400">This mode needs a WebGL2-capable GPU.</div>
+            <div className="text-[13px] text-fg-secondary">Couldn’t start {activeMode!.label}</div>
+            <div className="text-[11px] text-fg-muted">This mode needs a WebGL2-capable GPU.</div>
           </div>
         ) : isOwnCanvas && !ownReady ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/40 pointer-events-none">
-            <div className="h-7 w-7 rounded-full border-2 border-white/15 border-t-cyan-400 animate-spin" />
-            <div className="text-[12px] text-gray-300">Rendering {activeMode!.label}…</div>
+            <div className="h-7 w-7 rounded-full border-2 border-line/15 border-t-accent animate-spin" />
+            <div className="text-[12px] text-fg-tertiary">Rendering {activeMode!.label}…</div>
           </div>
         ) : null}
-        <div className="absolute bottom-2 right-3 text-[10px] text-gray-500/80 pointer-events-none">
+        <div className="absolute bottom-2 right-3 text-[10px] text-fg-dim/80 pointer-events-none">
           {hint}
         </div>
       </div>

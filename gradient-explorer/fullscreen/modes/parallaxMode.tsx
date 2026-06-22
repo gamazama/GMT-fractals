@@ -272,15 +272,15 @@ const Slider: React.FC<{
   // the absolute value instead.
   readout?: (v: number) => string;
 }> = ({ label, value, min, max, step, onChange, title, readout }) => (
-  <label className="flex items-center gap-1.5 text-[11px] text-gray-400" title={title}>
+  <label className="flex items-center gap-1.5 text-[11px] text-fg-muted" title={title}>
     {label}
     <input
       type="range" min={min} max={max} step={step} value={value}
       onChange={(e) => onChange(parseFloat(e.target.value))}
-      className="w-20 accent-cyan-400"
+      className="w-20 accent-accent"
       aria-label={label}
     />
-    <span className="tabular-nums w-8 text-right text-gray-500">
+    <span className="tabular-nums w-8 text-right text-fg-dim">
       {readout ? readout(value) : Math.round(((value - min) / (max - min)) * 100)}
     </span>
   </label>
@@ -295,7 +295,7 @@ const ParallaxControls: React.FC = () => {
       <Slider label="Stir" value={st.stir} min={0.05} max={0.4} step={0.01} onChange={setParallaxStir}
         title="Size of the stir brush" readout={(v) => v.toFixed(2)} />
 
-      <div className="flex items-center rounded-md border border-white/10 overflow-hidden divide-x divide-white/10">
+      <div className="flex items-center rounded-md border border-line/10 overflow-hidden divide-x divide-line/10">
         {COLOR_MODES.map((m) => (
           <button
             key={m.id}
@@ -303,7 +303,7 @@ const ParallaxControls: React.FC = () => {
             title={m.title}
             aria-pressed={st.colorBy === m.id}
             className={`px-2 py-1.5 text-[11px] transition-colors ${
-              st.colorBy === m.id ? 'bg-cyan-500/25 text-cyan-100' : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.05]'
+              st.colorBy === m.id ? 'bg-accent-500/25 text-accent-300' : 'text-fg-muted hover:text-fg-secondary hover:bg-line/[0.05]'
             }`}
           >
             {m.label}
@@ -311,7 +311,7 @@ const ParallaxControls: React.FC = () => {
         ))}
       </div>
 
-      <div className="flex items-center rounded-md border border-white/10 overflow-hidden divide-x divide-white/10">
+      <div className="flex items-center rounded-md border border-line/10 overflow-hidden divide-x divide-line/10">
         {DENSITIES.map((d) => (
           <button
             key={d.id}
@@ -319,7 +319,7 @@ const ParallaxControls: React.FC = () => {
             title={`Point density: ${d.label}`}
             aria-pressed={st.density === d.id}
             className={`px-2 py-1.5 text-[11px] transition-colors ${
-              st.density === d.id ? 'bg-cyan-500/25 text-cyan-100' : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.05]'
+              st.density === d.id ? 'bg-accent-500/25 text-accent-300' : 'text-fg-muted hover:text-fg-secondary hover:bg-line/[0.05]'
             }`}
           >
             {d.label}
@@ -330,7 +330,7 @@ const ParallaxControls: React.FC = () => {
       <button
         onClick={shuffleParallax}
         title="Re-scatter the field into a fresh composition"
-        className="px-2.5 py-1 text-[12px] rounded-md border border-white/10 text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+        className="px-2.5 py-1 text-[12px] rounded-md border border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06] transition-colors"
       >
         🎲 Shuffle
       </button>
