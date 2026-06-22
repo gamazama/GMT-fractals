@@ -43,7 +43,7 @@ export type ForceMode = 'gradient' | 'curl' | 'iterate' | 'c-track' | 'hue';
  */
 export type ForceSource = 'smoothPot' | 'de' | 'stripe' | 'paletteLuma' | 'mask';
 export type ShowMode = 'composite' | 'julia' | 'dye' | 'velocity';
-export type FractalKind = 'julia' | 'mandelbrot';
+export type FractalKind = 'julia' | 'mandelbrot' | 'phoenix' | 'phoenix-mandel';
 
 /** How new dye blends into the existing dye field each frame. */
 export type DyeBlend = 'add' | 'screen' | 'max' | 'over';
@@ -211,6 +211,9 @@ export interface FluidParams {
   escapeR: number;
   power: number;
   kind: FractalKind;
+  /** Phoenix history coefficient K (complex): zₙ₊₁ = zₙ^p + c + K·zₙ₋₁.
+   *  Only consulted when kind === 'phoenix'. */
+  phoenixK: [number, number];
   forceMode: ForceMode;
   forceSource: ForceSource;
   forceGain: number;
@@ -412,6 +415,7 @@ export const DEFAULT_PARAMS: FluidParams = {
   escapeR: 32,
   power: 2,
   kind: 'mandelbrot',
+  phoenixK: [-0.5, 0],
   forceMode: 'gradient',
   forceSource: 'smoothPot',
   forceGain: -1200,
@@ -746,7 +750,7 @@ export class FluidEngine {
 
   private compileAll() {
     this.progJulia = this.linkProgram(VERT_FULLSCREEN, FRAG_JULIA,
-      ['uTexel', 'uKind', 'uJuliaC', 'uCenter', 'uScale', 'uAspect', 'uMaxIter', 'uEscapeR2', 'uPower',
+      ['uTexel', 'uKind', 'uJuliaC', 'uCenter', 'uScale', 'uAspect', 'uMaxIter', 'uEscapeR2', 'uPower', 'uPhoenix', 'uPhoenixK',
        'uColorIter', 'uTrapMode', 'uTrapCenter', 'uTrapRadius', 'uTrapNormal', 'uTrapOffset', 'uStripeFreq',
        'uJitterScale', 'uResolution', 'uBlueNoiseTexture', 'uBlueNoiseResolution', 'uFrameCount', 'uPerFrameSamples', 'uJitterMode', 'uGridSize', 'uTsaaSampleIndex',
        'uImageTileOrigin', 'uImageTileSize', 'uRegionMin', 'uRegionMax',
@@ -1350,7 +1354,15 @@ export class FluidEngine {
     gl.viewport(0, 0, this.juliaCur.width, this.juliaCur.height);
     this.useProgram(this.progJulia);
     this.setTexel(this.progJulia, this.simW, this.simH);
-    gl.uniform1i(this.progJulia.uniforms['uKind'], this.params.kind === 'julia' ? 0 : 1);
+    // Phoenix adds the K·zₙ₋₁ history term (uPhoenix) and transposes the view
+    // (handled in-kernel off uPhoenix). uKind still chooses z₀: Julia-style
+    // 'phoenix' shares uKind 0 (z₀ = pixel, c = uJuliaC); Mandelbrot-style
+    // 'phoenix-mandel' shares uKind 1 (z₀ = 0, c = pixel) with plain Mandelbrot.
+    const k = this.params.kind;
+    const phoenixActive = k === 'phoenix' || k === 'phoenix-mandel';
+    gl.uniform1i(this.progJulia.uniforms['uKind'], (k === 'mandelbrot' || k === 'phoenix-mandel') ? 1 : 0);
+    gl.uniform1i(this.progJulia.uniforms['uPhoenix'], phoenixActive ? 1 : 0);
+    gl.uniform2f(this.progJulia.uniforms['uPhoenixK'], this.params.phoenixK[0], this.params.phoenixK[1]);
     gl.uniform2f(this.progJulia.uniforms['uJuliaC'], this.params.juliaC[0], this.params.juliaC[1]);
     gl.uniform2f(this.progJulia.uniforms['uCenter'], this.params.center[0], this.params.center[1]);
     gl.uniform1f(this.progJulia.uniforms['uScale'], this.params.zoom);
@@ -1424,6 +1436,10 @@ export class FluidEngine {
     // texture state and packs the uniforms onto the active program. Pass
     // blueNoise as the fallback so its texture stub-binds units 6/7 when
     // the orbit/LA texture is absent (avoids driver warnings).
+    // Phoenix deep zoom is supported via pure perturbation: the worker builds
+    // the reference with the Phoenix recurrence and the kernel adds the K·dz₋₁
+    // term (uPhoenix). LA / AT / nucleus / rebase stay off for Phoenix (gated in
+    // useDeepZoomOrbit + the kernel), so it's PO-only — same tier as Julia.
     this.deepZoom.bindUniforms(this.progJulia, this.params, this.blueNoise?.texture ?? null);
 
     // Per-evaluation palette + mask bake — gradient LUT + colour-mapping
@@ -1569,7 +1585,7 @@ export class FluidEngine {
     // change that alters the baked colour must reset the accumulator,
     // not just the iteration-affecting params.
     const ic = p.interiorColor;
-    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|cL:${p.centerLow[0]},${p.centerLow[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|cn:${p.colorNormV2 ? 1 : 0}|ir:${p.iterRate}|io:${p.iterOffset}|is:${p.iterScale}|de:${p.deLogBands ? 1 : 0}|li:${p.lightEnabled ? 1 : 0},${p.lightAngle},${p.lightHeight},${p.lightStrength},${p.ambient}|ic:${ic[0]},${ic[1]},${ic[2]}|ce:${p.collisionEnabled ? 1 : 0}|cr:${p.collisionRepeat}|cp:${p.collisionPhase}|gV:${this.gradients.version}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}|ai:${p.autoIter ? 1 : 0}|im:${p.iterMul}|dmi:${p.deepMaxIter}`;
+    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|ph:${p.phoenixK[0]},${p.phoenixK[1]}|${p.center[0]}|${p.center[1]}|cL:${p.centerLow[0]},${p.centerLow[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|cn:${p.colorNormV2 ? 1 : 0}|ir:${p.iterRate}|io:${p.iterOffset}|is:${p.iterScale}|de:${p.deLogBands ? 1 : 0}|li:${p.lightEnabled ? 1 : 0},${p.lightAngle},${p.lightHeight},${p.lightStrength},${p.ambient}|ic:${ic[0]},${ic[1]},${ic[2]}|ce:${p.collisionEnabled ? 1 : 0}|cr:${p.collisionRepeat}|cp:${p.collisionPhase}|gV:${this.gradients.version}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}|ai:${p.autoIter ? 1 : 0}|im:${p.iterMul}|dmi:${p.deepMaxIter}`;
     if (hash !== this.tsaaParamHash) {
         this.tsaaParamHash = hash;
         this.tsaaSampleIndex = 0;

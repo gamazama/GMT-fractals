@@ -23,8 +23,9 @@ export const CoordsButton: React.FC = () => {
             center: [julia.center.x, julia.center.y],
             centerLow: [julia.centerLow?.x ?? 0, julia.centerLow?.y ?? 0],
             zoom: julia.zoom,
-            kind: julia.kind === 0 ? 'julia' : 'mandelbrot',
+            kind: julia.kind === 1 ? 'mandelbrot' : julia.kind === 2 ? 'phoenix' : julia.kind === 3 ? 'phoenix-mandel' : 'julia',
             juliaC: [julia.juliaC.x, julia.juliaC.y],
+            phoenixK: [julia.phoenixK?.x ?? -0.5, julia.phoenixK?.y ?? 0],
             power: julia.power,
             colorMapping: palette.colorMapping,
             gradientRepeat: palette.gradientRepeat,
@@ -50,8 +51,8 @@ export const CoordsButton: React.FC = () => {
             title="Copy the exact view + colour state (center / zoom / juliaC / colorMapping / iter) to the clipboard"
             className={`pointer-events-auto px-2 h-6 rounded text-[10px] border transition-colors ${
                 copied
-                    ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-200'
-                    : 'border-white/10 bg-black/40 text-gray-400 hover:text-white hover:bg-white/10'
+                    ? 'border-ok/40 bg-ok/20 text-ok'
+                    : 'border-line/10 bg-surface-tabbar text-fg-muted hover:text-fg hover:bg-line/10'
             }`}
         >
             {copied ? '✓ Copied' : '⧉ Copy coords'}

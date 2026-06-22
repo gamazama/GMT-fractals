@@ -39,15 +39,30 @@ export const FluidToyPanels: PanelManifest = [
     // saves, and the modulation system still reach them via julia.*
     // targets, but the tab itself is omitted from the dock.
     {
-        // Pure navigation surface — saved views + the cardinal preset
-        // buttons (RESET / HOME / 1:1 / WIDE / MAND / JULIA) inside the
-        // panel-views widget. No DDFS sliders here; pan / zoom / juliaC
-        // happen on the canvas (drag to pan, wheel to zoom, ctrl-click
-        // to pick c). Fine-grained adjustments live on the hidden
-        // Fractal panel.
+        // Navigation + iterations surface. Saved views + the cardinal preset
+        // buttons (RESET / HOME / 1:1 / WIDE / MAND / JULIA) live in the
+        // panel-views widget; pan / zoom / juliaC happen on the canvas (drag
+        // to pan, wheel to zoom, ctrl-click to pick c).
+        //
+        // The Iterations section is the single home for the display-iteration
+        // story (previously scattered: the manual cap was on a HIDDEN panel,
+        // the auto toggle + multiplier were buried in Deep Zoom). The readout
+        // shows the resolved count so the active control is never a mystery,
+        // and each knob self-hides when it isn't the one in effect:
+        //   • Auto iterations ON  → "Iteration ×" multiplier (maxIter hidden)
+        //   • Auto iterations OFF → "Iterations (cap)" manual cap
         id: 'View', dock: 'left', order: 0, active: true,
         items: [
             { type: 'widget', id: 'panel-views' },
+            { type: 'section', label: 'Iterations' },
+            { type: 'widget', id: 'iteration-readout' },
+            // autoIter (always) + iterMul (self-gates on autoIter). Both live on
+            // the deepZoom slice but govern the standard render too, so they
+            // belong in this general Iterations section, not just Deep Zoom.
+            { type: 'feature', id: 'deepZoom', whitelistParams: ['autoIter', 'iterMul'] },
+            // Manual cap — self-hides unless Auto iterations is off (cross-feature
+            // condition `$deepZoom.autoIter` on the param).
+            { type: 'feature', id: 'julia', whitelistParams: ['maxIter'] },
         ],
     },
     {
@@ -63,7 +78,18 @@ export const FluidToyPanels: PanelManifest = [
             { type: 'feature', id: 'julia', whitelistParams: ['maxIter'] },
         ],
     },
-    { id: 'Deep Zoom',  dock: 'left', order: 2, features: ['deepZoom'] },
+    {
+        // Deep-zoom-specific knobs only. The general iteration controls
+        // (autoIter / iterMul) moved to View ▸ Iterations — they govern the
+        // shallow render too, so they don't belong behind a deep-zoom tab.
+        // The manual deep caps self-hide unless Auto iterations is off.
+        id: 'Deep Zoom', dock: 'left', order: 2,
+        items: [
+            { type: 'feature', id: 'deepZoom', whitelistParams: [
+                'enabled', 'useLA', 'useAT', 'maxRefIter', 'deepMaxIter', 'showStats', 'disableFluid',
+            ] },
+        ],
+    },
     {
         id: 'Palette', dock: 'left', order: 3,
         items: [

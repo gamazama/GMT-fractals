@@ -48,6 +48,12 @@ export interface RefOrbitRequest {
     /** Opt out of the auto-reference (non-escaping centre) search. Default
      *  false — the search runs for Mandelbrot when the view centre escapes. */
     disableAutoReference?: boolean;
+    /** Phoenix kind — build Z_{n+1} = Z_n^d + C + K·Z_{n-1}. Caller must also
+     *  set buildLA=false and screenSqrRadius=0 (LA/AT unsupported for Phoenix). */
+    phoenix?: boolean;
+    /** Phoenix history coefficient K (real, imag). */
+    phoenixKx?: number;
+    phoenixKy?: number;
     /** Opt out of the minibrot-nucleus (periodic) reference (ADR-0066), forcing
      *  the non-periodic fallback. Default false. */
     disableNucleus?: boolean;

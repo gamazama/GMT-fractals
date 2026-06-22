@@ -141,6 +141,79 @@ export const PRESETS: Preset[] = [
     },
 
     {
+        id: 'classic-phoenix',
+        name: 'Classic Phoenix',
+        desc: 'The literal 2D Phoenix set — zₙ₊₁ = zₙ² + c + K·zₙ₋₁ with the famous c = 0.56667, K = -0.5. The previous-iterate memory term gives it the flowing, feathered "phoenix" plumage you can\'t get from z²+c alone. Shown as a static fractal over a fire palette; unpause the sim (Fluid tab) to set the plumage in motion.',
+        params: {
+            kind: 'phoenix',
+            juliaC: [0.56667, 0],
+            phoenixK: [-0.5, 0],
+            center: [0, 0],
+            zoom: 1.5,
+            maxIter: 220,
+            power: 2,
+            escapeR: 16,
+            // Static fractal showcase — fluid coupling off, sim paused.
+            // Accumulation (TSAA) stays on so it converges crisp.
+            forceMode: 'gradient',
+            forceSource: 'smoothPot',
+            forceGain: 0,
+            interiorDamp: 1,
+            show: 'julia',
+            colorMapping: 'iterations',
+            gradientRepeat: 1,
+            gradientPhase: 0,
+            interiorColor: [0, 0, 0],
+            collisionEnabled: false,
+            paused: true,
+        },
+        gradient: {
+            // Phoenix fire: ember-black → deep red → orange → gold → warm white.
+            stops: makeStops([
+                [0, '#000010'], [0.15, '#3b0a1f'], [0.35, '#8c1d12'],
+                [0.55, '#d2480a'], [0.72, '#f59e0b'], [0.88, '#ffd66b'], [1, '#fff6e0'],
+            ]),
+            colorSpace: 'linear',
+            blendSpace: 'oklab',
+        },
+    },
+
+    {
+        id: 'phoenix-map',
+        name: 'Phoenix Map',
+        desc: 'The Mandelbrot-style map of the Phoenix family: z₀=0, each pixel is a different additive constant c, with K fixed at -0.5. Every point inside the dark body is a c that yields a bounded Phoenix Julia set — the parameter atlas for the Classic Phoenix preset. Cool electric palette; pan/zoom to read its feathered boundary.',
+        params: {
+            kind: 'phoenix-mandel',
+            phoenixK: [-0.5, 0],
+            center: [0, 0],
+            zoom: 1.7,
+            maxIter: 260,
+            power: 2,
+            escapeR: 16,
+            forceMode: 'gradient',
+            forceSource: 'smoothPot',
+            forceGain: 0,
+            interiorDamp: 1,
+            show: 'julia',
+            colorMapping: 'iterations',
+            gradientRepeat: 1,
+            gradientPhase: 0,
+            interiorColor: [0.02, 0.01, 0.06],
+            collisionEnabled: false,
+            paused: true,
+        },
+        gradient: {
+            // Electric: ink → indigo → violet → cyan → white.
+            stops: makeStops([
+                [0, '#01010a'], [0.2, '#1b1466'], [0.45, '#5a2bd0'],
+                [0.68, '#2bb6ff'], [0.86, '#9ff7ff'], [1, '#ffffff'],
+            ]),
+            colorSpace: 'linear',
+            blendSpace: 'oklab',
+        },
+    },
+
+    {
         id: 'coral-gyre',
         name: 'Coral Gyre',
         desc: 'Orbit-point colouring on a negative curl — teal interior feeds a coral halo, with filmic bloom + aberration.',

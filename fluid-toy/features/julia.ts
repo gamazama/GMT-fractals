@@ -21,13 +21,18 @@ import type { JuliaSlice } from '../storeTypes';
 // Index-to-string map for the `kind` enum. Default = 1 (Mandelbrot),
 // matching FluidEngine.DEFAULT_PARAMS.kind so existing save files round-trip.
 const kindParam = defineEnumParam(
-    ['julia', 'mandelbrot'] as const,
+    ['julia', 'mandelbrot', 'phoenix', 'phoenix-mandel'] as const,
     'Fractal Kind',
     {
         defaultIndex: 1,
+        optionLabels: {
+            'phoenix-mandel': 'Phoenix (Mandel)',
+        },
         optionHints: {
             julia:      'Iterate z² + c with fixed c. Pixels are starting z values.',
             mandelbrot: 'Iterate z² + c with z₀=0. Pixels are c values.',
+            phoenix:    'Phoenix: zₙ₊₁ = zₙ² + c + K·zₙ₋₁ — adds memory of the previous iterate. Julia-style (pixels are starting z; c is the fixed constant). The literal 2D Phoenix set.',
+            'phoenix-mandel': 'Phoenix parameter space: z₀=0, pixels are c, K fixed. The Mandelbrot-style map of the Phoenix family — each pixel is a different Phoenix Julia set.',
         },
     },
 );
@@ -66,8 +71,20 @@ export const JuliaFeature: FeatureDefinition = {
             description: 'Julia constant. Move me to reshape the entire fractal — and the forces it emits.',
             // Mandelbrot uses pixel coords as c — the slice value is
             // ignored. Hide the slider in mandelbrot mode so users
-            // aren't tempted to drag a no-op.
-            condition: { param: 'kind', eq: 0 },
+            // aren't tempted to drag a no-op. Phoenix (Julia-style) uses
+            // c as the additive constant, so show it there too.
+            condition: { or: [{ param: 'kind', eq: 0 }, { param: 'kind', eq: 2 }] },
+        },
+
+        // Phoenix history coefficient K (complex). Only meaningful for the
+        // Phoenix kind; hidden otherwise. Classic Phoenix uses K = (-0.5, 0).
+        phoenixK: {
+            type: 'vec2',
+            default: { x: -0.5, y: 0 },
+            min: -1.5, max: 1.5, step: 0.001,
+            label: 'Phoenix K (Re, Im)',
+            description: 'Complex weight on the previous iterate zₙ₋₁ in the Phoenix recurrence zₙ₊₁ = zₙ^p + c + K·zₙ₋₁. The classic Phoenix is K = (-0.5, 0).',
+            condition: { or: [{ param: 'kind', eq: 2 }, { param: 'kind', eq: 3 }] },
         },
 
         // Camera zoom/center were a separate SceneCamera feature before the
@@ -109,8 +126,13 @@ export const JuliaFeature: FeatureDefinition = {
         maxIter: {
             type: 'int',
             default: 310, min: 16, max: 512, step: 1,
-            label: 'Iter',
-            description: 'Caps the fractal force-field detail, and the shallow display when Deep Zoom ▸ Auto iterations is off. More iterations → sharper escape gradients → finer force detail.',
+            label: 'Iterations (cap)',
+            // Only the active control shows: this manual cap is hidden while
+            // Auto iterations is on (the display uses the auto count then).
+            // It always also sets the fluid force-field normalisation, but
+            // that's only visible with the sim running.
+            condition: { param: '$deepZoom.autoIter', eq: false },
+            description: 'Manual per-pixel iteration cap (Auto iterations off). More iterations → sharper escape detail at higher GPU cost. Also normalises the fluid force field.',
         },
         power: {
             type: 'float',
@@ -144,6 +166,7 @@ export const syncJuliaToEngine = (
     engine.setParams({
         kind: kindFromIndex(julia.kind),
         juliaC: [cx, cy],
+        phoenixK: [julia.phoenixK?.x ?? -0.5, julia.phoenixK?.y ?? 0],
         maxIter: julia.maxIter,
         power: julia.power,
         center: [julia.center.x, julia.center.y],

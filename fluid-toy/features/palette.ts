@@ -200,7 +200,11 @@ export const PaletteFeature: FeatureDefinition = {
         colorIter: {
             type: 'int', default: 310, min: 1, max: 1024, step: 1,
             label: 'Color iter',
-            description: 'Iterations used for the coloring accumulators (orbit trap, stripe, DE). Separate from escape-test maxIter — reduce for fresher colours.',
+            // Only consulted when Auto iterations is off; with Auto on the
+            // colouring accumulators track the auto iteration count, so this
+            // knob is a no-op and hidden (matches the maxIter cap behaviour).
+            condition: { param: '$deepZoom.autoIter', eq: false },
+            description: 'Iterations used for the colouring accumulators (orbit trap, stripe, DE) when Auto iterations is off. Reduce for fresher colours.',
         },
 
         // ── Orbit-trap shape params (conditional on colorMapping) ─────

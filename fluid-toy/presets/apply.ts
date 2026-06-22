@@ -79,6 +79,7 @@ export const applyRefPreset = (preset: RefPreset) => {
     const kindIdx = idx(KIND_MODES, p.kind);
     if (kindIdx !== undefined) julia.kind = kindIdx;
     if (p.juliaC) julia.juliaC = tupleToVec(p.juliaC);
+    if (p.phoenixK) julia.phoenixK = tupleToVec(p.phoenixK);
     if (p.center) {
         julia.center = tupleToVec(p.center);
         // Reset the DD pan-accumulator lo word — presets are authored
@@ -142,6 +143,7 @@ export const applyRefPreset = (preset: RefPreset) => {
     const cmIdx = idx(COLOR_MAPPINGS, p.colorMapping);
     if (cmIdx !== undefined) pa.colorMapping = cmIdx;
     if (p.colorIter       !== undefined) pa.colorIter     = p.colorIter;
+    if (p.escapeR         !== undefined) pa.escapeR        = p.escapeR;
     if (p.gradientRepeat  !== undefined) pa.gradientRepeat = p.gradientRepeat;
     if (p.gradientPhase   !== undefined) pa.gradientPhase  = p.gradientPhase;
     if (p.trapCenter)                    pa.trapCenter     = tupleToVec(p.trapCenter);

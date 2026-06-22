@@ -77,6 +77,14 @@ export interface RefOrbitInput {
      *  falling back to the non-periodic relocation/long-orbit path. Default
      *  false. For A/B and the periodic-vs-non-periodic regression smoke. */
     disableNucleus?: boolean;
+    /** Phoenix kind: build the reference with Z_{n+1} = Z_n^d + C + K·Z_{n-1}.
+     *  Auto-reference relocation and the nucleus search are z²+c-specific, so
+     *  they're skipped for Phoenix (build at the literal centre). LA/AT are
+     *  likewise gated off by the caller — Phoenix deep zoom is pure PO. */
+    phoenix?: boolean;
+    /** Phoenix history coefficient K (real, imag). Only read when phoenix. */
+    phoenixKx?: number;
+    phoenixKy?: number;
 }
 
 export interface RefOrbitOutput {
@@ -154,6 +162,18 @@ const NUCLEUS_MAX_RATIO = 0.9;
 const NUCLEUS_MIN_ZOOM = 1e-6;
 
 /**
+ * One high-precision iteration step — the single source of truth for the
+ * recurrence, shared by the orbit builder AND the auto-reference probe so the
+ * z^d+c (+ K·zPrev for Phoenix) logic lives in exactly one place. Standard
+ * kinds: z → z^power + c. Phoenix (K non-null): z → z^power + c + K·zPrev.
+ * The caller advances zPrev = z after each step.
+ */
+const stepHP = (z: HPComplex, zPrev: HPComplex, c: HPComplex, power: number, K: HPComplex | null): HPComplex => {
+    const zn = (power === 2 ? z.sqr() : z.pow(power)).add(c);
+    return K ? zn.add(K.mul(zPrev)) : zn;
+};
+
+/**
  * Build a reference orbit for a single Mandelbrot/Julia centre, storing each
  * sampled Z (re, im, |Z|²) into a freshly-allocated RGBA32F-packed array.
  * Pure helper — no auto-reference logic.
@@ -163,8 +183,13 @@ const buildOrbitAt = (
     c: HPComplex,
     power: number,
     maxIter: number,
+    /** Phoenix history coefficient K. When provided, the recurrence becomes
+     *  Z_{n+1} = Z_n^d + C + K·Z_{n-1} (Z_{-1} = 0) — the deep-zoom reference
+     *  for the Phoenix kinds. Null/omitted = plain Z^d + C. */
+    phoenixK: HPComplex | null = null,
 ): { orbit: Float32Array; length: number; escaped: boolean } => {
     let z = z0;
+    let zPrev = HPComplex.zero(z0.re.p); // Z_{-1} = 0 (only used when phoenixK)
     const out = new Float32Array(maxIter * 4);
     let i = 0;
     let escaped = false;
@@ -177,7 +202,9 @@ const buildOrbitAt = (
         out[i * 4 + 2] = norm2;
         out[i * 4 + 3] = 0;
 
-        z = (power === 2 ? z.sqr() : z.pow(power)).add(c);
+        const zNext = stepHP(z, zPrev, c, power, phoenixK);
+        zPrev = z;
+        z = zNext;
         const [reN, imN] = z.toFloat32Pair();
         const norm2N = reN * reN + imN * imN;
 
@@ -197,19 +224,26 @@ const buildOrbitAt = (
 };
 
 /**
- * Iterate z → z^d + c (Mandelbrot, z₀ = 0) and return the escape iteration,
- * capped at `cap`. No orbit storage — this is the cheap ranking probe for the
+ * Iterate z → z^d + c (+ K·zPrev for Phoenix) from z₀ and return the escape
+ * iteration, capped at `cap`. No orbit storage — the cheap ranking probe for the
  * auto-reference search. `escaped` false means the candidate survived `cap`
  * iterations (a deep / near-interior point — an excellent reference).
+ *
+ * Seeding mirrors the kind: Mandelbrot-style passes z₀ = 0 with the candidate as
+ * `c`; Julia/Phoenix-Julia passes the candidate as z₀ with `c` = fixed juliaC.
  */
 const probeOrbitLength = (
+    z0: HPComplex,
     c: HPComplex,
     power: number,
     cap: number,
+    K: HPComplex | null = null,
 ): { length: number; escaped: boolean } => {
-    let z = HPComplex.zero(c.re.p);
+    let z = z0;
+    let zPrev = HPComplex.zero(c.re.p);
     for (let i = 0; i < cap; i++) {
-        z = (power === 2 ? z.sqr() : z.pow(power)).add(c);
+        const zn = stepHP(z, zPrev, c, power, K);
+        zPrev = z; z = zn;
         if (z.norm2().isGreaterThanFour()) return { length: i + 1, escaped: true };
     }
     return { length: cap, escaped: false };
@@ -224,16 +258,20 @@ const probeOrbitLength = (
  * orbit length this candidate would produce as a reference".
  */
 const probeOrbitLengthF64 = (
+    z0r: number, z0i: number,
     cRe: number, cIm: number,
     power: number,
     cap: number,
+    kr = 0, ki = 0, hasK = false,
 ): { length: number; escaped: boolean } => {
-    let zr = 0, zi = 0;
+    // f64 step kept inline (not via stepHP) — it's the sole f64 copy of the
+    // recurrence and runs hot in the candidate search, so avoid per-iter alloc.
+    let zr = z0r, zi = z0i, pr = 0, pi = 0;
     for (let i = 0; i < cap; i++) {
+        let nr: number, ni: number;
         if (power === 2) {
-            const nr = zr * zr - zi * zi + cRe;
-            const ni = 2 * zr * zi + cIm;
-            zr = nr; zi = ni;
+            nr = zr * zr - zi * zi + cRe;
+            ni = 2 * zr * zi + cIm;
         } else {
             // z^d via exponentiation-by-squaring, then + c.
             let rr = 1, ri = 0, br = zr, bi = zi, e = power;
@@ -242,8 +280,10 @@ const probeOrbitLengthF64 = (
                 e >>= 1;
                 if (e > 0) { const t = br * br - bi * bi; bi = 2 * br * bi; br = t; }
             }
-            zr = rr + cRe; zi = ri + cIm;
+            nr = rr + cRe; ni = ri + cIm;
         }
+        if (hasK) { nr += kr * pr - ki * pi; ni += kr * pi + ki * pr; }
+        pr = zr; pi = zi; zr = nr; zi = ni;
         if (zr * zr + zi * zi > ESCAPE_RADIUS_SQ) return { length: i + 1, escaped: true };
     }
     return { length: cap, escaped: false };
@@ -256,6 +296,20 @@ const probeOrbitLengthF64 = (
  */
 const f64ProbeOK = (zoom: number, maxIter: number): boolean =>
     (zoom > 0 ? -Math.log2(zoom) : 0) + Math.log2(Math.max(2, maxIter)) < 46;
+
+/**
+ * How a candidate point is fed to the orbit probe. Mandelbrot-style: candidate
+ * is `c`, z₀ = 0. Julia/Phoenix-Julia: candidate is z₀, c = fixed juliaC. K is
+ * the Phoenix history coefficient (null for plain z^d+c). HP + f64 forms are
+ * both carried so each probe path uses the right precision.
+ */
+interface ProbeSeeding {
+    julia: boolean;
+    juliaCHp: HPComplex | null;
+    juliaCx: number; juliaCy: number;
+    K: HPComplex | null;
+    kx: number; ky: number;
+}
 
 interface RefCandidate {
     hiX: number; loX: number; hiY: number; loY: number;
@@ -291,9 +345,11 @@ const searchBetterReference = (
     power: number, precisionBits: number,
     centerLength: number, probeCap: number,
     useF64: boolean,
+    seeding: ProbeSeeding,
 ): RefCandidate | null => {
     const halfW = aspect * zoom;
     const halfH = zoom;
+    const hasK = !!seeding.K;
 
     let best: RefCandidate | null = null;
     let interiorFound = false;
@@ -306,9 +362,14 @@ const searchBetterReference = (
         if (interiorFound) return;
         const [hiX, loX] = ddAddF64(centerX, centerLowX, ox);
         const [hiY, loY] = ddAddF64(centerY, centerLowY, oy);
+        // Candidate point is z₀ (Julia/Phoenix-Julia) or c (Mandelbrot-style).
         const probe = useF64
-            ? probeOrbitLengthF64(hiX + loX, hiY + loY, power, probeCap)
-            : probeOrbitLength(HPComplex.fromDoubleDouble(hiX, loX, hiY, loY, precisionBits), power, probeCap);
+            ? (seeding.julia
+                ? probeOrbitLengthF64(hiX + loX, hiY + loY, seeding.juliaCx, seeding.juliaCy, power, probeCap, seeding.kx, seeding.ky, hasK)
+                : probeOrbitLengthF64(0, 0, hiX + loX, hiY + loY, power, probeCap, seeding.kx, seeding.ky, hasK))
+            : (seeding.julia
+                ? probeOrbitLength(HPComplex.fromDoubleDouble(hiX, loX, hiY, loY, precisionBits), seeding.juliaCHp!, power, probeCap, seeding.K)
+                : probeOrbitLength(HPComplex.zero(precisionBits), HPComplex.fromDoubleDouble(hiX, loX, hiY, loY, precisionBits), power, probeCap, seeding.K));
         if (!best || probe.length > best.length) {
             best = { hiX, loX, hiY, loY, ox, oy, length: probe.length, escaped: probe.escaped };
         }
@@ -379,9 +440,10 @@ const isViewExteriorDominated = (
     for (const [nx, ny] of ring) {
         const [hiX, loX] = ddAddF64(refHiX, refLoX, nx * halfW);
         const [hiY, loY] = ddAddF64(refHiY, refLoY, ny * halfH);
+        // Mandelbrot-only path (LA-safety classification) — z₀ = 0, candidate = c.
         const probe = useF64
-            ? probeOrbitLengthF64(hiX + loX, hiY + loY, power, maxIter)
-            : probeOrbitLength(HPComplex.fromDoubleDouble(hiX, loX, hiY, loY, precisionBits), power, maxIter);
+            ? probeOrbitLengthF64(0, 0, hiX + loX, hiY + loY, power, maxIter)
+            : probeOrbitLength(HPComplex.zero(precisionBits), HPComplex.fromDoubleDouble(hiX, loX, hiY, loY, precisionBits), power, maxIter);
         if (probe.escaped) escaped++;
         done++;
         if (escaped >= need) return true;                       // majority escaped
@@ -472,6 +534,12 @@ export const computeReferenceOrbit = (input: RefOrbitInput): RefOrbitOutput => {
     const kind = input.kind ?? 'mandelbrot';
     const aspect = input.aspect && input.aspect > 0 ? input.aspect : 1.5;
     const precisionBits = choosePrecisionBits(zoom, maxIter);
+    // Phoenix history coefficient K, lifted to working precision. Null for the
+    // plain z^d+c kinds. Its presence switches buildOrbitAt to the Phoenix
+    // recurrence and disables the z²+c-specific auto-reference / nucleus paths.
+    const phoenixK = input.phoenix
+        ? HPComplex.fromNumbers(input.phoenixKx ?? 0, input.phoenixKy ?? 0, precisionBits)
+        : null;
 
     // Mode-specific seed. Mandelbrot iterates z=0..N from c=centre.
     // Julia iterates z=z₀..N from c=juliaC, where z₀ = centre.
@@ -491,10 +559,23 @@ export const computeReferenceOrbit = (input: RefOrbitInput): RefOrbitOutput => {
         };
     };
 
+    // How the candidate-search probes seed the recurrence — mirrors seedAt but
+    // for the probe API (which keeps z₀ and c separate). Carries K so the search
+    // ranks Phoenix orbits, not plain z²+c ones.
+    const seeding: ProbeSeeding = {
+        julia: kind === 'julia',
+        juliaCHp: kind === 'julia' ? HPComplex.fromNumbers(input.juliaCx ?? 0, input.juliaCy ?? 0, precisionBits) : null,
+        juliaCx: input.juliaCx ?? 0,
+        juliaCy: input.juliaCy ?? 0,
+        K: phoenixK,
+        kx: input.phoenixKx ?? 0,
+        ky: input.phoenixKy ?? 0,
+    };
+
     // Build at the requested centre first.
     let refHiX = centerX, refLoX = centerLowX, refHiY = centerY, refLoY = centerLowY;
     const seed = seedAt(refHiX, refLoX, refHiY, refLoY);
-    let built = buildOrbitAt(seed.z0, seed.c, power, maxIter);
+    let built = buildOrbitAt(seed.z0, seed.c, power, maxIter, phoenixK);
     let relocated = false;
 
     // Candidate-ranking probes use f64 where the view resolves in 53 bits (the
@@ -504,10 +585,12 @@ export const computeReferenceOrbit = (input: RefOrbitInput): RefOrbitOutput => {
 
     // Auto-reference: only when the centre orbit escaped early. A non-escaping
     // centre is already an ideal reference (interior / near-interior), so no
-    // search. Julia's reference is z₀ (not c), so the "non-escaping centre"
-    // notion differs — restrict the search to Mandelbrot, where it's well
-    // defined and where LA (the artifact's home) actually runs.
-    if (!input.disableAutoReference && kind === 'mandelbrot' && built.escaped && maxIter > 1) {
+    // search. Enabled for Mandelbrot AND both Phoenix kinds (the probe runs the
+    // Phoenix recurrence via `seeding`); plain Julia still opts out (its
+    // reference is z₀ and the relocation wasn't needed there). This is what lets
+    // a Phoenix dive resolve detail from any view instead of only at a
+    // hand-picked interior centre.
+    if (!input.disableAutoReference && (kind === 'mandelbrot' || phoenixK) && built.escaped && maxIter > 1) {
         // Probe to the full maxIter so an interior (non-escaping) point is
         // detected and escaping candidates are ranked by true depth — the
         // reference must outlast the view's latest-escaping pixel.
@@ -515,10 +598,11 @@ export const computeReferenceOrbit = (input: RefOrbitInput): RefOrbitOutput => {
             centerX, centerLowX, centerY, centerLowY,
             zoom, aspect, power, precisionBits,
             built.length, maxIter, useF64,
+            seeding,
         );
         if (better) {
             const reseed = seedAt(better.hiX, better.loX, better.hiY, better.loY);
-            built = buildOrbitAt(reseed.z0, reseed.c, power, maxIter);
+            built = buildOrbitAt(reseed.z0, reseed.c, power, maxIter, phoenixK);
             refHiX = better.hiX; refLoX = better.loX;
             refHiY = better.hiY; refLoY = better.loY;
             relocated = true;
@@ -535,7 +619,7 @@ export const computeReferenceOrbit = (input: RefOrbitInput): RefOrbitOutput => {
     // existing heuristics: on any failure we keep the orbit built above.
     // Power-2 Mandelbrot only (the derivative recurrence + LA are d=2-specific).
     let period = 0;
-    if (!input.disableAutoReference && !input.disableNucleus &&
+    if (!input.disableAutoReference && !input.disableNucleus && !phoenixK &&
         kind === 'mandelbrot' && power === 2 &&
         !built.escaped && maxIter > 1 && zoom < NUCLEUS_MIN_ZOOM) {
         const nuc = findNucleus(
@@ -560,7 +644,7 @@ export const computeReferenceOrbit = (input: RefOrbitInput): RefOrbitOutput => {
     // minibrot dives (interior-dominated view) keep LA. Only meaningful for
     // Mandelbrot (where LA runs). @see docs/adr/0065
     let laUnsafe = false;
-    if (!input.disableAutoReference && kind === 'mandelbrot' && !built.escaped && maxIter > 1) {
+    if (!input.disableAutoReference && !phoenixK && kind === 'mandelbrot' && !built.escaped && maxIter > 1) {
         laUnsafe = isViewExteriorDominated(refHiX, refLoX, refHiY, refLoY, zoom, aspect, power, precisionBits, maxIter, useF64);
     }
 

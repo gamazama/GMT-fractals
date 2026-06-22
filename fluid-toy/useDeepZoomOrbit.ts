@@ -58,7 +58,12 @@ export const useDeepZoomOrbit = (engineRef: RefObject<FluidEngine | null>): void
         // hardcoded for d=2). Higher powers fall back to PO-only.
         const power = Math.max(2, Math.round(julia.power ?? 2));
         const isPower2 = power === 2;
-        const kind: 'mandelbrot' | 'julia' = julia.kind === 0 ? 'julia' : 'mandelbrot';
+        // Phoenix kinds: 2 = Julia-style (seed like Julia), 3 = Mandelbrot-style
+        // (seed like Mandelbrot). The recurrence adds K·Z_{n-1}; LA/AT/auto-ref
+        // are z²+c-specific so they're forced off below (pure-PO deep zoom).
+        const phoenix = julia.kind >= 2;
+        const kind: 'mandelbrot' | 'julia' =
+            (julia.kind === 0 || julia.kind === 2) ? 'julia' : 'mandelbrot';
         const liveCx = liveMod['julia.juliaC_x'] ?? julia.juliaC.x;
         const liveCy = liveMod['julia.juliaC_y'] ?? julia.juliaC.y;
 
@@ -79,6 +84,9 @@ export const useDeepZoomOrbit = (engineRef: RefObject<FluidEngine | null>): void
             maxIter: buildIter,
             power,
             kind,
+            phoenix,
+            phoenixKx: julia.phoenixK?.x ?? -0.5,
+            phoenixKy: julia.phoenixK?.y ?? 0,
             juliaCx: liveCx,
             juliaCy: liveCy,
             aspect,
@@ -88,8 +96,8 @@ export const useDeepZoomOrbit = (engineRef: RefObject<FluidEngine | null>): void
             //   - LA's rebase formula assumes Z[0] = 0 (Mandelbrot
             //     convention); Julia's Z[0] = R₀ breaks rebase math.
             // Both also require power 2 (Step rules are d=2-specific).
-            buildLA:         deepZoom.useLA && isPower2 && kind === 'mandelbrot',
-            screenSqrRadius: deepZoom.useAT && isPower2 && kind === 'mandelbrot' ? screenSqrRadius : 0,
+            buildLA:         deepZoom.useLA && isPower2 && kind === 'mandelbrot' && !phoenix,
+            screenSqrRadius: deepZoom.useAT && isPower2 && kind === 'mandelbrot' && !phoenix ? screenSqrRadius : 0,
         }).then((res) => {
             if (cancelled) return;
             const dz = engine.deepZoom;
@@ -158,6 +166,7 @@ export const useDeepZoomOrbit = (engineRef: RefObject<FluidEngine | null>): void
         deepZoom.autoIter, deepZoom.iterMul,
         julia.center.x, julia.center.y, julia.centerLow?.x, julia.centerLow?.y, julia.zoom,
         julia.power, julia.kind, julia.juliaC.x, julia.juliaC.y,
+        julia.phoenixK?.x, julia.phoenixK?.y,
         canvasPixelSize, engineRef]);
 
     // Poll engine's GPU-timer EWMA 5×/sec for the diagnostics overlay.

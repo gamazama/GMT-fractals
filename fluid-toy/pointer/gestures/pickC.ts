@@ -29,8 +29,13 @@ export const pickCMove = (e: PointerEvent, ctx: GestureCtx): void => {
     const mul = precisionMultiplier(e.shiftKey, e.altKey);
     const dxPx = e.clientX - ps.startX;
     const dyPx = e.clientY - ps.startY;
-    const dfx =  (dxPx / rect.width)  * 2 * aspect * zoom * mul;
-    const dfy = -(dyPx / rect.height) * 2 * zoom * mul;
+    // Phoenix transposes the view, so swap which screen axis moves which c
+    // component, matching the kernel uv.yx swap. Non-Phoenix unchanged.
+    const transpose = (s.julia?.kind ?? 0) >= 2;
+    const dHoriz =  (dxPx / rect.width)  * 2 * aspect * zoom * mul;
+    const dVert  = -(dyPx / rect.height) * 2 * zoom * mul;
+    const dfx = transpose ? dVert : dHoriz;
+    const dfy = transpose ? dHoriz : dVert;
     s.setJulia({ juliaC: { x: ps.startCx + dfx, y: ps.startCy + dfy } });
     ps.lastX = e.clientX;
     ps.lastY = e.clientY;

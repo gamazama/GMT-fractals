@@ -53,6 +53,16 @@ uniform int   uColorIter;     // iterations used for coloring accumulators (≤ 
 uniform float uEscapeR2;      // escape radius squared
 uniform float uPower;         // integer power of z (2..8)
 
+// Phoenix recurrence. When uPhoenix != 0 the standard (non-deep) iteration
+// becomes zₙ₊₁ = zₙ^p + c + K·zₙ₋₁ (z₋₁ = 0) — the literal 2D Phoenix set.
+// uKind still chooses whether c is fixed (Julia-style) or the pixel
+// (Mandelbrot-style). Deep-zoom / LA / AT are z²+c-specific, so the host
+// forces them OFF for the Phoenix kind and we only ever take the standard
+// f32 path below. Defaults to 0 — the Gradient Explorer never sets it, so
+// its render is byte-identical.
+uniform int   uPhoenix;
+uniform vec2  uPhoenixK;       // complex coefficient on the previous iterate
+
 // Orbit-trap params — trap SHAPE is driven by uTrapMode:
 //   0 = point (at uTrapCenter)
 //   1 = circle (|z-center| - radius)
@@ -441,7 +451,12 @@ vec2 fetchRefZ(int idx) {
 void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
   vec2 uv = uvJ * 2.0 - 1.0;
   uv.x *= uAspect;
-  vec2 p = uCenter + uv * uScale;
+  // Phoenix is conventionally plotted transposed (re/im axes swapped) so the
+  // "bird" stands upright. uv.yx reflects across the diagonal AFTER the aspect
+  // scale, so the aspect factor follows the horizontal screen axis onto the
+  // fractal y-axis. The pan/zoom/pickC gestures apply the same swap, so
+  // navigation stays intuitive on the upright image. Non-Phoenix is unchanged.
+  vec2 p = uCenter + (uPhoenix != 0 ? uv.yx : uv) * uScale;
 
   // Deep-zoom path activates whenever the worker has uploaded a valid
   // reference orbit. Both Mandelbrot and Julia kinds work (the
@@ -462,13 +477,17 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
   // across kinds — only the initial values swap.
   vec2 dz_pert = vec2(0.0);
   vec2 dc      = vec2(0.0);
+  // Phoenix delta history dz_{n-1} (deep path), seeded to 0 (= dz_{-1}).
+  vec2 dzPrev  = vec2(0.0);
   if (uDeepZoomEnabled != 0) {
     float scale_f32 = uDeepScale.x * exp2(uDeepScale.y);
     vec2 offset_f32 = vec2(
       uDeepCenterOffset.x * exp2(uDeepCenterOffset.y),
       uDeepCenterOffset.z * exp2(uDeepCenterOffset.w)
     );
-    vec2 pixelOffset = uv * scale_f32 + offset_f32;
+    // Phoenix transposes the view (uv.yx), so the deep pixel offset must use the
+    // same swapped uv as the shallow path or deep ≠ shallow by a 90° flip.
+    vec2 pixelOffset = (uPhoenix != 0 ? uv.yx : uv) * scale_f32 + offset_f32;
     if (uKind == 0) {
       // Julia: pixel z₀ shifted by pixelOffset; c is fixed.
       dz_pert = pixelOffset;
@@ -482,6 +501,10 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
   int  ref     = 0;
   if (uKind == 0) { z = p; c = uJuliaC; }
   else            { z = vec2(0.0); c = p; }
+
+  // Phoenix history term: zₙ₋₁, seeded to 0 (z₋₁ = 0). Only read/written on
+  // the standard path when uPhoenix != 0.
+  vec2 zPrev = vec2(0.0);
 
   float escaped = 0.0;
   float iters = float(uMaxIter);
@@ -685,11 +708,17 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
     if (escaped > 0.5) break;
     if (iter >= uMaxIter) break;
 
+    // Phoenix deep zoom is pure PO (no rebase / LA / nucleus wrap), so once the
+    // reference orbit is exhausted the perturbation can't continue — stop here
+    // and treat the pixel as non-escaped. The orbit is built to uMaxIter for an
+    // interior centre, so this only bites near the set boundary.
+    if (deep && uPhoenix != 0 && ref >= uRefOrbitLen - 1) break;
+
     if (uTrackDeriv != 0) {
       dz = cmul(2.0 * z, dz) + vec2(1.0, 0.0);
     }
 
-    if (deep && uKind == 0 && ref >= uRefOrbitLen - 1) {
+    if (deep && uKind == 0 && uPhoenix == 0 && ref >= uRefOrbitLen - 1) {
       // Julia past orbit overflow: switch to direct iteration of pixel
       // z. The orbit was built BigInt-precise, so for the iters it
       // covers the perturbation path is correct. When ref outruns the
@@ -712,7 +741,9 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
         // d=2 hot path: stable algebra dz*(2Z + dz) + dc avoids the
         // catastrophic cancellation that would happen if we computed
         // (Z+dz)^2 - Z^2 directly when dz is much smaller than Z.
-        dz_new = cmul(2.0 * po_Zref, dz_pert) + cmul(dz_pert, dz_pert) + dc;
+        // Phoenix adds the exact delta-history term K·dz_{n-1}.
+        dz_new = cmul(2.0 * po_Zref, dz_pert) + cmul(dz_pert, dz_pert) + dc
+               + (uPhoenix != 0 ? cmul(uPhoenixK, dzPrev) : vec2(0.0));
       } else {
         // d >= 3: factored form
         //   (Z+dz)^d - Z^d = dz * sum_{k=0..d-1} C(d, k+1) * Z^(d-1-k) * dz^k
@@ -743,8 +774,11 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
           inner += coeff * term;
           coeff = coeff * float(d-k-1) / float(k+2);
         }
-        dz_new = cmul(dz_pert, inner) + dc;
+        dz_new = cmul(dz_pert, inner) + dc
+               + (uPhoenix != 0 ? cmul(uPhoenixK, dzPrev) : vec2(0.0));
       }
+      // Advance the Phoenix delta history (dz_{n-1} ← dz_n) before overwrite.
+      dzPrev = dz_pert;
       dz_pert = dz_new;
       ref++;
       // Periodic (minibrot-nucleus) reference: orbit[period] == orbit[0] == 0,
@@ -756,7 +790,7 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
       z = ZrefNext + dz_pert;
       float zMag2 = dot(z, z);
       float dzPertMag2 = dot(dz_pert, dz_pert);
-      if (uKind != 0) {
+      if (uKind != 0 && uPhoenix == 0) {
         // Mandelbrot: Zhuoran rebase whenever |z| drops below |dz| (glitch
         // correction) — always applies. The orbit-overflow rebase to orbit[0]
         // is the NON-periodic fallback only; a periodic reference already
@@ -781,6 +815,15 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
         // special handling needed.
         po_Zref = ZrefNext;
       }
+    } else if (uPhoenix != 0) {
+      // Phoenix: zₙ₊₁ = zₙ^p + c + K·zₙ₋₁. Save the current z as the next
+      // step's history BEFORE overwriting it. (uTrackDeriv's dz tracker
+      // is the z²+c derivative and ignores the history term, so DE /
+      // slope-lighting colour modes are approximate for Phoenix — escape,
+      // smooth-iter, trap and stripe modes are exact.)
+      vec2 zCur = z;
+      z = cpow(z, uPower) + c + cmul(uPhoenixK, zPrev);
+      zPrev = zCur;
     } else {
       z = cpow(z, uPower) + c;
     }

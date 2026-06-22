@@ -34,10 +34,17 @@ export const zoomEnter = (e: PointerEvent, ctx: GestureCtx): void => {
     ps.zoomAnchorV = v;
 
     // Anchor = currCenter + (u·2-1)·aspect·currZoom in DD precision.
+    // Phoenix transposes the view (re/im axes swapped) — the horizontal screen
+    // axis (u, aspect-scaled) drives fractal.y and the vertical (v) drives
+    // fractal.x. Matches the kernel's uv.yx swap so the anchor stays under the
+    // cursor. Non-Phoenix (kind < 2) keeps the original mapping exactly.
+    const transpose = (s.julia?.kind ?? 0) >= 2;
     const cxLow = s.julia?.centerLow?.x ?? 0;
     const cyLow = s.julia?.centerLow?.y ?? 0;
-    const dx = (u * 2 - 1) * aspect * currZoom;
-    const dy = (v * 2 - 1) * currZoom;
+    const dAspect = (u * 2 - 1) * aspect * currZoom;
+    const dPlain  = (v * 2 - 1) * currZoom;
+    const dx = transpose ? dPlain : dAspect;
+    const dy = transpose ? dAspect : dPlain;
     const ax = ddAddF64(currCenter.x, cxLow, dx);
     const ay = ddAddF64(currCenter.y, cyLow, dy);
     ps.zoomAnchorX    = ax[0];
@@ -62,9 +69,13 @@ export const zoomMove = (e: PointerEvent, ctx: GestureCtx): void => {
 
     // newCenter = anchor − (u·2-1)·aspect·newZoom, computed as DD so
     // the small newZoom term (deep zoom) doesn't cancel against the
-    // anchor's f64 mantissa.
-    const dx = -(ps.zoomAnchorU * 2 - 1) * aspect * newZoom;
-    const dy = -(ps.zoomAnchorV * 2 - 1) * newZoom;
+    // anchor's f64 mantissa. Phoenix transpose swaps which screen axis
+    // feeds each fractal axis (see zoomEnter); kept in lockstep here.
+    const transpose = (useEngineStore.getState().julia?.kind ?? 0) >= 2;
+    const dAspect = -(ps.zoomAnchorU * 2 - 1) * aspect * newZoom;
+    const dPlain  = -(ps.zoomAnchorV * 2 - 1) * newZoom;
+    const dx = transpose ? dPlain : dAspect;
+    const dy = transpose ? dAspect : dPlain;
     const [newCx, newCxLow] = ddAddF64(ps.zoomAnchorX, ps.zoomAnchorXLow, dx);
     const [newCy, newCyLow] = ddAddF64(ps.zoomAnchorY, ps.zoomAnchorYLow, dy);
 

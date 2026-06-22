@@ -67,6 +67,13 @@ export type DeepZoomRequest =
           /** Opt out of the minibrot-nucleus (periodic) reference (ADR-0066),
            *  forcing the non-periodic fallback. Default false. */
           disableNucleus?: boolean;
+          /** Phoenix kind — build Z_{n+1} = Z_n^d + C + K·Z_{n-1}. The caller
+           *  must also set buildLA=false / screenSqrRadius=0 (LA/AT are
+           *  z²+c-specific and unsupported for Phoenix). */
+          phoenix?: boolean;
+          /** Phoenix history coefficient K (real, imag). */
+          phoenixKx?: number;
+          phoenixKy?: number;
       }
     | {
           type: 'cancel';
@@ -186,7 +193,7 @@ ctx.onmessage = (event: MessageEvent<DeepZoomRequest>) => {
     }
     if (msg.type !== 'computeOrbit') return;
 
-    const { id, centerX, centerY, centerLowX, centerLowY, zoom, maxIter, buildLA, screenSqrRadius, power, kind, juliaCx, juliaCy, aspect, disableAutoReference, disableNucleus, calibrateLA } = msg;
+    const { id, centerX, centerY, centerLowX, centerLowY, zoom, maxIter, buildLA, screenSqrRadius, power, kind, juliaCx, juliaCy, aspect, disableAutoReference, disableNucleus, calibrateLA, phoenix, phoenixKx, phoenixKy } = msg;
     try {
         const t0 = performance.now();
         const result = computeReferenceOrbit({
@@ -196,6 +203,7 @@ ctx.onmessage = (event: MessageEvent<DeepZoomRequest>) => {
             zoom, maxIter,
             power, kind, juliaCx, juliaCy,
             aspect, disableAutoReference, disableNucleus,
+            phoenix, phoenixKx, phoenixKy,
         });
         const buildMs = performance.now() - t0;
 

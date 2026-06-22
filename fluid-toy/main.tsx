@@ -66,6 +66,7 @@ import { useEngineStore } from '../store/engineStore';
 import { installFluidToyViewLibrary } from './viewLibrary';
 import { ViewLibraryPanel } from './components/ViewLibraryPanel';
 import { FitGradientButton } from './components/FitGradientButton';
+import { IterationReadout } from './components/IterationReadout';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { installRenderDialog } from '../engine/plugins/RenderDialog';
 import { runVideoExport } from './components/RenderDialog/exportRunner';
@@ -336,6 +337,8 @@ installFluidToyViewLibrary({ autoSelectDefault: !incomingScene });
 componentRegistry.register('panel-views', ViewLibraryPanel);
 // `palette-fit` — the Iterations Fit-to-view button, referenced from the Palette panel manifest.
 componentRegistry.register('palette-fit', FitGradientButton);
+// `iteration-readout` — live "what's the active iteration count" line in the View ▸ Iterations section.
+componentRegistry.register('iteration-readout', IterationReadout);
 
 // Register the video-export dialog so the shared TimelineToolbar's
 // "Render" button surfaces it. Plugin owns UI + flags + status; the

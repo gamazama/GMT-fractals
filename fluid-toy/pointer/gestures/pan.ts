@@ -50,8 +50,13 @@ export const panMove = (e: PointerEvent, ctx: GestureCtx): void => {
     const mul = precisionMultiplier(e.shiftKey, e.altKey);
     const dxPx = e.clientX - ps.startX;
     const dyPx = e.clientY - ps.startY;
-    const dcx = -(dxPx / rect.width) * 2 * aspect * zoom * mul;
-    const dcy =  (dyPx / rect.height) * 2 * zoom * mul;
+    // Phoenix transposes the view, so horizontal drag pans fractal.y and
+    // vertical drag pans fractal.x (kernel uv.yx swap). Non-Phoenix unchanged.
+    const transpose = (s.julia?.kind ?? 0) >= 2;
+    const dHoriz = -(dxPx / rect.width) * 2 * aspect * zoom * mul;
+    const dVert  =  (dyPx / rect.height) * 2 * zoom * mul;
+    const dcx = transpose ? dVert : dHoriz;
+    const dcy = transpose ? dHoriz : dVert;
     // DD-add the pan delta into the captured (hi, lo) start pair. Each
     // delta might be smaller than f64 ulp at the start centre's
     // magnitude — two-sum captures the residual in the lo word.

@@ -90,16 +90,19 @@ export const DeepZoomFeature: FeatureDefinition = {
             type: 'int',
             default: 50_000, min: 5_000, max: 500_000, step: 1_000,
             label: 'Reference orbit length',
-            condition: { param: 'enabled', bool: true },
-            description: 'Manual reference-orbit build length — used only when Fractal ▸ Auto iterations is OFF. With Auto on (default), the build length is scaled to the zoom depth automatically.',
+            // Manual deep cap — only relevant (and only shown) when deep zoom is
+            // on AND Auto iterations is off. With Auto on the build length is
+            // scaled to zoom depth automatically.
+            condition: { and: [{ param: 'enabled', bool: true }, { param: 'autoIter', bool: false }] },
+            description: 'Manual reference-orbit build length (Auto iterations off).',
         },
 
         deepMaxIter: {
             type: 'int',
             default: 2_000, min: 200, max: 50_000, step: 100,
-            label: 'Iter (deep)',
-            condition: { param: 'enabled', bool: true },
-            description: 'Manual per-pixel iteration cap under deep zoom — used only when Fractal ▸ Auto iterations is OFF. With Auto on (default), the cap is the reference-orbit length (full zoom-depth budget for a periodic nucleus).',
+            label: 'Iterations (cap, deep)',
+            condition: { and: [{ param: 'enabled', bool: true }, { param: 'autoIter', bool: false }] },
+            description: 'Manual per-pixel iteration cap under deep zoom (Auto iterations off). With Auto on, the cap is the reference-orbit length.',
         },
 
         showStats: {
