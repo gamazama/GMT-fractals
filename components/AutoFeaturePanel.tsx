@@ -294,7 +294,15 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             let hex = val;
             if (typeof val === 'object' && val.getHexString) hex = '#' + val.getHexString();
             if (config.layout === 'embedded' || config.parentId) {
-                return <div className={`mb-px pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><EmbeddedColorPicker color={hex} onColorChange={(c) => handleUpdate(key, c)} /></div>;
+                // `layout: 'embedded'` is a standalone row (no parent section header),
+                // so carry its label above the inline picker. `parentId` pickers sit
+                // under their parent's header already, so they stay label-less.
+                return (
+                    <div className={`mb-px pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
+                        {config.layout === 'embedded' && config.label && <SectionLabel>{config.label}</SectionLabel>}
+                        <EmbeddedColorPicker color={hex} onColorChange={(c) => handleUpdate(key, c)} />
+                    </div>
+                );
             } else {
                 return (
                     <div className={`flex items-center justify-between px-3 py-1 bg-surface-header mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>

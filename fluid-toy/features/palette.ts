@@ -28,7 +28,7 @@ import type { GradientConfig } from '../../types';
 import { defineEnumParam } from '../../engine/defineEnumParam';
 import type { FluidEngine } from '../fluid/FluidEngine';
 import type { PaletteSlice } from '../storeTypes';
-import { generateGradientTextureBuffer } from '../../utils/colorUtils';
+import { generateGradientTextureBuffer, hexToRgb } from '../../utils/colorUtils';
 import { brushHandles } from '../engineHandles';
 
 const DEFAULT_DYE_GRADIENT: GradientConfig = {
@@ -248,11 +248,14 @@ export const PaletteFeature: FeatureDefinition = {
             description: 'Stripe frequency — k in ½ + ½·sin(k·arg z). Higher = more stripes per iteration.',
         },
 
-        // Interior colour for points that never escape.
+        // Interior colour for points that never escape. A `color` param so the
+        // shared colour picker (compact swatch + HL strip, expandable) edits it
+        // inline instead of three raw 0–1 sliders. Stored as a hex string;
+        // syncPaletteToEngine + presets/apply convert to the engine's [r,g,b].
         interiorColor: {
-            type: 'vec3',
-            default: { x: 0.02, y: 0.02, z: 0.04 },
-            min: 0, max: 1, step: 0.001,
+            type: 'color',
+            default: '#05050A',          // ≈ the old vec3 (0.02, 0.02, 0.04)
+            layout: 'embedded',
             label: 'Interior color',
             description: 'Colour for bounded points (pixels that never escape the iteration).',
         },
@@ -307,6 +310,29 @@ export const PaletteFeature: FeatureDefinition = {
 };
 
 /**
+ * interiorColor may arrive as a hex string (the `color` param — the live
+ * shape), an {x,y,z} vec3 (pre-2026-06 saved scenes), or an [r,g,b]/{r,g,b}
+ * object (defensive). Normalize to [r,g,b] floats 0–1, the form
+ * FluidEngine.setParams expects.
+ */
+const interiorToRgb01 = (c: unknown): [number, number, number] => {
+    if (typeof c === 'string') {
+        const rgb = hexToRgb(c);
+        return rgb ? [rgb.r / 255, rgb.g / 255, rgb.b / 255] : [0, 0, 0];
+    }
+    if (Array.isArray(c)) return [Number(c[0]) || 0, Number(c[1]) || 0, Number(c[2]) || 0];
+    if (c && typeof c === 'object') {
+        const o = c as Record<string, number>;
+        if ('x' in o) return [o.x || 0, o.y || 0, o.z || 0];
+        if ('r' in o) {
+            const s = Math.max(o.r || 0, o.g || 0, o.b || 0) > 1 ? 1 / 255 : 1;
+            return [(o.r || 0) * s, (o.g || 0) * s, (o.b || 0) * s];
+        }
+    }
+    return [0, 0, 0];
+};
+
+/**
  * Push the palette slice into FluidEngine — display-stage iteration
  * colour knobs + dye-blend mode + the gradient LUT. The trap normal is
  * normalized at the boundary so the shader's distance math stays
@@ -321,13 +347,13 @@ export const syncPaletteToEngine = (engine: FluidEngine, palette: PaletteSlice):
         ? [rawNx / nLen, rawNy / nLen]
         : [1, 0];
 
-    const interior = palette.interiorColor;
+    const interior = interiorToRgb01(palette.interiorColor as unknown);
 
     engine.setParams({
         colorMapping:        colorMappingFromIndex(palette.colorMapping),
         colorIter:           palette.colorIter,
         escapeR:             palette.escapeR,
-        interiorColor:       [interior.x, interior.y, interior.z],
+        interiorColor:       interior,
         trapCenter:          [palette.trapCenter.x, palette.trapCenter.y],
         trapRadius:          palette.trapRadius,
         trapNormal,

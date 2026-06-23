@@ -18,6 +18,7 @@ import { collectHelpIds } from '../utils/helpUtils';
 import { useClipboardCopy } from '../hooks/useClipboardCopy';
 import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisionTrackDrag';
+import { ChevronDown } from './Icons';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rich colour picker (W10): 2D saturation×brightness field + hue strip, RGB+HSB
@@ -32,9 +33,16 @@ import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisio
 // `alpha`/`onAlphaChange` props; absent them the alpha control is hidden.
 //
 // Feel: sliders use the SHARED GMT precision-drag (usePrecisionTrackDrag — Shift ×10
-// coarse, Alt ×0.1 fine), and the 2D field + hue strip honour the same modifiers.
-// Space: sliders + swatches live under ONE collapsible header (persisted) and the
-// field shrinks on narrow/mobile, so the default footprint stays small.
+// coarse, Alt ×0.1 fine), and every 2D field / hue strip honours the same modifiers.
+// Space: in the narrow dock the picker DEFAULTS to a compact MINI state — the swatch/hex
+// line plus a 2D Hue×Lightness pad (one control to pick any colour). A chevron on the hex
+// line expands to the NORMAL pads (the Saturation×Value field + vertical hue strip); the
+// RGB/HSB channels + swatch rows then sit behind a FURTHER sub-collapse. Both collapse
+// states are persisted. Wide layouts (≥400px, e.g. the gradient Stops stage) skip the
+// collapses and show everything in two/three columns.
+// Theming: all chrome uses scheme tokens (bg-surface-*, text-fg-*, border-line/*) so it
+// reads cleanly in every colour scheme; only the colour-space gradients painted into the
+// canvases are literal (they ARE colours, not UI).
 // ─────────────────────────────────────────────────────────────────────────────
 
 type HSB = { h: number; s: number; v: number };
@@ -72,14 +80,16 @@ const pushRecent = (hex: string) => {
     recentsListeners.forEach((fn) => fn(recentsCache));
 };
 
-// --- persisted collapse state for the details (sliders + swatches) section ---
+// --- persisted collapse state (narrow dock only) ---
+// `details` = expand from the MINI Hue×Lightness pad to the full Saturation×Value
+// field + hue strip. `channels` = the further sub-collapse for the RGB/HSB sliders +
+// swatch rows once expanded.
 const DETAILS_KEY = 'gmt.colorpicker.details';
-const loadDetailsOpen = (): boolean => {
-    return safeLocalGet(DETAILS_KEY) === '1';
-};
-const saveDetailsOpen = (open: boolean) => {
-    safeLocalSet(DETAILS_KEY, open ? '1' : '0');
-};
+const loadDetailsOpen = (): boolean => safeLocalGet(DETAILS_KEY) === '1';
+const saveDetailsOpen = (open: boolean) => safeLocalSet(DETAILS_KEY, open ? '1' : '0');
+const CHANNELS_KEY = 'gmt.colorpicker.channels';
+const loadChannelsOpen = (): boolean => safeLocalGet(CHANNELS_KEY) === '1';
+const saveChannelsOpen = (open: boolean) => safeLocalSet(CHANNELS_KEY, open ? '1' : '0');
 
 // Host-agnostic fixed palette (spans hues + neutrals).
 const PALETTE_DEFAULT = [
@@ -180,7 +190,10 @@ const GradientSlider: React.FC<{
                 onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value))))}
                 onFocus={onStart}
                 onBlur={onEnd}
-                className="w-9 shrink-0 bg-black/40 border border-line/10 rounded text-[9px] text-fg-tertiary px-1 py-[1px] text-right tabular-nums"
+                // Native number spinners are browser chrome — they squish this 36px field
+                // and ignore the colour scheme. Hide them (the track drag already steps the
+                // value, with Shift ×10 / Alt ×0.1) and use a themed focus border instead.
+                className="w-9 shrink-0 bg-surface-sunken border border-line/10 rounded text-[9px] text-fg-tertiary px-1 py-[1px] text-right tabular-nums outline-none focus:border-accent-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
             />
         </div>
     );
@@ -200,20 +213,22 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const copied = clip.state === 'copied';
     const [eyedropError, setEyedropError] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState<boolean>(() => loadDetailsOpen());
+    const [channelsOpen, setChannelsOpen] = useState<boolean>(() => loadChannelsOpen());
 
     const lastOutputHex = useRef(color.toUpperCase());
     const rootRef = useRef<HTMLDivElement>(null);
     const fieldRef = useRef<HTMLCanvasElement>(null);
     const hueRef = useRef<HTMLCanvasElement>(null);
+    const hlPadRef = useRef<HTMLCanvasElement>(null);
 
     // Container-responsive layout (NOT viewport — the picker is mounted both in a
     // ~260px dock and, since the Stops mode, on a very wide centre stage). Measure
-    // our own width and reflow the three groups (colour pads / channels / swatches):
-    //   wide  → pads | channels | swatches  (3 columns)
-    //   mid   → pads, then channels | swatches  (2 columns under the pads)
-    //   narrow→ stacked, channels+swatches behind the collapse toggle (unchanged
-    //           dock behaviour). Defaults to narrow until measured (no layout flash
-    //           for the common dock case).
+    // our own width and reflow the groups (colour pads / channels / swatches):
+    //   wide  → field+hue | channels | swatches  (3 columns, everything shown)
+    //   mid   → field+hue on top, then channels | swatches  (2 columns below)
+    //   narrow→ minified Hue×Lightness pad by default; chevron expands to the full
+    //           field + the further channels/swatches sub-collapse. Defaults to narrow
+    //           until measured (no layout flash for the common dock case).
     const [width, setWidth] = useState(0);
     useEffect(() => {
         const el = rootRef.current;
@@ -224,9 +239,15 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         return () => ro.disconnect();
     }, []);
     const layout: 'cols' | 'rows' | 'stack' = width >= 600 ? 'cols' : width >= 400 ? 'rows' : 'stack';
-    // In the wide layouts there's ample room, so channels + swatches are always shown
-    // (the collapse toggle only exists to keep the narrow dock compact).
-    const showDetails = layout !== 'stack' || detailsOpen;
+    // Narrow dock (stack): default to a compact MINI state — the swatch/hex line plus a
+    // 2D Hue×Lightness pad (picks any colour in one control). The chevron expands to the
+    // full Saturation×Value field + vertical hue strip; channels + swatches sit behind a
+    // further sub-collapse. Wide layouts skip both collapses and show everything.
+    const minified = layout === 'stack' && !detailsOpen;
+    const showChevron = layout === 'stack';
+    // Swatch rows (harmonies/recents/palette) are visible in the wide layouts, or in the
+    // stack once expanded AND the channels sub-section is open.
+    const swatchesVisible = layout !== 'stack' || (detailsOpen && channelsOpen);
 
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
     // Single shared gesture for every field/strip/slider drag — anchored to the param
@@ -237,6 +258,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const a = alphaEnabled ? alpha! : 100;
 
     const toggleDetails = () => setDetailsOpen((o) => { saveDetailsOpen(!o); return !o; });
+    const toggleChannels = () => setChannelsOpen((o) => { saveChannelsOpen(!o); return !o; });
 
     // External → internal sync, guarded against our own echoes (load-bearing: the
     // gradient editor re-emits `color`, and an unguarded setState would loop).
@@ -316,10 +338,11 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         val.addColorStop(1, '#000000');
         ctx.fillStyle = val;
         ctx.fillRect(0, 0, w, h);
-        // `layout` is a dep: switching layout (e.g. stack→cols once measured) renders a
-        // different branch, which REMOUNTS this canvas to a fresh blank backing store —
-        // repaint it (the effect runs post-commit, so the ref is the new canvas).
-    }, [hsb.h, layout]);
+        // `layout`/`minified` are deps: switching layout (stack→cols once measured) or
+        // expanding out of the minified pad renders a different branch, which REMOUNTS
+        // this canvas to a fresh blank backing store — repaint it (the effect runs
+        // post-commit, so the ref is the new canvas).
+    }, [hsb.h, layout, minified]);
 
     // --- vertical hue strip ---
     useEffect(() => {
@@ -332,9 +355,39 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, hsbToHex({ h: (i / 6) * 360, s: 100, v: 100 }));
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
-        // `layout` is a dep so the strip repaints after a layout-driven remount (see
-        // the field effect above) — the gradient itself is static.
-    }, [layout]);
+        // `layout`/`minified` deps so the strip repaints after a remount (see the field
+        // effect above) — the gradient itself is static.
+    }, [layout, minified]);
+
+    // --- mini Hue×Lightness pad (minified view) ---
+    // The classic HSL "spectrum": X = hue, Y = lightness — WHITE on top → full-saturation
+    // hue in the middle band → BLACK at the bottom. Packs the most colour into one 2D pad
+    // (every hue, plus tints above and shades below) far better than a hue×value pad,
+    // which has no white. Painted as a pure-hue rainbow with a white tint over the top
+    // half and a black shade over the bottom half — no HSL maths in colorUtils needed.
+    useEffect(() => {
+        const cv = hlPadRef.current;
+        if (!cv) return;
+        const ctx = cv.getContext('2d');
+        if (!ctx) return;
+        const { width: w, height: h } = cv;
+        const hue = ctx.createLinearGradient(0, 0, w, 0);
+        for (let i = 0; i <= 6; i++) hue.addColorStop(i / 6, hsbToHex({ h: (i / 6) * 360, s: 100, v: 100 }));
+        ctx.fillStyle = hue;
+        ctx.fillRect(0, 0, w, h);
+        const tint = ctx.createLinearGradient(0, 0, 0, h);    // white over the top half
+        tint.addColorStop(0, 'rgba(255,255,255,1)');
+        tint.addColorStop(0.5, 'rgba(255,255,255,0)');
+        tint.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = tint;
+        ctx.fillRect(0, 0, w, h);
+        const shade = ctx.createLinearGradient(0, 0, 0, h);   // black over the bottom half
+        shade.addColorStop(0, 'rgba(0,0,0,0)');
+        shade.addColorStop(0.5, 'rgba(0,0,0,0)');
+        shade.addColorStop(1, 'rgba(0,0,0,1)');
+        ctx.fillStyle = shade;
+        ctx.fillRect(0, 0, w, h);
+    }, [minified, layout]);
 
     // Field / hue dragging: ABSOLUTE when unmodified (the colour under the cursor, like
     // any colour pad), and PRECISION (relative, scaled) only while Shift (×10 coarse) or
@@ -421,6 +474,53 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     };
     const endHue = endDrag(hueDrag);
 
+    // Mini HL pad: 2D drag — X = hue, Y = HSL lightness (1 = white top, 0.5 = pure hue,
+    // 0 = black bottom). `hlColor` maps (hue, lightness) onto the picker's HSB state at
+    // full HSL saturation, keeping the dragged hue when l hits the white/black ends (so
+    // it isn't lost the way rgb→hsb would). Same absolute / precision feel as the field.
+    const hlColor = (hh: number, l: number): HSB => {
+        const v = l + Math.min(l, 1 - l);
+        const s = v === 0 ? 0 : 2 * (1 - l / v);
+        return clampHsb(hh, s * 100, v * 100);
+    };
+    const hlPadDrag = useRef({ active: false, x: 0, y: 0, h: 0, l: 0, shift: false, alt: false });
+    const hueX = (e: React.PointerEvent<HTMLCanvasElement>, r: DOMRect) => Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * 360;
+    const lightY = (e: React.PointerEvent<HTMLCanvasElement>, r: DOMRect) => 1 - Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+    const beginHLPad = (e: React.PointerEvent<HTMLCanvasElement>) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        const hh = hueX(e, r);
+        const l = lightY(e, r);
+        e.currentTarget.setPointerCapture(e.pointerId);
+        handleInteractionStart('param');
+        colorSession.onPointerDown();
+        emit(hlColor(hh, l));
+        hlPadDrag.current = { active: true, x: e.clientX, y: e.clientY, h: hh, l, shift: e.shiftKey, alt: e.altKey };
+    };
+    const moveHLPad = (e: React.PointerEvent<HTMLCanvasElement>) => {
+        const d = hlPadDrag.current;
+        if (!d.active) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        const m = precisionMultiplier(e);
+        let hh: number, l: number;
+        if (m === 1) {
+            hh = hueX(e, r); l = lightY(e, r);
+            d.h = hh; d.l = l; d.x = e.clientX; d.y = e.clientY; d.shift = false; d.alt = false;
+        } else {
+            const baseH = 360 / r.width;
+            const baseL = 1 / r.height;
+            if (d.shift !== e.shiftKey || d.alt !== e.altKey) {
+                const om = precisionMultiplier({ shiftKey: d.shift, altKey: d.alt });
+                d.h = Math.max(0, Math.min(360, d.h + (e.clientX - d.x) * baseH * om));
+                d.l = Math.max(0, Math.min(1, d.l - (e.clientY - d.y) * baseL * om));
+                d.x = e.clientX; d.y = e.clientY; d.shift = e.shiftKey; d.alt = e.altKey;
+            }
+            hh = Math.max(0, Math.min(360, d.h + (e.clientX - d.x) * baseH * m));
+            l = Math.max(0, Math.min(1, d.l - (e.clientY - d.y) * baseL * m));
+        }
+        emit(hlColor(hh, l));
+    };
+    const endHLPad = endDrag(hlPadDrag);
+
     const doCopy = () => { void clip.copy(hex); };
     const doEyedrop = async () => {
         const ED = getEyeDropper();
@@ -434,13 +534,13 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     };
 
     // Only computed while the swatch rows are visible (skips 4 generator arrays per
-    // drag tick when the section is hidden — the collapsed dock default).
-    const harmonies = useMemo(() => (showDetails ? {
+    // drag tick when the section is hidden — the minified / sub-collapsed dock default).
+    const harmonies = useMemo(() => (swatchesVisible ? {
         analogous: analogous(hex, 5, 30),
         monochromatic: monochromatic(hex, 5),
         complementary: complementary(hex),
         split: splitComplementary(hex),
-    } : null), [hex, showDetails]);
+    } : null), [hex, swatchesVisible]);
 
     const handleContainerContextMenu = (e: React.MouseEvent) => {
         const ids = collectHelpIds(e.currentTarget as HTMLElement);
@@ -451,69 +551,108 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         }
     };
 
-    // --- The three responsive groups (laid out per `layout` below) ---------------
+    // --- The responsive groups (laid out per `layout` below) ---------------------
 
-    // Group 1 — colour pads: the 2D field + hue strip, then hex / copy / eyedropper.
-    const padsBlock = (
-        <>
-            {/* Field + hue strip (shrinks on narrow/mobile; Shift/Alt = coarse/fine) */}
-            <div className="flex gap-1.5">
-                <div className="relative flex-1">
-                    <canvas
-                        ref={fieldRef}
-                        width={208}
-                        height={120}
-                        className="w-full h-[76px] md:h-[86px] rounded cursor-crosshair touch-none"
-                        onPointerDown={beginField}
-                        onPointerMove={moveField}
-                        onPointerUp={endField}
-                        onPointerCancel={endField}
-                        onLostPointerCapture={endField}
-                    />
-                    <div
-                        className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-fg shadow pointer-events-none mix-blend-difference"
-                        style={{ left: `${hsb.s}%`, top: `${100 - hsb.v}%` }}
-                    />
-                </div>
-                <div className="relative w-4 shrink-0">
-                    <canvas
-                        ref={hueRef}
-                        width={16}
-                        height={120}
-                        className="w-4 h-[76px] md:h-[86px] rounded cursor-crosshair touch-none"
-                        onPointerDown={beginHue}
-                        onPointerMove={moveHue}
-                        onPointerUp={endHue}
-                        onPointerCancel={endHue}
-                        onLostPointerCapture={endHue}
-                    />
-                    <div
-                        className="absolute left-0 w-full h-[3px] -mt-[1.5px] bg-line/90 rounded-full pointer-events-none shadow"
-                        style={{ top: `${(hsb.h / 360) * 100}%` }}
-                    />
-                </div>
-            </div>
-
-            {/* Hex + copy + eyedropper */}
-            <div className="flex items-center gap-1.5">
-                <div className="w-6 h-6 shrink-0 rounded border border-line/10" style={{ backgroundColor: hex }} />
-                <input
-                    value={hexDraft}
-                    onChange={(e) => setHexDraft(e.target.value)}
-                    onBlur={(e) => setFromHex(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                    className="flex-1 min-w-0 bg-black/40 border border-line/10 rounded text-[11px] font-mono text-fg-secondary px-1.5 py-1 uppercase"
-                    spellCheck={false}
+    // Group 1a — the NORMAL pads: 2D saturation×value field + vertical hue strip (the
+    // "SL pad + H strip"). Shown when expanded / in the wide layouts.
+    const fieldBlock = (
+        // Field + hue strip (shrinks on narrow/mobile; Shift/Alt = coarse/fine)
+        <div className="flex gap-1.5">
+            <div className="relative flex-1">
+                <canvas
+                    ref={fieldRef}
+                    width={208}
+                    height={120}
+                    className="w-full h-[76px] md:h-[86px] rounded cursor-crosshair touch-none"
+                    onPointerDown={beginField}
+                    onPointerMove={moveField}
+                    onPointerUp={endField}
+                    onPointerCancel={endField}
+                    onLostPointerCapture={endField}
                 />
-                <button onClick={doCopy} title="Copy hex" className="w-6 h-6 shrink-0 grid place-items-center rounded border border-line/10 hover:bg-line/10 text-fg-tertiary text-[10px]">
-                    {copied ? '✓' : '⧉'}
-                </button>
-                <button onClick={doEyedrop} title={eyedropError ? 'Eyedropper unsupported' : 'Pick from screen'} className={`w-6 h-6 shrink-0 grid place-items-center rounded border hover:bg-line/10 text-[11px] ${eyedropError ? 'border-amber-500/60 text-amber-400' : 'border-line/10 text-fg-tertiary'}`}>
-                    ⦿
-                </button>
+                <div
+                    className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-fg shadow pointer-events-none mix-blend-difference"
+                    style={{ left: `${hsb.s}%`, top: `${100 - hsb.v}%` }}
+                />
             </div>
-        </>
+            <div className="relative w-4 shrink-0">
+                <canvas
+                    ref={hueRef}
+                    width={16}
+                    height={120}
+                    className="w-4 h-[76px] md:h-[86px] rounded cursor-crosshair touch-none"
+                    onPointerDown={beginHue}
+                    onPointerMove={moveHue}
+                    onPointerUp={endHue}
+                    onPointerCancel={endHue}
+                    onLostPointerCapture={endHue}
+                />
+                <div
+                    className="absolute left-0 w-full h-[3px] -mt-[1.5px] bg-line/90 rounded-full pointer-events-none shadow"
+                    style={{ top: `${(hsb.h / 360) * 100}%` }}
+                />
+            </div>
+        </div>
     );
+
+    // Group 1c — the MINI Hue×Lightness pad (minified state): one compact 2D control to
+    // pick any colour. X = hue, Y = HSL lightness (white top → pure hue → black bottom).
+    // Marker Y uses the HSV→HSL lightness L = v·(1 − s/2) so it sits where the painted
+    // pad shows the live colour. Half-height — it's a strip, not a full square.
+    const padLightness = (hsb.v / 100) * (1 - (hsb.s / 100) / 2);
+    const hlPad = (
+        <div className="relative">
+            <canvas
+                ref={hlPadRef}
+                width={208}
+                height={120}
+                className="w-full h-9 rounded cursor-crosshair touch-none"
+                onPointerDown={beginHLPad}
+                onPointerMove={moveHLPad}
+                onPointerUp={endHLPad}
+                onPointerCancel={endHLPad}
+                onLostPointerCapture={endHLPad}
+            />
+            <div
+                className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-fg shadow pointer-events-none mix-blend-difference"
+                style={{ left: `${(hsb.h / 360) * 100}%`, top: `${(1 - padLightness) * 100}%` }}
+            />
+        </div>
+    );
+
+    // Group 1b — the always-visible swatch/hex line: expand chevron (mini state only) ·
+    // current-colour swatch · hex input · copy · eyedropper. Stays on top when minimized.
+    const hexRow = (
+        <div className="flex items-center gap-1.5">
+            {showChevron && (
+                <button
+                    onClick={toggleDetails}
+                    title={detailsOpen ? 'Collapse picker' : 'Expand picker'}
+                    className="shrink-0 grid place-items-center text-fg-tertiary hover:text-fg transition-colors select-none -ml-0.5"
+                >
+                    <span className={`inline-flex transition-transform [&_svg]:w-[18px] [&_svg]:h-[18px] ${detailsOpen ? '' : '-rotate-90'}`}>
+                        <ChevronDown />
+                    </span>
+                </button>
+            )}
+            <div className="w-6 h-6 shrink-0 rounded border border-line/10" style={{ backgroundColor: hex }} />
+            <input
+                value={hexDraft}
+                onChange={(e) => setHexDraft(e.target.value)}
+                onBlur={(e) => setFromHex(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                className="flex-1 min-w-0 bg-surface-sunken border border-line/10 rounded text-[11px] font-mono text-fg-secondary px-1.5 py-1 uppercase"
+                spellCheck={false}
+            />
+            <button onClick={doCopy} title="Copy hex" className="w-6 h-6 shrink-0 grid place-items-center rounded border border-line/10 hover:bg-line/10 text-fg-tertiary text-[10px]">
+                {copied ? '✓' : '⧉'}
+            </button>
+            <button onClick={doEyedrop} title={eyedropError ? 'Eyedropper unsupported' : 'Pick from screen'} className={`w-6 h-6 shrink-0 grid place-items-center rounded border hover:bg-line/10 text-[11px] ${eyedropError ? 'border-amber-500/60 text-amber-400' : 'border-line/10 text-fg-tertiary'}`}>
+                ⦿
+            </button>
+        </div>
+    );
+
 
     // Group 2 — channels: the RGB + HSB (+ alpha) gradient sliders.
     const channelsBlock = (
@@ -555,41 +694,49 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     return (
         <div
             ref={rootRef}
-            className="flex flex-col gap-1.5 w-full bg-black/40 border border-line/5 rounded p-2 gradient-interactive-element"
+            className="flex flex-col gap-1.5 w-full bg-surface-section border border-line/10 rounded p-2 gradient-interactive-element"
             data-help-id="ui.colorpicker"
             onContextMenu={handleContainerContextMenu}
         >
             {layout === 'cols' ? (
                 // Widest — pads | channels | swatches, three columns side by side.
                 <div className="flex gap-3 items-start">
-                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">{padsBlock}</div>
+                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">{hexRow}{fieldBlock}</div>
                     <div className="flex-1 min-w-0 flex flex-col gap-1">{channelsBlock}</div>
                     <div className="flex-1 min-w-0 flex flex-col gap-1">{swatchesBlock}</div>
                 </div>
             ) : layout === 'rows' ? (
                 // Medium — pads on top, channels | swatches side by side below.
                 <>
-                    <div className="flex flex-col gap-1.5">{padsBlock}</div>
+                    <div className="flex flex-col gap-1.5">{hexRow}{fieldBlock}</div>
                     <div className="flex gap-3 items-start pt-0.5 border-t border-line/5">
                         <div className="flex-1 min-w-0 flex flex-col gap-1">{channelsBlock}</div>
                         <div className="flex-1 min-w-0 flex flex-col gap-1">{swatchesBlock}</div>
                     </div>
                 </>
-            ) : (
-                // Narrow (dock default) — stacked; channels + swatches behind the
-                // persisted collapse toggle to keep the footprint small.
+            ) : minified ? (
+                // Narrow + minified (dock default) — swatch/hex line on top, then the 2D
+                // Hue×Lightness pad. The chevron on the hex line expands to the full pads.
                 <>
-                    {padsBlock}
-                    <div className="flex flex-col gap-1 pt-0.5 border-t border-line/5">
+                    {hexRow}
+                    {hlPad}
+                </>
+            ) : (
+                // Narrow + expanded — the full Saturation×Value field + hue strip, with
+                // channels + swatches behind a further, persisted collapsible subitem.
+                <>
+                    {hexRow}
+                    {fieldBlock}
+                    <div className="flex flex-col gap-1 pt-1 border-t border-line/10">
                         <button
-                            onClick={toggleDetails}
+                            onClick={toggleChannels}
                             className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-fg-dim hover:text-fg-tertiary font-bold select-none"
                         >
-                            <span className="inline-block w-2 text-center">{detailsOpen ? '▾' : '▸'}</span>
+                            <span className="inline-block w-2 text-center">{channelsOpen ? '▾' : '▸'}</span>
                             Channels &amp; swatches
                         </button>
-                        {detailsOpen && (
-                            <div className="flex flex-col gap-1">
+                        {channelsOpen && (
+                            <div className="flex flex-col gap-1 pt-0.5">
                                 {channelsBlock}
                                 <div className="h-px bg-line/10 my-1" />
                                 {swatchesBlock}

@@ -24,6 +24,7 @@
  */
 
 import { registerMigration, renameSlice, moveField } from '../engine/migrations';
+import { rgbToHex } from '../utils/colorUtils';
 
 registerMigration({
     version: 1,
@@ -74,6 +75,32 @@ registerMigration({
             delete p.features.sceneCamera;
         }
 
+        return p;
+    },
+});
+
+// v2 (2026-06-23) — interiorColor changed from a `vec3` ({x,y,z}, 0–1) to a
+// `color` param (hex string) so the shared colour picker edits it. Convert any
+// pre-existing vec3 (or [r,g,b]/{r,g,b}) value to a hex string on load.
+registerMigration({
+    version: 2,
+    id: 'fluid-toy.interior-color-to-hex',
+    apply: (p: any) => {
+        const pal = p?.features?.palette;
+        const ic = pal?.interiorColor;
+        if (ic == null || typeof ic === 'string') return p;   // missing or already hex
+
+        let r = 0, g = 0, b = 0;
+        if (Array.isArray(ic)) {
+            [r, g, b] = ic;
+        } else if (typeof ic === 'object') {
+            if ('x' in ic) { r = ic.x; g = ic.y; b = ic.z; }
+            else if ('r' in ic) {
+                const s = Math.max(ic.r, ic.g, ic.b) > 1 ? 1 / 255 : 1;   // tolerate 0–255
+                r = ic.r * s; g = ic.g * s; b = ic.b * s;
+            }
+        }
+        pal.interiorColor = rgbToHex(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255));
         return p;
     },
 });

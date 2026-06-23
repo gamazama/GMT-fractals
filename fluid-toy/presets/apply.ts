@@ -22,6 +22,7 @@ import type { Preset as RefPreset } from './data';
 // featureRegistry.register() throws. We grab the store at call time
 // via the global __store handle the fractalStore sets up on boot.
 import { featureRegistry } from '../../engine/FeatureSystem';
+import { rgbToHex } from '../../utils/colorUtils';
 import { KIND_MODES } from '../features/julia';
 import { FORCE_MODES, FORCE_SOURCES } from '../features/coupling';
 import { COLOR_MAPPINGS, DYE_BLENDS, DYE_DECAY_MODES } from '../features/palette';
@@ -61,8 +62,10 @@ const idx = <T extends string>(arr: readonly T[], v: unknown): number | undefine
 const tupleToVec = (t: [number, number] | undefined) =>
     t ? { x: t[0], y: t[1] } : undefined;
 
-const vec3FromTuple = (t: [number, number, number] | undefined) =>
-    t ? { x: t[0], y: t[1], z: t[2] } : undefined;
+// interiorColor is a `color` param (hex string) since 2026-06; preset data
+// still authors it as an [r,g,b] 0–1 tuple, so convert at apply time.
+const hexFromTuple = (t: [number, number, number] | undefined) =>
+    t ? rgbToHex(Math.round(t[0] * 255), Math.round(t[1] * 255), Math.round(t[2] * 255)) : undefined;
 
 /** Dispatch every slice update implied by a reference preset. */
 export const applyRefPreset = (preset: RefPreset) => {
@@ -151,7 +154,7 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.trapNormal)                    pa.trapNormal     = tupleToVec(p.trapNormal);
     if (p.trapOffset      !== undefined) pa.trapOffset     = p.trapOffset;
     if (p.stripeFreq      !== undefined) pa.stripeFreq     = p.stripeFreq;
-    if (p.interiorColor)                 pa.interiorColor  = vec3FromTuple(p.interiorColor);
+    if (p.interiorColor)                 pa.interiorColor  = hexFromTuple(p.interiorColor);
     if (preset.gradient) pa.gradient = preset.gradient;
     s.setPalette({ ...buildDefaultSlice('palette'), ...pa });
 
