@@ -6,6 +6,7 @@ import { DraggableNumber } from './Slider';
 import { analyzeHistogram, calculateSmartLevels } from '../utils/histogramUtils';
 import { useEngineStore } from '../store/engineStore';
 import { collectHelpIds } from '../utils/helpUtils';
+import { getThemeColor, useColorScheme } from '../engine/store/colorSchemeStore';
 
 interface HistogramProps {
     data: Float32Array | null;
@@ -93,30 +94,34 @@ const Histogram: React.FC<HistogramProps> = ({
     // If Gamma < 1.0 (Brighter), Input < 0.5 (Handle Left).
     const gammaPosPct = Math.pow(0.5, 1.0 / gamma) * 100;
 
+    // Histogram fill follows the theme so the bars stay legible on light surfaces
+    // (the old fixed '#666' washed out on the light schemes). --fg-tertiary is a
+    // light grey on dark, a dark grey on light → visible on both.
+    const scheme = useColorScheme((s) => s.scheme);
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        
+
         // Clear
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
+
         if (histogramBuckets.length === 0) return;
 
         // Draw Bars
         const w = canvas.width;
         const h = canvas.height;
         const barW = w / histogramBuckets.length;
-        
-        ctx.fillStyle = '#666';
-        
+
+        ctx.fillStyle = getThemeColor('--fg-tertiary', 0.5);
+
         histogramBuckets.forEach((val, i) => {
             const barH = val * h;
             ctx.fillRect(i * barW, h - barH, barW, barH);
         });
-        
-    }, [histogramBuckets]);
+
+    }, [histogramBuckets, scheme]);
 
     // Map min/max to percentages of the current histogram view range
     const toViewPercent = (val: number) => {
@@ -346,7 +351,7 @@ const Histogram: React.FC<HistogramProps> = ({
                 {/* Content Area - Added mx-3 margin to prevent handle clipping at edges */}
                 <div className="absolute inset-0 right-4 left-3 mx-2">
                     {/* Histogram Canvas */}
-                    <canvas ref={canvasRef} width={320} height={height} className="w-full h-full opacity-40 absolute inset-0" />
+                    <canvas ref={canvasRef} width={320} height={height} className="w-full h-full absolute inset-0" />
                     
                     {/* Active Range Overlay with Gradient */}
                     <div
