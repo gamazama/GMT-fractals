@@ -398,7 +398,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                 {showMenu && menuPos && createPortal((
                     <div
                         ref={menuPanelRef}
-                        className="fixed w-48 bg-[#1a1f3a] border border-line/20 rounded shadow-xl z-[100] p-1 flex flex-col gap-1"
+                        className="fixed w-48 bg-surface-raised border border-line/20 rounded shadow-xl z-[100] p-1 flex flex-col gap-1"
                         style={{ top: menuPos.top, right: menuPos.right }}
                     >
 

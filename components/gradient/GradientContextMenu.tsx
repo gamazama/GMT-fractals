@@ -36,7 +36,7 @@ const LazyGradientPreview: React.FC<{ stops: GradientStop[] }> = ({ stops }) => 
         <div
             ref={ref}
             className="w-16 h-3 rounded border border-line/20 shadow-sm shrink-0"
-            style={visible ? { background: getGradientCssString(stops) } : { background: '#222' }}
+            style={visible ? { background: getGradientCssString(stops) } : { background: 'rgb(var(--surface-section))' }}
         />
     );
 };
@@ -47,7 +47,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose
             anchor={{ x, y }}
             onClose={onClose}
             padding={12}
-            className="bg-[#1a1f3a] border border-line/20 rounded-md shadow-2xl py-1 w-[220px] max-h-[400px] overflow-y-auto custom-scroll"
+            className="bg-surface-raised border border-line/20 rounded-md shadow-2xl py-1 w-[220px] max-h-[400px] overflow-y-auto custom-scroll"
         >
             {options.map((opt, i) => (
                 opt.isHeader ? (
