@@ -9,10 +9,15 @@
  * - Smooth value "baking" when modifiers change mid-drag
  * - Optional value mapping for custom scales (pi, log)
  * - Hard min/max clamping
+ * - Screen-edge fold: when the cursor pins against a monitor edge the drag keeps
+ *   going on the orthogonal axis (up = increase) instead of freezing. See
+ *   screenEdgeFold.ts. This is why the move math accumulates RELATIVE per-event
+ *   deltas rather than differencing against a fixed pointer-down anchor.
  */
 
 import { useCallback, useRef, useState } from 'react';
 import { ValueMapping } from '../primitives/FormatUtils';
+import { beginEdgeFold, edgeFoldDelta, EdgeFoldTracker } from '../screenEdgeFold';
 
 interface UseDragValueOptions {
     value: number;
@@ -72,7 +77,11 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
     const immediateValueRef = useRef<number | null>(null);
 
     // Refs for drag state (don't trigger re-renders)
-    const dragStartX = useRef(0);
+    // accumPx accumulates the effective along-axis travel (in px) since the current
+    // anchor — fed by edgeFoldDelta so it telescopes to plain `cur - start` off the
+    // wall, and keeps climbing via the orthogonal axis once pinned at a screen edge.
+    const accumPx = useRef(0);
+    const edgeTracker = useRef<EdgeFoldTracker>({ primary: 0, orth: 0 });
     const dragStartValue = useRef(0);
     const hasMoved = useRef(false);
     const lastShift = useRef(false);
@@ -111,8 +120,10 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         e.currentTarget.setPointerCapture(e.pointerId);
         currentPointerId.current = e.pointerId;
 
-        // Initialize drag state (store the coordinate along the active axis)
-        dragStartX.current = axis === 'y' ? e.clientY : e.clientX;
+        // Initialize drag state. Seed the edge-fold tracker with the pointer-down
+        // coordinates and zero the travel accumulator.
+        edgeTracker.current = beginEdgeFold(e, axis);
+        accumPx.current = 0;
         const displayValue = mapping ? mapping.toDisplay(value) : value;
         dragStartValue.current = isNaN(displayValue) ? 0 : displayValue;
         hasMoved.current = false;
@@ -130,10 +141,13 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         if (disabled || !isDragging) return;
         if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
 
-        // Delta along the active axis. For 'y' we DON'T invert: dragging down increases,
-        // so a top-to-bottom slider's thumb follows the pointer (top = min, bottom = max).
-        const cur = axis === 'y' ? e.clientY : e.clientX;
-        const dx = cur - dragStartX.current;
+        // Effective along-axis travel for this move. edgeFoldDelta returns the plain
+        // primary-axis delta off the wall (so accumPx telescopes to `cur - start`), and
+        // folds in the free orthogonal axis once pinned at a screen edge — up = increase.
+        // For axis 'y' we DON'T invert: dragging down increases, so a top-to-bottom
+        // slider's thumb follows the pointer (top = min, bottom = max).
+        accumPx.current += edgeFoldDelta(e, axis, edgeTracker.current);
+        const dx = accumPx.current;
 
         // Check if we've moved enough to start dragging
         if (Math.abs(dx) > dragThreshold) {
@@ -154,18 +168,19 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
             const oldSensitivity = getSensitivity(lastShift.current, lastAlt.current);
             const currentValue = dragStartValue.current + (dx * oldSensitivity);
 
-            // "Bake" the current value as the new start
+            // "Bake" the current value as the new anchor and zero the accumulator
             dragStartValue.current = currentValue;
-            dragStartX.current = cur;
+            accumPx.current = 0;
 
             // Update modifier tracking
             lastShift.current = e.shiftKey;
             lastAlt.current = e.altKey;
         }
 
-        // Calculate new value with current sensitivity (in DISPLAY space).
+        // Calculate new value with current sensitivity (in DISPLAY space). Re-read
+        // accumPx — it was just zeroed if a modifier toggled on this move.
         const currentSensitivity = getSensitivity(e.shiftKey, e.altKey);
-        const nextDisplay = dragStartValue.current + (dx * currentSensitivity);
+        const nextDisplay = dragStartValue.current + (accumPx.current * currentSensitivity);
 
         // Convert display → internal FIRST, then clamp hard bounds in RAW space. (Clamping the
         // display value broke mapped params: a raw hardMin of 0.0001 applied to a log-display
