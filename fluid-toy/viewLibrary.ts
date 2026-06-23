@@ -206,9 +206,11 @@ const DEFAULT_VIEWS: Array<{ label: string; state: JuliaViewState }> = [
       state: { kind: 0, juliaC: { x: 0,    y: 1 },       center: { x: 0,    y: 0 },     zoom: 1.5,  maxIter: 256, power: 2 } },
     { label: 'Julia · San Marco',
       state: { kind: 0, juliaC: { x: -0.75, y: 0 },      center: { x: 0,    y: 0 },     zoom: 1.5,  maxIter: 256, power: 2 } },
-    // Classic 2D Phoenix: z_{n+1} = z² + c + K·z_{n-1}, the famous c=0.56667, K=-0.5.
+    // Classic 2D Phoenix: z_{n+1} = z² + c + K·z_{n-1}, c=0.56667. K is nudged
+    // slightly off the real axis (-0.49715, 0.0071) — the small imaginary part
+    // breaks the mirror symmetry and brings out the phoenix plumage.
     { label: 'Phoenix · Classic',
-      state: { kind: 2, juliaC: { x: 0.56667, y: 0 }, phoenixK: { x: -0.5, y: 0 }, center: { x: 0, y: 0 }, zoom: 1.6, maxIter: 256, power: 2 } },
+      state: { kind: 2, juliaC: { x: 0.56667, y: 0 }, phoenixK: { x: -0.49715, y: 0.0071 }, center: { x: 0, y: 0 }, zoom: 1.6, maxIter: 256, power: 2 } },
     { label: 'Mandelbrot · Seahorse Valley',
       state: { kind: 1, juliaC: { x: 0,    y: 0 },       center: { x: -0.75, y: 0.1 },  zoom: 0.15, maxIter: 384, power: 2 } },
 ];

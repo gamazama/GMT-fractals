@@ -147,7 +147,7 @@ export const PRESETS: Preset[] = [
         params: {
             kind: 'phoenix',
             juliaC: [0.56667, 0],
-            phoenixK: [-0.5, 0],
+            phoenixK: [-0.49715, 0.0071],
             center: [0, 0],
             zoom: 1.5,
             maxIter: 220,
