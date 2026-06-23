@@ -18,6 +18,8 @@ import { wireGradientExplorer } from './setup';
 
 import { registerUI } from '../engine/features/ui';
 import { installTopBar, topbar } from '../engine/plugins/TopBar';
+import { registerCoreSettings } from '../store/coreSettings';
+import { SettingsButton } from '../components/SettingsAccess';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
 import { installMenu } from '../engine/plugins/Menu';
@@ -64,6 +66,11 @@ topbar.register({ id: 'gx-favients', slot: 'left', order: 21, component: Favient
 topbar.unregister('adaptive');
 topbar.unregister('fps');
 topbar.register({ id: 'fps', slot: 'right', order: -10, component: FpsCounterDesktopOnly });
+
+// Settings — colour scheme + accent hues (shared across all GMT apps), autosave.
+// The gear opens the floating Settings panel (SettingsHost mounted in the app).
+registerCoreSettings();
+topbar.register({ id: 'settings', slot: 'right', order: 100, component: SettingsButton });
 
 // Animation glue — param sliders show the keyframe diamond and key onto the
 // timeline (TimelineHost is mounted in GradientExplorerApp). installModulation

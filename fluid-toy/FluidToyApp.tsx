@@ -32,6 +32,7 @@ import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
+import { SettingsHost } from '../components/SettingsAccess';
 // readBrushParams is not used here — useFluidEngine owns the RAF brush tick.
 import { FluidPointerLayer } from './FluidPointerLayer';
 import { DomOverlays } from './components/DomOverlays';
@@ -235,6 +236,8 @@ export const FluidToyApp: React.FC = () => {
             <TimelineHost />
 
             <HelpOverlay />
+
+            <SettingsHost />
 
             {contextMenu.visible && (
                 <GlobalContextMenu

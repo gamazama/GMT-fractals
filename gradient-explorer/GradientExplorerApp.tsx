@@ -21,6 +21,7 @@ import { CaretRight } from '../components/Icons2';
 import { TopBarHost } from '../engine/plugins/TopBar';
 import { HudHost } from '../engine/plugins/Hud';
 import { HelpOverlay } from '../engine/plugins/Help';
+import { SettingsHost } from '../components/SettingsAccess';
 import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
@@ -384,6 +385,8 @@ const GradientExplorerApp: React.FC = () => {
           )}
 
           <HelpOverlay />
+
+          <SettingsHost />
 
           {state.contextMenu.visible && (
             <GlobalContextMenu

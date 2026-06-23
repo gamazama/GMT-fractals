@@ -36,6 +36,8 @@ import { safeLocalGet, safeLocalRemove } from '../store/safeLocalStorage';
 import { setupFluidToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar, topbar } from '../engine/plugins/TopBar';
+import { registerCoreSettings } from '../store/coreSettings';
+import { SettingsButton } from '../components/SettingsAccess';
 import { FluidToggleButton } from './components/FluidToggleButton';
 import { FavientsToggleButton } from '../palette/components/FavientsToggleButton';
 import { mountFavientsPanel } from '../palette/installFavients';
@@ -122,6 +124,11 @@ topbar.register({ id: 'fluid-toggle', slot: 'left', order: 5, component: FluidTo
 // picked gradient to the Palette (fractal + dye). The shelf itself is a floating
 // panel restored below; this button just toggles its visibility.
 topbar.register({ id: 'favients-toggle', slot: 'left', order: 40, component: FavientsToggleButton });
+
+// Settings — colour scheme + accent hues (shared across all GMT apps), autosave.
+// The gear opens the floating Settings panel (SettingsHost is mounted in FluidToyApp).
+registerCoreSettings();
+topbar.register({ id: 'settings', slot: 'right', order: 100, component: SettingsButton });
 
 // PWA update pill. Surfaces an amber "Update" button in the topbar
 // when a new SW is detected; clicking skips-waiting + reloads.
