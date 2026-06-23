@@ -24,44 +24,47 @@
       #ft-boot-splash {
         position: fixed; inset: 0; z-index: 99999;
         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
-        background: #000; color: #9ca3af;
+        background: rgb(var(--app-bg)); color: rgb(var(--fg-dim));
         font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
         font-size: 12px; letter-spacing: 0.04em;
         transition: opacity 450ms ease;
       }
       #ft-boot-splash .ft-spinner {
         width: 32px; height: 32px; border-radius: 9999px;
-        border: 2px solid rgba(255,255,255,0.15); border-top-color: #22d3ee;
+        border: 2px solid rgb(var(--line) / 0.15); border-top-color: rgb(var(--accent-400));
         animation: ft-spin 0.8s linear infinite;
       }
       #ft-boot-splash.ft-hidden { opacity: 0; pointer-events: none; }
     </style>
     <link rel="icon" type="image/x-icon" href="./favicon.ico" />
-    <script type="module" crossorigin src="./assets/fluid-toy-C6PWMEMn.js"></script>
+    <!-- Apply the saved UI color scheme before first paint (shared gmt.colorScheme). -->
+    <script>try{var t=localStorage.getItem('gmt.colorScheme');if(t&&t!=='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+    <script type="module" crossorigin src="./assets/fluid-toy-CX3zBS86.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/three-DQWx7qFd.js">
     <link rel="modulepreload" crossorigin href="./assets/three-fiber-GKfjny8F.js">
     <link rel="modulepreload" crossorigin href="./assets/three-drei-D2x72drd.js">
     <link rel="modulepreload" crossorigin href="./assets/pako-DwGzBETv.js">
-    <link rel="modulepreload" crossorigin href="./assets/CollapsibleSection-CD1MDlqf.js">
+    <link rel="modulepreload" crossorigin href="./assets/CollapsibleSection-CWFumHMF.js">
     <link rel="modulepreload" crossorigin href="./assets/createSingleSlot-BAHyf9Ga.js">
     <link rel="modulepreload" crossorigin href="./assets/gradientEditorEntrance-BUgjjaMI.js">
-    <link rel="modulepreload" crossorigin href="./assets/FormulaFormat-CtjbDJQo.js">
-    <link rel="modulepreload" crossorigin href="./assets/Undo-DLHo0_dQ.js">
-    <link rel="modulepreload" crossorigin href="./assets/CompositionOverlay-DWXG7LtY.js">
-    <link rel="modulepreload" crossorigin href="./assets/Camera-ESw4Th6S.js">
+    <link rel="modulepreload" crossorigin href="./assets/FormulaFormat-CXIsVH6k.js">
+    <link rel="modulepreload" crossorigin href="./assets/Undo-Dh8_LtkD.js">
+    <link rel="modulepreload" crossorigin href="./assets/CompositionOverlay-BTCqRlsK.js">
+    <link rel="modulepreload" crossorigin href="./assets/Camera-CwTd5iBe.js">
     <link rel="modulepreload" crossorigin href="./assets/AudioAnalysisEngine-DyaB3DyZ.js">
     <link rel="modulepreload" crossorigin href="./assets/ModulationEngine-fGx0zqS8.js">
-    <link rel="modulepreload" crossorigin href="./assets/modulationTick-8BYDuprl.js">
-    <link rel="modulepreload" crossorigin href="./assets/RenderLoop-94wNAwDO.js">
-    <link rel="modulepreload" crossorigin href="./assets/laRuntime-CNeiY-wy.js">
-    <link rel="modulepreload" crossorigin href="./assets/typedSlices-De7yjB5g.js">
-    <link rel="modulepreload" crossorigin href="./assets/FavientsToggleButton-BBQ2CePb.js">
-    <link rel="modulepreload" crossorigin href="./assets/support-jF-WsnM3.js">
+    <link rel="modulepreload" crossorigin href="./assets/modulationTick-BsfMSn3J.js">
+    <link rel="modulepreload" crossorigin href="./assets/RenderLoop-qCKlePFD.js">
+    <link rel="modulepreload" crossorigin href="./assets/colorSchemeStore-DEJOklhD.js">
+    <link rel="modulepreload" crossorigin href="./assets/support-DxqLZ2uM.js">
+    <link rel="modulepreload" crossorigin href="./assets/FavientsToggleButton-D7zB60mg.js">
+    <link rel="modulepreload" crossorigin href="./assets/laRuntime-CTFpToa_.js">
+    <link rel="modulepreload" crossorigin href="./assets/typedSlices-DNV3-n6S.js">
     <link rel="modulepreload" crossorigin href="./assets/renderPopupRegistry-49PcnqqE.js">
-    <link rel="modulepreload" crossorigin href="./assets/applyAt-DoaUbN64.js">
-    <link rel="modulepreload" crossorigin href="./assets/installBucketRender-CfEW3_jp.js">
-    <link rel="modulepreload" crossorigin href="./assets/cameraKeyRegistry-D0Jb-OXg.js">
-    <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-kgNuTCD_.css">
+    <link rel="modulepreload" crossorigin href="./assets/applyAt-HL6T4iL8.js">
+    <link rel="modulepreload" crossorigin href="./assets/installBucketRender-xc_6CAVu.js">
+    <link rel="modulepreload" crossorigin href="./assets/cameraKeyRegistry-DtlAACb9.js">
+    <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-uCPA8M6H.css">
   <link rel="manifest" href="./manifest.webmanifest"></head>
   <body>
     <div id="root"></div>
