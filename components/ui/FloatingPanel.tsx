@@ -226,7 +226,8 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
         >
             {showHeader && (
                 <div
-                    className={`${headerClassName} ${draggable && effectivePos ? 'cursor-move' : ''}`}
+                    className={`${headerClassName} select-none ${draggable && effectivePos ? 'cursor-move' : ''}`}
+                    onDragStart={(e) => e.preventDefault()}
                     {...(draggable && effectivePos ? drag : null)}
                 >
                     <div className="flex items-center gap-2 min-w-0">
