@@ -50,50 +50,50 @@ export const DropZones: React.FC = () => {
     return (
         <div className="fixed inset-0 z-[1000] flex pointer-events-none">
             {/* Left Zone */}
-            <div 
+            <div
                 style={{ width: leftW }}
                 className={`h-full flex items-center justify-center transition-all duration-200 border-r-2
-                    ${sourceLocation !== 'left' 
-                        ? 'bg-accent-900/40 border-accent-500/50 pointer-events-auto cursor-copy' 
+                    ${sourceLocation !== 'left'
+                        ? 'bg-accent-500/20 border-accent-400 pointer-events-auto cursor-copy'
                         : 'border-transparent pointer-events-none' /* Passthrough to dock for reordering */
                     }`}
                 onMouseUp={(e) => { if(sourceLocation !== 'left') handleDrop(e, 'left'); }}
             >
                 {sourceLocation !== 'left' && (
-                    <div className="bg-surface/80 px-4 py-2 rounded border border-accent-500/50 text-cyan-200 font-bold text-sm shadow-xl backdrop-blur-md">
+                    <div className="bg-accent-600 px-4 py-2 rounded text-accent-fg font-bold text-sm shadow-xl">
                         Dock Left
                     </div>
                 )}
             </div>
-            
+
             {/* Float Zone (Center) — stands down for a non-floatable panel. */}
             <div
                 className={`flex-1 h-full flex items-center justify-center transition-all duration-200
                     ${floatActive
-                        ? 'bg-secondary/20 hover:bg-secondary/30 border-x-2 border-secondary/30 pointer-events-auto cursor-copy'
+                        ? 'bg-secondary/20 hover:bg-secondary/30 border-x-2 border-secondary pointer-events-auto cursor-copy'
                         : 'pointer-events-none'
                     }`}
                 onMouseUp={(e) => { if(floatActive) handleDrop(e, 'float'); }}
             >
                 {floatActive && (
-                    <div className="bg-surface/80 px-4 py-2 rounded border border-secondary/50 text-secondary font-bold text-sm shadow-xl backdrop-blur-md">
+                    <div className="bg-secondary-strong px-4 py-2 rounded text-accent-fg font-bold text-sm shadow-xl">
                         Float Window
                     </div>
                 )}
             </div>
 
             {/* Right Zone */}
-            <div 
+            <div
                 style={{ width: rightW }}
                 className={`h-full flex items-center justify-center transition-all duration-200 border-l-2
-                    ${sourceLocation !== 'right' 
-                        ? 'bg-accent-900/40 border-accent-500/50 pointer-events-auto cursor-copy' 
+                    ${sourceLocation !== 'right'
+                        ? 'bg-accent-500/20 border-accent-400 pointer-events-auto cursor-copy'
                         : 'border-transparent pointer-events-none' /* Passthrough to dock */
                     }`}
                 onMouseUp={(e) => { if(sourceLocation !== 'right') handleDrop(e, 'right'); }}
             >
                 {sourceLocation !== 'right' && (
-                    <div className="bg-surface/80 px-4 py-2 rounded border border-accent-500/50 text-cyan-200 font-bold text-sm shadow-xl backdrop-blur-md">
+                    <div className="bg-accent-600 px-4 py-2 rounded text-accent-fg font-bold text-sm shadow-xl">
                         Dock Right
                     </div>
                 )}
