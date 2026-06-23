@@ -23,11 +23,17 @@ import { nanoid } from 'nanoid';
 export interface JuliaViewState {
     kind: number;
     juliaC: { x: number; y: number };
+    /** Phoenix history coefficient K. Optional — only meaningful for the
+     *  Phoenix kinds (2/3); absent on older snapshots and the non-Phoenix
+     *  seeds, where it defaults to the classic (-0.5, 0). */
+    phoenixK?: { x: number; y: number };
     center: { x: number; y: number };
     zoom: number;
     maxIter: number;
     power: number;
 }
+
+const DEFAULT_PHOENIX_K = { x: -0.5, y: 0 };
 
 // Augment the engine store with the dynamic fields written by
 // installStateLibrary. Keys are baked into installFluidToyViewLibrary
@@ -61,6 +67,7 @@ const captureView = (): JuliaViewState => {
     return {
         kind: julia.kind,
         juliaC: { ...julia.juliaC },
+        phoenixK: julia.phoenixK ? { ...julia.phoenixK } : { ...DEFAULT_PHOENIX_K },
         center: { ...julia.center },
         zoom: julia.zoom,
         maxIter: julia.maxIter,
@@ -89,7 +96,9 @@ const tweenView = (target: JuliaViewState) => {
 
     const start = captureView();
 
-    setJulia({ kind: target.kind, maxIter: target.maxIter });
+    // kind / maxIter / phoenixK are shape params (not smoothly interpolatable
+    // across kinds) — snap them at tween start; center/zoom/juliaC tween below.
+    setJulia({ kind: target.kind, maxIter: target.maxIter, phoenixK: target.phoenixK ?? { ...DEFAULT_PHOENIX_K } });
 
     const startLogZoom = Math.log(Math.max(start.zoom, 1e-12));
     const endLogZoom = Math.log(Math.max(target.zoom, 1e-12));
@@ -141,6 +150,9 @@ const isViewModified = (snap: JuliaViewState): boolean => {
         Math.abs(live.center.y - snap.center.y) > 1e-4) return true;
     if (Math.abs(live.juliaC.x - snap.juliaC.x) +
         Math.abs(live.juliaC.y - snap.juliaC.y) > 1e-4) return true;
+    const liveK = live.phoenixK ?? DEFAULT_PHOENIX_K;
+    const snapK = snap.phoenixK ?? DEFAULT_PHOENIX_K;
+    if (Math.abs(liveK.x - snapK.x) + Math.abs(liveK.y - snapK.y) > 1e-4) return true;
     return false;
 };
 
@@ -184,7 +196,7 @@ const resetView = () => {
 // power) — captureView mirrors the same shape, so manually-added views
 // drop into the same array shape.
 //
-// KIND_MODES indices: 0 = julia, 1 = mandelbrot.
+// KIND_MODES indices: 0 = julia, 1 = mandelbrot, 2 = phoenix, 3 = phoenix-mandel.
 const DEFAULT_VIEWS: Array<{ label: string; state: JuliaViewState }> = [
     { label: 'Mandelbrot · Home',
       state: { kind: 1, juliaC: { x: -0.7, y: 0.27015 }, center: { x: -0.5, y: 0 },     zoom: 1.5,  maxIter: 256, power: 2 } },
@@ -194,6 +206,9 @@ const DEFAULT_VIEWS: Array<{ label: string; state: JuliaViewState }> = [
       state: { kind: 0, juliaC: { x: 0,    y: 1 },       center: { x: 0,    y: 0 },     zoom: 1.5,  maxIter: 256, power: 2 } },
     { label: 'Julia · San Marco',
       state: { kind: 0, juliaC: { x: -0.75, y: 0 },      center: { x: 0,    y: 0 },     zoom: 1.5,  maxIter: 256, power: 2 } },
+    // Classic 2D Phoenix: z_{n+1} = z² + c + K·z_{n-1}, the famous c=0.56667, K=-0.5.
+    { label: 'Phoenix · Classic',
+      state: { kind: 2, juliaC: { x: 0.56667, y: 0 }, phoenixK: { x: -0.5, y: 0 }, center: { x: 0, y: 0 }, zoom: 1.6, maxIter: 256, power: 2 } },
     { label: 'Mandelbrot · Seahorse Valley',
       state: { kind: 1, juliaC: { x: 0,    y: 0 },       center: { x: -0.75, y: 0.1 },  zoom: 0.15, maxIter: 384, power: 2 } },
 ];
