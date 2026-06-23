@@ -107,16 +107,19 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
             showClose={showClose}
             headerLeft={
                 isManaged && id ? (
-                    // select-none + draggable=false + preventDefault: the handle bypasses
-                    // FloatingPanel's header-drag onBegin (via stopPropagation), so it must
-                    // suppress the browser's native text-selection / drag itself — otherwise
-                    // a native drag fires intermittently, ghosts the page, captures the
-                    // pointer, and the dock-drop never lands.
+                    // The handle bypasses FloatingPanel's header-drag onBegin (via
+                    // stopPropagation), so it suppresses the browser's native text-selection /
+                    // element drag itself — otherwise a native drag fires intermittently,
+                    // ghosts the page and hijacks the pointer. select-none kills the selection
+                    // drag; draggable=false + onDragStart preventDefault kill the element drag.
+                    // Do NOT preventDefault the pointerdown — that also suppresses the
+                    // compatibility mouseup the dock DropZones use, so the drop wouldn't land
+                    // on release (you'd have to click an extra time).
                     <div
                         className="cursor-grab text-fg-dim hover:text-fg select-none"
                         draggable={false}
                         onDragStart={(e) => e.preventDefault()}
-                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); startPanelDrag(id); }}
+                        onPointerDown={(e) => { e.stopPropagation(); startPanelDrag(id); }}
                     >
                         <DragHandleIcon />
                     </div>
