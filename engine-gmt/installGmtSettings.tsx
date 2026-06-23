@@ -41,7 +41,8 @@ export const registerGmtSettings = (): void => {
 
     registerSetting({
         id: 'ui-mode',
-        section: 'Interface',
+        tab: 'Interface',
+        section: 'General',
         label: 'Layout',
         description: 'Force mobile/desktop layout, or auto-detect by device.',
         control: { kind: 'enum', options: UI_MODE_OPTIONS },
@@ -53,7 +54,8 @@ export const registerGmtSettings = (): void => {
 
     registerSetting({
         id: 'composition-overlay',
-        section: 'Interface',
+        tab: 'Interface',
+        section: 'General',
         label: 'Composition guide',
         description: 'Overlay a framing guide (rule of thirds, golden ratio, grid, …) on the viewport.',
         control: { kind: 'enum', options: COMPOSITION_OVERLAY_OPTIONS },
@@ -65,7 +67,8 @@ export const registerGmtSettings = (): void => {
 
     registerSetting({
         id: 'first-run-hint-reset',
-        section: 'Interface',
+        tab: 'Interface',
+        section: 'General',
         label: 'First-run hint',
         description: 'Re-show the welcome banner for first-time visitors (takes effect on next reload).',
         control: { kind: 'action', buttonLabel: 'Reset' },
@@ -75,6 +78,7 @@ export const registerGmtSettings = (): void => {
 
     registerSetting({
         id: 'invert-y',
+        tab: 'Interface',
         section: 'Camera',
         label: 'Invert look Y',
         description: 'Invert vertical mouse-look direction in Fly camera mode.',
@@ -87,6 +91,7 @@ export const registerGmtSettings = (): void => {
 
     registerSetting({
         id: 'hardware',
+        tab: 'Hardware',
         section: 'Hardware',
         label: '',
         control: { kind: 'custom', render: () => <HardwarePrefsControls /> },

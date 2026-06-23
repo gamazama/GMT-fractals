@@ -34,7 +34,10 @@ export type SettingControl =
 export interface SettingDescriptor {
     /** Unique id; also the registry key. */
     id: string;
-    /** Group heading the panel buckets this under (e.g. 'General', 'Rendering'). */
+    /** Top-level tab the Settings panel files this under (e.g. 'Interface',
+     *  'Files', 'Hardware'). Defaults to 'Interface' when omitted. */
+    tab?: string;
+    /** Group heading within the tab (e.g. 'Colour', 'Camera', 'Autosave'). */
     section: string;
     label: string;
     description?: string;

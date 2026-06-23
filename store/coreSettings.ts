@@ -21,7 +21,8 @@ export const registerCoreSettings = (): void => {
 
     registerSetting({
         id: 'color-scheme',
-        section: 'Interface',
+        tab: 'Interface',
+        section: 'Colour',
         label: 'Color scheme',
         description: 'Recolor the entire interface. Applies across all GMT apps; fractal output and gradients are unaffected.',
         control: { kind: 'enum', options: COLOR_SCHEMES.map((s) => ({ value: s.value, label: s.label })) },
@@ -33,7 +34,8 @@ export const registerCoreSettings = (): void => {
 
     registerSetting({
         id: 'accent-hue',
-        section: 'Interface',
+        tab: 'Interface',
+        section: 'Colour',
         label: 'Accent colour',
         description: 'Hue of the primary interface accent. Applies on top of any colour scheme.',
         control: { kind: 'custom', render: () => createElement(AccentHueControl) },
@@ -42,7 +44,8 @@ export const registerCoreSettings = (): void => {
 
     registerSetting({
         id: 'secondary-hue',
-        section: 'Interface',
+        tab: 'Interface',
+        section: 'Colour',
         label: 'Secondary accent',
         description: 'Hue of the secondary accent (audio, modulation, Path Tracer).',
         control: { kind: 'custom', render: () => createElement(SecondaryHueControl) },
@@ -51,6 +54,7 @@ export const registerCoreSettings = (): void => {
 
     registerSetting({
         id: 'autosave.enabled',
+        tab: 'Files',
         section: 'Autosave',
         label: 'Autosave to browser',
         description: 'Periodically stash the current scene to local storage as a crash backstop.',
@@ -63,6 +67,7 @@ export const registerCoreSettings = (): void => {
 
     registerSetting({
         id: 'autosave.interval',
+        tab: 'Files',
         section: 'Autosave',
         label: 'Autosave interval',
         description: 'How often to stash the scene, in seconds.',
