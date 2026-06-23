@@ -8,8 +8,9 @@ import { getProxy } from '../../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { getViewportCamera } from '../../../engine/worker/ViewportRefs';
 import Slider from '../../../../components/Slider';
+import { Vector3Input } from '../../../../components/vector-input';
 import EmbeddedColorPicker from '../../../../components/EmbeddedColorPicker';
-import { KeyIcon, KeyStatus, AnchorIcon, UnanchoredIcon, MenuIcon } from '../../../../components/Icons';
+import { KeyIcon, KeyStatus, AnchorIcon, UnanchoredIcon, MenuIcon, DragHandleIcon, CloseIcon } from '../../../../components/Icons';
 import { buildCoreLightMenuItems } from '../utils/lightMenuUtils';
 import { KeyframeButton } from '../../../../components/KeyframeButton';
 import { evaluateTrackValue } from '../../../../utils/timelineUtils';
@@ -134,7 +135,7 @@ export const LightOrb = ({ index, color, active, type, rotation, onClick, onDrag
     );
 };
 
-export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?: () => void }) => {
+export const LightSettingsContent = ({ index, onClose, detached = false, onHandlePointerDown }: { index: number; onClose?: () => void; detached?: boolean; onHandlePointerDown?: (e: React.PointerEvent) => void }) => {
     const light = useEngineStore(s => getLightFromSlice(s.lighting, index));
     const renderMode = useEngineStore(s => s.lighting?.renderMode);
     const ptAreaLights = useEngineStore(s => s.lighting?.ptAreaLights);
@@ -182,7 +183,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
         openContextMenu(r.left, r.bottom + 4, items, ['panel.light']);
     };
 
-    if (!light.visible) return null;
+    if (!detached && !light.visible) return null;
 
     const handleToggleFixed = () => {
          const wasFixed = light.fixed;
@@ -344,14 +345,36 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
     };
 
     return (
-        <Popover width="w-52" onClose={onClose}>
-            <div className="relative space-y-3">
-                <div className="flex items-center justify-between border-b border-line/10 pb-2">
-                    <div className="flex items-center gap-2">
-                        {light.type !== 'Directional' && <KeyframeButton status={posStatus} onClick={handlePositionKey} />}
+            <div className="relative space-y-3" data-light-popup>
+                <div
+                    className={detached
+                        ? "flex items-center justify-between gap-2 px-2 py-1.5 -mx-3 -mt-3 bg-surface-header border-b border-line/10 rounded-t-xl select-none cursor-move touch-none"
+                        : "flex items-center justify-between border-b border-line/10 pb-2"}
+                    // Detached: the whole heading drags the panel (like a normal
+                    // floating panel), minus the action buttons so they still click.
+                    onPointerDown={detached && onHandlePointerDown
+                        ? (e) => { if (!(e.target as HTMLElement).closest('button')) onHandlePointerDown(e); }
+                        : undefined}
+                >
+                    <div className="flex items-center gap-2 min-w-0">
+                        {!detached && onHandlePointerDown && (
+                            // Anchored popup only: the 2-line handle tears the panel
+                            // off. Once detached, the heading itself is the drag grip.
+                            <button
+                                type="button"
+                                onPointerDown={onHandlePointerDown}
+                                onDragStart={(e) => e.preventDefault()}
+                                draggable={false}
+                                className="p-1 -ml-1 rounded text-fg-dim hover:text-fg hover:bg-line/10 transition-colors cursor-grab active:cursor-grabbing select-none touch-none shrink-0"
+                                title="Drag off to detach panel"
+                            >
+                                <DragHandleIcon />
+                            </button>
+                        )}
+                        {!detached && light.type !== 'Directional' && <KeyframeButton status={posStatus} onClick={handlePositionKey} />}
                         <SectionLabel>Light {index + 1}</SectionLabel>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -373,6 +396,16 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                         >
                             <MenuIcon />
                         </button>
+                        {detached && onClose && (
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                                className="p-1 rounded text-fg-dim hover:text-danger hover:bg-danger/10 transition-colors"
+                                title="Close panel"
+                            >
+                                <CloseIcon />
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -552,8 +585,8 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                     
                     <div className="flex items-center justify-between pt-1">
                         <label className="text-xs text-fg-muted font-medium">Cast Shadows</label>
-                        <input 
-                            type="checkbox" 
+                        <input
+                            type="checkbox"
                             checked={light.castShadow}
                             onChange={(e) => {
                                 handleInteractionStart('param');
@@ -564,7 +597,35 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                         />
                     </div>
                 </div>
+
+                {/* Detached panels get a full position editor at the bottom (the
+                    keyframe diamond that lives next to the title in the anchored
+                    popup moves here). Positional lights only — Directional lights
+                    aim via the Heliotrope control above. */}
+                {detached && light.type !== 'Directional' && (
+                    <div className="pt-2 border-t border-line/10" data-help-id="light.pos">
+                        <Vector3Input
+                            label={light.fixed ? 'Offset XYZ' : 'World Position'}
+                            value={new THREE.Vector3(light.position.x, light.position.y, light.position.z)}
+                            onChange={(v) => updateLight({ index, params: { position: { x: v.x, y: v.y, z: v.z } } })}
+                            min={-10} max={10} step={0.01}
+                            interactionMode="param"
+                            trackKeys={[`lighting.light${index}_posX`, `lighting.light${index}_posY`, `lighting.light${index}_posZ`]}
+                            trackLabels={[`Light ${index + 1} Pos X`, `Light ${index + 1} Pos Y`, `Light ${index + 1} Pos Z`]}
+                        />
+                    </div>
+                )}
             </div>
-        </Popover>
     );
 };
+
+/**
+ * Anchored hover popup — the inline Light Studio popover under an orb. Wraps the
+ * shared content in a Popover; grabbing the header drag-handle tears it off into
+ * a free-floating panel (handled by CenterHUD via `onHandlePointerDown`).
+ */
+export const LightSettingsPopup = ({ index, onClose, onHandlePointerDown }: { index: number; onClose?: () => void; onHandlePointerDown?: (e: React.PointerEvent) => void }) => (
+    <Popover width="w-52" onClose={onClose}>
+        <LightSettingsContent index={index} onClose={onClose} onHandlePointerDown={onHandlePointerDown} />
+    </Popover>
+);

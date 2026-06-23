@@ -56,6 +56,41 @@ export const projectToScreen = (
 };
 
 /**
+ * Map a Heliotrope-pad coordinate to a light-direction Euler (YXZ radians).
+ *
+ * Shared by the Heliotrope pad (LightDirectionControl) and the
+ * drag-a-Directional-light-in-from-the-Light-Studio gesture
+ * (useInteractionManager) so the viewport surface aims a sun light with
+ * identical logic to the pad.
+ *
+ * Convention: (nx, ny) are pad coordinates normalised so the origin is the
+ * pad/viewport centre, +x = right, +y = DOWN, and radius 1.0 = 90° deviation
+ * from view-forward (0,0,-1). `isFixed` (headlamp) keeps the direction in view
+ * space; world mode rotates it into world space by `camQuat` (camera view→world).
+ */
+export const padCoordToLightEuler = (
+    nx: number,
+    ny: number,
+    isFixed: boolean,
+    camQuat: THREE.Quaternion
+): { x: number; y: number; z: number } => {
+    const rNorm = Math.sqrt(nx * nx + ny * ny);
+    const phi = Math.atan2(ny, nx);
+    // radius 1.0 → 90° deviation; clamp shy of the 180° flip singularity.
+    const theta = Math.min(rNorm * (Math.PI / 2), Math.PI - 0.001);
+    const sinT = Math.sin(theta);
+    const finalDir = new THREE.Vector3(
+        -sinT * Math.cos(phi),
+        sinT * Math.sin(phi),
+        -Math.cos(theta)
+    );
+    if (!isFixed) finalDir.applyQuaternion(camQuat);
+    const targetQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), finalDir);
+    const euler = new THREE.Euler().setFromQuaternion(targetQ, 'YXZ');
+    return { x: euler.x, y: euler.y, z: euler.z };
+};
+
+/**
  * Project an axis tip to screen-space and return delta from the origin.
  * Delegates to the shared getScreenAxisTip utility.
  */

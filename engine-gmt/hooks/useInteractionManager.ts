@@ -7,6 +7,7 @@ import { getDisplayCamera } from '../engine/worker/ViewportRefs';
 import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 import { INTERACTION_SOURCES } from '../interaction/interactionSources';
+import { padCoordToLightEuler } from '../features/lighting/utils/GizmoMath';
 
 
 /** Record keyframe(s) if the animation system is in recording mode. */
@@ -285,38 +286,56 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                     const cam = getDisplayCamera() as THREE.PerspectiveCamera;
                     const dragIdx = state.lighting?.lights?.findIndex(l => l.id === state.draggedLightIndex) ?? -1;
                     if (cam && dragIdx >= 0) {
-                        const raycaster = new THREE.Raycaster();
-                        raycaster.setFromCamera(new THREE.Vector2(x, y), cam);
-
-                        // Place at half the measured surface distance along the ray
-                        const targetDist = Math.max(0.0002, Math.min(20.0, engine.lastMeasuredDistance * 0.5));
-                        const worldPos = raycaster.ray.direction.clone().multiplyScalar(targetDist).add(raycaster.ray.origin);
-
-                        // Convert world → store space
-                        const so = engine.sceneOffset;
                         const draggedLight = state.lighting.lights[dragIdx];
 
-                        let finalPos: { x: number; y: number; z: number };
-                        if (draggedLight.fixed && draggedLight.visible) {
-                            // Headlamp: world → camera-local
-                            const local = worldPos.clone().sub(cam.position)
-                                .applyQuaternion(cam.quaternion.clone().invert());
-                            finalPos = { x: local.x, y: local.y, z: local.z };
+                        if (draggedLight.type === 'Directional') {
+                            // Directional lights have no position — aim them instead.
+                            // Treat the viewport surface as a giant Heliotrope pad
+                            // (screen centre = view-forward, NDC radius 1.0 = 90°
+                            // deviation) and reuse the pad's exact mapping so the
+                            // drag-in matches the in-popup direction control.
+                            const willBeFixed = draggedLight.visible ? !!draggedLight.fixed : false;
+                            // Pad convention is +y DOWN; NDC y is +up, so negate.
+                            const rotation = padCoordToLightEuler(x, -y, willBeFixed, cam.quaternion);
+
+                            const placementParams: Record<string, any> = { visible: true, castShadow: true, rotation };
+                            if (!draggedLight.visible) placementParams.fixed = false;
+                            state.updateLight({ index: dragIdx, params: placementParams });
+
+                            if (!state.lighting.shadows) state.setLighting({ shadows: true });
                         } else {
-                            // World-anchored: world → absolute store coords
-                            finalPos = {
-                                x: worldPos.x + so.x + (so.xL ?? 0),
-                                y: worldPos.y + so.y + (so.yL ?? 0),
-                                z: worldPos.z + so.z + (so.zL ?? 0)
-                            };
+                            const raycaster = new THREE.Raycaster();
+                            raycaster.setFromCamera(new THREE.Vector2(x, y), cam);
+
+                            // Place at half the measured surface distance along the ray
+                            const targetDist = Math.max(0.0002, Math.min(20.0, engine.lastMeasuredDistance * 0.5));
+                            const worldPos = raycaster.ray.direction.clone().multiplyScalar(targetDist).add(raycaster.ray.origin);
+
+                            // Convert world → store space
+                            const so = engine.sceneOffset;
+
+                            let finalPos: { x: number; y: number; z: number };
+                            if (draggedLight.fixed && draggedLight.visible) {
+                                // Headlamp: world → camera-local
+                                const local = worldPos.clone().sub(cam.position)
+                                    .applyQuaternion(cam.quaternion.clone().invert());
+                                finalPos = { x: local.x, y: local.y, z: local.z };
+                            } else {
+                                // World-anchored: world → absolute store coords
+                                finalPos = {
+                                    x: worldPos.x + so.x + (so.xL ?? 0),
+                                    y: worldPos.y + so.y + (so.yL ?? 0),
+                                    z: worldPos.z + so.z + (so.zL ?? 0)
+                                };
+                            }
+
+                            const placementParams: Record<string, any> = { visible: true, castShadow: true, position: finalPos };
+                            if (!draggedLight.visible) placementParams.fixed = false;
+                            state.updateLight({ index: dragIdx, params: placementParams });
+
+                            if (!state.lighting.shadows) state.setLighting({ shadows: true });
+                            if (!state.showLightGizmo) state.setShowLightGizmo(true);
                         }
-
-                        const placementParams: Record<string, any> = { visible: true, castShadow: true, position: finalPos };
-                        if (!draggedLight.visible) placementParams.fixed = false;
-                        state.updateLight({ index: dragIdx, params: placementParams });
-
-                        if (!state.lighting.shadows) state.setLighting({ shadows: true });
-                        if (!state.showLightGizmo) state.setShowLightGizmo(true);
                     }
                 }
             }

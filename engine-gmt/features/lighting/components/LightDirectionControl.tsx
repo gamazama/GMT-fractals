@@ -10,6 +10,7 @@ import { evaluateTrackValue } from '../../../../utils/timelineUtils';
 import { DraggableNumber } from '../../../../components/Slider';
 import { useInteractionDrag } from '../../../../engine/hooks/useInteractionDrag';
 import { INTERACTION_SOURCES } from '../../../interaction/interactionSources';
+import { padCoordToLightEuler } from '../utils/GizmoMath';
 
 interface LightDirectionControlProps {
     index: number;
@@ -102,52 +103,21 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
     };
 
     // 3. Map Screen Position to World Direction
+    // Normalize coordinates to the unit circle based on ellipse radii (the
+    // stretched phi keeps the handle visually under the mouse), then defer to
+    // the shared pad→direction mapping (also used by the drag-a-Directional-
+    // light-in gesture, so both surfaces aim with identical logic).
     const updateFromPointer = (clientX: number, clientY: number) => {
         if (!containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
-        
+
         const cx = rect.left + w / 2;
         const cy = rect.top + h / 2;
-        
-        const dx = clientX - cx;
-        const dy = clientY - cy; 
-        
-        // Normalize coordinates to Unit Circle based on ellipse radii
-        const nx = dx / rx;
-        const ny = dy / ry;
-        
-        // Calculate Polar in normalized space
-        const rNorm = Math.sqrt(nx*nx + ny*ny);
-        const phi = Math.atan2(ny, nx);
-        
-        // Map Normalized Radius to Deviation Angle (Theta)
-        // rNorm = 1.0 -> Theta = 90 deg
-        const theta = rNorm * (Math.PI / 2);
-        
-        // Clamp to safe range (avoid exact 180 flip singularity)
-        const safeTheta = Math.min(theta, Math.PI - 0.001);
-        
-        // Construct Local Vector (Relative to View)
-        const sinT = Math.sin(safeTheta);
-        // We use the phi calculated from the stretched coordinates to maintain visual alignment under mouse
-        const viewSpaceDir = new THREE.Vector3(
-            -sinT * Math.cos(phi), 
-            sinT * Math.sin(phi),  
-            -Math.cos(safeTheta)   
-        );
-        
-        // Transform to Storage Space
-        let finalDir = viewSpaceDir;
 
-        if (!isFixed) {
-            finalDir.applyQuaternion(getCameraQuat());
-        }
-        
-        // Convert Vector to Euler
-        const targetQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,-1), finalDir);
-        const euler = new THREE.Euler().setFromQuaternion(targetQ, 'YXZ');
-        
-        onChange({ x: euler.x, y: euler.y, z: euler.z });
+        const nx = (clientX - cx) / rx;
+        const ny = (clientY - cy) / ry;
+
+        onChange(padCoordToLightEuler(nx, ny, isFixed, getCameraQuat()));
     };
 
     const handlePos = getHandlePosition();

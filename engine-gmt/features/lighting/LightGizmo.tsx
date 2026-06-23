@@ -6,6 +6,7 @@ const engine = getProxy();
 import { FeatureComponentProps } from '../../../components/registry/ComponentRegistry';
 import * as THREE from 'three';
 import { SingleLightGizmo } from './components/SingleLightGizmo';
+import { LightParams } from '../../types';
 import { getViewportCamera, getViewportCanvas, getDisplayCamera } from '../../engine/worker/ViewportRefs';
 import { normalizeLights } from './index';
 import { INTERACTION_SOURCES } from '../../interaction/interactionSources';
@@ -48,6 +49,7 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
     const lights = useEngineStore(s => s.lighting?.lights || []);
     const updateLight = useEngineStore(s => s.updateLight);
     const setDraggedLight = useEngineStore(s => s.setDraggedLight);
+    const draggedLightId = useEngineStore(s => s.draggedLightIndex);
     const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
 
     // Drag state — kept minimal. No captured offset; we always read engine.sceneOffset
@@ -315,11 +317,28 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
         window.removeEventListener('lostpointercapture', handlePointerUp as any);
     };
 
-    if (!showGizmo) return null;
+    // While a Directional light is being dragged in from the Light Studio, glow
+    // the canvas edge the light is coming FROM. The drop point already aims the
+    // sun (padCoordToLightEuler), so we project the light's "from" direction
+    // (−direction) into view space and place the glow at that screen edge. Shown
+    // regardless of `showGizmo` — it's a drag affordance, not a gizmo.
+    const dirGlow = computeDirectionalDragGlow(draggedLightId, lights);
 
     return (
         <div className="absolute inset-0 pointer-events-none">
-            {lights.map((l, i) => (
+            {dirGlow && (
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                    <div
+                        className="absolute inset-0"
+                        style={{
+                            opacity: dirGlow.opacity,
+                            background: `radial-gradient(circle at ${dirGlow.px}% ${dirGlow.py}%, ${dirGlow.rgb} 0%, ${dirGlow.rgbFade} 9%, transparent 38%)`,
+                            mixBlendMode: 'screen',
+                        }}
+                    />
+                </div>
+            )}
+            {showGizmo && lights.map((l, i) => (
                 <SingleLightGizmo
                     key={l.id || i}
                     index={i}
@@ -339,6 +358,55 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
             ))}
         </div>
     );
+};
+
+const hexToRgbTriple = (hex: string): [number, number, number] => {
+    let h = (hex || '').replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    if (h.length !== 6 || Number.isNaN(n)) return [255, 255, 255];
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
+/**
+ * Edge-glow descriptor for the directional drag affordance, or null when no
+ * Directional light is mid-drag. `px/py` are percent coords on the canvas of
+ * the glow centre (sits on the border the light comes from); `opacity` ramps
+ * with how far off-forward the sun is (≈0 when it would come from behind you).
+ */
+const computeDirectionalDragGlow = (
+    draggedLightId: string | null,
+    lights: LightParams[]
+): { px: number; py: number; opacity: number; rgb: string; rgbFade: string } | null => {
+    if (!draggedLightId) return null;
+    const light = lights.find(l => l.id === draggedLightId);
+    if (!light || light.type !== 'Directional') return null;
+
+    const cam = getDisplayCamera();
+    if (!cam) return null;
+
+    const rot = light.rotation;
+    const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'YXZ'));
+    // World-anchored sun: rotate the world direction into view space. Headlamp
+    // sun is already stored relative to the camera, so leave it.
+    if (!light.fixed) dir.applyQuaternion(cam.quaternion.clone().invert());
+
+    // Screen-plane projection of the "comes-from" direction (−dir). View +y is
+    // up, screen +y is down → screenY = −(−dir.y) = dir.y; screenX = −dir.x.
+    const sx = -dir.x;
+    const sy = dir.y;
+    const mag = Math.hypot(sx, sy); // sin(deviation): 0 = from behind viewer, 1 = side-on
+
+    const [r, g, b] = hexToRgbTriple(light.color);
+    const px = mag < 1e-4 ? 50 : 50 + (sx / mag) * 50;
+    const py = mag < 1e-4 ? 50 : 50 + (sy / mag) * 50;
+    const opacity = Math.min(0.85, mag * 1.15);
+
+    return {
+        px, py, opacity,
+        rgb: `rgba(${r},${g},${b},0.85)`,
+        rgbFade: `rgba(${r},${g},${b},0.35)`,
+    };
 };
 
 export default LightGizmo;

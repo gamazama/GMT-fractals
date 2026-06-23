@@ -8,6 +8,15 @@
  *   - 3-light collapsed view + 8-light expanded 3x3 grid (click to
  *     toggle enable, context-menu for per-light settings, drag to
  *     move a light into 3D space via the SingleLightGizmo overlay).
+ *     Drag placement lives in useInteractionManager: Point/Sphere lights
+ *     land at the ray-hit surface; Directional lights are AIMED by mapping
+ *     the drop point through the Heliotrope pad logic (padCoordToLightEuler).
+ *   - Empty (+) slot: click adds a Point light; dragging it out creates a
+ *     Point light and places it where released (same gesture as an orb).
+ *   - Tear-off panels: the hover popup's 2-line header handle detaches the
+ *     light panel into a free-floating window (`detachedPanels`, FloatingPanel)
+ *     that stays open until its X is clicked — no hover auto-close. Detached
+ *     panels swap the title keyframe diamond for a bottom Vec3 position editor.
  *   - Shadow toggle + ShadowSettingsPopup.
  *   - Light-Gizmo toggle — shows per-light gizmos in the viewport.
  *
@@ -18,8 +27,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useEngineStore } from '../../store/engineStore';
-import { LightOrb, LightSettingsPopup } from '../features/lighting/components/LightControls';
+import { LightOrb, LightSettingsPopup, LightSettingsContent } from '../features/lighting/components/LightControls';
 import ShadowSettingsPopup from '../features/lighting/components/ShadowControls';
+import { FloatingPanel } from '../../components/ui';
+import { Z } from '../../components/ui/zIndex';
 import { ShadowIcon, GizmoIcon, ChevronDown, ChevronUp, PlusIcon } from '../../components/Icons';
 import { getLightFromSlice } from '../features/lighting';
 import { activeLightPopup } from '../features/lighting/utils/GizmoMath';
@@ -41,6 +52,9 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
     const [activeMenuIndex, setActiveMenuIndex] = useState<number | null>(null);
     const [isExpanded, setIsExpanded] = useState(false);
     const [menuBridge, setMenuBridge] = useState<{ x: number; y: number } | null>(null);
+    // Light panels torn off the studio into free-floating windows, keyed by
+    // light id → top-left screen position. Present = detached (no auto-close).
+    const [detachedPanels, setDetachedPanels] = useState<Record<string, { x: number; y: number }>>({});
 
     const lightHoverTimeoutRef = useRef<number | null>(null);
     const menuBridgeTimeoutRef = useRef<number | null>(null);
@@ -195,8 +209,71 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
         }
     };
 
-    const handleAddLight = () => {
+    // Drag-out from an empty (+) slot: create a fresh Point light and hand it to
+    // the placement gesture (useInteractionManager) so it drops where released.
+    // Fired on pointerdown so a plain click (no drag) still just adds the light.
+    const handleAddLightDragStart = () => {
+        vibrate(5);
         state.addLight();
+        const newLights = (useEngineStore.getState() as any).lighting?.lights ?? [];
+        const newLight = newLights[newLights.length - 1];
+        if (newLight) state.setDraggedLight(newLight.id);
+        if (!isMobileMode) {
+            setActiveMenuIndex(null);
+            setHoveredLight(null);
+        }
+    };
+
+    // Tear-off / move drag for a light panel's 2-line handle. Window listeners
+    // (not pointer capture) so the gesture survives the hover-popup → floating-
+    // panel DOM swap — same pattern as the orb drag. Seamless: on tear-off the
+    // floating panel materialises exactly where the hover popup sat, with the
+    // cursor still gripping the handle, then it tracks the pointer.
+    const beginLightPanelDrag = (id: string, e: React.PointerEvent) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX, startY = e.clientY;
+        const existing = detachedPanels[id];
+        let grabDX: number, grabDY: number;
+        if (existing) {
+            grabDX = startX - existing.x;
+            grabDY = startY - existing.y;
+        } else {
+            // Anchor where the hover popup's card sits. The popup root is inset
+            // by the Popover's p-3, so back off 12px to land the floating card
+            // over the same pixels (keeps the handle under the cursor).
+            const popupEl = (e.currentTarget as HTMLElement).closest('[data-light-popup]') as HTMLElement | null;
+            const r = popupEl?.getBoundingClientRect();
+            const left = (r ? r.left : startX - 120) - 12;
+            const top = (r ? r.top : startY - 12) - 12;
+            grabDX = startX - left;
+            grabDY = startY - top;
+            setDetachedPanels(prev => ({ ...prev, [id]: { x: left, y: top } }));
+            if (!isMobileMode) { setActiveMenuIndex(null); setHoveredLight(null); }
+        }
+        const onMove = (ev: PointerEvent) => {
+            setDetachedPanels(prev => (prev[id]
+                ? { ...prev, [id]: { x: ev.clientX - grabDX, y: ev.clientY - grabDY } }
+                : prev));
+        };
+        const onUp = () => {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onUp);
+        };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointercancel', onUp);
+    };
+
+    const closeDetachedPanel = (id: string) => {
+        setDetachedPanels(prev => {
+            if (!prev[id]) return prev;
+            const next = { ...prev };
+            delete next[id];
+            return next;
+        });
     };
 
     const lights = state.lighting?.lights || [];
@@ -221,12 +298,12 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                         onClick={() => handleLightInteraction(i)}
                         onDragStart={() => handleDragStartLogic(i)}
                     />
-                    {state.draggedLightIndex !== l.id && (hoveredLight === i || activeMenuIndex === i) && (
+                    {state.draggedLightIndex !== l.id && !detachedPanels[l.id] && (hoveredLight === i || activeMenuIndex === i) && (
                         <>
                             {/* Transparent bridge covering the Popover's mt-3 gap so
                                 moving from the orb to the popup doesn't fire mouseleave */}
                             <div className="absolute top-full left-1/2 -translate-x-1/2 w-56 h-4 pointer-events-auto" />
-                            <LightSettingsPopup index={i} />
+                            <LightSettingsPopup index={i} onHandlePointerDown={(e) => beginLightPanelDrag(l.id, e)} />
                         </>
                     )}
                 </div>
@@ -237,9 +314,14 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                  return (
                     <div key={i} className="flex justify-center items-center w-8 h-8">
                         <button
-                            onClick={handleAddLight}
-                            className="w-8 h-8 rounded-full border border-line/10 flex items-center justify-center text-fg-dim hover:text-accent-400 hover:border-accent-500/50 hover:bg-line/5 transition-all"
-                            title="Add Light"
+                            onPointerDown={(e) => {
+                                if (e.button === 0) {
+                                    e.stopPropagation();
+                                    handleAddLightDragStart();
+                                }
+                            }}
+                            className="w-8 h-8 rounded-full border border-line/10 flex items-center justify-center text-fg-dim hover:text-accent-400 hover:border-accent-500/50 hover:bg-line/5 transition-all touch-none cursor-grab active:cursor-grabbing"
+                            title="Add Light (or drag to place)"
                         >
                             <PlusIcon />
                         </button>
@@ -354,6 +436,33 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                 </button>
             </div>
         </div>
+
+        {/* Detached light panels — torn off the studio, styled like the docked
+            draggable windows (coloured header bar, drag handle, X). They float
+            free (portalled, on-screen-clamped) and stay open until closed. */}
+        {lights.map((l: any, idx: number) => {
+            const pos = detachedPanels[l.id];
+            if (!pos) return null;
+            return (
+                <FloatingPanel
+                    key={l.id}
+                    z={Z.panel}
+                    position={pos}
+                    onPositionChange={(p) => setDetachedPanels(prev => (prev[l.id] ? { ...prev, [l.id]: p } : prev))}
+                    draggable={false}
+                    showClose={false}
+                    className="glass-panel flex flex-col overflow-hidden rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] w-52"
+                    bodyClassName="p-3 overflow-y-auto overflow-x-hidden custom-scroll flex-1"
+                >
+                    <LightSettingsContent
+                        index={idx}
+                        detached
+                        onHandlePointerDown={(e) => beginLightPanelDrag(l.id, e)}
+                        onClose={() => closeDetachedPanel(l.id)}
+                    />
+                </FloatingPanel>
+            );
+        })}
         </>
     );
 };
