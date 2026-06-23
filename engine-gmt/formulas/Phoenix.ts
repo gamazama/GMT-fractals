@@ -138,7 +138,7 @@ export const Phoenix: FractalDefinition = {
         formula: 'Phoenix',
         features: {
             coreMath: {
-                iterations: 31,
+                iterations: 12,
                 paramA: 2,
                 paramB: 1,
                 paramC: 0,
