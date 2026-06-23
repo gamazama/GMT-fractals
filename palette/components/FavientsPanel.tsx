@@ -674,6 +674,7 @@ export const FavientsPanel: React.FC = () => {
   const renameGroup = useFavientsStore((s) => s.renameGroup);
   const selectedTargetId = useFavientsStore((s) => s.selectedTargetId);
   const setSelectedTarget = useFavientsStore((s) => s.setSelectedTarget);
+  const reloadFromStorage = useFavientsStore((s) => s.reloadFromStorage);
   const targets = useHostTargets();
   const browse = getFavientBrowseAction();
   const studio = getFavientStudioAction();
@@ -814,6 +815,22 @@ export const FavientsPanel: React.FC = () => {
       window.removeEventListener('drop', onEnd);
     };
   }, []);
+
+  // Pick up the shared shelf when returning to this tab. The cross-tab `storage` listener
+  // (favientsStore) already syncs live while the panel is mounted, so this is the belt-and-
+  // braces "check on tab switch": catches anything that landed while this document was
+  // backgrounded / before the listener saw it. reloadFromStorage no-ops when nothing changed.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') reloadFromStorage();
+    };
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [reloadFromStorage]);
   // A favourite drag hides its source by UNMOUNTING it, so dragend/drop may never reach the
   // window — recover via the shared mousemove net (else the swatch stays hidden + avatar stuck).
   useDragEndSafetyNet(dragging, endDrag);

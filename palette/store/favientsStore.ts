@@ -169,6 +169,15 @@ interface FavientsState {
   seedPresets: (entries: { name: string; config: GradientConfig }[], group: string, label: string) => void;
   clear: () => void;
   setSelectedTarget: (id: string | null) => void;
+  /** Re-read the SHARED shelf content (favourites + group labels) from localStorage into
+   *  memory. The collection is same-origin-shared across every GMT app (key `gmt.favients`),
+   *  but each app reads it only at boot — so a favourite saved in another app/tab wouldn't
+   *  show here without a reload. The cross-tab `storage` listener (below) and the panel's
+   *  refresh-on-focus both call this so other apps' edits appear immediately. Only the
+   *  collection syncs; transient per-app prefs (selectedTargetId, lastGroupId) stay local.
+   *  No-ops when the on-disk content matches memory, so it never churns renders or clobbers
+   *  an in-flight local edit with an identical reload. */
+  reloadFromStorage: () => void;
   /** Serialize the whole collection (favourites + group labels) to a portable
    *  JSON string — the backup/share file written by the panel's "Save". */
   exportCollection: () => string;
@@ -313,6 +322,19 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     set({ selectedTargetId: id });
   },
 
+  reloadFromStorage: () => {
+    const favients = loadFavients();
+    const groupLabels = loadGroupLabels();
+    const cur = get();
+    // Cheap content equality — the lists are small (dozens), and our own writes always
+    // saveFavients before set(), so a no-change focus/storage tick compares equal and
+    // skips the set() (no re-render, no clobber of an identical in-flight edit).
+    const same =
+      JSON.stringify(favients) === JSON.stringify(cur.favients) &&
+      JSON.stringify(groupLabels) === JSON.stringify(cur.groupLabels);
+    if (!same) set({ favients, groupLabels });
+  },
+
   exportCollection: () => {
     const { favients, groupLabels } = get();
     const payload: FavientsCollection = { version: COLLECTION_VERSION, favients, groupLabels };
@@ -355,6 +377,24 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     return fresh.length;
   },
 }));
+
+/**
+ * Cross-tab / cross-app live sync. The shelf is same-origin-shared across every GMT app
+ * (app-gmt, fluid-toy, the Gradient Explorer — separate pages, one `gmt.favients` key).
+ * The browser fires `storage` in OTHER documents the instant one writes localStorage, so
+ * a favourite saved in one app appears in every other already-open app/tab immediately —
+ * no page reload. The writing document never receives its own event, so there's no loop,
+ * and `reloadFromStorage` only re-reads (never writes back), so an undo's write-through
+ * propagates here too without bouncing. We re-read on any change to a content key (or a
+ * whole-storage clear, where `key` is null). Module-scope so it lives wherever the store
+ * is imported — i.e. wherever the shelf is mounted.
+ */
+if (typeof window !== 'undefined') {
+  const CONTENT_KEYS = new Set<string>([LS_KEY, LS_GROUPS]);
+  window.addEventListener('storage', (e) => {
+    if (e.key === null || CONTENT_KEYS.has(e.key)) useFavientsStore.getState().reloadFromStorage();
+  });
+}
 
 /**
  * History-provider snapshot for the favients shelf (W5 undo). Registered in
