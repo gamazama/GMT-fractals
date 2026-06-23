@@ -343,8 +343,8 @@ const Histogram: React.FC<HistogramProps> = ({
                 </div>
             </div>
             
-            <div 
-                className={`relative w-full bg-black/60 overflow-hidden select-none border-y border-line/5 transition-colors group/hist ${onRefresh && !autoUpdate ? 'cursor-pointer hover:bg-black/40' : ''}`}
+            <div
+                className={`relative w-full bg-surface-sunken overflow-hidden select-none border-y border-line/5 transition-colors group/hist ${onRefresh && !autoUpdate ? 'cursor-pointer hover:bg-surface-raised' : ''}`}
                 style={{ height }}
                 onClick={onRefresh && !autoUpdate ? onRefresh : undefined}
             >
