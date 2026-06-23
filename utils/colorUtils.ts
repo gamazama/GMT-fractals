@@ -202,8 +202,27 @@ export const getGradientCssString = (input: GradientStop[] | GradientConfig | un
 
   if (!stops || stops.length === 0) return 'linear-gradient(90deg, #000 0%, #fff 100%)';
 
-  const sorted = [...stops].sort((a, b) => a.position - b.position);
+  let sorted = [...stops].sort((a, b) => a.position - b.position);
+  // Decimate an absurdly dense gradient before building the preview string — even
+  // emitting one CSS stop per source stop would blow the budget below for a
+  // thousands-of-stops gradient. The preview is an approximation (the real render
+  // samples a 256-texel texture), so an evenly-spaced subset is visually identical.
+  if (sorted.length > 256) {
+    const n = sorted.length;
+    sorted = Array.from({ length: 256 }, (_, i) => sorted[Math.round((i * (n - 1)) / 255)]);
+  }
   const needsSampling = blend !== 'rgb';
+  // Bound the total CSS stop count. This builds a `linear-gradient(...)` string used
+  // as a backgroundImage for the histogram PREVIEW (the real render uses a 256-texel
+  // texture). A non-RGB blend samples SAMPLES intermediate colours PER SEGMENT, so a
+  // dense gradient (e.g. 152 stops) emitted ~1800 stops — and Firefox's WebRender
+  // rasterises that onto a transformed, semi-transparent compositing layer, which
+  // exhausts and CRASHES the GPU process (Coloring layer 1 mounts this histogram;
+  // the env/sky gradient has no histogram, so it never crashed). A dense gradient's
+  // segments are already tiny, so coarser sampling there is visually identical —
+  // scale samples-per-segment down as the stop count grows. @see components/Histogram.tsx
+  const MAX_SAMPLES = 12;
+  const samplesPerSegment = Math.max(1, Math.min(MAX_SAMPLES, Math.floor(384 / Math.max(1, sorted.length - 1))));
   const parts: string[] = [];
 
   for (let i = 0; i < sorted.length; i++) {
@@ -226,10 +245,12 @@ export const getGradientCssString = (input: GradientStop[] | GradientConfig | un
                parts.push(`${next.color} ${nextPos.toFixed(2)}%`);
           }
           else if (needsSampling) {
-              // Non-RGB blend: approximate by sampling intermediate colors
+              // Non-RGB blend: approximate by sampling intermediate colors. The
+              // sample count is bounded by stop density (samplesPerSegment) so the
+              // whole string stays small enough not to crash the GPU compositor.
               const c1 = hexToRgb(s.color) || {r:0,g:0,b:0};
               const c2 = hexToRgb(next.color) || {r:0,g:0,b:0};
-              const SAMPLES = 12;
+              const SAMPLES = samplesPerSegment;
               for (let j = 1; j < SAMPLES; j++) {
                   let t = j / SAMPLES;
                   if (Math.abs(segmentBias - 0.5) > 0.001) t = applyBias(t, segmentBias);
