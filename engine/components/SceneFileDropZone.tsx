@@ -22,6 +22,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { loadSceneFile } from '../plugins/SceneIO';
 import { showToast } from '../store/toastStore';
+import { Layer } from '../../components/ui';
 
 const SCENE_EXT = /\.(png|gmf|json)$/i;
 const IMAGE_EXT = /\.(jpe?g|webp|gif|bmp)$/i;
@@ -100,11 +101,11 @@ export const SceneFileDropZone: React.FC = () => {
 
     if (!active) return null;
     return (
-        <div className="fixed inset-0 z-[1500] pointer-events-none flex items-center justify-center bg-accent-900/40 backdrop-blur-sm">
+        <Layer tier="osDrop" className="inset-0 pointer-events-none flex items-center justify-center bg-accent-900/40 backdrop-blur-sm">
             <div className="px-8 py-6 rounded-2xl border-2 border-dashed border-accent-400/70 bg-surface text-center shadow-2xl">
                 <div className="text-accent-300 font-bold text-lg">Drop to load scene</div>
                 <div className="text-accent-400/70 text-xs mt-1">.png snapshot · .gmf · .json</div>
             </div>
-        </div>
+        </Layer>
     );
 };

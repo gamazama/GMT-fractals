@@ -14,6 +14,7 @@ import React, { useState } from 'react';
 import { collectBootDiagnostics } from '../engine-gmt/engine/webglDiagnostics';
 import { submitFeedback } from '../engine-gmt/feedback/FeedbackClient';
 import { useClipboardCopy } from '../hooks/useClipboardCopy';
+import { Layer } from '../components/ui';
 
 const diagRequested = (): boolean => {
     try { return new URLSearchParams(window.location.search).has('diag'); }
@@ -39,7 +40,7 @@ export const DiagnosticsOverlay: React.FC = () => {
     const copy = () => clip.copy(report);
 
     return (
-        <div className="fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-surface p-4">
+        <Layer tier="overlay" className="inset-0 flex flex-col items-center justify-center bg-surface p-4">
             <div className="w-[520px] max-w-full bg-surface-sunken/90 border border-accent-500/40 rounded-xl p-5 shadow-[0_0_50px_rgb(var(--accent-glow)/0.15)]">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-accent-400/80 mb-2">Renderer diagnostics</div>
                 <div className="font-mono text-[10px] leading-relaxed text-fg-secondary whitespace-pre-wrap break-words max-h-[55vh] overflow-auto bg-surface-section rounded p-2 border border-line/5">
@@ -70,6 +71,6 @@ export const DiagnosticsOverlay: React.FC = () => {
                     </button>
                 </div>
             </div>
-        </div>
+        </Layer>
     );
 };

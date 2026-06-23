@@ -63,7 +63,9 @@ const PalettePickerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
 
 /** Mounted once (AppGmt). Renders the modal while the overlay store says it's open.
  *  Full-screen takeover with no backdrop-click close (easy to mis-click) — ✕ or Esc.
- *  Modal owns the portal, scope-aware Escape, and stacking (Z.modal). */
+ *  Modal owns the portal, scope-aware Escape, and stacking (Z.takeover — a
+ *  full-screen scrim that covers the dock + base chrome but sits UNDER floating
+ *  panels, so the Favients shelf stays draggable over it). */
 export const PalettePickerOverlayHost: React.FC = () => {
   const open = usePaletteOverlayStore((s) => s.open);
   const setOpen = usePaletteOverlayStore((s) => s.setOpen);
@@ -72,7 +74,7 @@ export const PalettePickerOverlayHost: React.FC = () => {
   return (
     <Modal
       onClose={() => setOpen(false)}
-      z={Z.modal}
+      z={Z.takeover}
       dismissOnBackdrop={false}
       backdropClassName="bg-black/85 backdrop-blur-sm"
       className="p-0"

@@ -11,6 +11,7 @@
 
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { z } from '../../components/ui';
 
 // Keep the preview + tooltip this many px clear of the viewport edges.
 const EDGE_MARGIN = 8;
@@ -27,8 +28,6 @@ export interface GradientHover {
   /** Optional trailing details (facets line, source label…). */
   sub?: React.ReactNode;
 }
-
-const Z_PREVIEW = 9500; // above floating panels / overlays; pointer-events-none so harmless
 
 export const GradientHoverPreview: React.FC<{ hover: GradientHover | null }> = ({ hover }) => {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -86,12 +85,12 @@ export const GradientHoverPreview: React.FC<{ hover: GradientHover | null }> = (
       <canvas
         ref={ref}
         className="fixed pointer-events-none border border-fg rounded-[2px]"
-        style={{ left: hover.ex, top: hover.ey, width: hover.ew, height: hover.eh, zIndex: Z_PREVIEW, boxShadow: '0 0 28px rgba(0,0,0,0.92)' }}
+        style={{ left: hover.ex, top: hover.ey, width: hover.ew, height: hover.eh, zIndex: z('tooltip'), boxShadow: '0 0 28px rgba(0,0,0,0.92)' }}
       />
       <div
         ref={tipRef}
         className="fixed pointer-events-none px-2 py-1 rounded bg-surface/95 border border-line/20 text-[11px] text-fg-secondary shadow-xl whitespace-nowrap"
-        style={{ left: hover.ex, top: hover.ey + hover.eh + 8, zIndex: Z_PREVIEW }}
+        style={{ left: hover.ex, top: hover.ey + hover.eh + 8, zIndex: z('tooltip') }}
       >
         <span className="font-medium">{hover.name}</span>
         {hover.sub != null && <span className="text-fg-dim"> {hover.sub}</span>}

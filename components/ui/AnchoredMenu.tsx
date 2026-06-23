@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDismiss } from '../../hooks/useDismiss';
 import { clampToViewport } from './viewportClamp';
 import { Z } from './zIndex';
+import { getLayerHost } from './layerHost';
 
 /**
  * Trigger-anchored surface (context menu, dropdown, picker popup) placed at a
@@ -88,7 +89,7 @@ export const AnchoredMenu: React.FC<AnchoredMenuProps> = ({
         >
             {children}
         </div>,
-        document.body,
+        getLayerHost(),
     );
 };
 

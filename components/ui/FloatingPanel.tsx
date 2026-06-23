@@ -1,8 +1,10 @@
-import React, { useRef, useState, useEffect, type ReactNode } from 'react';
+import React, { useRef, useState, useEffect, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismiss } from '../../hooks/useDismiss';
 import { CloseIcon, ResizeHandleIcon } from '../Icons';
 import { Z } from './zIndex';
+import { usePanelStack, usePanelStackZ } from './panelStack';
+import { getLayerHost } from './layerHost';
 
 /**
  * Non-blocking floating panel: portalled, `position: fixed`, no backdrop — the
@@ -25,7 +27,18 @@ type Dimensions = { width: number; height: number };
 export interface FloatingPanelProps {
     children: ReactNode;
     open?: boolean;
+    /**
+     * Base z-index for anchored/static mode. In coordinate (draggable) mode the
+     * panel joins the click-to-front stack and its z is computed there instead,
+     * so this is ignored — see {@link usePanelStack}.
+     */
     z?: number;
+    /**
+     * Stable id for the click-to-front stack (draggable mode only). Defaults to
+     * a per-instance auto id; pass a semantic one (e.g. the panel id) for stable
+     * identity across re-renders / devtools.
+     */
+    stackId?: string;
 
     /** Controlled top-left. Omit to anchor via `className` instead. */
     position?: Coords;
@@ -100,6 +113,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     children,
     open = true,
     z = Z.panel,
+    stackId,
     position,
     initialPosition,
     onPositionChange,
@@ -126,6 +140,26 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     const [internalSize, setInternalSize] = useState<Dimensions | undefined>(initialSize);
     const effectivePos = position ?? internalPos;
     const effectiveSize = size ?? internalSize;
+
+    // Click-to-front stacking. A panel joins the stack when it's a coordinate-mode
+    // window (has a position) sitting at the default panel tier — so anchored
+    // popovers (no position) and deliberately-elevated tool/dialog windows (an
+    // explicit higher `z`, e.g. SettingsPanel at Z.modal, RenderDialog at 600)
+    // keep their fixed tier untouched. A participant registers on mount (coming
+    // to the top) and raises on any pointer press inside it; its z is
+    // `Z.panel + rank`. Hooks run unconditionally; `participates` only gates use.
+    const autoStackId = useId();
+    const stackKey = stackId ?? autoStackId;
+    const participates = open && !!effectivePos && z === Z.panel;
+    const stackedZ = usePanelStackZ(stackKey);
+    const raise = usePanelStack((s) => s.raise);
+    const release = usePanelStack((s) => s.release);
+    useEffect(() => {
+        if (!participates) return;
+        raise(stackKey);
+        return () => release(stackKey);
+    }, [participates, stackKey, raise, release]);
+    const effectiveZ = participates ? stackedZ : z;
 
     useDismiss(panelRef, {
         onClose: onClose ?? (() => {}),
@@ -217,8 +251,11 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
         <div
             ref={panelRef}
             className={`fixed ${className}`}
+            // Capture phase: raise even when a child (drag handle, resize grip)
+            // stops propagation on its own pointerdown.
+            onPointerDownCapture={participates ? () => raise(stackKey) : undefined}
             style={{
-                zIndex: z,
+                zIndex: effectiveZ,
                 ...(effectivePos ? { left: effectivePos.x, top: effectivePos.y } : null),
                 ...(effectiveSize ? { width: effectiveSize.width, height: effectiveSize.height } : null),
                 maxHeight: '90vh',
@@ -253,7 +290,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
                 </div>
             )}
         </div>,
-        document.body,
+        getLayerHost(),
     );
 };
 

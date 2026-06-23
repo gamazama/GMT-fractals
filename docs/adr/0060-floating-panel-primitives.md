@@ -4,6 +4,10 @@
 **Status:** Accepted
 **Scope:** `components/ui/*`, `hooks/useDismiss.ts`, `app-gmt/main.tsx`, and the migrated surfaces (DraggableWindow, NewSceneModal, FeedbackPanel, AuthOverlay, AccountPanel, SubmitGalleryModal, BucketRenderResultModal, GradientContextMenu, GraphContextMenu, GlobalContextMenu, LoadFilterPanel)
 
+> **Update 2026-06-23 (ADR-0081; decision unchanged):** the `Z` scale remains the single stacking source, but it is no longer purely static for floating panels. ADR-0081 adds a `takeover` tier (90, below `panel`) for full-screen scrim surfaces that sit under panels, and gives coordinate-mode `FloatingPanel`s at the default `Z.panel` tier a click-to-front order (`Z.panel + rank`, via `components/ui/panelStack.ts`). Surfaces with an explicit non-default `z` (and anchored menus) are unaffected and keep their fixed tier.
+>
+> **Update 2026-06-23 (ADR-0082; decision unchanged):** the flat `Z` const became a domain-tagged `TIERS` table behind a back-compat `Z` Proxy (so every `Z.modal` call site here is untouched), and the three primitives now resolve their portal target through `getLayerHost()` instead of a hard-coded `document.body`. A new `<Layer tier=…>` primitive is the standard way to author *new* floating surfaces (it always portals + tiers); the bespoke `Modal`/`FloatingPanel`/`AnchoredMenu` exceptions noted below still stand. See ADR-0082 + `plans/z-index-system-design.md`.
+
 ## Context
 
 Many UI surfaces hand-rolled their own "floating" chrome — a fixed/absolute box, a z-index, a portal, a viewport clamp, and outside-click / Escape dismissal. The patterns had drifted: some auto-closed, some didn't; z-indices ranged across ~15 ad-hoc values; each surface reimplemented the `setTimeout(0)`-deferred outside-click listener; Escape handling was inconsistent (some capture-phase, some none).

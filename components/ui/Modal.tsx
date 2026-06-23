@@ -2,6 +2,7 @@ import React, { useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismiss } from '../../hooks/useDismiss';
 import { Z } from './zIndex';
+import { getLayerHost } from './layerHost';
 
 /**
  * Blocking modal primitive: full-screen backdrop, centred content, portal to
@@ -70,7 +71,7 @@ export const Modal: React.FC<ModalProps> = ({
         >
             {children}
         </div>,
-        document.body,
+        getLayerHost(),
     );
 };
 

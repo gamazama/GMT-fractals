@@ -12,11 +12,12 @@ import React from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { componentRegistry } from '../../components/registry/ComponentRegistry';
+import { z } from '../../components/ui';
 
 export const DomOverlays: React.FC = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
     return (
-        <div className="absolute inset-0 pointer-events-none z-[20]">
+        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: z('shellViewportOverlay') }}>
             {overlays.map(cfg => {
                 const C = componentRegistry.get(cfg.componentId);
                 if (!C) return null;

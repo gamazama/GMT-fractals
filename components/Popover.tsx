@@ -1,6 +1,7 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useState } from 'react';
 import { mergeRefs, useTutorAnchor } from '../engine/plugins/Tutorial';
+import { Layer } from './ui';
 
 type PopoverAlign = 'center' | 'start' | 'end';
 
@@ -19,37 +20,44 @@ interface PopoverProps {
      *  spacing). 'none' = p-0 — for popovers whose inner rows want flush
      *  alignment with the popover edge. */
     padding?: 'default' | 'none';
+    /** Forwarded to the portalled panel. REQUIRED for hover-driven triggers:
+     *  the panel is a body portal, not a DOM descendant of the trigger wrapper,
+     *  so the wrapper's `onMouseLeave` fires when the cursor reaches the panel.
+     *  Pass the trigger's enter/leave handlers here so hovering the panel keeps
+     *  it open (cancels the close timer). */
+    onMouseEnter?: React.MouseEventHandler<HTMLDivElement>;
+    onMouseLeave?: React.MouseEventHandler<HTMLDivElement>;
 }
 
-const alignClasses: Record<PopoverAlign, { container: string; arrow: string }> = {
-    center: {
-        container: 'left-1/2 -translate-x-1/2',
-        arrow: 'left-1/2 -translate-x-1/2',
-    },
-    start: {
-        container: 'left-0',
-        arrow: 'left-4',
-    },
-    end: {
-        container: 'right-0',
-        arrow: 'right-4',
-    },
+const alignArrow: Record<PopoverAlign, string> = {
+    center: 'left-1/2 -translate-x-1/2',
+    start: 'left-4',
+    end: 'right-4',
 };
 
+const GAP = 12; // mt-3
+
 /**
- * Popover — dropdown panel that appears below its parent (which must be `relative`).
+ * Popover — dropdown panel anchored below its trigger.
  *
- * Usage:
+ * **Portalled** (ADR-0081 / the z-index layer system): the visible panel mounts
+ * to the layer host at the `popover` tier, so it floats ABOVE the floating-panel
+ * band — fixing the long-standing "topbar dropdowns render under panels" trap
+ * (the panel was previously an inline `absolute top-full` child, confined to the
+ * shell's stacking context). An inline 0-size marker stays in place to measure
+ * the trigger rect; the panel is positioned `fixed` below it, preserving the
+ * original `top-full` + align (center/start/end) + arrow geometry exactly.
+ *
+ * Call sites are unchanged — the trigger wrapper may still be `relative`
+ * (now harmless), and the panel keeps appearing right below the trigger:
  * ```tsx
  * <div className="relative">
  *   <button onClick={() => setOpen(!open)}>Settings</button>
- *   {open && (
- *     <Popover width="w-52" onClose={() => setOpen(false)}>
- *       {content}
- *     </Popover>
- *   )}
+ *   {open && <Popover width="w-52" onClose={() => setOpen(false)}>{content}</Popover>}
  * </div>
  * ```
+ *
+ * @see plans/z-index-system-design.md (§2 — the portal-vs-trap rule)
  */
 export const Popover: React.FC<PopoverProps> = ({
     children,
@@ -60,18 +68,44 @@ export const Popover: React.FC<PopoverProps> = ({
     arrow = true,
     tutAnchor,
     padding = 'default',
+    onMouseEnter,
+    onMouseLeave,
 }) => {
-    const ref = useRef<HTMLDivElement>(null);
+    const markerRef = useRef<HTMLSpanElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLElement | null>(null);
     const anchorRef = useTutorAnchor(tutAnchor);
+    const [rect, setRect] = useState<DOMRect | null>(null);
 
+    // Measure the trigger (the marker's parent — the wrapper that held the
+    // popover in flow) before paint, and keep it in sync on resize / scroll.
+    useLayoutEffect(() => {
+        const parent = markerRef.current?.parentElement;
+        if (!parent) return;
+        triggerRef.current = parent;
+        const measure = () => setRect(parent.getBoundingClientRect());
+        measure();
+        window.addEventListener('resize', measure);
+        window.addEventListener('scroll', measure, true); // capture: catch any scrolling ancestor
+        return () => {
+            window.removeEventListener('resize', measure);
+            window.removeEventListener('scroll', measure, true);
+        };
+    }, []);
+
+    // Outside-click closes. Deferred a tick so the opening click doesn't close it.
+    // The panel is a body PORTAL — not a DOM descendant of the trigger wrapper —
+    // so a click is "inside" when it lands in EITHER the portalled panel OR the
+    // trigger wrapper (the latter lets the trigger button toggle without the
+    // outside-click racing it closed/reopened).
     useEffect(() => {
         if (!onClose) return;
         const handler = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) {
-                onClose();
-            }
+            const t = e.target as Node;
+            if (contentRef.current?.contains(t)) return;
+            if (triggerRef.current?.contains(t)) return;
+            onClose();
         };
-        // Delay listener to avoid catching the opening click
         const id = setTimeout(() => document.addEventListener('mousedown', handler), 0);
         return () => {
             clearTimeout(id);
@@ -79,23 +113,49 @@ export const Popover: React.FC<PopoverProps> = ({
         };
     }, [onClose]);
 
-    const a = alignClasses[align];
+    const posStyle: React.CSSProperties = rect
+        ? {
+              top: rect.bottom + GAP,
+              ...(align === 'center'
+                  ? { left: rect.left + rect.width / 2, transform: 'translateX(-50%)' }
+                  : align === 'start'
+                    ? { left: rect.left }
+                    : { left: rect.right, transform: 'translateX(-100%)' }),
+          }
+        : {};
 
     return (
-        <div
-            ref={tutAnchor ? mergeRefs(ref, anchorRef) : ref}
-            // max-h:80dvh + overflow scroll prevents popover content
-            // from exceeding the visible viewport on mobile (the Light
-            // Studio popup in particular has unbounded internal layout).
-            // mobile-scroll gives a thicker scroll surface for touch.
-            className={`absolute top-full mt-3 ${a.container} ${width} max-h-[80dvh] overflow-y-auto mobile-scroll bg-surface border border-line/20 rounded-xl ${padding === 'none' ? 'py-3' : 'p-3'} shadow-2xl z-[70] animate-fade-in ${className}`}
-            onClick={e => e.stopPropagation()}
-        >
-            {arrow && (
-                <div className={`absolute -top-1.5 ${a.arrow} w-3 h-3 bg-surface border-t border-l border-line/20 transform rotate-45`} />
+        <>
+            {/* In-flow marker: anchors the measurement to the original location. */}
+            <span ref={markerRef} className="hidden" aria-hidden />
+            {rect && (
+                <Layer
+                    tier="popover"
+                    ref={mergeRefs(contentRef, tutAnchor ? anchorRef : null)}
+                    // Generic marker so a trigger's own outside-click handler can
+                    // treat clicks inside the (portalled) panel as "inside" via
+                    // `target.closest('[data-popover]')` — the panel is no longer a
+                    // DOM descendant of the trigger wrapper (ADR-0082).
+                    data-popover=""
+                    style={posStyle}
+                    // max-h:80dvh + overflow scroll keeps content inside the viewport on
+                    // mobile (the Light Studio popup has unbounded internal layout).
+                    className={`${width} max-h-[80dvh] overflow-y-auto mobile-scroll bg-surface border border-line/20 rounded-xl ${
+                        padding === 'none' ? 'py-3' : 'p-3'
+                    } shadow-2xl animate-fade-in ${className}`}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseEnter={onMouseEnter}
+                    onMouseLeave={onMouseLeave}
+                >
+                    {arrow && (
+                        <div
+                            className={`absolute -top-1.5 ${alignArrow[align]} w-3 h-3 bg-surface border-t border-l border-line/20 transform rotate-45`}
+                        />
+                    )}
+                    {children}
+                </Layer>
             )}
-            {children}
-        </div>
+        </>
     );
 };
 

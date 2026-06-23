@@ -104,6 +104,11 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent | TouchEvent) => {
             const target = event.target as HTMLElement;
+            // Popovers (shadow panel, per-light settings) now portal to the layer
+            // host, so they are NOT DOM descendants of these refs — a click inside
+            // a portalled popover must still count as "inside" or the first control
+            // press would self-dismiss the menu (ADR-0082 portal-vs-trap gotcha).
+            if (target.closest('[data-popover]')) return;
             if (shadowMenuRef.current && !shadowMenuRef.current.contains(target) && !target.closest('.shadow-toggle-btn')) {
                 setShadowPanelOpen(false);
             }
@@ -303,7 +308,14 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                             {/* Transparent bridge covering the Popover's mt-3 gap so
                                 moving from the orb to the popup doesn't fire mouseleave */}
                             <div className="absolute top-full left-1/2 -translate-x-1/2 w-56 h-4 pointer-events-auto" />
-                            <LightSettingsPopup index={i} onHandlePointerDown={(e) => beginLightPanelDrag(l.id, e)} />
+                            <LightSettingsPopup
+                                index={i}
+                                onHandlePointerDown={(e) => beginLightPanelDrag(l.id, e)}
+                                // The popup portals out of this wrapper, so hovering it
+                                // must re-fire the orb's enter/leave to keep it open.
+                                onMouseEnter={(e) => handleLightMouseEnter(i, e)}
+                                onMouseLeave={handleLightMouseLeave}
+                            />
                         </>
                     )}
                 </div>

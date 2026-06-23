@@ -14,6 +14,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import { Layer } from '../components/ui';
 
 export const RenderContextLostOverlay: React.FC = () => {
     const [reason, setReason] = useState<string | null>(null);
@@ -28,8 +29,9 @@ export const RenderContextLostOverlay: React.FC = () => {
     if (!reason) return null;
 
     return (
-        <div
-            className="fixed inset-0 z-[100000] flex flex-col items-center justify-center bg-surface text-fg text-center px-8 select-none"
+        <Layer
+            tier="emergency"
+            className="inset-0 flex flex-col items-center justify-center bg-surface text-fg text-center px-8 select-none"
             style={{
                 paddingTop: 'env(safe-area-inset-top)',
                 paddingBottom: 'env(safe-area-inset-bottom)',
@@ -52,6 +54,6 @@ export const RenderContextLostOverlay: React.FC = () => {
             >
                 Reload
             </button>
-        </div>
+        </Layer>
     );
 };

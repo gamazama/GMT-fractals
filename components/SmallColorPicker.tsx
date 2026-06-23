@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import { useHelpContextMenu } from '../hooks/useHelpContextMenu';
+import { z } from './ui';
 
 interface SmallColorPickerProps {
     color: string;
@@ -66,8 +67,8 @@ const PickerPortal = ({
 
     return createPortal(
         <div 
-            className="picker-popup fixed z-[9999] bg-surface border border-line/20 p-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-64 animate-fade-in"
-            style={{ left: coords.x, top: coords.y }}
+            className="picker-popup fixed bg-surface border border-line/20 p-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-64 animate-fade-in"
+            style={{ left: coords.x, top: coords.y, zIndex: z('contextMenu') }}
             onMouseDown={(e) => e.stopPropagation()} 
         >
             {label && <div className="text-[10px] font-bold text-fg-dim mb-2 text-center">{label}</div>}

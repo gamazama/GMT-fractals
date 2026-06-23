@@ -15,10 +15,11 @@ import React, { useEffect, useReducer, useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanding, clearLanding, useCancel, clearCancel, type Landing, type Cancel } from '../palette/store/dragVisual';
 import { paintRampToCanvas } from '../palette/core/rampCanvas';
+import { z } from '../components/ui';
 
 const LANDING_MS = 240;
 // Matches the drag avatar's z (above the Picker hover preview) for a seamless hand-off.
-const LANDING_Z = 9600;
+const LANDING_Z = z('dragGhost');
 // The cancel wipe runs longer than a land — a deliberate, heavily-eased dismissal.
 const CANCEL_MS = 340;
 

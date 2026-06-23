@@ -21,6 +21,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import DraggableWindow from '../../../components/DraggableWindow';
+import { z } from '../../../components/ui';
 import { useAnimationStore } from '../../../store/animationStore';
 import { VIDEO_CONFIG } from '../../../data/constants';
 import { canEncodeFormat } from '../../export/videoEncoder';
@@ -250,7 +251,7 @@ function RenderDialogShell<TExtra>(
             size={winSize}
             onSizeChange={setWinSize}
             disableClose={isRendering}
-            zIndex={600}
+            zIndex={z('tool')}
         >
             {isRendering ? (
                 <RenderingView

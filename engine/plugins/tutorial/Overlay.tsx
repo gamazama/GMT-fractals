@@ -11,6 +11,7 @@ import { tutorAnchors } from './anchors';
 import { onKeyPressed } from './triggers';
 import { stepRenderers } from './stepRenderers';
 import { TutorialHighlight } from './Highlight';
+import { Layer } from '../../../components/ui';
 import type { TutorialStep, TutorialLesson, PositionConfig } from './types';
 import { getLesson } from './lessons';
 
@@ -224,16 +225,20 @@ const TutorialOverlayInner: React.FC = () => {
     const offsetX = displayedStep.position?.offset?.x ?? 0;
     const offsetY = displayedStep.position?.offset?.y ?? 0;
 
+    // zIndex is owned by the <Layer tier="tooltip"> below — the card portals so
+    // it shares a stacking context with TutorialHighlight (both body-level),
+    // fixing the mobile split where an in-flow card diverged from the portalled
+    // ring inside the sticky shell.
     const posStyle: React.CSSProperties = pos
         ? {
-            position: 'fixed', left: pos.left + offsetX, top: pos.top + offsetY,
-            zIndex: 9998, pointerEvents: 'auto', width: PANEL_WIDTH,
+            left: pos.left + offsetX, top: pos.top + offsetY,
+            pointerEvents: 'auto', width: PANEL_WIDTH,
             transition: `left ${TRANSITION_MS}ms ease, top ${TRANSITION_MS}ms ease, opacity ${TRANSITION_MS}ms ease`,
             opacity: visible ? 1 : 0,
         }
         : {
-            position: 'fixed', bottom: 60, left: '50%', transform: 'translateX(-50%)',
-            zIndex: 9998, pointerEvents: 'auto', maxWidth: PANEL_WIDTH, width: '90vw',
+            bottom: 60, left: '50%', transform: 'translateX(-50%)',
+            pointerEvents: 'auto', maxWidth: PANEL_WIDTH, width: '90vw',
             transition: `opacity ${TRANSITION_MS}ms ease`, opacity: visible ? 1 : 0,
         };
 
@@ -253,7 +258,7 @@ const TutorialOverlayInner: React.FC = () => {
             {displayedStep.highlightTargets && displayedStep.highlightTargets.length > 0 && (
                 <TutorialHighlight targets={displayedStep.highlightTargets} />
             )}
-            <div style={posStyle}>
+            <Layer tier="tooltip" style={posStyle}>
                 <div style={{
                     background: 'rgb(var(--surface) / 0.88)', borderRadius: 8,
                     border: '1px solid rgb(var(--line) / 0.15)', padding: '10px 14px',
@@ -312,7 +317,7 @@ const TutorialOverlayInner: React.FC = () => {
                         )}
                     </div>
                 </div>
-            </div>
+            </Layer>
         </>
     );
 };

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Modal, Z, stopNavKeys } from '../../components/ui';
+import { Modal, Z, z, stopNavKeys } from '../../components/ui';
 import { CloseIcon } from '../../components/Icons';
 import { GhostButton } from '../../components/GhostButton';
 import { useEngineStore } from '../../store/engineStore';
@@ -475,7 +475,8 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                 everything else and lets the modal stay open behind it. */}
             {previewExpanded && previewUrl && createPortal(
                 <div
-                    className="fixed inset-0 z-[2200] bg-surface backdrop-blur flex items-center justify-center cursor-zoom-out"
+                    className="fixed inset-0 bg-surface backdrop-blur flex items-center justify-center cursor-zoom-out"
+                    style={{ zIndex: z('overlayResult') }}
                     onClick={() => setPreviewExpanded(false)}
                     onKeyDown={(e) => { if (e.key === 'Escape') setPreviewExpanded(false); }}
                 >

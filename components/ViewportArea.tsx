@@ -7,6 +7,7 @@ import { AnimationSystem } from '../engine/animation/AnimationSystem';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from './registry/ComponentRegistry';
+import { z } from './ui';
 import { useMobileLayout } from '../hooks/useMobileLayout';
 import { FixedResolutionControls } from '../engine/plugins/viewport/FixedResolutionControls';
 import { CompositionOverlay } from './viewport/CompositionOverlay';
@@ -50,7 +51,7 @@ const DomOverlays: React.FC = () => {
     const actions = useEngineStore();
 
     return (
-        <div className="absolute inset-0 pointer-events-none z-[20]">
+        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: z('shellViewportOverlay') }}>
             {overlays.map(config => {
                 const Component = componentRegistry.get(config.componentId);
                 const featureId = config.id;

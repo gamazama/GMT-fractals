@@ -67,7 +67,10 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
     if (isManaged && (!panel || !panel.isOpen || panel.location !== 'float' || !showIfVisible)) return null;
 
     const displayTitle = title || (panel ? panel.id : 'Window');
-    const displayZ = zIndex ?? (isManaged ? Z.panel : Z.panel + 100);
+    // Base tier only — FloatingPanel's click-to-front stack computes the actual
+    // z from this base, so the old "standalone sits above managed" offset is
+    // superseded by last-clicked-wins ordering.
+    const displayZ = zIndex ?? Z.panel;
 
     const handleClose = () => {
         if (onClose) onClose();
@@ -86,6 +89,7 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
     return (
         <FloatingPanel
             z={displayZ}
+            stackId={id}
             position={isManaged ? (panel?.floatPos ?? { x: 100, y: 100 }) : position}
             initialPosition={initialPos ?? { x: 100, y: 100 }}
             onPositionChange={

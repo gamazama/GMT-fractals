@@ -25,8 +25,8 @@ import { HudHost } from '../engine/plugins/Hud';
 import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
-import { Z } from '../components/ui/zIndex';
 import { PanelRouter } from '../components/PanelRouter';
+import { z } from '../components/ui';
 import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
@@ -98,7 +98,7 @@ const DomOverlays: React.FC = () => {
         [],
     );
     return (
-        <div className="absolute inset-0 pointer-events-none z-[20]">
+        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: z('shellViewportOverlay') }}>
             {overlays.map(config => <OverlayHost key={config.id} config={config} />)}
         </div>
     );
@@ -254,9 +254,10 @@ export const AppGmt: React.FC = () => {
 
                 {!isBroadcastMode && floatingPanels.map((p) => (
                     <BenchProfiler key={p.id} id={`FloatingPanel:${p.id}`}>
-                        {/* Favients floats ABOVE the Palettes overlay (Z.modal) so the user can
-                            drag picker swatches onto it while browsing. */}
-                        <DraggableWindow id={p.id} title={p.id} zIndex={p.id === 'Favients' ? Z.modal + 50 : undefined}>
+                        {/* The Palettes overlay sits at Z.takeover (under floating panels),
+                            so Favients no longer needs a special elevation to stay draggable
+                            over it — every floating panel does, via the click-to-front stack. */}
+                        <DraggableWindow id={p.id} title={p.id}>
                             <PanelRouter
                                 activeTab={p.id as PanelId}
                                 state={useEngineStore.getState()}

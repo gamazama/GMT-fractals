@@ -4,6 +4,16 @@
 **Origin:** Forked from stable at `h:/GMT/workspace-gmt/stable/` (was `h:/GMT/gmt-0.8.5/`, kept as `upstream` remote)
 **Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors. **Mobile mode shipped 2026-05-01.** **True Area Lights shipped 2026-05-03.** **PT reflection quality (env MIS + IS + Sobol) shipped 2026-05-05** — see entry below.
 
+**📋 2026-06-23 — Engine-level z-index/stacking system (branch `feat/zindex-layer-system`):**
+
+Holistic z-index overhaul across all six apps. Census found 300 surfaces + 51 stacking traps; the governing fact is two non-competing domains — body **portals** order globally, in-flow **shell** elements (under `MobileViewportShell`/`fixed inset-0` roots) are trapped and can't beat any portal regardless of number. Shipped (see ADR-0082 + `plans/z-index-system-design.md`):
+- **Foundation:** `components/ui/zIndex.ts` is now a domain-tagged `TIERS` table behind a back-compat `Z` Proxy (zero call-site churn) + `z(tier, rank)` + `registerTiers`. New: `layerStack.ts` (per-tier click-to-front; `panelStack` = the `'panel'` instance), `layerHost.ts` (`get/setLayerHost`), `Layer.tsx` (`forwardRef` portal primitive — the un-trappable way to author a floating surface). `Modal`/`AnchoredMenu`/`FloatingPanel` portal through `getLayerHost()`.
+- **The headline fix:** `Popover` now portals (measures an in-flow marker's parent rect, renders `fixed` at the `popover` tier) → **topbar dropdowns finally render above floating panels**; call sites unchanged.
+- **Portalled out of the shell:** CompilingIndicator, LandscapeGate, SceneFileDropZone, DiagnosticsOverlay, RenderContextLostOverlay, tutorial card (+ highlight ring), GE GradientSourcePicker/EasingPicker, DemoExplainer. Tokenized: tool windows, context menus, gallery zoom, GE drag avatars/previews, the four DomOverlays.
+- **Guards:** `npm run test:zindex` (overlap + invariants), `npm run check:zindex` (ratchet — fails on new raw `z-[≥100]`).
+- **Gates green:** typecheck, test:zindex, check:zindex, smoke:boot, smoke:ui-primitives, smoke:help-menu, smoke:pause-controls. **Needs the user's visual pass** (checklist in design doc §7) since Phase-3 surfaces moved stacking domains.
+- **Deferred (tracked):** DomOverlays structural dedupe; ~7 surfaces still `createPortal(_, document.body)` directly + CenterHUD/FormulaPicker raw portal-z (allowlisted, correct today).
+
 **📋 2026-05-20 — Doc audit + documentation migration:**
 
 Three-phase audit (Phase 1: 28 subsystem surveys + 9 docs-existing summaries; Phase 1.5: 120 open-question follow-ups, 119 answered; Phase 2: 35 module docs authored across two parallel sessions) followed by a same-day migration after observing the docs were trending toward "write-only" state-shaped files.

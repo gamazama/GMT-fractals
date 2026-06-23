@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import DraggableWindow from './DraggableWindow';
+import { z } from './ui';
 import { useHelpTopics } from '../data/help/useHelpTopics';
 import { HelpSection } from '../types/help';
 import { ChevronDown, ChevronRight } from './Icons';
@@ -436,7 +437,7 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
             onClose={onClose} 
             initialPos={{ x: 100, y: 100 }} 
             initialSize={{ width: 700, height: 600 }}
-            zIndex={600}
+            zIndex={z('tool')}
         >
             <div className="flex h-full -m-3">
                 {/* Sidebar */}

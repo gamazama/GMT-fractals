@@ -23,7 +23,7 @@ import { DropTargetLayer } from '../components/DropTargetLayer';
 import { DropTargetTile } from '../components/DropTarget';
 import { useDragInFlight } from '../hooks/useDragInFlight';
 import { useEngineStore } from '../store/engineStore';
-import { Z } from '../components/ui/zIndex';
+import { z } from '../components/ui/zIndex';
 import { useActiveHeroSelection, useHeroOptionsOpen, closeHeroOptions } from '../palette/store/heroSelection';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
 import { renderStopsToBuffer } from '../palette/core/gmtGradient';
@@ -63,8 +63,8 @@ const intermediateWell = (
 /** Cursor-following ramp dimensions (the avatar's settled size). */
 const AVATAR_W = 148;
 const AVATAR_H = 30;
-// Above the Picker's hover-zoom preview (z 9500) so the morph is never covered by it.
-const AVATAR_Z = 9600;
+// Above the Picker's hover-zoom preview (tooltip tier) so the morph is never covered by it.
+const AVATAR_Z = z('dragGhost');
 
 /** The avatar's floating box for a cursor point — the single source for the +14/-14 offset,
  *  shared by the landing `from` (handleSent) and the cancel `at` (teardown). */
@@ -400,7 +400,7 @@ export const GradientDropLayer: React.FC = () => {
                 // Collapsed dock → a NAMED well next to the edge icon (shows the page name);
                 // expanded → a label-less box over the tab (the tab's own text reads through).
                 return createPortal(
-                    <div key={`intermediate:${it.id}`} className="fixed" style={{ ...w, zIndex: Z.overlay }}>
+                    <div key={`intermediate:${it.id}`} className="fixed" style={{ ...w, zIndex: z('overlay') }}>
                         <DropTargetTile
                             label={it.label ?? it.id}
                             fill

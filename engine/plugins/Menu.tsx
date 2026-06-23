@@ -46,7 +46,7 @@
  * call menu.register() when they want their first menu.
  */
 
-import React, { useSyncExternalStore, useCallback, useState, useRef, useEffect } from 'react';
+import React, { useSyncExternalStore, useCallback, useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { topbar, TopBarSlot } from './TopBar';
 import { useEngineStore } from '../../store/engineStore';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
@@ -54,6 +54,7 @@ import { CloseIcon } from '../../components/Icons';
 import { ChevronDown } from '../../components/Icons2';
 import { useDismiss } from '../../hooks/useDismiss';
 import { useRenderPause } from '../../hooks/useRenderPause';
+import { Layer } from '../../components/ui';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -324,16 +325,35 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
     const def = _menus.get(menuId);
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
     const close = useCallback(() => setOpen(false), []);
 
     // Outside-click dismissal — popover path only (desktop, or mobile when no
-    // MobileMenuHost is mounted). The side-panel path dismisses via
-    // <MobileMenuHost> (outside-tap + X button).
-    useDismiss(rootRef, { onClose: close, enabled: open && !useSidePanel, escape: false });
+    // MobileMenuHost is mounted). Both the trigger anchor AND the portalled
+    // dropdown count as "inside" (the dropdown is portalled out of rootRef, so
+    // without listing it a click on a toggle row would self-dismiss). The
+    // side-panel path dismisses via <MobileMenuHost> (outside-tap + X button).
+    useDismiss([rootRef, dropdownRef], { onClose: close, enabled: open && !useSidePanel, escape: false });
 
     // If a side panel takes over while a popover was open, close the
     // local state so re-toggling back doesn't resurface a stale popover.
     useEffect(() => { if (useSidePanel && open) close(); }, [useSidePanel, open, close]);
+
+    // Measure the trigger so the portalled dropdown can position `fixed` below
+    // it (the dropdown leaves rootRef's stacking context to clear the floating
+    // panels — a shell-trapped `absolute` dropdown can't, no matter its z).
+    useLayoutEffect(() => {
+        if (!open || useSidePanel) { setTriggerRect(null); return; }
+        const measure = () => { if (rootRef.current) setTriggerRect(rootRef.current.getBoundingClientRect()); };
+        measure();
+        window.addEventListener('resize', measure);
+        window.addEventListener('scroll', measure, true);
+        return () => {
+            window.removeEventListener('resize', measure);
+            window.removeEventListener('scroll', measure, true);
+        };
+    }, [open, useSidePanel]);
 
     // Side-panel route: button toggles the global state, no popover.
     // Popover route (desktop, or mobile without a host): local state.
@@ -372,10 +392,22 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
                     across Camera / System / File / Help / etc. */}
                 <ChevronDown size={10} className="opacity-60" />
             </button>
-            {/* Popover path — desktop, or mobile when no MobileMenuHost. */}
-            {open && !useSidePanel && (
-                <div
-                    className={`absolute top-full ${def.align === 'end' ? 'right-0' : def.align === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0'} mt-2 ${def.width || 'w-56'} bg-surface border border-line/15 rounded-lg shadow-2xl z-50 p-1`}
+            {/* Popover path — desktop, or mobile when no MobileMenuHost. Portalled
+                at the `popover` tier so it floats above the floating panels (an
+                inline `absolute` dropdown is trapped in the shell — see ADR-0082). */}
+            {open && !useSidePanel && triggerRect && (
+                <Layer
+                    ref={dropdownRef}
+                    tier="popover"
+                    className={`${def.width || 'w-56'} bg-surface border border-line/15 rounded-lg shadow-2xl p-1`}
+                    style={{
+                        top: triggerRect.bottom + 8, // mt-2
+                        ...(def.align === 'end'
+                            ? { left: triggerRect.right, transform: 'translateX(-100%)' }
+                            : def.align === 'center'
+                              ? { left: triggerRect.left + triggerRect.width / 2, transform: 'translateX(-50%)' }
+                              : { left: triggerRect.left }),
+                    }}
                     onClick={(e) => e.stopPropagation()}
                 >
                     {items.map((item) => (
@@ -384,7 +416,7 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
                     {items.length === 0 && (
                         <div className="px-3 py-2 text-[10px] text-fg-faint italic">(empty)</div>
                     )}
-                </div>
+                </Layer>
             )}
         </div>
     );

@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Layer } from './ui';
 import { SpinnerIcon } from './Icons';
 import { compileGate } from '../store/CompileGate';
 import { useCompileProgress, selectProgress } from '../store/CompileProgressStore';
@@ -91,9 +92,10 @@ export const CompilingIndicator: React.FC = () => {
     const isBackgroundCompile = displayMessage.includes('Lighting');
 
     return (
+        <Layer tier="compileProgress" className="inset-0 pointer-events-none">
         <div
             ref={pingRef}
-            className={`fixed top-16 left-1/2 -translate-x-1/2 z-[99999] pointer-events-none ${isBackgroundCompile ? 'opacity-60' : 'opacity-100'}`}
+            className={`absolute top-16 left-1/2 -translate-x-1/2 pointer-events-none ${isBackgroundCompile ? 'opacity-60' : 'opacity-100'}`}
         >
             <div className="bg-surface/80 backdrop-blur-sm border border-line/10 px-3 py-1.5 rounded-full flex flex-col items-center gap-1.5 shadow-lg min-w-[200px]">
                 <div className="flex items-center gap-2">
@@ -120,5 +122,6 @@ export const CompilingIndicator: React.FC = () => {
                 </div>
             </div>
         </div>
+        </Layer>
     );
 };

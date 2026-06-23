@@ -5,7 +5,7 @@
 // drift between the README and reality.
 
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { Layer } from '../components/ui';
 import bootSrc        from '../index.tsx?raw';
 import featureSrc     from './DemoFeature.ts?raw';
 import registerSrc    from './registerFeatures.ts?raw';
@@ -92,9 +92,10 @@ const SourceModal: React.FC<SourceModalProps> = ({ onClose }) => {
         return () => window.removeEventListener('keydown', onKey);
     }, [onClose]);
 
-    return createPortal(
-        <div
-            className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-6"
+    return (
+        <Layer
+            tier="overlay"
+            className="inset-0 flex items-center justify-center bg-black/70 p-6"
             onClick={onClose}
         >
             <div
@@ -146,7 +147,6 @@ const SourceModal: React.FC<SourceModalProps> = ({ onClose }) => {
                     </pre>
                 </div>
             </div>
-        </div>,
-        document.body,
+        </Layer>
     );
 };

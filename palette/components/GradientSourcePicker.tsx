@@ -22,6 +22,7 @@ import { buildPresetCatalog, registerCustomRamp, type CatalogEntry } from '../co
 import { renderStopsToRamp, renderStopsToBuffer } from '../core/gmtGradient';
 import { paintRampToCanvas } from '../core/rampCanvas';
 import { useFavientsStore } from '../store/favientsStore';
+import { Layer } from '../../components/ui';
 
 const MAX_ROWS = 300; // cap until the 11k catalog gets a virtualized list
 
@@ -129,10 +130,12 @@ export const GradientSourcePicker: React.FC<GradientSourcePickerProps> = ({ titl
   };
 
   return (
-    // Viewport-fixed centred modal: never off-screen, never clipped by the source list's
-    // scroll container. Click the backdrop (or Esc / ✕) to dismiss.
-    <div
-      className="fixed inset-0 z-[60] flex items-start justify-center pt-[10vh] bg-black/40"
+    // Portalled modal (layer host, `modal` tier): never off-screen, never clipped
+    // by the source list's scroll container, never trapped in the GE shell.
+    // Click the backdrop (or Esc / ✕) to dismiss.
+    <Layer
+      tier="modal"
+      className="inset-0 flex items-start justify-center pt-[10vh] bg-black/40"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -179,7 +182,7 @@ export const GradientSourcePicker: React.FC<GradientSourcePickerProps> = ({ titl
         ))}
       </div>
       </div>
-    </div>
+    </Layer>
   );
 };
 

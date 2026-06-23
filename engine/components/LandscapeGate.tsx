@@ -11,6 +11,7 @@
 import React from 'react';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { SmartphoneRotateIcon } from '../../components/Icons';
+import { Layer } from '../../components/ui';
 
 /**
  * @invariant Consumes raw `isDeviceMobile`, NOT the preference-aware
@@ -27,10 +28,10 @@ export const LandscapeGate: React.FC = () => {
     if (!isDeviceMobile || !isPortrait) return null;
 
     return (
-        <div className="fixed inset-0 z-[9999] bg-surface flex flex-col items-center justify-center p-10 text-center text-fg">
+        <Layer tier="deviceGate" className="inset-0 bg-surface flex flex-col items-center justify-center p-10 text-center text-fg">
             <div className="text-accent-400 mb-6 animate-bounce"><SmartphoneRotateIcon /></div>
             <h2 className="text-2xl font-bold tracking-tight mb-2">Landscape Recommended</h2>
             <p className="text-fg-dim text-sm font-mono">Rotate device to access controls.</p>
-        </div>
+        </Layer>
     );
 };

@@ -7,6 +7,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { tutorAnchors } from './anchors';
+import { z } from '../../../components/ui';
 
 interface HighlightRect {
     key: string;
@@ -85,7 +86,7 @@ export const TutorialHighlight: React.FC<TutorialHighlightProps> = ({ targets, f
                         border: `2.5px solid ${flash ? 'rgb(var(--accent-300) / 1)' : 'rgb(var(--accent-300) / 0.85)'}`,
                         borderRadius: '6px',
                         pointerEvents: 'none',
-                        zIndex: 9999,
+                        zIndex: z('tooltip'),
                         animation: flash
                             ? 'tutorial-flash 0.6s ease-out forwards'
                             : 'tutorial-pulse 2s ease-in-out infinite',

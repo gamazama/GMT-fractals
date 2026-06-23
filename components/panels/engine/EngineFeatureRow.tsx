@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { DraggableNumber } from '../../Slider';
+import { z } from '../../ui';
 
 export type EngineStatus = 'synced' | 'pending' | 'runtime' | 'overridden';
 
@@ -178,11 +179,12 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
             {/* Portal Tooltip */}
             {showTooltip && createPortal(
                 <div
-                    className="fixed z-[9999] pointer-events-none flex items-center animate-fade-in"
+                    className="fixed pointer-events-none flex items-center animate-fade-in"
                     style={{
                         top: tooltipPos.top,
                         [tooltipPos.side === 'left' ? 'left' : 'right']: tooltipPos.x,
-                        transform: 'translateY(-50%)'
+                        transform: 'translateY(-50%)',
+                        zIndex: z('tooltip')
                     }}
                 >
                     <div className="bg-surface-raised text-fg text-[9px] px-2 py-1 rounded border border-line/20 shadow-xl whitespace-nowrap">

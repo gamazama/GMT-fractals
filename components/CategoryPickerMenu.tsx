@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight } from './Icons';
+import { z } from './ui';
 
 /**
  * CategoryPickerMenu — Generic two-column portal dropdown.
@@ -115,13 +116,14 @@ export const CategoryPickerMenu: React.FC<CategoryPickerMenuProps> = ({
     return createPortal(
         <div
             ref={menuRef}
-            className="fixed z-[9999] flex text-xs font-mono"
+            className="fixed flex text-xs font-mono"
             style={{
                 left: layout.x,
                 top: layout.y,
                 opacity: layout.opacity,
                 transition: 'opacity 0.05s ease-out',
                 flexDirection: layout.flip ? 'row-reverse' : 'row',
+                zIndex: z('contextMenu'),
             }}
         >
             {/* Level 1: Categories */}

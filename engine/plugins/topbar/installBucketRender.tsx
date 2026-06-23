@@ -70,6 +70,11 @@ export const installBucketRender = (options: InstallBucketRenderOptions): void =
             if (!open) return;
             const onClick = (e: MouseEvent) => {
                 if (rootRef.current && rootRef.current.contains(e.target as Node)) return;
+                // The panel is a Popover — it portals to the layer host, so its
+                // content is NOT a descendant of rootRef. Without this, mousedown on
+                // a setup button reads as "outside" and closes the panel before the
+                // click lands (buttons dead, click falls through to the canvas). See ADR-0082.
+                if ((e.target as HTMLElement).closest?.('[data-popover]')) return;
                 // Don't dismiss during active bucket render, while a preview region
                 // is active (user needs the panel open to adjust params live), or
                 // during preview-pick mode (the canvas click that picks shouldn't

@@ -18,6 +18,7 @@ import { useEngineStore } from '../store/engineStore';
 import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
+import { z } from '../components/ui';
 import { PanelRouter } from '../components/PanelRouter';
 import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
@@ -35,7 +36,7 @@ const DomOverlays: React.FC = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
     const state = useEngineStore();
     return (
-        <div className="absolute inset-0 pointer-events-none z-[20]">
+        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: z('shellViewportOverlay') }}>
             {overlays.map(cfg => {
                 const C = componentRegistry.get(cfg.componentId);
                 const slice = (state as any)[cfg.id];

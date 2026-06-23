@@ -7,6 +7,7 @@ import { HelpIcon, CheckIcon, ArrowIcon, ChevronRight } from './Icons';
 import Slider from './Slider';
 import { useDismiss } from '../hooks/useDismiss';
 import { useRenderPause } from '../hooks/useRenderPause';
+import { z } from './ui';
 
 interface GlobalContextMenuProps {
     x: number;
@@ -100,8 +101,8 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
     const content = (
         <div 
             ref={menuRef}
-            className="fractal-context-menu fixed z-[9999] bg-surface-raised border border-line/20 rounded shadow-[0_4px_20px_rgba(0,0,0,0.8)] py-1 min-w-[200px] max-h-[80dvh] overflow-y-auto mobile-scroll animate-fade-in [&_.animate-slider-entry]:!animate-none"
-            style={{ left: layout.x, top: layout.y, opacity: layout.opacity }}
+            className="fractal-context-menu fixed bg-surface-raised border border-line/20 rounded shadow-[0_4px_20px_rgba(0,0,0,0.8)] py-1 min-w-[200px] max-h-[80dvh] overflow-y-auto mobile-scroll animate-fade-in [&_.animate-slider-entry]:!animate-none"
+            style={{ left: layout.x, top: layout.y, opacity: layout.opacity, zIndex: z('contextMenu') }}
             onContextMenu={(e) => e.preventDefault()}
         >
             {/* Action Items */}

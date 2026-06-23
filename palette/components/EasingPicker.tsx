@@ -15,6 +15,7 @@ import React, { useEffect, useState } from 'react';
 import { EASING_NAMES, getEasing } from '../core/easings';
 import { easingThumb, drawEasingCurve } from './easingThumb';
 import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
+import { Layer } from '../../components/ui';
 
 const TILE_W = 56;
 const TILE_H = 40;
@@ -49,8 +50,11 @@ export const EasingPicker: React.FC<{
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-start justify-center pt-[10vh] bg-black/40"
+    // Portalled modal (layer host, `modal` tier) — never clipped by the generator
+    // canvas's scroll container, never trapped in the GE shell.
+    <Layer
+      tier="modal"
+      className="inset-0 flex items-start justify-center pt-[10vh] bg-black/40"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -95,7 +99,7 @@ export const EasingPicker: React.FC<{
         </div>
       </div>
       <GradientHoverPreview hover={hover} />
-    </div>
+    </Layer>
   );
 };
 

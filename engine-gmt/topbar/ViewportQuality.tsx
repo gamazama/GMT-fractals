@@ -72,19 +72,15 @@ export const ViewportQuality: React.FC = () => {
 
     const currentLabel = getScalabilityLabel(scalability);
 
-    // Close on outside click
-    useEffect(() => {
-        if (!isOpen) return;
-        const handleClick = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-                setIsOpen(false);
-                setPendingSubsystems(null);
-                setPendingPreset(null);
-            }
-        };
-        window.addEventListener('mousedown', handleClick);
-        return () => window.removeEventListener('mousedown', handleClick);
-    }, [isOpen]);
+    // Close + discard pending. Outside-click/Escape dismissal is owned by the
+    // Popover (it portals to the layer host, so a bespoke containerRef-scoped
+    // listener here would treat clicks inside the portalled panel as "outside"
+    // and close on the first control press — the ADR-0082 portal-vs-trap gotcha).
+    const handleClose = () => {
+        setIsOpen(false);
+        setPendingSubsystems(null);
+        setPendingPreset(null);
+    };
 
     const handlePresetSelect = (presetId: string) => {
         const preset = getShaderCompilerPresets().find(p => p.id === presetId);
@@ -146,7 +142,7 @@ export const ViewportQuality: React.FC = () => {
             </button>
 
             {isOpen && (
-                <Popover width="w-64" align="center">
+                <Popover width="w-64" align="center" onClose={handleClose}>
                     <div className="space-y-3">
                         {/* Master Presets */}
                         <div>

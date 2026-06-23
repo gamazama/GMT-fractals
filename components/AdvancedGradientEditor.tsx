@@ -5,6 +5,7 @@ import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } fr
 import { rgbToHex, sampleStops, renderStopsToRamp } from '../utils/colorUtils';
 import { stopOps } from '../utils/stopOps';
 import Slider from './Slider';
+import { z } from './ui';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import Dropdown from './Dropdown';
 import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
@@ -848,7 +849,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                 </div>
             )}
 
-            {marqueeRect && createPortal(<div className="fixed border border-info bg-info/20 z-[9999] pointer-events-none" style={{ left: marqueeRect.x, top: marqueeRect.y, width: marqueeRect.w, height: marqueeRect.h }} />, document.body)}
+            {marqueeRect && createPortal(<div className="fixed border border-info bg-info/20 pointer-events-none" style={{ left: marqueeRect.x, top: marqueeRect.y, width: marqueeRect.w, height: marqueeRect.h, zIndex: z('tooltip') }} />, document.body)}
         </div>
     );
 };

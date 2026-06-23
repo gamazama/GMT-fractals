@@ -624,8 +624,11 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
  * shared content in a Popover; grabbing the header drag-handle tears it off into
  * a free-floating panel (handled by CenterHUD via `onHandlePointerDown`).
  */
-export const LightSettingsPopup = ({ index, onClose, onHandlePointerDown }: { index: number; onClose?: () => void; onHandlePointerDown?: (e: React.PointerEvent) => void }) => (
-    <Popover width="w-52" onClose={onClose}>
+export const LightSettingsPopup = ({ index, onClose, onHandlePointerDown, onMouseEnter, onMouseLeave }: { index: number; onClose?: () => void; onHandlePointerDown?: (e: React.PointerEvent) => void; onMouseEnter?: React.MouseEventHandler<HTMLDivElement>; onMouseLeave?: React.MouseEventHandler<HTMLDivElement> }) => (
+    // onMouseEnter/Leave forward to the portalled panel: the popup is hover-driven
+    // by the orb wrapper, but the panel is no longer a DOM descendant of it, so
+    // hovering the panel must re-fire the orb's enter/leave to keep it open (ADR-0082).
+    <Popover width="w-52" onClose={onClose} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
         <LightSettingsContent index={index} onClose={onClose} onHandlePointerDown={onHandlePointerDown} />
     </Popover>
 );

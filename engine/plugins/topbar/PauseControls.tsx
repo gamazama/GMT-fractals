@@ -93,7 +93,7 @@ export const PauseControls: React.FC = () => {
             </button>
 
             {showMenu && (
-                <Popover width="w-44">
+                <Popover width="w-44" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
                     <Slider
                         label="Auto-Stop (Samples)"
                         value={sampleCap}

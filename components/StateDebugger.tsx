@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import DraggableWindow from './DraggableWindow';
+import { z } from './ui';
 import { useEngineStore } from '../store/engineStore';
 import { Preset } from '../types';
 import { parseShareString } from '../utils/Sharing';
@@ -71,7 +72,7 @@ export const StateDebugger = () => {
             initialPos={{ x: 100, y: 100 }} 
             initialSize={{ width: 500, height: 600 }}
             onClose={() => setIsOpen(false)}
-            zIndex={600}
+            zIndex={z('tool')}
         >
             <div className="flex flex-col h-full gap-3">
                 <div className="flex flex-col gap-1">

@@ -8,6 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test:zindex": "tsx debug/test-zindex.mts",
+    "check:zindex": "node debug/check-zindex.mjs",
     "orphans": "knip --reporter compact",
     "context:map": "node plans/context-protocol/scripts/build-context-map.mjs",
     "context:cost": "node plans/context-protocol/scripts/context-cost.mjs",
