@@ -163,14 +163,14 @@
 
   --line: 24 24 24;
 
-  --surface-viewport: 198 198 198;
-  --surface-dock: 210 210 210;
-  --surface: 230 230 230;
-  --surface-section: 220 220 220;
-  --surface-raised: 240 240 240;
-  --surface-sunken: 214 214 214;
-  --surface-header: 224 224 224;
-  --surface-tabbar: 218 218 218;
+  --surface-viewport: 174 174 174;
+  --surface-dock: 188 188 188;
+  --surface: 208 208 208;
+  --surface-section: 198 198 198;
+  --surface-raised: 220 220 220;
+  --surface-sunken: 192 192 192;
+  --surface-header: 202 202 202;
+  --surface-tabbar: 196 196 196;
 
   --warn: 180 83 9;
   --warn-strong: 217 119 6;
@@ -183,10 +183,10 @@
   --secondary: 147 51 234;
   --secondary-strong: 126 34 206;
 
-  --app-bg: 208 208 208;
-  --scrollbar-track: 204 204 204;
-  --scrollbar-thumb: 150 150 150;
-  --scrollbar-thumb-strong: 120 120 120;
+  --app-bg: 184 184 184;
+  --scrollbar-track: 182 182 182;
+  --scrollbar-thumb: 140 140 140;
+  --scrollbar-thumb-strong: 110 110 110;
 }
 
 /* ── Neutral Grey — dark graphite theme; true neutral greys (no blue/black
