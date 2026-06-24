@@ -201,8 +201,8 @@ Name: ${formulaName}
 ${minimalGmf}
 
 ================ OUTPUT RULES (follow exactly) ================
-1. Output ONLY the .gmf content. Your entire reply is the file. The FIRST character must be '<' and the file must START with the \`<Metadata>\` tag (a leading \`<!--\` comment is also accepted, but \`<Metadata>\` first is safest).
-2. NO markdown code fences. Do not wrap the output in \`\`\`, \`\`\`gmf, \`\`\`glsl, \`\`\`xml, or \`\`\`html. No \`\`\` anywhere.
+1. Put the COMPLETE .gmf inside ONE triple-backtick code block: a \`\`\` line, then the file starting with the <Metadata> tag, then a closing \`\`\` line. A single fenced block makes the copy verbatim and stops the chat UI from injecting stray formatting tokens into it; the app strips the fence automatically.
+2. Use EXACTLY ONE code block and nothing else of substance — no second code block, no commentary, no "Here is...". At most one short sentence before the block. Inside it write RAW GMF: the <Metadata> JSON then the <Shader_*> blocks as raw multi-line GLSL (never escape newlines as \\n); GLSL // comments inside shader blocks only.
 3. NO prose, NO commentary, NO explanation, NO "Here is...", NO trailing notes. Not a single word of natural language outside the GMF blocks. Use GLSL \`//\` comments INSIDE shader blocks if you must annotate.
 4. Keep the EXACT function signature: void formula_NAME(inout vec4 z, inout float dr, inout float trap, vec4 c). Do not add, remove, reorder, or retype parameters. The function name in <Shader_Function> must match the call in <Shader_Loop>.
 5. Keep ALL the <Shader_*> blocks that were present in the starting formula. Always emit <Shader_Function> and <Shader_Loop>. The shader blocks are RAW multi-line GLSL — never collapse the GLSL into JSON, and never escape newlines as "\\n".
@@ -329,6 +329,13 @@ Many sources — especially the Distance Estimator Compendium and Shadertoy snip
   GROUP related components into ONE vec slider (an offset (ox,oy,oz) becomes a single uVec3A, not three scalars). Wiring gotcha: uParamB also seeds z.w and uParamA is c.w in Julia mode, so prefer uParamC..F for ordinary scalars.
 - For each slider add a matching <Metadata>.parameters entry: a human "label", the slot "id", sensible "min"/"max"/"step", and "default" = the ORIGINAL constant's value — NEVER 0 when the original was non-zero (a 0 scale/power/angle renders black). MIRROR every value into defaultPreset.features.coreMath too: the engine reads each param's LIVE value from coreMath, not from the slider default, so a param missing from coreMath shows up at 0.
 - Be TASTEFUL, not exhaustive: expose the handful (≈2-6) of knobs genuinely worth playing with, with ranges that stay visually stable; leave purely structural/incidental constants baked in. Too many sliders is worse than too few.
+- CRITICAL — slot id vs uniform name: the GLSL reads a slider as uParamC / uVec2A, but in <Metadata> the parameters[].id AND the coreMath KEY use the SLOT id WITHOUT the leading 'u' (paramA..paramF, vec2A.., vec3A.., vec4A..). Writing "uParamC" as the id/key SILENTLY FAILS — the value never applies and the slider sits at 0. Worked example (a scale + an xyz offset):
+    "parameters": [
+      { "id": "paramC", "label": "Scale",  "min": 1.0, "max": 3.0, "step": 0.01, "default": 1.8 },
+      { "id": "vec3A",  "label": "Offset", "min": -5,  "max": 5,   "step": 0.01, "default": { "x": 0, "y": 3, "z": 0 } }
+    ],
+    "defaultPreset": { "features": { "coreMath": { "iterations": 9, "paramC": 1.8, "vec3A": { "x": 0, "y": 3, "z": 0 } } } }
+  The GLSL uses uParamC and uVec3A; the id and coreMath key drop the 'u'. Mirror every default into coreMath.
 
 ================ THE FRAGMENTARIUM SOURCE YOU ARE CONVERTING ================
 Name: ${formulaName}
@@ -341,8 +348,8 @@ These tell you which engine uniform replaces each original .frag uniform. Use th
 ${mappings}
 
 ================ OUTPUT RULES (follow exactly) ================
-1. Output ONLY the .gmf content. Your entire reply is the file. The FIRST character must be '<' and the file must START with the \`<Metadata>\` tag (a leading \`<!--\` comment is also accepted, but \`<Metadata>\` first is safest).
-2. NO markdown code fences. Do not wrap the output in \`\`\`, \`\`\`gmf, \`\`\`glsl, \`\`\`xml, or \`\`\`html. No \`\`\` anywhere.
+1. Put the COMPLETE .gmf inside ONE triple-backtick code block: a \`\`\` line, then the file starting with the <Metadata> tag, then a closing \`\`\` line. A single fenced block makes the copy verbatim and stops the chat UI from injecting stray formatting tokens into it; the app strips the fence automatically.
+2. Use EXACTLY ONE code block and nothing else of substance — no second code block, no commentary, no "Here is...". At most one short sentence before the block. Inside it write RAW GMF: the <Metadata> JSON then the <Shader_*> blocks as raw multi-line GLSL (never escape newlines as \\n); GLSL // comments inside shader blocks only.
 3. NO prose, NO commentary, NO explanation, NO "Here is...", NO trailing notes. Not a single word of natural language outside the GMF blocks. Use GLSL \`//\` comments INSIDE shader blocks if you must annotate.
 4. Keep the EXACT function signature: void formula_NAME(inout vec4 z, inout float dr, inout float trap, vec4 c). Do not add, remove, reorder, or retype parameters. The function name in <Shader_Function> must match the call in <Shader_Loop>.
 5. Keep ALL the <Shader_*> blocks you need. Always emit <Shader_Function> and <Shader_Loop>. The shader blocks are RAW multi-line GLSL — never collapse the GLSL into JSON, and never escape newlines as "\\n".
@@ -500,4 +507,50 @@ export function backfillCoreMathDefaults(preset: Preset, parameters: FractalDefi
     }
     if (!added) return preset;
     return { ...preset, features: { ...preset.features, coreMath } };
+}
+
+/** uParamC -> paramC, uVec2A -> vec2A; any other key is returned unchanged. */
+function canonSlot(key: string): string {
+    const m = key.match(/^u(Param[A-F]|Vec[234][A-C])$/);
+    return m ? m[1].charAt(0).toLowerCase() + m[1].slice(1) : key;
+}
+
+/**
+ * Rewrite GLSL-uniform-style param keys back to GMT slot ids. Models routinely
+ * confuse the GLSL UNIFORM name (`uParamC`, `uVec2A`) with the SLOT id
+ * (`paramC`, `vec2A`) and write the uniform name as both `parameters[].id` and
+ * the `coreMath` key. The engine keys `coreMath` by the slot id, so the value
+ * never applies and every slider loads at 0. This canonicalises any u-prefixed
+ * `parameters[].id` and `coreMath` key. No-op for already-correct ids (and for
+ * keys like `iterations` that aren't slots).
+ */
+export function normalizeParamSlots(def: FractalDefinition): FractalDefinition {
+    const params = def.parameters ?? [];
+    const core: Record<string, any> = (def.defaultPreset?.features?.coreMath as Record<string, any>) ?? {};
+    let changed = false;
+
+    const newParams = params.map((p) => {
+        if (!p) return p;
+        const id = canonSlot(p.id);
+        if (id === p.id) return p;
+        changed = true;
+        return { ...p, id: id as typeof p.id };
+    });
+
+    const newCore: Record<string, any> = {};
+    for (const k of Object.keys(core)) {
+        const ck = canonSlot(k);
+        if (ck !== k) changed = true;
+        newCore[ck] = core[k];
+    }
+
+    if (!changed) return def;
+    return {
+        ...def,
+        parameters: newParams,
+        defaultPreset: {
+            ...def.defaultPreset,
+            features: { ...def.defaultPreset?.features, coreMath: newCore },
+        },
+    };
 }

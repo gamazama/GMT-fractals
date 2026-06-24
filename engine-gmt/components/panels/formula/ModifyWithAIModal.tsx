@@ -36,7 +36,7 @@ import { useClipboardCopy } from '../../../../hooks/useClipboardCopy';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
 import { loadGMFScene } from '../../../utils/FormulaFormat';
-import { buildFormulaBrief, buildModifyPrompt, buildConvertPrompt, sanitizeGMF, ensureUniqueFormulaId, backfillCoreMathDefaults } from '../../../utils/formulaBrief';
+import { buildFormulaBrief, buildModifyPrompt, buildConvertPrompt, sanitizeGMF, ensureUniqueFormulaId, backfillCoreMathDefaults, normalizeParamSlots } from '../../../utils/formulaBrief';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
 import type { FormulaType } from '../../../../types';
 import type { FractalDefinition } from '../../../types/fractal';
@@ -220,14 +220,19 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                 // taken, so re-pasting an iteration doesn't collide with / silently
                 // fail to replace the existing formula. Then register in BOTH
                 // registries (main + worker) — loadScene() does neither.
-                const def = ensureUniqueFormulaId(loadedDef, (id) => !!registry.get(id));
-                // Seed coreMath from the formula's own parameters[].default for any
-                // value the model didn't set: the engine reads a param's INITIAL
-                // value from coreMath, NOT from parameters[].default, so an AI
-                // formula with good slider defaults but an empty coreMath would load
-                // every slider at 0 (and a 0 scale/power renders black).
-                const loadPreset = backfillCoreMathDefaults(preset, def.parameters);
-                loadPreset.formula = def.id;
+                // Normalize uParamC->paramC etc (models confuse the GLSL uniform
+                // name with the slot id used by parameters[].id / coreMath keys),
+                // then uniquify the id + GLSL fn so a re-paste can't collide.
+                const def = ensureUniqueFormulaId(normalizeParamSlots(loadedDef), (id) => !!registry.get(id));
+                // AI output is v1 formula-only, so the scene preset IS the def's
+                // (normalized) defaultPreset; seed any slider the model left out of
+                // coreMath from its parameters[].default (the engine reads a param's
+                // value from coreMath, not parameters[].default — this is what keeps
+                // sliders off 0). A v2 <Scene> paste keeps its own preset (saved
+                // scenes already use canonical slot keys).
+                const isSceneGmf = /<Scene>/.test(clean);
+                const basePreset = (isSceneGmf ? preset : def.defaultPreset) as typeof preset;
+                const loadPreset = backfillCoreMathDefaults({ ...basePreset, formula: def.id }, def.parameters);
                 registry.register(def);
                 FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, {
                     id: def.id,
