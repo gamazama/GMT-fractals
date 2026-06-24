@@ -542,7 +542,7 @@ export function normalizeParamSlots(def: FractalDefinition): FractalDefinition {
         // through to the scalar branch and doesn't render as a vector control at
         // all. Scalars (paramA..F) need no type (the float branch handles them).
         const vecMatch = id.match(/^(vec[234])[A-C]$/);
-        const type = p.type ?? (vecMatch ? (vecMatch[1] as typeof p.type) : undefined);
+        const type = p.type ?? (vecMatch ? (vecMatch[1] as 'vec2' | 'vec3' | 'vec4') : undefined);
         if (id === p.id && type === p.type) return p;
         changed = true;
         return { ...p, id: id as typeof p.id, ...(type ? { type } : {}) };
