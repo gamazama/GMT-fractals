@@ -327,7 +327,7 @@ Many sources — especially the Distance Estimator Compendium and Shadertoy snip
     an x/y pair or two angles      -> a uVec2A..uVec2C
     an xyz vector / offset / axis  -> a uVec3A..uVec3C  (add "mode":"rotation" for an azimuth/pitch/angle rotation, "mode":"direction" for a direction vector)
   GROUP related components into ONE vec slider (an offset (ox,oy,oz) becomes a single uVec3A, not three scalars). Wiring gotcha: uParamB also seeds z.w and uParamA is c.w in Julia mode, so prefer uParamC..F for ordinary scalars.
-- For each slider add a matching <Metadata>.parameters entry: a human "label", the slot "id", sensible "min"/"max"/"step", and "default" = the ORIGINAL constant's value (so it looks identical out of the box). Mirror those defaults into defaultPreset.features.coreMath.
+- For each slider add a matching <Metadata>.parameters entry: a human "label", the slot "id", sensible "min"/"max"/"step", and "default" = the ORIGINAL constant's value — NEVER 0 when the original was non-zero (a 0 scale/power/angle renders black). MIRROR every value into defaultPreset.features.coreMath too: the engine reads each param's LIVE value from coreMath, not from the slider default, so a param missing from coreMath shows up at 0.
 - Be TASTEFUL, not exhaustive: expose the handful (≈2-6) of knobs genuinely worth playing with, with ranges that stay visually stable; leave purely structural/incidental constants baked in. Too many sliders is worse than too few.
 
 ================ THE FRAGMENTARIUM SOURCE YOU ARE CONVERTING ================
@@ -469,4 +469,35 @@ export function ensureUniqueFormulaId(
         shader,
         defaultPreset: { ...def.defaultPreset, formula: newId as FractalDefinition['id'] },
     };
+}
+
+/**
+ * Seed a preset's `features.coreMath` from the formula's own
+ * `parameters[].default` for any value the preset doesn't already specify.
+ *
+ * WHY: the engine takes a parameter's INITIAL value from `coreMath`, NOT from
+ * `parameters[].default` (core_math.ts never reads the FractalParameter array —
+ * only the UI and interlace do). So an AI-authored formula that declares good
+ * slider defaults but forgets to mirror them into `defaultPreset.features.coreMath`
+ * loads every slider at 0 — and a 0 `scale`/`power`/`angle` renders black or
+ * degenerate. This bridges the gap so the model's natural output (a sensible
+ * `parameters[].default`) renders correctly. Non-destructive: any value the
+ * preset already sets in `coreMath` wins; we only fill the gaps. Returns the same
+ * preset object when nothing needs filling.
+ */
+export function backfillCoreMathDefaults(preset: Preset, parameters: FractalDefinition['parameters']): Preset {
+    const params = parameters ?? [];
+    if (params.length === 0) return preset;
+    const existing: Record<string, any> = (preset.features?.coreMath as Record<string, any>) ?? {};
+    const coreMath: Record<string, any> = { ...existing };
+    let added = false;
+    for (const p of params) {
+        if (!p || p.default === undefined) continue;
+        if (coreMath[p.id] === undefined) {
+            coreMath[p.id] = p.default;
+            added = true;
+        }
+    }
+    if (!added) return preset;
+    return { ...preset, features: { ...preset.features, coreMath } };
 }

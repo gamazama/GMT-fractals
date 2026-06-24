@@ -36,7 +36,7 @@ import { useClipboardCopy } from '../../../../hooks/useClipboardCopy';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
 import { loadGMFScene } from '../../../utils/FormulaFormat';
-import { buildFormulaBrief, buildModifyPrompt, buildConvertPrompt, sanitizeGMF, ensureUniqueFormulaId } from '../../../utils/formulaBrief';
+import { buildFormulaBrief, buildModifyPrompt, buildConvertPrompt, sanitizeGMF, ensureUniqueFormulaId, backfillCoreMathDefaults } from '../../../utils/formulaBrief';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
 import type { FormulaType } from '../../../../types';
 import type { FractalDefinition } from '../../../types/fractal';
@@ -221,13 +221,19 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                 // fail to replace the existing formula. Then register in BOTH
                 // registries (main + worker) — loadScene() does neither.
                 const def = ensureUniqueFormulaId(loadedDef, (id) => !!registry.get(id));
-                preset.formula = def.id;
+                // Seed coreMath from the formula's own parameters[].default for any
+                // value the model didn't set: the engine reads a param's INITIAL
+                // value from coreMath, NOT from parameters[].default, so an AI
+                // formula with good slider defaults but an empty coreMath would load
+                // every slider at 0 (and a 0 scale/power renders black).
+                const loadPreset = backfillCoreMathDefaults(preset, def.parameters);
+                loadPreset.formula = def.id;
                 registry.register(def);
                 FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, {
                     id: def.id,
                     shader: def.shader,
                 });
-                useEngineStore.getState().loadScene({ def, preset });
+                useEngineStore.getState().loadScene({ def, preset: loadPreset });
             } else {
                 // Legacy JSON — just switch formula.
                 watchingRef.current = false;
