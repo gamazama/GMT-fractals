@@ -36,9 +36,12 @@ import { useClipboardCopy } from '../../../../hooks/useClipboardCopy';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
 import { loadGMFScene } from '../../../utils/FormulaFormat';
-import { buildFormulaBrief, buildModifyPrompt, sanitizeGMF, ensureUniqueFormulaId } from '../../../utils/formulaBrief';
+import { buildFormulaBrief, buildModifyPrompt, buildConvertPrompt, sanitizeGMF, ensureUniqueFormulaId } from '../../../utils/formulaBrief';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
 import type { FormulaType } from '../../../../types';
+import type { FractalDefinition } from '../../../types/fractal';
+
+type ImportMappings = NonNullable<FractalDefinition['importSource']>['mappings'];
 
 /** LLM-facing guidance copied (with the GLSL log appended when available) when a
  *  loaded formula fails to compile. */
@@ -49,6 +52,23 @@ const COMPILE_ERROR_GUIDANCE =
     'name, a mismatched function signature between <Shader_Function> and ' +
     '<Shader_Loop>, a missing semicolon, or a const initialised with a built-in ' +
     'function (use a non-const global instead).';
+
+/** Render `def.importSource.mappings` as the human-readable uniform→slot lines
+ *  the convert prompt expects: one "originalName (type) -> uParamA" per mapping,
+ *  with "= fixedValue" appended when a uniform was inlined rather than slotted.
+ *  Returns the sentinel when no mappings were recorded (V4 imports / reloads). */
+function formatMappings(mappings: ImportMappings | undefined): string {
+    if (!mappings || mappings.length === 0) return '(no parameter mappings recorded)';
+    return mappings
+        .map((m) => {
+            const slot = m.mappedSlot?.trim();
+            const head = `${m.name} (${m.type})`;
+            return slot
+                ? `${head} -> ${slot}`
+                : `${head} = ${m.fixedValue} (fixed literal — substitute directly)`;
+        })
+        .join('\n');
+}
 
 export interface ModifyWithAIModalProps {
     open: boolean;
@@ -63,12 +83,63 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
     // 'error' = sanitize/parse rejected the paste; 'compile' = it loaded but the
     // shader failed to compile (the actionable F12 loop).
     const [loadError, setLoadError] = useState<null | { kind: 'error' | 'compile'; message: string; log?: string }>(null);
+    // 'convert' rewrites an imported self-contained formula into a native
+    // per-iteration one (re-enables interlace/hybrid/burning-ship); 'modify' is
+    // the original "change this formula" path. Only self-contained formulas get
+    // the toggle; everything else is Modify-only.
+    const [mode, setMode] = useState<'modify' | 'convert'>('modify');
 
-    // ── Build the prompt for the current formula (memoised on formula id) ──────
+    // ── Is the current formula in the limited self-contained shape? ───────────
+    // This is the set of formulas that LOSE interlace/hybrid/burning-ship and so
+    // benefit from a convert-to-native pass. Gate on the legacy flag OR the modern
+    // capability token (kept in sync; see import-capabilities.ts). Modular is
+    // excluded — buildFormulaBrief throws for it (its GLSL lives in the node graph).
+    const selectedDef = registry.get(formula);
+    const formulaName = selectedDef?.name ?? formula;
+    const isSelfContained =
+        formula !== 'Modular' &&
+        (!!selectedDef?.shader.selfContainedSDE ||
+            !!selectedDef?.shader.capabilities?.has('shape:self-contained'));
+
+    // follow-up: converting the LIVE, unsaved Workshop editor buffer would need
+    // FormulaWorkshop to expose its `source`/`mappings` state (currently local to
+    // that component, not store- or window-readable). We gate purely on the
+    // CURRENTLY REGISTERED formula's def here — importSource reflects the last
+    // V3 import only and isn't serialised into GMF, so a reloaded-from-file
+    // imported formula falls back to decomposing its current self-contained GMF.
+
+    // Default to Convert for self-contained formulas (the valuable path); reset
+    // when the formula or the modal-open state changes.
+    useEffect(() => {
+        setMode(isSelfContained ? 'convert' : 'modify');
+    }, [formula, isSelfContained, open]);
+
+    // The effective mode never lands on 'convert' for a non-self-contained
+    // formula (no toggle is shown), so coerce it for the prompt build.
+    const activeMode: 'modify' | 'convert' = isSelfContained ? mode : 'modify';
+
+    // ── Build the prompt for the current formula + active mode ────────────────
     const { prompt, briefError } = useMemo(() => {
         const def = registry.get(formula);
         if (!def) return { prompt: '', briefError: 'No formula is selected.' };
         try {
+            if (activeMode === 'convert') {
+                // Prefer the ORIGINAL .frag (importSource.glsl) as the math source;
+                // when absent (V4 import, or any save→reload — importSource isn't
+                // serialised) fall back to the current self-contained GMF and let
+                // the prompt's decompose recipe re-derive the per-iteration step.
+                const origFrag = def.importSource?.glsl?.trim();
+                const currentGmf = buildFormulaBrief(def);
+                const fragSource = origFrag || currentGmf;
+                const mappings = formatMappings(def.importSource?.mappings);
+                const convertPrompt = buildConvertPrompt(fragSource, def.name, {
+                    mappings,
+                    // Only inline the current GMF as a secondary reference when the
+                    // primary source is the original .frag (avoid duplicating it).
+                    currentGmf: origFrag ? currentGmf : undefined,
+                });
+                return { prompt: convertPrompt, briefError: null as string | null };
+            }
             const brief = buildFormulaBrief(def);
             return { prompt: buildModifyPrompt(brief, def.name), briefError: null as string | null };
         } catch (e) {
@@ -76,10 +147,11 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
             // that case, but guard the render path too.
             return { prompt: '', briefError: e instanceof Error ? e.message : 'Could not export this formula.' };
         }
-    }, [formula]);
+    }, [formula, activeMode]);
 
-    const selectedDef = registry.get(formula);
-    const formulaName = selectedDef?.name ?? formula;
+    // True when the convert prompt is fed the ORIGINAL .frag (vs decomposing the
+    // already-wrapped self-contained shader) — drives the one-line source note.
+    const hasOriginalFrag = !!selectedDef?.importSource?.glsl?.trim();
 
     // ── Compile-error watch (see file header) ─────────────────────────────────
     // Armed when we trigger a load. A COMPILE_FAILED while armed = a shader
@@ -242,7 +314,8 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                 <div className="flex items-center justify-between px-5 py-3 border-b border-line/10">
                     <div className="flex items-center gap-2">
                         <h2 id="modify-ai-title" className="text-sm font-bold">
-                            Modify <span className="text-fg-muted font-medium">·</span>{' '}
+                            {activeMode === 'convert' ? 'Convert' : 'Modify'}{' '}
+                            <span className="text-fg-muted font-medium">·</span>{' '}
                             <span className="text-accent-300">{formulaName}</span> with AI
                         </h2>
                     </div>
@@ -263,23 +336,84 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                         </div>
                     ) : (
                         <>
-                            {/* Instruction line */}
-                            <p className="text-xs text-fg-muted leading-relaxed">
-                                Copy the prompt below into <strong className="text-fg">Claude</strong>,{' '}
-                                <strong className="text-fg">Gemini</strong>, or any LLM, add one line describing the
-                                change you want, then paste the model's reply back below. The prompt includes the
-                                current formula (<span className="text-accent-300">{formulaName}</span>) as a worked
-                                example for the AI to build on. The full guide is at{' '}
-                                <a
-                                    href="https://gmt-fractals.com/learn/create-formula"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-accent-400 underline hover:text-accent-300"
-                                >
-                                    gmt-fractals.com/learn/create-formula
-                                </a>
-                                .
-                            </p>
+                            {/* Mode toggle (self-contained imports only — text-only, no icons) */}
+                            {isSelfContained && (
+                                <div className="flex items-center gap-2 text-[11px]">
+                                    <span className="font-bold uppercase tracking-wide text-fg-tertiary">Mode</span>
+                                    <div className="inline-flex rounded-lg border border-line/15 overflow-hidden">
+                                        <button
+                                            onClick={() => setMode('convert')}
+                                            className={`px-3 py-1 font-bold transition-colors ${
+                                                activeMode === 'convert'
+                                                    ? 'bg-accent-600 text-white'
+                                                    : 'bg-transparent text-fg-muted hover:text-fg hover:bg-line/[0.06]'
+                                            }`}
+                                            title="Rewrite this imported formula as a native per-iteration formula (re-enables interlace, hybrid, and burning-ship)"
+                                        >
+                                            Convert to native
+                                        </button>
+                                        <button
+                                            onClick={() => setMode('modify')}
+                                            className={`px-3 py-1 font-bold border-l border-line/15 transition-colors ${
+                                                activeMode === 'modify'
+                                                    ? 'bg-accent-600 text-white'
+                                                    : 'bg-transparent text-fg-muted hover:text-fg hover:bg-line/[0.06]'
+                                            }`}
+                                            title="Ask the AI to change this formula"
+                                        >
+                                            Modify
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Instruction line (mode-aware) */}
+                            {activeMode === 'convert' ? (
+                                <p className="text-xs text-fg-muted leading-relaxed">
+                                    <span className="text-accent-300">{formulaName}</span> is an{' '}
+                                    <strong className="text-fg">imported (self-contained)</strong> formula — that disables
+                                    interlace, hybrid, and burning-ship. Copy the prompt below into{' '}
+                                    <strong className="text-fg">Claude</strong>, <strong className="text-fg">Gemini</strong>,
+                                    or any LLM to rewrite it as a <strong className="text-fg">native per-iteration</strong>{' '}
+                                    formula (which re-enables all three), then paste the reply back below. The full guide is
+                                    at{' '}
+                                    <a
+                                        href="https://gmt-fractals.com/learn/create-formula"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-accent-400 underline hover:text-accent-300"
+                                    >
+                                        gmt-fractals.com/learn/create-formula
+                                    </a>
+                                    .
+                                </p>
+                            ) : (
+                                <p className="text-xs text-fg-muted leading-relaxed">
+                                    Copy the prompt below into <strong className="text-fg">Claude</strong>,{' '}
+                                    <strong className="text-fg">Gemini</strong>, or any LLM, add one line describing the
+                                    change you want, then paste the model's reply back below. The prompt includes the
+                                    current formula (<span className="text-accent-300">{formulaName}</span>) as a worked
+                                    example for the AI to build on. The full guide is at{' '}
+                                    <a
+                                        href="https://gmt-fractals.com/learn/create-formula"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-accent-400 underline hover:text-accent-300"
+                                    >
+                                        gmt-fractals.com/learn/create-formula
+                                    </a>
+                                    .
+                                </p>
+                            )}
+
+                            {/* Convert-mode source note: which source the prompt is built from */}
+                            {activeMode === 'convert' && (
+                                <p className="text-[11px] text-fg-tertiary leading-relaxed">
+                                    {hasOriginalFrag
+                                        ? 'Using the original imported .frag source as the basis for conversion.'
+                                        : 'No original source recorded — working from the current converted shader (decomposing it back into per-iteration steps).'}
+                                </p>
+                            )}
 
                             {/* Prompt preview (read-only) */}
                             <div>
