@@ -4,8 +4,9 @@ import { registry } from '../../../engine/FractalRegistry';
 import { FormulaType } from '../../../../types';
 import { useEngineStore } from '../../../../store/engineStore';
 import { ContextMenuItem } from '../../../../types/help';
-import { generateGMF, loadGMFScene } from '../../../utils/FormulaFormat';
+import { generateGMF } from '../../../utils/FormulaFormat';
 import { sanitizeGMF } from '../../../utils/formulaBrief';
+import { loadPastedFormula } from './loadPastedFormula';
 import { DownloadIcon, ChevronDown, CodeIcon, MenuIcon, UploadIcon } from '../../../../components/Icons';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../../engine/FractalEvents';
 import { showToast } from '../../../../engine/store/toastStore';
@@ -124,34 +125,23 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
         openGlobalMenu(e.clientX, e.clientY, items, []);
     };
 
-    // Shared GMF-string loader: register the formula in BOTH registries
-    // (main thread + worker) then hydrate the store, exactly like the file
-    // import path. Throws on parse failure so callers can surface their own
-    // error UI. Used by file import AND the "Load formula from clipboard"
-    // menu item.
+    // Shared GMF-string loader for file import AND "Load formula from clipboard".
+    // Input is RAW (file contents / clipboard text), so it is sanitized here
+    // first (strips markdown fences / prose / BOM / typography), then routed
+    // through loadPastedFormula — the SAME canonical load path (and AI-output
+    // repairs: normalizeParamSlots → ensureUniqueFormulaId → backfillCoreMath)
+    // the "Modify with AI" modal uses. Sharing that path is what fixes the bug
+    // where an identical paste rendered correctly through the modal but BLACK
+    // (sliders at 0) through clipboard / file import. Throws on parse failure so
+    // callers can surface their own error UI.
     const loadGmfString = (content: string) => {
-        FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
-        const { def, preset } = loadGMFScene(content);
-        if (def) {
-            // Register the imported formula in BOTH registries:
-            //  - main thread (so UI / FractalRegistry can resolve it)
-            //  - worker (via REGISTER_FORMULA event → bridge → proxy)
-            // engine-core's loadScene() does neither directly; this
-            // call site is responsible for both, then loadScene
-            // hydrates the store + emits CONFIG so the worker
-            // compiles the just-registered shader.
-            if (!registry.get(def.id)) {
-                registry.register(def);
-            }
-            FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, {
-                id: def.id,
-                shader: def.shader,
-            });
-            useEngineStore.getState().loadScene({ def, preset });
-        } else {
-            // Legacy JSON — just switch formula
-            onChange(preset.formula as FormulaType);
+        const clean = sanitizeGMF(content);
+        if (!clean) {
+            showToast("That doesn't look like a valid formula — copy the whole .gmf and try again.", 'error', 4500);
+            return;
         }
+        FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
+        loadPastedFormula(clean);
     };
 
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {

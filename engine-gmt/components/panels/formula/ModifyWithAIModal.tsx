@@ -35,10 +35,9 @@ import { showToast } from '../../../../engine/store/toastStore';
 import { useClipboardCopy } from '../../../../hooks/useClipboardCopy';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
-import { loadGMFScene } from '../../../utils/FormulaFormat';
-import { buildFormulaBrief, buildModifyPrompt, buildConvertPrompt, sanitizeGMF, ensureUniqueFormulaId, backfillCoreMathDefaults, normalizeParamSlots, buildRepairPrompt } from '../../../utils/formulaBrief';
+import { buildFormulaBrief, buildModifyPrompt, buildConvertPrompt, sanitizeGMF, buildRepairPrompt } from '../../../utils/formulaBrief';
+import { loadPastedFormula } from './loadPastedFormula';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
-import type { FormulaType } from '../../../../types';
 import type { FractalDefinition } from '../../../types/fractal';
 
 type ImportMappings = NonNullable<FractalDefinition['importSource']>['mappings'];
@@ -161,8 +160,26 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
     // repair prompt around the exact code that failed.
     const lastGmfRef = useRef('');
 
+    // Disarm the watch if the active formula changes out from under it. Without
+    // this, an UNRELATED recompile (the user switches formula while a watch is
+    // armed) can emit COMPILE_FAILED and the modal reports a phantom error around
+    // the wrong lastGmfRef. Keyed on `formula` so the watch only ever reacts to
+    // the load it was armed for.
+    useEffect(() => {
+        watchingRef.current = false;
+    }, [formula]);
+
     useEffect(() => {
         if (!open) return;
+        // EVENT-ORDERING INVARIANT (load-bearing): on a failed load, COMPILE_FAILED
+        // MUST arrive on the main bus BEFORE IS_COMPILING:false, or the offCompiling
+        // handler below would disarm the watch first and the error would be missed.
+        // This ordering is enforced upstream, NOT here:
+        //   - CompileScheduler.ts emits COMPILE_FAILED before IS_COMPILING:false.
+        //   - renderWorker.ts registers the COMPILE_FAILED→ERROR postMessage bridge
+        //     before the IS_COMPILING bridge.
+        //   - onShaderError posts ERROR synchronously before the success-path
+        //     IS_COMPILING:false.
         // The ONLY reliable error signal is COMPILE_FAILED, forwarded from the
         // worker post-boot (see WorkerProxy case 'ERROR'). We deliberately do NOT
         // infer failure from a missing COMPILE_TIME — that event only fires for
@@ -219,36 +236,13 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
             watchingRef.current = true;
             lastGmfRef.current = clean;
 
-            const { def: loadedDef, preset } = loadGMFScene(clean);
-            if (loadedDef) {
-                // Uniquify the id (+ its GLSL function name) when it's already
-                // taken, so re-pasting an iteration doesn't collide with / silently
-                // fail to replace the existing formula. Then register in BOTH
-                // registries (main + worker) — loadScene() does neither.
-                // Normalize uParamC->paramC etc (models confuse the GLSL uniform
-                // name with the slot id used by parameters[].id / coreMath keys),
-                // then uniquify the id + GLSL fn so a re-paste can't collide.
-                const def = ensureUniqueFormulaId(normalizeParamSlots(loadedDef), (id) => !!registry.get(id));
-                // AI output is v1 formula-only, so the scene preset IS the def's
-                // (normalized) defaultPreset; seed any slider the model left out of
-                // coreMath from its parameters[].default (the engine reads a param's
-                // value from coreMath, not parameters[].default — this is what keeps
-                // sliders off 0). A v2 <Scene> paste keeps its own preset (saved
-                // scenes already use canonical slot keys).
-                const isSceneGmf = /<Scene>/.test(clean);
-                const basePreset = (isSceneGmf ? preset : def.defaultPreset) as typeof preset;
-                const loadPreset = backfillCoreMathDefaults({ ...basePreset, formula: def.id }, def.parameters);
-                registry.register(def);
-                FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, {
-                    id: def.id,
-                    shader: def.shader,
-                });
-                useEngineStore.getState().loadScene({ def, preset: loadPreset });
-            } else {
-                // Legacy JSON — just switch formula.
-                watchingRef.current = false;
-                useEngineStore.getState().setFormula(preset.formula as FormulaType);
-            }
+            // Core load sequence (loadGMFScene → repairs → register → loadScene)
+            // is shared with the clipboard / file-import path so all three apply
+            // the SAME AI-output repairs — see loadPastedFormula.ts. A null return
+            // means legacy JSON (the formula was switched, nothing to compile), so
+            // disarm the watch.
+            const def = loadPastedFormula(clean);
+            if (!def) watchingRef.current = false;
             showToast('Formula loaded — compiling…', 'success');
         } catch (err) {
             watchingRef.current = false;

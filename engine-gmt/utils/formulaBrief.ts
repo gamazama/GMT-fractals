@@ -387,10 +387,12 @@ export function sanitizeGMF(text: string): string | null {
     // BOM would misclassify a valid GMF as JSON).
     if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
 
-    // Normalize clipboard/chat typography that breaks GLSL/JSON: non-breaking
-    // spaces -> space, smart quotes -> straight. A documented source of mystery
-    // compile / JSON-parse errors. GLSL has no string literals, so this is safe.
-    s = s.replace(/ /g, ' ').replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+    // Normalize ONLY the non-breaking space -> space (a documented source of
+    // mystery GLSL compile errors). Curly quotes are deliberately LEFT ALONE:
+    // GLSL has no string literals (so normalizing them buys nothing there), and
+    // the <Metadata> JSON may legitimately contain curly quotes INSIDE a string
+    // value -- rewriting those to straight quotes would break valid JSON.
+    s = s.replace(/ /g, ' ');
 
     // Remove markdown fences anywhere: opening ``` with optional lang tag, and
     // bare closing ```. Done globally + case-insensitively so a fence wrapping
@@ -461,12 +463,23 @@ export function ensureUniqueFormulaId(
     }
 
     // Rename the GLSL function. Read the actual name from <Shader_Loop> (the kit
-    // convention is formula_<id>, but honour whatever the author called it).
+    // convention is formula_<id>, but honour whatever the author called it). Prefer
+    // a formula_ prefixed name; fall back to the first called identifier so a
+    // formula whose function the AI named WITHOUT the formula_ prefix still gets
+    // renamed (else the id is bumped but the GLSL fn isn't — breaking the
+    // no-collision guarantee).
     const shader = { ...def.shader };
-    const oldFn = (def.shader.loopBody.match(/\b(formula_\w+)\s*\(/) || [])[1];
+    const oldFn =
+        (def.shader.loopBody.match(/\b(formula_\w+)\s*\(/) || [])[1] ||
+        (def.shader.loopBody.match(/\b([A-Za-z_]\w*)\s*\(/) || [])[1];
     if (oldFn) {
         const newFn = `formula_${newId}`;
-        const rename = (s: string | undefined) => (s ? s.split(oldFn).join(newFn) : s);
+        // Word-boundary rename so a prefix-sharing identifier isn't over-renamed
+        // (e.g. renaming formula_Foo must NOT also corrupt formula_FooBar). A
+        // plain split/join would clip every substring occurrence.
+        const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const fnRe = new RegExp('\\b' + escapeRegex(oldFn) + '\\b(?![A-Za-z0-9_])', 'g');
+        const rename = (s: string | undefined) => (s ? s.replace(fnRe, newFn) : s);
         shader.function = rename(shader.function) as string;
         shader.loopBody = rename(shader.loopBody) as string;
         shader.loopInit = rename(shader.loopInit);
@@ -506,7 +519,10 @@ export function backfillCoreMathDefaults(preset: Preset, parameters: FractalDefi
     for (const p of params) {
         if (!p || p.default === undefined) continue;
         if (coreMath[p.id] === undefined) {
-            coreMath[p.id] = p.default;
+            // Shallow-clone vec object defaults so the backfilled coreMath doesn't
+            // share a mutable reference with parameters[].default (a later in-place
+            // edit of one would otherwise mutate the other).
+            coreMath[p.id] = (p.default && typeof p.default === 'object') ? { ...p.default } : p.default;
             added = true;
         }
     }
@@ -551,6 +567,14 @@ export function normalizeParamSlots(def: FractalDefinition): FractalDefinition {
     const newCore: Record<string, any> = {};
     for (const k of Object.keys(core)) {
         const ck = canonSlot(k);
+        // A stray u-prefixed key (uParamC) must NOT clobber a present canonical
+        // key (paramC) — if both exist, the canonical value wins. Skip the
+        // u-prefixed one when its canonical form already exists in the source core
+        // or in what we've built so far (last-write-wins would otherwise corrupt).
+        if (ck !== k && (core[ck] !== undefined || newCore[ck] !== undefined)) {
+            changed = true;
+            continue;
+        }
         if (ck !== k) changed = true;
         newCore[ck] = core[k];
     }
