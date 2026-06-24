@@ -319,6 +319,17 @@ Only reference uniforms/helpers listed here or in the guide; never invent one.
 6. Pick the estimator + fudge in defaultPreset.features.quality: "estimator": 0 for power fractals (z^p + c, analytic log DE), "estimator": 1 for fold/IFS fractals (box/sphere fold, linear DE). Set "fudgeFactor": 0.5 (the app's "Slice Optimization") so the raymarch takes smaller steps and a hand-derived DE doesn't overshoot the surface and leave flat "slices"/holes. Only add a custom <Shader_Dist> if the original genuinely needs a bespoke distance estimate.
 7. Preamble globals: if you must keep a mutable global (a DE accumulator the step writes and the estimator reads), declare it in <Shader_Preamble>, RESET it in <Shader_Init>, and list its name in <Metadata>.shaderMeta.preambleVars (named u<INITIALS>_name) so interlace doesn't corrupt it. Do NOT list engine-owned cp_* globals.
 
+================ EXPOSE TASTEFUL SLIDERS (important for DEC / Shadertoy sources) ================
+Many sources — especially the Distance Estimator Compendium and Shadertoy snippets — hard-code their interesting values as literal constants. A GMT formula is only fun if those are adjustable, so PROMOTE a tasteful selection of the meaningful constants to UI sliders instead of leaving them baked in:
+- Scan the source for constants that change the SHAPE or LOOK: power/degree, scale, fold limit, min/fixed radius, rotation angle(s), offset/shift, julia seed, thickness, colour/contrast knobs. (Iteration count is ALREADY a slider via uIterations — do NOT re-expose it.)
+- Replace the chosen literal with a uniform and add a slider for it:
+    a single scalar               -> uParamA..uParamF
+    an x/y pair or two angles      -> a uVec2A..uVec2C
+    an xyz vector / offset / axis  -> a uVec3A..uVec3C  (add "mode":"rotation" for an azimuth/pitch/angle rotation, "mode":"direction" for a direction vector)
+  GROUP related components into ONE vec slider (an offset (ox,oy,oz) becomes a single uVec3A, not three scalars). Wiring gotcha: uParamB also seeds z.w and uParamA is c.w in Julia mode, so prefer uParamC..F for ordinary scalars.
+- For each slider add a matching <Metadata>.parameters entry: a human "label", the slot "id", sensible "min"/"max"/"step", and "default" = the ORIGINAL constant's value (so it looks identical out of the box). Mirror those defaults into defaultPreset.features.coreMath.
+- Be TASTEFUL, not exhaustive: expose the handful (≈2-6) of knobs genuinely worth playing with, with ranges that stay visually stable; leave purely structural/incidental constants baked in. Too many sliders is worse than too few.
+
 ================ THE FRAGMENTARIUM SOURCE YOU ARE CONVERTING ================
 Name: ${formulaName}
 
