@@ -6,7 +6,7 @@ import { useEngineStore } from '../../../../store/engineStore';
 import { ContextMenuItem } from '../../../../types/help';
 import { generateGMF, loadGMFScene } from '../../../utils/FormulaFormat';
 import { sanitizeGMF } from '../../../utils/formulaBrief';
-import { DownloadIcon, ChevronDown, CodeIcon, MenuIcon, UploadIcon, MagicIcon } from '../../../../components/Icons';
+import { DownloadIcon, ChevronDown, CodeIcon, MenuIcon, UploadIcon } from '../../../../components/Icons';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../../engine/FractalEvents';
 import { showToast } from '../../../../engine/store/toastStore';
 import { buildFormulaContextMenu } from './FormulaContextMenu';
@@ -55,7 +55,6 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             { label: 'AI', action: () => {}, isHeader: true },
             {
                 label: 'Modify with AI…',
-                icon: <MagicIcon active={!modular} />,
                 // Modular formulas live in the node graph, not portable shader
                 // blocks, so they can't be exported to the kit.
                 disabled: modular,

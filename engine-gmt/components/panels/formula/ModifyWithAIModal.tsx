@@ -31,13 +31,12 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '../../../../components/ui';
-import { CopyIcon, DownloadIcon, AlertIcon, MagicIcon } from '../../../../components/Icons';
 import { showToast } from '../../../../engine/store/toastStore';
 import { useClipboardCopy } from '../../../../hooks/useClipboardCopy';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
 import { loadGMFScene } from '../../../utils/FormulaFormat';
-import { buildFormulaBrief, buildModifyPrompt, sanitizeGMF } from '../../../utils/formulaBrief';
+import { buildFormulaBrief, buildModifyPrompt, sanitizeGMF, ensureUniqueFormulaId } from '../../../utils/formulaBrief';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
 import type { FormulaType } from '../../../../types';
 
@@ -83,61 +82,35 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
     const formulaName = selectedDef?.name ?? formula;
 
     // ── Compile-error watch (see file header) ─────────────────────────────────
-    // Armed when we trigger a load; sawCompileTime flips true if the worker
-    // reports a successful compile before the cycle closes.
+    // Armed when we trigger a load. A COMPILE_FAILED while armed = a shader
+    // error; the cycle ending with no COMPILE_FAILED = success.
     const watchingRef = useRef(false);
-    const sawCompileTimeRef = useRef(false);
 
     useEffect(() => {
         if (!open) return;
-        // End the watch once, with an optional compile error to surface. The
-        // first signal wins (COMPILE_FAILED's exact log, else the no-COMPILE_TIME
-        // fallback), so a single failure never double-reports.
-        const finishWatch = (err: { message: string; log?: string } | null) => {
+        // The ONLY reliable error signal is COMPILE_FAILED, forwarded from the
+        // worker post-boot (see WorkerProxy case 'ERROR'). We deliberately do NOT
+        // infer failure from a missing COMPILE_TIME — that event only fires for
+        // compiles slower than 0.1s, so a fast/cached SUCCESS would otherwise be
+        // misreported as an error (the old false-positive). A cycle that ends with
+        // no COMPILE_FAILED simply compiled cleanly.
+        const offCompileFailed = FractalEvents.on(FRACTAL_EVENTS.COMPILE_FAILED, ({ reason }) => {
             if (!watchingRef.current) return;
             watchingRef.current = false;
-            if (err) {
-                setLoadError({ kind: 'compile', message: err.message, log: err.log });
-                showToast(
-                    'This formula has a shader error — copy it back to your LLM to fix.',
-                    'error',
-                    6000,
-                );
-            }
-        };
-        // Exact GLSL compile/link log, forwarded from the worker post-boot.
-        const offCompileFailed = FractalEvents.on(FRACTAL_EVENTS.COMPILE_FAILED, ({ reason }) => {
-            finishWatch({
+            setLoadError({
+                kind: 'compile',
                 message: 'This formula has a shader compile error (shown below). Click "Copy error for LLM" and paste it back to your model.',
                 log: (reason || '').trim() || undefined,
             });
+            showToast('This formula has a shader error — copy it back to your LLM to fix.', 'error', 6000);
         });
-        const offCompileTime = FractalEvents.on(FRACTAL_EVENTS.COMPILE_TIME, () => {
-            if (watchingRef.current) sawCompileTimeRef.current = true;
-        });
+        // COMPILE_FAILED (if any) arrives just BEFORE this on the main thread, so a
+        // cycle that ends while we're still armed = success: disarm quietly.
         const offCompiling = FractalEvents.on(FRACTAL_EVENTS.IS_COMPILING, (status) => {
-            // A string status = a (re)compile started; reset the success flag so a
-            // stale COMPILE_TIME from an earlier cycle can't mask this one.
-            if (typeof status === 'string') {
-                if (watchingRef.current) sawCompileTimeRef.current = false;
-                return;
-            }
-            // status === false → cycle finished. Close the watch; if we never saw
-            // a COMPILE_TIME (and COMPILE_FAILED didn't already fire), the shader
-            // failed — fall back to walking the user to the console.
-            if (status === false && watchingRef.current) {
-                if (sawCompileTimeRef.current) {
-                    watchingRef.current = false; // success — close quietly
-                } else {
-                    finishWatch({
-                        message: 'This formula failed to compile. Open the console (F12 → Console) for the exact GLSL error, then paste it back to your LLM.',
-                    });
-                }
-            }
+            if (status === false && watchingRef.current) watchingRef.current = false;
         });
         return () => {
             offCompileFailed();
-            offCompileTime();
             offCompiling();
             watchingRef.current = false;
         };
@@ -149,7 +122,6 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
             setPasteText('');
             setLoadError(null);
             watchingRef.current = false;
-            sawCompileTimeRef.current = false;
         }
     }, [open]);
 
@@ -169,15 +141,16 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
             FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, 'Compiling Formula...');
             // Arm the compile-error watch for the recompile this triggers.
             watchingRef.current = true;
-            sawCompileTimeRef.current = false;
 
-            const { def, preset } = loadGMFScene(clean);
-            if (def) {
-                // Register in BOTH registries (main thread + worker), exactly like
-                // FormulaSelect.handleImport — loadScene() does neither.
-                if (!registry.get(def.id)) {
-                    registry.register(def);
-                }
+            const { def: loadedDef, preset } = loadGMFScene(clean);
+            if (loadedDef) {
+                // Uniquify the id (+ its GLSL function name) when it's already
+                // taken, so re-pasting an iteration doesn't collide with / silently
+                // fail to replace the existing formula. Then register in BOTH
+                // registries (main + worker) — loadScene() does neither.
+                const def = ensureUniqueFormulaId(loadedDef, (id) => !!registry.get(id));
+                preset.formula = def.id;
+                registry.register(def);
                 FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, {
                     id: def.id,
                     shader: def.shader,
@@ -268,7 +241,6 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3 border-b border-line/10">
                     <div className="flex items-center gap-2">
-                        <span className="text-accent-400"><MagicIcon active /></span>
                         <h2 id="modify-ai-title" className="text-sm font-bold">
                             Modify <span className="text-fg-muted font-medium">·</span>{' '}
                             <span className="text-accent-300">{formulaName}</span> with AI
@@ -287,7 +259,6 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                 <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
                     {briefError ? (
                         <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-                            <span className="mt-0.5 shrink-0"><AlertIcon /></span>
                             <span>{briefError}</span>
                         </div>
                     ) : (
@@ -296,7 +267,9 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                             <p className="text-xs text-fg-muted leading-relaxed">
                                 Copy the prompt below into <strong className="text-fg">Claude</strong>,{' '}
                                 <strong className="text-fg">Gemini</strong>, or any LLM, add one line describing the
-                                change you want, then paste the model's reply back below. The full guide is at{' '}
+                                change you want, then paste the model's reply back below. The prompt includes the
+                                current formula (<span className="text-accent-300">{formulaName}</span>) as a worked
+                                example for the AI to build on. The full guide is at{' '}
                                 <a
                                     href="https://gmt-fractals.com/learn/create-formula"
                                     target="_blank"
@@ -326,7 +299,6 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                                             }`}
                                             title="Copy the prompt + formula to the clipboard"
                                         >
-                                            <CopyIcon />
                                             {copyBtn.state === 'copied' ? 'Copied' : copyBtn.state === 'failed' ? 'Failed' : 'Copy'}
                                         </button>
                                         <button
@@ -334,7 +306,6 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                                             className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-line/25 transition-colors"
                                             title="Download the prompt as a .md file"
                                         >
-                                            <DownloadIcon />
                                             Save .md
                                         </button>
                                     </div>
@@ -375,7 +346,6 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
 
                                 {loadError && (
                                     <div className="mt-2 flex items-start gap-2 text-xs bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-red-200">
-                                        <span className="mt-0.5 shrink-0 text-red-300"><AlertIcon /></span>
                                         <div className="space-y-1.5 min-w-0 flex-1">
                                             <p className="leading-relaxed">{loadError.message}</p>
                                             {loadError.log && (
@@ -388,7 +358,6 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                                                     onClick={copyErrorForLLM}
                                                     className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded border bg-red-500/15 border-red-500/40 text-red-200 hover:bg-red-500/25 transition-colors"
                                                 >
-                                                    <CopyIcon />
                                                     Copy error for LLM
                                                 </button>
                                             )}

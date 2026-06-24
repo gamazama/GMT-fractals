@@ -157,7 +157,7 @@ A GMF is NOT JSON-with-escaped-newlines. It is a small set of XML-like blocks. T
   <Shader_Init> ...optional once-before-loop GLSL... </Shader_Init>
   <Shader_Function> ...REQUIRED: the formula function... </Shader_Function>
   <Shader_Loop> ...REQUIRED: one line calling the function... </Shader_Loop>
-  <Shader_Dist> ...optional smoothing... </Shader_Dist>
+  <Shader_Dist> ...optional, usually OMIT. The BODY of "vec2 getDist(float r, float dr, float iter, vec4 z)" — statements ONLY (no function signature/wrapper), ending with "return vec2(distance, smoothIter);". Prefer setting defaultPreset.features.quality.estimator instead... </Shader_Dist>
 
 The formula function signature is EXACTLY:
   void formula_NAME(inout vec4 z, inout float dr, inout float trap, vec4 c)
@@ -206,6 +206,7 @@ ${minimalGmf}
 9. Keep the <Metadata> as valid JSON (double-quoted keys, no trailing commas, no comments inside the JSON). If you rename the formula, update both \`id\` and the function name consistently.
 10. Do not reference uniforms or helpers that are not in the guide. Only use uParamA..uParamF, uVec2A..uVec4C, uIterations, uTime, uJulia, uJuliaMode, uDistanceMetric, uEscapeThresh, uDeBailout, and the listed helpers.
 11. In defaultPreset.features.quality, set "fudgeFactor": 0.5 and "estimator": 0 for power fractals (z = z^p + c) or 1 for fold/IFS fractals (box/sphere folds). fudgeFactor (the app's "Slice Optimization") under 1.0 makes the raymarch take smaller steps so a hand-written distance estimate — which is rarely exact — doesn't overshoot the surface and leave flat "slices"/holes. 0.5 is a safe default for AI-authored formulas; raise it toward 1.0 only if the surface looks correct and you want more speed.
+12. Prefer the built-in estimator (rule 11) and OMIT <Shader_Dist>. Only add <Shader_Dist> if you genuinely need a custom distance estimate — and if so, it is the BODY of "vec2 getDist(float r, float dr, float iter, vec4 z)": write statements ONLY (do NOT write a "float yourName(...)" or "vec2 getDist(...)" function — GLSL forbids nested functions, so a function definition here will not compile) and end with "return vec2(distance, smoothIter);" — a vec2, never a float. In scope: r, dr, iter, z.
 
 ================ STRONGLY PREFER per-iteration (do NOT reach for break;) ================
 Author the formula as \`shape:per-iteration\`: write ONE step of the iteration and let the engine run the loop and the escape check. This is the default and the right choice almost always.
@@ -256,14 +257,15 @@ export function sanitizeGMF(text: string): string | null {
     if (startIdx < 0) return null; // no GMF tag at all
     s = s.slice(startIdx).trim();
 
-    // Scrub code-block formatter artifacts that some chat UIs inject when you
-    // copy from a rendered code block — a stray standalone line like "code",
-    // "Code", "code Code", "Copy code", or a bare language label ("glsl"/"xml").
-    // Gemini's formatter is a known offender. Such a line is never valid on its
-    // own in GMF / GLSL / JSON, so removing whole lines made up only of these
-    // tokens is safe and rescues an otherwise-good paste (it landed mid-shader
-    // and broke the GLSL compile). Punctuation-bearing GLSL/JSON lines never match.
-    s = s.replace(/^[ \t]*(?:(?:copy|code|glsl|xml|html)[ \t]*)+$/gim, '');
+    // Scrub code-block formatter artifacts that some chat UIs (Gemini is a known
+    // offender) inject when you copy from a rendered code block — a stray line
+    // like "code Code", "Copy code", or a bare language label ("glsl"/"json").
+    // STRICT per-line exact match after trimming: a line is dropped ONLY when its
+    // ENTIRE trimmed content is one of these tokens, so a brace, a GLSL statement,
+    // or any real line is never touched. (An earlier looser regex could clip a
+    // line — e.g. eat a `}` — which broke otherwise-valid pastes.)
+    const ARTIFACT_LINE = /^(?:code(?:\s+code)?|copy(?:\s+code)?|glsl(?:\s*es)?|xml|html|json)$/i;
+    s = s.split('\n').filter((line) => !ARTIFACT_LINE.test(line.trim())).join('\n');
 
     // Validate the two blocks the strict parser actually requires (parseGMF
     // throws without <Metadata>, and "Missing essential shader blocks" without
@@ -273,4 +275,52 @@ export function sanitizeGMF(text: string): string | null {
 
     // Guaranteed to satisfy isGMFFormat() now (starts with <Metadata> or <!--).
     return s;
+}
+
+/**
+ * Avoid a name collision when loading a pasted formula. If `def.id` is already
+ * registered, return a clone with a fresh id (`Foo` → `Foo_2`, `Foo_3`, …) AND a
+ * matching renamed GLSL function (`formula_Foo` → `formula_Foo_2`), so:
+ *   - re-pasting an iteration doesn't silently fail to replace the old one,
+ *   - it never clobbers a built-in that happens to share the id,
+ *   - two same-named `formula_*` functions can't clash in one shader (interlace).
+ * Each paste becomes its own formula. No-op when the id is already free.
+ *
+ * `exists(id)` is injected (the caller passes the live registry lookup) to keep
+ * this module free of an engine/registry import.
+ */
+export function ensureUniqueFormulaId(
+    def: FractalDefinition,
+    exists: (id: string) => boolean,
+): FractalDefinition {
+    if (!exists(def.id)) return def;
+
+    let n = 2;
+    let newId = `${def.id}_${n}`;
+    while (exists(newId)) {
+        n += 1;
+        newId = `${def.id}_${n}`;
+    }
+
+    // Rename the GLSL function. Read the actual name from <Shader_Loop> (the kit
+    // convention is formula_<id>, but honour whatever the author called it).
+    const shader = { ...def.shader };
+    const oldFn = (def.shader.loopBody.match(/\b(formula_\w+)\s*\(/) || [])[1];
+    if (oldFn) {
+        const newFn = `formula_${newId}`;
+        const rename = (s: string | undefined) => (s ? s.split(oldFn).join(newFn) : s);
+        shader.function = rename(shader.function) as string;
+        shader.loopBody = rename(shader.loopBody) as string;
+        shader.loopInit = rename(shader.loopInit);
+        shader.getDist = rename(shader.getDist);
+        shader.preamble = rename(shader.preamble);
+    }
+
+    return {
+        ...def,
+        id: newId as FractalDefinition['id'],
+        name: `${def.name} (${n})`,
+        shader,
+        defaultPreset: { ...def.defaultPreset, formula: newId as FractalDefinition['id'] },
+    };
 }

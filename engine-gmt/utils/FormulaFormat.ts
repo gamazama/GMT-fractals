@@ -59,11 +59,13 @@ const GMF_API_DOCS = `
  *       The single call placed inside the engine's iteration loop, usually:
  *         formula_<id>(z, dr, trap, c);
  *
- *   <Shader_Dist> ... </Shader_Dist>            (optional)
- *       Custom distance estimator body. Replaces the built-in estimator.
- *         Signature: vec2 getDist(float r, float dr, float iter, vec4 z)
- *         Return: vec2(distance, smoothIteration)
- *       Omit it to use the built-in estimator chosen by defaultPreset.quality.estimator.
+ *   <Shader_Dist> ... </Shader_Dist>            (optional — usually OMIT)
+ *       The BODY of the estimator. The engine wraps your block as
+ *         vec2 getDist(float r, float dr, float iter, vec4 z) { <your block> }
+ *       so write STATEMENTS ONLY — do NOT include the "vec2 getDist(...)" line or
+ *       any function definition (GLSL has no nested functions → won't compile) —
+ *       and END with:  return vec2(distance, smoothIteration);   // a vec2, not a float
+ *       Most formulas should OMIT this and just set defaultPreset.quality.estimator.
  *
  * ---- THE FORMULA FUNCTION ----
  *   z    : current point. z.xyz = position, z.w = 4th dimension (init from uParamB)
