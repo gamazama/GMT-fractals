@@ -40,6 +40,7 @@ docs/
 │   ├── 07_Code_Health.md          GMT technical debt tracker
 │   ├── 08_File_Structure.md       GMT codebase layout (pre-extraction)
 │   ├── 21–27_*.md                 formula / frag importer / shader tests
+│   ├── 25_Formula_Dev_Reference.md  GLSL formula contract: signature, uniforms, helpers, estimators, gotchas (native + GMF authoring)
 │   ├── 30_Mesh_Export_Prototype.md
 │   ├── 43_Bucket_Render_Overhaul.md
 │   └── 44_Preview_Region_Plan.md
@@ -151,6 +152,14 @@ The [gmt/](gmt/) subdir preserves pre-extraction GMT docs for the eventual port.
 - `01–08` — GMT architecture, rendering, modular graph, animation, data, file structure (pre-engine-split).
 - `21–27` — Fragmentarium importer, formula dev, shader test harness.
 - `30, 43, 44` — Mesh export, bucket render, preview region.
+
+### Formula authoring
+
+| # | File | Status | Scope |
+|---|---|---|---|
+| 25 | [Formula Dev Reference](gmt/25_Formula_Dev_Reference.md) | ⚠️ | Writing/modifying fractal formulas — `formula_NAME()` GLSL contract, `uParam*`/`uVec*` uniforms, `sphereFold`/`boxFold`/`gmt_*` helpers, distance estimators, `paramA→c.w` / `paramB→z.w` wiring. NOTE: registration section (FormulaType/index.ts) is pre-extraction; `capabilities` is now REQUIRED on `shader` (P8). |
+
+- **Public formula-authoring guide** (for the in-app "Modify with AI" `.gmf` paste workflow) lives on the landing site at **gmt-fractals.com/learn/create-formula** — derived from `gmt/25_Formula_Dev_Reference.md`, minus native `.ts` registration. The canonical machine-readable contract is the `GMF_API_DOCS` comment in `engine-gmt/utils/FormulaFormat.ts`.
 
 ## Style
 

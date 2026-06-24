@@ -11,45 +11,135 @@ import { registry } from '../engine/FractalRegistry';
  */
 
 const GMF_API_DOCS = `
-  /*
-   * --- GMT SHADER API REFERENCE ---
-   *
-   * Scalar Parameters (float uniforms — mapped to UI sliders):
-   *   uParamA, uParamB, uParamC, uParamD, uParamE, uParamF
-   *
-   * Vector Parameters (mapped to multi-axis UI controls):
-   *   vec2 uVec2A, uVec2B, uVec2C
-   *   vec3 uVec3A, uVec3B, uVec3C
-   *   vec4 uVec4A, uVec4B, uVec4C
-   *
-   * System Uniforms:
-   *   int   uIterations      — Iteration count (user-adjustable)
-   *   float uTime            — Elapsed time in seconds
-   *   vec3  uJulia           — Julia seed coordinates (if Julia mode active)
-   *   float uJuliaMode       — 1.0 if Julia mode active, 0.0 otherwise
-   *   float uDistanceMetric  — 0=Euclidean, 1=Chebyshev, 2=Manhattan, 3=Quartic
-   *
-   * Built-in Helper Functions:
-   *   void  sphereFold(inout vec3 z, inout float dz, float minR, float fixedR)
-   *   void  boxFold(inout vec3 z, inout float dz, float foldLimit)
-   *   float snoise(vec3 v)                — Simplex Noise (-1.0 to 1.0)
-   *   float getLength(vec3 p)             — Distance metric (respects uDistanceMetric)
-   *
-   * Rotation Helpers (branchless, CPU-precomputed matrices):
-   *   void applyPreRotation(inout vec3 p)   — Applied inside loop, before formula
-   *   void applyPostRotation(inout vec3 p)  — Applied inside loop, after formula
-   *   void applyWorldRotation(inout vec3 p) — Applied before iteration loop
-   *
-   * Formula Function Signature:
-   *   void formula_NAME(inout vec4 z, inout float dr, inout float trap, vec4 c)
-   *     z    : Current coordinate (.xyz = position, .w = auxiliary)
-   *     dr   : Running derivative (float) — used for distance estimation
-   *     trap : Orbit trap accumulator (float) — used for coloring
-   *     c    : Constant for the fractal (Julia seed or initial position)
-   *
-   * To modify this formula, edit the GLSL blocks below directly.
-   * The Metadata JSON block configures parameter names, ranges, and defaults.
-   */
+/*
+ * ============================================================
+ *  GMT FRACTAL FORMULA — .gmf AUTHORING KIT
+ *  Full guide: https://gmt-fractals.com/learn/create-formula
+ * ============================================================
+ *
+ * This file is a GMF (GPU Mandelbulb Format) container. It holds a fractal
+ * definition you can edit by hand or with an LLM, then drag-and-drop or paste
+ * back into the GMT app to register and render it.
+ *
+ * ---- FILE STRUCTURE ----
+ * A GMF is plain text. The loader reads these blocks (order is fixed; tags are
+ * literal). Only <Metadata>, <Shader_Function> and <Shader_Loop> are required.
+ *
+ *   <Metadata> ... </Metadata>
+ *       JSON describing the formula. Required keys:
+ *         "id"          unique formula id (no spaces), e.g. "MyBulb"
+ *         "name"        display name
+ *         "parameters"  array of UI controls (see PARAMETERS below); use null
+ *                       for an unused slot
+ *         "defaultPreset" initial scene (camera, lights, feature values). At
+ *                       minimum: { "formula":"<id>", "features": {
+ *                       "coreMath": { "iterations": 10, ...params },
+ *                       "quality": { "estimator": 0, "fudgeFactor": 0.5,
+ *                       "maxSteps": 300 } } }
+ *       Optional keys: "shortDescription", "description", "juliaType"
+ *       ("julia" | "offset" | "none"), "tags".
+ *       Optional "shaderMeta": { "selfContainedSDE": true, "preambleVars":[...] }
+ *       — see MUST-DO #4. Do NOT hand-write a "capabilities" field; the loader
+ *       derives it from the shader automatically.
+ *
+ *   <Shader_Preamble> ... </Shader_Preamble>   (optional)
+ *       Global-scope GLSL: helper functions and mutable globals. Runs once at
+ *       compile. You CANNOT call gmt_* transform helpers from here (declared
+ *       later) — call them from <Shader_Init>.
+ *
+ *   <Shader_Init> ... </Shader_Init>           (optional)
+ *       GLSL run once before the iteration loop. In scope: z, c, dr, trap, iter.
+ *       Typical use: precalc, e.g.  gmt_precalcRodrigues(uVec3B);
+ *
+ *   <Shader_Function> ... </Shader_Function>    (REQUIRED)
+ *       Your formula function. Signature is fixed:
+ *         void formula_<id>(inout vec4 z, inout float dr, inout float trap, vec4 c)
+ *
+ *   <Shader_Loop> ... </Shader_Loop>            (REQUIRED)
+ *       The single call placed inside the engine's iteration loop, usually:
+ *         formula_<id>(z, dr, trap, c);
+ *
+ *   <Shader_Dist> ... </Shader_Dist>            (optional)
+ *       Custom distance estimator body. Replaces the built-in estimator.
+ *         Signature: vec2 getDist(float r, float dr, float iter, vec4 z)
+ *         Return: vec2(distance, smoothIteration)
+ *       Omit it to use the built-in estimator chosen by defaultPreset.quality.estimator.
+ *
+ * ---- THE FORMULA FUNCTION ----
+ *   z    : current point. z.xyz = position, z.w = 4th dimension (init from uParamB)
+ *   dr   : running derivative for distance estimation. Starts at 1.0
+ *   trap : orbit-trap accumulator for colour. Starts at 1e10
+ *   c    : iteration constant. Mandelbrot: c = initial z. Julia: c = vec4(uJulia, uParamA)
+ *   The engine runs the loop and handles escape/bailout — do NOT loop or check
+ *   escape yourself (unless you use the self-contained pattern, MUST-DO #4).
+ *
+ * ---- MUST DO (or it renders wrong / black) ----
+ *   1. UPDATE dr every call to match your math, or the surface is garbage:
+ *        power fractal:  dr = power * pow(max(r,1e-10), power-1.0) * dr + 1.0;
+ *        IFS / fold:     dr *= abs(scale);   (accumulate per fold stage)
+ *   2. UPDATE trap with a POSITIVE distance (the colourer clamps <=0 to a floor):
+ *        trap = min(trap, length(z.xyz));   // or dot(z.xyz,z.xyz)
+ *      Never feed log-distances or negatives into trap.
+ *   3. HANDLE Julia mode for power fractals:
+ *        if (uJuliaMode > 0.5) z.xyz += c.xyz;   // add the constant
+ *      (Set "juliaType":"offset" for fold/IFS fractals, "none" to hide the toggle.)
+ *   4. PREFER per-iteration. Write ONE step of the iteration and let the engine
+ *      run the loop. Only if the math genuinely cannot be decomposed: let your
+ *      <Shader_Loop> own its own loop, end it with break;, and you MUST set
+ *      "shaderMeta": { "selfContainedSDE": true } in <Metadata>. Read uIterations
+ *      as int(uIterations) to cap your internal loop, and encode trap/iteration
+ *      yourself. Self-contained DISABLES hybrid / interlace / burning-ship — it
+ *      strictly reduces what the engine can do, so use it only as a last resort.
+ *
+ * ---- UNIFORMS (read-only inputs) ----
+ *  Scalar params (UI sliders):  float uParamA uParamB uParamC uParamD uParamE uParamF
+ *  Vector params:               vec2 uVec2A/B/C   vec3 uVec3A/B/C   vec4 uVec4A/B/C
+ *  GOTCHA: uParamB initialises z.w (4D), and uParamA becomes c.w in Julia mode.
+ *          Prefer uParamC..F for ordinary scalars unless you want that.
+ *  System:
+ *    float uIterations     max iterations (cap loops with int(uIterations))
+ *    float uJuliaMode      >0.5 = Julia, else Mandelbrot
+ *    vec3  uJulia          Julia seed (xyz)
+ *    float uDistanceMetric 0=Euclidean 1=Chebyshev 2=Manhattan 3=Minkowski-4(L4)
+ *    float uEscapeThresh   colouring escape radius (default 4.0)  — colouring only
+ *    float uDeBailout      raymarch DE bailout |z|^2 (default 100.0) — geometry
+ *    float uTime           seconds — AVOID in the formula body (breaks accumulation)
+ *
+ * ---- HELPER FUNCTIONS (call freely) ----
+ *    void  sphereFold(inout vec3 z, inout float dz, float minR, float fixedR)
+ *    void  boxFold(inout vec3 z, inout float dz, float foldLimit)
+ *    float getLength(vec3 p)        distance metric (respects uDistanceMetric)
+ *    float snoise(vec3 v)           3D simplex noise, -1..1
+ *    vec4  textureLod0(sampler2D t, vec2 uv)
+ *    (sphereFold / boxFold take the running derivative dr as their 2nd argument.)
+ *  Rodrigues AXIS-ANGLE rotation (call gmt_precalcRodrigues from <Shader_Init>, apply inside):
+ *    void  gmt_precalcRodrigues(vec3 params)   params = (azimuth, pitch, angle)
+ *    void  gmt_applyRodrigues(inout vec3 p)
+ *    void  gmt_applyTwist(inout vec3 p, float amount)
+ *  NO per-axis rotation helpers exist (gmt_rotate_x/y/z, rotX… do NOT exist and
+ *  will not compile). Rotate around an axis with an inline 2x2 matrix:
+ *    float ca=cos(a), sa=sin(a); p.xy = mat2(ca, sa, -sa, ca) * p.xy;  // around Z
+ *    (around X -> rotate p.yz ; around Y -> rotate p.xz)
+ *  Constants: PI, TAU, INV_PI, INV_TAU, phi (golden ratio).
+ *  GLSL ES 3.0 note: do NOT initialise \`const\` with sqrt()/normalize()/cos();
+ *  use a non-const global set in a precalc function instead.
+ *  ENGINE-INTERNAL (applied automatically by the DE loop — do NOT call these as
+ *  your rotation control): applyPreRotation / applyPostRotation / applyWorldRotation.
+ *
+ * ---- BUILT-IN ESTIMATORS (defaultPreset.quality.estimator) ----
+ *    0 Analytic/Log  0.5*r*ln(r)/dr   power fractals (Mandelbulb)
+ *    1 Linear        (r-1.0)/dr       IFS / box-fold (Menger, Sierpinski)
+ *    2 Pseudo        r/dr             sparse / artistic
+ *    3 Dampened      0.5*r*ln(r)/(dr+8) fixes slicing on thin structures
+ *    4 Linear(2.0)   (r-2.0)/dr       classic Menger offset
+ *  (5 Cutting-Plane is formula-gated; ignore for normal formulas.)
+ *  fudgeFactor ("Slice Optimization"): default 1.0. Use ~0.5 for hand-written
+ *  DEs — values <1 take smaller raymarch steps so an imperfect/overestimating
+ *  estimator doesn't overshoot the surface (which shows as flat "slices"/holes).
+ *
+ * To modify this formula: edit the GLSL blocks and the <Metadata> JSON below,
+ * then drag this file onto the app or paste it via "Modify with AI".
+ */
 `;
 
 // ─── Original GMF Generator/Parser (formula-only, used by FormulaSelect/Gallery) ──

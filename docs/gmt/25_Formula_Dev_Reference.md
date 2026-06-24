@@ -1,6 +1,13 @@
 # Formula Developer Reference
 > Last updated: 2026-04-08 | GMT v0.9.1
 
+> **Update 2026-06-24 (corrections; decisions unchanged):** body left as-is per the append-only rule for `gmt/` docs; the following drift was found while building the AI Formula Kit. The GLSL contract, helpers, estimators, and gotchas below remain current — the corrections are confined to the registration/capability surface.
+> - **(a) `shader.capabilities` is REQUIRED since P8.** `FractalRegistry.register()` now *throws* if `def.shader.capabilities` is missing — native formulas MUST include `capabilities: new Set([...])`. The three boolean flags (`selfContainedSDE` / `usesSharedRotation` / `supportsCuttingPlane`) taught in §3.7–§3.9 are `@deprecated`, kept only for GMF back-compat (and auto-derived from the shader on GMF load). See `engine-gmt/engine/FractalRegistry.ts` + ADR-0059.
+> - **(b) The native-registration sections do NOT apply to GMF/paste authoring.** §1, §3.7–§3.9, and §9 (FormulaType union, `formulas/index.ts`, recompile/`tsc` checklist) describe the pre-extraction GMT native `.ts` workflow. They are irrelevant to the GMF/paste ("Modify with AI") authoring path — for that, see the public guide at gmt-fractals.com/learn/create-formula (and the `GMF_API_DOCS` comment in `engine-gmt/utils/FormulaFormat.ts`, which is the canonical machine-readable contract).
+> - **(c) §3.3a "Examples" mis-lists KleinianMobius as a self-contained SDE.** It is actually `shape:per-iteration` (normal loopBody, custom `getDist`) and interlace-capable — do NOT add `selfContainedSDE` to it. The shared trait there is "mutable preamble-global DE + custom getDist," not "self-contained."
+> - **(d) `### 3.8` appears twice** (`usesSharedRotation` AND `getDist`). The `getDist` section should be numbered §3.9.
+> - **(e) §6 omits estimator 5 (Cutting Plane).** It exists (Knighty fold-and-cut) but is formula-gated — only selectable for formulas declaring the cutting-plane capability.
+
 Unified reference for writing, debugging, and maintaining GMT native formula files (`formulas/*.ts`). Covers the full API surface, quirks, workarounds, and common patterns.
 
 **Related docs:**

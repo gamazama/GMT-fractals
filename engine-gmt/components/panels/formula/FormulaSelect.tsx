@@ -5,9 +5,12 @@ import { FormulaType } from '../../../../types';
 import { useEngineStore } from '../../../../store/engineStore';
 import { ContextMenuItem } from '../../../../types/help';
 import { generateGMF, loadGMFScene } from '../../../utils/FormulaFormat';
-import { DownloadIcon, ChevronDown, CodeIcon, MenuIcon, UploadIcon } from '../../../../components/Icons';
+import { sanitizeGMF } from '../../../utils/formulaBrief';
+import { DownloadIcon, ChevronDown, CodeIcon, MenuIcon, UploadIcon, MagicIcon } from '../../../../components/Icons';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../../engine/FractalEvents';
+import { showToast } from '../../../../engine/store/toastStore';
 import { buildFormulaContextMenu } from './FormulaContextMenu';
+import { ModifyWithAIModal } from './ModifyWithAIModal';
 import { FormulaPicker, useSceneGroups, useCatalogData, sectionGroups } from '../../FormulaPicker';
 import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
 
@@ -25,6 +28,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
     const hamburgerAnchorRef = useTutorAnchor('formula-hamburger');
     const fileRef = useRef<HTMLInputElement>(null);
     const [rect, setRect] = useState<DOMRect | null>(null);
+    const [aiOpen, setAiOpen] = useState(false);
 
     // Global Hooks
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
@@ -43,7 +47,26 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
         e.stopPropagation();
         const r = menuBtnRef.current?.getBoundingClientRect();
         if (!r) return;
-        const items = buildFormulaContextMenu();
+        const modular = value === 'Modular';
+        // Prepend the AI section. The context-menu builder is a pure free
+        // function with no closure over component state, so the modal is opened
+        // from here (where setAiOpen is in scope) rather than from the builder.
+        const aiItems: ContextMenuItem[] = [
+            { label: 'AI', action: () => {}, isHeader: true },
+            {
+                label: 'Modify with AI…',
+                icon: <MagicIcon active={!modular} />,
+                // Modular formulas live in the node graph, not portable shader
+                // blocks, so they can't be exported to the kit.
+                disabled: modular,
+                action: () => setAiOpen(true),
+            },
+            {
+                label: 'Load formula from clipboard',
+                action: () => { void loadFormulaFromClipboard(); },
+            },
+        ];
+        const items = [...aiItems, ...buildFormulaContextMenu()];
         openGlobalMenu(r.left, r.bottom + 4, items, ['formula.active']);
     };
 
@@ -102,6 +125,36 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
         openGlobalMenu(e.clientX, e.clientY, items, []);
     };
 
+    // Shared GMF-string loader: register the formula in BOTH registries
+    // (main thread + worker) then hydrate the store, exactly like the file
+    // import path. Throws on parse failure so callers can surface their own
+    // error UI. Used by file import AND the "Load formula from clipboard"
+    // menu item.
+    const loadGmfString = (content: string) => {
+        FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
+        const { def, preset } = loadGMFScene(content);
+        if (def) {
+            // Register the imported formula in BOTH registries:
+            //  - main thread (so UI / FractalRegistry can resolve it)
+            //  - worker (via REGISTER_FORMULA event → bridge → proxy)
+            // engine-core's loadScene() does neither directly; this
+            // call site is responsible for both, then loadScene
+            // hydrates the store + emits CONFIG so the worker
+            // compiles the just-registered shader.
+            if (!registry.get(def.id)) {
+                registry.register(def);
+            }
+            FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, {
+                id: def.id,
+                shader: def.shader,
+            });
+            useEngineStore.getState().loadScene({ def, preset });
+        } else {
+            // Legacy JSON — just switch formula
+            onChange(preset.formula as FormulaType);
+        }
+    };
+
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -109,29 +162,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
         const reader = new FileReader();
         reader.onload = (ev) => {
             try {
-                const content = ev.target?.result as string;
-                FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
-                const { def, preset } = loadGMFScene(content);
-                if (def) {
-                    // Register the imported formula in BOTH registries:
-                    //  - main thread (so UI / FractalRegistry can resolve it)
-                    //  - worker (via REGISTER_FORMULA event → bridge → proxy)
-                    // engine-core's loadScene() does neither directly; this
-                    // call site is responsible for both, then loadScene
-                    // hydrates the store + emits CONFIG so the worker
-                    // compiles the just-registered shader.
-                    if (!registry.get(def.id)) {
-                        registry.register(def);
-                    }
-                    FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, {
-                        id: def.id,
-                        shader: def.shader,
-                    });
-                    useEngineStore.getState().loadScene({ def, preset });
-                } else {
-                    // Legacy JSON — just switch formula
-                    onChange(preset.formula as FormulaType);
-                }
+                loadGmfString(ev.target?.result as string);
                 if (fileRef.current) fileRef.current.value = '';
             } catch (err) {
                 console.error("Failed to import formula:", err);
@@ -140,6 +171,32 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             }
         };
         reader.readAsText(file);
+    };
+
+    // "Load formula from clipboard" — the same tolerant load path the AI modal
+    // uses, callable straight from the burger menu. Reads the clipboard, runs
+    // it through sanitizeGMF (strips fences / prose / BOM), then loads it.
+    const loadFormulaFromClipboard = async () => {
+        let text = '';
+        try {
+            text = await navigator.clipboard.readText();
+        } catch {
+            showToast('Clipboard read was blocked — use Modify with AI to paste into a box instead.', 'warning', 4500);
+            return;
+        }
+        const clean = sanitizeGMF(text);
+        if (!clean) {
+            showToast("Clipboard didn't contain a complete formula. Copy the whole .gmf and try again.", 'warning', 4500);
+            return;
+        }
+        try {
+            loadGmfString(clean);
+            showToast('Formula loaded from clipboard — compiling…', 'success');
+        } catch (err) {
+            console.error('Failed to load formula from clipboard:', err);
+            FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
+            showToast("Couldn't read that formula — check it's a complete .gmf block.", 'error', 4500);
+        }
     };
 
     const selectedDef = registry.get(value);
@@ -246,6 +303,8 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                     ) : undefined}
                 />
             )}
+
+            <ModifyWithAIModal open={aiOpen} onClose={() => setAiOpen(false)} />
 
         </div>
     );

@@ -345,6 +345,17 @@ export class WorkerProxy implements AccumulationController {
                     FractalEvents.emit(FRACTAL_EVENTS.WORKER_BOOT_FAILED, {
                         reason: msg.message || 'unknown worker error'
                     });
+                } else {
+                    // Post-boot worker error — almost always a shader
+                    // compile/link failure from a late-registered or AI-pasted
+                    // formula (renderWorker forwards CompileScheduler's
+                    // COMPILE_FAILED as this ERROR postMessage). Previously this
+                    // was only console.error'd; re-emit it on the main bus so UI
+                    // such as the "Modify with AI" modal can show the GLSL log
+                    // and offer a one-click "copy error for LLM".
+                    FractalEvents.emit(FRACTAL_EVENTS.COMPILE_FAILED, {
+                        reason: msg.message || 'unknown worker error'
+                    });
                 }
                 break;
             case 'CONTEXT_LOST': {
