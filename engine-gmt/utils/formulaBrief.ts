@@ -332,10 +332,10 @@ Many sources — especially the Distance Estimator Compendium and Shadertoy snip
 - CRITICAL — slot id vs uniform name: the GLSL reads a slider as uParamC / uVec2A, but in <Metadata> the parameters[].id AND the coreMath KEY use the SLOT id WITHOUT the leading 'u' (paramA..paramF, vec2A.., vec3A.., vec4A..). Writing "uParamC" as the id/key SILENTLY FAILS — the value never applies and the slider sits at 0. Worked example (a scale + an xyz offset):
     "parameters": [
       { "id": "paramC", "label": "Scale",  "min": 1.0, "max": 3.0, "step": 0.01, "default": 1.8 },
-      { "id": "vec3A",  "label": "Offset", "min": -5,  "max": 5,   "step": 0.01, "default": { "x": 0, "y": 3, "z": 0 } }
+      { "id": "vec3A",  "type": "vec3", "label": "Offset", "min": -5, "max": 5, "step": 0.01, "default": { "x": 0, "y": 3, "z": 0 } }
     ],
     "defaultPreset": { "features": { "coreMath": { "iterations": 9, "paramC": 1.8, "vec3A": { "x": 0, "y": 3, "z": 0 } } } }
-  The GLSL uses uParamC and uVec3A; the id and coreMath key drop the 'u'. Mirror every default into coreMath.
+  The GLSL uses uParamC and uVec3A; the id and coreMath key drop the 'u'. Mirror every default into coreMath. A vec2/vec3/vec4 slider MUST include "type":"vec2"/"vec3"/"vec4" (as shown for vec3A) — without it the slider won't render as a vector control. Scalars (paramA..paramF) need no type.
 
 ================ THE FRAGMENTARIUM SOURCE YOU ARE CONVERTING ================
 Name: ${formulaName}
@@ -537,9 +537,15 @@ export function normalizeParamSlots(def: FractalDefinition): FractalDefinition {
     const newParams = params.map((p) => {
         if (!p) return p;
         const id = canonSlot(p.id);
-        if (id === p.id) return p;
+        // Infer a missing `type` from the slot id. The param WIDGET dispatches on
+        // p.type (if p.type==='vec2'…), so a vec2/3/4 param with no type falls
+        // through to the scalar branch and doesn't render as a vector control at
+        // all. Scalars (paramA..F) need no type (the float branch handles them).
+        const vecMatch = id.match(/^(vec[234])[A-C]$/);
+        const type = p.type ?? (vecMatch ? (vecMatch[1] as typeof p.type) : undefined);
+        if (id === p.id && type === p.type) return p;
         changed = true;
-        return { ...p, id: id as typeof p.id };
+        return { ...p, id: id as typeof p.id, ...(type ? { type } : {}) };
     });
 
     const newCore: Record<string, any> = {};
