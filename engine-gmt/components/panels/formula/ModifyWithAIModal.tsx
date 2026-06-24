@@ -36,7 +36,7 @@ import { useClipboardCopy } from '../../../../hooks/useClipboardCopy';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
 import { loadGMFScene } from '../../../utils/FormulaFormat';
-import { buildFormulaBrief, buildModifyPrompt, buildConvertPrompt, sanitizeGMF, ensureUniqueFormulaId, backfillCoreMathDefaults, normalizeParamSlots } from '../../../utils/formulaBrief';
+import { buildFormulaBrief, buildModifyPrompt, buildConvertPrompt, sanitizeGMF, ensureUniqueFormulaId, backfillCoreMathDefaults, normalizeParamSlots, buildRepairPrompt } from '../../../utils/formulaBrief';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
 import type { FormulaType } from '../../../../types';
 import type { FractalDefinition } from '../../../types/fractal';
@@ -157,6 +157,9 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
     // Armed when we trigger a load. A COMPILE_FAILED while armed = a shader
     // error; the cycle ending with no COMPILE_FAILED = success.
     const watchingRef = useRef(false);
+    // The last sanitized GMF we tried to load — so a compile failure can build a
+    // repair prompt around the exact code that failed.
+    const lastGmfRef = useRef('');
 
     useEffect(() => {
         if (!open) return;
@@ -171,7 +174,7 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
             watchingRef.current = false;
             setLoadError({
                 kind: 'compile',
-                message: 'This formula has a shader compile error (shown below). Click "Copy error for LLM" and paste it back to your model.',
+                message: 'This formula has a shader compile error (shown below). Click "Copy fix request for LLM" and paste it to your model.',
                 log: (reason || '').trim() || undefined,
             });
             showToast('This formula has a shader error — copy it back to your LLM to fix.', 'error', 6000);
@@ -211,8 +214,10 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
         }
         try {
             FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, 'Compiling Formula...');
-            // Arm the compile-error watch for the recompile this triggers.
+            // Arm the compile-error watch for the recompile this triggers, and
+            // remember the GMF so a failure can build a repair prompt around it.
             watchingRef.current = true;
+            lastGmfRef.current = clean;
 
             const { def: loadedDef, preset } = loadGMFScene(clean);
             if (loadedDef) {
@@ -302,11 +307,16 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
     // Copy the LLM-facing fix instruction with the exact GLSL log appended (when
     // we captured one) so the user can hand the model everything in one paste.
     const copyErrorForLLM = () => {
-        const payload = loadError?.log
-            ? `${COMPILE_ERROR_GUIDANCE}\n\nThe exact GLSL compiler error was:\n${loadError.log}`
-            : COMPILE_ERROR_GUIDANCE;
+        // A ready-to-paste REPAIR prompt: the failed GMF + the exact error + a
+        // plain-language diagnosis + the restated contract. This external,
+        // grounded feedback is what lets a weak model fix its own output.
+        const payload = lastGmfRef.current
+            ? buildRepairPrompt(lastGmfRef.current, loadError?.log ?? '')
+            : loadError?.log
+                ? `${COMPILE_ERROR_GUIDANCE}\n\nThe exact GLSL compiler error was:\n${loadError.log}`
+                : COMPILE_ERROR_GUIDANCE;
         void navigator.clipboard.writeText(payload).then(
-            () => showToast('Error + fix instructions copied — paste them to your LLM.', 'success'),
+            () => showToast('Fix request copied — paste it to your LLM.', 'success'),
             () => showToast('Copy failed — select the text above manually.', 'warning', 4000),
         );
     };
@@ -503,7 +513,7 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
                                                     onClick={copyErrorForLLM}
                                                     className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded border bg-red-500/15 border-red-500/40 text-red-200 hover:bg-red-500/25 transition-colors"
                                                 >
-                                                    Copy error for LLM
+                                                    Copy fix request for LLM
                                                 </button>
                                             )}
                                         </div>

@@ -387,6 +387,11 @@ export function sanitizeGMF(text: string): string | null {
     // BOM would misclassify a valid GMF as JSON).
     if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
 
+    // Normalize clipboard/chat typography that breaks GLSL/JSON: non-breaking
+    // spaces -> space, smart quotes -> straight. A documented source of mystery
+    // compile / JSON-parse errors. GLSL has no string literals, so this is safe.
+    s = s.replace(/ /g, ' ').replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+
     // Remove markdown fences anywhere: opening ``` with optional lang tag, and
     // bare closing ```. Done globally + case-insensitively so a fence wrapping
     // only part of the output (e.g. just the shader block) is also removed.
@@ -553,4 +558,52 @@ export function normalizeParamSlots(def: FractalDefinition): FractalDefinition {
             features: { ...def.defaultPreset?.features, coreMath: newCore },
         },
     };
+}
+
+/**
+ * Map a raw GLSL/driver compile log to a short plain-language diagnosis a weak
+ * model can act on (research: weak models can't self-diagnose, but DO repair
+ * well from external grounded feedback). Best-effort substring match.
+ */
+export function glslErrorHint(log: string): string {
+    const l = (log || '').toLowerCase();
+    if (l.includes('no matching overloaded function') || l.includes('overloaded'))
+        return 'A function is called with the wrong number or types of arguments. Check helper signatures — boxFold/sphereFold take the running derivative dr as their 2nd argument, and there are no gmt_rotate_x/y/z helpers (rotate with an inline mat2).';
+    if (l.includes('undeclared') || l.includes('undefined'))
+        return "A name isn't defined. Use only the uniforms/helpers from the guide (uParamA..F, uVec2A.., sphereFold, boxFold, getLength, snoise, gmt_*); don't invent functions or uniforms.";
+    if (l.includes('redefinition') || l.includes('already has a body') || l.includes('previously'))
+        return 'Something is defined twice — make sure the formula function is defined once and only CALLED (not redefined) in <Shader_Loop>, and <Shader_Dist> is a body (no function wrapper).';
+    if (l.includes('syntax error') || l.includes('unexpected'))
+        return 'A syntax error — often a stray non-GLSL token, a missing semicolon, or an unbalanced brace. The shader blocks must contain only valid GLSL.';
+    if (l.includes('cannot convert') || l.includes('constructor') || l.includes('implicit'))
+        return 'A type mismatch — check vec sizes and that vec2/vec3/vec4 are built with the right number of components.';
+    return 'Read the exact error, find the offending line, and fix just that.';
+}
+
+/**
+ * Build a ready-to-paste REPAIR prompt for a formula that failed to compile.
+ * Bundles the exact compiler error + a plain-language hint + the failed GMF + a
+ * restated contract, with one instruction. This external, grounded feedback is
+ * what lets a weak model actually fix its own output (see the SOTA research).
+ */
+export function buildRepairPrompt(failedGmf: string, errorLog: string): string {
+    const hint = glslErrorHint(errorLog);
+    return `The GMT fractal formula you produced FAILED TO COMPILE. Fix ONLY the error and return the complete corrected .gmf.
+
+================ THE COMPILER ERROR ================
+${(errorLog || '(no log captured — open the browser console, F12, for the exact GLSL error)').trim()}
+
+WHAT IT USUALLY MEANS: ${hint}
+
+================ THE FORMULA THAT FAILED ================
+${failedGmf.trim()}
+
+================ HOW TO FIX ================
+- Change as little as possible: fix the specific error above and keep everything else.
+- Keep it per-iteration: signature stays void formula_NAME(inout vec4 z, inout float dr, inout float trap, vec4 c); update dr every iteration; trap = min(trap, <positive>); no own loop, no break;.
+- <Metadata>: parameters[].id and the coreMath KEYS are SLOT ids WITHOUT the 'u' (paramC, vec2A) even though the GLSL reads uParamC/uVec2A; every param the shader reads must have its value in defaultPreset.features.coreMath.
+- Use only uniforms/helpers from https://gmt-fractals.com/learn/create-formula — never invent one (no gmt_rotate_x/y/z; boxFold/sphereFold take dr as the 2nd arg). <Shader_Dist>, if present, is the BODY of vec2 getDist(...) returning vec2 — not a function definition.
+
+================ OUTPUT ================
+Output ONLY the corrected .gmf inside ONE fenced code block (\`\`\`gmf … \`\`\`). No prose, no second block.`;
 }
