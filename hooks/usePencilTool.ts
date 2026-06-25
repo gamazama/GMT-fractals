@@ -22,7 +22,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type { Keyframe } from '../types';
 import type { GraphViewTransform } from '../utils/GraphUtils';
-import { fitSamplesToKeys } from '../utils/CurveFitting';
+import { fitSamplesToKeys, reTangentBezier } from '../utils/CurveFitting';
 
 /**
  * A pencil-shaped mouse cursor (white fill + black outline so it reads on any
@@ -130,7 +130,19 @@ export const usePencilTool = ({
     const kept = getKeys(st.target.trackId).filter((k) => k.frame < lo || k.frame > hi);
     const merged = [...kept, ...spanKeys].sort((a, b) => a.frame - b.frame);
     if (merged.length < 2) return; // never leave a track with <2 keys
-    commit(st.target.trackId, merged);
+
+    // Heal the seam. The span was fit in isolation, so its boundary keys carry
+    // flat stub handles (prev/next were undefined during the fit), and the kept
+    // keys flanking the span still carry handles sized for their *old* neighbours
+    // inside the now-removed span. Both extend far past the new, much closer
+    // boundary key and bow the curve into a big loop on either side of the draw.
+    // Re-tangent just the four seam keys with their real neighbours in the merged
+    // line (auto keys only — reTangentBezier leaves hand-broken handles alone).
+    const firstSpan = merged.findIndex((k) => k.frame >= lo);
+    let lastSpan = firstSpan;
+    while (lastSpan + 1 < merged.length && merged[lastSpan + 1].frame <= hi) lastSpan++;
+    const seam = new Set([firstSpan - 1, firstSpan, lastSpan, lastSpan + 1]);
+    commit(st.target.trackId, reTangentBezier(merged, (_k, i) => seam.has(i)));
   }, [overlayRef, maxFrame, getKeys, commit, onMove]);
 
   const beginPencil = useCallback((e: React.MouseEvent) => {
