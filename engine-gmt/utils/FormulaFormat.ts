@@ -247,11 +247,16 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
  * Parse a GMF string into a FractalDefinition. Falls back to JSON FractalDefinition
  * if no `<Metadata>` tag is present.
  *
- * @invariant Tag extraction uses non-greedy `<TAG>...</TAG>` regex. A shader
- * body containing a literal `</Shader_Function>` (e.g. inside a GLSL
- * line-comment) will truncate early — latent fragility, no current bug hits
- * it. Modular formulas (`metadata.id === 'Modular'`) are explicitly allowed
- * to ship with empty `Shader_Function` / `Shader_Loop`; their GLSL is rebuilt
+ * @invariant Tag extraction is LINE-ANCHORED (`^<TAG>…^</TAG>`, `m` flag):
+ * real blocks are emitted at column 0, so the regex skips the GMF_API_DOCS
+ * banner that mentions the same tag names inside an indented comment. Do NOT
+ * relax the anchors — a bare `<TAG>…</TAG>` matched the banner's `<Metadata>`
+ * example and parsed prose as JSON, breaking every newly-saved scene (the
+ * banner gained literal tag names in the 2026-06 AI-formula-kit rewrite). A
+ * shader body whose own line *starts* with `</Shader_Function>` at column 0
+ * would still truncate early — latent fragility, no current bug hits it.
+ * Modular formulas (`metadata.id === 'Modular'`) are explicitly allowed to
+ * ship with empty `Shader_Function` / `Shader_Loop`; their GLSL is rebuilt
  * from the preset's pipeline at load time.
  *
  * @invariant `shaderMeta` is the survival path for non-GLSL shader fields.
@@ -265,8 +270,14 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
  */
 export const parseGMF = (content: string): FractalDefinition => {
     const extract = (tag: string) => {
-        // Match content between tags, non-greedy
-        const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`);
+        // Anchor BOTH tags to the start of a line (`m` flag). Real GMF blocks are
+        // always emitted at column 0 (`<Tag>\n…\n</Tag>`), whereas the
+        // GMF_API_DOCS banner mentions the same tag names INSIDE an indented
+        // `/* * … */` comment (e.g. ` *   <Metadata> … </Metadata>`). A bare
+        // non-greedy `<Tag>…</Tag>` matched the FIRST occurrence — the banner
+        // example — and fed prose to JSON.parse, so every newly-saved scene
+        // (whose banner now lists the tags) failed to load. See @invariant below.
+        const regex = new RegExp(`^<${tag}>([\\s\\S]*?)^<\\/${tag}>`, 'm');
         const match = content.match(regex);
         return match ? match[1].trim() : null;
     };
@@ -426,7 +437,7 @@ export const loadGMFScene = (content: string): { def?: FractalDefinition, preset
         const def = parseGMF(content);
 
         // Check for Scene block (v2 scene GMF)
-        const sceneMatch = content.match(/<Scene>([\s\S]*?)<\/Scene>/);
+        const sceneMatch = content.match(/^<Scene>([\s\S]*?)^<\/Scene>/m);
         if (sceneMatch) {
             const preset = JSON.parse(sceneMatch[1].trim()) as Preset;
             return { def, preset };

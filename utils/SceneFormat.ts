@@ -58,7 +58,9 @@ export const serializeScene = (preset: Preset): string => {
 export const parseSceneJson = (content: string): Preset | null => {
     // GMF format: starts with a <!-- GMT comment block
     if (content.trimStart().startsWith('<!--')) {
-        const sceneMatch = content.match(/<Scene>([\s\S]*?)<\/Scene>/);
+        // Line-anchored: a GMF banner/comment may mention <Scene> in prose; the
+        // real block is emitted at column 0. Mirrors parseGMF's extract().
+        const sceneMatch = content.match(/^<Scene>([\s\S]*?)^<\/Scene>/m);
         if (sceneMatch) {
             try {
                 return JSON.parse(sceneMatch[1].trim()) as Preset;
