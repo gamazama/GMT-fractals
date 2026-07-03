@@ -13,6 +13,7 @@
  */
 
 import type { ParamAnnotation } from '../types';
+import { SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS } from '../../../../utils/uniformSlots';
 
 export interface SlotAssignment {
     /** paramName → slot (e.g. 'Scale' → 'paramA') or 'ignore' */
@@ -50,10 +51,9 @@ const JULIA_MODE_NAMES = new Set(['Julia', 'DoJulia', 'JuliaV', 'julia', 'doJuli
 /** Uniform names that signal "Julia coordinates / c-constant". */
 const JULIA_COORD_NAMES = new Set(['JuliaC', 'JuliaValues', 'JuliaOffset', 'julia', 'juliaC']);
 
-const FLOAT_SLOTS = ['paramA', 'paramB', 'paramC', 'paramD', 'paramE', 'paramF'];
-const VEC2_SLOTS  = ['vec2A', 'vec2B', 'vec2C'];
-const VEC3_SLOTS  = ['vec3A', 'vec3B', 'vec3C'];
-const VEC4_SLOTS  = ['vec4A', 'vec4B', 'vec4C'];
+// Slot vocabulary — shared single source of truth. @see engine-gmt/utils/uniformSlots.ts
+// (FLOAT_SLOTS is this module's historical name for the scalar pool.)
+const FLOAT_SLOTS = SCALAR_SLOTS;
 
 export function assignSlots(parameters: ParamAnnotation[]): SlotAssignment {
     const byName: Record<string, string> = {};
@@ -65,7 +65,7 @@ export function assignSlots(parameters: ParamAnnotation[]): SlotAssignment {
     const usedVec4  = new Set<string>();
     let iterationsUsed = false;
 
-    function nextSlot(pool: string[], used: Set<string>, type: string, pname: string): string {
+    function nextSlot(pool: readonly string[], used: Set<string>, type: string, pname: string): string {
         for (const s of pool) {
             if (!used.has(s)) { used.add(s); return s; }
         }

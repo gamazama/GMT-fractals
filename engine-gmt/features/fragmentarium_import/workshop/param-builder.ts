@@ -4,18 +4,17 @@
  */
 
 import type { FragUniform, ParamMappingV2, WorkshopParam } from '../types';
-import { slotToUniform, componentSlotBase, getSlotOccupancy, buildOccupancyMap, isSlotConflict } from '../../../utils/uniformSlots';
+import {
+    slotToUniform, componentSlotBase, getSlotOccupancy, buildOccupancyMap, isSlotConflict,
+    SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS,
+} from '../../../utils/uniformSlots';
 
-// The slot vocabulary, accessor mapping, and occupancy algebra now live in the shared
+// The slot vocabulary, accessor mapping, and occupancy algebra live in the shared
 // `uniformSlots` module (consumed by both the Workshop and the MB3D importer). Re-export
 // here so existing `from './workshop/param-builder'` imports keep resolving unchanged.
 // @see engine-gmt/utils/uniformSlots.ts
 export { slotToUniform, componentSlotBase, getSlotOccupancy, buildOccupancyMap, isSlotConflict };
-
-export const SCALAR_SLOTS = ['paramA', 'paramB', 'paramC', 'paramD', 'paramE', 'paramF'] as const;
-export const VEC2_SLOTS   = ['vec2A', 'vec2B', 'vec2C'] as const;
-export const VEC3_SLOTS   = ['vec3A', 'vec3B', 'vec3C'] as const;
-export const VEC4_SLOTS   = ['vec4A', 'vec4B', 'vec4C'] as const;
+export { SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS };
 
 // Component slots: pack multiple floats into a single vec2/vec3/vec4 control.
 // Format: 'vec3A.x', 'vec3A.y', 'vec3A.z', 'vec2A.x', 'vec2A.y', etc.

@@ -7,15 +7,14 @@
  */
 
 import type { ImportedParam, GLSLType } from '../types';
+import { SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS } from '../../../../utils/uniformSlots';
 
 // ============================================================================
-// Slot definitions (same as V2 param-builder, exported for reuse)
+// Slot vocabulary — shared single source of truth (re-exported for existing consumers)
+// @see engine-gmt/utils/uniformSlots.ts
 // ============================================================================
 
-export const SCALAR_SLOTS = ['paramA', 'paramB', 'paramC', 'paramD', 'paramE', 'paramF'] as const;
-export const VEC2_SLOTS   = ['vec2A', 'vec2B', 'vec2C'] as const;
-export const VEC3_SLOTS   = ['vec3A', 'vec3B', 'vec3C'] as const;
-export const VEC4_SLOTS   = ['vec4A', 'vec4B', 'vec4C'] as const;
+export { SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS };
 
 // ============================================================================
 // Well-known Fragmentarium names → engine slots
