@@ -28,6 +28,7 @@ import { getProxy } from '../../../engine/worker/WorkerProxy';
 import { SectionLabel } from '../../../../components/SectionLabel';
 import { text as themeText, border as themeBorder, surface } from '../../../../data/theme';
 import { FormulaSelect } from './FormulaSelect';
+import { slotWriteValue } from '../../../utils/uniformSlots';
 import type { FormulaType } from '../../../../types';
 
 const engine = getProxy();
@@ -94,66 +95,24 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                 const id = key.charAt(0).toLowerCase() + key.slice(1) as LfoTarget;
                 if (!map) return null;
                 const label = map.labels.length > 1 ? `${key} (Mixed)` : (map.labels[0] || key);
-                let val = 0; let set = (v: number) => {};
-                switch(id) {
-                    case 'paramA': val = coreMath.paramA; set = (v) => actions.setCoreMath({ paramA: v }); break;
-                    case 'paramB': val = coreMath.paramB; set = (v) => actions.setCoreMath({ paramB: v }); break;
-                    case 'paramC': val = coreMath.paramC; set = (v) => actions.setCoreMath({ paramC: v }); break;
-                    case 'paramD': val = coreMath.paramD; set = (v) => actions.setCoreMath({ paramD: v }); break;
-                    case 'paramE': val = coreMath.paramE; set = (v) => actions.setCoreMath({ paramE: v }); break;
-                    case 'paramF': val = coreMath.paramF; set = (v) => actions.setCoreMath({ paramF: v }); break;
-                }
+                const val = (coreMath as any)[id] as number;
+                const set = (v: number) => actions.setCoreMath({ [id]: v });
                 return { label, val, set, min: -5.0, max: 5.0, step: 0.01, def: 0.0, id, trackId: `coreMath.${id}`, scale: 'linear' as const };
             });
         }
 
         const def = registry.get(state.formula);
         if (def) {
+            // Params address coreMath slots by id (paramA..F / vec2A..C / vec3A..C /
+            // vec4A..C — the uniformSlots vocabulary). A vec3 param whose id is a vec4
+            // base is the vec4-held-vec3 case (MB3D vec3 overflow, Workshop vec4.xyz
+            // mapping): it renders as a 3-axis control and slotWriteValue pins .w to 0.
             return def.parameters.map((p: any) => {
                 if (!p) return null;
-                if (p.type === 'vec3') {
-                    let val = coreMath.vec3A; let set = (v: any) => actions.setCoreMath({ vec3A: v });
-                    switch(p.id) {
-                        case 'vec3A': val = coreMath.vec3A; set = (v) => actions.setCoreMath({ vec3A: v }); break;
-                        case 'vec3B': val = coreMath.vec3B; set = (v) => actions.setCoreMath({ vec3B: v }); break;
-                        case 'vec3C': val = coreMath.vec3C; set = (v) => actions.setCoreMath({ vec3C: v }); break;
-                        // A vec3 param packed into a uVec4* unit's .xyz (MB3D importer's vec3
-                        // overflow once uVec3A/B/C are full): read/write the .xyz components,
-                        // keep .w at 0. The control still renders as a 3-axis vec3 slider.
-                        case 'vec4A': val = coreMath.vec4A; set = (v) => actions.setCoreMath({ vec4A: { x: v.x, y: v.y, z: v.z, w: 0 } }); break;
-                        case 'vec4B': val = coreMath.vec4B; set = (v) => actions.setCoreMath({ vec4B: { x: v.x, y: v.y, z: v.z, w: 0 } }); break;
-                        case 'vec4C': val = coreMath.vec4C; set = (v) => actions.setCoreMath({ vec4C: { x: v.x, y: v.y, z: v.z, w: 0 } }); break;
-                    }
-                    return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec3' as const, mode: p.mode, linkable: p.linkable, scale: p.scale };
-                }
-                if (p.type === 'vec4') {
-                    let val = coreMath.vec4A; let set = (v: any) => actions.setCoreMath({ vec4A: v });
-                    switch(p.id) {
-                        case 'vec4A': val = coreMath.vec4A; set = (v) => actions.setCoreMath({ vec4A: v }); break;
-                        case 'vec4B': val = coreMath.vec4B; set = (v) => actions.setCoreMath({ vec4B: v }); break;
-                        case 'vec4C': val = coreMath.vec4C; set = (v) => actions.setCoreMath({ vec4C: v }); break;
-                    }
-                    return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec4' as const, mode: p.mode, linkable: p.linkable, scale: p.scale };
-                }
-                if (p.type === 'vec2') {
-                    let val = coreMath.vec2A; let set = (v: any) => actions.setCoreMath({ vec2A: v });
-                    switch(p.id) {
-                        case 'vec2A': val = coreMath.vec2A; set = (v) => actions.setCoreMath({ vec2A: v }); break;
-                        case 'vec2B': val = coreMath.vec2B; set = (v) => actions.setCoreMath({ vec2B: v }); break;
-                        case 'vec2C': val = coreMath.vec2C; set = (v) => actions.setCoreMath({ vec2C: v }); break;
-                    }
-                    return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec2' as const, mode: p.mode, linkable: p.linkable, scale: p.scale };
-                }
-                let val = 0; let set = (v: number) => {};
-                switch(p.id) {
-                    case 'paramA': val = coreMath.paramA; set = (v) => actions.setCoreMath({ paramA: v }); break;
-                    case 'paramB': val = coreMath.paramB; set = (v) => actions.setCoreMath({ paramB: v }); break;
-                    case 'paramC': val = coreMath.paramC; set = (v) => actions.setCoreMath({ paramC: v }); break;
-                    case 'paramD': val = coreMath.paramD; set = (v) => actions.setCoreMath({ paramD: v }); break;
-                    case 'paramE': val = coreMath.paramE; set = (v) => actions.setCoreMath({ paramE: v }); break;
-                    case 'paramF': val = coreMath.paramF; set = (v) => actions.setCoreMath({ paramF: v }); break;
-                }
-                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, scale: p.scale, options: p.options };
+                const val = (coreMath as any)[p.id];
+                if (val === undefined) return null; // id outside the slot vocabulary — nothing to bind
+                const set = (v: any) => actions.setCoreMath({ [p.id]: slotWriteValue(p.id, p.type, v) });
+                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: p.type, mode: p.mode, linkable: p.linkable, scale: p.scale, options: p.options };
             });
         }
 
