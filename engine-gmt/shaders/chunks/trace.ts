@@ -66,8 +66,11 @@ export const getTraceGLSL = (options: TraceOptions = {}) => {
     //   1. refineDeclare  — carry the last OUTSIDE ray parameter across iterations.
     //   2. refineBlock    — the bisection itself, inside the hit block.
     //   3. refineRemember — record the outside sample just before each step advance.
+    // Both declares carry their own trailing newline so an OFF gate collapses to
+    // NOTHING (no stray blank line) — the off kernel stays byte-identical to the
+    // pre-gate source. Guarded by test-trace-refine.mts ("dPrev-insert collapsed").
     const refineDeclare = enableRefine
-        ? `    float dPrev = d;          // last OUTSIDE sample → bracket [dPrev,d] for the hit refine below`
+        ? `    float dPrev = d;          // last OUTSIDE sample → bracket [dPrev,d] for the hit refine below\n`
         : ``;
     const refineBlock = enableRefine
         ? `            // --- MB3D-style damped-bisection SURFACE REFINEMENT ---
@@ -121,7 +124,7 @@ export const getTraceGLSL = (options: TraceOptions = {}) => {
         ? `    float mb3dRLastDE = 0.0;     // DE at the previous march point
     float mb3dRLastStep = 0.0;   // previous step width (world units)
     float mb3dRSF = 1.0;         // RSFmul convergence damper, clamped to [0.5, 1.0]
-    bool  mb3dPrimed = false;    // skip clamp/damper on the first sample (no history yet)`
+    bool  mb3dPrimed = false;    // skip clamp/damper on the first sample (no history yet)\n`
         : ``;
     const mb3dPreHit = enableMB3DFaithful
         ? `            // MB3D overstep clamp + RSFmul damper (CalcThread.pas:223-230)
@@ -184,8 +187,7 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
     float minCandidateRatio = 1.0e10;
     float candidateD = -1.0;
     vec4 candidateH = vec4(0.0);
-${refineDeclare}
-${mb3dDeclare}
+${refineDeclare}${mb3dDeclare}
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= limit) break;
 
