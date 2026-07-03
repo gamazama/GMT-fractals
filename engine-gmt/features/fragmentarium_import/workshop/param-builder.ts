@@ -6,7 +6,7 @@
 import type { FragUniform, ParamMappingV2, WorkshopParam } from '../types';
 import {
     slotToUniform, componentSlotBase, getSlotOccupancy, buildOccupancyMap, isSlotConflict,
-    SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS,
+    SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS, VecControlAccumulator,
 } from '../../../utils/uniformSlots';
 
 // The slot vocabulary, accessor mapping, and occupancy algebra live in the shared
@@ -292,64 +292,22 @@ export function buildFractalParams(mappings: WorkshopParam[], formulaName: strin
         packedBases.get(info.base)!.push({ param: p, components: info.components });
     }
 
+    // The packing itself is the shared VecControlAccumulator kernel (label joining,
+    // range widening, bool→toggle, vec4-held-vec3 typing) — same code the MB3D
+    // ScalarParamPacker uses. @see engine-gmt/utils/uniformSlots.ts
     const componentPackedSlots = new Set<string>();
+    const acc = new VecControlAccumulator(uiParams, defaultPreset.features.coreMath);
     for (const [base, entries] of packedBases) {
         if (entries.length === 0) continue;
         componentPackedSlots.add(base);
-
-        // Build per-component defaults and labels
-        const compDefaults: Record<string, number> = { x: 0, y: 0, z: 0, w: 0 };
-        const compLabels: Record<string, string> = {};
-        const allParams: WorkshopParam[] = [];
-
-        for (const entry of entries) {
-            allParams.push(entry.param);
-            const p = entry.param;
+        for (const { param: p, components } of entries) {
             const defaults = Array.isArray(p.uiDefault) ? p.uiDefault : [typeof p.uiDefault === 'number' ? p.uiDefault : 0];
-            for (let ci = 0; ci < entry.components.length; ci++) {
-                const c = entry.components[ci];
-                compDefaults[c] = defaults[ci] ?? defaults[0] ?? 0;
-                compLabels[c] = compLabels[c] ?? p.name;
-            }
-        }
-
-        // Build combined label: group consecutive components from same param
-        const ALL_COMPS = ['x', 'y', 'z', 'w'];
-        const labelParts: string[] = [];
-        let i = 0;
-        while (i < ALL_COMPS.length) {
-            const c = ALL_COMPS[i];
-            if (!compLabels[c]) { i++; continue; }
-            const name = compLabels[c];
-            let j = i + 1;
-            while (j < ALL_COMPS.length && compLabels[ALL_COMPS[j]] === name) j++;
-            labelParts.push(name);
-            i = j;
-        }
-        const label = labelParts.join(' | ');
-
-        const allBools = allParams.every(p => p.type === 'bool');
-        const allMin = allBools ? 0 : Math.min(...allParams.map(p => p.uiMin ?? -180));
-        const allMax = allBools ? 1 : Math.max(...allParams.map(p => p.uiMax ?? 180));
-        const allStep = allBools ? 1 : Math.min(...allParams.map(p => p.uiStep ?? 1));
-
-        // Determine output type from the base slot
-        const isVec4 = (VEC4_SLOTS as readonly string[]).includes(base);
-        const isVec2 = (VEC2_SLOTS as readonly string[]).includes(base);
-        if (isVec4) {
-            const def4 = { x: compDefaults.x, y: compDefaults.y, z: compDefaults.z, w: compDefaults.w };
-            uiParams.push({ label, id: base, type: 'vec4', min: allMin, max: allMax, step: allStep, default: def4 });
-            defaultPreset.features.coreMath[base] = def4;
-        } else if (isVec2) {
-            const def2 = { x: compDefaults.x, y: compDefaults.y };
-            uiParams.push({ label, id: base, type: 'vec2', min: allMin, max: allMax, step: allStep, default: def2 });
-            defaultPreset.features.coreMath[base] = def2;
-        } else {
-            const def3 = { x: compDefaults.x, y: compDefaults.y, z: compDefaults.z };
-            const param: any = { label, id: base, type: 'vec3', min: allMin, max: allMax, step: allStep, default: def3 };
-            if (allBools) param.mode = 'toggle';
-            uiParams.push(param);
-            defaultPreset.features.coreMath[base] = def3;
+            acc.add(
+                base, p.name, components,
+                components.map((_, ci) => defaults[ci] ?? defaults[0] ?? 0),
+                p.uiMin ?? -180, p.uiMax ?? 180, p.uiStep ?? 1,
+                { isBool: p.type === 'bool', isVec3Param: p.type === 'vec3' && !p.mappedSlot.includes('.') },
+            );
         }
     }
 
@@ -401,14 +359,8 @@ export function buildFractalParams(mappings: WorkshopParam[], formulaName: strin
         }
 
         if ((VEC4_SLOTS as readonly string[]).includes(p.mappedSlot)) {
-            if (p.type === 'vec3') {
-                // vec3 param in a vec4 slot: expose as vec3 slider on .xyz, w defaults to 0
-                const defs = Array.isArray(p.uiDefault) ? p.uiDefault : (typeof p.uiDefault === 'number' ? [p.uiDefault, p.uiDefault, p.uiDefault] : [0, 0, 0]);
-                const def3 = { x: defs[0] ?? 0, y: defs[1] ?? 0, z: defs[2] ?? 0 };
-                uiParams.push({ label: p.name, id: p.mappedSlot, type: 'vec3', min: p.uiMin, max: p.uiMax, step: p.uiStep, default: def3 });
-                defaultPreset.features.coreMath[p.mappedSlot] = { ...def3, w: 0 };
-                continue;
-            }
+            // (vec3-in-vec4 params never reach here — packedBases catches them above and
+            // the accumulator emits the vec3-typed control with .w pinned to 0.)
             const defs = Array.isArray(p.uiDefault) ? p.uiDefault : (typeof p.uiDefault === 'number' ? [p.uiDefault, p.uiDefault, p.uiDefault, p.uiDefault] : [0, 0, 0, 0]);
             const def4 = { x: defs[0] ?? 0, y: defs[1] ?? 0, z: defs[2] ?? 0, w: defs[3] ?? 0 };
             uiParams.push({ label: p.name, id: p.mappedSlot, type: 'vec4', min: p.uiMin, max: p.uiMax, step: p.uiStep, default: def4 });

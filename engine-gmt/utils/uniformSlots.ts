@@ -20,9 +20,12 @@
  *    lanes (`paramA..F` → `uVec2*` components → `uVec4*` components) plus a separate
  *    vec3 pool, used by the MB3D cross-slot allocator to thread a distinct uniform to
  *    every slot's params.
- *  - {@link ScalarParamPacker} — accumulates the slider schema + coreMath defaults as
- *    scalars are packed, grouping vec-lane scalars into ONE combined vec control per
- *    base uniform (mirrors the Workshop's `buildFractalParams` component packing).
+ *  - {@link VecControlAccumulator} — THE component-packing kernel: folds params sharing
+ *    a base vec uniform into ONE combined control + coreMath defaults. Consumed by both
+ *    {@link ScalarParamPacker} (MB3D, allocator-driven) and the Workshop's
+ *    `buildFractalParams` (mapping-driven).
+ *  - {@link slotWriteValue} — the vec4-held-vec3 `w:0` write contract, shared by the
+ *    packers and `FormulaParamsWidget`.
  *
  * Intentionally app-agnostic: no fractal-, Fragmentarium-, or MB3D-specific logic.
  * @see engine-gmt/features/core_math.ts (the uniform declarations these slots target)
@@ -255,22 +258,125 @@ export interface PackedParam {
     max: number;
     step: number;
     default: number | { x: number; y: number; z?: number; w?: number };
+    /** Render as per-component on/off toggles (vec3 base fully occupied by bools). */
+    mode?: 'toggle';
+}
+
+/**
+ * The vec4-held-vec3 write contract: a vec3 param stored in a `uVec4*` unit occupies
+ * `.xyz` and must pin `.w` to 0 so the full vec4 uniform syncs cleanly. Returns the
+ * coreMath-shaped value to store for a param value landing on `slotId`. Every writer
+ * of a slot value (packers, widgets) routes through this instead of restating the rule.
+ */
+export function slotWriteValue(slotId: string, paramType: string | undefined, v: any): any {
+    if (paramType === 'vec3' && /^vec4[ABC]$/.test(slotId)) return { x: v.x, y: v.y, z: v.z, w: 0 };
+    return v;
+}
+
+/** One param's contribution to a combined vec control (see {@link VecControlAccumulator}). */
+interface VecEntry {
+    label: string;
+    comps: readonly string[];
+    min: number;
+    max: number;
+    step: number;
+    isBool: boolean;
+    isVec3Param: boolean;
+}
+
+/**
+ * THE component-packing kernel: folds params that share a base vec uniform into ONE
+ * combined control per base, plus the matching coreMath defaults. Shared by the MB3D
+ * {@link ScalarParamPacker} (allocator-driven, one scalar at a time) and the Workshop's
+ * `buildFractalParams` (mapping-driven, whole params at a time) — previously two
+ * hand-mirrored implementations.
+ *
+ * Semantics (rebuilt from ALL entries on every {@link add}):
+ *  - label: members joined with `" | "` in component order (x→w), consecutive
+ *    components of one param collapsed to a single mention;
+ *  - range: min/max widen across members, step narrows; all-bool bases clamp to
+ *    0..1 step 1 (and a fully-bool vec3 base renders as toggles);
+ *  - type: the base's own kind — EXCEPT a vec4 base whose sole occupant is a genuine
+ *    vec3 param, which presents as a vec3 control (the vec4-held-vec3 contract:
+ *    `.w` stays pinned to 0, see {@link slotWriteValue});
+ *  - the control is created on first touch and pushed to `out` (display order follows
+ *    first touch), then mutated in place.
+ */
+export class VecControlAccumulator {
+    private byBase = new Map<string, { param: PackedParam; entries: VecEntry[] }>();
+
+    constructor(
+        private out: PackedParam[],
+        private coreMath: Record<string, any>,
+    ) {}
+
+    /** Fold one param (its label, the components it occupies, per-component default
+     *  values, and slider range) into the combined control for `base`. */
+    add(
+        base: string, label: string, comps: readonly string[], values: readonly number[],
+        min: number, max: number, step: number,
+        opts: { isBool?: boolean; isVec3Param?: boolean } = {},
+    ): void {
+        const kind = vecKindOf(base);
+        let slot = this.byBase.get(base);
+        if (!slot) {
+            const param: PackedParam = { label, id: base, type: kind, min, max, step, default: zeroVec(kind) };
+            slot = { param, entries: [] };
+            this.byBase.set(base, slot);
+            this.out.push(param);
+            this.coreMath[base] = zeroVec(kind);
+        }
+        slot.entries.push({ label, comps, min, max, step, isBool: !!opts.isBool, isVec3Param: !!opts.isVec3Param });
+
+        comps.forEach((c, i) => {
+            const v = values[i] ?? values[0] ?? 0;
+            (slot!.param.default as any)[c] = v;
+            this.coreMath[base][c] = v;
+        });
+
+        this.rebuild(kind, slot);
+    }
+
+    private rebuild(kind: 'vec2' | 'vec3' | 'vec4', slot: { param: PackedParam; entries: VecEntry[] }): void {
+        const { param, entries } = slot;
+
+        const labelByComp: Record<string, string> = {};
+        for (const e of entries) for (const c of e.comps) labelByComp[c] = labelByComp[c] ?? e.label;
+        const parts: string[] = [];
+        const ALL = ['x', 'y', 'z', 'w'];
+        for (let i = 0; i < ALL.length;) {
+            const name = labelByComp[ALL[i]];
+            if (!name) { i++; continue; }
+            let j = i + 1;
+            while (j < ALL.length && labelByComp[ALL[j]] === name) j++;
+            parts.push(name);
+            i = j;
+        }
+        param.label = parts.join(' | ');
+
+        const allBools = entries.every(e => e.isBool);
+        param.min = allBools ? 0 : Math.min(...entries.map(e => e.min));
+        param.max = allBools ? 1 : Math.max(...entries.map(e => e.max));
+        param.step = allBools ? 1 : Math.min(...entries.map(e => e.step));
+        if (allBools && kind === 'vec3') param.mode = 'toggle';
+        else delete param.mode;
+
+        param.type = kind === 'vec4' && entries.length === 1 && entries[0].isVec3Param ? 'vec3' : kind;
+    }
 }
 
 /**
  * Wraps a {@link LaneAllocator} and accumulates the slider schema + coreMath defaults
  * as a slot's options are packed. Scalars landing on `paramA..F` become individual
- * sliders; scalars landing on vec lanes are grouped into ONE combined vec control per
- * base uniform — its label joins the members with `" | "`, its min/max/step collapse to
- * the widest, and each member writes its own component of the base vec's default object.
- * (Mirrors the Workshop's `buildFractalParams` component packing.)
+ * sliders; scalars landing on vec lanes — and whole vec3 units — are folded through the
+ * shared {@link VecControlAccumulator}.
  *
  * One packer per slot; the underlying allocator is shared across slots.
  */
 export class ScalarParamPacker {
     readonly params: PackedParam[] = [];
     readonly coreMath: Record<string, any> = {};
-    private vecByBase = new Map<string, PackedParam>();
+    private acc = new VecControlAccumulator(this.params, this.coreMath);
 
     constructor(private alloc: LaneAllocator) {}
 
@@ -280,21 +386,7 @@ export class ScalarParamPacker {
         const lane = this.alloc.nextScalar();
         if (!lane) return null;
         if (lane.component) {
-            const kind = vecKindOf(lane.coreKey);
-            let p = this.vecByBase.get(lane.coreKey);
-            if (!p) {
-                p = { label, id: lane.coreKey, type: kind, min, max, step, default: zeroVec(kind) };
-                this.vecByBase.set(lane.coreKey, p);
-                this.params.push(p);
-                this.coreMath[lane.coreKey] = zeroVec(kind);
-            } else {
-                p.label += ' | ' + label;
-                p.min = Math.min(p.min, min);
-                p.max = Math.max(p.max, max);
-                p.step = Math.min(p.step, step);
-            }
-            (p.default as any)[lane.component] = value;
-            this.coreMath[lane.coreKey][lane.component] = value;
+            this.acc.add(lane.coreKey, label, [lane.component], [value], min, max, step);
         } else {
             this.params.push({ label, id: lane.coreKey, min, max, step, default: value });
             this.coreMath[lane.coreKey] = value;
@@ -309,8 +401,7 @@ export class ScalarParamPacker {
     vec3(label: string, def: { x: number; y: number; z: number }, min: number, max: number, step: number): { id: string; vec3Accessor: string; componentBase: string } | null {
         const lane = this.alloc.nextVec3();
         if (!lane) return null;
-        this.params.push({ label, id: lane.id, type: 'vec3', min, max, step, default: def });
-        this.coreMath[lane.id] = lane.id.startsWith('vec4') ? { ...def, w: 0 } : def;
+        this.acc.add(lane.id, label, ['x', 'y', 'z'], [def.x, def.y, def.z], min, max, step, { isVec3Param: true });
         return lane;
     }
 }
