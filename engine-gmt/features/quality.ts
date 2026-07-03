@@ -1,7 +1,7 @@
 
 import { FeatureDefinition } from '../engine/FeatureSystem';
 import { DEFAULT_HARD_CAP, REFINE_HARD_CAP } from '../../data/constants';
-import { registry } from '../engine/FractalRegistry';
+import { ESTIMATOR_OPTIONS } from '../engine/estimators';
 
 export interface QualityState {
     engineQuality: boolean; // Master Anchor
@@ -105,48 +105,9 @@ export const QualityFeature: FeatureDefinition = {
         estimator: {
             type: 'float', default: 0.0, label: 'Estimator', shortId: 'es',
             group: 'metric',
-            options: [
-                { label: 'Analytic (Log)', value: 0.0 },
-                { label: 'Linear (Unit 1.0)', value: 1.0 },
-                { label: 'Linear (Offset 2.0)', value: 4.0 },
-                { label: 'Pseudo (Raw)', value: 2.0 },
-                { label: 'Dampened', value: 3.0 },
-                {
-                    label: 'Cutting Plane',
-                    value: 5.0,
-                    // Gray out unless either the current formula OR the active interlace
-                    // secondary declares supportsCuttingPlane. Engine falls back to Linear
-                    // if a user somehow forces this on a non-CP pair, so this is purely UX.
-                    disabledIf: (state: any) => {
-                        const primary = registry.get(state?.formula);
-                        if (primary?.shader.supportsCuttingPlane) return false;
-                        const il = state?.interlace;
-                        if (il?.interlaceCompiled && il.interlaceFormula) {
-                            const sec = registry.get(il.interlaceFormula);
-                            if (sec?.shader.supportsCuttingPlane) return false;
-                        }
-                        return true;
-                    },
-                },
-                {
-                    // MB3D dIFS orbit-trap estimator — only valid on an imported dIFS
-                    // scene (declares shader.supportsDifs + a g_difsDE preamble). Engine
-                    // falls back to Linear on any other formula, so this is purely UX.
-                    label: 'dIFS (Orbit Trap)',
-                    value: 6.0,
-                    disabledIf: (state: any) => !registry.get(state?.formula)?.shader.supportsDifs,
-                },
-                {
-                    // Numerical (finite-difference) DE — the only estimator that needs NO
-                    // analytic derivative. It re-iterates the orbit at perturbed seed points
-                    // and estimates distance from the escape-radius gradient (port of MB3D
-                    // CalcDEnoADE). For ANY formula whose analytic dr is missing or wrong:
-                    // MB3D [CODE] hybrids, hard frag imports, hand-written formulas. ~4× the
-                    // DE cost (re-iterates 3 extra orbits), so it recompiles + runs slower.
-                    label: 'Numerical (Finite-Diff)',
-                    value: 7.0,
-                }
-            ],
+            // The estimator catalog (labels, values, capability greying, dispatch) has ONE
+            // owner: engine/estimators.ts. Add estimators there, not here.
+            options: ESTIMATOR_OPTIONS,
             description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix, Cutting Plane=Knighty fold-and-cut polyhedra, Numerical=finite-difference (no analytic DE needed; ~4× slower, fixes formulas that render as dust/noise).',
             helpId: 'quality.estimator',
             onUpdate: 'compile',

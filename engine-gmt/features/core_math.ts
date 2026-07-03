@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { FeatureDefinition } from '../engine/FeatureSystem';
 import { registry } from '../engine/FractalRegistry';
 import { pairHasCapability } from '../engine/compat';
+import { generateGetDist, isNumericDEEstimator } from '../engine/estimators';
 import { MAX_MODULAR_PARAMS } from '../../data/constants';
 import { compileGraph } from '../utils/GraphCompiler';
 import { FormulaType } from '../types';
@@ -29,90 +30,6 @@ export interface CoreMathState {
     vec4B: { x: number; y: number; z: number; w: number } | THREE.Vector4;
     vec4C: { x: number; y: number; z: number; w: number } | THREE.Vector4;
 }
-
-// Generate optimized DE logic based on compile-time estimator type
-const generateGetDist = (estimatorType: number, supportsCuttingPlane = false, supportsDifs = false) => {
-    // 6: dIFS (MB3D orbit-trap IFS) — reads the engine-provided g_difsDE accumulator,
-    // the running minimum over the orbit of mb3dRout/mb3dVary, written each iteration by
-    // an MB3D-imported fused dIFS formula (g_difsDE declared in its preamble, init in
-    // loopInit). Mirrors MB3D's doHybridIFS3D (formulas.pas:3210), which returns that
-    // MinDE directly. Gated on supportsDifs so a non-dIFS formula forced to estimator 6
-    // falls back to Linear (no reference to an undeclared g_difsDE). MUST precede the
-    // >4.5 CP checks, which would otherwise coerce 6 → CP/Linear and break the dIFS DE.
-    if (estimatorType > 5.5 && supportsDifs) {
-        return `
-        vec2 getDist(float r, float dr, float iter, vec4 z) {
-            return vec2(g_difsDE, iter);
-        }`;
-    }
-    if (estimatorType > 5.5) estimatorType = 1.0; // dIFS on a non-dIFS formula → Linear
-    // 5: Cutting Plane — Knighty fold-and-cut. Reads engine-provided cp_dmin/cp_trap
-    // accumulators (declared only when formula has shader.supportsCuttingPlane).
-    // For non-CP formulas, fall back to Linear (1.0) — picking CP on a formula that
-    // doesn't write to cp_* would otherwise produce undeclared-identifier compile errors.
-    if (estimatorType > 4.5 && supportsCuttingPlane) {
-        return `
-        vec2 getDist(float r, float dr, float iter, vec4 z) {
-            return vec2(abs(cp_dmin), cp_trap);
-        }`;
-    }
-    // Treat estimator=5 on a non-CP formula as Linear (best-effort fallback).
-    if (estimatorType > 4.5) estimatorType = 1.0;
-
-    let mathLine = "d = 0.5 * log(max(r, 1.0e-5)) * r / dr_safe;"; // Default 0 (Analytic)
-
-    // Optimized GPU math using log2 where possible
-    if (estimatorType < 0.5) {
-        // 0: Analytic (Log) - Standard for Power Fractals
-        // d = 0.5 * r * log(r) / dr
-        mathLine = `
-        float logR2 = log2(m2);
-        // 0.5 * ln(2) / 2 ≈ 0.17328679 — converts log2(r²) to 0.5*r*ln(r) for DE formula
-        d = 0.17328679 * logR2 * r / dr_safe;
-        `;
-    } else if (estimatorType < 1.5) {
-        // 1: Linear (Fold 1.0) - Standard for Box/Menger
-        // d = (r - 1.0) / dr
-        mathLine = `d = (r - 1.0) / dr_safe;`;
-    } else if (estimatorType < 2.5) {
-        // 2: Pseudo (Raw) - Good for Artifacts
-        // d = r / dr
-        mathLine = `d = r / dr_safe;`;
-    } else if (estimatorType < 3.5) {
-        // 3: Dampened - Fix Slices
-        // d = 0.5 * r * log(r) / (dr + K)
-        mathLine = `
-        float logR2 = log2(m2);
-        // 0.5 * ln(2) ≈ 0.34657359 — converts log2(r²) to r*ln(r), then halved by dampening term
-        d = 0.34657359 * logR2 * r / (dr_safe + 8.0);
-        `;
-    } else {
-        // 4: Linear (Fold 2.0) - Classic Menger offset
-        // d = (r - 2.0) / dr
-        mathLine = `d = (r - 2.0) / dr_safe;`;
-    }
-
-    return `
-        vec2 getDist(float r, float dr, float iter, vec4 z) {
-            float m2 = r * r;
-            if (m2 < 1.0e-20) return vec2(0.0, iter);
-
-            // Log Smoothing Calculation (Shared)
-            // Guarded: Only calculate log smoothing if we have actually escaped (> 1.0)
-            float smoothIter = iter;
-            if (m2 > 1.0) {
-                float threshLog = log2(max(uEscapeThresh, 1.1));
-                smoothIter = iter + 1.0 - log2(log2(m2) / threshLog);
-            }
-
-            float d = 0.0;
-            float dr_safe = max(abs(dr), 1.0e-20);
-
-            ${mathLine}
-
-            return vec2(d, smoothIter);
-        }`;
-};
 
 // Engine-provided cutting-plane accumulator globals + init lines.
 // Declared whenever a formula has shader.supportsCuttingPlane, regardless of estimator —
@@ -232,14 +149,14 @@ export const CoreMathFeature: FeatureDefinition = {
         // dIFS scene; its preamble declares g_difsDE. Not interlaceable (single-scene
         // import), so no pair check needed.
         const supportsDifs = !!def?.shader.supportsDifs;
-        let getDistBody = generateGetDist(estimatorType, pairSupportsCuttingPlane, supportsDifs);
+        let getDistBody = generateGetDist(estimatorType, { supportsCuttingPlane: pairSupportsCuttingPlane, supportsDifs });
 
         // 7: Numerical (finite-difference) DE — no analytic dr needed. Arms the
         // escape-radius-gradient path in DE_MASTER (map()/mapDist() re-iterate
         // perturbed seeds). The getDist body above is dead code in this path (falls
         // back to Linear, unused). For any formula whose analytic DE is missing/wrong
         // (MB3D [CODE] hybrids, hard frag imports). @see docs/adr/0085.
-        if (estimatorType > 6.5) {
+        if (isNumericDEEstimator(estimatorType)) {
             builder.enableNumericDE(true);
             builder.addDefine('NUMERIC_DE', '1'); // material_eval uses numericNormal()
         }
