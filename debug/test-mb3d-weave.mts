@@ -2,7 +2,8 @@
  * MB3D hybrid-weave tests (Phase 2): sequencer (pure) + fused emitter.
  * Run: `npm run test:mb3d:weave`  (tsx debug/test-mb3d-weave.mts)
  */
-import { buildWeaveSequence, emitWeaveGLSL } from '../engine-gmt/utils/mb3d/weaveSequencer.ts';
+import { buildWeaveSequence, emitWeaveGLSL, weaveSpecFromMB3D } from '../engine-gmt/utils/mb3d/weaveSequencer.ts';
+import { emitModuloScheduleGLSL } from '../engine-gmt/engine/weave/schedule.ts';
 import { emitFusedHybrid } from '../engine-gmt/utils/mb3d/emitFusedHybrid.ts';
 import { registry } from '../engine-gmt/engine/FractalRegistry.ts';
 import { AmazingBox } from '../engine-gmt/formulas/AmazingBox.ts';
@@ -214,6 +215,36 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     if (!def || !ledger.supported || !fnOk) broken.push(`${e.label} [${e.kind}:${e.ref}]`);
   }
   ck(`all ${all.length} catalog formulas emit a valid def`, broken.length === 0, broken.slice(0, 8));
+}
+
+// ── Weave core: WeaveSpec adapter + modulo schedule emitter ────────────────────
+{
+  const { spec, mode } = weaveSpecFromMB3D(addon([2, 3, 0], (1 << 4) | 7, 0));
+  ck('spec: mode nibble extracted', mode === 0, mode);
+  ck('spec: 6 fixed slots', spec.slots.length === 6, spec.slots.length);
+  ck('spec: counts schedule', spec.schedule.kind === 'counts');
+  // hybOpt1 endTo nibble = 7, but mode-0 override clamps to the last active slot (1);
+  // repeatFrom nibble = 1 stays (≤ endTo, non-empty).
+  const sched = spec.schedule as { kind: 'counts'; endTo: number; repeatFrom: number };
+  ck('spec: endTo clamped to last active slot', sched.endTo === 1, sched.endTo);
+  ck('spec: repeatFrom preserved', sched.repeatFrom === 1, sched.repeatFrom);
+  ck('spec: slot sources are mb3d-kind', spec.slots.every((s) => s.source.kind === 'mb3d'));
+  ck('spec: iterCounts mirrored', spec.slots.map((s) => s.iterCount).join(',') === '2,3,0,0,0,0');
+}
+{
+  // Modulo schedule (P2 consumers: interlace fold, Hybrid Box interleave).
+  const bare = emitModuloScheduleGLSL({ interval: 'uXInterval', startIter: 'uXStart' }, 'T');
+  ck('modulo: fnName follows the weave convention', bare.fnName === 'T_weaveSlot', bare.fnName);
+  ck('modulo: interval clamps below 1', bare.glsl.includes('if (skip < 1) skip = 1;'));
+  ck('modulo: start-relative gate', bare.glsl.includes('int rel = i - int(uXStart);'));
+  ck('modulo: primary before start / off-beat', bare.glsl.includes('if (rel < 0 || rel % skip != 0) return 0;'));
+  ck('modulo: no enable gate unless asked', !bare.glsl.includes('< 0.5'));
+  ck('modulo: no cap unless asked', !bare.glsl.includes('rel / skip'));
+
+  const full = emitModuloScheduleGLSL(
+    { enabled: 'uXEnabled', interval: 'uXInterval', startIter: 'uXStart', maxCount: 'uXCount' }, 'T');
+  ck('modulo: enable gate emitted', full.glsl.includes('if (uXEnabled < 0.5) return 0;'));
+  ck('modulo: invocation cap emitted', full.glsl.includes('if (rel / skip >= int(uXCount)) return 0;'));
 }
 
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);

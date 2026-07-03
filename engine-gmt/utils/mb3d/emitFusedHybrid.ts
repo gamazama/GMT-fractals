@@ -16,6 +16,7 @@ import type { MB3DScene } from './parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
 import type { Capability } from '../../types/capabilities';
 import { buildWeaveSequence, emitWeaveGLSL, stepSlot } from './weaveSequencer';
+import { assembleWeave } from '../../engine/weave/emitWeave';
 import { transpileSlot } from './slotTranspiler';
 import type { SlotFlag } from './slotTranspiler';
 import { mapDEMeta, MB3D_ROT_GLSL } from './constPacker';
@@ -152,11 +153,9 @@ export function emitFusedHybrid(scene: MB3DScene): EmitResult {
 
   // Per-iteration scratch (TIteration3D fields like VaryScale/Dfree, persisted
   // across iterations) — declared once in loopInit, threaded inout into every
-  // slot fn + the dispatcher. mb3dVary seeds to 1.0 ("set to 1 on start"), rest 0.
+  // slot fn + the dispatcher (assembleWeave derives the same union). mb3dVary
+  // seeds to 1.0 ("set to 1 on start"), rest 0 — see scratchSeed below.
   const allScratch = [...new Set(bodies.flatMap((b) => b.scratchVars ?? []))];
-  const scratchSig = allScratch.map((s) => `, inout float ${s}`).join('');
-  const scratchArg = allScratch.map((s) => `, ${s}`).join('');
-  const slotScratchArg = (k: number) => (bodies[k].scratchVars ?? []).map((s) => `, ${s}`).join('');
 
   // DE slot + dIFS detection (used both for the mb3dRout recompute below and the
   // quality preset further down). Prefer a slot whose formula owns a real DE.
@@ -203,15 +202,6 @@ export function emitFusedHybrid(scene: MB3DScene): EmitResult {
   // `material colors` fold every iteration as before → unchanged.)
   const difsFold = isDifs ? ` g_difsDE = min(g_difsDE, mb3dRout / max(abs(mb3dVary), 1e-9));` : '';
   const slotIsDifs = (k: number) => (DECOMPILED_DE_META[bodies[k].flag.name]?.deOption ?? -1) === 20;
-  const dispatcher = `
-void formula_${id}(inout vec4 z, inout float dr, inout float trap, inout vec4 c, int i${scratchSig}) {
-  int phase = ${weave.fnName}(i);
-${recomputeRout ? '  mb3dRout = dot(z.xyz, z.xyz);\n' : ''}${usedIdx.map((idx, k) => `  if (phase == ${idx}) { ${id}_slot${idx}(z, dr, trap, c${slotScratchArg(k)});${slotIsDifs(k) ? difsFold : ''} return; }`).join('\n')}
-}`;
-  // The mb3dRot() helper is emitted ONCE here when any slot's parametric body needs
-  // it — inlining it per slot would redefine the function (2+ rotation slots → fail).
-  const rotHelper = bodies.some((b) => b.needsRotHelper) ? MB3D_ROT_GLSL : '';
-  const fnGlsl = [rotHelper, ...bodies.map((b) => b.glsl), weave.glsl, dispatcher].join('\n');
 
   // Renderable scaffolding — a NEUTRAL preset, not an AmazingBox clone. Cloning
   // AmazingBox dragged in box-specific overrides (tight teal fog, Z-depth coloring
@@ -454,7 +444,33 @@ ${recomputeRout ? '  mb3dRout = dot(z.xyz, z.xyz);\n' : ''}${usedIdx.map((idx, k
   // Mirrors MB3D doHybridIFS3D: min over orbit of Rout/VaryScale, init 65535 / 1.0.
   const difsPreamble = isDifs ? 'float g_difsDE;\n' : '';
   const difsInit = isDifs ? 'g_difsDE = 65535.0;\n' : '';
-  // (the fold is now emitted per-dIFS-slot inside the dispatcher — see difsFold above.)
+  // (the fold is emitted per-dIFS-slot inside the dispatcher — see difsFold above.)
+
+  // Assemble the kernel GLSL through the engine weave core (dispatcher + scratch
+  // threading + loopInit/loopBody). The mb3dRot() helper goes in the prelude — it is
+  // emitted ONCE when any slot's parametric body needs it; inlining it per slot would
+  // redefine the function (2+ rotation slots → fail).
+  const assembled = assembleWeave({
+    id,
+    schedule: weave,
+    slots: usedIdx.map((idx, k) => ({
+      phase: idx,
+      fnName: `${id}_slot${idx}`,
+      glsl: bodies[k].glsl!,
+      scratchVars: bodies[k].scratchVars,
+      postCall: slotIsDifs(k) ? difsFold : undefined,
+    })),
+    prelude: bodies.some((b) => b.needsRotHelper) ? MB3D_ROT_GLSL : '',
+    preDispatch: recomputeRout ? '  mb3dRout = dot(z.xyz, z.xyz);\n' : '',
+    // mb3dVary (dIFS absScale) + mb3dDr1 (4D-with-DE derivative, MB3D Deriv1) both seed
+    // to 1.0 ("set to 1 on start" / Calc.pas:2732 `Deriv1 := 1`); the rest to 0.
+    scratchSeed: (s) => (s === 'mb3dVary' || s === 'mb3dDr1' ? '1.0' : '0.0'),
+    extraLoopInit: difsInit,
+    // mb3dIter = MB3D's ItResultI (the integer iteration count, `fild [esi-0x18]`),
+    // NOT persistent scratch — it's the current loop index, so refresh it to float(i)
+    // each iteration before the slot reads it (the MB3D OTrap-on-iterations colour idiom).
+    loopBodyPrefix: allScratch.includes('mb3dIter') ? 'mb3dIter = float(i); ' : '',
+  });
 
   const def: FractalDefinition = {
     id: id as any,
@@ -463,16 +479,11 @@ ${recomputeRout ? '  mb3dRout = dot(z.xyz, z.xyz);\n' : ''}${usedIdx.map((idx, k
     description: `A fused Mandelbulb3D hybrid weave (${slotFlags.map((s) => s.name).join(' → ')}).`,
     juliaType: 'offset',
     shader: {
-      function: fnGlsl,
+      function: assembled.functionGLSL,
       preamble: difsPreamble || undefined,
       supportsDifs: isDifs || undefined,
-      // mb3dIter = MB3D's ItResultI (the integer iteration count, `fild [esi-0x18]`),
-      // NOT persistent scratch — it's the current loop index, so refresh it to float(i)
-      // each iteration before the slot reads it (the MB3D OTrap-on-iterations colour idiom).
-      loopBody: `${allScratch.includes('mb3dIter') ? 'mb3dIter = float(i); ' : ''}formula_${id}(z, dr, trap, c, i${scratchArg});`,
-      // mb3dVary (dIFS absScale) + mb3dDr1 (4D-with-DE derivative, MB3D Deriv1) both seed to
-      // 1.0 ("set to 1 on start" / Calc.pas:2732 `Deriv1 := 1`); the rest of the scratch to 0.
-      loopInit: difsInit + allScratch.map((s) => `float ${s} = ${s === 'mb3dVary' || s === 'mb3dDr1' ? '1.0' : '0.0'};`).join('\n'),
+      loopBody: assembled.loopBody,
+      loopInit: assembled.loopInit,
       capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     } as any,
     // Slider schema. Multi-slot: concat every slot's params (each already on a
