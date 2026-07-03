@@ -1,25 +1,50 @@
+import type { KernelFeatures } from './kernel';
+
+/** The injectable GLSL sections of the DE kernel, by splice point. All optional —
+ *  an absent section emits nothing. */
+export interface DEMasterOptions {
+    /** Pre-loop state init (formula loopInit — e.g. MB3D scratch floats). */
+    loopInit?: string;
+    hybridInit?: string;
+    hybridPreLoop?: string;
+    /** Per-iteration hybrid dispatch; may set `skipMainFormula` (declared only when used). */
+    hybridInLoop?: string;
+    distOverrideInit?: string;
+    distOverrideInLoopFull?: string;
+    distOverrideInLoopGeom?: string;
+    distOverridePostFull?: string;
+    distOverridePostGeom?: string;
+    postMapCode?: string;
+    postDistCode?: string;
+    /** Kernel feature gates — DE_MASTER reads `numericDE`: when true, map()/mapDist()
+     *  estimate distance from a FIXED-ITERATION final-radius (Rout) finite difference
+     *  (re-iterating perturbed seeds at the center point's escape count) instead of the
+     *  analytic getDist(r, dr). For formulas with no/wrong analytic dr. Float32-robust
+     *  port of MB3D CalcDEnoADE (Calc.pas:445-523). When false, NOTHING changes — the
+     *  analytic path is byte-identical. @see docs/adr/0085 */
+    kernel?: KernelFeatures;
+}
 
 export const DE_MASTER = (
     formulaBody: string,
-    loopInit: string = '',
     getDistBody: string,
-    hybridInit: string = '',
-    hybridPreLoop: string = '',
-    hybridInLoop: string = '',
-    distOverrideInit: string = '',
-    distOverrideInLoopFull: string = '',
-    distOverrideInLoopGeom: string = '',
-    distOverridePostFull: string = '',
-    distOverridePostGeom: string = '',
-    postMapCode: string = '',
-    postDistCode: string = '',
-    // Numerical (finite-difference) DE: when true, map()/mapDist() estimate distance from a
-    // FIXED-ITERATION final-radius (Rout) finite difference (re-iterating perturbed seeds at the
-    // center point's escape count), instead of the analytic getDist(r, dr). For formulas with
-    // no/wrong analytic dr. Float32-robust port of MB3D CalcDEnoADE (Calc.pas:445-523). When
-    // false, NOTHING below changes — the analytic path is byte-identical. @see docs/adr/0085
-    numericDE: boolean = false
+    options: DEMasterOptions = {},
 ) => {
+    const {
+        loopInit = '',
+        hybridInit = '',
+        hybridPreLoop = '',
+        hybridInLoop = '',
+        distOverrideInit = '',
+        distOverrideInLoopFull = '',
+        distOverrideInLoopGeom = '',
+        distOverridePostFull = '',
+        distOverridePostGeom = '',
+        postMapCode = '',
+        postDistCode = '',
+        kernel = {},
+    } = options;
+    const numericDE = !!kernel.numericDE;
     // When hybridInLoop sets skipMainFormula, we need the variable and if-wrapper.
     // Otherwise emit the formula body directly — saves a bool + branch per iteration.
     const needsSkip = hybridInLoop.includes('skipMainFormula');

@@ -38,8 +38,8 @@ const REFINE_MARKERS = ['uRefineSteps', 'dPrev', 'REFINE_HARD_CAP', 'damped-bise
 
 // ── A. OFF byte-identity ─────────────────────────────────────────────────────
 {
-  const off = getTraceGLSL(false, true, 0, 0, '', '', 'traceScene', false);
-  const offDefault = getTraceGLSL(false, true, 0, 0, '', '', 'traceScene'); // arg omitted → default false
+  const off = getTraceGLSL({ enableGlow: true, kernel: { refine: false } });
+  const offDefault = getTraceGLSL({ enableGlow: true }); // gate omitted → default false
   ck('off === default-arg off (default is false)', off === offDefault);
 
   for (const m of REFINE_MARKERS) ck(`off omits marker "${m}"`, !off.includes(m), m);
@@ -56,7 +56,7 @@ const REFINE_MARKERS = ['uRefineSteps', 'dPrev', 'REFINE_HARD_CAP', 'damped-bise
 
 // ── B. ON emission ───────────────────────────────────────────────────────────
 {
-  const on = getTraceGLSL(false, true, 0, 0, '', '', 'traceScene', true);
+  const on = getTraceGLSL({ enableGlow: true, kernel: { refine: true } });
   for (const m of REFINE_MARKERS) ck(`on includes marker "${m}"`, on.includes(m), m);
 
   ck('on: runtime gate present (uRefineActive instant on/off)', /if \(uRefineActive > 0\.5\) \{/.test(on));
@@ -77,7 +77,7 @@ const REFINE_MARKERS = ['uRefineSteps', 'dPrev', 'REFINE_HARD_CAP', 'damped-bise
 
 // ── B2. Physics / lean traces never refine ───────────────────────────────────
 {
-  const lean = getTraceGLSL(false, false, 0, 0, '', '', 'traceSceneLean'); // path-tracer secondary
+  const lean = getTraceGLSL({ functionName: 'traceSceneLean' }); // path-tracer secondary
   ck('lean trace omits refinement (default false)', !lean.includes('uRefineSteps'));
 }
 
@@ -86,7 +86,7 @@ const REFINE_MARKERS = ['uRefineSteps', 'dPrev', 'REFINE_HARD_CAP', 'damped-bise
   const FORMULA = '/*__FORMULA_MARKER__*/ z.xyz *= 2.0;';
   const INIT = 'float __initMarker__ = 1.0;';
   const GETDIST = 'vec2 getDist(float r, float dr, float iter, vec4 z) { return vec2(r/dr, iter); }';
-  const glsl = DE_MASTER(FORMULA, INIT, GETDIST);
+  const glsl = DE_MASTER(FORMULA, GETDIST, { loopInit: INIT });
 
   const mapBody = glsl.slice(glsl.indexOf('vec4 map('), glsl.indexOf('float mapDist('));
   const mapDistBody = glsl.slice(glsl.indexOf('float mapDist('));
@@ -151,8 +151,8 @@ const REFINE_MARKERS = ['uRefineSteps', 'dPrev', 'REFINE_HARD_CAP', 'damped-bise
 // numFootprint). @see ADR-0085 + sim-numeric-de3.mts (Mandelbulb MISS→HIT).
 {
   const FB = 'z.xyz *= 2.0;', GD = 'vec2 getDist(float r,float dr,float iter,vec4 z){return vec2(r/dr,iter);}';
-  const off = DE_MASTER(FB, '', GD);
-  const on = DE_MASTER(FB, '', GD, '', '', '', '', '', '', '', '', '', '', true);
+  const off = DE_MASTER(FB, GD);
+  const on = DE_MASTER(FB, GD, { kernel: { numericDE: true } });
 
   for (const m of ['centerCount', 'iterateLogRadius', 'numericDistance', 'numericNormal', 'numProbe', 'numFootprint', 'uNumDEeps']) {
     ck(`numericDE off omits "${m}"`, !off.includes(m), m);

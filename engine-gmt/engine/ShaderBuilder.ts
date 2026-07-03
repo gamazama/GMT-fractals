@@ -27,6 +27,8 @@
 import { UNIFORMS } from '../shaders/chunks/uniforms';
 import { getMathGLSL, MESH_GLSL_UNIFORMS, GLSL_MATH_CONSTANTS, GLSL_SPHERE_FOLD, GLSL_BOX_FOLD, getSnoiseFunctions } from '../shaders/chunks/math';
 import { DE_MASTER } from '../shaders/chunks/de';
+import type { DEMasterOptions } from '../shaders/chunks/de';
+import type { KernelFeatures } from '../shaders/chunks/kernel';
 import { generateMaterialEval } from '../shaders/chunks/material_eval';
 import { getFragmentMainGLSL } from '../shaders/chunks/main';
 import { getRayGLSL } from '../shaders/chunks/ray';
@@ -142,6 +144,31 @@ export class ShaderBuilder {
 
     public setMaxLights(n: number) {
         this.maxLights = n;
+    }
+
+    /** The armed kernel feature gates as one object — the single seam threaded into
+     *  the kernel chunk builders (DE_MASTER reads numericDE; getTraceGLSL reads
+     *  refine + mb3dFaithful). @see shaders/chunks/kernel.ts */
+    private kernelFeatures(): KernelFeatures {
+        return { refine: this.enableRefine, numericDE: this.numericDE, mb3dFaithful: this.mb3dFaithful };
+    }
+
+    /** The builder's accumulated injection state as DE_MASTER's options bag. */
+    private deMasterOptions(kernel: KernelFeatures): DEMasterOptions {
+        return {
+            loopInit: this.formulaInit,
+            hybridInit: this.hybridInit.join('\n'),
+            hybridPreLoop: this.hybridPreLoop.join('\n'),
+            hybridInLoop: this.hybridInLoop.join('\n'),
+            distOverrideInit: this.distOverrideInit,
+            distOverrideInLoopFull: this.distOverrideInLoopFull,
+            distOverrideInLoopGeom: this.distOverrideInLoopGeom,
+            distOverridePostFull: this.distOverridePostFull,
+            distOverridePostGeom: this.distOverridePostGeom,
+            postMapCode: this.postMapCode.join('\n'),
+            postDistCode: this.postDistCode.join('\n'),
+            kernel,
+        };
     }
     
 
@@ -363,21 +390,9 @@ vec3 sampleMiss(vec3 ro, vec3 rd, float roughness) {
             }
         });
 
-        const de = DE_MASTER(
-            this.formulaLoopBody,
-            this.formulaInit,
-            this.formulaDist,
-            this.hybridInit.join('\n'),
-            this.hybridPreLoop.join('\n'),
-            this.hybridInLoop.join('\n'),
-            this.distOverrideInit,
-            this.distOverrideInLoopFull,
-            this.distOverrideInLoopGeom,
-            this.distOverridePostFull,
-            this.distOverridePostGeom,
-            this.postMapCode.join('\n'),
-            this.postDistCode.join('\n')
-        );
+        // Mesh SDF library: no kernel gates (numeric DE / refine / MB3D march are
+        // viewport-trace concerns; the mesh path keeps the analytic kernel).
+        const de = DE_MASTER(this.formulaLoopBody, this.formulaDist, this.deMasterOptions({}));
 
         // Base mesh helpers — sphereFold/boxFold/getLength/rotation stubs/snoise.
         // Does NOT include SHARED_TRANSFORMS_GLSL — that arrives via geometry.inject()
@@ -462,22 +477,7 @@ float formulaDE(vec3 pos) {
         const math = getMathGLSL(this.useRotation);
 
         // Core DE
-        const de = DE_MASTER(
-            this.formulaLoopBody,
-            this.formulaInit,
-            this.formulaDist,
-            this.hybridInit.join('\n'),
-            this.hybridPreLoop.join('\n'),
-            this.hybridInLoop.join('\n'),
-            this.distOverrideInit,
-            this.distOverrideInLoopFull,
-            this.distOverrideInLoopGeom,
-            this.distOverridePostFull,
-            this.distOverridePostGeom,
-            this.postMapCode.join('\n'),
-            this.postDistCode.join('\n'),
-            this.numericDE
-        );
+        const de = DE_MASTER(this.formulaLoopBody, this.formulaDist, this.deMasterOptions(this.kernelFeatures()));
 
         // --- VARIANT: PHYSICS (Distance Measurement) ---
         if (this.variant === 'Physics') {
@@ -559,7 +559,7 @@ void main() {
 
         // --- VARIANT: HISTOGRAM (Data Analysis) ---
         if (this.variant === 'Histogram') {
-            const traceGLSL = getTraceGLSL(false, false, this.precisionMode, 0, "", "");
+            const traceGLSL = getTraceGLSL({ precisionMode: this.precisionMode });
             const rayGLSL = getRayGLSL('Direct'); // Use direct ray generation for sampling
 
             // Update: Use actual mapping value for accuracy
@@ -617,9 +617,14 @@ void main() {
         const missHandler = this.buildMissHandler();
         const isPathTracing = this.renderMode === 'PathTracing';
 
-        const traceGLSL = getTraceGLSL(this.isLite, true, this.precisionMode, 0, this.volumeBody.join('\n'), this.volumeFinalize.join('\n'), "traceScene", this.enableRefine, this.mb3dFaithful);
+        const traceGLSL = getTraceGLSL({
+            isMobile: this.isLite, enableGlow: true, precisionMode: this.precisionMode,
+            volumeBodyCode: this.volumeBody.join('\n'), volumeFinalizeCode: this.volumeFinalize.join('\n'),
+            kernel: this.kernelFeatures(),
+        });
+        // The lean PT trace deliberately takes NO kernel gates (no refine, no MB3D march).
         const traceLeanGLSL = isPathTracing
-            ? getTraceGLSL(this.isLite, false, this.precisionMode, 0, "", "", "traceSceneLean")
+            ? getTraceGLSL({ isMobile: this.isLite, precisionMode: this.precisionMode, functionName: 'traceSceneLean' })
             : "";
         const mainGLSL = getFragmentMainGLSL(isPathTracing, this.maxLights, this.compositeLogic.join('\n'));
         const rayGLSL = getRayGLSL(this.renderMode);

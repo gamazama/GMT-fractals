@@ -1,24 +1,35 @@
+import type { KernelFeatures } from './kernel';
 
+export interface TraceOptions {
+    isMobile?: boolean;
+    enableGlow?: boolean;
+    precisionMode?: number;
+    glowQuality?: number;
+    /** Injected volume-integration code (per-step body / miss finalize). */
+    volumeBodyCode?: string;
+    volumeFinalizeCode?: string;
+    functionName?: string;
+    /** Kernel feature gates — the trace kernel reads `refine` (post-hit damped
+     *  bisection, @see docs/adr/0084) and `mb3dFaithful` (MB3D marcher: overstep
+     *  clamp + RSFmul damper + msDEsub, @see docs/adr/0088). When a gate is off,
+     *  NO GLSL for it is emitted — the kernel is byte-identical to the plain march,
+     *  so default scenes carry zero compile/runtime cost. */
+    kernel?: KernelFeatures;
+}
 
-// Updated signature to accept injected code block for volume logic
-export const getTraceGLSL = (
-    isMobile: boolean,
-    enableGlow: boolean,
-    precisionMode: number = 0,
-    glowQuality: number = 0,
-    volumeBodyCode: string = "",
-    volumeFinalizeCode: string = "",
-    functionName: string = "traceScene",
-    // Post-hit surface refinement (damped bisection). When false (default), NO
-    // refinement GLSL is emitted at all — the kernel is byte-identical to the
-    // unrefined march, so default scenes carry zero compile/runtime cost. Armed
-    // compile-time from the quality `refineSteps` control. @see docs/adr/0084
-    enableRefine: boolean = false,
-    // MB3D-faithful marcher (compile-gated). When false (default) NO MB3D GLSL is
-    // emitted — the kernel is byte-identical to the standard march. Armed from the
-    // quality `mb3dFaithful` compile gate; imported MB3D scenes opt in. @see docs/adr/0088
-    enableMB3DFaithful: boolean = false
-) => {
+export const getTraceGLSL = (options: TraceOptions = {}) => {
+    const {
+        isMobile = false,
+        enableGlow = false,
+        precisionMode = 0,
+        glowQuality = 0,
+        volumeBodyCode = '',
+        volumeFinalizeCode = '',
+        functionName = 'traceScene',
+        kernel = {},
+    } = options;
+    const enableRefine = !!kernel.refine;
+    const enableMB3DFaithful = !!kernel.mb3dFaithful;
 
     const useLowPrecision = (precisionMode === 1) || isMobile;
 
