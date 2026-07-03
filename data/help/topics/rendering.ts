@@ -548,19 +548,6 @@ Adds stochastic (random) variation to each ray step position (default 0.15).
 - **Higher values**: More randomness per frame — noisier in motion but converges faster when still.
 `
     },
-    'quality.relaxation': {
-        id: 'quality.relaxation',
-        category: 'Rendering',
-        title: 'Step Relaxation',
-        parentId: 'panel.quality',
-        content: `
-> **REQUIRES ADVANCED MODE**
-
-A dynamic fudge factor that automatically adjusts the step size based on the previous step's distance estimate.
-
-When enabled, the raymarcher takes larger steps in open space (where it is safe) and smaller steps near surfaces (where precision matters). This speeds up rendering in scenes with large empty areas without sacrificing surface detail.
-`
-    },
     'quality.adaptive': {
         id: 'quality.adaptive',
         category: 'Rendering',

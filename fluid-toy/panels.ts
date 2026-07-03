@@ -94,7 +94,12 @@ export const FluidToyPanels: PanelManifest = [
         id: 'Palette', dock: 'left', order: 3,
         items: [
             { type: 'section', label: 'Mode + LUT' },
-            { type: 'feature', id: 'palette', whitelistParams: ['colorMapping', 'colorNormV2', 'gradient', 'interiorColor'] },
+            { type: 'feature', id: 'palette', whitelistParams: ['colorMapping', 'colorNormV2', 'gradient'] },
+            // Interior ("island") colouring — solid swatch self-hides when a
+            // non-solid interior mode is active; the interior gradient + density/
+            // phase self-show in its place.
+            { type: 'section', label: 'Interior' },
+            { type: 'feature', id: 'palette', whitelistParams: ['interiorMode', 'interiorColor', 'interiorGradient', 'interiorRepeat', 'interiorPhase', 'interiorIter'] },
             { type: 'section', label: 'Tiling' },
             // iterRate (Rate) + deLogBands (Distance rings) self-gate on colorNormV2 + mode.
             { type: 'feature', id: 'palette', whitelistParams: ['gradientRepeat', 'gradientPhase', 'iterRate', 'deLogBands'] },

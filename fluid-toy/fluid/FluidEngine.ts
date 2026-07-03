@@ -189,6 +189,47 @@ export function colorMappingTrapShape(m: ColorMapping): number {
   }
 }
 
+/** How the bounded ("island") interior of the set is coloured. `solid` keeps the
+ *  flat interiorColor (default, byte-identical to the pre-interior look); every
+ *  other mode maps a per-orbit scalar through a SEPARATE interior gradient.
+ *  Index-aligned with the kernel's uInteriorMode + interiorModeToIndex below. */
+export type InteriorMode =
+  | 'solid'        // flat interiorColor
+  | 'min-modulus'  // min |z| over the orbit (Bof60 nested level-sets)
+  | 'avg-modulus'  // mean |z| over the orbit (soft bulb fill)
+  | 'final-mag'    // |z_final|
+  | 'final-angle'  // arg(z_final)
+  | 'stripe'       // Härkönen stripe average over the interior orbit
+  | 'orbit-trap';  // min approach to the trap shape (reuses the trap controls)
+
+export const INTERIOR_MODES: Array<{ id: InteriorMode; label: string; hint: string }> = [
+  { id: 'solid',       label: 'Solid',        hint: 'Flat fill — the single interior colour.' },
+  { id: 'min-modulus', label: 'Min |z|',      hint: 'Closest the orbit comes to the origin. Nested level-sets around each attractor.' },
+  { id: 'avg-modulus', label: 'Avg |z|',      hint: 'Mean orbit modulus. Soft gradient filling each bulb.' },
+  { id: 'final-mag',   label: 'Final |z|',    hint: 'Magnitude of the last iterate — radial intensity.' },
+  { id: 'final-angle', label: 'Final angle',  hint: 'Argument of the last iterate — angular sweep.' },
+  { id: 'stripe',      label: 'Stripe',       hint: 'Härkönen stripe average over the bounded orbit. Striped bulbs.' },
+  { id: 'orbit-trap',  label: 'Orbit trap',   hint: 'Closest approach to the trap shape — ornamental structure inside the set.' },
+];
+
+export function interiorModeToIndex(m: InteriorMode): number {
+  switch (m) {
+    case 'solid':       return 0;
+    case 'min-modulus': return 1;
+    case 'avg-modulus': return 2;
+    case 'final-mag':   return 3;
+    case 'final-angle': return 4;
+    case 'stripe':      return 5;
+    case 'orbit-trap':  return 6;
+  }
+}
+
+/** Whether a non-solid interior mode is active — drives the fixed-window
+ *  interior accumulators (uTrackInterior) and the uMaxIter ≥ uInteriorIter floor. */
+export function interiorIsActive(m: InteriorMode): boolean {
+  return m !== 'solid';
+}
+
 export interface FluidParams {
   juliaC: [number, number];
   center: [number, number];
@@ -304,6 +345,15 @@ export interface FluidParams {
   /** Laplacian-of-dye caustic highlight scale (liquid look). */
   caustics: number;
   interiorColor: [number, number, number];
+  /** How the bounded interior ("island") is coloured. `solid` = flat interiorColor. */
+  interiorMode: InteriorMode;
+  /** Density of the interior scalar along the separate interior gradient. */
+  interiorRepeat: number;
+  /** Phase shift along the interior gradient. */
+  interiorPhase: number;
+  /** Fixed number of orbit iterations the interior colourers sample. Decoupled
+   *  from the zoom-scaled iteration cap so the island's colour holds across zoom. */
+  interiorIter: number;
   edgeMargin: number;         // 0..0.25 — fade force/dye injection + advection near borders (fixes "gushing from edges")
   forceCap: number;           // per-pixel magnitude cap on force vector (prevents c-track blowup)
   /** When true, a separate B&W collision gradient paints solid obstacles the fluid bounces off. */
@@ -466,6 +516,10 @@ export const DEFAULT_PARAMS: FluidParams = {
   refractRoughness: 0.0,
   caustics: 1,
   interiorColor: [0.02, 0.02, 0.04],
+  interiorMode: 'solid',
+  interiorRepeat: 1,
+  interiorPhase: 0,
+  interiorIter: 128,
   edgeMargin: 0.04,
   forceCap: 40,
   collisionEnabled: false,
@@ -758,8 +812,9 @@ export class FluidEngine {
        'uLATable', 'uLATexW', 'uLATotalCount', 'uLAEnabled', 'uLAStages[0]', 'uLAStageCount',
        'uATEnabled', 'uATStepLength', 'uATThresholdC', 'uATSqrEscapeRadius',
        'uATRefC', 'uATCCoeff', 'uATInvZCoeff',
-       'uTrackAccum', 'uTrackDeriv',
+       'uTrackAccum', 'uTrackDeriv', 'uTrackInterior',
        'uGradient', 'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uInteriorColor',
+       'uInteriorMode', 'uInteriorGradient', 'uInteriorRepeat', 'uInteriorPhase', 'uInteriorIter',
        'uColorNormV2', 'uLogPixelScale', 'uIterRate', 'uIterOffset', 'uIterScale', 'uDeLogBands',
        'uLightEnabled', 'uLightAngle', 'uLightHeight', 'uLightStrength', 'uAmbient',
        'uCollisionGradient', 'uCollisionRepeat', 'uCollisionPhase', 'uCollisionEnabled']);
@@ -1068,6 +1123,10 @@ export class FluidEngine {
   /** Upload the collision gradient LUT (black = fluid, white = wall). */
   setCollisionGradientBuffer(buf: Uint8Array) { this.gradients.setBuffer('collision', buf); }
 
+  /** Upload the interior ("island") gradient LUT — sampled by the non-solid
+   *  interiorMode colourings. Independent of the main palette gradient. */
+  setInteriorGradientBuffer(buf: Uint8Array) { this.gradients.setBuffer('interior', buf); }
+
   /** Set the render dimensions — sim/fractal grid AND canvas drawing
    *  buffer at the same size, no DPR multiplication or aspect drift.
    *  Resolution changes bilinearly reproject dye, velocity, and the
@@ -1308,7 +1367,10 @@ export class FluidEngine {
   private effectiveMaxIter(): number {
     const p = this.params;
     if (p.deepZoomEnabled && this.deepZoom.hasOrbit()) {
-      return Math.max(200, (p.autoIter ? p.deepIterCap : p.deepMaxIter) | 0);
+      // Floor at 8, not 200: at normal iterMul deepIterCap is already ≥200 and
+      // deepMaxIter's slider min is 200, so this only matters when a low iterMul
+      // (dissolve animation) drives the auto deep cap below 200 — let it through.
+      return Math.max(8, (p.autoIter ? p.deepIterCap : p.deepMaxIter) | 0);
     }
     return p.autoIter ? autoShallowIter(p.zoom, p.iterMul) : Math.max(4, p.maxIter | 0);
   }
@@ -1379,8 +1441,17 @@ export class FluidEngine {
       ? this.bucketOutputSize[0] / this.bucketOutputSize[1]
       : this.simW / this.simH;
     gl.uniform1f(this.progJulia.uniforms['uAspect'], aspect);
-    const maxIt = this.effectiveMaxIter();
+    // Interior coloring samples a FIXED window (uInteriorIter) so the island's
+    // colour is zoom-stable. Floor the per-pixel cap at that window when a
+    // non-solid interior mode is active, else the window can outrun the
+    // zoom-scaled cap and the coverage (hence the colour) would drift again.
+    const interiorActive = interiorIsActive(this.params.interiorMode);
+    const interiorIter = Math.max(1, this.params.interiorIter | 0);
+    const maxIt = interiorActive
+      ? Math.max(this.effectiveMaxIter(), interiorIter)
+      : this.effectiveMaxIter();
     gl.uniform1i(this.progJulia.uniforms['uMaxIter'], maxIt);
+    gl.uniform1i(this.progJulia.uniforms['uInteriorIter'], interiorIter);
     // Coloring-accumulator cap (orbit-trap / stripe / DE run only while
     // iter < uColorIter). With Auto iterations on, track the effective cap so
     // those modes — and the Iteration × multiplier — actually gain detail at
@@ -1397,6 +1468,10 @@ export class FluidEngine {
     // whether the active palette actually reads them. Saves ~35 ops
     // per iter for the common smoothI / iter-based modes.
     gl.uniform1i(this.progJulia.uniforms['uTrackAccum'], colorMappingNeedsAccum(this.params.colorMapping) ? 1 : 0);
+    // Interior coloring has its own fixed-window accumulators (min/avg |z|,
+    // stripe, trap, frozen iterate) — on for any non-solid interior mode. Forces
+    // the pure-PO path (LA/AT off) so every iteration in the window is visited.
+    gl.uniform1i(this.progJulia.uniforms['uTrackInterior'], interiorActive ? 1 : 0);
     // Slope lighting builds its normal from the dz/dc derivative, so it needs derivative
     // tracking on for ANY mode (not just DE) — else dz stays at its init value and the
     // normal is garbage (the "decomposition overlay" look). Force it on when lighting.
@@ -1457,8 +1532,10 @@ export class FluidEngine {
     // than derived at display time.
     this.gradients.ensure('main');
     this.gradients.ensure('collision');
+    this.gradients.ensure('interior');
     this.bindTex(8, this.gradients.getTexture('main')!, this.progJulia.uniforms['uGradient']);
     this.bindTex(9, this.gradients.getTexture('collision')!, this.progJulia.uniforms['uCollisionGradient']);
+    this.bindTex(10, this.gradients.getTexture('interior')!, this.progJulia.uniforms['uInteriorGradient']);
     gl.uniform1i(this.progJulia.uniforms['uColorMapping'], colorMappingToIndex(this.params.colorMapping));
     gl.uniform1f(this.progJulia.uniforms['uGradientRepeat'], this.params.gradientRepeat);
     gl.uniform1f(this.progJulia.uniforms['uGradientPhase'], this.params.gradientPhase);
@@ -1485,6 +1562,9 @@ export class FluidEngine {
     gl.uniform1f(this.progJulia.uniforms['uAmbient'], this.params.ambient);
     gl.uniform3f(this.progJulia.uniforms['uInteriorColor'],
       this.params.interiorColor[0], this.params.interiorColor[1], this.params.interiorColor[2]);
+    gl.uniform1i(this.progJulia.uniforms['uInteriorMode'], interiorModeToIndex(this.params.interiorMode));
+    gl.uniform1f(this.progJulia.uniforms['uInteriorRepeat'], this.params.interiorRepeat);
+    gl.uniform1f(this.progJulia.uniforms['uInteriorPhase'], this.params.interiorPhase);
     gl.uniform1i(this.progJulia.uniforms['uCollisionEnabled'], this.params.collisionEnabled ? 1 : 0);
     gl.uniform1f(this.progJulia.uniforms['uCollisionRepeat'], this.params.collisionRepeat);
     gl.uniform1f(this.progJulia.uniforms['uCollisionPhase'], this.params.collisionPhase);
@@ -1590,7 +1670,7 @@ export class FluidEngine {
     // change that alters the baked colour must reset the accumulator,
     // not just the iteration-affecting params.
     const ic = p.interiorColor;
-    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|ph:${p.phoenixK[0]},${p.phoenixK[1]}|${p.center[0]}|${p.center[1]}|cL:${p.centerLow[0]},${p.centerLow[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|cn:${p.colorNormV2 ? 1 : 0}|ir:${p.iterRate}|io:${p.iterOffset}|is:${p.iterScale}|de:${p.deLogBands ? 1 : 0}|li:${p.lightEnabled ? 1 : 0},${p.lightAngle},${p.lightHeight},${p.lightStrength},${p.ambient}|ic:${ic[0]},${ic[1]},${ic[2]}|ce:${p.collisionEnabled ? 1 : 0}|cr:${p.collisionRepeat}|cp:${p.collisionPhase}|gV:${this.gradients.version}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}|ai:${p.autoIter ? 1 : 0}|im:${p.iterMul}|dmi:${p.deepMaxIter}`;
+    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|ph:${p.phoenixK[0]},${p.phoenixK[1]}|${p.center[0]}|${p.center[1]}|cL:${p.centerLow[0]},${p.centerLow[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|gr:${p.gradientRepeat}|gp:${p.gradientPhase}|cn:${p.colorNormV2 ? 1 : 0}|ir:${p.iterRate}|io:${p.iterOffset}|is:${p.iterScale}|de:${p.deLogBands ? 1 : 0}|li:${p.lightEnabled ? 1 : 0},${p.lightAngle},${p.lightHeight},${p.lightStrength},${p.ambient}|ic:${ic[0]},${ic[1]},${ic[2]}|iM:${p.interiorMode},${p.interiorRepeat},${p.interiorPhase},${p.interiorIter}|ce:${p.collisionEnabled ? 1 : 0}|cr:${p.collisionRepeat}|cp:${p.collisionPhase}|gV:${this.gradients.version}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}|ai:${p.autoIter ? 1 : 0}|im:${p.iterMul}|dmi:${p.deepMaxIter}`;
     if (hash !== this.tsaaParamHash) {
         this.tsaaParamHash = hash;
         this.tsaaSampleIndex = 0;

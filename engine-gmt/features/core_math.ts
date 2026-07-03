@@ -31,7 +31,21 @@ export interface CoreMathState {
 }
 
 // Generate optimized DE logic based on compile-time estimator type
-const generateGetDist = (estimatorType: number, supportsCuttingPlane = false) => {
+const generateGetDist = (estimatorType: number, supportsCuttingPlane = false, supportsDifs = false) => {
+    // 6: dIFS (MB3D orbit-trap IFS) — reads the engine-provided g_difsDE accumulator,
+    // the running minimum over the orbit of mb3dRout/mb3dVary, written each iteration by
+    // an MB3D-imported fused dIFS formula (g_difsDE declared in its preamble, init in
+    // loopInit). Mirrors MB3D's doHybridIFS3D (formulas.pas:3210), which returns that
+    // MinDE directly. Gated on supportsDifs so a non-dIFS formula forced to estimator 6
+    // falls back to Linear (no reference to an undeclared g_difsDE). MUST precede the
+    // >4.5 CP checks, which would otherwise coerce 6 → CP/Linear and break the dIFS DE.
+    if (estimatorType > 5.5 && supportsDifs) {
+        return `
+        vec2 getDist(float r, float dr, float iter, vec4 z) {
+            return vec2(g_difsDE, iter);
+        }`;
+    }
+    if (estimatorType > 5.5) estimatorType = 1.0; // dIFS on a non-dIFS formula → Linear
     // 5: Cutting Plane — Knighty fold-and-cut. Reads engine-provided cp_dmin/cp_trap
     // accumulators (declared only when formula has shader.supportsCuttingPlane).
     // For non-CP formulas, fall back to Linear (1.0) — picking CP on a formula that
@@ -214,7 +228,21 @@ export const CoreMathFeature: FeatureDefinition = {
         // Generate optimized getDist based on Quality Settings
         // Default to 0 (Analytic) if missing
         const estimatorType = quality?.estimator || 0;
-        let getDistBody = generateGetDist(estimatorType, pairSupportsCuttingPlane);
+        // dIFS (estimator 6): the MB3D importer sets shader.supportsDifs on a fused
+        // dIFS scene; its preamble declares g_difsDE. Not interlaceable (single-scene
+        // import), so no pair check needed.
+        const supportsDifs = !!def?.shader.supportsDifs;
+        let getDistBody = generateGetDist(estimatorType, pairSupportsCuttingPlane, supportsDifs);
+
+        // 7: Numerical (finite-difference) DE — no analytic dr needed. Arms the
+        // escape-radius-gradient path in DE_MASTER (map()/mapDist() re-iterate
+        // perturbed seeds). The getDist body above is dead code in this path (falls
+        // back to Linear, unused). For any formula whose analytic DE is missing/wrong
+        // (MB3D [CODE] hybrids, hard frag imports). @see docs/adr/0085.
+        if (estimatorType > 6.5) {
+            builder.enableNumericDE(true);
+            builder.addDefine('NUMERIC_DE', '1'); // material_eval uses numericNormal()
+        }
 
         if (formula === 'Modular') {
             const modularCode = compileGraph(config.pipeline || [], config.graph?.edges || []);

@@ -101,6 +101,14 @@ export interface FractalDefinition {
          *  global emission is still gated on this flag at the engine boundary
          *  during the transition. */
         supportsCuttingPlane?: boolean;
+        /** Set by the Mandelbulb3D importer on a fused dIFS scene (DEoption 20).
+         *  The fused formula declares a `float g_difsDE;` global in `preamble`,
+         *  initializes it in `loopInit`, and writes the running minimum of
+         *  `mb3dRout / mb3dVary` (MB3D's orbit-trap IFS distance) in `loopBody`.
+         *  estimator 6 reads it. Gates the dIFS getDist path so a manually
+         *  selected estimator 6 on a non-dIFS formula falls back to Linear (no
+         *  reference to an undeclared g_difsDE). @see emitFusedHybrid.ts */
+        supportsDifs?: boolean;
         /** Capability tokens declared by this formula. Read by evaluateCompat()
          *  for feature gating. REQUIRED since P8 — FractalRegistry.register()
          *  throws if missing. The deriveLegacy shim is gone; native formulas

@@ -432,13 +432,46 @@ export const GmtPanels: PanelManifest = [
                 whitelistParams: ['fudgeFactor', 'stepJitter'],
             },
 
+            // MB3D-Faithful March — compile-only CompilableFeatureSection (no runtime
+            // toggle; the marcher swaps the whole step so it must recompile to switch,
+            // like Burning Mode's compile-only mode). Header toggle buffers the change
+            // → Compile button flips mb3dFaithful + rebuilds in place. When compiled,
+            // the body shows the Step Div / DE Sub tuning sliders (group 'mb3d_faithful').
+            // Auto-on for .m3p imports; toggle here to A/B against GMT's standard march.
+            // When on, Slice Optimization above goes inert (the step uses Step Div). @see docs/adr/0088.
+            {
+                type: 'compilable',
+                id: 'quality',
+                compileParam: 'mb3dFaithful',
+                runtimeGroup: 'mb3d_faithful',
+                label: 'MB3D-Faithful March',
+                helpId: 'quality.estimator',
+            },
+
             { type: 'separator' },
 
-            // Detail + threshold
+            // Detail + threshold. numDEeps (DE Scale) + numDESmooth (DE Smoothing) are runtime
+            // params that show only when the Numerical estimator (7) is selected (their own condition).
             {
                 type: 'feature',
                 id: 'quality',
-                whitelistParams: ['detail', 'pixelThreshold', 'overstepTolerance'],
+                whitelistParams: ['detail', 'pixelThreshold', 'overstepTolerance', 'numDEeps', 'numDESmooth'],
+            },
+
+            // Surface Refinement — compile-toggle sub-section of the quality feature
+            // (override-mode CompilableFeatureSection, same shape as Burning Mode):
+            // refineEnabled compiles the bisection loop in/out (recompiles); once
+            // compiled, refineActive toggles it instantly and refineSteps tunes the
+            // step count live (no recompile). A plain feature whitelist only shows the
+            // runtime sliders without a working compile toggle. @see docs/adr/0084.
+            {
+                type: 'compilable',
+                id: 'quality',
+                compileParam: 'refineEnabled',
+                runtimeToggleParam: 'refineActive',
+                runtimeGroup: 'refine',
+                label: 'Surface Refinement',
+                helpId: 'quality.detail',
             },
 
             // Distance Estimator + Metric live in the Formula tab (compile-

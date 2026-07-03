@@ -37,7 +37,12 @@ debug/bench-shader-snapshot.json
 debug/bench-shader-baseline*.json
 debug/bench-shader-refs/Mandelbulb-*.png
 debug/bench-shader-refs/Apollonian-*.png
+debug/bench-shader-refs/AmazingBox-*.png
 debug/shader-dump/
+
+# One-off scratch probes (leading-underscore convention = throwaway, never tracked).
+# Used heavily during MB3D/DE investigations (debug/_dsyne-*, _numde-*, _lbm-*, …).
+debug/_*
 
 # TypeScript incremental build cache
 *.tsbuildinfo

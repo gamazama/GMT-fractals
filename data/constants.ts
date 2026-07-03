@@ -23,6 +23,13 @@ export const DEFAULT_HARD_CAP = 2000;
 /** Reduced loop cap for mobile GPUs to prevent GPU hangs. */
 export const MOBILE_HARD_CAP = 256;
 
+/** Compile-time ceiling for the post-hit surface-refinement bisection loop
+ *  (quality `refineSteps` param → `uRefineSteps`). Bounds the unrolled loop in
+ *  `trace.ts` (`#define REFINE_HARD_CAP`), mirroring how `MAX_HARD_ITERATIONS`
+ *  bounds the march. The MB3D importer caps its `bStepsafterDEStop` mapping to
+ *  this too. @see docs/adr/0084 */
+export const REFINE_HARD_CAP = 8;
+
 export const DEFAULT_PIPELINE_REVISION = 1;
 
 /** Maximum valid depth — anything ≥ this is treated as a sky hit (no surface). */

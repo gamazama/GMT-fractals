@@ -80,6 +80,19 @@ export class ShaderBuilder {
     private isLite: boolean = false;
     private precisionMode: number = 0;
     private maxLights: number = 0;
+    // Post-hit surface refinement (damped bisection at the first hit). Compile-gated:
+    // armed by the quality feature's inject() only when refineSteps > 0, so the Main
+    // trace kernel emits the refine loop only when asked. @see docs/adr/0084
+    private enableRefine: boolean = false;
+    // Numerical (finite-difference) DE. Armed by coreMath inject() when estimator===7.
+    // map()/mapDist() then estimate distance from the escape-radius gradient instead of
+    // an analytic dr (for formulas with no/wrong analytic DE). @see docs/adr/0085
+    private numericDE: boolean = false;
+    // MB3D-faithful marcher. Armed by the quality feature's inject() when an imported
+    // MB3D scene sets quality.mb3dFaithful. The Main trace kernel then advances with
+    // MB3D's overstep-clamp + RSFmul damper + msDEsub safety-subtraction instead of
+    // the plain sphere step; off (default) it is byte-identical. @see docs/adr/0088
+    private mb3dFaithful: boolean = false;
     // Depth output is always enabled for MRT - removes shader recompilation issue
     
     // 5. Variant Specific
@@ -104,6 +117,27 @@ export class ShaderBuilder {
     public setQuality(isLite: boolean, precisionMode: number) {
         this.isLite = isLite;
         this.precisionMode = precisionMode;
+    }
+
+    /** Arms compile-gated post-hit surface refinement for the Main trace kernel.
+     *  Called from the quality feature's inject() when refineSteps > 0. The Physics
+     *  probe + path-tracer lean trace deliberately never refine. @see docs/adr/0084 */
+    public enableRefinement(enabled: boolean) {
+        this.enableRefine = enabled;
+    }
+
+    /** Arms the numerical (finite-difference) DE. Called from coreMath inject() when
+     *  estimator===7. map()/mapDist() then estimate distance from the escape-radius
+     *  gradient (re-iterating perturbed seeds) instead of the analytic dr. @see docs/adr/0085 */
+    public enableNumericDE(enabled: boolean) {
+        this.numericDE = enabled;
+    }
+
+    /** Arms the MB3D-faithful marcher for the Main trace kernel. Called from the quality
+     *  feature's inject() when an imported scene sets quality.mb3dFaithful. The Physics
+     *  probe + path-tracer lean trace keep the standard march. @see docs/adr/0088 */
+    public enableMB3DFaithful(enabled: boolean) {
+        this.mb3dFaithful = enabled;
     }
 
     public setMaxLights(n: number) {
@@ -441,7 +475,8 @@ float formulaDE(vec3 pos) {
             this.distOverridePostFull,
             this.distOverridePostGeom,
             this.postMapCode.join('\n'),
-            this.postDistCode.join('\n')
+            this.postDistCode.join('\n'),
+            this.numericDE
         );
 
         // --- VARIANT: PHYSICS (Distance Measurement) ---
@@ -582,7 +617,7 @@ void main() {
         const missHandler = this.buildMissHandler();
         const isPathTracing = this.renderMode === 'PathTracing';
 
-        const traceGLSL = getTraceGLSL(this.isLite, true, this.precisionMode, 0, this.volumeBody.join('\n'), this.volumeFinalize.join('\n'));
+        const traceGLSL = getTraceGLSL(this.isLite, true, this.precisionMode, 0, this.volumeBody.join('\n'), this.volumeFinalize.join('\n'), "traceScene", this.enableRefine, this.mb3dFaithful);
         const traceLeanGLSL = isPathTracing
             ? getTraceGLSL(this.isLite, false, this.precisionMode, 0, "", "", "traceSceneLean")
             : "";

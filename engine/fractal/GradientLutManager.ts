@@ -19,11 +19,12 @@ export const FRACTAL_GRADIENT_LUT_WIDTH = 256;
 // Local alias keeps the body byte-identical to the pre-carve version.
 const GRADIENT_LUT_WIDTH = FRACTAL_GRADIENT_LUT_WIDTH;
 
-export type GradientSlot = 'main' | 'collision';
+export type GradientSlot = 'main' | 'collision' | 'interior';
 
 export class GradientLutManager {
     private mainTex: WebGLTexture | null = null;
     private collisionTex: WebGLTexture | null = null;
+    private interiorTex: WebGLTexture | null = null;
     /** Bumped on every LUT upload so callers (e.g. FluidEngine's TSAA
      *  param hash) can detect a gradient change and reset accumulators
      *  that bake the LUT colour into their output. */
@@ -32,7 +33,9 @@ export class GradientLutManager {
     constructor(private gl: WebGL2RenderingContext) {}
 
     getTexture(slot: GradientSlot): WebGLTexture | null {
-        return slot === 'main' ? this.mainTex : this.collisionTex;
+        if (slot === 'main') return this.mainTex;
+        if (slot === 'collision') return this.collisionTex;
+        return this.interiorTex;
     }
 
     /** Upload a packed RGBA LUT (`GRADIENT_LUT_WIDTH * 4` bytes). */
@@ -46,7 +49,8 @@ export class GradientLutManager {
         if (!tex) {
             tex = gl.createTexture()!;
             if (slot === 'main') this.mainTex = tex;
-            else this.collisionTex = tex;
+            else if (slot === 'collision') this.collisionTex = tex;
+            else this.interiorTex = tex;
         }
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -59,22 +63,22 @@ export class GradientLutManager {
     }
 
     /** Allocate a fallback LUT if the slot hasn't been uploaded yet.
-     *  `main` defaults to a grey ramp, `collision` to all-black (no
-     *  walls). Both are harmless placeholders until the app uploads a
-     *  real LUT on boot. */
+     *  `main` and `interior` default to a grey ramp, `collision` to
+     *  all-black (no walls). All are harmless placeholders until the app
+     *  uploads a real LUT on boot. */
     ensure(slot: GradientSlot): void {
         if (this.getTexture(slot)) return;
         const w = GRADIENT_LUT_WIDTH;
         const buf = new Uint8Array(w * 4);
-        if (slot === 'main') {
+        if (slot === 'collision') {
+            for (let i = 0; i < w; ++i) buf[i * 4 + 3] = 255;  // black, opaque
+        } else {
             for (let i = 0; i < w; ++i) {
                 buf[i * 4 + 0] = i;
                 buf[i * 4 + 1] = i;
                 buf[i * 4 + 2] = i;
                 buf[i * 4 + 3] = 255;
             }
-        } else {
-            for (let i = 0; i < w; ++i) buf[i * 4 + 3] = 255;  // black, opaque
         }
         this.setBuffer(slot, buf);
     }
@@ -83,5 +87,6 @@ export class GradientLutManager {
         const gl = this.gl;
         if (this.mainTex) { gl.deleteTexture(this.mainTex); this.mainTex = null; }
         if (this.collisionTex) { gl.deleteTexture(this.collisionTex); this.collisionTex = null; }
+        if (this.interiorTex) { gl.deleteTexture(this.interiorTex); this.interiorTex = null; }
     }
 }

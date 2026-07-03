@@ -7,6 +7,7 @@ import { parse, generate } from '@shaderfrog/glsl-parser';
 import { visit } from '@shaderfrog/glsl-parser/ast';
 import type { Program, IdentifierNode } from '@shaderfrog/glsl-parser/ast';
 import type { DEFunctionInfo, FragUniform, ParamMappingV2 } from '../types';
+import { slotToUniform } from '../../../utils/uniformSlots';
 
 // ============================================================================
 // Uniform name → GMT slot mapping (known Fragmentarium built-ins)
@@ -26,18 +27,10 @@ export const UNIFORM_MAP: Record<string, string> = {
     'JuliaC': 'uJulia',
 };
 
-/** Convert a short slot ID ('vec3A', 'paramB', 'vec3A.x') to the GPU uniform name ('uVec3A', 'uParamB', 'uVec3A.x'). */
-export function slotToUniform(slot: string): string {
-    if (!slot || slot.startsWith('u')) return slot;
-    // Component slot: 'vec3A.x' → 'uVec3A.x'
-    const dot = slot.indexOf('.');
-    if (dot >= 0) {
-        const base = slot.slice(0, dot);
-        const comp = slot.slice(dot); // includes the dot
-        return 'u' + base.charAt(0).toUpperCase() + base.slice(1) + comp;
-    }
-    return 'u' + slot.charAt(0).toUpperCase() + slot.slice(1);
-}
+// `slotToUniform` now lives in the shared `uniformSlots` module (used by the MB3D
+// importer too). Re-export so existing `from '../transform/variable-renamer'` imports
+// keep resolving. @see engine-gmt/utils/uniformSlots.ts
+export { slotToUniform };
 
 /**
  * Apply the rename map to an AST in-place.

@@ -6,6 +6,12 @@ export const generateMaterialEval = (injectedCode: string = "") => `
 // ------------------------------------------------------------------
 
 vec3 GetNormal(vec3 p_ray, float eps) {
+#ifdef NUMERIC_DE
+    // Numerical estimator: the DE is a finite difference, so finite-differencing it
+    // again (below) gives difference-of-difference noise. Use the escape-time gradient
+    // directly, probed at the pixel footprint eps to avoid speckle. @see docs/adr/0085
+    return numericNormal(p_ray + uCameraPosition, eps);
+#else
     // High Quality: Tetrahedron Normal (4 taps)
     // OPTIMIZATION: Use DE_Dist
     vec2 k = vec2(1.0, -1.0);
@@ -15,11 +21,15 @@ vec3 GetNormal(vec3 p_ray, float eps) {
              k.xxx * DE_Dist(p_ray + k.xxx * eps);
     
     if (dot(n, n) < 1.0e-20) return vec3(0.0, 1.0, 0.0);
-    
+
     return normalize(n);
+#endif
 }
 
 vec3 GetFastNormal(vec3 p, float eps) {
+#ifdef NUMERIC_DE
+    return numericNormal(p + uCameraPosition, eps);
+#else
     // Forward Difference (4 taps). The center tap d0 is load-bearing: the ray
     // stops at DE < threshold, so DE(p) is a small POSITIVE residual, not 0.
     // Dropping it (n = vec3(dx,dy,dz)) leaves n = trueGradient + DE(p)*(1,1,1),
@@ -38,6 +48,7 @@ vec3 GetFastNormal(vec3 p, float eps) {
     if (dot(n, n) < 1.0e-20) return vec3(0.0, 1.0, 0.0);
 
     return normalize(n);
+#endif
 }
 
 // Evaluate surface properties (Albedo, Normal, Roughness, Emission)

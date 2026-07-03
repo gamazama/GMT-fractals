@@ -1,6 +1,6 @@
 
 import { FeatureDefinition } from '../engine/FeatureSystem';
-import { DEFAULT_HARD_CAP } from '../../data/constants';
+import { DEFAULT_HARD_CAP, REFINE_HARD_CAP } from '../../data/constants';
 import { registry } from '../engine/FractalRegistry';
 
 export interface QualityState {
@@ -20,6 +20,13 @@ export interface QualityState {
     estimator: number; // 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
     deBailout: number; // Absolute raymarch DE bailout radius² (uDeBailout)
     overstepTolerance: number; // Candidate Recovery Threshold
+    refineEnabled: boolean; // Post-hit surface refinement compile gate
+    refineActive: boolean; // Surface-refinement instant runtime on/off (uRefineActive)
+    refineSteps: number; // Surface-refinement bisection step count (runtime, live)
+    numDEeps: number; // Numerical-DE magnitude calibration (MB3D dDEscale); probe is auto-derived
+    mb3dFaithful: boolean; // MB3D-faithful marcher compile gate (importer-set for MB3D imports)
+    mb3dStepDiv: number; // MB3D sZstepDiv → uMb3dStepDiv (faithful step divisor)
+    mb3dDEsub: number; // MB3D msDEsub → uMb3dDEsub (faithful step safety-subtraction fraction)
     physicsProbeMode: number; // 0=GPU Probe, 1=CPU Calculation, 2=Manual
     manualDistance: number; // Manual distance override when probe is disabled
 }
@@ -120,17 +127,35 @@ export const QualityFeature: FeatureDefinition = {
                         }
                         return true;
                     },
+                },
+                {
+                    // MB3D dIFS orbit-trap estimator — only valid on an imported dIFS
+                    // scene (declares shader.supportsDifs + a g_difsDE preamble). Engine
+                    // falls back to Linear on any other formula, so this is purely UX.
+                    label: 'dIFS (Orbit Trap)',
+                    value: 6.0,
+                    disabledIf: (state: any) => !registry.get(state?.formula)?.shader.supportsDifs,
+                },
+                {
+                    // Numerical (finite-difference) DE — the only estimator that needs NO
+                    // analytic derivative. It re-iterates the orbit at perturbed seed points
+                    // and estimates distance from the escape-radius gradient (port of MB3D
+                    // CalcDEnoADE). For ANY formula whose analytic dr is missing or wrong:
+                    // MB3D [CODE] hybrids, hard frag imports, hand-written formulas. ~4× the
+                    // DE cost (re-iterates 3 extra orbits), so it recompiles + runs slower.
+                    label: 'Numerical (Finite-Diff)',
+                    value: 7.0,
                 }
             ],
-            description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix, Cutting Plane=Knighty fold-and-cut polyhedra.',
+            description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix, Cutting Plane=Knighty fold-and-cut polyhedra, Numerical=finite-difference (no analytic DE needed; ~4× slower, fixes formulas that render as dust/noise).',
             helpId: 'quality.estimator',
             onUpdate: 'compile',
             noAccumReset: true,
         },
         deBailout: {
             type: 'float', default: 100.0, label: 'DE Bailout', shortId: 'eb', uniform: 'uDeBailout',
-            min: 1, max: 1000, step: 0.01, scale: 'log', group: 'metric',
-            description: 'Radius² at which the raymarch DE stops iterating. High (default) keeps surfaces sharp and true to the boundary; low bails early, slicing the fractal into rounded shells (a stylistic effect). Fast-escaping formulas only respond near their structure scale.',
+            min: 1, max: 1.0e7, step: 0.01, scale: 'log', group: 'metric',
+            description: 'Radius² at which the raymarch DE stops iterating. High keeps surfaces sharp and true to the boundary; low bails early, slicing the fractal into rounded shells. FOLD formulas (box/IFS) whose orbit oscillates back need a HIGH bailout to develop structure — MB3D imports map this from rStop² (often ~1e6). Fast-escaping formulas only respond near their structure scale.',
             helpId: 'quality.metric',
         },
         fudgeFactor: {
@@ -164,6 +189,106 @@ export const QualityFeature: FeatureDefinition = {
             min: 0.0, max: 1000.0, step: 0.1, scale: 'log', group: 'kernel',
             description: "Recovers details missed by the raymarcher. 0=Off. Higher values fix more holes but may create noise.",
             helpId: 'quality.fudge',
+        },
+        // Numerical-DE SCALE (MB3D's dDEscale) — only used by the "Numerical (Finite-Diff)"
+        // estimator. It calibrates the DE MAGNITUDE: DE = ln(R0)·dDEscale·e/(√ΣΔ(ln Rout)²+e·0.06).
+        // MB3D derives dDEscale per-scene from the zoom/step; GMT exposes it as this knob. Too
+        // high → the ray overshoots (misses the surface); too low → the ray converges slowly and
+        // may hit the step budget (blank). The probe itself is auto-derived (zoom-scaled,
+        // quality-param-free) and the estimate is probe-invariant, so THIS is the one numeric-DE
+        // dial. Runtime (no recompile), harmless on other estimators (uniform unread). Default
+        // 0.3 hits the true surface in ~36 steps at the default fudge/detail; the safe band is
+        // wide (overshoots only above ~1.0 at fudge 1.0). @see docs/adr/0085.
+        numDEeps: {
+            type: 'float', default: 0.3, label: 'DE Scale', shortId: 'np', uniform: 'uNumDEeps',
+            min: 0.001, max: 5.0, step: 0.001, scale: 'log', group: 'kernel',
+            description: 'Magnitude calibration (MB3D dDEscale) for the Numerical (Finite-Diff) estimator. Too high overshoots/misses the surface; too low converges slowly and can exhaust the step budget (blank). ~0.2–0.5 works for the MB3D imports; if a scene reads as noise, lower Ray detail (~1.5) so the rougher numeric DE clears the hit threshold. The probe is auto-derived, so this is the main numeric-DE dial. Only affects that estimator.',
+            helpId: 'quality.detail',
+            format: (v: number) => v.toFixed(3),
+            // Only relevant to the Numerical estimator — hide it for all the analytic ones.
+            condition: { param: 'estimator', eq: 7.0 },
+        },
+
+        // Numerical-DE SMOOTHING — the primary-ray probe width for est7. The escape field is
+        // CHAOTIC in deep (high-iteration) regions, so a narrow finite-difference probe is noisy:
+        // as jitter/camera motion perturbs the sample by a sub-probe amount, the DE flips the ray
+        // hit↔miss → deep sections flicker black (measured CV ≈ 0.45 at nC≈17 with a ×1 probe,
+        // → 0.00 at ×3 — debug/sim-numeric-de4.mts). A wider probe averages that sub-footprint
+        // chaos → a stable, flicker-free silhouette, at the cost of some deep-detail sharpness.
+        // Lower toward 1.0 for maximum detail (accepts flicker); raise for a smoother, stable
+        // surface. Runtime (no recompile); unread on other estimators. @see docs/adr/0085.
+        numDESmooth: {
+            type: 'float', default: 2.5, label: 'DE Smoothing', shortId: 'ns', uniform: 'uNumDESmooth',
+            min: 1.0, max: 8.0, step: 0.1, group: 'kernel',
+            description: 'Primary-ray probe width for the Numerical (Finite-Diff) estimator. The escape field is chaotic in deep/high-iteration regions, so a narrow probe (1.0) makes those sections flicker black under any motion. Wider = averages the sub-pixel chaos → a stable, flicker-free surface, trading a little deep-detail sharpness. Raise if deep sections shimmer/flicker; lower toward 1.0 for maximum detail. Only affects that estimator.',
+            helpId: 'quality.detail',
+            format: (v: number) => v.toFixed(1),
+            condition: { param: 'estimator', eq: 7.0 },
+        },
+
+        // Post-hit SURFACE REFINEMENT. Sphere tracing accepts the first sample under
+        // the hit threshold as-is; for a non-Lipschitz / over-estimating DE (some
+        // hybrid / frag / MB3D imports) the ray overshoots a thin or discontinuous
+        // surface and the accepted points scatter into "dust" instead of a coherent
+        // face. This runs a damped binary search across the iso-surface at the first
+        // hit — the coarse march only BRACKETS, then we bisect the ray parameter onto
+        // the DE==eps crossing (MB3D's RMdoBinSearch shape, native to any formula).
+        //
+        // Surface refinement = a CompilableFeatureSection (the volumetric / Burning Mode
+        // norm): a compile gate (refineEnabled) that compiles the loop in/out, a hidden
+        // runtime toggle (refineActive) for instant on/off after compile, and the live
+        // step count (refineSteps). Rendered via an override-mode `compilable` panel
+        // item (panels.ts), NOT a plain feature whitelist. REFINE_HARD_CAP (8) bounds the
+        // unrolled loop. @see docs/adr/0084.
+        refineEnabled: {
+            type: 'boolean', default: false, label: 'Surface Refinement', shortId: 'sre', group: 'refine',
+            description: "Binary-searches the first ray hit onto the surface — resolves 'dust' from overshooting / discontinuous distance estimators (hard hybrid & imported formulas). Compiling it in/out recompiles; on/off + step count are live after.",
+            helpId: 'quality.detail',
+            onUpdate: 'compile',
+            noAccumReset: true,
+        },
+        refineActive: {
+            // Instant runtime on/off of the compiled loop (the CompilableFeatureSection
+            // header toggle drives this once compiled). Hidden — surfaced by the section.
+            type: 'boolean', default: false, label: 'Refine Active', shortId: 'sra', uniform: 'uRefineActive',
+            group: 'refine', hidden: true,
+        },
+        refineSteps: {
+            type: 'float', default: 4.0, label: 'Refine Steps', shortId: 'sr', uniform: 'uRefineSteps',
+            min: 1.0, max: 8.0, step: 1.0, group: 'refine',
+            description: 'Bisection steps at the hit — higher converges tighter onto the surface. Live (no recompile).',
+            helpId: 'quality.detail',
+            format: (v: number) => `${v.toFixed(0)} steps`,
+        },
+
+        // MB3D-FAITHFUL MARCHER. Imported MB3D scenes render with MB3D's actual march
+        // convergence dynamics (overstep clamp + RSFmul damper + msDEsub safety-sub,
+        // CalcThread.pas:196-230) instead of GMT's plain sphere step — what stops an
+        // over-estimating fused DE from scattering thin surfaces into "dust". Compile-
+        // gated (mb3dFaithful, importer-set); when off the kernel is byte-identical.
+        // The two scalar uniforms carry the authored step params (no header parse beyond
+        // what the importer already reads). @see docs/adr/0088.
+        mb3dFaithful: {
+            type: 'boolean', default: false, label: 'MB3D-Faithful March', shortId: 'm3f', group: 'kernel',
+            description: "Use MB3D's own raymarch step (damped, Lipschitz-clamped, safety-subtracted) instead of GMT's plain sphere step — resolves overshoot 'dust' on hard hybrid / MB3D imports. Auto-enabled when you import a .m3p scene; toggle here to A/B against GMT's standard march. Recompiles in/out.",
+            helpId: 'quality.estimator',
+            onUpdate: 'compile',
+            noAccumReset: true,
+        },
+        // Runtime tuning knobs for the faithful marcher, shown in the MB3D-Faithful
+        // March section body (group 'mb3d_faithful') once it's compiled in. Live
+        // (no recompile) — lower DE Sub if a conservative scene under-steps to empty.
+        mb3dStepDiv: {
+            type: 'float', default: 0.5, label: 'Step Div', shortId: 'm3s', uniform: 'uMb3dStepDiv',
+            min: 0.01, max: 1.0, step: 0.01, group: 'mb3d_faithful',
+            description: "MB3D sZstepDiv — step divisor for the faithful marcher (smaller = finer/slower). Authored from the scene; tweak to taste.",
+            format: (v: number) => v.toFixed(2),
+        },
+        mb3dDEsub: {
+            type: 'float', default: 0.0, label: 'DE Sub', shortId: 'm3d', uniform: 'uMb3dDEsub',
+            min: 0.0, max: 0.9, step: 0.01, group: 'mb3d_faithful',
+            description: "MB3D msDEsub — per-step DE safety-subtraction (0 unless the scene set iOptions bit 2). Higher = more cautious near surfaces; too high can under-step a scene to empty — lower it if a scene renders blank.",
+            format: (v: number) => v.toFixed(2),
         },
 
         // Adaptive resolution is a user/device performance preference, not
@@ -232,5 +357,21 @@ export const QualityFeature: FeatureDefinition = {
         // This controls the unrolled loop size in DE.ts
         const cap = state?.compilerHardCap || DEFAULT_HARD_CAP;
         builder.addDefine('MAX_HARD_ITERATIONS', Math.floor(cap).toString());
+
+        // Post-hit surface refinement (damped bisection). Compile-gated on the master
+        // TOGGLE (refineEnabled), not the step count: only emit the REFINE_HARD_CAP
+        // define + arm the trace-kernel loop when enabled. Off (default) → no define,
+        // no GLSL, byte-identical shader, zero compile cost. The live step count
+        // (uRefineSteps) tunes the loop at runtime without recompiling. @see docs/adr/0084.
+        if (state?.refineEnabled) {
+            builder.addDefine('REFINE_HARD_CAP', String(REFINE_HARD_CAP));
+            builder.enableRefinement(true);
+        }
+
+        // MB3D-faithful marcher. Compile-gated on the importer-set toggle; off (default)
+        // emits zero MB3D GLSL → byte-identical kernel. @see docs/adr/0088.
+        if (state?.mb3dFaithful) {
+            builder.enableMB3DFaithful(true);
+        }
     }
 };

@@ -264,7 +264,7 @@ export const PerformanceMonitor = () => {
             data-help-id="ui.performance"
             onContextMenu={handleContextMenu}
         >
-            <div className="flex flex-col gap-1 bg-danger/90 border border-danger/30 rounded-lg shadow-xl backdrop-blur-md p-2">
+            <div className="flex flex-col gap-1 bg-danger/15 border border-danger/50 rounded-lg shadow-xl backdrop-blur-md p-2">
                 
                 <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2 text-danger text-[10px] font-bold">

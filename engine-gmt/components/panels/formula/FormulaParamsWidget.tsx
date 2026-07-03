@@ -117,6 +117,12 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                         case 'vec3A': val = coreMath.vec3A; set = (v) => actions.setCoreMath({ vec3A: v }); break;
                         case 'vec3B': val = coreMath.vec3B; set = (v) => actions.setCoreMath({ vec3B: v }); break;
                         case 'vec3C': val = coreMath.vec3C; set = (v) => actions.setCoreMath({ vec3C: v }); break;
+                        // A vec3 param packed into a uVec4* unit's .xyz (MB3D importer's vec3
+                        // overflow once uVec3A/B/C are full): read/write the .xyz components,
+                        // keep .w at 0. The control still renders as a 3-axis vec3 slider.
+                        case 'vec4A': val = coreMath.vec4A; set = (v) => actions.setCoreMath({ vec4A: { x: v.x, y: v.y, z: v.z, w: 0 } }); break;
+                        case 'vec4B': val = coreMath.vec4B; set = (v) => actions.setCoreMath({ vec4B: { x: v.x, y: v.y, z: v.z, w: 0 } }); break;
+                        case 'vec4C': val = coreMath.vec4C; set = (v) => actions.setCoreMath({ vec4C: { x: v.x, y: v.y, z: v.z, w: 0 } }); break;
                     }
                     return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec3' as const, mode: p.mode, linkable: p.linkable, scale: p.scale };
                 }

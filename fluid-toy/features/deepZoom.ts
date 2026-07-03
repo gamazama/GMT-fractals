@@ -55,11 +55,11 @@ export const DeepZoomFeature: FeatureDefinition = {
         },
         iterMul: {
             type: 'float',
-            default: 1, min: 0.25, max: 8, step: 0.25,
+            default: 1, min: 0.01, max: 8, step: 0.25,
             scale: 'log',
             label: 'Iteration ×',
             condition: { param: 'autoIter', bool: true },
-            description: 'Multiplier on the auto iteration count — push it up when a difficult area (thin filaments, deep minibrots) still looks under-resolved, down for speed.',
+            description: 'Multiplier on the auto iteration count — push it up when a difficult area (thin filaments, deep minibrots) still looks under-resolved, down for speed. Goes all the way to 0 (every pixel reads as interior → solid) so an animation can dissolve the fractal in/out.',
         },
 
         // useScaledFloat removed: HDR deltas were tried but the

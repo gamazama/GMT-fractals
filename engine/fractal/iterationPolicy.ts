@@ -30,11 +30,16 @@ export const ITER_DEEP_MIN_ZOOM = 1e-100;
 export const MAX_DEEP_ITER = 200_000;
 
 /** Shallow (f32) per-pixel cap: 200 at the home view, +220 per zoom decade,
- *  capped at 2000, then × an optional iteration multiplier. */
+ *  capped at 2000, then × an optional iteration multiplier. The multiplier
+ *  floors at 0 (not 0.25) so an animation can drive the cap all the way to 0 —
+ *  the kernel runs zero iterations and every pixel reads as interior, a clean
+ *  dissolve-to-solid. The shader guards its smoothIter divisions by maxIter, so
+ *  0 is safe. (Callers that need a non-zero floor — e.g. the Gradient Explorer
+ *  viewer — clamp at their own call site.) */
 export const autoShallowIter = (zoom: number, mul = 1): number => {
   const depth = Math.log10(ITER_REF_ZOOM / Math.max(zoom, ITER_MIN_ZOOM));
   const base = Math.max(200, Math.min(2000, 200 + 220 * Math.max(0, depth)));
-  return Math.round(base * Math.max(0.25, mul));
+  return Math.round(base * Math.max(0, mul));
 };
 
 /** Reference-orbit BUILD length for a deep view (2000..20000 by zoom depth). */
@@ -43,11 +48,21 @@ export const deepRefIter = (zoom: number): number => {
   return Math.round(Math.min(20_000, Math.max(2_000, 1_500 + 900 * Math.max(0, depth))));
 };
 
-/** Deep build target = reference length × iter multiplier, capped at MAX_DEEP_ITER. */
+/** Deep build target = reference length × iter multiplier, capped at MAX_DEEP_ITER.
+ *  The multiplier floors at 0 (not 0.25) so a low `iterMul` shortens the orbit
+ *  along with the per-pixel cap — keeping them in lockstep (cap ≤ orbit length)
+ *  while letting a dissolve animation drive deep iterations far below the old
+ *  500-iter (2000 × 0.25) floor. */
 export const deepBuildIter = (zoom: number, mul = 1): number =>
-  Math.round(Math.min(MAX_DEEP_ITER, deepRefIter(zoom) * Math.max(0.25, mul)));
+  Math.round(Math.min(MAX_DEEP_ITER, deepRefIter(zoom) * Math.max(0, mul)));
 
 /** Per-pixel GPU cap for the deep path: full zoom-depth budget for a periodic
- *  (nucleus) reference, else the actual orbit length (floored at 200). */
+ *  (nucleus) reference (the orbit wraps, so the cap may exceed its length), else
+ *  the actual orbit length. The non-periodic floor scales with `mul` (200 at
+ *  mul≥1, shrinking toward 0) rather than a hard 200: a low `iterMul` produces a
+ *  short orbit, and a hard 200 floor would push the cap PAST that orbit → the
+ *  "read past the reference" artifact. Scaling the floor keeps cap ≤ orbit. */
 export const deepGpuCap = (zoom: number, orbitLen: number, period: number, mul = 1): number =>
-  period > 0 ? deepBuildIter(zoom, mul) : Math.max(200, orbitLen);
+  period > 0
+    ? deepBuildIter(zoom, mul)
+    : Math.max(Math.round(200 * Math.min(1, Math.max(0, mul))), orbitLen);

@@ -12,6 +12,7 @@ import { FractalEvents, FRACTAL_EVENTS } from '../../../../engine/FractalEvents'
 import { showToast } from '../../../../engine/store/toastStore';
 import { buildFormulaContextMenu } from './FormulaContextMenu';
 import { ModifyWithAIModal } from './ModifyWithAIModal';
+import { ImportMandelbulb3DModal } from './ImportMandelbulb3DModal';
 import { FormulaPicker, useSceneGroups, useCatalogData, sectionGroups } from '../../FormulaPicker';
 import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
 
@@ -30,6 +31,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
     const fileRef = useRef<HTMLInputElement>(null);
     const [rect, setRect] = useState<DOMRect | null>(null);
     const [aiOpen, setAiOpen] = useState(false);
+    const [mb3dOpen, setMb3dOpen] = useState(false);
 
     // Global Hooks
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
@@ -64,6 +66,11 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             {
                 label: 'Load formula from clipboard',
                 action: () => { void loadFormulaFromClipboard(); },
+            },
+            { label: 'Import', action: () => {}, isHeader: true },
+            {
+                label: 'Import Mandelbulb3D…',
+                action: () => setMb3dOpen(true),
             },
         ];
         const items = [...aiItems, ...buildFormulaContextMenu()];
@@ -294,6 +301,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             )}
 
             <ModifyWithAIModal open={aiOpen} onClose={() => setAiOpen(false)} />
+            <ImportMandelbulb3DModal open={mb3dOpen} onClose={() => setMb3dOpen(false)} />
 
         </div>
     );

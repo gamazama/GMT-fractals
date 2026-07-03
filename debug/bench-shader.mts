@@ -186,6 +186,24 @@ const IS_PT = RENDER_MODE === 'PathTracing';
 const SHADOW_ALGORITHM = (argVal('--shadow-algorithm') ?? '').toLowerCase();
 const AREA_LIGHTS = parseBool(argVal('--area-lights'));
 
+// MB3D-faithful marcher toggle (compile gate) + its two runtime knobs. Lets the
+// bench A/B GMT's standard sphere march vs MB3D's damped/clamped march (ADR-0088)
+// on ANY formula — the gate lives in the trace kernel, not the importer, so the
+// default Mandelbulb is a clean controlled A/B.
+//   --mb3d-faithful=on|off   quality.mb3dFaithful (recompiles in/out)
+//   --mb3d-stepdiv=N         uMb3dStepDiv (0.01..1.0; default 0.5) — runtime knob.
+//                            Set 1.0 to isolate the faithful ALU cost at equal step size.
+//   --mb3d-desub=N           uMb3dDEsub   (0..0.9; default 0.0)   — runtime knob
+const MB3D_FAITHFUL = parseBool(argVal('--mb3d-faithful'));
+const MB3D_STEPDIV = argVal('--mb3d-stepdiv') !== undefined ? parseFloat(argVal('--mb3d-stepdiv')!) : null;
+const MB3D_DESUB   = argVal('--mb3d-desub')   !== undefined ? parseFloat(argVal('--mb3d-desub')!)   : null;
+
+// --formula=<id> switches the active formula to <id> and benches it at ITS
+// registry defaultPreset (camera/lights/params) — so we can bench a formula
+// other than the booted default at its authored framing, instead of a bare
+// {formula} scene that leaves a degenerate camera. Ignored when --scene is set.
+const FORMULA_OVERRIDE = argVal('--formula') ?? '';
+
 // Volumetric scatter overrides. ptVolumetric is a compile gate (recompiles
 // the trace loop with the per-step body); volEnabled is the runtime gate;
 // remaining knobs are sliders. --volumetric=on flips both compile + runtime.
@@ -523,12 +541,16 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         volEmissive: number | null;
         volLights: number | null;
         volAnisotropy: number | null;
+        mb3dFaithful: boolean | null;
+        mb3dStepDiv: number | null;
+        mb3dDesub: number | null;
+        formulaOverride: string;
         scenePreset: any;
     }) => {
         const store = (window as any).__store;
         const reg = (window as any).__fractalRegistry;
         const state = store.getState();
-        const formula = opts.scenePreset?.formula ?? state.formula;
+        const formula = opts.formulaOverride || opts.scenePreset?.formula || state.formula;
         // Scene preset (loaded from --scene) wins; otherwise use the formula's
         // own defaultPreset for the formula the engine is currently running.
         const sourcePreset = opts.scenePreset ?? reg?.get(formula)?.defaultPreset;
@@ -658,6 +680,17 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             setters.setVolumetric(volPatch);
         }
 
+        // MB3D-faithful marcher. mb3dFaithful is a compile gate (recompiles the
+        // trace kernel with the damped/clamped step); stepdiv/desub are runtime
+        // uniforms. setQuality is the DDFS auto-setter for the 'quality' feature.
+        if ((opts.mb3dFaithful !== null || opts.mb3dStepDiv !== null || opts.mb3dDesub !== null) && setters.setQuality) {
+            const qPatch: any = {};
+            if (opts.mb3dFaithful !== null) qPatch.mb3dFaithful = opts.mb3dFaithful;
+            if (opts.mb3dStepDiv !== null) qPatch.mb3dStepDiv = opts.mb3dStepDiv;
+            if (opts.mb3dDesub !== null) qPatch.mb3dDEsub = opts.mb3dDesub;
+            setters.setQuality(qPatch);
+        }
+
         const after = (window as any).__store.getState();
         return {
             ok: true,
@@ -676,6 +709,9 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             appliedVolDensity:   after.volumetric?.volDensity   ?? 'unset',
             appliedVolEmissive:  after.volumetric?.volEmissive  ?? 'unset',
             appliedVolLights:    after.volumetric?.volMaxLights ?? 'unset',
+            appliedMb3dFaithful: after.quality?.mb3dFaithful ?? 'unset',
+            appliedMb3dStepDiv:  after.quality?.mb3dStepDiv  ?? 'unset',
+            appliedMb3dDesub:    after.quality?.mb3dDEsub    ?? 'unset',
         };
     }, {
         reflectionMode: REFLECTION_MODE,
@@ -695,6 +731,10 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         volEmissive: VOL_EMISSIVE,
         volLights: VOL_LIGHTS,
         volAnisotropy: VOL_ANISOTROPY,
+        mb3dFaithful: MB3D_FAITHFUL,
+        mb3dStepDiv: MB3D_STEPDIV,
+        mb3dDesub: MB3D_DESUB,
+        formulaOverride: FORMULA_OVERRIDE,
         scenePreset: SCENE_PRESET,
     });
     console.log(`[bench-shader] preset diag: applied=${JSON.stringify({ refl: presetApplied.appliedReflectionMode, rough: presetApplied.appliedRoughness, reflectionStrength: presetApplied.appliedReflection })}`);
@@ -703,6 +743,9 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
     }
     if (VOLUMETRIC !== null) {
         console.log(`[bench-shader] volumetric diag: applied=${JSON.stringify({ pt: presetApplied.appliedPtVolumetric, runtime: presetApplied.appliedVolEnabled, density: presetApplied.appliedVolDensity, emissive: presetApplied.appliedVolEmissive, lights: presetApplied.appliedVolLights })}`);
+    }
+    if (MB3D_FAITHFUL !== null || MB3D_STEPDIV !== null || MB3D_DESUB !== null) {
+        console.log(`[bench-shader] mb3d-faithful diag: applied=${JSON.stringify({ faithful: presetApplied.appliedMb3dFaithful, stepDiv: presetApplied.appliedMb3dStepDiv, deSub: presetApplied.appliedMb3dDesub })}`);
     }
     if (!presetApplied.ok) {
         console.log(`[bench-shader] WARNING: ${presetApplied.reason} — using whatever state the engine had`);

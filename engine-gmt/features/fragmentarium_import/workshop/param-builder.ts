@@ -4,7 +4,13 @@
  */
 
 import type { FragUniform, ParamMappingV2, WorkshopParam } from '../types';
-import { slotToUniform } from '../transform/variable-renamer';
+import { slotToUniform, componentSlotBase, getSlotOccupancy, buildOccupancyMap, isSlotConflict } from '../../../utils/uniformSlots';
+
+// The slot vocabulary, accessor mapping, and occupancy algebra now live in the shared
+// `uniformSlots` module (consumed by both the Workshop and the MB3D importer). Re-export
+// here so existing `from './workshop/param-builder'` imports keep resolving unchanged.
+// @see engine-gmt/utils/uniformSlots.ts
+export { slotToUniform, componentSlotBase, getSlotOccupancy, buildOccupancyMap, isSlotConflict };
 
 export const SCALAR_SLOTS = ['paramA', 'paramB', 'paramC', 'paramD', 'paramE', 'paramF'] as const;
 export const VEC2_SLOTS   = ['vec2A', 'vec2B', 'vec2C'] as const;
@@ -20,86 +26,6 @@ export const VEC2_COMPONENTS = VEC2_SLOTS.flatMap(s => [`${s}.x`, `${s}.y`]);
 // Swizzle slots: pack vec2 params into partial vec3/vec4 slots.
 export const VEC4_VEC2_SLOTS = VEC4_SLOTS.flatMap(s => [`${s}.xy`, `${s}.zw`]);
 export const VEC3_VEC2_SLOTS = VEC3_SLOTS.flatMap(s => [`${s}.xy`]);
-
-/** Given a component slot like 'vec3A.x' or 'vec4A.xy', return its base slot. */
-export function componentSlotBase(slot: string): string | null {
-    const dot = slot.indexOf('.');
-    return dot >= 0 ? slot.slice(0, dot) : null;
-}
-
-/**
- * Return which components of a base slot a given mapping occupies.
- * Handles: full slots (vec3A → xyz), component slots (vec4A.x → [x]),
- * swizzle slots (vec4A.xy → [x,y]), and vec3-in-vec4 (vec4A with type vec3 → [x,y,z]).
- */
-export function getSlotOccupancy(slot: string, paramType: string): { base: string; components: string[] } | null {
-    // Swizzle or component slot: 'vec4A.xy', 'vec3A.x', etc.
-    const dot = slot.indexOf('.');
-    if (dot >= 0) {
-        return { base: slot.slice(0, dot), components: [...slot.slice(dot + 1)] };
-    }
-    // Full vec slots
-    if (/^vec4[ABC]$/.test(slot)) {
-        return paramType === 'vec3'
-            ? { base: slot, components: ['x', 'y', 'z'] }
-            : { base: slot, components: ['x', 'y', 'z', 'w'] };
-    }
-    if (/^vec3[ABC]$/.test(slot)) {
-        return paramType === 'vec2'
-            ? { base: slot, components: ['x', 'y'] }
-            : { base: slot, components: ['x', 'y', 'z'] };
-    }
-    if (/^vec2[ABC]$/.test(slot)) return { base: slot, components: ['x', 'y'] };
-    // Scalar or special slot
-    return null;
-}
-
-/**
- * Build a component occupancy map from mappings.
- * Returns base → Set of occupied component chars.
- */
-export function buildOccupancyMap(mappings: WorkshopParam[]): Map<string, Set<string>> {
-    const map = new Map<string, Set<string>>();
-    for (const m of mappings) {
-        if (m.mappedSlot === 'ignore' || m.mappedSlot === 'fixed' || m.mappedSlot === 'builtin') continue;
-        const info = getSlotOccupancy(m.mappedSlot, m.type);
-        if (!info) continue;
-        if (!map.has(info.base)) map.set(info.base, new Set());
-        for (const c of info.components) map.get(info.base)!.add(c);
-    }
-    return map;
-}
-
-/**
- * Check if a slot conflicts with already-occupied components.
- * Used by the SlotPicker to grey out unavailable slots.
- */
-export function isSlotConflict(
-    candidateSlot: string,
-    candidateType: string,
-    currentSlot: string,
-    occupancyMap: Map<string, Set<string>>,
-    scalarUsed: Set<string>,
-): boolean {
-    if (candidateSlot === currentSlot) return false;
-    const info = getSlotOccupancy(candidateSlot, candidateType);
-    if (!info) {
-        // Scalar or special slot — exact match check
-        return scalarUsed.has(candidateSlot);
-    }
-    // Get what's currently occupied on this base (excluding our own current slot's components)
-    const occupied = occupancyMap.get(info.base);
-    if (!occupied) return false;
-
-    // Temporarily remove our own components to avoid self-conflict
-    const currentInfo = getSlotOccupancy(currentSlot, candidateType);
-    let ownComponents: string[] = [];
-    if (currentInfo && currentInfo.base === info.base) {
-        ownComponents = currentInfo.components;
-    }
-
-    return info.components.some(c => occupied.has(c) && !ownComponents.includes(c));
-}
 
 export function slotOptionsForType(type: WorkshopParam['type']): string[] {
     switch (type) {

@@ -96,6 +96,33 @@ uniform int       uColorMapping;
 uniform float     uGradientRepeat;
 uniform float     uGradientPhase;
 uniform vec3      uInteriorColor;
+// ── Interior ("island") colouring ─────────────────────────────────────────────
+// Points that never escape (escaped == 0) were always a flat uInteriorColor.
+// uInteriorMode selects a per-ORBIT scalar to map through a SEPARATE interior
+// gradient (uInteriorGradient) instead, so the bounded region carries structure:
+//   0 solid       — uInteriorColor (DEFAULT; byte-identical to the pre-interior look)
+//   1 min |z|     — Bof60: nested level-sets around the orbit's attracting point
+//   2 avg |z|     — mean modulus: soft fill that grades across each bulb
+//   3 |z_final|   — radial intensity from the last iterate
+//   4 arg(z_final)— angular sweep around the attractor
+//   5 stripe avg  — Härkönen ⟨½+½·sin(k·arg z)⟩ over the interior orbit
+//   6 orbit-trap  — min approach to the trap shape (reuses uTrapMode/uTrapCenter…)
+// Modes 1/2 need the min/avg-|z| tracker (uTrackInterior); 5/6 reuse the trap/
+// stripe accumulator (uTrackAccum). Default (mode 0) leaves the shared kernel —
+// the Gradient Explorer uses it too and never sets these — pixel-identical.
+uniform int       uInteriorMode;
+uniform sampler2D uInteriorGradient;
+uniform float     uInteriorRepeat;   // density of the interior scalar → gradient
+uniform float     uInteriorPhase;    // phase shift along the interior gradient
+uniform int       uTrackInterior;    // 1 when a non-solid interior mode is active
+// FIXED interior accumulation window. Interior points never escape, so they run
+// to uMaxIter — which auto-scales with zoom. Sampling the interior orbit over
+// that moving cap makes the colour drift (and final-|z|/angle JUMP as the cap's
+// parity flips the cycle phase) on every zoom step. Accumulating over a fixed
+// count instead gives each interior point a stable, zoom-independent colour.
+// The host floors uMaxIter ≥ uInteriorIter when an interior mode is active so
+// the window is always fully covered.
+uniform int       uInteriorIter;
 // Colour-normalization regime (see gradientSample.ts colorMappingT):
 //   0 = v1 legacy magic constants (current look, byte-identical)
 //   1 = v2 depth-decoupled fields (Density ≈ 1 sane at any zoom)
@@ -448,7 +475,7 @@ vec2 fetchRefZ(int idx) {
 // the (outMain, outAux) data. Extracted so K-sampling can call it K
 // times with different jitter offsets without inlining the iteration
 // loop K times in source.
-void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
+void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal, out float outInteriorT) {
   vec2 uv = uvJ * 2.0 - 1.0;
   uv.x *= uAspect;
   // Phoenix is conventionally plotted transposed (re/im axes swapped) so the
@@ -513,6 +540,17 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
   float trapIter  = 0.0;
   float stripeSum = 0.0;
   int   stripeCount = 0;
+  // Interior ("island") trackers — fed when uTrackInterior != 0, over the FIXED
+  // uInteriorIter window so the colour is zoom-stable. minMod2 = min |z|² (sqrt
+  // deferred); modSum/intCount = mean |z|; intTrap = min trap distance; intStripe
+  // = Härkönen stripe sum; zInterior = the iterate frozen at the window's end
+  // (deterministic per point → stable final-|z| / final-angle).
+  float minMod2   = 1e30;
+  float modSum    = 0.0;
+  float intTrap   = 1e9;
+  float intStripe = 0.0;
+  int   intCount  = 0;
+  vec2  zInterior = vec2(0.0);
   // Stripe-average colouring loses contrast at depth: as the iteration cap rises,
   // more sin() terms average toward 0.5 (central-limit), so deep views need an
   // absurd Density to tease bands out. In v2 we scale the angular frequency down by
@@ -547,7 +585,7 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
   // accumulator/derivative mode is active, force the pure-PO path (which visits
   // every iteration). Costs LA/AT acceleration for those modes only — all other
   // colour modes keep it. @see docs/adr/0065
-  bool perIterColor = (uTrackAccum != 0) || (uTrackDeriv != 0);
+  bool perIterColor = (uTrackAccum != 0) || (uTrackDeriv != 0) || (uTrackInterior != 0);
   bool atActive = deep && uATEnabled != 0 && uMaxIter > uATStepLength && !perIterColor;
   if (atActive && max(abs(dc.x), abs(dc.y)) <= uATThresholdC) {
     vec2 c_at = cmul(dc, uATCCoeff) + uATRefC;
@@ -835,6 +873,18 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
       stripeCount++;
     }
     float r2 = dot(z, z);
+    // Interior ("island") accumulation over the FIXED uInteriorIter window (not
+    // the zoom-scaled uColorIter) → a zoom-stable colour per bounded point. The
+    // stripe uses the RAW uStripeFreq (no depth-normalization) so it too stays
+    // put across zoom. zInterior freezes the iterate at the window's tail.
+    if (uTrackInterior != 0 && iter < uInteriorIter) {
+      minMod2  = min(minMod2, r2);
+      modSum  += sqrt(r2);
+      intTrap  = min(intTrap, trapDistance(z));
+      intStripe += 0.5 + 0.5 * sin(uStripeFreq * atan(z.y, z.x));
+      zInterior = z;
+      intCount++;
+    }
     if (r2 > uEscapeR2) {
       iters = float(iter) + 1.0 - log2(max(0.5 * log2(max(r2, 1.0001)), 1e-6));
       escaped = 1.0;
@@ -846,6 +896,24 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA, out vec2 outNormal) {
   float stripeAvg = stripeCount > 0 ? stripeSum / float(stripeCount) : 0.0;
   float logDz     = log(1.0 + length(dz));
   float trapIterN = float(uMaxIter) > 0.0 ? trapIter / float(uMaxIter) : 0.0;
+
+  // Interior ("island") scalar → [0,1)-ish t along the SEPARATE interior gradient,
+  // all sourced from the fixed-window accumulators so the colour holds across zoom.
+  // The modulus modes pass through 1 - exp(-k·v) so a default density (repeat 1)
+  // already spans a sane sweep regardless of how small the bounded |z| stays;
+  // angle / stripe are already in [0,1]; the trap mirrors the v1 exterior trap map.
+  // Computed for every pixel but only consumed for interior pixels (see main()).
+  float minMod       = sqrt(minMod2);
+  float modAvg       = intCount > 0 ? modSum   / float(intCount) : 0.0;
+  float intStripeAvg = intCount > 0 ? intStripe / float(intCount) : 0.0;
+  float interiorT = 0.0;
+  if      (uInteriorMode == 1) interiorT = 1.0 - exp(-minMod * 4.0);
+  else if (uInteriorMode == 2) interiorT = 1.0 - exp(-modAvg * 4.0);
+  else if (uInteriorMode == 3) interiorT = 1.0 - exp(-length(zInterior) * 2.0);
+  else if (uInteriorMode == 4) interiorT = atan(zInterior.y, zInterior.x) * 0.15915494 + 0.5;
+  else if (uInteriorMode == 5) interiorT = clamp(intStripeAvg, 0.0, 1.0);
+  else if (uInteriorMode == 6) interiorT = 1.0 - clamp(intTrap * 0.8, 0.0, 1.0);
+  outInteriorT = interiorT;
 
   outM = vec4(z, iters, escaped);
   outA = vec4(minT, stripeAvg, logDz, trapIterN);
@@ -946,16 +1014,29 @@ void main() {
 
     vec4 sM, sA;
     vec2 sN;
-    evalJulia(uvJ, sM, sA, sN);
+    float sInteriorT;
+    evalJulia(uvJ, sM, sA, sN, sInteriorT);
 
     // Per-evaluation palette bake. sM.w is 0 (interior) or 1 (escaped).
     // For interior pixels, palette colour is undefined (smoothIter is
     // clamped at uMaxIter, z is the orbit's last position) — feed the
     // interior colour instead so the mean across jitter samples in a
     // boundary pixel becomes a smooth interior↔palette blend.
+    //
+    // Interior colour: solid (mode 0) keeps the flat uInteriorColor; any other
+    // mode maps the per-orbit interior scalar through the SEPARATE interior
+    // gradient with its own density/phase. Mean-pools cleanly across jitter, so
+    // the island↔boundary edge stays smooth under TSAA.
     bool  escaped = sM.w > 0.5;
     vec4  sPalRgba = gradientForJuliaRgba(sM, sA);
-    vec3  sColor   = escaped ? sPalRgba.rgb : uInteriorColor;
+    vec3  sInterior;
+    if (uInteriorMode == 0) {
+      sInterior = uInteriorColor;
+    } else {
+      float ti = fract(sInteriorT * uInteriorRepeat + uInteriorPhase);
+      sInterior = texture(uInteriorGradient, vec2(ti, 0.5)).rgb;
+    }
+    vec3  sColor   = escaped ? sPalRgba.rgb : sInterior;
 
     // Slope-lighting composite layer — modulates the base colour of ANY mode by the
     // analytic escape-gradient normal, so escaped pixels read as a lit, sculpted surface.

@@ -126,6 +126,52 @@ const colorMappingParam = defineEnumParam(
 export const COLOR_MAPPINGS = colorMappingParam.values;
 export const colorMappingFromIndex = colorMappingParam.fromIndex;
 
+// Interior ("island") colouring modes — index-aligned with FluidEngine's
+// InteriorMode / interiorModeToIndex + the kernel's uInteriorMode.
+const interiorModeParam = defineEnumParam(
+    [
+        'solid', 'min-modulus', 'avg-modulus', 'final-mag',
+        'final-angle', 'stripe', 'orbit-trap',
+    ] as const,
+    'Interior mode',
+    {
+        optionLabels: {
+            'min-modulus': 'Min |z|',
+            'avg-modulus': 'Avg |z|',
+            'final-mag':   'Final |z|',
+            'final-angle': 'Final angle',
+            'orbit-trap':  'Orbit trap',
+        },
+        optionHints: {
+            solid:         'Flat fill — the single interior colour below.',
+            'min-modulus': "Closest the orbit comes to the origin. Nested level-sets around each bulb's attractor.",
+            'avg-modulus': 'Mean orbit modulus — a soft gradient filling each bulb.',
+            'final-mag':   'Magnitude of the last iterate. Radial intensity.',
+            'final-angle': 'Argument of the last iterate. Angular sweep around the attractor.',
+            stripe:        'Härkönen stripe average over the bounded orbit — striped bulbs.',
+            'orbit-trap':  'Closest approach to the trap shape (reuses Trap centre). Ornamental interior.',
+        },
+    },
+);
+export const INTERIOR_MODES = interiorModeParam.values;
+export const interiorModeFromIndex = interiorModeParam.fromIndex;
+
+// Index constants for conditional visibility (kept in sync with INTERIOR_MODES).
+const INT_SOLID = 0, INT_STRIPE = 5, INT_TRAP = 6;
+
+// Default interior gradient — a deep midnight→indigo→cyan→gold ramp, distinct
+// from the dye palette so the island reads as its own surface out of the box.
+const DEFAULT_INTERIOR_GRADIENT: GradientConfig = {
+    colorSpace: 'srgb',
+    blendSpace: 'oklab',
+    stops: [
+        { id: '0', position: 0.00, color: '#05010f', bias: 0.5, interpolation: 'linear' },
+        { id: '1', position: 0.35, color: '#1b2a78', bias: 0.5, interpolation: 'linear' },
+        { id: '2', position: 0.65, color: '#27c4d6', bias: 0.5, interpolation: 'linear' },
+        { id: '3', position: 1.00, color: '#ffe9b0', bias: 0.5, interpolation: 'linear' },
+    ],
+};
+
 // Indices of the orbit-trap modes — used by conditional visibility on
 // the trap-shape params below. Kept in sync with COLOR_MAPPINGS order.
 const ORBIT_POINT = 5, ORBIT_CIRCLE = 6, ORBIT_CROSS = 7, ORBIT_LINE = 8, STRIPE = 9, TRAP_ITER = 13;
@@ -219,6 +265,7 @@ export const PaletteFeature: FeatureDefinition = {
                 { param: 'colorMapping', eq: ORBIT_CIRCLE },
                 { param: 'colorMapping', eq: ORBIT_CROSS },
                 { param: 'colorMapping', eq: TRAP_ITER },
+                { param: 'interiorMode', eq: INT_TRAP },   // interior orbit-trap reuses the centre
             ] },
         },
         trapRadius: {
@@ -244,7 +291,10 @@ export const PaletteFeature: FeatureDefinition = {
         stripeFreq: {
             type: 'float', default: 4, min: 1, max: 16, step: 0.1,
             label: 'Stripe freq',
-            condition: { param: 'colorMapping', eq: STRIPE },
+            condition: { or: [
+                { param: 'colorMapping', eq: STRIPE },
+                { param: 'interiorMode', eq: INT_STRIPE },   // interior stripe reuses the frequency
+            ] },
             description: 'Stripe frequency — k in ½ + ½·sin(k·arg z). Higher = more stripes per iteration.',
         },
 
@@ -252,12 +302,53 @@ export const PaletteFeature: FeatureDefinition = {
         // shared colour picker (compact swatch + HL strip, expandable) edits it
         // inline instead of three raw 0–1 sliders. Stored as a hex string;
         // syncPaletteToEngine + presets/apply convert to the engine's [r,g,b].
+        // How the bounded "island" is coloured. `solid` = flat swatch (default);
+        // every other mode maps a per-orbit scalar through the separate interior
+        // gradient below. Research-backed interior methods: min/avg modulus
+        // (Bof60 level-sets), final magnitude/angle, stripe average, orbit trap.
+        interiorMode: {
+            ...interiorModeParam.config,
+            description: 'How the bounded interior of the set is coloured. Solid = flat colour; other modes map a per-orbit quantity through the interior gradient.',
+        },
+
         interiorColor: {
             type: 'color',
             default: '#05050A',          // ≈ the old vec3 (0.02, 0.02, 0.04)
             layout: 'embedded',
             label: 'Interior color',
             description: 'Colour for bounded points (pixels that never escape the iteration).',
+            condition: { param: 'interiorMode', eq: INT_SOLID },
+        },
+
+        // Separate interior gradient + its own density/phase. Shown for every
+        // non-solid interior mode.
+        interiorGradient: {
+            type: 'gradient', default: DEFAULT_INTERIOR_GRADIENT, label: 'Interior gradient',
+            description: 'Colours the bounded interior when Interior mode is not Solid. Independent of the main palette.',
+            condition: { param: 'interiorMode', neq: INT_SOLID },
+        },
+        interiorRepeat: {
+            type: 'float', default: 1, min: 0.1, max: 100, step: 0.01, scale: 'log',
+            label: 'Interior density',
+            description: 'Colour density of the interior scalar along the interior gradient. 1 = one sweep.',
+            condition: { param: 'interiorMode', neq: INT_SOLID },
+        },
+        interiorPhase: {
+            type: 'float', default: 0, min: 0, max: 1, step: 0.005,
+            label: 'Interior phase',
+            description: 'Phase shift — rotates the interior colours without changing their layout.',
+            condition: { param: 'interiorMode', neq: INT_SOLID },
+        },
+        // FIXED number of orbit iterations the interior colourers sample. Decoupled
+        // from the zoom-scaled iteration cap so the island's colour stays put when
+        // you zoom/pan (otherwise the moving cap makes it shimmer, and final-|z| /
+        // angle jump as the cap's parity flips the orbit's cycle phase). Higher =
+        // more nested interior detail (and a longer bounded-orbit sample).
+        interiorIter: {
+            type: 'int', default: 128, min: 16, max: 512, step: 1,
+            label: 'Interior iterations',
+            description: 'How many orbit steps the interior colouring samples. Fixed across zoom (keeps the island colour stable). Higher = finer interior detail.',
+            condition: { param: 'interiorMode', neq: INT_SOLID },
         },
 
         // ── Slope-lighting composite layer (multiplies any mode's colour by an
@@ -354,6 +445,10 @@ export const syncPaletteToEngine = (engine: FluidEngine, palette: PaletteSlice):
         colorIter:           palette.colorIter,
         escapeR:             palette.escapeR,
         interiorColor:       interior,
+        interiorMode:        interiorModeFromIndex(palette.interiorMode),
+        interiorRepeat:      palette.interiorRepeat,
+        interiorPhase:       palette.interiorPhase,
+        interiorIter:        palette.interiorIter,
         trapCenter:          [palette.trapCenter.x, palette.trapCenter.y],
         trapRadius:          palette.trapRadius,
         trapNormal,
@@ -377,5 +472,9 @@ export const syncPaletteToEngine = (engine: FluidEngine, palette: PaletteSlice):
         const lut = generateGradientTextureBuffer(palette.gradient);
         engine.setGradientBuffer(lut);
         brushHandles.ref.current.gradientLut = lut;
+    }
+
+    if (palette.interiorGradient) {
+        engine.setInteriorGradientBuffer(generateGradientTextureBuffer(palette.interiorGradient));
     }
 };

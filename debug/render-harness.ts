@@ -40,6 +40,8 @@ import { buildFractalParams } from '../engine-gmt/features/fragmentarium_import/
 import { deriveImportCapabilities } from '../engine-gmt/features/fragmentarium_import/import-capabilities';
 import { processFormula as v4ProcessFormula } from '../engine-gmt/features/fragmentarium_import/v4';
 import type { FractalDefinition } from '../engine-gmt/types';
+import { emitFusedHybrid } from '../engine-gmt/utils/mb3d/emitFusedHybrid';
+import type { MB3DScene } from '../engine-gmt/utils/mb3d/parseMB3D';
 
 registerFeatures();
 
@@ -470,6 +472,15 @@ async function runOne(spec: TestSpec): Promise<TestResult> {
     // drifts if a formula's preset has an unexpected shape.
     let stage = 'start';
     try {
+        // qualityOverride is a COMPILE-TIME concern: `estimator` selects a getDist
+        // branch baked into the shader, and fudge/detail/deBailout/maxSteps are
+        // uniforms synced from `config.quality` at compile. The old approach merged
+        // it into `st.quality` AFTER prepareScene (post-compile) where it never
+        // reached the shader — a cert DE sweep silently did nothing. Fold it into the
+        // config build (via configOverrides.quality) so the override actually applies.
+        if ((spec as any).qualityOverride) {
+            spec = { ...spec, configOverrides: { ...spec.configOverrides, quality: { ...(spec.configOverrides as any)?.quality, ...(spec as any).qualityOverride } } };
+        }
         stage = 'prepareScene';
         const { config, compileMs } = await prepareScene(spec, spec.timeoutMs ?? 30000);
         result.compile.totalMs = compileMs;
@@ -479,10 +490,19 @@ async function runOne(spec: TestSpec): Promise<TestResult> {
         // Render: mode-dependent
         if (spec.mode === 'single') {
             stage = 'renderFrames';
-            const n = (config as any).lighting?.renderMode === 1.0 ? 32 : 8;
+            // Force full-frame each tick: adaptiveTarget=0 makes the BandScheduler use
+            // a single band, so a short snapshot capture isn't left as the centre strip
+            // (progressive banding only paints a few bands in N frames — the live app
+            // converges over seconds, a snapshot can't). See FractalEngine.ts:735.
+            const st = (engine as any).state;
+            // adaptiveTarget:0 → full-frame (single band, so a snapshot isn't left as
+            // the centre strip). qualityOverride is applied at compile via configOverrides
+            // above — NOT here (post-compile st.quality never reaches the shader).
+            st.quality = { ...(st.quality ?? {}), adaptiveTarget: 0 };
+            const n = (config as any).lighting?.renderMode === 1.0 ? 32 : 12;
             for (let i = 0; i < n; i++) {
                 engine.syncCameraFromMatrix(camera);
-                engine.update(camera, 1 / 60, (engine as any).state, false);
+                engine.update(camera, 1 / 60, st, false);
                 engine.compute(renderer);
                 await nextFrame();
             }
@@ -559,6 +579,65 @@ async function runOne(spec: TestSpec): Promise<TestResult> {
     inflight = run;
     try { return await run; }
     finally { inflight = null; }
+};
+
+// Render a raw per-iteration formula body (e.g. an x87-decompiled MB3D formula).
+// funcGlsl = the `void formula_<id>(...)` GLSL; loopBody = the call. Scaffolds a
+// renderable preset from Amazing Box.
+(window as any).runRawFormulaTest = async (
+  funcGlsl: string,
+  loopBody: string,
+  spec: TestSpec,
+): Promise<TestResult> => {
+  if (inflight) await inflight;
+  const run = (async (): Promise<TestResult> => {
+    const id = spec.formula || 'DecompPOC';
+    if (!registry.get(id as any)) {
+      const scaffold = registry.get('AmazingBox' as any);
+      const preset: any = JSON.parse(JSON.stringify(scaffold!.defaultPreset));
+      preset.formula = id;
+      const def: any = {
+        id, name: id, shortDescription: '', description: '', juliaType: 'offset',
+        shader: { function: funcGlsl, loopBody, capabilities: new Set(['shape:per-iteration', 'render:writes-trap', 'render:writes-iter']) },
+        parameters: [], defaultPreset: preset,
+      };
+      registry.register(def);
+      FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+    }
+    return runOne({ ...spec, formula: id });
+  })();
+  inflight = run;
+  try { return await run; } finally { inflight = null; }
+};
+
+// Build an MB3D fused-hybrid def from a (JSON) MB3DScene, register it, render it.
+// Mirrors runFragRenderTest: build a non-native def then render like any formula.
+(window as any).runMB3DWeaveTest = async (
+  sceneJson: MB3DScene,
+  spec: TestSpec,
+): Promise<TestResult> => {
+  if (inflight) await inflight;
+  const run = (async (): Promise<TestResult> => {
+    const t0 = performance.now();
+    const fail = (msg: string): TestResult => ({
+      id: spec.id, ok: false, error: msg,
+      compile: { totalMs: 0 }, render: { sigma: [0, 0, 0], nanFraction: 0, nonBlackFraction: 0 },
+      timeMs: Math.round(performance.now() - t0),
+    });
+    try {
+      const { def, ledger } = emitFusedHybrid(sceneJson);
+      if (!def) return fail(`[stage=emit] unsupported: ${ledger.reasons.join('; ')}`);
+      if (!registry.get(def.id as any)) {
+        registry.register(def);
+        FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+      }
+      return runOne({ ...spec, formula: def.id });
+    } catch (e: any) {
+      return fail(`[stage=mb3dWeave] ${e?.message ?? String(e)}`);
+    }
+  })();
+  inflight = run;
+  try { return await run; } finally { inflight = null; }
 };
 
 // ─── PT bench: headless bucket-render driver (debug/bench-pt.mts) ────────────
