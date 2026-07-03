@@ -38,6 +38,15 @@ export const VEC2_SLOTS   = ['vec2A', 'vec2B', 'vec2C'] as const;
 export const VEC3_SLOTS   = ['vec3A', 'vec3B', 'vec3C'] as const;
 export const VEC4_SLOTS   = ['vec4A', 'vec4B', 'vec4C'] as const;
 
+// Component slots — pack multiple scalars into one vec uniform's components
+// ('vec3A.x', 'vec4B.w', …) — and swizzle slots — pack vec2 params into halves
+// of a vec3/vec4 ('vec4A.xy' / 'vec4A.zw' / 'vec3A.xy').
+export const VEC4_COMPONENTS = VEC4_SLOTS.flatMap(s => [`${s}.x`, `${s}.y`, `${s}.z`, `${s}.w`]);
+export const VEC3_COMPONENTS = VEC3_SLOTS.flatMap(s => [`${s}.x`, `${s}.y`, `${s}.z`]);
+export const VEC2_COMPONENTS = VEC2_SLOTS.flatMap(s => [`${s}.x`, `${s}.y`]);
+export const VEC4_VEC2_SLOTS = VEC4_SLOTS.flatMap(s => [`${s}.xy`, `${s}.zw`]);
+export const VEC3_VEC2_SLOTS = VEC3_SLOTS.flatMap(s => [`${s}.xy`]);
+
 /** Given a component slot like `'vec3A.x'` or `'vec4A.xy'`, return its base slot
  *  (`'vec3A'`), or `null` for a plain scalar / non-component slot. */
 export function componentSlotBase(slot: string): string | null {
