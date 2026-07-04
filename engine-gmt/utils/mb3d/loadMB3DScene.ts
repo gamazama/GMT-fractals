@@ -14,6 +14,8 @@ import { parseMB3D, parseMB3DBinary } from './parseMB3D';
 import type { MB3DScene, MB3DAddon, MB3DFormulaSlot, MB3DHeader } from './parseMB3D';
 import { emitFusedHybrid } from './emitFusedHybrid';
 import type { WeaveLedger } from './emitFusedHybrid';
+import { weaveSpecFromMB3D } from './weaveSequencer';
+import type { FractalDefinition } from '../../types/fractal';
 import { DECOMPILED_FORMULAS, DECOMPILED_DEFAULTS } from './decompiled-formulas';
 import type { Preset } from '../../types/fractal';
 import { registry } from '../../engine/FractalRegistry';
@@ -41,6 +43,10 @@ function loadFromScene(scene: MB3DScene): LoadMB3DResult {
   if (!def) {
     return { ok: false, reason: ledger.reasons.join(' '), ledger };
   }
+  // Imported scenes carry a Weave-Editor-openable source (re-weave any import);
+  // synthetic standalone loads (iterCount 0) don't.
+  const ws = weaveSourceFromScene(scene);
+  if (ws) def.weaveSource = ws;
   registry.register(def);
   FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
   // defaultPreset is built complete (cloned from Amazing Box) though typed Partial.
@@ -116,15 +122,39 @@ export function loadInternFormula(formulaIndex: number, name: string, optionValu
 
 // ── User-authored weaves (the Weave Editor) ─────────────────────────────────
 
-/** Synthesize a multi-slot mode-0 weave scene from weaver-picked slots. Wrap
- *  bounds ride the hybOpt1 defaults: the mode-0 clamp in weaveSpecFromMB3D sets
- *  endTo to the last active slot; repeatFrom 0 repeats the whole sequence. */
-export function buildWeaveScene(slots: MB3DFormulaSlot[], title: string, iterations?: number): MB3DScene {
+/** Build a Weave-Editor-openable source from a real (parsed) MB3D scene, so any
+ *  imported scene can be cracked open and re-woven. Skipped for the synthetic
+ *  single-slot standalone loads (their slots carry iterCount 0). Slots up to the
+ *  clamped endTo are included verbatim (zero-count gaps keep indices aligned
+ *  with the schedule's repeatFrom). */
+function weaveSourceFromScene(scene: MB3DScene): FractalDefinition['weaveSource'] | undefined {
+  const addon = scene.addon;
+  if (!addon || !addon.slots.some((s) => (s?.iterCount ?? 0) !== 0)) return undefined;
+  const { spec } = weaveSpecFromMB3D(addon);
+  const sched = spec.schedule as { kind: 'counts'; endTo: number; repeatFrom: number };
+  const slots = addon.slots.slice(0, sched.endTo + 1).filter((s): s is MB3DFormulaSlot => !!s);
+  return {
+    version: 1,
+    title: scene.title || 'MB3D Weave',
+    slots: slots.map((slot) => ({
+      label: slot.name || (slot.formulaIndex >= 20 ? 'CODE formula' : `Intern #${slot.formulaIndex}`),
+      kind: slot.formulaIndex >= 20 ? 'decompiled' : 'intern',
+      ref: slot.formulaIndex >= 20 ? slot.name : slot.formulaIndex,
+      slot: { ...slot, optionTypes: [...slot.optionTypes], optionValues: [...slot.optionValues] },
+    })),
+    schedule: { kind: 'counts', repeatFrom: sched.repeatFrom },
+  };
+}
+
+/** Synthesize a multi-slot mode-0 weave scene from weaver-picked slots. endTo
+ *  rides the mode-0 clamp in weaveSpecFromMB3D (last active slot); `repeatFrom`
+ *  is MB3D's "repeat from here" nibble — earlier slots run once as an intro. */
+export function buildWeaveScene(slots: MB3DFormulaSlot[], title: string, iterations?: number, repeatFrom = 0): MB3DScene {
   const header = defaultHeader();
   if (iterations && iterations > 0) header.iterations = iterations;
   const addon: MB3DAddon = {
     version: 0, options1: 0, options2: 0, options3: 0,
-    formulaCount: slots.length, hybOpt1: 0, hybOpt2: 0, slots,
+    formulaCount: slots.length, hybOpt1: (repeatFrom & 0xF) << 4, hybOpt2: 0, slots,
   };
   return { version: 18, header, addon, title, raw: new Uint8Array(0) };
 }
@@ -143,8 +173,9 @@ export function loadUserWeave(
   slots: MB3DFormulaSlot[],
   title: string,
   weaveSource?: import('../../types/fractal').FractalDefinition['weaveSource'],
+  repeatFrom = 0,
 ): LoadMB3DResult {
-  const { def, ledger } = emitFusedHybrid(buildWeaveScene(slots, title));
+  const { def, ledger } = emitFusedHybrid(buildWeaveScene(slots, title, undefined, repeatFrom));
   if (!def) {
     return { ok: false, reason: ledger.reasons.join(' '), ledger };
   }

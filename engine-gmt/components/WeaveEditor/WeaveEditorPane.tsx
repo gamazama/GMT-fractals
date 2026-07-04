@@ -9,14 +9,17 @@
  *
  * Design decisions (session doc, user-confirmed 2026-07-04):
  *  - Rebuilds preserve the current camera / lights / look (loadUserWeave).
- *  - Structure edits (add/remove/reorder/count) have editor-local undo/redo,
- *    separate from DDFS param undo.
- *  - Reordering slots while keyframed formula-param tracks exist shows a
- *    warning (packed lanes may retarget) — a transfer tool comes later.
+ *  - Rows keep a STABLE color (colorIdx) so reordering doesn't repaint the strip.
+ *  - "Repeat from here" (↻ per row) = MB3D's repeatFrom: earlier slots run once
+ *    as an intro, the loop repeats from the marked slot.
+ *  - Reorder is a drag handle (pointer-based, list-local — no native drag image).
+ *  - Structure edits have editor-local undo/redo, separate from DDFS param undo.
+ *  - Reordering while keyframed formula-param tracks exist shows a warning
+ *    (packed lanes may retarget) — a transfer tool comes later.
  *  - Schedule kinds are a user choice: counts ("Sequence", baked) ships now;
- *    modulo ("Rhythm", live + keyframable) is rendered but arrives with its
- *    runtime uniforms.
- *  - weaveSource rides on the built def so the weave reopens for re-editing.
+ *    modulo ("Rhythm", live + keyframable) arrives with its runtime uniforms.
+ *  - weaveSource rides on the built def so the weave reopens for re-editing;
+ *    imported MB3D scenes carry one too, so any loaded weave can be opened here.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CategoryPickerMenu } from '../../../components/CategoryPickerMenu';
@@ -32,17 +35,23 @@ import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
 import { LoopStrip, SLOT_COLORS } from './LoopStrip';
 
+type WeaveSource = NonNullable<FractalDefinition['weaveSource']>;
+
 interface SlotRow {
     key: string;
     label: string;
     kind: 'intern' | 'decompiled';
     ref: string | number;
+    /** Stable color identity — survives reorder (user feedback 2026-07-04). */
+    colorIdx: number;
     slot: MB3DFormulaSlot;
 }
 
 interface WeaveDraft {
     title: string;
     rows: SlotRow[];
+    /** Row key of the "repeat from here" marker; null = repeat the whole sequence. */
+    repeatKey: string | null;
 }
 
 // Module-scoped draft — survives modal close/reopen within a session (the
@@ -53,16 +62,27 @@ const rowKey = () => `wrow${rowSeq++}`;
 
 const cloneRows = (rows: SlotRow[]): SlotRow[] =>
     rows.map((r) => ({ ...r, slot: { ...r.slot, optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] } }));
+const cloneDraft = (d: WeaveDraft): WeaveDraft => ({ title: d.title, rows: cloneRows(d.rows), repeatKey: d.repeatKey });
 
-/** Hydrate rows from a reopened weave's persisted source. */
-function rowsFromWeaveSource(ws: NonNullable<FractalDefinition['weaveSource']>): SlotRow[] {
-    return ws.slots.map((s) => ({
+const nextColorIdx = (rows: SlotRow[]): number => {
+    const used = new Set(rows.map((r) => r.colorIdx));
+    let ci = 0;
+    while (used.has(ci)) ci++;
+    return ci;
+};
+
+/** Hydrate a draft from a weave formula's persisted source. */
+function draftFromWeaveSource(ws: WeaveSource): WeaveDraft {
+    const rows = ws.slots.map((s, i) => ({
         key: rowKey(),
         label: s.label,
         kind: s.kind,
         ref: s.ref,
+        colorIdx: i,
         slot: { ...s.slot, optionTypes: [...s.slot.optionTypes], optionValues: [...s.slot.optionValues] },
     }));
+    const rf = ws.schedule.kind === 'counts' ? (ws.schedule.repeatFrom ?? 0) : 0;
+    return { title: ws.title, rows, repeatKey: rows[rf]?.key ?? null };
 }
 
 const DEFAULT_ITER_COUNT = 2;
@@ -71,11 +91,11 @@ export function WeaveEditorPane() {
     const store = useEngineStore() as any;
 
     const [draft, setDraft] = useState<WeaveDraft>(() => {
-        if (weaveDraft && weaveDraft.rows.length > 0) return { title: weaveDraft.title, rows: cloneRows(weaveDraft.rows) };
+        if (weaveDraft && weaveDraft.rows.length > 0) return cloneDraft(weaveDraft);
         // Reopening a weave formula: hydrate from its persisted source.
         const ws = (registry.get(store.formula) as FractalDefinition | undefined)?.weaveSource;
-        if (ws) return { title: ws.title, rows: rowsFromWeaveSource(ws) };
-        return { title: 'My Weave', rows: [] };
+        if (ws) return draftFromWeaveSource(ws);
+        return { title: 'My Weave', rows: [], repeatKey: null };
     });
     const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
     const [reorderWarn, setReorderWarn] = useState(false);
@@ -89,10 +109,10 @@ export function WeaveEditorPane() {
     // Snapshot the draft to module scope on unmount (modal close).
     const liveRef = useRef(draft);
     liveRef.current = draft;
-    useEffect(() => () => { weaveDraft = { title: liveRef.current.title, rows: cloneRows(liveRef.current.rows) }; }, []);
+    useEffect(() => () => { weaveDraft = cloneDraft(liveRef.current); }, []);
 
     const commit = (next: WeaveDraft) => {
-        past.current.push({ title: draft.title, rows: cloneRows(draft.rows) });
+        past.current.push(cloneDraft(draft));
         if (past.current.length > 50) past.current.shift();
         future.current = [];
         setDraft(next);
@@ -100,13 +120,13 @@ export function WeaveEditorPane() {
     const undo = () => {
         const prev = past.current.pop();
         if (!prev) return;
-        future.current.push({ title: draft.title, rows: cloneRows(draft.rows) });
+        future.current.push(cloneDraft(draft));
         setDraft(prev);
     };
     const redo = () => {
         const next = future.current.pop();
         if (!next) return;
-        past.current.push({ title: draft.title, rows: cloneRows(draft.rows) });
+        past.current.push(cloneDraft(draft));
         setDraft(next);
     };
 
@@ -149,6 +169,7 @@ export function WeaveEditorPane() {
                 label: entry.label,
                 kind: entry.kind,
                 ref: entry.ref,
+                colorIdx: nextColorIdx(draft.rows),
                 slot: slotFromCatalogEntry(entry, DEFAULT_ITER_COUNT),
             };
             commit({ ...draft, rows: [...draft.rows, row] });
@@ -162,30 +183,84 @@ export function WeaveEditorPane() {
     };
     const hasFormulaTracks = () =>
         (store.animations ?? []).some((a: any) => a.enabled && typeof a.target === 'string' && a.target.startsWith('coreMath.'));
-    const move = (key: string, dir: -1 | 1) => {
-        const i = draft.rows.findIndex((r) => r.key === key);
-        const j = i + dir;
-        if (i < 0 || j < 0 || j >= draft.rows.length) return;
-        const rows = [...draft.rows];
-        [rows[i], rows[j]] = [rows[j], rows[i]];
-        if (hasFormulaTracks()) setReorderWarn(true);
-        commit({ ...draft, rows });
-    };
     const remove = (key: string) => {
         if (hasFormulaTracks()) setReorderWarn(true);
-        commit({ ...draft, rows: draft.rows.filter((r) => r.key !== key) });
+        commit({
+            ...draft,
+            rows: draft.rows.filter((r) => r.key !== key),
+            repeatKey: draft.repeatKey === key ? null : draft.repeatKey,
+        });
+    };
+    const setRepeat = (key: string) => {
+        const idx = draft.rows.findIndex((r) => r.key === key);
+        commit({ ...draft, repeatKey: idx <= 0 ? null : key });
+    };
+
+    // ── Drag-handle reorder (pointer-based, list-local) ──────────────────────
+    const rowRefs = useRef(new Map<string, HTMLDivElement>());
+    const [dragKey, setDragKey] = useState<string | null>(null);
+    const dragBase = useRef<WeaveDraft | null>(null);
+
+    const onHandleDown = (e: React.PointerEvent, key: string) => {
+        e.preventDefault();
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        dragBase.current = cloneDraft(draft);
+        setDragKey(key);
+    };
+    const onHandleMove = (e: React.PointerEvent, key: string) => {
+        if (dragKey !== key) return;
+        const from = draft.rows.findIndex((r) => r.key === key);
+        if (from < 0) return;
+        let to = from;
+        draft.rows.forEach((r, idx) => {
+            if (idx === from) return;
+            const el = rowRefs.current.get(r.key);
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            if (e.clientY > rect.top && e.clientY < rect.bottom) to = idx;
+        });
+        if (to !== from) {
+            const rows = [...draft.rows];
+            const [moved] = rows.splice(from, 1);
+            rows.splice(to, 0, moved);
+            setDraft({ ...draft, rows }); // transient — committed once on release
+        }
+    };
+    const onHandleUp = (_e: React.PointerEvent, key: string) => {
+        if (dragKey !== key) return;
+        setDragKey(null);
+        const base = dragBase.current;
+        dragBase.current = null;
+        if (base && base.rows.map((r) => r.key).join() !== draft.rows.map((r) => r.key).join()) {
+            // One undo step for the whole drag.
+            past.current.push(base);
+            if (past.current.length > 50) past.current.shift();
+            future.current = [];
+            if (hasFormulaTracks()) setReorderWarn(true);
+        }
     };
 
     // ── Live schedule preview ────────────────────────────────────────────────
     const iterCounts = draft.rows.map((r) => r.slot.iterCount);
     const activeCount = iterCounts.filter((n) => n > 0).length;
+    const repeatIdx = useMemo(() => {
+        if (activeCount === 0) return 0;
+        let endTo = iterCounts.length - 1;
+        while (endTo > 0 && iterCounts[endTo] === 0) endTo--;
+        let rf = draft.repeatKey ? draft.rows.findIndex((r) => r.key === draft.repeatKey) : 0;
+        if (rf < 0) rf = 0;
+        rf = Math.min(rf, endTo);
+        while (rf > 0 && iterCounts[rf] <= 0) rf--;
+        return rf;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [iterCounts.join(','), draft.repeatKey, draft.rows.map((r) => r.key).join(',')]);
     const plan = useMemo(() => {
         if (activeCount === 0) return null;
         let endTo = iterCounts.length - 1;
         while (endTo > 0 && iterCounts[endTo] === 0) endTo--;
-        return buildCountsPlan({ iterCounts, endTo, repeatFrom: 0 });
+        return buildCountsPlan({ iterCounts, endTo, repeatFrom: repeatIdx });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [iterCounts.join(',')]);
+    }, [iterCounts.join(','), repeatIdx]);
 
     // ── Build ────────────────────────────────────────────────────────────────
     const build = () => {
@@ -197,13 +272,13 @@ export function WeaveEditorPane() {
         setStatus(null);
         try {
             const slots = draft.rows.map((r) => ({ ...r.slot, optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] }));
-            const weaveSource: FractalDefinition['weaveSource'] = {
+            const weaveSource: WeaveSource = {
                 version: 1,
                 title: draft.title,
                 slots: draft.rows.map((r) => ({ label: r.label, kind: r.kind, ref: r.ref, slot: { ...r.slot } })),
-                schedule: { kind: 'counts' },
+                schedule: { kind: 'counts', repeatFrom: repeatIdx },
             };
-            const res = loadUserWeave(slots, draft.title || 'My Weave', weaveSource);
+            const res = loadUserWeave(slots, draft.title || 'My Weave', weaveSource, repeatIdx);
             if (!res.ok) {
                 setStatus({ kind: 'error', text: res.reason || 'This weave is not supported.' });
                 showToast(res.reason || 'Weave build failed.', 'error', 6000);
@@ -220,7 +295,16 @@ export function WeaveEditorPane() {
         }
     };
 
-    const clearAll = () => commit({ ...draft, rows: [] });
+    const clearAll = () => commit({ ...draft, rows: [], repeatKey: null });
+
+    // "Open current weave" — the active formula carries a weaveSource (a built
+    // weave, an imported MB3D scene, or a loaded GMF) that differs from the draft.
+    const currentWs = (registry.get(store.formula) as FractalDefinition | undefined)?.weaveSource;
+    const openCurrent = () => {
+        if (!currentWs) return;
+        commit(draftFromWeaveSource(currentWs));
+        setStatus(null);
+    };
 
     // ── Render ───────────────────────────────────────────────────────────────
     return (
@@ -231,7 +315,7 @@ export function WeaveEditorPane() {
                 and <strong className="text-fg">Build</strong> — your camera and look are kept between rebuilds.
             </p>
 
-            {/* Title + undo/redo */}
+            {/* Title + open-current + undo/redo */}
             <div className="flex items-center gap-2">
                 <input
                     value={draft.title}
@@ -240,6 +324,13 @@ export function WeaveEditorPane() {
                     className="flex-1 rounded bg-surface-sunken border border-line/10 px-2 py-1 text-[11px] text-fg outline-none focus:border-accent-500/40"
                     spellCheck={false}
                 />
+                {currentWs && (
+                    <button onClick={openCurrent}
+                        className="px-2 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 transition-colors"
+                        title={`Load the active formula's weave ("${currentWs.title}") into the editor`}>
+                        ⧉ Open current
+                    </button>
+                )}
                 <button onClick={undo} disabled={past.current.length === 0}
                     className="px-2 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg disabled:opacity-40 disabled:hover:text-fg-muted transition-colors"
                     title="Undo structure edit">↶</button>
@@ -256,13 +347,37 @@ export function WeaveEditorPane() {
                     </p>
                 )}
                 {draft.rows.map((r, i) => (
-                    <div key={r.key} className="flex items-center gap-1.5 rounded-lg border border-line/10 bg-surface-sunken/60 px-2 py-1.5">
-                        <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[i % SLOT_COLORS.length] }} />
+                    <div
+                        key={r.key}
+                        ref={(el) => { if (el) rowRefs.current.set(r.key, el); else rowRefs.current.delete(r.key); }}
+                        className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 transition-colors ${
+                            dragKey === r.key ? 'border-accent-500/40 bg-accent-500/10' : 'border-line/10 bg-surface-sunken/60'
+                        }`}
+                    >
+                        <span
+                            onPointerDown={(e) => onHandleDown(e, r.key)}
+                            onPointerMove={(e) => onHandleMove(e, r.key)}
+                            onPointerUp={(e) => onHandleUp(e, r.key)}
+                            className="cursor-grab active:cursor-grabbing touch-none select-none text-fg-tertiary hover:text-fg-muted px-0.5 shrink-0"
+                            title="Drag to reorder"
+                        >≡</span>
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[r.colorIdx % SLOT_COLORS.length] }} />
                         <button onClick={(e) => openPicker(e, r.key)}
                             className="flex-1 text-left text-[11px] text-fg truncate hover:text-accent-300 transition-colors"
                             title={`Change formula (${r.label})`}>
                             {r.label}
                         </button>
+                        <button
+                            onClick={() => setRepeat(r.key)}
+                            className={`w-5 h-5 text-[11px] rounded border shrink-0 transition-colors ${
+                                i === repeatIdx && i > 0
+                                    ? 'border-accent-500/50 bg-accent-500/15 text-accent-300'
+                                    : (draft.repeatKey === null && i === 0)
+                                        ? 'border-line/10 bg-line/[0.02] text-fg-tertiary/50'
+                                        : 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'
+                            }`}
+                            title="Repeat from here — earlier slots run once as an intro; the loop repeats from this slot (MB3D's Repeat From)"
+                        >↻</button>
                         <div className="flex items-center gap-0.5 shrink-0" title="Iterations this slot runs per visit">
                             <button onClick={() => setIter(r.key, r.slot.iterCount - 1)}
                                 className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
@@ -274,12 +389,8 @@ export function WeaveEditorPane() {
                             <button onClick={() => setIter(r.key, r.slot.iterCount + 1)}
                                 className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
                         </div>
-                        <button onClick={() => move(r.key, -1)} disabled={i === 0}
-                            className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg disabled:opacity-30 transition-colors" title="Move up">↑</button>
-                        <button onClick={() => move(r.key, +1)} disabled={i === draft.rows.length - 1}
-                            className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg disabled:opacity-30 transition-colors" title="Move down">↓</button>
                         <button onClick={() => remove(r.key)}
-                            className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-red-300 transition-colors" title="Remove slot">×</button>
+                            className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-red-300 transition-colors shrink-0" title="Remove slot">×</button>
                     </div>
                 ))}
                 <div className="flex items-center gap-2">
@@ -312,10 +423,15 @@ export function WeaveEditorPane() {
                             </button>
                         </div>
                     </div>
-                    <LoopStrip plan={plan} labels={draft.rows.map((r) => r.label)} />
+                    <LoopStrip
+                        plan={plan}
+                        labels={draft.rows.map((r) => r.label)}
+                        colors={draft.rows.map((r) => SLOT_COLORS[r.colorIdx % SLOT_COLORS.length])}
+                        totalIterations={store.coreMath?.iterations}
+                    />
                     <p className="text-[10px] text-fg-tertiary">
                         cycle = {plan.cycleLen} iteration{plan.cycleLen === 1 ? '' : 's'}
-                        {plan.introLen > 0 ? ` after ${plan.introLen} intro` : ''} · scene iterations set how many times it plays
+                        {plan.introLen > 0 ? ` after ${plan.introLen} intro` : ''} · faded blocks repeat · scene iterations: {store.coreMath?.iterations ?? '—'}
                     </p>
                 </div>
             )}

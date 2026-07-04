@@ -245,6 +245,12 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     const r2 = emitFusedHybrid(buildWeaveScene(s2, 'Mixed Weave'));
     ck(`user weave: intern + decompiled (${decomp.label}) emits`, !!r2.def, r2.ledger.reasons);
   }
+
+  // "Repeat from here" (MB3D repeatFrom nibble): slot 0 runs once as intro,
+  // the loop repeats from slot 1.
+  const rfScene = buildWeaveScene([slotFromCatalogEntry(box, 2), slotFromCatalogEntry(bulb, 1)], 'RF Weave', undefined, 1);
+  const rfPlan = buildWeaveSequence(rfScene.addon!);
+  ck('user weave: repeatFrom=1 → box,box intro then bulb loop', expand(rfPlan, 6).join(',') === '0,0,1,1,1,1', expand(rfPlan, 6));
 }
 
 // ── Weave core: WeaveSpec adapter + modulo schedule emitter ────────────────────

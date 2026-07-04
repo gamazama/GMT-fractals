@@ -159,8 +159,9 @@ export interface FractalDefinition {
                 optionValues: number[];
             };
         }>;
-        /** Schedule kind — counts is the baked-LUT sequence; modulo (live rhythm)
-         *  arrives with its runtime uniforms. */
-        schedule: { kind: 'counts' } | { kind: 'modulo'; interval: number; startIter: number; maxCount?: number };
+        /** Schedule kind — counts is the baked-LUT sequence (repeatFrom = MB3D's
+         *  "repeat from here": earlier slots run once as an intro); modulo (live
+         *  rhythm) arrives with its runtime uniforms. */
+        schedule: { kind: 'counts'; repeatFrom?: number } | { kind: 'modulo'; interval: number; startIter: number; maxCount?: number };
     };
 }
