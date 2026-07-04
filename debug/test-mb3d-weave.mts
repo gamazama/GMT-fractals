@@ -973,6 +973,26 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     const p: any = migrateLegacyWeavePreset(src);
     ck('migrate: unknown secondary → untouched', p.formula === 'Mandelbulb' && !!p.features.interlace);
   }
+
+  // Re-save round-trip: a MIGRATED scene saved as GMF and re-loaded comes back
+  // in the NEW format (weaveSource on the def, weave feature state in <Scene>,
+  // no legacy interlace anywhere) — and re-running the migration is a no-op.
+  {
+    const { saveGMFScene, loadGMFScene } = await import('../engine-gmt/utils/FormulaFormat.ts');
+    const p: any = migrateLegacyWeavePreset(legacy());
+    const gmf = saveGMFScene(p);
+    const { def, preset } = loadGMFScene(gmf) as any;
+    ck('roundtrip: reloaded def carries weaveSource (2 native slots, modulo)',
+      def?.weaveSource?.slots?.length === 2 && def.weaveSource.schedule.kind === 'modulo', def?.weaveSource?.schedule);
+    ck('roundtrip: reloaded def keeps the spliced getDist + gated phase fn',
+      typeof def?.shader.getDist === 'string' || def?.shader.function.includes('uWeaveEnabled'));
+    ck('roundtrip: scene state rides weave feature, no legacy interlace',
+      preset.features.weave?.ws1ParamA === -1.8 && preset.features.weave?.weaveInterval1 === 3
+      && preset.features.interlace === undefined, preset.features.weave);
+    const again: any = migrateLegacyWeavePreset(JSON.parse(JSON.stringify(preset)));
+    ck('roundtrip: re-migration is a no-op', again.formula === preset.formula
+      && again.features.weave?.ws1ParamA === -1.8);
+  }
 }
 
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);
