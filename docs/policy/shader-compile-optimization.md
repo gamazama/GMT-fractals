@@ -1003,6 +1003,34 @@ deliberate scope change.
 - **Parallel-compile tuning** — already correctly used (ADR-0040); §7.2 confirms
   no further wall-time win is available.
 
+### 8.1 Measured: uniform-count headroom is (almost) free — 2026-07-04
+
+Question (weave param-lane planning): what does WIDENING the uniform slot
+vocabulary cost, i.e. declaring more `uniform float/vec4` lanes that most
+shaders never read? Measured with `debug/probe-uniform-headroom.mts` (headed
+Chrome → ANGLE/D3D11, RTX 2070; the live production frag snapshot, 89 KB /
+250 declared uniforms; interleaved cache-busted rounds, median of 7 full
+compile+link cycles):
+
+| variant | median compile+link | Δ vs base | ACTIVE_UNIFORMS |
+|---|---|---|---|
+| base | 2426 ms | — | 122 |
+| +24 float +6 vec4 unread | 2473 ms | +47 ms (+1.9%) | 122 |
+| +96 float +24 vec4 unread | 2476 ms | +50 ms (+2.1%) | 122 |
+
+Findings:
+- **Cold-compile cost ≈ +2%, flat** — the delta barely moves between +30 and
+  +120 declarations (GLSL parse overhead, not per-uniform translation work).
+- **Zero runtime cost** — `ACTIVE_UNIFORMS` is unchanged: uniforms a program
+  never reads are INACTIVE after link (no D3D constant registers), and
+  three.js's WebGLUniforms upload loop iterates only active uniforms, so idle
+  lanes are never uploaded either. FPS is structurally unaffected.
+- Implication: the real price of widening the slot vocabulary is **code
+  surface** (FractalParameter id union, SCALAR_SLOTS/VEC*_SLOTS, animation
+  targets, GMF round-trip compat), not performance. Dense packing remains
+  worthwhile only as an opt-in for the marginal compile-time and for keeping
+  the animation-target list short.
+
 ---
 
 ## 9. See also
