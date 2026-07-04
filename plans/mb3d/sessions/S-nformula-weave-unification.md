@@ -162,12 +162,12 @@ Then **push v1 + the weave UI together** → deploy.
    (`pickRandom`), live-param budget meter (LaneAllocator lanes used; overflow bakes).
 
 **P4 owner decisions (2026-07-04; gate for P4.4+ — see `weave-p4-struct-state-design.md` Appendix):**
-1. **Weave enable** — PENDING final owner word. Purpose explained: (a) migration home for the legacy live toggles
-   (`interlaceEnabled`/`hybridMode`) so a disabled-but-configured old scene round-trips losslessly; (b) the live +
-   keyframable A/B switch users have today (layers can't express silence: beats 0 = endless, interval ≥ 1).
-   Orchestrator recommendation: ONE whole-weave `weaveEnabled` DDFS param (P3b pattern: live on feature state,
-   snapshotted into weaveSource). Alternative if declined: migrate disabled legacy scenes as ENABLED (accepted look
-   change) and drop the toggle workflow.
+1. **Weave enable** — CONFIRMED: one whole-weave `weaveEnabled` DDFS param (live, keyframable, default ON; P3b
+   pattern — live on feature state, snapshotted into weaveSource). Off = base slot only, weave dormant (the legacy
+   `interlaceEnabled`/`hybridMode` semantics; required for lossless migration of disabled-but-configured scenes).
+   **Owner caveat: "it's a weird control"** — semantically it is mute-all-layers, not solo. UI guidance: keep it
+   LOW-PROFILE (a compat/migration affordance, not a hero control); if the editor ever grows mixer-style ergonomics,
+   per-slot mute/solo is the natural control and the layered phase fn can support it cheaply — backlog, not P4 scope.
 2. **Migrated-param transport** — CONFIRMED: legacy `interlace*`/`hybrid*` state migrates into `weaveSource`,
    legacy `features.*` cleared (no double-apply). Migrate at LOAD; file rewritten only on re-save (old files
    untouched on disk; post-migration saves need current app builds — accepted one-way door).
