@@ -217,6 +217,36 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck(`all ${all.length} catalog formulas emit a valid def`, broken.length === 0, broken.slice(0, 8));
 }
 
+// ── Weave Editor build path: catalog slots → buildWeaveScene → fused def ───────
+{
+  const { getMB3DCatalog, slotFromCatalogEntry } = await import('../engine-gmt/utils/mb3d/mb3dCatalog.ts');
+  const { buildWeaveScene } = await import('../engine-gmt/utils/mb3d/loadMB3DScene.ts');
+  const catalog = getMB3DCatalog();
+  const flat = catalog.flatMap((g) => g.entries);
+  const box = flat.find((e) => e.kind === 'intern' && e.ref === 4)!;
+  const bulb = flat.find((e) => e.kind === 'intern' && e.ref === 0)!;
+  ck('catalog: intern box + bulb present', !!box && !!bulb);
+
+  const slots = [slotFromCatalogEntry(box, 2), slotFromCatalogEntry(bulb, 1)];
+  ck('slotFromCatalogEntry: iterCount applied', slots[0].iterCount === 2 && slots[1].iterCount === 1);
+
+  const weaveScene = buildWeaveScene(slots, 'User Weave Test');
+  const { def, ledger } = emitFusedHybrid(weaveScene);
+  ck('user weave: emits a def', !!def, ledger.reasons);
+  ck('user weave: 2 slots woven', ledger.slotFlags.length === 2, ledger.slotFlags.length);
+  ck('user weave: dispatcher + weave LUT emitted', !!def && def.shader.function.includes('_weaveSlot') && def.shader.function.includes('void formula_'));
+  // 2+1 cycle: box,box,bulb repeating
+  const wPlan = buildWeaveSequence(weaveScene.addon!);
+  ck('user weave: schedule is box,box,bulb cycle', expand(wPlan, 6).join(',') === '0,0,1,0,0,1', expand(wPlan, 6));
+
+  const decomp = flat.find((e) => e.kind === 'decompiled');
+  if (decomp) {
+    const s2 = [slotFromCatalogEntry(box, 1), slotFromCatalogEntry(decomp, 1)];
+    const r2 = emitFusedHybrid(buildWeaveScene(s2, 'Mixed Weave'));
+    ck(`user weave: intern + decompiled (${decomp.label}) emits`, !!r2.def, r2.ledger.reasons);
+  }
+}
+
 // ── Weave core: WeaveSpec adapter + modulo schedule emitter ────────────────────
 {
   const { spec, mode } = weaveSpecFromMB3D(addon([2, 3, 0], (1 << 4) | 7, 0));

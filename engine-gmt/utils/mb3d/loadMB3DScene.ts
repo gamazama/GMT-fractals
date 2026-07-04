@@ -113,3 +113,65 @@ export function loadInternFormula(formulaIndex: number, name: string, optionValu
   };
   return loadFromScene(synthScene(slot, name));
 }
+
+// ── User-authored weaves (the Weave Editor) ─────────────────────────────────
+
+/** Synthesize a multi-slot mode-0 weave scene from weaver-picked slots. Wrap
+ *  bounds ride the hybOpt1 defaults: the mode-0 clamp in weaveSpecFromMB3D sets
+ *  endTo to the last active slot; repeatFrom 0 repeats the whole sequence. */
+export function buildWeaveScene(slots: MB3DFormulaSlot[], title: string, iterations?: number): MB3DScene {
+  const header = defaultHeader();
+  if (iterations && iterations > 0) header.iterations = iterations;
+  const addon: MB3DAddon = {
+    version: 0, options1: 0, options2: 0, options3: 0,
+    formulaCount: slots.length, hybOpt1: 0, hybOpt2: 0, slots,
+  };
+  return { version: 18, header, addon, title, raw: new Uint8Array(0) };
+}
+
+/**
+ * Build + register + load a user-authored weave (the Weave Editor's Build button).
+ *
+ * Unlike scene imports, rebuilds happen INSIDE an editing session — so the current
+ * camera / lights / atmosphere / materials / coloring are preserved (the Formula
+ * Workshop preview pattern) and only the formula-bearing features (coreMath,
+ * geometry, quality — the emit's DE routing) come from the new preset. The
+ * WeaveSpec-shaped `weaveSource` is attached to the def so the weave can be
+ * reopened and re-edited (importSource pattern, ADR-0058/0089).
+ */
+export function loadUserWeave(
+  slots: MB3DFormulaSlot[],
+  title: string,
+  weaveSource?: import('../../types/fractal').FractalDefinition['weaveSource'],
+): LoadMB3DResult {
+  const { def, ledger } = emitFusedHybrid(buildWeaveScene(slots, title));
+  if (!def) {
+    return { ok: false, reason: ledger.reasons.join(' '), ledger };
+  }
+  if (weaveSource) def.weaveSource = weaveSource;
+  registry.register(def);
+  FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+
+  const preset: any = def.defaultPreset;
+  const store = useEngineStore.getState() as any;
+  const current = store.getPreset();
+  store.loadPreset({
+    ...preset,
+    cameraPos: current.cameraPos, cameraRot: current.cameraRot,
+    sceneOffset: current.sceneOffset, targetDistance: current.targetDistance,
+    cameraMode: current.cameraMode, lights: current.lights,
+    features: {
+      ...(preset.features || {}),
+      atmosphere: current.features?.atmosphere,
+      lighting: current.features?.lighting,
+      optics: current.features?.optics,
+      materials: current.features?.materials,
+      coloring: current.features?.coloring,
+      coreMath: preset.features?.coreMath,
+      geometry: preset.features?.geometry,
+      quality: preset.features?.quality,
+    },
+  });
+  const names = ledger.slotFlags.map((s) => s.name).join(' → ');
+  return { ok: true, ledger, summary: names };
+}

@@ -30,6 +30,24 @@ export interface CatalogGroup {
   entries: CatalogEntry[];
 }
 
+/** Build the MB3DFormulaSlot a catalog entry loads as — shared by the standalone
+ *  click-to-load path and the Weave Editor's slot rows. `iterCount` is the weave
+ *  iteration count (0 for standalone single-formula loads). */
+export function slotFromCatalogEntry(entry: CatalogEntry, iterCount = 0): MB3DFormulaSlot {
+  if (entry.kind === 'intern') {
+    const optionValues = (entry.internDefaults ?? []).slice();
+    return {
+      iterCount, formulaIndex: entry.ref as number, name: entry.label,
+      optionCount: optionValues.length, optionTypes: optionValues.map(() => 0), optionValues,
+    };
+  }
+  const d = DECOMPILED_DEFAULTS[entry.ref as string] ?? { optionTypes: [], optionValues: [], optionCount: 0 };
+  return {
+    iterCount, formulaIndex: 20, name: entry.ref as string,
+    optionCount: d.optionCount, optionTypes: d.optionTypes.slice(), optionValues: d.optionValues.slice(),
+  };
+}
+
 /** The 5 intern formulas (faithful MB3D source-math transpiles). */
 const INTERN_CATALOG: CatalogEntry[] = [
   { label: 'Amazing Box (Mandelbox)', kind: 'intern', ref: 4, internDefaults: [2, 0.5, 1], category: 'Boxes & Folds' },

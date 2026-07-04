@@ -138,4 +138,29 @@ export interface FractalDefinition {
             isDegrees?: boolean;
         }>;
     };
+    /** Present on user-authored weaves (the Weave Editor). Enables reopening the
+     *  weave for re-editing — the importSource pattern for WeaveSpecs.
+     *  @see docs/adr/0089-weave-core-unification.md (ADR-0058 for the pattern) */
+    weaveSource?: {
+        version: 1;
+        title: string;
+        /** Editor rows: catalog identity (kind/ref/label for the picker) + the exact
+         *  MB3DFormulaSlot built from it (iterCount = the weave iteration count). */
+        slots: Array<{
+            label: string;
+            kind: 'intern' | 'decompiled';
+            ref: string | number;
+            slot: {
+                iterCount: number;
+                formulaIndex: number;
+                optionCount: number;
+                name: string;
+                optionTypes: number[];
+                optionValues: number[];
+            };
+        }>;
+        /** Schedule kind — counts is the baked-LUT sequence; modulo (live rhythm)
+         *  arrives with its runtime uniforms. */
+        schedule: { kind: 'counts' } | { kind: 'modulo'; interval: number; startIter: number; maxCount?: number };
+    };
 }

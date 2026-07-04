@@ -19,13 +19,20 @@ import { getMB3DCatalog, getMB3DCatalogCount } from '../../../utils/mb3d/mb3dCat
 import type { CatalogEntry } from '../../../utils/mb3d/mb3dCatalog';
 import { MB3D_SAMPLE_SCENES, decodeSampleScene } from '../../../utils/mb3d/sampleScenes';
 import type { SampleScene } from '../../../utils/mb3d/sampleScenes';
+import { WeaveEditorPane } from '../../WeaveEditor';
 
 export interface ImportMandelbulb3DModalProps {
   open: boolean;
   onClose: () => void;
 }
 
+// Remembered across open/close within a session, so a user mid-weave lands back
+// on their editor (its draft survives too — see WeaveEditorPane).
+let lastTab: 'import' | 'weave' = 'import';
+
 export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = ({ open, onClose }) => {
+  const [tab, setTabState] = useState<'import' | 'weave'>(lastTab);
+  const setTab = (t: 'import' | 'weave') => { lastTab = t; setTabState(t); };
   const [pasteText, setPasteText] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -159,8 +166,34 @@ export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = (
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex items-center gap-1 px-5 pt-2.5 border-b border-line/10">
+          {(
+            [
+              ['import', 'Import'],
+              ['weave', 'Weave Editor'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`px-3 py-1.5 text-[11px] font-bold rounded-t-lg border border-b-0 transition-colors ${
+                tab === id
+                  ? 'bg-surface-sunken border-line/15 text-fg'
+                  : 'bg-transparent border-transparent text-fg-tertiary hover:text-fg-muted'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {tab === 'weave' ? (
+            <WeaveEditorPane />
+          ) : (
+            <>
           <p className="text-xs text-fg-muted leading-relaxed">
             Load any of <strong className="text-fg">{catalogCount}</strong> Mandelbulb3D formulas translated faithfully
             from MB3D's own math (intern source + x87-decompiled <span className="font-mono text-fg">[CODE]</span>).
@@ -273,6 +306,8 @@ export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = (
               </div>
             )}
           </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -283,12 +318,14 @@ export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = (
           >
             Close
           </button>
-          <button
-            onClick={handleImport}
-            className="px-4 py-1.5 text-xs font-bold rounded-lg bg-accent-600 hover:bg-accent-500 text-white border border-accent-500/50 transition-colors"
-          >
-            Import
-          </button>
+          {tab === 'import' && (
+            <button
+              onClick={handleImport}
+              className="px-4 py-1.5 text-xs font-bold rounded-lg bg-accent-600 hover:bg-accent-500 text-white border border-accent-500/50 transition-colors"
+            >
+              Import
+            </button>
+          )}
         </div>
       </div>
     </Modal>
