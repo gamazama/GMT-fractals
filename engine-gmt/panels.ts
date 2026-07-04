@@ -113,26 +113,16 @@ export const GmtPanels: PanelManifest = [
                 label: 'Burning Mode',
             },
 
-            // Hybrid Box — uses geometry's feature panelConfig (hybridCompiled
-            // compile gate, hybridMode runtime toggle, fold-type compile
-            // settings, hybrid group runtime params). Explicit label so the
-            // section reads "Hybrid Box" rather than falling back to the
-            // feature's name ("Geometry").
-            // Section-level reject: self-contained formulas skip hybrid
-            // wiring (geometry/index.ts:474). Modular composes fine.
-            {
-                type: 'compilable',
-                id: 'geometry',
-                label: 'Hybrid Box',
-                helpId: 'hybrid.mode',
-                requires: { rejects: { primary: ['shape:self-contained'] } },
-            },
-
-            // Weave the active formula with others — the legacy Formula
-            // Interlace section retired here (ADR-0089 P4.4); the Weave Editor
-            // (Import ▸ Weave tab) is the one authoring surface. Old interlace
-            // scenes migrate to weaves at load.
-            { type: 'widget', id: 'edit-weave-affordance' },
+            // Weave — author an N-formula weave across the iteration loop:
+            // slot structure, schedule (Sequence / Rhythm), Hybrid Box presets,
+            // budget meter, Build. This ONE section replaces both the retired
+            // Hybrid Box fast-path compilable section AND the "Edit weave…"
+            // affordance (ADR-0089 P4.7) — the Formula panel is now the single
+            // weave authoring surface. Per-formula param sliders render in
+            // formula-params above (bank params route feature:'weave', grouped
+            // per formula). Old interlace + Hybrid Box scenes migrate to weaves
+            // at load.
+            { type: 'widget', id: 'weave-section' },
 
             // Distance Estimator + Metric + Escape Radius — one block. Estimator
             // (compile-flagged) + Metric render as the dropdown row; runtimeGroup

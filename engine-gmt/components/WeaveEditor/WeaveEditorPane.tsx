@@ -48,7 +48,7 @@ import type { CatalogEntry } from '../../utils/mb3d/mb3dCatalog';
 import { loadUserWeave } from '../../utils/mb3d/loadMB3DScene';
 import { transpileSlot, getSlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
 import type { SlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
-import { getNativeSlotCatalog, nativeSlotShell, isNativeSlot } from '../../engine/weave/nativeSlotCatalog';
+import { getNativeSlotCatalog, nativeSlotShell, nativeSlotReject, isNativeSlot } from '../../engine/weave/nativeSlotCatalog';
 import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
@@ -131,6 +131,28 @@ function draftFromWeaveSource(ws: WeaveSource): WeaveDraft {
 
 const DEFAULT_ITER_COUNT = 2;
 
+/** Build slot 0 from a registered formula id — used to seed a fresh weave from
+ *  the scene's current formula (the Formula-panel section's "+ Add formula"
+ *  entry). Returns null for formulas the resolver can't weave. */
+function seedRowFromFormula(id: string): SlotRow | null {
+    const def = registry.get(id) as FractalDefinition | undefined;
+    if (!def || nativeSlotReject(def)) return null;
+    return {
+        key: rowKey(), label: def.name ?? id, kind: 'native', ref: id, colorIdx: 0,
+        slot: nativeSlotShell(id, DEFAULT_ITER_COUNT),
+    };
+}
+
+export interface WeaveEditorPaneProps {
+    /** 'modal' (default) keeps the full editor chrome; 'panel' trims the intro
+     *  prose for the Formula-panel Weave section (ADR-0089 P4.7). */
+    variant?: 'modal' | 'panel';
+    /** When starting fresh (no module draft, active formula isn't a weave),
+     *  pre-seed slot 0 with this formula id so the user weaves their current
+     *  formula with others. Ignored if it can't weave. */
+    seedFormulaId?: string;
+}
+
 /** Compact −/N/+ stepper for the live rhythm params (real-time friendly — the
  *  full GMT slider widgets arrive with the P4 panel promotion, where the DDFS
  *  params render through the standard panel primitives). */
@@ -180,7 +202,7 @@ function autoTitleOf(rows: SlotRow[]): string {
     return t;
 }
 
-export function WeaveEditorPane() {
+export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEditorPaneProps = {}) {
     const store = useEngineStore() as any;
 
     const [draft, setDraft] = useState<WeaveDraft>(() => {
@@ -188,6 +210,12 @@ export function WeaveEditorPane() {
         // Reopening a weave formula: hydrate from its persisted source.
         const ws = (registry.get(store.formula) as FractalDefinition | undefined)?.weaveSource;
         if (ws) return draftFromWeaveSource(ws);
+        // Fresh weave off a single formula: seed slot 0 with it, so the first
+        // "+ Add formula" pick becomes slot 1 (weave-the-current-formula).
+        if (seedFormulaId) {
+            const seed = seedRowFromFormula(seedFormulaId);
+            if (seed) return { title: '', rows: [seed], repeatKey: null, scheduleKind: 'counts' };
+        }
         // Empty title = auto-name from the formula mix (autoTitleOf) until the
         // user types their own.
         return { title: '', rows: [], repeatKey: null, scheduleKind: 'counts' };
@@ -559,12 +587,14 @@ export function WeaveEditorPane() {
     // ── Render ───────────────────────────────────────────────────────────────
     return (
         <div className="space-y-3">
-            <p className="text-xs text-fg-muted leading-relaxed">
-                Weave formulas across the iteration loop: each slot runs for its count of iterations, then the next
-                takes over, repeating <span title="Repeating cycle">↻</span>. Pick from the MB3D library or a native /
-                imported formula, set counts, and <strong className="text-fg">Build</strong> — your camera and look are
-                kept between rebuilds.
-            </p>
+            {variant !== 'panel' && (
+                <p className="text-xs text-fg-muted leading-relaxed">
+                    Weave formulas across the iteration loop: each slot runs for its count of iterations, then the next
+                    takes over, repeating <span title="Repeating cycle">↻</span>. Pick from the MB3D library or a native /
+                    imported formula, set counts, and <strong className="text-fg">Build</strong> — your camera and look are
+                    kept between rebuilds.
+                </p>
+            )}
 
             {/* Title + open-current + undo/redo */}
             <div className="flex items-center gap-2">

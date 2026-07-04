@@ -42,7 +42,7 @@ import { FormulaSelect } from '../components/panels/formula/FormulaSelect';
 import { QualityRenderControls } from '../components/panels/quality/QualityRenderControls';
 import LightPanelControls from '../components/panels/lighting/LightPanelControls';
 import { FormulaParamsWidget } from '../components/panels/formula/FormulaParamsWidget';
-import { EditWeaveButton } from '../components/panels/formula/EditWeaveButton';
+import { WeaveSection } from '../components/panels/formula/WeaveSection';
 // LfoList lifted to engine/components/modulation. installModulationUI()
 // registers `'lfo-list'` so the manifest entry below would normally be
 // redundant — but app-gmt installs UI components from this single
@@ -165,7 +165,7 @@ export const registerGmtUi = () => {
     componentRegistry.register('hints-footer', HintsFooter);
     componentRegistry.register('light-panel-controls', LightPanelControls);
     componentRegistry.register('formula-params', FormulaParamsWidget);
-    componentRegistry.register('edit-weave-affordance', EditWeaveButton);
+    componentRegistry.register('weave-section', WeaveSection);
 
     // LfoList no longer needs a store-wrapping shim — the lifted
     // version reads the engine store itself via useEngineStore.
