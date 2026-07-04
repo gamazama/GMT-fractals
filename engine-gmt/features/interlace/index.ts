@@ -10,6 +10,7 @@ import {
     rewriteLoopInit,
     rewritePreamble,
     buildInterlaceLoopGLSL,
+    buildInterlaceScheduleGLSL,
     extractPreambleFunctions,
     INTERLACE_UNIFORM_NAMES,
 } from './glslRewriter';
@@ -380,11 +381,13 @@ export const InterlaceFeature: FeatureDefinition = {
             builder.addPreamble(rewrittenPreamble);
         }
 
-        // 2. Inject the rewritten formula function
+        // 2. Inject the rewritten formula function + the interlace phase function
+        // (the weave core's runtime modulo scheduler — drives the in-loop dispatch).
         const rewrittenFunction = rewriteFormulaFunction(
             def.shader.function, def.id, def.shader.preambleVars, preambleFunctions,
         );
         builder.addFunction(rewrittenFunction);
+        builder.addFunction(buildInterlaceScheduleGLSL().glsl);
 
         // 3. Build the interlace loop logic
         const rewrittenBody = rewriteLoopBody(def.shader.loopBody, def.id, def.shader.preambleVars);

@@ -27,6 +27,7 @@
  * dispatcher functions like MB3D slots.
  */
 import { SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS, slotToUniform } from '../../utils/uniformSlots';
+import { emitModuloScheduleGLSL } from './schedule';
 
 /** Everything namespace-specific about one native slot. */
 export interface NativeSlotNamespace {
@@ -134,6 +135,9 @@ export interface NativeSlotRewriter {
     rewriteFormulaFunction(glsl: string, formulaId: string, preambleVars?: string[], preambleFunctions?: string[]): string;
     rewriteLoopBody(loopBody: string, formulaId: string, preambleVars?: string[]): string;
     rewriteLoopInit(loopInit: string, formulaId: string, preambleVars?: string[], preambleFunctions?: string[]): string;
+    /** The namespace's runtime modulo phase function (the weave core's shared
+     *  schedule impl — live + keyframable, no recompile). Emit at global scope. */
+    scheduleGLSL(): { glsl: string; fnName: string };
     buildSlotLoopGLSL(rewrittenBody: string, slotInit: string, needsRotSwap: boolean): { preLoop: string; inLoop: string };
 }
 
@@ -165,6 +169,14 @@ export function createNativeSlotRewriter(ns: NativeSlotNamespace): NativeSlotRew
     }
 
     return {
+        scheduleGLSL() {
+            return emitModuloScheduleGLSL({
+                enabled: `u${ns.uniformPrefix}Enabled`,
+                interval: `u${ns.uniformPrefix}Interval`,
+                startIter: `u${ns.uniformPrefix}StartIter`,
+            }, ns.uniformPrefix);
+        },
+
         /**
          * Rewrite a formula's preamble for slot use:
          * - renames mutable globals listed in `preambleVars` to the namespace prefix
@@ -371,17 +383,16 @@ export function createNativeSlotRewriter(ns: NativeSlotNamespace): NativeSlotRew
             // before the entire hybridInLoop block. In SDFShaderBuilder (mesh export), the caller
             // declares it separately. Declaring it here would cause a redefinition when geometry's
             // hybridInLoop also uses skipMainFormula.
+            //
+            // The schedule decision lives in the namespace's phase function (the weave
+            // core's modulo scheduler — see scheduleGLSL above); the caller must emit
+            // that function at global scope. Runtime-uniform driven: live + keyframable.
             const inLoop = `
-    if (u${ns.uniformPrefix}Enabled > 0.5) {
-        int ilSkip = int(u${ns.uniformPrefix}Interval);
-        int ilStart = int(u${ns.uniformPrefix}StartIter);
-        if (ilSkip < 1) ilSkip = 1;
-        if (i >= ilStart && ((i - ilStart) % ilSkip) == 0) {
-            ${rotSwapIn}
-            ${rewrittenBody}
-            ${rotSwapOut}
-            skipMainFormula = true;
-        }
+    if (${ns.uniformPrefix}_weaveSlot(i) == 1) {
+        ${rotSwapIn}
+        ${rewrittenBody}
+        ${rotSwapOut}
+        skipMainFormula = true;
     }`;
 
             return { preLoop, inLoop };

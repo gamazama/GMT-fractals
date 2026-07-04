@@ -15,6 +15,7 @@ import {
   rewriteLoopInit,
   rewritePreamble,
   buildInterlaceLoopGLSL,
+  buildInterlaceScheduleGLSL,
   INTERLACE_UNIFORM_NAMES,
 } from '../features/interlace/glslRewriter';
 import { pairHasCapability } from './compat';
@@ -190,14 +191,17 @@ uniform float uInterlaceStartIter;
 `;
 }
 
-/** Build interlace GLSL blocks (preamble + function) */
+/** Build interlace GLSL blocks (preamble + function). The interlace phase function
+ *  (the weave core's runtime modulo scheduler) rides along with `func` so every
+ *  mesh-pass splice point gets it at global scope. */
 function buildInterlaceGLSL(interlace: MeshInterlaceConfig): { preamble: string; func: string; loopInit: string } {
   const def = interlace.definition;
   let preamble = '';
   if (def.shader.preamble) {
     preamble = rewritePreamble(def.shader.preamble, def.id, def.shader.preambleVars);
   }
-  const func = rewriteFormulaFunction(def.shader.function, def.id, def.shader.preambleVars);
+  const func = rewriteFormulaFunction(def.shader.function, def.id, def.shader.preambleVars)
+    + '\n' + buildInterlaceScheduleGLSL().glsl;
   let loopInit = '';
   if (def.shader.loopInit) {
     loopInit = rewriteLoopInit(def.shader.loopInit, def.id, def.shader.preambleVars);

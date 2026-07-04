@@ -26,6 +26,10 @@ export const rewriteFormulaFunction = R.rewriteFormulaFunction;
 export const rewriteLoopBody = R.rewriteLoopBody;
 export const rewriteLoopInit = R.rewriteLoopInit;
 export const buildInterlaceLoopGLSL = R.buildSlotLoopGLSL;
+/** The interlace phase function (`Interlace_weaveSlot`) — the weave core's runtime
+ *  modulo scheduler bound to the uInterlace* uniforms. Must be emitted at global
+ *  scope wherever buildInterlaceLoopGLSL's inLoop is spliced. */
+export const buildInterlaceScheduleGLSL = R.scheduleGLSL;
 export { extractPreambleFunctions };
 
 /** All uniform names the interlace feature declares, grouped by GLSL type. */
