@@ -256,7 +256,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
      *    'auto' — per-formula catalog recommendation (V3 when V3 passes for
      *             engine-feature compat; else V4 if V4 passes; else V4 default).
      *    'v3'   — force V3 pipeline (per-iteration extraction; composes with
-     *             interlace / hybrid fold / burning ship).
+     *             weaving / hybrid fold / burning ship).
      *    'v4'   — force V4 processFormula (self-contained SDE; simpler but no
      *             engine-feature composition).
      *  See docs/26_Formula_Workshop_V4_Plan.md §0.1 + docs/research/hybrid-formula-architecture-comparison.md */
@@ -1152,9 +1152,9 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                         className="flex items-center gap-1 text-[11px] text-fg-muted select-none"
                         title={
                             pipelineMode === 'auto'
-                                ? `Auto-picks per formula: Iteration when possible (engine-feature compat — interlace, hybrid fold, burning ship); else Standalone. Current: ${effectivePipeline === 'v3' ? 'Iteration' : 'Standalone'}.`
+                                ? `Auto-picks per formula: Iteration when possible (engine-feature compat — weaving, hybrid fold, burning ship); else Standalone. Current: ${effectivePipeline === 'v3' ? 'Iteration' : 'Standalone'}.`
                                 : pipelineMode === 'v3'
-                                    ? 'Force Iteration mode (per-iteration formulas that compose with interlace, hybrid fold, burning ship).'
+                                    ? 'Force Iteration mode (per-iteration formulas that compose with weaving, hybrid fold, burning ship).'
                                     : 'Force Standalone mode (self-contained DE; simpler but no engine-feature composition).'
                         }
                     >

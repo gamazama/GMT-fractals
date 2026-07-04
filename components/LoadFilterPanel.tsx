@@ -62,7 +62,7 @@ export const LoadSceneFilterMenuItem: React.FC<{ close: () => void }> = ({ close
 };
 
 const GROUPS: { id: LoadFilterGroup; label: string }[] = [
-    { id: 'formula', label: 'Formula (+ geometry, interlace, DE)' },
+    { id: 'formula', label: 'Formula (+ geometry, weave, DE)' },
     { id: 'lighting', label: 'Lighting + lights' },
     { id: 'materials', label: 'Materials, AO, reflections' },
     { id: 'atmosphere', label: 'Atmosphere, volumetric' },

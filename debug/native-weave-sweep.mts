@@ -1,31 +1,34 @@
 /**
- * Native × Native Interlace Sweep
+ * Native × Native WEAVE Sweep (ADR-0089 P4.4 — repointed from the retired
+ * interlace feature; same N×N compile-safety purpose).
  *
- * For every pair of eligible native formulas (primary × secondary) compile the
- * interlaced shader through the real engine ShaderFactory and run webglCompile
- * + renderNonDegenerate gates. Answers: "does interlacing compile cleanly
- * across all native combinations?"
+ * For every pair of eligible native formulas (primary × secondary) build a
+ * 2-SLOT NATIVE WEAVE (emitFusedHybrid: primary = slot 0, secondary = slot 1,
+ * alternating 1/1), compile the fused def through the real engine
+ * ShaderFactory, and run the webglCompile gate. Answers: "does weaving compile
+ * cleanly across all native combinations?" — namespace collisions, missing
+ * uniforms, rewriter/bank/getDist-splice syntax errors.
  *
- * Excluded from the sweep:
- *   - Modular (interlace feature bails on Modular either side)
+ * Excluded from the sweep (nativeSlotReject — mirrors the resolver):
+ *   - Modular (no GLSL to rewrite)
  *   - Formulas with shader.selfContainedSDE (JuliaMorph, MandelTerrain)
  *
  * Setup: requires `debug/validator.html` (gitignored by convention; copy from
  * stable: `cp ../stable/debug/validator.html debug/validator.html`).
  *
  * Usage:
- *   npx tsx debug/native-interlace-sweep.mts                         # full N×N
- *   npx tsx debug/native-interlace-sweep.mts --primary=Mandelbulb    # one row
- *   npx tsx debug/native-interlace-sweep.mts --pair=A,B              # one cell
- *   npx tsx debug/native-interlace-sweep.mts --skip-self             # drop primary==secondary pairs
- *   npx tsx debug/native-interlace-sweep.mts --fresh                 # wipe jsonl
- *   npx tsx debug/native-interlace-sweep.mts --timeout=15000         # per-pair
- *   npx tsx debug/native-interlace-sweep.mts --show                  # non-headless
- *   npx tsx debug/native-interlace-sweep.mts --verbose               # per-pair detail
+ *   npx tsx debug/native-weave-sweep.mts                         # full N×N
+ *   npx tsx debug/native-weave-sweep.mts --primary=Mandelbulb    # one row
+ *   npx tsx debug/native-weave-sweep.mts --pair=A,B              # one cell
+ *   npx tsx debug/native-weave-sweep.mts --skip-self             # drop primary==secondary pairs
+ *   npx tsx debug/native-weave-sweep.mts --fresh                 # wipe jsonl
+ *   npx tsx debug/native-weave-sweep.mts --timeout=15000         # per-pair
+ *   npx tsx debug/native-weave-sweep.mts --show                  # non-headless
+ *   npx tsx debug/native-weave-sweep.mts --verbose               # per-pair detail
  *
  * Output:
- *   debug/native-interlace-sweep.jsonl   — one row per pair
- *   debug/thumbnails/interlace/<hash>.png
+ *   debug/native-weave-sweep.jsonl   — one row per pair
+ *   debug/thumbnails/weave-sweep/<hash>.png
  */
 
 import * as fs from 'fs';
@@ -39,6 +42,9 @@ import type { ShaderConfig } from '../engine-gmt/engine/ShaderFactory.ts';
 import { createDefaultShaderConfig } from '../engine-gmt/engine/ConfigDefaults.ts';
 import { registerFeatures } from '../engine-gmt/features/index.ts';
 import '../engine-gmt/formulas/index.ts';  // side-effect: registers all native FractalDefinitions
+import { emitFusedHybrid } from '../engine-gmt/utils/mb3d/emitFusedHybrid.ts';
+import { buildWeaveScene } from '../engine-gmt/utils/mb3d/sceneSynth.ts';
+import { nativeSlotShell, nativeSlotReject } from '../engine-gmt/engine/weave/nativeSlotCatalog.ts';
 
 registerFeatures();
 
@@ -60,8 +66,8 @@ function argVal(flag: string): string | undefined {
 
 // ─── Output paths ────────────────────────────────────────────────────────────
 
-const OUT_JSONL  = path.resolve('debug/native-interlace-sweep.jsonl');
-const OUT_THUMBS = path.resolve('debug/thumbnails/interlace');
+const OUT_JSONL  = path.resolve('debug/native-weave-sweep.jsonl');
+const OUT_THUMBS = path.resolve('debug/thumbnails/weave-sweep');
 const VALIDATOR_HTML = path.resolve('debug/validator.html');
 
 // ─── Config builder (shared with FractalEngine constructor) ───────────────
@@ -85,8 +91,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'op'): Promise<T> {
 
 function eligibleFormulas(): string[] {
     return registry.getAll()
-        .filter(def => def.id !== 'Modular')
-        .filter(def => !def.shader.selfContainedSDE)
+        .filter(def => !nativeSlotReject(def))
         .map(def => def.id);
 }
 
@@ -95,7 +100,7 @@ function eligibleFormulas(): string[] {
 // Sphere-trace preview main. Casts rays from a fixed camera, shades hits with
 // depth + orbit-trap (map().y) + color-iter (map().z) + a cheap normal estimate
 // — no lighting uniforms needed. Produces thumbnails that actually show
-// interlaced-fractal silhouettes with the formula's real parameter defaults.
+// woven-fractal silhouettes with the formula's real parameter defaults.
 //
 // Channels at hit:
 //   R = proximity (1 − depth) × facing term
@@ -168,10 +173,10 @@ void main() {
 // the validator supplies. Chasing that would mean replicating the whole
 // engine runtime, which defeats the purpose of a lightweight CI check.
 //
-// The compile gate alone is sufficient for the ORIGINAL goal of this sweep:
-// catch GLSL namespace collisions, missing uniforms, or syntax errors from
-// the interlace glue code across all native-formula pair combinations. That's
-// what doc 27 suggestion #5 called out, and it's what breaks in practice.
+// The compile gate alone is sufficient for the goal of this sweep: catch GLSL
+// namespace collisions, missing uniforms, or syntax errors from the weave
+// rewriter/bank/getDist-splice glue across all native-formula pair
+// combinations. That's what breaks in practice.
 
 // Strip engine's `void main() {...}` + its out-decl so we can replace the main.
 // Engine places main at the END of the shader, so greedy `[\s\S]*\}` matches
@@ -182,89 +187,53 @@ function stripEngineMain(src: string): string {
     return out;
 }
 
-function buildInterlacedEngine(primaryId: string, secondaryId: string): string {
-    const config = buildFullShaderConfig(primaryId);
-    (config as any).interlace.interlaceCompiled = true;
-    (config as any).interlace.interlaceFormula  = secondaryId;
-    (config as any).interlace.interlaceEnabled  = true;
+/** Build the 2-slot native weave def (primary ⊗ secondary, alternating 1/1)
+ *  and its full engine shader. The def is registered so ShaderFactory's
+ *  feature injection resolves it like any formula. */
+function buildWeaveEngine(primaryId: string, secondaryId: string): { shader: string; def: any } {
+    const { def, ledger } = emitFusedHybrid(
+        buildWeaveScene([nativeSlotShell(primaryId, 1), nativeSlotShell(secondaryId, 1)], primaryId + '+' + secondaryId),
+    );
+    if (!def) throw new Error('emit: ' + ledger.reasons.join('; '));
+    registry.register(def);
+    const config = buildFullShaderConfig(def.id);
 
     let raw = ShaderFactory.generateFragmentShader(config);
     if (!/^\s*#version/.test(raw)) raw = '#version 300 es\n' + raw;
     raw = stripEngineMain(raw);
 
-    const nonce = `const int _gmt_nonce = ${Math.floor(Math.random() * 1e9)};`;
-    raw = raw.replace(/^(#version[^\n]*\n)/, `$1${nonce}\n`);
-    return raw;
+    const nonce = 'const int _gmt_nonce = ' + Math.floor(Math.random() * 1e9) + ';';
+    raw = raw.replace(/^(#version[^\n]*\n)/, '$1' + nonce + '\n');
+    return { shader: raw + '\n' + PREVIEW_MAIN, def };
 }
 
-function buildCompileShader(primaryId: string, secondaryId: string): string {
-    return buildInterlacedEngine(primaryId, secondaryId) + '\n' + PREVIEW_MAIN;
-}
-
-// Collect uniform defaults for both primary AND secondary so the thumbnail
-// render exercises sensible values (not all zeros, which many DEs NaN on).
-function buildUniforms(primaryId: string, secondaryId: string): Record<string, any> {
+// Collect uniform defaults so the thumbnail render exercises sensible values
+// (not all zeros, which many DEs NaN on). Slot params live on the per-slot
+// BANKS (ADR-0090): the fused def stamps its defaults into
+// defaultPreset.features.weave as ws<k><Slot> keys → uWs<k><Slot> uniforms.
+function buildUniforms(def: any): Record<string, any> {
     const u: Record<string, any> = {
-        uIterations:   6,
+        uIterations:   Math.max(6, Number(def?.defaultPreset?.features?.coreMath?.iterations) || 6),
         uEscapeThresh: 1000,
         uJuliaMode:    0,
         uJulia:        [0, 0, 0],
         uCameraPosition: [0, 0, -3],
         uResolution:   [64, 64],
         uTime:         0,
-
-        // Primary param slots
-        uParamA: 8, uParamB: 1, uParamC: 0, uParamD: 0, uParamE: 0, uParamF: 0,
-        uVec2A: [0, 0], uVec2B: [0, 0], uVec2C: [0, 0],
-        uVec3A: [0, 0, 0], uVec3B: [0, 0, 0], uVec3C: [0, 0, 0],
-        uVec4A: [0, 0, 0, 0], uVec4B: [0, 0, 0, 0], uVec4C: [0, 0, 0, 0],
         uSceneOffsetLow: [0, 0, 0], uSceneOffsetHigh: [0, 0, 0],
-
-        // Interlace runtime controls
-        uInterlaceEnabled:   1,
-        uInterlaceInterval:  2,
-        uInterlaceStartIter: 0,
-
-        // Interlace secondary-formula slots (filled from secondary defaults below)
-        uInterlaceParamA: 0, uInterlaceParamB: 0, uInterlaceParamC: 0,
-        uInterlaceParamD: 0, uInterlaceParamE: 0, uInterlaceParamF: 0,
-        uInterlaceVec2A: [0, 0], uInterlaceVec2B: [0, 0], uInterlaceVec2C: [0, 0],
-        uInterlaceVec3A: [0, 0, 0], uInterlaceVec3B: [0, 0, 0], uInterlaceVec3C: [0, 0, 0],
     };
-
-    const primDef = registry.get(primaryId as any);
-    if (primDef) writeDefaultsTo(u, primDef.parameters, /* interlace */ false);
-
-    const secDef = registry.get(secondaryId as any);
-    if (secDef) writeDefaultsTo(u, secDef.parameters, /* interlace */ true);
-
-    return u;
-}
-
-function writeDefaultsTo(
-    u: Record<string, any>,
-    params: any[],
-    interlace: boolean,
-): void {
-    const prefix = interlace ? 'uInterlace' : 'u';
-    for (const p of params) {
-        if (!p || !p.id) continue;
-        // id is e.g. 'paramA', 'vec3B', 'iterations'
-        if (p.id === 'iterations') {
-            if (!interlace && typeof p.default === 'number') u.uIterations = Math.max(4, p.default);
-            continue;
-        }
-        const slot = p.id;
-        if (!/^(param[A-F]|vec[234][A-C])$/.test(slot)) continue;
-        const name = prefix + slot[0].toUpperCase() + slot.slice(1);
-        const d = p.default;
+    const wv = def?.defaultPreset?.features?.weave ?? {};
+    for (const [k, d] of Object.entries(wv) as Array<[string, any]>) {
+        if (!/^ws\d/.test(k)) continue;
+        const name = 'u' + k.charAt(0).toUpperCase() + k.slice(1);
         if (typeof d === 'number') u[name] = d;
         else if (d && typeof d === 'object') {
-            if ('w' in d) u[name] = [d.x, d.y, (d as any).z, (d as any).w];
-            else if ('z' in d) u[name] = [d.x, d.y, (d as any).z];
+            if ('w' in d) u[name] = [d.x, d.y, d.z, d.w];
+            else if ('z' in d) u[name] = [d.x, d.y, d.z];
             else if ('y' in d) u[name] = [d.x, d.y];
         }
     }
+    return u;
 }
 
 // ─── Per-pair verification ───────────────────────────────────────────────────
@@ -291,8 +260,9 @@ async function verifyPair(page: Page, primary: string, secondary: string): Promi
     };
 
     let compileShader: string;
+    let fusedDef: any;
     try {
-        compileShader = buildCompileShader(primary, secondary);
+        ({ shader: compileShader, def: fusedDef } = buildWeaveEngine(primary, secondary));
     } catch (e: any) {
         r.overall = 'fail';
         r.failFirstGate = 'shaderFactory';
@@ -301,7 +271,7 @@ async function verifyPair(page: Page, primary: string, secondary: string): Promi
         return r;
     }
 
-    const uniforms = buildUniforms(primary, secondary);
+    const uniforms = buildUniforms(fusedDef);
 
     // Dummy sample shader — sample path isn't a gate for this sweep. We pass
     // it to reuse validator.html's runValidation() scaffolding.
@@ -336,7 +306,7 @@ async function verifyPair(page: Page, primary: string, secondary: string): Promi
         const pngPath = path.join(OUT_THUMBS, `${hash}.png`);
         const base64 = browserResult.thumbnailPNG.replace(/^data:image\/png;base64,/, '');
         fs.writeFileSync(pngPath, Buffer.from(base64, 'base64'));
-        r.thumbnail = `thumbnails/interlace/${hash}.png`;
+        r.thumbnail = `thumbnails/weave-sweep/${hash}.png`;
     }
 
     r.timeMs = Math.round(performance.now() - t0);
@@ -436,7 +406,7 @@ async function main() {
     }
 
     const estSec = Math.round(pairs.length * 0.5);
-    console.log(`\n  Native Interlace Sweep`);
+    console.log(`\n  Native Weave Sweep (2-slot native weaves)`);
     console.log(`  ${ids.length} eligible formulas, ${pairs.length} pairs to test (~${estSec}s est.)`);
     console.log(`  Output: ${OUT_JSONL}`);
     console.log(`  Thumbs: ${OUT_THUMBS}\n`);
@@ -517,7 +487,6 @@ async function main() {
         }
     }
     console.log(`\n  Results: ${OUT_JSONL}`);
-    console.log(`  Render matrix:  npx tsx debug/native-interlace-matrix.mts\n`);
 
     process.exit(fail > 0 ? 1 : 0);
 }

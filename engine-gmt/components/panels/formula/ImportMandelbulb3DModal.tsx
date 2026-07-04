@@ -24,14 +24,18 @@ import { WeaveEditorPane } from '../../WeaveEditor';
 export interface ImportMandelbulb3DModalProps {
   open: boolean;
   onClose: () => void;
+  /** Land on a specific tab at mount (the Formula panel's "Edit weave…"
+   *  affordance opens straight into the Weave Editor). Omitted = the
+   *  session-remembered tab. */
+  initialTab?: 'import' | 'weave';
 }
 
 // Remembered across open/close within a session, so a user mid-weave lands back
 // on their editor (its draft survives too — see WeaveEditorPane).
 let lastTab: 'import' | 'weave' = 'import';
 
-export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = ({ open, onClose }) => {
-  const [tab, setTabState] = useState<'import' | 'weave'>(lastTab);
+export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = ({ open, onClose, initialTab }) => {
+  const [tab, setTabState] = useState<'import' | 'weave'>(initialTab ?? lastTab);
   const setTab = (t: 'import' | 'weave') => { lastTab = t; setTabState(t); };
   const [pasteText, setPasteText] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);

@@ -30,7 +30,7 @@ import { flushCameraToStore } from '../store/cameraSlice';
 import type { Preset } from '../types/fractal';
 
 export interface LoadFilter {
-    /** formula id + params (coreMath) + geometry/interlace + graph/pipeline,
+    /** formula id + params (coreMath) + geometry/weave + graph/pipeline,
      *  plus the DE characterisation (quality.estimator/distanceMetric/deBailout) */
     formula: boolean;
     /** features.lighting + top-level lights[] */
@@ -65,7 +65,7 @@ const DEFAULT_FILTER: LoadFilter = {
 /** Feature-slice ids copied for each feature-backed group. Camera + animation
  *  groups live in top-level preset fields, handled separately in the merge. */
 const GROUP_FEATURES: Record<'formula' | 'lighting' | 'materials' | 'atmosphere' | 'gradients' | 'color', string[]> = {
-    formula: ['coreMath', 'geometry', 'interlace'],
+    formula: ['coreMath', 'geometry', 'weave'],
     lighting: ['lighting'],
     materials: ['materials', 'ao', 'reflections'],
     atmosphere: ['atmosphere', 'volumetric'],

@@ -1,12 +1,11 @@
 // BoundsPanel.tsx — Bounding box center/size controls using GMT VectorInput
 import React, { useState, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
-import { useMeshExportStore } from '../store/meshExportStore';
+import { useMeshExportStore, weaveBagFrom } from '../store/meshExportStore';
 import { VectorInput } from '../../components/inputs/VectorInput';
 import { BaseVectorInput } from '../../components/vector-input/BaseVectorInput';
 import { autoFitBounds } from '../gpu/gpu-pipeline';
 import { registry } from '../../engine-gmt/engine/FractalRegistry';
-import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 
 export function BoundsPanel() {
   const center = useMeshExportStore((s) => s.bboxCenter);
@@ -37,16 +36,7 @@ export function BoundsPanel() {
 
     setFitting(true);
     try {
-      let interlace: MeshInterlaceConfig | undefined;
-      if (state.interlaceState) {
-        interlace = {
-          definition: state.interlaceState.definition,
-          params: state.interlaceState.params,
-          enabled: state.interlaceState.enabled,
-          interval: state.interlaceState.interval,
-          startIter: state.interlaceState.startIter,
-        };
-      }
+      const weave = weaveBagFrom(state);
 
       const qs = state.qualitySettings;
       const quality = { estimator: qs.estimator, distanceMetric: qs.distanceMetric };
@@ -56,7 +46,7 @@ export function BoundsPanel() {
         state.formulaParams,
         state.iters,
         (state.formulaParams.paramA as number) || 8,
-        interlace,
+        weave,
         quality,
         qs.surfaceThreshold,
       );

@@ -8,7 +8,6 @@ import { MAX_MODULAR_PARAMS } from '../../data/constants';
 import { compileGraph } from '../utils/GraphCompiler';
 import { FormulaType } from '../types';
 import { QualityState } from './quality';
-import type { InterlaceState } from './interlace';
 import { Uniforms } from '../engine/UniformNames';
 
 export interface CoreMathState {
@@ -126,28 +125,21 @@ export const CoreMathFeature: FeatureDefinition = {
         let loopBody = "";
         let loopInit = "";
 
-        // Detect if EITHER side of an interlace pair supports cutting-plane DE.
-        // Without this check, interlacing a non-CP primary (e.g. Mandelbulb) with a
-        // CP-aware secondary (e.g. MengerSponge) would emit cp_* writes from the
-        // secondary's body without the corresponding engine-side declarations.
-        // Single source of truth via the capability protocol — see
-        // engine-gmt/engine/compat/pairHasCapability.ts. SDFShaderBuilder's local
-        // pairSupportsCP helper delegates to the same function; the two-file
-        // mirror flagged in ADR-0052 is collapsed.
-        const interlaceState = config.interlace as InterlaceState | undefined;
-        const interlaceDef = interlaceState?.interlaceCompiled && interlaceState.interlaceFormula
-            ? registry.get(interlaceState.interlaceFormula as FormulaType)
-            : undefined;
+        // Cutting-plane support is a formula capability. (The legacy interlace
+        // PAIR check retired with the feature — ADR-0089 P4.4: a migrated
+        // legacy pair is one fused def whose capability set already unions the
+        // slots'. Single source of truth via the capability protocol — see
+        // engine-gmt/engine/compat/pairHasCapability.ts; SDFShaderBuilder's
+        // supportsCP delegates to the same function.)
         const pairSupportsCuttingPlane = def
-            ? pairHasCapability(def, interlaceDef, 'estimator:cutting-plane')
+            ? pairHasCapability(def, undefined, 'estimator:cutting-plane')
             : false;
 
         // Generate optimized getDist based on Quality Settings
         // Default to 0 (Analytic) if missing
         const estimatorType = quality?.estimator || 0;
         // dIFS (estimator 6): the MB3D importer sets shader.supportsDifs on a fused
-        // dIFS scene; its preamble declares g_difsDE. Not interlaceable (single-scene
-        // import), so no pair check needed.
+        // dIFS scene; its preamble declares g_difsDE.
         const supportsDifs = !!def?.shader.supportsDifs;
         let getDistBody = generateGetDist(estimatorType, { supportsCuttingPlane: pairSupportsCuttingPlane, supportsDifs });
 
@@ -183,15 +175,15 @@ export const CoreMathFeature: FeatureDefinition = {
             }
             // Cutting-plane formulas: engine declares the cp_* accumulators and
             // initializes them. The formula's own loopBody writes to them; getDist
-            // reads them iff estimator===5 (Cutting Plane). Triggered when either
-            // the primary or the interlace secondary supports CP — addPreamble
+            // reads them iff estimator===5 (Cutting Plane). addPreamble
             // dedupes by exact string so duplicate calls are safe.
             if (pairSupportsCuttingPlane) {
                 builder.addPreamble(CP_PREAMBLE);
                 loopInit = CP_INIT + loopInit;
             }
-            // Custom getDist override: keep for Frags/legacy formulas. Skipped when
-            // CP estimator is selected — engine's getDist takes precedence.
+            // Custom getDist override: Frags/legacy formulas + fused weave defs
+            // (P4.4 lead-slot splice). Skipped when the CP estimator is
+            // selected — engine's getDist takes precedence.
             if (def.shader.getDist && estimatorType < 4.5) {
                  getDistBody = `vec2 getDist(float r, float dr, float iter, vec4 z) { ${def.shader.getDist} }`;
             }

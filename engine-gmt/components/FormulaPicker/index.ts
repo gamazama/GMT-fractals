@@ -4,8 +4,6 @@ export type {
     FormulaPickerRef,
     FormulaPickerCommit,
 } from './FormulaPicker';
-export { InterlaceSecondaryPicker } from './InterlaceSecondaryPicker';
-export type { InterlaceSecondaryPickerProps } from './InterlaceSecondaryPicker';
 export { NATIVE_CATEGORIES, FORMULA_TO_CATEGORY, NO_SPECIAL_ENTRIES } from './pickerCategories';
 export type { SpecialEntry, PickerCategory } from './pickerCategories';
 export type { SceneGroup, SceneItem } from './sceneGroups';

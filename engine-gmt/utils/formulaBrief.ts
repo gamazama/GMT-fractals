@@ -145,7 +145,7 @@ export function buildFormulaBrief(def: FractalDefinition, opts: BuildFormulaBrie
  * Build the paste-ready LLM prompt: instruction + guide link + the minimal GMF
  * inlined + a {goal} blank + strict output-format rules. The output rules steer
  * the model toward `shape:per-iteration` formulas (self-contained `break;`
- * disables interlace / hybrid / burning-ship).
+ * disables weaving / hybrid / burning-ship).
  */
 export function buildModifyPrompt(minimalGmf: string, formulaName: string): string {
     return `You are authoring a fractal formula for GMT, a real-time GPU fractal renderer. GMT formulas use a plain-text container called GMF (GPU Mandelbulb Format). Your job is to read the formula below, apply the change the user wants, and output a new, complete GMF.
@@ -216,7 +216,7 @@ ${minimalGmf}
 
 ================ STRONGLY PREFER per-iteration (do NOT reach for break;) ================
 Author the formula as \`shape:per-iteration\`: write ONE step of the iteration and let the engine run the loop and the escape check. This is the default and the right choice almost always.
-Only fall back to a self-contained formula (your <Shader_Loop> owns its own loop and ends with \`break;\`, with \`"shaderMeta": { "selfContainedSDE": true }\` in <Metadata>) as a LAST RESORT, when the math genuinely cannot be decomposed into independent per-iteration steps. Self-contained DISABLES interlace, hybrid formulas, and burning-ship variants — it strictly reduces what the engine can do with your formula, so don't use \`break;\` casually.
+Only fall back to a self-contained formula (your <Shader_Loop> owns its own loop and ends with \`break;\`, with \`"shaderMeta": { "selfContainedSDE": true }\` in <Metadata>) as a LAST RESORT, when the math genuinely cannot be decomposed into independent per-iteration steps. Self-contained DISABLES weaving (combining formulas as weave slots), hybrid formulas, and burning-ship variants — it strictly reduces what the engine can do with your formula, so don't use \`break;\` casually.
 
 
 ================ USER INSTRUCTIONS ================
@@ -228,7 +228,7 @@ Only fall back to a self-contained formula (your <Shader_Loop> owns its own loop
 /**
  * Build the paste-ready LLM prompt for CONVERTING a self-contained (imported
  * `break;`-loop) formula into a NATIVE `shape:per-iteration` GMT formula — which
- * regains interlace / hybrid / burning-ship (self-contained disables all three).
+ * regains weaving / hybrid / burning-ship (self-contained disables all three).
  *
  * Strongly prefers the ORIGINAL `.frag` source (pass `def.importSource.glsl`);
  * when that's gone (V4 imports, GMF round-trip — importSource is session-only and
@@ -259,8 +259,8 @@ export function buildConvertPrompt(
     return `You are authoring a fractal formula for GMT, a real-time GPU fractal renderer. GMT formulas use a plain-text container called GMF (GPU Mandelbulb Format). You are given a Fragmentarium-style .frag formula that GMT currently runs as a SELF-CONTAINED formula (it owns its own internal loop and ends with \`break;\`). Your job is to CONVERT it into a NATIVE per-iteration GMT formula and output a new, complete GMF.
 
 ================ WHY CONVERT (the goal) ================
-The imported formula is \`shape:self-contained\`: its <Shader_Loop> runs one giant internal \`for\` loop and then \`break;\`s the engine's outer loop. That works, but it strictly REDUCES what the engine can do — self-contained DISABLES interlace (blending two formulas), hybrid formulas (alternating box-folds), and engine burning-ship variants, because all of those require the ENGINE to own the iteration loop and run your step many times.
-Your task is to rewrite the math as ONE step of the iteration inside \`void formula_NAME(inout vec4 z, inout float dr, inout float trap, vec4 c)\`, with NO internal loop and NO \`break;\`, so the formula becomes \`shape:per-iteration\` and regains interlace / hybrid / burning-ship for free. The visual result must match the original as closely as possible.
+The imported formula is \`shape:self-contained\`: its <Shader_Loop> runs one giant internal \`for\` loop and then \`break;\`s the engine's outer loop. That works, but it strictly REDUCES what the engine can do — self-contained DISABLES weaving (combining formulas as weave slots), hybrid formulas (alternating box-folds), and engine burning-ship variants, because all of those require the ENGINE to own the iteration loop and run your step many times.
+Your task is to rewrite the math as ONE step of the iteration inside \`void formula_NAME(inout vec4 z, inout float dr, inout float trap, vec4 c)\`, with NO internal loop and NO \`break;\`, so the formula becomes \`shape:per-iteration\` and regains weaving / hybrid / burning-ship for free. The visual result must match the original as closely as possible.
 
 ================ FULL AUTHORING GUIDE ================
 The complete reference (shader API, all uniforms, helper functions, capability tokens, worked examples) is here:
@@ -317,7 +317,7 @@ Only reference uniforms/helpers listed here or in the guide; never invent one.
 4. Julia: the engine already encodes Julia vs Mandelbrot in \`c\` (c = pixel position for Mandelbrot, c = vec4(uJulia, uParamA) for Julia). For a POWER fractal just add \`c.xyz\` every iteration and set "juliaType":"julia" — do NOT branch on uJuliaMode. For a FOLD/IFS fractal treat \`c.xyz\` as a constant translation/offset and set "juliaType":"offset"; if the offset should only apply in Julia mode, gate it with \`if (uJuliaMode > 0.5) z.xyz += c.xyz;\`. Use "juliaType":"none" for a purely symmetric IFS that ignores c.
 5. trap: write \`trap = min(trap, X)\` with X a POSITIVE quantity (typically a length, e.g. length(z.xyz) or abs(z.x)). Never feed a negative or log-domain value into trap — the colourer clamps <=0 to a floor and you get one flat colour.
 6. Pick the estimator + fudge in defaultPreset.features.quality: "estimator": 0 for power fractals (z^p + c, analytic log DE), "estimator": 1 for fold/IFS fractals (box/sphere fold, linear DE). Set "fudgeFactor": 0.5 (the app's "Slice Optimization") so the raymarch takes smaller steps and a hand-derived DE doesn't overshoot the surface and leave flat "slices"/holes. Only add a custom <Shader_Dist> if the original genuinely needs a bespoke distance estimate.
-7. Preamble globals: if you must keep a mutable global (a DE accumulator the step writes and the estimator reads), declare it in <Shader_Preamble>, RESET it in <Shader_Init>, and list its name in <Metadata>.shaderMeta.preambleVars (named u<INITIALS>_name) so interlace doesn't corrupt it. Do NOT list engine-owned cp_* globals.
+7. Preamble globals: if you must keep a mutable global (a DE accumulator the step writes and the estimator reads), declare it in <Shader_Preamble>, RESET it in <Shader_Init>, and list its name in <Metadata>.shaderMeta.preambleVars (named u<INITIALS>_name) so weaving doesn't corrupt it. Do NOT list engine-owned cp_* globals.
 
 ================ EXPOSE TASTEFUL SLIDERS (important for DEC / Shadertoy sources) ================
 Many sources — especially the Distance Estimator Compendium and Shadertoy snippets — hard-code their interesting values as literal constants. A GMT formula is only fun if those are adjustable, so PROMOTE a tasteful selection of the meaningful constants to UI sliders instead of leaving them baked in:
@@ -362,7 +362,7 @@ ${mappings}
 12. Prefer the built-in estimator (rule 11) and OMIT <Shader_Dist>. Only add <Shader_Dist> if you genuinely need a custom distance estimate — and if so, it is the BODY of "vec2 getDist(float r, float dr, float iter, vec4 z)": write statements ONLY (do NOT write a "float yourName(...)" or "vec2 getDist(...)" function — GLSL forbids nested functions, so a function definition here will not compile) and end with "return vec2(distance, smoothIter);" — a vec2, never a float. In scope: r, dr, iter, z.
 
 ================ THIS IS A CONVERSION — per-iteration is the WHOLE POINT ================
-The entire reason for this task is to drop the self-contained \`break;\` loop and become \`shape:per-iteration\` so interlace / hybrid / burning-ship light up. So: do NOT emit \`"shaderMeta": { "selfContainedSDE": true }\`, do NOT write your own loop, and do NOT call \`break;\` — those would re-disable everything you are trying to enable.
+The entire reason for this task is to drop the self-contained \`break;\` loop and become \`shape:per-iteration\` so weaving / hybrid / burning-ship light up. So: do NOT emit \`"shaderMeta": { "selfContainedSDE": true }\`, do NOT write your own loop, and do NOT call \`break;\` — those would re-disable everything you are trying to enable.
 A FEW Fragmentarium formulas genuinely cannot be decomposed into independent per-iteration steps (e.g. the distance needs the full internal orbit history, or each step depends on a value only known after the whole loop runs). ATTEMPT the per-iteration rewrite FIRST. ONLY if the math truly requires the full internal loop, fall back to keeping it self-contained: let <Shader_Loop> own its loop ending in \`break;\`, set \`"shaderMeta": { "selfContainedSDE": true }\` in <Metadata>, and read uIterations as \`int(uIterations)\` to cap the internal loop. Use this fallback as a LAST RESORT only.
 
 
@@ -443,7 +443,7 @@ export function sanitizeGMF(text: string): string | null {
  * matching renamed GLSL function (`formula_Foo` → `formula_Foo_2`), so:
  *   - re-pasting an iteration doesn't silently fail to replace the old one,
  *   - it never clobbers a built-in that happens to share the id,
- *   - two same-named `formula_*` functions can't clash in one shader (interlace).
+ *   - two same-named `formula_*` functions can't clash in one shader (weave slots).
  * Each paste becomes its own formula. No-op when the id is already free.
  *
  * `exists(id)` is injected (the caller passes the live registry lookup) to keep
@@ -502,7 +502,7 @@ export function ensureUniqueFormulaId(
  *
  * WHY: the engine takes a parameter's INITIAL value from `coreMath`, NOT from
  * `parameters[].default` (core_math.ts never reads the FractalParameter array —
- * only the UI and interlace do). So an AI-authored formula that declares good
+ * only the UI and weave slots do). So an AI-authored formula that declares good
  * slider defaults but forgets to mirror them into `defaultPreset.features.coreMath`
  * loads every slider at 0 — and a 0 `scale`/`power`/`angle` renders black or
  * degenerate. This bridges the gap so the model's natural output (a sensible

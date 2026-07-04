@@ -69,22 +69,11 @@ export const GmtPanels: PanelManifest = [
                 runtimeGroup: 'julia',
                 label: 'Julia / Offset',
                 helpId: 'julia.mode',
-                showIf: (s: any) => {
-                    if (registry.get(s.formula)?.juliaType !== 'none') return true;
-                    const il = s.interlace;
-                    if (il?.interlaceCompiled && registry.get(il.interlaceFormula)?.juliaType !== 'none') return true;
-                    return false;
-                },
+                showIf: (s: any) => registry.get(s.formula)?.juliaType !== 'none',
                 labelFn: (s: any) => {
                     const primary = registry.get(s.formula);
                     if (primary?.juliaType === 'julia') return 'Julia';
                     if (primary?.juliaType === 'offset') return 'Offset';
-                    const il = s.interlace;
-                    if (il?.interlaceCompiled) {
-                        const sec = registry.get(il.interlaceFormula);
-                        if (sec?.juliaType === 'julia') return 'Julia';
-                        if (sec?.juliaType === 'offset') return 'Offset';
-                    }
                     return undefined;
                 },
             },
@@ -139,8 +128,11 @@ export const GmtPanels: PanelManifest = [
                 requires: { rejects: { primary: ['shape:self-contained'] } },
             },
 
-            // Formula Interlace — uses interlace's feature panelConfig.
-            { type: 'compilable', id: 'interlace' },
+            // Weave the active formula with others — the legacy Formula
+            // Interlace section retired here (ADR-0089 P4.4); the Weave Editor
+            // (Import ▸ Weave tab) is the one authoring surface. Old interlace
+            // scenes migrate to weaves at load.
+            { type: 'widget', id: 'edit-weave-affordance' },
 
             // Distance Estimator + Metric + Escape Radius — one block. Estimator
             // (compile-flagged) + Metric render as the dropdown row; runtimeGroup
@@ -192,10 +184,10 @@ export const GmtPanels: PanelManifest = [
 
             // --- Volumetric scatter (compile-toggle UI) ---
             // Renders via <CompilableFeatureSection> reading the
-            // feature's panelConfig — same shape hybrid box and
-            // interlace use. Plain `type: 'feature'` showed only the
-            // runtime sliders without the compile toggle, leaving the
-            // user dependent on the Engine panel to compile it on.
+            // feature's panelConfig — same shape as Hybrid Box. Plain
+            // `type: 'feature'` showed only the runtime sliders without
+            // the compile toggle, leaving the user dependent on the
+            // Engine panel to compile it on.
             { type: 'compilable', id: 'volumetric' },
 
             { type: 'separator' },

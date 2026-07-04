@@ -15,7 +15,6 @@ function humanizeReason(raw: string): string {
     if (raw.includes('shape:self-contained')) return 'This formula owns its full iteration loop.';
     if (raw.includes('shape:modular')) return 'Modular graph formulas use the node editor instead.';
     if (raw.startsWith('rejected by primary capability')) return 'Not compatible with the current primary formula.';
-    if (raw.startsWith('rejected by secondary capability')) return 'Not compatible with the current interlace secondary.';
     if (raw.startsWith('requires')) return raw.replace('requires', 'Needs');
     return raw;
 }
@@ -40,7 +39,7 @@ interface CompilableFeatureSectionProps extends Partial<CompilablePanelConfig> {
  *
  * Two sub-modes, picked by the presence of `runtimeToggleParam`:
  *
- *  A. **With runtime toggle** (Hybrid Box, Interlace, Volumetric, Local
+ *  A. **With runtime toggle** (Hybrid Box, Volumetric, Local
  *     Rotation, area shadows): the header toggle controls the runtime
  *     param instantly (no rebuild). A separate compile gate (`compileParam`)
  *     controls whether the feature is compiled into the shader. When the
@@ -264,16 +263,13 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     // mutated) so switching back to a compatible formula re-enables exactly
     // as it was. See dev/docs/gmt/35_Capability_Protocol.md.
     const primaryFormulaId = useEngineStore((s: any) => s.formula);
-    const interlaceCompiled = useEngineStore((s: any) => s.interlace?.interlaceCompiled);
-    const interlaceFormulaId = useEngineStore((s: any) => s.interlace?.interlaceFormula);
     const sectionRequires = src.requires;
     const compatReport = useMemo(() => {
         if (!primaryFormulaId) return undefined;
         const primary = formulaRegistry.get(primaryFormulaId);
         if (!primary) return undefined;
-        const secondary = interlaceCompiled && interlaceFormulaId
-            ? formulaRegistry.get(interlaceFormulaId)
-            : undefined;
+        // (The legacy interlace SECONDARY leg of the pair check retired with
+        // the feature — ADR-0089 P4.4; a woven scene is one fused def.)
         // Section-level requires (from CompilablePanelConfig) wins over the
         // feature's. Temporarily patch the registered feature def so the pure
         // reducer reads our section's rules instead. Cleanest is a single-
@@ -282,12 +278,12 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
         if (sectionRequires && feature) {
             const original = (feature as any).requires;
             (feature as any).requires = sectionRequires;
-            const report = evaluateCompat({ primary, secondary }).find(r => r.featureId === featureId);
+            const report = evaluateCompat({ primary }).find(r => r.featureId === featureId);
             (feature as any).requires = original;
             return report;
         }
-        return evaluateCompat({ primary, secondary }).find(r => r.featureId === featureId);
-    }, [primaryFormulaId, interlaceCompiled, interlaceFormulaId, featureId, sectionRequires, feature]);
+        return evaluateCompat({ primary }).find(r => r.featureId === featureId);
+    }, [primaryFormulaId, featureId, sectionRequires, feature]);
     const isProtocolDisabled = compatReport?.status === 'disabled';
     const primaryName = primaryFormulaId
         ? (formulaRegistry.get(primaryFormulaId)?.name ?? primaryFormulaId)
@@ -310,7 +306,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     // Protocol-disabled variant: grayed header + tooltip, body collapsed,
     // toggle is a no-op. Unload button stays FUNCTIONAL when the feature is
     // currently compiled — without this escape hatch, users who compiled a
-    // bad pairing (e.g. interlace + MandelTerrain) have no way to disable it.
+    // bad pairing have no way to disable it.
     // State is preserved (not mutated) so restoring a compatible formula
     // brings the feature back exactly as it was.
     if (isProtocolDisabled) {

@@ -341,6 +341,11 @@ export const NewSceneModal: React.FC = () => {
         // start-iter are left at defaults; user tunes runtime post-create.
         // interlaceEnabled runtime toggle is set ON so the user sees the
         // effect immediately on first render.
+        // NOTE (ADR-0089 P4.4): the interlace FEATURE is retired — this composer
+        // still authors legacy-shaped features.interlace, and the load-time
+        // migration (applyMigrations v3, inside loadPreset) converts it into a
+        // 2-slot native weave before any setter runs. One authoring bridge, one
+        // migration path — no live interlace state ever reaches the store.
         const interlaceOverrides: Record<string, any> = {};
         if (interlace.secondary && !interlaceDisabled) {
             interlaceOverrides.interlaceCompiled = true;

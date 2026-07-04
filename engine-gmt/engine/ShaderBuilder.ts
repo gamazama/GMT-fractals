@@ -380,7 +380,7 @@ vec3 sampleMiss(vec3 ro, vec3 rd, float roughness) {
      *   `ShaderFactory.generateMeshSDFLibrary`.
      */
     buildMeshSDFLibrary(): string {
-        // Build feature-injected uniforms (interlace params etc.) from addUniform() calls
+        // Build feature-injected uniforms (mesh weave params etc.) from addUniform() calls
         let injectedUniforms = '';
         this.uniforms.forEach((info, name) => {
             if (info.arraySize) {
@@ -432,7 +432,7 @@ uniform float uTextureModeU;
 uniform float uTextureModeV;
 uniform float uBurningEnabled;
 
-// Feature-injected uniforms (e.g. interlace params from Interlace.inject())
+// Feature-injected uniforms (e.g. weave bank params from the weave feature's Mesh inject)
 ${injectedUniforms}
 
 // Precision offset stub — mesh SDF operates in local space (no camera offset needed)
@@ -444,7 +444,7 @@ ${meshBaseHelpers}
 // Preambles from feature inject() calls (e.g. SHARED_TRANSFORMS_GLSL from Geometry)
 ${this.preambles.join('\n')}
 
-// Pre-DE functions (primary formula + secondary interlace formula functions)
+// Pre-DE functions (formula functions, incl. fused weave slot fns)
 ${this.preDEFunctions.join('\n')}
 
 // Distance estimator — generates map(vec3 p) -> vec4 and mapDist(vec3 p) -> float

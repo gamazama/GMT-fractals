@@ -102,19 +102,11 @@ export const ESTIMATORS: EstimatorEntry[] = [
         vec2 getDist(float r, float dr, float iter, vec4 z) {
             return vec2(abs(cp_dmin), cp_trap);
         }`,
-        // Gray out unless either the current formula OR the active interlace
-        // secondary declares supportsCuttingPlane. Engine falls back to Linear
-        // if a user somehow forces this on a non-CP pair, so this is purely UX.
-        disabledIf: (state: any) => {
-            const primary = registry.get(state?.formula);
-            if (primary?.shader.supportsCuttingPlane) return false;
-            const il = state?.interlace;
-            if (il?.interlaceCompiled && il.interlaceFormula) {
-                const sec = registry.get(il.interlaceFormula);
-                if (sec?.shader.supportsCuttingPlane) return false;
-            }
-            return true;
-        },
+        // Gray out unless the current formula declares supportsCuttingPlane
+        // (a migrated legacy pair is one fused def whose capabilities union
+        // the slots' — ADR-0089 P4.4). Engine falls back to Linear if forced
+        // on a non-CP formula, so this is purely UX.
+        disabledIf: (state: any) => !registry.get(state?.formula)?.shader.supportsCuttingPlane,
     },
     {
         id: 'difs', value: 6.0, label: 'dIFS (Orbit Trap)',

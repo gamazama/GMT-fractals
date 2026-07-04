@@ -30,7 +30,7 @@ export function classifyTrackId(tid: string): typeof GROUP_ORDER[number] {
         tid.startsWith('param') ||
         tid.startsWith('julia.') ||
         tid.startsWith('hybridParams.') ||
-        tid.startsWith('interlace.') ||
+        tid.startsWith('weave.') ||
         tid === 'iterations'
     ) return 'Formula';
     if (tid === 'camFov' || tid.startsWith('optics.') || tid.startsWith('dof')) return 'Optics';

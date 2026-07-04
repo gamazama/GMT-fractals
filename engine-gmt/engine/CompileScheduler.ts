@@ -70,8 +70,7 @@ export class CompileScheduler {
      *   CONFIG bursts. `hasCompiledShader` and `lastCompiledFormula` are
      *   set BEFORE the first async yield so a concurrent `perform()`
      *   sees updated state.
-     * @invariant `lastCompiledFormula` includes the interlace formula
-     *   id when `interlaceCompiled` is true — formula-switch detection
+     * @invariant `lastCompiledFormula` is the compiled formula id —
      *   must include BOTH halves of the hybrid id, otherwise an
      *   interlace-only change skips recompile.
      * @invariant `keepCurrent` strategy skips modular uniform sync
@@ -214,10 +213,7 @@ export class CompileScheduler {
         //                 while the new one builds. No preview downgrade.
         //   twoStage    — first boot or formula change → preview while full builds.
         //   singleStage — no parallel compile or lighting already off → synchronous.
-        const interlaceId = (config as any).interlace?.interlaceCompiled
-            ? ((config as any).interlace?.interlaceFormula ?? '')
-            : '';
-        const compiledFormulaKey = config.formula + (interlaceId ? '+' + interlaceId : '');
+        const compiledFormulaKey = config.formula;
         const formulaChanged = compiledFormulaKey !== this.lastCompiledFormula;
         const keepCurrent = this.hasCompiledShader && this.hasParallelCompile && !formulaChanged;
 

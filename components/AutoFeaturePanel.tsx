@@ -346,25 +346,6 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             ) : null;
             
             if (config.options) {
-                // Per-param widget override — `interlaceFormula` opts into
-                // the unified FormulaPicker (categories, thumbnails,
-                // compat-driven disabling) instead of a flat dropdown. The
-                // picker is registered via componentRegistry so this shared
-                // file doesn't import engine-gmt directly.
-                if (key === 'interlaceFormula') {
-                    const Widget = componentRegistry.get('interlace-secondary-picker');
-                    if (Widget) {
-                        return (
-                            <Widget
-                                label={config.label}
-                                value={val}
-                                onChange={(v: string) => handleUpdate(key, v)}
-                                disabled={isParamDisabled}
-                            />
-                        );
-                    }
-                }
-
                 // Find the current option to surface its per-option hint.
                 // Falls back to undefined when no hint authored on the
                 // current option — keeps the layout tight for compact

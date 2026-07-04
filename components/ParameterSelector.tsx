@@ -160,11 +160,9 @@ function buildItems(catId: string, activeFormula: string, storeState: any): Pick
         }
 
         // Apply DDFS dynamicConfig + dynamicVisible — same path
-        // AutoFeaturePanel uses for its sliders. Without this,
-        // interlace.interlaceParam{A..F} surface as static "Param A"
-        // labels in the modulation target dropdown instead of the
-        // secondary formula's authored names ("Power" / "Fold Limit"
-        // / etc.); slots the secondary doesn't use also still show.
+        // AutoFeaturePanel uses for its sliders. Keeps dynamically-
+        // configured params showing their authored labels in the
+        // modulation target dropdown (and hides unused slots).
         let config: any = config_raw;
         if ((config_raw as any).dynamicConfig) {
             const overrides = (config_raw as any).dynamicConfig(sliceState);

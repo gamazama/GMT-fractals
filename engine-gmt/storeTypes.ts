@@ -25,7 +25,6 @@ import type { OpticsState } from './features/optics';
 import type { NavigationState } from './features/navigation';
 import type { QualityState } from './features/quality';
 import type { GeometryState } from './features/geometry';
-import type { InterlaceState } from './features/interlace';
 import type { ColoringState } from './features/coloring';
 import type { TexturingState } from './features/texturing';
 import type { MaterialState } from './features/materials';
@@ -47,7 +46,6 @@ declare module '../engine/features/types' {
     interface FeatureStateMap {
         coreMath:    CoreMathState;
         geometry:    GeometryState;
-        interlace:   InterlaceState;
         lighting:    LightingState;
         lightSpheres: LightSpheresState;
         ao:          AOState;

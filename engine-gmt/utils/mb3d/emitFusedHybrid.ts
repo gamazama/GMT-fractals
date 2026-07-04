@@ -149,6 +149,10 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
      *  fused def when this slot LEADS the weave (slot 0, interlace-host
      *  semantics). */
     getDist?: string;
+    /** Native slot's formula supports cutting-plane DE (writes the engine-owned
+     *  cp_* accumulators — UNPREFIXED by the rewriter, shared across slots).
+     *  Unioned onto the fused def so core_math declares CP_PREAMBLE. */
+    supportsCP?: boolean;
   };
 
   const isNative = (idx: number) => addon.slots[idx]?.formulaIndex === NATIVE_FORMULA_INDEX;
@@ -175,6 +179,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       params: res.params as any, coreMath: res.coreMath, weaveState: res.weaveState, paramOk: true, writesDeriv: res.writesDeriv,
       call: res.call, preCall: res.preCall, postCall: res.postCall, slotLoopInit: res.loopInit,
       deMeta: res.deMeta, getDist: res.getDist,
+      supportsCP: !!ndef.shader.capabilities?.has('estimator:cutting-plane') || !!(ndef.shader as any).supportsCuttingPlane,
     };
   };
 
@@ -630,6 +635,17 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // ⇒ byte-identical.
   const leadGetDist = isNative(usedIdx[0]) ? bodies[0].getDist : undefined;
 
+  // Capability UNION from native slots (P4.4): a slot's cp_* writes are
+  // UNPREFIXED (engine-owned globals, shared across slots on purpose), so any
+  // CP-capable slot needs core_math to declare CP_PREAMBLE — under retired
+  // interlace the pairHasCapability(primary, secondary) check did this; for a
+  // fused def the def's own capability set must carry it. The old sweep's
+  // signature failure class ('cp_dmin: undeclared identifier') gates this.
+  // Pure-MB3D weaves have no native slots ⇒ set unchanged ⇒ byte-identical.
+  const anyCP = bodies.some((b) => b.supportsCP);
+  const fusedCaps = new Set<Capability>(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter']);
+  if (anyCP) fusedCaps.add('estimator:cutting-plane');
+
   const def: FractalDefinition = {
     id: id as any,
     name: scene.title || 'MB3D Hybrid',
@@ -643,7 +659,10 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       supportsDifs: isDifs || undefined,
       loopBody: assembled.loopBody,
       loopInit: assembled.loopInit,
-      capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
+      // supportsCuttingPlane mirrors the capability for the estimator UI +
+      // GMF shaderMeta stash (parseGMF also self-heals it from cp_* in body).
+      supportsCuttingPlane: anyCP || undefined,
+      capabilities: fusedCaps,
     } as any,
     parameters,
     defaultPreset: preset,

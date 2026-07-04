@@ -9,15 +9,6 @@
 
 import type { FractalDefinition } from '../types/fractal';
 import { MESH_GLSL_UNIFORMS, MESH_GLSL_HELPERS } from '../shaders/chunks/math';
-import {
-  rewriteFormulaFunction,
-  rewriteLoopBody,
-  rewriteLoopInit,
-  rewritePreamble,
-  buildInterlaceLoopGLSL,
-  buildInterlaceScheduleGLSL,
-  INTERLACE_UNIFORM_NAMES,
-} from '../features/interlace/glslRewriter';
 import { pairHasCapability } from './compat';
 
 // ============================================================================
@@ -30,11 +21,10 @@ import { pairHasCapability } from './compat';
 //
 // MIRROR: keep the GLSL string contents of CP_PREAMBLE_GLOBALS / CP_INIT in
 // sync with `CP_PREAMBLE` / `CP_INIT` in `features/core_math.ts`. The DECISION
-// of when to emit them (pair-aware) is now single-sourced via the capability
-// protocol's pairHasCapability — see pairSupportsCP below. P7 of the
-// capability-protocol initiative collapses the per-file decision logic;
-// only the GLSL string content remains duplicated and that's acceptable
-// (mesh-export and main-render embed it differently anyway).
+// of when to emit them is single-sourced via the capability protocol's
+// pairHasCapability — see supportsCP below. Only the GLSL string content
+// remains duplicated and that's acceptable (mesh-export and main-render embed
+// it differently anyway).
 const CP_PREAMBLE_GLOBALS = `
 // --- Cutting-plane DE accumulators (engine-provided) ---
 float cp_dmin;
@@ -46,19 +36,10 @@ float cp_trap;
 // Types
 // ============================================================================
 
-export interface MeshInterlaceConfig {
-  definition: FractalDefinition;  // Secondary formula definition
-  params: Record<string, any>;    // Secondary formula parameter values
-  enabled: boolean;
-  interval: number;
-  startIter: number;
-}
-
 export interface MeshShaderConfig {
   definition: FractalDefinition;
   deType: 'power' | 'ifs' | 'auto';
   deSamples?: number;
-  interlace?: MeshInterlaceConfig;
   estimator?: number;  // 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
 }
 
@@ -177,74 +158,32 @@ function buildDEReturn(deType: DEType, hasCustomDist: boolean, thresholdExpr: st
   return `return (r - 1.0) / safeDr - ${thresholdExpr};`;
 }
 
-/** Build interlace uniform declarations GLSL */
-function buildInterlaceUniforms(): string {
-  const { scalars, vec2s, vec3s, vec4s } = INTERLACE_UNIFORM_NAMES;
-  return `
-uniform float ${scalars.join(', ')};
-uniform vec2  ${vec2s.join(', ')};
-uniform vec3  ${vec3s.join(', ')};
-uniform vec4  ${vec4s.join(', ')};
-uniform float uInterlaceEnabled;
-uniform float uInterlaceInterval;
-uniform float uInterlaceStartIter;
-`;
+/** Weave uniform declarations for FUSED WEAVE defs (ADR-0090 banks + rhythm +
+ *  the P4.4 enable gate): declare exactly the `uWs*` / `uWeave*` uniforms the
+ *  def's GLSL references. A migrated legacy-interlace scene's formula is a
+ *  self-contained fused def (dispatcher + slot fns baked into shader.function),
+ *  so the old parallel interlace splice path is retired (ADR-0089 P4.4) — the
+ *  mesh builders embed the def verbatim and only need these declarations. */
+function buildWeaveUniforms(def: FractalDefinition): string {
+  const sh = def.shader;
+  const src = `${sh.preamble ?? ''}\n${sh.function}\n${sh.loopInit ?? ''}\n${sh.loopBody}\n${sh.getDist ?? ''}`;
+  const names = [...new Set(src.match(/\bu(?:Ws\d(?:Param[A-F]|Vec[234][A-C])|Weave(?:Enabled|Interval\d|StartIter\d|Beats\d))\b/g) ?? [])];
+  if (names.length === 0) return '';
+  const typeOf = (n: string) => /Vec2/.test(n) ? 'vec2' : /Vec3/.test(n) ? 'vec3' : /Vec4/.test(n) ? 'vec4' : 'float';
+  return names.map((n) => `uniform ${typeOf(n)} ${n};`).join('\n') + '\n';
 }
 
-/** Build interlace GLSL blocks (preamble + function). The interlace phase function
- *  (the weave core's runtime modulo scheduler) rides along with `func` so every
- *  mesh-pass splice point gets it at global scope. */
-function buildInterlaceGLSL(interlace: MeshInterlaceConfig): { preamble: string; func: string; loopInit: string } {
-  const def = interlace.definition;
-  let preamble = '';
-  if (def.shader.preamble) {
-    preamble = rewritePreamble(def.shader.preamble, def.id, def.shader.preambleVars);
-  }
-  const func = rewriteFormulaFunction(def.shader.function, def.id, def.shader.preambleVars)
-    + '\n' + buildInterlaceScheduleGLSL().glsl;
-  let loopInit = '';
-  if (def.shader.loopInit) {
-    loopInit = rewriteLoopInit(def.shader.loopInit, def.id, def.shader.preambleVars);
-  }
-  return { preamble, func, loopInit };
-}
-
-/** True when the primary OR interlace secondary supports cutting-plane DE.
- *  Either side writing to cp_* requires engine-side declarations + init.
- *  Delegates to the canonical capability-protocol helper so this mesh-export
- *  path and the main-render path in core_math.ts share one source of truth
- *  (resolves the two-file mirror flagged in ADR-0052). */
-function pairSupportsCP(def: FractalDefinition, interlace?: MeshInterlaceConfig): boolean {
-  return pairHasCapability(def, interlace?.definition, 'estimator:cutting-plane');
+/** True when the formula supports cutting-plane DE (writes cp_* accumulators,
+ *  which require engine-side declarations + init). Delegates to the canonical
+ *  capability-protocol helper shared with core_math.ts. */
+function supportsCP(def: FractalDefinition): boolean {
+  return pairHasCapability(def, undefined, 'estimator:cutting-plane');
 }
 
 /** Build the common formula iteration block */
-function buildIterationLoop(def: FractalDefinition, itersVar: string, interlace?: MeshInterlaceConfig): string {
-  // Build interlace pre-loop and in-loop logic if interlace is active
-  let interlacePreLoop = '';
-  let interlaceInLoop = '';
-
-  if (interlace) {
-    const rewrittenBody = rewriteLoopBody(interlace.definition.shader.loopBody, interlace.definition.id);
-    let interlaceInit = '';
-    if (interlace.definition.shader.loopInit) {
-      interlaceInit = rewriteLoopInit(interlace.definition.shader.loopInit, interlace.definition.id, interlace.definition.shader.preambleVars);
-    }
-    const needsRotSwap = !!interlace.definition.shader.usesSharedRotation;
-    ({ preLoop: interlacePreLoop, inLoop: interlaceInLoop } = buildInterlaceLoopGLSL(
-      rewrittenBody,
-      interlaceInit,
-      needsRotSwap,
-    ));
-  }
-
-  const mainBody = interlace
-    ? `if (!skipMainFormula) { ${def.shader.loopBody} }`
-    : def.shader.loopBody;
-
+function buildIterationLoop(def: FractalDefinition, itersVar: string): string {
   // Cutting-plane formulas: init engine-provided accumulators before loopInit runs.
-  // Triggers when either primary or interlace secondary supports CP — see pairSupportsCP.
-  const cpInit = pairSupportsCP(def, interlace)
+  const cpInit = supportsCP(def)
     ? 'cp_dmin = -1e10; cp_scale = 1.0; cp_trap = 1e10;'
     : '';
 
@@ -255,15 +194,12 @@ function buildIterationLoop(def: FractalDefinition, itersVar: string, interlace?
   float iter = 0.0;
   ${cpInit}
   ${def.shader.loopInit || ''}
-  ${interlacePreLoop}
 
   for (int i = 0; i < 100; i++) {
     if (i >= ${itersVar}) break;
     float r2 = dot(z.xyz, z.xyz);
     if (r2 > 1e4) break;
-    ${interlace ? 'bool skipMainFormula = false;' : ''}
-    ${interlaceInLoop}
-    ${mainBody}
+    ${def.shader.loopBody}
     iter += 1.0;
   }`;
 }
@@ -292,11 +228,9 @@ export function buildMeshSDFShader(config: MeshShaderConfig): string {
   const def = config.definition;
   const deType = resolveDE(config);
   const deSamples = config.deSamples || 2;
-  const il = config.interlace;
-  const ilGLSL = il ? buildInterlaceGLSL(il) : null;
 
   const getDistBlock = buildGetDistBlock(def);
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uBoundsRange * uInvRes * 0.5', config.estimator, pairSupportsCP(def, il));
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uBoundsRange * uInvRes * 0.5', config.estimator, supportsCP(def));
 
   return `#version 300 es
 // GMT mesh-sdf ${Date.now()}
@@ -310,23 +244,21 @@ uniform vec3  uBoundsMin;
 uniform float uBoundsRange;
 uniform float uSurfaceThreshold;
 ${MESH_GLSL_UNIFORMS}
-${il ? buildInterlaceUniforms() : ''}
+${buildWeaveUniforms(def)}
 out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
 // --- Preamble (global variables / helpers) ---
-${pairSupportsCP(def, il) ? CP_PREAMBLE_GLOBALS : ''}
+${supportsCP(def) ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
-${ilGLSL?.preamble || ''}
 
 // --- Formula function ---
 ${def.shader.function}
-${ilGLSL?.func || ''}
 
 ${getDistBlock}
 float formulaDE(vec3 pos, float power, int iters) {
-${buildIterationLoop(def, 'iters', il)}
+${buildIterationLoop(def, 'iters')}
 
   float r = length(z.xyz);
   float safeDr = max(abs(dr), 1e-10);
@@ -402,8 +334,6 @@ void main() {
  */
 export function buildMeshEscapeShader(config: MeshShaderConfig): string {
   const def = config.definition;
-  const il = config.interlace;
-  const ilGLSL = il ? buildInterlaceGLSL(il) : null;
 
   return `#version 300 es
 precision highp float;
@@ -415,17 +345,15 @@ uniform vec2  uTileOffset;
 uniform vec3  uBoundsMin;
 uniform float uBoundsRange;
 ${MESH_GLSL_UNIFORMS}
-${il ? buildInterlaceUniforms() : ''}
+${buildWeaveUniforms(def)}
 out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
-${pairSupportsCP(def, il) ? CP_PREAMBLE_GLOBALS : ''}
+${supportsCP(def) ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
-${ilGLSL?.preamble || ''}
 
 ${def.shader.function}
-${ilGLSL?.func || ''}
 
 void main() {
   vec3 pos = vec3(
@@ -434,7 +362,7 @@ void main() {
     uZ * uBoundsRange + uBoundsMin.z
   );
 
-${buildIterationLoop(def, 'uIters', il)}
+${buildIterationLoop(def, 'uIters')}
 
   float r2 = dot(z.xyz, z.xyz);
   // 1.0 = interior (did not escape), 0.0 = exterior
@@ -450,10 +378,8 @@ ${buildIterationLoop(def, 'uIters', il)}
 export function buildMeshNewtonShader(config: MeshShaderConfig): string {
   const def = config.definition;
   const deType = resolveDE(config);
-  const il = config.interlace;
-  const ilGLSL = il ? buildInterlaceGLSL(il) : null;
   const getDistBlock = buildGetDistBlock(def);
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uVoxelSize * 0.5', config.estimator, pairSupportsCP(def, il));
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uVoxelSize * 0.5', config.estimator, supportsCP(def));
 
   return `#version 300 es
 precision highp float;
@@ -463,24 +389,22 @@ uniform int   uIters;
 uniform float uVoxelSize;
 uniform int   uNewtonSteps;
 ${MESH_GLSL_UNIFORMS}
-${il ? buildInterlaceUniforms() : ''}
+${buildWeaveUniforms(def)}
 
 layout(location = 0) out vec4 outPosition;
 layout(location = 1) out vec4 outNormal;
 
 ${MESH_GLSL_HELPERS}
 
-${pairSupportsCP(def, il) ? CP_PREAMBLE_GLOBALS : ''}
+${supportsCP(def) ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
-${ilGLSL?.preamble || ''}
 
 // --- Formula function ---
 ${def.shader.function}
-${ilGLSL?.func || ''}
 
 ${getDistBlock}
 float formulaDE(vec3 pos) {
-${buildIterationLoop(def, 'uIters', il)}
+${buildIterationLoop(def, 'uIters')}
 
   float r = length(z.xyz);
   float safeDr = max(abs(dr), 1e-10);
@@ -538,8 +462,6 @@ void main() {
  */
 export function buildMeshColorShader(config: MeshShaderConfig): string {
   const def = config.definition;
-  const il = config.interlace;
-  const ilGLSL = il ? buildInterlaceGLSL(il) : null;
 
   return `#version 300 es
 // GMT mesh-color ${Date.now()}
@@ -550,18 +472,16 @@ uniform int uIters;
 uniform int uWidth;
 uniform vec3 uJitterOffset;
 ${MESH_GLSL_UNIFORMS}
-${il ? buildInterlaceUniforms() : ''}
+${buildWeaveUniforms(def)}
 out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
-${pairSupportsCP(def, il) ? CP_PREAMBLE_GLOBALS : ''}
+${supportsCP(def) ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
-${ilGLSL?.preamble || ''}
 
 // --- Formula function ---
 ${def.shader.function}
-${ilGLSL?.func || ''}
 
 void main() {
   ivec2 coord = ivec2(gl_FragCoord.xy);
@@ -569,7 +489,7 @@ void main() {
   vec3 pos = pd.xyz + uJitterOffset;
   if (pd.w < 0.5) { fragColor = vec4(0.5, 0.5, 0.5, 1.0); return; }
 
-${buildIterationLoop(def, 'uIters', il)}
+${buildIterationLoop(def, 'uIters')}
 
   float t = log(max(1e-5, trap)) * -0.3;
   t = fract(t * 1.5 + 0.1);
@@ -593,13 +513,11 @@ ${buildIterationLoop(def, 'uIters', il)}
 export function buildMeshPreviewShader(config: MeshShaderConfig): string {
   const def = config.definition;
   const deType = resolveDE(config);
-  const il = config.interlace;
-  const ilGLSL = il ? buildInterlaceGLSL(il) : null;
   const getDistBlock = buildGetDistBlock(def);
   // IFS preview: threshold 0.0 places the zero-crossing at r=1. Using '0.001' would shift it by
   // 0.001*dr ≈ 8 units (for dr=8192), making the raymarcher see everything as interior.
   const previewThresh = deType === 'ifs' ? '0.0' : '0.001';
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, previewThresh, config.estimator, pairSupportsCP(def, il));
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, previewThresh, config.estimator, supportsCP(def));
 
   return `#version 300 es
 // GMT mesh-preview ${Date.now()}
@@ -618,21 +536,19 @@ uniform float uClipBounds;
 uniform vec3  uBoundsMin;
 uniform vec3  uBoundsMax;
 ${MESH_GLSL_UNIFORMS}
-${il ? buildInterlaceUniforms() : ''}
+${buildWeaveUniforms(def)}
 out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
-${pairSupportsCP(def, il) ? CP_PREAMBLE_GLOBALS : ''}
+${supportsCP(def) ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
-${ilGLSL?.preamble || ''}
 
 ${def.shader.function}
-${ilGLSL?.func || ''}
 
 ${getDistBlock}
 float formulaDE(vec3 pos, float power, int iters) {
-${buildIterationLoop(def, 'iters', il)}
+${buildIterationLoop(def, 'iters')}
 
   float r = length(z.xyz);
   float safeDr = max(abs(dr), 1e-10);
@@ -707,6 +623,19 @@ void main() {
 // Formula Uniform Names (for WebGL uniform location lookup)
 // ============================================================================
 
+// Weave uniform names (ADR-0090 banks + rhythm + the P4.4 enable gate) for
+// fused weave defs. Locations resolve to null on shaders that don't declare
+// them (buildWeaveUniforms only declares what the def references), and the
+// pipeline's guarded setters skip nulls — so listing the full vocabulary is
+// free.
+const WEAVE_SLOT_NAMES = ['ParamA', 'ParamB', 'ParamC', 'ParamD', 'ParamE', 'ParamF',
+  'Vec2A', 'Vec2B', 'Vec2C', 'Vec3A', 'Vec3B', 'Vec3C', 'Vec4A', 'Vec4B', 'Vec4C'] as const;
+export const MESH_WEAVE_UNIFORMS: string[] = [
+  ...Array.from({ length: 6 }, (_, k) => WEAVE_SLOT_NAMES.map((s) => `uWs${k}${s}`)).flat(),
+  'uWeaveEnabled',
+  ...Array.from({ length: 5 }, (_, j) => [`uWeaveInterval${j + 1}`, `uWeaveStartIter${j + 1}`, `uWeaveBeats${j + 1}`]).flat(),
+];
+
 /** All formula-related uniform names used across mesh export shaders */
 export const MESH_FORMULA_UNIFORMS = [
   'uParamA', 'uParamB', 'uParamC', 'uParamD', 'uParamE', 'uParamF',
@@ -714,12 +643,8 @@ export const MESH_FORMULA_UNIFORMS = [
   'uVec3A', 'uVec3B', 'uVec3C',
   'uVec4A', 'uVec4B', 'uVec4C',
   'uJulia', 'uJuliaMode', 'uEscapeThresh', 'uDeBailout', 'uDistanceMetric',
-  // Interlace uniforms
-  ...INTERLACE_UNIFORM_NAMES.scalars,
-  ...INTERLACE_UNIFORM_NAMES.vec2s,
-  ...INTERLACE_UNIFORM_NAMES.vec3s,
-  ...INTERLACE_UNIFORM_NAMES.vec4s,
-  'uInterlaceEnabled', 'uInterlaceInterval', 'uInterlaceStartIter',
+  // Weave uniforms (fused weave defs — banks + rhythm + enable)
+  ...MESH_WEAVE_UNIFORMS,
   // Quality / preview uniforms
   'uFudgeFactor', 'uDetail', 'uPixelThreshold', 'uSurfaceThreshold',
   // Bounds clipping

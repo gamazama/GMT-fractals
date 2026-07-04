@@ -1,9 +1,8 @@
 /**
  * Native-slot transpiler — rewrites a REGISTERED native formula so it can run as a
- * secondary weave slot inside another formula's iteration loop. This is the engine
- * home of the machinery the interlace feature pioneered; interlace is now a thin
- * front-end over it (P2 of the weave unification, ADR-0089), and the weaver's
- * native slots (P4) consume the same rewriter with their own namespaces.
+ * weave slot. Engine home of the machinery the (retired, ADR-0089 P4.4) interlace
+ * feature pioneered; today's one consumer is the weaver's native dispatcher slots
+ * (nativeResolver.ts), which bind one rewriter per slot namespace.
  *
  * What rewriting involves (per slot namespace):
  *  - uniform remap    — the formula's generic slots (uParamA.., uVec2A.., …) become
@@ -21,16 +20,14 @@
  *    gmt_rot* state in loopInit; the loop GLSL snapshots both parties' states and
  *    swaps around the slot body.
  *
- * Two consumption models share this rewriter:
- *  - INTERLACE (P2): the loop body is spliced INLINE into the iteration loop, so
- *    native loopInit locals at map()-function scope are directly visible;
- *  - the WEAVER's native dispatcher slots (P4): nativeResolver.ts binds one
- *    rewriter per slot (namespace `ws<N>_`, uniforms remapped to allocated lanes
- *    via `uniformMap`), hoists loopInit state declarations to globals, and hosts
- *    the rotation swap in the dispatcher branch (preCall/postCall).
+ * Consumption model (the WEAVER's native dispatcher slots, P4): nativeResolver.ts
+ * binds one rewriter per slot (namespace `ws<N>_`, uniforms remapped via
+ * `uniformMap` to bank uniforms / literals), hoists loopInit state declarations
+ * to globals, splices the lead slot's getDist (P4.4), and hosts the rotation
+ * swap in the dispatcher branch (preCall/postCall). The old INTERLACE inline-
+ * splice model retired with the feature.
  */
 import { SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS, slotToUniform } from '../../utils/uniformSlots';
-import { emitModuloScheduleGLSL } from './schedule';
 
 /** Everything namespace-specific about one native slot. */
 export interface NativeSlotNamespace {
@@ -38,7 +35,7 @@ export interface NativeSlotNamespace {
     uniformPrefix: string;
     /** Prefix for preamble helpers + mutable globals (e.g. 'interlace_'). */
     symbolPrefix: string;
-    /** The rewritten formula function's name (e.g. 'formula_Interlace'). */
+    /** The rewritten formula function's name (e.g. '<weaveId>_slot0'). */
     functionName: string;
     /** The slot's own c variable (c.w isolation; e.g. 'cInterlace'). */
     cVarName: string;
@@ -146,10 +143,6 @@ export interface NativeSlotRewriter {
     rewriteFormulaFunction(glsl: string, formulaId: string, preambleVars?: string[], preambleFunctions?: string[]): string;
     rewriteLoopBody(loopBody: string, formulaId: string, preambleVars?: string[]): string;
     rewriteLoopInit(loopInit: string, formulaId: string, preambleVars?: string[], preambleFunctions?: string[]): string;
-    /** The namespace's runtime modulo phase function (the weave core's shared
-     *  schedule impl — live + keyframable, no recompile). Emit at global scope. */
-    scheduleGLSL(): { glsl: string; fnName: string };
-    buildSlotLoopGLSL(rewrittenBody: string, slotInit: string, needsRotSwap: boolean): { preLoop: string; inLoop: string };
 }
 
 /** Bind the rewriter machinery to one slot namespace. */
@@ -188,14 +181,6 @@ export function createNativeSlotRewriter(ns: NativeSlotNamespace): NativeSlotRew
     }
 
     return {
-        scheduleGLSL() {
-            return emitModuloScheduleGLSL({
-                enabled: `u${ns.uniformPrefix}Enabled`,
-                interval: `u${ns.uniformPrefix}Interval`,
-                startIter: `u${ns.uniformPrefix}StartIter`,
-            }, ns.uniformPrefix);
-        },
-
         /**
          * Rewrite a formula's preamble for slot use:
          * - renames mutable globals listed in `preambleVars` to the namespace prefix
@@ -348,77 +333,5 @@ export function createNativeSlotRewriter(ns: NativeSlotNamespace): NativeSlotRew
             return result;
         },
 
-        /**
-         * Build the pre-loop and in-loop GLSL for the slot injection.
-         *
-         * - `rewrittenBody`: the slot formula's loopBody after rewriting
-         * - `slotInit`: the slot formula's loopInit after rewriting (empty string if none)
-         * - `needsRotSwap`: true if the slot formula writes gmt_rotAxis/rotCos/rotSin (usesSharedRotation)
-         *
-         * Returns `preLoop` (emitted before the iteration loop) and `inLoop` (emitted inside the loop,
-         * before the primary formula body).
-         */
-        buildSlotLoopGLSL(rewrittenBody, slotInit, needsRotSwap) {
-            const P = ns.rotSwapPrefix;
-            // Always emit a slot-specific c. The primary's c is built at the top of
-            // map() using uParamA for c.w; 4D formulas (Tetrabrot, Quaternion, Mandelbar3D,
-            // Bristorbrot, MakinBrot, BoxBulb, MandelMap, MandelBolic) put their Julia /
-            // slice parameter in c.w, so reusing the primary's c silently feeds them the
-            // wrong scalar. The slot c fixes c.w; c.xyz (uJulia / position) is still
-            // shared with the primary on purpose (the UI exposes a single julia c).
-            let preLoop = `
-    vec4 ${ns.cVarName} = vec4(c.xyz, u${ns.uniformPrefix}ParamA);`;
-            if (slotInit) {
-                // Emit slotInit at function scope (no enclosing if-block). Any
-                // variables it declares need to be visible inside the iteration loop
-                // where the rewritten formula body references them. Running uncondi-
-                // tionally is safe: the declarations are cheap, and the rot-swap
-                // bookkeeping below still captures the post-init state only when
-                // the slot is enabled at runtime.
-                preLoop += `
-    vec3 ${P}savedAxis = gmt_rotAxis;
-    float ${P}savedCos = gmt_rotCos;
-    float ${P}savedSin = gmt_rotSin;
-    ${slotInit}
-    vec3 ${P}interlaceAxis = gmt_rotAxis;
-    float ${P}interlaceCos = gmt_rotCos;
-    float ${P}interlaceSin = gmt_rotSin;
-    gmt_rotAxis = ${P}savedAxis;
-    gmt_rotCos = ${P}savedCos;
-    gmt_rotSin = ${P}savedSin;`;
-            }
-
-            const rotSwapIn = needsRotSwap ? `
-            gmt_rotAxis = ${P}interlaceAxis;
-            gmt_rotCos = ${P}interlaceCos;
-            gmt_rotSin = ${P}interlaceSin;` : '';
-            const rotSwapOut = needsRotSwap ? `
-            gmt_rotAxis = ${P}savedAxis;
-            gmt_rotCos = ${P}savedCos;
-            gmt_rotSin = ${P}savedSin;` : '';
-
-            // Note: do NOT declare skipMainFormula here.
-            // In the main renderer, shaders/chunks/de.ts detects the reference and declares it once
-            // before the entire hybridInLoop block. In SDFShaderBuilder (mesh export), the caller
-            // declares it separately. Declaring it here would cause a redefinition when geometry's
-            // hybridInLoop also uses skipMainFormula.
-            //
-            // The schedule decision lives in the namespace's phase function (the weave
-            // core's modulo scheduler — see scheduleGLSL above); the caller must emit
-            // that function at global scope. Runtime-uniform driven: live + keyframable.
-            //
-            // !skipMainFormula: a weave block only claims an iteration no earlier block
-            // claimed — with Hybrid Box also interleaving, at most ONE slot body runs
-            // per iteration (injection order defines precedence).
-            const inLoop = `
-    if (!skipMainFormula && ${ns.uniformPrefix}_weaveSlot(i) == 1) {
-        ${rotSwapIn}
-        ${rewrittenBody}
-        ${rotSwapOut}
-        skipMainFormula = true;
-    }`;
-
-            return { preLoop, inLoop };
-        },
     };
 }

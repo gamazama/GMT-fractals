@@ -14,7 +14,6 @@ import {
   buildMeshNewtonShader,
   buildMeshColorShader,
 } from '../../engine-gmt/engine/SDFShaderBuilder';
-import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 
 import { ShaderFactory } from '../../engine-gmt/engine/ShaderFactory';
 import type { ShaderConfig } from '../../engine-gmt/engine/ShaderFactory';
@@ -28,29 +27,18 @@ import type { Vec3VDBTree } from '../algorithms/vdb-writer';
 // Mesh Shader Config Builder
 // ============================================================================
 
-/** Build a minimal ShaderConfig for mesh SDF generation from a FractalDefinition + optional interlace.
- *  Only formula ID and interlace compile-time flags matter — all param values are runtime uniforms. */
+/** Build a minimal ShaderConfig for mesh SDF generation from a FractalDefinition.
+ *  Only the formula ID matters for codegen — param values are runtime uniforms.
+ *  A fused WEAVE def (migrated legacy interlace / editor-built) is self-contained;
+ *  its uWs / uWeave uniforms are declared by the weave feature's Mesh inject. */
 function buildMeshShaderConfig(
   definition: FractalDefinition,
-  interlace?: MeshInterlaceConfig,
   quality?: { estimator?: number; distanceMetric?: number }
 ): ShaderConfig {
   return {
     formula: definition.id,
     pipelineRevision: 0,
     quality: quality ? { estimator: quality.estimator ?? 0, distanceMetric: quality.distanceMetric ?? 0 } : undefined,
-    interlace: interlace ? {
-      interlaceCompiled: true,           // CRITICAL: must be true or Interlace.inject() silently skips
-      interlaceFormula: interlace.definition.id,
-      interlaceEnabled: interlace.enabled,
-      interlaceInterval: interlace.interval,
-      interlaceStartIter: interlace.startIter,
-      // Secondary formula params: all runtime uniforms — default values unused for shader generation
-      interlaceParamA: 0, interlaceParamB: 0, interlaceParamC: 0,
-      interlaceParamD: 0, interlaceParamE: 0, interlaceParamF: 0,
-      interlaceVec2A: { x: 0, y: 0 }, interlaceVec2B: { x: 0, y: 0 }, interlaceVec2C: { x: 0, y: 0 },
-      interlaceVec3A: { x: 0, y: 0, z: 0 }, interlaceVec3B: { x: 0, y: 0, z: 0 }, interlaceVec3C: { x: 0, y: 0, z: 0 },
-    } : undefined,
   };
 }
 
@@ -152,54 +140,29 @@ function setFormulaUniforms(
   if (loc.uDistanceMetric) gl.uniform1f(loc.uDistanceMetric, p.distanceMetric ?? 0);
 }
 
-/** Set interlace uniforms on a GL program */
-function setInterlaceUniforms(
+/** Set weave uniforms (fused weave defs — ADR-0090 banks + rhythm + the P4.4
+ *  enable gate) from a `features.weave`-shaped state bag. Keys: `ws<k><Slot>`
+ *  (bank params — float or {x,y[,z[,w]]} by slot name), `weaveEnabled`,
+ *  `weaveInterval<k>` / `weaveStartIter<k>` / `weaveBeats<k>`. Locations are
+ *  null on shaders whose def doesn't reference a uniform — skipped. */
+function setWeaveUniforms(
   gl: WebGL2RenderingContext,
   loc: Record<string, WebGLUniformLocation | null>,
-  interlace: MeshInterlaceConfig | undefined
+  weave: Record<string, any> | undefined
 ): void {
-  if (!interlace) {
-    // Ensure interlace is disabled
-    if (loc.uInterlaceEnabled) gl.uniform1f(loc.uInterlaceEnabled, 0.0);
-    return;
+  // Master gate defaults ON when the shader carries it but the state omits it.
+  if (loc.uWeaveEnabled) gl.uniform1f(loc.uWeaveEnabled, weave?.weaveEnabled === false ? 0.0 : 1.0);
+  if (!weave) return;
+  const cap = (k: string) => k.charAt(0).toUpperCase() + k.slice(1);
+  for (const [key, v] of Object.entries(weave)) {
+    if (key === 'weaveEnabled') continue;
+    const l = loc['u' + cap(key)];
+    if (!l) continue;
+    if (/^ws\d+Vec2/.test(key)) gl.uniform2f(l, v?.x ?? 0, v?.y ?? 0);
+    else if (/^ws\d+Vec3/.test(key)) gl.uniform3f(l, v?.x ?? 0, v?.y ?? 0, v?.z ?? 0);
+    else if (/^ws\d+Vec4/.test(key)) gl.uniform4f(l, v?.x ?? 0, v?.y ?? 0, v?.z ?? 0, v?.w ?? 0);
+    else gl.uniform1f(l, typeof v === 'number' ? v : v ? 1.0 : 0.0);
   }
-
-  if (loc.uInterlaceEnabled) gl.uniform1f(loc.uInterlaceEnabled, interlace.enabled ? 1.0 : 0.0);
-  if (loc.uInterlaceInterval) gl.uniform1f(loc.uInterlaceInterval, interlace.interval ?? 2);
-  if (loc.uInterlaceStartIter) gl.uniform1f(loc.uInterlaceStartIter, interlace.startIter ?? 0);
-
-  const p = interlace.params || {};
-
-  // Helper to read x/y/z from either {x,y,z} object or [x,y,z] array
-  const v2 = (v: any): [number, number] =>
-    v ? [v.x ?? v[0] ?? 0, v.y ?? v[1] ?? 0] : [0, 0];
-  const v3 = (v: any): [number, number, number] =>
-    v ? [v.x ?? v[0] ?? 0, v.y ?? v[1] ?? 0, v.z ?? v[2] ?? 0] : [0, 0, 0];
-  const v4 = (v: any): [number, number, number, number] =>
-    v ? [v.x ?? v[0] ?? 0, v.y ?? v[1] ?? 0, v.z ?? v[2] ?? 0, v.w ?? v[3] ?? 0] : [0, 0, 0, 0];
-
-  // Float params A-F
-  if (loc.uInterlaceParamA) gl.uniform1f(loc.uInterlaceParamA, p.paramA ?? 0);
-  if (loc.uInterlaceParamB) gl.uniform1f(loc.uInterlaceParamB, p.paramB ?? 0);
-  if (loc.uInterlaceParamC) gl.uniform1f(loc.uInterlaceParamC, p.paramC ?? 0);
-  if (loc.uInterlaceParamD) gl.uniform1f(loc.uInterlaceParamD, p.paramD ?? 0);
-  if (loc.uInterlaceParamE) gl.uniform1f(loc.uInterlaceParamE, p.paramE ?? 0);
-  if (loc.uInterlaceParamF) gl.uniform1f(loc.uInterlaceParamF, p.paramF ?? 0);
-
-  // Vec2 A-C
-  const v2a = v2(p.vec2A); if (loc.uInterlaceVec2A) gl.uniform2f(loc.uInterlaceVec2A, v2a[0], v2a[1]);
-  const v2b = v2(p.vec2B); if (loc.uInterlaceVec2B) gl.uniform2f(loc.uInterlaceVec2B, v2b[0], v2b[1]);
-  const v2c = v2(p.vec2C); if (loc.uInterlaceVec2C) gl.uniform2f(loc.uInterlaceVec2C, v2c[0], v2c[1]);
-
-  // Vec3 A-C
-  const v3a = v3(p.vec3A); if (loc.uInterlaceVec3A) gl.uniform3f(loc.uInterlaceVec3A, v3a[0], v3a[1], v3a[2]);
-  const v3b = v3(p.vec3B); if (loc.uInterlaceVec3B) gl.uniform3f(loc.uInterlaceVec3B, v3b[0], v3b[1], v3b[2]);
-  const v3c = v3(p.vec3C); if (loc.uInterlaceVec3C) gl.uniform3f(loc.uInterlaceVec3C, v3c[0], v3c[1], v3c[2]);
-
-  // Vec4 A-C
-  const v4a = v4(p.vec4A); if (loc.uInterlaceVec4A) gl.uniform4f(loc.uInterlaceVec4A, v4a[0], v4a[1], v4a[2], v4a[3]);
-  const v4b = v4(p.vec4B); if (loc.uInterlaceVec4B) gl.uniform4f(loc.uInterlaceVec4B, v4b[0], v4b[1], v4b[2], v4b[3]);
-  const v4c = v4(p.vec4C); if (loc.uInterlaceVec4C) gl.uniform4f(loc.uInterlaceVec4C, v4c[0], v4c[1], v4c[2], v4c[3]);
 }
 
 // ============================================================================
@@ -287,17 +250,16 @@ export function setupSDFPipeline(
   config: FractalDefinition,
   deSamples: number,
   log: (msg: string, type?: string) => void,
-  interlace?: MeshInterlaceConfig,
+  weave?: Record<string, any>,
   quality?: { estimator?: number; distanceMetric?: number }
 ): SDFPipeline {
   // Pre-register formulas in the shared registry so CoreMath.inject() can look them up.
   // GMF-loaded definitions may not be in the registry from startup; this ensures they are.
   registry.register(config);
-  if (interlace) registry.register(interlace.definition);
 
   // Generate the SDF library via the unified DDFS injection pipeline (ShaderFactory + ShaderBuilder).
   // The library contains uniforms + helpers + formula functions + map/mapDist + formulaDE(pos).
-  const sdfLibrary = ShaderFactory.generateMeshSDFLibrary(buildMeshShaderConfig(config, interlace, quality));
+  const sdfLibrary = ShaderFactory.generateMeshSDFLibrary(buildMeshShaderConfig(config, quality));
 
   // Wrap the library with the SDF pass preamble (#version, pass uniforms) and void main.
   // formulaDE(pos) signature — no power/iters args; mapDist() reads uIters via #define uIterations uIters.
@@ -412,7 +374,7 @@ export function bindPipelineUniforms(
   gridMin: [number, number, number],
   boundsRange: number,
   formulaParams: Record<string, any>,
-  interlace?: MeshInterlaceConfig,
+  weave?: Record<string, any>,
   surfaceThreshold?: number
 ): void {
   gl.useProgram(pipeline.prog);
@@ -423,7 +385,7 @@ export function bindPipelineUniforms(
   gl.uniform1f(pipeline.loc.uBoundsRange, boundsRange);
   if (pipeline.loc.uSurfaceThreshold) gl.uniform1f(pipeline.loc.uSurfaceThreshold, surfaceThreshold ?? 0.0);
   setFormulaUniforms(gl, pipeline.loc, formulaParams);
-  setInterlaceUniforms(gl, pipeline.loc, interlace);
+  setWeaveUniforms(gl, pipeline.loc, weave);
   gl.bindFramebuffer(gl.FRAMEBUFFER, pipeline.fbo);
 }
 
@@ -448,7 +410,7 @@ export async function coarsePrePass(
   gridMax: [number, number, number],
   voxelSize: number,
   callbacks: GPUPipelineCallbacks,
-  interlace?: MeshInterlaceConfig,
+  weave?: Record<string, any>,
   quality?: { estimator?: number; distanceMetric?: number },
   surfaceThreshold?: number,
 ): Promise<CoarsePrePassResult> {
@@ -464,8 +426,8 @@ export async function coarsePrePass(
     setStatus('Coarse pre-pass (' + coarseN + '\u00B3)...');
     await tick();
 
-    const coarsePipeline = setupSDFPipeline(gl, coarseN, config, 1, log, interlace, quality);
-    bindPipelineUniforms(gl, coarsePipeline, coarseN, power, iters, gridMin, boundsRange, formulaParams, interlace, surfaceThreshold);
+    const coarsePipeline = setupSDFPipeline(gl, coarseN, config, 1, log, weave, quality);
+    bindPipelineUniforms(gl, coarsePipeline, coarseN, power, iters, gridMin, boundsRange, formulaParams, weave, surfaceThreshold);
     gl.viewport(0, 0, coarseN, coarseN);
 
     const coarsePixF = new Float32Array(coarseN * coarseN * 4);
@@ -630,7 +592,7 @@ export async function sampleDenseGrid(
   zSliceMin: number | null,
   zSliceMax: number | null,
   callbacks: GPUPipelineCallbacks,
-  interlace?: MeshInterlaceConfig,
+  weave?: Record<string, any>,
   surfaceThreshold?: number,
 ): Promise<Float32Array> {
   const { setProgress, setPhase, setStatus, tick, log, onSlicePreview } = callbacks;
@@ -639,7 +601,7 @@ export async function sampleDenseGrid(
   if (!zSubSlices || zSubSlices < 1) zSubSlices = 1;
   if (zSliceMin == null) zSliceMin = 0;
   if (zSliceMax == null) zSliceMax = N - 1;
-  bindPipelineUniforms(gl, pipeline, N, power, iters, gridMin, boundsRange, formulaParams, interlace, surfaceThreshold);
+  bindPipelineUniforms(gl, pipeline, N, power, iters, gridMin, boundsRange, formulaParams, weave, surfaceThreshold);
   gl.viewport(0, 0, tileSize, tileSize);
 
   const pixF = new Float32Array(tileSize * tileSize * 4);
@@ -745,7 +707,7 @@ export async function sampleSparseGrid(
   progressBase: number,
   progressRange: number,
   callbacks: GPUPipelineCallbacks,
-  interlace?: MeshInterlaceConfig,
+  weave?: Record<string, any>,
   surfaceThreshold?: number,
 ): Promise<SparseSDFGrid> {
   const { setProgress, setPhase, setStatus, tick, onSlicePreview } = callbacks;
@@ -753,7 +715,7 @@ export async function sampleSparseGrid(
   const bs = sparseGrid.blockSize;
   const tileSize = Math.min(N, 2048);
   const boundsRange = gridMax[0] - gridMin[0];
-  bindPipelineUniforms(gl, pipeline, N, power, iters, gridMin, boundsRange, formulaParams, interlace, surfaceThreshold);
+  bindPipelineUniforms(gl, pipeline, N, power, iters, gridMin, boundsRange, formulaParams, weave, surfaceThreshold);
   gl.viewport(0, 0, tileSize, tileSize);
 
   // Collect unique Z slices that have allocated blocks, with XY bounding box
@@ -877,7 +839,7 @@ export async function generateVDB(
   deSamples: number,
   zSubSlices: number,
   callbacks: GPUPipelineCallbacks,
-  interlace?: MeshInterlaceConfig,
+  weave?: Record<string, any>,
   quality?: { estimator?: number; distanceMetric?: number },
   surfaceThreshold?: number,
   enableColor?: boolean,
@@ -890,14 +852,14 @@ export async function generateVDB(
   const tileSize = Math.min(N, 2048);
   if (!zSubSlices || zSubSlices < 1) zSubSlices = 1;
 
-  const zRange = await coarsePrePass(gl, config, formulaParams, N, power, iters, gridMin, gridMax, voxelSize, callbacks, interlace, quality, surfaceThreshold);
+  const zRange = await coarsePrePass(gl, config, formulaParams, N, power, iters, gridMin, gridMax, voxelSize, callbacks, weave, quality, surfaceThreshold);
   const { zSliceMin, zSliceMax } = zRange;
 
   // ================================================================
   // Fine pass: sample SDF slice by slice with optional Z sub-slicing
   // ================================================================
-  const pipeline = setupSDFPipeline(gl, tileSize, config, deSamples || 1, log, interlace, quality);
-  bindPipelineUniforms(gl, pipeline, N, power, iters, gridMin, boundsRange, formulaParams, interlace, surfaceThreshold);
+  const pipeline = setupSDFPipeline(gl, tileSize, config, deSamples || 1, log, weave, quality);
+  bindPipelineUniforms(gl, pipeline, N, power, iters, gridMin, boundsRange, formulaParams, weave, surfaceThreshold);
 
   const pixF = new Float32Array(tileSize * tileSize * 4);
   const tree = createTree();
@@ -1026,7 +988,7 @@ export async function generateVDB(
       const maxBatchVoxels = maxTexDim * maxTexDim;
 
       // Compile color shader once, reuse across batches
-      const colFrag = buildMeshColorShader({ definition: config, deType: 'auto', interlace });
+      const colFrag = buildMeshColorShader({ definition: config, deType: 'auto' });
       const colProg = createProgram(gl, MESH_SDF_VERT, colFrag, log);
       const colLoc = locateFormulaUniforms(gl, colProg);
       const colVao = gl.createVertexArray();
@@ -1135,7 +1097,7 @@ export async function generateVDB(
         gl.uniform1i(uWidth, texW);
         gl.uniform3f(uJitterOffset!, 0, 0, 0);
         setFormulaUniforms(gl, colLoc, formulaParams);
-        setInterlaceUniforms(gl, colLoc, interlace);
+        setWeaveUniforms(gl, colLoc, weave);
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -1275,7 +1237,7 @@ export async function sampleEscapeTest(
   gridMax: [number, number, number],
   callbacks: GPUPipelineCallbacks,
   onProgress?: (pct: number) => void,
-  interlace?: MeshInterlaceConfig
+  weave?: Record<string, any>
 ): Promise<EscapeTestResult> {
   const { log, tick } = callbacks;
   const N = sparseGrid.N;
@@ -1286,7 +1248,7 @@ export async function sampleEscapeTest(
   const bytesPerBlock = (sparseGrid.blockCellCount + 7) >> 3;
 
   // Build & compile escape shader
-  const escapeFrag = buildMeshEscapeShader({ definition: config, deType: 'auto', interlace });
+  const escapeFrag = buildMeshEscapeShader({ definition: config, deType: 'auto' });
   const escapeProg = createProgram(gl, MESH_SDF_VERT, escapeFrag, log);
   gl.useProgram(escapeProg);
 
@@ -1312,7 +1274,7 @@ export async function sampleEscapeTest(
   gl.uniform3f(loc.uBoundsMin, gridMin[0], gridMin[1], gridMin[2]);
   gl.uniform1f(loc.uBoundsRange, boundsRange);
   setFormulaUniforms(gl, loc, formulaParams);
-  setInterlaceUniforms(gl, loc, interlace);
+  setWeaveUniforms(gl, loc, weave);
   gl.bindVertexArray(gl.createVertexArray());
 
   // Collect Z slices from allocated blocks
@@ -1436,7 +1398,7 @@ export function gpuNewtonProject(
   voxelSize: number,
   newtonSteps: number,
   log: (msg: string, type?: string) => void,
-  interlace?: MeshInterlaceConfig
+  weave?: Record<string, any>
 ): DCMeshResult {
   if (!newtonSteps) newtonSteps = 6;
   const vertexCount = mesh.vertexCount;
@@ -1478,7 +1440,7 @@ export function gpuNewtonProject(
   gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
 
   // Compile Newton shader
-  const newtonFrag = buildMeshNewtonShader({ definition: config, deType: 'auto', interlace });
+  const newtonFrag = buildMeshNewtonShader({ definition: config, deType: 'auto' });
   const newtonProg = createProgram(gl, MESH_SDF_VERT, newtonFrag, log);
   gl.useProgram(newtonProg);
   gl.viewport(0, 0, texW, texH);
@@ -1498,7 +1460,7 @@ export function gpuNewtonProject(
   // Set formula uniforms
   const formulaLoc = locateFormulaUniforms(gl, newtonProg);
   setFormulaUniforms(gl, formulaLoc, formulaParams);
-  setInterlaceUniforms(gl, formulaLoc, interlace);
+  setWeaveUniforms(gl, formulaLoc, weave);
 
   // Render
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -1555,7 +1517,7 @@ export async function colorizeVerticesGPU(
   colorSamples: number,
   jitterRadius: number,
   callbacks: GPUPipelineCallbacks,
-  interlace?: MeshInterlaceConfig
+  weave?: Record<string, any>
 ): Promise<Uint8Array> {
   const { log, setProgress, setPhase, setStatus, tick } = callbacks;
   if (!colorSamples || colorSamples < 1) colorSamples = 1;
@@ -1575,7 +1537,7 @@ export async function colorizeVerticesGPU(
     posData[i * 4 + 3] = 1.0;
   }
 
-  const colFrag = buildMeshColorShader({ definition: config, deType: 'auto', interlace });
+  const colFrag = buildMeshColorShader({ definition: config, deType: 'auto' });
   const colProg = createProgram(gl, MESH_SDF_VERT, colFrag, log);
   gl.useProgram(colProg);
 
@@ -1609,7 +1571,7 @@ export async function colorizeVerticesGPU(
   gl.uniform1i(gl.getUniformLocation(colProg, 'uIters'), iters);
   gl.uniform1i(gl.getUniformLocation(colProg, 'uWidth'), colTexW);
   setFormulaUniforms(gl, colLoc, formulaParams);
-  setInterlaceUniforms(gl, colLoc, interlace);
+  setWeaveUniforms(gl, colLoc, weave);
 
   if (colorSamples <= 1) {
     // Single pass -- no jitter, no blending
@@ -1692,7 +1654,7 @@ export async function autoFitBounds(
   formulaParams: Record<string, any>,
   iters: number,
   power: number,
-  interlace?: MeshInterlaceConfig,
+  weave?: Record<string, any>,
   quality?: { estimator?: number; distanceMetric?: number },
   surfaceThreshold?: number,
 ): Promise<{ center: [number, number, number]; size: [number, number, number] } | null> {
@@ -1705,8 +1667,8 @@ export async function autoFitBounds(
   const thresh = surfaceThreshold ?? 0.0;
 
   try {
-    const pipeline = setupSDFPipeline(gl, fitN, config, 1, () => {}, interlace, quality);
-    bindPipelineUniforms(gl, pipeline, fitN, power, iters, searchMin, boundsRange, formulaParams, interlace, thresh);
+    const pipeline = setupSDFPipeline(gl, fitN, config, 1, () => {}, weave, quality);
+    bindPipelineUniforms(gl, pipeline, fitN, power, iters, searchMin, boundsRange, formulaParams, weave, thresh);
     gl.viewport(0, 0, fitN, fitN);
 
     const pixF = new Float32Array(fitN * fitN * 4);

@@ -133,4 +133,20 @@ export const WeaveFeature: FeatureDefinition = {
         weave_rhythm: { label: 'Weave Rhythm' },
         weave_banks: { label: 'Weave Slot Banks' },
     },
+
+    // Mesh variant only: MESH_GLSL_UNIFORMS covers just the primary coreMath
+    // params, so a fused WEAVE def's uWs*/uWeave* references would be
+    // undeclared in the mesh SDF library. Declare the full bank + rhythm +
+    // enable vocabulary there (unused ones are inactive — A3). The main
+    // variants get these from the DDFS UNIFORMS chunk; declaring here too
+    // would be a GLSL redefinition error, hence the gate. (The retired
+    // interlace feature used this exact pattern.)
+    inject: (builder, _config, variant) => {
+        if (variant !== 'Mesh') return;
+        for (const cfg of Object.values(params)) {
+            if (!cfg.uniform) continue;
+            const t = cfg.type === 'vec2' ? 'vec2' : cfg.type === 'vec3' ? 'vec3' : cfg.type === 'vec4' ? 'vec4' : 'float';
+            builder.addUniform(cfg.uniform, t);
+        }
+    },
 };
