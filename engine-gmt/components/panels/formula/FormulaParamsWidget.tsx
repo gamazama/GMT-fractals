@@ -111,12 +111,21 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             // vec4A..C — the uniformSlots vocabulary). A vec3 param whose id is a vec4
             // base is the vec4-held-vec3 case (MB3D vec3 overflow, Workshop vec4.xyz
             // mapping): it renders as a 3-axis control and slotWriteValue pins .w to 0.
+            //
+            // A param may declare `feature: 'weave'` (ADR-0090) — a NATIVE formula's
+            // per-slot BANK id (`ws<k>ParamA`). Then reads/writes/trackId route to the
+            // `weave` feature (store.weave / setWeave / weave.<id>) instead of coreMath;
+            // the id is already a real vec so slotWriteValue is a no-op (no vec4-held-vec3).
             return def.parameters.map((p: any) => {
                 if (!p) return null;
-                const val = (coreMath as any)[p.id];
-                if (val === undefined) return null; // id outside the slot vocabulary — nothing to bind
-                const set = (v: any) => actions.setCoreMath({ [p.id]: slotWriteValue(p.id, p.type, v) });
-                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: p.type, mode: p.mode, linkable: p.linkable, scale: p.scale, options: p.options, group: p.group };
+                const feat: string | undefined = p.feature;
+                const sliceState = feat ? (state as any)[feat] : coreMath;
+                const val = sliceState?.[p.id];
+                if (val === undefined) return null; // id outside the feature's state — nothing to bind
+                const setter = feat ? (actions as any)[`set${feat.charAt(0).toUpperCase()}${feat.slice(1)}`] : actions.setCoreMath;
+                const set = (v: any) => setter({ [p.id]: slotWriteValue(p.id, p.type, v) });
+                const trackId = `${feat ?? 'coreMath'}.${p.id}`;
+                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId, type: p.type, mode: p.mode, linkable: p.linkable, scale: p.scale, options: p.options, group: p.group };
             });
         }
 

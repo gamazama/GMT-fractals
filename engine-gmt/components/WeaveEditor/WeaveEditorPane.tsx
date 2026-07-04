@@ -48,7 +48,6 @@ import type { CatalogEntry } from '../../utils/mb3d/mb3dCatalog';
 import { loadUserWeave } from '../../utils/mb3d/loadMB3DScene';
 import { transpileSlot, getSlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
 import type { SlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
-import { resolveNativeSlot } from '../../engine/weave/nativeResolver';
 import { getNativeSlotCatalog, nativeSlotShell, isNativeSlot } from '../../engine/weave/nativeSlotCatalog';
 import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
@@ -359,44 +358,33 @@ export function WeaveEditorPane() {
     };
 
     // Live lane-budget meter: a pure dry-run through the same allocator the build
-    // uses (multi-slot path), recomputed when the draft changes. Single-slot builds
-    // use fixed uParam* lanes instead of the allocator, so report the param count.
+    // uses, recomputed when the draft changes. NATIVE rows use their own per-slot
+    // BANKS (ADR-0090) — always live, never consuming the shared coreMath pool — so
+    // the meter reports ONLY the MB3D dense pool (24 scalar lanes / 6 vec3 units).
+    // A native-only weave has no pool to meter (every param is live).
     const meter = useMemo(() => {
         const active = draft.rows.filter((r) => r.slot.iterCount > 0);
         if (active.length === 0) return null;
-        // Native rows dry-run through the SAME LaneAllocator via the native
-        // resolver (walking def.parameters); MB3D rows through the transpiler.
-        const nativeParamCount = (r: SlotRow, k: number, alloc?: LaneAllocator): number | false => {
-            const def = registry.get(String(r.ref)) as FractalDefinition | undefined;
-            if (!def) return false;
-            const res = resolveNativeSlot(def, k, `probe${k}`, alloc ? { alloc } : { parametric: true });
-            if (!res.ok || res.paramOk === false) return false;
-            return res.params.length;
-        };
+        const mb3d = active.filter((r) => !isNativeSlot(r.slot));
+        const natives = active.length - mb3d.length;
         try {
-            if (active.length === 1) {
-                const r = active[0];
-                if (isNativeSlot(r.slot)) {
-                    const n = nativeParamCount(r, 0);
-                    return { single: n === false ? 0 : n };
-                }
-                const t = transpileSlot(r.slot, 0, 'probe0', { parametric: true, bake: r.bake });
-                return { single: t.params?.length ?? 0 };
+            // No MB3D slots: every active row is a native on its own bank → all live.
+            if (mb3d.length === 0) return { allNative: natives };
+            // A single MB3D slot owns the whole coreMath pool at fixed uParam* lanes.
+            if (mb3d.length === 1) {
+                const t = transpileSlot(mb3d[0].slot, 0, 'probe0', { parametric: true, bake: mb3d[0].bake });
+                return { single: t.params?.length ?? 0, natives };
             }
-            if (active.some((r) => r.slot.formulaIndex === 2)) {
-                return { note: '4D (Quaternion) hybrids bake parameters' };
+            if (mb3d.some((r) => r.slot.formulaIndex === 2)) {
+                return { note: '4D (Quaternion) hybrids bake parameters', natives };
             }
             const alloc = new LaneAllocator();
             let ok = true;
-            active.forEach((r, k) => {
+            mb3d.forEach((r, k) => {
                 alloc.startSlot();
-                if (isNativeSlot(r.slot)) {
-                    if (nativeParamCount(r, k, alloc) === false) ok = false;
-                } else if (transpileSlot(r.slot, k, `probe${k}`, { alloc, bake: r.bake }).paramOk === false) {
-                    ok = false;
-                }
+                if (transpileSlot(r.slot, k, `probe${k}`, { alloc, bake: r.bake }).paramOk === false) ok = false;
             });
-            return { scalars: alloc.scalarsUsed, vec3s: alloc.vec3sUsed, fits: ok && alloc.fits() };
+            return { scalars: alloc.scalarsUsed, vec3s: alloc.vec3sUsed, fits: ok && alloc.fits(), natives };
         } catch {
             return null;
         }
@@ -673,9 +661,9 @@ export function WeaveEditorPane() {
                     {expandedKey === r.key && isNativeSlot(r.slot) && (
                         <div className="ml-6 rounded-lg border border-line/10 bg-surface-sunken/40 px-2 py-1.5 space-y-1 text-[10px] text-fg-tertiary leading-relaxed">
                             <p>
-                                A native formula's parameters <strong className="text-fg-muted">auto-expose</strong> as
-                                sliders in the Formula panel — they share the same lane budget as the other slots and
-                                bake automatically only if the pool overflows (no per-parameter toggle here).
+                                A native formula keeps its own parameters <strong className="text-fg-muted">verbatim</strong> —
+                                they get a private per-slot bank and <strong className="text-fg-muted">auto-expose</strong> as
+                                sliders in the Formula panel, always live (no shared budget, no bake).
                             </p>
                             <p>
                                 This formula's own distance estimator isn't spliced into the weave — if the surface
@@ -849,11 +837,15 @@ export function WeaveEditorPane() {
             {/* Build + live lane-budget meter */}
             <div className="flex items-center justify-between gap-2">
                 <span className={`text-[10px] ${meter && 'fits' in meter && !meter.fits ? 'text-amber-300/90' : 'text-fg-tertiary'}`}
-                    title="Live-slider budget: 24 scalar lanes (paramA–F + vec2/vec4 components) and 6 vec3 units are shared by all slots' exposed parameters. Over budget → every parameter bakes; fix values to fit.">
+                    title="Live-slider budget: native formulas get their own per-slot parameter banks (always live). MB3D slots share 24 scalar lanes (paramA–F + vec2/vec4 components) + 6 vec3 units; over that budget their parameters bake.">
                     {meter === null ? '' :
-                        'single' in meter ? `${meter.single} parameter slider${meter.single === 1 ? '' : 's'}` :
-                        'note' in meter ? meter.note :
-                        `${meter.scalars}/24 lanes · ${meter.vec3s}/6 vec3 — ${meter.fits ? 'live sliders' : 'over budget: parameters bake'}`}
+                        'allNative' in meter ? `${meter.allNative} native slot${meter.allNative === 1 ? '' : 's'} — parameters always live` :
+                        (() => {
+                            const nativeSuffix = (meter as any).natives ? ` · +${(meter as any).natives} native live` : '';
+                            return 'single' in meter ? `${meter.single} MB3D parameter slider${meter.single === 1 ? '' : 's'}${nativeSuffix}` :
+                                'note' in meter ? `${meter.note}${nativeSuffix}` :
+                                `MB3D ${meter.scalars}/24 lanes · ${meter.vec3s}/6 vec3 — ${meter.fits ? 'live sliders' : 'over budget: parameters bake'}${nativeSuffix}`;
+                        })()}
                 </span>
                 <button onClick={build} disabled={busy || activeCount === 0}
                     className="px-4 py-1.5 text-xs font-bold rounded-lg bg-accent-600 hover:bg-accent-500 text-white border border-accent-500/50 disabled:opacity-40 transition-colors"
