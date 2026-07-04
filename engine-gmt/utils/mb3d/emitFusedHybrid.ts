@@ -18,8 +18,9 @@ import type { Capability } from '../../types/capabilities';
 import { buildWeaveSequence, emitWeaveGLSL, stepSlot } from './weaveSequencer';
 import { assembleWeave } from '../../engine/weave/emitWeave';
 import { emitLayeredModuloGLSL } from '../../engine/weave/schedule';
+import { resolveNativeSlot, NATIVE_FORMULA_INDEX } from '../../engine/weave/nativeResolver';
 import { transpileSlot } from './slotTranspiler';
-import type { SlotFlag } from './slotTranspiler';
+import type { SlotFlag, TranspiledSlot } from './slotTranspiler';
 import { mapDEMeta, MB3D_ROT_GLSL } from './constPacker';
 import { LaneAllocator } from '../uniformSlots';
 import { mapMB3DCamera } from './mapCamera';
@@ -128,8 +129,38 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // kernel's w-seeds (see has4D below), so they bake. If any slot can't bind or the
   // pool overflows, the whole scene falls back to baking literals.
   const has4D = usedIdx.some((idx) => addon.slots[idx].formulaIndex === 2);
-  const tx = (idx: number, o: Parameters<typeof transpileSlot>[3]) =>
-    transpileSlot(addon.slots[idx], idx, `${id}_slot${idx}`, { ...o, bake: opts?.slotBake?.[idx] });
+
+  // A weave slot body: the MB3D transpiler shape, optionally extended with the
+  // native dispatcher-slot emission pieces (ADR-0089 P4.1 — nativeResolver.ts).
+  type SlotBody = TranspiledSlot & { call?: string; preCall?: string; postCall?: string; slotLoopInit?: string };
+
+  // NATIVE slots (formulaIndex -1, name = registered formula id): resolved via the
+  // engine weave core's native resolver instead of the MB3D transpiler. Prefixed
+  // globals carry per-slot state; params bind the SAME shared LaneAllocator, so
+  // mixed native+MB3D weaves pack one budget. z.w rides the shared orbit; c.w is
+  // isolated per slot (interlace semantics).
+  const nativeBody = (idx: number, o: { alloc?: LaneAllocator; parametric?: boolean }): SlotBody => {
+    const slot = addon.slots[idx];
+    const fnName = `${id}_slot${idx}`;
+    const mkFlag = (tier: SlotFlag['tier'], note: string): SlotFlag =>
+      ({ slotIndex: idx, formulaIndex: NATIVE_FORMULA_INDEX, name: slot.name || 'native', tier, note });
+    const ndef = registry.get(slot.name ?? '');
+    if (!ndef) return { glsl: '', fnName, tier: 'unsupported', flag: mkFlag('unsupported', `"${slot.name}" is not a registered formula.`) };
+    const res = resolveNativeSlot(ndef, idx, fnName, o);
+    if (!res.ok) return { glsl: '', fnName, tier: 'unsupported', flag: mkFlag('unsupported', res.reason) };
+    if (!res.paramOk) return { glsl: '', fnName, tier: 'native', flag: mkFlag('native', 'multi-slot param bind failed'), paramOk: false };
+    return {
+      glsl: res.glsl, fnName, tier: 'native',
+      flag: mkFlag('native', 'native GMT formula as a weave slot'),
+      params: res.params as any, coreMath: res.coreMath, paramOk: true, writesDeriv: true,
+      call: res.call, preCall: res.preCall, postCall: res.postCall, slotLoopInit: res.loopInit,
+    };
+  };
+
+  const tx = (idx: number, o: Parameters<typeof transpileSlot>[3]): SlotBody =>
+    addon.slots[idx]?.formulaIndex === NATIVE_FORMULA_INDEX
+      ? nativeBody(idx, o ?? {})
+      : transpileSlot(addon.slots[idx], idx, `${id}_slot${idx}`, { ...o, bake: opts?.slotBake?.[idx] });
   let parametric = usedIdx.length === 1;
   const bodies = usedIdx.length === 1
     ? [tx(usedIdx[0], { parametric: true })]
@@ -153,8 +184,10 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     // we load GMT's native formula at its defaults — explicitly flagged as NOT
     // MB3D's math. Multi-slot external hybrids stay unsupported (DE composition).
     // A modulo-arity failure must NOT fall into substitution — the slot itself may
-    // be perfectly transpilable; the schedule request was the problem.
-    if (usedIdx.length === 1 && !modulo) {
+    // be perfectly transpilable; the schedule request was the problem. Native slots
+    // (formulaIndex -1) never substitute either: a name like "MengerSponge" would
+    // false-match gmtSubId and silently load the wrong thing.
+    if (usedIdx.length === 1 && !modulo && addon.slots[usedIdx[0]].formulaIndex >= 0) {
       const slot = addon.slots[usedIdx[0]];
       const subId = gmtSubId(slot?.name || '');
       const sub = subId ? registry.get(subId) : undefined;
@@ -240,7 +273,10 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // fold only sees the surface distance the dIFS slot just wrote. (all-dIFS scenes like
   // `material colors` fold every iteration as before → unchanged.)
   const difsFold = isDifs ? ` g_difsDE = min(g_difsDE, mb3dRout / max(abs(mb3dVary), 1e-9));` : '';
-  const slotIsDifs = (k: number) => (DECOMPILED_DE_META[bodies[k].flag.name]?.deOption ?? -1) === 20;
+  // Tier-gated: DECOMPILED_DE_META is keyed by MB3D [CODE] names — a NATIVE slot
+  // whose formula shares a name must never inherit the dIFS fold.
+  const slotIsDifs = (k: number) => bodies[k].flag.tier === 'decompiled'
+    && (DECOMPILED_DE_META[bodies[k].flag.name]?.deOption ?? -1) === 20;
 
   // Renderable scaffolding — a NEUTRAL preset, not an AmazingBox clone. Cloning
   // AmazingBox dragged in box-specific overrides (tight teal fog, Z-depth coloring
@@ -497,7 +533,12 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       fnName: `${id}_slot${idx}`,
       glsl: bodies[k].glsl!,
       scratchVars: bodies[k].scratchVars,
-      postCall: slotIsDifs(k) ? difsFold : undefined,
+      // Native slots carry their own branch pieces (slot-local c + rotation swap +
+      // rewritten call + hoisted loopInit); MB3D slots leave them undefined.
+      preCall: bodies[k].preCall,
+      call: bodies[k].call,
+      loopInit: bodies[k].slotLoopInit,
+      postCall: slotIsDifs(k) ? difsFold : bodies[k].postCall,
     })),
     prelude: bodies.some((b) => b.needsRotHelper) ? MB3D_ROT_GLSL : '',
     preDispatch: recomputeRout ? '  mb3dRout = dot(z.xyz, z.xyz);\n' : '',

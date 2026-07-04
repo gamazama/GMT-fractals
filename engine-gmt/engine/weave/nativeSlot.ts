@@ -21,10 +21,13 @@
  *    gmt_rot* state in loopInit; the loop GLSL snapshots both parties' states and
  *    swaps around the slot body.
  *
- * The loop body is spliced INLINE into the iteration loop (not dispatched through a
- * slot function) because native loopInit locals live at map()-function scope — the
- * per-iteration struct-state framework (P4) is what would let native slots become
- * dispatcher functions like MB3D slots.
+ * Two consumption models share this rewriter:
+ *  - INTERLACE (P2): the loop body is spliced INLINE into the iteration loop, so
+ *    native loopInit locals at map()-function scope are directly visible;
+ *  - the WEAVER's native dispatcher slots (P4): nativeResolver.ts binds one
+ *    rewriter per slot (namespace `ws<N>_`, uniforms remapped to allocated lanes
+ *    via `uniformMap`), hoists loopInit state declarations to globals, and hosts
+ *    the rotation swap in the dispatcher branch (preCall/postCall).
  */
 import { SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS, slotToUniform } from '../../utils/uniformSlots';
 import { emitModuloScheduleGLSL } from './schedule';
@@ -43,6 +46,14 @@ export interface NativeSlotNamespace {
     rotSwapPrefix: string;
     /** Tag for dev-mode diagnostics (e.g. 'interlace'). */
     warnTag: string;
+    /** Optional explicit uniform remap: source primary uniform → replacement GLSL
+     *  expression (an allocated lane accessor like 'uVec2B.x', a composed vec like
+     *  'vec2(uParamC, uParamD)', or a baked literal). When present it REPLACES the
+     *  uniformPrefix-derived remap, and replacement is SINGLE-PASS (simultaneous) —
+     *  a map {uParamA→uParamB, uParamB→uParamC} never chains. The weaver's native
+     *  slots (P4) land params on allocated coreMath lanes through this; interlace
+     *  omits it (the prefix-derived remap is unchanged). */
+    uniformMap?: Array<[string, string]>;
 }
 
 const PRIMARY_UNIFORMS = [
@@ -150,6 +161,14 @@ export function createNativeSlotRewriter(ns: NativeSlotNamespace): NativeSlotRew
         [new RegExp(`\\b${u}\\b`, 'g'), targetFlat[i]]);
 
     function applyUniformMap(glsl: string): string {
+        // Explicit map (weaver native slots): single-pass simultaneous replacement,
+        // because targets may themselves be primary uniform names (lane accessors).
+        if (ns.uniformMap) {
+            if (ns.uniformMap.length === 0) return glsl;
+            const lookup = new Map(ns.uniformMap);
+            const re = new RegExp(`\\b(?:${[...lookup.keys()].join('|')})\\b`, 'g');
+            return glsl.replace(re, (m) => lookup.get(m) ?? m);
+        }
         let result = glsl;
         for (const [pattern, replacement] of uniformMap) {
             result = result.replace(pattern, replacement);

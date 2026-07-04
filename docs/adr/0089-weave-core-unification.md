@@ -2,6 +2,28 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-04 (P4.0+P4.1 landed; decision unchanged):** native formulas
+> are now dispatcher-hosted weave slots. The struct-state framework this ADR
+> anticipated ("per-iteration state remains flat named floats… the struct-state
+> framework (P4) lands inside assembleWeave") was **not needed** — the state
+> inventory (plans/mb3d/weave-p4-struct-state-design.md §1) showed native
+> cross-iteration state already lives in globals, so the shipped design is
+> **namespace-prefixed globals** per slot (`ws<N>_`), the interlace rewriter
+> generalized. `assembleWeave` gained per-slot `preCall`/`call`/`loopInit`
+> seams (P4.0, byte-identical when absent); `engine/weave/nativeResolver.ts`
+> (P4.1) binds one `createNativeSlotRewriter` per slot with a `uniformMap` that
+> lands declared params on allocated coreMath lanes (shared LaneAllocator with
+> MB3D slots — one budget) and bakes undeclared uniforms to preset defaults,
+> hoists loopInit-declared state to globals (Phoenix/Bristorbrot), hosts the
+> shared-rotation swap in the dispatcher branch, and isolates c.w per slot
+> (z.w rides the shared orbit — interlace semantics). Weave addon slots carry
+> natives as `formulaIndex: -1` + `name` = registered formula id
+> (`NATIVE_FORMULA_INDEX`); `weaveSource.slots[].kind` gained `'native'`.
+> MB3D slots keep the shared `inout float` scratch — two state channels reflect
+> two real semantics (shared fused orbit vs independent formulas), one
+> dispatcher. GPU canary: identity pair (Mandelbulb⊗Mandelbulb) + mixed
+> bulb⊗box render coherently (probe-native-weave.mts); interlace sweep 45/45.
+
 > **Update 2026-07-04 (P3b landed; decision unchanged):** the weaver's opt-in
 > **Rhythm (LAYERED modulo) schedule** ships: 2–6 active slots — the first is
 > the base (phase 0), each further slot k is an independent rhythm layer reading

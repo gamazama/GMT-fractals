@@ -26,7 +26,7 @@ import { packConstBuffer, bindOptions, PALIGNED16 } from './constPacker';
 import { LaneAllocator, ScalarParamPacker } from '../uniformSlots';
 import type { PackedParam } from '../uniformSlots';
 
-export type SlotTier = 'intern' | 'decompiled' | 'code-sub' | 'unsupported';
+export type SlotTier = 'intern' | 'decompiled' | 'code-sub' | 'native' | 'unsupported';
 
 export interface SlotFlag {
   slotIndex: number;

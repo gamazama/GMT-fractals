@@ -49,7 +49,7 @@ type WeaveSource = NonNullable<FractalDefinition['weaveSource']>;
 interface SlotRow {
     key: string;
     label: string;
-    kind: 'intern' | 'decompiled';
+    kind: 'intern' | 'decompiled' | 'native';
     ref: string | number;
     /** Stable color identity — survives reorder (user feedback 2026-07-04). */
     colorIdx: number;

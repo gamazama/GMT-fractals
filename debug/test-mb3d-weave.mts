@@ -8,6 +8,10 @@ import { assembleWeave } from '../engine-gmt/engine/weave/emitWeave.ts';
 import { emitFusedHybrid } from '../engine-gmt/utils/mb3d/emitFusedHybrid.ts';
 import { registry } from '../engine-gmt/engine/FractalRegistry.ts';
 import { AmazingBox } from '../engine-gmt/formulas/AmazingBox.ts';
+import { Mandelbulb } from '../engine-gmt/formulas/Mandelbulb.ts';
+import { Phoenix } from '../engine-gmt/formulas/Phoenix.ts';
+import { Julia3D } from '../engine-gmt/formulas/Julia3D.ts';
+import { MandelTerrain } from '../engine-gmt/formulas/MandelTerrain.ts';
 import type { MB3DAddon, MB3DFormulaSlot, MB3DScene, MB3DHeader } from '../engine-gmt/utils/mb3d/parseMB3D.ts';
 
 registry.register(AmazingBox);
@@ -471,6 +475,86 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck('P4.0: slot loopInit lands after extraLoopInit, before scratch decls',
     nat.loopInit === 'g_x = 0.0;\ns1_zp = vec4(0.0);\nfloat mb3dVary = 0.0;', JSON.stringify(nat.loopInit));
   ck('P4.0: native slot threads no scratch through its own call', !nat.functionGLSL.includes('T1_slot1(z, dr, trap, c1, s1_zp, mb3dVary'), undefined);
+}
+
+// ── Native dispatcher slots (P4.1): resolver + emitFusedHybrid wiring ─────────
+{
+  registry.register(Mandelbulb);
+  registry.register(Phoenix);
+  registry.register(Julia3D);
+  registry.register(MandelTerrain);
+  const nslot = (iterCount: number, formula: string): MB3DFormulaSlot =>
+    ({ iterCount, formulaIndex: -1, name: formula, optionCount: 0, optionTypes: [], optionValues: [] });
+
+  // Identity pair: Mandelbulb woven with itself, alternating.
+  {
+    const { def, ledger } = emitFusedHybrid(scene([nslot(1, 'Mandelbulb'), nslot(1, 'Mandelbulb')]));
+    ck('native: identity pair supported', ledger.supported === true && !!def, ledger.reasons);
+    const fn = def?.shader.function ?? '';
+    ck('native: per-slot namespaces (ws0_/ws1_) both present', /\bws0_/.test(fn) && /\bws1_/.test(fn), undefined);
+    ck('native: branch isolates c (ws0_c)', fn.includes('vec4 ws0_c = vec4(c.xyz,') && fn.includes('(z, dr, trap, ws0_c'), fn);
+    ck('native: params exposed on distinct lanes', (def?.parameters?.length ?? 0) >= 2
+      && new Set((def?.parameters as any[]).map((p) => p.id)).size === (def?.parameters as any[]).length,
+      (def?.parameters as any[])?.map((p: any) => p.id));
+    ck('native: slot labels prefixed', (def?.parameters as any[]).every((p: any) => /^Mandelbulb: /.test(p.label)),
+      (def?.parameters as any[])?.map((p: any) => p.label));
+    ck('native: ledger tier native', ledger.slotFlags.every((f) => f.tier === 'native'), ledger.slotFlags);
+  }
+
+  // Stateful pair: Phoenix twice — loopInit state decls hoisted to globals,
+  // per-pixel resets in loopInit, extra args renamed at the call.
+  {
+    const { def, ledger } = emitFusedHybrid(scene([nslot(1, 'Phoenix'), nslot(1, 'Phoenix')]));
+    ck('native: Phoenix pair supported', ledger.supported === true && !!def, ledger.reasons);
+    const fn = def?.shader.function ?? '';
+    const init = def?.shader.loopInit ?? '';
+    ck('native: state decl hoisted to global', fn.includes('vec4 ws0_z_prev;') && fn.includes('vec4 ws1_z_prev;'), undefined);
+    ck('native: loopInit resets state without redeclaring', init.includes('ws0_z_prev = vec4(0.0);')
+      && init.includes('ws1_z_prev = vec4(0.0);') && !/vec4\s+ws\d+_z_prev\s*=/.test(init), init);
+    ck('native: call threads renamed extra args', fn.includes('(z, dr, trap, ws0_c, ws0_z_prev, ws0_dr_prev, ws0_z_prev2, ws0_dr_prev2);'), fn);
+    ck('native: identity pair prefixes internal helpers', /\bws0_phoenixBulbPow\b/.test(fn) && /\bws1_phoenixBulbPow\b/.test(fn)
+      && !/\bphoenixBulbPow\b/.test(fn), undefined);
+  }
+
+  // Rotation slot: Julia3D uses gmt_rot* — loopInit save/capture/restore bracket +
+  // dispatcher-branch swap-in/out.
+  {
+    const { def, ledger } = emitFusedHybrid(scene([nslot(1, 'Mandelbulb'), nslot(1, 'Julia3D')]));
+    ck('native: rotation pair supported', ledger.supported === true && !!def, ledger.reasons);
+    const fn = def?.shader.function ?? '';
+    const init = def?.shader.loopInit ?? '';
+    ck('native: rot capture globals declared', fn.includes('vec3 ws1_rotAxis; float ws1_rotCos; float ws1_rotSin;'), undefined);
+    ck('native: loopInit captures + restores shared rot state',
+      init.includes('ws1_rotAxis = gmt_rotAxis;') && init.includes('gmt_rotAxis = _ws1_svAxis;'), init);
+    ck('native: branch swaps rot state around the call',
+      fn.includes('gmt_rotAxis = ws1_rotAxis;') && fn.includes('gmt_rotAxis = _ws1_pAxis;'), fn);
+    ck('native: preamble state prefixed (kk_minSurf)', /\bws1_kk_minSurf\b/.test(fn) && /ws1_kk_minSurf = 1e10/.test(init), undefined);
+    ck('native: non-rotation slot has no swap', !fn.includes('ws0_rotAxis'), undefined);
+  }
+
+  // Mixed weave: native Mandelbulb + MB3D intern Amazing Box (#4) in one dispatcher.
+  {
+    const { def, ledger } = emitFusedHybrid(scene([nslot(2, 'Mandelbulb'), slot(1, 4)]));
+    ck('mixed: native + MB3D supported', ledger.supported === true && !!def, ledger.reasons);
+    const fn = def?.shader.function ?? '';
+    ck('mixed: native branch uses its own c', fn.includes('vec4 ws0_c = vec4(c.xyz,'), undefined);
+    ck('mixed: MB3D branch shape unchanged', /if \(phase == 1\) \{ MB3DHybrid\d+_slot1\(z, dr, trap, c\); return; \}/.test(fn), fn);
+    ck('mixed: tiers native + intern', JSON.stringify(ledger.slotFlags.map((f) => f.tier)) === '["native","intern"]', ledger.slotFlags);
+  }
+
+  // Reject: self-contained formulas can't be weave slots.
+  {
+    const { def, ledger } = emitFusedHybrid(scene([nslot(1, 'Mandelbulb'), nslot(1, 'MandelTerrain')]));
+    ck('native: self-contained rejected with reason', !def && ledger.supported === false
+      && ledger.reasons.some((r) => /self-contained/.test(r)), ledger.reasons);
+  }
+
+  // Reject: unregistered formula id.
+  {
+    const { def, ledger } = emitFusedHybrid(scene([nslot(1, 'Mandelbulb'), nslot(1, 'NoSuchFormula')]));
+    ck('native: unregistered id rejected', !def && ledger.reasons.some((r) => /not a registered formula/.test(r)), ledger.reasons);
+  }
+
 }
 
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);

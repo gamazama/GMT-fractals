@@ -138,8 +138,8 @@ function weaveSourceFromScene(scene: MB3DScene): FractalDefinition['weaveSource'
     title: scene.title || 'MB3D Weave',
     slots: slots.map((slot) => ({
       label: slot.name || (slot.formulaIndex >= 20 ? 'CODE formula' : `Intern #${slot.formulaIndex}`),
-      kind: slot.formulaIndex >= 20 ? 'decompiled' : 'intern',
-      ref: slot.formulaIndex >= 20 ? slot.name : slot.formulaIndex,
+      kind: slot.formulaIndex < 0 ? 'native' : slot.formulaIndex >= 20 ? 'decompiled' : 'intern',
+      ref: slot.formulaIndex >= 0 && slot.formulaIndex < 20 ? slot.formulaIndex : slot.name,
       slot: { ...slot, optionTypes: [...slot.optionTypes], optionValues: [...slot.optionValues] },
     })),
     schedule: { kind: 'counts', repeatFrom: sched.repeatFrom },

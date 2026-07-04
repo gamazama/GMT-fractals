@@ -148,7 +148,9 @@ export interface FractalDefinition {
          *  MB3DFormulaSlot built from it (iterCount = the weave iteration count). */
         slots: Array<{
             label: string;
-            kind: 'intern' | 'decompiled';
+            /** `native` = a registered GMT formula (ref = formula id); the slot's
+             *  MB3DFormulaSlot shell carries formulaIndex -1 + name = id (P4.1). */
+            kind: 'intern' | 'decompiled' | 'native';
             ref: string | number;
             slot: {
                 iterCount: number;
