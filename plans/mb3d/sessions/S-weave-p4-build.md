@@ -19,7 +19,7 @@
 > (`debug/probe-weave-refactor.mts` vs a fresh pre-change dump), `test:mb3d:weave` (156), typecheck,
 > smoke:boot, and the native canary probe for any resolver/emit touch.
 
-> **Opus delivery 2026-07-04 — P4.3 DONE (picker sources), pending user visual verdict on the exit gate.**
+> **Opus delivery 2026-07-04 — P4.3 DONE (picker sources); exit gate PASSED (user confirmed "working").**
 > The Weave Editor's "+ Add formula" picker (lightweight `CategoryPickerMenu`) now lists REGISTERED native
 > + imported (frag/DEC) formulas alongside the MB3D catalog, greying resolver-rejects
 > (`shape:self-contained` / `shape:modular`) with a hover reason (never hidden). New engine module
@@ -34,9 +34,8 @@
 > formulas only — the raw 438-thumbnail catalog is deferred (import via Workshop → appears under
 > "Imported"), no silent auto-register. Suite 156→**162** (P4.3: shell-emits-native, reject-greying parity
 > over all registered defs, catalog groups + self-contained greyed). Gates green: typecheck · weave 162 ·
-> mb3d 24 · refine 56 · decompiler corpus · smoke:boot. **Exit gate REMAINING:** user visually verifies a
-> V4-import slot + a native slot woven together renders (import a V4 frag in Workshop first, then weave it
-> with a native — e.g. Mandelbulb). ADR-0089 has the P4.3 update block. Did NOT push. **Next:** P4.4+
+> mb3d 24 · refine 56 · decompiler corpus · smoke:boot. **Exit gate PASSED:** user confirmed the picker +
+> woven render work ("can confirm it is working"). ADR-0089 has the P4.3 update block. Did NOT push. **Next:** P4.4+
 > (interlace/Hybrid Box absorption — gated on owner Appendix decisions 1–3) per the split below.
 >
 > **Session split (orchestrator, 2026-07-04, budget plan):** the FABLE session runs **P4.0–P4.2 only**, then stops
