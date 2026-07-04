@@ -158,6 +158,9 @@ export interface FractalDefinition {
                 optionTypes: number[];
                 optionValues: number[];
             };
+            /** Per-option expose/bake directives (true = baked literal, no
+             *  uniform lane), indexed by option index. Absent = auto-expose. */
+            bake?: boolean[];
         }>;
         /** Schedule kind — counts is the baked-LUT sequence (repeatFrom = MB3D's
          *  "repeat from here": earlier slots run once as an intro); modulo (live

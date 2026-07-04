@@ -101,14 +101,16 @@ function resolveDecompiledName(name: string | undefined): string | undefined {
  *  scalars pack into idle vec lanes (the {@link ScalarParamPacker} groups them into one
  *  combined vec slider). Returns the dynamic uniformVars (the per-logical accessor) +
  *  relabelled params/coreMath, or null if the scalar pool overflows. */
-function internMultiParam(def: InternFormula, o: number[], alloc: LaneAllocator):
+function internMultiParam(def: InternFormula, o: number[], alloc: LaneAllocator, bake?: boolean[]):
   { vars: Vars; params: PackedParam[]; coreMath: Record<string, any> } | null {
   if (!def.uniformVars || !def.params || !def.coreMath) return null;
   const keys = Object.keys(def.uniformVars);            // logical names, in param order
   const oldParams = def.params(o);
+  const litVars = def.literalVars(o);
   const packer = new ScalarParamPacker(alloc);
   const vars: Vars = {};
   for (let k = 0; k < keys.length; k++) {
+    if (bake?.[k]) { vars[keys[k]] = litVars[keys[k]]; continue; } // baked: literal, no lane
     const op = oldParams[k];
     const acc = packer.scalar(op.label, op.default, op.min, op.max, op.step);
     if (acc === null) return null;
@@ -324,7 +326,13 @@ export function transpileSlot(
   slot: MB3DFormulaSlot,
   slotIndex: number,
   fnName: string,
-  opts?: { parametric?: boolean; alloc?: LaneAllocator },
+  opts?: {
+    parametric?: boolean;
+    alloc?: LaneAllocator;
+    /** Per-OPTION expose/bake directives (P3b Task 2), indexed by option index:
+     *  true = bake the value as a literal (no lane); absent/false = auto-expose. */
+    bake?: boolean[];
+  },
 ): TranspiledSlot {
   const fi = slot.formulaIndex;
   const alloc = opts?.alloc; // multi-slot parametric: shared cross-slot lane allocator
@@ -335,18 +343,32 @@ export function transpileSlot(
     // Multi-slot parametric: allocate this intern's scalars from the shared cursor.
     // #2 Quaternion is excluded (the kernel reserves paramA/B for its 4D seeds).
     if (alloc) {
-      const mp = fi !== 2 ? internMultiParam(def, slot.optionValues, alloc) : null;
+      const mp = fi !== 2 ? internMultiParam(def, slot.optionValues, alloc, opts?.bake) : null;
       if (!mp) return { glsl: '', fnName, tier: 'intern', flag, paramOk: false };
       return { glsl: def.body(fnName, mp.vars), fnName, tier: 'intern', flag, params: mp.params, coreMath: mp.coreMath, paramOk: true, writesDeriv: true };
     }
     const useUniform = !!opts?.parametric && !!def.uniformVars;
-    const vars = useUniform ? def.uniformVars! : def.literalVars(slot.optionValues);
+    const bake = opts?.bake;
+    // Single-slot parametric with bake directives: baked options read their literal,
+    // exposed ones keep the fixed uParam* lane (paramA gaps are fine — the schema is
+    // filtered below to match).
+    let vars: Vars;
+    if (useUniform && bake?.some(Boolean)) {
+      const lit = def.literalVars(slot.optionValues);
+      vars = {};
+      Object.keys(def.uniformVars!).forEach((key, k) => { vars[key] = bake[k] ? lit[key] : def.uniformVars![key]; });
+    } else {
+      vars = useUniform ? def.uniformVars! : def.literalVars(slot.optionValues);
+    }
     // Intern formulas (latitude bulbs / box / IntPow / folds) all thread a real
     // derivative through `dr` (`dr = pow(r,p-1)·p·dr + 1`, `dr = dr·|m| + 1`, …).
     const out: TranspiledSlot = { glsl: def.body(fnName, vars), fnName, tier: 'intern', flag, writesDeriv: true };
     if (useUniform && def.params && def.coreMath) {
-      out.params = def.params(slot.optionValues);
-      out.coreMath = def.coreMath(slot.optionValues);
+      const allParams = def.params(slot.optionValues);
+      out.params = allParams.filter((_, k) => !bake?.[k]);
+      const cm = def.coreMath(slot.optionValues);
+      allParams.forEach((p, k) => { if (bake?.[k]) delete cm[p.id]; });
+      out.coreMath = cm;
     }
     return out;
   }
@@ -407,7 +429,7 @@ ${body}
       // gets a fresh allocator (starts at paramA); multi-slot threads the shared
       // cross-slot allocator so each slot's params land on distinct uniforms.
       if (opts?.parametric || alloc) {
-        const bound = bindOptions(slot.optionValues, slot.optionTypes, slot.optionCount, DECOMPILED_OPTIONS[canonName!] ?? [], alloc ?? new LaneAllocator());
+        const bound = bindOptions(slot.optionValues, slot.optionTypes, slot.optionCount, DECOMPILED_OPTIONS[canonName!] ?? [], alloc ?? new LaneAllocator(), opts?.bake);
         if (bound) {
           const missing: string[] = [];
           const body = decompiled
@@ -486,4 +508,44 @@ ${body}
     tier: 'unsupported',
     flag: { slotIndex, formulaIndex: fi, name: slot.name || INTERN_NAMES[fi] || `#${fi}`, tier: 'unsupported', note },
   };
+}
+
+/** One logical option control for the Weave Editor's per-slot customization UI.
+ *  `span` = raw option indices consumed (3-angle rotations span 3, 4×4 rotations
+ *  span 6); `exposable` = the live binder can map this type to a uniform lane
+ *  (non-exposable types can still be BAKED via the per-option directive). */
+export interface SlotOptionMeta {
+  /** First raw option index of this control (the bake[] directive index). */
+  index: number;
+  span: number;
+  name: string;
+  exposable: boolean;
+}
+
+/** Option metadata for a slot — names, grouping, exposability — mirroring the
+ *  walks in bindOptions/packConstBuffer. Returns [] for unsupported slots. */
+export function getSlotOptionMeta(slot: MB3DFormulaSlot): SlotOptionMeta[] {
+  const fi = slot.formulaIndex;
+  const def = INTERN[fi];
+  if (def?.params && ((fi >= 0 && fi <= 4) || fi === 6)) {
+    return def.params(slot.optionValues).map((p, k) => ({ index: k, span: 1, name: p.label, exposable: true }));
+  }
+  const canonName = resolveDecompiledName(slot.name);
+  if (!canonName || !DECOMPILED_FORMULAS[canonName]) return [];
+  const names = DECOMPILED_OPTIONS[canonName] ?? [];
+  // Pad to the formula's full option list, like transpileSlot (truncated .m3p prefix).
+  const defaults = DECOMPILED_DEFAULTS[canonName];
+  const types = defaults && slot.optionCount < defaults.optionCount ? defaults.optionTypes : slot.optionTypes;
+  const count = defaults && slot.optionCount < defaults.optionCount ? defaults.optionCount : slot.optionCount;
+  const out: SlotOptionMeta[] = [];
+  let i = 0, opt = 0; // raw value index vs logical option index (rotations = 1 name, 3/6 values)
+  while (i < Math.min(16, count)) {
+    const t = types[i] ?? 0;
+    const name = names[opt]?.name ?? `opt${opt}`;
+    if (t === 6) { out.push({ index: i, span: 3, name, exposable: true }); i += 3; opt++; continue; }
+    if (t === 12) { out.push({ index: i, span: 6, name, exposable: false }); i += 6; opt++; continue; }
+    out.push({ index: i, span: 1, name, exposable: t === 0 || t === 1 || t === 2 || t === 7 || t === 8 || t === 11 });
+    i++; opt++;
+  }
+  return out;
 }

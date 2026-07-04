@@ -340,6 +340,63 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck('layered: interval clamps below 1', two.glsl.includes('if (skip < 1) skip = 1;'));
 }
 
+// ── Per-option expose/bake directives (P3b Task 2) ─────────────────────────────
+{
+  // Intern single-slot: bake Scale (option 0) → literal in the body, 2 sliders left,
+  // coreMath no longer seeds the baked lane.
+  const { def } = emitFusedHybrid(scene([slot(1, 4, [-1.5, 0.4, 1])]), { slotBake: [[true]] });
+  const p = (def?.parameters ?? []) as any[];
+  ck('bake: intern single-slot def emits', !!def);
+  ck('bake: scale baked as literal', !!def && /m = -1\.5 \//.test(def.shader.function));
+  ck('bake: 2 sliders remain (MinR, Fold)', p.length === 2 && p[0].label === 'Min Radius' && p[1].label === 'Folding Limit', p.map((x: any) => x.label));
+  const cm = (def?.defaultPreset as any)?.features?.coreMath ?? {};
+  ck('bake: coreMath drops baked paramA, keeps paramB', cm.paramA === undefined && cm.paramB === 0.4, cm);
+}
+{
+  // Multi-slot: baking one slot's option frees its lane; the rest stay live.
+  const s = scene([slot(2, 4, [-1.5, 0.5, 1]), slot(1, 1, [8, 1])]);
+  const withBake = emitFusedHybrid(s, { slotBake: [undefined, [true, false]] });
+  const p = (withBake.def?.parameters ?? []) as any[];
+  ck('bake: multi-slot 4 sliders (power baked)', p.length === 4, p.map((x: any) => x.label));
+  ck('bake: baked power is a literal 8.0', !!withBake.def && /fpow = 8\.0/.test(withBake.def.shader.function));
+  ck('bake: box params still live', !!withBake.def && /uParamA/.test(withBake.def.shader.function));
+}
+{
+  // Decompiled: bake the Scale scalar → 3 sliders left (CScale + 2 rotations), no
+  // scalar lane used; bake a whole ROTATION group (span 3) → matrix baked as
+  // literals, its slider gone, the OTHER rotation still live via mb3dRot.
+  const menger = (): MB3DFormulaSlot => ({
+    iterCount: 1, formulaIndex: 20, name: 'Menger3', optionCount: 10,
+    optionTypes: [0, 0, 0, 0, 6, 6, 6, 6, 6, 6, 0, 0, 0, 0, 0, 0],
+    optionValues: [3, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  });
+  const bs = emitFusedHybrid(scene([menger()]), { slotBake: [[true]] });
+  const bp = (bs.def?.parameters ?? []) as any[];
+  ck('bake: Menger3 scale baked → 3 sliders', bp.length === 3 && bp[0].label === 'CScale', bp.map((x: any) => x.label));
+  ck('bake: Menger3 no scalar lane used', !!bs.def && !/uParamA/.test(bs.def.shader.function));
+
+  const rotBake: boolean[] = []; rotBake[4] = rotBake[5] = rotBake[6] = true;
+  const br = emitFusedHybrid(scene([menger()]), { slotBake: [rotBake] });
+  const rp = (br.def?.parameters ?? []) as any[];
+  ck('bake: Menger3 Rotation1 group baked → 3 sliders', rp.length === 3, rp.map((x: any) => x.label));
+  ck('bake: Rotation1 slider gone, Rotation2 live', !rp.some((x: any) => x.label === 'Rotation1') && rp.some((x: any) => x.label === 'Rotation2'), rp.map((x: any) => x.label));
+  ck('bake: live rotation still binds mb3dRot', !!br.def && /mb3dRot\(/.test(br.def.shader.function));
+}
+{
+  // Option metadata for the editor UI: names, rotation grouping, exposability.
+  const { getSlotOptionMeta } = await import('../engine-gmt/utils/mb3d/slotTranspiler.ts');
+  const im = getSlotOptionMeta(slot(1, 4, [-1.5, 0.4, 1]));
+  ck('meta: intern box 3 options, all exposable', im.length === 3 && im.every((m) => m.exposable && m.span === 1), im);
+  ck('meta: intern labels', im.map((m) => m.name).join('|') === 'Scale|Min Radius|Folding Limit', im.map((m) => m.name));
+  const dm = getSlotOptionMeta({
+    iterCount: 1, formulaIndex: 20, name: 'Menger3', optionCount: 10,
+    optionTypes: [0, 0, 0, 0, 6, 6, 6, 6, 6, 6, 0, 0, 0, 0, 0, 0],
+    optionValues: [3, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  });
+  ck('meta: Menger3 rotations group span 3', dm.filter((m) => m.span === 3).length === 2, dm);
+  ck('meta: Menger3 6 logical controls (4 scalars + 2 rotations)', dm.length === 6, dm.map((m) => `${m.name}:${m.span}`));
+}
+
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);
 if (fails.length) {
   console.log('FAILURES:\n - ' + fails.join('\n - '));

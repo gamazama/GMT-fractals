@@ -178,9 +178,12 @@ export function loadUserWeave(
   // Rhythm (layered modulo) schedule rides in on the weaveSource; the emit swaps the
   // baked counts LUT for the layered runtime-uniform phase fn (uWeave*<k> uniforms).
   const rhythm = weaveSource?.schedule.kind === 'modulo' ? weaveSource.schedule : undefined;
+  // Per-option expose/bake directives ride weaveSource.slots (row order = addon
+  // slot order, buildWeaveScene keeps them aligned).
+  const slotBake = weaveSource?.slots.map((s) => s.bake);
   const { def, ledger } = emitFusedHybrid(
     buildWeaveScene(slots, title, undefined, repeatFrom),
-    rhythm ? { schedule: { kind: 'modulo' } } : undefined,
+    { ...(rhythm ? { schedule: { kind: 'modulo' as const } } : {}), slotBake },
   );
   if (!def) {
     return { ok: false, reason: ledger.reasons.join(' '), ledger };

@@ -232,6 +232,12 @@ function axisOf(name: string): { prefix: string; axis: 'x' | 'y' | 'z' } | null 
  * rotations (`mb3dRot`) and "<p> X/Y/Z" triples (e.g. Menger CScale) — take a true
  * `uVec3*` unit. Returns null if the pool overflows or an option type is unmapped —
  * the caller bakes. Offset walk mirrors packConstBuffer exactly.
+ *
+ * `bake` (P3b Task 2, per-option expose/bake directives): options flagged true are
+ * bound to LITERALS via packConstBuffer's exact math instead of taking lanes —
+ * INCLUDING option types the live binder can't map (angles, squares, reciprocals,
+ * 4×4 rotations), so one odd option no longer forces the whole slot to bake.
+ * `bake` absent/empty ⇒ behavior is byte-identical to before.
  */
 export function bindOptions(
   optionValues: number[],
@@ -239,6 +245,7 @@ export function bindOptions(
   optionCount: number,
   options: DecompiledOption[],
   alloc: LaneAllocator,
+  bake?: boolean[],
 ): DecompBinding | null {
   const bindings = new Map<number, string>();
   const matrixDecls: string[] = [];
@@ -257,11 +264,61 @@ export function bindOptions(
   while (i < Math.min(16, optionCount)) {
     const t = optionTypes[i] ?? 0;
     const name = nm(optIdx);
+    if (bake?.[i]) {
+      // BAKE DIRECTIVE: bind this option's const offsets to literals using
+      // packConstBuffer's exact math — no lanes consumed, all types coverable.
+      switch (t) {
+        case 0: off += 8; bindings.set(off, flit(v(i))); break;
+        case 1: off += 4; bindings.set(off, flit(v(i))); break;
+        case 2: off += 4; bindings.set(off, flit(Math.round(v(i)))); break;
+        case 3: off += 8; bindings.set(off, flit(Math.sin(v(i) * PID180))); off += 8; bindings.set(off, flit(Math.cos(v(i) * PID180))); break;
+        case 4: off += 4; bindings.set(off, flit(Math.sin(v(i) * PID180))); off += 4; bindings.set(off, flit(Math.cos(v(i) * PID180))); break;
+        case 6: {
+          // NB: a rotation is ONE logical option (one name entry) spanning 3 raw
+          // value slots — advance i by the extra 2, but optIdx only via the shared ++.
+          const M = buildRotMatrix(v(i) * PID180, v(i + 1) * PID180, v(i + 2) * PID180);
+          for (let j = 0; j < 9; j++) { off += 4; bindings.set(off, flit(M[j])); }
+          i += 2;
+          break;
+        }
+        case 7: {
+          // Scale/MinR² needs the PRECEDING Scale — which may still be a live lane.
+          const minR2 = sqr(Math.max(1e-40, v(i)));
+          const scale = prevScalarUni ?? flit(v(i - 1));
+          off += 8; bindings.set(off, `(${scale} / ${flit(minR2)})`);
+          off += 8; bindings.set(off, flit(minR2));
+          break;
+        }
+        case 8: for (const s of [1, 2, -1, -2]) { off += 8; bindings.set(off, flit(s * v(i))); } off += 4; break;
+        case 9: off += 8; bindings.set(off, flit(sqr(v(i)))); break;
+        case 11: for (const s of [1, 1, -1, -1]) { off += 8; bindings.set(off, flit(s * v(i))); } break;
+        case 12: {
+          // One logical option spanning 6 raw value slots (see the t6 note above).
+          const M4 = buildRotMatrix4d([v(i), v(i + 1), v(i + 2), v(i + 3), v(i + 4), v(i + 5)].map((d) => d * PID180));
+          for (let j = 0; j < 16; j++) { off += 4; bindings.set(off, flit(M4[j])); }
+          i += 5;
+          break;
+        }
+        case 13: off += 8; bindings.set(off, flit(1 / (Math.abs(v(i)) < 1e-40 ? 1e-40 : v(i)))); break;
+        case 14: off += 8; bindings.set(off, flit(v(i))); off += 8; bindings.set(off, flit(v(i))); break;
+        case 15: off += 8; bindings.set(off, flit(1 / Math.max(1e-40, sqr(v(i))))); break;
+        case 21: off += 4; bindings.set(off, flit(v(i))); off += 4; bindings.set(off, flit(1 / (Math.abs(v(i)) < 1e-40 ? 1e-40 : v(i)))); break;
+        case 22: off += 8; bindings.set(off, flit(v(i))); off += 8; bindings.set(off, flit(1 / (Math.abs(v(i)) < 1e-40 ? 1e-40 : v(i)))); break;
+        default: return null; // unported type (mirrors packConstBuffer's throw)
+      }
+      // A baked Scale is still a valid .BOXSCALE dividend (a literal operand).
+      prevScalarUni = (t === 0 || t === 1) ? flit(v(i)) : null;
+      i++; optIdx++;
+      continue;
+    }
     if (t === 0 || t === 1) {
       // X/Y/Z triple → one vec3 (e.g. Menger "CScale X/Y/Z"). All three must be
       // scalar options with the same prefix and consecutive X→Y→Z axes.
       const a0 = axisOf(name);
-      if (a0?.axis === 'x' && (optionTypes[i + 1] ?? -1) <= 1 && (optionTypes[i + 2] ?? -1) <= 1) {
+      // A bake directive on Y or Z breaks the triple — the members fall through as
+      // individual scalars (each exposed or baked on its own).
+      if (a0?.axis === 'x' && (optionTypes[i + 1] ?? -1) <= 1 && (optionTypes[i + 2] ?? -1) <= 1
+          && !bake?.[i + 1] && !bake?.[i + 2]) {
         const a1 = axisOf(nm(optIdx + 1)), a2 = axisOf(nm(optIdx + 2));
         if (a1?.axis === 'y' && a2?.axis === 'z' && a1.prefix === a0.prefix && a2.prefix === a0.prefix) {
           const lane = packer.vec3(a0.prefix, { x: v(i), y: v(i + 1), z: v(i + 2) }, -8, 8, 0.001);

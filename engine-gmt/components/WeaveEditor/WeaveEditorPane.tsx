@@ -37,6 +37,9 @@ import { buildCountsPlan } from '../../engine/weave/schedule';
 import { getMB3DCatalog, slotFromCatalogEntry } from '../../utils/mb3d/mb3dCatalog';
 import type { CatalogEntry } from '../../utils/mb3d/mb3dCatalog';
 import { loadUserWeave } from '../../utils/mb3d/loadMB3DScene';
+import { transpileSlot, getSlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
+import type { SlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
+import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
 import { LoopStrip, SLOT_COLORS } from './LoopStrip';
@@ -51,6 +54,9 @@ interface SlotRow {
     /** Stable color identity — survives reorder (user feedback 2026-07-04). */
     colorIdx: number;
     slot: MB3DFormulaSlot;
+    /** Per-option expose/bake directives (true = baked literal, no slider lane),
+     *  indexed by option index. Absent entries = auto-expose. */
+    bake?: boolean[];
 }
 
 interface WeaveDraft {
@@ -70,7 +76,11 @@ let rowSeq = 0;
 const rowKey = () => `wrow${rowSeq++}`;
 
 const cloneRows = (rows: SlotRow[]): SlotRow[] =>
-    rows.map((r) => ({ ...r, slot: { ...r.slot, optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] } }));
+    rows.map((r) => ({
+        ...r,
+        slot: { ...r.slot, optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] },
+        bake: r.bake ? [...r.bake] : undefined,
+    }));
 const cloneDraft = (d: WeaveDraft): WeaveDraft => ({ title: d.title, rows: cloneRows(d.rows), repeatKey: d.repeatKey, scheduleKind: d.scheduleKind ?? 'counts' });
 
 const nextColorIdx = (rows: SlotRow[]): number => {
@@ -79,6 +89,20 @@ const nextColorIdx = (rows: SlotRow[]): number => {
     while (used.has(ci)) ci++;
     return ci;
 };
+
+/** Options whose type can only be baked get a pre-set bake directive, so the rest
+ *  of the slot's options can still expose (without directives one unmappable type
+ *  makes bindOptions bail and the WHOLE slot bakes). */
+function defaultBake(slot: MB3DFormulaSlot): boolean[] | undefined {
+    const bake: boolean[] = [];
+    let any = false;
+    for (const m of getSlotOptionMeta(slot)) {
+        if (m.exposable) continue;
+        any = true;
+        for (let j = 0; j < m.span; j++) bake[m.index + j] = true;
+    }
+    return any ? bake : undefined;
+}
 
 /** Hydrate a draft from a weave formula's persisted source. */
 function draftFromWeaveSource(ws: WeaveSource): WeaveDraft {
@@ -89,6 +113,7 @@ function draftFromWeaveSource(ws: WeaveSource): WeaveDraft {
         ref: s.ref,
         colorIdx: i,
         slot: { ...s.slot, optionTypes: [...s.slot.optionTypes], optionValues: [...s.slot.optionValues] },
+        bake: s.bake ? [...s.bake] : undefined,
     }));
     const rf = ws.schedule.kind === 'counts' ? (ws.schedule.repeatFrom ?? 0) : 0;
     return { title: ws.title, rows, repeatKey: rows[rf]?.key ?? null, scheduleKind: ws.schedule.kind };
@@ -109,6 +134,27 @@ function MiniStep({ value, set, title }: { value: number; set: (n: number) => vo
             <button onClick={() => set(value + 1)}
                 className="w-4 h-4 text-[10px] leading-none rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
         </span>
+    );
+}
+
+/** Float input that commits on blur/Enter (keeps partial typing like "1." alive
+ *  and gives one editor-undo step per edit, not per keystroke). */
+function OptValInput({ value, onCommit }: { value: number; onCommit: (n: number) => void }) {
+    const [text, setText] = useState<string | null>(null);
+    return (
+        <input
+            value={text ?? String(value)}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={() => {
+                if (text !== null) {
+                    const n = parseFloat(text);
+                    if (isFinite(n) && n !== value) onCommit(n);
+                    setText(null);
+                }
+            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+            className="w-14 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40"
+        />
     );
 }
 
@@ -184,18 +230,23 @@ export function WeaveEditorPane() {
         if (picker?.replaceKey) {
             commit({
                 ...draft,
-                rows: draft.rows.map((r) => r.key === picker.replaceKey
-                    ? { ...r, label: entry.label, kind: entry.kind, ref: entry.ref, slot: slotFromCatalogEntry(entry, r.slot.iterCount) }
-                    : r),
+                rows: draft.rows.map((r) => {
+                    if (r.key !== picker.replaceKey) return r;
+                    const slot = slotFromCatalogEntry(entry, r.slot.iterCount);
+                    // A different formula has different options — directives reset.
+                    return { ...r, label: entry.label, kind: entry.kind, ref: entry.ref, slot, bake: defaultBake(slot) };
+                }),
             });
         } else {
+            const slot = slotFromCatalogEntry(entry, DEFAULT_ITER_COUNT);
             const row: SlotRow = {
                 key: rowKey(),
                 label: entry.label,
                 kind: entry.kind,
                 ref: entry.ref,
                 colorIdx: nextColorIdx(draft.rows),
-                slot: slotFromCatalogEntry(entry, DEFAULT_ITER_COUNT),
+                slot,
+                bake: defaultBake(slot),
             };
             commit({ ...draft, rows: [...draft.rows, row] });
         }
@@ -220,6 +271,62 @@ export function WeaveEditorPane() {
         const idx = draft.rows.findIndex((r) => r.key === key);
         commit({ ...draft, repeatKey: idx <= 0 ? null : key });
     };
+
+    // ── Per-slot param customization (P3b Task 2) ────────────────────────────
+    const [expandedKey, setExpandedKey] = useState<string | null>(null);
+    const setOptionValues = (key: string, index: number, vals: number[]) => {
+        commit({
+            ...draft,
+            rows: draft.rows.map((r) => {
+                if (r.key !== key) return r;
+                const optionValues = [...r.slot.optionValues];
+                vals.forEach((v, j) => { optionValues[index + j] = v; });
+                return { ...r, slot: { ...r.slot, optionValues } };
+            }),
+        });
+    };
+    const toggleBake = (key: string, m: SlotOptionMeta) => {
+        commit({
+            ...draft,
+            rows: draft.rows.map((r) => {
+                if (r.key !== key) return r;
+                const bake = r.bake ? [...r.bake] : [];
+                const next = !bake[m.index];
+                for (let j = 0; j < m.span; j++) bake[m.index + j] = next;
+                return { ...r, bake };
+            }),
+        });
+    };
+    const rowDefaults = (r: SlotRow): number[] => {
+        const e = entryByKey.get(`${r.kind}:${r.ref}`);
+        return e ? slotFromCatalogEntry(e).optionValues : [...r.slot.optionValues];
+    };
+
+    // Live lane-budget meter: a pure dry-run through the same allocator the build
+    // uses (multi-slot path), recomputed when the draft changes. Single-slot builds
+    // use fixed uParam* lanes instead of the allocator, so report the param count.
+    const meter = useMemo(() => {
+        const active = draft.rows.filter((r) => r.slot.iterCount > 0);
+        if (active.length === 0) return null;
+        try {
+            if (active.length === 1) {
+                const t = transpileSlot(active[0].slot, 0, 'probe0', { parametric: true, bake: active[0].bake });
+                return { single: t.params?.length ?? 0 };
+            }
+            if (active.some((r) => r.slot.formulaIndex === 2)) {
+                return { note: '4D (Quaternion) hybrids bake parameters' };
+            }
+            const alloc = new LaneAllocator();
+            let ok = true;
+            active.forEach((r, k) => {
+                alloc.startSlot();
+                if (transpileSlot(r.slot, k, `probe${k}`, { alloc, bake: r.bake }).paramOk === false) ok = false;
+            });
+            return { scalars: alloc.scalarsUsed, vec3s: alloc.vec3sUsed, fits: ok && alloc.fits() };
+        } catch {
+            return null;
+        }
+    }, [draft.rows]);
 
     // ── Drag-handle reorder (pointer-based, list-local) ──────────────────────
     const rowRefs = useRef(new Map<string, HTMLDivElement>());
@@ -337,7 +444,10 @@ export function WeaveEditorPane() {
             const weaveSource: WeaveSource = {
                 version: 1,
                 title: draft.title,
-                slots: draft.rows.map((r) => ({ label: r.label, kind: r.kind, ref: r.ref, slot: { ...r.slot } })),
+                slots: draft.rows.map((r) => ({
+                    label: r.label, kind: r.kind, ref: r.ref, slot: { ...r.slot },
+                    ...(r.bake?.some(Boolean) ? { bake: Array.from(r.bake, Boolean) } : {}),
+                })),
                 // Rhythm persists the built per-layer snapshot; the live values stay
                 // on the DDFS weave feature (and ride presets/GMF as feature state).
                 schedule: rhythm
@@ -424,8 +534,8 @@ export function WeaveEditorPane() {
                     </p>
                 )}
                 {draft.rows.map((r, i) => (
+                    <React.Fragment key={r.key}>
                     <div
-                        key={r.key}
                         ref={(el) => { if (el) rowRefs.current.set(r.key, el); else rowRefs.current.delete(r.key); }}
                         className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 transition-colors ${
                             dragKey === r.key ? 'border-accent-500/40 bg-accent-500/10' : 'border-line/10 bg-surface-sunken/60'
@@ -472,9 +582,65 @@ export function WeaveEditorPane() {
                             <button onClick={() => setIter(r.key, r.slot.iterCount + 1)}
                                 className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
                         </div>
+                        <button onClick={() => setExpandedKey(expandedKey === r.key ? null : r.key)}
+                            className={`w-5 h-5 text-[11px] rounded border shrink-0 transition-colors ${expandedKey === r.key
+                                ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
+                                : 'bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg'}`}
+                            title="Parameters — edit values, choose live slider vs fixed literal">{expandedKey === r.key ? '▾' : '▸'}</button>
                         <button onClick={() => remove(r.key)}
                             className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-red-300 transition-colors shrink-0" title="Remove slot">×</button>
                     </div>
+                    {expandedKey === r.key && (() => {
+                        const meta = getSlotOptionMeta(r.slot);
+                        if (meta.length === 0) {
+                            return <p className="ml-6 text-[10px] text-fg-tertiary px-2">This formula has no editable parameters.</p>;
+                        }
+                        const defs = rowDefaults(r);
+                        return (
+                            <div className="ml-6 rounded-lg border border-line/10 bg-surface-sunken/40 px-2 py-1.5 space-y-1">
+                                {meta.map((m) => {
+                                    const baked = !!r.bake?.[m.index];
+                                    const vals = Array.from({ length: m.span }, (_, j) => r.slot.optionValues[m.index + j] ?? 0);
+                                    const defVals = Array.from({ length: m.span }, (_, j) => defs[m.index + j] ?? 0);
+                                    const dirty = vals.some((v, j) => v !== defVals[j]);
+                                    return (
+                                        <div key={m.index} className="flex items-center gap-1.5 text-[11px] text-fg-muted flex-wrap">
+                                            <span className="flex-1 min-w-[80px] truncate text-fg" title={m.name}>{m.name}</span>
+                                            {vals.map((v, j) => (
+                                                <OptValInput key={j} value={v} onCommit={(n) => {
+                                                    const nv = [...vals]; nv[j] = n; setOptionValues(r.key, m.index, nv);
+                                                }} />
+                                            ))}
+                                            <button onClick={() => setOptionValues(r.key, m.index, defVals)}
+                                                disabled={!dirty}
+                                                className={`w-5 h-5 text-[11px] rounded border shrink-0 transition-colors ${dirty
+                                                    ? 'bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg'
+                                                    : 'opacity-0 pointer-events-none border-transparent'}`}
+                                                title={`Reset to default (${defVals.join(', ')})`}>↺</button>
+                                            {m.exposable ? (
+                                                <button onClick={() => toggleBake(r.key, m)}
+                                                    className={`w-11 px-1.5 py-0.5 text-[10px] rounded border shrink-0 transition-colors ${!baked
+                                                        ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
+                                                        : 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'}`}
+                                                    title={baked
+                                                        ? 'Fixed: baked into the shader as a literal — uses no slider lane. Click to expose as a live slider'
+                                                        : 'Live: exposed as a slider in the Formula panel — uses uniform lanes. Click to bake as a fixed literal'}>
+                                                    {baked ? 'fixed' : 'live'}
+                                                </button>
+                                            ) : (
+                                                <span className="w-11 px-1.5 py-0.5 text-[10px] text-center rounded border border-line/10 text-fg-tertiary/60 shrink-0"
+                                                    title="This option type always bakes (angle / matrix / derived constant — it has no live-uniform mapping)">fixed</span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                <p className="text-[10px] text-fg-tertiary">
+                                    value edits and live/fixed toggles apply on Build · fixing a value frees slider lanes
+                                </p>
+                            </div>
+                        );
+                    })()}
+                    </React.Fragment>
                 ))}
                 <div className="flex items-center gap-2">
                     <button onClick={(e) => openPicker(e)}
@@ -587,8 +753,15 @@ export function WeaveEditorPane() {
                 </div>
             )}
 
-            {/* Build */}
-            <div className="flex items-center justify-end gap-2">
+            {/* Build + live lane-budget meter */}
+            <div className="flex items-center justify-between gap-2">
+                <span className={`text-[10px] ${meter && 'fits' in meter && !meter.fits ? 'text-amber-300/90' : 'text-fg-tertiary'}`}
+                    title="Live-slider budget: 24 scalar lanes (paramA–F + vec2/vec4 components) and 6 vec3 units are shared by all slots' exposed parameters. Over budget → every parameter bakes; fix values to fit.">
+                    {meter === null ? '' :
+                        'single' in meter ? `${meter.single} parameter slider${meter.single === 1 ? '' : 's'}` :
+                        'note' in meter ? meter.note :
+                        `${meter.scalars}/24 lanes · ${meter.vec3s}/6 vec3 — ${meter.fits ? 'live sliders' : 'over budget: parameters bake'}`}
+                </span>
                 <button onClick={build} disabled={busy || activeCount === 0}
                     className="px-4 py-1.5 text-xs font-bold rounded-lg bg-accent-600 hover:bg-accent-500 text-white border border-accent-500/50 disabled:opacity-40 transition-colors"
                     title="Compile the weave and preview it — keeps your camera and look">

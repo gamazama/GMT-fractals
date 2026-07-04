@@ -46,6 +46,10 @@ export interface EmitFusedOptions {
    *  @invariant opts absent (or kind ≠ modulo) = the counts path, byte-identical
    *  to the pre-P3b emit (probe: debug/probe-weave-refactor.mts). */
   schedule?: { kind: 'modulo' };
+  /** Per-slot, per-OPTION expose/bake directives (P3b Task 2), indexed by the
+   *  addon slot index then the option index: true = bake that option's value as
+   *  a literal (frees its uniform lanes). Absent = auto-expose (unchanged). */
+  slotBake?: Array<boolean[] | undefined>;
 }
 
 export interface EmitResult {
@@ -125,7 +129,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // pool overflows, the whole scene falls back to baking literals.
   const has4D = usedIdx.some((idx) => addon.slots[idx].formulaIndex === 2);
   const tx = (idx: number, o: Parameters<typeof transpileSlot>[3]) =>
-    transpileSlot(addon.slots[idx], idx, `${id}_slot${idx}`, o);
+    transpileSlot(addon.slots[idx], idx, `${id}_slot${idx}`, { ...o, bake: opts?.slotBake?.[idx] });
   let parametric = usedIdx.length === 1;
   const bodies = usedIdx.length === 1
     ? [tx(usedIdx[0], { parametric: true })]
