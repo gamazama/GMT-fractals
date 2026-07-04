@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { FOLD_LIST, FOLD_OPTIONS, getFold } from './folds';
 import { SHARED_TRANSFORMS_GLSL } from './transforms';
 import { registry } from '../../engine/FractalRegistry';
+import { emitModuloScheduleGLSL } from '../../engine/weave/schedule';
 
 // Re-export types
 export type { FoldDefinition } from './types';
@@ -482,25 +483,32 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
                 }
                 `;
             } else {
-                // Interleaved Path — init + per-iteration fold, guarded by runtime uniform
-                // Swap is baked at compile time to eliminate runtime branches
+                // Interleaved Path — init + per-iteration fold. The schedule is the
+                // weave core's modulo phase function (ADR-0089): enabled / interval /
+                // invocation cap are runtime uniforms (live + keyframable, no
+                // recompile); the swap start offset stays baked at compile time to
+                // eliminate a runtime branch, as before.
                 const swapEnabled = state?.hybridSwap ?? false;
 
                 hybridPreLoop += `if (uHybrid > 0.5) { initHybridTransform(); }\n`;
 
+                const schedule = emitModuloScheduleGLSL({
+                    enabled: 'uHybrid',
+                    interval: 'uHybridSkip',
+                    startIter: swapEnabled ? '1.0' : '0.0',
+                    maxCount: 'uHybridIter',
+                }, 'Hybrid');
+                builder.addFunction(schedule.glsl);
+
+                // !skipMainFormula: a weave block only claims an iteration no earlier
+                // block claimed — with interlace also active, at most ONE slot body
+                // runs per iteration (injection order defines precedence; geometry
+                // injects before interlace). Previously both bodies could fire on the
+                // same iteration with last-writer-wins flag semantics — undefined.
                 hybridInLoop += `
-                if (uHybrid > 0.5) {
-                    int skip = int(uHybridSkip);
-                    if (skip < 1) skip = 1;
-
-                    if (i >= ${swapEnabled ? '1' : '0'}) {
-                        int rel_i = i - ${swapEnabled ? '1' : '0'};
-
-                        if ((rel_i % skip) == 0 && (rel_i / skip) < int(uHybridIter)) {
-                            formula_Hybrid(z, dr, trap, c);
-                            skipMainFormula = true;
-                        }
-                    }
+                if (!skipMainFormula && ${schedule.fnName}(i) == 1) {
+                    formula_Hybrid(z, dr, trap, c);
+                    skipMainFormula = true;
                 }
                 `;
             }

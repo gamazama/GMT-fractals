@@ -387,8 +387,12 @@ export function createNativeSlotRewriter(ns: NativeSlotNamespace): NativeSlotRew
             // The schedule decision lives in the namespace's phase function (the weave
             // core's modulo scheduler — see scheduleGLSL above); the caller must emit
             // that function at global scope. Runtime-uniform driven: live + keyframable.
+            //
+            // !skipMainFormula: a weave block only claims an iteration no earlier block
+            // claimed — with Hybrid Box also interleaving, at most ONE slot body runs
+            // per iteration (injection order defines precedence).
             const inLoop = `
-    if (${ns.uniformPrefix}_weaveSlot(i) == 1) {
+    if (!skipMainFormula && ${ns.uniformPrefix}_weaveSlot(i) == 1) {
         ${rotSwapIn}
         ${rewrittenBody}
         ${rotSwapOut}
