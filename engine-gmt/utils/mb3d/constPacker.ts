@@ -317,14 +317,23 @@ export function bindOptions(
       i++; optIdx++;
       continue;
     }
-    if (t === 0 || t === 1) {
-      // X/Y/Z triple → one vec3 (e.g. Menger "CScale X/Y/Z", boxIFS "Z/Y/X halfwidth").
-      // Three consecutive plain scalars sharing one prefix whose axes cover {x,y,z}
-      // in ANY order — each member binds to the component its OWN axis names.
+    // Plain scalar shapes: .DOUBLE (0), .SINGLE (1), and .2DOUBLES (14 — SSE2: one
+    // value packed into BOTH 8-byte lanes, so its lane feeds two consecutive offsets).
+    const scalarish = (tt: number) => tt === 0 || tt === 1 || tt === 14;
+    /** Bind a scalar option's offset(s) to one GLSL expression, honoring its shape. */
+    const bindScalarOffsets = (tt: number, expr: string) => {
+      if (tt === 14) { off += 8; bindings.set(off, expr); off += 8; bindings.set(off, expr); }
+      else { off += (tt === 0 ? 8 : 4); bindings.set(off, expr); }
+    };
+    if (scalarish(t)) {
+      // X/Y/Z triple → one vec3 (e.g. Menger "CScale X/Y/Z", boxIFS "Z/Y/X halfwidth",
+      // mixed-shape "Z add"(t14)/"Y add"/"X add"). Three consecutive scalar-shaped
+      // options sharing one prefix whose axes cover {x,y,z} in ANY order — each
+      // member binds to the component its OWN axis names.
       const a0 = axisOf(name);
       // A bake directive on a later member breaks the triple — the members fall
       // through as individual scalars (each exposed or baked on its own).
-      if (a0 && (optionTypes[i + 1] ?? -1) <= 1 && (optionTypes[i + 2] ?? -1) <= 1
+      if (a0 && scalarish(optionTypes[i + 1] ?? -1) && scalarish(optionTypes[i + 2] ?? -1)
           && !bake?.[i + 1] && !bake?.[i + 2]) {
         const a1 = axisOf(nm(optIdx + 1)), a2 = axisOf(nm(optIdx + 2));
         if (a1 && a2 && a1.prefix === a0.prefix && a2.prefix === a0.prefix
@@ -335,8 +344,7 @@ export function bindOptions(
           const lane = packer.vec3(a0.prefix, seed, -8, 8, 0.001);
           if (!lane) return null;
           for (let k = 0; k < 3; k++) {
-            off += (optionTypes[i + k] === 0 ? 8 : 4);
-            bindings.set(off, `${lane.componentBase}.${members[k].axis}`);
+            bindScalarOffsets(optionTypes[i + k] ?? 0, `${lane.componentBase}.${members[k].axis}`);
           }
           i += 2; optIdx += 2; prevScalarUni = null;
           i++; optIdx++;
@@ -345,8 +353,7 @@ export function bindOptions(
       }
       const acc = packer.scalar(name, v(i), -8, 8, 0.001);
       if (acc === null) return null;
-      off += t === 0 ? 8 : 4;
-      bindings.set(off, acc);
+      bindScalarOffsets(t, acc);
       prevScalarUni = acc;
     } else if (t === 2) {
       // .INTEGER (e.g. Sphere/Cylinder toggle) → one scalar lane, rounded. The Cm

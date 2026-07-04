@@ -544,7 +544,7 @@ export function getSlotOptionMeta(slot: MB3DFormulaSlot): SlotOptionMeta[] {
     const name = names[opt]?.name ?? `opt${opt}`;
     if (t === 6) { out.push({ index: i, span: 3, name, exposable: true }); i += 3; opt++; continue; }
     if (t === 12) { out.push({ index: i, span: 6, name, exposable: false }); i += 6; opt++; continue; }
-    out.push({ index: i, span: 1, name, exposable: t === 0 || t === 1 || t === 2 || t === 7 || t === 8 || t === 11 });
+    out.push({ index: i, span: 1, name, exposable: t === 0 || t === 1 || t === 2 || t === 7 || t === 8 || t === 11 || t === 14 });
     i++; opt++;
   }
   return out;
