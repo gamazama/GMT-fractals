@@ -267,8 +267,12 @@ export interface PackedParam {
     max: number;
     step: number;
     default: number | { x: number; y: number; z?: number; w?: number };
-    /** Render as per-component on/off toggles (vec3 base fully occupied by bools). */
-    mode?: 'toggle';
+    /** 'toggle': on/off rendering — per-component buttons on an all-bool vec base,
+     *  or a segmented Off/On switch on a bool scalar lane. 'mixed': a vec2 whose
+     *  x is a GATING bool and y a value it enables (toggle X + slider Y — only
+     *  emitted when the bool's name declares gating semantics, since mixed greys
+     *  the slider while the toggle is off). */
+    mode?: 'toggle' | 'mixed';
 }
 
 /**
@@ -290,6 +294,9 @@ interface VecEntry {
     max: number;
     step: number;
     isBool: boolean;
+    /** Bool whose NAME declares gating semantics ("apply …", "use …", "enable …")
+     *  — eligible to drive a vec2 'mixed' control (toggle X gates slider Y). */
+    gates: boolean;
     isVec3Param: boolean;
 }
 
@@ -324,7 +331,7 @@ export class VecControlAccumulator {
     add(
         base: string, label: string, comps: readonly string[], values: readonly number[],
         min: number, max: number, step: number,
-        opts: { isBool?: boolean; isVec3Param?: boolean } = {},
+        opts: { isBool?: boolean; gates?: boolean; isVec3Param?: boolean } = {},
     ): void {
         const kind = vecKindOf(base);
         let slot = this.byBase.get(base);
@@ -335,7 +342,7 @@ export class VecControlAccumulator {
             this.out.push(param);
             this.coreMath[base] = zeroVec(kind);
         }
-        slot.entries.push({ label, comps, min, max, step, isBool: !!opts.isBool, isVec3Param: !!opts.isVec3Param });
+        slot.entries.push({ label, comps, min, max, step, isBool: !!opts.isBool, gates: !!opts.gates, isVec3Param: !!opts.isVec3Param });
 
         comps.forEach((c, i) => {
             const v = values[i] ?? values[0] ?? 0;
@@ -367,7 +374,16 @@ export class VecControlAccumulator {
         param.min = allBools ? 0 : Math.min(...entries.map(e => e.min));
         param.max = allBools ? 1 : Math.max(...entries.map(e => e.max));
         param.step = allBools ? 1 : Math.min(...entries.map(e => e.step));
-        if (allBools && kind === 'vec3') param.mode = 'toggle';
+        // Any FULLY-bool base renders as per-component toggles. A vec2 whose x is
+        // a GATING bool ("apply …") over a continuous y renders as 'mixed'
+        // (toggle X enables slider Y) — the gating check matters because mixed
+        // greys the slider while the toggle is off, which would be wrong for two
+        // unrelated params that merely share the lane.
+        const boolAt = (c: string) => entries.some(e => e.comps.includes(c) && e.isBool);
+        const gatesAt = (c: string) => entries.some(e => e.comps.includes(c) && e.gates);
+        const hasComp = (c: string) => entries.some(e => e.comps.includes(c));
+        if (allBools) param.mode = 'toggle';
+        else if (kind === 'vec2' && gatesAt('x') && hasComp('y') && !boolAt('y')) param.mode = 'mixed';
         else delete param.mode;
 
         param.type = kind === 'vec4' && entries.length === 1 && entries[0].isVec3Param ? 'vec3' : kind;
@@ -390,14 +406,22 @@ export class ScalarParamPacker {
     constructor(private alloc: LaneAllocator) {}
 
     /** Allocate one scalar lane for an option, record its slider + default, and return
-     *  the GLSL accessor for the binding — or `null` if the scalar pool overflowed. */
-    scalar(label: string, value: number, min: number, max: number, step: number): string | null {
+     *  the GLSL accessor for the binding — or `null` if the scalar pool overflowed.
+     *  `opts.bool` marks a binary option (renders as a toggle — segmented Off/On on
+     *  a paramA..F lane, per-component button in an all-bool vec pack); `opts.gates`
+     *  marks a bool whose name declares gating semantics (vec2 'mixed' candidate). */
+    scalar(label: string, value: number, min: number, max: number, step: number,
+        opts?: { bool?: boolean; gates?: boolean }): string | null {
         const lane = this.alloc.nextScalar();
         if (!lane) return null;
         if (lane.component) {
-            this.acc.add(lane.coreKey, label, [lane.component], [value], min, max, step);
+            this.acc.add(lane.coreKey, label, [lane.component], [value], min, max, step,
+                opts?.bool ? { isBool: true, gates: opts.gates } : {});
         } else {
-            this.params.push({ label, id: lane.coreKey, min, max, step, default: value });
+            this.params.push({
+                label, id: lane.coreKey, min, max, step, default: value,
+                ...(opts?.bool ? { mode: 'toggle' as const } : {}),
+            });
             this.coreMath[lane.coreKey] = value;
         }
         return lane.accessor;

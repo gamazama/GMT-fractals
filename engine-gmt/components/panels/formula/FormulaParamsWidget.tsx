@@ -18,6 +18,7 @@ import type { FeatureComponentProps } from '../../../../components/registry/Comp
 import type { LfoTarget } from '../../../../types';
 import Slider from '../../../../components/Slider';
 import Dropdown from '../../../../components/Dropdown';
+import ToggleSwitch from '../../../../components/ToggleSwitch';
 import { Vector2Input, Vector3Input, Vector4Input } from '../../../../components/vector-input';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
@@ -178,6 +179,19 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
         }
 
         const val = p.val as number;
+
+        // Boolean scalar lane (packer mode 'toggle') — a segmented Off/On switch
+        // instead of a 0..1 slider. Still a float uniform underneath (0.0/1.0),
+        // so keyframing/undo behave like any other param.
+        if (p.mode === 'toggle') {
+            return (
+                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
+                    <ToggleSwitch label={p.label} value={val >= 0.5 ? 1 : 0}
+                        options={[{ label: 'Off', value: 0 }, { label: 'On', value: 1 }]}
+                        onChange={(v: number) => p.set(v)} />
+                </div>
+            );
+        }
 
         if (p.options) {
             return (

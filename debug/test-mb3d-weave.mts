@@ -645,6 +645,53 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   }
 }
 
+// ── Toggle / mixed control modes (A5: boolean + boolean-gates-slider inputs) ──
+{
+  const { VecControlAccumulator } = await import('../engine-gmt/utils/uniformSlots.ts');
+  const p1: any[] = [];
+  const a1 = new VecControlAccumulator(p1, {});
+  a1.add('vec2A', 'apply scale+add', ['x'], [1], 0, 1, 1, { isBool: true, gates: true });
+  a1.add('vec2A', 'Scale', ['y'], [2], -8, 8, 0.001);
+  ck('mode: gating bool + slider on vec2 → mixed', p1[0].mode === 'mixed', p1[0].mode);
+
+  const p2: any[] = [];
+  const a2 = new VecControlAccumulator(p2, {});
+  a2.add('vec2B', 'Sphere or Cylinder', ['x'], [1], 0, 1, 1, { isBool: true });
+  a2.add('vec2B', 'Scale', ['y'], [2], -8, 8, 0.001);
+  ck('mode: NON-gating bool pair stays normal (mixed would wrongly grey the slider)', p2[0].mode === undefined, p2[0].mode);
+
+  const p3: any[] = [];
+  const a3 = new VecControlAccumulator(p3, {});
+  a3.add('vec2C', 'Abs X', ['x'], [1], 0, 1, 1, { isBool: true });
+  a3.add('vec2C', 'Abs Y', ['y'], [0], 0, 1, 1, { isBool: true });
+  ck('mode: all-bool vec2 → per-axis toggles', p3[0].mode === 'toggle', p3[0].mode);
+
+  const { ScalarParamPacker, LaneAllocator } = await import('../engine-gmt/utils/uniformSlots.ts');
+  const pk = new ScalarParamPacker(new LaneAllocator());
+  pk.scalar('Sphere or Cylinder', 1, 0, 1, 1, { bool: true });
+  ck('mode: bool on a paramA..F lane → segmented toggle', pk.params[0]?.mode === 'toggle', pk.params[0]);
+}
+{
+  // t2 .INTEGER control shapes via the emit: "(0 to 3)" ranges become reachable
+  // sliders; plain 0/1 integers become toggles. (Probe check: 9 bundled scenes
+  // pick these up with ZERO shader changes.)
+  const { bindOptions } = await import('../engine-gmt/utils/mb3d/constPacker.ts');
+  const { LaneAllocator } = await import('../engine-gmt/utils/uniformSlots.ts');
+  const mk = (name: string, val: number) => {
+    const alloc = new LaneAllocator();
+    const b = bindOptions([val], [2], 1, [{ name } as any], alloc);
+    return b?.params[0];
+  };
+  const ranged = mk('OTrap option (0..3)', 0);
+  ck('t2: "(0..3)" range parsed → max 3 (was capped at 1)', !!ranged && ranged.max === 3 && !ranged.mode, ranged);
+  const ranged2 = mk('Modes (0 to 3)', 2);
+  ck('t2: "(0 to 3)" range parsed', !!ranged2 && ranged2.max === 3, ranged2);
+  const boolp = mk('Sphere or Cylinder', 1);
+  ck('t2: plain 0/1 integer → toggle', !!boolp && boolp.mode === 'toggle' && boolp.max === 1, boolp);
+  const big = mk('Iterations count', 3);
+  ck('t2: unhinted value>1 → slider reaching the value', !!big && big.max >= 3 && !big.mode, big);
+}
+
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);
 if (fails.length) {
   console.log('FAILURES:\n - ' + fails.join('\n - '));

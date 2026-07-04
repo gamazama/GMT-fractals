@@ -356,10 +356,19 @@ export function bindOptions(
       bindScalarOffsets(t, acc);
       prevScalarUni = acc;
     } else if (t === 2) {
-      // .INTEGER (e.g. Sphere/Cylinder toggle) → one scalar lane, rounded. The Cm
-      // token is a float operand in the decompiled body, so the lane reads as a float
-      // (no int() wrap) — identical whether it lands on paramA..F or a vec component.
-      const acc = packer.scalar(name, Math.round(v(i)), 0, 1, 1);
+      // .INTEGER → one scalar lane, rounded. The Cm token is a float operand in the
+      // decompiled body, so the lane reads as a float (no int() wrap) — identical
+      // whether it lands on paramA..F or a vec component. Control shape from the
+      // name + value: a declared range ("OTrap option (0..3)", "Modes (0 to 3)")
+      // becomes an integer slider over that range (the old hardcoded 0..1 max made
+      // 2..3 unreachable); a 0/1 value with no range is a BOOLEAN → toggle control,
+      // and a gating name ("apply scale+add") makes it a vec2 'mixed' candidate.
+      const val = Math.round(v(i));
+      const range = /\(0\s?(?:\.\.+|to|-)\s?(\d+)\)/i.exec(name);
+      const rangeMax = range ? Math.max(1, parseInt(range[1], 10)) : undefined;
+      const isBool = !rangeMax && (val === 0 || val === 1);
+      const acc = packer.scalar(name, val, 0, rangeMax ?? (isBool ? 1 : Math.max(4, val)), 1,
+        isBool ? { bool: true, gates: /^(apply|use|enable|with)\b/i.test(name) } : undefined);
       if (acc === null) return null;
       off += 4;
       bindings.set(off, acc);
