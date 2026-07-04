@@ -12,6 +12,7 @@ import { Mandelbulb } from '../engine-gmt/formulas/Mandelbulb.ts';
 import { Phoenix } from '../engine-gmt/formulas/Phoenix.ts';
 import { Julia3D } from '../engine-gmt/formulas/Julia3D.ts';
 import { MandelTerrain } from '../engine-gmt/formulas/MandelTerrain.ts';
+import { MengerSponge } from '../engine-gmt/formulas/MengerSponge.ts';
 import type { MB3DAddon, MB3DFormulaSlot, MB3DScene, MB3DHeader } from '../engine-gmt/utils/mb3d/parseMB3D.ts';
 
 registry.register(AmazingBox);
@@ -555,6 +556,49 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     ck('native: unregistered id rejected', !def && ledger.reasons.some((r) => /not a registered formula/.test(r)), ledger.reasons);
   }
 
+  // ── Native DE policy (P4.2): writesDeriv → est7 last resort; deMeta lead ────
+  registry.register(MengerSponge);
+  {
+    // Synthetic position-only formula: never writes dr → the fused weave must
+    // auto-route to the numerical estimator recipe (est7, ADR-0085).
+    const NoDr: any = {
+      id: 'TestNoDr', name: 'Test NoDr', juliaType: 'offset',
+      shader: {
+        function: 'void formula_TestNoDr(inout vec4 z, inout float dr, inout float trap, vec4 c) { z.xyz = abs(z.xyz) * uParamA + c.xyz; trap = min(trap, dot(z.xyz, z.xyz)); }',
+        loopBody: 'formula_TestNoDr(z, dr, trap, c);',
+        capabilities: new Set(['shape:per-iteration']),
+      },
+      parameters: [{ label: 'Scale', id: 'paramA', min: 0, max: 4, step: 0.01, default: 1.5 }],
+      defaultPreset: { formula: 'TestNoDr', features: { coreMath: { paramA: 1.5 } } },
+    };
+    registry.register(NoDr);
+    const { def, ledger } = emitFusedHybrid(scene([nslot(1, 'TestNoDr'), nslot(1, 'TestNoDr')]));
+    const q = (def?.defaultPreset as any)?.features?.quality ?? {};
+    ck('P4.2: no-dr native weave routes to est7 recipe', ledger.supported === true
+      && q.estimator === 7.0 && q.numDEeps === 0.3 && q.mb3dFaithful === true && q.detail === 1.5, q);
+  }
+  {
+    // dr-writing native pair must NOT route to est7; the lead's tuned quality
+    // subset applies (AmazingBox: est 1, fudge 0.5, Chebyshev, detail 2).
+    const { def } = emitFusedHybrid(scene([nslot(1, 'AmazingBox'), nslot(1, 'Mandelbulb')]));
+    const q = (def?.defaultPreset as any)?.features?.quality ?? {};
+    ck('P4.2: native lead deMeta applied (AmazingBox)', q.estimator === 1.0 && q.fudgeFactor === 0.5
+      && q.distanceMetric === 1.0 && q.detail === 2, q);
+  }
+  {
+    // Capability-backed estimator preset (MengerSponge est 5 cutting-plane) is
+    // dropped whole; the NEXT native slot's generic subset leads instead.
+    const { def } = emitFusedHybrid(scene([nslot(1, 'MengerSponge'), nslot(1, 'Mandelbulb')]));
+    const q = (def?.defaultPreset as any)?.features?.quality ?? {};
+    ck('P4.2: unsafe estimator subset dropped, next lead wins', q.estimator === 0.0 && q.fudgeFactor === 1
+      && q.distanceMetric === 0.0, q);
+  }
+  {
+    // Certified intern-box calibration keeps precedence over a native lead.
+    const { def } = emitFusedHybrid(scene([slot(1, 4), nslot(1, 'Mandelbulb')]));
+    const q = (def?.defaultPreset as any)?.features?.quality ?? {};
+    ck('P4.2: intern box calibration outranks native deMeta', q.estimator === 1.0 && q.fudgeFactor === 0.45, q);
+  }
 }
 
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);

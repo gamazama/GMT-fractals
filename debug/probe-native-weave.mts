@@ -8,6 +8,8 @@
  *                   ≈ the plain bulb (namespace prefixing proven on the GPU).
  *   3. bulb-box   — Mandelbulb ⊗ AmazingBox (two different native slots) —
  *                   the machinery visibly weaving.
+ *   4. mixed      — native Mandelbulb ⊗ MB3D intern Amazing Box (#4): both slot
+ *                   KINDS in one dispatcher (the P4.2 gate).
  *
  * Requires the dev server (any port serving render-harness.html; default 3400)
  * and a HEADED Chromium for the real ANGLE/D3D11 GPU (never SwiftShader).
@@ -49,10 +51,15 @@ pg.on('pageerror', () => {});
 await pg.goto(`http://localhost:${PORT}/render-harness.html`, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await pg.waitForFunction(() => !!(window as any).runMB3DWeaveTest, { timeout: 60000 });
 
+const mb3dInternBox = (iterCount: number) => ({
+  iterCount, formulaIndex: 4, name: '',
+  optionCount: 3, optionTypes: [0, 0, 0], optionValues: [2, 0.5, 1], // Scale, MinR, Fold
+});
 const shots: Array<{ id: string; scene?: any; formula?: string }> = [
   { id: 'ref-mandelbulb', formula: 'Mandelbulb' },
   { id: 'pair-identity', scene: weaveScene([nslot(1, PAIR[0]), nslot(1, PAIR[1] ?? PAIR[0])], `Canary ${PAIR.join('+')}`) },
   { id: 'bulb-box', scene: weaveScene([nslot(1, 'Mandelbulb'), nslot(1, 'AmazingBox')], 'Canary bulb+box') },
+  { id: 'mixed-native-mb3d', scene: weaveScene([nslot(2, 'Mandelbulb'), mb3dInternBox(1)], 'Canary mixed') },
 ];
 
 for (const s of shots) {

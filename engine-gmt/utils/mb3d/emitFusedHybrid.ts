@@ -132,7 +132,11 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
 
   // A weave slot body: the MB3D transpiler shape, optionally extended with the
   // native dispatcher-slot emission pieces (ADR-0089 P4.1 — nativeResolver.ts).
-  type SlotBody = TranspiledSlot & { call?: string; preCall?: string; postCall?: string; slotLoopInit?: string };
+  type SlotBody = TranspiledSlot & {
+    call?: string; preCall?: string; postCall?: string; slotLoopInit?: string;
+    /** Native slot's own DE preferences (P4.2) — applied when it leads the weave. */
+    deMeta?: Record<string, number>;
+  };
 
   // NATIVE slots (formulaIndex -1, name = registered formula id): resolved via the
   // engine weave core's native resolver instead of the MB3D transpiler. Prefixed
@@ -152,8 +156,9 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     return {
       glsl: res.glsl, fnName, tier: 'native',
       flag: mkFlag('native', 'native GMT formula as a weave slot'),
-      params: res.params as any, coreMath: res.coreMath, paramOk: true, writesDeriv: true,
+      params: res.params as any, coreMath: res.coreMath, paramOk: true, writesDeriv: res.writesDeriv,
       call: res.call, preCall: res.preCall, postCall: res.postCall, slotLoopInit: res.loopInit,
+      deMeta: res.deMeta,
     };
   };
 
@@ -389,6 +394,17 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       // distanceMetric 0 = Euclidean to match MB3D (`r := Sqrt(Rout)`, no metric option;
       // ADR-0088). est 1 + fudge 0.45 kept (the certified empirical intern-box calibration).
       preset.features.quality = { ...(preset.features.quality ?? {}), estimator: 1.0, fudgeFactor: 0.45, distanceMetric: 0.0 };
+    } else {
+      // NATIVE DE lead (P4.2): no decompiled DE meta and no intern box in the weave —
+      // adopt the first native slot's own tuned quality subset (its preset's
+      // estimator/fudge/metric/bailout/detail, generic estimators only; see
+      // nativeResolver deMeta). MB3D-only scenes never reach here with a hit
+      // (no native slots ⇒ no deMeta ⇒ unchanged), keeping the certified corpus
+      // byte-identical.
+      const nativeLead = bodies.find((b) => b.deMeta);
+      if (nativeLead) {
+        preset.features.quality = { ...(preset.features.quality ?? {}), ...nativeLead.deMeta };
+      }
     }
   }
 

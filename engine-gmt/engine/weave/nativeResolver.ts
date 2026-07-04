@@ -65,6 +65,22 @@ export interface NativeSlotResolution {
     /** False when the shared lane pool overflowed — caller re-resolves in bake mode
      *  (the same all-or-nothing fallback as the MB3D transpiler path). */
     paramOk: boolean;
+    /** True when the formula actually UPDATES the DE derivative (writes `dr`) —
+     *  i.e. supplies a usable analytic dr. The emit auto-routes a weave where NO
+     *  slot writes a derivative to the numerical estimator (7, ADR-0085) — the
+     *  same no-ADE policy as MB3D [CODE] slots. Detected from source, so P4.3's
+     *  frag/DEC imports (which can be position-only) route correctly for free. */
+    writesDeriv: boolean;
+    /** The formula's own DE preferences (its preset quality subset), for the
+     *  fused def when this slot LEADS the weave and no decompiled/intern DE meta
+     *  applies. Undefined when the preset requests a capability-backed estimator
+     *  (cutting-plane 5 / dIFS 6 / numeric 7): those need per-formula state or a
+     *  custom getDist the fused def doesn't carry, so the whole tuned subset is
+     *  dropped rather than half-applied. NOTE a native slot's `shader.getDist`
+     *  is NOT spliced into a weave (exactly like interlace secondaries) — such
+     *  formulas run on the generic estimator; the estimator dropdown stays the
+     *  manual escape hatch. */
+    deMeta?: Record<string, number>;
 }
 
 export interface NativeSlotReject { ok: false; reason: string; }
@@ -162,7 +178,9 @@ export function resolveNativeSlot(
         ? new ScalarParamPacker(opts.alloc)
         : opts.parametric ? new ScalarParamPacker(new LaneAllocator()) : null;
     const { map, ok } = buildParamBindings(def, packer);
-    if (!ok) return { ok: true, glsl: '', call: '', preCall: '', params: [], coreMath: {}, paramOk: false };
+    // Pool overflow: the caller discards this body and re-resolves in bake mode,
+    // so only paramOk matters here.
+    if (!ok) return { ok: true, glsl: '', call: '', preCall: '', params: [], coreMath: {}, paramOk: false, writesDeriv: true };
 
     const P = `ws${slotIndex}_`;
     const R = createNativeSlotRewriter({
@@ -223,6 +241,24 @@ gmt_rotAxis = _${P}svAxis; gmt_rotCos = _${P}svCos; gmt_rotSin = _${P}svSin;`;
         postCall = ` gmt_rotAxis = _${P}pAxis; gmt_rotCos = _${P}pCos; gmt_rotSin = _${P}pSin;`;
     }
 
+    // DE policy (P4.2). writesDeriv: does anything in the formula update `dr`?
+    // (dr is threaded inout through helpers under the same name, so a source scan
+    // over function+loopBody+loopInit covers the helper-write case too.)
+    const writesDeriv = /\bdr(?:\.\w+)?\s*[*+/-]?=(?!=)/.test(`${sh.function}\n${sh.loopBody}\n${sh.loopInit ?? ''}`);
+    // deMeta: the formula's tuned quality subset — only for GENERIC estimators
+    // (0 analytic / 1 linear / 2 pseudo / 3 dampened / 4 linear-offset). 5/6/7
+    // need capabilities or state the fused def doesn't have; their tuned values
+    // would be half-applied nonsense, so drop the subset entirely.
+    const q = (def.defaultPreset as any)?.features?.quality ?? {};
+    let deMeta: Record<string, number> | undefined;
+    if (q.estimator === undefined || (q.estimator >= 0 && q.estimator <= 4)) {
+        deMeta = {};
+        for (const k of ['estimator', 'fudgeFactor', 'distanceMetric', 'deBailout', 'detail'] as const) {
+            if (typeof q[k] === 'number') deMeta[k] = q[k];
+        }
+        if (Object.keys(deMeta).length === 0) deMeta = undefined;
+    }
+
     return {
         ok: true,
         glsl: [globals.join('\n'), rewrittenPreamble, rewrittenFn].filter(Boolean).join('\n'),
@@ -233,5 +269,7 @@ gmt_rotAxis = _${P}svAxis; gmt_rotCos = _${P}svCos; gmt_rotSin = _${P}svSin;`;
         params: packer?.params ?? [],
         coreMath: packer?.coreMath ?? {},
         paramOk: true,
+        writesDeriv,
+        deMeta,
     };
 }
