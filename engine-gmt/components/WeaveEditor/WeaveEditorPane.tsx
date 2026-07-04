@@ -169,6 +169,18 @@ function OptValInput({ value, onCommit }: { value: number; onCommit: (n: number)
     );
 }
 
+/** Auto-name a weave from its active formulas ("ABox × Menger 3 × Koch"),
+ *  shortened to fit. Used whenever the user leaves the name field empty. */
+function autoTitleOf(rows: SlotRow[]): string {
+    const short = (l: string) => l.replace(/\s*\(.*?\)\s*/g, ' ').replace(/^_/, '').trim();
+    const act = rows.filter((r) => r.slot.iterCount > 0).map((r) => short(r.label));
+    if (act.length === 0) return 'My Weave';
+    let t = act.join(' × ');
+    if (t.length > 34) t = act.map((l) => l.split(/\s+/)[0]).join(' × ');
+    if (t.length > 34) t = t.slice(0, 33) + '…';
+    return t;
+}
+
 export function WeaveEditorPane() {
     const store = useEngineStore() as any;
 
@@ -177,7 +189,9 @@ export function WeaveEditorPane() {
         // Reopening a weave formula: hydrate from its persisted source.
         const ws = (registry.get(store.formula) as FractalDefinition | undefined)?.weaveSource;
         if (ws) return draftFromWeaveSource(ws);
-        return { title: 'My Weave', rows: [], repeatKey: null, scheduleKind: 'counts' };
+        // Empty title = auto-name from the formula mix (autoTitleOf) until the
+        // user types their own.
+        return { title: '', rows: [], repeatKey: null, scheduleKind: 'counts' };
     });
     const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
     const [reorderWarn, setReorderWarn] = useState(false);
@@ -501,9 +515,10 @@ export function WeaveEditorPane() {
         setStatus(null);
         try {
             const slots = draft.rows.map((r) => ({ ...r.slot, optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] }));
+            const title = draft.title.trim() || autoTitleOf(draft.rows);
             const weaveSource: WeaveSource = {
                 version: 1,
-                title: draft.title,
+                title,
                 slots: draft.rows.map((r) => ({
                     label: r.label, kind: r.kind, ref: r.ref, slot: { ...r.slot },
                     ...(r.bake?.some(Boolean) ? { bake: Array.from(r.bake, Boolean) } : {}),
@@ -520,7 +535,7 @@ export function WeaveEditorPane() {
                     }
                     : { kind: 'counts', repeatFrom: repeatIdx },
             };
-            const res = loadUserWeave(slots, draft.title || 'My Weave', weaveSource, repeatIdx);
+            const res = loadUserWeave(slots, title, weaveSource, repeatIdx);
             if (!res.ok) {
                 setStatus({ kind: 'error', text: res.reason || 'This weave is not supported.' });
                 showToast(res.reason || 'Weave build failed.', 'error', 6000);
@@ -568,8 +583,9 @@ export function WeaveEditorPane() {
                 <input
                     value={draft.title}
                     onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-                    placeholder="Weave name"
-                    className="flex-1 rounded bg-surface-sunken border border-line/10 px-2 py-1 text-[11px] text-fg outline-none focus:border-accent-500/40"
+                    placeholder={autoTitleOf(draft.rows)}
+                    title="Weave name — leave empty to name it after its formula mix"
+                    className="flex-1 rounded bg-surface-sunken border border-line/10 px-2 py-1 text-[11px] text-fg outline-none focus:border-accent-500/40 placeholder:text-fg-tertiary"
                     spellCheck={false}
                 />
                 {currentWs && (
