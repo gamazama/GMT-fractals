@@ -1,5 +1,38 @@
 # Session prompt — Weave P4 build: native slots (P4.0–P4.3), then legacy absorption (P4.4+)
 
+> **Fable delivery 2026-07-04 — P4.4+P4.5 DONE (legacy absorption + one-way load migration; ADR-0091).**
+> Commits: `96719a7` weaveEnabled master gate (opt-in via emitFusedHybrid opts; low-profile editor checkbox) ·
+> `02248c3` P4.4 interlace load-migration + LEAD-slot getDist splice · `37b365e` re-save round-trip test ·
+> `3c4c2b6` interlace feature RETIRED (uInterlace* deleted; mesh path reworked + verified; sweep repointed →
+> `native-weave-sweep.mts`; "Edit weave…" affordance replaces the panel section) · `9bd8428` P4.5 Hybrid Box
+> interleave absorbed (9 BoxFold formulas generated from FOLD_LIST; interleaved emission + hybridComplex/Skip/Swap
+> retired; fast path untouched). **NOT pushed.**
+>
+> **The load-bearing gate came back exact: every migrated legacy scene renders PIXEL-IDENTICAL (0/691200
+> differing subpixels, real GPU) to its pre-migration reference** — interlace on Mandelbulb, on two
+> custom-getDist hosts (KleinianMobius, Apollonian — the getDist splice is what makes these exact), the
+> disabled-but-configured case (→ `weaveEnabled:false`, renders base-only), Hybrid Box interleaved, and the
+> fast-path control. References + loadable legacy scene files + probe: `debug/scratch/p44/` +
+> `debug/probe-legacy-migration.mts [--migrated]` (synthesized presets — owner chose fallback over real files).
+> Migration hook = app-gmt preset migration v3 (runs inside loadPreset on EVERY load path; mesh-export hooks the
+> same fn). Combined interlace+hybrid scenes: fold layer first (legacy precedence); disagreeing enables migrate
+> only the ENABLED system (owner policy). `hybridPermute` not carried (warned). Re-saved migrated scenes
+> round-trip through the NEW format; re-migration is a no-op.
+>
+> **Owner calls this session:** (1) enable-gate design as recommended (both schedule kinds, editor always opts
+> in); (2) lead-slot getDist splice approved after classifying all 18 custom getDist bodies (all weavable ones
+> spliceable with the existing rewriter; none structurally incompatible); (3) full retirement scope incl.
+> mesh-path deletion after verification; (4) BoxFold-as-formulas + agree-policy, noting "a few boxFold
+> formulas" exist (→ one def per fold type) and that Hybrid Box could later be a PRESET GROUP in the
+> consolidated weave UI (backlog).
+>
+> **Found + fixed en route:** the fused def now UNIONS `estimator:cutting-plane` from native slots — the
+> repointed sweep caught 12/45 'cp_dmin: undeclared identifier' failures (the retired pairHasCapability leg's
+> job); sweep now 45/45. Suite 189→**243**; typecheck/mb3d 24/refine 56/decompiler/boot green; MB3D emit probe
+> byte-identical at every step. NewSceneModal still authors legacy-shaped interlace state on purpose (the v3
+> migration converts it — one bridge). **Next: P4.6** (animation transfer — banks give stable per-slot targets,
+> reorder = bank-index rename) **and P4.7** (panel promotion), as separate sessions per the split below.
+
 > **BANKS delivery 2026-07-04 (Opus, `S-weave-p4-banks.md` / ADR-0090) — DONE + user-approved. Exit gate PASSED.**
 > Per-slot param BANKS landed on `feat/weave-core` (commits `19a86db` bank decl · `c44cea6` resolver/emit · `9759e4a`
 > panel+meter · `578073c` ADR · `b5fdcef` divider fix · `7ec8f9e` modulation+randomize · `0d7da9e` "Formula N:" naming ·

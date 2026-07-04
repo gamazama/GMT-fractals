@@ -2,6 +2,12 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-04 (P4.4+P4.5 absorption landed; decision unchanged):** the
+> "banks BEFORE P4.4/P4.5" sequencing paid off as planned — legacy interlace
+> params migrate straight onto bank 1 (`weave.ws1*`) and the whole `uInterlace*`
+> uniform set is DELETED with the feature (one migration, not two); Hybrid Box
+> fold params land on the BoxFold slot's bank. See ADR-0091.
+
 ## Context
 
 ADR-0089 P4.1 made a registered native GMT formula a dispatcher-hosted weave

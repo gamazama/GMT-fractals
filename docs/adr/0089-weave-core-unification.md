@@ -2,6 +2,28 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-04 (P4.4+P4.5 landed; decision unchanged; see ADR-0091):**
+> the absorption this ADR anticipated is DONE — the interlace feature and
+> Hybrid Box's interleaved mode are RETIRED, and legacy scenes convert into
+> weave-native form at LOAD (app-gmt migration v3 → weaveMigration.ts): host →
+> slot 0 / bank 0, Hybrid Box fold → a layer on the matching BoxFold FORMULA
+> (nine registered defs generated from FOLD_LIST), interlace secondary → the
+> next layer, schedules → `weave.weaveInterval<k>`/`StartIter<k>`/`Beats<k>`,
+> enables → the new whole-weave `weaveEnabled` gate (owner decision 1: live,
+> keyframable, default ON, opt-in per def via emitFusedHybrid opts.enableGate —
+> plain MB3D imports stay byte-identical), tracks retargeted by pure id rename,
+> legacy state cleared (owner decision 2 — accepted one-way door). The
+> resolver now splices the LEAD slot's custom getDist (accumulator DEs like
+> KleinianMobius survive weaving) and the fused def unions
+> `estimator:cutting-plane` from its slots (the old pairHasCapability leg).
+> ROUND-TRIP GATE: every migrated legacy scene rendered PIXEL-IDENTICAL
+> (0-diff) to its pre-migration reference on the real GPU, including both
+> custom-getDist hosts, the disabled case, Hybrid Box interleaved, and the
+> untouched fast-path control. The "latent same-iteration conflict" this ADR's
+> Context flagged is structurally gone (one dispatcher). The N×N interlace
+> sweep is repointed at 2-slot native weaves (native-weave-sweep.mts). MB3D
+> emit byte-identical throughout; suite 189→243. Full contract in ADR-0091.
+
 > **Update 2026-07-04 (per-slot BANKS landed; decision unchanged; see ADR-0090):**
 > a native formula woven as slot k no longer shares the coreMath dense
 > `LaneAllocator` — it binds its declared params VERBATIM onto its own per-slot
