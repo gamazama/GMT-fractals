@@ -47,6 +47,30 @@ export const VEC2_COMPONENTS = VEC2_SLOTS.flatMap(s => [`${s}.x`, `${s}.y`]);
 export const VEC4_VEC2_SLOTS = VEC4_SLOTS.flatMap(s => [`${s}.xy`, `${s}.zw`]);
 export const VEC3_VEC2_SLOTS = VEC3_SLOTS.flatMap(s => [`${s}.xy`]);
 
+/** Every core slot id, in declaration order — the full per-slot vocabulary a
+ *  native weave slot's BANK mirrors (6 scalars + 3 vec2 + 3 vec3 + 3 vec4). */
+export const CORE_SLOTS = [...SCALAR_SLOTS, ...VEC2_SLOTS, ...VEC3_SLOTS, ...VEC4_SLOTS] as const;
+
+/** Per-slot BANKS (ADR-0090): a native GMT formula woven as slot k presents its
+ *  declared params VERBATIM on its own bank — the coreMath vocabulary duplicated
+ *  under a `ws<k>` prefix. `WEAVE_BANK_COUNT` = the max weave slots (the MB3D
+ *  addon table), so every active slot 0..5 has a private bank and native slots
+ *  never share the coreMath dense pool with each other or with MB3D slots. */
+export const WEAVE_BANK_COUNT = 6;
+
+/** Bank state key for core slot id `slot` on bank `k` (`0`,`'paramA'` →
+ *  `'ws0ParamA'`). The DDFS `weave` feature declares one param per key; the
+ *  fused def's `parameters` reference them with `feature: 'weave'`. */
+export function weaveBankKey(bank: number, slot: string): string {
+    return `ws${bank}${slot.charAt(0).toUpperCase()}${slot.slice(1)}`;
+}
+
+/** GPU uniform accessor for a bank slot (`0`,`'paramA'` → `'uWs0ParamA'`) — the
+ *  uniform the DDFS bank param declares and the resolver remaps `uParamA` to. */
+export function weaveBankUniform(bank: number, slot: string): string {
+    return slotToUniform(weaveBankKey(bank, slot));
+}
+
 /** Given a component slot like `'vec3A.x'` or `'vec4A.xy'`, return its base slot
  *  (`'vec3A'`), or `null` for a plain scalar / non-component slot. */
 export function componentSlotBase(slot: string): string | null {
