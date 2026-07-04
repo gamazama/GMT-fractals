@@ -4,7 +4,6 @@ import * as THREE from 'three';
 import { FOLD_LIST, FOLD_OPTIONS, getFold } from './folds';
 import { SHARED_TRANSFORMS_GLSL } from './transforms';
 import { registry } from '../../engine/FractalRegistry';
-import { emitModuloScheduleGLSL } from '../../engine/weave/schedule';
 
 // Re-export types
 export type { FoldDefinition } from './types';
@@ -46,7 +45,6 @@ export interface GeometryState {
 
     // Hybrid Box (compile-time config)
     hybridFoldType: number;
-    hybridComplex: boolean;
     hybridPermute: number;
 
     // Hybrid Box (runtime)
@@ -58,8 +56,6 @@ export interface GeometryState {
     hybridFoldLimit: number;
     hybridFoldLimitVec: THREE.Vector3;
     hybridAddC: boolean;
-    hybridSkip: number;
-    hybridSwap: boolean;
     hybridShift: THREE.Vector3;
     hybridRot: THREE.Vector3;
 
@@ -208,7 +204,7 @@ export const GeometryFeature: FeatureDefinition = {
     panelConfig: {
         compileParam: 'hybridCompiled',
         runtimeToggleParam: 'hybridMode',
-        compileSettingsParams: ['hybridFoldType', 'hybridComplex', 'hybridSwap', 'hybridPermute'],
+        compileSettingsParams: ['hybridFoldType', 'hybridPermute'],
         runtimeGroup: 'hybrid',
         runtimeExcludeParams: ['hybridMode'],
         label: 'Hybrid Box Fold',
@@ -252,16 +248,6 @@ export const GeometryFeature: FeatureDefinition = {
             options: FOLD_OPTIONS.map(o => ({ ...o, estCompileMs: 400 })),
             description: 'Box fold algorithm. Each type produces fundamentally different geometry.',
             onUpdate: 'compile', noAccumReset: true,
-            condition: { param: 'hybridCompiled', bool: true }
-        },
-
-        // Advanced Hybrid (compile-time interleaving)
-        hybridComplex: {
-            type: 'boolean', default: false, label: 'Interleaved Mode', shortId: 'hx',
-            group: 'engine_settings', ui: 'checkbox',
-            description: 'Interleaves fold with fractal formula (Box \u2192 Fractal \u2192 Box). Slow compile.',
-            onUpdate: 'compile', noAccumReset: true,
-            estCompileMs: 1500,
             condition: { param: 'hybridCompiled', bool: true }
         },
 
@@ -342,19 +328,6 @@ export const GeometryFeature: FeatureDefinition = {
 
         // Fold-type-specific params (auto-injected from fold definitions, with eq conditions)
         ...buildFoldExtraParams(),
-
-        // Interleaved Hybrid Options (compile-time — eliminate runtime branches)
-        hybridSwap: {
-            type: 'boolean', default: false, label: 'Swap Order', shortId: 'hw',
-            group: 'engine_settings', ui: 'checkbox',
-            description: 'Start with fractal formula instead of box fold.',
-            onUpdate: 'compile', noAccumReset: true,
-            condition: [{ param: 'hybridCompiled', bool: true }, { param: 'hybridComplex', bool: true }]
-        },
-        hybridSkip: {
-            type: 'int', default: 1, label: 'Hybrid Interval', shortId: 'hk', uniform: 'uHybridSkip', min: 1, max: 8, step: 1, group: 'hybrid',
-            condition: [{ param: 'hybridComplex', bool: true }, { param: 'hybridCompiled', bool: true }, { param: 'hybridMode', bool: true }]
-        },
 
         // --- LOCAL ROTATION (Runtime) ---
         preRotEnabled: {
@@ -467,12 +440,13 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
             hybridInLoop += `z.xyz = mix(z.xyz, abs(z.xyz), uBurningRuntime * uBurningMix);`;
         }
 
+        // Hybrid Box FAST PATH only — pre-loop box fold iterations, guarded by
+        // a runtime uniform. The legacy INTERLEAVED mode (hybridComplex — a
+        // per-iteration modulo weave) retired in ADR-0089 P4.5: interleaved
+        // scenes migrate at load into a weave whose fold layer is the matching
+        // BoxFold FORMULA (formulas/boxFolds.ts), scheduled by the weave core.
         if (hybridCompiled && !isSelfContainedSDE) {
-            const isComplex = state && state.hybridComplex;
-
-            if (!isComplex) {
-                // Fast Path — pre-loop box fold iterations, guarded by runtime uniform
-                hybridPreLoop += `
+            hybridPreLoop += `
                 if (uHybrid > 0.5) {
                     initHybridTransform();
                     int hLim = int(uHybridIter);
@@ -482,36 +456,6 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
                     }
                 }
                 `;
-            } else {
-                // Interleaved Path — init + per-iteration fold. The schedule is the
-                // weave core's modulo phase function (ADR-0089): enabled / interval /
-                // invocation cap are runtime uniforms (live + keyframable, no
-                // recompile); the swap start offset stays baked at compile time to
-                // eliminate a runtime branch, as before.
-                const swapEnabled = state?.hybridSwap ?? false;
-
-                hybridPreLoop += `if (uHybrid > 0.5) { initHybridTransform(); }\n`;
-
-                const schedule = emitModuloScheduleGLSL({
-                    enabled: 'uHybrid',
-                    interval: 'uHybridSkip',
-                    startIter: swapEnabled ? '1.0' : '0.0',
-                    maxCount: 'uHybridIter',
-                }, 'Hybrid');
-                builder.addFunction(schedule.glsl);
-
-                // !skipMainFormula: a weave block only claims an iteration no earlier
-                // block claimed — with interlace also active, at most ONE slot body
-                // runs per iteration (injection order defines precedence; geometry
-                // injects before interlace). Previously both bodies could fire on the
-                // same iteration with last-writer-wins flag semantics — undefined.
-                hybridInLoop += `
-                if (!skipMainFormula && ${schedule.fnName}(i) == 1) {
-                    formula_Hybrid(z, dr, trap, c);
-                    skipMainFormula = true;
-                }
-                `;
-            }
         }
 
         builder.addHybridFold("", hybridPreLoop, hybridInLoop);

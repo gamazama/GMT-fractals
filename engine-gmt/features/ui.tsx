@@ -9,7 +9,7 @@
  * Scope of this first pass:
  *   - Widget components that slot into AutoFeaturePanel via each
  *     feature's `customUI` entries (ColoringHistogram, scene widgets,
- *     HybridAdvancedLock, JuliaRandomize).
+ *     JuliaRandomize).
  *   - Bespoke `panel-*` components that the manifest's panel entries
  *     reference by `component:` (ShaderCompilerPanel, CameraManagerPanel).
  *
@@ -36,7 +36,6 @@ import { ColoringHistogram } from '../components/panels/gradient/ColoringHistogr
 import { GradientPreviewLayer1, GradientPreviewLayer2 } from '../components/panels/gradient/GradientPreview';
 import { TexturingSourceToggle } from '../components/panels/gradient/TexturingSourceToggle';
 import { HistogramLayerMarker } from '../components/panels/gradient/HistogramLayerMarker';
-import { HybridAdvancedLock } from '../components/panels/HybridAdvancedLock';
 import { JuliaRandomize } from '../components/widgets/JuliaRandomize';
 import { InteractionPicker } from '../../components/InteractionPicker';
 import { FormulaSelect } from '../components/panels/formula/FormulaSelect';
@@ -159,7 +158,6 @@ export const registerGmtUi = () => {
     componentRegistry.register('gradient-preview-layer2', GradientPreviewLayer2);
     componentRegistry.register('texturing-source-toggle', TexturingSourceToggle);
     componentRegistry.register('coloring-histogram-layer-marker', HistogramLayerMarker);
-    componentRegistry.register('hybrid-advanced-lock', HybridAdvancedLock);
     componentRegistry.register('julia-randomize', JuliaRandomize);
     componentRegistry.register('interaction-picker', InteractionPicker);
     componentRegistry.register('formula-select', ConnectedFormulaSelect);

@@ -17,6 +17,7 @@ import { OpticsFeature } from './optics';
 import { NavigationFeature } from './navigation';
 import { DrawingFeature } from './drawing/index';
 import { ShaderCompilerFeature } from './engine/index';
+import { registerBoxFoldFormulas } from '../formulas/boxFolds';
 import { AOFeature } from './ao/index';
 import { ReflectionsFeature } from './reflections/index';
 import { WaterPlaneFeature } from './water_plane';
@@ -92,6 +93,13 @@ export const registerFeatures = () => {
     featureRegistry.register(WebcamFeature);
     featureRegistry.register(DebugToolsFeature);
     featureRegistry.register(ShaderCompilerFeature);
+
+    // BoxFold FORMULA defs (ADR-0089 P4.5): geometry's Hybrid Box fold step as
+    // registered formulas, one per fold type — the weave slots the legacy
+    // interleaved-mode migration targets (and picker entries for free). The
+    // formula registry has no freeze, but registering here keeps every entry
+    // (app, harness, sweep) consistent without touching formulas/index.ts.
+    registerBoxFoldFormulas();
 };
 
 // --- EXPORT TYPES ---

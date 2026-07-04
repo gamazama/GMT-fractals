@@ -1011,6 +1011,128 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   }
 }
 
+// ── P4.5: BoxFold formulas + Hybrid Box interleave migration ────────────────
+{
+  const { registerBoxFoldFormulas, boxFoldFormulaId } = await import('../engine-gmt/formulas/boxFolds.ts');
+  const { FOLD_LIST } = await import('../engine-gmt/features/geometry/folds/index.ts');
+  const { migrateLegacyWeavePreset } = await import('../engine-gmt/utils/weaveMigration.ts');
+  registerBoxFoldFormulas();
+
+  // All nine fold types register and resolve as weave slots.
+  {
+    const ids = FOLD_LIST.map((_, i) => boxFoldFormulaId(i));
+    ck('boxfold: 9 defs registered', ids.length === 9 && ids.every((id) => !!registry.get(id as any)), ids);
+    const rejects = ids.filter((id) => resolveNativeSlot(registry.get(id as any)!, 0, 'p', { parametric: true }).ok === false);
+    ck('boxfold: all resolve as weave slots', rejects.length === 0, rejects);
+    const std = registry.get(boxFoldFormulaId(0) as any)!;
+    ck('boxfold: standard keeps Tglad fold body', std.shader.function.includes('clamp(z, -uVec3A, uVec3A) * 2.0 - z'));
+    ck('boxfold: menger selfContained (no sphereFold/outer scale)',
+      !registry.get(boxFoldFormulaId(8) as any)!.shader.function.includes('sphereFold('));
+    const emit = emitFusedHybrid(scene([nativeSlotShell('Mandelbulb', 1), nativeSlotShell(boxFoldFormulaId(0), 1)]));
+    ck('boxfold: weaves with a host', emit.ledger.supported === true && !!emit.def
+      && emit.def.shader.function.includes('ws1_bfstandard_fold'), emit.ledger.reasons);
+  }
+
+  const legacyHb = (over: Record<string, any> = {}, geomOver: Record<string, any> = {}) => ({
+    formula: 'Mandelbulb',
+    name: 'hb legacy',
+    features: {
+      coreMath: { iterations: 30, paramA: 8 },
+      geometry: {
+        juliaMode: false,
+        hybridCompiled: true, hybridMode: true, hybridComplex: true,
+        hybridSkip: 2, hybridSwap: true, hybridIter: 4, hybridFoldType: 0,
+        hybridScale: -1.7, hybridMinR: 0.4, hybridFixedR: 1.1,
+        hybridFoldLimitVec: { x: 1, y: 1, z: 1 },
+        ...geomOver,
+      },
+    },
+    animations: [
+      { id: 'h1', enabled: true, target: 'geometry.hybridScale' },
+      { id: 'h2', enabled: true, target: 'geometry.hybridSkip' },
+      { id: 'h3', enabled: true, target: 'geometry.juliaMode' },
+    ],
+    ...over,
+  });
+
+  // Interleaved-only scene → 2-slot weave with a BoxFold layer.
+  {
+    const p: any = migrateLegacyWeavePreset(legacyHb());
+    ck('hb-migrate: formula → fused weave', /^MB3DHybrid/.test(p.formula), p.formula);
+    const w = p.features.weave;
+    ck('hb-migrate: skip/swap/iter → interval/startIter/beats',
+      w.weaveInterval1 === 2 && w.weaveStartIter1 === 1 && w.weaveBeats1 === 4,
+      { i: w.weaveInterval1, s: w.weaveStartIter1, b: w.weaveBeats1 });
+    ck('hb-migrate: fold VALUES on bank 1', w.ws1ParamA === -1.7 && w.ws1ParamC === 0.4, { a: w.ws1ParamA, c: w.ws1ParamC });
+    ck('hb-migrate: gate from hybridMode', w.weaveEnabled === true);
+    const geo = p.features.geometry;
+    ck('hb-migrate: interleave state cleared, julia untouched',
+      geo.hybridComplex === undefined && geo.hybridSkip === undefined && geo.hybridSwap === undefined
+      && geo.hybridCompiled === false && geo.hybridMode === false && geo.juliaMode === false, geo);
+    const targets = p.animations.map((a: any) => a.target);
+    ck('hb-migrate: tracks retargeted',
+      JSON.stringify(targets) === JSON.stringify(['weave.ws1ParamA', 'weave.weaveInterval1', 'geometry.juliaMode']), targets);
+    const def = registry.get(p.formula) as any;
+    ck('hb-migrate: weaveSource layer carries beats',
+      def?.weaveSource?.schedule?.layers?.[0]?.beats === 4, def?.weaveSource?.schedule);
+  }
+
+  // Combined scene, enables AGREE → 3-slot weave, fold layer 1, secondary layer 2.
+  {
+    const src: any = legacyHb();
+    src.features.interlace = {
+      interlaceCompiled: true, interlaceEnabled: true,
+      interlaceFormula: 'AmazingBox', interlaceInterval: 3, interlaceStartIter: 0,
+      interlaceParamA: -1.8,
+    };
+    src.animations.push({ id: 'c1', enabled: true, target: 'interlace.interlaceInterval' });
+    const p: any = migrateLegacyWeavePreset(src);
+    const def = registry.get(p.formula) as any;
+    const w = p.features.weave;
+    ck('combined: 3 native slots, fold before secondary',
+      def?.weaveSource?.slots?.length === 3
+      && /Box Fold/.test(def.weaveSource.slots[1].label) && /Amazing Box/.test(def.weaveSource.slots[2].label),
+      def?.weaveSource?.slots?.map((s: any) => s.label));
+    ck('combined: fold = layer 1 (legacy precedence), interlace = layer 2',
+      w.weaveInterval1 === 2 && w.weaveBeats1 === 4 && w.weaveInterval2 === 3 && w.weaveBeats2 === 0,
+      { i1: w.weaveInterval1, i2: w.weaveInterval2 });
+    ck('combined: interlace tracks land on layer 2',
+      p.animations.find((a: any) => a.id === 'c1')?.target === 'weave.weaveInterval2');
+    ck('combined: secondary VALUES on bank 2', w.ws2ParamA === -1.8, w.ws2ParamA);
+    ck('combined: legacy state cleared', p.features.interlace === undefined && p.features.geometry.hybridComplex === undefined);
+  }
+
+  // Combined scene, enables DISAGREE → only the enabled system migrates.
+  {
+    const src: any = legacyHb();
+    src.features.interlace = {
+      interlaceCompiled: true, interlaceEnabled: false,
+      interlaceFormula: 'AmazingBox', interlaceInterval: 3, interlaceStartIter: 0,
+    };
+    const p: any = migrateLegacyWeavePreset(src);
+    const def = registry.get(p.formula) as any;
+    ck('disagree: only hybrid migrates (2 slots), interlace dropped',
+      def?.weaveSource?.slots?.length === 2 && p.features.interlace === undefined
+      && p.features.weave.weaveEnabled === true,
+      def?.weaveSource?.slots?.map((s: any) => s.label));
+  }
+
+  // Fast path (hybridComplex false) is NOT a weave — untouched.
+  {
+    const p: any = migrateLegacyWeavePreset(legacyHb({}, { hybridComplex: false }));
+    ck('fastpath: untouched', p.formula === 'Mandelbulb' && p.features.geometry.hybridCompiled === true
+      && p.features.geometry.hybridMode === true && p.features.weave === undefined);
+  }
+
+  // hybridIter < 1: the legacy cap meant the fold NEVER ran — no weave, state off.
+  {
+    const p: any = migrateLegacyWeavePreset(legacyHb({}, { hybridIter: 0 }));
+    ck('hb-iter0: no weave, interleave switched off',
+      p.formula === 'Mandelbulb' && p.features.weave === undefined
+      && p.features.geometry.hybridComplex === undefined && p.features.geometry.hybridCompiled === false);
+  }
+}
+
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);
 if (fails.length) {
   console.log('FAILURES:\n - ' + fails.join('\n - '));
