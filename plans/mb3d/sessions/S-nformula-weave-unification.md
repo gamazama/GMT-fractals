@@ -161,6 +161,19 @@ Then **push v1 + the weave UI together** → deploy.
 8. **Fun layer:** loop-strip schedule visualization (live from `buildCountsPlan`), drag/reorder rows, dice
    (`pickRandom`), live-param budget meter (LaneAllocator lanes used; overflow bakes).
 
+**P4 owner decisions (2026-07-04; gate for P4.4+ — see `weave-p4-struct-state-design.md` Appendix):**
+1. **Weave enable** — PENDING final owner word. Purpose explained: (a) migration home for the legacy live toggles
+   (`interlaceEnabled`/`hybridMode`) so a disabled-but-configured old scene round-trips losslessly; (b) the live +
+   keyframable A/B switch users have today (layers can't express silence: beats 0 = endless, interval ≥ 1).
+   Orchestrator recommendation: ONE whole-weave `weaveEnabled` DDFS param (P3b pattern: live on feature state,
+   snapshotted into weaveSource). Alternative if declined: migrate disabled legacy scenes as ENABLED (accepted look
+   change) and drop the toggle workflow.
+2. **Migrated-param transport** — CONFIRMED: legacy `interlace*`/`hybrid*` state migrates into `weaveSource`,
+   legacy `features.*` cleared (no double-apply). Migrate at LOAD; file rewritten only on re-save (old files
+   untouched on disk; post-migration saves need current app builds — accepted one-way door).
+3. **Global-count ceiling** — CONFIRMED: accept namespace-prefixed globals for native slots; option (b) per-slot
+   struct stays the documented escape valve if a pathological weave bloats the global table.
+
 ## Prompt
 
 Unify GMT's weaving system and build the user-facing weaver — a **collaborative, interactive** design+build session
