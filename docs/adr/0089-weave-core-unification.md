@@ -17,7 +17,12 @@
 > `emitFusedHybrid(scene, opts)` takes `opts.schedule = {kind:'modulo'}`; opts
 > absent stays the counts path, probe-proven byte-identical over all 38 bundled
 > scenes. `weaveSource.schedule = {kind:'modulo', layers:[…]}` persists the
-> built snapshot; the live values ride feature state.
+> built snapshot; the live values ride feature state. Task 2 adds per-OPTION
+> expose/bake directives (`opts.slotBake` → `bindOptions(..., bake)`): baked
+> options bind literals via packConstBuffer's math — covering even
+> non-live-mappable option types, so one odd option no longer bakes the whole
+> slot — and `weaveSource.slots[].bake` persists the choice; the editor's lane
+> budget meter dry-runs the same `LaneAllocator` (24 scalar lanes / 6 vec3 units).
 
 > **Update 2026-07-04 (P2/P2.5 landed; decision unchanged):** the interlace rewriter now
 > lives at `engine/weave/nativeSlot.ts` (namespace-parameterized `createNativeSlotRewriter`;
