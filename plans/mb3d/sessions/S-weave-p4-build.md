@@ -27,3 +27,11 @@ Hard rules beyond the doc:
   `shape:modular`) via `disabledIds` — greyed with a reason, never hidden.
 - Update ADR-0089 with an update block per landed step; keep the weave test suite growing with each capability
   (native slot emit, identity pair, mixed native+MB3D, frag slot).
+- **Layered-rhythm reconciliation (P3b postdates the design doc):** the doc's §3.2/§3.3 absorption mapping was
+  written against the BINARY modulo schedule; P3b shipped `emitLayeredModuloGLSL` (N layers, first-beat-wins — the
+  same precedence rule as `skipMainFormula`) with `weaveSource.schedule = {kind:'modulo', layers:[…]}` and live
+  values on the DDFS `weave` feature. P4.4/P4.5 absorption converts interlace/Hybrid Box onto LAYERS (interlace =
+  base + 1 layer, no beats; Hybrid Box interleaved = base + 1 layer with beats + start offset). The binary
+  `emitModuloScheduleGLSL` stays for the legacy features until their fold, then becomes their layer binding. The
+  doc's open decision 1 (`ModuloSchedule.active`) must be re-posed for the layered shape (master enable vs
+  per-layer enable) — resolved by the owner before P4.4.
