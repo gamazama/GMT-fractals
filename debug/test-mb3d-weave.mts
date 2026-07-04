@@ -6,6 +6,8 @@ import { buildWeaveSequence, emitWeaveGLSL, weaveSpecFromMB3D } from '../engine-
 import { emitModuloScheduleGLSL } from '../engine-gmt/engine/weave/schedule.ts';
 import { assembleWeave } from '../engine-gmt/engine/weave/emitWeave.ts';
 import { emitFusedHybrid } from '../engine-gmt/utils/mb3d/emitFusedHybrid.ts';
+import { resolveNativeSlot } from '../engine-gmt/engine/weave/nativeResolver.ts';
+import { getNativeSlotCatalog, nativeSlotReject, nativeSlotShell, isNativeSlot } from '../engine-gmt/engine/weave/nativeSlotCatalog.ts';
 import { registry } from '../engine-gmt/engine/FractalRegistry.ts';
 import { AmazingBox } from '../engine-gmt/formulas/AmazingBox.ts';
 import { Mandelbulb } from '../engine-gmt/formulas/Mandelbulb.ts';
@@ -598,6 +600,48 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     const { def } = emitFusedHybrid(scene([slot(1, 4), nslot(1, 'Mandelbulb')]));
     const q = (def?.defaultPreset as any)?.features?.quality ?? {};
     ck('P4.2: intern box calibration outranks native deMeta', q.estimator === 1.0 && q.fudgeFactor === 0.45, q);
+  }
+}
+
+// ── Native + imported slot SOURCES (P4.3): picker catalog + reject parity ────
+{
+  // nativeSlotShell builds the addon-slot shell the picker appends; it emits
+  // through the native resolver exactly like a frag/DEC import (design §1.3 —
+  // imports self-limit to global/tracker shapes and take the same path).
+  {
+    const s0 = nativeSlotShell('Mandelbulb', 2);
+    ck('P4.3: shell is native (formulaIndex -1, name = id)',
+      s0.formulaIndex === -1 && s0.name === 'Mandelbulb' && s0.optionCount === 0 && isNativeSlot(s0), s0);
+    const { def, ledger } = emitFusedHybrid(scene([nativeSlotShell('Mandelbulb', 1), nativeSlotShell('AmazingBox', 1)]));
+    ck('P4.3: shells emit through native resolver', ledger.supported === true && !!def
+      && ledger.slotFlags[0].tier === 'native', ledger.slotFlags);
+  }
+
+  // Reject-greying parity: the picker greys EXACTLY what the resolver rejects.
+  // For every registered formula, nativeSlotReject() returns a reason iff
+  // resolveNativeSlot(...) is not ok. (The catalog only lists registered defs,
+  // so registration itself is not part of the parity check.)
+  {
+    let mismatches: string[] = [];
+    for (const def of registry.getAll()) {
+      const greyed = nativeSlotReject(def) !== undefined;
+      const rejected = resolveNativeSlot(def, 0, 'probe', { parametric: true }).ok === false;
+      if (greyed !== rejected) mismatches.push(`${def.id}: greyed=${greyed} rejected=${rejected}`);
+    }
+    ck('P4.3: reject-greying set matches engine rejects', mismatches.length === 0, mismatches);
+  }
+
+  // Catalog groups the registered natives; self-contained MandelTerrain is
+  // greyed with a reason, weavable Mandelbulb is not.
+  {
+    const groups = getNativeSlotCatalog();
+    const flat = groups.flatMap((g) => g.entries);
+    const bulb = flat.find((e) => e.id === 'Mandelbulb');
+    const terrain = flat.find((e) => e.id === 'MandelTerrain');
+    ck('P4.3: catalog lists weavable native enabled', !!bulb && !bulb.disabledReason, bulb);
+    ck('P4.3: catalog greys self-contained with reason',
+      !!terrain && /self-contained/i.test(terrain.disabledReason ?? ''), terrain);
+    ck('P4.3: catalog groups are non-empty', groups.length > 0 && flat.length > 0, groups.map((g) => g.category));
   }
 }
 

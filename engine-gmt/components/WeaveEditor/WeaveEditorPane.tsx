@@ -1,7 +1,16 @@
 /**
- * WeaveEditorPane — the user-facing weaver (ADR-0089 P3): author an N-slot
- * mode-0 weave over the MB3D formula library, see the iteration schedule live
- * (LoopStrip), build → preview through the fused-hybrid pipeline, keep editing.
+ * WeaveEditorPane — the user-facing weaver (ADR-0089 P3/P4.3): author an N-slot
+ * mode-0 weave over the MB3D formula library AND registered native / imported
+ * formulas (native slots resolve through engine/weave/nativeResolver — P4.1),
+ * see the iteration schedule live (LoopStrip), build → preview through the
+ * fused-hybrid pipeline, keep editing.
+ *
+ * Slot sources (P4.3): the "+ Add formula" picker lists MB3D catalog entries +
+ * registered native formulas + imported frag/DEC (nativeSlotCatalog). Formulas
+ * the resolver can't weave (self-contained / modular) are GREYED with a hover
+ * reason, never hidden. Native params auto-expose (no per-option bake UI). The
+ * raw 438-thumbnail catalog is deferred (import via Workshop first); adopting
+ * the full thumbnail FormulaPicker here is a P4-follow-up.
  *
  * Host-agnostic on purpose: pure props + module-scoped draft (the Workshop
  * pattern — survives modal close/reopen within a session). First mounted as a
@@ -39,6 +48,8 @@ import type { CatalogEntry } from '../../utils/mb3d/mb3dCatalog';
 import { loadUserWeave } from '../../utils/mb3d/loadMB3DScene';
 import { transpileSlot, getSlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
 import type { SlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
+import { resolveNativeSlot } from '../../engine/weave/nativeResolver';
+import { getNativeSlotCatalog, nativeSlotShell, isNativeSlot } from '../../engine/weave/nativeSlotCatalog';
 import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
@@ -201,54 +212,85 @@ export function WeaveEditorPane() {
         setDraft(next);
     };
 
-    // ── Catalog picker (CategoryPickerMenu over the MB3D library) ────────────
+    // ── Slot-source picker (CategoryPickerMenu) ──────────────────────────────
+    // Two sources: the MB3D catalog (intern + decompiled slots) and REGISTERED
+    // native / imported formulas (P4.3, engine-driven staging — the picker lists
+    // what the resolver can weave; rejects are greyed, never hidden). Category
+    // ids are prefixed so the two source namespaces never collide.
+    // TODO(P4-follow-up): adopt the full thumbnail <FormulaPicker> here (native +
+    // 438-catalog with previews + disabledIds greying) — v1 keeps the lightweight
+    // menu for parity with today's editor (owner call 2026-07-04).
     const catalog = useMemo(() => getMB3DCatalog(), []);
+    const nativeCatalog = useMemo(() => getNativeSlotCatalog(), []);
     const entryByKey = useMemo(() => {
         const m = new Map<string, CatalogEntry>();
         for (const g of catalog) for (const e of g.entries) m.set(`${e.kind}:${e.ref}`, e);
         return m;
     }, [catalog]);
     const pickerCategories: PickerCategory[] = useMemo(
-        () => catalog.map((g) => ({ id: g.category, name: g.category })),
-        [catalog],
+        () => [
+            ...catalog.map((g) => ({ id: `mb3d:${g.category}`, name: g.category })),
+            ...nativeCatalog.map((g) => ({ id: `nat:${g.category}`, name: `Native · ${g.category}` })),
+        ],
+        [catalog, nativeCatalog],
     );
-    const pickerItems = (catId: string): PickerItem[] =>
-        (catalog.find((g) => g.category === catId)?.entries ?? []).map((e) => ({
+    const pickerItems = (catId: string): PickerItem[] => {
+        if (catId.startsWith('nat:')) {
+            const name = catId.slice(4);
+            return (nativeCatalog.find((g) => g.category === name)?.entries ?? []).map((e) => ({
+                key: `native:${e.id}`,
+                label: e.label,
+                disabled: !!e.disabledReason,
+                disabledSuffix: e.disabledReason ? '— can’t weave' : undefined,
+                description: e.disabledReason ?? e.label,
+            }));
+        }
+        const name = catId.startsWith('mb3d:') ? catId.slice(5) : catId;
+        return (catalog.find((g) => g.category === name)?.entries ?? []).map((e) => ({
             key: `${e.kind}:${e.ref}`,
             label: e.label,
         }));
+    };
 
     const openPicker = (ev: React.MouseEvent, replaceKey?: string) => {
         const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
         setPicker({ x: rect.left, y: rect.bottom + 4, right: rect.right, replaceKey });
     };
 
-    const onPick = (key: string) => {
+    /** Build a fresh SlotRow (native or MB3D) for a picked key at the given color. */
+    const rowFromKey = (key: string, colorIdx: number, iterCount: number): SlotRow | null => {
+        if (key.startsWith('native:')) {
+            const id = key.slice(7);
+            const def = registry.get(id) as FractalDefinition | undefined;
+            if (!def) return null;
+            // Native params auto-expose (resolver-driven); no MB3D bake directives.
+            return {
+                key: rowKey(), label: def.name ?? id, kind: 'native', ref: id, colorIdx,
+                slot: nativeSlotShell(id, iterCount),
+            };
+        }
         const entry = entryByKey.get(key);
+        if (!entry) return null;
+        const slot = slotFromCatalogEntry(entry, iterCount);
+        return { key: rowKey(), label: entry.label, kind: entry.kind, ref: entry.ref, colorIdx, slot, bake: defaultBake(slot) };
+    };
+
+    const onPick = (key: string) => {
         setPicker(null);
-        if (!entry) return;
         if (picker?.replaceKey) {
+            const target = draft.rows.find((r) => r.key === picker.replaceKey);
+            if (!target) return;
+            const built = rowFromKey(key, target.colorIdx, target.slot.iterCount);
+            if (!built) return;
+            // Keep the original row key so reorder/undo identity is stable.
             commit({
                 ...draft,
-                rows: draft.rows.map((r) => {
-                    if (r.key !== picker.replaceKey) return r;
-                    const slot = slotFromCatalogEntry(entry, r.slot.iterCount);
-                    // A different formula has different options — directives reset.
-                    return { ...r, label: entry.label, kind: entry.kind, ref: entry.ref, slot, bake: defaultBake(slot) };
-                }),
+                rows: draft.rows.map((r) => (r.key === picker.replaceKey ? { ...built, key: r.key } : r)),
             });
         } else {
-            const slot = slotFromCatalogEntry(entry, DEFAULT_ITER_COUNT);
-            const row: SlotRow = {
-                key: rowKey(),
-                label: entry.label,
-                kind: entry.kind,
-                ref: entry.ref,
-                colorIdx: nextColorIdx(draft.rows),
-                slot,
-                bake: defaultBake(slot),
-            };
-            commit({ ...draft, rows: [...draft.rows, row] });
+            const built = rowFromKey(key, nextColorIdx(draft.rows), DEFAULT_ITER_COUNT);
+            if (!built) return;
+            commit({ ...draft, rows: [...draft.rows, built] });
         }
     };
 
@@ -308,9 +350,23 @@ export function WeaveEditorPane() {
     const meter = useMemo(() => {
         const active = draft.rows.filter((r) => r.slot.iterCount > 0);
         if (active.length === 0) return null;
+        // Native rows dry-run through the SAME LaneAllocator via the native
+        // resolver (walking def.parameters); MB3D rows through the transpiler.
+        const nativeParamCount = (r: SlotRow, k: number, alloc?: LaneAllocator): number | false => {
+            const def = registry.get(String(r.ref)) as FractalDefinition | undefined;
+            if (!def) return false;
+            const res = resolveNativeSlot(def, k, `probe${k}`, alloc ? { alloc } : { parametric: true });
+            if (!res.ok || res.paramOk === false) return false;
+            return res.params.length;
+        };
         try {
             if (active.length === 1) {
-                const t = transpileSlot(active[0].slot, 0, 'probe0', { parametric: true, bake: active[0].bake });
+                const r = active[0];
+                if (isNativeSlot(r.slot)) {
+                    const n = nativeParamCount(r, 0);
+                    return { single: n === false ? 0 : n };
+                }
+                const t = transpileSlot(r.slot, 0, 'probe0', { parametric: true, bake: r.bake });
                 return { single: t.params?.length ?? 0 };
             }
             if (active.some((r) => r.slot.formulaIndex === 2)) {
@@ -320,7 +376,11 @@ export function WeaveEditorPane() {
             let ok = true;
             active.forEach((r, k) => {
                 alloc.startSlot();
-                if (transpileSlot(r.slot, k, `probe${k}`, { alloc, bake: r.bake }).paramOk === false) ok = false;
+                if (isNativeSlot(r.slot)) {
+                    if (nativeParamCount(r, k, alloc) === false) ok = false;
+                } else if (transpileSlot(r.slot, k, `probe${k}`, { alloc, bake: r.bake }).paramOk === false) {
+                    ok = false;
+                }
             });
             return { scalars: alloc.scalarsUsed, vec3s: alloc.vec3sUsed, fits: ok && alloc.fits() };
         } catch {
@@ -498,8 +558,9 @@ export function WeaveEditorPane() {
         <div className="space-y-3">
             <p className="text-xs text-fg-muted leading-relaxed">
                 Weave formulas across the iteration loop: each slot runs for its count of iterations, then the next
-                takes over, repeating <span title="Repeating cycle">↻</span>. Pick from the MB3D library, set counts,
-                and <strong className="text-fg">Build</strong> — your camera and look are kept between rebuilds.
+                takes over, repeating <span title="Repeating cycle">↻</span>. Pick from the MB3D library or a native /
+                imported formula, set counts, and <strong className="text-fg">Build</strong> — your camera and look are
+                kept between rebuilds.
             </p>
 
             {/* Title + open-current + undo/redo */}
@@ -530,7 +591,8 @@ export function WeaveEditorPane() {
             <div className="space-y-1.5">
                 {draft.rows.length === 0 && (
                     <p className="text-[11px] text-fg-tertiary border border-dashed border-line/15 rounded-lg px-3 py-4 text-center">
-                        No slots yet — add a base fractal (box, bulb, IFS), then layer transforms or a second fractal.
+                        No slots yet — add a base fractal (box, bulb, IFS) from the MB3D library or a native / imported
+                        formula, then layer transforms or a second fractal.
                     </p>
                 )}
                 {draft.rows.map((r, i) => (
@@ -586,11 +648,26 @@ export function WeaveEditorPane() {
                             className={`w-5 h-5 text-[11px] rounded border shrink-0 transition-colors ${expandedKey === r.key
                                 ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
                                 : 'bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg'}`}
-                            title="Parameters — edit values, choose live slider vs fixed literal">{expandedKey === r.key ? '▾' : '▸'}</button>
+                            title={isNativeSlot(r.slot)
+                                ? 'Parameters — auto-exposed as sliders (details)'
+                                : 'Parameters — edit values, choose live slider vs fixed literal'}>{expandedKey === r.key ? '▾' : '▸'}</button>
                         <button onClick={() => remove(r.key)}
                             className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-red-300 transition-colors shrink-0" title="Remove slot">×</button>
                     </div>
-                    {expandedKey === r.key && (() => {
+                    {expandedKey === r.key && isNativeSlot(r.slot) && (
+                        <div className="ml-6 rounded-lg border border-line/10 bg-surface-sunken/40 px-2 py-1.5 space-y-1 text-[10px] text-fg-tertiary leading-relaxed">
+                            <p>
+                                A native formula's parameters <strong className="text-fg-muted">auto-expose</strong> as
+                                sliders in the Formula panel — they share the same lane budget as the other slots and
+                                bake automatically only if the pool overflows (no per-parameter toggle here).
+                            </p>
+                            <p>
+                                This formula's own distance estimator isn't spliced into the weave — if the surface
+                                looks wrong, pick an estimator in the <strong className="text-fg-muted">Quality</strong> panel.
+                            </p>
+                        </div>
+                    )}
+                    {expandedKey === r.key && !isNativeSlot(r.slot) && (() => {
                         const meta = getSlotOptionMeta(r.slot);
                         if (meta.length === 0) {
                             return <p className="ml-6 text-[10px] text-fg-tertiary px-2">This formula has no editable parameters.</p>;
