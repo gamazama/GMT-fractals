@@ -51,9 +51,17 @@ export interface Preset {
   features?: Record<string, any>;
 }
 
+/** The fixed coreMath slot vocabulary a param addresses by id. */
+export type CoreSlotId = 'paramA' | 'paramB' | 'paramC' | 'paramD' | 'paramE' | 'paramF' | 'vec2A' | 'vec2B' | 'vec2C' | 'vec3A' | 'vec3B' | 'vec3C' | 'vec4A' | 'vec4B' | 'vec4C';
+/** Per-slot BANK slot id (ADR-0090): the coreMath vocabulary under a `ws<k>`
+ *  prefix (`ws0ParamA` … `ws5Vec4C`). A native formula woven as weave slot k
+ *  presents its declared params on bank k, routed to the `weave` feature via
+ *  `feature: 'weave'`. */
+export type WeaveBankSlotId = `ws${number}${Capitalize<CoreSlotId>}`;
+
 export interface FractalParameter {
     label: string;
-    id: 'paramA' | 'paramB' | 'paramC' | 'paramD' | 'paramE' | 'paramF' | 'vec2A' | 'vec2B' | 'vec2C' | 'vec3A' | 'vec3B' | 'vec3C' | 'vec4A' | 'vec4B' | 'vec4C';
+    id: CoreSlotId | WeaveBankSlotId;
     type?: 'float' | 'vec2' | 'vec3' | 'vec4';
     min: number;
     max: number;
@@ -65,6 +73,11 @@ export interface FractalParameter {
      *  render under one divider (fused weaves stamp each slot's formula name).
      *  Absent = no divider (single-formula defs unchanged). */
     group?: string;
+    /** Feature whose state / auto-setter / animation trackId this param routes to
+     *  (ADR-0090). Absent = `coreMath` (the default). `'weave'` = a per-slot bank
+     *  (a native formula woven as a slot); the panel reads `store.weave[id]`,
+     *  writes `setWeave`, and keys the track `weave.<id>`. */
+    feature?: string;
     mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed'; // 'rotation' = Rodrigues (A/P/∠), 'direction' = azimuth/pitch, 'axes' = per-axis angles, 'toggle' = bool on/off, 'mixed' = toggle X + slider Y
     linkable?: boolean; // For vec3/vec2: enable axis linking (uniform scale)
 }

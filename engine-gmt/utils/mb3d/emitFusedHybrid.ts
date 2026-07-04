@@ -136,50 +136,66 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     call?: string; preCall?: string; postCall?: string; slotLoopInit?: string;
     /** Native slot's own DE preferences (P4.2) — applied when it leads the weave. */
     deMeta?: Record<string, number>;
+    /** Native BANK defaults (ADR-0090) → preset.features.weave. */
+    weaveState?: Record<string, any>;
   };
 
+  const isNative = (idx: number) => addon.slots[idx]?.formulaIndex === NATIVE_FORMULA_INDEX;
+
   // NATIVE slots (formulaIndex -1, name = registered formula id): resolved via the
-  // engine weave core's native resolver instead of the MB3D transpiler. Prefixed
-  // globals carry per-slot state; params bind the SAME shared LaneAllocator, so
-  // mixed native+MB3D weaves pack one budget. z.w rides the shared orbit; c.w is
-  // isolated per slot (interlace semantics).
-  const nativeBody = (idx: number, o: { alloc?: LaneAllocator; parametric?: boolean }): SlotBody => {
+  // engine weave core's native resolver in BANK (fidelity) mode (ADR-0090) — each
+  // slot binds its declared params VERBATIM onto its own per-slot bank (uWs<k>*),
+  // so a native slot never shares the coreMath dense pool (that pool is now
+  // MB3D-slots-only) and can NEVER overflow. Prefixed globals carry per-slot
+  // state; z.w rides the shared orbit; c.w is isolated per slot (interlace
+  // semantics). Bank params are always live — independent of has4D / MB3D budget.
+  const nativeBody = (idx: number): SlotBody => {
     const slot = addon.slots[idx];
     const fnName = `${id}_slot${idx}`;
     const mkFlag = (tier: SlotFlag['tier'], note: string): SlotFlag =>
       ({ slotIndex: idx, formulaIndex: NATIVE_FORMULA_INDEX, name: slot.name || 'native', tier, note });
     const ndef = registry.get(slot.name ?? '');
     if (!ndef) return { glsl: '', fnName, tier: 'unsupported', flag: mkFlag('unsupported', `"${slot.name}" is not a registered formula.`) };
-    const res = resolveNativeSlot(ndef, idx, fnName, o);
+    const res = resolveNativeSlot(ndef, idx, fnName, { bank: idx });
     if (!res.ok) return { glsl: '', fnName, tier: 'unsupported', flag: mkFlag('unsupported', res.reason) };
-    if (!res.paramOk) return { glsl: '', fnName, tier: 'native', flag: mkFlag('native', 'multi-slot param bind failed'), paramOk: false };
     return {
       glsl: res.glsl, fnName, tier: 'native',
       flag: mkFlag('native', 'native GMT formula as a weave slot'),
-      params: res.params as any, coreMath: res.coreMath, paramOk: true, writesDeriv: res.writesDeriv,
+      params: res.params as any, coreMath: res.coreMath, weaveState: res.weaveState, paramOk: true, writesDeriv: res.writesDeriv,
       call: res.call, preCall: res.preCall, postCall: res.postCall, slotLoopInit: res.loopInit,
       deMeta: res.deMeta,
     };
   };
 
-  const tx = (idx: number, o: Parameters<typeof transpileSlot>[3]): SlotBody =>
-    addon.slots[idx]?.formulaIndex === NATIVE_FORMULA_INDEX
-      ? nativeBody(idx, o ?? {})
-      : transpileSlot(addon.slots[idx], idx, `${id}_slot${idx}`, { ...o, bake: opts?.slotBake?.[idx] });
-  let parametric = usedIdx.length === 1;
-  const bodies = usedIdx.length === 1
-    ? [tx(usedIdx[0], { parametric: true })]
-    : (() => {
-        if (!has4D) {
-          // startSlot() before each slot keeps a vec uniform from being split across
-          // two slots (which would collide on coreMath + emit duplicate vec params);
-          // fits() is the 24-lane / 3-vec3 budget gate.
-          const alloc = new LaneAllocator();
-          const tryB = usedIdx.map((idx) => { alloc.startSlot(); return tx(idx, { alloc }); });
-          if (tryB.every((b) => b.paramOk !== false) && alloc.fits()) { parametric = true; return tryB; }
-        }
-        return usedIdx.map((idx) => tx(idx, {}));
-      })();
+  // MB3D slots pack the shared coreMath dense pool exactly as before — native
+  // slots no longer consume it, so the budget/parametric decision is scoped to the
+  // MB3D slots. A pure-MB3D weave reduces to the pre-banks path byte-for-byte
+  // (mb3dActive === usedIdx). @invariant emit unchanged when no native slot present.
+  const mb3dTx = (idx: number, o: Parameters<typeof transpileSlot>[3]): SlotBody =>
+    transpileSlot(addon.slots[idx], idx, `${id}_slot${idx}`, { ...o, bake: opts?.slotBake?.[idx] });
+  const mb3dActive = usedIdx.filter((idx) => !isNative(idx));
+  const mb3dBody = new Map<number, SlotBody>();
+  let mb3dParametric = false;
+  if (mb3dActive.length === 1) {
+    mb3dParametric = true;
+    mb3dBody.set(mb3dActive[0], mb3dTx(mb3dActive[0], { parametric: true }));
+  } else if (mb3dActive.length > 1) {
+    let shared = false;
+    if (!has4D) {
+      // startSlot() before each slot keeps a vec uniform from being split across
+      // two slots (which would collide on coreMath + emit duplicate vec params);
+      // fits() is the 24-lane / 3-vec3 budget gate.
+      const alloc = new LaneAllocator();
+      const tryB = mb3dActive.map((idx) => { alloc.startSlot(); return mb3dTx(idx, { alloc }); });
+      if (tryB.every((b) => b.paramOk !== false) && alloc.fits()) {
+        mb3dParametric = true; shared = true;
+        mb3dActive.forEach((idx, j) => mb3dBody.set(idx, tryB[j]));
+      }
+    }
+    if (!shared) mb3dActive.forEach((idx) => mb3dBody.set(idx, mb3dTx(idx, {})));
+  }
+
+  const bodies = usedIdx.map((idx) => isNative(idx) ? nativeBody(idx) : mb3dBody.get(idx)!);
   const slotFlags = bodies.map((b) => b.flag);
   for (const b of bodies) if (b.tier === 'unsupported') reasons.push(`Slot ${b.flag.slotIndex} (${b.flag.name}): ${b.flag.note}`);
 
@@ -325,11 +341,17 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   };
   preset.features.coreMath = {
     ...(preset.features.coreMath ?? {}),
-    // imported slider defaults — aggregated across every slot in multi-slot
-    // parametric mode (each slot's params already live on distinct uniforms).
-    ...(parametric ? Object.assign({}, ...bodies.map((b) => b.coreMath ?? {})) : {}),
+    // imported MB3D slider defaults — aggregated across the MB3D slots when they
+    // share the dense pool (native slots live on their own banks, below).
+    ...(mb3dParametric ? Object.assign({}, ...mb3dActive.map((idx) => mb3dBody.get(idx)?.coreMath ?? {})) : {}),
     iterations: Math.max(clampIter(h.iterations), minCoverIters),
   };
+  // Native BANK defaults (ADR-0090) → preset.features.weave. Empty for a pure-MB3D
+  // weave (no native slots ⇒ features.weave stays absent ⇒ byte-identical probe).
+  const weaveDefaults = Object.assign({}, ...bodies.map((b) => b.weaveState ?? {}));
+  if (Object.keys(weaveDefaults).length > 0) {
+    preset.features.weave = { ...(preset.features.weave ?? {}), ...weaveDefaults };
+  }
   preset.features.geometry = {
     ...(preset.features.geometry ?? {}),
     juliaMode: h.isJulia,
@@ -582,14 +604,16 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       loopInit: assembled.loopInit,
       capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     } as any,
-    // Slider schema. Multi-slot: concat every slot's params (each already on a
-    // distinct uniform), stamped with the slot's formula name as `group` — the
-    // Formula panel renders a divider header per group instead of the old
-    // "SphereFolding1: R fold" label prefix (labels stay short).
-    parameters: parametric
-      ? (bodies.flatMap((b) => (b.params ?? []).map((pp: any) =>
-          usedIdx.length > 1 ? { ...pp, group: b.flag.name.replace(/^_/, '') } : pp)) as any)
-      : [],
+    // Slider schema. Native slots' BANK params (feature:'weave', ADR-0090) are
+    // ALWAYS exposed; MB3D slots' coreMath params are exposed only when they share
+    // the dense pool (mb3dParametric). Multi-slot: each slot's params are stamped
+    // with the formula name as `group` — the Formula panel renders a divider header
+    // per group (labels stay short); a single-slot weave carries no group.
+    parameters: (bodies.flatMap((b, k) => {
+      if (!isNative(usedIdx[k]) && !mb3dParametric) return [];
+      return (b.params ?? []).map((pp: any) =>
+        usedIdx.length > 1 ? { ...pp, group: b.flag.name.replace(/^_/, '') } : pp);
+    }) as any),
     defaultPreset: preset,
   };
 

@@ -605,6 +605,112 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   }
 }
 
+// ── Per-slot param BANKS (ADR-0090): fidelity binding for native slots ────────
+{
+  registry.register(Mandelbulb);
+  registry.register(Phoenix);
+  const nslot = (iterCount: number, formula: string): MB3DFormulaSlot =>
+    ({ iterCount, formulaIndex: -1, name: formula, optionCount: 0, optionTypes: [], optionValues: [] });
+
+  // Identity pair on DISTINCT banks: each Mandelbulb binds its OWN ws<k> bank —
+  // the case no flat namespace can satisfy. No shared coreMath pool touched.
+  {
+    const { def } = emitFusedHybrid(scene([nslot(1, 'Mandelbulb'), nslot(1, 'Mandelbulb')]));
+    const fn = def?.shader.function ?? '';
+    const params = (def?.parameters ?? []) as any[];
+    ck('banks: slot0 → uWs0*, slot1 → uWs1* (verbatim, distinct banks)',
+      /\buWs0ParamA\b/.test(fn) && /\buWs1ParamA\b/.test(fn), (fn.match(/uWs\dParamA/g) || []));
+    ck('banks: native slots never touch the coreMath pool (no uParamA/uVec2A)',
+      !/\buParamA\b/.test(fn) && !/\buVec2A\b/.test(fn), (fn.match(/uParam[A-F]|uVec\d[ABC]/g) || []));
+    ck('banks: params route to weave feature (feature:weave + ws<k> ids)',
+      params.length >= 2 && params.every((p) => p.feature === 'weave' && /^ws[01]/.test(p.id)),
+      params.map((p) => `${p.id}/${p.feature}`));
+    const ids = new Set(params.map((p) => p.id));
+    ck('banks: identity pair ids on distinct banks (ws0ParamA + ws1ParamA)',
+      ids.has('ws0ParamA') && ids.has('ws1ParamA'), [...ids]);
+    // Defaults land in preset.features.weave (Power=8 verbatim), NOT coreMath.
+    const w = (def?.defaultPreset as any)?.features?.weave ?? {};
+    const cm = (def?.defaultPreset as any)?.features?.coreMath ?? {};
+    ck('banks: defaults in features.weave (ws0ParamA=8, ws1ParamA=8)', w.ws0ParamA === 8 && w.ws1ParamA === 8, w);
+    ck('banks: native params NOT in coreMath (only iterations)',
+      cm.paramA === undefined && cm.ws0ParamA === undefined, cm);
+  }
+
+  // vec2 is NOT decomposed: Mandelbulb's Phase (vec2A) binds a REAL vec2 uniform,
+  // not two component lanes (the dense pack's decomposition is gone in fidelity).
+  {
+    const { def } = emitFusedHybrid(scene([nslot(2, 'Mandelbulb')]));
+    const fn = def?.shader.function ?? '';
+    const params = (def?.parameters ?? []) as any[];
+    const v2 = params.find((p) => p.id === 'ws0Vec2A');
+    // Fidelity: both components read from ONE coherent vec2 uniform (uWs0Vec2A),
+    // never scattered onto unrelated scalar lanes + a vec2(...) reconstruction
+    // (which is what the dense pack does when it decomposes a vec2 param).
+    ck('banks: vec2 verbatim on its own real vec2 uniform (not decomposed to lanes)',
+      /uWs0Vec2A\.x/.test(fn) && /uWs0Vec2A\.y/.test(fn) && !/vec2\(\s*uWs0/.test(fn),
+      (fn.match(/u\w*Vec2A[.\w]*/g) || []));
+    ck('banks: vec2 param is ONE vec2 entry with the real label', !!v2 && v2.type === 'vec2' && v2.label === 'Phase (θ, φ)', v2);
+    const w = (def?.defaultPreset as any)?.features?.weave ?? {};
+    ck('banks: vec2 default is a plain {x,y} in features.weave',
+      !!w.ws0Vec2B && typeof w.ws0Vec2B.x === 'number' && w.ws0Vec2B.y === 0.5, w.ws0Vec2B);
+  }
+
+  // Undeclared coreMath uniform → baked LITERAL (never a bank uniform), so a slot
+  // can't read a bank lane it didn't declare (or another slot's).
+  {
+    const Undecl: any = {
+      id: 'TestUndecl', name: 'Test Undecl', juliaType: 'offset',
+      shader: {
+        function: 'void formula_TestUndecl(inout vec4 z, inout float dr, inout float trap, vec4 c) { z.xyz = z.xyz * uParamA + uParamB * c.xyz; dr = dr * uParamA; trap = min(trap, dot(z.xyz, z.xyz)); }',
+        loopBody: 'formula_TestUndecl(z, dr, trap, c);',
+        capabilities: new Set(['shape:per-iteration']),
+      },
+      parameters: [{ label: 'Scale', id: 'paramA', min: 0, max: 4, step: 0.01, default: 1.5 }],
+      defaultPreset: { formula: 'TestUndecl', features: { coreMath: { paramA: 1.5, paramB: 0.7 } } },
+    };
+    registry.register(Undecl);
+    const { def } = emitFusedHybrid(scene([nslot(2, 'TestUndecl')]));
+    const fn = def?.shader.function ?? '';
+    ck('banks: declared uParamA → uWs0ParamA (live)', /\buWs0ParamA\b/.test(fn), (fn.match(/uWs0Param[A-F]/g) || []));
+    ck('banks: undeclared uParamB baked to preset literal 0.7 (no uWs0ParamB)',
+      /0\.7/.test(fn) && !/\buWs0ParamB\b/.test(fn) && !/\buParamB\b/.test(fn), (fn.match(/uWs0Param[A-F]|uParamB|0\.7/g) || []));
+  }
+
+  // Phoenix ⊗ Phoenix: the shared pool OVERFLOWS today (9 params/slot: 4 scalars +
+  // 2 vec2 + 3 vec3 → 16 scalar lanes + 6 vec3 units collide, bake-everything). On
+  // banks EVERY param is live on its own bank — the exit-gate param-rich pair.
+  {
+    const { def, ledger } = emitFusedHybrid(scene([nslot(1, 'Phoenix'), nslot(1, 'Phoenix')]));
+    const params = (def?.parameters ?? []) as any[];
+    ck('banks: Phoenix⊗Phoenix exposes all params live (no overflow-bake)',
+      ledger.supported && params.length === 18, params.length);
+    ck('banks: Phoenix pair params feature:weave, 18 distinct ids',
+      params.every((p) => p.feature === 'weave') && new Set(params.map((p) => p.id)).size === 18, undefined);
+    ck('banks: Phoenix pair grouped by formula name', params.every((p) => p.group === 'Phoenix'), undefined);
+    const ids = new Set(params.map((p) => p.id));
+    ck('banks: Phoenix vec3 verbatim on both banks (ws0Vec3A + ws1Vec3A)',
+      ids.has('ws0Vec3A') && ids.has('ws1Vec3A'), [...ids]);
+  }
+
+  // Mixed native + MB3D: DISJOINT pools — native on ws0*, MB3D on coreMath uParam*.
+  {
+    const { def } = emitFusedHybrid(scene([nslot(2, 'Mandelbulb'), slot(1, 4)]));
+    const fn = def?.shader.function ?? '';
+    const params = (def?.parameters ?? []) as any[];
+    ck('mixed banks: native slot on ws0 bank, MB3D slot on coreMath',
+      /\buWs0ParamA\b/.test(fn) && /\buParamA\b/.test(fn), undefined);
+    const nativeP = params.filter((p) => p.feature === 'weave');
+    const mb3dP = params.filter((p) => !p.feature);
+    ck('mixed banks: native params feature:weave, MB3D params coreMath (no feature)',
+      nativeP.length > 0 && mb3dP.length > 0 && nativeP.every((p) => /^ws0/.test(p.id)),
+      params.map((p) => `${p.id}/${p.feature ?? 'coreMath'}`));
+    const w = (def?.defaultPreset as any)?.features?.weave ?? {};
+    const cm = (def?.defaultPreset as any)?.features?.coreMath ?? {};
+    ck('mixed banks: native default in features.weave, MB3D default in coreMath',
+      w.ws0ParamA === 8 && cm.paramA !== undefined && cm.ws0ParamA === undefined, { weave: w.ws0ParamA, cm: cm.paramA });
+  }
+}
+
 // ── Native + imported slot SOURCES (P4.3): picker catalog + reject parity ────
 {
   // nativeSlotShell builds the addon-slot shell the picker appends; it emits

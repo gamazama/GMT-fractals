@@ -37,7 +37,7 @@ import type { FractalDefinition } from '../../types/fractal';
 import { createNativeSlotRewriter, extractPreambleFunctions } from './nativeSlot';
 import {
     LaneAllocator, ScalarParamPacker, slotToUniform, vecKindOf,
-    SCALAR_SLOTS, VEC2_SLOTS, VEC3_SLOTS, VEC4_SLOTS,
+    CORE_SLOTS, weaveBankKey, weaveBankUniform,
 } from '../../utils/uniformSlots';
 import type { PackedParam } from '../../utils/uniformSlots';
 
@@ -59,9 +59,16 @@ export interface NativeSlotResolution {
     postCall?: string;
     /** Hoisted per-slot loopInit (state resets + precalc), for the weave loopInit. */
     loopInit?: string;
-    /** Slider schema + defaults for the exposed lanes (empty in bake mode). */
-    params: PackedParam[];
+    /** Slider schema + defaults for the exposed params (empty in bake mode). In
+     *  BANK mode (ADR-0090) these are FractalParameter-shaped with `feature:
+     *  'weave'` + a bank state-key id (`ws<k>ParamA`); in dense/parametric mode
+     *  they are PackedParam onto coreMath lanes. */
+    params: any[];
+    /** coreMath-lane defaults (dense/parametric mode) — EMPTY in bank mode. */
     coreMath: Record<string, any>;
+    /** BANK-mode defaults (ADR-0090), keyed by bank state key (`ws<k>ParamA`) for
+     *  `preset.features.weave`. Undefined in dense/parametric/bake mode. */
+    weaveState?: Record<string, any>;
     /** False when the shared lane pool overflowed — caller re-resolves in bake mode
      *  (the same all-or-nothing fallback as the MB3D transpiler path). */
     paramOk: boolean;
@@ -141,7 +148,7 @@ function buildParamBindings(
 
     // Backfill: any primary uniform the formula references without declaring a
     // parameter for it must NOT fall through to the weave's own lanes.
-    for (const slotId of [...SCALAR_SLOTS, ...VEC2_SLOTS, ...VEC3_SLOTS, ...VEC4_SLOTS]) {
+    for (const slotId of CORE_SLOTS) {
         if (covered.has(slotId)) continue;
         const kind = slotId.startsWith('vec') ? vecKindOf(slotId) : 'float';
         map.push([slotToUniform(slotId), kind === 'float' ? fmt(cm[slotId]) : vecLit(kind, cm[slotId])]);
@@ -149,21 +156,77 @@ function buildParamBindings(
     return { map, ok: true };
 }
 
+const plainVec = (kind: 'vec2' | 'vec3' | 'vec4', v: any): any =>
+    kind === 'vec2' ? { x: num(v?.x), y: num(v?.y) }
+        : kind === 'vec3' ? { x: num(v?.x), y: num(v?.y), z: num(v?.z) }
+            : { x: num(v?.x), y: num(v?.y), z: num(v?.z), w: num(v?.w) };
+
+/**
+ * BANK (fidelity) binding — ADR-0090. A native slot presents its declared params
+ * VERBATIM on its own per-slot bank: `uParamA → uWs<k>ParamA`, `uVec2A →
+ * uWs<k>Vec2A`, … with NO vec decomposition (a declared vec2/vec4 binds a real
+ * vec2/vec4 uniform). Every OTHER coreMath uniform the formula might reference is
+ * backfilled to its preset-default LITERAL, so a slot can never read a bank
+ * uniform it didn't declare (or another slot's). Because the declared ids are
+ * already in the coreMath vocabulary, they fit bank k's mirror by construction —
+ * bank mode never overflows.
+ *
+ * Returns the rewriter `uniformMap`, the bank state defaults (for
+ * `preset.features.weave`), and FractalParameter-shaped param descriptors
+ * (`feature: 'weave'`, state-key id, the formula's real label/range/mode/scale).
+ */
+function buildBankBindings(
+    def: FractalDefinition,
+    bank: number,
+): { map: Array<[string, string]>; weaveState: Record<string, any>; params: any[] } {
+    const cm = (def.defaultPreset as any)?.features?.coreMath ?? {};
+    const map: Array<[string, string]> = [];
+    const weaveState: Record<string, any> = {};
+    const params: any[] = [];
+    const covered = new Set<string>();
+
+    for (const p of (def.parameters ?? []) as any[]) {
+        if (!p?.id || covered.has(p.id)) continue;
+        covered.add(p.id);
+        const kind: 'float' | 'vec2' | 'vec3' | 'vec4' = p.type ?? 'float';
+        const raw = cm[p.id] ?? p.default;
+        const value = kind === 'float' ? num(raw) : plainVec(kind, raw);
+        const bankKey = weaveBankKey(bank, p.id);
+        map.push([slotToUniform(p.id), weaveBankUniform(bank, p.id)]);
+        weaveState[bankKey] = value;
+        // Carry the formula's full descriptor (label/type/range/mode/scale/options/
+        // linkable); only the id + default + feature routing change. `group` is
+        // stamped by emitFusedHybrid (per-formula divider), like MB3D slots.
+        params.push({ ...p, id: bankKey, feature: 'weave', default: value });
+    }
+
+    // Backfill: bake every UNDECLARED coreMath uniform to its preset default.
+    for (const slotId of CORE_SLOTS) {
+        if (covered.has(slotId)) continue;
+        const kind = slotId.startsWith('vec') ? vecKindOf(slotId) : 'float';
+        map.push([slotToUniform(slotId), kind === 'float' ? fmt(cm[slotId]) : vecLit(kind, cm[slotId])]);
+    }
+    return { map, weaveState, params };
+}
+
 /**
  * Resolve one native formula into weave-slot emission pieces.
  *
  * @param slotIndex weave addon slot index — namespaces the slot (`ws<N>_`).
  * @param fnName    the dispatcher-facing function name (`<weaveId>_slot<N>`).
- * @param opts.alloc      shared cross-slot LaneAllocator (multi-slot parametric);
+ * @param opts.bank       BANK (fidelity) mode — bind declared params VERBATIM onto
+ *                        per-slot bank `<n>` (ADR-0090). Native slots use this; it
+ *                        never overflows and never touches the coreMath pool.
+ * @param opts.alloc      shared cross-slot LaneAllocator (multi-slot dense pack);
  *                        the caller must `startSlot()` before each slot.
  * @param opts.parametric single-slot parametric mode — a private allocator.
- *                        Neither ⇒ bake mode (all params as literals, no sliders).
+ *                        None of the three ⇒ bake mode (all params as literals).
  */
 export function resolveNativeSlot(
     def: FractalDefinition,
     slotIndex: number,
     fnName: string,
-    opts: { alloc?: LaneAllocator; parametric?: boolean } = {},
+    opts: { bank?: number; alloc?: LaneAllocator; parametric?: boolean } = {},
 ): NativeSlotResolution | NativeSlotReject {
     const sh = def.shader;
     const caps = sh.capabilities;
@@ -174,13 +237,24 @@ export function resolveNativeSlot(
         return { ok: false, reason: `${def.name ?? def.id} is a modular graph formula — not weavable yet.` };
     }
 
-    const packer = opts.alloc
-        ? new ScalarParamPacker(opts.alloc)
-        : opts.parametric ? new ScalarParamPacker(new LaneAllocator()) : null;
-    const { map, ok } = buildParamBindings(def, packer);
-    // Pool overflow: the caller discards this body and re-resolves in bake mode,
-    // so only paramOk matters here.
-    if (!ok) return { ok: true, glsl: '', call: '', preCall: '', params: [], coreMath: {}, paramOk: false, writesDeriv: true };
+    // Param binding: BANK (fidelity, native default) vs dense/parametric/bake.
+    let map: Array<[string, string]>;
+    let params: any[];
+    let coreMath: Record<string, any>;
+    let weaveState: Record<string, any> | undefined;
+    if (opts.bank !== undefined) {
+        const b = buildBankBindings(def, opts.bank);
+        map = b.map; params = b.params; coreMath = {}; weaveState = b.weaveState;
+    } else {
+        const packer = opts.alloc
+            ? new ScalarParamPacker(opts.alloc)
+            : opts.parametric ? new ScalarParamPacker(new LaneAllocator()) : null;
+        const r = buildParamBindings(def, packer);
+        // Pool overflow: the caller discards this body and re-resolves in bake mode,
+        // so only paramOk matters here.
+        if (!r.ok) return { ok: true, glsl: '', call: '', preCall: '', params: [], coreMath: {}, paramOk: false, writesDeriv: true };
+        map = r.map; params = packer?.params ?? []; coreMath = packer?.coreMath ?? {};
+    }
 
     const P = `ws${slotIndex}_`;
     const R = createNativeSlotRewriter({
@@ -266,8 +340,9 @@ gmt_rotAxis = _${P}svAxis; gmt_rotCos = _${P}svCos; gmt_rotSin = _${P}svSin;`;
         preCall,
         postCall,
         loopInit: init ? `${init}\n` : undefined,
-        params: packer?.params ?? [],
-        coreMath: packer?.coreMath ?? {},
+        params,
+        coreMath,
+        weaveState,
         paramOk: true,
         writesDeriv,
         deMeta,

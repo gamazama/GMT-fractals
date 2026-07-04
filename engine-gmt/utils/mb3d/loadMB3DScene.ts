@@ -201,7 +201,10 @@ export function loadUserWeave(
       weaveState[`weaveStartIter${j + 1}`] = L.startIter;
       weaveState[`weaveBeats${j + 1}`] = L.beats ?? 0;
     });
-    (def.defaultPreset.features ??= {}).weave = weaveState;
+    // Merge (not overwrite): emitFusedHybrid may have stamped native BANK defaults
+    // (ADR-0090) into features.weave; the rhythm keys join them.
+    const feats = (def.defaultPreset.features ??= {});
+    feats.weave = { ...(feats.weave ?? {}), ...weaveState };
   }
   registry.register(def);
   FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
@@ -224,9 +227,17 @@ export function loadUserWeave(
       coreMath: preset.features?.coreMath,
       geometry: preset.features?.geometry,
       quality: preset.features?.quality,
-      // Keep the live rhythm params across rebuilds (the editor writes them to the
-      // store directly; a rebuild must not reset them to feature defaults).
-      weave: current.features?.weave ?? preset.features?.weave,
+      // Adopt the freshly-built native BANK defaults (ADR-0090; ws<k>* keys) from
+      // the new preset — like coreMath, a formula-structure rebuild reseeds the
+      // slot params (a full per-slot transfer is P4.6). But PRESERVE the live
+      // RHYTHM params (weave*<k>): the editor writes them to the store directly and
+      // a rebuild must not reset the schedule to feature defaults.
+      weave: {
+        ...(preset.features?.weave ?? {}),
+        ...Object.fromEntries(
+          Object.entries(current.features?.weave ?? {}).filter(([k]) => k.startsWith('weave')),
+        ),
+      },
     },
   });
   const names = ledger.slotFlags.map((s) => s.name).join(' → ');
