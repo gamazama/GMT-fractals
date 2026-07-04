@@ -17,7 +17,7 @@ import type { FractalDefinition } from '../../types/fractal';
 import type { Capability } from '../../types/capabilities';
 import { buildWeaveSequence, emitWeaveGLSL, stepSlot } from './weaveSequencer';
 import { assembleWeave } from '../../engine/weave/emitWeave';
-import { emitModuloScheduleGLSL } from '../../engine/weave/schedule';
+import { emitLayeredModuloGLSL } from '../../engine/weave/schedule';
 import { transpileSlot } from './slotTranspiler';
 import type { SlotFlag } from './slotTranspiler';
 import { mapDEMeta, MB3D_ROT_GLSL } from './constPacker';
@@ -37,10 +37,12 @@ export interface WeaveLedger {
 
 export interface EmitFusedOptions {
   /** Schedule override (ADR-0089 P3b "Rhythm"). `{kind:'modulo'}` replaces the baked
-   *  counts LUT with the runtime-uniform modulo phase function reading
-   *  `uWeaveInterval` / `uWeaveStartIter` (the DDFS `weave` feature — live AND
-   *  keyframable, schedule edits never recompile). Requires EXACTLY 2 active slots
-   *  (phase 0 = first, phase 1 = second); anything else is a ledger reason.
+   *  counts LUT with the LAYERED runtime-uniform phase function: the first active
+   *  slot is the base (phase 0); each further active slot k is an independent rhythm
+   *  layer reading `uWeaveInterval<k>` / `uWeaveStartIter<k>` / `uWeaveBeats<k>`
+   *  (the DDFS `weave` feature — live AND keyframable, schedule edits never
+   *  recompile). Layers are checked in slot order, first beat wins (the ADR-0089
+   *  arbitration rule). Requires 2–6 active slots; anything else is a ledger reason.
    *  @invariant opts absent (or kind ≠ modulo) = the counts path, byte-identical
    *  to the pre-P3b emit (probe: debug/probe-weave-refactor.mts). */
   schedule?: { kind: 'modulo' };
@@ -89,12 +91,12 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
 
   const id = `MB3DHybrid${seq}`;
   const usedIdx = [...new Set(plan.order.map(stepSlot))].sort((a, b) => a - b);
-  // Rhythm (modulo) schedule: strictly 2 active slots — the modulo phase fn is
-  // binary (0 = primary, 1 = secondary). The Weave Editor only requests it when
-  // exactly 2 rows are active, so this reason is a belt-and-braces backstop.
+  // Rhythm (layered modulo) schedule: 2–6 active slots — base + up to 5 layers
+  // (the DDFS weave feature declares 5 layer uniform sets). The Weave Editor only
+  // requests it in that range, so this reason is a belt-and-braces backstop.
   const modulo = opts?.schedule?.kind === 'modulo';
-  if (modulo && usedIdx.length !== 2) {
-    reasons.push(`Rhythm (modulo) scheduling needs exactly 2 active formula slots — this weave has ${usedIdx.length}.`);
+  if (modulo && (usedIdx.length < 2 || usedIdx.length > 6)) {
+    reasons.push(`Rhythm (modulo) scheduling needs 2 to 6 active formula slots — this weave has ${usedIdx.length}.`);
   }
   // A hybrid weave must run long enough for every formula slot to execute at least
   // once, else a trailing slot never contributes to the DE. MB3D's authored iteration
@@ -214,11 +216,17 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   const recomputeRout = !isDifs && allScratch.includes('mb3dRout');
 
   // Schedule phase function: the baked counts LUT (default), or — Rhythm — the
-  // runtime-uniform modulo gate (uWeaveInterval/uWeaveStartIter, declared shader-
-  // wide by the DDFS `weave` feature; live + keyframable, no recompile). For
-  // modulo the dispatcher phases are 0/1 (positional), not the slot indices.
+  // layered runtime-uniform gate (uWeaveInterval<k>/uWeaveStartIter<k>/uWeaveBeats<k>,
+  // declared shader-wide by the DDFS `weave` feature; live + keyframable, no
+  // recompile). For modulo the dispatcher phases are positional (0 = base, k = layer
+  // k), not the slot indices.
   const weave = modulo
-    ? emitModuloScheduleGLSL({ interval: 'uWeaveInterval', startIter: 'uWeaveStartIter' }, id)
+    ? emitLayeredModuloGLSL(
+        usedIdx.slice(1).map((_, j) => ({
+          interval: `uWeaveInterval${j + 1}`,
+          startIter: `uWeaveStartIter${j + 1}`,
+          beats: `uWeaveBeats${j + 1}`,
+        })), id)
     : emitWeaveGLSL(plan, id);
   // dIFS orbit-trap fold (estimator 6): fold mb3dRout/mb3dVary into the running min g_difsDE
   // ONLY right after a dIFS-OWNER slot (deOption 20) ran — never every iteration. A mixed

@@ -161,7 +161,11 @@ export interface FractalDefinition {
         }>;
         /** Schedule kind — counts is the baked-LUT sequence (repeatFrom = MB3D's
          *  "repeat from here": earlier slots run once as an intro); modulo (live
-         *  rhythm) arrives with its runtime uniforms. */
-        schedule: { kind: 'counts'; repeatFrom?: number } | { kind: 'modulo'; interval: number; startIter: number; maxCount?: number };
+         *  Rhythm) is layered: the first active slot is the base, each further
+         *  active slot k is layer k with its own interval/start[/beats] snapshot
+         *  (the LIVE values ride the DDFS `weave` feature state; these are the
+         *  built snapshot for re-pick/hydrate). beats 0/absent = endless. */
+        schedule: { kind: 'counts'; repeatFrom?: number }
+                | { kind: 'modulo'; layers: Array<{ interval: number; startIter: number; beats?: number }> };
     };
 }

@@ -17,11 +17,13 @@
  *  - Reordering while keyframed formula-param tracks exist shows a warning
  *    (packed lanes may retarget) — a transfer tool comes later.
  *  - Schedule kinds are a user choice: counts ("Sequence", baked LUT — structure
- *    edits rebuild) vs modulo ("Rhythm", exactly 2 active slots; interval/start
- *    live on the DDFS `weave` feature (uWeaveInterval/uWeaveStartIter) so
- *    schedule edits are LIVE + keyframable, no rebuild — formula changes still
- *    rebuild). Slot counts don't drive Rhythm; they only mark which slots are
- *    active, so the steppers dim in Rhythm mode.
+ *    edits rebuild) vs layered modulo ("Rhythm", 2–6 active slots: the first is
+ *    the base, each further slot is an independent rhythm layer with its own
+ *    interval / start / beats-cap on the DDFS `weave` feature — LIVE +
+ *    keyframable, no rebuild; formula changes still rebuild. Layers are checked
+ *    top to bottom, first beat wins — the ADR-0089 arbitration rule. A dense
+ *    capped layer doubles as a sequence-style intro). Slot counts don't drive
+ *    Rhythm; they only mark which slots are active, so the steppers dim.
  *  - weaveSource rides on the built def so the weave reopens for re-editing;
  *    imported MB3D scenes carry one too, so any loaded weave can be opened here.
  */
@@ -93,6 +95,22 @@ function draftFromWeaveSource(ws: WeaveSource): WeaveDraft {
 }
 
 const DEFAULT_ITER_COUNT = 2;
+
+/** Compact −/N/+ stepper for the live rhythm params (real-time friendly — the
+ *  full GMT slider widgets arrive with the P4 panel promotion, where the DDFS
+ *  params render through the standard panel primitives). */
+function MiniStep({ value, set, title }: { value: number; set: (n: number) => void; title: string }) {
+    return (
+        <span className="flex items-center gap-0.5 shrink-0" title={title}>
+            <button onClick={() => set(value - 1)}
+                className="w-4 h-4 text-[10px] leading-none rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
+            <input value={value} onChange={(e) => set(parseInt(e.target.value, 10) || 0)}
+                className="w-7 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" />
+            <button onClick={() => set(value + 1)}
+                className="w-4 h-4 text-[10px] leading-none rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
+        </span>
+    );
+}
 
 export function WeaveEditorPane() {
     const store = useEngineStore() as any;
@@ -247,19 +265,24 @@ export function WeaveEditorPane() {
         }
     };
 
-    // ── Rhythm (modulo) schedule state — lives on the DDFS `weave` feature so it
-    // is LIVE (uniform-driven, no rebuild) and keyframable. The editor is just a
-    // view over store.weave; the DDFS auto-setter writes it.
+    // ── Rhythm (layered modulo) schedule state — lives on the DDFS `weave`
+    // feature so it is LIVE (uniform-driven, no rebuild) and keyframable. The
+    // editor is just a view over store.weave; the DDFS auto-setter writes it.
+    // Active rows in row order: [0] = base, [1..] = rhythm layers (layer k = position).
     const iterCounts = draft.rows.map((r) => r.slot.iterCount);
     const activeCount = iterCounts.filter((n) => n > 0).length;
-    const rhythmOk = activeCount === 2;
+    const rhythmOk = activeCount >= 2 && activeCount <= 6;
     const rhythm = draft.scheduleKind === 'modulo' && rhythmOk;
-    const rhythmInterval = Math.max(1, Math.min(32, Math.round(store.weave?.weaveInterval ?? 2)));
-    const rhythmStart = Math.max(0, Math.min(64, Math.round(store.weave?.weaveStartIter ?? 0)));
-    const setRhythmInterval = (n: number) =>
-        store.setWeave?.({ weaveInterval: Math.max(1, Math.min(32, Math.round(n) || 1)) });
-    const setRhythmStart = (n: number) =>
-        store.setWeave?.({ weaveStartIter: Math.max(0, Math.min(64, Math.round(n) || 0)) });
+    const activeRowIdx = draft.rows.map((r, i) => (r.slot.iterCount > 0 ? i : -1)).filter((i) => i >= 0);
+    const clampI = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(n) || 0));
+    const layerVal = (k: number) => ({
+        interval: Math.max(1, clampI(store.weave?.[`weaveInterval${k}`] ?? 2, 1, 32)),
+        start: clampI(store.weave?.[`weaveStartIter${k}`] ?? 0, 0, 64),
+        beats: clampI(store.weave?.[`weaveBeats${k}`] ?? 0, 0, 64),
+    });
+    const setLayerVal = (k: number, field: 'weaveInterval' | 'weaveStartIter' | 'weaveBeats', n: number) =>
+        store.setWeave?.({ [`${field}${k}`]: field === 'weaveInterval' ? Math.max(1, clampI(n, 1, 32)) : clampI(n, 0, 64) });
+    const rowColor = (i: number) => SLOT_COLORS[(draft.rows[i]?.colorIdx ?? 0) % SLOT_COLORS.length];
 
     // ── Live schedule preview ────────────────────────────────────────────────
     const repeatIdx = useMemo(() => {
@@ -281,18 +304,25 @@ export function WeaveEditorPane() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [iterCounts.join(','), repeatIdx]);
 
-    // Rhythm plan for the LoopStrip: mirror the modulo phase fn in JS (pure — no
-    // compile). Pattern: `start` primary steps as the intro, then a cycle of
-    // length `interval` = [secondary, primary × (interval-1)]. Being plan-shaped,
-    // LoopStrip's slot-identity colors + faded repeats come free.
-    const rhythmPlan = useMemo(() => {
+    // Rhythm plan for the LoopStrip: mirror the layered phase fn in JS (pure — no
+    // compile; recomputed per render, trivially cheap). Layers are checked in row
+    // order, first beat wins; the base fills the rest. Beats caps make the layered
+    // schedule non-periodic in general, so the strip shows the exact first
+    // iterations (introLen = full length ⇒ no faded-repeat tail).
+    const rhythmPlan = (() => {
         if (!rhythm) return null;
-        const act = draft.rows.map((r, i) => ({ r, i })).filter(({ r }) => r.slot.iterCount > 0).map(({ i }) => i);
-        const [a, b] = act;
-        const order = [...Array(rhythmStart).fill(a), b, ...Array(rhythmInterval - 1).fill(a)];
-        return { order, introLen: rhythmStart, cycleLen: rhythmInterval, endTo: 0, repeatFrom: 0, nHybrid: iterCounts, hasSilent: false };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [rhythm, rhythmInterval, rhythmStart, iterCounts.join(','), draft.rows.map((r) => r.key).join(',')]);
+        const layers = activeRowIdx.slice(1).map((rowIdx, j) => ({ rowIdx, ...layerVal(j + 1) }));
+        const order: number[] = [];
+        for (let i = 0; i < 96; i++) {
+            let s = activeRowIdx[0];
+            for (const L of layers) {
+                const rel = i - L.start;
+                if (rel >= 0 && rel % L.interval === 0 && (L.beats <= 0 || rel / L.interval < L.beats)) { s = L.rowIdx; break; }
+            }
+            order.push(s);
+        }
+        return { order, introLen: order.length, cycleLen: 1, endTo: 0, repeatFrom: 0, nHybrid: iterCounts, hasSilent: false };
+    })();
 
     // ── Build ────────────────────────────────────────────────────────────────
     const build = () => {
@@ -308,10 +338,16 @@ export function WeaveEditorPane() {
                 version: 1,
                 title: draft.title,
                 slots: draft.rows.map((r) => ({ label: r.label, kind: r.kind, ref: r.ref, slot: { ...r.slot } })),
-                // Rhythm persists the built interval/start snapshot; the live values
-                // stay on the DDFS weave feature (and ride presets/GMF as feature state).
+                // Rhythm persists the built per-layer snapshot; the live values stay
+                // on the DDFS weave feature (and ride presets/GMF as feature state).
                 schedule: rhythm
-                    ? { kind: 'modulo', interval: rhythmInterval, startIter: rhythmStart }
+                    ? {
+                        kind: 'modulo',
+                        layers: activeRowIdx.slice(1).map((_, j) => {
+                            const v = layerVal(j + 1);
+                            return { interval: v.interval, startIter: v.start, ...(v.beats > 0 ? { beats: v.beats } : {}) };
+                        }),
+                    }
                     : { kind: 'counts', repeatFrom: repeatIdx },
             };
             const res = loadUserWeave(slots, draft.title || 'My Weave', weaveSource, repeatIdx);
@@ -323,7 +359,7 @@ export function WeaveEditorPane() {
                 setStatus({
                     kind: 'ok',
                     text: rhythm
-                        ? `Built ${res.summary}. Rhythm interval/start are live now — tweak them without rebuilding. Camera and look kept.`
+                        ? `Built ${res.summary}. Rhythm layers are live now — tweak interval/start/beats without rebuilding. Camera and look kept.`
                         : `Built ${res.summary}. Parameter sliders live in the Formula panel; camera and look kept.`,
                 });
                 showToast(`Weave built: ${res.summary}`, 'info', 4000);
@@ -477,37 +513,46 @@ export function WeaveEditorPane() {
                                         ? 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'
                                         : 'border-line/10 bg-line/[0.04] text-fg-tertiary opacity-50 cursor-not-allowed'}`}
                                 title={rhythmOk || draft.scheduleKind === 'modulo'
-                                    ? 'Live rhythm — the second formula runs every Nth iteration. Interval & start are keyframable and apply instantly (no rebuild); costs a little performance'
-                                    : 'Rhythm needs exactly 2 active formula slots'}>
+                                    ? 'Live rhythm — the first slot is the base; every other slot is an independent layer running every Nth iteration. Interval / start / beats are keyframable and apply instantly (no rebuild); costs a little performance'
+                                    : 'Rhythm needs 2–6 active formula slots'}>
                                 Rhythm
                             </button>
                         </div>
                     </div>
                     {draft.scheduleKind === 'modulo' && !rhythmOk && (
                         <p className="text-[10px] text-amber-300/80">
-                            Rhythm needs exactly 2 active slots ({activeCount} now) — building as Sequence until then.
+                            Rhythm needs 2–6 active slots ({activeCount} now) — building as Sequence until then.
                         </p>
                     )}
                     {rhythm && (
-                        <div className="flex items-center gap-3 text-[11px] text-fg-muted">
-                            <label className="flex items-center gap-1.5" title="Run the second formula every N iterations — live and keyframable, no rebuild">
-                                <span>every</span>
-                                <input
-                                    value={rhythmInterval}
-                                    onChange={(e) => setRhythmInterval(parseInt(e.target.value, 10))}
-                                    className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40"
-                                />
-                                <span>iters</span>
-                            </label>
-                            <label className="flex items-center gap-1.5" title="First iteration where the second formula runs — live and keyframable, no rebuild">
-                                <span>from iter</span>
-                                <input
-                                    value={rhythmStart}
-                                    onChange={(e) => setRhythmStart(parseInt(e.target.value, 10))}
-                                    className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40"
-                                />
-                            </label>
-                            <span className="text-[10px] text-fg-tertiary">live — no rebuild; formula changes still rebuild</span>
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-[11px] text-fg-muted">
+                                <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: rowColor(activeRowIdx[0]) }} />
+                                <span className="truncate text-fg max-w-[110px]">{draft.rows[activeRowIdx[0]]?.label}</span>
+                                <span className="text-[10px] text-fg-tertiary">— base, runs when no layer beats</span>
+                            </div>
+                            {activeRowIdx.slice(1).map((rowIdx, j) => {
+                                const k = j + 1;
+                                const v = layerVal(k);
+                                return (
+                                    <div key={draft.rows[rowIdx].key} className="flex items-center gap-1.5 text-[11px] text-fg-muted flex-wrap">
+                                        <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: rowColor(rowIdx) }} />
+                                        <span className="truncate text-fg max-w-[110px]">{draft.rows[rowIdx].label}</span>
+                                        <span className="text-fg-tertiary">every</span>
+                                        <MiniStep value={v.interval} set={(n) => setLayerVal(k, 'weaveInterval', n)}
+                                            title="Run this layer every N iterations — live, keyframable, no rebuild" />
+                                        <span className="text-fg-tertiary">from</span>
+                                        <MiniStep value={v.start} set={(n) => setLayerVal(k, 'weaveStartIter', n)}
+                                            title="First iteration where this layer runs — live, keyframable, no rebuild" />
+                                        <span className="text-fg-tertiary">beats</span>
+                                        <MiniStep value={v.beats} set={(n) => setLayerVal(k, 'weaveBeats', n)}
+                                            title="Stop after this many beats (0 = endless). A dense capped layer works as an intro sequence — live, no rebuild" />
+                                    </div>
+                                );
+                            })}
+                            <p className="text-[10px] text-fg-tertiary">
+                                layers are checked top to bottom — the first beat wins · live, no rebuild; formula changes still rebuild
+                            </p>
                         </div>
                     )}
                     <LoopStrip
@@ -518,8 +563,7 @@ export function WeaveEditorPane() {
                     />
                     <p className="text-[10px] text-fg-tertiary">
                         {rhythm
-                            ? <>second formula every {rhythmInterval} iteration{rhythmInterval === 1 ? '' : 's'}
-                                {rhythmStart > 0 ? ` from iteration ${rhythmStart}` : ''} · faded blocks repeat · scene iterations: {store.coreMath?.iterations ?? '—'}</>
+                            ? <>{activeCount - 1} rhythm layer{activeCount === 2 ? '' : 's'} over {draft.rows[activeRowIdx[0]]?.label} · scene iterations: {store.coreMath?.iterations ?? '—'}</>
                             : <>cycle = {plan.cycleLen} iteration{plan.cycleLen === 1 ? '' : 's'}
                                 {plan.introLen > 0 ? ` after ${plan.introLen} intro` : ''} · faded blocks repeat · scene iterations: {store.coreMath?.iterations ?? '—'}</>}
                     </p>

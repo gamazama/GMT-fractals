@@ -3,14 +3,21 @@
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
 > **Update 2026-07-04 (P3b landed; decision unchanged):** the weaver's opt-in
-> **Rhythm (modulo) schedule** ships: a DDFS `weave` feature carries
-> `uWeaveInterval`/`uWeaveStartIter` (live + keyframable — schedule edits never
-> recompile), and `emitFusedHybrid(scene, opts)` accepts
-> `opts.schedule = {kind:'modulo'}` (exactly 2 active slots, positional phases
-> 0/1; anything else is a ledger reason). Opts absent stays the counts path,
-> probe-proven byte-identical over all 38 bundled scenes. The Weave Editor's
-> Rhythm chip, live interval/start controls, and modulo LoopStrip render it;
-> `weaveSource.schedule` persists it.
+> **Rhythm (LAYERED modulo) schedule** ships: 2–6 active slots — the first is
+> the base (phase 0), each further slot k is an independent rhythm layer reading
+> `uWeaveInterval<k>`/`uWeaveStartIter<k>`/`uWeaveBeats<k>` from the DDFS `weave`
+> feature (live + keyframable — schedule edits never recompile). Layers are
+> checked in slot order, first beat wins — the same precedence rule as the
+> `skipMainFormula` arbitration above, so the GMT "Hybrid Box + interlace"
+> pattern maps 1:1 onto rhythm layers. `beats` caps a layer after N claims
+> (0 = endless); a dense capped layer doubles as a sequence-style intro, which is
+> why no baked counts-prefix hybrid schedule was added (deferred to P4 if ever
+> needed). Emitters: `emitLayeredModuloGLSL` (weaver) alongside the binary
+> `emitModuloScheduleGLSL` (interlace / Hybrid Box bindings, unchanged).
+> `emitFusedHybrid(scene, opts)` takes `opts.schedule = {kind:'modulo'}`; opts
+> absent stays the counts path, probe-proven byte-identical over all 38 bundled
+> scenes. `weaveSource.schedule = {kind:'modulo', layers:[…]}` persists the
+> built snapshot; the live values ride feature state.
 
 > **Update 2026-07-04 (P2/P2.5 landed; decision unchanged):** the interlace rewriter now
 > lives at `engine/weave/nativeSlot.ts` (namespace-parameterized `createNativeSlotRewriter`;

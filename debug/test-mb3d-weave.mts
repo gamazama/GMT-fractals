@@ -283,20 +283,22 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck('modulo: invocation cap emitted', full.glsl.includes('if (rel / skip >= int(uXCount)) return 0;'));
 }
 
-// ── Rhythm: emitFusedHybrid opts.schedule = modulo (P3b) ───────────────────────
+// ── Rhythm: emitFusedHybrid opts.schedule = modulo (P3b, layered) ──────────────
 {
-  // 2 active slots + modulo → runtime-uniform phase fn, no baked LUT, phases 0/1.
+  // 2 active slots + modulo → runtime-uniform layered phase fn, no baked LUT,
+  // phases 0/1 (base + layer 1).
   const s = scene([slot(2, 4, [-1.5, 0.5, 1]), slot(1, 1, [8, 1])]);
   const { def, ledger } = emitFusedHybrid(s, { schedule: { kind: 'modulo' } });
   ck('rhythm: supported', ledger.supported === true && !!def, ledger.reasons);
   if (def) {
     const fn = def.shader.function;
-    ck('rhythm: reads uWeaveInterval', fn.includes('uWeaveInterval'));
-    ck('rhythm: reads uWeaveStartIter', fn.includes('uWeaveStartIter'));
+    ck('rhythm: layer 1 reads uWeaveInterval1/StartIter1/Beats1',
+      fn.includes('uWeaveInterval1') && fn.includes('uWeaveStartIter1') && fn.includes('uWeaveBeats1'));
     ck('rhythm: no baked counts LUT', !/_WEAVE\[/.test(fn), 'LUT should be absent');
     ck('rhythm: phase fn follows weave convention', /_weaveSlot\(int i\)/.test(fn));
     ck('rhythm: dispatcher phases are 0/1', fn.includes('if (phase == 0)') && fn.includes('if (phase == 1)'));
     ck('rhythm: no slot-index phases beyond 1', !fn.includes('if (phase == 2)'));
+    ck('rhythm: beats gate is endless-when-0', fn.includes('int(uWeaveBeats1) <= 0 ||'));
   }
   // Same scene WITHOUT opts stays on the counts LUT (byte-identity backstop —
   // the full 38-scene probe is debug/probe-weave-refactor.mts).
@@ -305,15 +307,37 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     !!base.def && /_WEAVE\[/.test(base.def.shader.function) && !base.def.shader.function.includes('uWeaveInterval'));
 }
 {
-  // Modulo needs EXACTLY 2 active slots: 1 and 3 both refuse with a reason,
-  // and the 1-slot failure must NOT detour into the GMT-substitute path.
-  const one = emitFusedHybrid(scene([slot(2, 4, [-1.5, 0.5, 1])]), { schedule: { kind: 'modulo' } });
-  ck('rhythm: 1 active slot refused', one.ledger.supported === false && !one.def, one.ledger.reasons);
-  ck('rhythm: 1-slot reason mentions 2 active slots', one.ledger.reasons.some((r) => /exactly 2 active/i.test(r)), one.ledger.reasons);
-  ck('rhythm: 1-slot failure does not substitute', !one.substitute);
+  // 3 active slots = base + 2 independent layers (the GMT hybrid-box+interlace
+  // pattern): phases 0/1/2, each layer on its own uniform set, checked in order.
   const three = emitFusedHybrid(
     scene([slot(1, 4, [-1.5, 0.5, 1]), slot(1, 1, [8, 1]), slot(1, 0, [8])]), { schedule: { kind: 'modulo' } });
-  ck('rhythm: 3 active slots refused', three.ledger.supported === false && !three.def, three.ledger.reasons);
+  ck('rhythm: 3 active slots supported (layered)', three.ledger.supported === true && !!three.def, three.ledger.reasons);
+  if (three.def) {
+    const fn = three.def.shader.function;
+    ck('rhythm: layer 2 on its own uniforms', fn.includes('uWeaveInterval2') && fn.includes('uWeaveStartIter2'));
+    ck('rhythm: layer 1 checked before layer 2 (precedence)',
+      fn.indexOf('uWeaveInterval1') < fn.indexOf('uWeaveInterval2'));
+    ck('rhythm: dispatcher phases 0/1/2', fn.includes('if (phase == 2)'));
+  }
+}
+{
+  // Rhythm arity: 1 active slot refuses with a reason, and the failure must
+  // NOT detour into the GMT-substitute path.
+  const one = emitFusedHybrid(scene([slot(2, 4, [-1.5, 0.5, 1])]), { schedule: { kind: 'modulo' } });
+  ck('rhythm: 1 active slot refused', one.ledger.supported === false && !one.def, one.ledger.reasons);
+  ck('rhythm: 1-slot reason mentions the 2-6 range', one.ledger.reasons.some((r) => /2 to 6 active/i.test(r)), one.ledger.reasons);
+  ck('rhythm: 1-slot failure does not substitute', !one.substitute);
+}
+{
+  // Pure layered emitter: precedence + beats semantics in the GLSL shape.
+  const { emitLayeredModuloGLSL } = await import('../engine-gmt/engine/weave/schedule.ts');
+  const two = emitLayeredModuloGLSL(
+    [{ interval: 'uA', startIter: 'uB', beats: 'uC' }, { interval: 'uD', startIter: 'uE' }], 'L');
+  ck('layered: fnName convention', two.fnName === 'L_weaveSlot', two.fnName);
+  ck('layered: layer order in body = precedence', two.glsl.indexOf('return 1;') < two.glsl.indexOf('return 2;'));
+  ck('layered: beats gate only where given', two.glsl.includes('int(uC) <= 0 ||') && !two.glsl.includes('uE) <= 0'));
+  ck('layered: base fallthrough returns 0', two.glsl.trimEnd().endsWith('return 0;\n}'));
+  ck('layered: interval clamps below 1', two.glsl.includes('if (skip < 1) skip = 1;'));
 }
 
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);

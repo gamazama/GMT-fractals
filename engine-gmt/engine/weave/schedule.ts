@@ -151,3 +151,41 @@ ${u.maxCount ? `  if (rel / skip >= int(${u.maxCount})) return 0;\n` : ''}  retu
 }`;
     return { glsl, fnName };
 }
+
+/** One rhythm layer of a layered modulo schedule. Each field is a GLSL
+ *  float-uniform expression (DDFS params — live + keyframable). */
+export interface ModuloLayerUniforms {
+    interval: string;
+    startIter: string;
+    /** Optional beat cap: the layer stops claiming after N beats (≤ 0 = endless).
+     *  A bounded dense layer (interval 1, a few beats) doubles as a sequence-style
+     *  intro without baking a counts prefix into the shader. */
+    beats?: string;
+}
+
+/**
+ * Emit the LAYERED modulo phase function — the user weaver's Rhythm with N slots
+ * (phase 0 = the base slot; layer n claims phase n). Each layer has its own
+ * (interval, startIter[, beats]) gate; layers are checked in order and the FIRST
+ * beat that hits wins — layer order = precedence, the same arbitration rule as
+ * the skipMainFormula dispatch (ADR-0089 P2.5). All inputs are runtime uniforms,
+ * so schedule edits are live and keyframable with zero recompile.
+ */
+export function emitLayeredModuloGLSL(
+    layers: ModuloLayerUniforms[],
+    idPrefix: string,
+): { glsl: string; fnName: string } {
+    const fnName = `${idPrefix}_weaveSlot`;
+    const body = layers.map((L, n) =>
+        `  skip = int(${L.interval}); if (skip < 1) skip = 1;
+  rel = i - int(${L.startIter});
+  if (rel >= 0 && rel % skip == 0${L.beats ? ` && (int(${L.beats}) <= 0 || rel / skip < int(${L.beats}))` : ''}) return ${n + 1};`,
+    ).join('\n');
+    const glsl = `
+int ${fnName}(int i) {
+  int skip; int rel;
+${body}
+  return 0;
+}`;
+    return { glsl, fnName };
+}

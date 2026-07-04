@@ -175,8 +175,8 @@ export function loadUserWeave(
   weaveSource?: import('../../types/fractal').FractalDefinition['weaveSource'],
   repeatFrom = 0,
 ): LoadMB3DResult {
-  // Rhythm (modulo) schedule rides in on the weaveSource; the emit swaps the baked
-  // counts LUT for the runtime-uniform phase fn (uWeaveInterval/uWeaveStartIter).
+  // Rhythm (layered modulo) schedule rides in on the weaveSource; the emit swaps the
+  // baked counts LUT for the layered runtime-uniform phase fn (uWeave*<k> uniforms).
   const rhythm = weaveSource?.schedule.kind === 'modulo' ? weaveSource.schedule : undefined;
   const { def, ledger } = emitFusedHybrid(
     buildWeaveScene(slots, title, undefined, repeatFrom),
@@ -190,9 +190,15 @@ export function loadUserWeave(
   // (which loads defaultPreset) renders the authored schedule — the uniforms are
   // driven by the DDFS `weave` feature state, not by the def.
   if (rhythm) {
-    (def.defaultPreset.features ??= {}).weave = {
-      weaveInterval: rhythm.interval, weaveStartIter: rhythm.startIter,
-    };
+    const weaveState: Record<string, number> = {};
+    // Tolerate the pre-layered single-pair shape from early P3b builds.
+    const layers = rhythm.layers ?? [{ interval: (rhythm as any).interval ?? 2, startIter: (rhythm as any).startIter ?? 0 }];
+    layers.forEach((L, j) => {
+      weaveState[`weaveInterval${j + 1}`] = L.interval;
+      weaveState[`weaveStartIter${j + 1}`] = L.startIter;
+      weaveState[`weaveBeats${j + 1}`] = L.beats ?? 0;
+    });
+    (def.defaultPreset.features ??= {}).weave = weaveState;
   }
   registry.register(def);
   FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
