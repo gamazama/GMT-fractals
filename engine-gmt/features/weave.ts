@@ -49,6 +49,8 @@ type LayerIdx = 1 | 2 | 3 | 4 | 5;
 export type WeaveBankKey = `ws${number}${string}`;
 export type WeaveState = {
     [K in `weaveInterval${LayerIdx}` | `weaveStartIter${LayerIdx}` | `weaveBeats${LayerIdx}`]: number;
+} & {
+    weaveEnabled: boolean;
 } & Partial<Record<WeaveBankKey,
     number | { x: number; y: number } | { x: number; y: number; z: number } | { x: number; y: number; z: number; w: number }>>;
 
@@ -81,6 +83,21 @@ for (let k = 0; k < WEAVE_BANK_COUNT; k++) {
         };
     }
 }
+
+// ── Whole-weave master enable (ADR-0089 P4.4 owner decision 1) ──────────────
+// ONE live, keyframable mute-all-layers gate: OFF = base slot only, weave
+// dormant (the legacy `interlaceEnabled`/`hybridMode` semantics — required for
+// lossless migration of disabled-but-configured legacy scenes). The phase-fn
+// gate is OPT-IN per def via `emitFusedHybrid` opts.enableGate (editor builds +
+// migrated scenes request it; plain MB3D imports don't, keeping their emit
+// byte-identical). UI is deliberately LOW-PROFILE (a compat/migration
+// affordance, not a hero control — owner: "it's a weird control"); per-slot
+// mute/solo is backlog.
+params.weaveEnabled = {
+    type: 'boolean', default: true, label: 'Weave Active', shortId: 'wve',
+    uniform: 'uWeaveEnabled', group: 'weave_rhythm',
+    description: 'Whole-weave enable: off renders the base formula only (all layers dormant). Live — no recompile.',
+};
 
 // ── Rhythm (layered modulo) schedule ────────────────────────────────────────
 for (let k = 1; k <= WEAVE_MAX_LAYERS; k++) {

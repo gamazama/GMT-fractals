@@ -348,6 +348,47 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck('layered: interval clamps below 1', two.glsl.includes('if (skip < 1) skip = 1;'));
 }
 
+// ── Whole-weave master gate (P4.4 weaveEnabled, opt-in via opts.enableGate) ────
+{
+  const s = scene([slot(2, 4, [-1.5, 0.5, 1]), slot(1, 1, [8, 1])]);
+  // Opt-in + modulo: gate first, returns 0 (base slot) when disabled.
+  const rhythmGated = emitFusedHybrid(s, { schedule: { kind: 'modulo' }, enableGate: true });
+  ck('gate: rhythm phase fn gated on uWeaveEnabled',
+    !!rhythmGated.def && rhythmGated.def.shader.function.includes('if (uWeaveEnabled < 0.5) return 0;'));
+  // Opt-in + counts: disabled returns the FIRST step's slot (base formula only).
+  const countsGated = emitFusedHybrid(s, { enableGate: true });
+  ck('gate: counts phase fn gated, disabled → base slot 0',
+    !!countsGated.def && countsGated.def.shader.function.includes('if (uWeaveEnabled < 0.5) return 0;'));
+  ck('gate: counts LUT still present alongside the gate',
+    !!countsGated.def && /_WEAVE\[/.test(countsGated.def.shader.function));
+  // Opt-in absent = no gate anywhere (byte-identity invariant).
+  const unGated = emitFusedHybrid(s);
+  const unGatedRhythm = emitFusedHybrid(s, { schedule: { kind: 'modulo' } });
+  ck('gate: opts absent → no uWeaveEnabled (counts)',
+    !!unGated.def && !unGated.def.shader.function.includes('uWeaveEnabled'));
+  ck('gate: opts absent → no uWeaveEnabled (rhythm)',
+    !!unGatedRhythm.def && !unGatedRhythm.def.shader.function.includes('uWeaveEnabled'));
+}
+{
+  // Counts gate with an EMPTY slot 0: disabled must return the first ACTIVE
+  // slot's phase (the LUT's first entry), not literal 0.
+  const s = scene([slot(0), slot(2, 4, [-1.5, 0.5, 1]), slot(1, 1, [8, 1])]);
+  const { def } = emitFusedHybrid(s, { enableGate: true });
+  ck('gate: counts disabled → first ACTIVE slot (1)',
+    !!def && def.shader.function.includes('if (uWeaveEnabled < 0.5) return 1;'));
+}
+{
+  // Pure schedule emitters: gate is opt-in and shape-stable.
+  const { emitCountsScheduleGLSL, emitLayeredModuloGLSL, buildCountsPlan } = await import('../engine-gmt/engine/weave/schedule.ts');
+  const plan = buildCountsPlan({ iterCounts: [2, 1], endTo: 1, repeatFrom: 0 });
+  const gated = emitCountsScheduleGLSL(plan, 'G', { enabled: 'uWeaveEnabled' });
+  ck('counts emitter: gate line first in fn', /int G_weaveSlot\(int i\) \{\n  if \(uWeaveEnabled < 0\.5\) return 0;/.test(gated.glsl));
+  const plain = emitCountsScheduleGLSL(plan, 'G');
+  ck('counts emitter: no opts → no gate', !plain.glsl.includes('uWeaveEnabled'));
+  const lGated = emitLayeredModuloGLSL([{ interval: 'uA', startIter: 'uB' }], 'G', { enabled: 'uWeaveEnabled' });
+  ck('layered emitter: gate line first in fn', /int G_weaveSlot\(int i\) \{\n  if \(uWeaveEnabled < 0\.5\) return 0;/.test(lGated.glsl));
+}
+
 // ── Per-option expose/bake directives (P3b Task 2) ─────────────────────────────
 {
   // Intern single-slot: bake Scale (option 0) → literal in the body, 2 sliders left,

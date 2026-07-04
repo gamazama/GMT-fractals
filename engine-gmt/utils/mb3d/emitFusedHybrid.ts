@@ -51,6 +51,13 @@ export interface EmitFusedOptions {
    *  addon slot index then the option index: true = bake that option's value as
    *  a literal (frees its uniform lanes). Absent = auto-expose (unchanged). */
   slotBake?: Array<boolean[] | undefined>;
+  /** OPT-IN whole-weave master gate (ADR-0089 P4.4 `weaveEnabled`): the phase
+   *  function reads `uWeaveEnabled` (DDFS `weave` feature — live, keyframable);
+   *  OFF = base slot only, weave dormant (legacy `interlaceEnabled` semantics).
+   *  Editor builds + migrated legacy scenes request it; plain MB3D scene imports
+   *  don't. @invariant opts absent = no gate emitted, byte-identical to the
+   *  pre-gate emit (probe: debug/probe-weave-refactor.mts). */
+  enableGate?: boolean;
 }
 
 export interface EmitResult {
@@ -278,14 +285,15 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // declared shader-wide by the DDFS `weave` feature; live + keyframable, no
   // recompile). For modulo the dispatcher phases are positional (0 = base, k = layer
   // k), not the slot indices.
+  const gate = opts?.enableGate ? { enabled: 'uWeaveEnabled' } : {};
   const weave = modulo
     ? emitLayeredModuloGLSL(
         usedIdx.slice(1).map((_, j) => ({
           interval: `uWeaveInterval${j + 1}`,
           startIter: `uWeaveStartIter${j + 1}`,
           beats: `uWeaveBeats${j + 1}`,
-        })), id)
-    : emitWeaveGLSL(plan, id);
+        })), id, gate)
+    : emitWeaveGLSL(plan, id, gate);
   // dIFS orbit-trap fold (estimator 6): fold mb3dRout/mb3dVary into the running min g_difsDE
   // ONLY right after a dIFS-OWNER slot (deOption 20) ran — never every iteration. A mixed
   // weave with a non-dIFS transform slot (e.g. Wada basin's PolyFold-symIFS, deOption 21,

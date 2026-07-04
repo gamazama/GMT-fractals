@@ -743,6 +743,18 @@ export function WeaveEditorPane() {
                     <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wide text-fg-tertiary">Iteration schedule</span>
                         <div className="flex items-center gap-1">
+                            {/* Whole-weave enable — deliberately LOW-PROFILE (a compat/
+                                migration affordance, not a hero control; ADR-0089 P4.4).
+                                Live DDFS state (uWeaveEnabled) — applies to weaves built
+                                here (and migrated legacy scenes), no rebuild needed. */}
+                            <label className="flex items-center gap-1 mr-1.5 text-[10px] text-fg-tertiary hover:text-fg-muted cursor-pointer select-none"
+                                title="Whole-weave enable — off renders the base formula only (all layers dormant). Live and keyframable; applies to weaves built here. Imported scenes gain it on rebuild.">
+                                <input type="checkbox"
+                                    checked={store.weave?.weaveEnabled ?? true}
+                                    onChange={(e) => store.setWeave?.({ weaveEnabled: e.target.checked })}
+                                    className="w-3 h-3 accent-accent-500" />
+                                active
+                            </label>
                             <button
                                 onClick={() => draft.scheduleKind !== 'counts' && commit({ ...draft, scheduleKind: 'counts' })}
                                 className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${!rhythm

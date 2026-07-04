@@ -97,13 +97,26 @@ export function stepSlot(step: number): number {
     return step < 0 ? ~step : step;
 }
 
+/** Opt-in whole-weave master gate (ADR-0089 P4.4 `weaveEnabled`). `enabled` is a
+ *  GLSL float-uniform expression (> 0.5 = weave active); when it reads OFF the
+ *  phase function returns the BASE slot's phase — base formula only, every layer
+ *  dormant (the legacy `interlaceEnabled`/`hybridMode` semantics). Omit the opts
+ *  for an ungated (always-on) phase function — emission is then byte-identical
+ *  to the pre-gate shape. */
+export interface ScheduleGateOptions {
+    enabled?: string;
+}
+
 /**
  * Emit the `counts` phase function: a `const int` lookup over one intro+cycle,
  * with the cycle taken modulo. Declared at shader-function scope.
+ * With `opts.enabled` (the opt-in master gate), disabled returns the FIRST
+ * step's slot — the weave's base formula runs alone.
  */
 export function emitCountsScheduleGLSL(
     plan: Pick<WeaveSchedulePlan, 'order' | 'introLen' | 'cycleLen'>,
     idPrefix: string,
+    opts: ScheduleGateOptions = {},
 ): { glsl: string; fnName: string } {
     const lut = plan.order.map(stepSlot);
     const fnName = `${idPrefix}_weaveSlot`;
@@ -113,7 +126,7 @@ export function emitCountsScheduleGLSL(
     const glsl = `
 const int ${arrName}[${lut.length}] = int[](${lut.join(', ')});
 int ${fnName}(int i) {
-  if (i < ${intro}) return ${arrName}[i];
+${opts.enabled ? `  if (${opts.enabled} < 0.5) return ${lut[0] ?? 0};\n` : ''}  if (i < ${intro}) return ${arrName}[i];
   return ${arrName}[${intro} + (i - ${intro}) % ${cyc}];
 }`;
     return { glsl, fnName };
@@ -170,10 +183,13 @@ export interface ModuloLayerUniforms {
  * beat that hits wins — layer order = precedence, the same arbitration rule as
  * the skipMainFormula dispatch (ADR-0089 P2.5). All inputs are runtime uniforms,
  * so schedule edits are live and keyframable with zero recompile.
+ * With `opts.enabled` (the opt-in master gate), disabled returns phase 0 — the
+ * base slot runs alone, every layer dormant.
  */
 export function emitLayeredModuloGLSL(
     layers: ModuloLayerUniforms[],
     idPrefix: string,
+    opts: ScheduleGateOptions = {},
 ): { glsl: string; fnName: string } {
     const fnName = `${idPrefix}_weaveSlot`;
     const body = layers.map((L, n) =>
@@ -183,7 +199,7 @@ export function emitLayeredModuloGLSL(
     ).join('\n');
     const glsl = `
 int ${fnName}(int i) {
-  int skip; int rel;
+${opts.enabled ? `  if (${opts.enabled} < 0.5) return 0;\n` : ''}  int skip; int rel;
 ${body}
   return 0;
 }`;

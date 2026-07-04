@@ -181,9 +181,12 @@ export function loadUserWeave(
   // Per-option expose/bake directives ride weaveSource.slots (row order = addon
   // slot order, buildWeaveScene keeps them aligned).
   const slotBake = weaveSource?.slots.map((s) => s.bake);
+  // Editor builds always opt into the whole-weave master gate (weaveEnabled,
+  // ADR-0089 P4.4): the phase fn reads uWeaveEnabled — live mute-all-layers.
+  // Plain MB3D scene imports (loadFromScene) deliberately do NOT.
   const { def, ledger } = emitFusedHybrid(
     buildWeaveScene(slots, title, undefined, repeatFrom),
-    { ...(rhythm ? { schedule: { kind: 'modulo' as const } } : {}), slotBake },
+    { ...(rhythm ? { schedule: { kind: 'modulo' as const } } : {}), slotBake, enableGate: true },
   );
   if (!def) {
     return { ok: false, reason: ledger.reasons.join(' '), ledger };
