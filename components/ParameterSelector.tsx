@@ -57,26 +57,31 @@ const isModulatable = (config: any): boolean => {
     return type === 'float' || type === 'int' || type === 'vec2' || type === 'vec3' || type === 'vec4';
 };
 
-/** Per-formula BANK groups of the active weave (ADR-0090): a native formula woven
- *  as a slot exposes its params on the `weave` feature (feature:'weave', id
- *  `ws<k>ParamA`, group = the formula name). Each group becomes its own modulation
- *  category so bank targets read by their real name, only the USED slots appear,
- *  and same-name slots (Phoenix / Phoenix (2)) stay distinguishable. Empty for a
- *  plain (non-woven) formula. */
-function weaveGroups(activeFormula: string): PickerCategory[] {
+/** Per-formula groups of the active woven scene (ADR-0090). A fused weave stamps
+ *  each slot's params with `group` = "Formula <n>: <name>" — whether the slot is a
+ *  NATIVE formula (params on the `weave` feature, feature:'weave') or an MB3D slot
+ *  (dense-packed onto `coreMath`, feature absent). ONE path: every distinct group
+ *  becomes its own modulation category, so imported scenes and editor-built weaves
+ *  read identically. Empty for a plain (non-woven) formula. */
+function formulaGroups(activeFormula: string): PickerCategory[] {
     const def = activeFormula ? registry.get(activeFormula) : null;
     const seen: string[] = [];
     for (const p of def?.parameters ?? []) {
-        if (!p || p.feature !== 'weave' || !p.id) continue;
-        const g = p.group || 'Weave';
-        if (!seen.includes(g)) seen.push(g);
+        if (!p?.group || !p.id) continue;
+        if (!seen.includes(p.group)) seen.push(p.group);
     }
-    return seen.map(g => ({ id: `weave:${g}`, name: g }));
+    return seen.map(g => ({ id: `fgroup:${g}`, name: g, highlight: true }));
 }
 
 function buildCategories(activeFormula: string): PickerCategory[] {
+    // A woven scene routes every slot's params into per-formula `fgroup:` categories,
+    // so hide the standalone "Formula Math" (coreMath) category — it would be empty.
+    const def = activeFormula ? registry.get(activeFormula) : null;
+    const woven = !!def?.parameters?.some(p => !!p?.group);
+
     const standardFeatures = featureRegistry.getAll()
         .filter(f => !EXCLUDED_IDS.has(f.id) && (Object.values(f.params).some(p => isModulatable(p)) || f.id === 'lighting'))
+        .filter(f => !(woven && f.id === 'coreMath'))
         .sort((a, b) => {
             const pA = PRIORITY_ORDER.indexOf(a.id);
             const pB = PRIORITY_ORDER.indexOf(b.id);
@@ -86,12 +91,10 @@ function buildCategories(activeFormula: string): PickerCategory[] {
             return a.name.localeCompare(b.name);
         });
 
-    // Woven-formula BANK categories lead the list (highlighted, like coreMath) —
-    // for a woven scene these ARE the primary params you modulate. coreMath (which
-    // holds any MB3D-slot params) and the rest follow.
-    const weaveCats = weaveGroups(activeFormula).map(c => ({ ...c, highlight: true }));
+    // Per-formula categories lead the list (highlighted) — for a woven scene these
+    // ARE the primary params you modulate. Standard features + camera follow.
     return [
-        ...weaveCats,
+        ...formulaGroups(activeFormula),
         ...standardFeatures.map(f => ({ id: f.id, name: f.name, highlight: f.id === 'coreMath' })),
         { id: 'camera', name: 'Camera' },
     ];
@@ -109,22 +112,24 @@ function buildItems(catId: string, activeFormula: string, storeState: any): Pick
         ];
     }
 
-    // Per-formula BANK category (ADR-0090): the active weave's bank params for one
-    // formula group, keyed `weave.<id>` and labelled by their real names. Only the
-    // slots the weave actually declares appear (def.parameters already omits unused
-    // bank slots), so nothing to filter/hide here.
-    if (catId.startsWith('weave:')) {
-        const group = catId.slice('weave:'.length);
+    // Per-formula category (ADR-0090): one weave slot's params, by their real
+    // names. ONE path for native (feature:'weave', keyed weave.<id>) and MB3D
+    // (feature absent, keyed coreMath.<id>) slots — each param routes to its own
+    // feature. Only the slots the weave declares appear (def.parameters already
+    // omits unused banks), so nothing to filter/hide here.
+    if (catId.startsWith('fgroup:')) {
+        const group = catId.slice('fgroup:'.length);
         const def = activeFormula ? registry.get(activeFormula) : null;
         const out: PickerItem[] = [];
         for (const p of def?.parameters ?? []) {
-            if (!p || p.feature !== 'weave' || !p.id || (p.group || 'Weave') !== group) continue;
+            if (!p?.id || p.group !== group) continue;
+            const fid = p.feature || 'coreMath';
             const t = p.type;
             if (t === 'vec2' || t === 'vec3' || t === 'vec4') {
                 const axes = t === 'vec2' ? ['x', 'y'] : t === 'vec3' ? ['x', 'y', 'z'] : ['x', 'y', 'z', 'w'];
-                axes.forEach(axis => out.push({ key: `weave.${p.id}_${axis}`, label: `${p.label} ${axis.toUpperCase()}` }));
+                axes.forEach(axis => out.push({ key: `${fid}.${p.id}_${axis}`, label: `${p.label} ${axis.toUpperCase()}` }));
             } else {
-                out.push({ key: `weave.${p.id}`, label: p.label ?? p.id });
+                out.push({ key: `${fid}.${p.id}`, label: p.label ?? p.id });
             }
         }
         return out;
@@ -275,24 +280,20 @@ export const ParameterSelector: React.FC<ParameterSelectorProps> = ({ value, onC
 
                  const param = feat.params[baseParamId];
                  if (param) {
-                     if (fid === 'coreMath' && activeFormula) {
+                     if ((fid === 'coreMath' || fid === 'weave') && activeFormula) {
+                         // A woven-scene slot param (ADR-0090): show "Formula N: <name>
+                         // · <real label>" from the def's group, whether it's a NATIVE
+                         // bank param (weave.ws*) or an MB3D slot param (coreMath.*).
                          const formulaDef = registry.get(activeFormula);
-                         const pDef = formulaDef?.parameters.find(p => p?.id === baseParamId);
-                         if (pDef) {
+                         const pDef = formulaDef?.parameters.find(p => p?.id === baseParamId && (p?.feature || 'coreMath') === fid);
+                         if (pDef?.group) {
+                             label = `${pDef.group} · ${pDef.label}${axisLabel}`;
+                         } else if (pDef && fid === 'coreMath') {
                              const shortKey = baseParamId.replace('param', 'P-').replace('vec', 'V-');
                              label = `${shortKey}: ${pDef.label}${axisLabel}`;
                          } else {
                              label = `${param.label}${axisLabel}`;
                          }
-                     } else if (fid === 'weave' && baseParamId.startsWith('ws') && activeFormula) {
-                         // A per-slot BANK target (ADR-0090): show the woven formula's
-                         // group + real name ("Formula 1: Phoenix · Power") rather than
-                         // the generic DDFS label ("Slot 1 Param A").
-                         const formulaDef = registry.get(activeFormula);
-                         const pDef = formulaDef?.parameters.find(p => p?.id === baseParamId && p?.feature === 'weave');
-                         label = pDef
-                             ? `${pDef.group ? pDef.group + ' · ' : ''}${pDef.label}${axisLabel}`
-                             : `${param.label}${axisLabel}`;
                      } else {
                          label = `${feat.name}: ${param.label}${axisLabel}`;
                      }
