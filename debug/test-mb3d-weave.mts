@@ -499,8 +499,10 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     ck('native: params exposed on distinct lanes', (def?.parameters?.length ?? 0) >= 2
       && new Set((def?.parameters as any[]).map((p) => p.id)).size === (def?.parameters as any[]).length,
       (def?.parameters as any[])?.map((p: any) => p.id));
-    ck('native: slot labels prefixed', (def?.parameters as any[]).every((p: any) => /^Mandelbulb: /.test(p.label)),
-      (def?.parameters as any[])?.map((p: any) => p.label));
+    // A2: the slot's formula name rides `group` (Formula-panel divider headers)
+    // instead of the old label prefix — labels stay short.
+    ck('native: slot params grouped by formula name', (def?.parameters as any[]).every((p: any) => p.group === 'Mandelbulb' && !/^Mandelbulb: /.test(p.label)),
+      (def?.parameters as any[])?.map((p: any) => `${p.group}/${p.label}`));
     ck('native: ledger tier native', ledger.slotFlags.every((f) => f.tier === 'native'), ledger.slotFlags);
   }
 

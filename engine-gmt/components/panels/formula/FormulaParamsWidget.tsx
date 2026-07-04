@@ -49,6 +49,9 @@ interface FormulaParam {
     type?: 'float' | 'vec2' | 'vec3' | 'vec4';
     mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed' | 'normal';
     linkable?: boolean;
+    /** Section divider: consecutive params sharing a group render under one
+     *  header (fused weaves stamp each slot's formula name). */
+    group?: string;
 }
 
 export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
@@ -113,7 +116,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                 const val = (coreMath as any)[p.id];
                 if (val === undefined) return null; // id outside the slot vocabulary — nothing to bind
                 const set = (v: any) => actions.setCoreMath({ [p.id]: slotWriteValue(p.id, p.type, v) });
-                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: p.type, mode: p.mode, linkable: p.linkable, scale: p.scale, options: p.options };
+                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: p.type, mode: p.mode, linkable: p.linkable, scale: p.scale, options: p.options, group: p.group };
             });
         }
 
@@ -261,7 +264,24 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                         mapTextInput={false} trackId="coreMath.iterations"
                         liveValue={state.liveModulations?.['coreMath.iterations']} />
                 </div>
-                {params.map((p) => renderControl(p))}
+                {(() => {
+                    // Group dividers: a header line whenever a param opens a new
+                    // group (fused weaves stamp each slot's formula name).
+                    let lastGroup: string | undefined;
+                    return params.map((p, i) => {
+                        const ctrl = renderControl(p);
+                        if (!ctrl) return ctrl;
+                        const g = p?.group;
+                        const divider = g && g !== lastGroup ? (
+                            <div className="flex items-center gap-2 px-2 pt-2 pb-0.5">
+                                <SectionLabel color={themeText.dimLabel}>{g}</SectionLabel>
+                                <div className={`flex-1 border-t ${themeBorder.subtle}`} />
+                            </div>
+                        ) : null;
+                        lastGroup = g;
+                        return <React.Fragment key={`${p!.id}-${i}`}>{divider}{ctrl}</React.Fragment>;
+                    });
+                })()}
             </div>
         </>
     );

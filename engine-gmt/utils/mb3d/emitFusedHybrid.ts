@@ -583,11 +583,12 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     } as any,
     // Slider schema. Multi-slot: concat every slot's params (each already on a
-    // distinct uniform) and prefix the label with the slot's formula name so the
-    // panel reads "SphereFolding1: R fold", "Amazing Box: Scale", "Menger3: CScale", …
+    // distinct uniform), stamped with the slot's formula name as `group` — the
+    // Formula panel renders a divider header per group instead of the old
+    // "SphereFolding1: R fold" label prefix (labels stay short).
     parameters: parametric
       ? (bodies.flatMap((b) => (b.params ?? []).map((pp: any) =>
-          usedIdx.length > 1 ? { ...pp, label: `${b.flag.name.replace(/^_/, '')}: ${pp.label}` } : pp)) as any)
+          usedIdx.length > 1 ? { ...pp, group: b.flag.name.replace(/^_/, '') } : pp)) as any)
       : [],
     defaultPreset: preset,
   };

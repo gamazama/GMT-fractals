@@ -61,6 +61,10 @@ export interface FractalParameter {
     default: number | { x: number; y: number } | { x: number; y: number; z: number } | { x: number; y: number; z: number; w: number };
     scale?: 'linear' | 'log' | 'pi'; // Explicit UI scaling mode
     options?: { label: string; value: number }[];
+    /** Section header for the Formula panel: consecutive params sharing a group
+     *  render under one divider (fused weaves stamp each slot's formula name).
+     *  Absent = no divider (single-formula defs unchanged). */
+    group?: string;
     mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed'; // 'rotation' = Rodrigues (A/P/∠), 'direction' = azimuth/pitch, 'axes' = per-axis angles, 'toggle' = bool on/off, 'mixed' = toggle X + slider Y
     linkable?: boolean; // For vec3/vec2: enable axis linking (uniform scale)
 }
