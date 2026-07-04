@@ -137,6 +137,29 @@ Then **push v1 + the weave UI together** → deploy.
 5. Native-slot transpiler (generalized from interlace's `glslRewriter` — c.w isolation, rotation swap, preamble
    prefixing) lands in P2 where interlace is its test case; **P2.5 (new phase): fold Hybrid Box interleaved mode**
    (2-slot modulo weave; gate: GPU verify hybrid scenes + schedule keyframability preserved).
+6. **Save migration (user, 2026-07-04):** formulas may run slightly differently post-fold, and the save/preset
+   migration layer MUST convert old-style interlace (`interlace*`) and Hybrid Box (`hybrid*`) feature state into the
+   weave-native form (a superset — more options than either legacy system). P2/P2.5 design must decide the persistent
+   format (keep legacy DDFS state + derive WeaveSpec, vs. migrate to weave-native state at load) with old-scene
+   round-trip as a gate. *(P2/P2.5 outcome: persisted state kept unchanged — conversion lands with the P4 UI absorption.)*
+
+**P3 design decisions (user, 2026-07-04):**
+1. **Model:** a weave is a formula whose source is a WeaveSpec (`weaveSource`, ADR-0058 pattern) — re-editable,
+   appears as ONE formula everywhere else. Scenes stay presets; differentiation is picker badging ("⧉ N"), not ontology.
+   Slot picker lists single formulas only; scenes get "Edit weave" / unpack-into-slots affordances.
+2. **Skip the throwaway prototype:** build the real host-agnostic `WeaveEditor` once, mount in the MB3D modal first;
+   panel promotion (P4) = re-mount. Slot-source staging is engine-driven: MB3D slots now, native/frag/DEC (500+) +
+   fold slots after P4 struct-state.
+3. **Animation stability:** WARN when reordering slots while keyframed tracks target packed lanes; future = an
+   animation-transfer tool prompted on reorder.
+4. **No weave library/shelf yet** (UI-overwhelm risk); weaves persist inside scenes only.
+5. **Schedule kinds are a user choice** — counts ("baked sequence", default) vs modulo ("live rhythm", keyframable,
+   costs perf → opt-in). Loop-strip visualization designed to render both.
+6. **Structure-edit undo** = editor-local (Workshop pattern), separate from DDFS param undo.
+7. **DE policy:** importer-style auto-resolution; numerical DE (est7) is the last resort when nothing supplies a
+   usable dr. Estimator dropdown stays the manual escape hatch.
+8. **Fun layer:** loop-strip schedule visualization (live from `buildCountsPlan`), drag/reorder rows, dice
+   (`pickRandom`), live-param budget meter (LaneAllocator lanes used; overflow bakes).
 
 ## Prompt
 
