@@ -855,6 +855,126 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck('t2: unhinted value>1 → slider reaching the value', !!big && big.max >= 3 && !big.mode, big);
 }
 
+// ── P4.4: lead-slot getDist splice ──────────────────────────────────────────
+{
+  // Julia3D's custom getDist reads the kk_minSurf accumulator global — as the
+  // LEAD slot it must survive onto the fused def, rewritten to the slot's
+  // prefixed global (ws0_kk_minSurf) so map()-scope getDist sees slot 0's state.
+  const lead = emitFusedHybrid(scene([nativeSlotShell('Julia3D', 1), nativeSlotShell('Mandelbulb', 1)]));
+  ck('getDist: native lead splices custom getDist',
+    !!lead.def?.shader.getDist && lead.def.shader.getDist.includes('ws0_kk_minSurf'), lead.def?.shader.getDist?.slice(0, 90));
+  // Interlace-host semantics: only the LEAD splices — a native SECONDARY's
+  // getDist stays out (estimator dropdown remains the escape hatch).
+  const second = emitFusedHybrid(scene([slot(2, 4, [-1.5, 0.5, 1]), nativeSlotShell('Julia3D', 1)]));
+  ck('getDist: MB3D lead + native second → no splice', !!second.def && second.def.shader.getDist === undefined);
+  // Pure-MB3D weave: unchanged (byte-identity backstop; full probe covers it).
+  const pure = emitFusedHybrid(scene([slot(2, 4, [-1.5, 0.5, 1]), slot(1, 1, [8, 1])]));
+  ck('getDist: pure MB3D weave → none', !!pure.def && pure.def.shader.getDist === undefined);
+  // A lead WITHOUT a custom getDist stays clean.
+  const bulbLead = emitFusedHybrid(scene([nativeSlotShell('Mandelbulb', 1), nativeSlotShell('Julia3D', 1)]));
+  ck('getDist: native lead without one → none', !!bulbLead.def && bulbLead.def.shader.getDist === undefined);
+}
+
+// ── P4.4: legacy interlace load-migration ───────────────────────────────────
+{
+  const { migrateLegacyWeavePreset } = await import('../engine-gmt/utils/weaveMigration.ts');
+  const legacy = () => ({
+    formula: 'Mandelbulb',
+    name: 'legacy test',
+    features: {
+      coreMath: { iterations: 40, paramA: 9, vec2A: { x: 3, y: 4 } },
+      geometry: { juliaMode: false },
+      interlace: {
+        interlaceCompiled: true, interlaceEnabled: true,
+        interlaceFormula: 'AmazingBox', interlaceInterval: 3, interlaceStartIter: 1,
+        interlaceParamA: -1.8,
+      },
+    },
+    animations: [
+      { id: 'l1', enabled: true, target: 'coreMath.paramA' },
+      { id: 'l2', enabled: true, target: 'coreMath.vec2A_x' },
+      { id: 'l3', enabled: true, target: 'interlace.interlaceParamA' },
+      { id: 'l4', enabled: true, target: 'interlace.interlaceInterval' },
+      { id: 'l5', enabled: true, target: 'quality.detail' },
+    ],
+    sequence: {
+      durationFrames: 100,
+      tracks: {
+        'coreMath.paramA': { id: 'coreMath.paramA', type: 'float', label: 'Power', keyframes: [] },
+        'interlace.interlaceVec3A_x': { id: 'interlace.interlaceVec3A_x', type: 'float', label: 'V', keyframes: [] },
+      },
+    },
+  });
+
+  // Happy path — 2-slot weave, banks carry VALUES (not defaults), rhythm layer
+  // 1 carries the schedule, gate carries the enable, legacy state cleared.
+  {
+    const p: any = migrateLegacyWeavePreset(legacy());
+    ck('migrate: formula → fused weave id', /^MB3DHybrid/.test(p.formula), p.formula);
+    const def = registry.get(p.formula) as any;
+    ck('migrate: fused def registered with 2 native weave slots',
+      def?.weaveSource?.slots?.length === 2 && def.weaveSource.slots.every((s: any) => s.kind === 'native'),
+      def?.weaveSource?.slots?.map((s: any) => s.kind));
+    ck('migrate: weaveSource schedule = modulo layer {3,1}',
+      def?.weaveSource?.schedule?.kind === 'modulo'
+      && def.weaveSource.schedule.layers?.[0]?.interval === 3
+      && def.weaveSource.schedule.layers?.[0]?.startIter === 1,
+      def?.weaveSource?.schedule);
+    ck('migrate: def gated + layered-modulo phase fn',
+      !!def && def.shader.function.includes('uWeaveEnabled') && def.shader.function.includes('uWeaveInterval1'));
+    const w = p.features.weave;
+    ck('migrate: host VALUES on bank 0 (paramA 9, vec2A {3,4})',
+      w.ws0ParamA === 9 && w.ws0Vec2A?.x === 3 && w.ws0Vec2A?.y === 4, { a: w.ws0ParamA, v: w.ws0Vec2A });
+    ck('migrate: secondary VALUES on bank 1 (Scale −1.8)', w.ws1ParamA === -1.8, w.ws1ParamA);
+    ck('migrate: rhythm layer 1 + gate', w.weaveInterval1 === 3 && w.weaveStartIter1 === 1 && w.weaveBeats1 === 0 && w.weaveEnabled === true,
+      { i: w.weaveInterval1, s: w.weaveStartIter1, b: w.weaveBeats1, e: w.weaveEnabled });
+    ck('migrate: features.interlace cleared', p.features.interlace === undefined);
+    ck('migrate: coreMath kernel state untouched', p.features.coreMath.iterations === 40, p.features.coreMath.iterations);
+    const targets = p.animations.map((a: any) => a.target);
+    ck('migrate: LFO targets retargeted (host, host-axis, secondary, schedule; others untouched)',
+      JSON.stringify(targets) === JSON.stringify([
+        'weave.ws0ParamA', 'weave.ws0Vec2A_x', 'weave.ws1ParamA', 'weave.weaveInterval1', 'quality.detail',
+      ]), targets);
+    const keys = Object.keys(p.sequence.tracks).sort();
+    ck('migrate: sequence track keys + ids renamed',
+      JSON.stringify(keys) === JSON.stringify(['weave.ws0ParamA', 'weave.ws1Vec3A_x'])
+      && p.sequence.tracks['weave.ws0ParamA'].id === 'weave.ws0ParamA'
+      && p.sequence.tracks['weave.ws1Vec3A_x'].id === 'weave.ws1Vec3A_x', keys);
+  }
+
+  // Disabled-but-configured: migrates with the gate OFF (base-only round-trip).
+  {
+    const src: any = legacy();
+    src.features.interlace.interlaceEnabled = false;
+    const p: any = migrateLegacyWeavePreset(src);
+    ck('migrate: disabled scene → weaveEnabled false', /^MB3DHybrid/.test(p.formula) && p.features.weave.weaveEnabled === false);
+  }
+
+  // Configured-but-never-compiled: dead state dropped, nothing else changes.
+  {
+    const src: any = legacy();
+    src.features.interlace.interlaceCompiled = false;
+    const p: any = migrateLegacyWeavePreset(src);
+    ck('migrate: uncompiled → interlace dropped, formula unchanged',
+      p.formula === 'Mandelbulb' && p.features.interlace === undefined && p.features.weave === undefined,
+      { f: p.formula, w: p.features.weave });
+  }
+
+  // Non-representable scenes stay untouched (state kept for forensics).
+  {
+    const src: any = legacy();
+    src.formula = 'MandelTerrain'; // self-contained host — resolver reject
+    const p: any = migrateLegacyWeavePreset(src);
+    ck('migrate: self-contained host → untouched', p.formula === 'MandelTerrain' && !!p.features.interlace);
+  }
+  {
+    const src: any = legacy();
+    src.features.interlace.interlaceFormula = 'NoSuchFormula';
+    const p: any = migrateLegacyWeavePreset(src);
+    ck('migrate: unknown secondary → untouched', p.formula === 'Mandelbulb' && !!p.features.interlace);
+  }
+}
+
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);
 if (fails.length) {
   console.log('FAILURES:\n - ' + fails.join('\n - '));

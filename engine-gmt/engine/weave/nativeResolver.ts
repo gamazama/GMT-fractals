@@ -83,11 +83,19 @@ export interface NativeSlotResolution {
      *  applies. Undefined when the preset requests a capability-backed estimator
      *  (cutting-plane 5 / dIFS 6 / numeric 7): those need per-formula state or a
      *  custom getDist the fused def doesn't carry, so the whole tuned subset is
-     *  dropped rather than half-applied. NOTE a native slot's `shader.getDist`
-     *  is NOT spliced into a weave (exactly like interlace secondaries) — such
-     *  formulas run on the generic estimator; the estimator dropdown stays the
-     *  manual escape hatch. */
+     *  dropped rather than half-applied. */
     deMeta?: Record<string, number>;
+    /** The formula's custom `shader.getDist` BODY, rewritten for this slot
+     *  (prefixed globals + helper renames + the slot's uniformMap) — P4.4
+     *  lead-slot getDist splice. The emit attaches it to the fused def ONLY when
+     *  this slot LEADS the weave (slot 0 — interlace-host semantics; secondaries
+     *  stay unspliced). getDist runs at map() scope where the slot's `ws<N>_*`
+     *  globals are visible, so accumulator-based DEs (KleinianMobius ks_*,
+     *  Apollonian apo_*, Julia3D kk_minSurf) survive weaving — none of them are
+     *  expressible on a generic estimator. core_math applies it exactly like a
+     *  standalone formula's (custom body overrides the generic estimator when
+     *  quality.estimator < 4.5). Undefined when the formula has none. */
+    getDist?: string;
 }
 
 export interface NativeSlotReject { ok: false; reason: string; }
@@ -280,6 +288,10 @@ export function resolveNativeSlot(
     const rewrittenFn = R.rewriteFormulaFunction(sh.function, def.id, pvars, preambleFunctions);
     const call = R.rewriteLoopBody(sh.loopBody, def.id, pvars).trim();
     let init = sh.loopInit ? R.rewriteLoopInit(sh.loopInit, def.id, pvars, preambleFunctions) : '';
+    // getDist body rewrite (P4.4 lead-slot splice): the same rename set as
+    // loopInit — helper fns, prefixed globals, this slot's uniformMap. The body
+    // keeps its (r, dr, iter, z) argument names untouched.
+    const getDist = sh.getDist ? R.rewriteLoopInit(sh.getDist, def.id, pvars, preambleFunctions) : undefined;
 
     // Hoist loopInit-declared state to globals: the dispatcher function can't see
     // map()-scope locals, and Phoenix/Bristorbrot pass these as call args. The
@@ -346,5 +358,6 @@ gmt_rotAxis = _${P}svAxis; gmt_rotCos = _${P}svCos; gmt_rotSin = _${P}svSin;`;
         paramOk: true,
         writesDeriv,
         deMeta,
+        getDist,
     };
 }

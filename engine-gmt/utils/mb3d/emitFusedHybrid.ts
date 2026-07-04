@@ -145,6 +145,10 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     deMeta?: Record<string, number>;
     /** Native BANK defaults (ADR-0090) → preset.features.weave. */
     weaveState?: Record<string, any>;
+    /** Native slot's rewritten custom getDist body (P4.4) — spliced onto the
+     *  fused def when this slot LEADS the weave (slot 0, interlace-host
+     *  semantics). */
+    getDist?: string;
   };
 
   const isNative = (idx: number) => addon.slots[idx]?.formulaIndex === NATIVE_FORMULA_INDEX;
@@ -170,7 +174,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       flag: mkFlag('native', 'native GMT formula as a weave slot'),
       params: res.params as any, coreMath: res.coreMath, weaveState: res.weaveState, paramOk: true, writesDeriv: res.writesDeriv,
       call: res.call, preCall: res.preCall, postCall: res.postCall, slotLoopInit: res.loopInit,
-      deMeta: res.deMeta,
+      deMeta: res.deMeta, getDist: res.getDist,
     };
   };
 
@@ -616,6 +620,16 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     return (b.params ?? []).map((pp: any) => ({ ...pp, group }));
   }) as any;
 
+  // LEAD-SLOT getDist splice (P4.4): a native FIRST slot keeps its custom
+  // distance function — rewritten by the resolver (prefixed ws0_* globals +
+  // bank/literal uniforms), visible at map() scope like any standalone
+  // formula's. Interlace-host semantics: only the LEAD splices; secondaries
+  // run unspliced (estimator dropdown stays the escape hatch). core_math
+  // applies it only when quality.estimator < 4.5, so dIFS (6) / numeric (7)
+  // scenes are unaffected. Pure-MB3D weaves have no native slots ⇒ undefined
+  // ⇒ byte-identical.
+  const leadGetDist = isNative(usedIdx[0]) ? bodies[0].getDist : undefined;
+
   const def: FractalDefinition = {
     id: id as any,
     name: scene.title || 'MB3D Hybrid',
@@ -624,6 +638,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     juliaType: 'offset',
     shader: {
       function: assembled.functionGLSL,
+      getDist: leadGetDist,
       preamble: difsPreamble || undefined,
       supportsDifs: isDifs || undefined,
       loopBody: assembled.loopBody,

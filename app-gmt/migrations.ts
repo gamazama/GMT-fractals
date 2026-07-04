@@ -29,6 +29,7 @@
  */
 
 import { registerMigration, renameSlice } from '../engine/migrations';
+import { migrateLegacyWeavePreset } from '../engine-gmt/utils/weaveMigration';
 
 registerMigration({
     version: 1,
@@ -77,4 +78,18 @@ registerMigration({
         renameSlice(p, 'engineSettings', 'shaderCompiler');
         return p;
     },
+});
+
+// v3 (2026-07-04) — legacy weave-system absorption (ADR-0089 P4.4/P4.5).
+// `features.interlace` (and, with P4.5, Hybrid Box interleaved state) converts
+// into a registered 2-slot native weave + `features.weave` state at load;
+// legacy state is cleared post-migration (owner decision: no double-apply;
+// files on disk untouched until re-save — accepted one-way door). Keyframed
+// tracks/LFOs retarget to the weave keys. Non-representable scenes are left
+// untouched with a console warning (they load as their base formula).
+// @see engine-gmt/utils/weaveMigration.ts · docs/adr/0089 P4.4 update block
+registerMigration({
+    version: 3,
+    id: 'app-gmt.legacy-weave-absorption',
+    apply: (p: any) => migrateLegacyWeavePreset(p),
 });

@@ -42,6 +42,7 @@ import { processFormula as v4ProcessFormula } from '../engine-gmt/features/fragm
 import type { FractalDefinition } from '../engine-gmt/types';
 import { emitFusedHybrid } from '../engine-gmt/utils/mb3d/emitFusedHybrid';
 import type { MB3DScene } from '../engine-gmt/utils/mb3d/parseMB3D';
+import { migrateLegacyWeavePreset } from '../engine-gmt/utils/weaveMigration';
 
 registerFeatures();
 
@@ -634,6 +635,39 @@ async function runOne(spec: TestSpec): Promise<TestResult> {
       return runOne({ ...spec, formula: def.id });
     } catch (e: any) {
       return fail(`[stage=mb3dWeave] ${e?.message ?? String(e)}`);
+    }
+  })();
+  inflight = run;
+  try { return await run; } finally { inflight = null; }
+};
+
+// Run the P4.4/P4.5 legacy-save migration on a preset, then render the MIGRATED
+// scene (the fused weave def the migration registered + the remapped feature
+// state). Pairs with runRenderTest on the same legacy preset (configOverrides =
+// its raw features) for the pixel-equivalence side-by-side — the harness never
+// calls loadPreset, so the store-side migration hook can't interfere with the
+// legacy reference path here.
+(window as any).runLegacyMigrationTest = async (
+  presetJson: any,
+  spec: TestSpec,
+): Promise<TestResult> => {
+  if (inflight) await inflight;
+  const run = (async (): Promise<TestResult> => {
+    const t0 = performance.now();
+    try {
+      const p = migrateLegacyWeavePreset(JSON.parse(JSON.stringify(presetJson)));
+      const res = await runOne({ ...spec, formula: p.formula, configOverrides: p.features });
+      // Diagnostic: which formula actually rendered (proves the migration ran —
+      // a silent no-op would re-render the legacy path and trivially "match").
+      (res as any).migratedFormula = p.formula;
+      (res as any).migrated = p.formula !== presetJson.formula;
+      return res;
+    } catch (e: any) {
+      return {
+        id: spec.id, ok: false, error: `[stage=migrate] ${e?.message ?? String(e)}`,
+        compile: { totalMs: 0 }, render: { sigma: [0, 0, 0], nanFraction: 0, nonBlackFraction: 0 },
+        timeMs: Math.round(performance.now() - t0),
+      };
     }
   })();
   inflight = run;
