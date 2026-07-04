@@ -86,9 +86,13 @@ function buildCategories(activeFormula: string): PickerCategory[] {
             return a.name.localeCompare(b.name);
         });
 
+    // Woven-formula BANK categories lead the list (highlighted, like coreMath) —
+    // for a woven scene these ARE the primary params you modulate. coreMath (which
+    // holds any MB3D-slot params) and the rest follow.
+    const weaveCats = weaveGroups(activeFormula).map(c => ({ ...c, highlight: true }));
     return [
+        ...weaveCats,
         ...standardFeatures.map(f => ({ id: f.id, name: f.name, highlight: f.id === 'coreMath' })),
-        ...weaveGroups(activeFormula),
         { id: 'camera', name: 'Camera' },
     ];
 }
@@ -282,12 +286,12 @@ export const ParameterSelector: React.FC<ParameterSelectorProps> = ({ value, onC
                          }
                      } else if (fid === 'weave' && baseParamId.startsWith('ws') && activeFormula) {
                          // A per-slot BANK target (ADR-0090): show the woven formula's
-                         // real name + group ("Phoenix (2): Power") rather than the
-                         // generic DDFS label ("Slot 1 Param A").
+                         // group + real name ("Formula 1: Phoenix · Power") rather than
+                         // the generic DDFS label ("Slot 1 Param A").
                          const formulaDef = registry.get(activeFormula);
                          const pDef = formulaDef?.parameters.find(p => p?.id === baseParamId && p?.feature === 'weave');
                          label = pDef
-                             ? `${pDef.group ? pDef.group + ': ' : ''}${pDef.label}${axisLabel}`
+                             ? `${pDef.group ? pDef.group + ' · ' : ''}${pDef.label}${axisLabel}`
                              : `${param.label}${axisLabel}`;
                      } else {
                          label = `${feat.name}: ${param.label}${axisLabel}`;

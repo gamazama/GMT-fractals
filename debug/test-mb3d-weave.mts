@@ -499,14 +499,14 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     ck('native: params exposed on distinct lanes', (def?.parameters?.length ?? 0) >= 2
       && new Set((def?.parameters as any[]).map((p) => p.id)).size === (def?.parameters as any[]).length,
       (def?.parameters as any[])?.map((p: any) => p.id));
-    // A2: the slot's formula name rides `group` (Formula-panel divider headers)
-    // instead of the old label prefix — labels stay short. Same-name slots are
-    // disambiguated ("Mandelbulb" / "Mandelbulb (2)") so the divider renders once
-    // per slot instead of merging.
-    ck('native: same-name slots grouped + disambiguated (Mandelbulb / Mandelbulb (2))',
+    // A2: the slot's formula name rides `group` (Formula-panel divider headers +
+    // per-slot modulation category) instead of the old label prefix. Same-name
+    // slots are slot-numbered ("Formula 1: Mandelbulb" / "Formula 2: Mandelbulb")
+    // so the divider renders once per slot instead of merging.
+    ck('native: same-name slots grouped + slot-numbered (Formula 1/2: Mandelbulb)',
       new Set((def?.parameters as any[]).map((p: any) => p.group)).size === 2
-      && (def?.parameters as any[]).some((p: any) => p.group === 'Mandelbulb')
-      && (def?.parameters as any[]).some((p: any) => p.group === 'Mandelbulb (2)')
+      && (def?.parameters as any[]).some((p: any) => p.group === 'Formula 1: Mandelbulb')
+      && (def?.parameters as any[]).some((p: any) => p.group === 'Formula 2: Mandelbulb')
       && (def?.parameters as any[]).every((p: any) => !/^Mandelbulb: /.test(p.label)),
       (def?.parameters as any[])?.map((p: any) => `${p.group}/${p.label}`));
     ck('native: ledger tier native', ledger.slotFlags.every((f) => f.tier === 'native'), ledger.slotFlags);
@@ -659,6 +659,11 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     const w = (def?.defaultPreset as any)?.features?.weave ?? {};
     ck('banks: vec2 default is a plain {x,y} in features.weave',
       !!w.ws0Vec2B && typeof w.ws0Vec2B.x === 'number' && w.ws0Vec2B.y === 0.5, w.ws0Vec2B);
+    // Single-slot NATIVE weave still carries a named group (Formula 1: <name>) so
+    // its bank params resolve a named modulation category, not a "Weave" fallback.
+    ck('banks: single native slot has a named group (Formula 1: Mandelbulb)',
+      params.length > 0 && params.every((p) => p.group === 'Formula 1: Mandelbulb'),
+      [...new Set(params.map((p) => p.group))]);
   }
 
   // Undeclared coreMath uniform → baked LITERAL (never a bank uniform), so a slot
@@ -692,9 +697,9 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       ledger.supported && params.length === 18, params.length);
     ck('banks: Phoenix pair params feature:weave, 18 distinct ids',
       params.every((p) => p.feature === 'weave') && new Set(params.map((p) => p.id)).size === 18, undefined);
-    ck('banks: Phoenix pair dividers disambiguated (Phoenix / Phoenix (2))',
+    ck('banks: Phoenix pair slot-numbered groups (Formula 1/2: Phoenix)',
       new Set(params.map((p) => p.group)).size === 2
-      && params.some((p) => p.group === 'Phoenix') && params.some((p) => p.group === 'Phoenix (2)'),
+      && params.some((p) => p.group === 'Formula 1: Phoenix') && params.some((p) => p.group === 'Formula 2: Phoenix'),
       [...new Set(params.map((p) => p.group))]);
     const ids = new Set(params.map((p) => p.id));
     ck('banks: Phoenix vec3 verbatim on both banks (ws0Vec3A + ws1Vec3A)',

@@ -275,13 +275,16 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                 </div>
                 {(() => {
                     // Group dividers: a header line whenever a param opens a new
-                    // group (fused weaves stamp each slot's formula name).
+                    // group (fused weaves stamp each slot's "Formula N: <name>").
+                    // Suppressed when only ONE group is present (a single-formula
+                    // weave needs no redundant header).
+                    const groupN = new Set(params.map((p) => p?.group).filter(Boolean)).size;
                     let lastGroup: string | undefined;
                     return params.map((p, i) => {
                         const ctrl = renderControl(p);
                         if (!ctrl) return ctrl;
                         const g = p?.group;
-                        const divider = g && g !== lastGroup ? (
+                        const divider = groupN > 1 && g && g !== lastGroup ? (
                             <div className="flex items-center gap-2 px-2 pt-2 pb-0.5">
                                 <SectionLabel color={themeText.dimLabel}>{g}</SectionLabel>
                                 <div className={`flex-1 border-t ${themeBorder.subtle}`} />
