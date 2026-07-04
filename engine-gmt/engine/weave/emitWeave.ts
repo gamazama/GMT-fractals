@@ -15,10 +15,17 @@
  *     ...
  *   }
  *
- * Scratch state is flat named floats threaded `inout` (no struct framework yet —
- * the P4 struct-state work lands here when it comes). The dispatcher signature
- * carries the UNION of all slots' scratch (first-appearance order); each slot's
- * call passes only its own.
+ * Two per-slot state channels, deliberately BOTH first-class (ADR-0089 P4):
+ *  - MB3D slots: flat named floats threaded `inout` (a SHARED orbit's accumulators —
+ *    mb3dVary/mb3dRout/… are one fused trajectory's state, slots take turns). The
+ *    dispatcher signature carries the UNION of all slots' scratch (first-appearance
+ *    order); each slot's call passes only its own.
+ *  - Native slots: namespace-prefixed GLOBALS (each slot is a distinct formula with
+ *    its OWN independent state — the interlace rewriter's channel, generalized).
+ *    Globals cross the dispatcher function boundary with no threading; a native
+ *    slot arrives with `loopInit` (its per-pixel reset/precalc, hoisted into the
+ *    weave loopInit), `call` (its rewritten loopBody — own c + extra args), and
+ *    `preCall`/`postCall` (the shared-rotation swap around the call).
  */
 
 export interface ResolvedWeaveSlot {
@@ -31,8 +38,19 @@ export interface ResolvedWeaveSlot {
     /** Per-iteration `inout float` state this slot threads (declaration order matters). */
     scratchVars?: string[];
     /** GLSL appended right after this slot's call, before `return;` (e.g. the MB3D
-     *  dIFS fold). Include a leading space. */
+     *  dIFS fold, the native rotation swap-out). Include a leading space. */
     postCall?: string;
+    /** GLSL emitted inside this slot's dispatcher branch BEFORE the call (e.g. the
+     *  native rotation swap-in + the slot-local `c`). Include a trailing space. */
+    preCall?: string;
+    /** Full call-statement override, trailing `;` included (native slots: the
+     *  rewritten loopBody — its own c var + extra trailing args). Defaults to the
+     *  MB3D shape `<fnName>(z, dr, trap, c[, scratch...]);`. */
+    call?: string;
+    /** This slot's contribution to the weave loopInit (native slots: the formula's
+     *  rewritten loopInit — per-pixel state resets + precalc-once globals), emitted
+     *  in slot order after `extraLoopInit`. Terminate with a newline. */
+    loopInit?: string;
 }
 
 export interface AssembleWeaveInput {
@@ -72,15 +90,18 @@ export function assembleWeave(input: AssembleWeaveInput): AssembledWeave {
     const scratchArg = allScratch.map((s) => `, ${s}`).join('');
     const slotScratchArg = (s: ResolvedWeaveSlot) => (s.scratchVars ?? []).map((v) => `, ${v}`).join('');
 
+    const callOf = (s: ResolvedWeaveSlot) => s.call ?? `${s.fnName}(z, dr, trap, c${slotScratchArg(s)});`;
     const dispatcher = `
 void formula_${id}(inout vec4 z, inout float dr, inout float trap, inout vec4 c, int i${scratchSig}) {
   int phase = ${schedule.fnName}(i);
-${input.preDispatch ?? ''}${slots.map((s) => `  if (phase == ${s.phase}) { ${s.fnName}(z, dr, trap, c${slotScratchArg(s)});${s.postCall ?? ''} return; }`).join('\n')}
+${input.preDispatch ?? ''}${slots.map((s) => `  if (phase == ${s.phase}) { ${s.preCall ?? ''}${callOf(s)}${s.postCall ?? ''} return; }`).join('\n')}
 }`;
 
     const functionGLSL = [input.prelude ?? '', ...slots.map((s) => s.glsl), schedule.glsl, dispatcher].join('\n');
     const seed = input.scratchSeed ?? (() => '0.0');
-    const loopInit = (input.extraLoopInit ?? '') + allScratch.map((s) => `float ${s} = ${seed(s)};`).join('\n');
+    const loopInit = (input.extraLoopInit ?? '')
+        + slots.map((s) => s.loopInit ?? '').join('')
+        + allScratch.map((s) => `float ${s} = ${seed(s)};`).join('\n');
     const loopBody = `${input.loopBodyPrefix ?? ''}formula_${id}(z, dr, trap, c, i${scratchArg});`;
 
     return { functionGLSL, loopInit, loopBody, scratchVars: allScratch };

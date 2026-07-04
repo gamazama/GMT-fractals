@@ -4,6 +4,7 @@
  */
 import { buildWeaveSequence, emitWeaveGLSL, weaveSpecFromMB3D } from '../engine-gmt/utils/mb3d/weaveSequencer.ts';
 import { emitModuloScheduleGLSL } from '../engine-gmt/engine/weave/schedule.ts';
+import { assembleWeave } from '../engine-gmt/engine/weave/emitWeave.ts';
 import { emitFusedHybrid } from '../engine-gmt/utils/mb3d/emitFusedHybrid.ts';
 import { registry } from '../engine-gmt/engine/FractalRegistry.ts';
 import { AmazingBox } from '../engine-gmt/formulas/AmazingBox.ts';
@@ -430,6 +431,46 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     ck('t14: Scale exposes as a live scalar', ap.some((x: any) => x?.label === 'Scale' && (x.type ?? 'float') === 'float'), ap.map((x: any) => x.label));
     ck('t14: mixed-shape add triple groups into a vec3', ap.some((x: any) => x?.label === 'add' && x.type === 'vec3'), ap.map((x: any) => `${x.label}:${x.type ?? 'float'}`));
   }
+}
+
+// ── assembleWeave native-slot seams (P4.0): preCall / call / per-slot loopInit ──
+{
+  const schedule = emitModuloScheduleGLSL({ interval: 'uT', startIter: 'uS' }, 'T');
+  // MB3D-shaped slot (no new fields) — emission shape unchanged.
+  const base = assembleWeave({
+    id: 'T0',
+    schedule,
+    slots: [
+      { phase: 0, fnName: 'T0_slot0', glsl: 'void T0_slot0(inout vec4 z, inout float dr, inout float trap, inout vec4 c) {}' },
+      { phase: 1, fnName: 'T0_slot1', glsl: 'void T0_slot1(inout vec4 z, inout float dr, inout float trap, inout vec4 c) {}' },
+    ],
+  });
+  ck('P4.0: default branch shape unchanged', base.functionGLSL.includes('if (phase == 1) { T0_slot1(z, dr, trap, c); return; }'), base.functionGLSL);
+
+  // Native-shaped slot: preCall + call override + per-slot loopInit contribution.
+  const nat = assembleWeave({
+    id: 'T1',
+    schedule,
+    extraLoopInit: 'g_x = 0.0;\n',
+    slots: [
+      { phase: 0, fnName: 'T1_slot0', glsl: '', scratchVars: ['mb3dVary'] },
+      {
+        phase: 1,
+        fnName: 'T1_slot1',
+        glsl: 'void T1_slot1(inout vec4 z, inout float dr, inout float trap, vec4 c, inout vec4 s1_zp) {}',
+        preCall: 'vec4 c1 = vec4(c.xyz, uParamB); ',
+        call: 'T1_slot1(z, dr, trap, c1, s1_zp);',
+        postCall: ' gmt_rotAxis = _p_axis;',
+        loopInit: 's1_zp = vec4(0.0);\n',
+      },
+    ],
+  });
+  ck('P4.0: native branch emits preCall + call override + postCall',
+    nat.functionGLSL.includes('if (phase == 1) { vec4 c1 = vec4(c.xyz, uParamB); T1_slot1(z, dr, trap, c1, s1_zp); gmt_rotAxis = _p_axis; return; }'),
+    nat.functionGLSL);
+  ck('P4.0: slot loopInit lands after extraLoopInit, before scratch decls',
+    nat.loopInit === 'g_x = 0.0;\ns1_zp = vec4(0.0);\nfloat mb3dVary = 0.0;', JSON.stringify(nat.loopInit));
+  ck('P4.0: native slot threads no scratch through its own call', !nat.functionGLSL.includes('T1_slot1(z, dr, trap, c1, s1_zp, mb3dVary'), undefined);
 }
 
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);
