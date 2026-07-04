@@ -213,10 +213,16 @@ export interface DecompBinding {
   needsRotHelper: boolean;
 }
 
-/** A trailing-axis name like "CScale X" → { prefix:'CScale', axis:'x' }, else null. */
+/** Axis-component name → { prefix, axis }, else null. The axis may TRAIL
+ *  ("CScale X", separator optional — the historical form) or LEAD with a required
+ *  separator ("Z halfwidth", "X add" — the *IFS convention; the separator guard
+ *  keeps "Zoom"-style names from reading as a Z component). */
 function axisOf(name: string): { prefix: string; axis: 'x' | 'y' | 'z' } | null {
-  const m = /^(.*?)[ _]?([XYZ])$/.exec(name.trim());
-  return m && m[1] ? { prefix: m[1].trim(), axis: m[2].toLowerCase() as 'x' | 'y' | 'z' } : null;
+  const t = /^(.*?)[ _]?([XYZ])$/.exec(name.trim());
+  if (t && t[1]) return { prefix: t[1].trim(), axis: t[2].toLowerCase() as 'x' | 'y' | 'z' };
+  const l = /^([XYZ])[ _-](.+)$/.exec(name.trim());
+  if (l) return { prefix: l[2].trim(), axis: l[1].toLowerCase() as 'x' | 'y' | 'z' };
+  return null;
 }
 
 /**
@@ -312,19 +318,25 @@ export function bindOptions(
       continue;
     }
     if (t === 0 || t === 1) {
-      // X/Y/Z triple → one vec3 (e.g. Menger "CScale X/Y/Z"). All three must be
-      // scalar options with the same prefix and consecutive X→Y→Z axes.
+      // X/Y/Z triple → one vec3 (e.g. Menger "CScale X/Y/Z", boxIFS "Z/Y/X halfwidth").
+      // Three consecutive plain scalars sharing one prefix whose axes cover {x,y,z}
+      // in ANY order — each member binds to the component its OWN axis names.
       const a0 = axisOf(name);
-      // A bake directive on Y or Z breaks the triple — the members fall through as
-      // individual scalars (each exposed or baked on its own).
-      if (a0?.axis === 'x' && (optionTypes[i + 1] ?? -1) <= 1 && (optionTypes[i + 2] ?? -1) <= 1
+      // A bake directive on a later member breaks the triple — the members fall
+      // through as individual scalars (each exposed or baked on its own).
+      if (a0 && (optionTypes[i + 1] ?? -1) <= 1 && (optionTypes[i + 2] ?? -1) <= 1
           && !bake?.[i + 1] && !bake?.[i + 2]) {
         const a1 = axisOf(nm(optIdx + 1)), a2 = axisOf(nm(optIdx + 2));
-        if (a1?.axis === 'y' && a2?.axis === 'z' && a1.prefix === a0.prefix && a2.prefix === a0.prefix) {
-          const lane = packer.vec3(a0.prefix, { x: v(i), y: v(i + 1), z: v(i + 2) }, -8, 8, 0.001);
+        if (a1 && a2 && a1.prefix === a0.prefix && a2.prefix === a0.prefix
+            && new Set([a0.axis, a1.axis, a2.axis]).size === 3) {
+          const members = [a0, a1, a2];
+          const seed = { x: 0, y: 0, z: 0 };
+          members.forEach((a, k) => { seed[a.axis] = v(i + k); });
+          const lane = packer.vec3(a0.prefix, seed, -8, 8, 0.001);
           if (!lane) return null;
-          for (const [k, ax] of [[0, 'x'], [1, 'y'], [2, 'z']] as const) {
-            off += (optionTypes[i + k] === 0 ? 8 : 4); bindings.set(off, `${lane.componentBase}.${ax}`);
+          for (let k = 0; k < 3; k++) {
+            off += (optionTypes[i + k] === 0 ? 8 : 4);
+            bindings.set(off, `${lane.componentBase}.${members[k].axis}`);
           }
           i += 2; optIdx += 2; prevScalarUni = null;
           i++; optIdx++;

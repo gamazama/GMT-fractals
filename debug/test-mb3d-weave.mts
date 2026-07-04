@@ -397,6 +397,33 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck('meta: Menger3 6 logical controls (4 scalars + 2 rotations)', dm.length === 6, dm.map((m) => `${m.name}:${m.span}`));
 }
 
+// ── Axis-triple grouping: leading axis + any order (boxIFS "Z/Y/X halfwidth") ──
+{
+  const { DECOMPILED_DEFAULTS } = await import('../engine-gmt/utils/mb3d/decompiled-formulas.ts');
+  const d = (DECOMPILED_DEFAULTS as any)['boxIFS'];
+  ck('triple: boxIFS defaults present', !!d);
+  if (d) {
+    const bslot: MB3DFormulaSlot = {
+      iterCount: 1, formulaIndex: 20, name: 'boxIFS',
+      optionCount: d.optionCount, optionTypes: d.optionTypes.slice(), optionValues: d.optionValues.slice(),
+    };
+    // Editor path: pre-bake the non-exposable t14 options (Scale, Z add).
+    const bake: boolean[] = [];
+    d.optionTypes.forEach((t: number, k: number) => { if (k < d.optionCount && t === 14) bake[k] = true; });
+    const { def, ledger } = emitFusedHybrid(scene([bslot]), { slotBake: [bake] });
+    ck('triple: boxIFS parametric with t14 baked', ledger.supported === true && !!def, ledger.reasons);
+    const p = (def?.parameters ?? []) as any[];
+    const hw = p.find((x: any) => x?.label === 'halfwidth');
+    ck('triple: Z/Y/X halfwidth groups into ONE vec3', !!hw && hw.type === 'vec3', p.map((x: any) => `${x.id}:${x.type ?? 'float'}:${x.label}`));
+    // Component mapping follows each member's OWN axis: option 0 = Z halfwidth,
+    // option 2 = X halfwidth — the vec3 default must be axis-correct, not positional.
+    const cm3 = (def?.defaultPreset as any)?.features?.coreMath?.[hw?.id] ?? {};
+    ck('triple: components bind by axis (x=opt2, z=opt0)',
+      cm3.x === d.optionValues[2] && cm3.y === d.optionValues[1] && cm3.z === d.optionValues[0], { cm3, vals: d.optionValues.slice(0, 3) });
+    ck('triple: body reads .z for Z halfwidth first-offset', !!def && /uVec3A\.z/.test(def!.shader.function));
+  }
+}
+
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);
 if (fails.length) {
   console.log('FAILURES:\n - ' + fails.join('\n - '));
