@@ -2,6 +2,17 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-04 (P2/P2.5 landed; decision unchanged):** the interlace rewriter now
+> lives at `engine/weave/nativeSlot.ts` (namespace-parameterized `createNativeSlotRewriter`;
+> `features/interlace/glslRewriter.ts` is interlace's binding of it), and BOTH interlace and
+> Hybrid Box's interleaved mode dispatch through `emitModuloScheduleGLSL` phase functions
+> (`Interlace_weaveSlot` / `Hybrid_weaveSlot`, the latter using `maxCount`). The
+> `skipMainFormula` arbitration is defined: a weave block claims an iteration only if no
+> earlier block did (injection order = precedence). The mesh path shares the same rewriter +
+> schedule through the interlace binding. Persisted `interlace*`/`hybrid*` state is
+> UNCHANGED — old scenes load as-is; the conversion to weave-native state lands when the
+> weaver absorbs those UIs (P4).
+
 ## Context
 
 GMT accumulated **three parallel implementations** of "schedule N formulas across the
