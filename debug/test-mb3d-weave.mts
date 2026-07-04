@@ -421,6 +421,14 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     ck('triple: components bind by axis (x=opt2, z=opt0)',
       cm3.x === d.optionValues[2] && cm3.y === d.optionValues[1] && cm3.z === d.optionValues[0], { cm3, vals: d.optionValues.slice(0, 3) });
     ck('triple: body reads .z for Z halfwidth first-offset', !!def && /uVec3A\.z/.test(def!.shader.function));
+
+    // t14 (.2DOUBLES) is live-mappable — NO directives needed: Scale exposes as a
+    // scalar slider and the mixed-shape add triple (Z add = t14) groups into a vec3.
+    const auto = emitFusedHybrid(scene([{ ...bslot, optionTypes: bslot.optionTypes.slice(), optionValues: bslot.optionValues.slice() }]));
+    const ap = (auto.def?.parameters ?? []) as any[];
+    ck('t14: boxIFS fully parametric with zero directives', auto.ledger.supported === true && ap.length > 0, auto.ledger.reasons);
+    ck('t14: Scale exposes as a live scalar', ap.some((x: any) => x?.label === 'Scale' && (x.type ?? 'float') === 'float'), ap.map((x: any) => x.label));
+    ck('t14: mixed-shape add triple groups into a vec3', ap.some((x: any) => x?.label === 'add' && x.type === 'vec3'), ap.map((x: any) => `${x.label}:${x.type ?? 'float'}`));
   }
 }
 
