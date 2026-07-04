@@ -2,6 +2,16 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-04 (P3b landed; decision unchanged):** the weaver's opt-in
+> **Rhythm (modulo) schedule** ships: a DDFS `weave` feature carries
+> `uWeaveInterval`/`uWeaveStartIter` (live + keyframable — schedule edits never
+> recompile), and `emitFusedHybrid(scene, opts)` accepts
+> `opts.schedule = {kind:'modulo'}` (exactly 2 active slots, positional phases
+> 0/1; anything else is a ledger reason). Opts absent stays the counts path,
+> probe-proven byte-identical over all 38 bundled scenes. The Weave Editor's
+> Rhythm chip, live interval/start controls, and modulo LoopStrip render it;
+> `weaveSource.schedule` persists it.
+
 > **Update 2026-07-04 (P2/P2.5 landed; decision unchanged):** the interlace rewriter now
 > lives at `engine/weave/nativeSlot.ts` (namespace-parameterized `createNativeSlotRewriter`;
 > `features/interlace/glslRewriter.ts` is interlace's binding of it), and BOTH interlace and
