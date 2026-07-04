@@ -500,8 +500,14 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       && new Set((def?.parameters as any[]).map((p) => p.id)).size === (def?.parameters as any[]).length,
       (def?.parameters as any[])?.map((p: any) => p.id));
     // A2: the slot's formula name rides `group` (Formula-panel divider headers)
-    // instead of the old label prefix — labels stay short.
-    ck('native: slot params grouped by formula name', (def?.parameters as any[]).every((p: any) => p.group === 'Mandelbulb' && !/^Mandelbulb: /.test(p.label)),
+    // instead of the old label prefix — labels stay short. Same-name slots are
+    // disambiguated ("Mandelbulb" / "Mandelbulb (2)") so the divider renders once
+    // per slot instead of merging.
+    ck('native: same-name slots grouped + disambiguated (Mandelbulb / Mandelbulb (2))',
+      new Set((def?.parameters as any[]).map((p: any) => p.group)).size === 2
+      && (def?.parameters as any[]).some((p: any) => p.group === 'Mandelbulb')
+      && (def?.parameters as any[]).some((p: any) => p.group === 'Mandelbulb (2)')
+      && (def?.parameters as any[]).every((p: any) => !/^Mandelbulb: /.test(p.label)),
       (def?.parameters as any[])?.map((p: any) => `${p.group}/${p.label}`));
     ck('native: ledger tier native', ledger.slotFlags.every((f) => f.tier === 'native'), ledger.slotFlags);
   }
@@ -686,7 +692,10 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       ledger.supported && params.length === 18, params.length);
     ck('banks: Phoenix pair params feature:weave, 18 distinct ids',
       params.every((p) => p.feature === 'weave') && new Set(params.map((p) => p.id)).size === 18, undefined);
-    ck('banks: Phoenix pair grouped by formula name', params.every((p) => p.group === 'Phoenix'), undefined);
+    ck('banks: Phoenix pair dividers disambiguated (Phoenix / Phoenix (2))',
+      new Set(params.map((p) => p.group)).size === 2
+      && params.some((p) => p.group === 'Phoenix') && params.some((p) => p.group === 'Phoenix (2)'),
+      [...new Set(params.map((p) => p.group))]);
     const ids = new Set(params.map((p) => p.id));
     ck('banks: Phoenix vec3 verbatim on both banks (ws0Vec3A + ws1Vec3A)',
       ids.has('ws0Vec3A') && ids.has('ws1Vec3A'), [...ids]);

@@ -590,6 +590,25 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     loopBodyPrefix: allScratch.includes('mb3dIter') ? 'mb3dIter = float(i); ' : '',
   });
 
+  // Slider schema. Native slots' BANK params (feature:'weave', ADR-0090) are
+  // ALWAYS exposed; MB3D slots' coreMath params only when they share the dense
+  // pool (mb3dParametric). Multi-slot: stamp each slot's formula name as `group`
+  // (the Formula-panel divider). Same-name slots are DISAMBIGUATED ("Phoenix" /
+  // "Phoenix (2)") — the panel's divider keys on the group label, so identical
+  // labels would merge two slots under one header (Phoenix ⊗ Phoenix). A
+  // single-slot weave carries no group (single-formula defs unchanged).
+  const seenGroup = new Map<string, number>();
+  const parameters = bodies.flatMap((b, k) => {
+    const exposed = isNative(usedIdx[k]) || mb3dParametric;
+    if (!exposed) return [];
+    if (usedIdx.length <= 1) return b.params ?? [];
+    const base = b.flag.name.replace(/^_/, '');
+    const n = (seenGroup.get(base) ?? 0) + 1;
+    seenGroup.set(base, n);
+    const group = n > 1 ? `${base} (${n})` : base;
+    return (b.params ?? []).map((pp: any) => ({ ...pp, group }));
+  }) as any;
+
   const def: FractalDefinition = {
     id: id as any,
     name: scene.title || 'MB3D Hybrid',
@@ -604,16 +623,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       loopInit: assembled.loopInit,
       capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     } as any,
-    // Slider schema. Native slots' BANK params (feature:'weave', ADR-0090) are
-    // ALWAYS exposed; MB3D slots' coreMath params are exposed only when they share
-    // the dense pool (mb3dParametric). Multi-slot: each slot's params are stamped
-    // with the formula name as `group` — the Formula panel renders a divider header
-    // per group (labels stay short); a single-slot weave carries no group.
-    parameters: (bodies.flatMap((b, k) => {
-      if (!isNative(usedIdx[k]) && !mb3dParametric) return [];
-      return (b.params ?? []).map((pp: any) =>
-        usedIdx.length > 1 ? { ...pp, group: b.flag.name.replace(/^_/, '') } : pp);
-    }) as any),
+    parameters,
     defaultPreset: preset,
   };
 
