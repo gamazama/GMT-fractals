@@ -1,5 +1,12 @@
 # Session prompt — Weave P4 build: native slots (P4.0–P4.3), then legacy absorption (P4.4+)
 
+> **Session split (orchestrator, 2026-07-04, budget plan):** the FABLE session runs **P4.0–P4.2 only**, then stops
+> at the P4.2 gate with a handover note. Follow-up steps run as SEPARATE smaller sessions (Opus 4.8): P4.3 (picker
+> sources); P4.4+P4.5 (absorption + migration — high effort; promote back to Fable if budget allows, it's the
+> one-way door on user data); P4.6 and P4.7 (independent of P4.3–P4.5, default effort, may run in parallel).
+> Each follow-up session reads THIS file + its design-doc section only; the probes/suites/GPU certs are the safety
+> net, and the orchestrator session reviews each delivery with a blast-radius diff.
+
 **Prepared:** 2026-07-04 · **Branch:** `feat/weave-core` (continue; do NOT push — v1 + weave ship together).
 **Precondition:** the P3b session has landed and been reviewed. If `git log` shows unreviewed P3b commits, stop and ask.
 
