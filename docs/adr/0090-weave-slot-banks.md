@@ -100,6 +100,27 @@ mirror by construction), so a native slot is always live.
 - The bank uniforms are declared-but-mostly-idle (only the active native slots'
   declared params are live); idle banks are INACTIVE after link and never synced,
   so the ~90 added uniforms cost ~+2% cold compile and 0 fps (A3).
+- **UI routing:** a per-param `feature` field (default `coreMath`, `'weave'` for
+  banks) routes the Formula panel and the modulation-target picker to the right
+  slice/setter/track. A fused weave stamps each slot's params with
+  `group = "Formula <n>: <name>"` — the Formula-panel divider AND the modulation
+  category, one per slot, identical for native and MB3D slots (imported scenes and
+  editor weaves read the same). The picker keys a SINGLE per-formula path on that
+  group, routing each param to its own feature (`weave.<id>` / `coreMath.<id>`).
+
+## Future work (not this ADR)
+
+Is `coreMath` redundant now? **No.** It remains the standalone-formula param home
+(the non-woven common case), the MB3D dense-pack pool (MB3D slots declare no param
+vocabulary), and the kernel-state home (`iterations`, Quaternion 4D seeds,
+`uModularParams`). Banks are a per-slot vocabulary for WOVEN NATIVE slots only. The
+apparent overlap — a native formula's `paramA` lives on `coreMath` standalone but
+on a bank when woven — is inherent context-duality, not accidental redundancy.
+Collapsing `coreMath` into banks would mean treating **every** scene as a 1-slot
+weave (the ADR-0089 "one weave core behind every formula" endgame): a large refactor
+with a one-way save-migration, after which `coreMath` would still survive for kernel
+state + the MB3D dense pool. It is a legitimate long-term direction but its own
+initiative with its own ADR, not a banks cleanup.
 
 ## Related
 

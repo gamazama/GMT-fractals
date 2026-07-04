@@ -1,5 +1,30 @@
 # Session prompt — Weave P4 build: native slots (P4.0–P4.3), then legacy absorption (P4.4+)
 
+> **BANKS delivery 2026-07-04 (Opus, `S-weave-p4-banks.md` / ADR-0090) — DONE + user-approved. Exit gate PASSED.**
+> Per-slot param BANKS landed on `feat/weave-core` (commits `19a86db` bank decl · `c44cea6` resolver/emit · `9759e4a`
+> panel+meter · `578073c` ADR · `b5fdcef` divider fix · `7ec8f9e` modulation+randomize · `0d7da9e` "Formula N:" naming ·
+> `daa0557` MB3D/native unification). **NOT pushed** (v1 + weave ship together). Step-1 owner call: **banks-for-all-6**
+> (native `uWs<k>*` and coreMath `uParam*` physically disjoint — zero reservation). A native formula woven as slot k binds
+> its declared params VERBATIM onto its own bank (no vec decomposition; identity pairs on distinct banks), state on the DDFS
+> `weave` feature (keyframes/undo/preset+GMF by construction), fidelity default with the dense pool surviving only for MB3D
+> slots. Phoenix⊗Phoenix — which overflow-baked before — now exposes all 18 params live; GPU-certed coherent
+> (identity/bulb⊗box/mixed/Phoenix). MB3D emit **shader byte-identical** throughout (probe diffs are group-label METADATA
+> only — 354 lines, 0 GLSL). Suite 170→**189**; typecheck/mb3d 24/refine 56/decompiler/boot green.
+>
+> **Exit-gate follow-ups (user, in the same session):** (1) same-name slot dividers merged in the Formula panel — fixed by
+> slot-numbering the group ("Formula 1: Phoenix" / "Formula 2: Phoenix"). (2) modulation-target picker + Randomize now route
+> bank params to the `weave` feature; ONE group-keyed path gives every woven slot (native AND MB3D) a per-formula modulation
+> category at the top of the list, hiding the empty standalone coreMath category. (3) unified MB3D-import and editor-built
+> weaves onto the SAME group naming (the "different code path" the user flagged was two group-naming branches — collapsed).
+>
+> **coreMath-vs-banks (user-raised, recorded for future sessions):** coreMath is NOT redundant — it's the standalone-formula
+> param home + the MB3D dense-pack pool + kernel state (iterations/4D seeds/uModularParams); banks are a per-slot vocabulary
+> for WOVEN native slots. Collapsing coreMath into banks = "every scene is a 1-slot weave" (the ADR-0089 endgame): a large
+> refactor with one-way save migration, and coreMath still survives for kernel state + MB3D dense-pack. Keep both for v1;
+> it's a separate future initiative + ADR, not a banks cleanup. **Next: P4.4/P4.5** (interlace/Hybrid Box absorption onto
+> banks — deletes `uInterlace*`), still owner-gated on the Appendix decisions.
+
+
 > **Fable delivery 2026-07-04 — P4.0–P4.2 DONE, session stopped at the P4.2 gate per the split below.**
 > Commits: `d3879d2` (P4.0 assembleWeave seams) · `4183a78` (P4.1 nativeResolver + canary) · `ac837fa`
 > (P4.2 DE policy). ADR-0089 has an update block per step. User visual verdict on the P4.1 identity-pair
