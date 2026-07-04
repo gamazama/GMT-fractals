@@ -175,11 +175,25 @@ export function loadUserWeave(
   weaveSource?: import('../../types/fractal').FractalDefinition['weaveSource'],
   repeatFrom = 0,
 ): LoadMB3DResult {
-  const { def, ledger } = emitFusedHybrid(buildWeaveScene(slots, title, undefined, repeatFrom));
+  // Rhythm (modulo) schedule rides in on the weaveSource; the emit swaps the baked
+  // counts LUT for the runtime-uniform phase fn (uWeaveInterval/uWeaveStartIter).
+  const rhythm = weaveSource?.schedule.kind === 'modulo' ? weaveSource.schedule : undefined;
+  const { def, ledger } = emitFusedHybrid(
+    buildWeaveScene(slots, title, undefined, repeatFrom),
+    rhythm ? { schedule: { kind: 'modulo' } } : undefined,
+  );
   if (!def) {
     return { ok: false, reason: ledger.reasons.join(' '), ledger };
   }
   if (weaveSource) def.weaveSource = weaveSource;
+  // Stamp the built rhythm into the def's preset so re-picking this formula later
+  // (which loads defaultPreset) renders the authored schedule — the uniforms are
+  // driven by the DDFS `weave` feature state, not by the def.
+  if (rhythm) {
+    (def.defaultPreset.features ??= {}).weave = {
+      weaveInterval: rhythm.interval, weaveStartIter: rhythm.startIter,
+    };
+  }
   registry.register(def);
   FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
 
@@ -201,6 +215,9 @@ export function loadUserWeave(
       coreMath: preset.features?.coreMath,
       geometry: preset.features?.geometry,
       quality: preset.features?.quality,
+      // Keep the live rhythm params across rebuilds (the editor writes them to the
+      // store directly; a rebuild must not reset them to feature defaults).
+      weave: current.features?.weave ?? preset.features?.weave,
     },
   });
   const names = ledger.slotFlags.map((s) => s.name).join(' → ');

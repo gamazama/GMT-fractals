@@ -9,6 +9,7 @@ import { TexturingFeature } from './texturing';
 import { ColoringFeature } from './coloring';
 import { GeometryFeature } from './geometry';
 import { InterlaceFeature } from './interlace';
+import { WeaveFeature } from './weave';
 import { QualityFeature } from './quality';
 import { CoreMathFeature } from './core_math';
 import { LightingFeature } from './lighting/index';
@@ -61,6 +62,7 @@ export const registerFeatures = () => {
     featureRegistry.register(CoreMathFeature);
     featureRegistry.register(GeometryFeature);
     featureRegistry.register(InterlaceFeature);
+    featureRegistry.register(WeaveFeature);
 
     // Rendering & Shading
     featureRegistry.register(LightingFeature);
@@ -113,6 +115,7 @@ export type { OpticsState } from './optics';
 export type { QualityState } from './quality';
 export type { GeometryState } from './geometry';
 export type { InterlaceState } from './interlace';
+export type { WeaveState } from './weave';
 export type { ColoringState } from './coloring';
 export type { TexturingState } from './texturing';
 export type { MaterialState } from './materials';

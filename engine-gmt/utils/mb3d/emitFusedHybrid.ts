@@ -17,6 +17,7 @@ import type { FractalDefinition } from '../../types/fractal';
 import type { Capability } from '../../types/capabilities';
 import { buildWeaveSequence, emitWeaveGLSL, stepSlot } from './weaveSequencer';
 import { assembleWeave } from '../../engine/weave/emitWeave';
+import { emitModuloScheduleGLSL } from '../../engine/weave/schedule';
 import { transpileSlot } from './slotTranspiler';
 import type { SlotFlag } from './slotTranspiler';
 import { mapDEMeta, MB3D_ROT_GLSL } from './constPacker';
@@ -32,6 +33,17 @@ export interface WeaveLedger {
   supported: boolean;
   reasons: string[];
   slotFlags: SlotFlag[];
+}
+
+export interface EmitFusedOptions {
+  /** Schedule override (ADR-0089 P3b "Rhythm"). `{kind:'modulo'}` replaces the baked
+   *  counts LUT with the runtime-uniform modulo phase function reading
+   *  `uWeaveInterval` / `uWeaveStartIter` (the DDFS `weave` feature — live AND
+   *  keyframable, schedule edits never recompile). Requires EXACTLY 2 active slots
+   *  (phase 0 = first, phase 1 = second); anything else is a ledger reason.
+   *  @invariant opts absent (or kind ≠ modulo) = the counts path, byte-identical
+   *  to the pre-P3b emit (probe: debug/probe-weave-refactor.mts). */
+  schedule?: { kind: 'modulo' };
 }
 
 export interface EmitResult {
@@ -64,7 +76,7 @@ function gmtSubId(name: string): string | undefined {
   return undefined;
 }
 
-export function emitFusedHybrid(scene: MB3DScene): EmitResult {
+export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): EmitResult {
   const addon = scene.addon;
   if (!addon) {
     return { def: null, ledger: { mode: -1, supported: false, reasons: ['No formula stack in that block.'], slotFlags: [] } };
@@ -77,6 +89,13 @@ export function emitFusedHybrid(scene: MB3DScene): EmitResult {
 
   const id = `MB3DHybrid${seq}`;
   const usedIdx = [...new Set(plan.order.map(stepSlot))].sort((a, b) => a - b);
+  // Rhythm (modulo) schedule: strictly 2 active slots — the modulo phase fn is
+  // binary (0 = primary, 1 = secondary). The Weave Editor only requests it when
+  // exactly 2 rows are active, so this reason is a belt-and-braces backstop.
+  const modulo = opts?.schedule?.kind === 'modulo';
+  if (modulo && usedIdx.length !== 2) {
+    reasons.push(`Rhythm (modulo) scheduling needs exactly 2 active formula slots — this weave has ${usedIdx.length}.`);
+  }
   // A hybrid weave must run long enough for every formula slot to execute at least
   // once, else a trailing slot never contributes to the DE. MB3D's authored iteration
   // count can fall below that: Wada basin authored iterations=2 over a 3-slot cycle
@@ -127,7 +146,9 @@ export function emitFusedHybrid(scene: MB3DScene): EmitResult {
     // formula. We can't fuse it (these GMT formulas carry their own getDist), so
     // we load GMT's native formula at its defaults — explicitly flagged as NOT
     // MB3D's math. Multi-slot external hybrids stay unsupported (DE composition).
-    if (usedIdx.length === 1) {
+    // A modulo-arity failure must NOT fall into substitution — the slot itself may
+    // be perfectly transpilable; the schedule request was the problem.
+    if (usedIdx.length === 1 && !modulo) {
       const slot = addon.slots[usedIdx[0]];
       const subId = gmtSubId(slot?.name || '');
       const sub = subId ? registry.get(subId) : undefined;
@@ -192,7 +213,13 @@ export function emitFusedHybrid(scene: MB3DScene): EmitResult {
   // overwrite it for dIFS scenes.
   const recomputeRout = !isDifs && allScratch.includes('mb3dRout');
 
-  const weave = emitWeaveGLSL(plan, id);
+  // Schedule phase function: the baked counts LUT (default), or — Rhythm — the
+  // runtime-uniform modulo gate (uWeaveInterval/uWeaveStartIter, declared shader-
+  // wide by the DDFS `weave` feature; live + keyframable, no recompile). For
+  // modulo the dispatcher phases are 0/1 (positional), not the slot indices.
+  const weave = modulo
+    ? emitModuloScheduleGLSL({ interval: 'uWeaveInterval', startIter: 'uWeaveStartIter' }, id)
+    : emitWeaveGLSL(plan, id);
   // dIFS orbit-trap fold (estimator 6): fold mb3dRout/mb3dVary into the running min g_difsDE
   // ONLY right after a dIFS-OWNER slot (deOption 20) ran — never every iteration. A mixed
   // weave with a non-dIFS transform slot (e.g. Wada basin's PolyFold-symIFS, deOption 21,
@@ -454,7 +481,7 @@ export function emitFusedHybrid(scene: MB3DScene): EmitResult {
     id,
     schedule: weave,
     slots: usedIdx.map((idx, k) => ({
-      phase: idx,
+      phase: modulo ? k : idx,
       fnName: `${id}_slot${idx}`,
       glsl: bodies[k].glsl!,
       scratchVars: bodies[k].scratchVars,
