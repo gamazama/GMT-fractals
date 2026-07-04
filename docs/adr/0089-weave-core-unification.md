@@ -2,6 +2,20 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-04 (P4.2 landed; decision unchanged):** native slots carry a
+> DE policy. `writesDeriv` is detected from the formula source (dr-write scan) —
+> a weave where NO slot updates the derivative auto-routes to the est7 numeric
+> recipe (ADR-0085), the same no-ADE policy as MB3D [CODE] slots; frag/DEC
+> import slots (P4.3) inherit this for free. A native slot's tuned preset
+> quality subset (`deMeta`: estimator/fudge/metric/bailout/detail) leads the
+> fused preset — GENERIC estimators (0–4) only; capability-backed presets
+> (cutting-plane/dIFS/numeric) drop the subset whole, since a native
+> `shader.getDist` is NOT spliced into weaves (interlace-secondary semantics;
+> the estimator dropdown stays the manual escape hatch). Precedence: decompiled
+> DE owner → certified intern-box calibration → first native generic subset.
+> GPU-certed: mixed native+MB3D weave + AmazingBox-led pair (non-default
+> deMeta) render coherently; MB3D corpus byte-identical throughout.
+
 > **Update 2026-07-04 (P4.0+P4.1 landed; decision unchanged):** native formulas
 > are now dispatcher-hosted weave slots. The struct-state framework this ADR
 > anticipated ("per-iteration state remains flat named floats… the struct-state

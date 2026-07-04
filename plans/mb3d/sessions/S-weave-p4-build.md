@@ -1,5 +1,24 @@
 # Session prompt — Weave P4 build: native slots (P4.0–P4.3), then legacy absorption (P4.4+)
 
+> **Fable delivery 2026-07-04 — P4.0–P4.2 DONE, session stopped at the P4.2 gate per the split below.**
+> Commits: `d3879d2` (P4.0 assembleWeave seams) · `4183a78` (P4.1 nativeResolver + canary) · `ac837fa`
+> (P4.2 DE policy). ADR-0089 has an update block per step. User visual verdict on the P4.1 identity-pair
+> canary: **approved** ("looks good"); P4.2 GPU shots (mixed native+MB3D, AmazingBox-led pair) at
+> `debug/scratch/native-weave/` via `debug/probe-native-weave.mts` (4-shot canary, real GPU, dev server
+> on :3400). MB3D emit probe byte-identical across all three steps (baseline = pre-P4.0). Suite 125→156.
+>
+> **Handover to the P4.3 session (Opus):** native slots enter a weave as addon slots with
+> `formulaIndex: NATIVE_FORMULA_INDEX` (−1) + `name` = registered formula id (`engine/weave/
+> nativeResolver.ts`); `weaveSource.slots[].kind` already accepts `'native'` (ref = formula id) and
+> `WeaveEditorPane`'s `SlotRow.kind` is widened. P4.3 = picker sources (native + frag/DEC) + reject-cap
+> greying via `disabledIds` (`shape:self-contained`/`shape:modular` — the resolver enforces the same
+> rejects engine-side, with ledger reasons). Frag/DEC imports resolve through the SAME native resolver
+> (registered defs; writesDeriv detection handles position-only imports → est7). Known limitation to
+> surface in UI copy if desired: a native slot's `shader.getDist` is not spliced (interlace-secondary
+> semantics) — the estimator dropdown is the escape hatch. Gates to keep: probe byte-identity
+> (`debug/probe-weave-refactor.mts` vs a fresh pre-change dump), `test:mb3d:weave` (156), typecheck,
+> smoke:boot, and the native canary probe for any resolver/emit touch.
+
 > **Session split (orchestrator, 2026-07-04, budget plan):** the FABLE session runs **P4.0–P4.2 only**, then stops
 > at the P4.2 gate with a handover note. Follow-up steps run as SEPARATE smaller sessions (Opus 4.8): P4.3 (picker
 > sources); P4.4+P4.5 (absorption + migration — high effort; promote back to Fable if budget allows, it's the
