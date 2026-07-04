@@ -38,6 +38,11 @@
 > woven render work ("can confirm it is working"). ADR-0089 has the P4.3 update block. Did NOT push. **Next:** P4.4+
 > (interlace/Hybrid Box absorption — gated on owner Appendix decisions 1–3) per the split below.
 >
+> **Re-sequencing (owner, 2026-07-04): the slot-BANKS session (`S-weave-p4-banks.md`, per
+> `weave-slot-fidelity-plan.md` §A4-decisions) runs BEFORE P4.4/P4.5** — absorption then maps interlace onto
+> a bank and deletes the `uInterlace*` uniform set (one migration instead of two). P4.4+ sessions: do not
+> start until the banks delivery note appears here.
+
 > **Session split (orchestrator, 2026-07-04, budget plan):** the FABLE session runs **P4.0–P4.2 only**, then stops
 > at the P4.2 gate with a handover note. Follow-up steps run as SEPARATE smaller sessions (Opus 4.8): P4.3 (picker
 > sources); P4.4+P4.5 (absorption + migration — high effort; promote back to Fable if budget allows, it's the

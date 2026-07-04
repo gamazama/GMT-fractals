@@ -1,10 +1,14 @@
-# Weave slot fidelity — uniform headroom verdict (A3, done) → native slot-config plan (A4, open)
+# Weave slot fidelity — uniform headroom verdict (A3, done) → native slot-config plan (A4, DECIDED)
 
 **Prepared:** 2026-07-04 (P3b amendments session) · **For:** the weave orchestrator, to fold into the P4+ plan.
 **Owner directive (2026-07-04):** "having enough uniforms negates the need for the user to do any packing and
 allows formulas to come in with their chosen slots. still worth an option for performance."
-**Sequencing:** HARD-GATED on the Opus P4.4+ sessions finishing (this work edits `nativeResolver.ts` /
-`emitFusedHybrid.ts` / `uniformSlots.ts` — the same seam).
+
+> **DECIDED 2026-07-04 (owner, via the review session) — see §A4-decisions below.** Per-slot BANKS (option 1);
+> state lives on the DDFS `weave` feature; **banks run BEFORE P4.4/P4.5** (the original hard gate is lifted —
+> it was blast-radius management, and absorption then maps interlace onto a bank and deletes the `uInterlace*`
+> set instead of migrating twice); fidelity is the default with compact as an AUTOMATIC fallback only (no user
+> toggle). Session prompt: `plans/mb3d/sessions/S-weave-p4-banks.md`.
 
 ## A3 — MEASURED: uniform-count headroom is ~free (done; decision input)
 
@@ -77,3 +81,35 @@ widens or banks land (load-bearing contract); suites (weave ≥170, mb3d, refine
 2. If banks: where does per-slot param STATE live (weave feature namespace vs coreMath extension), and do
    its animation targets appear as `ws1.paramA`-style tracks?
 3. Default mode for NEW weaves: fidelity (recommended per the directive) with compact as opt-in?
+
+## A4-decisions (owner, 2026-07-04) + design shape for the build session
+
+1. **Per-slot banks** (option 1). Affinity rejected: it adds ZERO availability — the shared pool
+   (24 scalar lanes + 6 vec3-shaped units) stays the ceiling and a Phoenix⊗Phoenix pair already
+   overflows it into bake-everything. Banks make availability per-slot; identity pairs verbatim.
+2. **State home = extend the DDFS `weave` feature** (the P3b loop-generated-params pattern, proven by
+   the rhythm layer sets). Bank k = the full slot vocabulary (6 scalars + 3 vec2 + 3 vec3 + 3 vec4 =
+   15 params), state keys `ws<k>ParamA`… / uniforms `uWs<k>ParamA`…. Keyframes/undo/preset+GMF
+   persistence arrive BY CONSTRUCTION (generic dotted binder: `weave.ws1ParamA` tracks). DDFS labels
+   are static/generic ("Slot 1 Param A") — the Formula panel shows the real labels via the fused def's
+   `parameters` (label + group), which gain an additive `feature` routing field consumed by
+   `FormulaParamsWidget` (today it hardcodes coreMath reads/`setCoreMath`/`coreMath.*` trackIds).
+3. **Sequencing: banks BEFORE P4.4/P4.5.** The old hard gate is lifted. Absorption then maps
+   `interlaceParamA..F`/vec sets onto a bank and DELETES the `uInterlace*` uniform set (one migration,
+   not two), and P4.6's animation transfer gets stable per-slot targets (reorder = bank-index rename).
+4. **Fidelity default; compact = automatic fallback only, NO user toggle.** Consequence: a native slot
+   can never overflow in bank mode (its declared params fit its own bank by definition), so the dense
+   path survives only for MB3D slots (option lists → shared pool + Task-2 expose/bake, unchanged) and
+   as the loader-compat path for defs saved pre-banks. The budget meter meters ONLY the MB3D dense pool.
+
+**Recommended bank↔slot shape (build session may simplify):** the BASE slot (first active) keeps the
+PRIMARY coreMath vocabulary verbatim (`uParamA`… — a 1-slot native weave then behaves exactly like the
+standalone formula, keyframes on `coreMath.paramA` as users expect; interlace precedent: primary =
+coreMath, secondary = its own bank); slots 1..5 take banks `uWs1*`..`uWs5*`. This requires the MB3D
+dense allocator to RESERVE the base slot's claimed coreMath ids in mixed weaves — if that reservation
+interaction gets ugly, fall back to banks-for-all-six (base included), which costs 15 more params and
+base-slot muscle memory but nothing else. Decide in-session, record in the ADR.
+
+**Compat:** old saved scenes load their SAVED def (dense lanes baked in the GLSL) + coreMath state —
+untouched, no migration. Only a REBUILD in the editor moves a weave onto banks; the existing
+reorder-keyframe warning covers the retarget gap until P4.6.
