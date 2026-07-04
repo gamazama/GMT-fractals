@@ -2,6 +2,31 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-04 (P4.3 landed; decision unchanged):** the Weave Editor
+> picker now lists REGISTERED native + imported (frag/DEC) formulas as slot
+> sources alongside the MB3D catalog. Picking one appends a native addon-slot
+> shell (`formulaIndex: -1`, `name` = formula id) via `nativeSlotShell`, which
+> the existing build path (buildWeaveScene → loadUserWeave → emitFusedHybrid →
+> nativeResolver) already accepts — the picker/UI was the only missing layer.
+> New engine module `engine/weave/nativeSlotCatalog.ts` owns the source list
+> (`getNativeSlotCatalog`, grouped by the FormulaPicker category map + an
+> "Imported" bucket for importSource/unclassified defs) and `nativeSlotReject`,
+> the pure predicate mirroring the resolver's capability rejects
+> (`shape:self-contained` / `shape:modular`). The picker GREYS exactly what the
+> resolver rejects, never hides — `test:mb3d:weave` asserts parity (greying set
+> == `resolveNativeSlot(...).ok === false`) over every registered formula.
+> Frag/DEC imports resolve through the SAME native resolver (design §1.3), so no
+> extra path. Native rows repurpose the per-row expansion to a note (params
+> auto-expose onto the shared lane budget; bake is engine-automatic on overflow;
+> the formula's own getDist is NOT spliced — the Quality estimator dropdown is
+> the escape hatch); the lane-budget meter dry-runs native rows through
+> `resolveNativeSlot` on the same LaneAllocator as MB3D rows. SCOPE (owner call):
+> only registered formulas are weavable — the raw 438-thumbnail catalog is
+> deferred (import via Workshop first); adopting the full thumbnail FormulaPicker
+> in the weave editor is a noted P4-follow-up. No emit-path file touched (the
+> P4.0–P4.2 byte-identity holds); gates green (typecheck, weave 162, mb3d 24,
+> refine 56, decompiler corpus, smoke:boot).
+
 > **Update 2026-07-04 (P4.2 landed; decision unchanged):** native slots carry a
 > DE policy. `writesDeriv` is detected from the formula source (dr-write scan) —
 > a weave where NO slot updates the derivative auto-routes to the est7 numeric
