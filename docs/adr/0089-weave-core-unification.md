@@ -2,6 +2,23 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-04 (per-slot BANKS landed; decision unchanged; see ADR-0090):**
+> a native formula woven as slot k no longer shares the coreMath dense
+> `LaneAllocator` — it binds its declared params VERBATIM onto its own per-slot
+> BANK (`uWs<k>ParamA` …, no vec decomposition; identity pairs on distinct banks),
+> so the P4.1 re-packing (which decomposed vec2/vec4 and overflowed a param-rich
+> pair like Phoenix ⊗ Phoenix into bake-everything) is superseded FOR NATIVE
+> SLOTS. Bank state lives on the DDFS `weave` feature (6 banks × 15 params);
+> `FractalParameter` gained a `feature: 'weave'` routing field so the Formula
+> panel drives `store.weave` / `setWeave` / `weave.<id>` tracks. The coreMath
+> dense pool is now MB3D-slots-only, physically disjoint from the native banks
+> (`uWs*` vs `uParam*`/`uVec*`) — no reservation. Fidelity is the default; compact
+> survives only for MB3D slots + pre-banks loader compat; the editor budget meter
+> meters only the MB3D pool. Runs BEFORE P4.4/P4.5 (the old hard gate lifted):
+> absorption maps interlace onto a bank and deletes `uInterlace*` (one migration).
+> MB3D emit byte-identical over all 38 bundled scenes; suite 170→188. Full
+> rationale + the banks-for-all-6 vs base-verbatim call in ADR-0090.
+
 > **Update 2026-07-04 (P4.3 landed; decision unchanged):** the Weave Editor
 > picker now lists REGISTERED native + imported (frag/DEC) formulas as slot
 > sources alongside the MB3D catalog. Picking one appends a native addon-slot
