@@ -55,9 +55,16 @@ export class PickingController {
      * Averages depth values from a small neighborhood to reduce noise.
      */
     public measureDistance(x: number, y: number, renderer: THREE.WebGLRenderer, camera: THREE.Camera): number {
-        // Convert NDC [-1, 1] to pixel coordinates
-        const width = renderer.domElement.width;
-        const height = renderer.domElement.height;
+        // Convert NDC [-1, 1] to pixel coordinates OF THE READBACK TARGET.
+        // readPixels() reads from the pipeline's previous MRT target, whose
+        // size tracks adaptive resolution (UniformManager resizes the
+        // pipeline, not the canvas) — so the canvas dimensions are wrong
+        // whenever adaptive scaling is engaged: cursor picks past the scale
+        // fraction landed out of bounds and every pick missed.
+        const target = this.pipeline.getPreviousRenderTarget();
+        if (!target || target.width <= 0 || target.height <= 0) return -1;
+        const width = target.width;
+        const height = target.height;
         const px = Math.floor((x + 1) * 0.5 * width);
         const py = Math.floor((y + 1) * 0.5 * height); // GL y=0 is bottom, NDC y=-1 is bottom — no flip needed
         
@@ -101,8 +108,11 @@ export class PickingController {
      * Skips the 3x3 averaging neighborhood (9 readPixels → 1).
      */
     public measureDistanceFast(x: number, y: number, renderer: THREE.WebGLRenderer, _camera: THREE.Camera): number {
-        const width = renderer.domElement.width;
-        const height = renderer.domElement.height;
+        // Same target-space mapping as measureDistance — see comment there.
+        const target = this.pipeline.getPreviousRenderTarget();
+        if (!target || target.width <= 0 || target.height <= 0) return -1;
+        const width = target.width;
+        const height = target.height;
         const px = Math.floor((x + 1) * 0.5 * width);
         const py = Math.floor((y + 1) * 0.5 * height);
 
