@@ -70,6 +70,7 @@ export const WeaveSection: React.FC = () => {
             >
                 <div className="px-1 pt-2 pb-1">
                     <WeaveEditorPane
+                        key={formula}
                         variant="panel"
                         seedFormulaId={!isWeave && weavable ? formula : undefined}
                     />

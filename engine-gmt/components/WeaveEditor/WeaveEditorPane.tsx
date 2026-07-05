@@ -91,8 +91,15 @@ interface WeaveDraft {
 }
 
 // Module-scoped draft — survives modal close/reopen within a session (the
-// Workshop draft pattern; cleared on page reload).
+// Workshop draft pattern; cleared on page reload). Used by the MODAL variant
+// (an import-in-progress, decoupled from the loaded scene).
 let weaveDraft: WeaveDraft | null = null;
+// The PANEL variant (Formula-panel Weave section) instead mirrors the currently
+// loaded formula: this per-formula cache preserves an in-progress edit across a
+// collapse/expand of the SAME formula, while switching formulas/scenes shows the
+// new formula's weave (a migrated hybrid like Bristorbrot shows its BoxFold
+// weave). Keyed by formula id; session-scoped (cleared on reload).
+const panelDraftCache = new Map<string, WeaveDraft>();
 let rowSeq = 0;
 const rowKey = () => `wrow${rowSeq++}`;
 
@@ -215,7 +222,30 @@ function autoTitleOf(rows: SlotRow[]): string {
 export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEditorPaneProps = {}) {
     const store = useEngineStore() as any;
 
+    // The formula this pane instance hydrated for. WeaveSection keys the panel
+    // pane by formula, so this is fixed for the instance's life — the correct
+    // per-formula cache key on unmount (store.formula may already point at the
+    // NEXT formula by the time this instance's cleanup runs).
+    const mountedFormula = useRef<string>(store.formula);
+
     const [draft, setDraft] = useState<WeaveDraft>(() => {
+        // Panel variant MIRRORS the current formula. A per-formula cache keeps an
+        // in-progress edit across a collapse/expand of the SAME formula; a miss
+        // hydrates from the formula's weaveSource (a weave, or a migrated hybrid
+        // like Bristorbrot), else seeds the single formula. Ignores the modal's
+        // `weaveDraft` on purpose — the panel tracks the scene, not an import.
+        if (variant === 'panel') {
+            const cached = panelDraftCache.get(store.formula);
+            if (cached) return cloneDraft(cached);
+            const ws = (registry.get(store.formula) as FractalDefinition | undefined)?.weaveSource;
+            if (ws) return draftFromWeaveSource(ws);
+            if (seedFormulaId) {
+                const seed = seedRowFromFormula(seedFormulaId);
+                if (seed) return { title: '', rows: [seed], dividers: [], scheduleKind: 'counts' };
+            }
+            return { title: '', rows: [], dividers: [], scheduleKind: 'counts' };
+        }
+        // Modal variant: import-in-progress draft, decoupled from store.formula.
         if (weaveDraft && weaveDraft.rows.length > 0) return cloneDraft(weaveDraft);
         // Reopening a weave formula: hydrate from its persisted source.
         const ws = (registry.get(store.formula) as FractalDefinition | undefined)?.weaveSource;
@@ -239,10 +269,15 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     const past = useRef<WeaveDraft[]>([]);
     const future = useRef<WeaveDraft[]>([]);
 
-    // Snapshot the draft to module scope on unmount (modal close).
+    // Snapshot the draft on unmount: the panel caches per-formula (so a collapse/
+    // expand of the same formula restores the edit, while switching formulas shows
+    // the new one); the modal snapshots its single import draft.
     const liveRef = useRef(draft);
     liveRef.current = draft;
-    useEffect(() => () => { weaveDraft = cloneDraft(liveRef.current); }, []);
+    useEffect(() => () => {
+        if (variant === 'panel') panelDraftCache.set(mountedFormula.current, cloneDraft(liveRef.current));
+        else weaveDraft = cloneDraft(liveRef.current);
+    }, []);
 
     const commit = (next: WeaveDraft) => {
         past.current.push(cloneDraft(draft));
