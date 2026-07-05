@@ -52,6 +52,9 @@ import { getNativeSlotCatalog, nativeSlotShell, nativeSlotReject, isNativeSlot }
 import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
+import Slider from '../../../components/Slider';
+import { warn, compileBar as compileBarClass } from '../../../data/theme';
+import { AlertIcon } from '../../../components/Icons';
 import { LoopStrip, SLOT_COLORS } from './LoopStrip';
 
 type WeaveSource = NonNullable<FractalDefinition['weaveSource']>;
@@ -151,22 +154,6 @@ export interface WeaveEditorPaneProps {
      *  pre-seed slot 0 with this formula id so the user weaves their current
      *  formula with others. Ignored if it can't weave. */
     seedFormulaId?: string;
-}
-
-/** Compact −/N/+ stepper for the live rhythm params (real-time friendly — the
- *  full GMT slider widgets arrive with the P4 panel promotion, where the DDFS
- *  params render through the standard panel primitives). */
-function MiniStep({ value, set, title }: { value: number; set: (n: number) => void; title: string }) {
-    return (
-        <span className="flex items-center gap-0.5 shrink-0" title={title}>
-            <button onClick={() => set(value - 1)}
-                className="w-4 h-4 text-[10px] leading-none rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
-            <input value={value} onChange={(e) => set(parseInt(e.target.value, 10) || 0)}
-                className="w-7 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" />
-            <button onClick={() => set(value + 1)}
-                className="w-4 h-4 text-[10px] leading-none rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
-        </span>
-    );
 }
 
 /** Float input that commits on blur/Enter (keeps partial typing like "1." alive
@@ -479,7 +466,6 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     });
     const setLayerVal = (k: number, field: 'weaveInterval' | 'weaveStartIter' | 'weaveBeats', n: number) =>
         store.setWeave?.({ [`${field}${k}`]: field === 'weaveInterval' ? Math.max(1, clampI(n, 1, 32)) : clampI(n, 0, 64) });
-    const rowColor = (i: number) => SLOT_COLORS[(draft.rows[i]?.colorIdx ?? 0) % SLOT_COLORS.length];
 
     // ── Live schedule preview ────────────────────────────────────────────────
     const repeatIdx = useMemo(() => {
@@ -584,6 +570,28 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         setStatus(null);
     };
 
+    // Un-built structural changes → the compile bar goes amber (mirrors the app's
+    // Compile/Recompile). Only STRUCTURE needs a Build — slots / order / counts /
+    // schedule kind / bake / repeat. Rhythm interval-start-beats and the enable
+    // gate are LIVE (store.weave, no rebuild) so they never mark dirty. Derived
+    // by comparing the draft to the active formula's persisted weave, so a Build
+    // (which registers that weave) clears it automatically.
+    const sigOf = (slots: { ref: string | number; kind: string; slot: MB3DFormulaSlot; bake?: boolean[] }[]) =>
+        slots.map((s) => ({
+            ref: s.ref, kind: s.kind, iter: s.slot.iterCount, ov: s.slot.optionValues,
+            bake: s.bake && s.bake.some(Boolean) ? s.bake.map(Boolean) : null,
+        }));
+    const dirty = (() => {
+        if (!currentWs) return activeCount > 0;
+        const draftSig = JSON.stringify({ slots: sigOf(draft.rows), kind: rhythm ? 'modulo' : 'counts', repeat: rhythm ? null : repeatIdx });
+        const liveSig = JSON.stringify({
+            slots: sigOf(currentWs.slots),
+            kind: currentWs.schedule.kind,
+            repeat: currentWs.schedule.kind === 'counts' ? (currentWs.schedule.repeatFrom ?? 0) : null,
+        });
+        return draftSig !== liveSig;
+    })();
+
     // ── Render ───────────────────────────────────────────────────────────────
     return (
         <div className="space-y-3">
@@ -621,150 +629,197 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     title="Redo structure edit">↷</button>
             </div>
 
-            {/* Slot rows */}
+            {/* Add / Clear — above the rows */}
+            <div className="flex items-center gap-2">
+                <button onClick={(e) => openPicker(e)}
+                    className="px-2.5 py-1 text-[11px] font-bold rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors">
+                    + Add formula
+                </button>
+                {draft.rows.length > 0 && (
+                    <button onClick={clearAll}
+                        className="px-2 py-1 text-[10px] rounded border bg-line/[0.04] border-line/10 text-fg-tertiary hover:text-fg-muted transition-colors">
+                        Clear
+                    </button>
+                )}
+            </div>
+
+            {/* Slot rows — two lines each: [handle · color · chevron · name · ×]
+                then [iterations + (Sequence: repeat) / (Rhythm: role + timing)]. */}
             <div className="space-y-1.5">
                 {draft.rows.length === 0 && (
                     <p className="text-[11px] text-fg-tertiary border border-dashed border-line/15 rounded-lg px-3 py-4 text-center">
-                        No slots yet — add a base fractal (box, bulb, IFS) from the MB3D library or a native / imported
-                        formula, then layer transforms or a second fractal.
+                        No formulas yet — add a base fractal (box, bulb, IFS), then layer a transform or a second
+                        fractal to weave them across the iteration loop.
                     </p>
                 )}
-                {draft.rows.map((r, i) => (
+                {draft.rows.map((r, i) => {
+                    const isExpanded = expandedKey === r.key;
+                    // Rhythm role: first active row = base, each later active row = layer k.
+                    const activePos = activeRowIdx.indexOf(i);
+                    const isBase = rhythm && activePos === 0;
+                    const layerK = rhythm && activePos >= 1 ? activePos : 0;
+                    const lv = layerK ? layerVal(layerK) : null;
+                    return (
                     <React.Fragment key={r.key}>
                     <div
                         ref={(el) => { if (el) rowRefs.current.set(r.key, el); else rowRefs.current.delete(r.key); }}
-                        className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 transition-colors ${
+                        className={`rounded-lg border px-2 py-1.5 transition-colors ${
                             dragKey === r.key ? 'border-accent-500/40 bg-accent-500/10' : 'border-line/10 bg-surface-sunken/60'
                         }`}
                     >
-                        <span
-                            onPointerDown={(e) => onHandleDown(e, r.key)}
-                            onPointerMove={(e) => onHandleMove(e, r.key)}
-                            onPointerUp={(e) => onHandleUp(e, r.key)}
-                            className="cursor-grab active:cursor-grabbing touch-none select-none text-fg-tertiary hover:text-fg-muted px-0.5 shrink-0"
-                            title="Drag to reorder"
-                        >≡</span>
-                        <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[r.colorIdx % SLOT_COLORS.length] }} />
-                        <button onClick={(e) => openPicker(e, r.key)}
-                            className="flex-1 text-left text-[11px] text-fg truncate hover:text-accent-300 transition-colors"
-                            title={`Change formula (${r.label})`}>
-                            {r.label}
-                        </button>
-                        <button
-                            onClick={() => setRepeat(r.key)}
-                            disabled={rhythm}
-                            className={`w-5 h-5 text-[11px] rounded border shrink-0 transition-colors ${rhythm ? 'opacity-30 cursor-not-allowed ' : ''}${
-                                i === repeatIdx && i > 0
-                                    ? 'border-accent-500/50 bg-accent-500/15 text-accent-300'
-                                    : (draft.repeatKey === null && i === 0)
-                                        ? 'border-line/10 bg-line/[0.02] text-fg-tertiary/50'
-                                        : 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'
-                            }`}
-                            title={rhythm
-                                ? 'Repeat-from doesn’t apply to Rhythm — the modulo beat drives the schedule'
-                                : 'Repeat from here — earlier slots run once as an intro; the loop repeats from this slot (MB3D’s Repeat From)'}
-                        >↻</button>
-                        <div className={`flex items-center gap-0.5 shrink-0 ${rhythm ? 'opacity-40' : ''}`}
-                            title={rhythm
-                                ? 'Counts don’t drive Rhythm — a slot is active while its count is above 0'
-                                : 'Iterations this slot runs per visit'}>
-                            <button onClick={() => setIter(r.key, r.slot.iterCount - 1)}
-                                className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
-                            <input
-                                value={r.slot.iterCount}
-                                onChange={(e) => setIter(r.key, parseInt(e.target.value, 10) || 0)}
-                                className="w-8 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40"
-                            />
-                            <button onClick={() => setIter(r.key, r.slot.iterCount + 1)}
-                                className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
+                        {/* Line 1 — handle · color · chevron · name · remove */}
+                        <div className="flex items-center gap-1.5">
+                            <span
+                                onPointerDown={(e) => onHandleDown(e, r.key)}
+                                onPointerMove={(e) => onHandleMove(e, r.key)}
+                                onPointerUp={(e) => onHandleUp(e, r.key)}
+                                className="cursor-grab active:cursor-grabbing touch-none select-none text-fg-tertiary hover:text-fg-muted px-0.5 shrink-0"
+                                title="Drag to reorder"
+                            >≡</span>
+                            <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[r.colorIdx % SLOT_COLORS.length] }} />
+                            <button onClick={() => setExpandedKey(isExpanded ? null : r.key)}
+                                className="shrink-0 w-3 text-center text-[10px] leading-none text-fg-tertiary hover:text-fg transition-colors"
+                                title="Parameters and per-layer timing">{isExpanded ? '▾' : '▸'}</button>
+                            <button onClick={(e) => openPicker(e, r.key)}
+                                className="flex-1 text-left text-[11px] text-fg truncate hover:text-accent-300 transition-colors"
+                                title={`Change formula (${r.label})`}>
+                                {r.label}
+                            </button>
+                            <button onClick={() => remove(r.key)}
+                                className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-red-300 transition-colors shrink-0" title="Remove formula">×</button>
                         </div>
-                        <button onClick={() => setExpandedKey(expandedKey === r.key ? null : r.key)}
-                            className={`w-5 h-5 text-[11px] rounded border shrink-0 transition-colors ${expandedKey === r.key
-                                ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
-                                : 'bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg'}`}
-                            title={isNativeSlot(r.slot)
-                                ? 'Parameters — auto-exposed as sliders (details)'
-                                : 'Parameters — edit values, choose live slider vs fixed literal'}>{expandedKey === r.key ? '▾' : '▸'}</button>
-                        <button onClick={() => remove(r.key)}
-                            className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-red-300 transition-colors shrink-0" title="Remove slot">×</button>
-                    </div>
-                    {expandedKey === r.key && isNativeSlot(r.slot) && (
-                        <div className="ml-6 rounded-lg border border-line/10 bg-surface-sunken/40 px-2 py-1.5 space-y-1 text-[10px] text-fg-tertiary leading-relaxed">
-                            <p>
-                                A native formula keeps its own parameters <strong className="text-fg-muted">verbatim</strong> —
-                                they get a private per-slot bank and <strong className="text-fg-muted">auto-expose</strong> as
-                                sliders in the Formula panel, always live (no shared budget, no bake).
-                            </p>
-                            <p>
-                                This formula's own distance estimator isn't spliced into the weave — if the surface
-                                looks wrong, pick an estimator in the <strong className="text-fg-muted">Quality</strong> panel.
-                            </p>
-                        </div>
-                    )}
-                    {expandedKey === r.key && !isNativeSlot(r.slot) && (() => {
-                        const meta = getSlotOptionMeta(r.slot);
-                        if (meta.length === 0) {
-                            return <p className="ml-6 text-[10px] text-fg-tertiary px-2">This formula has no editable parameters.</p>;
-                        }
-                        const defs = rowDefaults(r);
-                        return (
-                            <div className="ml-6 rounded-lg border border-line/10 bg-surface-sunken/40 px-2 py-1.5 space-y-1">
-                                {meta.map((m) => {
-                                    const baked = !!r.bake?.[m.index];
-                                    const vals = Array.from({ length: m.span }, (_, j) => r.slot.optionValues[m.index + j] ?? 0);
-                                    const defVals = Array.from({ length: m.span }, (_, j) => defs[m.index + j] ?? 0);
-                                    const dirty = vals.some((v, j) => v !== defVals[j]);
-                                    return (
-                                        <div key={m.index} className="flex items-center gap-1.5 text-[11px] text-fg-muted flex-wrap">
-                                            <span className="flex-1 min-w-[80px] truncate text-fg" title={m.name}>{m.name}</span>
-                                            {vals.map((v, j) => (
-                                                <OptValInput key={j} value={v} onCommit={(n) => {
-                                                    const nv = [...vals]; nv[j] = n; setOptionValues(r.key, m.index, nv);
-                                                }} />
-                                            ))}
-                                            <button onClick={() => setOptionValues(r.key, m.index, defVals)}
-                                                disabled={!dirty}
-                                                className={`w-5 h-5 text-[11px] rounded border shrink-0 transition-colors ${dirty
-                                                    ? 'bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg'
-                                                    : 'opacity-0 pointer-events-none border-transparent'}`}
-                                                title={`Reset to default (${defVals.join(', ')})`}>↺</button>
-                                            {m.exposable ? (
-                                                <button onClick={() => toggleBake(r.key, m)}
-                                                    className={`w-11 px-1.5 py-0.5 text-[10px] rounded border shrink-0 transition-colors ${!baked
-                                                        ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
-                                                        : 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'}`}
-                                                    title={baked
-                                                        ? 'Fixed: baked into the shader as a literal — uses no slider lane. Click to expose as a live slider'
-                                                        : 'Live: exposed as a slider in the Formula panel — uses uniform lanes. Click to bake as a fixed literal'}>
-                                                    {baked ? 'fixed' : 'live'}
-                                                </button>
-                                            ) : (
-                                                <span className="w-11 px-1.5 py-0.5 text-[10px] text-center rounded border border-line/10 text-fg-tertiary/60 shrink-0"
-                                                    title="This option type always bakes (angle / matrix / derived constant — it has no live-uniform mapping)">fixed</span>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                                <p className="text-[10px] text-fg-tertiary">
-                                    value edits and live/fixed toggles apply on Build · fixing a value frees slider lanes
-                                </p>
+
+                        {/* Line 2 — iterations + mode-specific control */}
+                        <div className="flex items-center gap-1.5 mt-1 pl-6">
+                            <div className={`flex items-center gap-0.5 shrink-0 ${rhythm ? 'opacity-50' : ''}`}
+                                title={rhythm
+                                    ? 'In Rhythm, iterations only mark a formula active (above 0) — timing is set by the layer sliders (expand ▸).'
+                                    : 'Iterations this formula runs each pass'}>
+                                <button onClick={() => setIter(r.key, r.slot.iterCount - 1)}
+                                    className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
+                                <input
+                                    value={r.slot.iterCount}
+                                    onChange={(e) => setIter(r.key, parseInt(e.target.value, 10) || 0)}
+                                    className="w-8 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40"
+                                />
+                                <button onClick={() => setIter(r.key, r.slot.iterCount + 1)}
+                                    className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
+                                <span className="text-[10px] text-fg-tertiary ml-1">iter</span>
                             </div>
-                        );
-                    })()}
-                    </React.Fragment>
-                ))}
-                <div className="flex items-center gap-2">
-                    <button onClick={(e) => openPicker(e)}
-                        className="px-2.5 py-1 text-[11px] font-bold rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors">
-                        + Add formula
-                    </button>
-                    {draft.rows.length > 0 && (
-                        <button onClick={clearAll}
-                            className="px-2 py-1 text-[10px] rounded border bg-line/[0.04] border-line/10 text-fg-tertiary hover:text-fg-muted transition-colors">
-                            Clear
-                        </button>
+                            {!rhythm && (
+                                <button
+                                    onClick={() => setRepeat(r.key)}
+                                    className={`ml-auto px-1.5 h-5 text-[10px] rounded border shrink-0 transition-colors ${
+                                        i === repeatIdx && i > 0
+                                            ? 'border-accent-500/50 bg-accent-500/15 text-accent-300'
+                                            : (draft.repeatKey === null && i === 0)
+                                                ? 'border-line/10 bg-line/[0.02] text-fg-tertiary/50'
+                                                : 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'
+                                    }`}
+                                    title="Repeat from here — earlier formulas run once as an intro, then the loop repeats from this one (MB3D's Repeat From)"
+                                >↻ repeat from here</button>
+                            )}
+                            {isBase && (
+                                <span className="ml-auto text-[10px] text-fg-tertiary shrink-0" title="The base runs on every iteration no rhythm layer claims.">base</span>
+                            )}
+                            {layerK > 0 && lv && (
+                                <button onClick={() => setExpandedKey(isExpanded ? null : r.key)}
+                                    className="ml-auto text-[10px] text-fg-tertiary hover:text-fg-muted shrink-0 truncate max-w-[170px]"
+                                    title="Layer timing — expand to edit as keyframable sliders">
+                                    every {lv.interval} · from {lv.start}{lv.beats > 0 ? ` · ${lv.beats} beats` : ''}
+                                </button>
+                            )}
+                            {rhythm && activePos < 0 && (
+                                <span className="ml-auto text-[10px] text-fg-tertiary/50 shrink-0">inactive</span>
+                            )}
+                        </div>
+                    </div>
+                    {isExpanded && (
+                        <div className="ml-6 rounded-lg border border-line/10 bg-surface-sunken/40 px-2 py-1.5 space-y-2">
+                            {/* Per-layer rhythm timing — real keyframable GMT sliders */}
+                            {layerK > 0 && lv && (
+                                <div className="space-y-1">
+                                    <Slider label="Interval" value={lv.interval} min={1} max={32} step={1}
+                                        onChange={(n) => setLayerVal(layerK, 'weaveInterval', n)} defaultValue={2}
+                                        trackId={`weave.weaveInterval${layerK}`} liveValue={store.liveModulations?.[`weave.weaveInterval${layerK}`]} />
+                                    <Slider label="Start" value={lv.start} min={0} max={64} step={1}
+                                        onChange={(n) => setLayerVal(layerK, 'weaveStartIter', n)} defaultValue={0}
+                                        trackId={`weave.weaveStartIter${layerK}`} liveValue={store.liveModulations?.[`weave.weaveStartIter${layerK}`]} />
+                                    <Slider label="Beats (0 = endless)" value={lv.beats} min={0} max={64} step={1}
+                                        onChange={(n) => setLayerVal(layerK, 'weaveBeats', n)} defaultValue={0}
+                                        trackId={`weave.weaveBeats${layerK}`} liveValue={store.liveModulations?.[`weave.weaveBeats${layerK}`]} />
+                                    {store.showHints && (
+                                        <p className="text-[10px] text-fg-tertiary">
+                                            Timing is live and keyframable — no rebuild. This formula runs every few iterations over the base.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                            {/* Parameters */}
+                            {isNativeSlot(r.slot) ? (
+                                <div className="text-[10px] text-fg-tertiary leading-relaxed space-y-1">
+                                    <p>This formula's parameters are the sliders in the panel above — always live, nothing to set up here.</p>
+                                    {store.showHints && (
+                                        <p>If the surface looks wrong, choose a different estimator in the <strong className="text-fg-muted">Quality</strong> panel.</p>
+                                    )}
+                                </div>
+                            ) : (() => {
+                                const meta = getSlotOptionMeta(r.slot);
+                                if (meta.length === 0) {
+                                    return <p className="text-[10px] text-fg-tertiary">This formula has no editable parameters.</p>;
+                                }
+                                const defs = rowDefaults(r);
+                                return (
+                                    <div className="space-y-1">
+                                        {meta.map((m) => {
+                                            const baked = !!r.bake?.[m.index];
+                                            const vals = Array.from({ length: m.span }, (_, j) => r.slot.optionValues[m.index + j] ?? 0);
+                                            const defVals = Array.from({ length: m.span }, (_, j) => defs[m.index + j] ?? 0);
+                                            const isDirty = vals.some((v, j) => v !== defVals[j]);
+                                            return (
+                                                <div key={m.index} className="flex items-center gap-1.5 text-[11px] text-fg-muted flex-wrap">
+                                                    <span className="flex-1 min-w-[80px] truncate text-fg" title={m.name}>{m.name}</span>
+                                                    {vals.map((v, j) => (
+                                                        <OptValInput key={j} value={v} onCommit={(n) => {
+                                                            const nv = [...vals]; nv[j] = n; setOptionValues(r.key, m.index, nv);
+                                                        }} />
+                                                    ))}
+                                                    <button onClick={() => setOptionValues(r.key, m.index, defVals)}
+                                                        disabled={!isDirty}
+                                                        className={`w-5 h-5 text-[11px] rounded border shrink-0 transition-colors ${isDirty
+                                                            ? 'bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg'
+                                                            : 'opacity-0 pointer-events-none border-transparent'}`}
+                                                        title={`Reset to default (${defVals.join(', ')})`}>↺</button>
+                                                    {m.exposable ? (
+                                                        <button onClick={() => toggleBake(r.key, m)}
+                                                            className={`w-11 px-1.5 py-0.5 text-[10px] rounded border shrink-0 transition-colors ${!baked
+                                                                ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
+                                                                : 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'}`}
+                                                            title={baked
+                                                                ? 'Fixed: baked into the shader — uses no slider lane. Click to make it a live slider'
+                                                                : 'Live: shows as a slider in the panel above. Click to bake it as a fixed value'}>
+                                                            {baked ? 'fixed' : 'live'}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="w-11 px-1.5 py-0.5 text-[10px] text-center rounded border border-line/10 text-fg-tertiary/60 shrink-0"
+                                                            title="This value is always fixed (angle / matrix / derived constant — it has no live-uniform mapping)">fixed</span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                        {store.showHints && (
+                                            <p className="text-[10px] text-fg-tertiary">
+                                                Changes apply when you Build. Fixing a value keeps it out of the live sliders.
+                                            </p>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+                        </div>
                     )}
-                </div>
+                    </React.Fragment>
+                    );
+                })}
             </div>
 
             {/* Schedule */}
@@ -810,39 +865,8 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     </div>
                     {draft.scheduleKind === 'modulo' && !rhythmOk && (
                         <p className="text-[10px] text-amber-300/80">
-                            Rhythm needs 2–6 active slots ({activeCount} now) — building as Sequence until then.
+                            Rhythm needs 2–6 active formulas ({activeCount} now) — building as Sequence until then.
                         </p>
-                    )}
-                    {rhythm && (
-                        <div className="space-y-1">
-                            <div className="flex items-center gap-1.5 text-[11px] text-fg-muted">
-                                <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: rowColor(activeRowIdx[0]) }} />
-                                <span className="truncate text-fg max-w-[110px]">{draft.rows[activeRowIdx[0]]?.label}</span>
-                                <span className="text-[10px] text-fg-tertiary">— base, runs when no layer beats</span>
-                            </div>
-                            {activeRowIdx.slice(1).map((rowIdx, j) => {
-                                const k = j + 1;
-                                const v = layerVal(k);
-                                return (
-                                    <div key={draft.rows[rowIdx].key} className="flex items-center gap-1.5 text-[11px] text-fg-muted flex-wrap">
-                                        <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: rowColor(rowIdx) }} />
-                                        <span className="truncate text-fg max-w-[110px]">{draft.rows[rowIdx].label}</span>
-                                        <span className="text-fg-tertiary">every</span>
-                                        <MiniStep value={v.interval} set={(n) => setLayerVal(k, 'weaveInterval', n)}
-                                            title="Run this layer every N iterations — live, keyframable, no rebuild" />
-                                        <span className="text-fg-tertiary">from</span>
-                                        <MiniStep value={v.start} set={(n) => setLayerVal(k, 'weaveStartIter', n)}
-                                            title="First iteration where this layer runs — live, keyframable, no rebuild" />
-                                        <span className="text-fg-tertiary">beats</span>
-                                        <MiniStep value={v.beats} set={(n) => setLayerVal(k, 'weaveBeats', n)}
-                                            title="Stop after this many beats (0 = endless). A dense capped layer works as an intro sequence — live, no rebuild" />
-                                    </div>
-                                );
-                            })}
-                            <p className="text-[10px] text-fg-tertiary">
-                                layers are checked top to bottom — the first beat wins · live, no rebuild; formula changes still rebuild
-                            </p>
-                        </div>
                     )}
                     <LoopStrip
                         plan={rhythm && rhythmPlan ? rhythmPlan : plan}
@@ -850,12 +874,14 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                         colors={draft.rows.map((r) => SLOT_COLORS[r.colorIdx % SLOT_COLORS.length])}
                         totalIterations={store.coreMath?.iterations}
                     />
-                    <p className="text-[10px] text-fg-tertiary">
-                        {rhythm
-                            ? <>{activeCount - 1} rhythm layer{activeCount === 2 ? '' : 's'} over {draft.rows[activeRowIdx[0]]?.label} · scene iterations: {store.coreMath?.iterations ?? '—'}</>
-                            : <>cycle = {plan.cycleLen} iteration{plan.cycleLen === 1 ? '' : 's'}
-                                {plan.introLen > 0 ? ` after ${plan.introLen} intro` : ''} · faded blocks repeat · scene iterations: {store.coreMath?.iterations ?? '—'}</>}
-                    </p>
+                    {store.showHints && (
+                        <p className="text-[10px] text-fg-tertiary">
+                            {rhythm
+                                ? <>{activeCount - 1} rhythm layer{activeCount === 2 ? '' : 's'} over {draft.rows[activeRowIdx[0]]?.label} · expand a layer to set its timing · scene iterations: {store.coreMath?.iterations ?? '—'}</>
+                                : <>cycle = {plan.cycleLen} iteration{plan.cycleLen === 1 ? '' : 's'}
+                                    {plan.introLen > 0 ? ` after ${plan.introLen} intro` : ''} · faded blocks repeat · scene iterations: {store.coreMath?.iterations ?? '—'}</>}
+                        </p>
+                    )}
                 </div>
             )}
 
@@ -876,25 +902,45 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 </div>
             )}
 
-            {/* Build + live lane-budget meter */}
-            <div className="flex items-center justify-between gap-2">
-                <span className={`text-[10px] ${meter && 'fits' in meter && !meter.fits ? 'text-amber-300/90' : 'text-fg-tertiary'}`}
-                    title="Live-slider budget: native formulas get their own per-slot parameter banks (always live). MB3D slots share 24 scalar lanes (paramA–F + vec2/vec4 components) + 6 vec3 units; over that budget their parameters bake.">
-                    {meter === null ? '' :
-                        'allNative' in meter ? `${meter.allNative} native slot${meter.allNative === 1 ? '' : 's'} — parameters always live` :
+            {/* Live lane-budget meter (MB3D dense pool) */}
+            {meter !== null && (
+                <p className={`text-[10px] px-0.5 ${'fits' in meter && !meter.fits ? 'text-amber-300/90' : 'text-fg-tertiary'}`}
+                    title="Live-slider budget: native formulas get their own per-formula parameter banks (always live). MB3D formulas share 24 scalar lanes (paramA–F + vec2/vec4 components) + 6 vec3 units; over that budget their parameters bake.">
+                    {'allNative' in meter ? `${meter.allNative} native formula${meter.allNative === 1 ? '' : 's'} — parameters always live` :
                         (() => {
                             const nativeSuffix = (meter as any).natives ? ` · +${(meter as any).natives} native live` : '';
                             return 'single' in meter ? `${meter.single} MB3D parameter slider${meter.single === 1 ? '' : 's'}${nativeSuffix}` :
                                 'note' in meter ? `${meter.note}${nativeSuffix}` :
                                 `MB3D ${meter.scalars}/24 lanes · ${meter.vec3s}/6 vec3 — ${meter.fits ? 'live sliders' : 'over budget: parameters bake'}${nativeSuffix}`;
                         })()}
-                </span>
-                <button onClick={build} disabled={busy || activeCount === 0}
-                    className="px-4 py-1.5 text-xs font-bold rounded-lg bg-accent-600 hover:bg-accent-500 text-white border border-accent-500/50 disabled:opacity-40 transition-colors"
-                    title="Compile the weave and preview it — keeps your camera and look">
-                    {busy ? 'Building…' : 'Build & Preview'}
-                </button>
-            </div>
+                </p>
+            )}
+
+            {/* Build — the app's standard compile bar. Amber (warn) with the
+                compile button while there are un-built structural changes;
+                quiet "weave is live" once built (like Compile → compiled). */}
+            {dirty ? (
+                <div className={`flex items-center justify-between px-2 py-1 ${compileBarClass} rounded`}>
+                    <div className={`flex items-center gap-1.5 ${warn.text}`}>
+                        <AlertIcon />
+                        <span className="text-[9px] font-bold uppercase tracking-wide">Build to apply</span>
+                    </div>
+                    <button onClick={build} disabled={busy || activeCount === 0}
+                        className={`px-3 py-0.5 ${warn.btnBg} ${warn.btnHover} ${warn.btnText} text-[9px] font-bold rounded transition-colors disabled:opacity-40`}
+                        title="Compile the weave and preview it — keeps your camera and look">
+                        {busy ? 'Building…' : 'Build'}
+                    </button>
+                </div>
+            ) : (
+                <div className="flex items-center justify-between px-2 py-1">
+                    <span className="text-[9px] font-bold uppercase tracking-wide text-fg-tertiary">✓ weave is live</span>
+                    <button onClick={build} disabled={busy || activeCount === 0}
+                        className="px-3 py-0.5 text-[9px] font-bold rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors disabled:opacity-40"
+                        title="Rebuild the weave (keeps your camera and look)">
+                        {busy ? 'Building…' : 'Rebuild'}
+                    </button>
+                </div>
+            )}
 
             {picker && (
                 <CategoryPickerMenu

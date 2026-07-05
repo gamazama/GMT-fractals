@@ -34,7 +34,9 @@ export const WeaveSection: React.FC = () => {
     // Self-contained / modular formulas own their full loop — weaving is n/a
     // (same reject set the resolver + picker enforce).
     const weavable = !!def && !nativeSlotReject(def);
-    const [open, setOpen] = useState(false);
+    // A weave scene defaults OPEN (the editor is what you came for); a single
+    // formula defaults collapsed to the "+ Add formula" one-liner.
+    const [open, setOpen] = useState(isWeave);
 
     const collapsedRight = open ? null : isWeave ? (
         <span
