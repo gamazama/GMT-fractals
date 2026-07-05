@@ -110,8 +110,11 @@ export interface ScheduleGateOptions {
 /**
  * Emit the `counts` phase function: a `const int` lookup over one intro+cycle,
  * with the cycle taken modulo. Declared at shader-function scope.
- * With `opts.enabled` (the opt-in master gate), disabled returns the FIRST
- * step's slot — the weave's base formula runs alone.
+ * With `opts.enabled` (the opt-in master gate), disabled returns the BASE slot —
+ * the first step of the repeating CYCLE (`order[introLen]`), so a weave with an
+ * intro (e.g. a migrated Hybrid Box fast path: fold intro → host loop) renders
+ * its looping base formula when disabled, NOT the intro slot. With no intro
+ * (introLen 0) this is `order[0]`, unchanged.
  */
 export function emitCountsScheduleGLSL(
     plan: Pick<WeaveSchedulePlan, 'order' | 'introLen' | 'cycleLen'>,
@@ -123,10 +126,11 @@ export function emitCountsScheduleGLSL(
     const arrName = `${idPrefix}_WEAVE`;
     const intro = plan.introLen;
     const cyc = Math.max(1, plan.cycleLen);
+    const baseSlot = lut[intro] ?? lut[0] ?? 0; // first CYCLE step = looping base
     const glsl = `
 const int ${arrName}[${lut.length}] = int[](${lut.join(', ')});
 int ${fnName}(int i) {
-${opts.enabled ? `  if (${opts.enabled} < 0.5) return ${lut[0] ?? 0};\n` : ''}  if (i < ${intro}) return ${arrName}[i];
+${opts.enabled ? `  if (${opts.enabled} < 0.5) return ${baseSlot};\n` : ''}  if (i < ${intro}) return ${arrName}[i];
   return ${arrName}[${intro} + (i - ${intro}) % ${cyc}];
 }`;
     return { glsl, fnName };

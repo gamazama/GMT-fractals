@@ -1117,21 +1117,34 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       def?.weaveSource?.slots?.map((s: any) => s.label));
   }
 
-  // Fast path (hybridComplex false) — retired P4.7. Migrates to a DENSE intro
-  // BoxFold layer (interval 1 from iter 0), IGNORING the interleave schedule
-  // fields (hybridSkip=2 / hybridSwap=true), so the fold runs on the first
-  // hybridIter iterations — z-identical to the pre-loop fold.
+  // Fast path (hybridComplex false) — retired P4.7. Migrates to a COUNTS intro:
+  // the fold is slot 0 running hybridIter iterations then STOPPING (repeatFrom =
+  // the host, slot 1), NOT a periodic layer. IGNORES the interleave schedule
+  // fields (hybridSkip=2 / hybridSwap=true).
   {
     const p: any = migrateLegacyWeavePreset(legacyHb({}, { hybridComplex: false }));
     const def = registry.get(p.formula) as any;
-    ck('fastpath: migrates to a 2-slot weave',
-      /^MB3DHybrid/.test(p.formula) && def?.weaveSource?.slots?.length === 2, p.formula);
-    const w = p.features.weave;
-    ck('fastpath: dense intro layer (interval 1, start 0, beats = hybridIter)',
-      w?.weaveInterval1 === 1 && w?.weaveStartIter1 === 0 && w?.weaveBeats1 === 4 && w?.weaveEnabled === true,
-      { i: w?.weaveInterval1, s: w?.weaveStartIter1, b: w?.weaveBeats1, en: w?.weaveEnabled });
+    const ws = def?.weaveSource;
+    ck('fastpath: 2-slot COUNTS weave, repeatFrom = host',
+      /^MB3DHybrid/.test(p.formula) && ws?.slots?.length === 2
+      && ws?.schedule?.kind === 'counts' && ws?.schedule?.repeatFrom === 1,
+      { kind: ws?.schedule?.kind, rf: ws?.schedule?.repeatFrom });
+    ck('fastpath: fold is intro slot 0 (hybridIter iters), host loops slot 1',
+      ws?.slots?.[0]?.ref?.startsWith?.('BoxFold') && ws?.slots?.[0]?.slot?.iterCount === 4
+      && ws?.slots?.[1]?.ref === 'Mandelbulb',
+      { s0: ws?.slots?.[0]?.ref, n0: ws?.slots?.[0]?.slot?.iterCount, s1: ws?.slots?.[1]?.ref });
+    ck('fastpath: enabled, no rhythm layer params (counts not modulo)',
+      p.features.weave?.weaveEnabled === true && p.features.weave?.weaveInterval1 === undefined);
     ck('fastpath: legacy geometry state cleared',
       p.features.geometry.hybridCompiled === false && p.features.geometry.hybridComplex === undefined);
+  }
+
+  // Disabled fast path (hybridMode off) rendered the host alone → NO weave.
+  {
+    const p: any = migrateLegacyWeavePreset(legacyHb({}, { hybridComplex: false, hybridMode: false }));
+    ck('fastpath disabled: host alone, no weave',
+      p.formula === 'Mandelbulb' && p.features.weave === undefined
+      && p.features.geometry.hybridCompiled === false);
   }
 
   // hybridIter < 1: the legacy cap meant the fold NEVER ran — no weave, state off.

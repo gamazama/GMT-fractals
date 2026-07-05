@@ -192,59 +192,82 @@ function migrateLegacyWeaves(preset: any): void {
         return;
     }
 
-    // ── Slot order: host, then the fold (geometry injected BEFORE interlace —
-    // legacy skipMainFormula precedence), then the interlace secondary.
+    // ── Slot plans. Interleave / interlace weave onto a LAYERED MODULO schedule
+    // (host base + periodic layers). The pure FAST path weaves onto a COUNTS
+    // schedule instead: the fold is a one-shot INTRO that runs hybridIter
+    // iterations then STOPS (repeatFrom = the host) — NOT a periodic layer that
+    // would keep re-firing. z-identical to the pre-loop fold; only the
+    // iteration-based colour/bailout shifts (the accepted P4.7 look change).
     type SlotPlan = {
         def: FractalDefinition;
+        /** Consecutive iteration count — the counts schedule's per-slot run. */
+        iterCount: number;
+        /** Modulo-layer schedule (modulo weaves only). */
         layer?: { interval: number; startIter: number; beats?: number };
         /** bank-value source: slot param id → legacy value */
         values: (p: any) => any;
         trackPrefix?: (p: any) => string | undefined;
     };
     const cm = feats.coreMath ?? {};
-    const plans: SlotPlan[] = [{
-        def: hostDef,
+    const foldValues = (p: any) => (BOXFOLD_LEGACY_KEYS[p.id] !== undefined ? g[BOXFOLD_LEGACY_KEYS[p.id]] : undefined) ?? p.default;
+    const foldTrack = (p: any) => (BOXFOLD_LEGACY_KEYS[p.id] ? `geometry.${BOXFOLD_LEGACY_KEYS[p.id]}` : undefined);
+    const hostPlan: SlotPlan = {
+        def: hostDef, iterCount: 1,
         values: (p) => cm[p.id] ?? p.default,
         trackPrefix: (p) => `coreMath.${p.id}`,
-    }];
-    if (useFold && foldDef) {
-        plans.push({
-            def: foldDef,
-            // Interleave keeps its own modulo schedule; the FAST path becomes a
-            // dense intro (interval 1 from iter 0), so the fold runs on the first
-            // hybridIter iterations — z-identical to the pre-loop fold. (The only
-            // change: those iterations now COUNT, so iteration-based colour +
-            // bailout shift by hybridIter — the P4.7 accepted look change.)
-            layer: isInterleave
-                ? {
-                    interval: Math.max(1, Math.round(numOr(g.hybridSkip, 1))),
-                    startIter: g.hybridSwap ? 1 : 0,
-                    beats: foldBeats,
-                  }
-                : { interval: 1, startIter: 0, beats: foldBeats },
-            values: (p) => (BOXFOLD_LEGACY_KEYS[p.id] !== undefined ? g[BOXFOLD_LEGACY_KEYS[p.id]] : undefined) ?? p.default,
-            trackPrefix: (p) => BOXFOLD_LEGACY_KEYS[p.id] ? `geometry.${BOXFOLD_LEGACY_KEYS[p.id]}` : undefined,
-        });
-    }
-    if (useIl && secDef) {
-        plans.push({
-            def: secDef,
-            layer: {
-                interval: Math.max(1, Math.round(numOr(il.interlaceInterval, 2))),
-                startIter: Math.max(0, Math.round(numOr(il.interlaceStartIter, 0))),
-            },
-            values: (p) => il[`interlace${cap(p.id)}`] ?? p.default,
-            trackPrefix: (p) => `interlace.interlace${cap(p.id)}`,
-        });
+    };
+
+    // A DISABLED fast path rendered the host alone (the fold never fired) — no
+    // weave needed; the host formula loads as-is.
+    const fastPath = useFold && !isInterleave && !useIl;
+    if (fastPath && !enabled) { clearInterleaveState(g); return; }
+
+    let plans: SlotPlan[];
+    let scheduleKind: 'counts' | 'modulo';
+    let repeatFrom = 0;
+    if (fastPath && foldDef) {
+        // fold INTRO (hybridIter iters, then stops) → host loops (repeatFrom).
+        plans = [
+            { def: foldDef, iterCount: foldBeats, values: foldValues, trackPrefix: foldTrack },
+            hostPlan,
+        ];
+        scheduleKind = 'counts';
+        repeatFrom = 1;
+    } else {
+        // Slot order: host base, then the fold (geometry injected BEFORE
+        // interlace — legacy precedence), then the interlace secondary.
+        plans = [hostPlan];
+        if (useFold && foldDef) {
+            plans.push({
+                def: foldDef, iterCount: 1,
+                layer: isInterleave
+                    ? { interval: Math.max(1, Math.round(numOr(g.hybridSkip, 1))), startIter: g.hybridSwap ? 1 : 0, beats: foldBeats }
+                    : { interval: 1, startIter: 0, beats: foldBeats },
+                values: foldValues, trackPrefix: foldTrack,
+            });
+        }
+        if (useIl && secDef) {
+            plans.push({
+                def: secDef, iterCount: 1,
+                layer: {
+                    interval: Math.max(1, Math.round(numOr(il.interlaceInterval, 2))),
+                    startIter: Math.max(0, Math.round(numOr(il.interlaceStartIter, 0))),
+                },
+                values: (p) => il[`interlace${cap(p.id)}`] ?? p.default,
+                trackPrefix: (p) => `interlace.interlace${cap(p.id)}`,
+            });
+        }
+        scheduleKind = 'modulo';
     }
 
-    // ── Build + register the fused weave def (layered modulo; legacy phase
-    // semantics are byte-equal — first beat wins, geometry layer first).
+    // ── Build + register the fused weave def.
     const title = plans.map((pl) => pl.def.name ?? pl.def.id).join(' ⧉ ');
-    const slots = plans.map((pl) => nativeSlotShell(pl.def.id as string, 1));
+    const slots = plans.map((pl) => nativeSlotShell(pl.def.id as string, pl.iterCount));
     const { def, ledger } = emitFusedHybrid(
-        buildWeaveScene(slots, title, numOr(cm.iterations, 0) || undefined),
-        { schedule: { kind: 'modulo' }, enableGate: true },
+        buildWeaveScene(slots, title, numOr(cm.iterations, 0) || undefined, repeatFrom),
+        scheduleKind === 'modulo'
+            ? { schedule: { kind: 'modulo' }, enableGate: true }
+            : { enableGate: true },
     );
     if (!def) return bail(`weave emit failed: ${ledger.reasons.join('; ')}`);
 
@@ -257,14 +280,16 @@ function migrateLegacyWeaves(preset: any): void {
             ref: pl.def.id as string,
             slot: { ...slots[i], optionTypes: [...slots[i].optionTypes], optionValues: [...slots[i].optionValues] },
         })),
-        schedule: {
-            kind: 'modulo',
-            layers: plans.slice(1).map((pl) => ({
-                interval: pl.layer!.interval,
-                startIter: pl.layer!.startIter,
-                ...(pl.layer!.beats ? { beats: pl.layer!.beats } : {}),
-            })),
-        },
+        schedule: scheduleKind === 'modulo'
+            ? {
+                kind: 'modulo',
+                layers: plans.slice(1).map((pl) => ({
+                    interval: pl.layer!.interval,
+                    startIter: pl.layer!.startIter,
+                    ...(pl.layer!.beats ? { beats: pl.layer!.beats } : {}),
+                })),
+              }
+            : { kind: 'counts', repeatFrom },
     };
     registry.register(def);
     FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
@@ -279,7 +304,7 @@ function migrateLegacyWeaves(preset: any): void {
             const from = pl.trackPrefix?.(p);
             if (from) renames.set(from, `weave.${weaveBankKey(k, p.id)}`);
         }
-        if (k > 0 && pl.layer) {
+        if (scheduleKind === 'modulo' && k > 0 && pl.layer) {
             weave[`weaveInterval${k}`] = pl.layer.interval;
             weave[`weaveStartIter${k}`] = pl.layer.startIter;
             weave[`weaveBeats${k}`] = pl.layer.beats ?? 0;
@@ -287,17 +312,19 @@ function migrateLegacyWeaves(preset: any): void {
     });
     weave.weaveEnabled = enabled;
 
-    // Schedule + enable track retargets (per system, at its layer index).
+    // Schedule + enable track retargets.
     plans.forEach((pl, k) => {
         if (pl.def === secDef) {
             renames.set('interlace.interlaceInterval', `weave.weaveInterval${k}`);
             renames.set('interlace.interlaceStartIter', `weave.weaveStartIter${k}`);
             renames.set('interlace.interlaceEnabled', 'weave.weaveEnabled');
         } else if (pl.def === foldDef) {
-            // Fast path pins interval=1/start=0, so only hybridIter (→ beats) and
-            // the enable retarget; interleave also maps its skip → interval.
-            if (isInterleave) renames.set('geometry.hybridSkip', `weave.weaveInterval${k}`);
-            renames.set('geometry.hybridIter', `weave.weaveBeats${k}`);
+            // Modulo maps hybridSkip/Iter → interval/beats; counts bakes the
+            // intro length (hybridIter), so only the enable retargets there.
+            if (scheduleKind === 'modulo') {
+                if (isInterleave) renames.set('geometry.hybridSkip', `weave.weaveInterval${k}`);
+                renames.set('geometry.hybridIter', `weave.weaveBeats${k}`);
+            }
             renames.set('geometry.hybridMode', 'weave.weaveEnabled');
         }
     });
