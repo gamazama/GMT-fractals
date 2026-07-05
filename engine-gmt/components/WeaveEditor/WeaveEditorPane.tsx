@@ -563,9 +563,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     // Read-clamps import BOUNDS (convert.ts) — a fitter honouring different bounds
     // than the clamp would silently corrupt one conversion direction (spec §5.2).
     const layerVal = (k: number) => ({
-        interval: Math.max(1, clampI(store.weave?.[`weaveInterval${k}`] ?? 2, 1, BOUNDS.INTERVAL_MAX)),
-        start: clampI(store.weave?.[`weaveStartIter${k}`] ?? 0, 0, BOUNDS.START_MAX),
-        beats: clampI(store.weave?.[`weaveBeats${k}`] ?? 0, 0, BOUNDS.BEATS_MAX),
+        interval: Math.max(1, clampI(store.weave?.[`weaveInterval${k}`] ?? 1, 1, BOUNDS.INTERVAL_MAX)),
+        start: clampI(store.weave?.[`weaveStartIter${k}`] ?? k, 0, BOUNDS.START_MAX),
+        beats: clampI(store.weave?.[`weaveBeats${k}`] ?? 1, 0, BOUNDS.BEATS_MAX),
     });
     const setLayerVal = (k: number, field: 'weaveInterval' | 'weaveStartIter' | 'weaveBeats', n: number) =>
         store.setWeave?.({ [`${field}${k}`]:
@@ -1115,14 +1115,14 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                             <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[(draft.rows[rowIdx]?.colorIdx ?? 0) % SLOT_COLORS.length] }} />
                                             <span className="truncate text-fg">{draft.rows[rowIdx]?.label}</span>
                                         </div>
-                                        <Slider label="Interval" value={v.interval} min={1} max={8} step={1} className="-mx-3"
-                                            onChange={(n) => setLayerVal(k, 'weaveInterval', n)} defaultValue={2}
-                                            trackId={`weave.weaveInterval${k}`} liveValue={store.liveModulations?.[`weave.weaveInterval${k}`]} />
                                         <Slider label="Start" value={v.start} min={0} max={8} step={1} className="-mx-3"
-                                            onChange={(n) => setLayerVal(k, 'weaveStartIter', n)} defaultValue={0}
+                                            onChange={(n) => setLayerVal(k, 'weaveStartIter', n)} defaultValue={k}
                                             trackId={`weave.weaveStartIter${k}`} liveValue={store.liveModulations?.[`weave.weaveStartIter${k}`]} />
+                                        <Slider label="Interval" value={v.interval} min={1} max={8} step={1} className="-mx-3"
+                                            onChange={(n) => setLayerVal(k, 'weaveInterval', n)} defaultValue={1}
+                                            trackId={`weave.weaveInterval${k}`} liveValue={store.liveModulations?.[`weave.weaveInterval${k}`]} />
                                         <Slider label="Beats (0 = endless)" value={v.beats} min={0} max={8} step={1} className="-mx-3"
-                                            onChange={(n) => setLayerVal(k, 'weaveBeats', n)} defaultValue={0}
+                                            onChange={(n) => setLayerVal(k, 'weaveBeats', n)} defaultValue={1}
                                             trackId={`weave.weaveBeats${k}`} liveValue={store.liveModulations?.[`weave.weaveBeats${k}`]} />
                                     </div>
                                 );
