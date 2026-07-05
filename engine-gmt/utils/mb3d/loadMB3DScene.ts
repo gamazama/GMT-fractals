@@ -170,10 +170,12 @@ function mergeWeaveBanks(
 /**
  * Build + register + load a user-authored weave (the Weave Editor's Build button).
  *
- * Unlike scene imports, rebuilds happen INSIDE an editing session — so the current
- * camera / lights / atmosphere / materials / coloring are preserved (the Formula
- * Workshop preview pattern) and only the formula-bearing features (coreMath,
- * geometry, quality — the emit's DE routing) come from the new preset. The
+ * Unlike scene imports, rebuilds happen INSIDE an editing session — so the whole
+ * scene LOOK is preserved: camera, lights, atmosphere, materials, coloring, the
+ * geometry modifiers (Julia/offset · burning · rotation), coreMath, and every
+ * quality knob. The ONLY thing that refreshes to the rebuilt formula is the DE
+ * ESTIMATOR TYPE (structural — a different weave needs a different estimator);
+ * surviving slot banks + live rhythm carry over via mergeWeaveBanks. The
  * WeaveSpec-shaped `weaveSource` is attached to the def so the weave can be
  * reopened and re-edited (importSource pattern, ADR-0058/0089).
  */
@@ -243,9 +245,25 @@ export function loadUserWeave(
       optics: current.features?.optics,
       materials: current.features?.materials,
       coloring: current.features?.coloring,
-      coreMath: preset.features?.coreMath,
-      geometry: preset.features?.geometry,
-      quality: preset.features?.quality,
+      // Rebuild preserves the scene's LOOK — only the DE ESTIMATOR TYPE refreshes
+      // to the rebuilt formula (owner call 2026-07-05). geometry (Julia/offset,
+      // burning, rotation), coreMath, and every other quality knob (detail, fudge,
+      // escape radius, metric, AA) are the user's, carried over; `iterations` only
+      // floors UP to the weave's minimum cover so a larger weave still renders.
+      coreMath: {
+        ...(current.features?.coreMath ?? {}),
+        iterations: Math.max(
+          current.features?.coreMath?.iterations ?? 0,
+          preset.features?.coreMath?.iterations ?? 0,
+        ),
+      },
+      geometry: current.features?.geometry,
+      quality: {
+        ...(current.features?.quality ?? {}),
+        ...(preset.features?.quality?.estimator !== undefined
+          ? { estimator: preset.features.quality.estimator }
+          : {}),
+      },
       // Preserve the live RHYTHM params (weave*) AND the per-slot BANK values
       // (ws<k>*) of slots that survive the rebuild — a Build must not reset slot
       // params to formula defaults (ADR-0090). See mergeWeaveBanks.
