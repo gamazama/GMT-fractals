@@ -390,7 +390,7 @@ export const ColoringFeature: FeatureDefinition = {
         // so the inner loop is the sole writer.
         if (state?.trapEnabled) {
             builder.addDefine('TRAP_ENABLED', '1');
-            builder.addHybridFold('', '', `
+            builder.addPerIterInject(`
 #ifndef SELF_CONTAINED_SDE
                 if (i > 0) {
                     vec3 _zp = z.xyz;

@@ -9,7 +9,7 @@
 //  6. Coloring           — (core)
 //  7. Preambles          — addPreamble()
 //  8. Pre-DE Functions   — addFunction()
-//  9. DE (map/mapDist)   — setFormula(), setDistOverride(), addHybridFold()
+//  9. DE (map/mapDist)   — setFormula(), setDistOverride(), addPerIterInject()
 //                          + addPostMapCode() / addPostDistCode() [accumulative, injected inside map/mapDist]
 // 10. Post-DE Functions  — addPostDEFunction()         [can call map()/mapDist()]
 // 11. Material Eval      — addMaterialLogic()          [inside getSurfaceMaterial()]
@@ -62,9 +62,7 @@ export class ShaderBuilder {
     private postProcessLogic: string[] = [];   // Position 16: Inside applyPostProcessing(), after glow
     private shadingReflectionCode: string[] = []; // Position 15: Injected into calculateShading() reflection block
     private needsShading: boolean = false;        // Set by requestShading(); triggers getShadingGLSL() in buildFragment()
-    private hybridInit: string[] = [];
-    private hybridPreLoop: string[] = [];
-    private hybridInLoop: string[] = [];
+    private perIterInject: string[] = [];      // Position 9: top of each DE iteration, before the formula (burning mix, geom-trap accum)
 
     // 3. Distance Estimator Configuration
     private formulaLoopBody: string = "";
@@ -157,9 +155,7 @@ export class ShaderBuilder {
     private deMasterOptions(kernel: KernelFeatures): DEMasterOptions {
         return {
             loopInit: this.formulaInit,
-            hybridInit: this.hybridInit.join('\n'),
-            hybridPreLoop: this.hybridPreLoop.join('\n'),
-            hybridInLoop: this.hybridInLoop.join('\n'),
+            perIterInject: this.perIterInject.join('\n'),
             distOverrideInit: this.distOverrideInit,
             distOverrideInLoopFull: this.distOverrideInLoopFull,
             distOverrideInLoopGeom: this.distOverrideInLoopGeom,
@@ -251,12 +247,11 @@ export class ShaderBuilder {
         this.distOverridePostGeom = opts.postGeom ?? '';
     }
 
-    /** Position 9: Hybrid fold injection into the DE loop.
-     *  Used for: multi-formula hybrid fractals with pre/in-loop transforms. */
-    addHybridFold(init: string, preLoop: string, inLoop: string) {
-        if(init) this.hybridInit.push(init);
-        if(preLoop) this.hybridPreLoop.push(preLoop);
-        if(inLoop) this.hybridInLoop.push(inLoop);
+    /** Position 9: code injected at the TOP of each DE iteration loop, before the
+     *  main formula step. Used by geometry (burning-mode abs mix) and coloring
+     *  (geometric orbit-trap accumulation). */
+    addPerIterInject(code: string) {
+        if (code) this.perIterInject.push(code);
     }
 
     /** Position 11: Code injected inside getSurfaceMaterial() for material property overrides.
@@ -420,7 +415,7 @@ ${MESH_GLSL_UNIFORMS}
 
 // Stub uniforms required by DE_MASTER generated code (map + mapDist reference these;
 // only mapDist is called in the mesh SDF path but both functions must compile).
-// Any uniform referenced by features' hybridInLoop/hybridPreLoop injections also goes here.
+// Any uniform referenced by features' perIterInject injections also goes here.
 uniform vec3  uSceneOffsetLow;
 uniform vec3  uSceneOffsetHigh;
 uniform vec3  uCameraPosition;

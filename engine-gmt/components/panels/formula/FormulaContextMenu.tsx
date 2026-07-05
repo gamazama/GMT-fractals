@@ -171,12 +171,6 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
         const s = useEngineStore.getState(); // fresh state after params changed
         const geo = s.geometry;
         const geoUpdates: Record<string, number> = {};
-        if (geo.hybridMode) {
-            geoUpdates.hybridScale = pct >= 1 ? 1.5 + Math.random() * 1.5 : Math.max(1, Math.min(3, geo.hybridScale + (Math.random() * 2 - 1) * 2 * pct));
-            geoUpdates.hybridMinR = pct >= 1 ? Math.random() * 1.0 : Math.max(0, Math.min(1.5, geo.hybridMinR + (Math.random() * 2 - 1) * 1.5 * pct));
-            geoUpdates.hybridFixedR = pct >= 1 ? 0.5 + Math.random() * 1.5 : Math.max(0.1, Math.min(3, geo.hybridFixedR + (Math.random() * 2 - 1) * 2.9 * pct));
-            geoUpdates.hybridFoldLimit = pct >= 1 ? 0.5 + Math.random() * 1.5 : Math.max(0.1, Math.min(2, geo.hybridFoldLimit + (Math.random() * 2 - 1) * 1.9 * pct));
-        }
         if (geo.juliaMode) {
             geoUpdates.juliaX = pct >= 1 ? (Math.random() * 4 - 2) : Math.max(-2, Math.min(2, geo.juliaX + (Math.random() * 2 - 1) * 4 * pct));
             geoUpdates.juliaY = pct >= 1 ? (Math.random() * 4 - 2) : Math.max(-2, Math.min(2, geo.juliaY + (Math.random() * 2 - 1) * 4 * pct));

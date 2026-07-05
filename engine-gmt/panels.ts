@@ -43,9 +43,9 @@ export const GmtPanels: PanelManifest = [
 
     // Formula — manifest-driven. Each formula-related capability gets its
     // own section in the user's mental order. Geometry is one DDFS feature
-    // exposed as multiple panel surfaces (julia / local rotation / burning /
-    // hybrid box) so each user-visible concept has a dedicated section
-    // header without splitting the underlying feature module.
+    // exposed as multiple panel surfaces (julia / local rotation / burning)
+    // so each user-visible concept has a dedicated section header without
+    // splitting the underlying feature module.
     {
         id: 'Formula',
         dock: 'right',
@@ -174,7 +174,7 @@ export const GmtPanels: PanelManifest = [
 
             // --- Volumetric scatter (compile-toggle UI) ---
             // Renders via <CompilableFeatureSection> reading the
-            // feature's panelConfig — same shape as Hybrid Box. Plain
+            // feature's panelConfig — same shape as Burning Mode. Plain
             // `type: 'feature'` showed only the runtime sliders without
             // the compile toggle, leaving the user dependent on the
             // Engine panel to compile it on.

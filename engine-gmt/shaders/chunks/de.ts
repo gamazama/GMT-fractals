@@ -5,10 +5,9 @@ import type { KernelFeatures } from './kernel';
 export interface DEMasterOptions {
     /** Pre-loop state init (formula loopInit — e.g. MB3D scratch floats). */
     loopInit?: string;
-    hybridInit?: string;
-    hybridPreLoop?: string;
-    /** Per-iteration hybrid dispatch; may set `skipMainFormula` (declared only when used). */
-    hybridInLoop?: string;
+    /** Code injected at the top of each DE iteration loop, before the main formula
+     *  (geometry burning-mode mix, coloring geometric-trap accumulation). */
+    perIterInject?: string;
     distOverrideInit?: string;
     distOverrideInLoopFull?: string;
     distOverrideInLoopGeom?: string;
@@ -32,9 +31,7 @@ export const DE_MASTER = (
 ) => {
     const {
         loopInit = '',
-        hybridInit = '',
-        hybridPreLoop = '',
-        hybridInLoop = '',
+        perIterInject = '',
         distOverrideInit = '',
         distOverrideInLoopFull = '',
         distOverrideInLoopGeom = '',
@@ -45,9 +42,6 @@ export const DE_MASTER = (
         kernel = {},
     } = options;
     const numericDE = !!kernel.numericDE;
-    // When hybridInLoop sets skipMainFormula, we need the variable and if-wrapper.
-    // Otherwise emit the formula body directly — saves a bool + branch per iteration.
-    const needsSkip = hybridInLoop.includes('skipMainFormula');
 
     // --- Numerical (finite-difference) DE support (emitted only when numericDE) ---
     // Port of MB3D CalcDEnoADE (Calc.pas:445-523), conditioned for WebGL2 float32.
@@ -123,18 +117,15 @@ int centerCount(vec3 p) {
 
     ${distOverrideInit}
     ${loopInit}
-    ${hybridPreLoop}
 
     float bailout = max(uDeBailout, 1.0);
 
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= int(uIterations)) break;
 
-        ${needsSkip ? 'bool skipMainFormula = false;' : ''}
+        ${perIterInject}
 
-        ${hybridInLoop}
-
-        ${needsSkip ? 'if (!skipMainFormula) {' : '// --- Main Formula ---'}
+        // --- Main Formula ---
             applyPreRotation(z.xyz);
 
             #ifndef SKIP_PRE_BAILOUT
@@ -144,7 +135,6 @@ int centerCount(vec3 p) {
             ${formulaBody}
 
             applyPostRotation(z.xyz);
-        ${needsSkip ? '}' : ''}
 
         iter += 1.0;
 
@@ -177,24 +167,20 @@ float iterateLogRadius(vec3 p, int fixedIters) {
 
     ${distOverrideInit}
     ${loopInit}
-    ${hybridPreLoop}
 
     float ovf = 1.0e30;   // float32 overflow guard (well below FLT_MAX; log compresses it to ≤69)
 
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= fixedIters) break;
 
-        ${needsSkip ? 'bool skipMainFormula = false;' : ''}
+        ${perIterInject}
 
-        ${hybridInLoop}
-
-        ${needsSkip ? 'if (!skipMainFormula) {' : '// --- Main Formula ---'}
+        // --- Main Formula ---
             applyPreRotation(z.xyz);
 
             ${formulaBody}
 
             applyPostRotation(z.xyz);
-        ${needsSkip ? '}' : ''}
 
         iter += 1.0;
 
@@ -332,7 +318,6 @@ vec4 map(vec3 p) {
 
     ${distOverrideInit}
     ${loopInit}
-    ${hybridPreLoop}
 
     bool escaped = false;
     // Absolute raymarch bailout (uDeBailout, default 100), decoupled from the
@@ -346,11 +331,9 @@ vec4 map(vec3 p) {
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= int(uIterations)) break;
 
-        ${needsSkip ? 'bool skipMainFormula = false;' : ''}
+        ${perIterInject}
 
-        ${hybridInLoop}
-
-        ${needsSkip ? 'if (!skipMainFormula) {' : '// --- Main Formula ---'}
+        // --- Main Formula ---
             applyPreRotation(z.xyz);
 
             float r2_check = dot(z.xyz, z.xyz);
@@ -374,7 +357,6 @@ vec4 map(vec3 p) {
             ${formulaBody}
 
             applyPostRotation(z.xyz);
-        ${needsSkip ? '}' : ''}
 
         // Count completed iterations. After uIterations runs iter == uIterations,
         // which matches Fragmentarium's n counter used in explicit getDist expressions.
@@ -385,7 +367,7 @@ vec4 map(vec3 p) {
 
         // Geometric trap — accumulates here (post-formula, pre-snapshot) so
         // it shares z state + snapshot timing with g_orbitTrap above. The
-        // older addHybridFold position fired BEFORE the formula step and
+        // older per-iter-inject position fired BEFORE the formula step and
         // its skip-iter-0 guard left savedGeomTrap at 1e10 for low
         // uColorIter, freezing the trap to a flat constant. Self-contained
         // formulas thread their own trap math through their inner loop and
@@ -494,7 +476,6 @@ float mapDist(vec3 p) {
 
     ${distOverrideInit}
     ${loopInit}
-    ${hybridPreLoop}
 
     // Geometry-only twin of map()'s bailout — see that comment for the rationale.
     float bailout = max(uDeBailout, 1.0);
@@ -503,11 +484,9 @@ float mapDist(vec3 p) {
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= int(uIterations)) break;
 
-        ${needsSkip ? 'bool skipMainFormula = false;' : ''}
+        ${perIterInject}
 
-        ${hybridInLoop}
-
-        ${needsSkip ? 'if (!skipMainFormula) {' : '// --- Main Formula ---'}
+        // --- Main Formula ---
             applyPreRotation(z.xyz);
 
             #ifndef SKIP_PRE_BAILOUT
@@ -517,7 +496,6 @@ float mapDist(vec3 p) {
             ${formulaBody}
 
             applyPostRotation(z.xyz);
-        ${needsSkip ? '}' : ''}
 
         // Track completed iterations so getDist expressions that use iter
         // (e.g. r * pow(Scale, -iter)) receive the correct count for shadow marching.
