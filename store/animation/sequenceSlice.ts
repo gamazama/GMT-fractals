@@ -120,6 +120,20 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         });
     },
 
+    removeTracks: (ids) => {
+        if (ids.length === 0) return;
+        get().snapshot();
+        const drop = new Set(ids);
+        set(state => {
+            const newTracks = { ...state.sequence.tracks };
+            drop.forEach(id => delete newTracks[id]);
+            return {
+                sequence: { ...state.sequence, tracks: newTracks },
+                selectedTrackIds: state.selectedTrackIds.filter(tid => !drop.has(tid)),
+            };
+        });
+    },
+
     setTrackBehavior: (trackId, behavior) => {
         get().snapshot();
         set(state => {

@@ -45,6 +45,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
     // Action selectors — stable refs via Object.is bail-out.
     const selectKeyframes      = useAnimationStore((s) => s.selectKeyframes);
     const removeTrack          = useAnimationStore((s) => s.removeTrack);
+    const removeTracks         = useAnimationStore((s) => s.removeTracks);
     const setTrackBehavior     = useAnimationStore((s) => s.setTrackBehavior);
     const setTrackSelection    = useAnimationStore((s) => s.setTrackSelection);
     const toggleTrackSelection = useAnimationStore((s) => s.toggleTrackSelection);
@@ -256,12 +257,21 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                     {isVisible && <LiveValueDisplay tid={tid} />}
                     
                     {/* Visibility Eye */}
-                    <div 
+                    <div
                         className="p-1 rounded hover:bg-line/20 text-fg-dim hover:text-fg"
                         onClick={(e) => { e.stopPropagation(); toggleVisibility(tid); }}
                     >
                         <EyeIcon active={isVisible} />
                     </div>
+
+                    {/* Delete track */}
+                    <button
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-danger hover:text-danger transition-all"
+                        onClick={(e) => { e.stopPropagation(); removeTrack(tid); }}
+                        title="Delete Track"
+                    >
+                        <TrashIcon />
+                    </button>
                 </div>
             </div>
         );
@@ -328,12 +338,20 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                                     <SelectAllIcon />
                                 </button>
                                 
-                                <div 
+                                <div
                                     className="p-1 rounded hover:bg-line/10 text-fg-dim hover:text-fg"
                                     onClick={(e) => toggleGroupVisibility(ids)}
                                 >
                                     <EyeIcon active={isAllVisible || isPartiallyVisible} />
                                 </div>
+
+                                <button
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-danger hover:text-danger transition-all"
+                                    onClick={(e) => { e.stopPropagation(); removeTracks(ids); }}
+                                    title="Delete all tracks in this group"
+                                >
+                                    <TrashIcon />
+                                </button>
                             </div>
                         </div>
                         {!collapsedGroups.has(groupName) && ids.map(tid => renderRow(tid))}

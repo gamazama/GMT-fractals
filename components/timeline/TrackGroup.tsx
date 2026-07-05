@@ -1,7 +1,7 @@
 import React, { memo, useMemo } from 'react';
 import { TrackRow } from './TrackRow';
 import { AnimationSequence } from '../../types';
-import { FolderIcon } from '../Icons';
+import { FolderIcon, TrashIcon } from '../Icons';
 import { SelectionTransformBar } from './SelectionTransformBar';
 import { useAnimationStore } from '../../store/animationStore';
 
@@ -33,6 +33,7 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
     onStartTransform, visibleGraphTracks, onToggleVisibility, onSelectAllKeys,
 }) => {
     const sidebarWidth = useAnimationStore(s => s.timelineSidebarWidth);
+    const removeTracks = useAnimationStore(s => s.removeTracks);
 
     // Group-local selection range — only selected keys whose track belongs to this group.
     // Reuses the global transform-bar mechanism (drags affect ALL selected keys, but the
@@ -63,14 +64,23 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
             >
                 <div
                     // z-30 matches TrackRow's sticky sidebar so the group header sits above scrolling keyframes.
-                    className="sticky left-0 z-30 bg-surface-raised border-r border-line/10 shrink-0 flex items-center px-2 cursor-pointer hover:bg-fg-ghost select-none"
+                    className="sticky left-0 z-30 bg-surface-raised border-r border-line/10 shrink-0 flex items-center justify-between px-2 cursor-pointer hover:bg-fg-ghost select-none group"
                     style={{ width: sidebarWidth }}
                     onClick={(e) => { e.stopPropagation(); onToggle(groupName, e.altKey); }}
                     onMouseDown={(e) => e.stopPropagation()}
                     data-help-id="anim.tracks"
                 >
-                    <span className="text-fg-dim w-4"><FolderIcon open={!collapsed} /></span>
-                    <span className="text-[10px] font-bold text-fg-tertiary">{groupName}</span>
+                    <div className="flex items-center min-w-0">
+                        <span className="text-fg-dim w-4"><FolderIcon open={!collapsed} /></span>
+                        <span className="text-[10px] font-bold text-fg-tertiary truncate">{groupName}</span>
+                    </div>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); removeTracks(trackIds); }}
+                        className="opacity-0 group-hover:opacity-100 text-danger hover:text-danger p-0.5 shrink-0"
+                        title="Delete all tracks in this group"
+                    >
+                        <TrashIcon />
+                    </button>
                 </div>
                 {/* Keyframe area: group diamonds now live on the shared DopeSheetCanvas overlay.
                     pointer-events:none lets the empty row fall through to the canvas hit-test;
