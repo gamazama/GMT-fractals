@@ -43,6 +43,7 @@ import { showToast } from '../../../engine/store/toastStore';
 import { useEngineStore } from '../../../store/engineStore';
 import { registry } from '../../engine/FractalRegistry';
 import { buildBlockPlan } from '../../engine/weave/schedule';
+import { BOUNDS, fitRhythmFromPlan, runsFromRhythm, rhythmPhase, planPhase, rhythmPreviewPlan, certify, planStructure, rhythmStructure } from '../../engine/weave/convert';
 import { getMB3DCatalog, slotFromCatalogEntry } from '../../utils/mb3d/mb3dCatalog';
 import type { CatalogEntry } from '../../utils/mb3d/mb3dCatalog';
 import { loadUserWeave } from '../../utils/mb3d/loadMB3DScene';
@@ -544,13 +545,18 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     const rhythm = draft.scheduleKind === 'modulo' && rhythmOk;
     const activeRowIdx = draft.rows.map((r, i) => (r.slot.iterCount > 0 ? i : -1)).filter((i) => i >= 0);
     const clampI = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(n) || 0));
+    // Read-clamps import BOUNDS (convert.ts) — a fitter honouring different bounds
+    // than the clamp would silently corrupt one conversion direction (spec §5.2).
     const layerVal = (k: number) => ({
-        interval: Math.max(1, clampI(store.weave?.[`weaveInterval${k}`] ?? 2, 1, 32)),
-        start: clampI(store.weave?.[`weaveStartIter${k}`] ?? 0, 0, 64),
-        beats: clampI(store.weave?.[`weaveBeats${k}`] ?? 0, 0, 64),
+        interval: Math.max(1, clampI(store.weave?.[`weaveInterval${k}`] ?? 2, 1, BOUNDS.INTERVAL_MAX)),
+        start: clampI(store.weave?.[`weaveStartIter${k}`] ?? 0, 0, BOUNDS.START_MAX),
+        beats: clampI(store.weave?.[`weaveBeats${k}`] ?? 0, 0, BOUNDS.BEATS_MAX),
     });
     const setLayerVal = (k: number, field: 'weaveInterval' | 'weaveStartIter' | 'weaveBeats', n: number) =>
-        store.setWeave?.({ [`${field}${k}`]: field === 'weaveInterval' ? Math.max(1, clampI(n, 1, 32)) : clampI(n, 0, 64) });
+        store.setWeave?.({ [`${field}${k}`]:
+            field === 'weaveInterval' ? Math.max(1, clampI(n, 1, BOUNDS.INTERVAL_MAX))
+            : field === 'weaveBeats' ? clampI(n, 0, BOUNDS.BEATS_MAX)
+            : clampI(n, 0, BOUNDS.START_MAX) });
 
     // ── Live schedule preview ────────────────────────────────────────────────
     // Loop dividers → { afterRow index, repeat }, in row order, for buildBlockPlan
@@ -577,20 +583,88 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     // order, first beat wins; the base fills the rest. Beats caps make the layered
     // schedule non-periodic in general, so the strip shows the exact first
     // iterations (introLen = full length ⇒ no faded-repeat tail).
-    const rhythmPlan = (() => {
-        if (!rhythm) return null;
-        const layers = activeRowIdx.slice(1).map((rowIdx, j) => ({ rowIdx, ...layerVal(j + 1) }));
-        const order: number[] = [];
-        for (let i = 0; i < 96; i++) {
-            let s = activeRowIdx[0];
-            for (const L of layers) {
-                const rel = i - L.start;
-                if (rel >= 0 && rel % L.interval === 0 && (L.beats <= 0 || rel / L.interval < L.beats)) { s = L.rowIdx; break; }
-            }
-            order.push(s);
+    const rhythmPlan = rhythm
+        ? rhythmPreviewPlan(activeRowIdx.slice(1).map((_, j) => layerVal(j + 1)), activeRowIdx, iterCounts)
+        : null;
+
+    // ── Sequence ↔ Rhythm conversion (pattern-preserving; engine/weave/convert.ts).
+    // Both toggles convert the CURRENT LUT into the target mode's params EXACTLY, or
+    // flip mode without writes + a one-line reason (never approximate). Idempotence
+    // is checked first so an untouched round-trip is lossless. @see the logic spec.
+    const hasRhythmTracks = () =>
+        (store.animations ?? []).some((a: any) => a.enabled && typeof a.target === 'string'
+            && /^weave\.weave(Interval|StartIter|Beats)\d/.test(a.target));
+    const rowLabel = (i: number) => draft.rows[i]?.label ?? `slot ${i + 1}`;
+
+    const toRhythm = () => {
+        if (draft.scheduleKind === 'modulo') return;
+        // <2 active (or no plan): the toggle just marks intent — build falls back to
+        // Sequence until 2–6 slots are active. Nothing to convert yet.
+        if (!plan || !rhythmOk) { commit({ ...draft, scheduleKind: 'modulo' }); return; }
+        const curLayers = activeRowIdx.slice(1).map((_, j) => layerVal(j + 1));
+        if (certify(planPhase(plan), planStructure(plan), rhythmPhase(curLayers, activeRowIdx), rhythmStructure(curLayers)).equal) {
+            commit({ ...draft, scheduleKind: 'modulo' });
+            setStatus({ kind: 'ok', text: 'Rhythm — same pattern (kept your timing).' });
+            return;
         }
-        return { order, introLen: order.length, cycleLen: 1, endTo: 0, repeatFrom: 0, nHybrid: iterCounts, hasSilent: false };
-    })();
+        const res = fitRhythmFromPlan(plan, activeRowIdx, rowLabel);
+        if (!res.ok) {
+            commit({ ...draft, scheduleKind: 'modulo' });
+            setStatus({ kind: 'error', text: `Switched to Rhythm — kept your existing timing. ${res.reason}` });
+            return;
+        }
+        const writes: Record<string, number> = {};
+        res.layers.forEach((L, m) => {
+            const k = m + 1;
+            writes[`weaveInterval${k}`] = L.interval;
+            writes[`weaveStartIter${k}`] = L.start;
+            writes[`weaveBeats${k}`] = L.beats; // write beats even when 0 — stale beats corrupt the pattern
+        });
+        const warned = hasRhythmTracks();
+        store.setWeave?.(writes);                     // rhythm params → DDFS undo home
+        commit({ ...draft, scheduleKind: 'modulo' }); // one editor commit
+        setStatus({ kind: 'ok', text: `Converted to Rhythm — same pattern, now live.${warned ? ' (Overwrote keyframed rhythm timing.)' : ''}` });
+    };
+
+    const toSequence = () => {
+        if (draft.scheduleKind === 'counts') return;
+        if (!rhythmOk) { commit({ ...draft, scheduleKind: 'counts' }); return; }
+        const layers = activeRowIdx.slice(1).map((_, j) => layerVal(j + 1));
+        if (plan && certify(rhythmPhase(layers, activeRowIdx), rhythmStructure(layers), planPhase(plan), planStructure(plan)).equal) {
+            commit({ ...draft, scheduleKind: 'counts' });
+            setStatus({ kind: 'ok', text: 'Sequence — same pattern (kept your rows).' });
+            return;
+        }
+        const res = runsFromRhythm(layers, activeRowIdx, rowLabel);
+        if (!res.ok) {
+            commit({ ...draft, scheduleKind: 'counts' });
+            setStatus({ kind: 'error', text: `Switched to Sequence — kept your existing rows. ${res.reason}` });
+            return;
+        }
+        // Materialize runs → rows (reuse a row on first use, deep-clone after) + one
+        // intro divider; iterCount = run length.
+        const runs = [...res.introRuns, ...res.cycleRuns];
+        const used = new Set<number>();
+        const newRows: SlotRow[] = [];
+        for (const run of runs) {
+            const src = draft.rows[run.rowIdx];
+            const first = !used.has(run.rowIdx);
+            used.add(run.rowIdx);
+            newRows.push({
+                ...src,
+                key: first ? src.key : rowKey(),
+                colorIdx: first ? src.colorIdx : nextColorIdx(newRows),
+                slot: { ...src.slot, optionTypes: [...src.slot.optionTypes], optionValues: [...src.slot.optionValues], iterCount: run.count },
+                bake: src.bake ? [...src.bake] : undefined,
+            });
+        }
+        const dividers: WeaveDivider[] = res.introRuns.length
+            ? [{ afterKey: newRows[res.introRuns.length - 1].key, repeat: 1 }]
+            : [];
+        const warned = hasRhythmTracks();
+        commit({ ...draft, rows: newRows, dividers, scheduleKind: 'counts' });
+        setStatus({ kind: 'ok', text: `Converted to Sequence — same pattern, now baked.${warned ? ' (Rhythm was animated; baked the current values.)' : ''}` });
+    };
 
     // ── Build ────────────────────────────────────────────────────────────────
     const build = () => {
@@ -945,7 +1019,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                 active
                             </label>
                             <button
-                                onClick={() => draft.scheduleKind !== 'counts' && commit({ ...draft, scheduleKind: 'counts' })}
+                                onClick={toSequence}
                                 className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${!rhythm
                                     ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
                                     : 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'}`}
@@ -954,7 +1028,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                             </button>
                             <button
                                 disabled={!rhythmOk && draft.scheduleKind !== 'modulo'}
-                                onClick={() => draft.scheduleKind !== 'modulo' && commit({ ...draft, scheduleKind: 'modulo' })}
+                                onClick={toRhythm}
                                 className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${rhythm
                                     ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
                                     : rhythmOk

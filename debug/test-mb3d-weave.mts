@@ -4,6 +4,7 @@
  */
 import { buildWeaveSequence, emitWeaveGLSL, weaveSpecFromMB3D } from '../engine-gmt/utils/mb3d/weaveSequencer.ts';
 import { emitModuloScheduleGLSL, buildBlockPlan, buildCountsPlan } from '../engine-gmt/engine/weave/schedule.ts';
+import { BOUNDS, fitRhythmFromPlan, runsFromRhythm, rhythmPhase, planPhase, simulate } from '../engine-gmt/engine/weave/convert.ts';
 import { assembleWeave } from '../engine-gmt/engine/weave/emitWeave.ts';
 import { emitFusedHybrid } from '../engine-gmt/utils/mb3d/emitFusedHybrid.ts';
 import { resolveNativeSlot } from '../engine-gmt/engine/weave/nativeResolver.ts';
@@ -1182,6 +1183,142 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   // A divider AT the last active row is dropped (no cycle would remain).
   const degen = buildBlockPlan({ iterCounts: [2, 1], dividers: [{ afterRow: 1, repeat: 3 }] });
   ck('blockPlan: divider at last row dropped (still one loop)', str(degen) === 'AAB' && degen.introLen === 0);
+}
+
+// ── Sequence ↔ Rhythm conversion (convert.ts) ────────────────────────────────
+{
+  const lbl = (i: number) => 'ABCDEF'[i] ?? `s${i}`;
+  const activeOf = (counts: number[]) => counts.map((c, i) => (c > 0 ? i : -1)).filter((i) => i >= 0);
+  const eqLUT = (a: number[], b: number[]) => JSON.stringify(a) === JSON.stringify(b);
+  const pairs = (rs: { rowIdx: number; count: number }[]) => rs.map((r) => [r.rowIdx, r.count]);
+
+  // -- Sequence → Rhythm fits + LUT preservation --
+  {
+    const plan = buildBlockPlan({ iterCounts: [1, 1], dividers: [] });
+    const fit = fitRhythmFromPlan(plan, activeOf([1, 1]), lbl);
+    ck('fit: A×1 B×1 → B(I2,S1,endless)',
+      fit.ok && fit.layers.length === 1 && fit.layers[0].interval === 2 && fit.layers[0].start === 1 && fit.layers[0].beats === 0,
+      fit.ok ? fit.layers : fit.reason);
+    if (fit.ok) ck('fit: A×1 B×1 LUT equal',
+      eqLUT(simulate(planPhase(plan), 40), simulate(rhythmPhase(fit.layers, activeOf([1, 1])), 40)));
+  }
+  {
+    const counts = [3, 1, 1];
+    const plan = buildBlockPlan({ iterCounts: counts, dividers: [] });
+    const fit = fitRhythmFromPlan(plan, activeOf(counts), lbl);
+    ck('fit: A×3 B×1 C×1 → B(I5,S3) C(I5,S4)',
+      fit.ok && fit.layers[0].interval === 5 && fit.layers[0].start === 3 && fit.layers[1].interval === 5 && fit.layers[1].start === 4,
+      fit.ok ? fit.layers : fit.reason);
+    if (fit.ok) ck('fit: A×3 B×1 C×1 LUT equal',
+      eqLUT(simulate(planPhase(plan), 40), simulate(rhythmPhase(fit.layers, activeOf(counts)), 40)));
+  }
+  {
+    // divider intro: [A×2 B×1]×2 then C D → B capped (S2,I3,B2); C,D endless past intro
+    const counts = [2, 1, 1, 1];
+    const plan = buildBlockPlan({ iterCounts: counts, dividers: [{ afterRow: 1, repeat: 2 }] });
+    const fit = fitRhythmFromPlan(plan, activeOf(counts), lbl);
+    ck('fit: divider intro [A×2 B]×2 then C D',
+      fit.ok && fit.layers[0].interval === 3 && fit.layers[0].start === 2 && fit.layers[0].beats === 2,
+      fit.ok ? fit.layers : fit.reason);
+    if (fit.ok) ck('fit: divider-intro LUT equal',
+      eqLUT(simulate(planPhase(plan), 60), simulate(rhythmPhase(fit.layers, activeOf(counts)), 60)));
+  }
+
+  // -- Sequence → Rhythm refusals with exact reasons --
+  {
+    const fit = fitRhythmFromPlan(buildBlockPlan({ iterCounts: [2, 2], dividers: [] }), activeOf([2, 2]), lbl);
+    ck('fit refuse: A×2 B×2 uneven gaps', !fit.ok && /unevenly/.test(fit.ok ? '' : fit.reason), fit.ok ? '' : fit.reason);
+  }
+  {
+    const fit = fitRhythmFromPlan(buildBlockPlan({ iterCounts: [2, -1, 1], dividers: [] }), [0, 2], lbl);
+    ck('fit refuse: silent slot', !fit.ok && /Silent/.test(fit.ok ? '' : fit.reason), fit.ok ? '' : fit.reason);
+  }
+  {
+    // cycle 33 (A×32 B×1 loops) → B interval 33 > INTERVAL_MAX
+    const fit = fitRhythmFromPlan(buildBlockPlan({ iterCounts: [32, 1], dividers: [] }), activeOf([32, 1]), lbl);
+    ck('fit refuse: cycle 33 outside interval range', !fit.ok && /range/.test(fit.ok ? '' : fit.reason), fit.ok ? '' : fit.reason);
+  }
+
+  // -- Rhythm → Sequence bakes --
+  {
+    // base-interleave: B(I5,S2) + C(I5,S4) → cycle A A B A C (4 rows, base duplicated)
+    const layers = [{ interval: 5, start: 2, beats: 0 }, { interval: 5, start: 4, beats: 0 }];
+    const runs = runsFromRhythm(layers, [0, 1, 2], lbl);
+    ck('runs: base-interleave → A×2 B A C (dup base, 4 rows)',
+      runs.ok && runs.introRuns.length === 0 && eqLUT(pairs(runs.cycleRuns).flat(), [0, 2, 1, 1, 0, 1, 2, 1]),
+      runs.ok ? pairs(runs.cycleRuns) : runs.reason);
+  }
+  {
+    // capped-layer intro → divider: base A + B(I1,S0,B2) → B×2 intro, A cycle
+    const runs = runsFromRhythm([{ interval: 1, start: 0, beats: 2 }], [0, 1], lbl);
+    ck('runs: capped intro → B×2 intro + A cycle',
+      runs.ok && eqLUT(pairs(runs.introRuns).flat(), [1, 2]) && eqLUT(pairs(runs.cycleRuns).flat(), [0, 1]),
+      runs.ok ? { intro: pairs(runs.introRuns), cyc: pairs(runs.cycleRuns) } : runs.reason);
+  }
+  {
+    // minimal-period reduction: B(I2,S0) + C(I2,S1) → cycle len 2 (B C)
+    const runs = runsFromRhythm([{ interval: 2, start: 0, beats: 0 }, { interval: 2, start: 1, beats: 0 }], [0, 1, 2], lbl);
+    ck('runs: two I=2 layers → cycle len 2 (B C)',
+      runs.ok && runs.introRuns.length === 0 && eqLUT(pairs(runs.cycleRuns).flat(), [1, 1, 2, 1]),
+      runs.ok ? pairs(runs.cycleRuns) : runs.reason);
+  }
+
+  // -- Rhythm → Sequence refusals --
+  {
+    // co-prime 2 & 5 with 3 active rows → 10 runs > MAX_ROWS
+    const runs = runsFromRhythm([{ interval: 2, start: 0, beats: 0 }, { interval: 5, start: 0, beats: 0 }], [0, 1, 2], lbl);
+    ck('runs refuse: co-prime 2&5 over row budget', !runs.ok && /slot rows/.test(runs.ok ? '' : runs.reason), runs.ok ? '' : runs.reason);
+  }
+  {
+    // period lcm(31,32,27)=26784 > W_MAX → refuse before RLE
+    const runs = runsFromRhythm(
+      [{ interval: 31, start: 0, beats: 0 }, { interval: 32, start: 0, beats: 0 }, { interval: 27, start: 0, beats: 0 }],
+      [0, 1, 2, 3], lbl);
+    ck('runs refuse: period over W_MAX', !runs.ok && /too long to bake/.test(runs.ok ? '' : runs.reason), runs.ok ? '' : runs.reason);
+  }
+
+  // -- Property fuzz: fit ok ⇒ LUT certificate holds (the disjointness argument) --
+  {
+    let ok = true, checked = 0;
+    for (let t = 0; t < 400 && ok; t++) {
+      const nRows = 2 + Math.floor(Math.random() * 4);
+      const counts = Array.from({ length: nRows }, () => 1 + Math.floor(Math.random() * 3));
+      const dividers = Math.random() < 0.5 ? [{ afterRow: Math.floor(Math.random() * (nRows - 1)), repeat: 1 + Math.floor(Math.random() * 2) }] : [];
+      const plan = buildBlockPlan({ iterCounts: counts, dividers });
+      const active = activeOf(counts);
+      const fit = fitRhythmFromPlan(plan, active, lbl);
+      if (fit.ok) { checked++; if (!eqLUT(simulate(planPhase(plan), 240), simulate(rhythmPhase(fit.layers, active), 240))) ok = false; }
+    }
+    ck(`fuzz: fit ok ⇒ LUT equal (${checked} fits)`, ok && checked > 0);
+  }
+  // -- Property fuzz: runs ok ⇒ replayed plan reproduces the rhythm --
+  {
+    let ok = true, checked = 0;
+    for (let t = 0; t < 400 && ok; t++) {
+      const nLayers = 1 + Math.floor(Math.random() * 2);
+      const active = Array.from({ length: nLayers + 1 }, (_, i) => i);
+      const layers = Array.from({ length: nLayers }, () => ({
+        interval: 1 + Math.floor(Math.random() * 5), start: Math.floor(Math.random() * 4),
+        beats: Math.random() < 0.4 ? 1 + Math.floor(Math.random() * 3) : 0,
+      }));
+      const runs = runsFromRhythm(layers, active, lbl);
+      if (runs.ok) {
+        checked++;
+        const all = [...runs.introRuns, ...runs.cycleRuns];
+        const p2 = buildBlockPlan({ iterCounts: all.map((r) => r.count), dividers: runs.introRuns.length ? [{ afterRow: runs.introRuns.length - 1, repeat: 1 }] : [] });
+        const rows = all.map((r) => r.rowIdx);
+        const src = simulate(rhythmPhase(layers, active), 300);
+        const got = simulate((i: number) => rows[planPhase(p2)(i)] ?? rows[0], 300);
+        if (!eqLUT(src, got)) ok = false;
+      }
+    }
+    ck(`fuzz: runs ok ⇒ replay equal (${checked} bakes)`, ok && checked > 0);
+  }
+
+  // -- Clamp coherence: BOUNDS are the documented values (layerVal imports them) --
+  ck('BOUNDS coherent (32/64/64/6/192/4096)',
+    BOUNDS.INTERVAL_MAX === 32 && BOUNDS.START_MAX === 64 && BOUNDS.BEATS_MAX === 64 &&
+    BOUNDS.MAX_ROWS === 6 && BOUNDS.MAX_LUT === 192 && BOUNDS.W_MAX === 4096);
 }
 
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);
