@@ -91,7 +91,7 @@ export const CategoryPickerMenu: React.FC<CategoryPickerMenuProps> = ({
         // Horizontal positioning — flip only when the menu would overflow the viewport
         const shouldFlip = x + menuWidth > winW - padding;
 
-        let left: number;
+        let left = x;
         let right = 0;
         if (shouldFlip) {
             // Pin the container's RIGHT edge to the trigger's right edge (or x if no
@@ -102,12 +102,8 @@ export const CategoryPickerMenu: React.FC<CategoryPickerMenuProps> = ({
             if (rightEdge - menuWidth < padding) rightEdge = menuWidth + padding;
             if (rightEdge > winW - padding) rightEdge = winW - padding;
             right = winW - rightEdge;
-            left = rightEdge - menuWidth; // informational; not applied when flipped
-        } else {
-            left = x;
-        }
-        // Final horizontal clamp (non-flipped path only — flipped is right-anchored)
-        if (!shouldFlip && left + menuWidth > winW - padding) {
+        } else if (left + menuWidth > winW - padding) {
+            // Non-flipped: clamp so the menu doesn't overflow the right edge.
             left = Math.max(padding, winW - menuWidth - padding);
         }
 
