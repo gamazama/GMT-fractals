@@ -101,20 +101,25 @@ params.weaveEnabled = {
 
 // ── Rhythm (layered modulo) schedule ────────────────────────────────────────
 for (let k = 1; k <= WEAVE_MAX_LAYERS; k++) {
+    // Fresh-layer defaults (never-set layer index): start = its slot number k,
+    // every 1 iteration, 2 beats — the sensible "just added a formula" rhythm.
+    // Built weaves / migrated scenes overwrite these explicitly, so the default
+    // only surfaces for a brand-new editor add (no byte-identity / migration
+    // impact — unused layers aren't emitted).
     params[`weaveInterval${k}`] = {
-        type: 'float', default: 2, label: `Layer ${k} Interval`, shortId: `wvi${k}`,
+        type: 'float', default: 1, label: `Layer ${k} Interval`, shortId: `wvi${k}`,
         uniform: `uWeaveInterval${k}`, min: 1, max: 32, step: 1,
         group: 'weave_rhythm',
         description: `Rhythm layer ${k}: its formula runs every N iterations. Live — no recompile.`,
     };
     params[`weaveStartIter${k}`] = {
-        type: 'float', default: 0, label: `Layer ${k} Start`, shortId: `wvs${k}`,
+        type: 'float', default: k, label: `Layer ${k} Start`, shortId: `wvs${k}`,
         uniform: `uWeaveStartIter${k}`, min: 0, max: 64, step: 1,
         group: 'weave_rhythm',
         description: `Rhythm layer ${k}: first iteration where its formula runs. Live — no recompile.`,
     };
     params[`weaveBeats${k}`] = {
-        type: 'float', default: 0, label: `Layer ${k} Beats`, shortId: `wvb${k}`,
+        type: 'float', default: 2, label: `Layer ${k} Beats`, shortId: `wvb${k}`,
         uniform: `uWeaveBeats${k}`, min: 0, max: 64, step: 1,
         group: 'weave_rhythm',
         description: `Rhythm layer ${k}: stop after this many beats (0 = endless). A dense capped layer works as a sequence-style intro. Live — no recompile.`,

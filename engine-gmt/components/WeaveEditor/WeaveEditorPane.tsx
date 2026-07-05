@@ -401,6 +401,8 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         } else {
             const built = rowFromKey(key, nextColorIdx(draft.rows), DEFAULT_ITER_COUNT);
             if (!built) return;
+            // Rhythm-layer timing defaults (start = k, every 1, 2 beats) come from the
+            // weave feature's per-index param defaults — see engine-gmt/features/weave.ts.
             commit({ ...draft, rows: [...draft.rows, built] });
         }
     };
@@ -619,7 +621,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     const layerVal = (k: number) => ({
         interval: Math.max(1, clampI(store.weave?.[`weaveInterval${k}`] ?? 1, 1, BOUNDS.INTERVAL_MAX)),
         start: clampI(store.weave?.[`weaveStartIter${k}`] ?? k, 0, BOUNDS.START_MAX),
-        beats: clampI(store.weave?.[`weaveBeats${k}`] ?? 1, 0, BOUNDS.BEATS_MAX),
+        beats: clampI(store.weave?.[`weaveBeats${k}`] ?? 2, 0, BOUNDS.BEATS_MAX),
     });
     const setLayerVal = (k: number, field: 'weaveInterval' | 'weaveStartIter' | 'weaveBeats', n: number) =>
         store.setWeave?.({ [`${field}${k}`]:
@@ -1191,7 +1193,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                             onChange={(n) => setLayerVal(k, 'weaveInterval', n)} defaultValue={1}
                                             trackId={`weave.weaveInterval${k}`} liveValue={store.liveModulations?.[`weave.weaveInterval${k}`]} />
                                         <Slider label="Beats (0 = endless)" value={v.beats} min={0} max={8} step={1} className="-mx-3"
-                                            onChange={(n) => setLayerVal(k, 'weaveBeats', n)} defaultValue={1}
+                                            onChange={(n) => setLayerVal(k, 'weaveBeats', n)} defaultValue={2}
                                             trackId={`weave.weaveBeats${k}`} liveValue={store.liveModulations?.[`weave.weaveBeats${k}`]} />
                                     </div>
                                 );
