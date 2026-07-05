@@ -3,10 +3,13 @@
  *
  * Old scenes carry "schedule a second formula across the iteration loop" state
  * in two legacy features: `features.interlace` (2-formula modulo alternation —
- * feature retired in P4.4) and geometry's Hybrid Box INTERLEAVED mode
- * (`hybridComplex` — emission retired in P4.5; the pre-loop FAST path is NOT a
- * weave and stays in geometry untouched). Both are modulo weaves; the weave
- * core is their superset. This module converts that persisted state AT LOAD:
+ * feature retired in P4.4) and geometry's Hybrid Box — BOTH its INTERLEAVED
+ * mode (`hybridComplex` — emission retired in P4.5) AND its pre-loop FAST path
+ * (retired in P4.7). All are modulo weaves; the weave core is their superset.
+ * The fast path maps to a DENSE intro layer (interval 1 from iteration 0), so
+ * the fold runs on the first hybridIter iterations exactly as the pre-loop did
+ * — z-identical, with an accepted colour/bailout shift (those iterations now
+ * count). This module converts that persisted state AT LOAD:
  *
  *   host formula [+ Hybrid Box interleave] [+ interlace secondary]
  *     →  a registered native weave on a LAYERED modulo schedule:
@@ -107,9 +110,9 @@ function retargetTracks(preset: any, renames: Map<string, string>): void {
     }
 }
 
-/** Switch the legacy hybrid interleave OFF on the geometry slice (the fold
- *  now lives on the weave — or never fired). Fast-path fields (hybridCompiled
- *  with hybridComplex false) are NEVER touched by the caller. */
+/** Switch the legacy Hybrid Box OFF on the geometry slice — the fold now lives
+ *  on the weave (whether interleave or the retired fast path), or it never
+ *  fired. Idempotent: hybridCompiled → false makes re-migration a no-op. */
 function clearInterleaveState(g: any): void {
     delete g.hybridComplex;
     delete g.hybridSkip;
@@ -127,28 +130,37 @@ function migrateLegacyWeaves(preset: any): void {
     }
     const il = feats.interlace;
     const g = feats.geometry ?? {};
-    const hbConfigured = !!(g.hybridCompiled && g.hybridComplex);
-    const hbBeats = Math.max(0, Math.round(numOr(g.hybridIter, 2)));
-    // Legacy maxCount semantics: hybridIter < 1 ⇒ the fold NEVER ran (the
-    // layered `beats: 0` would mean ENDLESS — the opposite). Treat as inactive.
-    const hb = hbConfigured && hbBeats >= 1;
-    if (hbConfigured && !hb) clearInterleaveState(g);
-    if (!il && !hb) return;
+    // Hybrid Box fold — present whenever compiled, in EITHER legacy mode:
+    //   INTERLEAVED (hybridComplex; emission retired P4.5) → its own modulo
+    //     schedule (hybridSkip / hybridSwap).
+    //   pre-loop FAST path (!hybridComplex; retired P4.7) → a DENSE intro:
+    //     interval 1 from iteration 0, so the fold runs on the first hybridIter
+    //     iterations exactly as the pre-loop did.
+    // Both migrate to the matching BoxFold FORMULA on a modulo layer.
+    const foldCompiled = !!g.hybridCompiled;
+    const isInterleave = !!g.hybridComplex;
+    const foldBeats = Math.max(0, Math.round(numOr(g.hybridIter, 2)));
+    // hybridIter < 1 ⇒ the fold NEVER ran (fast path: the pre-loop cap hLim=0;
+    // interleave: the layered `beats: 0` would mean ENDLESS — the opposite).
+    // Treat as inactive.
+    const hasFold = foldCompiled && foldBeats >= 1;
+    if (foldCompiled && !hasFold) clearInterleaveState(g);
+    if (!il && !hasFold) return;
 
     const bail = (why: string) =>
         console.warn(`[weaveMigration] legacy scene NOT migrated — ${why}. Loading the base formula; legacy state kept.`);
 
     // ── Enable agree-policy (combined scenes; owner call 2026-07-04).
     const ilEnabled = il ? !!il.interlaceEnabled : undefined;
-    const hbEnabled = hb ? !!g.hybridMode : undefined;
+    const foldEnabled = hasFold ? !!g.hybridMode : undefined;
     let useIl = !!il;
-    let useHb = hb;
-    if (il && hb && ilEnabled !== hbEnabled) {
+    let useFold = hasFold;
+    if (il && hasFold && ilEnabled !== foldEnabled) {
         console.warn('[weaveMigration] combined interlace + Hybrid Box scene with disagreeing enables — migrating only the ENABLED system (one whole-weave gate; per-slot mute is backlog).');
         useIl = !!ilEnabled;
-        useHb = !!hbEnabled;
+        useFold = !!foldEnabled;
     }
-    const enabled = useIl ? !!ilEnabled : useHb ? !!hbEnabled : false;
+    const enabled = useIl ? !!ilEnabled : useFold ? !!foldEnabled : false;
 
     // ── Resolve the slot formulas.
     const hostId = preset.formula as string;
@@ -166,7 +178,7 @@ function migrateLegacyWeaves(preset: any): void {
         if (secReject) return bail(`secondary: ${secReject}`);
     }
     let foldDef: FractalDefinition | undefined;
-    if (useHb) {
+    if (useFold) {
         const foldId = boxFoldFormulaId(Math.round(numOr(g.hybridFoldType, 0)));
         foldDef = registry.get(foldId as any) as FractalDefinition | undefined;
         if (!foldDef) return bail(`fold formula "${foldId}" is not registered`);
@@ -174,7 +186,7 @@ function migrateLegacyWeaves(preset: any): void {
             console.warn('[weaveMigration] legacy hybridPermute is not carried onto the BoxFold slot — migrating with the default c mapping.');
         }
     }
-    if (!useIl && !useHb) {
+    if (!useIl && !useFold) {
         // Combined scene where the enabled side failed above never reaches here;
         // both-disabled single systems migrate with the gate off instead.
         return;
@@ -195,14 +207,21 @@ function migrateLegacyWeaves(preset: any): void {
         values: (p) => cm[p.id] ?? p.default,
         trackPrefix: (p) => `coreMath.${p.id}`,
     }];
-    if (useHb && foldDef) {
+    if (useFold && foldDef) {
         plans.push({
             def: foldDef,
-            layer: {
-                interval: Math.max(1, Math.round(numOr(g.hybridSkip, 1))),
-                startIter: g.hybridSwap ? 1 : 0,
-                beats: hbBeats,
-            },
+            // Interleave keeps its own modulo schedule; the FAST path becomes a
+            // dense intro (interval 1 from iter 0), so the fold runs on the first
+            // hybridIter iterations — z-identical to the pre-loop fold. (The only
+            // change: those iterations now COUNT, so iteration-based colour +
+            // bailout shift by hybridIter — the P4.7 accepted look change.)
+            layer: isInterleave
+                ? {
+                    interval: Math.max(1, Math.round(numOr(g.hybridSkip, 1))),
+                    startIter: g.hybridSwap ? 1 : 0,
+                    beats: foldBeats,
+                  }
+                : { interval: 1, startIter: 0, beats: foldBeats },
             values: (p) => (BOXFOLD_LEGACY_KEYS[p.id] !== undefined ? g[BOXFOLD_LEGACY_KEYS[p.id]] : undefined) ?? p.default,
             trackPrefix: (p) => BOXFOLD_LEGACY_KEYS[p.id] ? `geometry.${BOXFOLD_LEGACY_KEYS[p.id]}` : undefined,
         });
@@ -275,7 +294,9 @@ function migrateLegacyWeaves(preset: any): void {
             renames.set('interlace.interlaceStartIter', `weave.weaveStartIter${k}`);
             renames.set('interlace.interlaceEnabled', 'weave.weaveEnabled');
         } else if (pl.def === foldDef) {
-            renames.set('geometry.hybridSkip', `weave.weaveInterval${k}`);
+            // Fast path pins interval=1/start=0, so only hybridIter (→ beats) and
+            // the enable retarget; interleave also maps its skip → interval.
+            if (isInterleave) renames.set('geometry.hybridSkip', `weave.weaveInterval${k}`);
             renames.set('geometry.hybridIter', `weave.weaveBeats${k}`);
             renames.set('geometry.hybridMode', 'weave.weaveEnabled');
         }
@@ -284,7 +305,7 @@ function migrateLegacyWeaves(preset: any): void {
     preset.formula = def.id;
     feats.weave = weave;
     if (il) delete feats.interlace;                 // owner decision 2: cleared, no double-apply
-    if (hbConfigured) clearInterleaveState(g);      // interleave now lives on the weave
+    if (foldCompiled) clearInterleaveState(g);      // fold (interleave or fast path) now lives on the weave
     retargetTracks(preset, renames);
     console.info(`[weaveMigration] legacy scene → ${plans.length}-slot weave "${title}" (${def.id})`);
 }

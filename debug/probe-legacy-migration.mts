@@ -124,16 +124,19 @@ const scenes = [
         },
     }),
 
-    // Hybrid Box FAST PATH (pre-loop, !hybridComplex) — NOT a weave; must stay
-    // in geometry untouched through P4.5 (control shot).
+    // Hybrid Box FAST PATH (pre-loop, !hybridComplex) — retired P4.7. REFERENCE
+    // shot renders the legacy pre-loop engine (capture BEFORE retiring it);
+    // --migrated renders the dense-intro-layer weave. The ref↔migrated pair is
+    // NOT pixel-exact (colour/bailout shift by hybridIter) — the owner's verdict.
     legacyScene('hb-fastpath', 'Mandelbulb', {
+        coreMath: { iterations: 12 },
         geometry: {
             hybridCompiled: true, hybridMode: true, hybridComplex: false,
-            hybridIter: 4, hybridFoldType: 0, hybridScale: 2.0,
+            hybridIter: 3, hybridFoldType: 0, hybridScale: 2.0,
             hybridMinR: 0.5, hybridFixedR: 1.0,
             hybridFoldLimitVec: { x: 1, y: 1, z: 1 },
         },
-    }),
+    }, { cameraPos: { x: 0, y: 0, z: 6.5 }, targetDistance: 6.5 }),
 ].filter((s) => !ONLY || s.id === ONLY);
 
 // Persist the legacy scene files (the artifacts the round-trip gate loads).

@@ -1117,11 +1117,21 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       def?.weaveSource?.slots?.map((s: any) => s.label));
   }
 
-  // Fast path (hybridComplex false) is NOT a weave — untouched.
+  // Fast path (hybridComplex false) — retired P4.7. Migrates to a DENSE intro
+  // BoxFold layer (interval 1 from iter 0), IGNORING the interleave schedule
+  // fields (hybridSkip=2 / hybridSwap=true), so the fold runs on the first
+  // hybridIter iterations — z-identical to the pre-loop fold.
   {
     const p: any = migrateLegacyWeavePreset(legacyHb({}, { hybridComplex: false }));
-    ck('fastpath: untouched', p.formula === 'Mandelbulb' && p.features.geometry.hybridCompiled === true
-      && p.features.geometry.hybridMode === true && p.features.weave === undefined);
+    const def = registry.get(p.formula) as any;
+    ck('fastpath: migrates to a 2-slot weave',
+      /^MB3DHybrid/.test(p.formula) && def?.weaveSource?.slots?.length === 2, p.formula);
+    const w = p.features.weave;
+    ck('fastpath: dense intro layer (interval 1, start 0, beats = hybridIter)',
+      w?.weaveInterval1 === 1 && w?.weaveStartIter1 === 0 && w?.weaveBeats1 === 4 && w?.weaveEnabled === true,
+      { i: w?.weaveInterval1, s: w?.weaveStartIter1, b: w?.weaveBeats1, en: w?.weaveEnabled });
+    ck('fastpath: legacy geometry state cleared',
+      p.features.geometry.hybridCompiled === false && p.features.geometry.hybridComplex === undefined);
   }
 
   // hybridIter < 1: the legacy cap meant the fold NEVER ran — no weave, state off.
