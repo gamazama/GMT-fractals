@@ -128,11 +128,11 @@ function weaveSourceFromScene(scene: MB3DScene): FractalDefinition['weaveSource'
 /** Merge freshly-built weave feature state with the LIVE one on an editor Rebuild.
  *  Fresh supplies the schema + native BANK defaults (ADR-0090); from live we keep:
  *   - RHYTHM params (`weave*`) — the editor writes these to the store directly;
- *   - per-slot BANK values (`ws<k>*`) for any slot that SURVIVES unchanged (same
- *     bank index + same slot identity), so a Build with no structural change (or
- *     just param tweaks) doesn't reset slot params to formula defaults. A bank
- *     whose formula changed (reorder/replace) takes the fresh default — full
- *     per-slot value transfer across reorder is P4.6;
+ *   - per-slot BANK values (`ws<k>*`), FOLLOWING each slot across a reorder: a new
+ *     bank inherits the live values of the first not-yet-claimed OLD bank with the
+ *     same slot identity (kind:ref), re-indexed onto the new bank. So a Build that
+ *     only reorders/tweaks slots keeps every slot's params; a genuinely NEW slot
+ *     takes the fresh defaults. Duplicates of one formula claim old banks in order;
  *   - for a FIRST build off a single formula, that formula's live coreMath params
  *     carry onto bank 0 (same continuity).
  *  @see docs/adr/0090-weave-slot-banks.md */
@@ -150,19 +150,33 @@ function mergeWeaveBanks(
 
   const ident = (s?: { kind: string; ref: string | number }) => (s ? `${s.kind}:${s.ref}` : '');
   const oldSlots = (registry.get(oldFormula as any) as FractalDefinition | undefined)?.weaveSource?.slots ?? [];
+  const claimed = new Set<number>();
 
   newSlots.forEach((s, k) => {
-    const bankRe = new RegExp(`^ws${k}[A-Z]`);
-    if (ident(oldSlots[k]) && ident(oldSlots[k]) === ident(s)) {
-      // Slot survived at the same bank → keep its live param values.
-      for (const [key, v] of Object.entries(live)) if (bankRe.test(key)) merged[key] = v;
-    } else if (k === 0 && oldSlots.length === 0 && ident(s) === `native:${oldFormula}`) {
+    const id = ident(s);
+    // First not-yet-claimed OLD bank with the same slot identity, so a slot's live
+    // params FOLLOW it across a reorder (not pinned to the bank index). Duplicates
+    // of one formula claim old banks left-to-right.
+    let oldIdx = -1;
+    if (id) for (let j = 0; j < oldSlots.length; j++) {
+      if (!claimed.has(j) && ident(oldSlots[j]) === id) { oldIdx = j; break; }
+    }
+    if (oldIdx >= 0) {
+      claimed.add(oldIdx);
+      // Re-index bank oldIdx's live values (ws<oldIdx>*) onto new bank k (ws<k>*).
+      const re = new RegExp(`^ws${oldIdx}([A-Z].*)$`);
+      for (const [key, v] of Object.entries(live)) {
+        const m = key.match(re);
+        if (m) merged[`ws${k}${m[1]}`] = v;
+      }
+    } else if (k === 0 && oldSlots.length === 0 && id === `native:${oldFormula}`) {
       // First build off a single formula → carry its coreMath onto bank 0.
       for (const [key, v] of Object.entries(oldCoreMath)) {
         const bk = `ws0${cap(key)}`;
         if (bk in merged) merged[bk] = v;
       }
     }
+    // else: genuinely new slot → keep the fresh defaults already in `merged`.
   });
   return merged;
 }
