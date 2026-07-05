@@ -34,12 +34,19 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
 
     return (
         <div
-            className={`flex border-b border-line/5 bg-transparent hover:bg-line/5 ${flat ? 'opacity-50' : ''}`}
+            className="flex border-b border-line/5 bg-transparent hover:bg-line/5"
             style={{ height: 32 }}
             data-help-id="anim.tracks"
         >
+            {/* Flat-track dim lives on the sidebar column ONLY, never the row root.
+                `opacity < 1` forms a stacking context; on the full-width row that
+                context lifts the row (DOM order: after the canvas) above the z-0
+                DopeSheetCanvas and its root swallows keyframe clicks — flat rows
+                became unselectable. The sidebar sits at left:0 and never overlaps
+                the keyframe canvas, so dimming it here is safe. Same trap the
+                DopeSheet globalSummary comment warns about for `position`. */}
             <div
-                className={`sticky left-0 z-30 bg-surface/80 backdrop-blur-sm border-r border-line/10 shrink-0 flex items-center justify-between px-3 cursor-pointer group select-none ${isSelected ? 'border-l-2 border-l-accent-500' : ''}`}
+                className={`sticky left-0 z-30 bg-surface/80 backdrop-blur-sm border-r border-line/10 shrink-0 flex items-center justify-between px-3 cursor-pointer group select-none ${isSelected ? 'border-l-2 border-l-accent-500' : ''} ${flat ? 'opacity-50' : ''}`}
                 style={{ width: sidebarWidth }}
                 onClick={(e) => onSelect(e, tid)}
                 onMouseDown={(e) => e.stopPropagation()}
