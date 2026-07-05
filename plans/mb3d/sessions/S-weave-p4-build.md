@@ -1,5 +1,44 @@
 # Session prompt — Weave P4 build: native slots (P4.0–P4.3), then legacy absorption (P4.4+)
 
+> **P4.7 delivery 2026-07-05 (Opus, `S-weave-p4-7-consolidation.md`) — consolidation + Seq↔Rhythm conversion
+> DONE; import-modal dissolution (item 5) and NewSceneModal bridge drop (item 6) NOT done. NOT pushed.**
+>
+> **Editor → Formula-panel Weave section (items 1–3):** the editor moved into the Formula panel as a
+> collapsible Weave section (`eb22445`, layout `3e39397`); Hybrid Box became a preset group (`329eae7`);
+> the section auto-opens when the loaded formula is a weave (`b8c300e`) and MIRRORS the currently loaded
+> formula (`616264e`). UX polish this session: Add/Restore-current/Clear moved into a slim footer card joined
+> under the rows, Hybrid Box ▾ alone right-aligned, pre-Build rhythm fields got − + steppers, estimator hint
+> now points "below" (`f3c1b1a`). CategoryPickerMenu single-column + click-to-pin + flip fixes (`371a046`,
+> `6c8ff18`).
+>
+> **Fast path retired (item 4):** the Hybrid Box pre-loop fold engine physically deleted (`b529329`,
+> ADR-0091 update block `b01600d`); load-migration routes a legacy fast-path scene to a COUNTS intro slot
+> (`a3fbc16` → `3f616c0` — intro not modulo layer, the accepted non-pixel-exact look change). analytic-DE
+> precedence + power-slot fix (`ddcfb0f`); loop dividers as schedule structure (`c7a86f5`); sequence "stop at"
+> + rhythm compact/live controls (`7b32b29`).
+>
+> **Build/Rebuild look-preservation:** Build keeps slot param values (`50201a1`); Rebuild preserves the scene
+> look and refreshes ONLY the DE estimator routing (owner call — `60c68d9`); slot params follow the formula
+> across a reorder (`fed9005`); ADR-0090 notes `e560399`, `bc0a827`.
+>
+> **Sequence ↔ Rhythm LUT-preserving conversion (`engine-gmt/engine/weave/convert.ts`, spec
+> `plans/mb3d/weave-seq-rhythm-conversion.md`):** the mode toggle now converts the current LUT EXACTLY or
+> refuses with a one-line reason — a FIT (Seq→Rhythm) and SIMULATE-AND-COMPRESS (Rhythm→Seq), exactness
+> proven by an equality certificate over `max(intros)+lcm(cycles)` iterations (`374b4d1`). The base is EXPLICIT
+> by tail-dominance election (the row owning most of the repeating cycle), threaded as `weaveSource.schedule.
+> baseRow` through `emitFusedHybrid` — absent baseRow stays byte-identical to baseRow=0 (`cdbbd04`, spec §7).
+> Rhythm param model: Start/Interval/Beats order, live sliders full-bleed 0–8 (`af66de6`, `7f1d6e7`); Rhythm
+> selectable from a single active slot; Hybrid Box preset enters at rhythm start 0 pushing others +1 (`411e317`,
+> `30c6fdd`); Sequence-mode Hybrid Box lands in the FIRST slot with a loop divider after it (`7201796`).
+> **Fresh rhythm-layer defaults fixed at the SOURCE** — the `weave` feature's per-index param defaults are now
+> start=k / interval=1 / beats=2 (was 2/0/0; `2245034`) so a never-set layer reads sensibly without per-path writes.
+>
+> **Gates:** typecheck green every commit; `test:mb3d:weave` grown to **281**; MB3D emit byte-identity held
+> (defaults are runtime uniforms, never baked). convert.ts JSDoc de-staled (elected base).
+> **Remaining before v1+weave push:** P4.7 item 5 (Import MB3D modal still exists → slim import dialog from
+> FormulaPicker + File menu), item 6 (NewSceneModal in `app-gmt/AppGmt.tsx` still authors legacy interlace —
+> drop the bridge, author a weave directly), and **P4.6** (animation transfer).
+
 > **Fable delivery 2026-07-04 — P4.4+P4.5 DONE (legacy absorption + one-way load migration; ADR-0091).**
 > Commits: `96719a7` weaveEnabled master gate (opt-in via emitFusedHybrid opts; low-profile editor checkbox) ·
 > `02248c3` P4.4 interlace load-migration + LEAD-slot getDist splice · `37b365e` re-save round-trip test ·

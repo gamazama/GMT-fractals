@@ -6,8 +6,9 @@
  *   - Sequence (counts): rows' iterCount + loop dividers → buildBlockPlan → a
  *     baked `{order, introLen, cycleLen}` LUT. Expressive (any eventually-periodic
  *     pattern) but the editor row model allows only ONE run per row per cycle.
- *   - Rhythm  (modulo): base = first active row; each other active row fires on
- *     ONE arithmetic progression (interval / start / beats). Constrained.
+ *   - Rhythm  (modulo): one ELECTED base row (tail-dominance — the row owning most
+ *     of the repeating cycle; spec §7, `fitRhythmFromPlan`); each other active row
+ *     fires on ONE arithmetic progression (interval / start / beats). Constrained.
  *
  * So the two directions need different algorithms — a FIT (Sequence→Rhythm) and a
  * SIMULATE-AND-COMPRESS (Rhythm→Sequence) — but share one contract: convert
