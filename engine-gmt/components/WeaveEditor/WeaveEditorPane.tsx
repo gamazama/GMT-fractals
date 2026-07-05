@@ -215,6 +215,23 @@ function OptValInput({ value, onCommit }: { value: number; onCommit: (n: number)
     );
 }
 
+/** Compact labelled integer stepper (− input +) for the pre-Build rhythm timing
+ *  fields. Mirrors the iteration control's affordance so start/every/beats are
+ *  clickable, not type-only. Clamping to BOUNDS is done by the caller's setter. */
+function StepField({ label, value, min, onChange }: { label: string; value: number; min: number; onChange: (n: number) => void }) {
+    return (
+        <div className="flex items-center gap-0.5">
+            <span className="text-[10px] text-fg-tertiary mr-0.5">{label}</span>
+            <button onClick={() => onChange(value - 1)}
+                className="w-4 h-4 text-[10px] leading-none rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
+            <input value={value} inputMode="numeric" onChange={(e) => onChange(parseInt(e.target.value, 10) || min)}
+                className="w-8 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" />
+            <button onClick={() => onChange(value + 1)}
+                className="w-4 h-4 text-[10px] leading-none rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
+        </div>
+    );
+}
+
 /** Auto-name a weave from its active formulas ("ABox × Menger 3 × Koch"),
  *  shortened to fit. Used whenever the user leaves the name field empty. */
 function autoTitleOf(rows: SlotRow[]): string {
@@ -788,6 +805,17 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
 
     const clearAll = () => commit({ ...draft, rows: [], dividers: [], scheduleKind: 'counts' });
 
+    // "Restore current" — reset the draft back to mirror the currently loaded
+    // formula: its weaveSource if it carries one (a built weave / imported scene),
+    // else seed slot 0 with the plain formula. Same logic as the initial hydrate.
+    const restoreCurrent = () => {
+        const ws = (registry.get(store.formula) as FractalDefinition | undefined)?.weaveSource;
+        if (ws) { commit(draftFromWeaveSource(ws)); setStatus(null); return; }
+        const seed = seedRowFromFormula(store.formula);
+        commit({ ...draft, rows: seed ? [seed] : [], dividers: [], scheduleKind: 'counts' });
+        setStatus(null);
+    };
+
     // "Open current weave" — the active formula carries a weaveSource (a built
     // weave, an imported MB3D scene, or a loaded GMF) that differs from the draft.
     const currentWs = (registry.get(store.formula) as FractalDefinition | undefined)?.weaveSource;
@@ -866,23 +894,14 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     title="Redo structure edit">↷</button>
             </div>
 
-            {/* Add / Hybrid Box presets / Clear — above the rows */}
-            <div className="flex items-center gap-2">
-                <button onClick={(e) => openPicker(e)}
-                    className="px-2.5 py-1 text-[11px] font-bold rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors">
-                    + Add formula
-                </button>
+            {/* Hybrid Box presets — on its own, right-aligned above the rows.
+                Add / Restore / Clear live in the slim footer card under the rows. */}
+            <div className="flex items-center">
                 <button onClick={openHbPicker}
-                    className="px-2.5 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors"
+                    className="ml-auto px-2.5 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors"
                     title="Add a classic Hybrid Box fold as a weave slot — the retired Hybrid Box, as presets">
                     Hybrid Box ▾
                 </button>
-                {draft.rows.length > 0 && (
-                    <button onClick={clearAll}
-                        className="ml-auto px-2 py-1 text-[10px] rounded border bg-line/[0.04] border-line/10 text-fg-tertiary hover:text-fg-muted transition-colors">
-                        Clear
-                    </button>
-                )}
             </div>
 
             {/* Slot rows — two lines each: [handle · color · chevron · name · ×]
@@ -953,15 +972,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                     {dirty ? (
                                         <div className="flex items-center gap-2 text-[10px] text-fg-tertiary flex-wrap"
                                             title="Layer timing — set here before Build; after Build the live keyframable sliders appear under the schedule.">
-                                            <label className="flex items-center gap-1">start
-                                                <input value={lv.start} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveStartIter', parseInt(e.target.value, 10) || 0)}
-                                                    className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
-                                            <label className="flex items-center gap-1">every
-                                                <input value={lv.interval} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveInterval', parseInt(e.target.value, 10) || 1)}
-                                                    className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
-                                            <label className="flex items-center gap-1">beats
-                                                <input value={lv.beats} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveBeats', parseInt(e.target.value, 10) || 0)}
-                                                    className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
+                                            <StepField label="start" value={lv.start} min={0} onChange={(n) => setLayerVal(layerK, 'weaveStartIter', n)} />
+                                            <StepField label="every" value={lv.interval} min={1} onChange={(n) => setLayerVal(layerK, 'weaveInterval', n)} />
+                                            <StepField label="beats" value={lv.beats} min={0} onChange={(n) => setLayerVal(layerK, 'weaveBeats', n)} />
                                         </div>
                                     ) : (
                                         <span className="text-[10px] text-fg-tertiary shrink-0" title="Live timing — edit with the keyframable sliders under the schedule below.">
@@ -987,7 +1000,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                 <div className="text-[10px] text-fg-tertiary leading-relaxed space-y-1">
                                     <p>This formula's parameters are the sliders in the panel above — always live, nothing to set up here.</p>
                                     {store.showHints && (
-                                        <p>If the surface looks wrong, choose a different estimator in the <strong className="text-fg-muted">Quality</strong> panel.</p>
+                                        <p>If the surface looks wrong, choose a different estimator <strong className="text-fg-muted">below</strong>.</p>
                                     )}
                                 </div>
                             ) : (() => {
@@ -1073,6 +1086,25 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     </React.Fragment>
                     );
                 })}
+
+                {/* Add / Restore current / Clear — slim card joined under the rows. */}
+                <div className="rounded-lg border border-line/10 bg-surface-sunken/60 px-2 py-1.5 flex items-center gap-2">
+                    <button onClick={(e) => openPicker(e)}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors">
+                        + Add formula
+                    </button>
+                    <button onClick={restoreCurrent}
+                        className="px-2.5 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 transition-colors"
+                        title="Reset the weave back to the currently loaded formula">
+                        ↺ Restore current
+                    </button>
+                    {draft.rows.length > 0 && (
+                        <button onClick={clearAll}
+                            className="ml-auto px-2 py-1 text-[10px] rounded border bg-line/[0.04] border-line/10 text-fg-tertiary hover:text-fg-muted transition-colors">
+                            Clear
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Schedule */}
