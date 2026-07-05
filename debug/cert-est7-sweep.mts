@@ -26,16 +26,17 @@ async function main() {
     console.log(`  ${label.padEnd(28)} ok=${res?.ok} nonBlack=${(nb * 100).toFixed(1)}% sigmaG=${(sig[1] ?? 0).toFixed(4)} ${res?.error ?? ''} → ${out}`);
   }
 
-  // est7 PAIRED WITH the MB3D-faithful marcher (Lipschitz clamp + StepDiv), the intended combo.
-  const F = (np: number, extra: any = {}) => ({ quality: { estimator: 7, numDEeps: np, detail: 1.5, maxSteps: 300, mb3dFaithful: true, mb3dStepDiv: 0.3, mb3dDEsub: 0.0, ...extra }, coreMath: { iterations: 60 } });
-  console.log(`\n=== ${FORMULA} est7 + FAITHFUL marcher — numDEeps sweep (detail 1.5, iter 60, stepDiv 0.3) ===`);
+  // est7 at a fine step divisor (the faithful step IS the marcher since ADR-0092;
+  // the step divisor is quality.fudgeFactor — the old mb3dStepDiv/mb3dFaithful keys are retired).
+  const F = (np: number, extra: any = {}) => ({ quality: { estimator: 7, numDEeps: np, detail: 1.5, maxSteps: 300, fudgeFactor: 0.3, mb3dDEsub: 0.0, ...extra }, coreMath: { iterations: 60 } });
+  console.log(`\n=== ${FORMULA} est7 — numDEeps sweep (detail 1.5, iter 60, stepDiv 0.3) ===`);
   for (const k of [0.3, 0.1, 0.03, 0.01]) {
     await shot(`est7f-np${k}`, F(k), `h:/tmp/sweep-${FORMULA}-f-np${k}.png`);
   }
-  console.log(`\n=== ${FORMULA} est7 (NO faithful marcher) control ===`);
-  await shot('est7-nofaithful', { quality: { estimator: 7, numDEeps: 0.1, detail: 1.5, maxSteps: 300 }, coreMath: { iterations: 60 } }, `h:/tmp/sweep-${FORMULA}-nofaithful.png`);
-  console.log(`\n=== ${FORMULA} est7 + faithful — stepDiv/DEsub probes (numDEeps 0.1) ===`);
-  await shot('est7f-stepdiv0.1', F(0.1, { mb3dStepDiv: 0.1 }), `h:/tmp/sweep-${FORMULA}-f-sd01.png`);
+  console.log(`\n=== ${FORMULA} est7 default-step control (fudge 1.0) ===`);
+  await shot('est7-defaultstep', { quality: { estimator: 7, numDEeps: 0.1, detail: 1.5, maxSteps: 300 }, coreMath: { iterations: 60 } }, `h:/tmp/sweep-${FORMULA}-defaultstep.png`);
+  console.log(`\n=== ${FORMULA} est7 — stepDiv/DEsub probes (numDEeps 0.1) ===`);
+  await shot('est7f-stepdiv0.1', F(0.1, { fudgeFactor: 0.1 }), `h:/tmp/sweep-${FORMULA}-f-sd01.png`);
   await shot('est7f-ms800', F(0.1, { maxSteps: 800 }), `h:/tmp/sweep-${FORMULA}-f-ms800.png`);
 
   await browser.close();

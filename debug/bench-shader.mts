@@ -186,15 +186,15 @@ const IS_PT = RENDER_MODE === 'PathTracing';
 const SHADOW_ALGORITHM = (argVal('--shadow-algorithm') ?? '').toLowerCase();
 const AREA_LIGHTS = parseBool(argVal('--area-lights'));
 
-// MB3D-faithful marcher toggle (compile gate) + its two runtime knobs. Lets the
-// bench A/B GMT's standard sphere march vs MB3D's damped/clamped march (ADR-0088)
-// on ANY formula — the gate lives in the trace kernel, not the importer, so the
-// default Mandelbulb is a clean controlled A/B.
-//   --mb3d-faithful=on|off   quality.mb3dFaithful (recompiles in/out)
-//   --mb3d-stepdiv=N         uMb3dStepDiv (0.01..1.0; default 0.5) — runtime knob.
-//                            Set 1.0 to isolate the faithful ALU cost at equal step size.
-//   --mb3d-desub=N           uMb3dDEsub   (0..0.9; default 0.0)   — runtime knob
-const MB3D_FAITHFUL = parseBool(argVal('--mb3d-faithful'));
+// MB3D-faithful marcher knobs. The faithful step IS the marcher since ADR-0092 —
+// the standard-vs-faithful compile A/B is gone (--mb3d-faithful is retired and
+// warns if passed). Both remaining knobs are runtime uniforms.
+//   --mb3d-stepdiv=N         quality.fudgeFactor (0.01..1.0) — the unified step
+//                            divisor. 1.0 isolates the marcher ALU at equal step size.
+//   --mb3d-desub=N           uMb3dDEsub (0..0.9; default 0.0) — runtime knob
+if (argVal('--mb3d-faithful') !== undefined) {
+    console.warn('[bench-shader] --mb3d-faithful is RETIRED (ADR-0092): the MB3D-faithful step is the unconditional marcher. Use --mb3d-stepdiv / --mb3d-desub.');
+}
 const MB3D_STEPDIV = argVal('--mb3d-stepdiv') !== undefined ? parseFloat(argVal('--mb3d-stepdiv')!) : null;
 const MB3D_DESUB   = argVal('--mb3d-desub')   !== undefined ? parseFloat(argVal('--mb3d-desub')!)   : null;
 
@@ -541,7 +541,6 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         volEmissive: number | null;
         volLights: number | null;
         volAnisotropy: number | null;
-        mb3dFaithful: boolean | null;
         mb3dStepDiv: number | null;
         mb3dDesub: number | null;
         formulaOverride: string;
@@ -680,13 +679,12 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             setters.setVolumetric(volPatch);
         }
 
-        // MB3D-faithful marcher. mb3dFaithful is a compile gate (recompiles the
-        // trace kernel with the damped/clamped step); stepdiv/desub are runtime
-        // uniforms. setQuality is the DDFS auto-setter for the 'quality' feature.
-        if ((opts.mb3dFaithful !== null || opts.mb3dStepDiv !== null || opts.mb3dDesub !== null) && setters.setQuality) {
+        // Marcher knobs (the MB3D-faithful step is THE marcher, ADR-0092): the step
+        // divisor is quality.fudgeFactor; desub is uMb3dDEsub. Both runtime uniforms.
+        // setQuality is the DDFS auto-setter for the 'quality' feature.
+        if ((opts.mb3dStepDiv !== null || opts.mb3dDesub !== null) && setters.setQuality) {
             const qPatch: any = {};
-            if (opts.mb3dFaithful !== null) qPatch.mb3dFaithful = opts.mb3dFaithful;
-            if (opts.mb3dStepDiv !== null) qPatch.mb3dStepDiv = opts.mb3dStepDiv;
+            if (opts.mb3dStepDiv !== null) qPatch.fudgeFactor = opts.mb3dStepDiv;
             if (opts.mb3dDesub !== null) qPatch.mb3dDEsub = opts.mb3dDesub;
             setters.setQuality(qPatch);
         }
@@ -709,9 +707,8 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             appliedVolDensity:   after.volumetric?.volDensity   ?? 'unset',
             appliedVolEmissive:  after.volumetric?.volEmissive  ?? 'unset',
             appliedVolLights:    after.volumetric?.volMaxLights ?? 'unset',
-            appliedMb3dFaithful: after.quality?.mb3dFaithful ?? 'unset',
-            appliedMb3dStepDiv:  after.quality?.mb3dStepDiv  ?? 'unset',
-            appliedMb3dDesub:    after.quality?.mb3dDEsub    ?? 'unset',
+            appliedMb3dStepDiv:  after.quality?.fudgeFactor ?? 'unset',
+            appliedMb3dDesub:    after.quality?.mb3dDEsub   ?? 'unset',
         };
     }, {
         reflectionMode: REFLECTION_MODE,
@@ -731,7 +728,6 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         volEmissive: VOL_EMISSIVE,
         volLights: VOL_LIGHTS,
         volAnisotropy: VOL_ANISOTROPY,
-        mb3dFaithful: MB3D_FAITHFUL,
         mb3dStepDiv: MB3D_STEPDIV,
         mb3dDesub: MB3D_DESUB,
         formulaOverride: FORMULA_OVERRIDE,

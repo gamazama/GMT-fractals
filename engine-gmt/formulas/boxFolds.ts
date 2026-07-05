@@ -2,21 +2,33 @@
  * BoxFold formulas — geometry's Hybrid Box fold step as REGISTERED
  * FractalDefinitions, one per fold type (ADR-0089 P4.5; owner call 2026-07-04).
  *
- * Each def wraps the SAME fold GLSL geometry's Hybrid Box uses (FOLD_LIST is
+ * Each def wraps the SAME fold GLSL geometry's Hybrid Box used (FOLD_LIST is
  * the single source of truth — the GLSL is remapped, never copied by hand) in
  * the formula_Hybrid step shape: [rot-in] → shift → fold → unshift → [rot-out]
- * → sphereFold → scale(+vary) → optional +c. This is what makes Hybrid Box's
- * INTERLEAVED mode absorbable by the weave core: a legacy interleaved scene
- * migrates to a weave whose layer slot is the matching BoxFold formula
- * (utils/weaveMigration.ts), and the weave picker gains fold slots for free.
+ * → sphereFold → scale(+vary) → optional +c. selfContained folds (menger,
+ * tetra, octa, icosa) skip sphereFold + outer scale: they carry their own
+ * MB3D-faithful IFS step `z·scale − offset·(scale−1)` inside the fold GLSL.
+ * This is what makes Hybrid Box's INTERLEAVED mode absorbable by the weave
+ * core: a legacy interleaved scene migrates to a weave whose layer slot is the
+ * matching BoxFold formula (utils/weaveMigration.ts), and the weave picker
+ * gains fold slots for free.
+ *
+ * Fold-audit rework (2026-07-05, vs the certified MB3D decompiles):
+ *   - tetra/octa/icosa are now selfContained KIFS with the offset step MB3D's
+ *     Sierpinski3 / OctahedronIFS / IcosahedronIFS use (the old sphereFold
+ *     wrapper could never form the actual solids); icosa's fold body was
+ *     re-ported from the MB3D IcosahedronIFS decompile.
+ *   - 'half' (foldType 2) is RETIRED with no successor (invented fold with an
+ *     embedded per-iteration drift); 'decoupled' (foldType 3) is RETIRED and
+ *     maps to standard (identical at its default Folding Value = 2·Fold Limit).
  *
  * Param slots (mirroring the legacy hybrid* params — BOXFOLD_LEGACY_KEYS is
  * the migration's value map):
  *   paramA = Scale · paramB = Scale Variation · paramC = Min Radius ·
  *   paramD = Fixed Radius · paramE = Add Constant (toggle) ·
  *   paramF = Center Z (menger only) · vec3A = Fold Limit · vec3B = Shift ·
- *   vec3C = Rotation · vec4A.xyz = fold-specific vec (folding value / kali
- *   constant / menger offset; w unused)
+ *   vec3C = Rotation · vec4A.xyz = fold-specific vec (kali constant /
+ *   menger-KIFS offset; w unused — BOXFOLD_VEC4_LEGACY maps it per formula)
  *
  * The legacy hybridPermute c-swizzle is NOT carried (compile-time permute on a
  * runtime def) — the migration warns when a scene used a non-default permute.
@@ -34,18 +46,36 @@ import { FOLD_LIST } from '../features/geometry/folds';
 import type { FoldDefinition } from '../features/geometry/types';
 import { registry } from '../engine/FractalRegistry';
 
-/** Formula id for a fold index (`BoxFoldStandard`, `BoxFoldKali`, …). */
-export function boxFoldFormulaId(foldIndex: number): string {
-    const f = FOLD_LIST[foldIndex] ?? FOLD_LIST[0];
-    return `BoxFold${f.id.charAt(0).toUpperCase()}${f.id.slice(1)}`;
+const foldFormulaId = (f: FoldDefinition) => `BoxFold${f.id.charAt(0).toUpperCase()}${f.id.slice(1)}`;
+
+/** Formula id for a STABLE fold-type code (`BoxFoldStandard`, `BoxFoldKali`, …)
+ *  — the persisted legacy `hybridFoldType` value, NOT a FOLD_LIST position.
+ *  Retired codes: 2 (half) → null (no successor — callers must bail);
+ *  3 (decoupled) → BoxFoldStandard (identical map at its default Folding
+ *  Value = 2·Fold Limit; a custom Folding Value is dropped). */
+export function boxFoldFormulaId(foldType: number): string | null {
+    const code = foldType === 3 ? 0 : foldType;
+    const f = FOLD_LIST.find((fd) => fd.foldType === code);
+    return f ? foldFormulaId(f) : null;
 }
 
 /** Fold-specific extra vec3 (uniform name → the def's vec4A.xyz), per fold id. */
 const EXTRA_VEC: Record<string, { uniform: string; label: string; legacyKey: string }> = {
-    decoupled: { uniform: 'uHybridFoldingValue', label: 'Folding Value', legacyKey: 'hybridFoldingValue' },
     kali: { uniform: 'uHybridKaliConstant', label: 'Kali Constant', legacyKey: 'hybridKaliConstant' },
     menger: { uniform: 'uHybridMengerOffset', label: 'Offset', legacyKey: 'hybridMengerOffset' },
+    tetra: { uniform: 'uHybridKifsOffset', label: 'Offset', legacyKey: 'hybridKifsOffset' },
+    octa: { uniform: 'uHybridKifsOffset', label: 'Offset', legacyKey: 'hybridKifsOffset' },
+    icosa: { uniform: 'uHybridKifsOffset', label: 'Offset', legacyKey: 'hybridKifsOffset' },
 };
+
+/** Legacy geometry-state key for a def's vec4A (the fold-specific vec), by
+ *  FORMULA id — vec4A's legacy key differs per fold, so it can't live in
+ *  BOXFOLD_LEGACY_KEYS. The migration consults this to carry custom Kali
+ *  Constant / Menger Offset values (tetra/octa/icosa's hybridKifsOffset has no
+ *  legacy scenes; the lookup just misses → default). */
+export const BOXFOLD_VEC4_LEGACY: Record<string, string> = Object.fromEntries(
+    FOLD_LIST.filter((f) => EXTRA_VEC[f.id]).map((f) => [foldFormulaId(f), EXTRA_VEC[f.id].legacyKey]),
+);
 
 /** Legacy geometry-state key per declared slot id — the migration's value map.
  *  vec4A carries the fold-specific vec3 (see EXTRA_VEC). */
@@ -62,10 +92,10 @@ export const BOXFOLD_LEGACY_KEYS: Record<string, string> = {
 };
 
 /** Folds whose body actually reads the foldLimit argument. */
-const USES_FOLD_LIMIT = new Set(['standard', 'mirror', 'half', 'decoupled']);
+const USES_FOLD_LIMIT = new Set(['standard', 'mirror']);
 
-function buildDef(fold: FoldDefinition, index: number): FractalDefinition {
-    const id = boxFoldFormulaId(index);
+function buildDef(fold: FoldDefinition): FractalDefinition {
+    const id = foldFormulaId(fold);
     const P = `bf${fold.id}_`;
     const wrap = (fold.rotMode ?? 'wrap') === 'wrap';
     const selfContained = !!fold.selfContained;
@@ -190,13 +220,13 @@ if (${P}hasRot) {
 
 let registered = false;
 
-/** Build + register the nine BoxFold defs (idempotent). Called from
+/** Build + register the seven BoxFold defs (idempotent). Called from
  *  registerFeatures() so every entry (app, harness, sweep) gets them; node
  *  test suites call it directly. */
 export function registerBoxFoldFormulas(): void {
     if (registered) return;
     registered = true;
-    FOLD_LIST.forEach((fold, i) => {
-        registry.register(buildDef(fold, i));
-    });
+    for (const fold of FOLD_LIST) {
+        registry.register(buildDef(fold));
+    }
 }

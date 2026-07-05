@@ -30,7 +30,8 @@ import type { FormulaType, FractalDefinition } from '../engine-gmt/types';
 
 interface GeometryState {
     hybridBox: boolean;
-    /** Index into FOLD_OPTIONS — 0 = Standard fold (default). Only meaningful
+    /** Stable fold-type code (a FOLD_OPTIONS value, NOT a list index) —
+     *  0 = Standard fold (default). Only meaningful
      *  when hybridBox is true. */
     hybridFoldType: number;
     burningMode: boolean;

@@ -640,8 +640,10 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     registry.register(NoDr);
     const { def, ledger } = emitFusedHybrid(scene([nslot(1, 'TestNoDr'), nslot(1, 'TestNoDr')]));
     const q = (def?.defaultPreset as any)?.features?.quality ?? {};
+    // (mb3dFaithful retired by ADR-0092 — the faithful step is the unconditional
+    // marcher, so the recipe no longer writes a gate; assert it stays absent.)
     ck('P4.2: no-dr native weave routes to est7 recipe', ledger.supported === true
-      && q.estimator === 7.0 && q.numDEeps === 0.3 && q.mb3dFaithful === true && q.detail === 1.5, q);
+      && q.estimator === 7.0 && q.numDEeps === 0.3 && q.mb3dFaithful === undefined && q.detail === 1.5, q);
   }
   {
     // dr-writing native pair must NOT route to est7; the lead's tuned quality
@@ -1033,17 +1035,24 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   const { migrateLegacyWeavePreset } = await import('../engine-gmt/utils/weaveMigration.ts');
   registerBoxFoldFormulas();
 
-  // All nine fold types register and resolve as weave slots.
+  // All seven fold types register and resolve as weave slots (stable codes;
+  // half=2 and decoupled=3 retired 2026-07-05).
   {
-    const ids = FOLD_LIST.map((_, i) => boxFoldFormulaId(i));
-    ck('boxfold: 9 defs registered', ids.length === 9 && ids.every((id) => !!registry.get(id as any)), ids);
+    const ids = FOLD_LIST.map((f) => boxFoldFormulaId(f.foldType));
+    ck('boxfold: 7 defs registered', ids.length === 7 && ids.every((id) => !!id && !!registry.get(id as any)), ids);
     const rejects = ids.filter((id) => resolveNativeSlot(registry.get(id as any)!, 0, 'p', { parametric: true }).ok === false);
     ck('boxfold: all resolve as weave slots', rejects.length === 0, rejects);
     const std = registry.get(boxFoldFormulaId(0) as any)!;
     ck('boxfold: standard keeps Tglad fold body', std.shader.function.includes('clamp(z, -uVec3A, uVec3A) * 2.0 - z'));
     ck('boxfold: menger selfContained (no sphereFold/outer scale)',
       !registry.get(boxFoldFormulaId(8) as any)!.shader.function.includes('sphereFold('));
-    const emit = emitFusedHybrid(scene([nativeSlotShell('Mandelbulb', 1), nativeSlotShell(boxFoldFormulaId(0), 1)]));
+    ck('boxfold: KIFS trio selfContained with MB3D offset IFS step', [5, 6, 7].every((t) => {
+      const fn = registry.get(boxFoldFormulaId(t) as any)!.shader.function;
+      return !fn.includes('sphereFold(') && fn.includes('uVec4A.xyz * (scale - 1.0)');
+    }));
+    ck('boxfold: retired codes — half → null, decoupled → Standard',
+      boxFoldFormulaId(2) === null && boxFoldFormulaId(3) === 'BoxFoldStandard');
+    const emit = emitFusedHybrid(scene([nativeSlotShell('Mandelbulb', 1), nativeSlotShell(boxFoldFormulaId(0)!, 1)]));
     ck('boxfold: weaves with a host', emit.ledger.supported === true && !!emit.def
       && emit.def.shader.function.includes('ws1_bfstandard_fold'), emit.ledger.reasons);
   }
@@ -1090,6 +1099,31 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     const def = registry.get(p.formula) as any;
     ck('hb-migrate: weaveSource layer carries beats',
       def?.weaveSource?.schedule?.layers?.[0]?.beats === 4, def?.weaveSource?.schedule);
+  }
+
+  // Retired folds: decoupled (3) migrates onto the Standard slot; half (2)
+  // bails (scene loads unmigrated, legacy state kept for forensics).
+  {
+    const p3: any = migrateLegacyWeavePreset(legacyHb({}, { hybridFoldType: 3 }));
+    const def3 = registry.get(p3.formula) as any;
+    ck('hb-migrate: decoupled → Standard fold slot',
+      /^MB3DHybrid/.test(p3.formula) && def3?.weaveSource?.slots?.[1]?.ref === 'BoxFoldStandard'
+      && p3.features.weave?.ws1ParamA === -1.7,
+      def3?.weaveSource?.slots?.map((s: any) => s.ref));
+    const p2: any = migrateLegacyWeavePreset(legacyHb({}, { hybridFoldType: 2 }));
+    ck('hb-migrate: half bails, scene loads unmigrated',
+      p2.formula === 'Mandelbulb' && p2.features.weave === undefined
+      && p2.features.geometry.hybridCompiled === true, p2.formula);
+  }
+
+  // Fold-specific vec4A (kali constant) carries the SCENE value, not the default.
+  {
+    const pk: any = migrateLegacyWeavePreset(legacyHb({}, {
+      hybridFoldType: 4, hybridKaliConstant: { x: 0.7, y: 0.6, z: -0.5 },
+    }));
+    const v = pk.features.weave?.ws1Vec4A;
+    ck('hb-migrate: kali constant → vec4A bank value',
+      /^MB3DHybrid/.test(pk.formula) && v?.x === 0.7 && v?.y === 0.6 && v?.z === -0.5 && v?.w === 0, v);
   }
 
   // Combined scene, enables AGREE → 3-slot weave, fold layer 1, secondary layer 2.

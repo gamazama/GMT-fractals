@@ -5,6 +5,7 @@ import type { FoldDefinition } from '../types';
 export const standardFold: FoldDefinition = {
     id: 'standard',
     label: 'Standard (Tglad)',
+    foldType: 0,
     glsl: `
 void foldOperation(inout vec3 z, inout float dr, vec3 foldLimit) {
     z = clamp(z, -foldLimit, foldLimit) * 2.0 - z;

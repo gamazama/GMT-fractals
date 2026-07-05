@@ -407,27 +407,14 @@ export const GmtPanels: PanelManifest = [
             // Raymarching: max steps
             { type: 'feature', id: 'quality', whitelistParams: ['maxSteps'] },
 
-            // Step tuning
+            // Step tuning. The march step is the MB3D-faithful step for every scene
+            // (ADR-0092 — the legacy plain sphere step and its separate MB3D-Faithful
+            // March compilable section are retired). fudgeFactor is THE step divisor;
+            // mb3dDEsub is the scene-authored safety-subtraction (advanced, usually 0).
             {
                 type: 'feature',
                 id: 'quality',
-                whitelistParams: ['fudgeFactor', 'stepJitter'],
-            },
-
-            // MB3D-Faithful March — compile-only CompilableFeatureSection (no runtime
-            // toggle; the marcher swaps the whole step so it must recompile to switch,
-            // like Burning Mode's compile-only mode). Header toggle buffers the change
-            // → Compile button flips mb3dFaithful + rebuilds in place. When compiled,
-            // the body shows the Step Div / DE Sub tuning sliders (group 'mb3d_faithful').
-            // Auto-on for .m3p imports; toggle here to A/B against GMT's standard march.
-            // When on, Slice Optimization above goes inert (the step uses Step Div). @see docs/adr/0088.
-            {
-                type: 'compilable',
-                id: 'quality',
-                compileParam: 'mb3dFaithful',
-                runtimeGroup: 'mb3d_faithful',
-                label: 'MB3D-Faithful March',
-                helpId: 'quality.estimator',
+                whitelistParams: ['fudgeFactor', 'stepJitter', 'mb3dDEsub'],
             },
 
             { type: 'separator' },

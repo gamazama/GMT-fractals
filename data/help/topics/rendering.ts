@@ -157,16 +157,15 @@ Controls the termination threshold of the raymarcher.
     'quality.fudge': {
         id: 'quality.fudge',
         category: 'Rendering',
-        title: 'Slice Optimization (Fudge)',
+        title: 'Step Size (Fudge)',
         parentId: 'panel.quality',
         content: `
-Scales the raymarch step size. Also known as "Lipschitz Bound Relaxation".
+Scales the raymarch step size (MB3D's ZstepDiv). The marcher itself uses MB3D's convergence dynamics — an overstep clamp and a damper that decelerates onto surfaces — so most overshoot is caught automatically; this dial trades speed against fine-surface fidelity.
 
-- **1.0 (Safe)**: Mathematically correct stepping. Guarantees no artifacts.
-- **< 1.0 (Slow/Safe)**: Takes smaller steps. Fixes "overstepping" artifacts (holes in the fractal) but is very slow.
-- **> 1.0 (Fast/Risky)**: Takes larger steps. Renders much faster, but may clip through thin geometry, creating black noise or missing details.
+- **1.0 (Standard)**: Full distance-estimate steps.
+- **< 1.0 (Finer)**: Takes smaller steps. Fixes residual "overstepping" artifacts (holes/dust in the fractal) on hard hybrid or imported formulas, but is slower. MB3D imports set this from the scene's authored step.
 
-> **Artistic use:** Values above 1.0 are also used for artistic slicing effects — they cause the ray to overshoot surfaces, creating cut-away or x-ray looks.
+**DE Sub** (advanced) is the remaining scene-authored marcher parameter: a per-step safety subtraction MB3D scenes may author (iOptions bit 2). Leave at 0 unless an import set it; too high can under-step a scene to empty.
 `
     },
     'quality.threshold': {

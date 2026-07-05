@@ -88,11 +88,8 @@ export class ShaderBuilder {
     // map()/mapDist() then estimate distance from the escape-radius gradient instead of
     // an analytic dr (for formulas with no/wrong analytic DE). @see docs/adr/0085
     private numericDE: boolean = false;
-    // MB3D-faithful marcher. Armed by the quality feature's inject() when an imported
-    // MB3D scene sets quality.mb3dFaithful. The Main trace kernel then advances with
-    // MB3D's overstep-clamp + RSFmul damper + msDEsub safety-subtraction instead of
-    // the plain sphere step; off (default) it is byte-identical. @see docs/adr/0088
-    private mb3dFaithful: boolean = false;
+    // (The mb3dFaithful gate was retired by ADR-0092 — the MB3D-faithful step
+    // is now THE marcher, emitted unconditionally by getTraceGLSL.)
     // Depth output is always enabled for MRT - removes shader recompilation issue
     
     // 5. Variant Specific
@@ -133,22 +130,15 @@ export class ShaderBuilder {
         this.numericDE = enabled;
     }
 
-    /** Arms the MB3D-faithful marcher for the Main trace kernel. Called from the quality
-     *  feature's inject() when an imported scene sets quality.mb3dFaithful. The Physics
-     *  probe + path-tracer lean trace keep the standard march. @see docs/adr/0088 */
-    public enableMB3DFaithful(enabled: boolean) {
-        this.mb3dFaithful = enabled;
-    }
-
     public setMaxLights(n: number) {
         this.maxLights = n;
     }
 
     /** The armed kernel feature gates as one object — the single seam threaded into
      *  the kernel chunk builders (DE_MASTER reads numericDE; getTraceGLSL reads
-     *  refine + mb3dFaithful). @see shaders/chunks/kernel.ts */
+     *  refine). @see shaders/chunks/kernel.ts */
     private kernelFeatures(): KernelFeatures {
-        return { refine: this.enableRefine, numericDE: this.numericDE, mb3dFaithful: this.mb3dFaithful };
+        return { refine: this.enableRefine, numericDE: this.numericDE };
     }
 
     /** The builder's accumulated injection state as DE_MASTER's options bag. */
@@ -617,7 +607,8 @@ void main() {
             volumeBodyCode: this.volumeBody.join('\n'), volumeFinalizeCode: this.volumeFinalize.join('\n'),
             kernel: this.kernelFeatures(),
         });
-        // The lean PT trace deliberately takes NO kernel gates (no refine, no MB3D march).
+        // The lean PT trace deliberately takes NO kernel gates (no refine). It still
+        // marches with the MB3D-faithful step — that's the unconditional marcher (ADR-0092).
         const traceLeanGLSL = isPathTracing
             ? getTraceGLSL({ isMobile: this.isLite, precisionMode: this.precisionMode, functionName: 'traceSceneLean' })
             : "";

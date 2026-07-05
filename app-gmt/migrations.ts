@@ -93,3 +93,56 @@ registerMigration({
     id: 'app-gmt.legacy-weave-absorption',
     apply: (p: any) => migrateLegacyWeavePreset(p),
 });
+
+// v4 (2026-07-05) — the MB3D-faithful marcher became THE marcher (ADR-0092).
+// The legacy plain sphere step, the mb3dFaithful compile gate, and the separate
+// mb3dStepDiv param/uniform are retired; quality.fudgeFactor is the unified
+// step divisor (MB3D sZstepDiv ↔ fudgeFactor, a 1:1 mapping).
+//  - Scenes that marched faithfully (mb3dFaithful truthy) carried their REAL
+//    step divisor in mb3dStepDiv (fudgeFactor only paced shadow/visibility rays
+//    there) — move it onto fudgeFactor so the primary march is unchanged.
+//  - Scenes with the gate off/absent had inert mb3dStepDiv/mb3dDEsub values
+//    (uniforms unread) — drop them so the now-always-live safety-subtraction
+//    doesn't suddenly bite.
+//  - Keyframe tracks / LFOs targeting quality.mb3dStepDiv retarget to
+//    quality.fudgeFactor (pure key rename); mb3dFaithful had no uniform and
+//    compile params aren't animatable in practice — any stray reference is
+//    left to fall through as an unknown target (warned by the engine).
+registerMigration({
+    version: 4,
+    id: 'app-gmt.faithful-marcher-unification',
+    apply: (p: any) => {
+        const q = p?.features?.quality;
+        if (q && typeof q === 'object') {
+            const faithful = !!q.mb3dFaithful;
+            if (faithful) {
+                // Saves can omit default-valued params; the old param default was 0.5.
+                q.fudgeFactor = typeof q.mb3dStepDiv === 'number' ? q.mb3dStepDiv : 0.5;
+            } else if (q.mb3dDEsub !== undefined) {
+                delete q.mb3dDEsub; // was inert behind the off gate
+            }
+            delete q.mb3dFaithful;
+            delete q.mb3dStepDiv;
+        }
+
+        // Retarget animation routing (LFO targets + sequence tracks) — pure rename.
+        const RENAME: Record<string, string> = { 'quality.mb3dStepDiv': 'quality.fudgeFactor' };
+        if (Array.isArray(p?.animations)) {
+            for (const a of p.animations) {
+                if (a && typeof a.target === 'string' && RENAME[a.target]) a.target = RENAME[a.target];
+            }
+        }
+        const tracks = p?.sequence?.tracks;
+        if (tracks && typeof tracks === 'object') {
+            for (const key of Object.keys(tracks)) {
+                const next = RENAME[key];
+                if (!next) continue;
+                const tr = tracks[key];
+                if (tr && typeof tr === 'object' && typeof tr.id === 'string') tr.id = next;
+                tracks[next] = tracks[key];
+                delete tracks[key];
+            }
+        }
+        return p;
+    },
+});

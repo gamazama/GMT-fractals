@@ -389,9 +389,10 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     };
 
     // ── Hybrid Box presets (P4.7 item 3) ─────────────────────────────────────
-    // The nine FOLD_LIST folds are registered BoxFold formulas (P4.5); this is
+    // The seven FOLD_LIST folds are registered BoxFold formulas (P4.5); this is
     // the curated, friendly entry into them — the classic Hybrid Box, now a
     // weave slot. Adds a configured BoxFold slot (its defaults + counts of 2).
+    // FOLD_OPTIONS values are stable fold-type codes, not list positions.
     const [hbPicker, setHbPicker] = useState<{ x: number; y: number; right: number } | null>(null);
     const openHbPicker = (ev: React.MouseEvent) => {
         const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
@@ -405,9 +406,11 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         }));
     const addFoldPreset = (key: string) => {
         setHbPicker(null);
-        const foldIndex = parseInt(key.slice(5), 10); // 'fold:<index>'
-        if (!Number.isFinite(foldIndex)) return;
-        const built = rowFromKey(`native:${boxFoldFormulaId(foldIndex)}`, nextColorIdx(draft.rows), DEFAULT_ITER_COUNT);
+        const foldType = parseInt(key.slice(5), 10); // 'fold:<code>'
+        if (!Number.isFinite(foldType)) return;
+        const foldId = boxFoldFormulaId(foldType);
+        if (!foldId) return;
+        const built = rowFromKey(`native:${foldId}`, nextColorIdx(draft.rows), DEFAULT_ITER_COUNT);
         if (!built) return;
         // Sequence mode: the fold is the classic pre-fold — put it in the FIRST slot
         // and drop a loop divider right after it, so the box block plays as intro and

@@ -24,9 +24,7 @@ export interface QualityState {
     refineActive: boolean; // Surface-refinement instant runtime on/off (uRefineActive)
     refineSteps: number; // Surface-refinement bisection step count (runtime, live)
     numDEeps: number; // Numerical-DE magnitude calibration (MB3D dDEscale); probe is auto-derived
-    mb3dFaithful: boolean; // MB3D-faithful marcher compile gate (importer-set for MB3D imports)
-    mb3dStepDiv: number; // MB3D sZstepDiv → uMb3dStepDiv (faithful step divisor)
-    mb3dDEsub: number; // MB3D msDEsub → uMb3dDEsub (faithful step safety-subtraction fraction)
+    mb3dDEsub: number; // MB3D msDEsub → uMb3dDEsub (marcher step safety-subtraction fraction)
     physicsProbeMode: number; // 0=GPU Probe, 1=CPU Calculation, 2=Manual
     manualDistance: number; // Manual distance override when probe is disabled
 }
@@ -120,9 +118,9 @@ export const QualityFeature: FeatureDefinition = {
             helpId: 'quality.metric',
         },
         fudgeFactor: {
-            type: 'float', default: 1.0, label: 'Slice Optimization', shortId: 'ff', uniform: 'uFudgeFactor',
+            type: 'float', default: 1.0, label: 'Step Size', shortId: 'ff', uniform: 'uFudgeFactor',
             min: 0.01, max: 1.0, step: 0.01, group: 'kernel',
-            description: 'Multiplies step size. Lower = Higher quality but slower. Set to < 0.2 for deep zooms.',
+            description: 'March step multiplier (MB3D ZstepDiv). Lower = finer march, higher quality but slower. Set to < 0.2 for deep zooms. Also paces shadow / visibility rays.',
             helpId: 'quality.fudge',
             format: (v) => v.toFixed(2)
         },
@@ -222,33 +220,18 @@ export const QualityFeature: FeatureDefinition = {
             format: (v: number) => `${v.toFixed(0)} steps`,
         },
 
-        // MB3D-FAITHFUL MARCHER. Imported MB3D scenes render with MB3D's actual march
-        // convergence dynamics (overstep clamp + RSFmul damper + msDEsub safety-sub,
-        // CalcThread.pas:196-230) instead of GMT's plain sphere step — what stops an
-        // over-estimating fused DE from scattering thin surfaces into "dust". Compile-
-        // gated (mb3dFaithful, importer-set); when off the kernel is byte-identical.
-        // The two scalar uniforms carry the authored step params (no header parse beyond
-        // what the importer already reads). @see docs/adr/0088.
-        mb3dFaithful: {
-            type: 'boolean', default: false, label: 'MB3D-Faithful March', shortId: 'm3f', group: 'kernel',
-            description: "Use MB3D's own raymarch step (damped, Lipschitz-clamped, safety-subtracted) instead of GMT's plain sphere step — resolves overshoot 'dust' on hard hybrid / MB3D imports. Auto-enabled when you import a .m3p scene; toggle here to A/B against GMT's standard march. Recompiles in/out.",
-            helpId: 'quality.estimator',
-            onUpdate: 'compile',
-            noAccumReset: true,
-        },
-        // Runtime tuning knobs for the faithful marcher, shown in the MB3D-Faithful
-        // March section body (group 'mb3d_faithful') once it's compiled in. Live
-        // (no recompile) — lower DE Sub if a conservative scene under-steps to empty.
-        mb3dStepDiv: {
-            type: 'float', default: 0.5, label: 'Step Div', shortId: 'm3s', uniform: 'uMb3dStepDiv',
-            min: 0.01, max: 1.0, step: 0.01, group: 'mb3d_faithful',
-            description: "MB3D sZstepDiv — step divisor for the faithful marcher (smaller = finer/slower). Authored from the scene; tweak to taste.",
-            format: (v: number) => v.toFixed(2),
-        },
+        // MARCHER SAFETY-SUBTRACTION (MB3D msDEsub). The raymarch step is the
+        // MB3D-faithful step for EVERY scene (overstep clamp + RSFmul damper +
+        // this safety-sub, CalcThread.pas:196-230 — ADR-0092 retired the legacy
+        // plain sphere step). The step divisor is fudgeFactor above; this knob is
+        // the remaining scene-authored parameter. Runtime (no recompile); 0 for
+        // native scenes, set by the importer when the scene authored iOptions bit 2.
         mb3dDEsub: {
             type: 'float', default: 0.0, label: 'DE Sub', shortId: 'm3d', uniform: 'uMb3dDEsub',
-            min: 0.0, max: 0.9, step: 0.01, group: 'mb3d_faithful',
-            description: "MB3D msDEsub — per-step DE safety-subtraction (0 unless the scene set iOptions bit 2). Higher = more cautious near surfaces; too high can under-step a scene to empty — lower it if a scene renders blank.",
+            min: 0.0, max: 0.9, step: 0.01, group: 'kernel',
+            isAdvanced: true,
+            description: "MB3D msDEsub — per-step DE safety-subtraction (0 unless the imported scene set iOptions bit 2). Higher = more cautious near surfaces; too high can under-step a scene to empty — lower it if a scene renders blank.",
+            helpId: 'quality.fudge',
             format: (v: number) => v.toFixed(2),
         },
 
@@ -329,10 +312,7 @@ export const QualityFeature: FeatureDefinition = {
             builder.enableRefinement(true);
         }
 
-        // MB3D-faithful marcher. Compile-gated on the importer-set toggle; off (default)
-        // emits zero MB3D GLSL → byte-identical kernel. @see docs/adr/0088.
-        if (state?.mb3dFaithful) {
-            builder.enableMB3DFaithful(true);
-        }
+        // (The mb3dFaithful compile gate was retired by ADR-0092 — the MB3D-faithful
+        // step is the unconditional marcher; nothing to arm here.)
     }
 };

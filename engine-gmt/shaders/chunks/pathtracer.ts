@@ -428,11 +428,31 @@ bool envVisibility(vec3 ro, vec3 rd) {
     float t = 0.0;
     float fudge = uFudgeFactor;
     int limit = uShadowSteps;
+    // MB3D-faithful march dynamics (overstep clamp + RSFmul damper + msDEsub,
+    // ADR-0092) — mirrors GetHardShadow so the env-NEE shadow ray converges on
+    // the same surfaces the primary trace does (no light leaks through thin
+    // geometry on over-estimating DEs).
+    float rLastDE = 0.0;
+    float rLastStep = 0.0;
+    float rSF = 1.0;
+    bool  primed = false;
     for (int i = 0; i < 256; i++) {
         if (i >= limit) break;
         float h = DE_Dist(ro + rd * t);
-        if (h < max(1.0e-6, t * 0.0002)) return false;  // hit geometry → occluded
-        t += h * fudge;
+        if (primed) {
+            h = min(h, rLastDE + rLastStep);
+            if (rLastDE > h + 1.0e-30) {
+                float rT = rLastStep / (rLastDE - h);
+                rSF = (rT < 1.0) ? max(0.5, rT) : 1.0;
+            } else { rSF = 1.0; }
+        }
+        rLastDE = h;
+        float thresh = max(1.0e-6, t * 0.0002);
+        if (h < thresh) return false;                    // hit geometry → occluded
+        float stepW = max(thresh * 0.5, (h - uMb3dDEsub * thresh) * fudge * rSF);
+        rLastStep = stepW;
+        primed = true;
+        t += stepW;
         if (t > MAX_DIST) return true;                   // reached the sky
     }
     return true;

@@ -29,21 +29,11 @@ doc §5 checklist is superseded on that point — no new panel, no new z-tier wo
 6. **NewSceneModal bridge**: it still authors legacy-shaped interlace state that the v3 migration converts —
    with the UI consolidated, make it author a weave directly and drop the bridge.
 
-## Design-confirm with the owner IN-SESSION (before building step 4)
-
 **Fast-path migration semantics.** The pre-loop fold transforms z BEFORE iteration 0; a weave intro slot
 (counts schedule: fold ×hybridIter as intro, repeatFrom = base) CONSUMES iterations — iteration-based coloring
-and bailout shift, so migration is NOT pixel-exact. Two routes; build a side-by-side of a real fast-path scene
-under both (or the feasible one) and let the owner pick:
-  (a) **Accepted look change** — migrate to the intro-weave preset; owner pre-approved retirement, verdict on
+and bailout shift, so migration is NOT pixel-exact. 
+  **Accepted look change** — migrate to the intro-weave preset; owner pre-approved retirement, verdict on
       the side-by-side.
-  (b) **SILENT slots** — implement negative-iterCount slots in the weave core (run the slot's transform without
-      advancing the escape/coloring iteration — MB3D's own concept, today a ledger reject: "silent slots not
-      supported"). Faithful fast-path migration AND unlocks real MB3D scenes that use silent slots (check the
-      corpus/bundled ledger for how many). More engine work: the counts plan already marks silent steps (`~slot`
-      in `schedule.ts`); the dispatcher/loop contract for "doesn't count" needs a careful definition against
-      `i`-driven schedules (a silent step must not consume a phase-fn index the schedule already assigned — the
-      plan's order array is the source of truth). If chosen, GPU-cert MB3D probe classification applies.
 
 ## Read first
 

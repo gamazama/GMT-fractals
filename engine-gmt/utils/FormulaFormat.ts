@@ -135,7 +135,7 @@ const GMF_API_DOCS = `
  *    3 Dampened      0.5*r*ln(r)/(dr+8) fixes slicing on thin structures
  *    4 Linear(2.0)   (r-2.0)/dr       classic Menger offset
  *  (5 Cutting-Plane is formula-gated; ignore for normal formulas.)
- *  fudgeFactor ("Slice Optimization"): default 1.0. Use ~0.5 for hand-written
+ *  fudgeFactor ("Step Size"): default 1.0. Use ~0.5 for hand-written
  *  DEs — values <1 take smaller raymarch steps so an imperfect/overestimating
  *  estimator doesn't overshoot the surface (which shows as flat "slices"/holes).
  *

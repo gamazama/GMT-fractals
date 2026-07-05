@@ -2,6 +2,23 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-05 (BoxFold audit — nine defs are now SEVEN; decision
+> unchanged):** the FOLD_LIST folds were audited against the certified MB3D
+> decompiles (utils/mb3d/decompiled-formulas.ts). 'half' (foldType 2, invented
+> fold with an embedded drift) and 'decoupled' (foldType 3, numerically
+> identical to standard at its default Folding Value = 2·Fold Limit) are
+> RETIRED; tetra/octa/icosa are reworked to selfContained MB3D-faithful KIFS
+> (`z·scale − offset·(scale−1)` — the old sphereFold wrapper could never form
+> the solids), with icosa's fold body re-ported from the IcosahedronIFS
+> decompile. Fold identity is now a STABLE `foldType` code (the persisted
+> legacy `hybridFoldType` value), not FOLD_LIST position; `boxFoldFormulaId`
+> maps retired code 3 → BoxFoldStandard and returns null for code 2 (migration
+> bails — scene loads unmigrated, warned). The P4.5 pixel-identical guarantee
+> therefore no longer extends to legacy fold types 2/3/5/6/7 (warned at
+> migration); 0/1/4/8 are untouched. Migration also now carries the
+> fold-specific vec4A value (kali constant / menger offset) via
+> BOXFOLD_VEC4_LEGACY — previously it silently reset to the default.
+
 > **Update 2026-07-04 (P4.4+P4.5 landed; decision unchanged; see ADR-0091):**
 > the absorption this ADR anticipated is DONE — the interlace feature and
 > Hybrid Box's interleaved mode are RETIRED, and legacy scenes convert into

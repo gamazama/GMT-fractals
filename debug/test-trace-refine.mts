@@ -46,12 +46,13 @@ const REFINE_MARKERS = ['uRefineSteps', 'dPrev', 'REFINE_HARD_CAP', 'damped-bise
 
   // The three insertion points must collapse to the ORIGINAL adjacent source when
   // off — proving each ${refine*} interpolated to '' without disturbing bytes.
-  ck('off: dPrev-insert collapsed (blank line before for-loop intact)',
-    off.includes('vec4 candidateH = vec4(0.0);\n\n    for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {'));
+  // (Adjacent source = the MB3D-faithful marcher blocks, unconditional since ADR-0092.)
+  ck('off: dPrev-insert collapsed (marcher state decl directly follows candidateH)',
+    off.includes('vec4 candidateH = vec4(0.0);\n    float mb3dRLastDE = 0.0;'));
   ck('off: refineBlock collapsed (blank line between adr/0076 note and Apply Final)',
     off.includes('@see docs/adr/0076)\n\n            // Apply Final Volumetric Resolve (Inlined)'));
-  ck('off: refineRemember collapsed (step advance directly follows stepJitter decl)',
-    off.includes('+ d * 31.7);\n        d += max(h.x, floatPrecision * 0.5) * currentFudge * stepJitter;'));
+  ck('off: refineRemember collapsed (marcher step directly follows stepJitter decl)',
+    off.includes('+ d * 31.7);\n        mb3dRLastDE = h.x;'));
 }
 
 // ── B. ON emission ───────────────────────────────────────────────────────────
@@ -66,8 +67,8 @@ const REFINE_MARKERS = ['uRefineSteps', 'dPrev', 'REFINE_HARD_CAP', 'damped-bise
   ck('on: mid-point uses mapDist twin (not full map)', /float hMid = mapDist\(\(ro \+ rd \* dMid\) \+ uCameraPosition\);/.test(on));
   ck('on: near-face sign test', /if \(hMid < finalEps\) dIn = dMid; else dOut = dMid;/.test(on));
   ck('on: commits refined near face', /d = dIn;/.test(on));
-  ck('on: dPrev declared before the march loop', /float dPrev = d;[^\n]*\n\s*for \(int i = 0/.test(on));
-  ck('on: dPrev recorded before the step advance', /dPrev = d;[^\n]*\n\s*d \+= max\(h\.x/.test(on));
+  ck('on: dPrev declared before the marcher state (outside the loop)', /float dPrev = d;[^\n]*\n\s*float mb3dRLastDE = 0\.0;/.test(on));
+  ck('on: dPrev recorded before the step advance', /dPrev = d;[^\n]*\n\s*mb3dRLastDE = h\.x;/.test(on));
 
   // dPrev must be DECLARED before (outside) the for-loop and only ASSIGNED inside —
   // declaring it at the advance site would put it out of scope at the hit check.
@@ -79,6 +80,23 @@ const REFINE_MARKERS = ['uRefineSteps', 'dPrev', 'REFINE_HARD_CAP', 'damped-bise
 {
   const lean = getTraceGLSL({ functionName: 'traceSceneLean' }); // path-tracer secondary
   ck('lean trace omits refinement (default false)', !lean.includes('uRefineSteps'));
+}
+
+// ── B3. Marcher unification (ADR-0092) — the MB3D-faithful step IS the marcher ──
+// Every trace fixture carries the clamp/damper/step unconditionally; the legacy
+// plain sphere step and the retired uMb3dStepDiv uniform must never reappear.
+{
+  for (const [label, glsl] of [
+    ['main', getTraceGLSL({ enableGlow: true })],
+    ['lean', getTraceGLSL({ functionName: 'traceSceneLean' })],
+    ['histogram', getTraceGLSL({})],
+  ] as const) {
+    ck(`${label}: marcher clamp/damper present`, glsl.includes('mb3dRSF') && glsl.includes('min(h.x, mb3dRLastDE + mb3dRLastStep)'));
+    ck(`${label}: step divisor is uFudgeFactor`, glsl.includes('* uFudgeFactor * mb3dRSF'));
+    ck(`${label}: safety-subtraction wired (uMb3dDEsub)`, glsl.includes('uMb3dDEsub * finalEps'));
+    ck(`${label}: legacy plain step retired`, !glsl.includes('* currentFudge *'));
+    ck(`${label}: retired uMb3dStepDiv absent`, !glsl.includes('uMb3dStepDiv'));
+  }
 }
 
 // ── C. Twin agreement (DE_MASTER emits same body into map + mapDist) ──────────

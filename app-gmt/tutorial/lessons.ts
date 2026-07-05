@@ -116,7 +116,7 @@ const lesson1: TutorialLesson = {
         },
         {
             id: 'l1-slice-opt',
-            text: 'The ray is overshooting the fractal surface, causing the slicing. Reduce Slice Optimization to take smaller steps.',
+            text: 'The ray is overshooting the fractal surface, causing the slicing. Reduce Step Size to take smaller steps.',
             subtext: 'Set it to around 0.05.',
             highlightTargets: [ANCHOR.fudgeFactor],
             trigger: { kind: 'value', path: 'quality.fudgeFactor', compare: 'lte', value: 0.1, waitForRelease: true },

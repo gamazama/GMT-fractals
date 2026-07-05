@@ -24,6 +24,11 @@ export const getShadowsGLSL = (enabled: boolean) => {
     return `
 // ------------------------------------------------------------------
 // SHADOWS (soft march — runtime Lite / HQ via uShadowQuality)
+// Shadow rays march with the SAME MB3D-faithful convergence dynamics as the
+// primary trace (overstep clamp + RSFmul damper + msDEsub, ADR-0092): a
+// non-Lipschitz / over-estimating DE otherwise lets the shadow ray launch
+// past the thin surfaces the main march resolves → light leaks / missing
+// self-shadowing on exactly the scenes the faithful marcher targets.
 // ------------------------------------------------------------------
 float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) {
     if (uShadowIntensity < 0.001) return 1.0;
@@ -36,6 +41,12 @@ float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) {
     float fudge = hq ? uFudgeFactor : 1.0;
     float ph    = 1.0e10;   // previous-step distance, HQ triangulation only
 
+    // MB3D-faithful march state (clamp + damper, CalcThread.pas:223-230)
+    float rLastDE = 0.0;
+    float rLastStep = 0.0;
+    float rSF = 1.0;
+    bool  primed = false;
+
     // Jitter starting position to break banding
     t += noise * 0.01;
 
@@ -45,6 +56,16 @@ float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) {
         if (i >= limit) break;
 
         float h = DE_Dist(ro + rd * t);
+
+        // Overstep clamp + RSFmul damper — same dynamics as the primary trace.
+        if (primed) {
+            h = min(h, rLastDE + rLastStep);
+            if (rLastDE > h + 1.0e-30) {
+                float rT = rLastStep / (rLastDE - h);
+                rSF = (rT < 1.0) ? max(0.5, rT) : 1.0;
+            } else { rSF = 1.0; }
+        }
+        rLastDE = h;
 
         if (hq) {
             // HQ / Robust — IQ + Aaltonen penumbra correction: triangulate the
@@ -62,15 +83,24 @@ float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) {
             res = min(res, k * pen);
             ph = h;
             if (res < 0.005) return 0.0;
-            t += h * fudge;
+            // Faithful step: safety-subtract + damp (floor keeps the step positive).
+            float stepW = max(thresh * 0.5, (h - uMb3dDEsub * thresh) * fudge * rSF);
+            rLastStep = stepW;
+            primed = true;
+            t += stepW;
         } else {
             // Lite — step-floored march (no penumbra triangulation). The
-            // max(h, 0.05) floor accelerates grazing-angle marches (~2x faster).
+            // max(h, 0.05) floor accelerates grazing-angle marches (~2x faster)
+            // and dominates the damper most steps; the clamp above still stops
+            // non-Lipschitz DE spikes launching the ray through geometry.
             // Early-out when res saturates (it only decreases via the min()).
             if(h < 0.005) return 0.0;
             res = min(res, k * h / t);
             if (res < 0.005) return 0.0;
-            t += max(h, 0.05);
+            float stepW = max(h * rSF, 0.05);
+            rLastStep = stepW;
+            primed = true;
+            t += stepW;
         }
 
         if(t > lightDist) break;
@@ -87,16 +117,35 @@ float GetHardShadow(vec3 ro, vec3 rd, float lightDist) {
     float fudge = uFudgeFactor;
     int limit = uShadowSteps;
 
+    // MB3D-faithful march state (clamp + damper — same dynamics as the primary
+    // trace; the PT binary-visibility ray must not tunnel through thin surfaces).
+    float rLastDE = 0.0;
+    float rLastStep = 0.0;
+    float rSF = 1.0;
+    bool  primed = false;
+
     for(int i = 0; i < ${MAX_SHADOW_STEPS}; i++) {
         if (i >= limit) break;
 
         float h = DE_Dist(ro + rd * t);
 
+        if (primed) {
+            h = min(h, rLastDE + rLastStep);
+            if (rLastDE > h + 1.0e-30) {
+                float rT = rLastStep / (rLastDE - h);
+                rSF = (rT < 1.0) ? max(0.5, rT) : 1.0;
+            } else { rSF = 1.0; }
+        }
+        rLastDE = h;
+
         float thresh = max(1.0e-6, t * 0.0002);
 
         if(h < thresh) return 0.0;
 
-        t += h * fudge;
+        float stepW = max(thresh * 0.5, (h - uMb3dDEsub * thresh) * fudge * rSF);
+        rLastStep = stepW;
+        primed = true;
+        t += stepW;
 
         if(t > lightDist) return 1.0;
     }

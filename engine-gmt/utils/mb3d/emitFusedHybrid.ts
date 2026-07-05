@@ -480,18 +480,20 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // NO-ANALYTIC-DERIVATIVE AUTO-ROUTE (estimator 7, ADR-0085). When nothing in the weave
   // supplies a usable dr (noAnalyticDE, computed above), the analytic path renders blank —
   // so route to the numerical finite-difference estimator with the certified recipe:
-  //   estimator 7 + numDEeps 0.3 (magnitude) + numDESmooth 2.5 (deep-region flicker) + the
-  //   mb3dFaithful marcher (set below in the sceneQuality block). Detail is capped to 1.5 there
-  //   (the numeric DE is rougher — a fine authored threshold makes rays miss). @see docs/adr/0085.
+  //   estimator 7 + numDEeps 0.3 (magnitude) + numDESmooth 2.5 (deep-region flicker).
+  //   The marcher's clamp+damper (unconditional since ADR-0092) damps the rough estimate.
+  //   Detail is capped to 1.5 (the numeric DE is rougher — a fine authored threshold
+  //   makes rays miss). @see docs/adr/0085.
   if (noAnalyticDE) {
     preset.features.quality = {
       ...(preset.features.quality ?? {}),
       estimator: 7.0, numDEeps: 0.3, numDESmooth: 2.5,
-      // mb3dFaithful + detail are (re)asserted in the sceneQuality block below when the header
-      // carries DE tuning; set them here too so a scene with no authored DEstop/RStop still gets
-      // the full est7 recipe (the faithful marcher damps the over-estimating numeric DE; the
-      // rougher DE needs a looser hit threshold than analytic → detail ≤ 1.5).
-      mb3dFaithful: true, detail: 1.5,
+      // detail is (re)asserted in the sceneQuality block below when the header carries
+      // DE tuning; set it here too so a scene with no authored DEstop/RStop still gets
+      // the full est7 recipe (the marcher's clamp+damper — now unconditional, ADR-0092 —
+      // damps the over-estimating numeric DE; the rougher DE needs a looser hit
+      // threshold than analytic → detail ≤ 1.5).
+      detail: 1.5,
     };
   }
 
@@ -544,46 +546,32 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     // noisy deep-region surface. Cap detail at 1.5 (the certified recipe); the user can raise it.
     if (noAnalyticDE) sceneQuality.detail = Math.min(sceneQuality.detail ?? 1.5, 1.5);
     // Step size: honour the artist's authored ZstepDiv. MB3D's march advances
-    // `dTmp * sZstepDiv` (Calc.pas:1878) — exactly GMT's `d += DE * uFudgeFactor`
-    // (trace.ts:213), a 1:1 mapping. The old code ignored the authored value and
-    // floored 0.5/ceiled 0.7. Floor at 0.3: MB3D affords a finer march because it
-    // binary-searches the surface after crossing DEstop (bStepsafterDEStop); GMT
-    // marches to the threshold directly, so a tiny ZstepDiv (Ellarien/Theli 0.05-0.1)
-    // would blow the step budget. Fall back to the formula DEscale if ZstepDiv is unset.
-    const authoredFudge = h2.zStepDiv > 0 ? h2.zStepDiv : ((q.fudgeFactor as number) || 0.5);
-    // Floor raised 0.3 → 0.4 (2026-06-28, round-2 A1). At the old 0.3 floor + the 2000
-    // maxSteps cap, the densest IFS/Menger scenes (Theli, TimeMachine) took steps too tiny
-    // to cross the whole volume in the budget → the back of the model was cut off. A coarser
-    // 0.4 step crosses it, and the overstepTolerance recovery below snaps back onto any thin
-    // detail the bigger step would otherwise tunnel through — net: full volume, no lost detail.
-    sceneQuality.fudgeFactor = Math.min(1.0, Math.max(0.4, authoredFudge));
-    // MB3D-FAITHFUL MARCHER (ADR-0088). Render imports with MB3D's ACTUAL march
-    // convergence dynamics — the overstep clamp + RSFmul damper + msDEsub safety-
-    // subtraction from the live marcher (CalcThread.pas:196-230) — instead of GMT's
-    // plain sphere step. Those three are what stop an over-estimating / discontinuous
-    // fused DE from scattering thin surfaces into "dust". MB3D's absolute step
-    // constants are stepWidth-NORMALIZED (don't translate to GMT world units), so the
-    // port reuses GMT's world-unit hit threshold (finalEps ≈ MB3D msDEstop) + step
-    // floor and carries only the two dimensionless authored params, both from header
-    // fields parseMB3D already reads (no new parse): sZstepDiv and msDEsub.
-    let mb3dSZ = Math.max(0.0001, h2.zStepDiv > 0 ? h2.zStepDiv : 0.5);
+    // `dTmp * sZstepDiv` (Calc.pas:1878), and GMT's marcher IS the MB3D-faithful
+    // step since ADR-0092, so sZstepDiv maps 1:1 onto quality.fudgeFactor — the
+    // unified step divisor (the separate mb3dStepDiv param/uniform is retired).
+    // MB3D's absolute step constants remain stepWidth-NORMALIZED (don't translate
+    // to GMT world units, ADR-0088); only the two dimensionless authored params
+    // carry over, both from header fields parseMB3D already reads (no new parse):
+    // sZstepDiv and msDEsub. Fall back to the formula DEscale if ZstepDiv is unset.
+    let mb3dSZ = Math.max(0.0001, h2.zStepDiv > 0 ? h2.zStepDiv : ((q.fudgeFactor as number) || 0.5));
     let mb3dDEsub = 0;
     // iOptions bit 2 (StepSubDEstop) → msDEsub + sZstepDiv quadratic remap (HeaderTrafos.pas:961-964).
     if ((h2.iOptions & 4) !== 0) {
       mb3dSZ = mb3dSZ * mb3dSZ + 1.2 * mb3dSZ * (1 - mb3dSZ);
       mb3dDEsub = Math.min(0.9, Math.sqrt(mb3dSZ));
     }
-    sceneQuality.mb3dStepDiv = Math.min(1.0, Math.max(0.01, mb3dSZ));
+    sceneQuality.fudgeFactor = Math.min(1.0, Math.max(0.01, mb3dSZ));
     sceneQuality.mb3dDEsub = mb3dDEsub;
     // With the faithful step's clamp+damper preventing overshoot, GMT's own closest-miss
     // recovery band-aid (uOverstepTolerance, the round-2 Theli fix for the plain step) is
     // redundant — turn it off so the two recovery mechanisms don't compound.
     sceneQuality.overstepTolerance = 0;
-    // Couple the march budget to the step size: a finer authored step (fudge < 0.5) needs a
-    // deeper march to cross the volume, else the image renders incomplete (cut-off / sparse —
-    // the S1 1c regression). Scale maxSteps inversely with fudge but NEVER below the 1500 base,
-    // so fudge ≥ 0.5 scenes are byte-identical — purely additive budget for the fine-step scenes.
-    sceneQuality.maxSteps = Math.min(2000, Math.max(1500, Math.round(750 / sceneQuality.fudgeFactor)));
+    // Couple the march budget to the step size: a finer authored step needs a deeper
+    // march to cross the volume, else the image renders incomplete (cut-off / sparse —
+    // the S1 1c regression). The curve is anchored on a 0.4 step floor (the faithful-
+    // marcher-era budgets — keeps every certified scene's budget identical); the 2000
+    // cap bounds the fine-step (< 0.4) scenes.
+    sceneQuality.maxSteps = Math.min(2000, Math.max(1500, Math.round(750 / Math.max(0.4, sceneQuality.fudgeFactor))));
     // NB: we deliberately do NOT auto-map bStepsafterDEStop (@134) → quality.refineSteps.
     // Surface refinement (ADR-0084) is a NATIVE, opt-in quality control (default 0). A
     // canary bench (2026-06-27) showed it does NOT resolve the DsyneGrafix-class "dust"
@@ -593,7 +581,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     // it would add ~0.5–2s compile to every import for no benefit on the target scenes,
     // so we leave it off and let the user dial it in the Quality panel for any
     // coherent-but-overshooting formula. @see docs/adr/0084.
-    preset.features.quality = { ...q, ...sceneQuality, mb3dFaithful: true };
+    preset.features.quality = { ...q, ...sceneQuality };
   }
 
   // dIFS DE wiring (estimator 6): declare a file-scope g_difsDE global (preamble),

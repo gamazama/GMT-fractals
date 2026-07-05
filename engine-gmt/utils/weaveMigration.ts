@@ -58,7 +58,7 @@ import { emitFusedHybrid } from './mb3d/emitFusedHybrid';
 import { buildWeaveScene } from './mb3d/sceneSynth';
 import { nativeSlotShell, nativeSlotReject } from '../engine/weave/nativeSlotCatalog';
 import { weaveBankKey } from './uniformSlots';
-import { boxFoldFormulaId, BOXFOLD_LEGACY_KEYS } from '../formulas/boxFolds';
+import { boxFoldFormulaId, BOXFOLD_LEGACY_KEYS, BOXFOLD_VEC4_LEGACY } from '../formulas/boxFolds';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const numOr = (v: any, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -179,9 +179,16 @@ function migrateLegacyWeaves(preset: any): void {
     }
     let foldDef: FractalDefinition | undefined;
     if (useFold) {
-        const foldId = boxFoldFormulaId(Math.round(numOr(g.hybridFoldType, 0)));
+        const foldType = Math.round(numOr(g.hybridFoldType, 0));
+        const foldId = boxFoldFormulaId(foldType);
+        if (!foldId) return bail(`legacy fold type ${foldType} ("half") is retired with no successor`);
         foldDef = registry.get(foldId as any) as FractalDefinition | undefined;
         if (!foldDef) return bail(`fold formula "${foldId}" is not registered`);
+        if (foldType === 3) {
+            console.warn('[weaveMigration] legacy "decoupled" fold is retired — migrated to the Standard fold (identical at the default Folding Value = 2·Fold Limit; a custom Folding Value is dropped).');
+        } else if (foldType >= 5 && foldType <= 7) {
+            console.warn('[weaveMigration] the KIFS folds (tetra/octa/icosa) were reworked to MB3D-faithful offset IFS steps (2026-07-05) — this scene will render differently from the legacy sphereFold variant.');
+        }
         if (Math.round(numOr(g.hybridPermute, 0)) !== 0) {
             console.warn('[weaveMigration] legacy hybridPermute is not carried onto the BoxFold slot — migrating with the default c mapping.');
         }
@@ -209,8 +216,12 @@ function migrateLegacyWeaves(preset: any): void {
         trackPrefix?: (p: any) => string | undefined;
     };
     const cm = feats.coreMath ?? {};
-    const foldValues = (p: any) => (BOXFOLD_LEGACY_KEYS[p.id] !== undefined ? g[BOXFOLD_LEGACY_KEYS[p.id]] : undefined) ?? p.default;
-    const foldTrack = (p: any) => (BOXFOLD_LEGACY_KEYS[p.id] ? `geometry.${BOXFOLD_LEGACY_KEYS[p.id]}` : undefined);
+    // vec4A carries the fold-specific vec (kali constant / menger offset) —
+    // its legacy key differs per fold, hence the separate per-formula map.
+    const foldLegacyKey = (p: any): string | undefined =>
+        p.id === 'vec4A' ? (foldDef ? BOXFOLD_VEC4_LEGACY[foldDef.id as string] : undefined) : BOXFOLD_LEGACY_KEYS[p.id];
+    const foldValues = (p: any) => { const k = foldLegacyKey(p); return (k !== undefined ? g[k] : undefined) ?? p.default; };
+    const foldTrack = (p: any) => { const k = foldLegacyKey(p); return k ? `geometry.${k}` : undefined; };
     const hostPlan: SlotPlan = {
         def: hostDef, iterCount: 1,
         values: (p) => cm[p.id] ?? p.default,
