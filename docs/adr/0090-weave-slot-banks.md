@@ -8,6 +8,16 @@
 > uniform set is DELETED with the feature (one migration, not two); Hybrid Box
 > fold params land on the BoxFold slot's bank. See ADR-0091.
 
+> **Update 2026-07-05 (rebuild now preserves surviving banks; decision unchanged):**
+> The "reseeds bank defaults on rebuild" behaviour below (Save compat / migration)
+> is refined: `loadUserWeave` (`mergeWeaveBanks`) now PRESERVES the live `ws<k>*`
+> values of every slot that survives a Build unchanged (matched by bank index +
+> slot identity), and carries a single formula's live coreMath onto bank 0 on its
+> first build — so a no-op Build (or one after only param tweaks) no longer resets
+> slot params to formula defaults. A bank whose formula CHANGED (reorder/replace)
+> still takes the fresh default rather than mis-applying another slot's values;
+> full per-slot value transfer across reorder remains P4.6.
+
 ## Context
 
 ADR-0089 P4.1 made a registered native GMT formula a dispatcher-hosted weave
