@@ -125,6 +125,48 @@ function weaveSourceFromScene(scene: MB3DScene): FractalDefinition['weaveSource'
   };
 }
 
+/** Merge freshly-built weave feature state with the LIVE one on an editor Rebuild.
+ *  Fresh supplies the schema + native BANK defaults (ADR-0090); from live we keep:
+ *   - RHYTHM params (`weave*`) — the editor writes these to the store directly;
+ *   - per-slot BANK values (`ws<k>*`) for any slot that SURVIVES unchanged (same
+ *     bank index + same slot identity), so a Build with no structural change (or
+ *     just param tweaks) doesn't reset slot params to formula defaults. A bank
+ *     whose formula changed (reorder/replace) takes the fresh default — full
+ *     per-slot value transfer across reorder is P4.6;
+ *   - for a FIRST build off a single formula, that formula's live coreMath params
+ *     carry onto bank 0 (same continuity).
+ *  @see docs/adr/0090-weave-slot-banks.md */
+function mergeWeaveBanks(
+  fresh: Record<string, any>,
+  live: Record<string, any>,
+  newSlots: Array<{ kind: string; ref: string | number }>,
+  oldFormula: string,
+  oldCoreMath: Record<string, any>,
+): Record<string, any> {
+  const merged: Record<string, any> = { ...fresh };
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  // Live rhythm params always win (the schedule the user set live).
+  for (const [k, v] of Object.entries(live)) if (k.startsWith('weave')) merged[k] = v;
+
+  const ident = (s?: { kind: string; ref: string | number }) => (s ? `${s.kind}:${s.ref}` : '');
+  const oldSlots = (registry.get(oldFormula as any) as FractalDefinition | undefined)?.weaveSource?.slots ?? [];
+
+  newSlots.forEach((s, k) => {
+    const bankRe = new RegExp(`^ws${k}[A-Z]`);
+    if (ident(oldSlots[k]) && ident(oldSlots[k]) === ident(s)) {
+      // Slot survived at the same bank → keep its live param values.
+      for (const [key, v] of Object.entries(live)) if (bankRe.test(key)) merged[key] = v;
+    } else if (k === 0 && oldSlots.length === 0 && ident(s) === `native:${oldFormula}`) {
+      // First build off a single formula → carry its coreMath onto bank 0.
+      for (const [key, v] of Object.entries(oldCoreMath)) {
+        const bk = `ws0${cap(key)}`;
+        if (bk in merged) merged[bk] = v;
+      }
+    }
+  });
+  return merged;
+}
+
 /**
  * Build + register + load a user-authored weave (the Weave Editor's Build button).
  *
@@ -204,17 +246,16 @@ export function loadUserWeave(
       coreMath: preset.features?.coreMath,
       geometry: preset.features?.geometry,
       quality: preset.features?.quality,
-      // Adopt the freshly-built native BANK defaults (ADR-0090; ws<k>* keys) from
-      // the new preset — like coreMath, a formula-structure rebuild reseeds the
-      // slot params (a full per-slot transfer is P4.6). But PRESERVE the live
-      // RHYTHM params (weave*<k>): the editor writes them to the store directly and
-      // a rebuild must not reset the schedule to feature defaults.
-      weave: {
-        ...(preset.features?.weave ?? {}),
-        ...Object.fromEntries(
-          Object.entries(current.features?.weave ?? {}).filter(([k]) => k.startsWith('weave')),
-        ),
-      },
+      // Preserve the live RHYTHM params (weave*) AND the per-slot BANK values
+      // (ws<k>*) of slots that survive the rebuild — a Build must not reset slot
+      // params to formula defaults (ADR-0090). See mergeWeaveBanks.
+      weave: mergeWeaveBanks(
+        preset.features?.weave ?? {},
+        current.features?.weave ?? {},
+        weaveSource?.slots ?? [],
+        current.formula,
+        current.features?.coreMath ?? {},
+      ),
     },
   });
   const names = ledger.slotFlags.map((s) => s.name).join(' → ');
