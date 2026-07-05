@@ -12,7 +12,6 @@ import { FractalEvents, FRACTAL_EVENTS } from '../../../../engine/FractalEvents'
 import { showToast } from '../../../../engine/store/toastStore';
 import { buildFormulaContextMenu } from './FormulaContextMenu';
 import { ModifyWithAIModal } from './ModifyWithAIModal';
-import { ImportMandelbulb3DModal } from './ImportMandelbulb3DModal';
 import { FormulaPicker, useSceneGroups, useCatalogData, sectionGroups } from '../../FormulaPicker';
 import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
 
@@ -31,7 +30,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
     const fileRef = useRef<HTMLInputElement>(null);
     const [rect, setRect] = useState<DOMRect | null>(null);
     const [aiOpen, setAiOpen] = useState(false);
-    const [mb3dOpen, setMb3dOpen] = useState(false);
+    const openImportMb3d = useEngineStore(s => (s as any).openImportMb3d as () => void);
 
     // Global Hooks
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
@@ -70,7 +69,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             { label: 'Import', action: () => {}, isHeader: true },
             {
                 label: 'Import Mandelbulb3D…',
-                action: () => setMb3dOpen(true),
+                action: () => openImportMb3d(),
             },
         ];
         const items = [...aiItems, ...buildFormulaContextMenu()];
@@ -288,20 +287,29 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                     }}
                     extraGroups={sceneGroups}
                     catalogGroups={catalogGroups}
-                    footerSlot={advancedMode ? (
-                        <button
-                            onClick={() => { fileRef.current?.click(); setIsOpen(false); }}
-                            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-accent-900/20 hover:bg-accent-900/40 text-accent-400 text-[10px] font-bold rounded border border-accent-500/20 hover:border-accent-500/50 transition-colors"
-                        >
-                            <UploadIcon />
-                            Import Formula (.GMF)
-                        </button>
-                    ) : undefined}
+                    footerSlot={(
+                        <div className="space-y-1.5">
+                            <button
+                                onClick={() => { openImportMb3d(); setIsOpen(false); }}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-line/[0.04] hover:bg-line/[0.08] text-fg-muted hover:text-fg text-[10px] font-bold rounded border border-line/15 hover:border-accent-500/40 transition-colors"
+                            >
+                                Import Mandelbulb3D…
+                            </button>
+                            {advancedMode && (
+                                <button
+                                    onClick={() => { fileRef.current?.click(); setIsOpen(false); }}
+                                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-accent-900/20 hover:bg-accent-900/40 text-accent-400 text-[10px] font-bold rounded border border-accent-500/20 hover:border-accent-500/50 transition-colors"
+                                >
+                                    <UploadIcon />
+                                    Import Formula (.GMF)
+                                </button>
+                            )}
+                        </div>
+                    )}
                 />
             )}
 
             <ModifyWithAIModal open={aiOpen} onClose={() => setAiOpen(false)} />
-            <ImportMandelbulb3DModal open={mb3dOpen} onClose={() => setMb3dOpen(false)} />
 
         </div>
     );

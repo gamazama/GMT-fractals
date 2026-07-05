@@ -217,6 +217,9 @@ export interface EngineStoreState extends FeatureStateMap {
   // New Scene wizard
   newSceneOpen: boolean;
 
+  // Import Mandelbulb3D dialog (global — openable from the File menu + FormulaPicker)
+  importMb3dOpen: boolean;
+
   // Viewport Quality System
   scalability: ScalabilityState;
   hardwareProfile: HardwareProfile | null;
@@ -390,6 +393,8 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     closeWorkshop: () => void;
     openNewScene: () => void;
     closeNewScene: () => void;
+    openImportMb3d: () => void;
+    closeImportMb3d: () => void;
 
     // Composition overlay
     setCompositionOverlay: (type: CompositionOverlayType) => void;

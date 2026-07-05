@@ -293,6 +293,16 @@ menu.registerItem('file', {
     onSelect: () => { useEngineStore.getState().openNewScene(); },
 });
 
+// Import a Mandelbulb3D scene / formula. Global dialog (also reachable from the
+// FormulaPicker footer); mounted once at app root.
+menu.registerItem('file', {
+    id: 'import-mb3d',
+    type: 'button',
+    label: 'Import Mandelbulb3D…',
+    order: -9,
+    onSelect: () => { (useEngineStore.getState() as any).openImportMb3d(); },
+});
+
 // Mobile users get Share Link only via this menu entry; desktop also
 // has the topbar icon (registered separately in registerGmtTopbar).
 menu.registerItem('file', { id: 'share-sep', type: 'separator' });

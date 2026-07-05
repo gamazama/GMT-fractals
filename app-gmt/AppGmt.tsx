@@ -40,6 +40,7 @@ import { UnsavedWorkGuard } from '../engine/components/UnsavedWorkGuard';
 import { FirstRunHint } from '../engine-gmt/components/FirstRunHint';
 import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubmissionsOverlay } from '../engine-gmt/gallery';
 import { NewSceneModal } from '../components/NewSceneModal';
+import { ImportMandelbulb3DModalHost } from '../engine-gmt/components/panels/formula/ImportMandelbulb3DModal';
 import { LoadFilterPanel } from '../components/LoadFilterPanel';
 import { PalettePickerOverlayHost } from './PalettePickerOverlay';
 import { SettingsHost } from './SettingsHost';
@@ -440,6 +441,7 @@ export const AppGmt: React.FC = () => {
                 <AuthOverlayHost />
                 <AccountPanelHost />
                 <NewSceneModal />
+                <ImportMandelbulb3DModalHost />
                 <LoadFilterPanel />
                 <PalettePickerOverlayHost />
                 <SettingsHost />

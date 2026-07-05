@@ -121,7 +121,7 @@ export type UISlice = Pick<EngineStoreState,
     'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' |
     'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot' |
     'workshopOpen' | 'workshopEditFormula' | 'workshopCatalogKey' |
-    'newSceneOpen' |
+    'newSceneOpen' | 'importMb3dOpen' |
     // Tutorial
     'tutorialActive' | 'tutorialLessonId' | 'tutorialStepIndex' | 'tutorialCompleted'
 > & Pick<EngineActions,
@@ -145,6 +145,7 @@ export type UISlice = Pick<EngineStoreState,
     // Workshop
     'openWorkshop' | 'closeWorkshop' |
     'openNewScene' | 'closeNewScene' |
+    'openImportMb3d' | 'closeImportMb3d' |
     // Tutorial
     'startTutorial' | 'advanceTutorialStep' | 'skipTutorial' | 'completeTutorial'
 >;
@@ -238,6 +239,7 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     // Workshop
     workshopOpen: false,
     newSceneOpen: false,
+    importMb3dOpen: false,
     workshopEditFormula: undefined,
     workshopCatalogKey: undefined,
 
@@ -311,6 +313,9 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
 
     openNewScene: () => set({ newSceneOpen: true }),
     closeNewScene: () => set({ newSceneOpen: false }),
+
+    openImportMb3d: () => set({ importMb3dOpen: true }),
+    closeImportMb3d: () => set({ importMb3dOpen: false }),
 
     // --- NEW LAYOUT ACTIONS IMPLEMENTATION ---
 
