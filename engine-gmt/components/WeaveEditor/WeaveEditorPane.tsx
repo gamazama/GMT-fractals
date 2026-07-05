@@ -49,6 +49,8 @@ import { loadUserWeave } from '../../utils/mb3d/loadMB3DScene';
 import { transpileSlot, getSlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
 import type { SlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
 import { getNativeSlotCatalog, nativeSlotShell, nativeSlotReject, isNativeSlot } from '../../engine/weave/nativeSlotCatalog';
+import { FOLD_OPTIONS } from '../../features/geometry/folds';
+import { boxFoldFormulaId } from '../../formulas/boxFolds';
 import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
@@ -320,6 +322,29 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             if (!built) return;
             commit({ ...draft, rows: [...draft.rows, built] });
         }
+    };
+
+    // ── Hybrid Box presets (P4.7 item 3) ─────────────────────────────────────
+    // The nine FOLD_LIST folds are registered BoxFold formulas (P4.5); this is
+    // the curated, friendly entry into them — the classic Hybrid Box, now a
+    // weave slot. Adds a configured BoxFold slot (its defaults + counts of 2).
+    const [hbPicker, setHbPicker] = useState<{ x: number; y: number; right: number } | null>(null);
+    const openHbPicker = (ev: React.MouseEvent) => {
+        const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+        setHbPicker({ x: rect.left, y: rect.bottom + 4, right: rect.right });
+    };
+    const hbItems = (): PickerItem[] =>
+        FOLD_OPTIONS.map((o) => ({
+            key: `fold:${o.value}`,
+            label: o.label,
+            description: `Add the ${o.label} box fold as a weave slot`,
+        }));
+    const addFoldPreset = (key: string) => {
+        setHbPicker(null);
+        const foldIndex = parseInt(key.slice(5), 10); // 'fold:<index>'
+        if (!Number.isFinite(foldIndex)) return;
+        const built = rowFromKey(`native:${boxFoldFormulaId(foldIndex)}`, nextColorIdx(draft.rows), DEFAULT_ITER_COUNT);
+        if (built) commit({ ...draft, rows: [...draft.rows, built] });
     };
 
     // ── Row edits ─────────────────────────────────────────────────────────────
@@ -629,15 +654,20 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     title="Redo structure edit">↷</button>
             </div>
 
-            {/* Add / Clear — above the rows */}
+            {/* Add / Hybrid Box presets / Clear — above the rows */}
             <div className="flex items-center gap-2">
                 <button onClick={(e) => openPicker(e)}
                     className="px-2.5 py-1 text-[11px] font-bold rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors">
                     + Add formula
                 </button>
+                <button onClick={openHbPicker}
+                    className="px-2.5 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors"
+                    title="Add a classic Hybrid Box fold as a weave slot — the retired Hybrid Box, as presets">
+                    Hybrid Box ▾
+                </button>
                 {draft.rows.length > 0 && (
                     <button onClick={clearAll}
-                        className="px-2 py-1 text-[10px] rounded border bg-line/[0.04] border-line/10 text-fg-tertiary hover:text-fg-muted transition-colors">
+                        className="ml-auto px-2 py-1 text-[10px] rounded border bg-line/[0.04] border-line/10 text-fg-tertiary hover:text-fg-muted transition-colors">
                         Clear
                     </button>
                 )}
@@ -952,6 +982,19 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     onClose={() => setPicker(null)}
                     categoryWidth={130}
                     itemWidth={210}
+                />
+            )}
+
+            {hbPicker && (
+                <CategoryPickerMenu
+                    x={hbPicker.x} y={hbPicker.y}
+                    anchorRight={hbPicker.right}
+                    categories={[{ id: 'hb', name: 'Hybrid Box folds', highlight: true }]}
+                    getItems={hbItems}
+                    onSelect={addFoldPreset}
+                    onClose={() => setHbPicker(null)}
+                    categoryWidth={140}
+                    itemWidth={220}
                 />
             )}
         </div>
