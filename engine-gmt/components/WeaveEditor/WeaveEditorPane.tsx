@@ -408,7 +408,22 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         const foldIndex = parseInt(key.slice(5), 10); // 'fold:<index>'
         if (!Number.isFinite(foldIndex)) return;
         const built = rowFromKey(`native:${boxFoldFormulaId(foldIndex)}`, nextColorIdx(draft.rows), DEFAULT_ITER_COUNT);
-        if (built) commit({ ...draft, rows: [...draft.rows, built] });
+        if (!built) return;
+        const newRows = [...draft.rows, built];
+        commit({ ...draft, rows: newRows });
+        // The Hybrid Box fold runs from iteration 0 (the classic pre-fold): give the
+        // new layer start 0, and if another layer already sits at 0 push every other
+        // layer +1 so the fold owns iteration 0 alone.
+        const active = newRows.map((r, i) => (r.slot.iterCount > 0 ? i : -1)).filter((i) => i >= 0);
+        const bIdx = draft.baseKey ? newRows.findIndex((r) => r.key === draft.baseKey && r.slot.iterCount > 0) : -1;
+        const base = bIdx >= 0 ? bIdx : active[0];
+        const layers = active.filter((i) => i !== base);
+        const boxPos = layers.indexOf(newRows.length - 1);
+        if (boxPos < 0) return;
+        const collide = layers.some((_, p) => p !== boxPos && layerVal(p + 1).start === 0);
+        const writes: Record<string, number> = { [`weaveStartIter${boxPos + 1}`]: 0 };
+        if (collide) layers.forEach((_, p) => { if (p !== boxPos) writes[`weaveStartIter${p + 1}`] = layerVal(p + 1).start + 1; });
+        store.setWeave?.(writes);
     };
 
     // ── Row edits ─────────────────────────────────────────────────────────────
