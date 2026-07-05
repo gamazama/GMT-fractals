@@ -2,6 +2,23 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-05 (P4.7 item 4c — fast-path engine retired; decision unchanged):**
+> The geometry-side Hybrid Box FAST path this ADR migrates *from* is now
+> physically DELETED from `features/geometry/index.ts` (commit b529329): the
+> pre-loop `uHybrid*` fold injection, the `formula_Hybrid` / `initHybridTransform`
+> emitters, `buildHybridFunctions` / `buildPermuteGLSL` / `buildFoldExtraParams`,
+> and every `hybrid*` geometry param + the Hybrid Box `panelConfig`. It was
+> already migration-shadowed — every load runs the migration below, which clears
+> `hybridCompiled`, so the pre-loop inject rendered nothing on any normal load
+> path. What STAYS: this migration's legacy READER (`weaveMigration.ts` still
+> consumes on-disk `hybrid*` / `hybridComplex` state), the `BoxFold` formulas +
+> `FOLD_LIST`, and the per-slot bank mapping. The one-shot per-iteration inject
+> splice that used to carry the fold (`ShaderBuilder.addHybridFold(init, preLoop,
+> inLoop)`) was renamed `addPerIterInject(code)` — geometry burning-mode and
+> coloring geometric-trap are its only remaining users; splice position/content
+> are unchanged so emitted GLSL is byte-identical (MB3D corpus 38/38). The
+> absorption decision is unchanged: legacy folds are BoxFold weave slots.
+
 ## Context
 
 ADR-0089 unified GMT's three formula-scheduling systems onto one engine weave
