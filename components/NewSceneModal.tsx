@@ -21,6 +21,9 @@ import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { FormulaPicker } from '../engine-gmt/components/FormulaPicker/FormulaPicker';
 import { useSceneGroups } from '../engine-gmt/components/FormulaPicker/useSceneGroups';
 import { FOLD_OPTIONS } from '../engine-gmt/features/geometry/folds';
+import { buildWeaveDef } from '../engine-gmt/utils/mb3d/loadMB3DScene';
+import { nativeSlotShell } from '../engine-gmt/engine/weave/nativeSlotCatalog';
+import { boxFoldFormulaId } from '../engine-gmt/formulas/boxFolds';
 import { getGalleryItem, type GalleryItem } from '../engine-gmt/gallery/GalleryClient';
 import { loadGMFScene } from '../engine-gmt/utils/FormulaFormat';
 import { extractMetadata } from '../utils/pngMetadata';
@@ -133,6 +136,63 @@ function pickRandomNative(opts: {
     });
     if (candidates.length === 0) return undefined;
     return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+/** Author a weave FractalDefinition directly from the wizard's choices — the
+ *  P4.7 (item 6) replacement for the legacy interlace / Hybrid-Box authoring
+ *  bridge. Returns the built + registered def (its `defaultPreset` carries the
+ *  weave state), or null when there's nothing to weave (no fold + no secondary)
+ *  or the build fails — the caller then falls back to the plain formula.
+ *
+ *  Fold present ⇒ classic pre-fold: a COUNTS weave with the fold as a one-shot
+ *  intro block (row 0) and the primary (+ optional secondary) looping after it.
+ *  No fold ⇒ interleave: a MODULO weave, primary base + secondary rhythm layer. */
+function authorWeaveDef(
+    primaryId: string,
+    foldType: number | null,
+    secondaryId: string | null,
+): FractalDefinition | null {
+    if (foldType === null && !secondaryId) return null;
+
+    type Row = { label: string; kind: 'native'; ref: string; slot: ReturnType<typeof nativeSlotShell> };
+    const rowFor = (id: string): Row | null => {
+        const def = registry.get(id);
+        if (!def) return null;
+        return { label: def.name ?? id, kind: 'native', ref: id, slot: nativeSlotShell(id, 2) };
+    };
+
+    const primary = rowFor(primaryId);
+    if (!primary) return null;
+    const foldId = foldType !== null ? boxFoldFormulaId(foldType) : null;
+    const fold = foldId ? rowFor(foldId) : null;
+    const secondary = secondaryId ? rowFor(secondaryId) : null;
+    // A requested layer that couldn't be built (retired fold, unregistered id)
+    // shouldn't silently vanish into a bare primary — bail so the caller keeps
+    // the plain formula rather than a misleading half-weave.
+    if (foldType !== null && !fold) return null;
+    if (secondaryId && !secondary) return null;
+
+    let rows: Row[];
+    let schedule: NonNullable<FractalDefinition['weaveSource']>['schedule'];
+    let repeatFrom = 0;
+    if (fold) {
+        rows = [fold, primary, ...(secondary ? [secondary] : [])];
+        repeatFrom = 1;
+        schedule = { kind: 'counts', repeatFrom: 1, breaks: [{ afterRow: 0, repeat: 1 }] };
+    } else {
+        rows = [primary, secondary!];
+        schedule = { kind: 'modulo', layers: [{ interval: 2, startIter: 1 }] };
+    }
+
+    const title = rows.map((r) => r.label).join(' × ');
+    const weaveSource: NonNullable<FractalDefinition['weaveSource']> = {
+        version: 1,
+        title,
+        slots: rows.map((r) => ({ label: r.label, kind: r.kind, ref: r.ref, slot: { ...r.slot } })),
+        schedule,
+    };
+    const built = buildWeaveDef(rows.map((r) => r.slot), title, weaveSource, repeatFrom);
+    return built.ok ? built.def : null;
 }
 
 /** Fetch + parse a gallery item's full preset. Mirrors loadGalleryScene's
@@ -317,48 +377,47 @@ export const NewSceneModal: React.FC = () => {
         // loadScene routes through the existing compile gate
         // (CONFIG → CONFIG_DONE) + camera teleport + history reset.
 
-        // Geometry overrides — only applied when the section has non-default
-        // values AND the toggle isn't disabled by protocol. Param names match
-        // engine-gmt/features/geometry/index.ts (GeometryState interface).
-        // We always set BOTH compile-gate and runtime-toggle params atomically
-        // so the feature lands in a coherent state on first compile (matches
+        // Weave authoring (P4.7 item 6) — the Hybrid Box fold and the interleave
+        // secondary now build a native weave def DIRECTLY, no legacy features.
+        // interlace / geometry.hybrid* bridge. A built weave becomes the target
+        // base (its id + defaultPreset carry the weave state). Scene-base
+        // composites are the one exception: authoring a fresh weave would drop the
+        // gallery scene's own params, so that rare combo keeps the legacy shape
+        // below and rides the (still-present) load-time v3 migration.
+        const foldType = geometry.hybridBox && !hybridBoxDisabled ? geometry.hybridFoldType : null;
+        const secondaryId = interlace.secondary && !interlaceDisabled ? interlace.secondary : null;
+        const weaveDef = !formulaScenePreset ? authorWeaveDef(pickedFormula, foldType, secondaryId) : null;
+
+        // Geometry overrides. Burning Mode is a real feature (always honored). The
+        // Hybrid Box fold is authored into the weave when one is built; the legacy
+        // hybrid* fields are only set in the scene-base fallback. Set BOTH
+        // compile-gate and runtime-toggle params atomically (matches
         // CompilableFeatureSection.handleCompile's atomic-flip convention).
         const geometryOverrides: Record<string, any> = {};
-        if (geometry.hybridBox && !hybridBoxDisabled) {
-            geometryOverrides.hybridCompiled = true;
-            geometryOverrides.hybridMode = true;
-            geometryOverrides.hybridFoldType = geometry.hybridFoldType;
-            // applyTransformLogic is the master geometry switch — defaults true
-            // but some formulas' defaultPresets may have flipped it. Force ON
-            // so the geometry inject path runs.
-            geometryOverrides.applyTransformLogic = true;
-        }
         if (geometry.burningMode) {
             geometryOverrides.burningEnabled = true;
             geometryOverrides.burningRuntime = true;
         }
-
-        // Interlace overrides — compile-time params only. Interval +
-        // start-iter are left at defaults; user tunes runtime post-create.
-        // interlaceEnabled runtime toggle is set ON so the user sees the
-        // effect immediately on first render.
-        // NOTE (ADR-0089 P4.4): the interlace FEATURE is retired — this composer
-        // still authors legacy-shaped features.interlace, and the load-time
-        // migration (applyMigrations v3, inside loadPreset) converts it into a
-        // 2-slot native weave before any setter runs. One authoring bridge, one
-        // migration path — no live interlace state ever reaches the store.
         const interlaceOverrides: Record<string, any> = {};
-        if (interlace.secondary && !interlaceDisabled) {
-            interlaceOverrides.interlaceCompiled = true;
-            interlaceOverrides.interlaceEnabled = true;
-            interlaceOverrides.interlaceFormula = interlace.secondary;
+        if (!weaveDef) {
+            if (foldType !== null) {
+                geometryOverrides.hybridCompiled = true;
+                geometryOverrides.hybridMode = true;
+                geometryOverrides.hybridFoldType = foldType;
+                geometryOverrides.applyTransformLogic = true;
+            }
+            if (secondaryId) {
+                interlaceOverrides.interlaceCompiled = true;
+                interlaceOverrides.interlaceEnabled = true;
+                interlaceOverrides.interlaceFormula = secondaryId;
+            }
         }
 
         // Deep-clone the chosen base so wizard merges don't mutate the
         // registry's defaultPreset (shared singleton) or the scene's preset.
-        const basePreset = formulaScenePreset ?? def.defaultPreset;
+        const basePreset = weaveDef ? weaveDef.defaultPreset : (formulaScenePreset ?? def.defaultPreset);
         const targetPreset: any = JSON.parse(JSON.stringify(basePreset ?? {}));
-        targetPreset.formula = pickedFormula;
+        targetPreset.formula = weaveDef ? weaveDef.id : pickedFormula;
         targetPreset.name = 'Untitled Scene';
         targetPreset.version = 0;
         // Shading copy — collect feature slices + lights[] from the picked
@@ -462,9 +521,26 @@ export const NewSceneModal: React.FC = () => {
         }
         const shadingDef = pickRandomNative({ exclude: new Set([primaryDef.id]) });
 
-        // Build base preset from primary formula
-        const targetPreset: any = JSON.parse(JSON.stringify(primaryDef.defaultPreset ?? {}));
-        targetPreset.formula = primaryDef.id;
+        // Interleave — ~50% chance, only when primary supports it (not
+        // self-contained or modular). Authored as a native weave directly
+        // (P4.7 item 6) — no legacy features.interlace bridge.
+        const primaryCaps = primaryDef.shader.capabilities;
+        const primaryCanInterlace =
+            !primaryCaps?.has('shape:self-contained') &&
+            !primaryCaps?.has('shape:modular');
+        let weaveDef: FractalDefinition | null = null;
+        if (primaryCanInterlace && Math.random() < 0.5) {
+            const secondaryDef = pickRandomNative({
+                exclude: new Set([primaryDef.id, ...(shadingDef ? [shadingDef.id] : [])]),
+                rejectShapes: ['shape:self-contained', 'shape:modular'],
+            });
+            if (secondaryDef) weaveDef = authorWeaveDef(primaryDef.id, null, secondaryDef.id);
+        }
+
+        // Build base preset from the weave (if authored) else the primary formula.
+        const baseDef = weaveDef ?? primaryDef;
+        const targetPreset: any = JSON.parse(JSON.stringify(baseDef.defaultPreset ?? {}));
+        targetPreset.formula = baseDef.id;
         targetPreset.name = 'Untitled Scene';
         targetPreset.version = 0;
         targetPreset.savedCameras = [];
@@ -487,31 +563,6 @@ export const NewSceneModal: React.FC = () => {
                 }
             }
             if (sourceLights) targetPreset.lights = sourceLights;
-        }
-
-        // Interlace — ~50% chance, only when primary supports it (not
-        // self-contained or modular). Secondary must also support it.
-        const primaryCaps = primaryDef.shader.capabilities;
-        const primaryCanInterlace =
-            !primaryCaps?.has('shape:self-contained') &&
-            !primaryCaps?.has('shape:modular');
-        if (primaryCanInterlace && Math.random() < 0.5) {
-            const secondaryDef = pickRandomNative({
-                exclude: new Set([primaryDef.id, ...(shadingDef ? [shadingDef.id] : [])]),
-                rejectShapes: ['shape:self-contained', 'shape:modular'],
-            });
-            if (secondaryDef) {
-                const existingFeatures = (targetPreset.features ?? {}) as Record<string, any>;
-                targetPreset.features = {
-                    ...existingFeatures,
-                    interlace: {
-                        ...(existingFeatures.interlace ?? {}),
-                        interlaceCompiled: true,
-                        interlaceEnabled: true,
-                        interlaceFormula: secondaryDef.id,
-                    },
-                };
-            }
         }
 
         loadScene({ preset: targetPreset });

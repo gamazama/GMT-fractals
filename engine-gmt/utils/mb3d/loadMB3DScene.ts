@@ -193,12 +193,20 @@ function mergeWeaveBanks(
  * WeaveSpec-shaped `weaveSource` is attached to the def so the weave can be
  * reopened and re-edited (importSource pattern, ADR-0058/0089).
  */
-export function loadUserWeave(
+/**
+ * Build + register a user-authored weave def WITHOUT loading it — the pure
+ * "make the fused def" half of loadUserWeave. Returns the registered def (its
+ * `defaultPreset` carries the authored rhythm/bank state) so callers can either
+ * rebuild-in-place (loadUserWeave) or compose a fresh scene on top of it
+ * (NewSceneModal authoring a weave directly, P4.7 item 6). Registers the def +
+ * emits REGISTER_FORMULA so `loadScene({ preset: def.defaultPreset })` resolves.
+ */
+export function buildWeaveDef(
   slots: MB3DFormulaSlot[],
   title: string,
-  weaveSource?: import('../../types/fractal').FractalDefinition['weaveSource'],
+  weaveSource?: FractalDefinition['weaveSource'],
   repeatFrom = 0,
-): LoadMB3DResult {
+): { ok: true; def: FractalDefinition; ledger: WeaveLedger } | { ok: false; ledger: WeaveLedger } {
   // Rhythm (layered modulo) schedule rides in on the weaveSource; the emit swaps the
   // baked counts LUT for the layered runtime-uniform phase fn (uWeave*<k> uniforms).
   const rhythm = weaveSource?.schedule.kind === 'modulo' ? weaveSource.schedule : undefined;
@@ -221,7 +229,7 @@ export function loadUserWeave(
     { ...(rhythm ? { schedule: { kind: 'modulo' as const, ...(rhythm.baseRow !== undefined ? { baseRow: rhythm.baseRow } : {}) } } : dividers ? { dividers } : {}), slotBake, enableGate: true },
   );
   if (!def) {
-    return { ok: false, reason: ledger.reasons.join(' '), ledger };
+    return { ok: false, ledger };
   }
   if (weaveSource) def.weaveSource = weaveSource;
   // Stamp the built rhythm into the def's preset so re-picking this formula later
@@ -243,6 +251,20 @@ export function loadUserWeave(
   }
   registry.register(def);
   FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+  return { ok: true, def, ledger };
+}
+
+export function loadUserWeave(
+  slots: MB3DFormulaSlot[],
+  title: string,
+  weaveSource?: FractalDefinition['weaveSource'],
+  repeatFrom = 0,
+): LoadMB3DResult {
+  const built = buildWeaveDef(slots, title, weaveSource, repeatFrom);
+  if (!built.ok) {
+    return { ok: false, reason: built.ledger.reasons.join(' '), ledger: built.ledger };
+  }
+  const { def, ledger } = built;
 
   const preset: any = def.defaultPreset;
   const store = useEngineStore.getState() as any;
