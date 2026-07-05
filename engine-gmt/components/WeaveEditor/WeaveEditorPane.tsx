@@ -409,6 +409,17 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         if (!Number.isFinite(foldIndex)) return;
         const built = rowFromKey(`native:${boxFoldFormulaId(foldIndex)}`, nextColorIdx(draft.rows), DEFAULT_ITER_COUNT);
         if (!built) return;
+        // Sequence mode: the fold is the classic pre-fold — put it in the FIRST slot
+        // and drop a loop divider right after it, so the box block plays as intro and
+        // the original formulas become the repeating cycle.
+        if (draft.scheduleKind !== 'modulo') {
+            commit({
+                ...draft,
+                rows: [built, ...draft.rows],
+                dividers: [...draft.dividers.filter((d) => d.afterKey !== built.key), { afterKey: built.key, repeat: 1 }],
+            });
+            return;
+        }
         const newRows = [...draft.rows, built];
         commit({ ...draft, rows: newRows });
         // The Hybrid Box fold runs from iteration 0 (the classic pre-fold): give the
