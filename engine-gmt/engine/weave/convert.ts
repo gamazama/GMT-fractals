@@ -73,13 +73,12 @@ function divisors(n: number): number[] {
 
 // ── phase functions (ONE simulator shared by preview + conversion) ────────────
 
-/** Rhythm phase: base = activeRows[0]; layer j (0-based) drives activeRows[j+1],
+/** Rhythm phase: `base` is the row left running when no layer claims (an EXPLICIT
+ *  role, not a position — spec §7); layer j (0-based) drives `layerRows[j]`,
  *  claimed when `rel = i − start ≥ 0 ∧ rel % interval == 0 ∧ (beats ≤ 0 ∨
  *  rel/interval < beats)`. Layers checked in order, FIRST hit wins (matches
  *  emitLayeredModuloGLSL). Returns the ROW index. */
-export function rhythmPhase(layers: RhythmLayer[], activeRows: number[]): PhaseFn {
-    const base = activeRows[0] ?? 0;
-    const layerRows = activeRows.slice(1);
+export function rhythmPhase(layers: RhythmLayer[], base: number, layerRows: number[]): PhaseFn {
     return (i: number) => {
         for (let j = 0; j < layers.length; j++) {
             const L = layers[j];
@@ -111,8 +110,8 @@ export function simulate(phase: PhaseFn, H: number): number[] {
 
 /** LoopStrip-shaped preview for Rhythm — the editor's old `rhythmPlan` IIFE, now
  *  sharing `rhythmPhase` so preview and conversion can never diverge. */
-export function rhythmPreviewPlan(layers: RhythmLayer[], activeRows: number[], iterCounts: number[], H = 96): WeaveSchedulePlan {
-    const order = simulate(rhythmPhase(layers, activeRows), H);
+export function rhythmPreviewPlan(layers: RhythmLayer[], base: number, layerRows: number[], iterCounts: number[], H = 96): WeaveSchedulePlan {
+    const order = simulate(rhythmPhase(layers, base, layerRows), H);
     return { order, introLen: order.length, cycleLen: 1, endTo: 0, repeatFrom: 0, nHybrid: iterCounts, hasSilent: false };
 }
 
@@ -153,21 +152,23 @@ export function certify(a: PhaseFn, sa: Struct, b: PhaseFn, sb: Struct): { equal
 
 // ── Sequence → Rhythm : the FIT ───────────────────────────────────────────────
 
-export type FitResult = { ok: true; layers: RhythmLayer[] } | ConvertFail;
+export type FitResult = { ok: true; baseRow: number; layers: RhythmLayer[] } | ConvertFail;
 
 /**
- * Fit a Rhythm (base + per-slot arithmetic progressions) to a counts plan's LUT.
+ * Fit a Rhythm to a counts plan's LUT by BASE ELECTION (spec §7).
  *
  * Each non-base active row's occurrence set must be a single AP (constant gap);
- * intro-only rows (living before the last divider) become beats-capped layers.
- * Because each fitted AP EQUALS that row's exact occurrence set and occurrence
- * sets partition the iterations, the layers are automatically disjoint — so
- * first-beat-wins can never misfire and no composition check is needed (spec §2).
+ * intro-only rows become beats-capped layers. Per-slot fitting is exact because
+ * occurrence sets partition the iterations (disjoint APs → first-beat-wins can
+ * never misfire; no composition check needed).
  *
- * base is pinned to `activeRows[0]` (the model's rule). If the fit only fails
- * because a DIFFERENT row is the natural gap-filler, we refuse with an actionable
- * "make X the first slot" reason rather than silently reordering rows (which would
- * change the Sequence state); auto-reorder is a documented follow-up (spec §5.1).
+ * The base is the row left running when no layer claims — an explicit ROLE, not a
+ * position. It's elected by TAIL DOMINANCE: the base owning the most of the
+ * repeating cycle ⇔ minimizing Σ 1/interval over the remaining ENDLESS layers
+ * (capped / intro-only layers cost 0), tie-break earliest row. That is the
+ * semantic definition of "base", and it makes the modulo enable-gate agree with
+ * the counts gate (both fall back to the tail formula). At most ONE row may be
+ * unfittable-as-a-layer — it must be the base; two or more ⇒ refuse.
  *
  * @param label rowIdx → display label, for the refusal messages.
  */
@@ -185,56 +186,58 @@ export function fitRhythmFromPlan(
     const cycleStart = plan.introLen;
     const cycleEnd = plan.introLen + Math.max(1, plan.cycleLen);
 
-    /** Try to fit every active row EXCEPT `base` as a layer. Returns the layers
-     *  (in the given `layerRows` order) or a per-row failure reason. */
-    const fitWithBase = (base: number, layerRows: number[]): { ok: true; layers: RhythmLayer[] } | { ok: false; reason: string; unfitRow: number } => {
-        const layers: RhythmLayer[] = [];
-        for (const r of layerRows) {
-            const occ: number[] = [];
-            for (let i = 0; i < H; i++) if (lut[i] === r) occ.push(i);
-            if (occ.length === 0) return { ok: false, reason: `"${label(r)}" never fires.`, unfitRow: r };
-            const endless = occ.some((i) => i >= cycleStart && i < cycleEnd);
-            const gaps: number[] = [];
-            for (let m = 1; m < occ.length; m++) gaps.push(occ[m] - occ[m - 1]);
-            const even = gaps.every((g) => g === gaps[0]);
-
-            let L: RhythmLayer;
-            if (!endless) {
-                // intro-only: k occurrences before the last divider.
-                if (occ.length === 1) L = { interval: 1, start: occ[0], beats: 1 };
-                else if (even) L = { interval: gaps[0], start: occ[0], beats: occ.length };
-                else return { ok: false, reason: `"${label(r)}" repeats unevenly (gaps ${gaps.join(',')}) — Rhythm fires evenly.`, unfitRow: r };
-            } else {
-                if (even) L = { interval: gaps[0], start: occ[0], beats: 0 };
-                else return { ok: false, reason: `"${label(r)}" repeats unevenly (gaps ${gaps.join(',')}) — Rhythm fires evenly.`, unfitRow: r };
-            }
-            if (L.interval > BOUNDS.INTERVAL_MAX || L.start > BOUNDS.START_MAX || L.beats > BOUNDS.BEATS_MAX) {
-                return { ok: false, reason: `"${label(r)}" needs interval ${L.interval} / start ${L.start} — outside Rhythm's range.`, unfitRow: r };
-            }
-            layers.push(L);
+    // Fit ONE row's occurrences to a single AP (base-independent — the occurrence
+    // set is fixed by the LUT, not by which row is elected base).
+    const fitLayer = (r: number): { ok: true; layer: RhythmLayer } | { ok: false; reason: string } => {
+        const occ: number[] = [];
+        for (let i = 0; i < H; i++) if (lut[i] === r) occ.push(i);
+        if (occ.length === 0) return { ok: false, reason: `"${label(r)}" never fires.` };
+        const endless = occ.some((i) => i >= cycleStart && i < cycleEnd);
+        const gaps: number[] = [];
+        for (let m = 1; m < occ.length; m++) gaps.push(occ[m] - occ[m - 1]);
+        const even = gaps.every((g) => g === gaps[0]);
+        let layer: RhythmLayer;
+        if (!endless) {
+            if (occ.length === 1) layer = { interval: 1, start: occ[0], beats: 1 };
+            else if (even) layer = { interval: gaps[0], start: occ[0], beats: occ.length };
+            else return { ok: false, reason: `"${label(r)}" repeats unevenly (gaps ${gaps.join(',')}) — Rhythm fires evenly.` };
+        } else if (even) {
+            layer = { interval: gaps[0], start: occ[0], beats: 0 };
+        } else return { ok: false, reason: `"${label(r)}" repeats unevenly (gaps ${gaps.join(',')}) — Rhythm fires evenly.` };
+        if (layer.interval > BOUNDS.INTERVAL_MAX || layer.start > BOUNDS.START_MAX || layer.beats > BOUNDS.BEATS_MAX) {
+            return { ok: false, reason: `"${label(r)}" needs interval ${layer.interval} / start ${layer.start} — outside Rhythm's range.` };
         }
-        return { ok: true, layers };
+        return { ok: true, layer };
     };
 
-    // Primary: base = activeRows[0], layers = the rest in row order.
-    const primary = fitWithBase(activeRows[0], activeRows.slice(1));
-    if (primary.ok) {
-        // Verify (0-diff-gate habit; provably safe, but catches model drift).
-        const fitted = rhythmPhase(primary.layers, activeRows);
-        const cert = certify(phase, planStructure(plan), fitted, rhythmStructure(primary.layers));
-        if (!cert.equal) return { ok: false, reason: 'Internal: fitted Rhythm did not reproduce the sequence.' };
-        return { ok: true, layers: primary.layers };
-    }
+    // Memoized per-row layer fit — the occurrence set is base-independent.
+    const memo = new Map<number, ReturnType<typeof fitLayer>>();
+    const fit1 = (r: number) => { let m = memo.get(r); if (!m) { m = fitLayer(r); memo.set(r, m); } return m; };
 
-    // Base fallback (refuse-with-reason): does making some OTHER row the base fit?
+    // Try EVERY active row as base; a base is valid iff every OTHER row fits as a
+    // layer (a base needs no AP — it fills the gaps — so a row that's uneven OR
+    // out-of-range can still be the base). Elect the valid base with the least
+    // remaining tail density (⇔ the most-dominant tail), tie-break earliest. The
+    // first layer-fit failure supplies the refusal reason if no base works.
+    let best: { baseRow: number; layers: RhythmLayer[]; density: number } | null = null;
+    let reason = '';
     for (const b of activeRows) {
-        if (b === activeRows[0]) continue;
-        const rest = activeRows.filter((r) => r !== b);
-        if (fitWithBase(b, rest.slice(1)).ok && rest[0] === b) {
-            return { ok: false, reason: `To convert to Rhythm, make "${label(b)}" the first slot (Rhythm's base is the first slot).` };
-        }
+        const layerRows = activeRows.filter((r) => r !== b);
+        const layers: RhythmLayer[] = [];
+        let ok = true;
+        for (const r of layerRows) { const f = fit1(r); if (!f.ok) { ok = false; if (!reason) reason = f.reason; break; } layers.push(f.layer); }
+        if (!ok) continue;
+        const density = layers.reduce((s, L) => s + (L.beats <= 0 ? 1 / Math.max(1, L.interval) : 0), 0);
+        if (!best || density < best.density) best = { baseRow: b, layers, density };
     }
-    return primary; // the specific unfit reason from the primary attempt
+    if (!best) return { ok: false, reason: reason || 'No slot can serve as the Rhythm base for this pattern.' };
+
+    const layerRows = activeRows.filter((r) => r !== best.baseRow);
+    // Certificate (0-diff-gate habit; provably safe by the partition argument).
+    if (!certify(phase, planStructure(plan), rhythmPhase(best.layers, best.baseRow, layerRows), rhythmStructure(best.layers)).equal) {
+        return { ok: false, reason: 'Internal: fitted Rhythm did not reproduce the sequence.' };
+    }
+    return { ok: true, baseRow: best.baseRow, layers: best.layers };
 }
 
 // ── Rhythm → Sequence : SIMULATE + COMPRESS ───────────────────────────────────
@@ -252,13 +255,14 @@ export type RunsResult = { ok: true; introRuns: Run[]; cycleRuns: Run[] } | Conv
  */
 export function runsFromRhythm(
     layers: RhythmLayer[],
-    activeRows: number[],
+    base: number,
+    layerRows: number[],
     label: (rowIdx: number) => string,
 ): RunsResult {
     const struct = rhythmStructure(layers);
     if (struct.period > BOUNDS.W_MAX) return { ok: false, reason: `This rhythm's pattern is ${struct.period} iterations long — too long to bake.` };
 
-    const phase = rhythmPhase(layers, activeRows);
+    const phase = rhythmPhase(layers, base, layerRows);
     const T = struct.intro;
     const P = struct.period;
     const lut = simulate(phase, T + 2 * P);

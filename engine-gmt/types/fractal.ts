@@ -182,10 +182,12 @@ export interface FractalDefinition {
             bake?: boolean[];
         }>;
         /** Schedule kind — counts is the baked-LUT sequence; modulo (live Rhythm)
-         *  is layered: the first active slot is the base, each further active slot
-         *  k is layer k with its own interval/start[/beats] snapshot (the LIVE
-         *  values ride the DDFS `weave` feature state; these are the built snapshot
-         *  for re-pick/hydrate). beats 0/absent = endless.
+         *  is layered: `baseRow` (a SLOT index — the tail formula run when no layer
+         *  claims; absent ⇒ the first active slot, so pre-base-election weaves load
+         *  byte-identical) is the base, and each NON-base active slot in row order
+         *  is a layer with its own interval/start[/beats] snapshot (the LIVE values
+         *  ride the DDFS `weave` feature state; these are the built snapshot for
+         *  re-pick/hydrate). beats 0/absent = endless. @see plans/mb3d/weave-seq-rhythm-conversion.md §7
          *
          *  Counts LOOP DIVIDERS (P4.7): `breaks` partitions the rows into blocks —
          *  the block ending at `afterRow` plays `repeat` times as intro; the
@@ -194,6 +196,6 @@ export interface FractalDefinition {
          *  "repeat from here": one divider, repeat 1) — MB3D imports carry no
          *  breaks, so their emission is unchanged. */
         schedule: { kind: 'counts'; repeatFrom?: number; breaks?: Array<{ afterRow: number; repeat: number }> }
-                | { kind: 'modulo'; layers: Array<{ interval: number; startIter: number; beats?: number }> };
+                | { kind: 'modulo'; baseRow?: number; layers: Array<{ interval: number; startIter: number; beats?: number }> };
     };
 }

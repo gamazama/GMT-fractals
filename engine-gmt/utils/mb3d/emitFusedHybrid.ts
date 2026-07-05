@@ -46,7 +46,7 @@ export interface EmitFusedOptions {
    *  arbitration rule). Requires 2–6 active slots; anything else is a ledger reason.
    *  @invariant opts absent (or kind ≠ modulo) = the counts path, byte-identical
    *  to the pre-P3b emit (probe: debug/probe-weave-refactor.mts). */
-  schedule?: { kind: 'modulo' };
+  schedule?: { kind: 'modulo'; baseRow?: number };
   /** LOOP DIVIDERS (P4.7): counts-schedule block boundaries — the block ending
    *  at `afterRow` plays `repeat` times as intro, the tail loops (buildBlockPlan).
    *  When present (and not modulo) they REPLACE the addon's repeatFrom nibble.
@@ -122,6 +122,12 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   if (modulo && (usedIdx.length < 2 || usedIdx.length > 6)) {
     reasons.push(`Rhythm (modulo) scheduling needs 2 to 6 active formula slots — this weave has ${usedIdx.length}.`);
   }
+  // Rhythm base (spec §7): an explicit tail slot (schedule.baseRow) if given + valid,
+  // else usedIdx[0] (first active slot — byte-identical to the pre-base emit). Layers =
+  // the remaining used slots in row order; layer j reads uWeave*{j+1}, phase j+1.
+  const baseSlot = modulo && opts?.schedule?.baseRow !== undefined && usedIdx.includes(opts.schedule.baseRow)
+    ? opts.schedule.baseRow : usedIdx[0];
+  const moduloLayerSlots = usedIdx.filter((idx) => idx !== baseSlot);
   // A hybrid weave must run long enough for every formula slot to execute at least
   // once, else a trailing slot never contributes to the DE. MB3D's authored iteration
   // count can fall below that: Wada basin authored iterations=2 over a 3-slot cycle
@@ -321,7 +327,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   const gate = opts?.enableGate ? { enabled: 'uWeaveEnabled' } : {};
   const weave = modulo
     ? emitLayeredModuloGLSL(
-        usedIdx.slice(1).map((_, j) => ({
+        moduloLayerSlots.map((_, j) => ({
           interval: `uWeaveInterval${j + 1}`,
           startIter: `uWeaveStartIter${j + 1}`,
           beats: `uWeaveBeats${j + 1}`,
@@ -608,7 +614,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     id,
     schedule: weave,
     slots: usedIdx.map((idx, k) => ({
-      phase: modulo ? k : idx,
+      phase: modulo ? (idx === baseSlot ? 0 : moduloLayerSlots.indexOf(idx) + 1) : idx,
       fnName: `${id}_slot${idx}`,
       glsl: bodies[k].glsl!,
       scratchVars: bodies[k].scratchVars,

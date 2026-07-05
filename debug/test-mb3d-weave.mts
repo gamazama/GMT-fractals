@@ -349,6 +349,20 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck('layered: interval clamps below 1', two.glsl.includes('if (skip < 1) skip = 1;'));
 }
 
+// ── Base election emit (spec §7): explicit baseRow moves phase 0 to that slot ──
+{
+  const mk = () => scene([slot(2, 4, [-1.5, 0.5, 1]), slot(1, 1, [8, 1])]);
+  const norm = (fn: string) => fn.replace(/MB3DHybrid\d+/g, 'HYB');
+  const d0 = emitFusedHybrid(mk(), { schedule: { kind: 'modulo' } }).def!;
+  const dFirst = emitFusedHybrid(mk(), { schedule: { kind: 'modulo', baseRow: 0 } }).def!;
+  const d1 = emitFusedHybrid(mk(), { schedule: { kind: 'modulo', baseRow: 1 } }).def!;
+  ck('baseRow: absent ≡ baseRow=first active (byte-identical)', norm(d0.shader.function) === norm(dFirst.shader.function));
+  ck('baseRow: baseRow=1 changes the emit', norm(d0.shader.function) !== norm(d1.shader.function));
+  const phase0Slot = (fn: string) => { const l = fn.split('\n').find((x) => /if \(phase == 0\)/.test(x)) ?? ''; const m = l.match(/_slot(\d+)\(/); return m ? +m[1] : -1; };
+  ck('baseRow: default → phase 0 = slot 0', phase0Slot(d0.shader.function) === 0, phase0Slot(d0.shader.function));
+  ck('baseRow: baseRow=1 → phase 0 = slot 1', phase0Slot(d1.shader.function) === 1, phase0Slot(d1.shader.function));
+}
+
 // ── Whole-weave master gate (P4.4 weaveEnabled, opt-in via opts.enableGate) ────
 {
   const s = scene([slot(2, 4, [-1.5, 0.5, 1]), slot(1, 1, [8, 1])]);
@@ -1192,36 +1206,58 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   const eqLUT = (a: number[], b: number[]) => JSON.stringify(a) === JSON.stringify(b);
   const pairs = (rs: { rowIdx: number; count: number }[]) => rs.map((r) => [r.rowIdx, r.count]);
 
+  const nonBase = (active: number[], base: number) => active.filter((r) => r !== base);
+
   // -- Sequence → Rhythm fits + LUT preservation --
   {
     const plan = buildBlockPlan({ iterCounts: [1, 1], dividers: [] });
     const fit = fitRhythmFromPlan(plan, activeOf([1, 1]), lbl);
-    ck('fit: A×1 B×1 → B(I2,S1,endless)',
-      fit.ok && fit.layers.length === 1 && fit.layers[0].interval === 2 && fit.layers[0].start === 1 && fit.layers[0].beats === 0,
-      fit.ok ? fit.layers : fit.reason);
+    ck('fit: A×1 B×1 → base 0, B(I2,S1,endless)',
+      fit.ok && fit.baseRow === 0 && fit.layers.length === 1 && fit.layers[0].interval === 2 && fit.layers[0].start === 1 && fit.layers[0].beats === 0,
+      fit.ok ? { base: fit.baseRow, layers: fit.layers } : fit.reason);
     if (fit.ok) ck('fit: A×1 B×1 LUT equal',
-      eqLUT(simulate(planPhase(plan), 40), simulate(rhythmPhase(fit.layers, activeOf([1, 1])), 40)));
+      eqLUT(simulate(planPhase(plan), 40), simulate(rhythmPhase(fit.layers, fit.baseRow, nonBase(activeOf([1, 1]), fit.baseRow)), 40)));
   }
   {
     const counts = [3, 1, 1];
     const plan = buildBlockPlan({ iterCounts: counts, dividers: [] });
     const fit = fitRhythmFromPlan(plan, activeOf(counts), lbl);
-    ck('fit: A×3 B×1 C×1 → B(I5,S3) C(I5,S4)',
-      fit.ok && fit.layers[0].interval === 5 && fit.layers[0].start === 3 && fit.layers[1].interval === 5 && fit.layers[1].start === 4,
-      fit.ok ? fit.layers : fit.reason);
+    ck('fit: A×3 B×1 C×1 → base 0, B(I5,S3) C(I5,S4)',
+      fit.ok && fit.baseRow === 0 && fit.layers[0].interval === 5 && fit.layers[0].start === 3 && fit.layers[1].interval === 5 && fit.layers[1].start === 4,
+      fit.ok ? { base: fit.baseRow, layers: fit.layers } : fit.reason);
     if (fit.ok) ck('fit: A×3 B×1 C×1 LUT equal',
-      eqLUT(simulate(planPhase(plan), 40), simulate(rhythmPhase(fit.layers, activeOf(counts)), 40)));
+      eqLUT(simulate(planPhase(plan), 40), simulate(rhythmPhase(fit.layers, fit.baseRow, nonBase(activeOf(counts), fit.baseRow)), 40)));
   }
   {
-    // divider intro: [A×2 B×1]×2 then C D → B capped (S2,I3,B2); C,D endless past intro
+    // divider intro: [A×2 B×1]×2 then C D → base 0, B capped (S2,I3,B2); C,D endless
     const counts = [2, 1, 1, 1];
     const plan = buildBlockPlan({ iterCounts: counts, dividers: [{ afterRow: 1, repeat: 2 }] });
     const fit = fitRhythmFromPlan(plan, activeOf(counts), lbl);
-    ck('fit: divider intro [A×2 B]×2 then C D',
-      fit.ok && fit.layers[0].interval === 3 && fit.layers[0].start === 2 && fit.layers[0].beats === 2,
-      fit.ok ? fit.layers : fit.reason);
+    ck('fit: divider intro [A×2 B]×2 then C D (base 0)',
+      fit.ok && fit.baseRow === 0 && fit.layers[0].interval === 3 && fit.layers[0].start === 2 && fit.layers[0].beats === 2,
+      fit.ok ? { base: fit.baseRow, layers: fit.layers } : fit.reason);
     if (fit.ok) ck('fit: divider-intro LUT equal',
-      eqLUT(simulate(planPhase(plan), 60), simulate(rhythmPhase(fit.layers, activeOf(counts)), 60)));
+      eqLUT(simulate(planPhase(plan), 60), simulate(rhythmPhase(fit.layers, fit.baseRow, nonBase(activeOf(counts), fit.baseRow)), 60)));
+  }
+
+  // -- Base election (spec §7): base is the tail formula, not the first row --
+  {
+    // Bristorbrot: fold intro A×1 then bristorbrot B loop → base elected = B (row 1),
+    // fold becomes a one-shot capped layer (S0,I1,B1). NOT activeRows[0].
+    const plan = buildBlockPlan({ iterCounts: [1, 4], dividers: [{ afterRow: 0, repeat: 1 }] });
+    const fit = fitRhythmFromPlan(plan, activeOf([1, 4]), lbl);
+    ck('elect: fold-intro → base = B (row 1), fold layer S0 I1 B1',
+      fit.ok && fit.baseRow === 1 && fit.layers.length === 1
+      && fit.layers[0].start === 0 && fit.layers[0].interval === 1 && fit.layers[0].beats === 1,
+      fit.ok ? { base: fit.baseRow, layers: fit.layers } : fit.reason);
+    ck('elect: elected base ≠ activeRows[0] (regression pin)', fit.ok && fit.baseRow !== activeOf([1, 4])[0]);
+    if (fit.ok) ck('elect: Bristorbrot LUT equal',
+      eqLUT(simulate(planPhase(plan), 40), simulate(rhythmPhase(fit.layers, fit.baseRow, nonBase(activeOf([1, 4]), fit.baseRow)), 40)));
+  }
+  {
+    // Tie-break: symmetric A×1 B×1 (both tail ½) → earliest row wins (base 0).
+    const fit = fitRhythmFromPlan(buildBlockPlan({ iterCounts: [1, 1], dividers: [] }), activeOf([1, 1]), lbl);
+    ck('elect: symmetric alternation → base 0 (tie-break earliest)', fit.ok && fit.baseRow === 0);
   }
 
   // -- Sequence → Rhythm refusals with exact reasons --
@@ -1243,21 +1279,21 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   {
     // base-interleave: B(I5,S2) + C(I5,S4) → cycle A A B A C (4 rows, base duplicated)
     const layers = [{ interval: 5, start: 2, beats: 0 }, { interval: 5, start: 4, beats: 0 }];
-    const runs = runsFromRhythm(layers, [0, 1, 2], lbl);
+    const runs = runsFromRhythm(layers, 0, [1, 2], lbl);
     ck('runs: base-interleave → A×2 B A C (dup base, 4 rows)',
       runs.ok && runs.introRuns.length === 0 && eqLUT(pairs(runs.cycleRuns).flat(), [0, 2, 1, 1, 0, 1, 2, 1]),
       runs.ok ? pairs(runs.cycleRuns) : runs.reason);
   }
   {
     // capped-layer intro → divider: base A + B(I1,S0,B2) → B×2 intro, A cycle
-    const runs = runsFromRhythm([{ interval: 1, start: 0, beats: 2 }], [0, 1], lbl);
+    const runs = runsFromRhythm([{ interval: 1, start: 0, beats: 2 }], 0, [1], lbl);
     ck('runs: capped intro → B×2 intro + A cycle',
       runs.ok && eqLUT(pairs(runs.introRuns).flat(), [1, 2]) && eqLUT(pairs(runs.cycleRuns).flat(), [0, 1]),
       runs.ok ? { intro: pairs(runs.introRuns), cyc: pairs(runs.cycleRuns) } : runs.reason);
   }
   {
     // minimal-period reduction: B(I2,S0) + C(I2,S1) → cycle len 2 (B C)
-    const runs = runsFromRhythm([{ interval: 2, start: 0, beats: 0 }, { interval: 2, start: 1, beats: 0 }], [0, 1, 2], lbl);
+    const runs = runsFromRhythm([{ interval: 2, start: 0, beats: 0 }, { interval: 2, start: 1, beats: 0 }], 0, [1, 2], lbl);
     ck('runs: two I=2 layers → cycle len 2 (B C)',
       runs.ok && runs.introRuns.length === 0 && eqLUT(pairs(runs.cycleRuns).flat(), [1, 1, 2, 1]),
       runs.ok ? pairs(runs.cycleRuns) : runs.reason);
@@ -1266,14 +1302,14 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   // -- Rhythm → Sequence refusals --
   {
     // co-prime 2 & 5 with 3 active rows → 10 runs > MAX_ROWS
-    const runs = runsFromRhythm([{ interval: 2, start: 0, beats: 0 }, { interval: 5, start: 0, beats: 0 }], [0, 1, 2], lbl);
+    const runs = runsFromRhythm([{ interval: 2, start: 0, beats: 0 }, { interval: 5, start: 0, beats: 0 }], 0, [1, 2], lbl);
     ck('runs refuse: co-prime 2&5 over row budget', !runs.ok && /slot rows/.test(runs.ok ? '' : runs.reason), runs.ok ? '' : runs.reason);
   }
   {
     // period lcm(31,32,27)=26784 > W_MAX → refuse before RLE
     const runs = runsFromRhythm(
       [{ interval: 31, start: 0, beats: 0 }, { interval: 32, start: 0, beats: 0 }, { interval: 27, start: 0, beats: 0 }],
-      [0, 1, 2, 3], lbl);
+      0, [1, 2, 3], lbl);
     ck('runs refuse: period over W_MAX', !runs.ok && /too long to bake/.test(runs.ok ? '' : runs.reason), runs.ok ? '' : runs.reason);
   }
 
@@ -1287,7 +1323,7 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       const plan = buildBlockPlan({ iterCounts: counts, dividers });
       const active = activeOf(counts);
       const fit = fitRhythmFromPlan(plan, active, lbl);
-      if (fit.ok) { checked++; if (!eqLUT(simulate(planPhase(plan), 240), simulate(rhythmPhase(fit.layers, active), 240))) ok = false; }
+      if (fit.ok) { checked++; if (!eqLUT(simulate(planPhase(plan), 240), simulate(rhythmPhase(fit.layers, fit.baseRow, nonBase(active, fit.baseRow)), 240))) ok = false; }
     }
     ck(`fuzz: fit ok ⇒ LUT equal (${checked} fits)`, ok && checked > 0);
   }
@@ -1301,13 +1337,13 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
         interval: 1 + Math.floor(Math.random() * 5), start: Math.floor(Math.random() * 4),
         beats: Math.random() < 0.4 ? 1 + Math.floor(Math.random() * 3) : 0,
       }));
-      const runs = runsFromRhythm(layers, active, lbl);
+      const runs = runsFromRhythm(layers, active[0], active.slice(1), lbl);
       if (runs.ok) {
         checked++;
         const all = [...runs.introRuns, ...runs.cycleRuns];
         const p2 = buildBlockPlan({ iterCounts: all.map((r) => r.count), dividers: runs.introRuns.length ? [{ afterRow: runs.introRuns.length - 1, repeat: 1 }] : [] });
         const rows = all.map((r) => r.rowIdx);
-        const src = simulate(rhythmPhase(layers, active), 300);
+        const src = simulate(rhythmPhase(layers, active[0], active.slice(1)), 300);
         const got = simulate((i: number) => rows[planPhase(p2)(i)] ?? rows[0], 300);
         if (!eqLUT(src, got)) ok = false;
       }

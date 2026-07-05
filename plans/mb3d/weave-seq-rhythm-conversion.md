@@ -179,3 +179,67 @@ structurally not the original — the idempotence shortcut (§1.2) is what makes
 - Property test: random valid counts drafts → if fitter says ok, certificate MUST pass (fuzz the
   disjointness argument); random rhythm layers → runsFromRhythm ok ⇒ certificate passes.
 - Clamp-coherence: editor read-clamps == `BOUNDS` (a unit test importing both).
+
+## 7. Addendum (2026-07-05): explicit base row — the fold-vs-formula inversion
+
+**Symptom (found post-implementation, Bristorbrot preset):** a migrated Hybrid Box scene is
+`boxfold ×1, bristorbrot ×N` → LUT `A B B B B …` with the fold as row 0. Switching to Rhythm pins
+base = `activeRows[0]` = the FOLD, so bristorbrot gets fitted as a dense layer (I=1, S=1) and the
+interactive sliders land on **bristorbrot**. The LUT is preserved and the fit succeeds — no fallback
+fires — but the roles are inverted: legacy interlace/Hybrid Box semantics put the rhythm controls on
+the FOLD ("fold every Nth iteration over the main formula"), and dragging the fitted layer's interval
+means the opposite ("bristorbrot every Nth, fold fills the gaps").
+
+**Root cause:** "base = first active row" conflates *sequence position* (the fold runs FIRST — an
+intro) with *rhythm role* (the base is the formula that FILLS THE TAIL). In migrated Hybrid Box
+scenes those are opposite slots. No base-*fallback* rule can catch this, because the wrong-base fit
+is exactly representable — the failure is semantic, not arithmetic.
+
+**Fix: decouple base from row order — explicit `baseRow`, chosen by tail dominance.**
+
+1. **Model.** Rhythm's base becomes an explicit row reference, not a position:
+   - Draft: `baseKey?: string` (row key — survives reorder, same pattern as dividers). Absent ⇒
+     first active row (back-compat).
+   - `weaveSource` modulo schedule: `{ kind: 'modulo', baseRow?: number, layers: [...] }` — `baseRow`
+     is the SLOT index; absent ⇒ first active slot (already-built rhythm weaves load unchanged).
+   - Dispatch/emit: phase 0 → baseRow's slot; layer j → the j-th non-base active row in row order
+     (precedence rule unchanged). Layer j reads `uWeaveInterval{j+1}` etc. — assignment is by
+     non-base order, so when baseRow = first active row the mapping is bit-identical to today.
+   - Row order stays a SEQUENCE concern only. Do NOT fix this by reordering rows: rows are shared
+     state, so reordering would corrupt the Sequence pattern (fold must stay row 0 = the intro) and
+     trip the keyframe-retarget warning for nothing.
+
+2. **Fitter (`fitRhythmFromPlan`).** Replace "primary base + refuse-fallback" with *base election*:
+   try EVERY active row as base (≤ 6 candidates, trivially cheap), keep the successful fits, and pick
+   the winner by **tail dominance** — the base owning the most iterations of the repeating cycle
+   (equivalently: minimize Σ over endless layers of 1/interval; intro-only/capped layers cost 0).
+   Tie-break: earliest row. This rule *is* the semantic definition of "base" — the formula left
+   running when no layer claims.
+   - Bristorbrot case: base=fold → bristorbrot layer, tail density 1. base=bristorbrot → fold is a
+     finite one-shot layer (S=0, I=1, B=1), tail density 0 → bristorbrot elected. Sliders land on
+     the fold. (One-shot note: with B=1 the interval is inert until the user raises beats/endless —
+     that's correct, the fold fires once today; interval N + beats 0 = "fold every Nth", the old
+     interlace control, now reachable by dragging.)
+   - Keep the certificate check on the elected fit, unchanged.
+   - The "make X the first slot" refusal message dies; base election replaces spec §5.1 entirely.
+
+3. **Editor.** The `base` tag renders on baseKey's row (not `activePos === 0`); timing sliders render
+   for every ACTIVE row except base; `rhythmPlan` preview + idempotence check take baseRow into
+   account (the idempotence comparison must include it, or toggling would keep a stale base).
+   Optional but recommended: a small "make base" affordance on rhythm rows — the election is a
+   heuristic and the user must be able to overrule it. Changing base re-maps layer→uniform indices:
+   if `weaveInterval*` tracks exist, show the retarget warning (same policy as row reorder).
+
+4. **Rhythm → Sequence** needs only `base = baseRow` in the simulator; the RLE emits rows in LUT
+   order, so the fold naturally lands back at row 0 (intro) regardless of which row was base.
+
+5. **Free consistency win — the enable gate.** `emitCountsScheduleGLSL` deliberately returns the
+   first CYCLE step when disabled ("fold intro → renders its looping base formula, NOT the intro
+   slot"). The modulo gate returns phase 0 = base. With base pinned to the fold, disabling a
+   Bristorbrot rhythm weave would have rendered the FOLD alone — contradicting the counts gate's
+   documented intent. Tail-dominant base makes both gates agree by construction.
+
+6. **Tests to add:** Bristorbrot shape `A×1 B×4` → base elected = B, fold layer (S=0,I=1,B=1),
+   certificate passes, and the elected base ≠ activeRows[0] (the regression pin). Dominance
+   tie-break determinism. baseRow round-trip through weaveSource save/load. Back-compat: modulo
+   weaveSource WITHOUT baseRow loads with base = first active slot, emit byte-identical.

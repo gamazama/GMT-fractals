@@ -89,6 +89,10 @@ interface WeaveDraft {
     /** User's schedule choice. 'modulo' (Rhythm) only takes effect while 2–6 rows
      *  are active — otherwise the build falls back to counts (Sequence). */
     scheduleKind: 'counts' | 'modulo';
+    /** Rhythm base row KEY (the tail formula left running when no layer fires) —
+     *  an explicit ROLE, decoupled from row order (spec §7). Absent ⇒ first active
+     *  row. Survives reorder like dividers. */
+    baseKey?: string;
 }
 
 // Module-scoped draft — survives modal close/reopen within a session (the
@@ -114,6 +118,7 @@ const cloneDraft = (d: WeaveDraft): WeaveDraft => ({
     title: d.title, rows: cloneRows(d.rows),
     dividers: (d.dividers ?? []).map((x) => ({ ...x })),
     scheduleKind: d.scheduleKind ?? 'counts',
+    baseKey: d.baseKey,
 });
 
 const nextColorIdx = (rows: SlotRow[]): number => {
@@ -160,7 +165,9 @@ function draftFromWeaveSource(ws: WeaveSource): WeaveDraft {
             if (rf > 0 && rows[rf - 1]) dividers.push({ afterKey: rows[rf - 1].key, repeat: 1 });
         }
     }
-    return { title: ws.title, rows, dividers, scheduleKind: ws.schedule.kind };
+    const baseKey = ws.schedule.kind === 'modulo' && ws.schedule.baseRow !== undefined
+        ? rows[ws.schedule.baseRow]?.key : undefined;
+    return { title: ws.title, rows, dividers, scheduleKind: ws.schedule.kind, baseKey };
 }
 
 const DEFAULT_ITER_COUNT = 2;
@@ -544,6 +551,14 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     const rhythmOk = activeCount >= 2 && activeCount <= 6;
     const rhythm = draft.scheduleKind === 'modulo' && rhythmOk;
     const activeRowIdx = draft.rows.map((r, i) => (r.slot.iterCount > 0 ? i : -1)).filter((i) => i >= 0);
+    // Rhythm base (spec §7): an explicit row (draft.baseKey), else the first active
+    // row (back-compat). Layers = the OTHER active rows in row order; layer j (1-based)
+    // ↔ uWeave*{j} ↔ layerRowIdx[j-1].
+    const baseRowIdx = (() => {
+        if (draft.baseKey) { const i = draft.rows.findIndex((r) => r.key === draft.baseKey); if (i >= 0 && draft.rows[i].slot.iterCount > 0) return i; }
+        return activeRowIdx[0] ?? -1;
+    })();
+    const layerRowIdx = activeRowIdx.filter((i) => i !== baseRowIdx);
     const clampI = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(n) || 0));
     // Read-clamps import BOUNDS (convert.ts) — a fitter honouring different bounds
     // than the clamp would silently corrupt one conversion direction (spec §5.2).
@@ -584,7 +599,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     // schedule non-periodic in general, so the strip shows the exact first
     // iterations (introLen = full length ⇒ no faded-repeat tail).
     const rhythmPlan = rhythm
-        ? rhythmPreviewPlan(activeRowIdx.slice(1).map((_, j) => layerVal(j + 1)), activeRowIdx, iterCounts)
+        ? rhythmPreviewPlan(layerRowIdx.map((_, j) => layerVal(j + 1)), baseRowIdx, layerRowIdx, iterCounts)
         : null;
 
     // ── Sequence ↔ Rhythm conversion (pattern-preserving; engine/weave/convert.ts).
@@ -596,13 +611,21 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             && /^weave\.weave(Interval|StartIter|Beats)\d/.test(a.target));
     const rowLabel = (i: number) => draft.rows[i]?.label ?? `slot ${i + 1}`;
 
+    const makeBase = (key: string) => {
+        // Overrule the elected base. Re-maps layer→uniform indices, so if rhythm
+        // timing is keyframed, warn like a reorder (same retarget policy, spec §7.3).
+        if (draft.baseKey === key) return;
+        if (hasRhythmTracks()) setReorderWarn(true);
+        commit({ ...draft, baseKey: key });
+    };
+
     const toRhythm = () => {
         if (draft.scheduleKind === 'modulo') return;
         // <2 active (or no plan): the toggle just marks intent — build falls back to
         // Sequence until 2–6 slots are active. Nothing to convert yet.
         if (!plan || !rhythmOk) { commit({ ...draft, scheduleKind: 'modulo' }); return; }
-        const curLayers = activeRowIdx.slice(1).map((_, j) => layerVal(j + 1));
-        if (certify(planPhase(plan), planStructure(plan), rhythmPhase(curLayers, activeRowIdx), rhythmStructure(curLayers)).equal) {
+        const curLayers = layerRowIdx.map((_, j) => layerVal(j + 1));
+        if (certify(planPhase(plan), planStructure(plan), rhythmPhase(curLayers, baseRowIdx, layerRowIdx), rhythmStructure(curLayers)).equal) {
             commit({ ...draft, scheduleKind: 'modulo' });
             setStatus({ kind: 'ok', text: 'Rhythm — same pattern (kept your timing).' });
             return;
@@ -613,6 +636,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             setStatus({ kind: 'error', text: `Switched to Rhythm — kept your existing timing. ${res.reason}` });
             return;
         }
+        // Layer values are in the elected base's NON-base row order → uWeave*{m+1}.
         const writes: Record<string, number> = {};
         res.layers.forEach((L, m) => {
             const k = m + 1;
@@ -621,28 +645,30 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             writes[`weaveBeats${k}`] = L.beats; // write beats even when 0 — stale beats corrupt the pattern
         });
         const warned = hasRhythmTracks();
-        store.setWeave?.(writes);                     // rhythm params → DDFS undo home
-        commit({ ...draft, scheduleKind: 'modulo' }); // one editor commit
-        setStatus({ kind: 'ok', text: `Converted to Rhythm — same pattern, now live.${warned ? ' (Overwrote keyframed rhythm timing.)' : ''}` });
+        store.setWeave?.(writes);                                                            // rhythm params → DDFS undo home
+        commit({ ...draft, scheduleKind: 'modulo', baseKey: draft.rows[res.baseRow]?.key }); // one editor commit
+        const baseNote = res.baseRow !== activeRowIdx[0] ? ` "${rowLabel(res.baseRow)}" is the base.` : '';
+        setStatus({ kind: 'ok', text: `Converted to Rhythm — same pattern, now live.${baseNote}${warned ? ' (Overwrote keyframed rhythm timing.)' : ''}` });
     };
 
     const toSequence = () => {
         if (draft.scheduleKind === 'counts') return;
         if (!rhythmOk) { commit({ ...draft, scheduleKind: 'counts' }); return; }
-        const layers = activeRowIdx.slice(1).map((_, j) => layerVal(j + 1));
-        if (plan && certify(rhythmPhase(layers, activeRowIdx), rhythmStructure(layers), planPhase(plan), planStructure(plan)).equal) {
+        const layers = layerRowIdx.map((_, j) => layerVal(j + 1));
+        if (plan && certify(rhythmPhase(layers, baseRowIdx, layerRowIdx), rhythmStructure(layers), planPhase(plan), planStructure(plan)).equal) {
             commit({ ...draft, scheduleKind: 'counts' });
             setStatus({ kind: 'ok', text: 'Sequence — same pattern (kept your rows).' });
             return;
         }
-        const res = runsFromRhythm(layers, activeRowIdx, rowLabel);
+        const res = runsFromRhythm(layers, baseRowIdx, layerRowIdx, rowLabel);
         if (!res.ok) {
             commit({ ...draft, scheduleKind: 'counts' });
             setStatus({ kind: 'error', text: `Switched to Sequence — kept your existing rows. ${res.reason}` });
             return;
         }
         // Materialize runs → rows (reuse a row on first use, deep-clone after) + one
-        // intro divider; iterCount = run length.
+        // intro divider; iterCount = run length. Rows land in LUT order, so the base
+        // clears — Sequence has no base (spec §7.4).
         const runs = [...res.introRuns, ...res.cycleRuns];
         const used = new Set<number>();
         const newRows: SlotRow[] = [];
@@ -662,7 +688,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             ? [{ afterKey: newRows[res.introRuns.length - 1].key, repeat: 1 }]
             : [];
         const warned = hasRhythmTracks();
-        commit({ ...draft, rows: newRows, dividers, scheduleKind: 'counts' });
+        commit({ ...draft, rows: newRows, dividers, scheduleKind: 'counts', baseKey: undefined });
         setStatus({ kind: 'ok', text: `Converted to Sequence — same pattern, now baked.${warned ? ' (Rhythm was animated; baked the current values.)' : ''}` });
     };
 
@@ -691,7 +717,10 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 schedule: rhythm
                     ? {
                         kind: 'modulo',
-                        layers: activeRowIdx.slice(1).map((_, j) => {
+                        // Explicit base only when non-default (spec §7); absent ⇒ first
+                        // active slot, so default-base builds stay byte-identical.
+                        ...(baseRowIdx !== activeRowIdx[0] ? { baseRow: baseRowIdx } : {}),
+                        layers: layerRowIdx.map((_, j) => {
                             const v = layerVal(j + 1);
                             return { interval: v.interval, startIter: v.start, ...(v.beats > 0 ? { beats: v.beats } : {}) };
                         }),
@@ -830,10 +859,12 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 )}
                 {draft.rows.map((r, i) => {
                     const isExpanded = expandedKey === r.key;
-                    // Rhythm role: first active row = base, each later active row = layer k.
+                    // Rhythm role: baseRowIdx = base (explicit, spec §7); each other
+                    // active row is a layer, keyed by its position among non-base rows.
                     const activePos = activeRowIdx.indexOf(i);
-                    const isBase = rhythm && activePos === 0;
-                    const layerK = rhythm && activePos >= 1 ? activePos : 0;
+                    const isBase = rhythm && i === baseRowIdx;
+                    const layerPos = rhythm ? layerRowIdx.indexOf(i) : -1;
+                    const layerK = layerPos >= 0 ? layerPos + 1 : 0;
                     const lv = layerK ? layerVal(layerK) : null;
                     return (
                     <React.Fragment key={r.key}>
@@ -881,24 +912,31 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                             ) : isBase ? (
                                 <span className="text-[10px] text-fg-tertiary shrink-0" title="The base runs on every iteration no rhythm layer claims.">base</span>
                             ) : layerK > 0 && lv ? (
-                                dirty ? (
-                                    <div className="flex items-center gap-2 text-[10px] text-fg-tertiary flex-wrap"
-                                        title="Layer timing — set here before Build; after Build the live keyframable sliders appear under the schedule.">
-                                        <label className="flex items-center gap-1">start
-                                            <input value={lv.start} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveStartIter', parseInt(e.target.value, 10) || 0)}
-                                                className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
-                                        <label className="flex items-center gap-1">every
-                                            <input value={lv.interval} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveInterval', parseInt(e.target.value, 10) || 1)}
-                                                className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
-                                        <label className="flex items-center gap-1">beats
-                                            <input value={lv.beats} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveBeats', parseInt(e.target.value, 10) || 0)}
-                                                className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
-                                    </div>
-                                ) : (
-                                    <span className="text-[10px] text-fg-tertiary shrink-0" title="Live timing — edit with the keyframable sliders under the schedule below.">
-                                        every {lv.interval} · from {lv.start}{lv.beats > 0 ? ` · ${lv.beats} beats` : ''}
-                                    </span>
-                                )
+                                <>
+                                    {dirty ? (
+                                        <div className="flex items-center gap-2 text-[10px] text-fg-tertiary flex-wrap"
+                                            title="Layer timing — set here before Build; after Build the live keyframable sliders appear under the schedule.">
+                                            <label className="flex items-center gap-1">start
+                                                <input value={lv.start} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveStartIter', parseInt(e.target.value, 10) || 0)}
+                                                    className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
+                                            <label className="flex items-center gap-1">every
+                                                <input value={lv.interval} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveInterval', parseInt(e.target.value, 10) || 1)}
+                                                    className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
+                                            <label className="flex items-center gap-1">beats
+                                                <input value={lv.beats} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveBeats', parseInt(e.target.value, 10) || 0)}
+                                                    className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
+                                        </div>
+                                    ) : (
+                                        <span className="text-[10px] text-fg-tertiary shrink-0" title="Live timing — edit with the keyframable sliders under the schedule below.">
+                                            every {lv.interval} · from {lv.start}{lv.beats > 0 ? ` · ${lv.beats} beats` : ''}
+                                        </span>
+                                    )}
+                                    <button onClick={() => makeBase(r.key)}
+                                        className="text-[9px] text-fg-tertiary/60 hover:text-accent-300 transition-colors shrink-0 ml-auto"
+                                        title="Make this the rhythm base — the formula left running when no layer fires">
+                                        make base
+                                    </button>
+                                </>
                             ) : activePos < 0 ? (
                                 <span className="text-[10px] text-fg-tertiary/50 shrink-0">inactive</span>
                             ) : null}
@@ -1065,10 +1103,10 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                         live), grouped per formula. Before Build, the compact start/every/
                         beats controls in the rows above set the initial timing; these
                         keyframe it live (no rebuild). */}
-                    {rhythm && !dirty && activeRowIdx.length > 1 && (
+                    {rhythm && !dirty && layerRowIdx.length > 0 && (
                         <div className="pt-1.5 mt-0.5 space-y-2 border-t border-line/10">
                             <span className="text-[10px] font-bold uppercase tracking-wide text-fg-tertiary">Live rhythm — keyframable</span>
-                            {activeRowIdx.slice(1).map((rowIdx, j) => {
+                            {layerRowIdx.map((rowIdx, j) => {
                                 const k = j + 1;
                                 const v = layerVal(k);
                                 return (

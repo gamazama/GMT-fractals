@@ -218,7 +218,7 @@ export function loadUserWeave(
   // Plain MB3D scene imports (loadFromScene) deliberately do NOT.
   const { def, ledger } = emitFusedHybrid(
     buildWeaveScene(slots, title, undefined, repeatFrom),
-    { ...(rhythm ? { schedule: { kind: 'modulo' as const } } : dividers ? { dividers } : {}), slotBake, enableGate: true },
+    { ...(rhythm ? { schedule: { kind: 'modulo' as const, ...(rhythm.baseRow !== undefined ? { baseRow: rhythm.baseRow } : {}) } } : dividers ? { dividers } : {}), slotBake, enableGate: true },
   );
   if (!def) {
     return { ok: false, reason: ledger.reasons.join(' '), ledger };
