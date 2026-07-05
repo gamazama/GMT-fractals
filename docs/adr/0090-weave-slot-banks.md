@@ -8,15 +8,22 @@
 > uniform set is DELETED with the feature (one migration, not two); Hybrid Box
 > fold params land on the BoxFold slot's bank. See ADR-0091.
 
-> **Update 2026-07-05 (rebuild now preserves surviving banks; decision unchanged):**
+> **Update 2026-07-05 (rebuild now preserves + follows banks; decision unchanged):**
 > The "reseeds bank defaults on rebuild" behaviour below (Save compat / migration)
-> is refined: `loadUserWeave` (`mergeWeaveBanks`) now PRESERVES the live `ws<k>*`
-> values of every slot that survives a Build unchanged (matched by bank index +
-> slot identity), and carries a single formula's live coreMath onto bank 0 on its
-> first build — so a no-op Build (or one after only param tweaks) no longer resets
-> slot params to formula defaults. A bank whose formula CHANGED (reorder/replace)
-> still takes the fresh default rather than mis-applying another slot's values;
-> full per-slot value transfer across reorder remains P4.6.
+> is refined: `loadUserWeave` (`mergeWeaveBanks`) PRESERVES the live `ws<k>*` values
+> of each slot, FOLLOWING it across a reorder — a new bank claims the first
+> not-yet-claimed OLD bank with the same slot identity (kind:ref) and re-indexes its
+> values onto the new bank (duplicates claim left-to-right). It also carries a single
+> formula's live coreMath onto bank 0 on its first build. So a Build that only
+> reorders/tweaks slots keeps every slot's params; only a genuinely NEW/REPLACED slot
+> takes fresh defaults. (The earlier "full per-slot transfer across reorder is P4.6"
+> caveat is thus resolved for value transfer; the remaining P4.6 item is keyframe/LFO
+> track re-mapping across reorder.)
+>
+> Same-day rebuild-preservation also widened beyond banks: geometry (Julia/offset,
+> burning, rotation), coreMath (iterations floored to min-cover), and all quality
+> knobs now carry over on Build — only `quality.estimator` (the DE type) refreshes to
+> the rebuilt formula (owner call). See `loadUserWeave` JSDoc.
 
 ## Context
 
