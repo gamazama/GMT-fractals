@@ -181,13 +181,19 @@ export interface FractalDefinition {
              *  uniform lane), indexed by option index. Absent = auto-expose. */
             bake?: boolean[];
         }>;
-        /** Schedule kind — counts is the baked-LUT sequence (repeatFrom = MB3D's
-         *  "repeat from here": earlier slots run once as an intro); modulo (live
-         *  Rhythm) is layered: the first active slot is the base, each further
-         *  active slot k is layer k with its own interval/start[/beats] snapshot
-         *  (the LIVE values ride the DDFS `weave` feature state; these are the
-         *  built snapshot for re-pick/hydrate). beats 0/absent = endless. */
-        schedule: { kind: 'counts'; repeatFrom?: number }
+        /** Schedule kind — counts is the baked-LUT sequence; modulo (live Rhythm)
+         *  is layered: the first active slot is the base, each further active slot
+         *  k is layer k with its own interval/start[/beats] snapshot (the LIVE
+         *  values ride the DDFS `weave` feature state; these are the built snapshot
+         *  for re-pick/hydrate). beats 0/absent = endless.
+         *
+         *  Counts LOOP DIVIDERS (P4.7): `breaks` partitions the rows into blocks —
+         *  the block ending at `afterRow` plays `repeat` times as intro; the
+         *  segment after the last divider is the repeating cycle (see
+         *  buildBlockPlan). Absent `breaks` falls back to `repeatFrom` (MB3D's
+         *  "repeat from here": one divider, repeat 1) — MB3D imports carry no
+         *  breaks, so their emission is unchanged. */
+        schedule: { kind: 'counts'; repeatFrom?: number; breaks?: Array<{ afterRow: number; repeat: number }> }
                 | { kind: 'modulo'; layers: Array<{ interval: number; startIter: number; beats?: number }> };
     };
 }

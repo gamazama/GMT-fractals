@@ -97,6 +97,72 @@ export function stepSlot(step: number): number {
     return step < 0 ? ~step : step;
 }
 
+export interface BlockScheduleInput {
+    /** Per-slot consecutive-iteration counts (0 = empty, negative = silent). */
+    iterCounts: number[];
+    /** LOOP DIVIDERS (P4.7): each divides the rows into blocks. The block ending
+     *  at `afterRow` (from the previous divider, or row 0) plays `repeat` times as
+     *  part of the intro; the segment AFTER the last divider is the repeating
+     *  cycle. Empty ⇒ the whole sequence is one repeating cycle (≡ repeatFrom 0).
+     *  A single `{afterRow: k, repeat: 1}` is exactly `buildCountsPlan`'s
+     *  `repeatFrom = k+1`, so this is a strict generalization. */
+    dividers: Array<{ afterRow: number; repeat: number }>;
+}
+
+/**
+ * Expand LOOP-DIVIDER blocks into a flat plan — a finite intro of repeated
+ * blocks followed by ONE repeating cycle — the exact `{order, introLen,
+ * cycleLen}` shape `emitCountsScheduleGLSL` already consumes. The engine emitter
+ * is unchanged: dividers are purely an authoring-layer expansion.
+ *
+ * `[A(2) B(1) C(1) D(1)]` with `[{afterRow:1, repeat:2}]` →
+ * order `A A B A A B C D`, introLen 6, cycleLen 2 → `A A B A A B C D C D …`.
+ */
+export function buildBlockPlan(input: BlockScheduleInput): WeaveSchedulePlan {
+    const nHybrid = input.iterCounts;
+    let endTo = nHybrid.length - 1;
+    while (endTo > 0 && (nHybrid[endTo] | 0) === 0) endTo--;
+
+    // One pass over rows [start..end]: each runs |count| consecutive iterations,
+    // empties skipped; a negative count is a silent step (stored as ~slot).
+    const runSegment = (start: number, end: number): number[] => {
+        const seq: number[] = [];
+        for (let r = start; r <= end; r++) {
+            const c = nHybrid[r] | 0;
+            const n = Math.abs(c);
+            for (let j = 0; j < n; j++) seq.push(c < 0 ? ~r : r);
+        }
+        return seq;
+    };
+
+    // Dividers clamped to [0, endTo): a divider AT/after endTo leaves no cycle
+    // segment, so it's dropped. De-duped + sorted.
+    const seen = new Set<number>();
+    const divs = input.dividers
+        .map((d) => ({ afterRow: Math.floor(d.afterRow), repeat: Math.max(1, Math.floor(d.repeat) || 1) }))
+        .filter((d) => d.afterRow >= 0 && d.afterRow < endTo && !seen.has(d.afterRow) && seen.add(d.afterRow))
+        .sort((a, b) => a.afterRow - b.afterRow);
+
+    const order: number[] = [];
+    let start = 0;
+    for (const d of divs) {
+        const seg = runSegment(start, d.afterRow);
+        for (let n = 0; n < d.repeat; n++) order.push(...seg);
+        start = d.afterRow + 1;
+    }
+    const introLen = order.length;
+    const cycle = runSegment(start, endTo);
+    order.push(...cycle);
+
+    if (order.length === 0) {
+        return { order: [0], introLen: 0, cycleLen: 1, endTo: 0, repeatFrom: 0, nHybrid, hasSilent: false };
+    }
+    return {
+        order, introLen, cycleLen: Math.max(1, cycle.length),
+        endTo, repeatFrom: start, nHybrid, hasSilent: order.some((x) => x < 0),
+    };
+}
+
 /** Opt-in whole-weave master gate (ADR-0089 P4.4 `weaveEnabled`). `enabled` is a
  *  GLSL float-uniform expression (> 0.5 = weave active); when it reads OFF the
  *  phase function returns the BASE slot's phase — base formula only, every layer

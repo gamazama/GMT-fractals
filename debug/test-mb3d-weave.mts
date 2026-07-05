@@ -3,7 +3,7 @@
  * Run: `npm run test:mb3d:weave`  (tsx debug/test-mb3d-weave.mts)
  */
 import { buildWeaveSequence, emitWeaveGLSL, weaveSpecFromMB3D } from '../engine-gmt/utils/mb3d/weaveSequencer.ts';
-import { emitModuloScheduleGLSL } from '../engine-gmt/engine/weave/schedule.ts';
+import { emitModuloScheduleGLSL, buildBlockPlan, buildCountsPlan } from '../engine-gmt/engine/weave/schedule.ts';
 import { assembleWeave } from '../engine-gmt/engine/weave/emitWeave.ts';
 import { emitFusedHybrid } from '../engine-gmt/utils/mb3d/emitFusedHybrid.ts';
 import { resolveNativeSlot } from '../engine-gmt/engine/weave/nativeResolver.ts';
@@ -1154,6 +1154,34 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       p.formula === 'Mandelbulb' && p.features.weave === undefined
       && p.features.geometry.hybridComplex === undefined && p.features.geometry.hybridCompiled === false);
   }
+}
+
+// ── Loop dividers (P4.7 buildBlockPlan) ──────────────────────────────────────
+{
+  const str = (p: any) => p.order.map((s: number) => 'ABCDEF'[s < 0 ? ~s : s]).join('');
+
+  // The owner's example: [A×2, B×1] plays ×2, then C, D loop → A A B A A B C D C D…
+  const ex = buildBlockPlan({ iterCounts: [2, 1, 1, 1], dividers: [{ afterRow: 1, repeat: 2 }] });
+  ck('blockPlan: A A B ×2 then C D loop',
+    str(ex) === 'AABAABCD' && ex.introLen === 6 && ex.cycleLen === 2,
+    { order: str(ex), intro: ex.introLen, cyc: ex.cycleLen });
+
+  // No dividers ≡ buildCountsPlan repeatFrom 0 (whole sequence loops).
+  const nod = buildBlockPlan({ iterCounts: [2, 1], dividers: [] });
+  const c0 = buildCountsPlan({ iterCounts: [2, 1], endTo: 1, repeatFrom: 0 });
+  ck('blockPlan: no dividers ≡ counts repeatFrom 0',
+    JSON.stringify(nod.order) === JSON.stringify(c0.order) && nod.introLen === c0.introLen && nod.cycleLen === c0.cycleLen);
+
+  // A single {afterRow:k, repeat:1} ≡ buildCountsPlan repeatFrom k+1 (the fast-path intro).
+  const one = buildBlockPlan({ iterCounts: [3, 1, 1], dividers: [{ afterRow: 0, repeat: 1 }] });
+  const cf = buildCountsPlan({ iterCounts: [3, 1, 1], endTo: 2, repeatFrom: 1 });
+  ck('blockPlan: one divider ≡ counts repeatFrom (fast-path intro)',
+    JSON.stringify(one.order) === JSON.stringify(cf.order) && one.introLen === cf.introLen && one.cycleLen === cf.cycleLen,
+    { block: str(one), counts: str(cf) });
+
+  // A divider AT the last active row is dropped (no cycle would remain).
+  const degen = buildBlockPlan({ iterCounts: [2, 1], dividers: [{ afterRow: 1, repeat: 3 }] });
+  ck('blockPlan: divider at last row dropped (still one loop)', str(degen) === 'AAB' && degen.introLen === 0);
 }
 
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);

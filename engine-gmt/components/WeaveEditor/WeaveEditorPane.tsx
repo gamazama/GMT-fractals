@@ -42,7 +42,7 @@ import type { PickerCategory, PickerItem } from '../../../components/CategoryPic
 import { showToast } from '../../../engine/store/toastStore';
 import { useEngineStore } from '../../../store/engineStore';
 import { registry } from '../../engine/FractalRegistry';
-import { buildCountsPlan } from '../../engine/weave/schedule';
+import { buildBlockPlan } from '../../engine/weave/schedule';
 import { getMB3DCatalog, slotFromCatalogEntry } from '../../utils/mb3d/mb3dCatalog';
 import type { CatalogEntry } from '../../utils/mb3d/mb3dCatalog';
 import { loadUserWeave } from '../../utils/mb3d/loadMB3DScene';
@@ -72,15 +72,19 @@ interface SlotRow {
     /** Per-option expose/bake directives (true = baked literal, no slider lane),
      *  indexed by option index. Absent entries = auto-expose. */
     bake?: boolean[];
-    /** Sequence "stop at" (P4.7): the absolute iteration this formula STOPS at —
-     *  it runs from the previous stop up to here as a one-shot INTRO, then the
-     *  loop repeats from the first row WITHOUT a stopAt. Undefined = loops. */
-    stopAt?: number;
 }
+
+/** A LOOP DIVIDER (P4.7): the block of rows ending at `afterKey` (back to the
+ *  previous divider, or the top) plays `repeat` times as intro; the rows after
+ *  the LAST divider are the repeating cycle. Keyed by row so it survives reorder.
+ *  A single divider with repeat 1 is exactly the old "repeat from here". */
+interface WeaveDivider { afterKey: string; repeat: number; }
 
 interface WeaveDraft {
     title: string;
     rows: SlotRow[];
+    /** Loop dividers (Sequence mode). */
+    dividers: WeaveDivider[];
     /** User's schedule choice. 'modulo' (Rhythm) only takes effect while 2–6 rows
      *  are active — otherwise the build falls back to counts (Sequence). */
     scheduleKind: 'counts' | 'modulo';
@@ -98,26 +102,11 @@ const cloneRows = (rows: SlotRow[]): SlotRow[] =>
         slot: { ...r.slot, optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] },
         bake: r.bake ? [...r.bake] : undefined,
     }));
-const cloneDraft = (d: WeaveDraft): WeaveDraft => ({ title: d.title, rows: cloneRows(d.rows), scheduleKind: d.scheduleKind ?? 'counts' });
-
-/** Sequence schedule from the rows' iter counts + stopAt markers: leading rows
- *  with a stopAt are one-shot INTROS (each runs `stopAt − previousStop`
- *  iterations); the first row without a stopAt begins the repeating cycle. */
-function seqPlanFromRows(rows: SlotRow[]): { iterCounts: number[]; repeatFrom: number } {
-    let prevStop = 0;
-    let repeatFrom = -1;
-    const iterCounts = rows.map((r, i) => {
-        if (repeatFrom < 0 && r.stopAt != null && r.stopAt > prevStop) {
-            const c = r.stopAt - prevStop;
-            prevStop = r.stopAt;
-            return c;
-        }
-        if (repeatFrom < 0 && r.slot.iterCount > 0) repeatFrom = i;
-        return r.slot.iterCount;
-    });
-    if (repeatFrom < 0) repeatFrom = Math.max(0, rows.length - 1);
-    return { iterCounts, repeatFrom };
-}
+const cloneDraft = (d: WeaveDraft): WeaveDraft => ({
+    title: d.title, rows: cloneRows(d.rows),
+    dividers: (d.dividers ?? []).map((x) => ({ ...x })),
+    scheduleKind: d.scheduleKind ?? 'counts',
+});
 
 const nextColorIdx = (rows: SlotRow[]): number => {
     const used = new Set(rows.map((r) => r.colorIdx));
@@ -151,17 +140,19 @@ function draftFromWeaveSource(ws: WeaveSource): WeaveDraft {
         slot: { ...s.slot, optionTypes: [...s.slot.optionTypes], optionValues: [...s.slot.optionValues] },
         bake: s.bake ? [...s.bake] : undefined,
     }));
-    // Counts intro → rows before repeatFrom are one-shot intros; stamp each with
-    // its cumulative stop iteration so the editor shows "stop at [x]".
+    // Counts → hydrate loop dividers from `breaks`, else synthesize one from
+    // repeatFrom (a single divider after row repeatFrom−1, repeat 1).
+    const dividers: WeaveDivider[] = [];
     if (ws.schedule.kind === 'counts') {
-        const rf = ws.schedule.repeatFrom ?? 0;
-        let cum = 0;
-        for (let i = 0; i < rf && i < rows.length; i++) {
-            cum += Math.max(0, rows[i].slot.iterCount);
-            rows[i].stopAt = cum;
+        const breaks = ws.schedule.breaks;
+        if (breaks?.length) {
+            for (const b of breaks) if (rows[b.afterRow]) dividers.push({ afterKey: rows[b.afterRow].key, repeat: Math.max(1, b.repeat) });
+        } else {
+            const rf = ws.schedule.repeatFrom ?? 0;
+            if (rf > 0 && rows[rf - 1]) dividers.push({ afterKey: rows[rf - 1].key, repeat: 1 });
         }
     }
-    return { title: ws.title, rows, scheduleKind: ws.schedule.kind };
+    return { title: ws.title, rows, dividers, scheduleKind: ws.schedule.kind };
 }
 
 const DEFAULT_ITER_COUNT = 2;
@@ -233,11 +224,11 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         // "+ Add formula" pick becomes slot 1 (weave-the-current-formula).
         if (seedFormulaId) {
             const seed = seedRowFromFormula(seedFormulaId);
-            if (seed) return { title: '', rows: [seed], scheduleKind: 'counts' };
+            if (seed) return { title: '', rows: [seed], dividers: [], scheduleKind: 'counts' };
         }
         // Empty title = auto-name from the formula mix (autoTitleOf) until the
         // user types their own.
-        return { title: '', rows: [], scheduleKind: 'counts' };
+        return { title: '', rows: [], dividers: [], scheduleKind: 'counts' };
     });
     const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
     const [reorderWarn, setReorderWarn] = useState(false);
@@ -386,13 +377,20 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         (store.animations ?? []).some((a: any) => a.enabled && typeof a.target === 'string' && a.target.startsWith('coreMath.'));
     const remove = (key: string) => {
         if (hasFormulaTracks()) setReorderWarn(true);
-        commit({ ...draft, rows: draft.rows.filter((r) => r.key !== key) });
+        commit({
+            ...draft,
+            rows: draft.rows.filter((r) => r.key !== key),
+            dividers: draft.dividers.filter((d) => d.afterKey !== key),
+        });
     };
-    /** Sequence "stop at": set (or clear, undefined) a row's one-shot stop
-     *  iteration. The build derives per-slot counts + repeatFrom from these. */
-    const setStopAt = (key: string, stopAt: number | undefined) => {
-        commit({ ...draft, rows: draft.rows.map((r) => (r.key === key ? { ...r, stopAt } : r)) });
-    };
+    // ── Loop dividers (P4.7) — the block ending at a row plays ×repeat as intro;
+    // the rows after the last divider are the repeating cycle.
+    const addDivider = (afterKey: string) =>
+        commit({ ...draft, dividers: [...draft.dividers.filter((d) => d.afterKey !== afterKey), { afterKey, repeat: 1 }] });
+    const removeDivider = (afterKey: string) =>
+        commit({ ...draft, dividers: draft.dividers.filter((d) => d.afterKey !== afterKey) });
+    const setDividerRepeat = (afterKey: string, repeat: number) =>
+        commit({ ...draft, dividers: draft.dividers.map((d) => (d.afterKey === afterKey ? { ...d, repeat: Math.max(1, repeat) } : d)) });
 
     // ── Per-slot param customization (P3b Task 2) ────────────────────────────
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -520,23 +518,24 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         store.setWeave?.({ [`${field}${k}`]: field === 'weaveInterval' ? Math.max(1, clampI(n, 1, 32)) : clampI(n, 0, 64) });
 
     // ── Live schedule preview ────────────────────────────────────────────────
-    // Sequence per-slot counts + repeatFrom derive from the rows: leading rows
-    // with a `stopAt` are one-shot intros (run `stopAt − prevStop` iterations),
-    // the first row without one begins the repeating cycle.
-    const seqPlan = useMemo(
-        () => seqPlanFromRows(draft.rows),
+    // Loop dividers → { afterRow index, repeat }, in row order, for buildBlockPlan
+    // + the emit. A divider on a since-removed row is dropped.
+    const dividerRows = useMemo(
+        () => draft.dividers
+            .map((d) => ({ afterRow: draft.rows.findIndex((r) => r.key === d.afterKey), repeat: d.repeat }))
+            .filter((d) => d.afterRow >= 0)
+            .sort((a, b) => a.afterRow - b.afterRow),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [iterCounts.join(','), draft.rows.map((r) => r.stopAt ?? '').join(','), draft.rows.map((r) => r.key).join(',')],
+        [draft.dividers, draft.rows.map((r) => r.key).join(',')],
     );
-    const repeatIdx = seqPlan.repeatFrom;
+    // repeatFrom (the nibble + weaveSource back-compat) = start of the cycle =
+    // the last divider's row + 1.
+    const repeatIdx = dividerRows.length ? dividerRows[dividerRows.length - 1].afterRow + 1 : 0;
     const plan = useMemo(() => {
         if (activeCount === 0) return null;
-        const ic = seqPlan.iterCounts;
-        let endTo = ic.length - 1;
-        while (endTo > 0 && ic[endTo] === 0) endTo--;
-        return buildCountsPlan({ iterCounts: ic, endTo, repeatFrom: repeatIdx });
+        return buildBlockPlan({ iterCounts: draft.rows.map((r) => r.slot.iterCount), dividers: dividerRows });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [seqPlan, activeCount]);
+    }, [iterCounts.join(','), dividerRows, activeCount]);
 
     // Rhythm plan for the LoopStrip: mirror the layered phase fn in JS (pure — no
     // compile; recomputed per render, trivially cheap). Layers are checked in row
@@ -567,17 +566,15 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         setBusy(true);
         setStatus(null);
         try {
-            // Sequence bakes each intro row's effective run (stopAt delta) into
-            // its slot count; rhythm keeps the raw counts (they only mark active).
-            const seqCounts = seqPlan.iterCounts;
-            const slotCount = (r: SlotRow, i: number) => (rhythm ? r.slot.iterCount : seqCounts[i]);
-            const slots = draft.rows.map((r, i) => ({ ...r.slot, iterCount: slotCount(r, i), optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] }));
+            // Slots keep their RAW counts; loop dividers (breaks) carry the block
+            // structure — buildBlockPlan expands them at emit.
+            const slots = draft.rows.map((r) => ({ ...r.slot, optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] }));
             const title = draft.title.trim() || autoTitleOf(draft.rows);
             const weaveSource: WeaveSource = {
                 version: 1,
                 title,
-                slots: draft.rows.map((r, i) => ({
-                    label: r.label, kind: r.kind, ref: r.ref, slot: { ...r.slot, iterCount: slotCount(r, i) },
+                slots: draft.rows.map((r) => ({
+                    label: r.label, kind: r.kind, ref: r.ref, slot: { ...r.slot },
                     ...(r.bake?.some(Boolean) ? { bake: Array.from(r.bake, Boolean) } : {}),
                 })),
                 // Rhythm persists the built per-layer snapshot; the live values stay
@@ -590,7 +587,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                             return { interval: v.interval, startIter: v.start, ...(v.beats > 0 ? { beats: v.beats } : {}) };
                         }),
                     }
-                    : { kind: 'counts', repeatFrom: repeatIdx },
+                    : { kind: 'counts', repeatFrom: repeatIdx, ...(dividerRows.length ? { breaks: dividerRows.map((d) => ({ afterRow: d.afterRow, repeat: d.repeat })) } : {}) },
             };
             const res = loadUserWeave(slots, title, weaveSource, repeatIdx);
             if (!res.ok) {
@@ -614,7 +611,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         }
     };
 
-    const clearAll = () => commit({ ...draft, rows: [], scheduleKind: 'counts' });
+    const clearAll = () => commit({ ...draft, rows: [], dividers: [], scheduleKind: 'counts' });
 
     // "Open current weave" — the active formula carries a weaveSource (a built
     // weave, an imported MB3D scene, or a loaded GMF) that differs from the draft.
@@ -636,15 +633,23 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             ref: s.ref, kind: s.kind, iter: s.slot.iterCount, ov: s.slot.optionValues,
             bake: s.bake && s.bake.some(Boolean) ? s.bake.map(Boolean) : null,
         }));
+    // Normalize a counts schedule's loop structure to `[[afterRow, repeat], …]`
+    // (breaks, or a single divider synthesized from repeatFrom) for comparison.
+    const normBreaks = (sched: any): [number, number][] | null =>
+        sched.kind !== 'counts' ? null
+            : sched.breaks?.length ? sched.breaks.map((b: any) => [b.afterRow, b.repeat] as [number, number])
+                : sched.repeatFrom ? [[sched.repeatFrom - 1, 1]] : [];
     const dirty = (() => {
         if (!currentWs) return activeCount > 0;
-        // Compare EFFECTIVE slot counts (intro rows bake stopAt → count on build).
-        const draftEff = draft.rows.map((r, i) => ({ ...r, slot: { ...r.slot, iterCount: rhythm ? r.slot.iterCount : seqPlan.iterCounts[i] } }));
-        const draftSig = JSON.stringify({ slots: sigOf(draftEff), kind: rhythm ? 'modulo' : 'counts', repeat: rhythm ? null : repeatIdx });
+        const draftSig = JSON.stringify({
+            slots: sigOf(draft.rows),
+            kind: rhythm ? 'modulo' : 'counts',
+            breaks: rhythm ? null : dividerRows.map((d) => [d.afterRow, d.repeat]),
+        });
         const liveSig = JSON.stringify({
             slots: sigOf(currentWs.slots),
             kind: currentWs.schedule.kind,
-            repeat: currentWs.schedule.kind === 'counts' ? (currentWs.schedule.repeatFrom ?? 0) : null,
+            breaks: normBreaks(currentWs.schedule),
         });
         return draftSig !== liveSig;
     })();
@@ -751,32 +756,19 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                 className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-red-300 transition-colors shrink-0" title="Remove formula">×</button>
                         </div>
 
-                        {/* Line 2 — Sequence: iterations + stop-at · Rhythm: role + compact timing */}
+                        {/* Line 2 — Sequence: iterations · Rhythm: role + compact timing */}
                         <div className="flex items-center gap-1.5 mt-1 pl-6 flex-wrap">
                             {!rhythm ? (
-                                <>
-                                    {r.stopAt == null ? (
-                                        <div className="flex items-center gap-0.5 shrink-0" title="Iterations this formula runs each pass through the repeating loop">
-                                            <button onClick={() => setIter(r.key, r.slot.iterCount - 1)}
-                                                className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
-                                            <input value={r.slot.iterCount}
-                                                onChange={(e) => setIter(r.key, parseInt(e.target.value, 10) || 0)}
-                                                className="w-8 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" />
-                                            <button onClick={() => setIter(r.key, r.slot.iterCount + 1)}
-                                                className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
-                                            <span className="text-[10px] text-fg-tertiary ml-1">iter</span>
-                                        </div>
-                                    ) : (
-                                        <span className="text-[10px] text-accent-300/90 shrink-0" title="Runs once as an intro (up to its stop), then the loop repeats from the first formula without a stop.">↑ intro</span>
-                                    )}
-                                    <label className="ml-auto flex items-center gap-1 text-[10px] text-fg-tertiary shrink-0"
-                                        title="Stop this formula at this iteration — it runs once as an intro up to here, then the loop repeats from the first formula without a stop. Blank = loops.">
-                                        stop at
-                                        <input value={r.stopAt ?? ''} placeholder="—" inputMode="numeric"
-                                            onChange={(e) => { const t = e.target.value.trim(); setStopAt(r.key, t === '' ? undefined : Math.max(1, parseInt(t, 10) || 1)); }}
-                                            className="w-10 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40 placeholder:text-fg-tertiary/40" />
-                                    </label>
-                                </>
+                                <div className="flex items-center gap-0.5 shrink-0" title="Iterations this formula runs each time it's scheduled">
+                                    <button onClick={() => setIter(r.key, r.slot.iterCount - 1)}
+                                        className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
+                                    <input value={r.slot.iterCount}
+                                        onChange={(e) => setIter(r.key, parseInt(e.target.value, 10) || 0)}
+                                        className="w-8 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" />
+                                    <button onClick={() => setIter(r.key, r.slot.iterCount + 1)}
+                                        className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
+                                    <span className="text-[10px] text-fg-tertiary ml-1">iter</span>
+                                </div>
                             ) : isBase ? (
                                 <span className="text-[10px] text-fg-tertiary shrink-0" title="The base runs on every iteration no rhythm layer claims.">base</span>
                             ) : layerK > 0 && lv ? (
@@ -868,6 +860,32 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                             })()}
                         </div>
                     )}
+                    {/* Loop divider after this row (Sequence) — the block above plays
+                        ×repeat as intro, the rows below loop. Only where active rows
+                        follow (there's a cycle to hand off to). */}
+                    {!rhythm && draft.rows.slice(i + 1).some((rr) => rr.slot.iterCount > 0) && (() => {
+                        const divider = draft.dividers.find((d) => d.afterKey === r.key);
+                        return divider ? (
+                            <div className="flex items-center gap-1.5 pl-6 py-0.5" title="Loop divider — the block above plays this many times as an intro, then the rows below loop.">
+                                <span className="flex-1 border-t border-dashed border-accent-500/40" />
+                                <span className="text-[10px] text-accent-300 shrink-0">↻ plays ×</span>
+                                <input value={divider.repeat} inputMode="numeric"
+                                    onChange={(e) => setDividerRepeat(r.key, parseInt(e.target.value, 10) || 1)}
+                                    className="w-8 text-center rounded bg-surface-sunken border border-accent-500/30 py-0.5 text-[11px] text-accent-200 outline-none focus:border-accent-500/60" />
+                                <button onClick={() => removeDivider(r.key)}
+                                    className="text-[11px] text-fg-tertiary hover:text-red-300 shrink-0 px-0.5" title="Remove loop divider">✕</button>
+                                <span className="flex-1 border-t border-dashed border-accent-500/40" />
+                            </div>
+                        ) : (
+                            <button onClick={() => addDivider(r.key)}
+                                className="w-full flex items-center gap-1.5 pl-6 py-0.5 text-[9px] text-fg-tertiary/40 hover:text-accent-300 transition-colors group"
+                                title="Insert a loop divider — the block above plays N times as an intro, then the rows below loop.">
+                                <span className="flex-1 border-t border-dashed border-line/10 group-hover:border-accent-500/30" />
+                                <span className="shrink-0">+ loop</span>
+                                <span className="flex-1 border-t border-dashed border-line/10 group-hover:border-accent-500/30" />
+                            </button>
+                        );
+                    })()}
                     </React.Fragment>
                     );
                 })}

@@ -144,6 +144,14 @@ export function loadUserWeave(
   // Rhythm (layered modulo) schedule rides in on the weaveSource; the emit swaps the
   // baked counts LUT for the layered runtime-uniform phase fn (uWeave*<k> uniforms).
   const rhythm = weaveSource?.schedule.kind === 'modulo' ? weaveSource.schedule : undefined;
+  // Loop dividers (P4.7): the counts schedule's `breaks` partition the rows into
+  // repeated blocks + a looping tail. Fall back to repeatFrom as a single divider
+  // (repeat 1 = MB3D's "repeat from here").
+  const counts = weaveSource?.schedule.kind === 'counts' ? weaveSource.schedule : undefined;
+  const rf = counts?.repeatFrom ?? repeatFrom;
+  const dividers = counts?.breaks?.length
+    ? counts.breaks
+    : rf > 0 ? [{ afterRow: rf - 1, repeat: 1 }] : undefined;
   // Per-option expose/bake directives ride weaveSource.slots (row order = addon
   // slot order, buildWeaveScene keeps them aligned).
   const slotBake = weaveSource?.slots.map((s) => s.bake);
@@ -152,7 +160,7 @@ export function loadUserWeave(
   // Plain MB3D scene imports (loadFromScene) deliberately do NOT.
   const { def, ledger } = emitFusedHybrid(
     buildWeaveScene(slots, title, undefined, repeatFrom),
-    { ...(rhythm ? { schedule: { kind: 'modulo' as const } } : {}), slotBake, enableGate: true },
+    { ...(rhythm ? { schedule: { kind: 'modulo' as const } } : dividers ? { dividers } : {}), slotBake, enableGate: true },
   );
   if (!def) {
     return { ok: false, reason: ledger.reasons.join(' '), ledger };

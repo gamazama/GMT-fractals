@@ -17,7 +17,7 @@ import type { FractalDefinition } from '../../types/fractal';
 import type { Capability } from '../../types/capabilities';
 import { buildWeaveSequence, emitWeaveGLSL, stepSlot } from './weaveSequencer';
 import { assembleWeave } from '../../engine/weave/emitWeave';
-import { emitLayeredModuloGLSL } from '../../engine/weave/schedule';
+import { emitLayeredModuloGLSL, buildBlockPlan } from '../../engine/weave/schedule';
 import { resolveNativeSlot, NATIVE_FORMULA_INDEX } from '../../engine/weave/nativeResolver';
 import { transpileSlot } from './slotTranspiler';
 import type { SlotFlag, TranspiledSlot } from './slotTranspiler';
@@ -47,6 +47,12 @@ export interface EmitFusedOptions {
    *  @invariant opts absent (or kind ≠ modulo) = the counts path, byte-identical
    *  to the pre-P3b emit (probe: debug/probe-weave-refactor.mts). */
   schedule?: { kind: 'modulo' };
+  /** LOOP DIVIDERS (P4.7): counts-schedule block boundaries — the block ending
+   *  at `afterRow` plays `repeat` times as intro, the tail loops (buildBlockPlan).
+   *  When present (and not modulo) they REPLACE the addon's repeatFrom nibble.
+   *  Absent = the buildWeaveSequence counts path, byte-identical to the pre-P4.7
+   *  emit (MB3D imports never set them). @invariant editor-only channel. */
+  dividers?: Array<{ afterRow: number; repeat: number }>;
   /** Per-slot, per-OPTION expose/bake directives (P3b Task 2), indexed by the
    *  addon slot index then the option index: true = bake that option's value as
    *  a literal (frees its uniform lanes). Absent = auto-expose (unchanged). */
@@ -96,7 +102,13 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     return { def: null, ledger: { mode: -1, supported: false, reasons: ['No formula stack in that block.'], slotFlags: [] } };
   }
 
-  const plan = buildWeaveSequence(addon);
+  // Counts plan (default): the addon's repeatFrom cursor walk. LOOP DIVIDERS
+  // (P4.7, editor-only) override it — buildBlockPlan expands the block structure
+  // into the same {order, introLen, cycleLen} the LUT emitter already consumes.
+  const baseSeq = buildWeaveSequence(addon);
+  const plan = (opts?.dividers?.length && opts.schedule?.kind !== 'modulo')
+    ? { mode: baseSeq.mode, ...buildBlockPlan({ iterCounts: addon.slots.map((s) => s.iterCount ?? 0), dividers: opts.dividers }) }
+    : baseSeq;
   const reasons: string[] = [];
   if (plan.mode !== 0) reasons.push(`Weave mode ${plan.mode} (interpolate / CSG / KIFS) isn't supported yet — only mode 0 (alternate).`);
   if (plan.hasSilent) reasons.push('Scene uses negative-iterCount "silent" slots — not supported yet.');
