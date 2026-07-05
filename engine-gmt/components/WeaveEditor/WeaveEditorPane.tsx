@@ -72,15 +72,17 @@ interface SlotRow {
     /** Per-option expose/bake directives (true = baked literal, no slider lane),
      *  indexed by option index. Absent entries = auto-expose. */
     bake?: boolean[];
+    /** Sequence "stop at" (P4.7): the absolute iteration this formula STOPS at —
+     *  it runs from the previous stop up to here as a one-shot INTRO, then the
+     *  loop repeats from the first row WITHOUT a stopAt. Undefined = loops. */
+    stopAt?: number;
 }
 
 interface WeaveDraft {
     title: string;
     rows: SlotRow[];
-    /** Row key of the "repeat from here" marker; null = repeat the whole sequence. */
-    repeatKey: string | null;
-    /** User's schedule choice. 'modulo' (Rhythm) only takes effect while exactly
-     *  2 rows are active — otherwise the build falls back to counts (Sequence). */
+    /** User's schedule choice. 'modulo' (Rhythm) only takes effect while 2–6 rows
+     *  are active — otherwise the build falls back to counts (Sequence). */
     scheduleKind: 'counts' | 'modulo';
 }
 
@@ -96,7 +98,26 @@ const cloneRows = (rows: SlotRow[]): SlotRow[] =>
         slot: { ...r.slot, optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] },
         bake: r.bake ? [...r.bake] : undefined,
     }));
-const cloneDraft = (d: WeaveDraft): WeaveDraft => ({ title: d.title, rows: cloneRows(d.rows), repeatKey: d.repeatKey, scheduleKind: d.scheduleKind ?? 'counts' });
+const cloneDraft = (d: WeaveDraft): WeaveDraft => ({ title: d.title, rows: cloneRows(d.rows), scheduleKind: d.scheduleKind ?? 'counts' });
+
+/** Sequence schedule from the rows' iter counts + stopAt markers: leading rows
+ *  with a stopAt are one-shot INTROS (each runs `stopAt − previousStop`
+ *  iterations); the first row without a stopAt begins the repeating cycle. */
+function seqPlanFromRows(rows: SlotRow[]): { iterCounts: number[]; repeatFrom: number } {
+    let prevStop = 0;
+    let repeatFrom = -1;
+    const iterCounts = rows.map((r, i) => {
+        if (repeatFrom < 0 && r.stopAt != null && r.stopAt > prevStop) {
+            const c = r.stopAt - prevStop;
+            prevStop = r.stopAt;
+            return c;
+        }
+        if (repeatFrom < 0 && r.slot.iterCount > 0) repeatFrom = i;
+        return r.slot.iterCount;
+    });
+    if (repeatFrom < 0) repeatFrom = Math.max(0, rows.length - 1);
+    return { iterCounts, repeatFrom };
+}
 
 const nextColorIdx = (rows: SlotRow[]): number => {
     const used = new Set(rows.map((r) => r.colorIdx));
@@ -121,7 +142,7 @@ function defaultBake(slot: MB3DFormulaSlot): boolean[] | undefined {
 
 /** Hydrate a draft from a weave formula's persisted source. */
 function draftFromWeaveSource(ws: WeaveSource): WeaveDraft {
-    const rows = ws.slots.map((s, i) => ({
+    const rows: SlotRow[] = ws.slots.map((s, i) => ({
         key: rowKey(),
         label: s.label,
         kind: s.kind,
@@ -130,8 +151,17 @@ function draftFromWeaveSource(ws: WeaveSource): WeaveDraft {
         slot: { ...s.slot, optionTypes: [...s.slot.optionTypes], optionValues: [...s.slot.optionValues] },
         bake: s.bake ? [...s.bake] : undefined,
     }));
-    const rf = ws.schedule.kind === 'counts' ? (ws.schedule.repeatFrom ?? 0) : 0;
-    return { title: ws.title, rows, repeatKey: rows[rf]?.key ?? null, scheduleKind: ws.schedule.kind };
+    // Counts intro → rows before repeatFrom are one-shot intros; stamp each with
+    // its cumulative stop iteration so the editor shows "stop at [x]".
+    if (ws.schedule.kind === 'counts') {
+        const rf = ws.schedule.repeatFrom ?? 0;
+        let cum = 0;
+        for (let i = 0; i < rf && i < rows.length; i++) {
+            cum += Math.max(0, rows[i].slot.iterCount);
+            rows[i].stopAt = cum;
+        }
+    }
+    return { title: ws.title, rows, scheduleKind: ws.schedule.kind };
 }
 
 const DEFAULT_ITER_COUNT = 2;
@@ -203,11 +233,11 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         // "+ Add formula" pick becomes slot 1 (weave-the-current-formula).
         if (seedFormulaId) {
             const seed = seedRowFromFormula(seedFormulaId);
-            if (seed) return { title: '', rows: [seed], repeatKey: null, scheduleKind: 'counts' };
+            if (seed) return { title: '', rows: [seed], scheduleKind: 'counts' };
         }
         // Empty title = auto-name from the formula mix (autoTitleOf) until the
         // user types their own.
-        return { title: '', rows: [], repeatKey: null, scheduleKind: 'counts' };
+        return { title: '', rows: [], scheduleKind: 'counts' };
     });
     const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
     const [reorderWarn, setReorderWarn] = useState(false);
@@ -356,15 +386,12 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         (store.animations ?? []).some((a: any) => a.enabled && typeof a.target === 'string' && a.target.startsWith('coreMath.'));
     const remove = (key: string) => {
         if (hasFormulaTracks()) setReorderWarn(true);
-        commit({
-            ...draft,
-            rows: draft.rows.filter((r) => r.key !== key),
-            repeatKey: draft.repeatKey === key ? null : draft.repeatKey,
-        });
+        commit({ ...draft, rows: draft.rows.filter((r) => r.key !== key) });
     };
-    const setRepeat = (key: string) => {
-        const idx = draft.rows.findIndex((r) => r.key === key);
-        commit({ ...draft, repeatKey: idx <= 0 ? null : key });
+    /** Sequence "stop at": set (or clear, undefined) a row's one-shot stop
+     *  iteration. The build derives per-slot counts + repeatFrom from these. */
+    const setStopAt = (key: string, stopAt: number | undefined) => {
+        commit({ ...draft, rows: draft.rows.map((r) => (r.key === key ? { ...r, stopAt } : r)) });
     };
 
     // ── Per-slot param customization (P3b Task 2) ────────────────────────────
@@ -493,24 +520,23 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         store.setWeave?.({ [`${field}${k}`]: field === 'weaveInterval' ? Math.max(1, clampI(n, 1, 32)) : clampI(n, 0, 64) });
 
     // ── Live schedule preview ────────────────────────────────────────────────
-    const repeatIdx = useMemo(() => {
-        if (activeCount === 0) return 0;
-        let endTo = iterCounts.length - 1;
-        while (endTo > 0 && iterCounts[endTo] === 0) endTo--;
-        let rf = draft.repeatKey ? draft.rows.findIndex((r) => r.key === draft.repeatKey) : 0;
-        if (rf < 0) rf = 0;
-        rf = Math.min(rf, endTo);
-        while (rf > 0 && iterCounts[rf] <= 0) rf--;
-        return rf;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [iterCounts.join(','), draft.repeatKey, draft.rows.map((r) => r.key).join(',')]);
+    // Sequence per-slot counts + repeatFrom derive from the rows: leading rows
+    // with a `stopAt` are one-shot intros (run `stopAt − prevStop` iterations),
+    // the first row without one begins the repeating cycle.
+    const seqPlan = useMemo(
+        () => seqPlanFromRows(draft.rows),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [iterCounts.join(','), draft.rows.map((r) => r.stopAt ?? '').join(','), draft.rows.map((r) => r.key).join(',')],
+    );
+    const repeatIdx = seqPlan.repeatFrom;
     const plan = useMemo(() => {
         if (activeCount === 0) return null;
-        let endTo = iterCounts.length - 1;
-        while (endTo > 0 && iterCounts[endTo] === 0) endTo--;
-        return buildCountsPlan({ iterCounts, endTo, repeatFrom: repeatIdx });
+        const ic = seqPlan.iterCounts;
+        let endTo = ic.length - 1;
+        while (endTo > 0 && ic[endTo] === 0) endTo--;
+        return buildCountsPlan({ iterCounts: ic, endTo, repeatFrom: repeatIdx });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [iterCounts.join(','), repeatIdx]);
+    }, [seqPlan, activeCount]);
 
     // Rhythm plan for the LoopStrip: mirror the layered phase fn in JS (pure — no
     // compile; recomputed per render, trivially cheap). Layers are checked in row
@@ -541,13 +567,17 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         setBusy(true);
         setStatus(null);
         try {
-            const slots = draft.rows.map((r) => ({ ...r.slot, optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] }));
+            // Sequence bakes each intro row's effective run (stopAt delta) into
+            // its slot count; rhythm keeps the raw counts (they only mark active).
+            const seqCounts = seqPlan.iterCounts;
+            const slotCount = (r: SlotRow, i: number) => (rhythm ? r.slot.iterCount : seqCounts[i]);
+            const slots = draft.rows.map((r, i) => ({ ...r.slot, iterCount: slotCount(r, i), optionTypes: [...r.slot.optionTypes], optionValues: [...r.slot.optionValues] }));
             const title = draft.title.trim() || autoTitleOf(draft.rows);
             const weaveSource: WeaveSource = {
                 version: 1,
                 title,
-                slots: draft.rows.map((r) => ({
-                    label: r.label, kind: r.kind, ref: r.ref, slot: { ...r.slot },
+                slots: draft.rows.map((r, i) => ({
+                    label: r.label, kind: r.kind, ref: r.ref, slot: { ...r.slot, iterCount: slotCount(r, i) },
                     ...(r.bake?.some(Boolean) ? { bake: Array.from(r.bake, Boolean) } : {}),
                 })),
                 // Rhythm persists the built per-layer snapshot; the live values stay
@@ -584,7 +614,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         }
     };
 
-    const clearAll = () => commit({ ...draft, rows: [], repeatKey: null, scheduleKind: 'counts' });
+    const clearAll = () => commit({ ...draft, rows: [], scheduleKind: 'counts' });
 
     // "Open current weave" — the active formula carries a weaveSource (a built
     // weave, an imported MB3D scene, or a loaded GMF) that differs from the draft.
@@ -608,7 +638,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         }));
     const dirty = (() => {
         if (!currentWs) return activeCount > 0;
-        const draftSig = JSON.stringify({ slots: sigOf(draft.rows), kind: rhythm ? 'modulo' : 'counts', repeat: rhythm ? null : repeatIdx });
+        // Compare EFFECTIVE slot counts (intro rows bake stopAt → count on build).
+        const draftEff = draft.rows.map((r, i) => ({ ...r, slot: { ...r.slot, iterCount: rhythm ? r.slot.iterCount : seqPlan.iterCounts[i] } }));
+        const draftSig = JSON.stringify({ slots: sigOf(draftEff), kind: rhythm ? 'modulo' : 'counts', repeat: rhythm ? null : repeatIdx });
         const liveSig = JSON.stringify({
             slots: sigOf(currentWs.slots),
             kind: currentWs.schedule.kind,
@@ -719,73 +751,62 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                 className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-red-300 transition-colors shrink-0" title="Remove formula">×</button>
                         </div>
 
-                        {/* Line 2 — iterations + mode-specific control */}
-                        <div className="flex items-center gap-1.5 mt-1 pl-6">
-                            <div className={`flex items-center gap-0.5 shrink-0 ${rhythm ? 'opacity-50' : ''}`}
-                                title={rhythm
-                                    ? 'In Rhythm, iterations only mark a formula active (above 0) — timing is set by the layer sliders (expand ▸).'
-                                    : 'Iterations this formula runs each pass'}>
-                                <button onClick={() => setIter(r.key, r.slot.iterCount - 1)}
-                                    className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
-                                <input
-                                    value={r.slot.iterCount}
-                                    onChange={(e) => setIter(r.key, parseInt(e.target.value, 10) || 0)}
-                                    className="w-8 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40"
-                                />
-                                <button onClick={() => setIter(r.key, r.slot.iterCount + 1)}
-                                    className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
-                                <span className="text-[10px] text-fg-tertiary ml-1">iter</span>
-                            </div>
-                            {!rhythm && (
-                                <button
-                                    onClick={() => setRepeat(r.key)}
-                                    className={`ml-auto px-1.5 h-5 text-[10px] rounded border shrink-0 transition-colors ${
-                                        i === repeatIdx && i > 0
-                                            ? 'border-accent-500/50 bg-accent-500/15 text-accent-300'
-                                            : (draft.repeatKey === null && i === 0)
-                                                ? 'border-line/10 bg-line/[0.02] text-fg-tertiary/50'
-                                                : 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'
-                                    }`}
-                                    title="Repeat from here — earlier formulas run once as an intro, then the loop repeats from this one (MB3D's Repeat From)"
-                                >↻ repeat from here</button>
-                            )}
-                            {isBase && (
-                                <span className="ml-auto text-[10px] text-fg-tertiary shrink-0" title="The base runs on every iteration no rhythm layer claims.">base</span>
-                            )}
-                            {layerK > 0 && lv && (
-                                <button onClick={() => setExpandedKey(isExpanded ? null : r.key)}
-                                    className="ml-auto text-[10px] text-fg-tertiary hover:text-fg-muted shrink-0 truncate max-w-[170px]"
-                                    title="Layer timing — expand to edit as keyframable sliders">
-                                    every {lv.interval} · from {lv.start}{lv.beats > 0 ? ` · ${lv.beats} beats` : ''}
-                                </button>
-                            )}
-                            {rhythm && activePos < 0 && (
-                                <span className="ml-auto text-[10px] text-fg-tertiary/50 shrink-0">inactive</span>
-                            )}
+                        {/* Line 2 — Sequence: iterations + stop-at · Rhythm: role + compact timing */}
+                        <div className="flex items-center gap-1.5 mt-1 pl-6 flex-wrap">
+                            {!rhythm ? (
+                                <>
+                                    {r.stopAt == null ? (
+                                        <div className="flex items-center gap-0.5 shrink-0" title="Iterations this formula runs each pass through the repeating loop">
+                                            <button onClick={() => setIter(r.key, r.slot.iterCount - 1)}
+                                                className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
+                                            <input value={r.slot.iterCount}
+                                                onChange={(e) => setIter(r.key, parseInt(e.target.value, 10) || 0)}
+                                                className="w-8 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" />
+                                            <button onClick={() => setIter(r.key, r.slot.iterCount + 1)}
+                                                className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
+                                            <span className="text-[10px] text-fg-tertiary ml-1">iter</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-[10px] text-accent-300/90 shrink-0" title="Runs once as an intro (up to its stop), then the loop repeats from the first formula without a stop.">↑ intro</span>
+                                    )}
+                                    <label className="ml-auto flex items-center gap-1 text-[10px] text-fg-tertiary shrink-0"
+                                        title="Stop this formula at this iteration — it runs once as an intro up to here, then the loop repeats from the first formula without a stop. Blank = loops.">
+                                        stop at
+                                        <input value={r.stopAt ?? ''} placeholder="—" inputMode="numeric"
+                                            onChange={(e) => { const t = e.target.value.trim(); setStopAt(r.key, t === '' ? undefined : Math.max(1, parseInt(t, 10) || 1)); }}
+                                            className="w-10 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40 placeholder:text-fg-tertiary/40" />
+                                    </label>
+                                </>
+                            ) : isBase ? (
+                                <span className="text-[10px] text-fg-tertiary shrink-0" title="The base runs on every iteration no rhythm layer claims.">base</span>
+                            ) : layerK > 0 && lv ? (
+                                dirty ? (
+                                    <div className="flex items-center gap-2 text-[10px] text-fg-tertiary flex-wrap"
+                                        title="Layer timing — set here before Build; after Build the live keyframable sliders appear under the schedule.">
+                                        <label className="flex items-center gap-1">start
+                                            <input value={lv.start} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveStartIter', parseInt(e.target.value, 10) || 0)}
+                                                className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
+                                        <label className="flex items-center gap-1">every
+                                            <input value={lv.interval} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveInterval', parseInt(e.target.value, 10) || 1)}
+                                                className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
+                                        <label className="flex items-center gap-1">beats
+                                            <input value={lv.beats} inputMode="numeric" onChange={(e) => setLayerVal(layerK, 'weaveBeats', parseInt(e.target.value, 10) || 0)}
+                                                className="w-9 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" /></label>
+                                    </div>
+                                ) : (
+                                    <span className="text-[10px] text-fg-tertiary shrink-0" title="Live timing — edit with the keyframable sliders under the schedule below.">
+                                        every {lv.interval} · from {lv.start}{lv.beats > 0 ? ` · ${lv.beats} beats` : ''}
+                                    </span>
+                                )
+                            ) : activePos < 0 ? (
+                                <span className="text-[10px] text-fg-tertiary/50 shrink-0">inactive</span>
+                            ) : null}
                         </div>
                     </div>
                     {isExpanded && (
                         <div className="ml-6 rounded-lg border border-line/10 bg-surface-sunken/40 px-2 py-1.5 space-y-2">
-                            {/* Per-layer rhythm timing — real keyframable GMT sliders */}
-                            {layerK > 0 && lv && (
-                                <div className="space-y-1">
-                                    <Slider label="Interval" value={lv.interval} min={1} max={32} step={1}
-                                        onChange={(n) => setLayerVal(layerK, 'weaveInterval', n)} defaultValue={2}
-                                        trackId={`weave.weaveInterval${layerK}`} liveValue={store.liveModulations?.[`weave.weaveInterval${layerK}`]} />
-                                    <Slider label="Start" value={lv.start} min={0} max={64} step={1}
-                                        onChange={(n) => setLayerVal(layerK, 'weaveStartIter', n)} defaultValue={0}
-                                        trackId={`weave.weaveStartIter${layerK}`} liveValue={store.liveModulations?.[`weave.weaveStartIter${layerK}`]} />
-                                    <Slider label="Beats (0 = endless)" value={lv.beats} min={0} max={64} step={1}
-                                        onChange={(n) => setLayerVal(layerK, 'weaveBeats', n)} defaultValue={0}
-                                        trackId={`weave.weaveBeats${layerK}`} liveValue={store.liveModulations?.[`weave.weaveBeats${layerK}`]} />
-                                    {store.showHints && (
-                                        <p className="text-[10px] text-fg-tertiary">
-                                            Timing is live and keyframable — no rebuild. This formula runs every few iterations over the base.
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-                            {/* Parameters */}
+                            {/* Parameters (rhythm timing lives in line 2 before Build,
+                                and as live keyframable sliders under the schedule after). */}
                             {isNativeSlot(r.slot) ? (
                                 <div className="text-[10px] text-fg-tertiary leading-relaxed space-y-1">
                                     <p>This formula's parameters are the sliders in the panel above — always live, nothing to set up here.</p>
@@ -907,10 +928,41 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     {store.showHints && (
                         <p className="text-[10px] text-fg-tertiary">
                             {rhythm
-                                ? <>{activeCount - 1} rhythm layer{activeCount === 2 ? '' : 's'} over {draft.rows[activeRowIdx[0]]?.label} · expand a layer to set its timing · scene iterations: {store.coreMath?.iterations ?? '—'}</>
+                                ? <>{activeCount - 1} rhythm layer{activeCount === 2 ? '' : 's'} over {draft.rows[activeRowIdx[0]]?.label} · scene iterations: {store.coreMath?.iterations ?? '—'}</>
                                 : <>cycle = {plan.cycleLen} iteration{plan.cycleLen === 1 ? '' : 's'}
                                     {plan.introLen > 0 ? ` after ${plan.introLen} intro` : ''} · faded blocks repeat · scene iterations: {store.coreMath?.iterations ?? '—'}</>}
                         </p>
+                    )}
+
+                    {/* Live keyframable rhythm sliders — appear AFTER Build (the weave is
+                        live), grouped per formula. Before Build, the compact start/every/
+                        beats controls in the rows above set the initial timing; these
+                        keyframe it live (no rebuild). */}
+                    {rhythm && !dirty && activeRowIdx.length > 1 && (
+                        <div className="pt-1.5 mt-0.5 space-y-2 border-t border-line/10">
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-fg-tertiary">Live rhythm — keyframable</span>
+                            {activeRowIdx.slice(1).map((rowIdx, j) => {
+                                const k = j + 1;
+                                const v = layerVal(k);
+                                return (
+                                    <div key={draft.rows[rowIdx].key} className="space-y-1">
+                                        <div className="flex items-center gap-1.5 text-[11px]">
+                                            <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[(draft.rows[rowIdx]?.colorIdx ?? 0) % SLOT_COLORS.length] }} />
+                                            <span className="truncate text-fg">{draft.rows[rowIdx]?.label}</span>
+                                        </div>
+                                        <Slider label="Interval" value={v.interval} min={1} max={32} step={1}
+                                            onChange={(n) => setLayerVal(k, 'weaveInterval', n)} defaultValue={2}
+                                            trackId={`weave.weaveInterval${k}`} liveValue={store.liveModulations?.[`weave.weaveInterval${k}`]} />
+                                        <Slider label="Start" value={v.start} min={0} max={64} step={1}
+                                            onChange={(n) => setLayerVal(k, 'weaveStartIter', n)} defaultValue={0}
+                                            trackId={`weave.weaveStartIter${k}`} liveValue={store.liveModulations?.[`weave.weaveStartIter${k}`]} />
+                                        <Slider label="Beats (0 = endless)" value={v.beats} min={0} max={64} step={1}
+                                            onChange={(n) => setLayerVal(k, 'weaveBeats', n)} defaultValue={0}
+                                            trackId={`weave.weaveBeats${k}`} liveValue={store.liveModulations?.[`weave.weaveBeats${k}`]} />
+                                    </div>
+                                );
+                            })}
+                        </div>
                     )}
                 </div>
             )}
