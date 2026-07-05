@@ -17,7 +17,7 @@
  *
  * @see docs/adr/0089-weave-core-unification.md
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
 import type { FractalDefinition } from '../../../types/fractal';
@@ -37,6 +37,11 @@ export const WeaveSection: React.FC = () => {
     // A weave scene defaults OPEN (the editor is what you came for); a single
     // formula defaults collapsed to the "+ Add formula" one-liner.
     const [open, setOpen] = useState(isWeave);
+    // Loading a weave (incl. switching to one, or a migrated hybrid) re-opens the
+    // section — "the editor is what you came for". Fires only on formula/isWeave
+    // change, so a manual collapse of the current weave stays collapsed; landing
+    // on a single formula never force-closes a section the user opened.
+    useEffect(() => { if (isWeave) setOpen(true); }, [formula, isWeave]);
 
     const collapsedRight = open ? null : isWeave ? (
         <span
