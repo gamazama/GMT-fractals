@@ -19,6 +19,19 @@
 > are unchanged so emitted GLSL is byte-identical (MB3D corpus 38/38). The
 > absorption decision is unchanged: legacy folds are BoxFold weave slots.
 
+> **Update 2026-07-06 (P4.7 item 6 — the last legacy AUTHORING bridge dropped; decision unchanged):**
+> The New Scene wizard (`components/NewSceneModal.tsx`) no longer AUTHORS the
+> legacy `features.interlace` / `geometry.hybrid*` shape for the migration to
+> convert. Its Hybrid Box fold and interleave secondary now build a native weave
+> def DIRECTLY (commit f8bcfe1) via the new `buildWeaveDef` export (the build+
+> register half of `loadUserWeave`): a fold ⇒ a COUNTS weave (fold intro + loop),
+> interleave-only ⇒ a MODULO weave (base + one rhythm layer). The migration's
+> legacy READER stays exactly as specified below — it is still the load path for
+> on-disk legacy files. ONE exception keeps the bridge: a gallery SCENE base with
+> an added fold/secondary still authors the legacy shape (a fresh weave would drop
+> the scene's own params), so the migration converts that rare combo. Absorption
+> decision unchanged; only the composer's output shape moved forward.
+
 ## Context
 
 ADR-0089 unified GMT's three formula-scheduling systems onto one engine weave

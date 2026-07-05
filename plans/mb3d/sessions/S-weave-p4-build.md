@@ -35,9 +35,23 @@
 >
 > **Gates:** typecheck green every commit; `test:mb3d:weave` grown to **281**; MB3D emit byte-identity held
 > (defaults are runtime uniforms, never baked). convert.ts JSDoc de-staled (elected base).
-> **Remaining before v1+weave push:** P4.7 item 5 (Import MB3D modal still exists → slim import dialog from
-> FormulaPicker + File menu), item 6 (NewSceneModal in `app-gmt/AppGmt.tsx` still authors legacy interlace —
-> drop the bridge, author a weave directly), and **P4.6** (animation transfer).
+>
+> **P4.7 items 5 + 6 DONE 2026-07-06 (`4c96ca4`, `f8bcfe1`):**
+> - **Item 5 — MB3D import modal dissolved.** The modal's Weave-Editor tab is retired (the editor lives in the
+>   Formula-panel Weave section); what's left is import-only, promoted to a GLOBAL dialog via a store flag
+>   (`importMb3dOpen` + `openImportMb3d`/`closeImportMb3d`, mirrors newScene; both `types/store.ts` copies +
+>   uiSlice). `ImportMandelbulb3DModalHost` mounts once at app root (AppGmt). Reachable from the File menu
+>   ("Import Mandelbulb3D…") AND the FormulaPicker footer; the FormulaSelect hamburger routes to the same store
+>   action (local `mb3dOpen` state + in-place mount removed). No external `initialTab` callers remained to repoint.
+> - **Item 6 — New Scene authors a weave directly (bridge dropped).** Extracted `buildWeaveDef` from
+>   `loadUserWeave` (build+register half, no rebuild-preserve load). `NewSceneModal.authorWeaveDef`: fold ⇒ a
+>   COUNTS weave (fold intro + primary/secondary loop), interleave-only ⇒ a MODULO weave (primary base +
+>   secondary rhythm layer); the built weave's id + defaultPreset become the target base, shading/lights/clean-
+>   slate merge on top. Create + dice both use it. Scene-base composites (gallery scene + a layer) KEEP the
+>   legacy shape and ride the still-present migration (a fresh weave would drop the scene's own params — rare,
+>   documented in-code). Gates: typecheck; weave 281/0; boot clean; `debug/probe-newscene-weave.mts` 6/0.
+>
+> **Remaining before v1+weave push:** **P4.6** (animation transfer) — then push v1 + weave together.
 
 > **Fable delivery 2026-07-04 — P4.4+P4.5 DONE (legacy absorption + one-way load migration; ADR-0091).**
 > Commits: `96719a7` weaveEnabled master gate (opt-in via emitFusedHybrid opts; low-profile editor checkbox) ·
