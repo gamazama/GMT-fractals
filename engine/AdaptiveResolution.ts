@@ -183,6 +183,14 @@ export function createAdaptiveResolutionState(): AdaptiveResolutionState {
     };
 }
 
+/** Frame deltas at/below this are treated as tick-cadence-saturated (the
+ *  renderer finished inside the pacing interval, so the delta measures the
+ *  pacer, not the work). 17.5ms covers 60Hz vsync; higher-Hz displays
+ *  saturate even lower, so they're covered too. A genuine 10-17ms trace
+ *  frame is indistinguishable from saturation and gets the same
+ *  downward-only treatment — erring low by design (see cost tracking). */
+const TICK_FLOOR_MS = 17.5;
+
 /** FPS-scaled grace period (ms): slow scenes get more time before
  *  restoring full res. 1fps → 2s, 30fps+ → 100ms minimum. */
 export function getAdaptiveGrace(stillFps: number): number {
@@ -234,6 +242,25 @@ export function tickAdaptiveResolution(
     // frames that did real trace work (interacting, or a new sample was
     // accumulated) so cheap display frames after convergence / while paused
     // don't poison it. Pauses / tab-switches (≥2s) are ignored.
+    //
+    // Two sample-hygiene guards keep the EMA from inflating (an inflated
+    // estimate over-seeds the downscale AND GMT's band count, and idle-only
+    // sampling means it can't self-correct until the NEXT gesture):
+    //   - Stall clamp: `frameMs` is a tick delta, so a shader-compile stall
+    //     or GC pause on an interaction frame reads as "cost" — and gets
+    //     multiplied by scale². Clamp each sample to 4× the current EMA: a
+    //     one-off stall bumps the estimate by at most ~1.9× (then decays),
+    //     while a GENUINE sustained cost jump still converges in a few
+    //     frames because the clamp ceiling rises with the EMA.
+    //   - Saturation guard: `frameMs` can never read below the tick cadence
+    //     (vsync / dispatch pacing), so a frame at that floor only proves
+    //     cost ≤ floor·scale² — an upper bound, not a measurement. Applying
+    //     it DOWNWARD is safe (it tightens the bound); applying it UPWARD
+    //     manufactures phantom cost (16.7ms at scale 4 reads as 267ms).
+    //     Skip saturated samples that would raise the EMA. Erring low is
+    //     deliberately cheap: the consumers' feedback loops correct an
+    //     undershoot multiplicatively within a window or two, while an
+    //     overshoot lingers (frozen EMA + slow reclaim).
     const tracedThisFrame = input.costSampleInteractingOnly
         ? isInteracting
         : (isInteracting || accumCount > state.prevAccumCount);
@@ -241,10 +268,22 @@ export function tickAdaptiveResolution(
         const frameMs = now - state.lastTickNow;
         if (frameMs > 0 && frameMs < 2000) {
             const sc = state.scale > 0 ? state.scale : 1;
-            const fullResSample = frameMs * sc * sc;
-            state.fullResFrameMs = state.fullResFrameMs > 0
-                ? state.fullResFrameMs * 0.7 + fullResSample * 0.3
-                : fullResSample;
+            let fullResSample = frameMs * sc * sc;
+            if (state.fullResFrameMs > 0 && fullResSample > state.fullResFrameMs * 4) {
+                fullResSample = state.fullResFrameMs * 4; // stall clamp
+            }
+            const saturated = frameMs <= TICK_FLOOR_MS;
+            const wouldRaise = fullResSample > state.fullResFrameMs;
+            // Saturated readings may only LOWER the estimate. The one
+            // exception: an unseeded EMA at full res — there the raw frame
+            // time is the best (and a harmless ≤ floor) first upper bound.
+            const rejectSaturated = saturated && wouldRaise
+                && (state.fullResFrameMs > 0 || sc > 1.001);
+            if (!rejectSaturated) {
+                state.fullResFrameMs = state.fullResFrameMs > 0
+                    ? state.fullResFrameMs * 0.7 + fullResSample * 0.3
+                    : fullResSample;
+            }
         }
     }
     state.lastTickNow = now;

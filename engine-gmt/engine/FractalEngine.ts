@@ -717,14 +717,25 @@ export class FractalEngine {
             // M5b — adaptive band count, closed-loop on measured fps.
             //   Seed: nBands ≈ fullFrameCost / targetBandMs (analytic). Good starting
             //     point so a new scene converges in ~1 window instead of ramping.
-            //   Refine: AIMD off the REAL main-thread fps. The analytic model ignores
-            //     per-tick overhead (whole-screen history copy + blit + driver), so it
-            //     undershoots the target; the feedback loop makes the band count
-            //     actually hit it. Multiplicative increase (fast back-off when too
-            //     slow → protect responsiveness), additive decrease (slowly reclaim
-            //     convergence speed when there's headroom), deadband between to avoid
-            //     oscillation. setBandCount defers to a pass boundary, so per-tick
-            //     calls are safe.
+            //   Refine: closed loop off the worker's REAL delivered fps. The analytic
+            //     model ignores per-tick overhead (whole-screen history copy + blit +
+            //     driver), so it undershoots the target; the feedback loop makes the
+            //     band count actually hit it. Both directions are MULTIPLICATIVE,
+            //     proportional to the fps error, with a deadband between to avoid
+            //     oscillation (the step factor → 1 as fps approaches target, so the
+            //     loop settles rather than hunts). The decrease MUST be as fast as
+            //     the increase: over-banding is the state the loop most needs to
+            //     exit (each excess band multiplies per-sample overhead and delays
+            //     convergence N×), and the worst case of shedding too far is one
+            //     slightly-long frame the next window corrects. The original
+            //     additive −1-per-window reclaim took ~30s to walk back an
+            //     over-seeded 64-band count — far longer than any real idle.
+            //     setBandCount defers to a pass boundary, so per-tick calls are safe.
+            //   At the sample cap the scheduler stops advancing and the convergence-
+            //     stop gate winds the dispatch (and thus renderFps) down to 0 — a
+            //     decaying reading, not a measurement. Freeze the loop there
+            //     (`atCap`) so a converged scene can't ratchet the count up for the
+            //     next resumeFrom re-entry.
             // The "Target FPS" slider (quality.adaptiveTarget) is the band-count target.
             // 0 = OFF → NO progressive banding: one full-screen band per tick (max
             // accumulation throughput — the "disable banding for fastest SPS" mode).
@@ -733,21 +744,27 @@ export class FractalEngine {
             // bands up toward the cap, splitting the first frame into strips and
             // converging only traced bands ("holes"). Off ⇒ no rate to chase ⇒ 1 band.
             const adaptiveTarget = this.state.quality?.adaptiveTarget ?? 0;
+            const cap = this.pipeline.getSampleCap();
+            const atCap = cap > 0 && this.bandScheduler.passCount >= cap;
             if (adaptiveTarget <= 0) {
                 this._bandCountCtrl = 1;
             } else {
                 const targetFps = adaptiveTarget;
                 if (this.pipeline.accumulationCount === 0 || this._bandCountCtrl <= 0) {
-                    // Fresh accumulation (new scene/view) — reseed from the analytic estimate.
+                    // Fresh accumulation (new scene/view) — reseed from the analytic
+                    // estimate. Unseeded (no cost EMA yet) starts LOW (4): the
+                    // multiplicative increase corrects an undershoot within a window
+                    // or two, whereas an overshoot must first finish a whole
+                    // over-banded pass before a correction can even apply.
                     const fullMs = this.uniformManager.getFullResFrameMs();
-                    const seed = fullMs > 0 ? Math.ceil(fullMs / (1000 / targetFps)) : 24;
+                    const seed = fullMs > 0 ? Math.ceil(fullMs / (1000 / targetFps)) : 4;
                     this._bandCountCtrl = Math.max(1, Math.min(64, seed));
                     this._lastBandAdjustTime = now;
                 } else if (!wasTiling) {
                     // Just re-entered steady tiling — let it settle a window before the
                     // loop reads fps (the last reading reflects the interaction, not bands).
                     this._lastBandAdjustTime = now;
-                } else {
+                } else if (!atCap) {
                     const fps = this.state.fps ?? 0;
                     if (fps > 0 && now - this._lastBandAdjustTime >= 500) {
                         this._lastBandAdjustTime = now;
@@ -756,8 +773,11 @@ export class FractalEngine {
                             const factor = Math.min(1.6, Math.max(1.05, targetFps / fps));
                             this._bandCountCtrl = Math.min(64, this._bandCountCtrl * factor);
                         } else if (fps > targetFps * 1.12 && this._bandCountCtrl > 1) {
-                            // Headroom → fewer bands, one at a time (slow reclaim).
-                            this._bandCountCtrl = Math.max(1, this._bandCountCtrl - 1);
+                            // Headroom → shed bands proportionally, mirroring the
+                            // increase (see block comment: over-banding must be
+                            // exited as fast as it was entered).
+                            const factor = Math.min(1.6, fps / targetFps);
+                            this._bandCountCtrl = Math.max(1, this._bandCountCtrl / factor);
                         }
                     }
                 }
@@ -793,7 +813,9 @@ export class FractalEngine {
                     this.bandScheduler.reset();
                 }
             }
-            const cap = this.pipeline.getSampleCap();
+            // NOTE: re-check against the CURRENT passCount (not the pre-branch
+            // `atCap` snapshot) — the reset()/resumeFrom() calls above may have
+            // just rewound the scheduler, and a fresh pass must render.
             if (cap > 0 && this.bandScheduler.passCount >= cap) {
                 // Converged at the sample cap: stop advancing. Clearing the blend
                 // override lets render()'s normal cap gate no-op (accumulationCount is
