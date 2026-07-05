@@ -404,11 +404,25 @@ export const LightingFeature: FeatureDefinition = {
                  float t1 = pow(abs(fract(mod(t1Raw, 1.0))), uGradientBias);
                  vec3 albedo = textureLod0(uGradientTexture, vec2(t1, 0.5)).rgb;
 
-                 // Simple N·L + ambient
-                 float NdotL = max(dot(n, normalize(vec3(-0.5, 1.0, 0.8))), 0.0);
-                 float rim = pow(1.0 - max(dot(n, -rd), 0.0), 3.0) * 0.08;
-                 float light = 0.03 + NdotL * 0.3 + rim;
-                 return albedo * light;
+                 // Cheap high-contrast preview shading — pure ALU (no marches, so
+                 // no shadow/AO cost and negligible compile impact). Key + weak cool
+                 // fill + hemispheric ambient give form; a Blinn highlight and rim
+                 // add pop the old flat N·L lacked.
+                 vec3 view = -rd;
+                 vec3 keyDir = normalize(vec3(-0.5, 1.0, 0.8));
+                 float key = max(dot(n, keyDir), 0.0);
+                 key = key * (key * 0.4 + 0.6);              // sharper terminator -> punchier form
+                 vec3 fillDir = normalize(vec3(0.6, 0.25, -0.6));
+                 float fill = max(dot(n, fillDir), 0.0);
+                 float hemi = 0.5 + 0.5 * n.y;               // sky-above / darker-below ambient
+                 vec3 ambient = mix(vec3(0.015, 0.017, 0.022), vec3(0.045, 0.05, 0.06), hemi);
+                 vec3 h = normalize(keyDir + view);
+                 float spec = pow(max(dot(n, h), 0.0), 28.0) * 0.35;
+                 float rim = pow(1.0 - max(dot(n, view), 0.0), 3.0) * 0.14;
+                 vec3 col = albedo * (ambient + key * 0.6 + fill * vec3(0.08, 0.10, 0.14));
+                 col += spec * vec3(1.0, 0.98, 0.92);        // warm highlight
+                 col += rim * vec3(0.85, 0.92, 1.0);         // cool edge
+                 return col;
              }
              vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, float seed) {
                  return calculateShading(ro, rd, d_init, result_init, seed);
