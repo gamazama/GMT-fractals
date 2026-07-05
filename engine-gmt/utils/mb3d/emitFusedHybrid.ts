@@ -270,13 +270,25 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // quality preset further down). Prefer a slot whose formula owns a real DE.
   const deCandidates = bodies.filter((b) => b.flag.tier === 'decompiled' && DECOMPILED_DE_META[b.flag.name]);
   const deOpt = (b: (typeof deCandidates)[number]) => DECOMPILED_DE_META[b.flag.name].deOption ?? -1;
+  // ANALYTIC-over-dIFS (owner report 2026-07-05): dIFS (deOption 20, orbit-trap) is
+  // right for a PURE IFS weave, but when the weave ALSO carries a power / analytic
+  // slot (one that writes the derivative dr), the analytic DE is the correct choice
+  // — the IFS slot must NOT force dIFS. Scoped to EDITOR builds + migrated scenes
+  // (opts.enableGate): plain MB3D scene imports never set it, so their DE routing —
+  // and the certified corpus emit — is byte-identical.
+  const preferAnalytic = !!opts?.enableGate && bodies.some((b) => b.writesDeriv);
   // Prefer the slot that OWNS the dIFS DE (deOption 20) over a transform that merely carries a
   // deOption ≥ 0 (e.g. PolyFold-symIFS = deOption 21). Picking the transform misroutes the scene
   // to estimator 2 (escape r/dr) instead of estimator 6 (orbit-trap dIFS) → black on a bounded
   // IFS orbit (Wada basin). Falls back to the first deOption ≥ 0, then the first candidate.
-  const deSlot = deCandidates.find((b) => deOpt(b) === 20)
-    ?? deCandidates.find((b) => deOpt(b) >= 0)
-    ?? deCandidates[0];
+  // With preferAnalytic, the dIFS owner is skipped entirely — an analytic (dr-writing,
+  // non-dIFS) decompiled slot wins, else deSlot stays undefined so the intern-box /
+  // native-lead / scaffold estimator (all analytic) applies below.
+  const deSlot = preferAnalytic
+    ? deCandidates.find((b) => b.writesDeriv && deOpt(b) !== 20)
+    : (deCandidates.find((b) => deOpt(b) === 20)
+        ?? deCandidates.find((b) => deOpt(b) >= 0)
+        ?? deCandidates[0]);
   const deMeta = deSlot ? DECOMPILED_DE_META[deSlot.flag.name] : undefined;
   const isDifs = (deMeta?.deOption ?? -1) === 20
     && allScratch.includes('mb3dRout') && allScratch.includes('mb3dVary');
