@@ -421,7 +421,13 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         const boxPos = layers.indexOf(newRows.length - 1);
         if (boxPos < 0) return;
         const collide = layers.some((_, p) => p !== boxPos && layerVal(p + 1).start === 0);
-        const writes: Record<string, number> = { [`weaveStartIter${boxPos + 1}`]: 0 };
+        // Own iteration 0, every iteration, one beat — and write interval/beats
+        // explicitly so a stale uniform at this layer index can't leak in (0,2,0 bug).
+        const writes: Record<string, number> = {
+            [`weaveStartIter${boxPos + 1}`]: 0,
+            [`weaveInterval${boxPos + 1}`]: 1,
+            [`weaveBeats${boxPos + 1}`]: 1,
+        };
         if (collide) layers.forEach((_, p) => { if (p !== boxPos) writes[`weaveStartIter${p + 1}`] = layerVal(p + 1).start + 1; });
         store.setWeave?.(writes);
     };
@@ -563,7 +569,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     // Active rows in row order: [0] = base, [1..] = rhythm layers (layer k = position).
     const iterCounts = draft.rows.map((r) => r.slot.iterCount);
     const activeCount = iterCounts.filter((n) => n > 0).length;
-    const rhythmOk = activeCount >= 2 && activeCount <= 6;
+    // Rhythm is selectable with a single active slot (base only, zero layers) so the
+    // mode can be chosen before adding more formulas; the hard ceiling is 6 (MAX_ROWS).
+    const rhythmOk = activeCount >= 1 && activeCount <= 6;
     const rhythm = draft.scheduleKind === 'modulo' && rhythmOk;
     const activeRowIdx = draft.rows.map((r, i) => (r.slot.iterCount > 0 ? i : -1)).filter((i) => i >= 0);
     // Rhythm base (spec §7): an explicit row (draft.baseKey), else the first active
@@ -1089,14 +1097,14 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                         : 'border-line/10 bg-line/[0.04] text-fg-tertiary opacity-50 cursor-not-allowed'}`}
                                 title={rhythmOk || draft.scheduleKind === 'modulo'
                                     ? 'Live rhythm — the first slot is the base; every other slot is an independent layer running every Nth iteration. Interval / start / beats are keyframable and apply instantly (no rebuild); costs a little performance'
-                                    : 'Rhythm needs 2–6 active formula slots'}>
+                                    : 'Rhythm supports up to 6 active formula slots'}>
                                 Rhythm
                             </button>
                         </div>
                     </div>
                     {draft.scheduleKind === 'modulo' && !rhythmOk && (
                         <p className="text-[10px] text-amber-300/80">
-                            Rhythm needs 2–6 active formulas ({activeCount} now) — building as Sequence until then.
+                            Rhythm supports up to 6 active formulas ({activeCount} now) — building as Sequence until then.
                         </p>
                     )}
                     <LoopStrip
