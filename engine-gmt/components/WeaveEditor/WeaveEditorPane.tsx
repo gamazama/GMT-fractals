@@ -338,13 +338,13 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         for (const g of catalog) for (const e of g.entries) m.set(`${e.kind}:${e.ref}`, e);
         return m;
     }, [catalog]);
-    // MB3D groups get an "MB3D ·" prefix to mirror the "Native ·" natives, so the
-    // two source namespaces read as distinct provenances in the category column
-    // (the id prefixes already keep them from colliding).
+    // MB3D groups get an "MB3D ·" prefix and native/imported groups a "GMT ·"
+    // prefix, so the two source namespaces read as distinct provenances in the
+    // category column (the id prefixes already keep them from colliding).
     const pickerCategories: PickerCategory[] = useMemo(
         () => [
             ...catalog.map((g) => ({ id: `mb3d:${g.category}`, name: `MB3D · ${g.category}` })),
-            ...nativeCatalog.map((g) => ({ id: `nat:${g.category}`, name: `Native · ${g.category}` })),
+            ...nativeCatalog.map((g) => ({ id: `nat:${g.category}`, name: `GMT · ${g.category}` })),
         ],
         [catalog, nativeCatalog],
     );

@@ -51,10 +51,10 @@ export function slotFromCatalogEntry(entry: CatalogEntry, iterCount = 0): MB3DFo
 /** The 5 intern formulas (faithful MB3D source-math transpiles). */
 const INTERN_CATALOG: CatalogEntry[] = [
   { label: 'Amazing Box (Mandelbox)', kind: 'intern', ref: 4, internDefaults: [2, 0.5, 1], category: 'Boxes & Folds' },
-  { label: 'Integer Power (bulb)', kind: 'intern', ref: 0, internDefaults: [8, 1], category: 'Bulbs & Powers' },
-  { label: 'Real Power (bulb)', kind: 'intern', ref: 1, internDefaults: [8, 1], category: 'Bulbs & Powers' },
-  { label: 'Quaternion', kind: 'intern', ref: 2, internDefaults: [1, 0], category: 'Bulbs & Powers' },
-  { label: 'Tricorn (Mandelbar)', kind: 'intern', ref: 3, internDefaults: [1, 1], category: 'Bulbs & Powers' },
+  { label: 'Integer Power (bulb)', kind: 'intern', ref: 0, internDefaults: [8, 1], category: 'Brots & Bulbs' },
+  { label: 'Real Power (bulb)', kind: 'intern', ref: 1, internDefaults: [8, 1], category: 'Brots & Bulbs' },
+  { label: 'Quaternion', kind: 'intern', ref: 2, internDefaults: [1, 0], category: 'Quaternion & 4D' },
+  { label: 'Tricorn (Mandelbar)', kind: 'intern', ref: 3, internDefaults: [1, 1], category: 'Brots & Bulbs' },
 ];
 
 /** Prettify a raw [CODE] name (`_sphereXinv` → `Sphere X Inv`). */
@@ -69,14 +69,31 @@ function prettify(name: string): string {
     .trim();
 }
 
-/** Bucket a [CODE] name into a UI category. */
+/**
+ * Bucket a [CODE] name into a UI category. Checks run in precedence order — the
+ * first match wins — so more specific families (4D, boxes, botanical) are tested
+ * before the broad transform / brot catch-alls. Tuned so no loadable formula
+ * falls through to 'Other' (that bucket is now a defensive backstop for any
+ * future name whose keywords none of the buckets below recognise).
+ */
 function categorize(name: string): string {
   const k = name.toLowerCase();
-  if (/ifs|menger|sierpinski|koch|cantor|octa|octo|halfoct|cross/.test(k)) return 'IFS & Kaleidoscopic';
-  if (/lorenz|rossler|vanderpol|rabinovich|dynamic|gnarl|hopalong/.test(k)) return 'Strange Attractors';
-  if (/recipro|inv|sphere.*inv|cylindric|spherical|torical|torus|poincare|hyc3d|quadist/.test(k)) return 'Inversions & Mappings';
-  if (/abs|flip|rotate|translat|scal|lincomb|conj|planefold|fold|sqr|updatec|quadray/.test(k)) return 'Transforms';
-  if (/benesi|makin|quadray|dudley|rpow|square|sine|sinh|cos|martin|asdam|yplus/.test(k)) return 'Brots & Powers';
+  // Quaternion / 4D hypercomplex families (incl. their 4D transform variants).
+  if (/quat|4d|hopf|julibrot|exp4d|tanh4d/.test(k)) return 'Quaternion & 4D';
+  // Amazing Box / Mandelbox / Surf / Tetra-box family.
+  if (/box|asurf|surfmod|atetra|platinum/.test(k)) return 'Boxes & Folds';
+  // IFS / kaleidoscopic / kali.
+  if (/ifs|menger|sierp|koch|cantor|octa|octo|halfoct|cross|mixpinski|ngon|kali|hilbert|scherk/.test(k)) return 'IFS & Kaleidoscopic';
+  // Strange attractors.
+  if (/lorenz|rossler|vanderpol|rabinovich|dynamic|gnarl|hopalong|hopalm/.test(k)) return 'Strange Attractors';
+  // Organic / botanical (pines, ferns, shells).
+  if (/pine|tree|fern|seashell|shell|barnsley|helispiral|leaf|faehrten/.test(k)) return 'Organic & Botanical';
+  // Inversions / spherical mappings / conformal.
+  if (/recipro|inv|sphere|cylindric|spherical|torical|torus|poincare|hyc3d|quadist|riemann|mobius|logx|logy|logz|donut|conform/.test(k)) return 'Inversions & Mappings';
+  // Mandelbrot cousins, brots, power bulbs, julias.
+  if (/brot|mandel|mandy|benesi|makin|dudley|rpow|quintic|bulb|power|msltoe|magvs|rucker|pseudoxdb|manowar|aexion|ides|fuzzy|lambda|square|sine|sinh|cos|martin|asdam|yplus|julia|beth/.test(k)) return 'Brots & Bulbs';
+  // Pure transforms / fold ops / math ops.
+  if (/abs|flip|rotate|translat|scal|lincomb|conj|planefold|fold|sqr|updatec|quadray|skew|addc|mulc|transform|hexa|comb|kamtor|tpx|deco/.test(k)) return 'Transforms';
   return 'Other';
 }
 
@@ -114,7 +131,7 @@ export function getMB3DCatalog(): CatalogGroup[] {
     if (!loadable(name)) continue;
     entries.push({ label: prettify(name), kind: 'decompiled', ref: name, category: categorize(name) });
   }
-  const ORDER = ['Boxes & Folds', 'Bulbs & Powers', 'IFS & Kaleidoscopic', 'Brots & Powers', 'Inversions & Mappings', 'Strange Attractors', 'Transforms', 'Other'];
+  const ORDER = ['Boxes & Folds', 'Brots & Bulbs', 'Quaternion & 4D', 'IFS & Kaleidoscopic', 'Inversions & Mappings', 'Organic & Botanical', 'Strange Attractors', 'Transforms', 'Other'];
   const byCat = new Map<string, CatalogEntry[]>();
   for (const e of entries) (byCat.get(e.category) ?? byCat.set(e.category, []).get(e.category)!).push(e);
   cached = [...byCat.keys()]
