@@ -167,7 +167,7 @@ export const GmtPanels: PanelManifest = [
             { type: 'section', label: 'Camera & Navigation', showIf: 'advancedMode' },
             { type: 'feature', id: 'navigation', groupFilter: 'controls', showIf: 'advancedMode' },
 
-            { type: 'separator' },
+            { type: 'separator', showIf: 'advancedMode' },
 
             // --- Atmosphere (fog) ---
             { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
@@ -179,8 +179,6 @@ export const GmtPanels: PanelManifest = [
             // the compile toggle, leaving the user dependent on the
             // Engine panel to compile it on.
             { type: 'compilable', id: 'volumetric' },
-
-            { type: 'separator' },
 
             // --- Water plane (only when enabled) ---
             { type: 'section', label: 'Water Plane', showIf: 'waterPlane.waterEnabled' },

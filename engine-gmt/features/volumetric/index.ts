@@ -43,11 +43,6 @@ export const VolumetricFeature: FeatureDefinition = {
         compileMessage: 'Compiling Volumetric Shader...',
         helpId: 'render.volumetric',
     },
-    groups: {
-        density: { label: 'Density & Shadow Rays', collapsible: true },
-        emissive: { label: 'Color Scatter', collapsible: true },
-        height: { label: 'Height Fog', collapsible: true },
-    },
     params: {
         // --- COMPILE-TIME TOGGLE ---
         ptVolumetric: {
@@ -63,11 +58,79 @@ export const VolumetricFeature: FeatureDefinition = {
             hidden: true,
         },
 
-        // --- QUALITY ---
-        // Per-frame sampling rate of the volumetric gate. Both extremes
-        // are unbiased estimators (energy compensated by seg-weight) — the
-        // final accumulated image is the same regardless. Slider just
-        // trades per-frame cost vs convergence speed:
+        // --- DENSITY SCATTER (expensive — shadow rays per light) ---
+        volDensity: {
+            type: 'float', default: 0.01, label: 'Density', shortId: 'vd', uniform: 'uVolDensity',
+            min: 0.001, max: 5.0, step: 0.01, scale: 'log',
+            condition: { param: 'ptVolumetric', bool: true },
+            description: 'How thick the participating medium is along each ray.',
+            helpId: 'render.volumetric',
+        },
+        volAnisotropy: {
+            type: 'float', default: 0.3, label: 'Anisotropy (g)', shortId: 'va', uniform: 'uVolAnisotropy',
+            min: -0.99, max: 0.99, step: 0.01,
+            parentId: 'volDensity', condition: { gt: 0.0 },
+            description: '0=isotropic, +0.9=forward (god rays), -0.9=back scatter.',
+            helpId: 'render.volumetric',
+        },
+        volMaxLights: {
+            type: 'float', default: 1, label: 'Light Sources', shortId: 'vml', uniform: 'uVolMaxLights',
+            min: 1, max: 3, step: 1,
+            parentId: 'volDensity', condition: { gt: 0.0 },
+            isAdvanced: true,
+            description: 'Max lights for shadow rays. More = more expensive.',
+            helpId: 'render.volumetric',
+        },
+        volScatterTint: {
+            type: 'color', default: new THREE.Color(1, 1, 1), label: 'Scatter Tint', shortId: 'vst', uniform: 'uVolScatterTint',
+            parentId: 'volDensity', condition: { gt: 0.0 },
+            description: 'Tint applied to scattered light along each ray.',
+            helpId: 'render.volumetric',
+        },
+
+        // --- SURFACE COLOR SCATTER (cheap — no shadow rays) ---
+        volEmissive: {
+            type: 'float', default: 0.0, label: 'Color Scatter', shortId: 'ves', uniform: 'uVolEmissive',
+            min: 0, max: 100.0, step: 0.1, scale: 'log',
+            condition: { param: 'ptVolumetric', bool: true },
+            description: 'Orbit trap color field scattered through the volume. No shadow rays needed.',
+            helpId: 'render.volumetric',
+        },
+        volStepJitter: {
+            type: 'float', default: 1.0, label: 'Step Jitter', shortId: 'vsj', uniform: 'uVolStepJitter',
+            min: 0.0, max: 1.0, step: 0.01,
+            parentId: 'volDensity', condition: { gt: 0.0 },
+            description: '1 = smooth (temporal accumulation removes noise). 0 = fixed slicing pattern (artistic, broken fog look).',
+            helpId: 'render.volumetric',
+        },
+        volEmissiveFalloff: {
+            type: 'float', default: 0.0, label: 'Surface Falloff', shortId: 'vef', uniform: 'uVolEmissiveFalloff',
+            min: 0, max: 5.0, step: 0.01, scale: 'log',
+            parentId: 'volEmissive', condition: { gt: 0.0 },
+            description: 'Concentrate color near fractal surface.',
+            helpId: 'render.volumetric',
+        },
+
+        // --- HEIGHT FOG ---
+        volHeightFalloff: {
+            type: 'float', default: 0.0, label: 'Fog Height Falloff', shortId: 'vhf', uniform: 'uVolHeightFalloff',
+            min: 0, max: 10.0, step: 0.01,
+            condition: { param: 'ptVolumetric', bool: true },
+            description: 'Density varies with Y. Creates ground fog, rising mist.',
+            helpId: 'render.volumetric',
+        },
+        volHeightOrigin: {
+            type: 'float', default: 0.0, label: 'Height Origin', shortId: 'vho', uniform: 'uVolHeightOrigin',
+            min: -5, max: 5, step: 0.01,
+            parentId: 'volHeightFalloff', condition: { gt: 0.0 },
+            description: 'Y level where height-based fog density peaks.',
+            helpId: 'render.volumetric',
+        },
+
+        // --- QUALITY (placed last — per-frame sampling rate) ---
+        // Both extremes are unbiased estimators (energy compensated by
+        // seg-weight) — the final accumulated image is the same regardless.
+        // Slider just trades per-frame cost vs convergence speed:
         //   0.0 = 1/128 sampling (super-cheap preview, ~16x cheaper than
         //         full, needs ~16x more accumulation frames to hit same SNR)
         //   1.0 = 1/8 sampling (final-render rate, ~16x more shadow rays
@@ -77,76 +140,6 @@ export const VolumetricFeature: FeatureDefinition = {
             min: 0.0, max: 1.0, step: 0.01,
             condition: { param: 'ptVolumetric', bool: true },
             description: '0 = 1/128 cheap preview (clean after many frames). 1 = 1/8 full sampling (converges fast, ~16× per-frame cost). Same final image either way; tradeoff is per-frame FPS vs frames-to-converge.',
-            helpId: 'render.volumetric',
-        },
-
-        // --- DENSITY SCATTER (expensive — shadow rays per light) ---
-        volDensity: {
-            type: 'float', default: 0.01, label: 'Density', shortId: 'vd', uniform: 'uVolDensity',
-            min: 0.001, max: 5.0, step: 0.01, scale: 'log', group: 'density',
-            condition: { param: 'ptVolumetric', bool: true },
-            description: 'How thick the participating medium is along each ray.',
-            helpId: 'render.volumetric',
-        },
-        volAnisotropy: {
-            type: 'float', default: 0.3, label: 'Anisotropy (g)', shortId: 'va', uniform: 'uVolAnisotropy',
-            min: -0.99, max: 0.99, step: 0.01, group: 'density',
-            parentId: 'volDensity', condition: { gt: 0.0 },
-            description: '0=isotropic, +0.9=forward (god rays), -0.9=back scatter.',
-            helpId: 'render.volumetric',
-        },
-        volMaxLights: {
-            type: 'float', default: 1, label: 'Light Sources', shortId: 'vml', uniform: 'uVolMaxLights',
-            min: 1, max: 3, step: 1, group: 'density',
-            parentId: 'volDensity', condition: { gt: 0.0 },
-            isAdvanced: true,
-            description: 'Max lights for shadow rays. More = more expensive.',
-            helpId: 'render.volumetric',
-        },
-        volScatterTint: {
-            type: 'color', default: new THREE.Color(1, 1, 1), label: 'Scatter Tint', shortId: 'vst', uniform: 'uVolScatterTint',
-            group: 'density',
-            parentId: 'volDensity', condition: { gt: 0.0 },
-            description: 'Tint applied to scattered light along each ray.',
-            helpId: 'render.volumetric',
-        },
-
-        // --- SURFACE COLOR SCATTER (cheap — no shadow rays) ---
-        volEmissive: {
-            type: 'float', default: 0.0, label: 'Color Scatter', shortId: 'ves', uniform: 'uVolEmissive',
-            min: 0, max: 100.0, step: 0.1, scale: 'log', group: 'emissive',
-            condition: { param: 'ptVolumetric', bool: true },
-            description: 'Orbit trap color field scattered through the volume. No shadow rays needed.',
-            helpId: 'render.volumetric',
-        },
-        volStepJitter: {
-            type: 'float', default: 1.0, label: 'Step Jitter', shortId: 'vsj', uniform: 'uVolStepJitter',
-            min: 0.0, max: 1.0, step: 0.01, group: 'density',
-            parentId: 'volDensity', condition: { gt: 0.0 },
-            description: '1 = smooth (temporal accumulation removes noise). 0 = fixed slicing pattern (artistic, broken fog look).',
-            helpId: 'render.volumetric',
-        },
-        volEmissiveFalloff: {
-            type: 'float', default: 0.0, label: 'Surface Falloff', shortId: 'vef', uniform: 'uVolEmissiveFalloff',
-            min: 0, max: 5.0, step: 0.01, scale: 'log', group: 'emissive',
-            parentId: 'volEmissive', condition: { gt: 0.0 },
-            description: 'Concentrate color near fractal surface.',
-            helpId: 'render.volumetric',
-        },
-
-        // --- HEIGHT FOG ---
-        volHeightFalloff: {
-            type: 'float', default: 0.0, label: 'Height Falloff', shortId: 'vhf', uniform: 'uVolHeightFalloff',
-            min: 0, max: 5.0, step: 0.01, scale: 'log', group: 'height',
-            condition: { param: 'ptVolumetric', bool: true },
-            description: 'Density varies with Y. Creates ground fog, rising mist.',
-            helpId: 'render.volumetric',
-        },
-        volHeightOrigin: {
-            type: 'float', default: 0.0, label: 'Height Origin', shortId: 'vho', uniform: 'uVolHeightOrigin',
-            min: -5, max: 5, step: 0.01, group: 'height',
-            parentId: 'volHeightFalloff', condition: { gt: 0.0 },
-            description: 'Y level where height-based fog density peaks.',
             helpId: 'render.volumetric',
         },
     },

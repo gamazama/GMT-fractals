@@ -347,7 +347,10 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                 onUnload={isCompiled ? handleUnload : undefined}
                 onReset={advancedMode ? handleReset : undefined}
             >
-                <div className="bg-line/[0.02]">
+                {/* Body indent (level 1): everything under the section header
+                 *  sits one step in, on a subtle left rail. Sub-sections
+                 *  (Compile Settings / Parameters) add a further indent. */}
+                <div className="bg-surface-raised pl-2 border-l border-line/10">
                     {/* CompileBar — the "compile question". Shown at the top of
                      *  the body whenever there's pending work: not compiled,
                      *  pending compile-settings change, or pending toggle. */}
@@ -364,12 +367,14 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                     {/* Compile Settings — feature-declared compile-flagged inputs. */}
                     {hasCompileSettings && (
                         <CollapsibleSection label="Compile Settings" defaultOpen={!isCompiled} variant="panel">
-                            <AutoFeaturePanel
-                                featureId={featureId}
-                                whitelistParams={compileSettingsParams}
-                                forcedState={mergedState}
-                                onChangeOverride={handleCompileParamChange}
-                            />
+                            <div className="pl-2 border-l border-line/10">
+                                <AutoFeaturePanel
+                                    featureId={featureId}
+                                    whitelistParams={compileSettingsParams}
+                                    forcedState={mergedState}
+                                    onChangeOverride={handleCompileParamChange}
+                                />
+                            </div>
                         </CollapsibleSection>
                     )}
 
@@ -382,13 +387,15 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                     {isCompiled && (
                         hasCompileSettings ? (
                             <CollapsibleSection label="Parameters" defaultOpen={true} variant="panel">
-                                <AutoFeaturePanel
-                                    featureId={featureId}
-                                    groupFilter={runtimeGroup}
-                                    excludeParams={fullExclude}
-                                    onChangeOverride={handleRuntimeOrCompileChange}
-                                    liftChildrenOf={runtimeToggleParam}
-                                />
+                                <div className="pl-2 border-l border-line/10">
+                                    <AutoFeaturePanel
+                                        featureId={featureId}
+                                        groupFilter={runtimeGroup}
+                                        excludeParams={fullExclude}
+                                        onChangeOverride={handleRuntimeOrCompileChange}
+                                        liftChildrenOf={runtimeToggleParam}
+                                    />
+                                </div>
                             </CollapsibleSection>
                         ) : (
                             <AutoFeaturePanel
