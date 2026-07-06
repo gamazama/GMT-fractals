@@ -12,6 +12,9 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from '../../../../components/ui';
+import { GhostButton } from '../../../../components/GhostButton';
+import { SectionLabel } from '../../../../components/SectionLabel';
+import { CloseIcon } from '../../../../components/Icons';
 import { useEngineStore } from '../../../../store/engineStore';
 import { showToast } from '../../../../engine/store/toastStore';
 import { loadMB3DScene, loadMB3DSceneBytes, loadDecompiledFormula, loadInternFormula } from '../../../utils/mb3d/loadMB3DScene';
@@ -25,6 +28,11 @@ export interface ImportMandelbulb3DModalProps {
   open: boolean;
   onClose: () => void;
 }
+
+/** Shared chip chrome for the library / sample-scene load buttons — auto-width
+ *  bordered pills with the accent "clickable to load" hover. */
+const chipClass =
+  'px-2 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors';
 
 export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = ({ open, onClose }) => {
   const [pasteText, setPasteText] = useState('');
@@ -151,12 +159,8 @@ export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = (
           <h2 id="mb3d-import-title" className="text-sm font-bold">
             Import <span className="text-accent-300">Mandelbulb3D</span> scene
           </h2>
-          <button
-            onClick={onClose}
-            className="text-fg-muted hover:text-fg text-lg leading-none px-1 transition-colors"
-            title="Close"
-          >
-            ×
+          <button onClick={onClose} className="icon-btn" title="Close">
+            <CloseIcon size={14} />
           </button>
         </div>
 
@@ -172,7 +176,7 @@ export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = (
           {/* Formula library */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wide text-fg-tertiary">Formula library</span>
+              <SectionLabel variant="secondary">Formula library</SectionLabel>
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -195,7 +199,7 @@ export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = (
                       <button
                         key={`${e.kind}:${e.ref}`}
                         onClick={() => loadEntry(e)}
-                        className="px-2 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors"
+                        className={chipClass}
                         title={`Load ${e.label}`}
                       >
                         {e.label}
@@ -214,17 +218,17 @@ export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = (
 
           {/* Sample scenes */}
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-wide text-fg-tertiary mb-1.5">
+            <SectionLabel variant="secondary" className="block mb-1.5">
               Sample scenes{' '}
-              <span className="text-fg-tertiary/60 normal-case font-normal">— real MB3D scenes that weave faithfully</span>
-            </div>
+              <span className="text-fg-tertiary/60 font-normal">— real MB3D scenes that weave faithfully</span>
+            </SectionLabel>
             <div className="flex flex-wrap gap-1.5">
               {MB3D_SAMPLE_SCENES.map((s) => (
                 <button
                   key={s.name}
                   onClick={() => loadSample(s)}
                   title={s.formulas.join(' → ')}
-                  className="px-2 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors"
+                  className={chipClass}
                 >
                   {s.name}
                 </button>
@@ -234,11 +238,11 @@ export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = (
 
           {/* Scene import */}
           <div className="pt-1">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-fg-tertiary mb-1.5">
+            <SectionLabel variant="secondary" className="block mb-1.5">
               Or import a full scene
-            </div>
+            </SectionLabel>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wide text-fg-tertiary">Mandelbulb3D block</span>
+              <SectionLabel variant="secondary">Mandelbulb3D block</SectionLabel>
               <div className="flex items-center gap-1.5">
                 <input ref={fileRef} type="file" accept=".m3p" className="hidden" onChange={handleFile} />
                 <button
@@ -278,18 +282,20 @@ export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = (
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-line/10">
-          <button
+          <GhostButton
+            variant="neutral"
             onClick={onClose}
-            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-line/[0.04] border border-line/10 text-fg-muted hover:text-fg hover:border-line/20 transition-colors"
+            className="px-3 py-1.5 text-xs font-bold rounded-lg text-fg-muted hover:text-fg transition-colors"
           >
             Close
-          </button>
-          <button
+          </GhostButton>
+          <GhostButton
+            variant="primary"
             onClick={handleImport}
-            className="px-4 py-1.5 text-xs font-bold rounded-lg bg-accent-600 hover:bg-accent-500 text-white border border-accent-500/50 transition-colors"
+            className="px-4 py-1.5 text-xs font-bold rounded-lg text-white transition-colors"
           >
             Import
-          </button>
+          </GhostButton>
         </div>
       </div>
     </Modal>
