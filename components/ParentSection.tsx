@@ -55,7 +55,7 @@ export const ParentSection: React.FC<ParentSectionProps> = ({
 
             {/* Indented children with left-bracket trim. Last row closes
                 the bracket with a bottom border + rounded corner. */}
-            <div className="flex flex-col">
+            <div className="flex flex-col bg-surface-raised">
                 {rows.map((child, i) => {
                     const isLast = i === rows.length - 1;
                     return (

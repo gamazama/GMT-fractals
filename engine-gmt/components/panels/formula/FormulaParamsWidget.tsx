@@ -147,7 +147,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                 axes: trackLabels,
             };
             return (
-                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
+                <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector3Input label={p.label} value={new THREE.Vector3(v3.x, v3.y, v3.z)}
                         min={isAngleMode ? -Math.PI * 2 : p.min} max={isAngleMode ? Math.PI * 2 : p.max}
                         step={p.step} onChange={p.set} trackKeys={trackKeys}
@@ -164,7 +164,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`, `${p.trackId}_w`];
             const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`, `${p.label} W`];
             return (
-                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
+                <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector4Input label={p.label} value={new THREE.Vector4(v4.x, v4.y, v4.z, v4.w)}
                         min={p.min} max={p.max} step={p.step} onChange={p.set}
                         trackKeys={trackKeys} trackLabels={trackLabels}
@@ -179,7 +179,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`];
             const trackLabels = [`${p.label} X`, `${p.label} Y`];
             return (
-                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
+                <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector2Input label={p.label} value={new THREE.Vector2(v2.x, v2.y)}
                         min={p.min} max={p.max} step={p.step}
                         onChange={(v) => p.set({ x: v.x, y: v.y })}
@@ -197,7 +197,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
         // so keyframing/undo behave like any other param.
         if (p.mode === 'toggle') {
             return (
-                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
+                <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <ToggleSwitch label={p.label} value={val >= 0.5 ? 1 : 0}
                         options={[{ label: 'Off', value: 0 }, { label: 'On', value: 1 }]}
                         onChange={(v: number) => p.set(v)} />
@@ -207,7 +207,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
 
         if (p.options) {
             return (
-                <div key={p.id} className="mb-px">
+                <div key={p.id}>
                     <Dropdown label={p.label} value={val} options={p.options} onChange={(v) => p.set(v as number)} fullWidth />
                 </div>
             );

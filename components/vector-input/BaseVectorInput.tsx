@@ -438,7 +438,7 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
     };
 
     return (
-        <div className="mb-px animate-slider-entry">
+        <div className="mt-px animate-slider-entry">
             {/* Header row with label and keyframe button */}
             {label && (
                 <div className="flex items-stretch bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-line/5">

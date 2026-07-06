@@ -23,11 +23,18 @@ export const SectionLabel: React.FC<SectionLabelProps> = ({ children, variant = 
     return <span className={`${base} ${colorClass} select-none ${className}`}>{children}</span>;
 };
 
-/** Horizontal section divider with drop-shadow gradient */
+/** Horizontal section divider. The lower strip is a flat fill matching the
+ *  outer bracket rail tone, with a top-down shadow overlaid on top. */
+// flat base = surface-raised + line/0.12 (rail fill) + line/0.06 (wrapper tint)
+const RAIL_TONE = 'linear-gradient(rgb(var(--line) / 0.06), rgb(var(--line) / 0.06)), linear-gradient(rgb(var(--line) / 0.12), rgb(var(--line) / 0.12)), rgb(var(--surface-raised))';
 export const SectionDivider: React.FC = () => (
     <>
-        <div className={`h-1.5 ${surface.divider} rounded-b-lg`} />
-        <div className="h-2" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.08))' }} />
+        <div className={`h-1.5 ${surface.divider}`} />
+        <div className="h-2 relative" style={{ background: RAIL_TONE }}>
+            <div className="absolute inset-0" style={{
+                background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)',
+            }} />
+        </div>
     </>
 );
 
