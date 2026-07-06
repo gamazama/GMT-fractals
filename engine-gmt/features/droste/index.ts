@@ -70,6 +70,24 @@ export const DrosteFeature: FeatureDefinition = {
             description: 'Pixel offset of the spiral centre on screen.',
             helpId: 'droste.geometry',
         },
+        smooth: {
+            type: 'float',
+            default: 0.35,
+            label: 'Smooth Upscaling',
+            shortId: 'sx',
+            uniform: 'uDrosteSmooth',
+            min: 0, max: 1, step: 0.01,
+            group: 'geometry',
+            condition: { param: 'active', bool: true },
+            noAccumReset: true,
+            description: 'Softens the magnified recursion. 0 = raw pixels; low = a crisp bicubic smoothing; higher widens into a broad blur.',
+            helpId: 'droste.geometry',
+            format: (v) => {
+                const n = v as number;
+                if (n <= 0) return '0.00 (off)';
+                return n.toFixed(2);
+            },
+        },
         radiusInside: {
             type: 'float',
             default: 5.0,
@@ -265,6 +283,9 @@ export const DrosteFeature: FeatureDefinition = {
                 );
                 sampleUV = res.xy;
                 mask = res.z;
+                // Amount of bicubic smoothing applied to the recursed image so the
+                // magnified inner tiles soften instead of blocking (see post_process.ts).
+                smoothAmount = uDrosteSmooth;
             }
         `
     }
