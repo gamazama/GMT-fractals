@@ -49,6 +49,16 @@ export const ChevronRight = chevron('9 18 15 12 9 6');
 export const ChevronLeft = chevron('15 18 9 12 15 6');
 
 /**
+ * Minus glyph — pairs with the shared {@link PlusIcon} (Icons.tsx, now full) at
+ * the same 10px / strokeWidth-4 weight, so a `−`/`+` stepper reads as one set.
+ */
+export const MinusIcon: React.FC<{ size?: number }> = ({ size = 10 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round">
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+/**
  * Filled disclosure caret — a solid right-pointing triangle, the panel/section
  * collapse glyph (distinct from the OUTLINE {@link ChevronRight}). Shared by
  * CollapsibleSection, DynamicList, and the Gradient Explorer section headers,

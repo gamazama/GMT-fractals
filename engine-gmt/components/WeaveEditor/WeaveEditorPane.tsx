@@ -59,6 +59,7 @@ import Slider from '../../../components/Slider';
 import { warn, compileBar as compileBarClass } from '../../../data/theme';
 import { AlertIcon, UndoIcon, RedoIcon, CloseIcon, DragHandleIcon, ResetIcon } from '../../../components/Icons';
 import { CaretRight } from '../../../components/Icons2';
+import { Stepper } from '../../../components/Stepper';
 import { LoopStrip, SLOT_COLORS } from './LoopStrip';
 
 type WeaveSource = NonNullable<FractalDefinition['weaveSource']>;
@@ -213,23 +214,6 @@ function OptValInput({ value, onCommit }: { value: number; onCommit: (n: number)
             onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
             className="w-14 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40"
         />
-    );
-}
-
-/** Compact labelled integer stepper (− input +) for the pre-Build rhythm timing
- *  fields. Mirrors the iteration control's affordance so start/every/beats are
- *  clickable, not type-only. Clamping to BOUNDS is done by the caller's setter. */
-function StepField({ label, value, min, onChange }: { label: string; value: number; min: number; onChange: (n: number) => void }) {
-    return (
-        <div className="flex items-center gap-0.5">
-            <span className="text-[10px] text-fg-tertiary mr-0.5">{label}</span>
-            <button onClick={() => onChange(value - 1)}
-                className="w-4 h-4 text-[10px] leading-none rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
-            <input value={value} inputMode="numeric" onChange={(e) => onChange(parseInt(e.target.value, 10) || min)}
-                className="w-8 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" />
-            <button onClick={() => onChange(value + 1)}
-                className="w-4 h-4 text-[10px] leading-none rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
-        </div>
     );
 }
 
@@ -962,15 +946,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                         {/* Line 2 — Sequence: iterations · Rhythm: role + compact timing */}
                         <div className="flex items-center gap-1.5 mt-1 pl-6 flex-wrap">
                             {!rhythm ? (
-                                <div className="flex items-center gap-0.5 shrink-0" title="Iterations this formula runs each time it's scheduled">
-                                    <button onClick={() => setIter(r.key, r.slot.iterCount - 1)}
-                                        className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">−</button>
-                                    <input value={r.slot.iterCount}
-                                        onChange={(e) => setIter(r.key, parseInt(e.target.value, 10) || 0)}
-                                        className="w-8 text-center rounded bg-surface-sunken border border-line/10 py-0.5 text-[11px] text-fg outline-none focus:border-accent-500/40" />
-                                    <button onClick={() => setIter(r.key, r.slot.iterCount + 1)}
-                                        className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors">+</button>
-                                    <span className="text-[10px] text-fg-tertiary ml-1">iter</span>
+                                <div className="flex items-center gap-1 shrink-0" title="Iterations this formula runs each time it's scheduled">
+                                    <Stepper value={r.slot.iterCount} min={0} onChange={(n) => setIter(r.key, n)} />
+                                    <span className="text-[10px] text-fg-tertiary">iter</span>
                                 </div>
                             ) : isBase ? (
                                 <span className="text-[10px] text-fg-tertiary shrink-0" title="The base runs on every iteration no rhythm layer claims.">base</span>
@@ -979,9 +957,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                     {dirty ? (
                                         <div className="flex items-center gap-2 text-[10px] text-fg-tertiary flex-wrap"
                                             title="Layer timing — set here before Build; after Build the live keyframable sliders appear under the schedule.">
-                                            <StepField label="start" value={lv.start} min={0} onChange={(n) => setLayerVal(layerK, 'weaveStartIter', n)} />
-                                            <StepField label="every" value={lv.interval} min={1} onChange={(n) => setLayerVal(layerK, 'weaveInterval', n)} />
-                                            <StepField label="beats" value={lv.beats} min={0} onChange={(n) => setLayerVal(layerK, 'weaveBeats', n)} />
+                                            <Stepper label="start" value={lv.start} min={0} onChange={(n) => setLayerVal(layerK, 'weaveStartIter', n)} />
+                                            <Stepper label="every" value={lv.interval} min={1} onChange={(n) => setLayerVal(layerK, 'weaveInterval', n)} />
+                                            <Stepper label="beats" value={lv.beats} min={0} onChange={(n) => setLayerVal(layerK, 'weaveBeats', n)} />
                                         </div>
                                     ) : (
                                         <span className="text-[10px] text-fg-tertiary shrink-0" title="Live timing — edit with the keyframable sliders under the schedule below.">
