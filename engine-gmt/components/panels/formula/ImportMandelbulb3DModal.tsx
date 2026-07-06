@@ -273,7 +273,7 @@ export const ImportMandelbulb3DModal: React.FC<ImportMandelbulb3DModalProps> = (
             />
 
             {loadError && (
-              <div className="mt-2 flex items-start gap-2 text-xs bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-red-200">
+              <div className="mt-2 flex items-start gap-2 text-xs bg-danger/10 border border-danger/25 rounded-lg px-3 py-2 text-danger">
                 <p className="leading-relaxed">{loadError}</p>
               </div>
             )}

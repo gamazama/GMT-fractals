@@ -1127,7 +1127,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                         ]}
                     />
                     {draft.scheduleKind === 'modulo' && !rhythmOk && (
-                        <p className="text-[10px] text-amber-300/80">
+                        <p className="text-[10px] text-warn">
                             Rhythm supports up to 6 active formulas ({activeCount} now) — building as Sequence until then.
                         </p>
                     )}
@@ -1180,7 +1180,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             )}
 
             {reorderWarn && (
-                <div className="flex items-start gap-2 text-xs bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-amber-200">
+                <div className="flex items-start gap-2 text-xs bg-warn/10 border border-warn/25 rounded-lg px-3 py-2 text-warn">
                     <p className="leading-relaxed">
                         You have keyframed formula parameters — changing slot structure can shift which slot a
                         parameter lane belongs to. Check your animation tracks after rebuilding.
@@ -1190,15 +1190,15 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
 
             {status && (
                 <div className={`flex items-start gap-2 text-xs rounded-lg px-3 py-2 border ${status.kind === 'ok'
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
-                    : 'bg-red-500/10 border-red-500/30 text-red-200'}`}>
+                    ? 'bg-ok/10 border-ok/25 text-ok'
+                    : 'bg-danger/10 border-danger/25 text-danger'}`}>
                     <p className="leading-relaxed">{status.text}</p>
                 </div>
             )}
 
             {/* Live lane-budget meter (MB3D dense pool) */}
             {meter !== null && (
-                <p className={`text-[10px] px-0.5 ${'fits' in meter && !meter.fits ? 'text-amber-300/90' : 'text-fg-tertiary'}`}
+                <p className={`text-[10px] px-0.5 ${'fits' in meter && !meter.fits ? 'text-warn' : 'text-fg-tertiary'}`}
                     title="Live-slider budget: native formulas get their own per-formula parameter banks (always live). MB3D formulas share 24 scalar lanes (paramA–F + vec2/vec4 components) + 6 vec3 units; over that budget their parameters bake.">
                     {'allNative' in meter ? `${meter.allNative} native formula${meter.allNative === 1 ? '' : 's'} — parameters always live` :
                         (() => {
