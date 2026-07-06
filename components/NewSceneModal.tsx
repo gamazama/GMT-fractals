@@ -169,8 +169,7 @@ function authorWeaveDef(
     // A requested layer that couldn't be built (retired fold, unregistered id)
     // shouldn't silently vanish into a bare primary — bail so the caller keeps
     // the plain formula rather than a misleading half-weave.
-    if (foldType !== null && !fold) return null;
-    if (secondaryId && !secondary) return null;
+    if ((foldType !== null && !fold) || (secondaryId && !secondary)) return null;
 
     let rows: Row[];
     let schedule: NonNullable<FractalDefinition['weaveSource']>['schedule'];

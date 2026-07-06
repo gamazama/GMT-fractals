@@ -26,7 +26,7 @@
  *  - Reordering while keyframed formula-param tracks exist shows a warning
  *    (packed lanes may retarget) — a transfer tool comes later.
  *  - Schedule kinds are a user choice: counts ("Sequence", baked LUT — structure
- *    edits rebuild) vs layered modulo ("Rhythm", 2–6 active slots: the first is
+ *    edits rebuild) vs layered modulo ("Rhythm", up to 6 active slots: the first is
  *    the base, each further slot is an independent rhythm layer with its own
  *    interval / start / beats-cap on the DDFS `weave` feature — LIVE +
  *    keyframable, no rebuild; formula changes still rebuild. Layers are checked
@@ -86,7 +86,7 @@ interface WeaveDraft {
     rows: SlotRow[];
     /** Loop dividers (Sequence mode). */
     dividers: WeaveDivider[];
-    /** User's schedule choice. 'modulo' (Rhythm) only takes effect while 2–6 rows
+    /** User's schedule choice. 'modulo' (Rhythm) only takes effect while 1–6 rows
      *  are active — otherwise the build falls back to counts (Sequence). */
     scheduleKind: 'counts' | 'modulo';
     /** Rhythm base row KEY (the tail formula left running when no layer fires) —
@@ -338,9 +338,12 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         for (const g of catalog) for (const e of g.entries) m.set(`${e.kind}:${e.ref}`, e);
         return m;
     }, [catalog]);
+    // MB3D groups get an "MB3D ·" prefix to mirror the "Native ·" natives, so the
+    // two source namespaces read as distinct provenances in the category column
+    // (the id prefixes already keep them from colliding).
     const pickerCategories: PickerCategory[] = useMemo(
         () => [
-            ...catalog.map((g) => ({ id: `mb3d:${g.category}`, name: g.category })),
+            ...catalog.map((g) => ({ id: `mb3d:${g.category}`, name: `MB3D · ${g.category}` })),
             ...nativeCatalog.map((g) => ({ id: `nat:${g.category}`, name: `Native · ${g.category}` })),
         ],
         [catalog, nativeCatalog],
@@ -453,7 +456,8 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         const layers = active.filter((i) => i !== base);
         const boxPos = layers.indexOf(newRows.length - 1);
         if (boxPos < 0) return;
-        const collide = layers.some((_, p) => p !== boxPos && layerVal(p + 1).start === 0);
+        const layerStarts = layers.map((_, p) => layerVal(p + 1).start); // read once (layerVal clamps per call)
+        const collide = layerStarts.some((s, p) => p !== boxPos && s === 0);
         // Own iteration 0, every iteration, one beat — and write interval/beats
         // explicitly so a stale uniform at this layer index can't leak in (0,2,0 bug).
         const writes: Record<string, number> = {
@@ -461,7 +465,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             [`weaveInterval${boxPos + 1}`]: 1,
             [`weaveBeats${boxPos + 1}`]: 1,
         };
-        if (collide) layers.forEach((_, p) => { if (p !== boxPos) writes[`weaveStartIter${p + 1}`] = layerVal(p + 1).start + 1; });
+        if (collide) layerStarts.forEach((s, p) => { if (p !== boxPos) writes[`weaveStartIter${p + 1}`] = s + 1; });
         store.setWeave?.(writes);
     };
 
@@ -618,6 +622,8 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     const clampI = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(n) || 0));
     // Read-clamps import BOUNDS (convert.ts) — a fitter honouring different bounds
     // than the clamp would silently corrupt one conversion direction (spec §5.2).
+    // The `?? interval 1 / start k / beats 2` fallbacks mirror the weave feature's
+    // per-index param defaults (engine-gmt/features/weave.ts) — keep them in sync.
     const layerVal = (k: number) => ({
         interval: Math.max(1, clampI(store.weave?.[`weaveInterval${k}`] ?? 1, 1, BOUNDS.INTERVAL_MAX)),
         start: clampI(store.weave?.[`weaveStartIter${k}`] ?? k, 0, BOUNDS.START_MAX),
@@ -677,8 +683,8 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
 
     const toRhythm = () => {
         if (draft.scheduleKind === 'modulo') return;
-        // <2 active (or no plan): the toggle just marks intent — build falls back to
-        // Sequence until 2–6 slots are active. Nothing to convert yet.
+        // No plan (0 active): the toggle just marks intent — build falls back to
+        // Sequence until 1–6 slots are active. Nothing to convert yet.
         if (!plan || !rhythmOk) { commit({ ...draft, scheduleKind: 'modulo' }); return; }
         const curLayers = layerRowIdx.map((_, j) => layerVal(j + 1));
         if (certify(planPhase(plan), planStructure(plan), rhythmPhase(curLayers, baseRowIdx, layerRowIdx), rhythmStructure(curLayers)).equal) {
