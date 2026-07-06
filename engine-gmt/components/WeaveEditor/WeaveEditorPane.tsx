@@ -60,6 +60,7 @@ import { warn, compileBar as compileBarClass } from '../../../data/theme';
 import { AlertIcon, UndoIcon, RedoIcon, CloseIcon, DragHandleIcon, ResetIcon } from '../../../components/Icons';
 import { CaretRight } from '../../../components/Icons2';
 import { Stepper } from '../../../components/Stepper';
+import { GenericToggleSwitch } from '../../../components/GenericToggleSwitch';
 import { LoopStrip, SLOT_COLORS } from './LoopStrip';
 
 type WeaveSource = NonNullable<FractalDefinition['weaveSource']>;
@@ -1097,42 +1098,36 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 <div className="rounded-lg border border-line/10 bg-surface-sunken/40 px-3 py-2 space-y-1.5">
                     <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wide text-fg-tertiary">Iteration schedule</span>
-                        <div className="flex items-center gap-1">
-                            {/* Whole-weave enable — deliberately LOW-PROFILE (a compat/
-                                migration affordance, not a hero control; ADR-0089 P4.4).
-                                Live DDFS state (uWeaveEnabled) — applies to weaves built
-                                here (and migrated legacy scenes), no rebuild needed. */}
-                            <label className="flex items-center gap-1 mr-1.5 text-[10px] text-fg-tertiary hover:text-fg-muted cursor-pointer select-none"
-                                title="Whole-weave enable — off renders the base formula only (all layers dormant). Live and keyframable; applies to weaves built here. Imported scenes gain it on rebuild.">
-                                <input type="checkbox"
-                                    checked={store.weave?.weaveEnabled ?? true}
-                                    onChange={(e) => store.setWeave?.({ weaveEnabled: e.target.checked })}
-                                    className="w-3 h-3 accent-accent-500" />
-                                active
-                            </label>
-                            <button
-                                onClick={toSequence}
-                                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${!rhythm
-                                    ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
-                                    : 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'}`}
-                                title="Baked iteration sequence — exact per-slot counts; structure edits rebuild the shader">
-                                Sequence
-                            </button>
-                            <button
-                                disabled={!rhythmOk && draft.scheduleKind !== 'modulo'}
-                                onClick={toRhythm}
-                                className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${rhythm
-                                    ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
-                                    : rhythmOk
-                                        ? 'border-line/15 bg-line/[0.04] text-fg-tertiary hover:text-fg-muted'
-                                        : 'border-line/10 bg-line/[0.04] text-fg-tertiary opacity-50 cursor-not-allowed'}`}
-                                title={rhythmOk || draft.scheduleKind === 'modulo'
-                                    ? 'Live rhythm — the first slot is the base; every other slot is an independent layer running every Nth iteration. Interval / start / beats are keyframable and apply instantly (no rebuild); costs a little performance'
-                                    : 'Rhythm supports up to 6 active formula slots'}>
-                                Rhythm
-                            </button>
-                        </div>
+                        {/* Whole-weave enable — deliberately LOW-PROFILE (a compat/
+                            migration affordance, not a hero control; ADR-0089 P4.4).
+                            Live DDFS state (uWeaveEnabled) — applies to weaves built
+                            here (and migrated legacy scenes), no rebuild needed. */}
+                        <label className="flex items-center gap-1 text-[10px] text-fg-tertiary hover:text-fg-muted cursor-pointer select-none"
+                            title="Whole-weave enable — off renders the base formula only (all layers dormant). Live and keyframable; applies to weaves built here. Imported scenes gain it on rebuild.">
+                            <input type="checkbox"
+                                checked={store.weave?.weaveEnabled ?? true}
+                                onChange={(e) => store.setWeave?.({ weaveEnabled: e.target.checked })}
+                                className="w-3 h-3 accent-accent-500" />
+                            active
+                        </label>
                     </div>
+                    {/* Sequence (baked counts) vs Rhythm (live layered modulo) — the
+                        canonical segmented toggle, matching the Quality panel's engine
+                        switch. Clicking converts the current pattern exactly (convert.ts). */}
+                    <GenericToggleSwitch<'counts' | 'modulo'>
+                        value={rhythm ? 'modulo' : 'counts'}
+                        onChange={(v) => (v === 'modulo' ? toRhythm() : toSequence())}
+                        options={[
+                            { label: 'Sequence', value: 'counts', tooltip: 'Baked iteration sequence — exact per-slot counts; structure edits rebuild the shader' },
+                            {
+                                label: 'Rhythm', value: 'modulo',
+                                disabled: !rhythmOk && draft.scheduleKind !== 'modulo',
+                                tooltip: rhythmOk || draft.scheduleKind === 'modulo'
+                                    ? 'Live rhythm — the first slot is the base; every other slot is an independent layer running every Nth iteration. Interval / start / beats are keyframable and apply instantly (no rebuild); costs a little performance'
+                                    : 'Rhythm supports up to 6 active formula slots',
+                            },
+                        ]}
+                    />
                     {draft.scheduleKind === 'modulo' && !rhythmOk && (
                         <p className="text-[10px] text-amber-300/80">
                             Rhythm supports up to 6 active formulas ({activeCount} now) — building as Sequence until then.

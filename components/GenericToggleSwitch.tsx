@@ -14,6 +14,9 @@ export interface GenericToggleOption<T> {
     /** Optional active-state color override for this option (overrides
      *  the top-level `color` prop when this option is selected). */
     color?: string;
+    /** Dim + block just this option (the rest stay live). Additive — options
+     *  that don't set it behave exactly as before. */
+    disabled?: boolean;
 }
 
 export interface GenericToggleSwitchProps<T> {
@@ -122,13 +125,14 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
                         return (
                             <button
                                 key={String(opt.value)}
-                                onClick={() => handleClick(opt.value)}
-                                disabled={disabled}
+                                onClick={() => { if (!opt.disabled) handleClick(opt.value); }}
+                                disabled={disabled || opt.disabled}
                                 className={`
                                     flex-1 min-w-0 flex items-center justify-center text-[9px] font-bold border-r border-line/5 last:border-r-0 transition-all truncate
                                     ${value === opt.value
                                         ? optActive.on
                                         : 'bg-line/[0.04] text-fg-faint hover:brightness-125'}
+                                    ${opt.disabled ? 'opacity-40 cursor-not-allowed hover:brightness-100' : ''}
                                 `}
                                 title={opt.tooltip || opt.label}
                             >
