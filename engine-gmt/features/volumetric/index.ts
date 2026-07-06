@@ -88,34 +88,11 @@ export const VolumetricFeature: FeatureDefinition = {
             helpId: 'render.volumetric',
         },
 
-        // --- SURFACE COLOR SCATTER (cheap — no shadow rays) ---
-        volEmissive: {
-            type: 'float', default: 0.0, label: 'Color Scatter', shortId: 'ves', uniform: 'uVolEmissive',
-            min: 0, max: 100.0, step: 0.1, scale: 'log',
-            condition: { param: 'ptVolumetric', bool: true },
-            description: 'Orbit trap color field scattered through the volume. No shadow rays needed.',
-            helpId: 'render.volumetric',
-        },
-        volStepJitter: {
-            type: 'float', default: 1.0, label: 'Step Jitter', shortId: 'vsj', uniform: 'uVolStepJitter',
-            min: 0.0, max: 1.0, step: 0.01,
-            parentId: 'volDensity', condition: { gt: 0.0 },
-            description: '1 = smooth (temporal accumulation removes noise). 0 = fixed slicing pattern (artistic, broken fog look).',
-            helpId: 'render.volumetric',
-        },
-        volEmissiveFalloff: {
-            type: 'float', default: 0.0, label: 'Surface Falloff', shortId: 'vef', uniform: 'uVolEmissiveFalloff',
-            min: 0, max: 5.0, step: 0.01, scale: 'log',
-            parentId: 'volEmissive', condition: { gt: 0.0 },
-            description: 'Concentrate color near fractal surface.',
-            helpId: 'render.volumetric',
-        },
-
-        // --- HEIGHT FOG ---
+        // --- HEIGHT FOG (a density modifier — only affects the shadow-ray medium) ---
         volHeightFalloff: {
             type: 'float', default: 0.0, label: 'Fog Height Falloff', shortId: 'vhf', uniform: 'uVolHeightFalloff',
             min: 0, max: 10.0, step: 0.01,
-            condition: { param: 'ptVolumetric', bool: true },
+            parentId: 'volDensity', condition: { gt: 0.0 },
             description: 'Density varies with Y. Creates ground fog, rising mist.',
             helpId: 'render.volumetric',
         },
@@ -124,6 +101,22 @@ export const VolumetricFeature: FeatureDefinition = {
             min: -5, max: 5, step: 0.01,
             parentId: 'volHeightFalloff', condition: { gt: 0.0 },
             description: 'Y level where height-based fog density peaks.',
+            helpId: 'render.volumetric',
+        },
+
+        // --- SURFACE COLOR SCATTER (cheap — no shadow rays) ---
+        volEmissive: {
+            type: 'float', default: 0.0, label: 'Surface Color Scatter', shortId: 'ves', uniform: 'uVolEmissive',
+            min: 0.05, max: 100.0, step: 0.1, scale: 'log',
+            condition: { param: 'ptVolumetric', bool: true },
+            description: 'Orbit trap color field scattered through the volume. No shadow rays needed.',
+            helpId: 'render.volumetric',
+        },
+        volEmissiveFalloff: {
+            type: 'float', default: 0.0, label: 'Surface Falloff', shortId: 'vef', uniform: 'uVolEmissiveFalloff',
+            min: 0, max: 5.0, step: 0.01, scale: 'log',
+            parentId: 'volEmissive', condition: { gt: 0.0 },
+            description: 'Concentrate color near fractal surface.',
             helpId: 'render.volumetric',
         },
 
@@ -139,7 +132,16 @@ export const VolumetricFeature: FeatureDefinition = {
             type: 'float', default: 0.0, label: 'Quality', shortId: 'vq', uniform: 'uVolQuality',
             min: 0.0, max: 1.0, step: 0.01,
             condition: { param: 'ptVolumetric', bool: true },
+            dynamicVisible: (s) => s.volDensity > 0 || s.volEmissive > 0,
             description: '0 = 1/128 cheap preview (clean after many frames). 1 = 1/8 full sampling (converges fast, ~16× per-frame cost). Same final image either way; tradeoff is per-frame FPS vs frames-to-converge.',
+            helpId: 'render.volumetric',
+        },
+        volStepJitter: {
+            type: 'float', default: 1.0, label: 'Step Jitter', shortId: 'vsj', uniform: 'uVolStepJitter',
+            min: 0.0, max: 1.0, step: 0.01,
+            condition: { param: 'ptVolumetric', bool: true },
+            dynamicVisible: (s) => s.volDensity > 0 || s.volEmissive > 0,
+            description: '1 = smooth (temporal accumulation removes noise). 0 = fixed slicing pattern (artistic, broken fog look).',
             helpId: 'render.volumetric',
         },
     },
