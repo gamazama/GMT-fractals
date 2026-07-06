@@ -25,9 +25,8 @@ function humanizeReason(raw: string): string {
 import { FeatureSection } from './FeatureSection';
 import { CollapsibleSection } from './CollapsibleSection';
 import { StatusDot } from './StatusDot';
-import { SectionLabel, SectionDivider } from './SectionLabel';
-import { AlertIcon } from './Icons';
-import { warn, compileBar as compileBarClass } from '../data/theme';
+import { SectionDivider } from './SectionLabel';
+import { CompileBar } from './CompileBar';
 
 interface CompilableFeatureSectionProps extends Partial<CompilablePanelConfig> {
     /** Feature ID in the DDFS registry. Reads panelConfig if available. */
@@ -354,6 +353,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                      *  pending compile-settings change, or pending toggle. */}
                     {needsCompile && (
                         <CompileBar
+                            className="mt-1"
                             isCompiled={isCompiled}
                             pendingToggleOff={hasPendingToggle && pendingToggle === false}
                             onCompile={handleCompile}
@@ -407,54 +407,3 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     );
 };
 
-/** Subtle engine icon — small bolt/zap */
-const EngineIcon = () => (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-);
-
-/** Amber compile/recompile bar with status + button + optional engine link.
- *  Message tracks whether the user has just toggled off a compiled feature
- *  (pendingToggleOff=true) so the prompt reads "Recompile to disable"
- *  instead of the ambiguous "Settings changed". */
-const CompileBar: React.FC<{
-    isCompiled: boolean;
-    pendingToggleOff?: boolean;
-    onCompile: () => void;
-    onOpenEngine?: () => void;
-}> = ({ isCompiled, pendingToggleOff, onCompile, onOpenEngine }) => {
-    const message = pendingToggleOff
-        ? 'Recompile to disable'
-        : !isCompiled
-            ? 'Not compiled'
-            : 'Settings changed';
-    const buttonLabel = !isCompiled ? 'Compile' : 'Recompile';
-    return (
-        <div className={`flex items-center justify-between px-2 py-1 mt-1 ${compileBarClass} rounded`}>
-            <div className={`flex items-center gap-1.5 ${warn.text}`}>
-                <AlertIcon />
-                <SectionLabel variant="secondary" color={warn.text}>
-                    {message}
-                </SectionLabel>
-            </div>
-            <div className="flex items-center gap-1">
-                {onOpenEngine && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onOpenEngine(); }}
-                        className="p-1 text-fg-dim hover:text-warn transition-colors"
-                        title="Open Engine Panel"
-                    >
-                        <EngineIcon />
-                    </button>
-                )}
-                <button
-                    onClick={onCompile}
-                    className={`px-3 py-0.5 ${warn.btnBg} ${warn.btnHover} ${warn.btnText} text-[9px] font-bold rounded transition-colors`}
-                >
-                    {buttonLabel}
-                </button>
-            </div>
-        </div>
-    );
-};

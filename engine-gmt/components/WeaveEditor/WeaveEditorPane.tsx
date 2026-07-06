@@ -56,11 +56,11 @@ import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
 import Slider from '../../../components/Slider';
-import { warn, compileBar as compileBarClass } from '../../../data/theme';
-import { AlertIcon, UndoIcon, RedoIcon, CloseIcon, DragHandleIcon, ResetIcon } from '../../../components/Icons';
+import { UndoIcon, RedoIcon, CloseIcon, DragHandleIcon, ResetIcon } from '../../../components/Icons';
 import { CaretRight } from '../../../components/Icons2';
 import { Stepper } from '../../../components/Stepper';
 import { GenericToggleSwitch } from '../../../components/GenericToggleSwitch';
+import { CompileBar } from '../../../components/CompileBar';
 import { LoopStrip, SLOT_COLORS } from './LoopStrip';
 
 type WeaveSource = NonNullable<FractalDefinition['weaveSource']>;
@@ -1216,17 +1216,12 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 compile button while there are un-built structural changes;
                 quiet "weave is live" once built (like Compile → compiled). */}
             {dirty ? (
-                <div className={`flex items-center justify-between px-2 py-1 ${compileBarClass} rounded`}>
-                    <div className={`flex items-center gap-1.5 ${warn.text}`}>
-                        <AlertIcon />
-                        <span className="text-[9px] font-bold uppercase tracking-wide">Build to apply</span>
-                    </div>
-                    <button onClick={build} disabled={busy || activeCount === 0}
-                        className={`px-3 py-0.5 ${warn.btnBg} ${warn.btnHover} ${warn.btnText} text-[9px] font-bold rounded transition-colors disabled:opacity-40`}
-                        title="Compile the weave and preview it — keeps your camera and look">
-                        {busy ? 'Building…' : 'Build'}
-                    </button>
-                </div>
+                <CompileBar
+                    message="Build to apply"
+                    buttonLabel={busy ? 'Building…' : 'Build'}
+                    disabled={busy || activeCount === 0}
+                    onCompile={build}
+                />
             ) : (
                 <div className="flex items-center justify-between px-2 py-1">
                     <span className="text-[9px] font-bold uppercase tracking-wide text-fg-tertiary">✓ weave is live</span>
