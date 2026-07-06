@@ -217,14 +217,3 @@ export interface EditState {
     isEditing: boolean;
     inputValue: string;
 }
-
-// ============================================================================
-// Custom Mapping Types (Legacy compatibility)
-// ============================================================================
-
-export interface CustomMapping {
-    min: number;
-    max: number;
-    toSlider: (val: number) => number;
-    fromSlider: (val: number) => number;
-}

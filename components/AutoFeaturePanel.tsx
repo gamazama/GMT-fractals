@@ -26,6 +26,7 @@ import React, { useMemo, useState, Suspense } from 'react';
 import { featureRegistry, ParamConfig, ParamCondition, CustomUIConfig, GroupConfig } from '../engine/FeatureSystem';
 import { useEngineStore } from '../store/engineStore';
 import Slider, { DraggableNumber } from './Slider';
+import { createLogMapping, createPowMapping, piUnitMapping, type ValueMapping } from './inputs';
 import ToggleSwitch from './ToggleSwitch';
 import SmallColorPicker from './SmallColorPicker';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
@@ -75,31 +76,17 @@ interface AutoFeaturePanelProps {
 }
 
 /**
- * Log-scale Slider mapping for [min, max]. Exported so hand-rolled Sliders
- * (those not driven by AutoFeaturePanel) can share the canonical impl.
+ * Resolve the ValueMapping for a param's `scale`, using the canonical factories
+ * in FormatUtils (one impl per family — log/pow/pi). Returns undefined for
+ * linear params (ScalarInput then runs identity).
  */
-export const buildLogMapping = (min: number, max: number) => {
-    const safeMin = Math.max(0.000001, min);
-    const lo = Math.log10(safeMin);
-    const span = Math.log10(max) - lo;
-    return {
-        min: 0, max: 100,
-        toSlider: (v: number) => v <= min ? 0 : ((Math.log10(Math.max(safeMin, v)) - lo) / span) * 100,
-        fromSlider: (v: number) => v <= 0 ? min : Math.pow(10, lo + (v / 100) * span),
-    };
-};
-
-const getMapping = (config: ParamConfig) => {
+const getMapping = (config: ParamConfig): ValueMapping | undefined => {
     const min = config.min ?? 0;
     const max = config.max ?? 1;
-    if (config.scale === 'pi') {
-        return { min: min / Math.PI, max: max / Math.PI, toSlider: (v: number) => v / Math.PI, fromSlider: (v: number) => v * Math.PI };
-    }
+    if (config.scale === 'pi') return piUnitMapping;
     if (!config.scale || config.scale === 'linear') return undefined;
-    if (config.scale === 'square') {
-        return { min: 0, max: 100, toSlider: (v: number) => Math.sqrt((v - min) / (max - min)) * 100, fromSlider: (v: number) => min + Math.pow(v / 100, 2) * (max - min) };
-    }
-    if (config.scale === 'log') return buildLogMapping(min, max);
+    if (config.scale === 'square') return createPowMapping(min, max, 2);
+    if (config.scale === 'log') return createLogMapping(min, max);
     return undefined;
 };
 
@@ -298,14 +285,14 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 // so carry its label above the inline picker. `parentId` pickers sit
                 // under their parent's header already, so they stay label-less.
                 return (
-                    <div className={`mb-px pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
+                    <div className={`pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
                         {config.layout === 'embedded' && config.label && <SectionLabel>{config.label}</SectionLabel>}
                         <EmbeddedColorPicker color={hex} onColorChange={(c) => handleUpdate(key, c)} />
                     </div>
                 );
             } else {
                 return (
-                    <div className={`flex items-center justify-between px-3 py-1 bg-surface-header mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
+                    <div className={`flex items-center justify-between px-3 py-1 bg-surface-header ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
                         <SectionLabel>{config.label}</SectionLabel>
                         <SmallColorPicker color={hex} onChange={(c) => handleUpdate(key, c)} label={config.label} />
                     </div>
@@ -359,7 +346,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                     o.disabledIf?.(globalState) === true ? { ...o, disabled: true } : o
                 );
                 return (
-                    <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
+                    <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
                         <Dropdown
                             label={config.label}
                             value={val}
@@ -399,7 +386,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const isHighlighted = val !== config.default || !!config.condition;
             // Conditional params: skip entry animation to prevent grey-box on re-mount (CSS animation restart issue)
             const conditionalClass = config.condition ? '!animate-none !overflow-visible' : '';
-            return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={effectiveMax} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={isHighlighted} trackId={trackId} liveValue={liveValue} defaultValue={config.default} customMapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={compileIndicator} className={conditionalClass} /></div>;
+            return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={effectiveMax} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={isHighlighted} trackId={trackId} liveValue={liveValue} defaultValue={config.default} mapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={compileIndicator} className={conditionalClass} /></div>;
         }
 
         // Vec2/3/4 all share the same binding derivation + live-value
@@ -412,7 +399,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const y = val?.y ?? config.default?.y ?? 0;
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y'], composeFrom: config.composeFrom });
             const liveVec2 = readLiveVec(liveModulations, binding) as THREE.Vector2 | undefined;
-            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} liveValue={liveVec2} showLiveIndicator={true} /></div>;
+            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} liveValue={liveVec2} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec3') {
             const x = val?.x ?? config.default?.x ?? 0;
@@ -421,7 +408,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const v3 = new THREE.Vector3(x, y, z);
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y', 'z'], composeFrom: config.composeFrom });
             const liveVec3 = readLiveVec(liveModulations, binding) as THREE.Vector3 | undefined;
-            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec3} showLiveIndicator={true} /></div>;
+            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec3} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec4') {
             const x = val?.x ?? config.default?.x ?? 0;
@@ -431,7 +418,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const v4 = new THREE.Vector4(x, y, z, w);
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y', 'z', 'w'], composeFrom: config.composeFrom });
             const liveVec4 = readLiveVec(liveModulations, binding) as THREE.Vector4 | undefined;
-            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec4} showLiveIndicator={true} /></div>;
+            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec4} showLiveIndicator={true} /></div>;
         }
 
         if (config.type === 'image') {
@@ -450,7 +437,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const profileLabel = colorSpaceVal === 1 ? 'LIN' : colorSpaceVal === 2 ? 'ACES' : 'sRGB';
 
             return (
-                <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
+                <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
                      <div className="bg-surface-header border border-line/5 text-center overflow-hidden relative group">
                         <input type="file" accept="image/*,.hdr,.exr" onChange={(e) => handleFileChange(e, key)} className="hidden" id={`file-input-${key}`} />
                         <label htmlFor={`file-input-${key}`} className="block bg-accent-900/40 hover:bg-accent-800/60 text-accent-300 w-full py-2 text-xs font-bold transition-colors cursor-pointer">{val ? "Replace Texture" : config.label}</label>
@@ -535,7 +522,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                          * because the parent label was already rendered
                          * above by `control` — only the indented
                          * children portion is needed. */}
-                        <div className="flex flex-col">
+                        <div className="flex flex-col bg-surface-raised">
                             {renderedChildren.map((child, i) => {
                                 const isLast = i === renderedChildren.length - 1;
                                 return (
@@ -590,7 +577,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 let nextId = roots[i + 1];
                 let nextConfig = nextId ? feature.params[nextId] : null;
                 if (nextConfig && nextConfig.layout === 'half' && !nextConfig.hidden && !excludeParams.includes(nextId!) && checkParamActive(nextConfig.condition, sliceState, globalState)) {
-                    items.push(<div key={`${id}-${nextId}`} className="flex gap-0.5 mb-px">{renderNode(id, true)}{renderNode(nextId, true)}</div>);
+                    items.push(<div key={`${id}-${nextId}`} className="flex gap-0.5">{renderNode(id, true)}{renderNode(nextId, true)}</div>);
                     i++; continue;
                 }
             }
@@ -630,7 +617,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         const Component = componentRegistry.get(c.componentId);
         if (!Component) return null;
         return (
-            <div key={`custom-${c.componentId}-${c.group != null ? c.group + '-' + idx : idx}`} className={`flex flex-col mb-px ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}>
+            <div key={`custom-${c.componentId}-${c.group != null ? c.group + '-' + idx : idx}`} className={`flex flex-col ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}>
                 <Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} />
             </div>
         );

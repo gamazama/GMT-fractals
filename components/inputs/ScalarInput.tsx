@@ -13,7 +13,7 @@
 import React from 'react';
 import { ScalarInputProps } from './types';
 import { DraggableNumber } from './primitives';
-import { computePercentage } from './primitives/FormatUtils';
+import { computePercentage, mappedDomain } from './primitives/FormatUtils';
 import { usePrecisionTrackDrag } from './usePrecisionTrackDrag';
 
 export const ScalarInput: React.FC<ScalarInputProps> = ({
@@ -73,25 +73,22 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     const valuePct = React.useMemo(() => {
         if (!hasBounds) return 0;
         const mappedValue = mapping ? mapping.toDisplay(value) : value;
-        const mappedMin = mapping ? mapping.toDisplay(min) : min;
-        const mappedMax = mapping ? mapping.toDisplay(max) : max;
-        return Math.max(0, Math.min(100, ((mappedValue - mappedMin) / (mappedMax - mappedMin)) * 100));
+        const { dMin, dMax } = mappedDomain(min, max, mapping);
+        return Math.max(0, Math.min(100, ((mappedValue - dMin) / (dMax - dMin)) * 100));
     }, [value, min, max, mapping, hasBounds]);
-    
+
     const livePct = React.useMemo(() => {
         if (!hasBounds || liveValue === undefined) return 0;
         const mappedValue = mapping ? mapping.toDisplay(liveValue) : liveValue;
-        const mappedMin = mapping ? mapping.toDisplay(min) : min;
-        const mappedMax = mapping ? mapping.toDisplay(max) : max;
-        return Math.max(0, Math.min(100, ((mappedValue - mappedMin) / (mappedMax - mappedMin)) * 100));
+        const { dMin, dMax } = mappedDomain(min, max, mapping);
+        return Math.max(0, Math.min(100, ((mappedValue - dMin) / (dMax - dMin)) * 100));
     }, [liveValue, min, max, mapping, hasBounds]);
-    
+
     const defaultPct = React.useMemo(() => {
         if (!hasBounds || defaultValue === undefined) return null;
         const mappedValue = mapping ? mapping.toDisplay(defaultValue) : defaultValue;
-        const mappedMin = mapping ? mapping.toDisplay(min) : min;
-        const mappedMax = mapping ? mapping.toDisplay(max) : max;
-        return ((mappedValue - mappedMin) / (mappedMax - mappedMin)) * 100;
+        const { dMin, dMax } = mappedDomain(min, max, mapping);
+        return ((mappedValue - dMin) / (dMax - dMin)) * 100;
     }, [defaultValue, min, max, mapping, hasBounds]);
     
     // Compute fill percentage from a raw value
@@ -236,7 +233,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     
     return (
         <div 
-            className={`mb-px animate-slider-entry ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`}
+            className={`mt-px animate-slider-entry ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`}
             data-help-id={dataHelpId}
             onContextMenu={onContextMenu}
         >

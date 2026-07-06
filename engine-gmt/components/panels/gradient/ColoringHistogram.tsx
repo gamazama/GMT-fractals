@@ -2,13 +2,13 @@
 import React, { useRef, useEffect } from 'react';
 import Histogram from '../../../../components/Histogram';
 import Slider from '../../../../components/Slider';
-import { buildLogMapping } from '../../../../components/AutoFeaturePanel';
+import { createLogMapping } from '../../../../components/inputs';
 import { analyzeHistogram, calculateSmartLevels } from '../../../../utils/histogramUtils';
 import { ColoringState } from '../../../features/coloring';
 
 // Repeats: matches `coloring.repeats[2]` param def (min: 0.1, max: 100, scale: 'log').
-// Hand-rolled here because this Slider doesn't go through AutoFeaturePanel.
-const REPEATS_LOG_MAPPING = buildLogMapping(0.1, 100);
+// Built here because this Slider doesn't go through AutoFeaturePanel.
+const REPEATS_LOG_MAPPING = createLogMapping(0.1, 100);
 
 interface ColoringHistogramProps {
     layer: 1 | 2;
@@ -162,7 +162,7 @@ export const ColoringHistogram: React.FC<ColoringHistogramProps> = ({
                 onChange={(v) => onChange({ [kRepeats]: v })}
                 trackId={`coloring.${kRepeats}`}
                 liveValue={liveModulations?.[`coloring.${kRepeats}`]}
-                customMapping={REPEATS_LOG_MAPPING}
+                mapping={REPEATS_LOG_MAPPING}
             />
             <Slider 
                 label="Phase" 

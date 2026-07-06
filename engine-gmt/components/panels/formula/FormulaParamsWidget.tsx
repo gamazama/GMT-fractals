@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import type { FeatureComponentProps } from '../../../../components/registry/ComponentRegistry';
 import type { LfoTarget } from '../../../../types';
 import Slider from '../../../../components/Slider';
+import { createPowMapping, piUnitMapping, formatDisplay, type ValueMapping } from '../../../../components/inputs';
 import Dropdown from '../../../../components/Dropdown';
 import ToggleSwitch from '../../../../components/ToggleSwitch';
 import { Vector2Input, Vector3Input, Vector4Input } from '../../../../components/vector-input';
@@ -31,6 +32,19 @@ import { text as themeText, border as themeBorder, surface } from '../../../../d
 import { FormulaSelect } from './FormulaSelect';
 import { slotWriteValue } from '../../../utils/uniformSlots';
 import type { FormulaType } from '../../../../types';
+
+// Iterations slider: cubic display feel over [1, 500] — fine control at low counts.
+const ITERATIONS_MAPPING = createPowMapping(1, 500, 3);
+
+// "degrees" scale: the param value is in degrees, shown as a count of π (180° = π).
+// Distinct from piUnitMapping (which is radian-valued) — single use, kept local.
+const DEG_D2PI = 1 / 180;
+const DEGREES_PI_MAPPING: ValueMapping = {
+    toDisplay: (v) => v * DEG_D2PI,
+    fromDisplay: (v) => v / DEG_D2PI,
+    format: formatDisplay,
+    parseInput: (s) => { const n = parseFloat(s); return isNaN(n) ? null : n; },
+};
 
 const engine = getProxy();
 
@@ -223,21 +237,20 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                         onChange={p.set} defaultValue={p.def as number}
                         highlight={hasLfo || (p.id === 'paramA' && !hasLfo)}
                         trackId={p.trackId} liveValue={liveVal}
-                        customMapping={{ min: p.min / Math.PI, max: p.max / Math.PI, toSlider: (v) => v / Math.PI, fromSlider: (v) => v * Math.PI }}
+                        mapping={piUnitMapping}
                         mapTextInput overrideInputText={`${(val / Math.PI).toFixed(2)}π`} />
                 </div>
             );
         }
         if (p.scale === 'degrees') {
-            const D2PI = 1 / 180;
             return (
                 <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Slider label={p.label} value={val} min={p.min} max={p.max} step={p.step}
                         onChange={p.set} defaultValue={p.def as number}
                         highlight={hasLfo || (p.id === 'paramA' && !hasLfo)}
                         trackId={p.trackId} liveValue={liveVal}
-                        customMapping={{ min: p.min * D2PI, max: p.max * D2PI, toSlider: (v) => v * D2PI, fromSlider: (v) => v / D2PI }}
-                        mapTextInput overrideInputText={`${(val * D2PI).toFixed(2)}π`} />
+                        mapping={DEGREES_PI_MAPPING}
+                        mapTextInput overrideInputText={`${(val * DEG_D2PI).toFixed(2)}π`} />
                 </div>
             );
         }
@@ -269,7 +282,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                     <Slider label="Iterations" value={coreMath.iterations} min={1} max={500} step={1}
                         onChange={(v) => actions.setCoreMath({ iterations: Math.round(v) })}
                         highlight defaultValue={32}
-                        customMapping={{ min: 0, max: 100, toSlider: (val) => 100 * Math.pow((val - 1) / 499, 1/3), fromSlider: (val) => 1 + 499 * Math.pow(val / 100, 3) }}
+                        mapping={ITERATIONS_MAPPING}
                         mapTextInput={false} trackId="coreMath.iterations"
                         liveValue={state.liveModulations?.['coreMath.iterations']} />
                 </div>

@@ -24,6 +24,7 @@ import { nanoid } from 'nanoid';
 import { useEngineStore } from '../../../store/engineStore';
 import type { AnimationParams } from '../../../types';
 import Slider from '../../../components/Slider';
+import { createPowMapping, formatDisplay, type ValueMapping } from '../../../components/inputs';
 import { DotToggle } from '../../../components/DotToggle';
 import { DynamicList, DynamicListItem } from '../../../components/DynamicList';
 import { ParameterSelector } from '../../../components/ParameterSelector';
@@ -40,19 +41,18 @@ const DEFAULT_SMOOTHING = 0.5;
 const STRENGTH_REACH = 10;     // Symmetric ±reach for the Min/Max sliders.
 const PERIOD_RANGE: [number, number] = [0.1, 30];
 
-// Period slider mapping: t² gives a "slightly-log feel" — slider
+// Period slider mapping: pow-2 gives a "slightly-log feel" — slider
 // middle ≈ 7.6s vs linear's 15s, with 0.1–3s filling the lower half.
-const PERIOD_SPAN = PERIOD_RANGE[1] - PERIOD_RANGE[0];
-const PERIOD_MAPPING = {
-    min: 0, max: 100,
-    toSlider: (val: number) => Math.sqrt((Math.max(PERIOD_RANGE[0], Math.min(PERIOD_RANGE[1], val)) - PERIOD_RANGE[0]) / PERIOD_SPAN) * 100,
-    fromSlider: (val: number) => PERIOD_RANGE[0] + PERIOD_SPAN * Math.pow(val / 100, 2),
-};
+const PERIOD_MAPPING = createPowMapping(PERIOD_RANGE[0], PERIOD_RANGE[1], 2);
 
-const PHASE_MAPPING = {
-    min: 0, max: 360,
-    toSlider: (v: number) => v * 360,
-    fromSlider: (v: number) => v / 360,
+// Phase slider: value in turns [0..1] shown as degrees [0..360].
+const PHASE_MAPPING: ValueMapping = {
+    toDisplay: (v: number) => v * 360,
+    fromDisplay: (v: number) => v / 360,
+    format: formatDisplay,
+    parseInput: (s: string) => { const n = parseFloat(s); return isNaN(n) ? null : n; },
+    domainMin: 0,
+    domainMax: 360,
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -215,7 +215,7 @@ export const LfoList: React.FC = () => {
                                     hardMin={0.01}
                                     defaultValue={DEFAULT_PERIOD}
                                     onChange={(v) => updateAnimation(anim.id, { period: v })}
-                                    customMapping={PERIOD_MAPPING}
+                                    mapping={PERIOD_MAPPING}
                                 />
                                 <Slider
                                     label="Min strength" value={min}
@@ -237,7 +237,7 @@ export const LfoList: React.FC = () => {
                                         min={0.0} max={1.0} step={0.01}
                                         defaultValue={0}
                                         onChange={(v) => updateAnimation(anim.id, { phase: v })}
-                                        customMapping={PHASE_MAPPING}
+                                        mapping={PHASE_MAPPING}
                                         mapTextInput
                                         overrideInputText={`${(anim.phase * 360).toFixed(0)}°`}
                                     />
