@@ -56,8 +56,9 @@ import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
 import Slider from '../../../components/Slider';
-import { UndoIcon, RedoIcon, CloseIcon, DragHandleIcon, ResetIcon } from '../../../components/Icons';
-import { CaretRight } from '../../../components/Icons2';
+import { UndoIcon, RedoIcon, CloseIcon, DragHandleIcon, ResetIcon, PlusIcon } from '../../../components/Icons';
+import { CaretRight, ChevronDown } from '../../../components/Icons2';
+import { SectionLabel } from '../../../components/SectionLabel';
 import { Stepper } from '../../../components/Stepper';
 import { GenericToggleSwitch } from '../../../components/GenericToggleSwitch';
 import { CompileBar } from '../../../components/CompileBar';
@@ -875,9 +876,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 />
                 {currentWs && (
                     <button onClick={openCurrent}
-                        className="px-2 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 transition-colors"
+                        className="t-btn-sm t-btn-default shrink-0"
                         title={`Load the active formula's weave ("${currentWs.title}") into the editor`}>
-                        ⧉ Open current
+                        Open current
                     </button>
                 )}
                 <button onClick={undo} disabled={past.current.length === 0}
@@ -890,9 +891,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 Add / Restore / Clear live in the slim footer card under the rows. */}
             <div className="flex items-center">
                 <button onClick={openHbPicker}
-                    className="ml-auto px-2.5 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors"
+                    className="t-btn-sm t-btn-default ml-auto"
                     title="Add a classic Hybrid Box fold as a weave slot — the retired Hybrid Box, as presets">
-                    Hybrid Box ▾
+                    Hybrid Box <ChevronDown size={9} />
                 </button>
             </div>
 
@@ -1075,18 +1076,15 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
 
                 {/* Add / Restore current / Clear — slim card joined under the rows. */}
                 <div className="rounded-lg border border-line/10 bg-surface-sunken/60 px-2 py-1.5 flex items-center gap-2">
-                    <button onClick={(e) => openPicker(e)}
-                        className="px-2.5 py-1 text-[11px] font-bold rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 hover:bg-accent-500/10 transition-colors">
-                        + Add formula
+                    <button onClick={(e) => openPicker(e)} className="t-btn-sm t-btn-default">
+                        <PlusIcon /> Add formula
                     </button>
-                    <button onClick={restoreCurrent}
-                        className="px-2.5 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg hover:border-accent-500/40 transition-colors"
+                    <button onClick={restoreCurrent} className="t-btn-sm t-btn-default"
                         title="Reset the weave back to the currently loaded formula">
-                        ↺ Restore current
+                        <ResetIcon /> Restore current
                     </button>
                     {draft.rows.length > 0 && (
-                        <button onClick={clearAll}
-                            className="ml-auto px-2 py-1 text-[10px] rounded border bg-line/[0.04] border-line/10 text-fg-tertiary hover:text-fg-muted transition-colors">
+                        <button onClick={clearAll} className="t-btn-sm t-btn-default ml-auto">
                             Clear
                         </button>
                     )}
@@ -1097,7 +1095,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             {plan && (
                 <div className="rounded-lg border border-line/10 bg-surface-sunken/40 px-3 py-2 space-y-1.5">
                     <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-fg-tertiary">Iteration schedule</span>
+                        <SectionLabel variant="secondary">Iteration schedule</SectionLabel>
                         {/* Whole-weave enable — deliberately LOW-PROFILE (a compat/
                             migration affordance, not a hero control; ADR-0089 P4.4).
                             Live DDFS state (uWeaveEnabled) — applies to weaves built
@@ -1154,7 +1152,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                         keyframe it live (no rebuild). */}
                     {rhythm && !dirty && layerRowIdx.length > 0 && (
                         <div className="pt-1.5 mt-0.5 space-y-2 border-t border-line/10">
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-fg-tertiary">Live rhythm — keyframable</span>
+                            <SectionLabel variant="secondary">Live rhythm — keyframable</SectionLabel>
                             {layerRowIdx.map((rowIdx, j) => {
                                 const k = j + 1;
                                 const v = layerVal(k);
@@ -1224,9 +1222,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 />
             ) : (
                 <div className="flex items-center justify-between px-2 py-1">
-                    <span className="text-[9px] font-bold uppercase tracking-wide text-fg-tertiary">✓ weave is live</span>
+                    <span className="text-[9px] font-bold text-fg-tertiary">✓ weave is live</span>
                     <button onClick={build} disabled={busy || activeCount === 0}
-                        className="px-3 py-0.5 text-[9px] font-bold rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg transition-colors disabled:opacity-40"
+                        className="t-btn-sm t-btn-default"
                         title="Rebuild the weave (keeps your camera and look)">
                         {busy ? 'Building…' : 'Rebuild'}
                     </button>
