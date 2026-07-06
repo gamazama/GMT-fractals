@@ -57,7 +57,8 @@ import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
 import Slider from '../../../components/Slider';
 import { warn, compileBar as compileBarClass } from '../../../data/theme';
-import { AlertIcon } from '../../../components/Icons';
+import { AlertIcon, UndoIcon, RedoIcon, CloseIcon, DragHandleIcon, ResetIcon } from '../../../components/Icons';
+import { CaretRight } from '../../../components/Icons2';
 import { LoopStrip, SLOT_COLORS } from './LoopStrip';
 
 type WeaveSource = NonNullable<FractalDefinition['weaveSource']>;
@@ -895,11 +896,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     </button>
                 )}
                 <button onClick={undo} disabled={past.current.length === 0}
-                    className="px-2 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg disabled:opacity-40 disabled:hover:text-fg-muted transition-colors"
-                    title="Undo structure edit">↶</button>
+                    className="icon-btn shrink-0" title="Undo structure edit"><UndoIcon /></button>
                 <button onClick={redo} disabled={future.current.length === 0}
-                    className="px-2 py-1 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg disabled:opacity-40 disabled:hover:text-fg-muted transition-colors"
-                    title="Redo structure edit">↷</button>
+                    className="icon-btn shrink-0" title="Redo structure edit"><RedoIcon /></button>
             </div>
 
             {/* Hybrid Box presets — on its own, right-aligned above the rows.
@@ -944,20 +943,20 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                 onPointerDown={(e) => onHandleDown(e, r.key)}
                                 onPointerMove={(e) => onHandleMove(e, r.key)}
                                 onPointerUp={(e) => onHandleUp(e, r.key)}
-                                className="cursor-grab active:cursor-grabbing touch-none select-none text-fg-tertiary hover:text-fg-muted px-0.5 shrink-0"
+                                className="cursor-grab active:cursor-grabbing touch-none select-none text-fg-tertiary hover:text-fg-muted px-0.5 shrink-0 flex items-center"
                                 title="Drag to reorder"
-                            >≡</span>
+                            ><DragHandleIcon /></span>
                             <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[r.colorIdx % SLOT_COLORS.length] }} />
                             <button onClick={() => setExpandedKey(isExpanded ? null : r.key)}
-                                className="shrink-0 w-3 text-center text-[10px] leading-none text-fg-tertiary hover:text-fg transition-colors"
-                                title="Parameters and per-layer timing">{isExpanded ? '▾' : '▸'}</button>
+                                className="shrink-0 w-3 flex items-center justify-center text-fg-tertiary hover:text-fg transition-colors"
+                                title="Parameters and per-layer timing"><CaretRight className={`w-2 h-2 transition-transform ${isExpanded ? 'rotate-90' : ''}`} /></button>
                             <button onClick={(e) => openPicker(e, r.key)}
                                 className="flex-1 text-left text-[11px] text-fg truncate hover:text-accent-300 transition-colors"
                                 title={`Change formula (${r.label})`}>
                                 {r.label}
                             </button>
                             <button onClick={() => remove(r.key)}
-                                className="w-5 h-5 text-[11px] rounded border bg-line/[0.04] border-line/15 text-fg-muted hover:text-red-300 transition-colors shrink-0" title="Remove formula">×</button>
+                                className="icon-btn icon-btn-danger shrink-0" title="Remove formula"><CloseIcon /></button>
                         </div>
 
                         {/* Line 2 — Sequence: iterations · Rhythm: role + compact timing */}
@@ -1034,10 +1033,10 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                                     ))}
                                                     <button onClick={() => setOptionValues(r.key, m.index, defVals)}
                                                         disabled={!isDirty}
-                                                        className={`w-5 h-5 text-[11px] rounded border shrink-0 transition-colors ${isDirty
-                                                            ? 'bg-line/[0.04] border-line/15 text-fg-muted hover:text-fg'
-                                                            : 'opacity-0 pointer-events-none border-transparent'}`}
-                                                        title={`Reset to default (${defVals.join(', ')})`}>↺</button>
+                                                        className={`shrink-0 transition-colors ${isDirty
+                                                            ? 'icon-btn'
+                                                            : 'opacity-0 pointer-events-none'}`}
+                                                        title={`Reset to default (${defVals.join(', ')})`}><ResetIcon /></button>
                                                     {m.exposable ? (
                                                         <button onClick={() => toggleBake(r.key, m)}
                                                             className={`w-11 px-1.5 py-0.5 text-[10px] rounded border shrink-0 transition-colors ${!baked
@@ -1078,7 +1077,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                     onChange={(e) => setDividerRepeat(r.key, parseInt(e.target.value, 10) || 1)}
                                     className="w-8 text-center rounded bg-surface-sunken border border-accent-500/30 py-0.5 text-[11px] text-accent-200 outline-none focus:border-accent-500/60" />
                                 <button onClick={() => removeDivider(r.key)}
-                                    className="text-[11px] text-fg-tertiary hover:text-red-300 shrink-0 px-0.5" title="Remove loop divider">✕</button>
+                                    className="icon-btn icon-btn-danger shrink-0" title="Remove loop divider"><CloseIcon /></button>
                                 <span className="flex-1 border-t border-dashed border-accent-500/40" />
                             </div>
                         ) : (
