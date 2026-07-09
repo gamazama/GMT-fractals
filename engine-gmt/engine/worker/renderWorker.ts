@@ -427,17 +427,33 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 }
                 break;
 
-            case 'REGISTER_FORMULA':
-                // Register a dynamically-imported formula (Workshop/DEC) in the worker's registry
-                // so core_math.ts inject() can find it during shader compilation.
+            case 'REGISTER_FORMULA': {
+                // Register a dynamically-imported formula (Workshop/DEC/weave) in the
+                // worker's registry so core_math.ts inject() can find it during shader
+                // compilation.
+                //
+                // core_math.inject runs HERE (worker-side) and gates the cutting-plane
+                // preamble (the engine-owned cp_dmin/cp_scale/cp_trap globals) on the
+                // def's capability set. A runtime weave/hybrid whose body writes cp_*
+                // (e.g. a native Menger sponge slot) would otherwise emit those writes
+                // with no declaration → "cp_dmin: undeclared identifier". The capability
+                // Set isn't a formal part of the REGISTER_FORMULA contract, so self-heal
+                // it from the shader body — the same cp_* body scan parseGMF uses for
+                // legacy GMF files (FormulaFormat.ts). Union with anything the message
+                // happens to carry (postMessage's structured clone preserves Sets).
+                const incoming = (msg.shader as { capabilities?: Iterable<Capability> }).capabilities;
+                const caps = new Set<Capability>(incoming ?? []);
+                const body = `${msg.shader.function} ${msg.shader.loopBody} ${msg.shader.loopInit ?? ''} ${msg.shader.preamble ?? ''}`;
+                if (/\bcp_(dmin|scale|trap)\b/.test(body)) caps.add('estimator:cutting-plane');
                 registry.register({
                     id: msg.id as any,
                     name: msg.id,
-                    shader: { ...msg.shader, capabilities: new Set<Capability>() }, // worker registry is injection-only; capability gating is main-thread (message carries none)
+                    shader: { ...msg.shader, capabilities: caps },
                     parameters: [],
                     defaultPreset: {},
                 });
                 break;
+            }
 
             case 'CONFIG':
                 if (engine) {
