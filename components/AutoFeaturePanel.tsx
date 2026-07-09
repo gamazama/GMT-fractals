@@ -473,7 +473,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         return null;
     };
 
-    const renderNode = (id: string, isHalfWidth: boolean = false) => {
+    const renderNode = (id: string, isHalfWidth: boolean = false, isNested: boolean = false) => {
         const config = feature.params[id];
         // EXCLUSION CHECK
         if (!config || config.hidden || excludeParams.includes(id) || !checkParamActive(config.condition, sliceState, globalState, config.parentId)) return null;
@@ -482,7 +482,9 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         if (config.isAdvanced && !advancedMode) return null;
         const control = renderControl(id, config);
         const childIds = Object.keys(feature.params).filter(k => feature.params[k].parentId === id);
-        const renderedChildren: React.ReactNode[] = childIds.map(cid => renderNode(cid)).filter(Boolean);
+        // Children render nested inside this node's bracket — their own closing
+        // divider uses the flat rail-tone variant, not the card end-cap.
+        const renderedChildren: React.ReactNode[] = childIds.map(cid => renderNode(cid, false, true)).filter(Boolean);
         // Include customUI entries that declare this param as their parent
         feature.customUI?.forEach((c, idx) => {
             if (c.parentId !== id) return;
@@ -536,7 +538,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                                 );
                             })}
                         </div>
-                        <SectionDivider />
+                        <SectionDivider nested={isNested} />
                     </>
                 )}
             </div>

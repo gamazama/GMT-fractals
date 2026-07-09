@@ -21,13 +21,13 @@ import React, { useState, useEffect } from 'react';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
 import type { FractalDefinition } from '../../../types/fractal';
-import { CollapsibleSection } from '../../../../components/CollapsibleSection';
-import { SectionDivider } from '../../../../components/SectionLabel';
+import { CompileSection } from '../../../../components/CompileSection';
 import { nativeSlotReject } from '../../../engine/weave/nativeSlotCatalog';
 import { WeaveEditorPane } from '../../WeaveEditor';
 
 export const WeaveSection: React.FC = () => {
     const formula = useEngineStore((s: any) => s.formula);
+    const weaveEnabled = useEngineStore((s: any) => s.weave?.weaveEnabled) ?? true;
     const def = registry.get(formula) as FractalDefinition | undefined;
     const ws = def?.weaveSource;
     const isWeave = !!ws;
@@ -64,25 +64,38 @@ export const WeaveSection: React.FC = () => {
         </span>
     );
 
+    // Mode B (ADR-0089 P4.7): adopt the shared compilable-section chrome
+    // (header tone + edge-fade + closing divider) while the weave's enable /
+    // Build stay inside WeaveEditorPane. `isOn` reflects weaveEnabled so a
+    // toggled-off weave gets the disabled fade (a single formula reads as
+    // on/neutral — it's an invitation, not a disabled section); `isCompiled` is
+    // left true because the pane owns the dirty/Build indication. `forceBodyOpen`
+    // keeps the pane visible while open even if the weave is toggled off within
+    // it, and `hideToggle` leaves the enable control to the pane.
+    const isOn = isWeave ? weaveEnabled : true;
+
     return (
-        <div data-help-id="weave.editor">
-            <CollapsibleSection
-                label={isWeave ? 'Weave' : 'Weave formulas'}
-                labelVariant="primary"
-                open={open}
-                onToggle={() => setOpen((o) => !o)}
-                rightContent={collapsedRight}
-            >
-                <div className="px-1 pt-2 pb-1">
-                    <WeaveEditorPane
-                        key={formula}
-                        variant="panel"
-                        seedFormulaId={!isWeave && weavable ? formula : undefined}
-                    />
-                </div>
-            </CollapsibleSection>
-            <SectionDivider />
-        </div>
+        <CompileSection
+            label={isWeave ? 'Weave' : 'Weave formulas'}
+            featureId="weave"
+            isOn={isOn}
+            isCompiled={true}
+            hideToggle
+            collapsible
+            open={open}
+            onOpenChange={setOpen}
+            forceBodyOpen
+            rightContent={collapsedRight}
+            helpId="weave.editor"
+        >
+            <div className="px-1 pt-2 pb-1 bg-surface-raised">
+                <WeaveEditorPane
+                    key={formula}
+                    variant="panel"
+                    seedFormulaId={!isWeave && weavable ? formula : undefined}
+                />
+            </div>
+        </CompileSection>
     );
 };
 

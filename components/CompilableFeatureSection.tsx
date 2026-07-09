@@ -23,6 +23,7 @@ function humanizeReason(raw: string): string {
 // changes via the feature setter; the scheduler picks up the config delta
 // and emits the spinner state with the correct strategy-aware label.
 import { FeatureSection } from './FeatureSection';
+import { CompileSection } from './CompileSection';
 import { CollapsibleSection } from './CollapsibleSection';
 import { StatusDot } from './StatusDot';
 import { SectionDivider } from './SectionLabel';
@@ -335,22 +336,21 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     }
 
     return (
-        <div data-help-id={helpId}>
-            <FeatureSection
-                label={label}
-                featureId={featureId}
-                enabled={isOn}
-                onToggle={handleToggle}
-                forceBodyOpen={needsCompile}
-                statusContent={statusDots}
-                headerClassName={isCompiled ? '' : 'bg-transparent'}
-                onUnload={isCompiled ? handleUnload : undefined}
-                onReset={advancedMode ? handleReset : undefined}
-            >
-                {/* Body indent (level 1): everything under the section header
-                 *  sits one step in, on a subtle left rail. Sub-sections
-                 *  (Compile Settings / Parameters) add a further indent. */}
-                <div className="bg-surface-raised pl-2 border-l border-line/10">
+        <CompileSection
+            label={label}
+            featureId={featureId}
+            isOn={isOn}
+            isCompiled={isCompiled}
+            onToggle={handleToggle}
+            forceBodyOpen={needsCompile}
+            statusContent={statusDots}
+            onUnload={isCompiled ? handleUnload : undefined}
+            onReset={advancedMode ? handleReset : undefined}
+            helpId={helpId}
+        >
+                {/* Body sits flush at the root (no indent). Sub-sections
+                 *  (Compile Settings / Parameters) add their own indent + rail. */}
+                <div className="bg-surface-raised">
                     {/* CompileBar — the "compile question". Shown at the top of
                      *  the body whenever there's pending work: not compiled,
                      *  pending compile-settings change, or pending toggle. */}
@@ -408,9 +408,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                         )
                     )}
                 </div>
-            </FeatureSection>
-            <SectionDivider />
-        </div>
+        </CompileSection>
     );
 };
 
