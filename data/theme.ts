@@ -6,13 +6,14 @@
  * Tailwind class string built from the engine's **semantic color tokens**
  * (`accent`, `fg`, `line`, `surface`, `warn`, `danger`, `ok`, `info`,
  * `secondary`) — NOT raw palette colors. Those tokens resolve to CSS variables
- * defined per-scheme in index.css, so spreading these strings into `className`
- * automatically follows the active color scheme (Dark / Light / accent variant).
+ * generated at runtime by colorSchemeStore (from the brightness / tint / contrast /
+ * hue axes) and applied as inline vars on <html>, so spreading these strings into
+ * `className` automatically follows the active theme.
  *
  * Group names describe *purpose*, not color. Components import and spread these.
  *
  * @see plans/color-scheme-spec.md — the variable set + migration mapping.
- * @see index.css — the `:root` / `[data-theme]` scheme definitions.
+ * @see engine/store/colorSchemeStore.ts — the theme generator; index.css `:root` = Dark fallback.
  */
 
 // ─── Accent (primary interactive color) ──────────────────────────────

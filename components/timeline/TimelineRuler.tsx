@@ -30,9 +30,9 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
     // boundary (ADR-0061 P3b). Window mouse-listener gesture — unmount cleanup +
     // watchdog back the release.
     const scrub = useInteractionGesture(INTERACTION_SOURCES.scrub);
-    // Re-render (and thus repaint the canvas below) when the color scheme changes;
-    // canvas pixels don't observe CSS vars, so the draw effect lists `scheme` as a dep.
-    const scheme = useColorScheme((s) => s.scheme);
+    // Re-render (and thus repaint the canvas below) when the theme changes;
+    // canvas pixels don't observe CSS vars, so the draw effect lists `themeRev` as a dep.
+    const themeRev = useColorScheme((s) => s.themeRev);
 
     const canvasWidth = Math.max(1, visibleWidth - sidebarWidth);
 
@@ -132,7 +132,7 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
 
         ctx.restore();
 
-    }, [durationFrames, FRAME_WIDTH, canvasWidth, scrollLeft, currentFrame, scheme]);
+    }, [durationFrames, FRAME_WIDTH, canvasWidth, scrollLeft, currentFrame, themeRev]);
 
     const handleScrubStart = (e: React.MouseEvent) => {
         e.preventDefault();

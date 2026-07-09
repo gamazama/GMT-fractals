@@ -3,6 +3,21 @@
 **Status:** Accepted
 **Date:** 2026-06-21
 
+> **Update 2026-07-09 (preset enum → composed axes; decision unchanged):** The fixed
+> scheme enum (`dark` / `neutral-grey` / `dark-high-contrast` / `light` / `light-grey` /
+> `light-high-contrast`, each a hand-authored `[data-theme]` CSS block) was replaced by a set
+> of orthogonal, continuously-adjustable **axes**: a `brightness` slider (0–100, interpolates
+> a Dark↔Light surface pole-pair; text/borders/status auto-invert at the midpoint), a
+> `surfaceTint` toggle (+ its hue), a `highContrast` toggle, plus the existing accent /
+> secondary hues. The old presets survive as **quick-picks** that just set these axes. The whole
+> theme is now **generated in JS** (`colorSchemeStore.buildThemeVars`) and applied as inline
+> vars on `<html>`; the computed set is cached to `localStorage['gmt.themeVars']` so each app's
+> boot `<script>` paints the exact saved theme pre-React (this also removed the `data-theme`
+> attribute + the 5 non-`:root` CSS blocks in index.css — `:root` remains the no-cache Dark
+> fallback). A one-time migration maps the legacy `gmt.colorScheme` enum onto the axes. The
+> core decision — semantic CSS-var tokens behind Tailwind, one runtime switch for all apps,
+> functional color never themed — is unchanged; only the *shape of the control* changed.
+
 ## Context
 
 GMT and its sibling apps (gradient-explorer, fluid-toy, fractal-toy, mesh-export, demo)

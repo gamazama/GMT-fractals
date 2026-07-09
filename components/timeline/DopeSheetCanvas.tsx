@@ -62,7 +62,7 @@ export const DopeSheetCanvas: React.FC<DopeSheetCanvasProps> = ({
     const [hover, setHover] = useState<HoverTarget | null>(null);
     // Repaint the diamond/selection/hover passes when the color scheme changes —
     // the DIAMOND_THEME + getThemeColor lookups resolve the new palette on redraw.
-    const scheme = useColorScheme((s) => s.scheme);
+    const themeRev = useColorScheme((s) => s.themeRev);
 
     const tracks = sequence.tracks;
 
@@ -102,7 +102,7 @@ export const DopeSheetCanvas: React.FC<DopeSheetCanvasProps> = ({
             panX: 0,
             hover,
         });
-    }, [width, height, rows, tracks, frameWidth, selectedKeyframeIds, hover, scheme]);
+    }, [width, height, rows, tracks, frameWidth, selectedKeyframeIds, hover, themeRev]);
 
     const eventCoords = useCallback((e: React.MouseEvent) => {
         const canvas = canvasRef.current;

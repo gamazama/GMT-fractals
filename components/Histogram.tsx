@@ -97,7 +97,7 @@ const Histogram: React.FC<HistogramProps> = ({
     // Histogram fill follows the theme so the bars stay legible on light surfaces
     // (the old fixed '#666' washed out on the light schemes). --fg-tertiary is a
     // light grey on dark, a dark grey on light → visible on both.
-    const scheme = useColorScheme((s) => s.scheme);
+    const themeRev = useColorScheme((s) => s.themeRev);
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -121,7 +121,7 @@ const Histogram: React.FC<HistogramProps> = ({
             ctx.fillRect(i * barW, h - barH, barW, barH);
         });
 
-    }, [histogramBuckets, scheme]);
+    }, [histogramBuckets, themeRev]);
 
     // Map min/max to percentages of the current histogram view range
     const toViewPercent = (val: number) => {

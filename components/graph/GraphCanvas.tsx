@@ -50,7 +50,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = (props) => {
     const overlayRef = useRef<HTMLCanvasElement>(null);
     // Canvas pixels can't observe CSS theme vars; re-fire both draw effects when
     // the color scheme changes (THEME / getThemeColor resolve the new palette).
-    const scheme = useColorScheme((s) => s.scheme);
+    const themeRev = useColorScheme((s) => s.themeRev);
 
     // Back layer: heavy paint. Dep list deliberately excludes currentFrame and
     // selectionBox so playback ticks don't re-fire this.
@@ -82,7 +82,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = (props) => {
         props.durationFrames, props.selectedKeyframeIds,
         props.normalized, props.trackRanges,
         props.softSelectionEnabled, props.softSelectionRadius, props.softSelectionType,
-        props.softInteraction, props.highlightedTracks, scheme,
+        props.softInteraction, props.highlightedTracks, themeRev,
     ]);
 
     // Overlay layer: playhead + selection box. Cheap; runs every frame during
@@ -101,7 +101,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = (props) => {
             currentFrame: props.currentFrame,
             selectionBox: props.selectionBox,
         });
-    }, [props.width, props.height, props.view, props.currentFrame, props.selectionBox, scheme]);
+    }, [props.width, props.height, props.view, props.currentFrame, props.selectionBox, themeRev]);
 
     return (
         <div
