@@ -115,12 +115,14 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
 
   const id = `MB3DHybrid${seq}`;
   const usedIdx = [...new Set(plan.order.map(stepSlot))].sort((a, b) => a - b);
-  // Rhythm (layered modulo) schedule: 2–6 active slots — base + up to 5 layers
-  // (the DDFS weave feature declares 5 layer uniform sets). The Weave Editor only
-  // requests it in that range, so this reason is a belt-and-braces backstop.
-  const modulo = opts?.schedule?.kind === 'modulo';
-  if (modulo && (usedIdx.length < 2 || usedIdx.length > 6)) {
-    reasons.push(`Rhythm (modulo) scheduling needs 2 to 6 active formula slots — this weave has ${usedIdx.length}.`);
+  // Rhythm (layered modulo) schedule needs 2+ active slots to mean anything — a
+  // SINGLE active slot DEGRADES to the plain counts path (the base just runs, so
+  // building one formula in "Live" yields that formula, not an error). Upper
+  // bound stays 6 — base + 5 layers (the DDFS weave feature declares 5 layer
+  // uniform sets); the Weave Editor only requests that range, belt-and-braces.
+  const modulo = opts?.schedule?.kind === 'modulo' && usedIdx.length >= 2;
+  if (opts?.schedule?.kind === 'modulo' && usedIdx.length > 6) {
+    reasons.push(`Live (modulo) scheduling needs 2 to 6 active formula slots — this weave has ${usedIdx.length}.`);
   }
   // Rhythm base (spec §7): an explicit tail slot (schedule.baseRow) if given + valid,
   // else usedIdx[0] (first active slot — byte-identical to the pre-base emit). Layers =

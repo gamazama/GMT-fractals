@@ -21,18 +21,22 @@
  *  - Rows keep a STABLE color (colorIdx) so reordering doesn't repaint the strip.
  *  - "Repeat from here" (↻ per row) = MB3D's repeatFrom: earlier slots run once
  *    as an intro, the loop repeats from the marked slot.
- *  - Reorder is a drag handle (pointer-based, list-local — no native drag image).
+ *  - Reorder is pointer-based and list-local (no native drag image). Two grab
+ *    surfaces per card: the colored identity bar (immediate, touch-friendly)
+ *    and the header row (mouse threshold-drag, so its buttons still click).
  *  - Structure edits have editor-local undo/redo, separate from DDFS param undo.
  *  - Reordering while keyframed formula-param tracks exist shows a warning
  *    (packed lanes may retarget) — a transfer tool comes later.
- *  - Schedule kinds are a user choice: counts ("Sequence", baked LUT — structure
- *    edits rebuild) vs layered modulo ("Rhythm", up to 6 active slots: the first is
+ *  - Schedule kinds are a user choice: layered modulo ("Live", the DEFAULT,
+ *    2026-07-09) vs counts ("Baked", LUT — structure edits rebuild). Live
+ *    supports up to 6 active slots (the first is
  *    the base, each further slot is an independent rhythm layer with its own
  *    interval / start / beats-cap on the DDFS `weave` feature — LIVE +
  *    keyframable, no rebuild; formula changes still rebuild. Layers are checked
  *    top to bottom, first beat wins — the ADR-0089 arbitration rule. A dense
  *    capped layer doubles as a sequence-style intro). Slot counts don't drive
- *    Rhythm; they only mark which slots are active, so the steppers dim.
+ *    Live; they only mark which slots are active, so the steppers dim. A single
+ *    active slot builds as the plain formula (the emit degrades to counts).
  *  - weaveSource rides on the built def so the weave reopens for re-editing;
  *    imported MB3D scenes carry one too, so any loaded weave can be opened here.
  */
@@ -56,7 +60,7 @@ import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
 import Slider from '../../../components/Slider';
-import { UndoIcon, RedoIcon, CloseIcon, DragHandleIcon, ResetIcon, PlusIcon } from '../../../components/Icons';
+import { UndoIcon, RedoIcon, CloseIcon, ResetIcon, PlusIcon } from '../../../components/Icons';
 import { CaretRight, ChevronDown } from '../../../components/Icons2';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { Stepper } from '../../../components/Stepper';
@@ -90,8 +94,9 @@ interface WeaveDraft {
     rows: SlotRow[];
     /** Loop dividers (Sequence mode). */
     dividers: WeaveDivider[];
-    /** User's schedule choice. 'modulo' (Rhythm) only takes effect while 1–6 rows
-     *  are active — otherwise the build falls back to counts (Sequence). */
+    /** User's schedule choice — 'modulo' ("Live") is the DEFAULT for new drafts.
+     *  It takes effect while 1–6 rows are active (a single active row builds as
+     *  the plain formula); 7+ falls back to counts ("Baked"). */
     scheduleKind: 'counts' | 'modulo';
     /** Rhythm base row KEY (the tail formula left running when no layer fires) —
      *  an explicit ROLE, decoupled from row order (spec §7). Absent ⇒ first active
@@ -253,9 +258,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             if (ws) return draftFromWeaveSource(ws);
             if (seedFormulaId) {
                 const seed = seedRowFromFormula(seedFormulaId);
-                if (seed) return { title: '', rows: [seed], dividers: [], scheduleKind: 'counts' };
+                if (seed) return { title: '', rows: [seed], dividers: [], scheduleKind: 'modulo' };
             }
-            return { title: '', rows: [], dividers: [], scheduleKind: 'counts' };
+            return { title: '', rows: [], dividers: [], scheduleKind: 'modulo' };
         }
         // Modal variant: import-in-progress draft, decoupled from store.formula.
         if (weaveDraft && weaveDraft.rows.length > 0) return cloneDraft(weaveDraft);
@@ -266,11 +271,11 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         // "+ Add formula" pick becomes slot 1 (weave-the-current-formula).
         if (seedFormulaId) {
             const seed = seedRowFromFormula(seedFormulaId);
-            if (seed) return { title: '', rows: [seed], dividers: [], scheduleKind: 'counts' };
+            if (seed) return { title: '', rows: [seed], dividers: [], scheduleKind: 'modulo' };
         }
         // Empty title = auto-name from the formula mix (autoTitleOf) until the
         // user types their own.
-        return { title: '', rows: [], dividers: [], scheduleKind: 'counts' };
+        return { title: '', rows: [], dividers: [], scheduleKind: 'modulo' };
     });
     const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
     const [reorderWarn, setReorderWarn] = useState(false);
@@ -543,18 +548,41 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         }
     }, [draft.rows]);
 
-    // ── Drag-handle reorder (pointer-based, list-local) ──────────────────────
+    // ── Reorder drag (pointer-based, list-local) ─────────────────────────────
+    // Two grab surfaces per card: the colored identity bar grabs immediately
+    // (touch-none, so it also works on touch, where the header must keep
+    // scrolling), and the header row starts a MOUSE drag after a small movement
+    // threshold — a real click never travels, so name / caret / × keep working.
     const rowRefs = useRef(new Map<string, HTMLDivElement>());
     const [dragKey, setDragKey] = useState<string | null>(null);
     const dragBase = useRef<WeaveDraft | null>(null);
+    const pendingDrag = useRef<{ key: string; y: number } | null>(null);
+    const suppressClick = useRef(false);
 
-    const onHandleDown = (e: React.PointerEvent, key: string) => {
-        e.preventDefault();
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const beginDrag = (el: HTMLElement, pointerId: number, key: string) => {
+        try { el.setPointerCapture(pointerId); } catch { /* pointer already gone */ }
         dragBase.current = cloneDraft(draft);
         setDragKey(key);
     };
-    const onHandleMove = (e: React.PointerEvent, key: string) => {
+    const onBarDown = (e: React.PointerEvent, key: string) => {
+        e.preventDefault();
+        pendingDrag.current = null;
+        beginDrag(e.currentTarget as HTMLElement, e.pointerId, key);
+    };
+    const onHeaderDown = (e: React.PointerEvent, key: string) => {
+        suppressClick.current = false;
+        if (e.pointerType !== 'mouse' || e.button !== 0) return;
+        pendingDrag.current = { key, y: e.clientY };
+    };
+    const onDragMove = (e: React.PointerEvent, key: string) => {
+        if (dragKey === null) {
+            const p = pendingDrag.current;
+            if (!p || p.key !== key || Math.abs(e.clientY - p.y) <= 5) return;
+            pendingDrag.current = null;
+            suppressClick.current = true; // this release ends a drag, not a click
+            beginDrag(e.currentTarget as HTMLElement, e.pointerId, key);
+            return; // reordering starts on the next move, once dragKey is set
+        }
         if (dragKey !== key) return;
         const from = draft.rows.findIndex((r) => r.key === key);
         if (from < 0) return;
@@ -573,7 +601,8 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             setDraft({ ...draft, rows }); // transient — committed once on release
         }
     };
-    const onHandleUp = (_e: React.PointerEvent, key: string) => {
+    const onDragUp = (_e: React.PointerEvent, key: string) => {
+        pendingDrag.current = null;
         if (dragKey !== key) return;
         setDragKey(null);
         const base = dragBase.current;
@@ -676,13 +705,13 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         const curLayers = layerRowIdx.map((_, j) => layerVal(j + 1));
         if (certify(planPhase(plan), planStructure(plan), rhythmPhase(curLayers, baseRowIdx, layerRowIdx), rhythmStructure(curLayers)).equal) {
             commit({ ...draft, scheduleKind: 'modulo' });
-            setStatus({ kind: 'ok', text: 'Rhythm — same pattern (kept your timing).' });
+            setStatus({ kind: 'ok', text: 'Live — same pattern (kept your timing).' });
             return;
         }
         const res = fitRhythmFromPlan(plan, activeRowIdx, rowLabel);
         if (!res.ok) {
             commit({ ...draft, scheduleKind: 'modulo' });
-            setStatus({ kind: 'error', text: `Switched to Rhythm — kept your existing timing. ${res.reason}` });
+            setStatus({ kind: 'error', text: `Switched to Live — kept your existing timing. ${res.reason}` });
             return;
         }
         // Layer values are in the elected base's NON-base row order → uWeave*{m+1}.
@@ -697,7 +726,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         store.setWeave?.(writes);                                                            // rhythm params → DDFS undo home
         commit({ ...draft, scheduleKind: 'modulo', baseKey: draft.rows[res.baseRow]?.key }); // one editor commit
         const baseNote = res.baseRow !== activeRowIdx[0] ? ` "${rowLabel(res.baseRow)}" is the base.` : '';
-        setStatus({ kind: 'ok', text: `Converted to Rhythm — same pattern, now live.${baseNote}${warned ? ' (Overwrote keyframed rhythm timing.)' : ''}` });
+        setStatus({ kind: 'ok', text: `Converted to Live — same pattern, timing now adjustable.${baseNote}${warned ? ' (Overwrote keyframed live timing.)' : ''}` });
     };
 
     const toSequence = () => {
@@ -706,13 +735,13 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         const layers = layerRowIdx.map((_, j) => layerVal(j + 1));
         if (plan && certify(rhythmPhase(layers, baseRowIdx, layerRowIdx), rhythmStructure(layers), planPhase(plan), planStructure(plan)).equal) {
             commit({ ...draft, scheduleKind: 'counts' });
-            setStatus({ kind: 'ok', text: 'Sequence — same pattern (kept your rows).' });
+            setStatus({ kind: 'ok', text: 'Baked — same pattern (kept your rows).' });
             return;
         }
         const res = runsFromRhythm(layers, baseRowIdx, layerRowIdx, rowLabel);
         if (!res.ok) {
             commit({ ...draft, scheduleKind: 'counts' });
-            setStatus({ kind: 'error', text: `Switched to Sequence — kept your existing rows. ${res.reason}` });
+            setStatus({ kind: 'error', text: `Switched to Baked — kept your existing rows. ${res.reason}` });
             return;
         }
         // Materialize runs → rows (reuse a row on first use, deep-clone after) + one
@@ -738,7 +767,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             : [];
         const warned = hasRhythmTracks();
         commit({ ...draft, rows: newRows, dividers, scheduleKind: 'counts', baseKey: undefined });
-        setStatus({ kind: 'ok', text: `Converted to Sequence — same pattern, now baked.${warned ? ' (Rhythm was animated; baked the current values.)' : ''}` });
+        setStatus({ kind: 'ok', text: `Converted to Baked — same pattern, now baked.${warned ? ' (Live timing was animated; baked the current values.)' : ''}` });
     };
 
     // ── Build ────────────────────────────────────────────────────────────────
@@ -785,7 +814,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 setStatus({
                     kind: 'ok',
                     text: rhythm
-                        ? `Built ${res.summary}. Rhythm layers are live now — tweak interval/start/beats without rebuilding. Camera and look kept.`
+                        ? `Built ${res.summary}. Live timing is adjustable now — tweak interval/start/beats without rebuilding. Camera and look kept.`
                         : `Built ${res.summary}. Parameter sliders live in the Formula panel; camera and look kept.`,
                 });
                 showToast(`Weave built: ${res.summary}`, 'info', 4000);
@@ -798,7 +827,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         }
     };
 
-    const clearAll = () => commit({ ...draft, rows: [], dividers: [], scheduleKind: 'counts' });
+    const clearAll = () => commit({ ...draft, rows: [], dividers: [], scheduleKind: 'modulo' });
 
     // "Restore current" — reset the draft back to mirror the currently loaded
     // formula: its weaveSource if it carries one (a built weave / imported scene),
@@ -807,7 +836,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         const ws = (registry.get(store.formula) as FractalDefinition | undefined)?.weaveSource;
         if (ws) { commit(draftFromWeaveSource(ws)); setStatus(null); return; }
         const seed = seedRowFromFormula(store.formula);
-        commit({ ...draft, rows: seed ? [seed] : [], dividers: [], scheduleKind: 'counts' });
+        commit({ ...draft, rows: seed ? [seed] : [], dividers: [], scheduleKind: 'modulo' });
         setStatus(null);
     };
 
@@ -897,9 +926,102 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 </button>
             </div>
 
-            {/* Slot rows — two lines each: [handle · color · chevron · name · ×]
-                then [iterations + (Sequence: repeat) / (Rhythm: role + timing)]. */}
-            <div className="space-y-1.5">
+            {/* Slot rows — flat sheets in the slider-surface language, stacked
+                FLUSH (no seams): each card carries a black bottom border and an
+                internal top shadow, square top, rounded bottom — so it reads as
+                tucked under the one above. Left zone = the drag handle: an 18px
+                slider-hatch strip, then the row's 4px color line, then content:
+                [chevron · name · + loop · ×] over
+                [iterations + (Sequence: repeat) / (Rhythm: role + timing)]. */}
+            <div>
+                {/* Schedule — the stack's header sheet: rounded top, square bottom,
+                    the first card tucks under it. */}
+                {plan && (
+                    <div className="rounded-t-lg border-b-[0.8px] border-black bg-line/[0.07] px-3 py-2 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                            <SectionLabel variant="secondary">Iteration schedule</SectionLabel>
+                            {/* Whole-weave enable — deliberately LOW-PROFILE (a compat/
+                                migration affordance, not a hero control; ADR-0089 P4.4).
+                                Live DDFS state (uWeaveEnabled) — applies to weaves built
+                                here (and migrated legacy scenes), no rebuild needed. */}
+                            <label className="flex items-center gap-1 text-[10px] text-fg-tertiary hover:text-fg-muted cursor-pointer select-none"
+                                title="Whole-weave enable — off renders the base formula only (all layers dormant). Live and keyframable; applies to weaves built here. Imported scenes gain it on rebuild.">
+                                <input type="checkbox"
+                                    checked={store.weave?.weaveEnabled ?? true}
+                                    onChange={(e) => store.setWeave?.({ weaveEnabled: e.target.checked })}
+                                    className="w-3 h-3 accent-accent-500" />
+                                active
+                            </label>
+                        </div>
+                        {/* Live (layered modulo, the default) vs Baked (counts LUT) — the
+                            canonical segmented toggle, matching the Quality panel's engine
+                            switch. Clicking converts the current pattern exactly (convert.ts). */}
+                        <GenericToggleSwitch<'counts' | 'modulo'>
+                            value={rhythm ? 'modulo' : 'counts'}
+                            onChange={(v) => (v === 'modulo' ? toRhythm() : toSequence())}
+                            options={[
+                                {
+                                    label: 'Live', value: 'modulo',
+                                    disabled: !rhythmOk && draft.scheduleKind !== 'modulo',
+                                    tooltip: rhythmOk || draft.scheduleKind === 'modulo'
+                                        ? 'Live schedule — one slot is the base; every other slot is an independent layer running every Nth iteration. Interval / start / beats are keyframable and apply instantly (no rebuild); costs a little performance'
+                                        : 'Live supports up to 6 active formula slots',
+                                },
+                                { label: 'Baked', value: 'counts', tooltip: 'Baked iteration sequence — exact per-slot counts; structure edits rebuild the shader' },
+                            ]}
+                        />
+                        {draft.scheduleKind === 'modulo' && !rhythmOk && (
+                            <p className="text-[10px] text-warn">
+                                Live supports up to 6 active formulas ({activeCount} now) — building as Baked until then.
+                            </p>
+                        )}
+                        <LoopStrip
+                            plan={rhythm && rhythmPlan ? rhythmPlan : plan}
+                            labels={draft.rows.map((r) => r.label)}
+                            colors={draft.rows.map((r) => SLOT_COLORS[r.colorIdx % SLOT_COLORS.length])}
+                            totalIterations={store.coreMath?.iterations}
+                        />
+                        {store.showHints && (
+                            <p className="text-[10px] text-fg-tertiary">
+                                {rhythm
+                                    ? <>{activeCount - 1} live layer{activeCount === 2 ? '' : 's'} over {draft.rows[activeRowIdx[0]]?.label} · scene iterations: {store.coreMath?.iterations ?? '—'}</>
+                                    : <>cycle = {plan.cycleLen} iteration{plan.cycleLen === 1 ? '' : 's'}
+                                        {plan.introLen > 0 ? ` after ${plan.introLen} intro` : ''} · faded blocks repeat · scene iterations: {store.coreMath?.iterations ?? '—'}</>}
+                            </p>
+                        )}
+
+                        {/* Live keyframable rhythm sliders — appear AFTER Build (the weave is
+                            live), grouped per formula. Before Build, the compact start/every/
+                            beats controls in the rows above set the initial timing; these
+                            keyframe it live (no rebuild). */}
+                        {rhythm && !dirty && layerRowIdx.length > 0 && (
+                            <div className="pt-1.5 mt-0.5 space-y-2 border-t border-line/10">
+                                <SectionLabel variant="secondary">Live timing — keyframable</SectionLabel>
+                                {layerRowIdx.map((rowIdx, j) => {
+                                    const k = j + 1;
+                                    const v = layerVal(k);
+                                    return (
+                                        <div key={draft.rows[rowIdx].key} className="space-y-1">
+                                            <div className="flex items-center gap-1.5 text-[11px]">
+                                                <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[(draft.rows[rowIdx]?.colorIdx ?? 0) % SLOT_COLORS.length] }} />
+                                                <span className="truncate text-fg">{draft.rows[rowIdx]?.label}</span>
+                                            </div>
+                                            <Slider label="Start" value={v.start} min={0} max={8} step={1} className="-mx-3"
+                                                onChange={(n) => setLayerVal(k, 'weaveStartIter', n)} defaultValue={k}
+                                                trackId={`weave.weaveStartIter${k}`} liveValue={store.liveModulations?.[`weave.weaveStartIter${k}`]} />
+                                            <Slider label="Interval" value={v.interval} min={1} max={8} step={1} className="-mx-3"
+                                                onChange={(n) => setLayerVal(k, 'weaveInterval', n)} defaultValue={1}
+                                                trackId={`weave.weaveInterval${k}`} liveValue={store.liveModulations?.[`weave.weaveInterval${k}`]} />
+                                            <Slider label="Beats (0 = endless)" value={v.beats} min={0} max={8} step={1} className="-mx-3"
+                                                onChange={(n) => setLayerVal(k, 'weaveBeats', n)} defaultValue={2}
+                                                trackId={`weave.weaveBeats${k}`} liveValue={store.liveModulations?.[`weave.weaveBeats${k}`]} />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
                 {draft.rows.length === 0 && (
                     <p className="text-[11px] text-fg-tertiary border border-dashed border-line/15 rounded-lg px-3 py-4 text-center">
                         No formulas yet — add a base fractal (box, bulb, IFS), then layer a transform or a second
@@ -917,60 +1039,100 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     const lv = layerK ? layerVal(layerK) : null;
                     return (
                     <React.Fragment key={r.key}>
+                    {/* Square under-sheet: the small areas behind the rounded bottom
+                        corners show the next sheet's shadowed surface, not raw bg.
+                        Surface tint × black shadow so it darkens in EVERY theme
+                        (a plain line-alpha reads white in the light scheme). */}
+                    <div className="bg-line/[0.12]" style={{ backgroundImage: 'linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35))' }}>
                     <div
                         ref={(el) => { if (el) rowRefs.current.set(r.key, el); else rowRefs.current.delete(r.key); }}
-                        className={`rounded-lg border px-2 py-1.5 transition-colors ${
-                            dragKey === r.key ? 'border-accent-500/40 bg-accent-500/10' : 'border-line/10 bg-surface-sunken/60'
+                        className={`relative overflow-hidden rounded-b-lg border-b-[0.8px] border-black pl-9 pr-2 py-2 transition-colors ${
+                            dragKey === r.key ? 'bg-accent-500/15 ring-1 ring-accent-500/40' : ''
                         }`}
+                        // OPAQUE sheet (surface + line tint in one paint): a translucent
+                        // bg would composite over the darkened under-sheet wrapper and
+                        // darken the whole card (visible in light schemes).
+                        style={dragKey === r.key ? undefined : {
+                            backgroundColor: 'rgb(var(--surface))',
+                            backgroundImage: 'linear-gradient(rgb(var(--line) / 0.12), rgb(var(--line) / 0.12))',
+                        }}
                     >
-                        {/* Line 1 — handle · color · chevron · name · remove */}
-                        <div className="flex items-center gap-1.5">
-                            <span
-                                onPointerDown={(e) => onHandleDown(e, r.key)}
-                                onPointerMove={(e) => onHandleMove(e, r.key)}
-                                onPointerUp={(e) => onHandleUp(e, r.key)}
-                                className="cursor-grab active:cursor-grabbing touch-none select-none text-fg-tertiary hover:text-fg-muted px-0.5 shrink-0 flex items-center"
-                                title="Drag to reorder"
-                            ><DragHandleIcon /></span>
-                            <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[r.colorIdx % SLOT_COLORS.length] }} />
+                        {/* Left-zone drag handle: slider-hatch strip, then the row's
+                            color line (a 1px shadow seam between them). Full card
+                            height, always available. */}
+                        <span
+                            onPointerDown={(e) => onBarDown(e, r.key)}
+                            onPointerMove={(e) => onDragMove(e, r.key)}
+                            onPointerUp={(e) => onDragUp(e, r.key)}
+                            className="absolute inset-y-0 left-0 w-[23px] cursor-grab active:cursor-grabbing touch-none select-none"
+                            title="Drag to reorder"
+                        >
+                            <span className="absolute inset-y-0 left-0 w-[18px] bg-line/[0.02]"
+                                style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgb(var(--line) / 0.04) 5px, rgb(var(--line) / 0.04) 10px)' }} />
+                            <span className="absolute inset-y-0 left-[19px] w-1"
+                                style={{ background: SLOT_COLORS[r.colorIdx % SLOT_COLORS.length], boxShadow: '-1px 0 0 rgba(0,0,0,0.5)' }} />
+                        </span>
+                        {/* Tucked-under shading — the card above casts onto this one. */}
+                        <span className="absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-black/40 to-transparent pointer-events-none" />
+
+                        {/* Line 1 — chevron · name · + loop · remove. The row itself
+                            drags with the mouse (threshold, so clicks still land). */}
+                        <div
+                            className="flex items-center gap-1.5 select-none"
+                            onPointerDown={(e) => onHeaderDown(e, r.key)}
+                            onPointerMove={(e) => onDragMove(e, r.key)}
+                            onPointerUp={(e) => onDragUp(e, r.key)}
+                            onClickCapture={(e) => { if (suppressClick.current) { suppressClick.current = false; e.preventDefault(); e.stopPropagation(); } }}
+                            title="Drag to reorder"
+                        >
                             <button onClick={() => setExpandedKey(isExpanded ? null : r.key)}
                                 className="shrink-0 w-3 flex items-center justify-center text-fg-tertiary hover:text-fg transition-colors"
                                 title="Parameters and per-layer timing"><CaretRight className={`w-2 h-2 transition-transform ${isExpanded ? 'rotate-90' : ''}`} /></button>
                             <button onClick={(e) => openPicker(e, r.key)}
-                                className="flex-1 text-left text-[11px] text-fg truncate hover:text-accent-300 transition-colors"
+                                className="flex-1 min-w-0 text-left text-xs text-fg truncate underline underline-offset-[3px] decoration-line/40 hover:text-accent-300 hover:decoration-accent-300/50 transition-colors"
                                 title={`Change formula (${r.label})`}>
                                 {r.label}
                             </button>
+                            {!rhythm && !draft.dividers.some((d) => d.afterKey === r.key)
+                                && draft.rows.slice(i + 1).some((rr) => rr.slot.iterCount > 0) && (
+                                <button onClick={() => addDivider(r.key)}
+                                    className="shrink-0 text-[10px] text-fg-tertiary hover:text-accent-300 transition-colors"
+                                    title="Insert a loop divider after this formula — the rows above play N times as an intro, then the rows below loop.">
+                                    + loop
+                                </button>
+                            )}
                             <button onClick={() => remove(r.key)}
-                                className="icon-btn icon-btn-danger shrink-0" title="Remove formula"><CloseIcon /></button>
+                                className="shrink-0 p-1 text-fg-tertiary hover:text-danger transition-colors"
+                                title="Remove formula"><CloseIcon /></button>
                         </div>
 
-                        {/* Line 2 — Sequence: iterations · Rhythm: role + compact timing */}
-                        <div className="flex items-center gap-1.5 mt-1 pl-6 flex-wrap">
+                        {/* Line 2 — Sequence: iterations · Rhythm: role + compact timing.
+                            Aligned with the chevron (the mock's stepper column). */}
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                             {!rhythm ? (
-                                <div className="flex items-center gap-1 shrink-0" title="Iterations this formula runs each time it's scheduled">
+                                <div className="flex items-center gap-1.5 shrink-0" title="Iterations this formula runs each time it's scheduled">
                                     <Stepper value={r.slot.iterCount} min={0} onChange={(n) => setIter(r.key, n)} />
-                                    <span className="text-[10px] text-fg-tertiary">iter</span>
+                                    <span className="text-[10px] font-semibold text-fg-muted">iter</span>
                                 </div>
                             ) : isBase ? (
-                                <span className="text-[10px] text-fg-tertiary shrink-0" title="The base runs on every iteration no rhythm layer claims.">base</span>
+                                <span className="text-[10px] text-fg-tertiary shrink-0" title="The base runs on every iteration no live layer claims.">base</span>
                             ) : layerK > 0 && lv ? (
                                 <>
                                     {dirty ? (
                                         <div className="flex items-center gap-2 text-[10px] text-fg-tertiary flex-wrap"
-                                            title="Layer timing — set here before Build; after Build the live keyframable sliders appear under the schedule.">
+                                            title="Layer timing — set here before Build; after Build the live keyframable sliders appear in the schedule above.">
                                             <Stepper label="start" value={lv.start} min={0} onChange={(n) => setLayerVal(layerK, 'weaveStartIter', n)} />
                                             <Stepper label="every" value={lv.interval} min={1} onChange={(n) => setLayerVal(layerK, 'weaveInterval', n)} />
                                             <Stepper label="beats" value={lv.beats} min={0} onChange={(n) => setLayerVal(layerK, 'weaveBeats', n)} />
                                         </div>
                                     ) : (
-                                        <span className="text-[10px] text-fg-tertiary shrink-0" title="Live timing — edit with the keyframable sliders under the schedule below.">
+                                        <span className="text-[10px] text-fg-tertiary shrink-0" title="Live timing — edit with the keyframable sliders in the schedule above.">
                                             every {lv.interval} · from {lv.start}{lv.beats > 0 ? ` · ${lv.beats} beats` : ''}
                                         </span>
                                     )}
                                     <button onClick={() => makeBase(r.key)}
                                         className="text-[9px] text-fg-tertiary/60 hover:text-accent-300 transition-colors shrink-0 ml-auto"
-                                        title="Make this the rhythm base — the formula left running when no layer fires">
+                                        title="Make this the base — the formula left running when no live layer fires">
                                         make base
                                     </button>
                                 </>
@@ -979,8 +1141,14 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                             ) : null}
                         </div>
                     </div>
+                    </div>
                     {isExpanded && (
-                        <div className="ml-6 rounded-lg border border-line/10 bg-surface-sunken/40 px-2 py-1.5 space-y-2">
+                        <div className="relative bg-line/[0.06] pl-9 pr-2 py-1.5">
+                            {/* The parent row's color line continues down through the
+                                expansion — the visual anchor for the indent (dimmed so
+                                the card's own line stays the hero). */}
+                            <span className="absolute inset-y-0 left-[19px] w-1 opacity-75"
+                                style={{ background: SLOT_COLORS[r.colorIdx % SLOT_COLORS.length], boxShadow: '-1px 0 0 rgba(0,0,0,0.5)' }} />
                             {/* Parameters (rhythm timing lives in line 2 before Build,
                                 and as live keyframable sliders under the schedule after). */}
                             {isNativeSlot(r.slot) ? (
@@ -1046,36 +1214,36 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     )}
                     {/* Loop divider after this row (Sequence) — the block above plays
                         ×repeat as intro, the rows below loop. Only where active rows
-                        follow (there's a cycle to hand off to). */}
+                        follow (there's a cycle to hand off to). Adding one lives on
+                        the card header ("+ loop"); this strip is the set divider. */}
                     {!rhythm && draft.rows.slice(i + 1).some((rr) => rr.slot.iterCount > 0) && (() => {
                         const divider = draft.dividers.find((d) => d.afterKey === r.key);
                         return divider ? (
-                            <div className="flex items-center gap-1.5 pl-6 py-0.5" title="Loop divider — the block above plays this many times as an intro, then the rows below loop.">
-                                <span className="flex-1 border-t border-dashed border-accent-500/40" />
-                                <span className="text-[10px] text-accent-300 shrink-0">↻ plays ×</span>
-                                <input value={divider.repeat} inputMode="numeric"
-                                    onChange={(e) => setDividerRepeat(r.key, parseInt(e.target.value, 10) || 1)}
-                                    className="w-8 text-center rounded bg-surface-sunken border border-accent-500/30 py-0.5 text-[11px] text-accent-200 outline-none focus:border-accent-500/60" />
+                            <div className="flex items-center gap-2 px-1 py-1 rounded-b-md bg-gradient-to-b from-line/[0.07] to-black/80" title="Loop divider — the block above plays this many times as an intro, then the rows below loop.">
+                                <span className="flex-1 border-t border-dashed border-line/25" />
+                                <span className="text-[10px] text-fg-muted shrink-0">↻ plays ×</span>
+                                <Stepper value={divider.repeat} min={1}
+                                    onChange={(n) => setDividerRepeat(r.key, n)} />
                                 <button onClick={() => removeDivider(r.key)}
-                                    className="icon-btn icon-btn-danger shrink-0" title="Remove loop divider"><CloseIcon /></button>
-                                <span className="flex-1 border-t border-dashed border-accent-500/40" />
+                                    className="shrink-0 p-1 text-fg-tertiary hover:text-danger transition-colors"
+                                    title="Remove loop divider"><CloseIcon /></button>
+                                <span className="flex-1 border-t border-dashed border-line/25" />
                             </div>
-                        ) : (
-                            <button onClick={() => addDivider(r.key)}
-                                className="w-full flex items-center gap-1.5 pl-6 py-0.5 text-[9px] text-fg-tertiary/40 hover:text-accent-300 transition-colors group"
-                                title="Insert a loop divider — the block above plays N times as an intro, then the rows below loop.">
-                                <span className="flex-1 border-t border-dashed border-line/10 group-hover:border-accent-500/30" />
-                                <span className="shrink-0">+ loop</span>
-                                <span className="flex-1 border-t border-dashed border-line/10 group-hover:border-accent-500/30" />
-                            </button>
-                        );
+                        ) : null;
                     })()}
                     </React.Fragment>
                     );
                 })}
 
-                {/* Add / Restore current / Clear — slim card joined under the rows. */}
-                <div className="rounded-lg border border-line/10 bg-surface-sunken/60 px-2 py-1.5 flex items-center gap-2">
+                {/* Add / Restore current / Clear — the closing sheet of the stack:
+                    same surface language, slightly dimmer (secondary). */}
+                <div className="bg-line/[0.12]" style={{ backgroundImage: 'linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35))' }}>
+                <div className="relative overflow-hidden rounded-b-lg border-b-[0.8px] border-black px-2 py-1.5 flex items-center gap-2"
+                    style={{
+                        backgroundColor: 'rgb(var(--surface))',
+                        backgroundImage: 'linear-gradient(rgb(var(--line) / 0.07), rgb(var(--line) / 0.07))',
+                    }}>
+                    <span className="absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-black/40 to-transparent pointer-events-none" />
                     <button onClick={(e) => openPicker(e)} className="t-btn-sm t-btn-default">
                         <PlusIcon /> Add formula
                     </button>
@@ -1089,95 +1257,8 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                         </button>
                     )}
                 </div>
-            </div>
-
-            {/* Schedule */}
-            {plan && (
-                <div className="rounded-lg border border-line/10 bg-surface-sunken/40 px-3 py-2 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                        <SectionLabel variant="secondary">Iteration schedule</SectionLabel>
-                        {/* Whole-weave enable — deliberately LOW-PROFILE (a compat/
-                            migration affordance, not a hero control; ADR-0089 P4.4).
-                            Live DDFS state (uWeaveEnabled) — applies to weaves built
-                            here (and migrated legacy scenes), no rebuild needed. */}
-                        <label className="flex items-center gap-1 text-[10px] text-fg-tertiary hover:text-fg-muted cursor-pointer select-none"
-                            title="Whole-weave enable — off renders the base formula only (all layers dormant). Live and keyframable; applies to weaves built here. Imported scenes gain it on rebuild.">
-                            <input type="checkbox"
-                                checked={store.weave?.weaveEnabled ?? true}
-                                onChange={(e) => store.setWeave?.({ weaveEnabled: e.target.checked })}
-                                className="w-3 h-3 accent-accent-500" />
-                            active
-                        </label>
-                    </div>
-                    {/* Sequence (baked counts) vs Rhythm (live layered modulo) — the
-                        canonical segmented toggle, matching the Quality panel's engine
-                        switch. Clicking converts the current pattern exactly (convert.ts). */}
-                    <GenericToggleSwitch<'counts' | 'modulo'>
-                        value={rhythm ? 'modulo' : 'counts'}
-                        onChange={(v) => (v === 'modulo' ? toRhythm() : toSequence())}
-                        options={[
-                            { label: 'Sequence', value: 'counts', tooltip: 'Baked iteration sequence — exact per-slot counts; structure edits rebuild the shader' },
-                            {
-                                label: 'Rhythm', value: 'modulo',
-                                disabled: !rhythmOk && draft.scheduleKind !== 'modulo',
-                                tooltip: rhythmOk || draft.scheduleKind === 'modulo'
-                                    ? 'Live rhythm — the first slot is the base; every other slot is an independent layer running every Nth iteration. Interval / start / beats are keyframable and apply instantly (no rebuild); costs a little performance'
-                                    : 'Rhythm supports up to 6 active formula slots',
-                            },
-                        ]}
-                    />
-                    {draft.scheduleKind === 'modulo' && !rhythmOk && (
-                        <p className="text-[10px] text-warn">
-                            Rhythm supports up to 6 active formulas ({activeCount} now) — building as Sequence until then.
-                        </p>
-                    )}
-                    <LoopStrip
-                        plan={rhythm && rhythmPlan ? rhythmPlan : plan}
-                        labels={draft.rows.map((r) => r.label)}
-                        colors={draft.rows.map((r) => SLOT_COLORS[r.colorIdx % SLOT_COLORS.length])}
-                        totalIterations={store.coreMath?.iterations}
-                    />
-                    {store.showHints && (
-                        <p className="text-[10px] text-fg-tertiary">
-                            {rhythm
-                                ? <>{activeCount - 1} rhythm layer{activeCount === 2 ? '' : 's'} over {draft.rows[activeRowIdx[0]]?.label} · scene iterations: {store.coreMath?.iterations ?? '—'}</>
-                                : <>cycle = {plan.cycleLen} iteration{plan.cycleLen === 1 ? '' : 's'}
-                                    {plan.introLen > 0 ? ` after ${plan.introLen} intro` : ''} · faded blocks repeat · scene iterations: {store.coreMath?.iterations ?? '—'}</>}
-                        </p>
-                    )}
-
-                    {/* Live keyframable rhythm sliders — appear AFTER Build (the weave is
-                        live), grouped per formula. Before Build, the compact start/every/
-                        beats controls in the rows above set the initial timing; these
-                        keyframe it live (no rebuild). */}
-                    {rhythm && !dirty && layerRowIdx.length > 0 && (
-                        <div className="pt-1.5 mt-0.5 space-y-2 border-t border-line/10">
-                            <SectionLabel variant="secondary">Live rhythm — keyframable</SectionLabel>
-                            {layerRowIdx.map((rowIdx, j) => {
-                                const k = j + 1;
-                                const v = layerVal(k);
-                                return (
-                                    <div key={draft.rows[rowIdx].key} className="space-y-1">
-                                        <div className="flex items-center gap-1.5 text-[11px]">
-                                            <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[(draft.rows[rowIdx]?.colorIdx ?? 0) % SLOT_COLORS.length] }} />
-                                            <span className="truncate text-fg">{draft.rows[rowIdx]?.label}</span>
-                                        </div>
-                                        <Slider label="Start" value={v.start} min={0} max={8} step={1} className="-mx-3"
-                                            onChange={(n) => setLayerVal(k, 'weaveStartIter', n)} defaultValue={k}
-                                            trackId={`weave.weaveStartIter${k}`} liveValue={store.liveModulations?.[`weave.weaveStartIter${k}`]} />
-                                        <Slider label="Interval" value={v.interval} min={1} max={8} step={1} className="-mx-3"
-                                            onChange={(n) => setLayerVal(k, 'weaveInterval', n)} defaultValue={1}
-                                            trackId={`weave.weaveInterval${k}`} liveValue={store.liveModulations?.[`weave.weaveInterval${k}`]} />
-                                        <Slider label="Beats (0 = endless)" value={v.beats} min={0} max={8} step={1} className="-mx-3"
-                                            onChange={(n) => setLayerVal(k, 'weaveBeats', n)} defaultValue={2}
-                                            trackId={`weave.weaveBeats${k}`} liveValue={store.liveModulations?.[`weave.weaveBeats${k}`]} />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
                 </div>
-            )}
+            </div>
 
             {reorderWarn && (
                 <div className="flex items-start gap-2 text-xs bg-warn/10 border border-warn/25 rounded-lg px-3 py-2 text-warn">

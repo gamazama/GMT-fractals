@@ -178,8 +178,8 @@ export function fitRhythmFromPlan(
     activeRows: number[],
     label: (rowIdx: number) => string,
 ): FitResult {
-    if (plan.hasSilent) return { ok: false, reason: 'Silent slots have no Rhythm equivalent — switch them off or remove them.' };
-    if (activeRows.length < 2) return { ok: false, reason: 'Rhythm needs at least 2 active formulas.' };
+    if (plan.hasSilent) return { ok: false, reason: 'Silent slots have no Live equivalent — switch them off or remove them.' };
+    if (activeRows.length < 2) return { ok: false, reason: 'Live timing needs at least 2 active formulas.' };
 
     const H = plan.introLen + 2 * Math.max(1, plan.cycleLen);
     const phase = planPhase(plan);
@@ -201,12 +201,12 @@ export function fitRhythmFromPlan(
         if (!endless) {
             if (occ.length === 1) layer = { interval: 1, start: occ[0], beats: 1 };
             else if (even) layer = { interval: gaps[0], start: occ[0], beats: occ.length };
-            else return { ok: false, reason: `"${label(r)}" repeats unevenly (gaps ${gaps.join(',')}) — Rhythm fires evenly.` };
+            else return { ok: false, reason: `"${label(r)}" repeats unevenly (gaps ${gaps.join(',')}) — Live fires evenly.` };
         } else if (even) {
             layer = { interval: gaps[0], start: occ[0], beats: 0 };
-        } else return { ok: false, reason: `"${label(r)}" repeats unevenly (gaps ${gaps.join(',')}) — Rhythm fires evenly.` };
+        } else return { ok: false, reason: `"${label(r)}" repeats unevenly (gaps ${gaps.join(',')}) — Live fires evenly.` };
         if (layer.interval > BOUNDS.INTERVAL_MAX || layer.start > BOUNDS.START_MAX || layer.beats > BOUNDS.BEATS_MAX) {
-            return { ok: false, reason: `"${label(r)}" needs interval ${layer.interval} / start ${layer.start} — outside Rhythm's range.` };
+            return { ok: false, reason: `"${label(r)}" needs interval ${layer.interval} / start ${layer.start} — outside Live's range.` };
         }
         return { ok: true, layer };
     };
@@ -231,12 +231,12 @@ export function fitRhythmFromPlan(
         const density = layers.reduce((s, L) => s + (L.beats <= 0 ? 1 / Math.max(1, L.interval) : 0), 0);
         if (!best || density < best.density) best = { baseRow: b, layers, density };
     }
-    if (!best) return { ok: false, reason: reason || 'No slot can serve as the Rhythm base for this pattern.' };
+    if (!best) return { ok: false, reason: reason || 'No slot can serve as the base for this pattern.' };
 
     const layerRows = activeRows.filter((r) => r !== best.baseRow);
     // Certificate (0-diff-gate habit; provably safe by the partition argument).
     if (!certify(phase, planStructure(plan), rhythmPhase(best.layers, best.baseRow, layerRows), rhythmStructure(best.layers)).equal) {
-        return { ok: false, reason: 'Internal: fitted Rhythm did not reproduce the sequence.' };
+        return { ok: false, reason: 'Internal: fitted Live timing did not reproduce the sequence.' };
     }
     return { ok: true, baseRow: best.baseRow, layers: best.layers };
 }
@@ -261,7 +261,7 @@ export function runsFromRhythm(
     label: (rowIdx: number) => string,
 ): RunsResult {
     const struct = rhythmStructure(layers);
-    if (struct.period > BOUNDS.W_MAX) return { ok: false, reason: `This rhythm's pattern is ${struct.period} iterations long — too long to bake.` };
+    if (struct.period > BOUNDS.W_MAX) return { ok: false, reason: `This live pattern is ${struct.period} iterations long — too long to bake.` };
 
     const phase = rhythmPhase(layers, base, layerRows);
     const T = struct.intro;
@@ -293,10 +293,10 @@ export function runsFromRhythm(
 
     const totalRows = introRuns.length + cycleRuns.length;
     if (totalRows > BOUNDS.MAX_ROWS) {
-        return { ok: false, reason: `This pattern needs ${totalRows} slot rows — Sequence holds ${BOUNDS.MAX_ROWS}. Simplify intervals or keep Rhythm.` };
+        return { ok: false, reason: `This pattern needs ${totalRows} slot rows — Baked holds ${BOUNDS.MAX_ROWS}. Simplify intervals or keep Live.` };
     }
     if (s + p > BOUNDS.MAX_LUT) {
-        return { ok: false, reason: `This pattern bakes ${s + p} steps — over the ${BOUNDS.MAX_LUT} limit. Simplify intervals or keep Rhythm.` };
+        return { ok: false, reason: `This pattern bakes ${s + p} steps — over the ${BOUNDS.MAX_LUT} limit. Simplify intervals or keep Live.` };
     }
 
     // Verify: the runs, replayed as a counts plan, reproduce the rhythm LUT.
@@ -306,7 +306,7 @@ export function runsFromRhythm(
     const runRows = [...introRuns, ...cycleRuns].map((r) => r.rowIdx);
     const plan2Phase: PhaseFn = (i) => runRows[planPhase(plan2)(i)] ?? runRows[0];
     const cert = certify(phase, struct, plan2Phase, planStructure(plan2));
-    if (!cert.equal) return { ok: false, reason: 'Internal: baked Sequence did not reproduce the rhythm.' };
+    if (!cert.equal) return { ok: false, reason: 'Internal: baked sequence did not reproduce the live pattern.' };
     void label; // reasons above are self-describing; label reserved for future per-row messages
 
     return { ok: true, introRuns, cycleRuns };

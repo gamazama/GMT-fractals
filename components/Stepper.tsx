@@ -2,10 +2,10 @@
  * Stepper — a compact integer control: `[−] value [+]` in a single bordered
  * box, the shared home for the little "click-or-type a small count" affordance.
  *
- * Chrome deliberately mirrors {@link NumberInput}'s panel box (h-6, surface-sunken,
- * `border-line/10`, `focus-within` accent) so a stepper reads as a first-class GMT
- * number control — the `−`/`+` are flush cells (not separate mini-buttons) flanking
- * a centred typed value, like a segmented control.
+ * Chrome is the raised grey input box (h-6, `bg-line/[0.16]` fill, `border-line/40`,
+ * bold value, `focus-within` accent — the weave editor's control grey, 2026-07-09)
+ * — the `−`/`+` are flush cells (not separate mini-buttons) flanking a centred
+ * typed value, like a segmented control.
  *
  * Pure primitive (engine-core, no store). CLAMPING IS THE CALLER'S JOB: the buttons
  * emit `value ± 1` and the field emits the parsed integer (or `min` when blank), so
@@ -39,7 +39,7 @@ export const Stepper: React.FC<StepperProps> = ({
 }) => (
     <div className={`flex items-center gap-1.5 ${className ?? ''}`} title={title}>
         {label && <span className="text-[10px] text-fg-tertiary select-none">{label}</span>}
-        <div className="flex items-stretch h-6 rounded border border-line/10 bg-surface-sunken overflow-hidden transition-colors focus-within:border-accent-500/40">
+        <div className="flex items-stretch h-6 rounded border border-line/40 bg-line/[0.16] overflow-hidden transition-colors focus-within:border-accent-500/60">
             <button
                 type="button" tabIndex={-1} aria-label="Decrease"
                 onClick={() => onChange(value - 1)}
@@ -48,7 +48,7 @@ export const Stepper: React.FC<StepperProps> = ({
             <input
                 value={value} inputMode="numeric"
                 onChange={(e) => onChange(parseInt(e.target.value, 10) || min)}
-                className={`${inputClassName} text-center bg-transparent border-x border-line/10 text-[11px] text-fg outline-none`}
+                className={`${inputClassName} text-center bg-transparent border-x border-line/20 text-[11px] font-bold text-fg outline-none`}
             />
             <button
                 type="button" tabIndex={-1} aria-label="Increase"

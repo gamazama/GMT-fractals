@@ -110,19 +110,19 @@ for (let k = 1; k <= WEAVE_MAX_LAYERS; k++) {
         type: 'float', default: 1, label: `Layer ${k} Interval`, shortId: `wvi${k}`,
         uniform: `uWeaveInterval${k}`, min: 1, max: 32, step: 1,
         group: 'weave_rhythm',
-        description: `Rhythm layer ${k}: its formula runs every N iterations. Live — no recompile.`,
+        description: `Live layer ${k}: its formula runs every N iterations. Applies instantly — no recompile.`,
     };
     params[`weaveStartIter${k}`] = {
         type: 'float', default: k, label: `Layer ${k} Start`, shortId: `wvs${k}`,
         uniform: `uWeaveStartIter${k}`, min: 0, max: 64, step: 1,
         group: 'weave_rhythm',
-        description: `Rhythm layer ${k}: first iteration where its formula runs. Live — no recompile.`,
+        description: `Live layer ${k}: first iteration where its formula runs. Applies instantly — no recompile.`,
     };
     params[`weaveBeats${k}`] = {
         type: 'float', default: 2, label: `Layer ${k} Beats`, shortId: `wvb${k}`,
         uniform: `uWeaveBeats${k}`, min: 0, max: 64, step: 1,
         group: 'weave_rhythm',
-        description: `Rhythm layer ${k}: stop after this many beats (0 = endless). A dense capped layer works as a sequence-style intro. Live — no recompile.`,
+        description: `Live layer ${k}: stop after this many beats (0 = endless). A dense capped layer works as a baked-style intro. Applies instantly — no recompile.`,
     };
 }
 
@@ -135,7 +135,7 @@ export const WeaveFeature: FeatureDefinition = {
     params,
 
     groups: {
-        weave_rhythm: { label: 'Weave Rhythm' },
+        weave_rhythm: { label: 'Weave Live Timing' },
         weave_banks: { label: 'Weave Slot Banks' },
     },
 
