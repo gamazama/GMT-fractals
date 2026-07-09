@@ -125,7 +125,7 @@ export const ViewportQuality: React.FC = () => {
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 ref={tutAnchor}
-                className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                className={`flex items-center gap-1.5 px-2 py-1 leading-4 rounded text-[10px] font-bold transition-colors ${
                     hasPending
                         ? 'text-warn bg-warn/15 border border-warn/30'
                         : 'text-accent-300 bg-accent-900/20 border border-accent-500/20 hover:bg-accent-900/40'
