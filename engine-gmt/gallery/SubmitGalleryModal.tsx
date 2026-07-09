@@ -273,7 +273,7 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                                     <div className="text-ok/70 leading-relaxed pt-1">
                                         Queued for review — usually approved within a day or two. It appears
                                         in the gallery once a moderator approves it; check back under
-                                        “My Submissions”.
+                                        “My Fractals”.
                                     </div>
                                 )}
                                 {result.status === 'approved' && result.visibility === 'public' && (

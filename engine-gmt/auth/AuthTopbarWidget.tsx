@@ -92,7 +92,7 @@ export const AuthTopbarWidget: React.FC = () => {
                     </div>
 
                     <MenuButton
-                        label="My submissions…"
+                        label="My fractals…"
                         onClick={() => { setOpen(false); useGalleryStore.getState().openMySubmissions(); }}
                     />
                     <MenuButton

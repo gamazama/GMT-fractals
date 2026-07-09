@@ -88,6 +88,8 @@ import { GmtPanels } from '../engine-gmt/panels';
 import { loadGMFScene, saveGMFScene } from '../engine-gmt/utils/FormulaFormat';
 import { registry as gmtRegistry } from '../engine-gmt/engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import { openSharedSceneById } from '../engine-gmt/gallery/openSharedScene';
+import { showToast } from '../engine/store/toastStore';
 import { consumeStashedScene } from '../engine-gmt/auth/oauthSceneStash';
 import type { Preset } from '../types';
 
@@ -637,6 +639,34 @@ try {
     }
 } catch (err) {
     console.warn('[app-gmt] gallery deep-link parse failed', err);
+}
+
+// Shared-scene deep-link — `?s=<id>` opens a backend-stored GMF (share-scene /
+// shared_scenes) STRAIGHT into the editor, no gallery lightbox. Async (one RPC),
+// so it lands during the LoadingScreen — before useAppStartup.bootEngine runs
+// the first compile — which means the shared scene is the only scene compiled
+// (no default-then-swap flash). The id is wiped from the URL after handoff so a
+// refresh drops the user back to a clean viewport. GMF carries the full shader,
+// so this opens ANY scene: weaves, MB3D imports, Workshop formulas.
+try {
+    const params = new URLSearchParams(window.location.search);
+    const shareId = params.get('s');
+    if (shareId) {
+        const cleaned = new URL(window.location.href);
+        cleaned.searchParams.delete('s');
+        window.history.replaceState({}, '', cleaned.toString());
+        void (async () => {
+            try {
+                const opened = await openSharedSceneById(shareId);
+                if (!opened) showToast('That share link is invalid or has been removed.', 'warning', 5000);
+            } catch (err) {
+                console.error('[app-gmt] shared-scene load failed', err);
+                showToast('Could not open that shared scene.', 'error', 5000);
+            }
+        })();
+    }
+} catch (err) {
+    console.warn('[app-gmt] shared-scene deep-link parse failed', err);
 }
 
 const rootElement = document.getElementById('root');
