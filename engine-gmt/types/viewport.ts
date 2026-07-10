@@ -175,21 +175,27 @@ export const SUBSYSTEM_PATHTRACER: SubsystemDefinition = {
     ],
 };
 
+// NOTE (2026-07-10, owner decision): volumetric.ptVolumetric is deliberately NOT
+// tier-controlled. Volumetric scatter is an explicit opt-in with its own compile
+// prompt (the feature panel's CompilableFeatureSection) — the user pays its cost
+// when they turn it on. Tier control was wrong twice over: presets silently
+// compiled it in (then even runtime-off it taxes every frame ~2.2× via register
+// pressure — policy doc §2.6.3), and tier switches silently stomped a user's
+// opted-in compile. Quality tiers manage glow only; the old top 'Volumetric'
+// tier is gone (out-of-range stored tier indices clamp in applyTierOverrides).
 export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
     id: 'atmosphere_quality',
     label: 'Atmosphere',
     controlledParams: [
         'atmosphere.glowEnabled',
         'atmosphere.glowQuality',
-        'volumetric.ptVolumetric',
     ],
     tiers: [
         {
             label: 'Off',
-            desc: 'No glow or volumetrics.',
+            desc: 'No glow.',
             overrides: {
                 atmosphere: { glowEnabled: false },
-                volumetric: { ptVolumetric: false },
             },
         },
         {
@@ -197,7 +203,6 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
             desc: 'Cheap bloom-style glow.',
             overrides: {
                 atmosphere: { glowEnabled: true, glowQuality: 1.0 },
-                volumetric: { ptVolumetric: false },
             },
         },
         {
@@ -205,15 +210,6 @@ export const SUBSYSTEM_ATMOSPHERE: SubsystemDefinition = {
             desc: 'Higher-quality coloured glow.',
             overrides: {
                 atmosphere: { glowEnabled: true, glowQuality: 0.0 },
-                volumetric: { ptVolumetric: false },
-            },
-        },
-        {
-            label: 'Volumetric',
-            desc: 'Coloured glow + volumetric fog/light (path-traced). Slowest.',
-            overrides: {
-                atmosphere: { glowEnabled: true, glowQuality: 0.0 },
-                volumetric: { ptVolumetric: true },
             },
         },
     ],
@@ -281,12 +277,12 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
     {
         id: 'full',
         label: 'Full',
-        description: 'Soft shadows, raymarched reflections, volumetric.',
+        description: 'Soft shadows, raymarched reflections, color glow.',
         subsystems: {
             shadows: 2,              // Soft
             reflections: 3,          // Full (raymarched + bounce shadows)
             lighting_quality: 1,     // Path Traced
-            atmosphere_quality: 3,   // Volumetric
+            atmosphere_quality: 2,   // Color Glow (volumetric is feature-panel opt-in only)
             pathtracer: 1,           // Full (PT: Env MIS+IS + area lights + NEE)
         },
     },
@@ -299,7 +295,7 @@ export const SCALABILITY_PRESETS: ScalabilityPreset[] = [
             shadows: 2,              // Soft
             reflections: 3,          // Full
             lighting_quality: 2,     // PT + NEE
-            atmosphere_quality: 3,   // Volumetric
+            atmosphere_quality: 2,   // Color Glow (volumetric is feature-panel opt-in only)
             pathtracer: 1,           // Full
         },
     },
