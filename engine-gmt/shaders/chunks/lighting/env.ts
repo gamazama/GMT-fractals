@@ -10,6 +10,36 @@ export const LIGHTING_ENV = `
 // (sampleProceduralEnv) both read it, so they can't drift. @see docs/adr/0070
 vec3 proceduralSunDir() { return normalize(vec3(1.0, 4.0, 2.0)); }
 
+// 4-tap bicubic B-spline sample of the env map's BASE level (Sigg & Hadwiger
+// GPU Gems 2 formulation — four bilinear taps reconstruct the 16-texel cubic).
+// For MAGNIFIED low-res equirect skies (a 1k map across a full viewport),
+// plain bilinear shows diamond-shaped texel artifacts; the B-spline smooths
+// them into clean gradients. Only used in the near-base regime (lod < 1) —
+// mip-blurred lookups stay single-tap trilinear.
+vec3 sampleEnvBicubic(vec2 uv) {
+    vec2 ts = vec2(textureSize(uEnvMapTexture, 0));
+    vec2 coord = uv * ts - 0.5;
+    vec2 ix = floor(coord);
+    vec2 f = coord - ix;
+    vec2 f2 = f * f;
+    vec2 f3 = f2 * f;
+    vec2 w0 = (-f3 + 3.0 * f2 - 3.0 * f + 1.0) / 6.0;
+    vec2 w1 = (3.0 * f3 - 6.0 * f2 + 4.0) / 6.0;
+    vec2 w2 = (-3.0 * f3 + 3.0 * f2 + 3.0 * f + 1.0) / 6.0;
+    vec2 w3 = f3 / 6.0;
+    vec2 g0 = w0 + w1;
+    vec2 g1 = w2 + w3;
+    // Each tap lands between two texels so the hardware bilinear does the
+    // inner interpolation; +0.5 centres on texels. Horizontal wrap comes from
+    // the sampler (wrapS = Repeat on env textures — the equirect seam).
+    vec2 c0 = (ix - 1.0 + w1 / g0 + 0.5) / ts;
+    vec2 c1 = (ix + 1.0 + w3 / g1 + 0.5) / ts;
+    return texture(uEnvMapTexture, vec2(c0.x, c0.y)).rgb * (g0.x * g0.y)
+         + texture(uEnvMapTexture, vec2(c1.x, c0.y)).rgb * (g1.x * g0.y)
+         + texture(uEnvMapTexture, vec2(c0.x, c1.y)).rgb * (g0.x * g1.y)
+         + texture(uEnvMapTexture, vec2(c1.x, c1.y)).rgb * (g1.x * g1.y);
+}
+
 vec3 GetEnvMap(vec3 dir, float roughness) {
     // Path 0: SOLID sky (uEnvSource 2) — the sky IS a flat colour
     // (uFogColorLinear, the shared Sky/Fog colour, ADR-0098). Constant in every
@@ -45,12 +75,18 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
         // capping the LOD short of the bad mips. @see docs/adr/0069
         if (uEnvAvgColor.r >= 0.0) {
             float lod = roughness * uEnvMaxMip;
-            col = textureLod(uEnvMapTexture, uv, lod).rgb;
+            // Near-base (magnification) regime: bicubic-smooth the base level
+            // and blend into the mip chain by lod 1 (continuous hand-off).
+            col = lod < 1.0
+                ? mix(sampleEnvBicubic(uv), textureLod(uEnvMapTexture, uv, 1.0).rgb, max(lod, 0.0))
+                : textureLod(uEnvMapTexture, uv, lod).rgb;
             float avgMix = smoothstep(uEnvMaxMip - 4.0, uEnvMaxMip, lod);
             col = mix(col, uEnvAvgColor, avgMix);
         } else {
             float lod = roughness * max(0.0, uEnvMaxMip - 4.0);
-            col = textureLod(uEnvMapTexture, uv, lod).rgb;
+            col = lod < 1.0
+                ? mix(sampleEnvBicubic(uv), textureLod(uEnvMapTexture, uv, 1.0).rgb, max(lod, 0.0))
+                : textureLod(uEnvMapTexture, uv, lod).rgb;
         }
         
         // Apply Color Profile (Linear/ACES)

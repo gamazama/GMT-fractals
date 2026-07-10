@@ -610,10 +610,12 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
             }
 #endif
             float skyIntensity = (bounce == 0) ? uEnvBackgroundStrength : uEnvStrength;
-            // Primary-ray sky gets the subtle camera-blur softening (mip-LOD
-            // scaled by DoF aperture, additive on the jittered ray); indirect
-            // bounce misses keep a sharp env. Mirrors main.ts. @see docs/adr/0072
-            float skyBlur = (bounce == 0) ? min(0.4, sqrt(uDOFStrength) * 0.35) : 0.0;
+            // Primary-ray sky gets the camera-blur softening (mip-LOD scaled by
+            // DoF aperture, additive on the jittered ray); indirect bounce
+            // misses keep a sharp env. Mirrors main.ts — fourth-root curve
+            // calibrated to the log aperture slider (supersedes ADR-0072's
+            // subtle cap; owner: background blur must be meaningful).
+            float skyBlur = (bounce == 0) ? min(0.85, pow(uDOFStrength, 0.25) * 0.9) : 0.0;
             // skyIntensity scales the sky only (inside sampleMiss) — light-sphere
             // overlays keep their physical brightness regardless of env strength.
             vec3 env = sampleMiss(currentRo, currentRd, skyBlur, skyIntensity);

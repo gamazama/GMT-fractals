@@ -1,5 +1,15 @@
 # ADR-0072: Sky background softens subtly with camera blur (additive mip-LOD)
 
+> **Update 2026-07-10 (curve strengthened; mechanism unchanged):** the "capped to stay subtle"
+> `min(0.4, sqrt(strength)·0.35)` curve was calibrated before the aperture slider's practical range
+> was understood — it's a LOG slider used at 0.001–0.1, where sqrt yields lod < 0.5 (invisible).
+> Owner verdict: camera blur must blur the background MEANINGFULLY. Both sites now use
+> `min(0.85, strength^0.25 · 0.9)` (0.005 → lod ≈ 2.4, 0.05 → ≈ 4.3, 1.0 → ≈ 8.5). The additive
+> mip-LOD mechanism, jittered-ray grain rationale, and bounce-0-only PT scope all stand. Related
+> same-day fixes that made ANY sky blur visible on HDR maps: DataTexture magFilter was Nearest
+> (blocky base), and GetEnvMap gained a 4-tap bicubic base filter + Repeat wrapS for low-res
+> equirects.
+
 **Date:** 2026-06-19
 **Status:** Accepted
 **Scope:** `engine-gmt/shaders/chunks/main.ts` (Direct background), `engine-gmt/shaders/chunks/pathtracer.ts` (PT bounce-0 sky)

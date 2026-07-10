@@ -45,13 +45,15 @@ vec3 renderPixel(vec2 uvCoord, float seedOffset, out float outDepth) {
     // the flat Background Color at visibility 0" rule is GONE: a flat-colour
     // backdrop is now the Solid sky source.
     //
-    // Subtle camera-blur softening of the sky: a small mip-LOD blur scaled by
-    // the DoF aperture, ADDED on top of the aperture-jittered ray direction
-    // (rd, not rdClean) so the sky keeps the same grain as the fractal's DoF
-    // instead of reading artificially clean. Sky is at infinity → max
-    // defocus; sqrt makes modest apertures responsive, capped to stay subtle.
-    // uDOFStrength == 0 → skyBlur 0 → unchanged. @see docs/adr/0072
-    float skyBlur = min(0.4, sqrt(uDOFStrength) * 0.35);
+    // Camera-blur softening of the sky: a mip-LOD blur scaled by the DoF
+    // aperture, ADDED on top of the aperture-jittered ray direction (rd, not
+    // rdClean) so the sky keeps the same grain as the fractal's DoF. Sky is at
+    // infinity → max defocus. Fourth-root curve calibrated to the LOG aperture
+    // slider's practical range (0.001–0.1): 0.005 → lod ≈ 2.4 (visible),
+    // 0.05 → ≈ 4.3 (strong), 1.0 → ≈ 8.5 (washed). Supersedes ADR-0072's
+    // "capped to stay subtle" 0.4·sqrt curve — owner: camera blur must blur
+    // the background MEANINGFULLY. uDOFStrength == 0 → skyBlur 0 → unchanged.
+    float skyBlur = min(0.85, pow(uDOFStrength, 0.25) * 0.9);
     // Per-direction fog in-scatter (fogRadiance, ADR-0097): with Sky Tint up,
     // the fogged sky keeps its directional gradient instead of flattening.
     vec3 bgCol = mix(
