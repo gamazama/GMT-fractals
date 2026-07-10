@@ -207,7 +207,25 @@ export const tick = () => {
     const tempShape = _overlayRef.tempShapeRef?.current ?? null;
 
     const hasContent = (shapes && shapes.length > 0) || tempShape || showAxes;
-    if (!hasContent) return;
+    if (!hasContent) {
+        // Nothing to draw — but any SVG paths, labels, and ✕ delete buttons
+        // left over from a just-removed shape must STILL be swept, or they
+        // stay orphaned on screen. Deleting the ONLY shape drops the count to
+        // zero, so an early `return` here (before the stale-element cleanup
+        // further down) left the last drawing — and its delete button — frozen
+        // on the viewport, making the ✕ look like it did nothing. Sweep the
+        // caches on the way out instead.
+        if (_svgCache.size) {
+            for (const el of _svgCache.values()) el.remove();
+            _svgCache.clear();
+        }
+        if (_labelCache.size) {
+            for (const el of _labelCache.values()) el.remove();
+            _labelCache.clear();
+        }
+        if (_overlayRef.axesSvgEl) _overlayRef.axesSvgEl.style.display = 'none';
+        return;
+    }
 
     const svgEl = _overlayRef.svgEl;
     const labelsEl = _overlayRef.labelsEl;
