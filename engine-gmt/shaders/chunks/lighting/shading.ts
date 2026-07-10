@@ -19,9 +19,15 @@ vec3 applyEnvFog(vec3 env) {
     return mix(env, uFogColorLinear, fogFactor);
 }
 
-// Sample environment for a miss ray (reflection/bounce), with fog and feature overrides
+// Sample environment for a miss ray (reflection/bounce), with fog and feature overrides.
+// The flat far-plane env fog spares the fraction covered by a self-fogged overlay
+// (light spheres fog themselves by their own distance inside sampleMiss and report
+// coverage via g_missSelfFogCover) — otherwise reflected emitters wipe to fog colour
+// at full intensity even when they sit right next to the reflector.
 vec3 sampleMissEnv(vec3 ro, vec3 rd, float roughness, vec3 throughput) {
-    return applyEnvFog(sampleMiss(ro, rd, roughness) * uEnvStrength) * throughput;
+    g_missSelfFogCover = 0.0;
+    vec3 raw = sampleMiss(ro, rd, roughness) * uEnvStrength;
+    return mix(applyEnvFog(raw), raw, g_missSelfFogCover) * throughput;
 }
 
 vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSeed) {

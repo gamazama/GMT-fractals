@@ -312,6 +312,14 @@ export class ShaderBuilder {
     private buildMissHandler(): string {
         const injectedCode = this.missLogic.join('\n');
         return `
+// Coverage [0..1] of the last sampleMiss() ray by an overlay that already fogged
+// ITSELF by its own distance (light spheres). The flat far-plane env fog that
+// callers apply (applyEnvFog in sampleMissEnv) reads this to SPARE that fraction —
+// otherwise a near emitter seen in a reflection is wiped to pure fog colour at
+// full fog intensity (it isn't at the far plane). Callers reset before the call;
+// injections that self-fog set it.
+float g_missSelfFogCover = 0.0;
+
 vec3 sampleMiss(vec3 ro, vec3 rd, float roughness) {
     vec3 env = GetEnvMap(rd, roughness);
 
