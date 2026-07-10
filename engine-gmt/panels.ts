@@ -183,18 +183,22 @@ export const GmtPanels: PanelManifest = [
                 label: 'Background & Sky',
                 defaultOpen: true,
                 items: [
-                    // Sky Color — surfaces here when the sky IS a colour (Solid
-                    // source, ADR-0098); with Gradient/Image skies the SAME
-                    // param (atmosphere.fogColor) surfaces as 'Fog Color'
-                    // beside the fog controls below. One param, one visible
-                    // home at a time.
+                    // SOURCE first — what the sky is. Its own sub-controls nest
+                    // beneath it via parentId (Upload/Rotation for Image, Sky
+                    // Gradient for Gradient)...
+                    { type: 'feature', id: 'materials', whitelistParams: ['envSource'] },
+                    // ...and the Solid colour picker follows as a sibling row
+                    // (it lives on atmosphere — same param surfaces as 'Fog
+                    // Color' beside the fog controls for Gradient/Image skies;
+                    // one visible home at a time, ADR-0098).
                     {
                         type: 'feature', id: 'atmosphere',
                         whitelistParams: ['fogColor'],
                         labelOverrides: { fogColor: 'Sky Color' },
                         showIf: (s: any) => (s.materials?.envSource ?? 1) > 1.5,
                     },
-                    { type: 'feature', id: 'materials', groupFilter: 'env' },
+                    // Then the sky's two consumers: see it / be lit by it.
+                    { type: 'feature', id: 'materials', whitelistParams: ['envBackgroundStrength', 'envStrength'] },
                 ],
             },
 
