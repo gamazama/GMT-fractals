@@ -118,6 +118,10 @@ export type PanelItem =
            *  groupFilter). Lets a panel cherry-pick a few sliders out
            *  of a larger feature. */
           whitelistParams?: string[];
+          /** Per-param label overrides (key → label). Lets one param surface
+           *  under different names in different panel contexts (e.g.
+           *  atmosphere.fogColor as 'Sky Color' vs 'Fog Color'). */
+          labelOverrides?: Record<string, string>;
           /** Skip these param keys (combines with the other filters). */
           excludeParams?: string[];
           /** Optional Tailwind classes appended to the AutoFeaturePanel. */

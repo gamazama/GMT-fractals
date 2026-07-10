@@ -108,6 +108,24 @@ registerMigration({
 //    quality.fudgeFactor (pure key rename); mb3dFaithful had no uniform and
 //    compile params aren't animatable in practice — any stray reference is
 //    left to fall through as an unknown target (warned by the engine).
+// Non-black test for a serialized colour param (presets store '#rrggbb'
+// strings; be defensive about {r,g,b} 0..1 objects from older/odd paths).
+// Absent = default black.
+const isNonBlackColor = (c: any): boolean => {
+    if (typeof c === 'string') {
+        const hex = c.replace('#', '');
+        if (hex.length < 6) return false;
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return (r || 0) > 3 || (g || 0) > 3 || (b || 0) > 3;
+    }
+    if (c && typeof c === 'object') {
+        return (c.r ?? 0) > 0.012 || (c.g ?? 0) > 0.012 || (c.b ?? 0) > 0.012;
+    }
+    return false;
+};
+
 registerMigration({
     version: 4,
     id: 'app-gmt.faithful-marcher-unification',
@@ -143,6 +161,33 @@ registerMigration({
                 delete tracks[key];
             }
         }
+        return p;
+    },
+});
+
+// v5 (2026-07-10) — the backdrop IS the sky (ADR-0098). Sky Visibility became a
+// plain brightness dial (0 → BLACK; the "fall back to the flat Background Color"
+// rule is gone), and the flat-colour backdrop moved into the sky source enum as
+// 'Solid' (envSource 2 — GetEnvMap returns the shared Sky/Fog colour, so it also
+// dome-lights and reflects). Scenes that showed a coloured flat backdrop the old
+// way (sky hidden + non-black fogColor) convert to a Solid sky at visibility 1 —
+// but ONLY when the environment light is off too: the source is shared, and
+// swapping a lit Gradient/Image dome to Solid would change the lighting. That
+// rare combo keeps its lighting and gets a black backdrop (accepted trade,
+// ADR-0098). Default scenes (black fogColor) are bit-identical either way.
+registerMigration({
+    version: 5,
+    id: 'app-gmt.solid-sky-backdrop',
+    apply: (p: any) => {
+        const f = p?.features;
+        if (!f) return p;
+        const bg = f.materials?.envBackgroundStrength ?? 0;    // absent = old default 0
+        const light = f.materials?.envStrength ?? 0;           // absent = default 0
+        if (bg > 0.001 || light > 0.001) return p;
+        if (!isNonBlackColor(f.atmosphere?.fogColor)) return p;
+        if (!f.materials) f.materials = {};
+        f.materials.envSource = 2.0;
+        f.materials.envBackgroundStrength = 1.0;
         return p;
     },
 });

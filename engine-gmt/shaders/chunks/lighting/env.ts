@@ -11,6 +11,12 @@ export const LIGHTING_ENV = `
 vec3 proceduralSunDir() { return normalize(vec3(1.0, 4.0, 2.0)); }
 
 vec3 GetEnvMap(vec3 dir, float roughness) {
+    // Path 0: SOLID sky (uEnvSource 2) — the sky IS a flat colour
+    // (uFogColorLinear, the shared Sky/Fog colour, ADR-0098). Constant in every
+    // direction, so it also acts as a uniform dome light, appears in
+    // reflections, and feeds fogRadiance — all for free through this one exit.
+    if (uEnvSource > 1.5) return uFogColorLinear;
+
     // 1. Apply Rotation (CPU Optimized: uEnvRotationMatrix, identity when rotation is 0)
     dir.xz = uEnvRotationMatrix * dir.xz;
 

@@ -14,7 +14,7 @@ export interface MaterialState {
     rimColor: THREE.Color;
     envStrength: number;
     envBackgroundStrength: number; // UI label 'Sky Visibility'
-    envSource: number;
+    envSource: number; // 0=Sky Image, 1=Gradient, 2=Solid (ADR-0098)
     envMapData: string | null;
     envMapColorSpace: number; // 0=sRGB, 1=Linear, 2=ACES
     useEnvMap: boolean;
@@ -170,6 +170,9 @@ export const MaterialFeature: FeatureDefinition = {
             // uEnvBackgroundStrength independently of the env LIGHT strength, so
             // this slider works even with the environment light at 0 — hiding it
             // there orphaned a live control (owner report 2026-07-10).
+            // Semantics (ADR-0098): a plain BRIGHTNESS dial on the visible sky.
+            // 0 = black backdrop — the old "fall back to the flat Background
+            // Color" rule is gone; a flat backdrop is the Solid sky source.
             type: 'float',
             default: 0.0,
             label: 'Sky Visibility',
@@ -177,7 +180,7 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEnvBackgroundStrength',
             min: 0.0, max: 2.0, step: 0.01,
             group: 'env',
-            description: 'How visible the sky is behind the fractal — independent of the environment light strength. At 0 the background falls back to the Background Color.',
+            description: 'Brightness of the sky behind the fractal — independent of the environment light strength. 0 = black backdrop.',
             helpId: 'mat.env',
         },
         envStrength: {
@@ -199,10 +202,11 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEnvSource',
             group: 'env',
             options: [
-                { label: 'Sky Image', value: 0.0 },
-                { label: 'Gradient', value: 1.0 }
+                { label: 'Solid', value: 2.0 },
+                { label: 'Gradient', value: 1.0 },
+                { label: 'Sky Image', value: 0.0 }
             ],
-            description: 'Whether the sky uses a panorama image or a procedural gradient — shared by the backdrop, the environment light, and the fog Sky Tint.',
+            description: 'What the sky is — a solid colour, a procedural gradient, or a panorama image. Shared by the backdrop, the environment light, reflections, and the fog Sky Tint.',
             helpId: 'mat.env',
         },
         envMapData: {

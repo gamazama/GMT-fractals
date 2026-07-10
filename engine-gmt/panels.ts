@@ -183,7 +183,17 @@ export const GmtPanels: PanelManifest = [
                 label: 'Background & Sky',
                 defaultOpen: true,
                 items: [
-                    { type: 'feature', id: 'atmosphere', groupFilter: 'background' },
+                    // Sky Color — surfaces here when the sky IS a colour (Solid
+                    // source, ADR-0098); with Gradient/Image skies the SAME
+                    // param (atmosphere.fogColor) surfaces as 'Fog Color'
+                    // beside the fog controls below. One param, one visible
+                    // home at a time.
+                    {
+                        type: 'feature', id: 'atmosphere',
+                        whitelistParams: ['fogColor'],
+                        labelOverrides: { fogColor: 'Sky Color' },
+                        showIf: (s: any) => (s.materials?.envSource ?? 1) > 1.5,
+                    },
                     { type: 'feature', id: 'materials', groupFilter: 'env' },
                 ],
             },
@@ -193,6 +203,17 @@ export const GmtPanels: PanelManifest = [
             // whose children (Range / Sky Tint / Density) expand when it's on —
             // wrapping that in another section would be a redundant layer (owner).
             { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
+
+            // Fog Color — the flat colour fog fades toward (Sky Tint < 1).
+            // Shown only for Gradient/Image skies; Solid skies edit the same
+            // param as 'Sky Color' above (fog fades toward the sky colour
+            // there by construction).
+            {
+                type: 'feature', id: 'atmosphere',
+                whitelistParams: ['fogColor'],
+                labelOverrides: { fogColor: 'Fog Color' },
+                showIf: (s: any) => (s.materials?.envSource ?? 1) <= 1.5,
+            },
 
             // Soft in-feature divider: Fog and Volumetric Scatter belong to the
             // same atmosphere run, so a full card end-cap between them would

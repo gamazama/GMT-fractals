@@ -153,6 +153,7 @@ const renderItem = (
                     featureId={item.id}
                     groupFilter={item.groupFilter}
                     whitelistParams={item.whitelistParams}
+                    labelOverrides={item.labelOverrides}
                     excludeParams={item.excludeParams}
                     className={item.className}
                 />

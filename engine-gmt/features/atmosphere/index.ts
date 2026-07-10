@@ -22,13 +22,11 @@ const FOG_POST_PROCESS = `
         col = mix(col, fogColor, volAlpha);
     }
 
-    // Distance fog
-    if (uEnvBackgroundStrength > 0.001) {
-        // Background visible: only fog geometry, preserve env map on miss
-        if (d < MISS_DIST - 10.0) {
-            col = mix(col, fogColor, fogFactor);
-        }
-    } else {
+    // Distance fog — geometry only. Miss pixels (the sky) are fogged ONCE at
+    // bgCol composition (main.ts mixes toward fogRadiance by intensity); the
+    // old visibility-0 else-branch is gone with the flat-backdrop fallback
+    // (ADR-0098 — the backdrop is always the sky now).
+    if (d < MISS_DIST - 10.0) {
         col = mix(col, fogColor, fogFactor);
     }
 `;
@@ -110,17 +108,20 @@ export const AtmosphereFeature: FeatureDefinition = {
             noAccumReset: true
         },
 
-        // --- BACKGROUND ---
+        // --- SKY / FOG COLOUR ---
         fogColor: {
-            // Own group so the Scene panel renders it at the TOP of the
-            // 'Background & Sky' section (groups are UI filters only — the
-            // stored key stays fogColor, no preset migration). ALWAYS visible:
-            // this colour IS the background whenever the sky isn't shown
-            // (main.ts bgCol falls back to uFogColorLinear regardless of fog
-            // intensity), and fog fades toward the same colour.
-            type: 'color', default: new THREE.Color(0,0,0), label: 'Background Color', shortId: 'fc', uniform: 'uFogColor',
+            // ONE param, two contextual homes (ADR-0098): with a SOLID sky
+            // (materials.envSource 2) this IS the sky — GetEnvMap returns
+            // uFogColorLinear — and the Scene panel surfaces it as 'Sky Color'
+            // in the Background & Sky section. With a Gradient/Image sky it
+            // surfaces as 'Fog Color' beside the fog controls (the flat colour
+            // fog fades toward at Sky Tint < 1). Both spots render THIS param
+            // via manifest whitelistParams + labelOverrides; the stored key and
+            // uniform never changed (no preset migration for the key itself —
+            // the v5 migration only converts old flat-backdrop scenes).
+            type: 'color', default: new THREE.Color(0,0,0), label: 'Sky / Fog Color', shortId: 'fc', uniform: 'uFogColor',
             group: 'background',
-            description: 'The background colour whenever the sky is not visible — even with fog off. Fog fades distant geometry toward this same colour.',
+            description: 'The Solid sky colour — and the flat colour fog fades toward when Sky Tint is below 1.',
             helpId: 'fog.settings',
         },
 
