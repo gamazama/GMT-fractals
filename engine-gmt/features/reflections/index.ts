@@ -79,7 +79,8 @@ const REFL_RAYMARCH_SHADING = `
 
         if (roughness <= uReflRoughnessCutoff && dot(currentThroughput, currentThroughput) >= 0.01) {
 
-            vec4 refHit = traceReflectionRay(currRo, currRd, d);
+            float reflFade = 1.0; // hit confidence: 1 = real hit, <1 = recovered candidate (ADR-0095)
+            vec4 refHit = traceReflectionRay(currRo, currRd, d, reflFade);
 
             if (refHit.x > 0.0) {
                 float hitD = refHit.x;
@@ -142,7 +143,16 @@ const REFL_RAYMARCH_SHADING = `
                 // the shared uPTMaxLuminance "Firefly Clamp" control). Clamping
                 // before accumulation is what makes bright reflected highlights
                 // average to a stable value instead of persisting as spikes.
-                reflectionLighting += clampReflLum(hitColor * currentThroughput);
+                vec3 hitContrib = clampReflLum(hitColor * currentThroughput);
+
+                // Graded confidence (ADR-0095): a recovered closest-approach
+                // candidate blends toward the env miss colour by reflFade, so
+                // budget-exhausted rays and reflected silhouettes fade smoothly
+                // instead of flipping hit/miss (the "dotty" env speckle).
+                if (reflFade < 1.0) {
+                    hitContrib = mix(sampleMissEnv(currRo, currRd, roughness, currentThroughput), hitContrib, reflFade);
+                }
+                reflectionLighting += hitContrib;
 
             } else {
                 reflectionLighting += sampleMissEnv(currRo, currRd, roughness, currentThroughput);

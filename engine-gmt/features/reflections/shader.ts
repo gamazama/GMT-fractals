@@ -81,8 +81,15 @@ vec3 clampReflLum(vec3 c) {
 // chunk never collides.
 ${getVNDFSamplerGLSL('sampleReflVNDF')}
 
+// Candidate-recovery confidence range, in multiples of the hit threshold. A ray
+// that ends its budget having passed within this many footprints of a surface is
+// treated as a GRADED hit (quadratic fade from full trust at 1× to env at 6×)
+// rather than a binary MISS — the cone-coverage reading: within ~6 footprints,
+// the pixel's reflection cone did clip that surface. Tune here, not per-scene.
+#define REFL_RECOVERY_RANGE 6.0
+
 // Reflection-bounce raymarcher — MB3D-faithful (ADR-0094, the reflection twin of
-// the unified marcher, ADR-0092/0093).
+// the unified marcher, ADR-0092/0093; recovery + fade + step caution: ADR-0095).
 //
 // THRESHOLD: the reflected ray CONTINUES the primary view cone. The hit epsilon
 // is the pixel footprint at (primary travel + reflected travel), floored by the
@@ -99,8 +106,9 @@ ${getVNDFSamplerGLSL('sampleReflVNDF')}
 // damper — so reflected geometry agrees with primary geometry on non-Lipschitz /
 // over-estimating fused DEs (MB3D imports) instead of tunneling into dust.
 // MB3D's CalcRay marches reflections with literally the primary step code.
-vec4 traceReflectionRay(vec3 ro, vec3 rd, float dPrimary) {
+vec4 traceReflectionRay(vec3 ro, vec3 rd, float dPrimary, out float reflFade) {
     float t = 0.0; // Caller biases ro along normal — no skip needed here
+    reflFade = 1.0; // full confidence on a real hit; graded on candidate recovery
 
     // Dynamic loop
     int limit = uReflSteps;
@@ -115,6 +123,10 @@ vec4 traceReflectionRay(vec3 ro, vec3 rd, float dPrimary) {
     float lastStep = 0.0;    // previous step width (world units)
     float rsf = 1.0;         // RSFmul convergence damper, clamped to [0.5, 1.0]
     bool primed = false;     // skip clamp/damper on the first sample (no history yet)
+
+    // Closest-approach candidate (trace.ts overstep-recovery twin, pure ALU).
+    float minRatio = 1.0e10; // min h/finalEps seen along the ray
+    float candT = -1.0;      // ray parameter at that closest approach
 
     for(int i=0; i<${MAX_REFL_STEPS}; i++) {
         if (i >= limit) break;
@@ -158,6 +170,14 @@ ${refineBlock}
             return vec4(max(tHit, floatPrecision), 0.0, 0.0, 0.0);
         }
 
+        // Track the closest approach in threshold multiples — non-hit steps only
+        // (a hit returns above). Ties resolve to the EARLIEST/nearest surface.
+        float ratio = h / finalEps;
+        if (ratio < minRatio) {
+            minRatio = ratio;
+            candT = max(t, floatPrecision); // keep a t=0 candidate returnable (x > 0 hit test)
+        }
+
         lastDE = h;
         // MB3D step: safety-subtract a fraction of the hit threshold, scale by the
         // step divisor (uFudgeFactor = MB3D sZstepDiv), damp by RSFmul — identical
@@ -168,6 +188,24 @@ ${refineBlock}
         t += stepW;
 
         if(t > MAX_DIST) break;
+    }
+
+    // Budget exhausted (or ray left the scene) without a hit. A binary MISS here
+    // paints env colour into pixels whose neighbours hit — the "dotty" speckle;
+    // MB3D never has this failure mode because its reflected rays march unbounded
+    // (CalcSR.pas repeat-loop runs to Zend). GMT keeps the step budget but snaps
+    // to the closest-approach candidate with GRADED confidence: reflFade 1 at
+    // ratio 1 falling quadratically to 0 at REFL_RECOVERY_RANGE, so reflected
+    // silhouettes blend smoothly toward env instead of flipping hit/miss per
+    // frame under the VNDF jitter (MB3D's fade-not-cutoff idiom, cf. its
+    // (t/maxLen)^8 falloffs). Deliberately NOT tied to uOverstepTolerance — that
+    // is a default-0 scene-repair knob for the primary march; for a reflection
+    // ray, recovery is always the lesser evil vs a guaranteed-wrong env leak.
+    if (candT > 0.0 && minRatio < REFL_RECOVERY_RANGE) {
+        float f = 1.0 - (minRatio - 1.0) / (REFL_RECOVERY_RANGE - 1.0);
+        f = clamp(f, 0.0, 1.0);
+        reflFade = f * f;
+        if (reflFade > 0.001) return vec4(candT, 0.0, 0.0, 0.0);
     }
     return vec4(-1.0); // MISS
 }
