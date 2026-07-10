@@ -88,7 +88,7 @@ import { GmtPanels } from '../engine-gmt/panels';
 import { loadGMFScene, saveGMFScene } from '../engine-gmt/utils/FormulaFormat';
 import { registry as gmtRegistry } from '../engine-gmt/engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
-import { openSharedSceneById } from '../engine-gmt/gallery/openSharedScene';
+import { getSharedSceneById } from '../engine-gmt/gallery/sharedScene';
 import { showToast } from '../engine/store/toastStore';
 import { consumeStashedScene } from '../engine-gmt/auth/oauthSceneStash';
 import type { Preset } from '../types';
@@ -545,22 +545,55 @@ shortcuts.register({
     handler: () => { (useEngineStore.getState() as any).redoCamera?.(); },
 });
 
-// Hydrate store from either a shared URL (#s=...) or the current
-// formula's defaultPreset. Mirrors GMT's useAppStartup — populates
-// every DDFS slice + scene fields via the presetFieldRegistry.
-// Without this, getShaderConfigFromState reads undefined slices and
-// the worker boots a half-formed shader.
-let bootPreset: any = null;
-const hash = typeof window !== 'undefined' ? window.location.hash : '';
-if (hash.startsWith('#s=')) {
-    try {
-        bootPreset = parseShareString(hash.slice(3));
-        if (bootPreset) console.info('[app-gmt] Loaded scene from share URL');
-    } catch (err) {
-        console.error('[app-gmt] Share URL parse failed:', err);
+// Resolve the store's boot preset from (in priority order) a #s= share hash, a
+// ?s=<id> backend share link, an OAuth-round-trip stash, or the default formula.
+// Mirrors GMT's useAppStartup — populates every DDFS slice so
+// getShaderConfigFromState builds a complete BOOT config.
+//
+// CRITICAL: this must finish BEFORE the worker boots. The BOOT config
+// (getShaderConfigFromState) and the pre-boot env-texture stash
+// (WorkerProxy.pendingTextures) both read the store at boot time, so a scene
+// hydrated AFTER boot boots the wrong shader (raster instead of Path Tracing) and
+// drops its env map — needing a manual PT toggle + sky-visibility bump to activate.
+// #s= is synchronous so it always wins that race; ?s= is a network fetch, so the
+// caller AWAITS this and defers the React mount until the store is hydrated.
+async function resolveBootPreset(): Promise<any> {
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    if (hash.startsWith('#s=')) {
+        try {
+            const p = parseShareString(hash.slice(3));
+            if (p) { console.info('[app-gmt] Loaded scene from share URL'); return p; }
+        } catch (err) {
+            console.error('[app-gmt] Share URL parse failed:', err);
+        }
     }
-}
-if (!bootPreset) {
+
+    // ?s=<id> — backend-stored shared scene (share-scene / shared_scenes). Fetch +
+    // hydrate here, BEFORE boot, so the worker boots directly into it. GMF carries
+    // the full shader, so this opens ANY scene: weaves, MB3D imports, Workshop
+    // formulas. The id is wiped from the URL so a refresh lands on a clean viewport.
+    const shareId = new URLSearchParams(window.location.search).get('s');
+    if (shareId) {
+        const cleaned = new URL(window.location.href);
+        cleaned.searchParams.delete('s');
+        window.history.replaceState({}, '', cleaned.toString());
+        try {
+            const shared = await getSharedSceneById(shareId);
+            if (shared?.gmf_text) {
+                const { def, preset } = loadGMFScene(shared.gmf_text);
+                if (def && !gmtRegistry.get(def.id)) {
+                    gmtRegistry.register(def);
+                    FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+                }
+                return preset;
+            }
+            showToast('That share link is invalid or has been removed.', 'warning', 5000);
+        } catch (err) {
+            console.error('[app-gmt] shared-scene load failed', err);
+            showToast('Could not open that shared scene.', 'error', 5000);
+        }
+    }
+
     // OAuth round-trips reload the page and lose the in-progress scene.
     // signInWithGoogle stashes it just before redirecting; restore it here.
     // consumeStashedScene self-expires + clears, so a normal reload won't
@@ -573,26 +606,17 @@ if (!bootPreset) {
                 gmtRegistry.register(def);
                 FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
             }
-            bootPreset = preset;
             console.info('[app-gmt] Restored scene stashed before OAuth redirect');
+            return preset;
         } catch (err) {
             console.error('[app-gmt] Failed to restore OAuth scene stash:', err);
         }
     }
-}
-if (!bootPreset) {
+
     const mandelbulbDef = registry.get('Mandelbulb');
-    bootPreset = mandelbulbDef?.defaultPreset
+    return mandelbulbDef?.defaultPreset
         ? JSON.parse(JSON.stringify(mandelbulbDef.defaultPreset))
         : null;
-}
-if (bootPreset) {
-    // loadScene fires CAMERA_TELEPORT — installGmtCameraSlice's listener
-    // stashes it on proxy.pendingTeleport for GmtRendererTickDriver to
-    // replay once the worker is boot-ready.
-    useEngineStore.getState().loadScene({ preset: bootPreset });
-} else {
-    console.warn('[app-gmt] No boot preset available — worker may boot un-hydrated');
 }
 
 applyPanelManifest([
@@ -641,39 +665,26 @@ try {
     console.warn('[app-gmt] gallery deep-link parse failed', err);
 }
 
-// Shared-scene deep-link — `?s=<id>` opens a backend-stored GMF (share-scene /
-// shared_scenes) STRAIGHT into the editor, no gallery lightbox. Async (one RPC),
-// so it lands during the LoadingScreen — before useAppStartup.bootEngine runs
-// the first compile — which means the shared scene is the only scene compiled
-// (no default-then-swap flash). The id is wiped from the URL after handoff so a
-// refresh drops the user back to a clean viewport. GMF carries the full shader,
-// so this opens ANY scene: weaves, MB3D imports, Workshop formulas.
-try {
-    const params = new URLSearchParams(window.location.search);
-    const shareId = params.get('s');
-    if (shareId) {
-        const cleaned = new URL(window.location.href);
-        cleaned.searchParams.delete('s');
-        window.history.replaceState({}, '', cleaned.toString());
-        void (async () => {
-            try {
-                const opened = await openSharedSceneById(shareId);
-                if (!opened) showToast('That share link is invalid or has been removed.', 'warning', 5000);
-            } catch (err) {
-                console.error('[app-gmt] shared-scene load failed', err);
-                showToast('Could not open that shared scene.', 'error', 5000);
-            }
-        })();
-    }
-} catch (err) {
-    console.warn('[app-gmt] shared-scene deep-link parse failed', err);
-}
-
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Could not find root element to mount to');
 
-ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-        <AppGmt />
-    </React.StrictMode>,
-);
+// Resolve the boot preset (awaiting a ?s= backend fetch when present), hydrate the
+// store, THEN mount React — so the worker's first BOOT config carries the scene's
+// renderMode + the pre-boot texture stash captures its env map (see
+// resolveBootPreset). For everything except ?s= this resolves synchronously, so
+// the mount is not delayed; a shared-link open pays a brief pre-loader blank in
+// exchange for a correct first compile instead of a raster/no-sky boot.
+void resolveBootPreset().then((bootPreset) => {
+    if (bootPreset) {
+        // loadScene fires CAMERA_TELEPORT — installGmtCameraSlice's listener stashes
+        // it on proxy.pendingTeleport for GmtRendererTickDriver to replay at boot.
+        useEngineStore.getState().loadScene({ preset: bootPreset });
+    } else {
+        console.warn('[app-gmt] No boot preset available — worker may boot un-hydrated');
+    }
+    ReactDOM.createRoot(rootElement).render(
+        <React.StrictMode>
+            <AppGmt />
+        </React.StrictMode>,
+    );
+});
