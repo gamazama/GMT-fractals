@@ -29,7 +29,12 @@ import Slider, { DraggableNumber } from './Slider';
 import { createLogMapping, createPowMapping, piUnitMapping, type ValueMapping } from './inputs';
 import ToggleSwitch from './ToggleSwitch';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
-import RangeSlider from './RangeSlider';
+import { QualityRangePad, combineKeyStatus } from './QualityRangePad';
+import { KeyframeButton } from './KeyframeButton';
+import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
+import { useInteractionGesture } from '../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
+import { useTrackAnimation } from '../hooks/useTrackAnimation';
 import Dropdown from './Dropdown';
 import { Vector2Input, Vector3Input, Vector4Input } from './vector-input';
 import type { BaseVectorInputProps } from './vector-input/types';
@@ -88,6 +93,63 @@ const getMapping = (config: ParamConfig): ValueMapping | undefined => {
     if (config.scale === 'square') return createPowMapping(min, max, 2);
     if (config.scale === 'log') return createLogMapping(min, max);
     return undefined;
+};
+
+/** DDFS adapter binding TWO scalar params (`rangePairWith`) to the shared
+ *  QualityRangePad master — the scalar-pair twin of the palette's
+ *  QualityRangePadConnected (which binds one vec2 param). One diamond keys both
+ *  params together (combineKeyStatus, the Vector2Input convention); the drag
+ *  wraps in the standard slider interaction session so undo/accumulation-reset
+ *  transactions match single-slider behaviour. */
+const RangePairPad: React.FC<{
+    label: string;
+    minLabel: string;
+    maxLabel: string;
+    valueMin: number;
+    valueMax: number;
+    onMinChange: (v: number) => void;
+    onMaxChange: (v: number) => void;
+    min: number;
+    max: number;
+    step?: number;
+    format?: (v: number) => string;
+    disabled?: boolean;
+    trackIdMin?: string;
+    trackIdMax?: string;
+}> = ({ label, minLabel, maxLabel, valueMin, valueMax, onMinChange, onMaxChange, min, max, step, format, disabled, trackIdMin, trackIdMax }) => {
+    const { handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
+    const gesture = useInteractionGesture(INTERACTION_SOURCES.slider);
+    const kLo = useTrackAnimation(trackIdMin, valueMin, minLabel);
+    const kHi = useTrackAnimation(trackIdMax, valueMax, maxLabel);
+    const onToggleKey = () => { kLo.toggleKey(); kHi.toggleKey(); };
+    const dragStart = () => {
+        handleInteractionStart('param');
+        gesture.begin();
+        kLo.autoKeyOnDragStart();
+        kHi.autoKeyOnDragStart();
+    };
+    const dragEnd = () => {
+        gesture.end();
+        handleInteractionEnd();
+    };
+    return (
+        <div className={disabled ? 'opacity-30 pointer-events-none' : ''}>
+            <QualityRangePad
+                value={[valueMin, valueMax]}
+                onChange={([lo, hi]) => {
+                    if (lo !== valueMin) { onMinChange(lo); kLo.autoKeyOnChange(lo); }
+                    if (hi !== valueMax) { onMaxChange(hi); kHi.autoKeyOnChange(hi); }
+                }}
+                min={min} max={max} step={step} format={format}
+                label={label} loLabel={minLabel} hiLabel={maxLabel}
+                headerRight={(trackIdMin || trackIdMax) && !disabled
+                    ? <KeyframeButton status={combineKeyStatus(kLo.status, kHi.status)} onClick={onToggleKey} />
+                    : undefined}
+                onDragStart={dragStart}
+                onDragEnd={dragEnd}
+            />
+        </div>
+    );
 };
 
 export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
@@ -360,22 +422,21 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             if (config.ui === 'knob') return <div className={config.layout === 'half' ? "flex flex-col items-center justify-center py-2" : "flex justify-center p-2"}><Knob label={config.label} value={val} min={config.min ?? 0} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, v)} color={val > (config.min ?? 0) ? "rgb(var(--accent-400))" : "#444"} size={40} /></div>;
             
             // Range pair (rangePairWith): this param + its partner render as ONE
-            // dual-thumb RangeSlider row. The partner's own row is suppressed in
-            // the root filter below; both keys write through handleUpdate so
-            // animation / undo / presets behave exactly like two separate sliders.
+            // dual-range row via the shared QualityRangePad master (the GX picker
+            // pads' control — reuse the master, don't fork). The partner's own
+            // row is suppressed in renderNode; both keys write through
+            // handleUpdate so animation / undo / presets behave exactly like two
+            // separate sliders.
             if (config.rangePairWith && feature.params[config.rangePairWith]) {
                 const partnerKey = config.rangePairWith;
                 const partner = feature.params[partnerKey];
                 const partnerVal = sliceState[partnerKey] ?? partner.default;
-                const rangeMapping = getMapping(config);
                 const bindMin = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: [] });
                 const bindMax = deriveTrackBinding({ featureId, paramKey: partnerKey, label: partner.label, axes: [] });
-                const rTrackMin = bindMin.trackKeys[0];
-                const rTrackMax = bindMax.trackKeys[0];
-                return <div><RangeSlider
+                return <div><RangePairPad
                     label={config.rangeLabel ?? config.label}
-                    minTitle={config.label}
-                    maxTitle={partner.label}
+                    minLabel={config.label}
+                    maxLabel={partner.label}
                     valueMin={val}
                     valueMax={partnerVal}
                     onMinChange={(v) => handleUpdate(key, v)}
@@ -383,15 +444,10 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                     min={config.min ?? 0}
                     max={Math.max(config.max ?? 1, partner.max ?? 1)}
                     step={config.step ?? 0.01}
-                    mapping={rangeMapping}
                     format={config.format}
                     disabled={isParamDisabled}
-                    highlight={val !== config.default || partnerVal !== partner.default || !!config.condition}
-                    trackIdMin={rTrackMin}
-                    trackIdMax={rTrackMax}
-                    liveMin={liveModulations[rTrackMin]}
-                    liveMax={liveModulations[rTrackMax]}
-                    labelSuffix={compileIndicator}
+                    trackIdMin={bindMin.trackKeys[0]}
+                    trackIdMax={bindMax.trackKeys[0]}
                 /></div>;
             }
 

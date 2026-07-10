@@ -1,31 +1,52 @@
-// QualityRangePad — a GMT-idiomatic dual-range "window" selector over a rendered
-// distribution track. Built to look/feel/behave like GMT's Slider (ScalarInput):
-// same header chrome, the same diagonal-hatch value cells, and it REUSES GMT's
-// DraggableNumber for both bound fields, so they scrub-on-drag / type-to-edit /
-// Alt-Shift precision exactly like every other GMT input.
+// QualityRangePad — THE GMT dual-range (min/max-in-one-slider) master control:
+// a "window" selector over a rendered distribution/gradient track. Built to
+// look/feel/behave like GMT's Slider (ScalarInput): same header chrome, the
+// same diagonal-hatch value cells, and it REUSES GMT's DraggableNumber for both
+// bound fields, so they scrub-on-drag / type-to-edit / Alt precision exactly
+// like every other GMT input.
 //
-// Three things adapt GMT's single-value slider to the picker's needs (per the
-// user's spec): a GRADIENT/distribution track background, VERTICAL-drag resize,
+// Consumers: the Gradient Explorer picker panels (five quality axes, via
+// palette/components/QualityRangePadConnected) and DDFS `rangePairWith` param
+// pairs (AutoFeaturePanel's RangePairPad adapter — e.g. Fog Range). Promoted
+// from palette/components 2026-07-10: ONE master, thin per-host adapters — do
+// NOT fork a parallel range slider.
+//
+// Three things adapt GMT's single-value slider to a range (per the original
+// picker spec): a GRADIENT/distribution track background, VERTICAL-drag resize,
 // and TWO numeric fields (min + max) instead of one.
 //
 // Track gesture (no GMT single-slider equivalent, so a custom 2D drag):
 //   • grab the NEARER edge if the press is within 0.05 of a bound → move that bound
 //   • otherwise grab the body → drag-X moves the window centre, drag-Y resizes it
 //     (Δwidth = ΔY / 5, Y tracks unclamped past the track); Alt = fine (0.25×)
-//   • min/max keep a 0.01 separation; window width floors at 0.02
+//   • min/max keep a 0.01 (normalised) separation; window width floors at 0.02
 // Host-agnostic: pure React, value in / onChange out, no engine-store coupling.
+//
+// DOMAIN SUPPORT (2026-07-10): `min`/`max` map the window into arbitrary units
+// (e.g. fog distances 0..10) — values in/out are DOMAIN values; the gesture
+// constants stay in normalised track space so the feel is scale-invariant.
+// Defaults (0..1, step 0.01) keep the original GX behaviour byte-identical.
 
 import React, { useCallback, useEffect, useRef } from 'react';
-import { DraggableNumber } from '../../components/inputs/primitives';
-import { clamp } from '../../utils/stopOps';
+import { DraggableNumber } from './inputs/primitives';
+import { clamp } from '../utils/stopOps';
+import type { KeyStatus } from './Icons';
 
 export type Range01 = [number, number];
 
 export interface QualityRangePadProps {
-  /** Normalised window [a, b] in 0..1. [0, 1] means "all" (no filtering). */
+  /** Window [a, b] in DOMAIN units (min..max, default 0..1). Full span = "all". */
   value: Range01;
   onChange: (range: Range01) => void;
-  /** Labels shown in the header, e.g. "dark" ↔ "light". */
+  /** Domain edges (default 0 / 1). The pad normalises internally. */
+  min?: number;
+  max?: number;
+  /** Step + formatter for the two numeric fields (default 0.01 / 2 dp). */
+  step?: number;
+  format?: (v: number) => string;
+  /** Main header label (e.g. "Fog Range"). Falls back to "lo ↔ hi". */
+  label?: string;
+  /** Bound labels, e.g. "dark" ↔ "light" (also the fallback header). */
   loLabel?: string;
   hiLabel?: string;
   /** Header-left slot (e.g. the keyframe diamond), mirroring GMT's ScalarInput. */
@@ -43,9 +64,9 @@ export interface QualityRangePadProps {
 
 const fmt2 = (v: number) => v.toFixed(2);
 
-const EDGE_HIT = 0.05; // press within this of a bound grabs that edge
-const MIN_GAP = 0.01; // min separation between the two bounds
-const MIN_WIDTH = 0.02; // floor on window width when body-resizing
+const EDGE_HIT = 0.05; // press within this (normalised) of a bound grabs that edge
+const MIN_GAP = 0.01; // min separation between the two bounds (normalised)
+const MIN_WIDTH = 0.02; // floor on window width when body-resizing (normalised)
 const RESIZE_DAMP = 5; // Δwidth = ΔY / RESIZE_DAMP (gentle vertical resize)
 
 const TRACK_W = 200;
@@ -59,9 +80,25 @@ type DragState = {
   wid: number;
 };
 
+/** Combine two per-bound key statuses into one diamond — GMT's Vector2Input
+ *  convention (a single diamond keys both bounds together). Shared by every
+ *  range-pad adapter (GX quality axes, DDFS rangePairWith rows). */
+export const combineKeyStatus = (a: KeyStatus, b: KeyStatus): KeyStatus => {
+  if (a === 'keyed' && b === 'keyed') return 'keyed';
+  if (a === 'keyed' || b === 'keyed' || a === 'keyed-dirty' || b === 'keyed-dirty') return 'keyed-dirty';
+  if (a === 'dirty' || b === 'dirty') return 'dirty';
+  if (a === 'partial' || b === 'partial') return 'partial';
+  return 'none';
+};
+
 export const QualityRangePad: React.FC<QualityRangePadProps> = ({
   value,
   onChange,
+  min = 0,
+  max = 1,
+  step = 0.01,
+  format,
+  label,
   loLabel,
   hiLabel,
   headerRight,
@@ -75,11 +112,18 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
   const trackRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<DragState | null>(null);
-  // Latest value held in a ref so pointer handlers never see a stale closure.
-  const valueRef = useRef<Range01>(value);
-  valueRef.current = value;
 
-  const [a, b] = value;
+  const span = max - min || 1;
+  const toN = useCallback((v: number) => (v - min) / span, [min, span]);
+  const fromN = useCallback((n: number) => min + n * span, [min, span]);
+  const quantize = useCallback((v: number) => (step ? Math.round(v / step) * step : v), [step]);
+
+  // Latest NORMALISED window held in a ref so pointer handlers never see a stale closure.
+  const valueRef = useRef<Range01>([toN(value[0]), toN(value[1])]);
+  valueRef.current = [toN(value[0]), toN(value[1])];
+
+  const [a, b] = value; // domain values (numeric fields)
+  const [na, nb] = valueRef.current; // normalised (track rendering)
 
   useEffect(() => {
     if (!drawTrack) return;
@@ -97,6 +141,12 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
     // Unclamped: Y keeps tracking past the track so resize stays smooth off-edge.
     return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
   }, []);
+
+  // Emit a normalised window as step-quantized DOMAIN values.
+  const emit = useCallback(
+    (nlo: number, nhi: number) => onChange([quantize(fromN(nlo)), quantize(fromN(nhi))]),
+    [onChange, quantize, fromN],
+  );
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -123,22 +173,22 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
       if (!st) return;
       const [px, py] = posOf(e);
       const fine = e.altKey ? 0.25 : 1; // Alt = fine adjust, matching GMT's precision modifier
-      let [na, nb] = valueRef.current;
+      let [nlo, nhi] = valueRef.current;
       if (st.mode === 'min') {
         const target = st.px + (px - st.px) * fine;
-        na = clamp(Math.min(clamp(target, 0, 1), nb - MIN_GAP), 0, 1);
+        nlo = clamp(Math.min(clamp(target, 0, 1), nhi - MIN_GAP), 0, 1);
       } else if (st.mode === 'max') {
         const target = st.px + (px - st.px) * fine;
-        nb = clamp(Math.max(clamp(target, 0, 1), na + MIN_GAP), 0, 1);
+        nhi = clamp(Math.max(clamp(target, 0, 1), nlo + MIN_GAP), 0, 1);
       } else {
         const ctr = clamp(st.ctr + (px - st.px) * fine, 0, 1);
         const wid = clamp(st.wid + ((st.py - py) / RESIZE_DAMP) * fine, MIN_WIDTH, 1);
-        na = clamp(ctr - wid / 2, 0, 1);
-        nb = clamp(ctr + wid / 2, 0, 1);
+        nlo = clamp(ctr - wid / 2, 0, 1);
+        nhi = clamp(ctr + wid / 2, 0, 1);
       }
-      onChange([na, nb]);
+      emit(nlo, nhi);
     },
-    [posOf, onChange],
+    [posOf, emit],
   );
 
   const endDrag = useCallback(() => {
@@ -147,10 +197,11 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
     onDragEnd?.();
   }, [onDragEnd]);
 
-  // Number-field edits — clamp to keep the 0.01 separation; DraggableNumber's own
+  // Number-field edits — clamp to keep the separation; DraggableNumber's own
   // hardMin/hardMax do the live clamp during scrub, these are belt-and-braces.
-  const setMin = useCallback((v: number) => onChange([clamp(v, 0, valueRef.current[1] - MIN_GAP), valueRef.current[1]]), [onChange]);
-  const setMax = useCallback((v: number) => onChange([valueRef.current[0], clamp(v, valueRef.current[0] + MIN_GAP, 1)]), [onChange]);
+  const gapD = MIN_GAP * span; // separation in domain units
+  const setMin = useCallback((v: number) => onChange([clamp(v, min, fromN(valueRef.current[1]) - gapD), fromN(valueRef.current[1])]), [onChange, min, fromN, gapD]);
+  const setMax = useCallback((v: number) => onChange([fromN(valueRef.current[0]), clamp(v, fromN(valueRef.current[0]) + gapD, max)]), [onChange, max, fromN, gapD]);
 
   const numberCell = (val: number, set: (v: number) => void, hardMin: number, hardMax: number) => (
     <div
@@ -162,10 +213,10 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
         onChange={set}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        step={0.01}
+        step={step}
         hardMin={hardMin}
         hardMax={hardMax}
-        format={fmt2}
+        format={format ?? fmt2}
       />
     </div>
   );
@@ -177,13 +228,13 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
         <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
           {headerRight}
           <label className="text-[10px] font-medium tracking-tight select-none truncate pointer-events-none text-fg-muted">
-            {loLabel} <span className="text-fg-faint">↔</span> {hiLabel}
+            {label ?? (<>{loLabel} <span className="text-fg-faint">↔</span> {hiLabel}</>)}
           </label>
         </div>
         {/* Value region = w-1/2 (matches a GMT slider's value area), split into two equal fields. */}
         <div className="w-1/2 flex shrink-0">
-          {numberCell(a, setMin, 0, Math.max(0, b - MIN_GAP))}
-          {numberCell(b, setMax, Math.min(1, a + MIN_GAP), 1)}
+          {numberCell(a, setMin, min, Math.max(min, b - gapD))}
+          {numberCell(b, setMax, Math.min(max, a + gapD), max)}
         </div>
       </div>
 
@@ -203,12 +254,12 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
           <div className="absolute inset-0" style={{ background: trackGradient ?? 'rgba(255,255,255,0.1)' }} />
         )}
         {/* dim-outside masks */}
-        <div className="absolute top-0 bottom-0 left-0 bg-black/60 pointer-events-none" style={{ width: `${a * 100}%` }} />
-        <div className="absolute top-0 bottom-0 bg-black/60 pointer-events-none" style={{ left: `${b * 100}%`, width: `${(1 - b) * 100}%` }} />
+        <div className="absolute top-0 bottom-0 left-0 bg-black/60 pointer-events-none" style={{ width: `${na * 100}%` }} />
+        <div className="absolute top-0 bottom-0 bg-black/60 pointer-events-none" style={{ left: `${nb * 100}%`, width: `${(1 - nb) * 100}%` }} />
         {/* selected window with GMT-style edge thumbs */}
         <div
           className="absolute top-0 bottom-0 border-l-2 border-r-2 border-line/80 box-border pointer-events-none"
-          style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%` }}
+          style={{ left: `${na * 100}%`, width: `${(nb - na) * 100}%` }}
         />
       </div>
     </div>
