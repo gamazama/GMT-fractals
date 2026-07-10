@@ -92,7 +92,16 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
 vec3 fogRadiance(vec3 dir) {
     if (uFogEnvTint < 0.001) return uFogColorLinear;
     float fogRough = clamp(1.0 - 4.0 / max(uEnvMaxMip, 5.0), 0.5, 1.0);
-    return mix(uFogColorLinear, GetEnvMap(dir, fogRough) * uEnvStrength, uFogEnvTint);
+    vec3 envFog = GetEnvMap(dir, fogRough) * uEnvStrength;
+    // HDR soft knee: even blurred, a bright HDR sun region can carry luminance
+    // 10-50+, and fog radiance multiplies into EVERY fogged term (ambient, env,
+    // post fog) — the scene blew out with only a little tint (owner repro).
+    // Pass luminance <= 1 through untouched and compress the excess toward an
+    // asymptote of 2 (the clampReflLum curve with t = 1): fog is scattered
+    // AMBIENT light, never a sun-disc-bright emitter.
+    float l = dot(envFog, vec3(0.2126, 0.7152, 0.0722));
+    if (l > 1.0) envFog *= (2.0 - exp(-(l - 1.0))) / l;
+    return mix(uFogColorLinear, envFog, uFogEnvTint);
 }
 
 // Sample the env map at the resolution the CDF was built from. Used by

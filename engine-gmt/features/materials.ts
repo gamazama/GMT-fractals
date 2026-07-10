@@ -14,6 +14,7 @@ export interface MaterialState {
     rimColor: THREE.Color;
     envStrength: number;
     envBackgroundStrength: number; // Renamed UI label to BG Visibility
+    fogEnvTint: number; // 'Tint Fog' — per-direction fog radiance from the env (ADR-0097)
     envSource: number;
     envMapData: string | null;
     envMapColorSpace: number; // 0=sRGB, 1=Linear, 2=ACES
@@ -171,6 +172,10 @@ export const MaterialFeature: FeatureDefinition = {
             helpId: 'mat.env',
         },
         envBackgroundStrength: {
+            // NOT gated on envStrength: the backdrop draw (main.ts bgCol) reads
+            // uEnvBackgroundStrength independently of the env LIGHT strength, so
+            // this slider works even with the environment light at 0 — hiding it
+            // there orphaned a live control (owner report 2026-07-10).
             type: 'float',
             default: 0.0,
             label: 'BG Visibility',
@@ -178,9 +183,21 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEnvBackgroundStrength',
             min: 0.0, max: 2.0, step: 0.01,
             group: 'env',
+            description: 'How visible the sky is behind the fractal — independent of the environment light strength. At 0 the background falls back to the Background Color.',
+            helpId: 'mat.env',
+        },
+        fogEnvTint: {
+            // Lives HERE (env group, nested under the env-light strength) rather
+            // than in the fog group: fogRadiance scales its env sample by
+            // uEnvStrength, so the control only does anything while the
+            // environment light is on — it belongs under the thing it follows.
+            // (Moved from atmosphere.fogEnvTint same-day 2026-07-10; ADR-0097.)
+            type: 'float', default: 0.0, label: 'Tint Fog', shortId: 'fet', uniform: 'uFogEnvTint',
+            min: 0.0, max: 1.0, step: 0.01,
+            group: 'env',
             parentId: 'envStrength',
             condition: { gt: 0.0, param: 'envStrength' },
-            description: 'How visible the sky is behind the fractal. At 0 the background falls back to the Fog Color (Scene panel), even with fog off.',
+            description: 'Tints the fog (and fogged background) with the environment per direction — aerial perspective: fog brightens toward the bright side of the sky. 0 = flat Background Color, 1 = the sky itself.',
             helpId: 'mat.env',
         },
         envSource: {

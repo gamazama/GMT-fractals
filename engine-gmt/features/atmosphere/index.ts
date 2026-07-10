@@ -45,8 +45,7 @@ export interface AtmosphereState {
     fogIntensity: number;
     fogNear: number;
     fogFar: number;
-    fogColor: THREE.Color;
-    fogEnvTint: number; // 0 = flat authored colour, 1 = env-derived per-direction (ADR-0097)
+    fogColor: THREE.Color; // UI label 'Background Color' — doubles as the no-sky backdrop
     fogDensity: number;
     glowEnabled: boolean; // Compile-Time Switch
     glowQuality: number;
@@ -106,6 +105,18 @@ export const AtmosphereFeature: FeatureDefinition = {
         },
 
         // --- FOG (Runtime) ---
+        fogColor: {
+            // FIRST in the group and ALWAYS visible (no fogIntensity gate): this
+            // colour IS the background whenever the sky isn't visible (main.ts
+            // bgCol falls back to uFogColorLinear regardless of fog intensity),
+            // hence the 'Background Color' label — fog fades toward the same
+            // colour, keeping geometry consistent with the backdrop behind it.
+            // Stored key stays fogColor (no preset migration).
+            type: 'color', default: new THREE.Color(0,0,0), label: 'Background Color', shortId: 'fc', uniform: 'uFogColor',
+            group: 'fog',
+            description: 'The background colour whenever the sky is not visible — even with fog off. Fog fades distant geometry toward this same colour.',
+            helpId: 'fog.settings',
+        },
         fogIntensity: {
             type: 'float', default: 0.0, label: 'Fog Intensity', shortId: 'fi', uniform: 'uFogIntensity',
             min: 0.0, max: 1.0, step: 0.01, group: 'fog',
@@ -124,26 +135,9 @@ export const AtmosphereFeature: FeatureDefinition = {
             description: 'Distance where fog reaches full opacity.',
             helpId: 'fog.settings',
         },
-        fogColor: {
-            // ALWAYS visible (no fogIntensity gate): this colour doubles as the
-            // BACKGROUND whenever the sky isn't visible (main.ts bgCol falls back
-            // to uFogColorLinear regardless of fog intensity) — hiding it with
-            // fog off left users unable to edit the colour their background
-            // was actually showing (owner report 2026-07-10).
-            type: 'color', default: new THREE.Color(0,0,0), label: 'Fog Color', shortId: 'fc', uniform: 'uFogColor',
-            group: 'fog',
-            description: 'Colour distant geometry fades toward. Also the background colour whenever the sky is not visible (BG Visibility 0 or environment off) — even with fog disabled.',
-            helpId: 'fog.settings',
-        },
-        fogEnvTint: {
-            // Label names the Environment section it draws from (sits directly
-            // above Fog in the Scene panel). Stored key stays fogEnvTint —
-            // renaming the label costs no preset migration.
-            type: 'float', default: 0.0, label: 'Environment Tint', shortId: 'fet', uniform: 'uFogEnvTint',
-            min: 0.0, max: 1.0, step: 0.01, group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
-            description: 'Derives the fog colour from the Environment above, per direction (aerial perspective) — fog brightens toward the bright side of the sky. Follows Environment Strength (no effect when the environment light is off). 0 = flat Fog Color, 1 = the sky itself.',
-            helpId: 'fog.settings',
-        },
+        // (fogEnvTint moved to the materials feature's env group 2026-07-10 —
+        // it belongs under Environment Light, which it follows. Same-day move,
+        // no preset migration shipped.)
         fogDensity: {
             type: 'float', default: 0.01, label: 'Fog Density', shortId: 'fd', uniform: 'uFogDensity',
             min: 0.001, max: 5.0, step: 0.01, scale: 'log', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },

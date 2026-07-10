@@ -1,5 +1,15 @@
 # ADR-0097: Per-direction fog radiance from the environment map (aerial perspective)
 
+> **Update 2026-07-10 #2 (owner UX pass + HDR fix; decision unchanged):** the param moved from
+> `atmosphere.fogEnvTint` to `materials.fogEnvTint` ("Tint Fog"), nested under the env-light
+> strength in the Environment group — it scales with `uEnvStrength`, so it belongs under the thing
+> it follows (same-day move, no preset migration shipped). `fogRadiance` gained an HDR soft knee
+> (the clampReflLum curve with t = 1, asymptote 2): blurred HDR sun regions still carry luminance
+> 10–50+, and fog radiance multiplies into every fogged term, so bright domes blew the scene out
+> with only a little tint. Related relabels: `fogColor` → "Background Color" (first in the Fog
+> group, always visible), BG Visibility un-gated from env-light strength (the backdrop reads it
+> independently).
+
 > **Update 2026-07-10 (sampling corrected same day; decision unchanged):** `fogRadiance` no longer
 > samples at roughness 1.0 — for image env maps GetEnvMap's terminal LOD blends to the
 > direction-INDEPENDENT solid-angle average (the ADR-0069 avgMix window), so tinted fog came out
