@@ -8,6 +8,23 @@
 //   uVolDensity, uVolAnisotropy, uVolMaxLights,
 //   uVolEmissive, uVolEmissiveFalloff, uVolStepJitter,
 //   uVolScatterTint, uVolHeightFalloff, uVolHeightOrigin
+//
+// MEASURED COST PROFILE (2026-07-10, Mandelbulb 720p, RTX 2070, 3-point-light
+// scene — protocol §2.6.3 of docs/policy/shader-compile-optimization.md):
+// - Compile (cold gpu=): +1557ms with shadows compiled (+674ms with the stub —
+//   the difference is the GetHardShadow inline in the light loop). No fxc
+//   nested-loop pathology: the runtime-capped MAX_LIGHTS loop stays cheap.
+// - FPS p50, steady-state: not-compiled 2.2ms · density@1-light 28.5ms ·
+//   density@3-lights 74.6ms (linear in lights) · emissive-only 5.9ms ·
+//   quality ladder 1/128→1/8 = 20.4→74.6ms; interaction clamp verified
+//   (1/32 → 37.2ms during nav).
+// - @invariant-adjacent gotcha: COMPILED-IN BUT RUNTIME-OFF COSTS ~2.2×
+//   baseline (2.16→4.75ms) — and enabled-with-zero-density measures identical,
+//   so it is REGISTER PRESSURE from this body inflating the trace loop's
+//   allocation, not the uniform branch. No runtime toggle can recover it; the
+//   panel's compile toggle (ptVolumetric off) is the only true off. Any future
+//   fix means moving scatter OUT of the per-step march (second-pass segment
+//   sampling) — an estimator redesign, not a branch tweak.
 
 export const VOLUMETRIC_SCATTER_BODY = `
 #ifdef PT_VOLUMETRIC

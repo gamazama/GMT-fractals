@@ -870,7 +870,13 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
     uniforms.uTime = 0.0;
     uniforms.uFrameCount = { int: 0 };
     uniforms.uJitter = [0, 0];
-    uniforms.uBlendFactor = 1.0;  // 100% fresh pixel — ignore (dummy) history
+    // 100% fresh pixel by default — ignore (dummy) history. --blend-factor=N
+    // overrides it: shader paths key "interacting?" off uBlendFactor >= 0.99
+    // (volumetric sampling clamp, VNDF reflection jitter), so steady-state
+    // accumulation cost needs a sub-0.99 value. NB below 0.99 the output blends
+    // with the harness's dummy (black) history — timing stays honest, the
+    // captured image darkens (don't image-diff those runs).
+    uniforms.uBlendFactor = parseFloat(argVal('--blend-factor') ?? '1.0');
     // FULL FRAME. The tiled progressive idle renderer (BandScheduler) confines the
     // trace to a band via uRegionMin/uRegionMax — the region check in main.ts skips
     // (history-copies) every pixel outside it. A snapshot taken mid-band would make

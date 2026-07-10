@@ -464,6 +464,28 @@ callee can DCE on) instead of calling through at every site. The remaining
 irreducible reflection cost is the §2.6.1 verdict (4-tap normal at the hit,
 ~1.6s) — a quality tradeoff, not a structural one.
 
+### 2.6.3 Volumetric scatter measured (2026-07-10, owner machine)
+
+Same treatment for `volumetric.ptVolumetric` (annotation was speculative 5500).
+Compile (cold `gpu=`, Mandelbulb, 2 passes, spread ≤12ms): marginal **+1557ms
+with shadows compiled** (the honest god-ray config; annotated 1600), +674ms with
+the shadow stub — the ~880ms difference is the `GetHardShadow` inline in the
+per-step light loop. **No fxc pathology** — the runtime-capped `MAX_LIGHTS` loop
+inside the trace `[loop]` compiles fine (unlike the reflection bounce wrapper,
+§2.6.2), so nesting per se is not the trigger; the trip-1 constant outer wrapper
+was.
+
+FPS (p50 720p, RTX 2070, 3-point-light scene, steady-state `--blend-factor=0.5`
+— new bench-shader flag, the volume body clamps sampling during interaction):
+not-compiled 2.16ms · **compiled-but-runtime-off 4.75ms (2.2×)** · density
+1-light 28.5ms · 3-light 74.6ms (linear) · emissive-only 5.9ms · quality
+1/128→1/8 = 20.4→74.6ms; nav clamp verified (37.2ms). The **runtime-off toll is
+register pressure**, not the uniform branch (enabled-with-zero-density measures
+identical) — the compiled body inflates the trace loop's allocation; only the
+compile toggle truly turns it off. Probe snapshots: `debug/vol-shaders/`; tools:
+`debug/scratch/measure-vol-compile.mts`, `dump-vol-shaders.mts`,
+`bench-vol-fps.sh`.
+
 [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts) has
 `estimateCompileTime(state)` (≈L161–196): `BASE_COMPILE_MS = 4200` plus a sum of
 per-param `estCompileMs` annotations for enabled `onUpdate:'compile'` params. It

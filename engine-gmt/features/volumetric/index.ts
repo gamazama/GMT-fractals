@@ -49,7 +49,7 @@ export const VolumetricFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'Volume Scatter', shortId: 'pvs',
             group: 'engine_settings', noAccumReset: true,
             onUpdate: 'compile',
-            estCompileMs: 5500,
+            estCompileMs: 1600,  // measured cold 2026-07-10 (§2.6.3): +1557ms with shadows compiled (+674ms stub-shadow); was 5500 (~3.5× high, speculative)
         },
 
         // --- RUNTIME TOGGLE (instant on/off, hidden — controlled by CompilableFeatureSection) ---
