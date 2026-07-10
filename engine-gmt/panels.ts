@@ -189,14 +189,10 @@ export const GmtPanels: PanelManifest = [
             },
 
             // --- Fog ---
-            {
-                type: 'collapsible',
-                label: 'Fog',
-                defaultOpen: true,
-                items: [
-                    { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
-                ],
-            },
+            // NOT a collapsible: Fog Intensity is itself a parent-slider card
+            // whose children (Range / Sky Tint / Density) expand when it's on —
+            // wrapping that in another section would be a redundant layer (owner).
+            { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
 
             // --- Volumetric scatter (compile-toggle UI) ---
             // Renders via <CompilableFeatureSection> reading the

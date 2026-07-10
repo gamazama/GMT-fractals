@@ -164,6 +164,10 @@ const renderItem = (
                     key={`collapsible-${index}-${item.label}`}
                     label={item.label}
                     defaultOpen={item.defaultOpen}
+                    // Manifest roll-ups get the full card chrome (raised header +
+                    // body + SectionDivider cap) so they read like the bespoke
+                    // Compilable/Runtime sections, not floating text on the dock.
+                    variant="section"
                 >
                     {item.items.map((child, childIdx) =>
                         renderItem(child, index * 1000 + childIdx, state, widgetProps),
