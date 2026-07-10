@@ -195,12 +195,17 @@ registerMigration({
 // v6 (2026-07-10) — Fog Tint inversion (ADR-0097 update #4, owner design). The
 // former fogEnvTint ('Sky Tint', 0 = flat fog colour, 1 = sky-derived) inverts
 // into fogTint ('Fog Tint', 0 = fog follows the sky — the new default and the
-// physically-right aerial perspective; 1 = the custom Fog Color). Old scenes
-// carried implicit fogEnvTint 0 (flat colour), so absent maps to fogTint 1 —
-// every existing foggy scene keeps its flat-colour look; only NEW scenes get
-// sky-following fog by default. Animation retargeting is skipped on purpose:
-// fogEnvTint shipped for a few hours on an unpushed branch, and its keyed
-// values would be inverted anyway.
+// physically-right aerial perspective; 1 = the custom Fog Color).
+//
+// NARROW on purpose (owner correction, same day): only scenes with fog
+// actually ON (fogIntensity > 0) get pinned to their old flat-colour look —
+// they authored that fog. Everything else is left at the new default, so when
+// a user turns fog on for the first time they get SKY-COLOURED fog, not the
+// mystery-black flat default colour. (The first cut of this migration pinned
+// fogTint=1 onto every loaded preset with an atmosphere slice — which made
+// every scene's fog flat black-by-default again.)
+// Animation retargeting is skipped on purpose: fogEnvTint shipped for a few
+// hours on an unpushed branch, and its keyed values would be inverted anyway.
 registerMigration({
     version: 6,
     id: 'app-gmt.fog-tint-inversion',
@@ -208,8 +213,10 @@ registerMigration({
         const a = p?.features?.atmosphere;
         if (a && typeof a === 'object') {
             const old = typeof a.fogEnvTint === 'number' ? a.fogEnvTint : 0;
-            a.fogTint = 1 - Math.min(1, Math.max(0, old));
             delete a.fogEnvTint;
+            if ((a.fogIntensity ?? 0) > 0.001) {
+                a.fogTint = 1 - Math.min(1, Math.max(0, old));
+            }
         }
         return p;
     },
