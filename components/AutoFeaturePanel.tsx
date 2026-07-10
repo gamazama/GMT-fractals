@@ -578,13 +578,18 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         // Children render nested inside this node's bracket — their own closing
         // divider uses the flat rail-tone variant, not the card end-cap.
         const renderedChildren: React.ReactNode[] = childIds.map(cid => renderNode(cid, false, true)).filter(Boolean);
-        // Include customUI entries that declare this param as their parent
+        // Include customUI entries that declare this param as their parent.
+        // `placement: 'top'` renders BEFORE the param's child rows (e.g. the
+        // sky-library loader above Rotation); default 'bottom' appends after.
         feature.customUI?.forEach((c, idx) => {
             if (c.parentId !== id) return;
             if (groupFilter && c.group !== groupFilter) return;
             if (!checkParamActive(c.condition, sliceState, globalState, c.parentId)) return;
             const Component = componentRegistry.get(c.componentId);
-            if (Component) renderedChildren.push(<div key={`custom-${c.componentId}-${c.group != null ? c.group + '-' + idx : idx}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
+            if (!Component) return;
+            const node = <div key={`custom-${c.componentId}-${c.group != null ? c.group + '-' + idx : idx}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>;
+            if (c.placement === 'top') renderedChildren.unshift(node);
+            else renderedChildren.push(node);
         });
         const containerClass = isHalfWidth ? "flex-1 min-w-0" : "flex flex-col";
         const hasCustomUIChildren = feature.customUI?.some(c => c.parentId === id) ?? false;

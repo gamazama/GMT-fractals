@@ -358,6 +358,7 @@ export const MaterialFeature: FeatureDefinition = {
             group: 'env',
             parentId: 'envSource',
             condition: { eq: 0.0 }, // Sky Image source
+            placement: 'top',       // loader row ABOVE Rotation (owner)
         },
     ],
     inject: (builder, _config, variant) => {

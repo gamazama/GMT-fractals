@@ -680,6 +680,13 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                         const hdrTex = new THREE.DataTexture(hdrData.data as any, hdrData.width, hdrData.height, THREE.RGBAFormat, hdrData.type);
                         hdrTex.mapping = THREE.EquirectangularReflectionMapping;
                         hdrTex.minFilter = THREE.LinearMipmapLinearFilter;
+                        // DataTexture defaults BOTH filters to NearestFilter (unlike
+                        // plain Texture) — minFilter was overridden above but magFilter
+                        // wasn't, so any MAGNIFIED sky view (low-res equirect across a
+                        // full viewport) rendered hard pixel blocks, and no amount of
+                        // mip blur could hide the base level. RGBA16F linear filtering
+                        // is core WebGL2 — just ask for it.
+                        hdrTex.magFilter = THREE.LinearFilter;
                         hdrTex.generateMipmaps = true;
                         hdrTex.flipY = true;
                         hdrTex.needsUpdate = true;
