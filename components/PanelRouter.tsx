@@ -131,7 +131,8 @@ const renderItem = (
             // Shared SectionDivider keeps the bespoke 1.5px bar + drop-
             // gradient consistent with the dividers each section component
             // (Runtime / Compilable / CompileDropdown) emits at its bottom.
-            return <div key={`sep-${index}`}><SectionDivider /></div>;
+            // variant 'fade' = the soft in-feature divider (no cap/lip).
+            return <div key={`sep-${index}`}><SectionDivider fade={item.variant === 'fade'} /></div>;
 
         case 'section':
             node = (

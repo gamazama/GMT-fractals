@@ -44,8 +44,23 @@ const RAIL_TONE = 'linear-gradient(rgb(var(--line) / 0.06), rgb(var(--line) / 0.
  * bottom lip instead of hard-seaming against a solid `surface-raised` cap. The
  * renderer that knows the section's tone (CompileSection) passes it; omit for
  * the default solid cap (sections that are already `surface-raised`).
+ *
+ * - **Fade** (`fade`): the soft IN-FEATURE divider — a `surface-raised`
+ *   rectangle that smoothly fades into the shadow tone at its bottom. No
+ *   rounded cap, no lip: it separates sibling blocks that belong to the same
+ *   feature run (e.g. Fog ↔ Volumetric Scatter) without stamping a card edge
+ *   between them. Manifest: `{ type: 'separator', variant: 'fade' }`.
  */
-export const SectionDivider: React.FC<{ nested?: boolean; capFrom?: string }> = ({ nested = false, capFrom }) => {
+export const SectionDivider: React.FC<{ nested?: boolean; capFrom?: string; fade?: boolean }> = ({ nested = false, capFrom, fade = false }) => {
+    if (fade) {
+        return (
+            <div className="h-2.5 relative bg-surface-raised">
+                <div className="absolute inset-x-0 bottom-0 h-2" style={{
+                    background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.5))',
+                }} />
+            </div>
+        );
+    }
     if (nested) {
         return (
             <div className="h-3.5 relative" style={{ background: RAIL_TONE }}>

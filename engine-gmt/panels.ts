@@ -194,6 +194,11 @@ export const GmtPanels: PanelManifest = [
             // wrapping that in another section would be a redundant layer (owner).
             { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
 
+            // Soft in-feature divider: Fog and Volumetric Scatter belong to the
+            // same atmosphere run, so a full card end-cap between them would
+            // over-separate — the fade variant just breathes.
+            { type: 'separator', variant: 'fade' },
+
             // --- Volumetric scatter (compile-toggle UI) ---
             // Renders via <CompilableFeatureSection> reading the
             // feature's panelConfig — same shape as Burning Mode. Plain

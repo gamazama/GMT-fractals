@@ -138,6 +138,11 @@ export type PanelItem =
       })
     | (PanelItemHelp & {
           type: 'separator';
+          /** 'fade' renders the soft in-feature divider (a raised rectangle
+           *  fading into shadow at its bottom, SectionDivider `fade`) instead
+           *  of the full card end-cap — for separating sibling blocks in the
+           *  same feature run (e.g. Fog ↔ Volumetric Scatter). */
+          variant?: 'fade';
           showIf?: ShowIfPredicate;
       })
     | (PanelItemHelp & {
