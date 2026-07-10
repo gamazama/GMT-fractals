@@ -52,7 +52,9 @@ vec3 renderPixel(vec2 uvCoord, float seedOffset, out float outDepth) {
         // uDOFStrength == 0 → skyBlur 0 → unchanged. @see docs/adr/0072
         float skyBlur = min(0.4, sqrt(uDOFStrength) * 0.35);
         vec3 env = GetEnvMap(rd, skyBlur) * uEnvBackgroundStrength;
-        bgCol = mix(env, safeFog, clamp(uFogIntensity, 0.0, 1.0));
+        // Per-direction fog in-scatter (fogRadiance, ADR-0097): with Sky Tint up,
+        // the fogged sky keeps its directional gradient instead of flattening.
+        bgCol = mix(env, fogRadiance(rd), clamp(uFogIntensity, 0.0, 1.0));
     } else {
         bgCol = mix(safeFog + vec3(0.01), safeFog, abs(rd.y));
     }
@@ -70,7 +72,7 @@ vec3 renderPixel(vec2 uvCoord, float seedOffset, out float outDepth) {
 
     ${integrator}
 
-    col = applyPostProcessing(col, d, glow, volumetric, fogScatter);
+    col = applyPostProcessing(col, d, rd, glow, volumetric, fogScatter);
     // Project hit point onto clean (un-jittered) ray for stable depth readback
     // When DoF is off, roClean==ro and rdClean==rd so this equals d
     outDepth = dot(ro + rd * d - roClean, rdClean);

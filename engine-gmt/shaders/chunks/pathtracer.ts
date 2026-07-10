@@ -619,7 +619,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
             vec3 env = sampleMiss(currentRo, currentRd, skyBlur, skyIntensity);
             if (bounce == 0 && uFogFar < 1000.0) {
                 float fogFactor = smoothstep(uFogNear, uFogFar, uFogFar * 0.95);
-                env = mix(env, uFogColorLinear, fogFactor * 0.5);
+                env = mix(env, fogRadiance(currentRd), fogFactor * 0.5);
             }
 
             // BSDF-side MIS weight when the bounce ray escaped to env. Pairs

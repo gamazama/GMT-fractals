@@ -266,7 +266,8 @@ export class ShaderBuilder {
     }
 
     /** Position 16: Code injected inside applyPostProcessing(). All post-processing is feature-injected.
-     *  Variables in scope: col (modifiable), d, glow, volumetric, fogScatter.
+     *  Variables in scope: col (modifiable), d, rd (primary ray direction — per-direction fog via
+     *  fogRadiance(dir), ADR-0097), glow, volumetric, fogScatter.
      *  Injection order follows feature registration: Atmosphere (fog+glow) → Volumetric (scatter) → others.
      *  Used for: fog, glow, volumetric scatter, custom atmosphere effects. */
     addPostProcessLogic(code: string) {

@@ -12,7 +12,9 @@ import { ATMOSPHERE_VOLUME_BODY, ATMOSPHERE_VOLUME_FINALIZE } from './shader';
 const FOG_POST_PROCESS = `
     // --- FOG (Atmosphere Feature) ---
     float fogFactor = smoothstep(uFogNear, uFogFar, d) * uFogIntensity;
-    vec3 fogColor = uFogColorLinear;
+    // Per-direction in-scatter (aerial perspective) — falls back to the flat
+    // authored colour at uFogEnvTint 0. @see fogRadiance (env.ts), ADR-0097.
+    vec3 fogColor = fogRadiance(rd);
 
     // Volumetric fog absorption
     if (uFogDensity > 0.0001) {
@@ -44,6 +46,7 @@ export interface AtmosphereState {
     fogNear: number;
     fogFar: number;
     fogColor: THREE.Color;
+    fogEnvTint: number; // 0 = flat authored colour, 1 = env-derived per-direction (ADR-0097)
     fogDensity: number;
     glowEnabled: boolean; // Compile-Time Switch
     glowQuality: number;
@@ -125,6 +128,12 @@ export const AtmosphereFeature: FeatureDefinition = {
             type: 'color', default: new THREE.Color(0,0,0), label: 'Fog Color', shortId: 'fc', uniform: 'uFogColor',
             group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
             description: 'Colour distant geometry fades toward.',
+            helpId: 'fog.settings',
+        },
+        fogEnvTint: {
+            type: 'float', default: 0.0, label: 'Sky Tint', shortId: 'fet', uniform: 'uFogEnvTint',
+            min: 0.0, max: 1.0, step: 0.01, group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
+            description: 'Derives the fog colour from the environment per direction (aerial perspective) — fog brightens toward the bright side of the sky. 0 = flat Fog Color, 1 = the sky itself.',
             helpId: 'fog.settings',
         },
         fogDensity: {

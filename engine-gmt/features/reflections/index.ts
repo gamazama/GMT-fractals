@@ -20,7 +20,7 @@ export const REFL_MODE_RAYMARCH = 3.0;  // Full raymarched reflections
 /** Environment map only — Fresnel-weighted env sampling with fog. Zero extra cost. */
 const REFL_ENV_SHADING = `
     // --- REFLECTIONS: ENVIRONMENT MAP ---
-    vec3 envColor = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength);
+    vec3 envColor = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength, reflDir);
     reflectionLighting = envColor * F * uSpecular;
 `;
 
@@ -154,12 +154,13 @@ const REFL_RAYMARCH_SHADING = `
                     // (kD·albedo / F) — fogging after tinted dark-albedo surfaces
                     // toward gray. Matches the primary Ambient IBL (shading.ts step 7).
                     vec3  r_kD    = (vec3(1.0) - r_F) * (1.0 - uReflection);
-                    vec3  r_envDiff = r_kD * r_albedo * applyEnvFog(GetEnvMap(r_n, 1.0) * uEnvStrength) * uDiffuse;
+                    vec3  r_envDiff = r_kD * r_albedo * applyEnvFog(GetEnvMap(r_n, 1.0) * uEnvStrength, r_n) * uDiffuse;
                     // Specular env lobe ONLY on the terminating bounce — on
                     // earlier bounces the traced next ray IS that lobe (it
                     // returns either real geometry or sampleMissEnv); adding
                     // both would double-count the mirror direction.
-                    vec3  r_envSpec = lastBounce ? r_F * applyEnvFog(GetEnvMap(reflect(currRd, r_n), r_rough) * uEnvStrength) : vec3(0.0);
+                    vec3  r_specDir = reflect(currRd, r_n);
+                    vec3  r_envSpec = lastBounce ? r_F * applyEnvFog(GetEnvMap(r_specDir, r_rough) * uEnvStrength, r_specDir) : vec3(0.0);
                     hitColor += r_envDiff + r_envSpec;
                 }
 
@@ -180,7 +181,7 @@ const REFL_RAYMARCH_SHADING = `
                 // CalcPixelColorSvecTrans). Misses already fog via applyEnvFog.
                 if (uFogIntensity > 0.001) {
                     float rFog = smoothstep(uFogNear, uFogFar, hitD) * uFogIntensity;
-                    hitColor = mix(hitColor, uFogColorLinear, rFog);
+                    hitColor = mix(hitColor, fogRadiance(currRd), rFog);
                 }
 
                 // Firefly clamp on the single per-frame reflection sample (uses
@@ -219,10 +220,10 @@ const REFL_RAYMARCH_SHADING = `
             }
             } // end bounce loop
         } else {
-            reflectionLighting += applyEnvFog(GetEnvMap(currRd, roughness) * uEnvStrength) * currentThroughput;
+            reflectionLighting += applyEnvFog(GetEnvMap(currRd, roughness) * uEnvStrength, currRd) * currentThroughput;
         }
 
-        vec3 simpleEnv = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength);
+        vec3 simpleEnv = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength, reflDir);
         simpleEnv *= reflThroughput0;
 
         reflectionLighting = mix(simpleEnv, reflectionLighting, uReflStrength);

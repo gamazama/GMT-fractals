@@ -76,6 +76,19 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
     return col;
 }
 
+// In-scattered fog radiance for a ray direction (ADR-0097). Physically the fog
+// IS the atmosphere lit by the dome, so its colour should track the (max-blur)
+// env map per direction — aerial perspective: fog brightens toward the bright
+// side of the sky instead of being one flat colour. uFogEnvTint blends from
+// the authored Fog Color (0, legacy — zero extra cost) to the env-derived
+// radiance (1). The env side scales with uEnvStrength: a dim dome lights dim
+// fog. roughness 1.0 rides the ADR-0069 blend to the solid-angle-correct
+// average, so the sample is cheap and pole-safe.
+vec3 fogRadiance(vec3 dir) {
+    if (uFogEnvTint < 0.001) return uFogColorLinear;
+    return mix(uFogColorLinear, GetEnvMap(dir, 1.0) * uEnvStrength, uFogEnvTint);
+}
+
 // Sample the env map at the resolution the CDF was built from. Used by
 // path-traced env-NEE under PT_ENV_MIS_IS so per-direction Le matches what
 // the CDF pdf claims for the cell — without this match, sub-pixel features

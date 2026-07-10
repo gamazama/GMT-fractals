@@ -99,7 +99,7 @@ export const LIGHT_SPHERE_MISS_GLSL = `
         float _r = uLightRadius[_li];
         float _disc = _r * _r - (dot(_oc, _oc) - _b * _b);
         float _lsD = _disc > 0.0 ? max(0.001, -_b - sqrt(_disc)) : max(0.001, -_b);
-        _lc = mix(_lc, uFogColorLinear, smoothstep(uFogNear, uFogFar, _lsD) * uFogIntensity);
+        _lc = mix(_lc, fogRadiance(rd), smoothstep(uFogNear, uFogFar, _lsD) * uFogIntensity);
         env = mix(env, _lc, _lsHit.x);
         g_missSelfFogCover = _lsHit.x;
     }
