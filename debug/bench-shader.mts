@@ -133,11 +133,11 @@ const APP_TIMEOUT_MS = parseInt(argVal('--app-timeout') ?? '30000', 10);
 // matrix benches across reflection modes / material variants.
 //
 //   --reflection-mode=off|env|raymarch       (default: leave alone — uses ENV)
-//   --reflection-bounces=1..3                (raymarch only)
 //   --material=default|matte|glossy|mirror   (presets that touch reflection,
 //                                             specular, roughness, metallic)
+// (--reflection-bounces removed 2026-07-10 with the Direct 'Max Bounces' param —
+//  Direct reflections are single-bounce; PT bounce depth is --pt-bounces.)
 const REFLECTION_MODE = argVal('--reflection-mode') ?? '';
-const REFLECTION_BOUNCES = parseInt(argVal('--reflection-bounces') ?? '1', 10);
 const MATERIAL_PRESET = argVal('--material') ?? '';
 const SCENE_TAG = argVal('--tag') ?? '';   // appended to image filenames so
                                             // matrix runs don't overwrite
@@ -525,7 +525,6 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
     console.log(SCENE_PRESET ? '[bench-shader] applying scene preset from --scene file…' : '[bench-shader] applying formula defaultPreset…');
     const presetApplied = await page.evaluate((opts: {
         reflectionMode: string;
-        reflectionBounces: number;
         materialPreset: string;
         renderMode: string;
         ptBounces: number | null;
@@ -568,9 +567,6 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
                 p.features.reflections = p.features.reflections || {};
                 p.features.reflections.enabled = true;
                 p.features.reflections.reflectionMode = m;
-                if (m === 3.0) {
-                    p.features.reflections.bounces = opts.reflectionBounces;
-                }
             }
         }
 
@@ -602,7 +598,7 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             const modeMap: Record<string, number> = { off: 0.0, env: 1.0, raymarch: 3.0 };
             const m = modeMap[opts.reflectionMode];
             if (m !== undefined && setters.setReflections) {
-                setters.setReflections({ enabled: true, reflectionMode: m, bounces: opts.reflectionBounces });
+                setters.setReflections({ enabled: true, reflectionMode: m });
             }
         }
         if (opts.materialPreset && setters.setMaterials) {
@@ -712,7 +708,6 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         };
     }, {
         reflectionMode: REFLECTION_MODE,
-        reflectionBounces: REFLECTION_BOUNCES,
         materialPreset: MATERIAL_PRESET,
         renderMode: RENDER_MODE,
         ptBounces: PT_BOUNCES,
@@ -1170,7 +1165,7 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
         strippedUniforms: result.missingUniforms ?? [],
         timingsUs:        t,
         compileTiming:    result.compileTiming ?? null,
-        scene:            { reflectionMode: REFLECTION_MODE || null, material: MATERIAL_PRESET || null, tag: SCENE_TAG || null, reflectionBounces: REFLECTION_BOUNCES, renderMode: RENDER_MODE || null, ptBounces: PT_BOUNCES, ptNeeAll: PT_NEE_ALL, ptEnvNee: PT_ENV_NEE, volumetric: VOLUMETRIC, volDensity: VOL_DENSITY, volEmissive: VOL_EMISSIVE, volLights: VOL_LIGHTS, volAnisotropy: VOL_ANISOTROPY },
+        scene:            { reflectionMode: REFLECTION_MODE || null, material: MATERIAL_PRESET || null, tag: SCENE_TAG || null, renderMode: RENDER_MODE || null, ptBounces: PT_BOUNCES, ptNeeAll: PT_NEE_ALL, ptEnvNee: PT_ENV_NEE, volumetric: VOLUMETRIC, volDensity: VOL_DENSITY, volEmissive: VOL_EMISSIVE, volLights: VOL_LIGHTS, volAnisotropy: VOL_ANISOTROPY },
         pageErrors,
         refImage:         refPath.replace(process.cwd() + '\\', '').replace(process.cwd() + '/', ''),
         diff: diff ? { mae: diff.mae, rmse: diff.rmse, maxErr: diff.maxErr } : null,

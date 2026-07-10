@@ -138,7 +138,7 @@ gmt_precalcRodrigues(uVec3B);`,
                 layer3Color: "#ffffff", layer3Scale: 89, layer3Strength: 0, layer3Bump: 0, layer3Turbulence: 0, layer3Enabled: true
             },
             ao: { aoIntensity: 0.42, aoSpread: 0.115, aoSamples: 12, aoEnabled: true, aoMode: false },
-            reflections: { enabled: true, reflectionMode: 1, bounces: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
+            reflections: { enabled: true, reflectionMode: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
             materials: {
                 diffuse: 2, reflection: 0, specular: 0.58, roughness: 0.132,
                 rim: 0, rimExponent: 5, envStrength: 0, envBackgroundStrength: 0.15,

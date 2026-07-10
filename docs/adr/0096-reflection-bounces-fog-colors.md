@@ -4,6 +4,20 @@
 study (ADR-0094 faithful march, ADR-0095 candidate recovery); closes the remaining owner-picked
 items from that study's queue.
 
+> **Update 2026-07-10 #2 (multi-bounce REMOVED; the fog/colour/importer decisions stand):**
+> after measuring the emission-gated loop (below) at a flat **+5.2s cold compile for any
+> bounces ≥ 2** and **2.3× frame cost for the full tier** on mirror scenes, the owner removed
+> Direct-mode multi-bounce entirely: the path tracer already owns bounce recursion
+> (`lighting.ptBounces` / `uPTBounces`), and Direct's mirror-in-mirror gain was situational.
+> Gone: the `bounces` param ('Max Bounces', shortId `rb`), the `MAX_REFL_BOUNCES` define, the
+> bounce loop + throughput-continuation GLSL (the shade body is single-bounce straight-line —
+> the fxc-pathology emission gate below is thereby moot), the quality-tier `bounces` overrides
+> (the Full tier is now Raymarched + bounceShadows only), and the importer's
+> `SRreflectioncount → bounces` mapping (decoded but unmapped; MB3D multi-reflection scenes
+> import with one mirror bounce). Old scenes' stored `reflections.bounces` values are ignored
+> on load. Multi-bounce reflections in Direct mode would be a NEW decision (superseding ADR),
+> not a revert.
+
 > **Update 2026-07-10 (bounce loop emission-gated; decision unchanged):** the unconditional
 > `for (int b …)` wrapper regressed the default Raymarched cold compile ~4.4s → ~42s. Measured
 > root cause (owner machine, D3D11/ANGLE, cold `gpu=`): wrapping the shade body — which inlines

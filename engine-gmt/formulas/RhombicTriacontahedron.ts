@@ -110,7 +110,7 @@ export const RhombicTriacontahedron: FractalDefinition = {
                 layer3Color: "#ffffff", layer3Scale: 89, layer3Strength: 0, layer3Bump: 0, layer3Turbulence: 0, layer3Enabled: true
             },
             ao: { aoIntensity: 0.7, aoSpread: 0.4, aoSamples: 5, aoEnabled: true, aoMode: false },
-            reflections: { enabled: true, reflectionMode: 1, bounces: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
+            reflections: { enabled: true, reflectionMode: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
             materials: {
                 diffuse: 2, reflection: 0.25, specular: 0.76, roughness: 0.226,
                 rim: 0, rimExponent: 4, envStrength: 0.55, envBackgroundStrength: 0.2,

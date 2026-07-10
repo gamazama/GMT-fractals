@@ -67,7 +67,6 @@ export const SUBSYSTEM_REFLECTIONS: SubsystemDefinition = {
     controlledParams: [
         'reflections.reflectionMode',
         'reflections.bounceShadows',
-        'reflections.bounces',
     ],
     tiers: [
         {
@@ -82,13 +81,16 @@ export const SUBSYSTEM_REFLECTIONS: SubsystemDefinition = {
         },
         {
             label: 'Raymarched',
-            desc: 'Marched reflections of the actual scene, single bounce.',
-            overrides: { reflections: { reflectionMode: 3.0, bounceShadows: false, bounces: 1 } },
+            desc: 'Marched reflections of the actual scene.',
+            overrides: { reflections: { reflectionMode: 3.0, bounceShadows: false } },
         },
         {
+            // Direct reflections are single-bounce by design (multi-bounce removed
+            // 2026-07-10 — PT owns bounce recursion); Full = + shadows on reflected
+            // surfaces (~free compile, +39% reflection frame cost on mirror scenes).
             label: 'Full',
-            desc: 'Marched reflections with shadows and 2 bounces. Slowest.',
-            overrides: { reflections: { reflectionMode: 3.0, bounceShadows: true, bounces: 2 } },
+            desc: 'Marched reflections with shadows on reflected surfaces. Slowest.',
+            overrides: { reflections: { reflectionMode: 3.0, bounceShadows: true } },
         },
     ],
 };

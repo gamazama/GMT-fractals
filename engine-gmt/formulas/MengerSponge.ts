@@ -119,7 +119,7 @@ export const MengerSponge: FractalDefinition = {
             lighting: { shadows: true, shadowSoftness: 2000, shadowIntensity: 0.8, shadowBias: 0.001 },
             quality: { fudgeFactor: 1, detail: 1, pixelThreshold: 0.001, maxSteps: 200, estimator: 5.0 },
             optics: { camFov: 50, dofStrength: 0, dofFocus: 10 },
-            reflections: { enabled: true, bounces: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.5 }
+            reflections: { enabled: true, steps: 64, mixStrength: 1, roughnessThreshold: 0.5 }
         },
         cameraPos: { x: 0, y: 0, z: 0 },
         cameraRot: { x: -0.3055326162805782, y: -0.23752826799481133, z: -0.07899585109054458, w: 0.9186891736613698 },

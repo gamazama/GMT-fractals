@@ -135,7 +135,7 @@ export const PseudoKleinianMod4: FractalDefinition = {
                 layer3Color: "#ffffff", layer3Scale: 89, layer3Strength: 0, layer3Bump: 0, layer3Turbulence: 0, layer3Enabled: true
             },
             ao: { aoIntensity: 0, aoSpread: 0.229, aoSamples: 5, aoEnabled: true, aoMode: false },
-            reflections: { enabled: true, reflectionMode: 1, bounces: 3, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
+            reflections: { enabled: true, reflectionMode: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
             materials: {
                 diffuse: 1.5, reflection: 0.04, specular: 1.07, roughness: 0.19,
                 rim: 0.256, rimExponent: 10, envStrength: 0, envBackgroundStrength: 0.2,

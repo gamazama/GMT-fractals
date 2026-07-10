@@ -46,7 +46,7 @@ console.log('[dump-direct] booted');
 await page.evaluate(`(async () => {
   const st = window.__store.getState(); const p = window.__gmtProxy;
   st.setLighting({ ptEnabled: false, advancedLighting: true, specularModel: 1.0, shadows: true, shadowsCompile: true, shadowAlgorithm: 0.0, ptStochasticShadows: true, areaLights: true });
-  if (st.setReflections) st.setReflections({ enabled: true, reflectionMode: 3.0, bounceShadows: true, bounces: 1 });
+  if (st.setReflections) st.setReflections({ enabled: true, reflectionMode: 3.0, bounceShadows: true });
   if (st.setAo) st.setAo({ aoEnabled: true, aoStochasticCp: true });
   st.setRenderMode('Direct');
   const t0 = performance.now(); while (performance.now() - t0 < 8000 && !p.isCompiling) await new Promise(r => setTimeout(r, 4));

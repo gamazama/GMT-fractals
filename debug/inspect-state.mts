@@ -15,7 +15,7 @@ console.log('BEFORE:', JSON.stringify(h1));
 // Set reflectionMode = 3 directly via setReflections
 const setResult = await page.evaluate(() => {
   const s = (window as any).__store.getState();
-  s.setReflections({ reflectionMode: 3.0, bounces: 1 });
+  s.setReflections({ reflectionMode: 3.0 });
   return { newMode: (window as any).__store.getState().reflections?.reflectionMode };
 });
 console.log('SET:', JSON.stringify(setResult));

@@ -291,7 +291,7 @@ export const Phoenix: FractalDefinition = {
                 bounceShadows: true,
                 mixStrength: 1,
                 roughnessThreshold: 0.62,
-                bounces: 2,
+                
                 steps: 64,
                 enabled: true
             },

@@ -121,7 +121,7 @@ export const Coxeter: FractalDefinition = {
                 layer3Color: "#ffffff", layer3Scale: 89, layer3Strength: 0, layer3Bump: 0, layer3Turbulence: 0, layer3Enabled: true
             },
             ao: { aoIntensity: 0.47, aoSpread: 0.2, aoSamples: 5, aoEnabled: true, aoMode: false },
-            reflections: { enabled: true, reflectionMode: 1, bounces: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
+            reflections: { enabled: true, reflectionMode: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
             materials: {
                 diffuse: 1.8, reflection: 0.15, specular: 0.67, roughness: 0.232,
                 rim: 0.3, rimExponent: 5, envStrength: 0.3, envBackgroundStrength: 0.18,

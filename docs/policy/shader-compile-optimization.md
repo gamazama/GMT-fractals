@@ -456,6 +456,12 @@ identical mirror-scene uniforms: 9852µs vs 10147µs pre-opt (no regression;
 within noise). Annotations recalibrated (Raymarched 2900, bounces 5200,
 accurateColors 600).
 
+> **Update (same day): Direct multi-bounce REMOVED entirely** (ADR-0096 update
+> #2) — the +5.2s bounce step and the FPS ladder (b1+shadows +39%, b2 +75%, Full
+> tier 2.3×) priced it out vs PT's existing bounce recursion. The b2/b3 rows
+> above and the `bounces 5200` annotation are historical; `sumParamCompileMs`'s
+> int-param step rule was removed with its only consumer.
+
 **Lesson (extends the §8-L5 "inline unit" model):** the unit of compile cost is
 the *transitively inlined body instance*. A helper that calls a heavy function
 (`applyEnvFog → fogRadiance → env sample`) multiplies that body by its OWN call

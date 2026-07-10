@@ -127,8 +127,9 @@ export interface MB3DHeader {
   /** `bCalcSRautomatic` @336 (Byte) — bit0 = calc reflections automatically (artist made
    *  them part of the render), bit1 = transmission, bit2 = only dIFS objects. */
   srOptions: number;
-  /** `SRreflectioncount` @337 (Byte) — reflection recursion depth. Maps to GMT
-   *  `reflections.bounces` (clamped to 3). */
+  /** `SRreflectioncount` @337 (Byte) — reflection recursion depth. Decoded but
+   *  UNMAPPED since 2026-07-10: GMT Direct reflections are single-bounce by design
+   *  (the 'Max Bounces' param was removed; PT owns bounce recursion). */
   srReflectionCount: number;
 
   // ── Lighting / material / colour (`Light: TLightingParas9` @432, TypeDefinitions.pas:800).
