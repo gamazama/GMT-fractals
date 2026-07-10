@@ -13,8 +13,7 @@ export interface MaterialState {
     rimExponent: number;
     rimColor: THREE.Color;
     envStrength: number;
-    envBackgroundStrength: number; // Renamed UI label to BG Visibility
-    fogEnvTint: number; // 'Tint Fog' — per-direction fog radiance from the env (ADR-0097)
+    envBackgroundStrength: number; // UI label 'Sky Visibility'
     envSource: number;
     envMapData: string | null;
     envMapColorSpace: number; // 0=sRGB, 1=Linear, 2=ACES
@@ -159,7 +158,28 @@ export const MaterialFeature: FeatureDefinition = {
             helpId: 'mat.rim',
         },
 
-        // --- ENVIRONMENT ---
+        // --- ENVIRONMENT (the 'Background & Sky' Scene section) ---
+        // ONE sky, three consumers: the backdrop (Sky Visibility), surface
+        // lighting (Environment Light), and the fog colour (atmosphere Sky
+        // Tint). Definition order = render order: the two consumer sliders
+        // first, then the shared sky definition (Source/Upload/Rotation),
+        // which is deliberately NOT gated on either consumer — any of the
+        // three may need it.
+        envBackgroundStrength: {
+            // NOT gated on envStrength: the backdrop draw (main.ts bgCol) reads
+            // uEnvBackgroundStrength independently of the env LIGHT strength, so
+            // this slider works even with the environment light at 0 — hiding it
+            // there orphaned a live control (owner report 2026-07-10).
+            type: 'float',
+            default: 0.0,
+            label: 'Sky Visibility',
+            shortId: 'eb',
+            uniform: 'uEnvBackgroundStrength',
+            min: 0.0, max: 2.0, step: 0.01,
+            group: 'env',
+            description: 'How visible the sky is behind the fractal — independent of the environment light strength. At 0 the background falls back to the Background Color.',
+            helpId: 'mat.env',
+        },
         envStrength: {
             type: 'float',
             default: 0.0,
@@ -168,36 +188,7 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEnvStrengthSlider',
             min: 0.0, max: 5.0, step: 0.01,
             group: 'env',
-            description: 'Brightness of the sky-based reflection on the surface.',
-            helpId: 'mat.env',
-        },
-        envBackgroundStrength: {
-            // NOT gated on envStrength: the backdrop draw (main.ts bgCol) reads
-            // uEnvBackgroundStrength independently of the env LIGHT strength, so
-            // this slider works even with the environment light at 0 — hiding it
-            // there orphaned a live control (owner report 2026-07-10).
-            type: 'float',
-            default: 0.0,
-            label: 'BG Visibility',
-            shortId: 'eb',
-            uniform: 'uEnvBackgroundStrength',
-            min: 0.0, max: 2.0, step: 0.01,
-            group: 'env',
-            description: 'How visible the sky is behind the fractal — independent of the environment light strength. At 0 the background falls back to the Background Color.',
-            helpId: 'mat.env',
-        },
-        fogEnvTint: {
-            // Lives HERE (env group, nested under the env-light strength) rather
-            // than in the fog group: fogRadiance scales its env sample by
-            // uEnvStrength, so the control only does anything while the
-            // environment light is on — it belongs under the thing it follows.
-            // (Moved from atmosphere.fogEnvTint same-day 2026-07-10; ADR-0097.)
-            type: 'float', default: 0.0, label: 'Tint Fog', shortId: 'fet', uniform: 'uFogEnvTint',
-            min: 0.0, max: 1.0, step: 0.01,
-            group: 'env',
-            parentId: 'envStrength',
-            condition: { gt: 0.0, param: 'envStrength' },
-            description: 'Tints the fog (and fogged background) with the environment per direction — aerial perspective: fog brightens toward the bright side of the sky. 0 = flat Background Color, 1 = the sky itself.',
+            description: 'How strongly the sky lights the scene (dome light on surfaces and reflections).',
             helpId: 'mat.env',
         },
         envSource: {
@@ -207,13 +198,11 @@ export const MaterialFeature: FeatureDefinition = {
             shortId: 'eo',
             uniform: 'uEnvSource',
             group: 'env',
-            parentId: 'envStrength',
-            condition: { gt: 0.0, param: 'envStrength' },
             options: [
                 { label: 'Sky Image', value: 0.0 },
                 { label: 'Gradient', value: 1.0 }
             ],
-            description: 'Whether the environment uses a panorama image or a procedural gradient.',
+            description: 'Whether the sky uses a panorama image or a procedural gradient — shared by the backdrop, the environment light, and the fog Sky Tint.',
             helpId: 'mat.env',
         },
         envMapData: {
@@ -265,10 +254,7 @@ export const MaterialFeature: FeatureDefinition = {
             min: 0.0, max: 6.28, step: 0.01,
             group: 'env',
             parentId: 'envSource',
-            condition: [
-                { param: 'envStrength', gt: 0.0 },
-                { param: 'envSource', eq: 0.0 }
-            ],
+            condition: { eq: 0.0 },
             description: 'Spins the sky image around the vertical axis.',
             helpId: 'mat.env',
         },

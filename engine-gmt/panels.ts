@@ -169,14 +169,34 @@ export const GmtPanels: PanelManifest = [
 
             { type: 'separator', showIf: 'advancedMode' },
 
-            // --- Environment (sky source + dome light) ---
-            // Moved here from the Shader panel (owner call 2026-07-10): the env
-            // map IS the scene's sky/dome, and fog now derives its colour from
-            // it per-direction (Sky Tint, ADR-0097) — the two belong together.
-            { type: 'feature', id: 'materials', groupFilter: 'env' },
+            // --- Background & Sky ---
+            // ONE sky, three consumers (ADR-0097 layout, owner-approved):
+            // Background Color (the no-sky backdrop + fog base), then the sky's
+            // two consumer sliders (Sky Visibility = see it, Environment Light
+            // = be lit by it), then the shared sky definition (Source/Upload/
+            // Rotation — un-gated; any consumer may need it). Fog follows as
+            // its own section with Sky Tint reaching over to the same sky.
+            // Both render via the SAME CollapsibleSection the Effects roll-up
+            // uses (reuse the component, don't imitate its styling — owner).
+            {
+                type: 'collapsible',
+                label: 'Background & Sky',
+                defaultOpen: true,
+                items: [
+                    { type: 'feature', id: 'atmosphere', groupFilter: 'background' },
+                    { type: 'feature', id: 'materials', groupFilter: 'env' },
+                ],
+            },
 
-            // --- Atmosphere (fog) ---
-            { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
+            // --- Fog ---
+            {
+                type: 'collapsible',
+                label: 'Fog',
+                defaultOpen: true,
+                items: [
+                    { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
+                ],
+            },
 
             // --- Volumetric scatter (compile-toggle UI) ---
             // Renders via <CompilableFeatureSection> reading the

@@ -46,6 +46,7 @@ export interface AtmosphereState {
     fogNear: number;
     fogFar: number;
     fogColor: THREE.Color; // UI label 'Background Color' — doubles as the no-sky backdrop
+    fogEnvTint: number; // 'Sky Tint' — per-direction fog radiance from the sky (ADR-0097)
     fogDensity: number;
     glowEnabled: boolean; // Compile-Time Switch
     glowQuality: number;
@@ -67,6 +68,11 @@ export const AtmosphereFeature: FeatureDefinition = {
         groupFilter: 'engine_settings'
     },
     groups: {
+        background: {
+            label: 'Background',
+            description: 'The backdrop colour shown when the sky is not visible.',
+            helpId: 'fog.settings',
+        },
         fog: {
             label: 'Fog',
             description: 'Distance-based fog that fades the scene toward a colour.',
@@ -104,19 +110,21 @@ export const AtmosphereFeature: FeatureDefinition = {
             noAccumReset: true
         },
 
-        // --- FOG (Runtime) ---
+        // --- BACKGROUND ---
         fogColor: {
-            // FIRST in the group and ALWAYS visible (no fogIntensity gate): this
-            // colour IS the background whenever the sky isn't visible (main.ts
-            // bgCol falls back to uFogColorLinear regardless of fog intensity),
-            // hence the 'Background Color' label — fog fades toward the same
-            // colour, keeping geometry consistent with the backdrop behind it.
-            // Stored key stays fogColor (no preset migration).
+            // Own group so the Scene panel renders it at the TOP of the
+            // 'Background & Sky' section (groups are UI filters only — the
+            // stored key stays fogColor, no preset migration). ALWAYS visible:
+            // this colour IS the background whenever the sky isn't shown
+            // (main.ts bgCol falls back to uFogColorLinear regardless of fog
+            // intensity), and fog fades toward the same colour.
             type: 'color', default: new THREE.Color(0,0,0), label: 'Background Color', shortId: 'fc', uniform: 'uFogColor',
-            group: 'fog',
+            group: 'background',
             description: 'The background colour whenever the sky is not visible — even with fog off. Fog fades distant geometry toward this same colour.',
             helpId: 'fog.settings',
         },
+
+        // --- FOG (Runtime) ---
         fogIntensity: {
             type: 'float', default: 0.0, label: 'Fog Intensity', shortId: 'fi', uniform: 'uFogIntensity',
             min: 0.0, max: 1.0, step: 0.01, group: 'fog',
@@ -124,8 +132,11 @@ export const AtmosphereFeature: FeatureDefinition = {
             helpId: 'fog.settings',
         },
         fogNear: {
+            // rangePairWith: Start + End render as ONE dual-thumb RangeSlider
+            // ('Fog Range') — first consumer of the generic pairing.
             type: 'float', default: 0.0, label: 'Fog Start', shortId: 'fn', uniform: 'uFogNear',
             min: 0, max: 10, step: 0.1, scale: 'square', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
+            rangePairWith: 'fogFar', rangeLabel: 'Fog Range',
             description: 'Distance where fog begins to appear.',
             helpId: 'fog.settings',
         },
@@ -135,9 +146,16 @@ export const AtmosphereFeature: FeatureDefinition = {
             description: 'Distance where fog reaches full opacity.',
             helpId: 'fog.settings',
         },
-        // (fogEnvTint moved to the materials feature's env group 2026-07-10 —
-        // it belongs under Environment Light, which it follows. Same-day move,
-        // no preset migration shipped.)
+        fogEnvTint: {
+            // Back in the FOG group (moved to materials/env earlier today, then
+            // fogRadiance was DECOUPLED from the env-light strength — the fog
+            // follows the VISIBLE sky definition regardless of how strongly it
+            // lights the scene, so this is purely a fog property again).
+            type: 'float', default: 0.0, label: 'Sky Tint', shortId: 'fet', uniform: 'uFogEnvTint',
+            min: 0.0, max: 1.0, step: 0.01, group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
+            description: 'Tints the fog with the sky per direction (aerial perspective) — fog brightens toward the bright side of the sky. 0 = flat Background Color, 1 = the sky itself.',
+            helpId: 'fog.settings',
+        },
         fogDensity: {
             type: 'float', default: 0.01, label: 'Fog Density', shortId: 'fd', uniform: 'uFogDensity',
             min: 0.001, max: 5.0, step: 0.01, scale: 'log', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },

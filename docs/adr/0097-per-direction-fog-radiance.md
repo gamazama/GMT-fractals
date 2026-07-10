@@ -1,5 +1,15 @@
 # ADR-0097: Per-direction fog radiance from the environment map (aerial perspective)
 
+> **Update 2026-07-10 #3 (final layout — 'one sky, three consumers'; decision unchanged):**
+> `fogRadiance` DROPPED the `uEnvStrength` scaling: the tint follows the VISIBLE sky definition,
+> not the env-light strength (a sunset backdrop with the dome light at 0 should still be matchable
+> by the fog; the HDR knee bounds brightness). With the coupling gone, the param moved BACK to
+> `atmosphere.fogEnvTint` ("Sky Tint", Fog group, gated on fog intensity only) — update #2's
+> materials/env placement is superseded. Scene panel restructured into 'Background & Sky'
+> (Background Color [atmosphere group `background`] → Sky Visibility → Environment Light → un-gated
+> Source/Upload/Rotation) + 'Fog' (Intensity → Fog Range dual-thumb RangeSlider [new generic
+> `rangePairWith` param pairing] → Sky Tint → Density).
+
 > **Update 2026-07-10 #2 (owner UX pass + HDR fix; decision unchanged):** the param moved from
 > `atmosphere.fogEnvTint` to `materials.fogEnvTint` ("Tint Fog"), nested under the env-light
 > strength in the Environment group — it scales with `uEnvStrength`, so it belongs under the thing

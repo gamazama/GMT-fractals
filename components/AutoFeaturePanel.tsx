@@ -29,6 +29,7 @@ import Slider, { DraggableNumber } from './Slider';
 import { createLogMapping, createPowMapping, piUnitMapping, type ValueMapping } from './inputs';
 import ToggleSwitch from './ToggleSwitch';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
+import RangeSlider from './RangeSlider';
 import Dropdown from './Dropdown';
 import { Vector2Input, Vector3Input, Vector4Input } from './vector-input';
 import type { BaseVectorInputProps } from './vector-input/types';
@@ -358,6 +359,42 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             
             if (config.ui === 'knob') return <div className={config.layout === 'half' ? "flex flex-col items-center justify-center py-2" : "flex justify-center p-2"}><Knob label={config.label} value={val} min={config.min ?? 0} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, v)} color={val > (config.min ?? 0) ? "rgb(var(--accent-400))" : "#444"} size={40} /></div>;
             
+            // Range pair (rangePairWith): this param + its partner render as ONE
+            // dual-thumb RangeSlider row. The partner's own row is suppressed in
+            // the root filter below; both keys write through handleUpdate so
+            // animation / undo / presets behave exactly like two separate sliders.
+            if (config.rangePairWith && feature.params[config.rangePairWith]) {
+                const partnerKey = config.rangePairWith;
+                const partner = feature.params[partnerKey];
+                const partnerVal = sliceState[partnerKey] ?? partner.default;
+                const rangeMapping = getMapping(config);
+                const bindMin = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: [] });
+                const bindMax = deriveTrackBinding({ featureId, paramKey: partnerKey, label: partner.label, axes: [] });
+                const rTrackMin = bindMin.trackKeys[0];
+                const rTrackMax = bindMax.trackKeys[0];
+                return <div><RangeSlider
+                    label={config.rangeLabel ?? config.label}
+                    minTitle={config.label}
+                    maxTitle={partner.label}
+                    valueMin={val}
+                    valueMax={partnerVal}
+                    onMinChange={(v) => handleUpdate(key, v)}
+                    onMaxChange={(v) => handleUpdate(partnerKey, v)}
+                    min={config.min ?? 0}
+                    max={Math.max(config.max ?? 1, partner.max ?? 1)}
+                    step={config.step ?? 0.01}
+                    mapping={rangeMapping}
+                    format={config.format}
+                    disabled={isParamDisabled}
+                    highlight={val !== config.default || partnerVal !== partner.default || !!config.condition}
+                    trackIdMin={rTrackMin}
+                    trackIdMax={rTrackMax}
+                    liveMin={liveModulations[rTrackMin]}
+                    liveMax={liveModulations[rTrackMax]}
+                    labelSuffix={compileIndicator}
+                /></div>;
+            }
+
             const mapping = getMapping(config);
             let overrideText = config.format ? config.format(val) : undefined;
             if (config.scale === 'pi') { overrideText = `${(val / Math.PI).toFixed(2)}π`; }
@@ -466,10 +503,16 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         return null;
     };
 
+    // Params consumed as the MAX side of a rangePairWith pair render inside their
+    // partner's RangeSlider row — never as their own row (root or nested).
+    const rangePartnerKeys = React.useMemo(() => new Set(
+        Object.values(feature.params).map(p => p.rangePairWith).filter(Boolean) as string[]
+    ), [feature.params]);
+
     const renderNode = (id: string, isHalfWidth: boolean = false, isNested: boolean = false) => {
         const config = feature.params[id];
         // EXCLUSION CHECK
-        if (!config || config.hidden || excludeParams.includes(id) || !checkParamActive(config.condition, sliceState, globalState, config.parentId)) return null;
+        if (!config || config.hidden || excludeParams.includes(id) || rangePartnerKeys.has(id) || !checkParamActive(config.condition, sliceState, globalState, config.parentId)) return null;
         // Dynamic visibility (DDFS) — checked after condition
         if (config.dynamicVisible && !config.dynamicVisible(sliceState)) return null;
         if (config.isAdvanced && !advancedMode) return null;

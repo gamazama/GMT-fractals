@@ -149,6 +149,17 @@ export interface ParamConfig {
     // Reference to another parameter whose value should be used as this param's max
     dynamicMaxRef?: string;
 
+    /** Render this float param and the named partner param as ONE dual-thumb
+     *  RangeSlider row (this param = the range MIN, the partner = the MAX).
+     *  The partner's own row is suppressed; the row's visibility follows THIS
+     *  param's parentId/condition. Both params keep their identity — animation,
+     *  undo, presets and uniforms are untouched (the row writes each key
+     *  through the normal setter). Float params only. */
+    rangePairWith?: string;
+    /** Header label for the combined RangeSlider row (defaults to this param's
+     *  label). The individual param labels still name the two thumbs/inputs. */
+    rangeLabel?: string;
+
     /** Dynamic config overrides computed from slice state. Returned fields merge over static config.
      *  Use for params whose label, range, mode, etc. change based on other state (e.g. interlace
      *  params that mirror the selected secondary formula's parameter definitions). */

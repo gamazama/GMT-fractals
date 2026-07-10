@@ -77,11 +77,16 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
 }
 
 // In-scattered fog radiance for a ray direction (ADR-0097). Physically the fog
-// IS the atmosphere lit by the dome, so its colour should track a heavily
+// IS the atmosphere lit by the sky, so its colour should track a heavily
 // blurred env sample per direction — aerial perspective: fog brightens toward
 // the bright side of the sky instead of being one flat colour. uFogEnvTint
-// blends from the authored Fog Color (0, legacy — zero extra cost) to the
-// env-derived radiance (1). The env side scales with uEnvStrength.
+// ("Sky Tint") blends from the authored Background Color (0, legacy — zero
+// extra cost) to the sky-derived radiance (1).
+//
+// DELIBERATELY NOT scaled by uEnvStrength: the tint follows the VISIBLE sky
+// definition, not the env-light strength — a sunset backdrop with the dome
+// light at 0 (already an artistic decouple) should still be matchable by the
+// fog. The HDR knee below bounds the brightness either way.
 //
 // NOT roughness 1.0: for image env maps GetEnvMap's terminal LOD blends to the
 // direction-INDEPENDENT solid-angle average (ADR-0069 avgMix window, the last
@@ -92,7 +97,7 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
 vec3 fogRadiance(vec3 dir) {
     if (uFogEnvTint < 0.001) return uFogColorLinear;
     float fogRough = clamp(1.0 - 4.0 / max(uEnvMaxMip, 5.0), 0.5, 1.0);
-    vec3 envFog = GetEnvMap(dir, fogRough) * uEnvStrength;
+    vec3 envFog = GetEnvMap(dir, fogRough);
     // HDR soft knee: even blurred, a bright HDR sun region can carry luminance
     // 10-50+, and fog radiance multiplies into EVERY fogged term (ambient, env,
     // post fog) — the scene blew out with only a little tint (owner repro).
