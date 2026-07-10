@@ -150,14 +150,17 @@ const REFL_RAYMARCH_SHADING = `
                 // show the environment, not just point lights). Deterministic
                 // mip-filtered lookups — adds fill light, not noise.
                 if (uEnvStrength > 0.001) {
+                    // Fog wraps the raw env radiance BEFORE the surface response
+                    // (kD·albedo / F) — fogging after tinted dark-albedo surfaces
+                    // toward gray. Matches the primary Ambient IBL (shading.ts step 7).
                     vec3  r_kD    = (vec3(1.0) - r_F) * (1.0 - uReflection);
-                    vec3  r_envDiff = r_kD * r_albedo * GetEnvMap(r_n, 1.0) * uDiffuse;
+                    vec3  r_envDiff = r_kD * r_albedo * applyEnvFog(GetEnvMap(r_n, 1.0) * uEnvStrength) * uDiffuse;
                     // Specular env lobe ONLY on the terminating bounce — on
                     // earlier bounces the traced next ray IS that lobe (it
                     // returns either real geometry or sampleMissEnv); adding
                     // both would double-count the mirror direction.
-                    vec3  r_envSpec = lastBounce ? r_F * GetEnvMap(reflect(currRd, r_n), r_rough) : vec3(0.0);
-                    hitColor += applyEnvFog((r_envDiff + r_envSpec) * uEnvStrength);
+                    vec3  r_envSpec = lastBounce ? r_F * applyEnvFog(GetEnvMap(reflect(currRd, r_n), r_rough) * uEnvStrength) : vec3(0.0);
+                    hitColor += r_envDiff + r_envSpec;
                 }
 
                 // Ambient occlusion on the reflected surface — the same

@@ -614,7 +614,9 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
             // scaled by DoF aperture, additive on the jittered ray); indirect
             // bounce misses keep a sharp env. Mirrors main.ts. @see docs/adr/0072
             float skyBlur = (bounce == 0) ? min(0.4, sqrt(uDOFStrength) * 0.35) : 0.0;
-            vec3 env = sampleMiss(currentRo, currentRd, skyBlur) * skyIntensity;
+            // skyIntensity scales the sky only (inside sampleMiss) — light-sphere
+            // overlays keep their physical brightness regardless of env strength.
+            vec3 env = sampleMiss(currentRo, currentRd, skyBlur, skyIntensity);
             if (bounce == 0 && uFogFar < 1000.0) {
                 float fogFactor = smoothstep(uFogNear, uFogFar, uFogFar * 0.95);
                 env = mix(env, uFogColorLinear, fogFactor * 0.5);

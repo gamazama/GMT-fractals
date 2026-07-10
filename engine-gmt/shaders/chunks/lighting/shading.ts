@@ -3,7 +3,9 @@ export const getShadingGLSL = (reflectionCode: string = '') => {
     // If no feature injects reflection code, use simple env-map fallback
     const reflectionBlock = reflectionCode || `
         // --- REFLECTIONS OFF (default) ---
-        vec3 envColor = GetEnvMap(reflDir, roughness) * uEnvStrength;
+        // Fog wraps the raw env radiance before the surface response (F, uSpecular) —
+        // same treatment as the ENV-mode injection; the dome sits at the fog far plane.
+        vec3 envColor = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength);
         reflectionLighting = envColor * F * uSpecular;
     `;
 
@@ -26,7 +28,7 @@ vec3 applyEnvFog(vec3 env) {
 // at full intensity even when they sit right next to the reflector.
 vec3 sampleMissEnv(vec3 ro, vec3 rd, float roughness, vec3 throughput) {
     g_missSelfFogCover = 0.0;
-    vec3 raw = sampleMiss(ro, rd, roughness) * uEnvStrength;
+    vec3 raw = sampleMiss(ro, rd, roughness, uEnvStrength);
     return mix(applyEnvFog(raw), raw, g_missSelfFogCover) * throughput;
 }
 
@@ -77,11 +79,15 @@ vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSe
     float fresnelTerm = pow(1.0 - NdotV, uRimExponent);
     vec3 rimColor = uRimColor * fresnelTerm * uRim;
 
-    // 7. Ambient IBL
+    // 7. Ambient IBL — the env map acting as a dome light. Fog wraps the raw
+    // irradiance BEFORE the surface response (kD·albedo): in heavy fog the dome
+    // light reaching a surface dims/tints toward the fog colour, matching the
+    // fogged sky behind it — otherwise surfaces glow unfogged against the fog.
+    // (applyEnvFog is identity when fog is off.)
     if (uEnvStrength > 0.001) {
-        vec3 envIrradiance = GetEnvMap(n, 1.0);
+        vec3 envIrradiance = applyEnvFog(GetEnvMap(n, 1.0) * uEnvStrength);
         vec3 kD = (vec3(1.0) - F) * (1.0 - uReflection);
-        ambient = kD * albedo * envIrradiance * uEnvStrength * uDiffuse;
+        ambient = kD * albedo * envIrradiance * uDiffuse;
     }
 
     // 8. Compose

@@ -122,7 +122,14 @@ void compositeLightSpheres(vec3 ro, vec3 rd, inout vec3 col, inout float d, bool
 
         if (lsHit.z > 0.5) {
             // Inside sphere: tint the entire view like a glowing fog volume
-            col = mix(col, lc, lsHit.x * 0.6);
+            float cover = lsHit.x * 0.6;
+            col = mix(col, lc, cover);
+            // The glow medium surrounds the camera (near field) — spare the tinted
+            // fraction from the whole-path fog the post-process applies, same
+            // rationale as the depth-tested branch below. d pulls toward the light
+            // radius, not 0: the Main depth output feeds the navigation probe.
+            volumetric *= 1.0 - cover;
+            d = mix(d, min(d, uLightRadius[li]), cover);
         } else {
             // Outside: depth-test against fractal surface
             vec3 oc = ro - uLightPos[li];

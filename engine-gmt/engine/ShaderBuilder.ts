@@ -300,7 +300,8 @@ export class ShaderBuilder {
     }
 
     /** Position 12: Code injected inside sampleMiss() to override the environment color.
-     *  Variables in scope: ro, rd, roughness, env (modifiable vec3).
+     *  Variables in scope: ro, rd, roughness, env (modifiable vec3 — already scaled by the
+     *  caller's envScale; overlays mix in unscaled emitter colour on top).
      *  Used for: light sphere rendering on miss, portals, custom skyboxes. */
     addMissLogic(code: string) {
         this.missLogic.push(code);
@@ -320,8 +321,12 @@ export class ShaderBuilder {
 // injections that self-fog set it.
 float g_missSelfFogCover = 0.0;
 
-vec3 sampleMiss(vec3 ro, vec3 rd, float roughness) {
-    vec3 env = GetEnvMap(rd, roughness);
+// envScale: the caller's env-strength factor, applied to the SKY SAMPLE ONLY —
+// injected overlays (light spheres) mix in unscaled, physical emitter colour on
+// top, matching the primary-view composite (a light's brightness must not track
+// the env/dome strength slider).
+vec3 sampleMiss(vec3 ro, vec3 rd, float roughness, float envScale) {
+    vec3 env = GetEnvMap(rd, roughness) * envScale;
 
     // --- FEATURE INJECTION: MISS RAY OVERRIDE ---
     ${injectedCode}
