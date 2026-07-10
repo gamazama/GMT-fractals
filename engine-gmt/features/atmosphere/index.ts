@@ -166,7 +166,7 @@ export const AtmosphereFeature: FeatureDefinition = {
         },
         fogDensity: {
             type: 'float', default: 0.01, label: 'Fog Density', shortId: 'fd', uniform: 'uFogDensity',
-            min: 0.001, max: 5.0, step: 0.01, scale: 'log', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
+            min: 0.001, max: 5.0, step: 0.05, group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
             description: 'Basic volumetric fog absorption density. For god rays and scatter, enable Volumetric Scattering in Engine.',
             helpId: 'fog.settings',
         },
