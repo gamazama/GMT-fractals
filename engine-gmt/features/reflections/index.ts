@@ -1,5 +1,6 @@
 
 import { FeatureDefinition } from '../../engine/FeatureSystem';
+import type { QualityState } from '../quality';
 import { getReflectionsGLSL } from './shader';
 
 // Reflection modes (compile-time)
@@ -78,7 +79,7 @@ const REFL_RAYMARCH_SHADING = `
 
         if (roughness <= uReflRoughnessCutoff && dot(currentThroughput, currentThroughput) >= 0.01) {
 
-            vec4 refHit = traceReflectionRay(currRo, currRd);
+            vec4 refHit = traceReflectionRay(currRo, currRd, d);
 
             if (refHit.x > 0.0) {
                 float hitD = refHit.x;
@@ -275,8 +276,14 @@ export const ReflectionsFeature: FeatureDefinition = {
         }
 
         if (mode === REFL_MODE_RAYMARCH) {
-            // Full raymarched reflections — trace function + shading integration
-            builder.addPostDEFunction(getReflectionsGLSL());
+            // Full raymarched reflections — trace function + shading integration.
+            // The bisection hit-refine rides the quality feature's 'Surface
+            // Refinement' compile gate (same source quality.ts inject reads, so
+            // inject order doesn't matter) — its REFINE_HARD_CAP define and
+            // uRefineActive/uRefineSteps runtime controls drive both marches.
+            // Un-refined builds get zero extra GLSL (no new DE_Dist call site).
+            const refine = !!(config.quality as QualityState | undefined)?.refineEnabled;
+            builder.addPostDEFunction(getReflectionsGLSL({ refine }));
 
             const bounces = Math.max(1, Math.min(3, state.bounces ?? 1));
             builder.addDefine('MAX_REFL_BOUNCES', bounces.toString());
