@@ -217,6 +217,11 @@ export const MaterialFeature: FeatureDefinition = {
             group: 'env',
             parentId: 'envSource',
             condition: { eq: 0.0 },
+            // Hidden: the 'sky-library' customUI component owns the whole
+            // loader row for this param ([Load Image | Skies | profile chip] +
+            // the sample/user sky shelf) — the generic image widget would
+            // duplicate it. State/serialisation unchanged.
+            hidden: true,
             uniform: 'uEnvMapTexture',
             textureSettings: {
                 mapping: THREE.EquirectangularReflectionMapping,
@@ -341,13 +346,15 @@ export const MaterialFeature: FeatureDefinition = {
             helpId: 'mat.emission',
         }
     },
-    // Bundled sample skies — renders under the Source dropdown (Sky Image only),
-    // after Upload/Rotation. The component is app-registered ('sample-skies',
+    // Sky loader + library — owns the envMapData row (the param is hidden):
+    // [Load Image | Skies ▾ | profile chip] with bundled samples + IndexedDB
+    // user skies behind the toggle. App-registered ('sky-library',
     // app-gmt/registerFeatures.ts); apps that don't register it (fluid-toy)
-    // silently skip the entry.
+    // silently skip the entry — but then have no env upload UI, so register
+    // it if the env section is surfaced there.
     customUI: [
         {
-            componentId: 'sample-skies',
+            componentId: 'sky-library',
             group: 'env',
             parentId: 'envSource',
             condition: { eq: 0.0 }, // Sky Image source
