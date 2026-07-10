@@ -1,11 +1,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { ChevronDown } from '../../../components/Icons';
 import { useHelpContextMenu } from '../../../hooks/useHelpContextMenu';
 import { ASPECT_RATIOS, type AspectRatioValue } from '../../../data/resolutionPresets';
 import { snap8 } from '../../../utils/resolutionUtils';
-import { NumberInput } from '../../../components/NumberInput';
 import { Button } from '../../../components/Button';
 
 interface FixedResolutionControlsProps {
@@ -146,13 +144,23 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
             </div>
             
             {showResMenu && (
-                <div 
+                <div
                     ref={presetMenuRef}
                     className="absolute top-8 left-0 w-48 bg-surface border border-line/20 rounded shadow-xl z-50 overflow-hidden flex flex-col py-1 animate-fade-in"
                 >
+                    {/* Custom sits at the top — it's an explicit W×H entry, not a
+                        fit-to-window preset, so it's separated from the list below. */}
+                    <button
+                        onClick={() => applyPreset('Custom')}
+                        className="text-left px-3 py-1.5 text-[10px] text-fg-tertiary hover:bg-line/10 hover:text-fg transition-colors flex justify-between items-center whitespace-nowrap"
+                    >
+                        <span>Custom…</span>
+                        <span className="text-[8px] text-fg-faint font-mono">W × H</span>
+                    </button>
+                    <div className="border-t border-line/10 my-1" />
                     <div className="px-3 py-1 text-[8px] font-bold text-fg-dim border-b border-line/10 mb-1">Fit to Window</div>
-                    {ASPECT_RATIOS.map(p => (
-                        <button 
+                    {ASPECT_RATIOS.filter(p => p.ratio !== 'Custom').map(p => (
+                        <button
                             key={p.label}
                             onClick={() => applyPreset(p.ratio)}
                             className="text-left px-3 py-1.5 text-[10px] text-fg-tertiary hover:bg-line/10 hover:text-fg transition-colors flex justify-between whitespace-nowrap"
@@ -173,7 +181,7 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
             </button>
 
             {showCustomDialog && (
-                <CustomResolutionDialog
+                <CustomResolutionPopover
                     initialWidth={width}
                     initialHeight={height}
                     onClose={() => setShowCustomDialog(false)}
@@ -187,48 +195,104 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
     );
 };
 
-interface CustomResolutionDialogProps {
+interface CustomResolutionPopoverProps {
     initialWidth: number;
     initialHeight: number;
     onClose: () => void;
     onApply: (w: number, h: number) => void;
 }
 
-const CustomResolutionDialog: React.FC<CustomResolutionDialogProps> = ({
+/**
+ * Small, non-blocking popover anchored below the resolution pill — no
+ * backdrop, so the rest of the app stays interactive while it's open.
+ * Opens with the Width field focused and its text selected so the user
+ * can type a value immediately; Enter applies, Escape / outside-click
+ * dismiss.
+ */
+const CustomResolutionPopover: React.FC<CustomResolutionPopoverProps> = ({
     initialWidth, initialHeight, onClose, onApply,
 }) => {
     const [w, setW] = useState(initialWidth);
     const [h, setH] = useState(initialHeight);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const widthRef = useRef<HTMLInputElement>(null);
 
-    // Latest-ref so the listener registers once but always sees current values
-    // / callbacks. Plain dep array would re-bind on every keystroke.
+    // Latest-ref so window listeners register once but always see current
+    // values / callbacks. Plain dep array would re-bind on every keystroke.
     const latestRef = useRef({ w, h, onClose, onApply });
     latestRef.current = { w, h, onClose, onApply };
+
+    // Focus + select the Width field on open so typing replaces it outright.
+    useEffect(() => {
+        const el = widthRef.current;
+        if (el) { el.focus(); el.select(); }
+    }, []);
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             const cur = latestRef.current;
-            if (e.key === 'Escape') cur.onClose();
-            else if (e.key === 'Enter') cur.onApply(cur.w, cur.h);
+            if (e.key === 'Escape') { e.stopPropagation(); cur.onClose(); }
+            else if (e.key === 'Enter') { e.stopPropagation(); cur.onApply(cur.w, cur.h); }
+        };
+        // Outside-click dismiss — non-blocking, so we watch the document
+        // ourselves instead of relying on a backdrop. Inner mousedowns
+        // stopPropagation (below), so they never reach this.
+        const onDown = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+                latestRef.current.onClose();
+            }
         };
         window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
+        window.addEventListener('mousedown', onDown);
+        return () => {
+            window.removeEventListener('keydown', onKey);
+            window.removeEventListener('mousedown', onDown);
+        };
     }, []);
 
-    return createPortal(
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60" onClick={onClose}>
-            <div className="bg-surface-sunken border border-line/10 rounded-lg p-5 w-72 shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="text-xs font-bold text-fg mb-3">Custom Resolution</div>
-                <div className="flex gap-2 mb-4">
-                    <NumberInput label="Width"  value={w} onChange={setW} step={8} min={64} max={32768} />
-                    <NumberInput label="Height" value={h} onChange={setH} step={8} min={64} max={32768} />
-                </div>
-                <div className="flex justify-end gap-2">
-                    <Button size="small" label="Cancel" onClick={onClose} />
-                    <Button size="small" variant="primary" active label="Apply" onClick={() => onApply(w, h)} />
-                </div>
+    const inputCls = 'w-full h-6 bg-surface-sunken rounded border border-line/10 px-2 text-[11px] font-mono text-fg text-center focus:border-accent-500/60 focus:outline-none';
+
+    return (
+        <div
+            ref={rootRef}
+            className="absolute top-8 left-0 w-52 bg-surface border border-line/20 rounded shadow-xl z-[60] p-3 animate-fade-in"
+            onMouseDown={e => e.stopPropagation()}
+        >
+            <div className="text-[10px] font-bold text-fg-dim mb-2">Custom Resolution</div>
+            <div className="flex items-end gap-1.5 mb-3">
+                <label className="flex-1">
+                    <span className="block text-[8px] font-bold text-fg-dim mb-0.5">Width</span>
+                    <input
+                        ref={widthRef}
+                        type="number"
+                        value={w}
+                        min={64}
+                        max={32768}
+                        step={8}
+                        onChange={e => setW(Number(e.currentTarget.value))}
+                        onFocus={e => e.currentTarget.select()}
+                        className={inputCls}
+                    />
+                </label>
+                <span className="text-fg-faint text-[10px] pb-1.5">×</span>
+                <label className="flex-1">
+                    <span className="block text-[8px] font-bold text-fg-dim mb-0.5">Height</span>
+                    <input
+                        type="number"
+                        value={h}
+                        min={64}
+                        max={32768}
+                        step={8}
+                        onChange={e => setH(Number(e.currentTarget.value))}
+                        onFocus={e => e.currentTarget.select()}
+                        className={inputCls}
+                    />
+                </label>
             </div>
-        </div>,
-        document.body,
+            <div className="flex justify-end gap-2">
+                <Button size="small" label="Cancel" onClick={onClose} />
+                <Button size="small" variant="primary" active label="OK" onClick={() => onApply(w, h)} />
+            </div>
+        </div>
     );
 };
