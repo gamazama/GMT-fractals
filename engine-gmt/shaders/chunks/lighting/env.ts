@@ -77,16 +77,22 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
 }
 
 // In-scattered fog radiance for a ray direction (ADR-0097). Physically the fog
-// IS the atmosphere lit by the dome, so its colour should track the (max-blur)
-// env map per direction — aerial perspective: fog brightens toward the bright
-// side of the sky instead of being one flat colour. uFogEnvTint blends from
-// the authored Fog Color (0, legacy — zero extra cost) to the env-derived
-// radiance (1). The env side scales with uEnvStrength: a dim dome lights dim
-// fog. roughness 1.0 rides the ADR-0069 blend to the solid-angle-correct
-// average, so the sample is cheap and pole-safe.
+// IS the atmosphere lit by the dome, so its colour should track a heavily
+// blurred env sample per direction — aerial perspective: fog brightens toward
+// the bright side of the sky instead of being one flat colour. uFogEnvTint
+// blends from the authored Fog Color (0, legacy — zero extra cost) to the
+// env-derived radiance (1). The env side scales with uEnvStrength.
+//
+// NOT roughness 1.0: for image env maps GetEnvMap's terminal LOD blends to the
+// direction-INDEPENDENT solid-angle average (ADR-0069 avgMix window, the last
+// 4 mips) — per-direction fog would come out one flat grey. Sample at the
+// blurriest mip BELOW that window instead (lod = uEnvMaxMip - 4, i.e.
+// roughness = 1 - 4/uEnvMaxMip): maximally soft but still directional.
+// Gradient/procedural env paths ignore the exact value and stay directional.
 vec3 fogRadiance(vec3 dir) {
     if (uFogEnvTint < 0.001) return uFogColorLinear;
-    return mix(uFogColorLinear, GetEnvMap(dir, 1.0) * uEnvStrength, uFogEnvTint);
+    float fogRough = clamp(1.0 - 4.0 / max(uEnvMaxMip, 5.0), 0.5, 1.0);
+    return mix(uFogColorLinear, GetEnvMap(dir, fogRough) * uEnvStrength, uFogEnvTint);
 }
 
 // Sample the env map at the resolution the CDF was built from. Used by

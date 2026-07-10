@@ -169,6 +169,12 @@ export const GmtPanels: PanelManifest = [
 
             { type: 'separator', showIf: 'advancedMode' },
 
+            // --- Environment (sky source + dome light) ---
+            // Moved here from the Shader panel (owner call 2026-07-10): the env
+            // map IS the scene's sky/dome, and fog now derives its colour from
+            // it per-direction (Sky Tint, ADR-0097) — the two belong together.
+            { type: 'feature', id: 'materials', groupFilter: 'env' },
+
             // --- Atmosphere (fog) ---
             { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
 
@@ -258,8 +264,9 @@ export const GmtPanels: PanelManifest = [
         ],
     },
 
-    // Shader — material surface + environment + reflections + glow +
-    // emission + ambient occlusion. Mirrors GMT's RenderPanel layout
+    // Shader — material surface + reflections + glow + emission + ambient
+    // occlusion (environment moved to the Scene panel beside Fog, ADR-0097).
+    // Mirrors GMT's RenderPanel layout
     // exactly: a flat sequence of group-filtered features rather than
     // the whole feature stack. The features listed here are *only*
     // used for the groups they expose to this panel — other panels
@@ -271,7 +278,7 @@ export const GmtPanels: PanelManifest = [
         helpId: 'panel.render',
         items: [
             { type: 'feature', id: 'materials',   groupFilter: 'surface'   },
-            { type: 'feature', id: 'materials',   groupFilter: 'env'       },
+            // (Environment group moved to the Scene panel, beside Fog — ADR-0097 ties them.)
             { type: 'feature', id: 'reflections', groupFilter: 'shading'   },
             { type: 'feature', id: 'atmosphere',  groupFilter: 'glow'      },
             { type: 'feature', id: 'materials',   groupFilter: 'emission'  },
