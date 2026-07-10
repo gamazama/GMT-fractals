@@ -37,6 +37,7 @@ const header = {
   zoom: 1, fovY: 0, dZstart: 0, dZend: 0, midX: 0, midY: 0, midZ: 0, wRotX: 0, wRotY: 0, wRotZ: 0,
   hVGrads: [], isJulia: false, jx: 0, jy: 0, jz: 0, jw: 0, m3dVersion: 18, tilingOptions: 0,
   rStop: 0, deStop: 0, zStepDiv: 0, stepsAfterDEStop: 0,
+  srAmount: 0, srOptions: 0, srReflectionCount: 0,
   lights: [], roughnessFactor: 0, tbpos: [], tbOptions: 0,
   ambCol: '', ambCol2: '', depthCol: '', depthCol2: '', dynFog: '', colStops: [],
 };

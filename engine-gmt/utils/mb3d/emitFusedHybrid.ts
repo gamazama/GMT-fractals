@@ -586,6 +586,31 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     preset.features.quality = { ...q, ...sceneQuality };
   }
 
+  // AUTHORED REFLECTIONS (ADR-0096). The CalcSR.pas "Calculate Reflections" pass params
+  // live in the header (SRamount #332, bCalcSRautomatic #336, SRreflectioncount #337 —
+  // TypeDefinitions.pas:791-793). bit0 of bCalcSRautomatic = "calc reflections
+  // automatically", i.e. the artist made reflections part of the render → enable GMT's
+  // Raymarched mode. Manual-calc scenes (bit0 clear) stay on the cheap Env default:
+  // SRamount is populated in most headers whether reflections were used or not, so it
+  // can't gate by itself.
+  //  - SRamount → mixStrength: MB3D scales the reflected-light amount (~0..1 in
+  //    practice); GMT's nearest control blends traced reflections against the env
+  //    fallback. Not exact — a dim MB3D reflection becomes a partly-env one — but it
+  //    tracks the authored intensity.
+  //  - SRreflectioncount → bounces (GMT's mirror recursion, clamped to its max of 3).
+  //  - bit1 (transmission) deliberately unmapped — GMT has no refraction path (parked).
+  //  - NOT compensated: MB3D dims its primary lighting when reflections are on
+  //    (sObjLightDecreaser = max(0.5, 1 − 0.17·√SRamount), CalcSR.pas:698), so a
+  //    reflective import renders slightly brighter in GMT than in MB3D.
+  if ((h2.srOptions & 1) !== 0 && h2.srAmount > 0) {
+    preset.features.reflections = {
+      ...(preset.features.reflections ?? {}),
+      reflectionMode: 3.0, // REFL_MODE_RAYMARCH (raw value, matching this file's literal style)
+      mixStrength: Math.min(1, Math.max(0, h2.srAmount)),
+      bounces: Math.min(3, Math.max(1, Math.round(h2.srReflectionCount || 1))),
+    };
+  }
+
   // dIFS DE wiring (estimator 6): declare a file-scope g_difsDE global (preamble),
   // reset it per map()/mapDist() call (loopInit), and after each fused-formula step
   // fold the active IFS slot's surface distance / accumulated scale into the running

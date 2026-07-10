@@ -299,7 +299,12 @@ export const LightingFeature: FeatureDefinition = {
             description: 'Deprecated — kept so old scene files load without dropping state. Migrated to ptReflMode at boot.'
         },
         ptMaxLuminance: {
-            type: 'float', default: 10.0, label: 'Firefly Clamp', shortId: 'pfl', uniform: 'uPTMaxLuminance',
+            // Default 10 → 2.5 (owner call 2026-07-10, with the reflection noise pass):
+            // both soft-knee clamps (PT clampByLuminance + reflections clampReflLum,
+            // ADR-0071) pass l ≤ t through untouched, so 10 only engaged on extreme
+            // spikes and left reflected/bounced highlights noisy. Scenes that stored
+            // the old value keep it (presets carry explicit params).
+            type: 'float', default: 2.5, label: 'Firefly Clamp', shortId: 'pfl', uniform: 'uPTMaxLuminance',
             min: 0.5, max: 200.0, step: 0.5, scale: 'log',
             group: 'engine_settings', parentId: 'ptEnabled',
             description: 'Clamps per-sample luminance to suppress bright firefly spikes. Lower = cleaner but slightly biased. Raise to effectively disable.'

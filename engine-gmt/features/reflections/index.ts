@@ -77,10 +77,26 @@ const REFL_RAYMARCH_SHADING = `
         // terms cancel against the VNDF pdf, leaving this bounded weight.
         vec3 currentThroughput = reflF * uSpecular * reflG1L;
 
+        // First-bounce throughput snapshot — the bounce loop attenuates
+        // currentThroughput per surface; the simpleEnv mix below must use the
+        // un-attenuated value (pre-loop behaviour).
+        vec3 reflThroughput0 = currentThroughput;
+
         if (roughness <= uReflRoughnessCutoff && dot(currentThroughput, currentThroughput) >= 0.01) {
 
+            // --- BOUNCE LOOP (ADR-0096) — Whitted continuation, MB3D CalcSR
+            // recursion shape: mirror re-reflect at each hit, throughput ×=
+            // the hit's Fresnel × specular, luma early-exit (MB3D uses 1e-4 on
+            // its absorption vector, CalcSR.pas:352). MAX_REFL_BOUNCES is the
+            // compile define from the 'Max Bounces' param (default 1 unrolls
+            // to exactly the old single-trace body). Secondary bounces are
+            // deterministic mirrors — the VNDF jitter applies to bounce 0 only,
+            // so extra bounces add no extra noise.
+            float reflPathDist = d; // view-cone distance at the current origin
+            for (int b = 0; b < MAX_REFL_BOUNCES; b++) {
+
             float reflFade = 1.0; // hit confidence: 1 = real hit, <1 = recovered candidate (ADR-0095)
-            vec4 refHit = traceReflectionRay(currRo, currRd, d, reflFade);
+            vec4 refHit = traceReflectionRay(currRo, currRd, reflPathDist, reflFade);
 
             if (refHit.x > 0.0) {
                 float hitD = refHit.x;
@@ -103,14 +119,26 @@ const REFL_RAYMARCH_SHADING = `
 
                 if (dot(r_n, -currRd) < 0.0) r_n = -r_n;
 
+                // Whether this iteration terminates the chain: the compiled
+                // bounce ceiling, or a recovered low-confidence hit (a faded
+                // near-graze is no basis for spawning another mirror ray).
+                bool lastBounce = (b == MAX_REFL_BOUNCES - 1) || (reflFade < 0.999);
+
                 vec3 hitColor = r_emission;
                 #ifdef REFL_BOUNCE_SHADOWS
                     // Always compute shadows when enabled — avoids brightness pop
                     // between navigation (no shadows) and accumulation (shadows).
-                    hitColor += calculatePBRContribution(p_next, r_n, -currRd, r_albedo, r_rough, uReflection, stochasticSeed + 0.1, true);
+                    hitColor += calculatePBRContribution(p_next, r_n, -currRd, r_albedo, r_rough, uReflection, stochasticSeed + 0.1 + 0.31 * float(b), true);
                 #else
-                    hitColor += calculatePBRContribution(p_next, r_n, -currRd, r_albedo, r_rough, uReflection, stochasticSeed + 0.1, false);
+                    hitColor += calculatePBRContribution(p_next, r_n, -currRd, r_albedo, r_rough, uReflection, stochasticSeed + 0.1 + 0.31 * float(b), false);
                 #endif
+
+                // Fresnel of the hit surface — feeds the env-spec fill AND the
+                // next bounce's throughput attenuation (MB3D: tAbsorb ×= the
+                // hit's specular colour, CalcSR.pas:635).
+                vec3  r_F0    = mix(vec3(0.04), r_albedo, uReflection);
+                float r_NdotV = max(0.0, dot(r_n, -currRd));
+                vec3  r_F     = r_F0 + (max(vec3(1.0 - r_rough), r_F0) - r_F0) * pow(1.0 - r_NdotV, 5.0);
 
                 // Environment fill at the reflected hit. The primary surface
                 // receives Ambient IBL (shading.ts step 7), but the reflection
@@ -122,12 +150,13 @@ const REFL_RAYMARCH_SHADING = `
                 // show the environment, not just point lights). Deterministic
                 // mip-filtered lookups — adds fill light, not noise.
                 if (uEnvStrength > 0.001) {
-                    vec3  r_F0    = mix(vec3(0.04), r_albedo, uReflection);
-                    float r_NdotV = max(0.0, dot(r_n, -currRd));
-                    vec3  r_F     = r_F0 + (max(vec3(1.0 - r_rough), r_F0) - r_F0) * pow(1.0 - r_NdotV, 5.0);
                     vec3  r_kD    = (vec3(1.0) - r_F) * (1.0 - uReflection);
                     vec3  r_envDiff = r_kD * r_albedo * GetEnvMap(r_n, 1.0) * uDiffuse;
-                    vec3  r_envSpec = r_F * GetEnvMap(reflect(currRd, r_n), r_rough);
+                    // Specular env lobe ONLY on the terminating bounce — on
+                    // earlier bounces the traced next ray IS that lobe (it
+                    // returns either real geometry or sampleMissEnv); adding
+                    // both would double-count the mirror direction.
+                    vec3  r_envSpec = lastBounce ? r_F * GetEnvMap(reflect(currRd, r_n), r_rough) : vec3(0.0);
                     hitColor += applyEnvFog((r_envDiff + r_envSpec) * uEnvStrength);
                 }
 
@@ -136,8 +165,20 @@ const REFL_RAYMARCH_SHADING = `
                 // reflected cavities occlude the env fill instead of reading
                 // flat / over-lit. GetAO is a safe no-op (returns 1.0) when the
                 // AO feature is disabled.
-                float r_ao = GetAO(p_next, r_n, stochasticSeed + 0.1);
+                float r_ao = GetAO(p_next, r_n, stochasticSeed + 0.1 + 0.31 * float(b));
                 hitColor *= mix(uAOColor, vec3(1.0), r_ao);
+
+                // Reflected-segment distance fog (ADR-0096). The atmosphere
+                // post-process fogs the whole pixel by the PRIMARY travel d —
+                // the camera→reflector segment — so reflections of distant
+                // geometry read too crisp in foggy scenes. Add the reflected
+                // segment's own travel through the same ramp (MB3D re-fogs
+                // reflected hits by their depth, CalcSR.pas CalcZposAndRough →
+                // CalcPixelColorSvecTrans). Misses already fog via applyEnvFog.
+                if (uFogIntensity > 0.001) {
+                    float rFog = smoothstep(uFogNear, uFogFar, hitD) * uFogIntensity;
+                    hitColor = mix(hitColor, uFogColorLinear, rFog);
+                }
 
                 // Firefly clamp on the single per-frame reflection sample (uses
                 // the shared uPTMaxLuminance "Firefly Clamp" control). Clamping
@@ -154,15 +195,32 @@ const REFL_RAYMARCH_SHADING = `
                 }
                 reflectionLighting += hitContrib;
 
+                if (lastBounce) break;
+
+                // Continue the chain: attenuate throughput by the hit surface's
+                // specular reflectance (r_F × uSpecular — the GMT twin of MB3D's
+                // tAbsorb ×= specular colour × SRamount) and mirror-reflect.
+                currentThroughput *= r_F * uSpecular;
+                if (dot(currentThroughput, vec3(0.299, 0.587, 0.114)) < 1.0e-3) break;
+                reflPathDist += hitD;
+                currRd = reflect(currRd, r_n);
+                // Same bias recipe as bounce 0: pixel footprint at the point's
+                // camera distance, floored by float precision at the point.
+                float nextFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * reflCameraDist;
+                float nextBias = max(nextFootprint * 2.0, length(p_next_fractal) * PRECISION_RATIO_HIGH * 2.0);
+                currRo = p_next + r_n * nextBias;
+
             } else {
                 reflectionLighting += sampleMissEnv(currRo, currRd, roughness, currentThroughput);
+                break;
             }
+            } // end bounce loop
         } else {
             reflectionLighting += applyEnvFog(GetEnvMap(currRd, roughness) * uEnvStrength) * currentThroughput;
         }
 
         vec3 simpleEnv = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength);
-        simpleEnv *= currentThroughput;
+        simpleEnv *= reflThroughput0;
 
         reflectionLighting = mix(simpleEnv, reflectionLighting, uReflStrength);
     }
@@ -176,6 +234,7 @@ export interface ReflectionsState {
     steps: number;
     roughnessThreshold: number;
     mixStrength: number;
+    accurateColors: boolean; // True trap-colour at reflected hits (compile gate, ADR-0096)
 }
 
 export const ReflectionsFeature: FeatureDefinition = {
@@ -241,12 +300,12 @@ export const ReflectionsFeature: FeatureDefinition = {
         bounces: {
             type: 'int', default: 1, label: 'Max Bounces', shortId: 'rb',
             min: 1, max: 3, step: 1, group: 'engine_settings',
-            uniform: 'uReflBounces',
             ui: 'numeric',
-            description: "Maximum recursion depth. Clamped to 3. Default 1 for performance.",
+            description: "Mirror recursion depth — 2+ shows reflections inside reflections. Each extra bounce recompiles and adds a full trace + shade per pixel.",
             noAccumReset: true,
             onUpdate: 'compile',
-            condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH }
+            condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH },
+            estCompileMs: 800  // speculative: each bounce unrolls another trace+shade body; owner to measure
         },
         steps: {
             type: 'int', default: 64, label: 'Trace Steps', shortId: 'rs',
@@ -256,6 +315,16 @@ export const ReflectionsFeature: FeatureDefinition = {
             description: "Precision of the reflection ray.",
             noAccumReset: true,
             condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH }
+        },
+        accurateColors: {
+            type: 'boolean', default: false, label: 'Accurate Colors', shortId: 'ac',
+            group: 'engine_settings',
+            ui: 'checkbox',
+            condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH },
+            description: "Sample the true surface colour (orbit traps / colour smoothing) at reflected hits instead of the gradient default. Adds compile time.",
+            onUpdate: 'compile',
+            noAccumReset: true,
+            estCompileMs: 400  // speculative: one full map() call site at the march exit; owner to measure
         },
 
         // Master Switch (Compile Time) — hidden, controlled by engine toggle
@@ -293,7 +362,7 @@ export const ReflectionsFeature: FeatureDefinition = {
             // uRefineActive/uRefineSteps runtime controls drive both marches.
             // Un-refined builds get zero extra GLSL (no new DE_Dist call site).
             const refine = !!(config.quality as QualityState | undefined)?.refineEnabled;
-            builder.addPostDEFunction(getReflectionsGLSL({ refine }));
+            builder.addPostDEFunction(getReflectionsGLSL({ refine, accurateColors: !!state.accurateColors }));
 
             const bounces = Math.max(1, Math.min(3, state.bounces ?? 1));
             builder.addDefine('MAX_REFL_BOUNCES', bounces.toString());

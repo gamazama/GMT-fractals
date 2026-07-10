@@ -18,6 +18,8 @@ export function defaultHeader(): MB3DHeader {
         // 0 → the scene-DE override in emitFusedHybrid is skipped; a standalone formula
         // keeps its own DE defaults (mapDEMeta) since there's no authored scene.
         rStop: 0, deStop: 0, zStepDiv: 0, stepsAfterDEStop: 0,
+        // srOptions 0 → no authored reflections; the reflections mapping is skipped.
+        srAmount: 0, srOptions: 0, srReflectionCount: 0,
         // No authored lighting → empty lights makes mapMB3DLighting return nothing, so the
         // preset inherits DEFAULT_LIGHTS (mirrors hVGrads:[] → centered-camera fallback).
         lights: [], roughnessFactor: 0, tbpos: [], tbOptions: 0,

@@ -7,6 +7,11 @@ export interface ReflectionsGLSLOptions {
      *  the primary march. When off, NO GLSL for it is emitted (no extra DE_Dist call
      *  site) and the marcher is byte-identical to the un-refined version. */
     refine?: boolean;
+    /** Compile-gate for true surface colour at reflected hits (the feature's own
+     *  'Accurate Colors' toggle): one full DE() call at the single exit point fills
+     *  refHit.yzw with real trap/iter/decomposition data instead of zeros (which fall
+     *  back to the gradient's default colour). Off = no extra map() call site. */
+    accurateColors?: boolean;
 }
 
 export const getReflectionsGLSL = (options: ReflectionsGLSLOptions = {}) => {
@@ -89,7 +94,8 @@ ${getVNDFSamplerGLSL('sampleReflVNDF')}
 #define REFL_RECOVERY_RANGE 6.0
 
 // Reflection-bounce raymarcher — MB3D-faithful (ADR-0094, the reflection twin of
-// the unified marcher, ADR-0092/0093; recovery + fade + step caution: ADR-0095).
+// the unified marcher, ADR-0092/0093; candidate recovery + graded fade: ADR-0095;
+// multi-bounce / segment fog / accurate colours: ADR-0096).
 //
 // THRESHOLD: the reflected ray CONTINUES the primary view cone. The hit epsilon
 // is the pixel footprint at (primary travel + reflected travel), floored by the
@@ -128,6 +134,8 @@ vec4 traceReflectionRay(vec3 ro, vec3 rd, float dPrimary, out float reflFade) {
     float minRatio = 1.0e10; // min h/finalEps seen along the ray
     float candT = -1.0;      // ray parameter at that closest approach
 
+    float hitT = -1.0;       // resolved hit parameter — single exit point below
+
     for(int i=0; i<${MAX_REFL_STEPS}; i++) {
         if (i >= limit) break;
 
@@ -154,20 +162,14 @@ vec4 traceReflectionRay(vec3 ro, vec3 rd, float dPrimary, out float reflFade) {
         }
 
         if (h < finalEps) {
-            // HIT: Retreat by half the last DE to land nearer the surface. The
-            // march uses DE_Dist (geometry-only) throughout — the trap/iter data
-            // we'd lose is only used downstream to drive gradient-texture color
-            // sampling at the reflection hit; for the common case (gradient-driven
-            // surface) returning vec4(0) for trap data falls back to the gradient's
-            // default colour, which is visually close to the actual reflected
-            // colour for default scenes. If pixel-perfect reflection colour
-            // matters, swap back to DE().
+            // HIT: Retreat by half the last DE to land nearer the surface.
             float tHit = t - h * 0.5;
 ${refineBlock}
             // Floor at floatPrecision: a legitimate contact hit on the very first
             // sample must still return a positive t (refHit.x > 0.0 is the caller's
             // hit test) — scale-aware, unlike a fixed epsilon.
-            return vec4(max(tHit, floatPrecision), 0.0, 0.0, 0.0);
+            hitT = max(tHit, floatPrecision);
+            break;
         }
 
         // Track the closest approach in threshold multiples — non-hit steps only
@@ -201,11 +203,25 @@ ${refineBlock}
     // (t/maxLen)^8 falloffs). Deliberately NOT tied to uOverstepTolerance — that
     // is a default-0 scene-repair knob for the primary march; for a reflection
     // ray, recovery is always the lesser evil vs a guaranteed-wrong env leak.
-    if (candT > 0.0 && minRatio < REFL_RECOVERY_RANGE) {
+    if (hitT < 0.0 && candT > 0.0 && minRatio < REFL_RECOVERY_RANGE) {
         float f = 1.0 - (minRatio - 1.0) / (REFL_RECOVERY_RANGE - 1.0);
         f = clamp(f, 0.0, 1.0);
         reflFade = f * f;
-        if (reflFade > 0.001) return vec4(candT, 0.0, 0.0, 0.0);
+        if (reflFade > 0.001) hitT = candT;
+    }
+
+    if (hitT > 0.0) {
+        ${options.accurateColors
+            ? `// 'Accurate Colors' (gated): ONE full map() at the resolved hit fills the
+        // trap/iter/decomposition channels so the reflected surface samples its true
+        // colour. The march itself stays on geometry-only DE_Dist — this is the only
+        // full-DE call site the gate adds.
+        vec4 hitData = DE(ro + rd * hitT);
+        return vec4(hitT, hitData.yzw);`
+            : `// Trap channels zeroed: the reflected surface colours from the gradient's
+        // default — visually close for gradient-driven scenes. The 'Accurate Colors'
+        // toggle compiles a true colour lookup here instead.
+        return vec4(hitT, 0.0, 0.0, 0.0);`}
     }
     return vec4(-1.0); // MISS
 }
