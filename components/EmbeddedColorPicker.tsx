@@ -24,8 +24,11 @@ import { ChevronDown } from './Icons';
 // Rich colour picker (W10): 2D saturation×brightness field + hue strip, RGB+HSB
 // sliders, optional alpha, hex input/copy/eyedropper, and harmony / recents /
 // palette swatch rows. Engine-shared & CONTROLLED — mounted by AutoFeaturePanel
-// (every colour DDFS param), AdvancedGradientEditor, SmallColorPicker, and the
-// lighting panels. All colour maths come from utils/colorUtils (P0a interface f);
+// (every colour DDFS param), AdvancedGradientEditor, DrawingPanel, the lighting
+// panels, and CompositionOverlayControls. It is THE colour picker — the legacy
+// SmallColorPicker swatch+portal wrapper was retired 2026-07-10 (the compact
+// MINI default covers dense docks; lists expand it in-place instead of
+// portalling). All colour maths come from utils/colorUtils (P0a interface f);
 // this file adds NO conversions of its own.
 //
 // Back-compat: `onColorChange` always emits `#RRGGBB` (never 8-digit — the stop

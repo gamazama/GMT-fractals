@@ -28,7 +28,6 @@ import { useEngineStore } from '../store/engineStore';
 import Slider, { DraggableNumber } from './Slider';
 import { createLogMapping, createPowMapping, piUnitMapping, type ValueMapping } from './inputs';
 import ToggleSwitch from './ToggleSwitch';
-import SmallColorPicker from './SmallColorPicker';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import Dropdown from './Dropdown';
 import { Vector2Input, Vector3Input, Vector4Input } from './vector-input';
@@ -280,24 +279,18 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         if (config.type === 'color') {
             let hex = val;
             if (typeof val === 'object' && val.getHexString) hex = '#' + val.getHexString();
-            if (config.layout === 'embedded' || config.parentId) {
-                // `layout: 'embedded'` is a standalone row (no parent section header),
-                // so carry its label above the inline picker. `parentId` pickers sit
-                // under their parent's header already, so they stay label-less.
-                return (
-                    <div className={`pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
-                        {config.layout === 'embedded' && config.label && <SectionLabel>{config.label}</SectionLabel>}
-                        <EmbeddedColorPicker color={hex} onColorChange={(c) => handleUpdate(key, c)} />
-                    </div>
-                );
-            } else {
-                return (
-                    <div className={`flex items-center justify-between px-3 py-1 bg-surface-header ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
-                        <SectionLabel>{config.label}</SectionLabel>
-                        <SmallColorPicker color={hex} onChange={(c) => handleUpdate(key, c)} label={config.label} />
-                    </div>
-                );
-            }
+            // ONE picker for every colour param (the SmallColorPicker swatch +
+            // body-portal popup is retired — the embedded picker's compact MINI
+            // default covers the dense-dock case). `parentId` pickers sit under
+            // their parent's header and stay label-less; standalone params
+            // (incl. the former `layout: 'embedded'` case) carry their label
+            // above the inline picker.
+            return (
+                <div className={`pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
+                    {!config.parentId && config.label && <SectionLabel>{config.label}</SectionLabel>}
+                    <EmbeddedColorPicker color={hex} onColorChange={(c) => handleUpdate(key, c)} />
+                </div>
+            );
         }
 
         if (config.type === 'boolean') {
