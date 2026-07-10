@@ -66,7 +66,9 @@ export const LightSpheresFeature: FeatureDefinition = {
         // Position 12 (Miss): Sphere rendering when primary ray misses geometry
         builder.addMissLogic(LIGHT_SPHERE_MISS_GLSL);
 
-        // Position 17 (Composite): Call site for primary ray sphere compositing
-        builder.addCompositeLogic('compositeLightSpheres(ro, rd, col, d, hit, stochasticSeed);');
+        // Position 17 (Composite): Call site for primary ray sphere compositing.
+        // volumetric is inout — the composite rescales the march's accumulated fog
+        // density to the sphere's depth so post-process fog doesn't wipe the emitter.
+        builder.addCompositeLogic('compositeLightSpheres(ro, rd, col, d, hit, volumetric, stochasticSeed);');
     }
 };

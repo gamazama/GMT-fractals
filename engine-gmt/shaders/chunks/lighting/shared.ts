@@ -99,7 +99,7 @@ export const LIGHT_SPHERE_MISS_GLSL = `
 // Primary ray compositing — injected via builder.addCompositeLogic()
 export const getLightSphereCompositeGLSL = () => `
 #ifdef LIGHT_SPHERES
-void compositeLightSpheres(vec3 ro, vec3 rd, inout vec3 col, inout float d, bool hit, float seed) {
+void compositeLightSpheres(vec3 ro, vec3 rd, inout vec3 col, inout float d, bool hit, inout float volumetric, float seed) {
     // Stochastic radius jitter: +-2% per frame, accumulation averages into smooth AA edges.
     // Disabled during navigation (uBlendFactor >= 0.99) for a clean image.
     float radiusJitter = uBlendFactor >= 0.99 ? 0.0 : (fract(seed * 91.3) - 0.5) * 0.04;
@@ -122,6 +122,15 @@ void compositeLightSpheres(vec3 ro, vec3 rd, inout vec3 col, inout float d, bool
 
             if (!hit || lightD < d) {
                 col = mix(col, lc, lsHit.x);
+                // Fog correctness: traceScene integrated fog density along its FULL
+                // march (to the geometry hit, or the miss exit ~MAX_DIST) — it never
+                // knew this emitter sits in front. Without a rescale, the volumetric
+                // fog term (applyPostProcessing runs AFTER this composite) paints that
+                // whole-path fog over the sphere and wipes it. Rescale the accumulated
+                // density to the sphere's depth (uniform-density approximation),
+                // blended by sphere coverage so a faint halo keeps the fog behind it.
+                // Distance fog needs no such fix — it reads d, updated below.
+                volumetric *= mix(1.0, clamp(lightD / max(d, lightD), 0.0, 1.0), lsHit.x);
                 d = lightD;
             }
         }

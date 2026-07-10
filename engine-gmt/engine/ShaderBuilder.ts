@@ -290,8 +290,10 @@ export class ShaderBuilder {
         this.shadingReflectionCode.push(code);
     }
 
-    /** Position 17: Compositing code injected inside renderPixel(), after the integrator runs.
-     *  Variables in scope: ro, rd, col, d, hit, stochasticSeed.
+    /** Position 17: Compositing code injected inside renderPixel(), after the integrator runs
+     *  and BEFORE applyPostProcessing — composited surfaces must fix up d / volumetric so the
+     *  post-process fog sees the depth of what is actually visible.
+     *  Variables in scope: ro, rd, col, d, hit, volumetric, stochasticSeed.
      *  Used for: light sphere compositing, overlay effects. */
     addCompositeLogic(code: string) {
         this.compositeLogic.push(code);
