@@ -180,7 +180,7 @@ export const MaterialFeature: FeatureDefinition = {
             group: 'env',
             parentId: 'envStrength',
             condition: { gt: 0.0, param: 'envStrength' },
-            description: 'How visible the sky is behind the fractal (0 = black background).',
+            description: 'How visible the sky is behind the fractal. At 0 the background falls back to the Fog Color (Scene panel), even with fog off.',
             helpId: 'mat.env',
         },
         envSource: {

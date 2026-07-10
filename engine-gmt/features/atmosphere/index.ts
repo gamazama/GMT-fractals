@@ -125,15 +125,23 @@ export const AtmosphereFeature: FeatureDefinition = {
             helpId: 'fog.settings',
         },
         fogColor: {
+            // ALWAYS visible (no fogIntensity gate): this colour doubles as the
+            // BACKGROUND whenever the sky isn't visible (main.ts bgCol falls back
+            // to uFogColorLinear regardless of fog intensity) — hiding it with
+            // fog off left users unable to edit the colour their background
+            // was actually showing (owner report 2026-07-10).
             type: 'color', default: new THREE.Color(0,0,0), label: 'Fog Color', shortId: 'fc', uniform: 'uFogColor',
-            group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
-            description: 'Colour distant geometry fades toward.',
+            group: 'fog',
+            description: 'Colour distant geometry fades toward. Also the background colour whenever the sky is not visible (BG Visibility 0 or environment off) — even with fog disabled.',
             helpId: 'fog.settings',
         },
         fogEnvTint: {
-            type: 'float', default: 0.0, label: 'Sky Tint', shortId: 'fet', uniform: 'uFogEnvTint',
+            // Label names the Environment section it draws from (sits directly
+            // above Fog in the Scene panel). Stored key stays fogEnvTint —
+            // renaming the label costs no preset migration.
+            type: 'float', default: 0.0, label: 'Environment Tint', shortId: 'fet', uniform: 'uFogEnvTint',
             min: 0.0, max: 1.0, step: 0.01, group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
-            description: 'Derives the fog colour from the environment per direction (aerial perspective) — fog brightens toward the bright side of the sky. 0 = flat Fog Color, 1 = the sky itself.',
+            description: 'Derives the fog colour from the Environment above, per direction (aerial perspective) — fog brightens toward the bright side of the sky. Follows Environment Strength (no effect when the environment light is off). 0 = flat Fog Color, 1 = the sky itself.',
             helpId: 'fog.settings',
         },
         fogDensity: {
