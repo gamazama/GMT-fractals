@@ -26,6 +26,13 @@ registerGmtShaderCompilerProfiles();
 import { registerPaletteUI } from '../palette/registerPaletteUI';
 registerPaletteUI();
 
+// Bundled sample skies (public/skies/*.hdr, ~1-1.7MB each, fetched on pick) —
+// the materials feature's customUI entry mounts this under the Sky Image
+// source in the Scene panel's Background & Sky section.
+import { componentRegistry } from '../components/registry/ComponentRegistry';
+import SampleSkies from '../engine-gmt/components/SampleSkies';
+componentRegistry.register('sample-skies', SampleSkies);
+
 // Favients (the cross-app gradient-favourites shelf) apply targets for app-gmt: a
 // favourite click/drop lands on a fractal COLORING layer via the gradient seam. These are
 // HOST-group send targets in the shared registry (the panel's "Destination" dropdown lists

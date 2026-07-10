@@ -341,6 +341,18 @@ export const MaterialFeature: FeatureDefinition = {
             helpId: 'mat.emission',
         }
     },
+    // Bundled sample skies — renders under the Source dropdown (Sky Image only),
+    // after Upload/Rotation. The component is app-registered ('sample-skies',
+    // app-gmt/registerFeatures.ts); apps that don't register it (fluid-toy)
+    // silently skip the entry.
+    customUI: [
+        {
+            componentId: 'sample-skies',
+            group: 'env',
+            parentId: 'envSource',
+            condition: { eq: 0.0 }, // Sky Image source
+        },
+    ],
     inject: (builder, _config, variant) => {
         if (variant === 'Mesh') return; // Mesh SDF library doesn't use materials or env map
         builder.addHeader(MAIN_HEADER);
