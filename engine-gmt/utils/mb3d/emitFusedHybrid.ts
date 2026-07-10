@@ -597,7 +597,10 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   //    practice); GMT's nearest control blends traced reflections against the env
   //    fallback. Not exact — a dim MB3D reflection becomes a partly-env one — but it
   //    tracks the authored intensity.
-  //  - SRreflectioncount → bounces (GMT's mirror recursion, clamped to its max of 3).
+  //  - SRreflectioncount deliberately UNMAPPED (2026-07-10): GMT Direct reflections
+  //    are single-bounce by design — the 'Max Bounces' param was removed (PT owns
+  //    bounce recursion; the Direct bounce loop cost +5.2s of cold compile). An
+  //    MB3D multi-reflection scene imports with one mirror bounce.
   //  - bit1 (transmission) deliberately unmapped — GMT has no refraction path (parked).
   //  - NOT compensated: MB3D dims its primary lighting when reflections are on
   //    (sObjLightDecreaser = max(0.5, 1 − 0.17·√SRamount), CalcSR.pas:698), so a
@@ -607,7 +610,6 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       ...(preset.features.reflections ?? {}),
       reflectionMode: 3.0, // REFL_MODE_RAYMARCH (raw value, matching this file's literal style)
       mixStrength: Math.min(1, Math.max(0, h2.srAmount)),
-      bounces: Math.min(3, Math.max(1, Math.round(h2.srReflectionCount || 1))),
     };
   }
 
@@ -662,12 +664,19 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // modulation category); a lone MB3D slot keeps no group — its params live on
   // coreMath's standard "Formula Math" category like any plain formula. The Formula
   // panel suppresses the divider when only one group is present.
+  // Every exposed param is stamped with its ADDON SLOT index (`slotIndex` =
+  // the weaveSource row it belongs to): dense lanes reallocate in row order, so
+  // an editor Rebuild needs the slot identity to carry live values across a
+  // reorder (mergeDenseLanes in loadMB3DScene.ts). Def-object-only — no GLSL /
+  // preset impact.
   const parameters = bodies.flatMap((b, k) => {
     const exposed = isNative(usedIdx[k]) || mb3dParametric;
     if (!exposed) return [];
-    if (usedIdx.length <= 1 && !isNative(usedIdx[k])) return b.params ?? [];
+    if (usedIdx.length <= 1 && !isNative(usedIdx[k])) {
+      return (b.params ?? []).map((pp: any) => ({ ...pp, slotIndex: usedIdx[k] }));
+    }
     const group = `Formula ${k + 1}: ${b.flag.name.replace(/^_/, '')}`;
-    return (b.params ?? []).map((pp: any) => ({ ...pp, group }));
+    return (b.params ?? []).map((pp: any) => ({ ...pp, group, slotIndex: usedIdx[k] }));
   }) as any;
 
   // LEAD-SLOT getDist splice (P4.4): a native FIRST slot keeps its custom

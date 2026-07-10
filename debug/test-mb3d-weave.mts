@@ -330,12 +330,13 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   }
 }
 {
-  // Rhythm arity: 1 active slot refuses with a reason, and the failure must
-  // NOT detour into the GMT-substitute path.
+  // Rhythm arity: 1 active slot BUILDS as the plain formula (the emit degrades
+  // to counts — Live is selectable before more formulas are added, 2026-07-09);
+  // its kernel carries no modulo schedule code and it must NOT substitute.
   const one = emitFusedHybrid(scene([slot(2, 4, [-1.5, 0.5, 1])]), { schedule: { kind: 'modulo' } });
-  ck('rhythm: 1 active slot refused', one.ledger.supported === false && !one.def, one.ledger.reasons);
-  ck('rhythm: 1-slot reason mentions the 2-6 range', one.ledger.reasons.some((r) => /2 to 6 active/i.test(r)), one.ledger.reasons);
-  ck('rhythm: 1-slot failure does not substitute', !one.substitute);
+  ck('rhythm: 1 active slot builds as the plain formula', one.ledger.supported === true && !!one.def, one.ledger.reasons);
+  ck('rhythm: 1-slot build carries no modulo schedule code', !!one.def && !one.def.shader.function.includes('uWeaveInterval'), undefined);
+  ck('rhythm: 1-slot build does not substitute', !one.substitute);
 }
 {
   // Pure layered emitter: precedence + beats semantics in the GLSL shape.
@@ -1389,6 +1390,69 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck('BOUNDS coherent (32/64/64/6/192/4096)',
     BOUNDS.INTERVAL_MAX === 32 && BOUNDS.START_MAX === 64 && BOUNDS.BEATS_MAX === 64 &&
     BOUNDS.MAX_ROWS === 6 && BOUNDS.MAX_LUT === 192 && BOUNDS.W_MAX === 4096);
+}
+
+// ── mergeDenseLanes: dense-lane transfer on an editor Rebuild ────────────────
+// Live MB3D param values must FOLLOW their slot across a reorder (lanes
+// reallocate in row order), a NEW slot must take its formula-file defaults
+// (never stale live lane values), and global knobs (iterations) stay the user's.
+{
+  const { mergeDenseLanes } = await import('../engine-gmt/utils/mb3d/loadMB3DScene.ts');
+  const wsSlot = (kind: string, ref: string | number, iter = 2) => ({
+    label: String(ref), kind, ref,
+    slot: { iterCount: iter, formulaIndex: 0, optionCount: 0, name: '', optionTypes: [], optionValues: [] },
+  });
+  const mkDef = (slots: any[], parameters: any[]): any => ({
+    id: 'X', name: 'X', parameters, shader: {}, defaultPreset: {},
+    weaveSource: { version: 1, title: 't', slots, schedule: { kind: 'counts', repeatFrom: 0 } },
+  });
+  const p = (id: string, label: string, slotIndex?: number, extra: any = {}) =>
+    ({ id, label, min: 0, max: 1, step: 0.1, default: 0, slotIndex, ...extra });
+
+  // Reorder [A,B] → [B,A]: each formula keeps ITS live value on its new lane.
+  {
+    const oldDef = mkDef([wsSlot('intern', 4), wsSlot('decompiled', 'Foo')],
+      [p('paramA', 'Scale', 0), p('paramB', 'Fold', 1)]);
+    const newDef = mkDef([wsSlot('decompiled', 'Foo'), wsSlot('intern', 4)],
+      [p('paramA', 'Fold', 0), p('paramB', 'Scale', 1)]);
+    const m = mergeDenseLanes({ paramA: 1, paramB: 2, iterations: 60 }, { paramA: 7, paramB: 9, iterations: 42 }, newDef, oldDef);
+    ck('denseLanes: reorder swaps live values onto the new lanes', m.paramA === 9 && m.paramB === 7, [m.paramA, m.paramB]);
+    ck("denseLanes: iterations stay the user's on rebuild", m.iterations === 42, m.iterations);
+  }
+  // Add a new slot: it takes the FRESH (formula-file) default, not the stale live lane.
+  {
+    const oldDef = mkDef([wsSlot('intern', 4)], [p('paramA', 'Scale', 0)]);
+    const newDef = mkDef([wsSlot('intern', 4), wsSlot('decompiled', 'Bar')],
+      [p('paramA', 'Scale', 0), p('paramB', 'Twist', 1)]);
+    const m = mergeDenseLanes({ paramA: 2, paramB: 5 }, { paramA: 7, paramB: 99 }, newDef, oldDef);
+    ck('denseLanes: surviving slot keeps its live value', m.paramA === 7, m.paramA);
+    ck('denseLanes: NEW slot gets formula-file defaults', m.paramB === 5, m.paramB);
+  }
+  // Legacy old def (no slotIndex): "Formula <n>: …" group fallback still transfers.
+  {
+    const oldDef = mkDef([wsSlot('intern', 4), wsSlot('decompiled', 'Foo')],
+      [p('paramA', 'Scale', undefined, { group: 'Formula 1: ABox' }), p('paramB', 'Fold', undefined, { group: 'Formula 2: Foo' })]);
+    const newDef = mkDef([wsSlot('decompiled', 'Foo'), wsSlot('intern', 4)],
+      [p('paramA', 'Fold', 0), p('paramB', 'Scale', 1)]);
+    const m = mergeDenseLanes({ paramA: 1, paramB: 2 }, { paramA: 7, paramB: 9 }, newDef, oldDef);
+    ck('denseLanes: legacy group-divider fallback transfers', m.paramA === 9 && m.paramB === 7, [m.paramA, m.paramB]);
+  }
+  // Vec value crossing lane shapes: vec3 landing on a vec4 unit pins .w to 0.
+  {
+    const oldDef = mkDef([wsSlot('decompiled', 'Rot'), wsSlot('decompiled', 'Foo')],
+      [p('vec3A', 'Rotation', 0, { type: 'vec3' })]);
+    const newDef = mkDef([wsSlot('decompiled', 'Foo'), wsSlot('decompiled', 'Rot')],
+      [p('vec4B', 'Rotation', 1, { type: 'vec3' })]);
+    const m = mergeDenseLanes({ vec4B: { x: 0, y: 0, z: 0, w: 0 } }, { vec3A: { x: 1, y: 2, z: 3 } }, newDef, oldDef);
+    ck('denseLanes: vec3 → vec4-held lane pins w=0', JSON.stringify(m.vec4B) === JSON.stringify({ x: 1, y: 2, z: 3, w: 0 }), m.vec4B);
+    ck('denseLanes: unused old lane dropped (resets to defaults)', !('vec3A' in m), m.vec3A);
+  }
+  // No old weaveSource (building from a plain formula): all lanes take fresh defaults.
+  {
+    const newDef = mkDef([wsSlot('intern', 4)], [p('paramA', 'Scale', 0)]);
+    const m = mergeDenseLanes({ paramA: 2 }, { paramA: 7, iterations: 33 }, newDef, undefined);
+    ck('denseLanes: plain-formula origin → fresh lane defaults', m.paramA === 2 && m.iterations === 33, [m.paramA, m.iterations]);
+  }
 }
 
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);

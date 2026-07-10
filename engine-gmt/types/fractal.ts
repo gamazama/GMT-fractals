@@ -78,6 +78,14 @@ export interface FractalParameter {
      *  (a native formula woven as a slot); the panel reads `store.weave[id]`,
      *  writes `setWeave`, and keys the track `weave.<id>`. */
     feature?: string;
+    /** Weave addon slot (= `weaveSource.slots` row index) this param belongs to.
+     *  Stamped by emitFusedHybrid on every exposed weave-slot param so an editor
+     *  Rebuild can transfer live DENSE-LANE values slot-by-slot (mergeDenseLanes):
+     *  MB3D lanes reallocate in row order, so without the slot identity a reorder
+     *  scrambles which formula reads which live value. Absent on plain
+     *  (non-weave) formula params and on defs built before the field existed
+     *  (mergeDenseLanes falls back to parsing the `group` divider). */
+    slotIndex?: number;
     mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed'; // 'rotation' = Rodrigues (A/P/∠), 'direction' = azimuth/pitch, 'axes' = per-axis angles, 'toggle' = bool on/off, 'mixed' = toggle X + slider Y
     linkable?: boolean; // For vec3/vec2: enable axis linking (uniform scale)
 }

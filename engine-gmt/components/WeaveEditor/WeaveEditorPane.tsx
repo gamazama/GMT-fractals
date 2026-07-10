@@ -25,8 +25,14 @@
  *    surfaces per card: the colored identity bar (immediate, touch-friendly)
  *    and the header row (mouse threshold-drag, so its buttons still click).
  *  - Structure edits have editor-local undo/redo, separate from DDFS param undo.
+ *  - Params + timing FOLLOW their formula across structure edits (2026-07-09):
+ *    live values transfer by slot identity on Build (mergeDenseLanes for MB3D
+ *    lanes, mergeWeaveBanks for native banks — loadMB3DScene.ts) and rhythm
+ *    timing re-maps live in the editor (syncRhythm). A NEW formula always
+ *    starts at its formula-file defaults.
  *  - Reordering while keyframed formula-param tracks exist shows a warning
- *    (packed lanes may retarget) — a transfer tool comes later.
+ *    (tracks target lanes/banks by name and may retarget) — a transfer tool
+ *    comes later.
  *  - Schedule kinds are a user choice: layered modulo ("Live", the DEFAULT,
  *    2026-07-09) vs counts ("Baked", LUT — structure edits rebuild). Live
  *    supports up to 6 active slots (the first is
@@ -55,6 +61,7 @@ import { transpileSlot, getSlotOptionMeta } from '../../utils/mb3d/slotTranspile
 import type { SlotOptionMeta } from '../../utils/mb3d/slotTranspiler';
 import { getNativeSlotCatalog, nativeSlotShell, nativeSlotReject, isNativeSlot } from '../../engine/weave/nativeSlotCatalog';
 import { FOLD_OPTIONS } from '../../features/geometry/folds';
+import { WEAVE_MAX_LAYERS } from '../../features/weave';
 import { boxFoldFormulaId } from '../../formulas/boxFolds';
 import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
@@ -396,9 +403,12 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         } else {
             const built = rowFromKey(key, nextColorIdx(draft.rows), DEFAULT_ITER_COUNT);
             if (!built) return;
-            // Rhythm-layer timing defaults (start = k, every 1, 2 beats) come from the
-            // weave feature's per-index param defaults — see engine-gmt/features/weave.ts.
-            commit({ ...draft, rows: [...draft.rows, built] });
+            const next = { ...draft, rows: [...draft.rows, built] };
+            commit(next);
+            // Seed the new layer's timing explicitly (start = k, every 1, 2 beats):
+            // reading the weave feature's defaults isn't enough — a previous weave's
+            // live values at this layer index would leak in (syncRhythm's job).
+            syncRhythm(draft, next);
         }
     };
 
@@ -464,17 +474,24 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     // ── Row edits ─────────────────────────────────────────────────────────────
     const setIter = (key: string, iterCount: number) => {
         const n = Math.max(0, Math.min(64, Math.round(iterCount)));
-        commit({ ...draft, rows: draft.rows.map((r) => (r.key === key ? { ...r, slot: { ...r.slot, iterCount: n } } : r)) });
+        const next = { ...draft, rows: draft.rows.map((r) => (r.key === key ? { ...r, slot: { ...r.slot, iterCount: n } } : r)) };
+        commit(next);
+        syncRhythm(draft, next); // crossing 0 ↔ active re-maps rows→layers
     };
+    // Keyframed formula-param tracks that a structure change can retarget:
+    // MB3D dense lanes (coreMath.*) AND native slot banks (weave.ws<k>*).
     const hasFormulaTracks = () =>
-        (store.animations ?? []).some((a: any) => a.enabled && typeof a.target === 'string' && a.target.startsWith('coreMath.'));
+        (store.animations ?? []).some((a: any) => a.enabled && typeof a.target === 'string'
+            && (a.target.startsWith('coreMath.') || /^weave\.ws\d/.test(a.target)));
     const remove = (key: string) => {
         if (hasFormulaTracks()) setReorderWarn(true);
-        commit({
+        const next = {
             ...draft,
             rows: draft.rows.filter((r) => r.key !== key),
             dividers: draft.dividers.filter((d) => d.afterKey !== key),
-        });
+        };
+        commit(next);
+        syncRhythm(draft, next); // layers after the removed row shift down — carry their timing
     };
     // ── Loop dividers (P4.7) — the block ending at a row plays ×repeat as intro;
     // the rows after the last divider are the repeating cycle.
@@ -613,6 +630,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             if (past.current.length > 50) past.current.shift();
             future.current = [];
             if (hasFormulaTracks()) setReorderWarn(true);
+            syncRhythm(base, draft); // timing follows the reordered rows
         }
     };
 
@@ -650,6 +668,45 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             field === 'weaveInterval' ? Math.max(1, clampI(n, 1, BOUNDS.INTERVAL_MAX))
             : field === 'weaveBeats' ? clampI(n, 0, BOUNDS.BEATS_MAX)
             : clampI(n, 0, BOUNDS.START_MAX) });
+
+    /** A draft's rows→layers mapping: active non-base row KEYS in row order
+     *  (layer k = index + 1). Mirrors baseRowIdx's resolution (explicit baseKey
+     *  when that row is active, else the first active row). */
+    const layerKeysOf = (d: WeaveDraft): string[] => {
+        const act = d.rows.filter((r) => r.slot.iterCount > 0);
+        if (act.length === 0) return [];
+        const base = (d.baseKey && act.find((r) => r.key === d.baseKey)) || act[0];
+        return act.filter((r) => r !== base).map((r) => r.key);
+    };
+    /** Rhythm timing FOLLOWS the formula row, not the layer index: when a
+     *  structure edit re-maps rows→layers (add / remove / reorder / iterations
+     *  crossing 0 / base change), permute the live uWeave*<k> values so each
+     *  surviving row keeps its own interval/start/beats, and seed a row that
+     *  just BECAME a layer with the fresh-layer defaults (every 1 / start k /
+     *  2 beats — keep in sync with features/weave.ts). Seeding is EXPLICIT on
+     *  purpose: relying on the feature defaults lets a previous weave's stale
+     *  live values leak into a new layer (the general "0,2,0 bug" addFoldPreset
+     *  patches locally). Only changed fields are written, so a mapping-
+     *  preserving edit is a no-op. NOT called on wholesale draft swaps
+     *  (openCurrent / restoreCurrent / hydrate / editor undo), where the live
+     *  store already matches — or should keep — its own weave's timing. */
+    const syncRhythm = (prev: WeaveDraft, next: WeaveDraft) => {
+        if (next.scheduleKind !== 'modulo') return;
+        const prevKeys = layerKeysOf(prev);
+        const writes: Record<string, number> = {};
+        layerKeysOf(next).forEach((key, i) => {
+            const k = i + 1;
+            if (k > WEAVE_MAX_LAYERS) return;
+            const pi = prevKeys.indexOf(key);
+            // All reads happen before the single batched write below.
+            const v = pi >= 0 ? layerVal(pi + 1) : { interval: 1, start: k, beats: 2 };
+            const cur = layerVal(k);
+            if (cur.interval !== v.interval) writes[`weaveInterval${k}`] = v.interval;
+            if (cur.start !== v.start) writes[`weaveStartIter${k}`] = v.start;
+            if (cur.beats !== v.beats) writes[`weaveBeats${k}`] = v.beats;
+        });
+        if (Object.keys(writes).length) store.setWeave?.(writes);
+    };
 
     // ── Live schedule preview ────────────────────────────────────────────────
     // Loop dividers → { afterRow index, repeat }, in row order, for buildBlockPlan
@@ -694,7 +751,11 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         // timing is keyframed, warn like a reorder (same retarget policy, spec §7.3).
         if (draft.baseKey === key) return;
         if (hasRhythmTracks()) setReorderWarn(true);
-        commit({ ...draft, baseKey: key });
+        const next = { ...draft, baseKey: key };
+        commit(next);
+        // The other layers' timing follows their rows; the old base joins the
+        // layers with fresh defaults (a base carries no timing to inherit).
+        syncRhythm(draft, next);
     };
 
     const toRhythm = () => {
@@ -1263,8 +1324,9 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             {reorderWarn && (
                 <div className="flex items-start gap-2 text-xs bg-warn/10 border border-warn/25 rounded-lg px-3 py-2 text-warn">
                     <p className="leading-relaxed">
-                        You have keyframed formula parameters — changing slot structure can shift which slot a
-                        parameter lane belongs to. Check your animation tracks after rebuilding.
+                        You have keyframed formula parameters — their tracks target parameter lanes by name, and a
+                        structure change can re-map which formula a lane belongs to. Your current values follow their
+                        formulas; check the animation tracks after rebuilding.
                     </p>
                 </div>
             )}

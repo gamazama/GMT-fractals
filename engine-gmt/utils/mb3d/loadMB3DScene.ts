@@ -21,6 +21,7 @@ import type { Preset } from '../../types/fractal';
 import { registry } from '../../engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { useEngineStore } from '../../../store/engineStore';
+import { CORE_SLOTS, slotWriteValue } from '../uniformSlots';
 
 export interface LoadMB3DResult {
   ok: boolean;
@@ -181,17 +182,119 @@ function mergeWeaveBanks(
   return merged;
 }
 
+const CORE_SLOT_SET = new Set<string>(CORE_SLOTS);
+
+/** Merge freshly-built coreMath with the LIVE one on an editor Rebuild — the
+ *  DENSE-LANE twin of {@link mergeWeaveBanks}. MB3D slots pack their params onto
+ *  the shared coreMath lanes (`paramA..F` / `vec2..vec4 A..C`) in ROW ORDER, so
+ *  live lane values can't be carried wholesale: a reorder/insert reallocates the
+ *  lanes and each formula would read another formula's values, and a NEW slot
+ *  would inherit stale lane values instead of its formula-file defaults. Policy:
+ *   - GLOBAL coreMath knobs (iterations, everything non-lane) stay the user's.
+ *     `iterations` is explicitly untouched on a rebuild (owner call 2026-07-09) —
+ *     it is only ever set by loading a formula from nothing (defaultPreset path).
+ *   - Every LANE takes the fresh build's default (the .m3f / catalog values —
+ *     including the 4D `paramA/paramB` seeds); lanes the new build doesn't stamp
+ *     are dropped so they reset to feature defaults on load.
+ *   - Then each surviving slot's live values FOLLOW it: a new slot claims the
+ *     first unclaimed OLD slot with the same identity (kind:ref — the same
+ *     left-to-right duplicate rule as mergeWeaveBanks) and its params transfer
+ *     old-lane → new-lane, matched by label + shape within the slot.
+ *  Param→slot association uses the `slotIndex` emitFusedHybrid stamps on every
+ *  exposed weave param; legacy defs (pre-stamp) fall back to the "Formula <n>: …"
+ *  group divider (n = 1-based ACTIVE slot position), or — for a single active
+ *  MB3D slot whose params carry no group — to that slot.
+ *  Exported for debug/test-mb3d-weave.mts. */
+export function mergeDenseLanes(
+  fresh: Record<string, any>,
+  live: Record<string, any>,
+  newDef: FractalDefinition,
+  oldDef: FractalDefinition | undefined,
+): Record<string, any> {
+  const merged: Record<string, any> = { ...live };
+  for (const lane of CORE_SLOTS) {
+    if (lane in fresh) merged[lane] = fresh[lane];
+    else delete merged[lane];
+  }
+  if (merged.iterations === undefined && fresh.iterations !== undefined) merged.iterations = fresh.iterations;
+
+  const newSlots = newDef.weaveSource?.slots ?? [];
+  const oldSlots = oldDef?.weaveSource?.slots ?? [];
+  if (newSlots.length === 0 || oldSlots.length === 0) return merged;
+
+  /** Dense-pool params per addon slot, in packing order. */
+  const denseBySlot = (def: FractalDefinition): Map<number, any[]> => {
+    const bySlot = new Map<number, any[]>();
+    const slots = def.weaveSource?.slots ?? [];
+    const activeIdx = slots.map((s, i) => (s.slot.iterCount !== 0 ? i : -1)).filter((i) => i >= 0);
+    const soleMB3D = activeIdx.filter((i) => slots[i].kind !== 'native');
+    for (const p of (def.parameters ?? []) as any[]) {
+      if (p.feature === 'weave' || !CORE_SLOT_SET.has(p.id)) continue; // bank params are mergeWeaveBanks' job
+      let idx: number | undefined = typeof p.slotIndex === 'number' ? p.slotIndex : undefined;
+      if (idx === undefined) {
+        const m = /^Formula (\d+): /.exec(p.group ?? '');
+        if (m) idx = activeIdx[parseInt(m[1], 10) - 1];
+        else if (soleMB3D.length === 1) idx = soleMB3D[0];
+      }
+      if (idx === undefined) return new Map(); // unattributable params → don't half-transfer
+      if (!bySlot.has(idx)) bySlot.set(idx, []);
+      bySlot.get(idx)!.push(p);
+    }
+    return bySlot;
+  };
+
+  const newBySlot = denseBySlot(newDef);
+  const oldBySlot = oldDef ? denseBySlot(oldDef) : new Map<number, any[]>();
+  if (newBySlot.size === 0 || oldBySlot.size === 0) return merged; // bake/4D mode — no live lanes to carry
+
+  const ident = (s: { kind: string; ref: string | number }) => `${s.kind}:${s.ref}`;
+  const claimed = new Set<number>();
+  newSlots.forEach((s, k) => {
+    // Claim identities for EVERY new slot (even ones without dense params) so
+    // duplicate matching stays aligned with mergeWeaveBanks' left-to-right rule.
+    let oldIdx = -1;
+    for (let j = 0; j < oldSlots.length; j++) {
+      if (!claimed.has(j) && ident(oldSlots[j]) === ident(s)) { oldIdx = j; break; }
+    }
+    if (oldIdx < 0) return; // genuinely new slot → fresh formula-file defaults stay
+    claimed.add(oldIdx);
+    const newParams = newBySlot.get(k);
+    if (!newParams?.length) return;
+    const oldParams = oldBySlot.get(oldIdx) ?? [];
+    // Same formula ⇒ same declared option list; match by label + shape within
+    // the slot (bake directives can drop entries), claiming each old param once.
+    const usedOld = new Set<number>();
+    for (const np of newParams) {
+      let oi = -1;
+      for (let j = 0; j < oldParams.length; j++) {
+        if (usedOld.has(j)) continue;
+        if (oldParams[j].label === np.label && (oldParams[j].type ?? 'float') === (np.type ?? 'float')) { oi = j; break; }
+      }
+      if (oi < 0) continue;
+      usedOld.add(oi);
+      const v = live[oldParams[oi].id];
+      if (v === undefined) continue;
+      // slotWriteValue keeps the vec4-held-vec3 contract (.w pinned to 0) when
+      // the same param lands on a different lane shape after the reorder.
+      merged[np.id] = slotWriteValue(np.id, np.type, typeof v === 'object' && v !== null ? { ...v } : v);
+    }
+  });
+  return merged;
+}
+
 /**
  * Build + register + load a user-authored weave (the Weave Editor's Build button).
  *
  * Unlike scene imports, rebuilds happen INSIDE an editing session — so the whole
  * scene LOOK is preserved: camera, lights, atmosphere, materials, coloring, the
- * geometry modifiers (Julia/offset · burning · rotation), coreMath, and every
- * quality knob. The ONLY thing that refreshes to the rebuilt formula is the DE
- * ESTIMATOR TYPE (structural — a different weave needs a different estimator);
- * surviving slot banks + live rhythm carry over via mergeWeaveBanks. The
- * WeaveSpec-shaped `weaveSource` is attached to the def so the weave can be
- * reopened and re-edited (importSource pattern, ADR-0058/0089).
+ * geometry modifiers (Julia/offset · burning · rotation), the global coreMath
+ * knobs, and every quality knob. What refreshes to the rebuilt formula: the DE
+ * ESTIMATOR TYPE (structural — a different weave needs a different estimator)
+ * and the FORMULA PARAM VALUES of genuinely NEW slots (formula-file defaults).
+ * Surviving slots keep their live params — native banks via mergeWeaveBanks,
+ * MB3D dense lanes via mergeDenseLanes (both follow slot identity across a
+ * reorder). The WeaveSpec-shaped `weaveSource` is attached to the def so the
+ * weave can be reopened and re-edited (importSource pattern, ADR-0058/0089).
  */
 /**
  * Build + register a user-authored weave def WITHOUT loading it — the pure
@@ -283,16 +386,19 @@ export function loadUserWeave(
       coloring: current.features?.coloring,
       // Rebuild preserves the scene's LOOK — only the DE ESTIMATOR TYPE refreshes
       // to the rebuilt formula (owner call 2026-07-05). geometry (Julia/offset,
-      // burning, rotation), coreMath, and every other quality knob (detail, fudge,
-      // escape radius, metric, AA) are the user's, carried over; `iterations` only
-      // floors UP to the weave's minimum cover so a larger weave still renders.
-      coreMath: {
-        ...(current.features?.coreMath ?? {}),
-        iterations: Math.max(
-          current.features?.coreMath?.iterations ?? 0,
-          preset.features?.coreMath?.iterations ?? 0,
-        ),
-      },
+      // burning, rotation), the global coreMath knobs, and every other quality
+      // knob (detail, fudge, escape radius, metric, AA) are the user's, carried
+      // over. `iterations` is never touched by a rebuild (owner call 2026-07-09).
+      // The DENSE PARAM LANES are NOT carried wholesale: they reallocate in row
+      // order, so mergeDenseLanes gives new slots their formula-file defaults and
+      // makes surviving slots' live values FOLLOW them across a reorder — the
+      // same slot-identity policy as the native banks (mergeWeaveBanks below).
+      coreMath: mergeDenseLanes(
+        preset.features?.coreMath ?? {},
+        current.features?.coreMath ?? {},
+        def,
+        registry.get(current.formula as any) as FractalDefinition | undefined,
+      ),
       geometry: current.features?.geometry,
       quality: {
         ...(current.features?.quality ?? {}),
