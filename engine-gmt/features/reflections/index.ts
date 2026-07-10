@@ -26,8 +26,18 @@ const REFL_ENV_SHADING = `
 
 /** Full raymarched reflections — traces a reflection ray, shades the hit point.
  *  VNDF importance sampling + firefly clamp + env/AO fill at the hit.
- *  @see docs/adr/0068-raymarched-reflection-importance-sampling.md */
-const REFL_RAYMARCH_SHADING = `
+ *
+ *  @invariant The bounce for-loop wrapper is EMISSION-GATED on bounces >= 2.
+ *  Wrapping this shade body (which inlines the [loop]-bounded reflection march)
+ *  in an outer `for` trips an fxc nested-loop pathology: measured cold compile
+ *  42s with the loop vs 8s without, at MAX_REFL_BOUNCES=1 on the same body
+ *  (2026-07-10, D3D11/ANGLE — see shader-compile-optimization.md §2.6.2). The
+ *  single-bounce emission is behaviour-identical: at 1 bounce `lastBounce` is
+ *  constant-true, so the elided continuation/break code was dead anyway.
+ *  Do NOT "simplify" the two forms back into one unconditional loop.
+ *  @see docs/adr/0068-raymarched-reflection-importance-sampling.md
+ *  @see docs/adr/0096-reflection-bounces-fog-colors.md (2026-07-10 update block) */
+const getReflRaymarchShading = (multiBounce: boolean) => `
     // --- REFLECTIONS: RAYMARCHED ---
     {
         // Adaptive bias: scales with pixel size at camera distance to avoid self-intersection.
@@ -88,12 +98,15 @@ const REFL_RAYMARCH_SHADING = `
             // recursion shape: mirror re-reflect at each hit, throughput ×=
             // the hit's Fresnel × specular, luma early-exit (MB3D uses 1e-4 on
             // its absorption vector, CalcSR.pas:352). MAX_REFL_BOUNCES is the
-            // compile define from the 'Max Bounces' param (default 1 unrolls
-            // to exactly the old single-trace body). Secondary bounces are
+            // compile define from the 'Max Bounces' param. At the default 1 the
+            // for-wrapper is NOT emitted (plain scope — see JSDoc: the wrapper
+            // alone cost +34s of fxc compile). Secondary bounces are
             // deterministic mirrors — the VNDF jitter applies to bounce 0 only,
             // so extra bounces add no extra noise.
             float reflPathDist = d; // view-cone distance at the current origin
-            for (int b = 0; b < MAX_REFL_BOUNCES; b++) {
+            ${multiBounce
+                ? `for (int b = 0; b < MAX_REFL_BOUNCES; b++) {`
+                : `{ int b = 0; // single bounce: loop wrapper elided (fxc pathology — see JSDoc)`}
 
             float reflFade = 1.0; // hit confidence: 1 = real hit, <1 = recovered candidate (ADR-0095)
             vec4 refHit = traceReflectionRay(currRo, currRd, reflPathDist, reflFade);
@@ -198,7 +211,7 @@ const REFL_RAYMARCH_SHADING = `
                     hitContrib = mix(sampleMissEnv(currRo, currRd, roughness, currentThroughput), hitContrib, reflFade);
                 }
                 reflectionLighting += hitContrib;
-
+${multiBounce ? `
                 if (lastBounce) break;
 
                 // Continue the chain: attenuate throughput by the hit surface's
@@ -213,12 +226,12 @@ const REFL_RAYMARCH_SHADING = `
                 float nextFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * reflCameraDist;
                 float nextBias = max(nextFootprint * 2.0, length(p_next_fractal) * PRECISION_RATIO_HIGH * 2.0);
                 currRo = p_next + r_n * nextBias;
-
+` : ``}
             } else {
-                reflectionLighting += sampleMissEnv(currRo, currRd, roughness, currentThroughput);
-                break;
+                reflectionLighting += sampleMissEnv(currRo, currRd, roughness, currentThroughput);${multiBounce ? `
+                break;` : ``}
             }
-            } // end bounce loop
+            } // end bounce ${multiBounce ? 'loop' : 'scope (loop elided)'}
         } else {
             reflectionLighting += applyEnvFog(GetEnvMap(currRd, roughness) * uEnvStrength, currRd) * currentThroughput;
         }
@@ -267,9 +280,9 @@ export const ReflectionsFeature: FeatureDefinition = {
             options: [
                 { label: 'Off', value: REFL_MODE_OFF, estCompileMs: 0 },
                 { label: 'Environment Map', value: REFL_MODE_ENV, estCompileMs: 0 },
-                { label: 'Raymarched (Quality)', value: REFL_MODE_RAYMARCH, estCompileMs: 1500 }  // L6: measured ~1500-2000 cold (§2.6.1); was 7500
+                { label: 'Raymarched (Quality)', value: REFL_MODE_RAYMARCH, estCompileMs: 5800 }  // measured cold 2026-07-10 (§2.6.2, post-ADR-0094/95/96 body): 8.2s total − 2.4s off; was 1500 (pre-overhaul body)
             ],
-            description: 'Reflection technique. Higher quality = longer compile time. Raymarched adds ~1.5-2s.',
+            description: 'Reflection technique. Higher quality = longer compile time. Raymarched adds ~6s of compile.',
             onUpdate: 'compile',
             noAccumReset: true
         },
@@ -305,11 +318,14 @@ export const ReflectionsFeature: FeatureDefinition = {
             type: 'int', default: 1, label: 'Max Bounces', shortId: 'rb',
             min: 1, max: 3, step: 1, group: 'engine_settings',
             ui: 'numeric',
-            description: "Mirror recursion depth — 2+ shows reflections inside reflections. Each extra bounce recompiles and adds a full trace + shade per pixel.",
+            description: "Mirror recursion depth — 2+ shows reflections inside reflections, and compiles the bounce loop (~11s extra compile; 2 vs 3 costs the same).",
             noAccumReset: true,
             onUpdate: 'compile',
             condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH },
-            estCompileMs: 800  // speculative: each bounce unrolls another trace+shade body; owner to measure
+            // Measured cold 2026-07-10 (§2.6.2): emitting the bounce for-loop (any value ≥2)
+            // is a STEP of ~+11.4s — the fxc nested-loop toll; 2→3 measured +84ms (free).
+            // Summed by profiles.ts as a flat step when value > default (int-param rule).
+            estCompileMs: 11400
         },
         steps: {
             type: 'int', default: 64, label: 'Trace Steps', shortId: 'rs',
@@ -325,10 +341,10 @@ export const ReflectionsFeature: FeatureDefinition = {
             group: 'engine_settings',
             ui: 'checkbox',
             condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH },
-            description: "Sample the true surface colour (orbit traps / colour smoothing) at reflected hits instead of the gradient default. Adds compile time.",
+            description: "Sample the true surface colour (orbit traps / colour smoothing) at reflected hits instead of the gradient default. Adds a little compile time.",
             onUpdate: 'compile',
             noAccumReset: true,
-            estCompileMs: 400  // speculative: one full map() call site at the march exit; owner to measure
+            estCompileMs: 800  // measured cold 2026-07-10 (§2.6.2): +0.8s — one full DE() call site at the march exit; ~noise floor
         },
 
         // Master Switch (Compile Time) — hidden, controlled by engine toggle
@@ -375,7 +391,7 @@ export const ReflectionsFeature: FeatureDefinition = {
                 builder.addDefine('REFL_BOUNCE_SHADOWS', '1');
             }
 
-            builder.addShadingLogic(REFL_RAYMARCH_SHADING);
+            builder.addShadingLogic(getReflRaymarchShading(bounces > 1));
         }
     }
 };

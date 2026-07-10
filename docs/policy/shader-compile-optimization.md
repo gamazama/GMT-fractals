@@ -362,6 +362,66 @@ censused; then localized by temporarily stubbing the reflection-hit surface shad
   structural win shipped.** Any cut here is an owner quality decision, not a
   compile-neutral fold.
 
+  > **Superseded for the post-overhaul body:** the ADR-0094/95/96 reflection
+  > overhaul (2026-07-10) replaced this march + shade; the current cost map and a
+  > NEW fxc pathology finding are in §2.6.2. The verdict above still applies to
+  > the 4-tap normal share of the cost.
+
+### 2.6.2 Reflection-overhaul regression + the fxc outer-loop pathology (2026-07-10, owner machine)
+
+The ADR-0094/95/96 reflection overhaul (faithful marcher + candidate recovery +
+multi-bounce + env/fog fill) regressed the default Raymarched cold compile
+**~4.4s (published) → ~42s** — caught pre-publish and fixed the same day. Owner
+machine ≈1.9× slower than the §2.6 session-5 machine (Direct minimal 2404ms vs
+1162ms); compare marginals via that scale, not absolutes.
+
+**Root cause (measured, hypotheses falsified in order):**
+
+| Probe | Result | Conclusion |
+|---|---|---|
+| Isolated toggle AND 4-param UI cascade | exactly **1** `[Compile]` line each (~42s) | NOT multiple compiles — the doubled `[ConfigManager] Rebuild` console lines are change-detection logs; the generation counter coalesces to one `compileAsync` |
+| Reflection-march bound 128→32 | flat (43.7s → 46.4s) | the inner march is NOT unrolled (still `[loop]`) |
+| **Bounce `for`-wrapper removed, body identical** | **42s → 8.0s** | **the wrapper is the regression** |
+
+**The pathology:** wrapping a body that inlines a `[loop]`-bounded `DE_Dist`
+march in an outer `for` makes fxc's translation of the region ~5× more
+expensive, **worst at trip-count 1** (`MAX_REFL_BOUNCES = 1`: +34s) and cheaper
+at 2–3 (~+11.4s) — so it is not classic unrolling (cost is not ∝ trip count).
+This is a NEW cost-model fact alongside §7.3: **never wrap a heavy-inline body
+in a constant-bounded outer loop when the common case is one trip — emission-gate
+the wrapper instead** (fix shipped: `getReflRaymarchShading(multiBounce)` in
+[`reflections/index.ts`](../../engine-gmt/features/reflections/index.ts) emits
+the loop only at `bounces ≥ 2`; the single-bounce form is behaviour-identical
+since the continuation code is dead at 1 bounce).
+
+**Post-fix reflection cost map** (cold `gpu=`, Mandelbulb, 2 passes, min/median
+coherent, no fallbacks; tool:
+[`measure-reflection-compile.mts`](../../debug/scratch/measure-reflection-compile.mts)):
+
+| Config | cold gpu= | marginal |
+|---|---:|---|
+| Reflections off (Direct minimal) | 2404ms | anchor |
+| **Raymarched, bounces=1 (default)** | **8173ms** | **+5.8s over off** (was 43.7s pre-fix) |
+| Raymarched bounces=2 / 3 | 19508 / 19592ms | **+11.4s step** for the loop; 2→3 = +84ms (free) |
+| + accurateColors (one `DE()` at march exit) | 8970ms | +0.8s (≈noise floor) |
+| + refineEnabled (bisection in both marchers) | 9193ms | +1.0s |
+| + bounceShadows | — | ≈free (canonical costmap: +0.6s) |
+
+The remaining +5.8s raymarched marginal (vs pre-overhaul +1.5s on a ~1.9×
+faster machine ≈ +2.9s here) is the overhaul's legitimate ~2× body growth
+(faithful-march state + recovery + doubled `GetEnvMap`+bicubic env fill) — a
+quality-path cost the owner accepted. `estCompileMs` annotations recalibrated;
+`sumParamCompileMs` gained int-param support (flat step above default) so the
+`bounces` cost is actually counted.
+
+**Protocol notes (new):**
+- **Same-process anchors can silently in-process cache-hit**: `refl-env` read
+  22ms because its emitted source matched an already-compiled shader in the
+  process (`--disable-gpu-shader-disk-cache` does not disable ANGLE's in-memory
+  program cache). Use an anchor whose source is guaranteed distinct.
+- **Console `Rebuild` lines ≠ compiles.** Count `[Compile]` lines (each = one
+  real `compileAsync`) when diagnosing "it compiles N times" reports.
+
 [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts) has
 `estimateCompileTime(state)` (≈L161–196): `BASE_COMPILE_MS = 4200` plus a sum of
 per-param `estCompileMs` annotations for enabled `onUpdate:'compile'` params. It

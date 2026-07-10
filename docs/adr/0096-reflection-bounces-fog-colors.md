@@ -4,6 +4,21 @@
 study (ADR-0094 faithful march, ADR-0095 candidate recovery); closes the remaining owner-picked
 items from that study's queue.
 
+> **Update 2026-07-10 (bounce loop emission-gated; decision unchanged):** the unconditional
+> `for (int b …)` wrapper regressed the default Raymarched cold compile ~4.4s → ~42s. Measured
+> root cause (owner machine, D3D11/ANGLE, cold `gpu=`): wrapping the shade body — which inlines
+> the `[loop]`-bounded 128-step reflection march — in an outer `for` trips an fxc nested-loop
+> pathology costing **+34s even at `MAX_REFL_BOUNCES = 1`** (42s with wrapper, 8s without, same
+> body). Refuted along the way: the inner march is NOT unrolled (bound 128→32 = flat), and the
+> UI cascade fires exactly ONE GPU compile (the "Rebuild ×2" console lines are change-detection
+> logs, not compiles). Fix: `getReflRaymarchShading(multiBounce)` emits the loop wrapper only at
+> `bounces ≥ 2`; the default emits the straight-line single-bounce form (behaviour-identical —
+> at 1 bounce `lastBounce` is constant-true, the continuation/breaks were dead). The "compiles
+> to exactly the former single-trace body" claim below now holds by construction, not by hoping
+> fxc folds the loop. Multi-bounce (2–3) still pays the wrapper knowingly, per the
+> compile-cost-rides-quality-paths rule. Measured costs + protocol notes:
+> `docs/policy/shader-compile-optimization.md` §2.6.2.
+
 ## Context
 
 Three gaps remained against MB3D's `CalcSR.pas` reflection pass:

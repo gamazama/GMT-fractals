@@ -42,6 +42,9 @@ const isPtFamily = (paramKey: string, pc: ParamConfig): boolean =>
  * Sum the estCompileMs of every active compile switch in a state-like object.
  * Shared by both estimators — `state` can be the live store state or a synthetic
  * tier state. Booleans cost when truthy; dropdowns cost the matching option.
+ * Int params cost a FLAT STEP when raised above their default (not per unit) —
+ * the one consumer is reflections.bounces, where emitting the bounce loop at
+ * any value ≥2 costs ~11s while 2→3 is free (§2.6.2 of the compile policy doc).
  * PT-family switches are skipped unless the state is in PT render mode.
  */
 const sumParamCompileMs = (state: any): number => {
@@ -60,6 +63,14 @@ const sumParamCompileMs = (state: any): number => {
             const value = slice[paramKey];
 
             if (pc.type === 'boolean' && value && pc.estCompileMs) {
+                total += pc.estCompileMs;
+            }
+
+            // Int compile params: flat step cost once the value leaves its default
+            // (see JSDoc above — deliberately NOT per-unit).
+            if (pc.type === 'int' && !pc.options && pc.estCompileMs
+                && typeof value === 'number' && typeof pc.default === 'number'
+                && value > pc.default) {
                 total += pc.estCompileMs;
             }
 
