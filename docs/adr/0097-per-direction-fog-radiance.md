@@ -1,6 +1,16 @@
 # ADR-0097: Per-direction fog radiance from the environment map (aerial perspective)
 
-> **Update 2026-07-10 #4 (Fog Tint inversion; owner design with ADR-0098):** the dial flipped.
+> **Update 2026-07-10 #5 (compile-cost pass; decision unchanged, one scoped approximation):**
+> fxc inlines the `fogRadiance -> env-sample` chain at EVERY call site (~260ms cold each —
+> §2.6.2 of the compile policy doc). Two changes: (1) `fogRadiance` now samples via
+> `envSampleCore(dir, fogRough, baseFilter=false)` — the bicubic base filter DCEs out of fog
+> instances (it was dead at runtime there anyway: fogRough ≥ 0.5 → lod ≥ 1 on any real map).
+> (2) The RAYMARCHED REFLECTION block hoists ONE `fogRadiance(reflDir)` sample shared by all its
+> fogged terms (segment fog, env fills, miss env, simpleEnv — 7 inlines → 1). Inside reflections
+> the fog in-scatter direction is therefore the pixel's reflection direction rather than each
+> term's own — sub-perceptual at the fog sample's max-blur lod. All PRIMARY-view fog terms
+> (sky, Ambient IBL, light spheres, post fog) keep exact per-direction sampling; fog-off output
+> is bit-exact (the hoisted weight replicates applyEnvFog's gate). the dial flipped.
 > `fogEnvTint` ("Sky Tint", 0 = flat colour) became `fogTint` ("Fog Tint", uniform `uFogTint`):
 > fog now follows the SKY per direction **by default** (`fogRadiance = mix(sky, fogColor, tint)`),
 > and the dial blends toward the custom Fog Color — which nests UNDER the tint slider in the UI,

@@ -422,6 +422,48 @@ quality-path cost the owner accepted. `estCompileMs` annotations recalibrated;
 - **Console `Rebuild` lines ≠ compiles.** Count `[Compile]` lines (each = one
   real `compileAsync`) when diagnosing "it compiles N times" reports.
 
+#### §2.6.2.1 Optimization pass (same day) — 8.2s → 5.0s, features unchanged
+
+Owner rejected the residual +5.8s marginal; a localize-then-fix pass (stub one
+suspect → cold oneshot → revert, per §5) partitioned it:
+
+| Probe (stubbed) | cold gpu= | share |
+|---|---:|---|
+| — baseline (post-gate b1) | 8277ms | — |
+| fogRadiance's env sample (P2) | 4933ms | **fog chain ~3.3s** — full env body inlined per `applyEnvFog`/fog site (~8 instances) |
+| bicubic in GetEnvMap (P8) | 5787ms | **bicubic ~2.5s** — inlined 2× per env-body instance (overlaps P2) |
+| reflected-hit surface shade (P7) | 6639ms | **~1.6s** — the §2.6.1 4-tap-normal share, scaled |
+
+Three structural fixes shipped (features + defaults unchanged):
+- **F1 — single image-sample site in the env body** (`envImageSample`): the
+  bicubic mix was duplicated in both `uEnvAvgColor` branches → every instance
+  carried it twice. One call site now; also shrinks the reflections-off shader
+  (2404→2090ms).
+- **F2 — `baseFilter=false` constant on the fog path** (`envSampleCore`): fxc
+  DCEs the bicubic out of every `fogRadiance` inline — it was runtime-dead there
+  (fogRough ≥ 0.5 → lod ≥ 1). F1+F2 = −1.2s.
+- **F4 — one `fogRadiance(reflDir)` per pixel for the reflection block** (7 fog
+  inlines → 1; `sampleMissEnvPre` carries the hoisted value) = −1.15s. Scoped
+  approximation documented in ADR-0097 update #5; fog-off bit-exact.
+- **F3 — single `sampleMissEnvPre` site in the single-bounce form**
+  (`mix(miss,hit,fade) ≡ hit·fade + miss·(1−fade)` → one weighted epilogue call;
+  halves the inlined `sampleMiss` bodies) = −0.9s.
+
+**Post-optimization matrix (cold gpu=, Mandelbulb):** off 2090 · **raymarched b1
+5026 (+2.9s marginal — published-parity)** · b2/b3 10191/10785 (bounce step
++5.2s, was +11.4s) · accurateColors +540ms · refine +625ms. Runtime p50 on the
+identical mirror-scene uniforms: 9852µs vs 10147µs pre-opt (no regression;
+within noise). Annotations recalibrated (Raymarched 2900, bounces 5200,
+accurateColors 600).
+
+**Lesson (extends the §8-L5 "inline unit" model):** the unit of compile cost is
+the *transitively inlined body instance*. A helper that calls a heavy function
+(`applyEnvFog → fogRadiance → env sample`) multiplies that body by its OWN call
+count — hoist one sample into a local and pass it (or pass a constant flag the
+callee can DCE on) instead of calling through at every site. The remaining
+irreducible reflection cost is the §2.6.1 verdict (4-tap normal at the hit,
+~1.6s) — a quality tradeoff, not a structural one.
+
 [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts) has
 `estimateCompileTime(state)` (≈L161–196): `BASE_COMPILE_MS = 4200` plus a sum of
 per-param `estCompileMs` annotations for enabled `onUpdate:'compile'` params. It

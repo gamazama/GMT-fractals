@@ -50,6 +50,19 @@ const getReflRaymarchShading = (multiBounce: boolean) => `
         vec3 currRo = p_ray + n * reflBias;
         vec3 currRd = reflDir;
 
+        // ONE fog-radiance sample shared by every fogged term in this block
+        // (segment fog, env fills, miss env, simpleEnv) — each used to inline its
+        // own fogRadiance -> env-sample chain (~260ms of cold compile per site,
+        // section 2.6.2; 7 inlines -> 1). At the fog sample's max-blur lod the
+        // direction dependence is gentle, so reflDir stands in for the per-term
+        // directions within this pixel's reflection. Primary-view fog terms
+        // (Ambient IBL, sky, light spheres) keep exact per-direction sampling.
+        // reflFogW replicates applyEnvFog's gate bit-exactly: 0 when fog is off
+        // or the far plane is parked, so mix(env, reflFogRad, reflFogW) == env.
+        bool reflFogOn = uFogIntensity >= 0.001;
+        vec3 reflFogRad = reflFogOn ? fogRadiance(reflDir) : vec3(0.0);
+        float reflFogW = (reflFogOn && uFogFar < 1000.0) ? uFogIntensity : 0.0;
+
         // Roughness regularization: floor the lobe width so near-mirror
         // surfaces don't degenerate (a=0 → NaN in the GGX basis) and the VNDF
         // weight stays bounded. Mirrors the PT path's max(roughness, 0.04).
@@ -104,6 +117,10 @@ const getReflRaymarchShading = (multiBounce: boolean) => `
             // deterministic mirrors — the VNDF jitter applies to bounce 0 only,
             // so extra bounces add no extra noise.
             float reflPathDist = d; // view-cone distance at the current origin
+            ${multiBounce ? `` : `// Single-bounce: hit-fade and miss both route through ONE weighted
+            // sampleMissEnvPre call after the scope (mix(miss, hit, fade) ==
+            // hit·fade + miss·(1−fade)) — halves the inlined sampleMiss bodies.
+            float reflMissW = 0.0;`}
             ${multiBounce
                 ? `for (int b = 0; b < MAX_REFL_BOUNCES; b++) {`
                 : `{ int b = 0; // single bounce: loop wrapper elided (fxc pathology — see JSDoc)`}
@@ -166,14 +183,15 @@ const getReflRaymarchShading = (multiBounce: boolean) => `
                     // Fog wraps the raw env radiance BEFORE the surface response
                     // (kD·albedo / F) — fogging after tinted dark-albedo surfaces
                     // toward gray. Matches the primary Ambient IBL (shading.ts step 7).
+                    // Fog mix uses the block-shared reflFogRad (see hoist above).
                     vec3  r_kD    = (vec3(1.0) - r_F) * (1.0 - uReflection);
-                    vec3  r_envDiff = r_kD * r_albedo * applyEnvFog(GetEnvMap(r_n, 1.0) * uEnvStrength, r_n) * uDiffuse;
+                    vec3  r_envDiff = r_kD * r_albedo * mix(GetEnvMap(r_n, 1.0) * uEnvStrength, reflFogRad, reflFogW) * uDiffuse;
                     // Specular env lobe ONLY on the terminating bounce — on
                     // earlier bounces the traced next ray IS that lobe (it
                     // returns either real geometry or sampleMissEnv); adding
                     // both would double-count the mirror direction.
                     vec3  r_specDir = reflect(currRd, r_n);
-                    vec3  r_envSpec = lastBounce ? r_F * applyEnvFog(GetEnvMap(r_specDir, r_rough) * uEnvStrength, r_specDir) : vec3(0.0);
+                    vec3  r_envSpec = lastBounce ? r_F * mix(GetEnvMap(r_specDir, r_rough) * uEnvStrength, reflFogRad, reflFogW) : vec3(0.0);
                     hitColor += r_envDiff + r_envSpec;
                 }
 
@@ -194,7 +212,7 @@ const getReflRaymarchShading = (multiBounce: boolean) => `
                 // CalcPixelColorSvecTrans). Misses already fog via applyEnvFog.
                 if (uFogIntensity > 0.001) {
                     float rFog = smoothstep(uFogNear, uFogFar, hitD) * uFogIntensity;
-                    hitColor = mix(hitColor, fogRadiance(currRd), rFog);
+                    hitColor = mix(hitColor, reflFogRad, rFog);
                 }
 
                 // Firefly clamp on the single per-frame reflection sample (uses
@@ -207,10 +225,11 @@ const getReflRaymarchShading = (multiBounce: boolean) => `
                 // candidate blends toward the env miss colour by reflFade, so
                 // budget-exhausted rays and reflected silhouettes fade smoothly
                 // instead of flipping hit/miss (the "dotty" env speckle).
-                if (reflFade < 1.0) {
-                    hitContrib = mix(sampleMissEnv(currRo, currRd, roughness, currentThroughput), hitContrib, reflFade);
+                ${multiBounce ? `if (reflFade < 1.0) {
+                    hitContrib = mix(sampleMissEnvPre(currRo, currRd, roughness, currentThroughput, reflFogRad, reflFogW), hitContrib, reflFade);
                 }
-                reflectionLighting += hitContrib;
+                reflectionLighting += hitContrib;` : `reflectionLighting += hitContrib * reflFade;
+                reflMissW = 1.0 - reflFade;`}
 ${multiBounce ? `
                 if (lastBounce) break;
 
@@ -228,15 +247,22 @@ ${multiBounce ? `
                 currRo = p_next + r_n * nextBias;
 ` : ``}
             } else {
-                reflectionLighting += sampleMissEnv(currRo, currRd, roughness, currentThroughput);${multiBounce ? `
-                break;` : ``}
+                ${multiBounce
+                    ? `reflectionLighting += sampleMissEnvPre(currRo, currRd, roughness, currentThroughput, reflFogRad, reflFogW);
+                break;`
+                    : `reflMissW = 1.0;`}
             }
             } // end bounce ${multiBounce ? 'loop' : 'scope (loop elided)'}
+            ${multiBounce ? `` : `// The ONE miss-env evaluation (see reflMissW above). currentThroughput
+            // is the entry value here — single-bounce never attenuates it.
+            if (reflMissW > 0.0001) {
+                reflectionLighting += reflMissW * sampleMissEnvPre(currRo, currRd, roughness, currentThroughput, reflFogRad, reflFogW);
+            }`}
         } else {
-            reflectionLighting += applyEnvFog(GetEnvMap(currRd, roughness) * uEnvStrength, currRd) * currentThroughput;
+            reflectionLighting += mix(GetEnvMap(currRd, roughness) * uEnvStrength, reflFogRad, reflFogW) * currentThroughput;
         }
 
-        vec3 simpleEnv = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength, reflDir);
+        vec3 simpleEnv = mix(GetEnvMap(reflDir, roughness) * uEnvStrength, reflFogRad, reflFogW);
         simpleEnv *= reflThroughput0;
 
         reflectionLighting = mix(simpleEnv, reflectionLighting, uReflStrength);
@@ -280,9 +306,9 @@ export const ReflectionsFeature: FeatureDefinition = {
             options: [
                 { label: 'Off', value: REFL_MODE_OFF, estCompileMs: 0 },
                 { label: 'Environment Map', value: REFL_MODE_ENV, estCompileMs: 0 },
-                { label: 'Raymarched (Quality)', value: REFL_MODE_RAYMARCH, estCompileMs: 5800 }  // measured cold 2026-07-10 (§2.6.2, post-ADR-0094/95/96 body): 8.2s total − 2.4s off; was 1500 (pre-overhaul body)
+                { label: 'Raymarched (Quality)', value: REFL_MODE_RAYMARCH, estCompileMs: 2900 }  // measured cold 2026-07-10 post-optimization (§2.6.2): 5.0s total − 2.1s off; pre-opt overhaul body was 5800
             ],
-            description: 'Reflection technique. Higher quality = longer compile time. Raymarched adds ~6s of compile.',
+            description: 'Reflection technique. Higher quality = longer compile time. Raymarched adds ~3s of compile.',
             onUpdate: 'compile',
             noAccumReset: true
         },
@@ -318,14 +344,15 @@ export const ReflectionsFeature: FeatureDefinition = {
             type: 'int', default: 1, label: 'Max Bounces', shortId: 'rb',
             min: 1, max: 3, step: 1, group: 'engine_settings',
             ui: 'numeric',
-            description: "Mirror recursion depth — 2+ shows reflections inside reflections, and compiles the bounce loop (~11s extra compile; 2 vs 3 costs the same).",
+            description: "Mirror recursion depth — 2+ shows reflections inside reflections, and compiles the bounce loop (~5s extra compile; 2 vs 3 costs the same).",
             noAccumReset: true,
             onUpdate: 'compile',
             condition: { param: 'reflectionMode', eq: REFL_MODE_RAYMARCH },
-            // Measured cold 2026-07-10 (§2.6.2): emitting the bounce for-loop (any value ≥2)
-            // is a STEP of ~+11.4s — the fxc nested-loop toll; 2→3 measured +84ms (free).
+            // Measured cold 2026-07-10 post-optimization (§2.6.2): emitting the bounce
+            // for-loop (any value ≥2) is a STEP of ~+5.2s — the fxc nested-loop toll on
+            // the slimmed body (was +11.4s pre-optimization); 2→3 is ~free.
             // Summed by profiles.ts as a flat step when value > default (int-param rule).
-            estCompileMs: 11400
+            estCompileMs: 5200
         },
         steps: {
             type: 'int', default: 64, label: 'Trace Steps', shortId: 'rs',
@@ -344,7 +371,7 @@ export const ReflectionsFeature: FeatureDefinition = {
             description: "Sample the true surface colour (orbit traps / colour smoothing) at reflected hits instead of the gradient default. Adds a little compile time.",
             onUpdate: 'compile',
             noAccumReset: true,
-            estCompileMs: 800  // measured cold 2026-07-10 (§2.6.2): +0.8s — one full DE() call site at the march exit; ~noise floor
+            estCompileMs: 600  // measured cold 2026-07-10 post-optimization (§2.6.2): +0.5s — one full DE() call site at the march exit; ~noise floor
         },
 
         // Master Switch (Compile Time) — hidden, controlled by engine toggle

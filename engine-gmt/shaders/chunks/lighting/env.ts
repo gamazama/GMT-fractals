@@ -40,7 +40,25 @@ vec3 sampleEnvBicubic(vec2 uv) {
          + texture(uEnvMapTexture, vec2(c1.x, c1.y)).rgb * (g1.x * g1.y);
 }
 
-vec3 GetEnvMap(vec3 dir, float roughness) {
+// Single-site image-path sample. Every GetEnvMap-body instance fxc inlines used
+// to carry TWO copies of the bicubic mix (both uEnvAvgColor branches) — at ~14
+// transitive instances in a raymarched build that was ~2.5s of cold compile
+// (measured 2026-07-10, §2.6.2). One call site here emits the bicubic once per
+// instance; baseFilter is CONSTANT at every caller, so fxc DCEs the bicubic
+// entirely out of instances that pass false (the fog chain — fogRadiance samples
+// at lod ≥ 1 on any real map, the magnification branch was dead there anyway).
+vec3 envImageSample(vec2 uv, float lod, bool baseFilter) {
+    if (baseFilter && lod < 1.0) {
+        // Near-base (magnification) regime: bicubic-smooth the base level
+        // and blend into the mip chain by lod 1 (continuous hand-off).
+        return mix(sampleEnvBicubic(uv), textureLod(uEnvMapTexture, uv, 1.0).rgb, max(lod, 0.0));
+    }
+    return textureLod(uEnvMapTexture, uv, max(lod, 0.0)).rgb;
+}
+
+// Core env sample — shared by GetEnvMap (baseFilter on) and fogRadiance
+// (baseFilter off). Callers MUST pass a constant baseFilter so fxc can DCE.
+vec3 envSampleCore(vec3 dir, float roughness, bool baseFilter) {
     // Path 0: SOLID sky (uEnvSource 2) — the sky IS a flat colour
     // (uFogColorLinear, the shared Sky/Fog colour, ADR-0098). Constant in every
     // direction, so it also acts as a uniform dome light, appears in
@@ -75,23 +93,16 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
         // capping the LOD short of the bad mips. @see docs/adr/0069
         if (uEnvAvgColor.r >= 0.0) {
             float lod = roughness * uEnvMaxMip;
-            // Near-base (magnification) regime: bicubic-smooth the base level
-            // and blend into the mip chain by lod 1 (continuous hand-off).
-            col = lod < 1.0
-                ? mix(sampleEnvBicubic(uv), textureLod(uEnvMapTexture, uv, 1.0).rgb, max(lod, 0.0))
-                : textureLod(uEnvMapTexture, uv, lod).rgb;
+            col = envImageSample(uv, lod, baseFilter);
             float avgMix = smoothstep(uEnvMaxMip - 4.0, uEnvMaxMip, lod);
             col = mix(col, uEnvAvgColor, avgMix);
         } else {
-            float lod = roughness * max(0.0, uEnvMaxMip - 4.0);
-            col = lod < 1.0
-                ? mix(sampleEnvBicubic(uv), textureLod(uEnvMapTexture, uv, 1.0).rgb, max(lod, 0.0))
-                : textureLod(uEnvMapTexture, uv, lod).rgb;
+            col = envImageSample(uv, roughness * max(0.0, uEnvMaxMip - 4.0), baseFilter);
         }
-        
+
         // Apply Color Profile (Linear/ACES)
         col = applyTextureProfile(col, uEnvMapColorSpace);
-    } 
+    }
     else {
         // Path 3: Procedural Sky — simple gradient + sun glint + rim fill
         float y = dir.y * 0.5 + 0.5;  // Remap vertical direction [-1,1] → [0,1]
@@ -118,6 +129,10 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
     return col;
 }
 
+vec3 GetEnvMap(vec3 dir, float roughness) {
+    return envSampleCore(dir, roughness, true);
+}
+
 // In-scattered fog radiance for a ray direction (ADR-0097; semantics inverted
 // per ADR-0097 update #4). Physically the fog IS the atmosphere lit by the sky,
 // so BY DEFAULT it tracks a heavily blurred env sample per direction — aerial
@@ -140,7 +155,10 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
 vec3 fogRadiance(vec3 dir) {
     if (uFogTint > 0.999) return uFogColorLinear;
     float fogRough = clamp(1.0 - 4.0 / max(uEnvMaxMip, 5.0), 0.5, 1.0);
-    vec3 envFog = GetEnvMap(dir, fogRough);
+    // baseFilter=false: at fogRough ≥ 0.5 the lod<1 magnification branch is dead
+    // at runtime — passing the constant lets fxc DCE the bicubic out of every
+    // fogRadiance inline (~8 instances in a raymarched build, §2.6.2).
+    vec3 envFog = envSampleCore(dir, fogRough, false);
     // HDR soft knee: even blurred, a bright HDR sun region can carry luminance
     // 10-50+, and fog radiance multiplies into EVERY fogged term (ambient, env,
     // post fog) — the scene blew out with only a little tint (owner repro).

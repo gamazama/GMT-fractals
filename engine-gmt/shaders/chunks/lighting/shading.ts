@@ -33,6 +33,19 @@ vec3 sampleMissEnv(vec3 ro, vec3 rd, float roughness, vec3 throughput) {
     return mix(applyEnvFog(raw, rd), raw, g_missSelfFogCover) * throughput;
 }
 
+// Fog-hoisted twin of sampleMissEnv for the raymarched reflection block: takes the
+// caller's precomputed fog radiance + weight instead of running the per-direction
+// applyEnvFog -> fogRadiance -> env-sample chain per call site. fxc inlines that
+// chain at EVERY call site (~260ms each cold, section 2.6.2) — the reflection block
+// samples fog once at reflDir and shares it. fogW MUST be 0.0 when fog is inactive
+// (callers replicate applyEnvFog's uFogIntensity/uFogFar gate).
+vec3 sampleMissEnvPre(vec3 ro, vec3 rd, float roughness, vec3 throughput, vec3 fogRad, float fogW) {
+    g_missSelfFogCover = 0.0;
+    vec3 raw = sampleMiss(ro, rd, roughness, uEnvStrength);
+    vec3 fogged = mix(raw, fogRad, fogW);
+    return mix(fogged, raw, g_missSelfFogCover) * throughput;
+}
+
 vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSeed) {
     vec3 p_ray = ro + rd * d;
     vec3 p_fractal = p_ray + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh;
