@@ -371,8 +371,8 @@ export const LightingFeature: FeatureDefinition = {
     inject: (builder, config, variant) => {
         if (variant !== 'Main') {
              builder.addPostDEFunction(`
-             float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) { return 1.0; }
-             float GetHardShadow(vec3 ro, vec3 rd, float lightDist) { return 1.0; }
+             float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise, float surfEps, float epsRate) { return 1.0; }
+             float GetHardShadow(vec3 ro, vec3 rd, float lightDist, float surfEps, float epsRate) { return 1.0; }
              vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSeed) { return vec3(0.0); }
              vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, float seed) { return vec3(0.0); }
              `);
@@ -385,8 +385,8 @@ export const LightingFeature: FeatureDefinition = {
         if (state && !state.advancedLighting) {
              builder.addDefine('MAX_LIGHTS', '0');
              builder.addPostDEFunction(`
-             float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) { return 1.0; }
-             float GetHardShadow(vec3 ro, vec3 rd, float lightDist) { return 1.0; }
+             float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise, float surfEps, float epsRate) { return 1.0; }
+             float GetHardShadow(vec3 ro, vec3 rd, float lightDist, float surfEps, float epsRate) { return 1.0; }
              vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSeed) {
                  vec3 p = ro + rd * d;
                  vec3 p_fractal = p + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh;

@@ -49,6 +49,14 @@ export const VOLUMETRIC_SCATTER_BODY = `
 
                 // --- DENSITY SCATTER (shadow rays — expensive) ---
                 if (_hasDensity && _sigma > 0.001) {
+                    // Zoom-aware fog-shadow precision (@see shadows.ts +
+                    // docs/adr/0093): the scatter point sits at depth d along
+                    // the primary ray, so its footprint eps mirrors the trace's
+                    // finalEps there. Light-loop-invariant — hoisted.
+                    float _epsPerDist = uPixelSizeBase * (uPixelThreshold / (uDetail / uInternalScale));
+                    bool _orthoCam = uCamType > 0.5 && uCamType < 1.5;
+                    float _surfEps = _orthoCam ? _epsPerDist : _epsPerDist * d;
+                    float _epsRateBase = _orthoCam ? 0.0 : _epsPerDist;
                     float _jScale = min(h.x * 0.2, 0.35);
                     vec3 _jDir = normalize(vec3(
                         fract(stochasticSeed * 127.1 + d * 31.7) * 2.0 - 1.0,
@@ -80,7 +88,10 @@ export const VOLUMETRIC_SCATTER_BODY = `
                         }
                         if (uLightIntensity[_li] * _att * _sigma * _trans * _seg < 1e-5) continue;
                         vec3 _l_shadow = normalize(_l + _jDir * _jScale);
-                        float _sh = GetHardShadow(p + _l_shadow * max(h.x * 2.0, 0.01), _l_shadow, _ld);
+                        // Origin offset in footprint units (was absolute 0.01 —
+                        // same high-zoom killer as the surface-shadow bias).
+                        float _sh = GetHardShadow(p + _l_shadow * max(h.x * 2.0, _surfEps * 2.0), _l_shadow, _ld,
+                                                  _surfEps, _epsRateBase * dot(_l_shadow, rd));
                         if (_sh < 0.01) continue;
                         // Henyey-Greenstein phase
                         float _cosT  = dot(rd, -_l);

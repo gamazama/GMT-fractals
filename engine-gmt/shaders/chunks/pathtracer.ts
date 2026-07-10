@@ -21,7 +21,7 @@ export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochast
     // jitter ALU is compiled in at all.
     const jitterCapable = stochasticShadows && !isMobile;
     const shadowLogic = !jitterCapable ? `
-        shadow = GetHardShadow(shadowRo, lDir, distToLight);
+        shadow = GetHardShadow(shadowRo, lDir, distToLight, biasEps, epsRateNEE * dot(lDir, viewDirNEE));
     ` : `
         vec3 shadowDir = lDir;
         float shadowDist = distToLight;
@@ -54,7 +54,7 @@ export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochast
             if (uLightType[lightIdx] > 1.5) { shadowDir = lDir; shadowDist = distToLight; }
             #endif
         }
-        shadow = GetHardShadow(shadowRo, shadowDir, shadowDist);
+        shadow = GetHardShadow(shadowRo, shadowDir, shadowDist, biasEps, epsRateNEE * dot(shadowDir, viewDirNEE));
     `;
 
     return `
@@ -424,14 +424,15 @@ float pdfEnvSample(vec3 dir) {
 // compiled, which would leak the environment straight through solid geometry.
 // Budget mirrors the shadow march (uShadowSteps); on exhaustion it returns
 // visible, matching GetHardShadow. @see docs/adr/0070
-bool envVisibility(vec3 ro, vec3 rd) {
+bool envVisibility(vec3 ro, vec3 rd, float surfEps, float epsRate) {
     float t = 0.0;
     float fudge = uFudgeFactor;
     int limit = uShadowSteps;
     // MB3D-faithful march dynamics (overstep clamp + RSFmul damper + msDEsub,
     // ADR-0092) — mirrors GetHardShadow so the env-NEE shadow ray converges on
     // the same surfaces the primary trace does (no light leaks through thin
-    // geometry on over-estimating DEs).
+    // geometry on over-estimating DEs). Threshold in footprint units with
+    // view-depth cone growth, like GetHardShadow (@see shadows.ts, ADR-0093).
     float rLastDE = 0.0;
     float rLastStep = 0.0;
     float rSF = 1.0;
@@ -447,9 +448,9 @@ bool envVisibility(vec3 ro, vec3 rd) {
             } else { rSF = 1.0; }
         }
         rLastDE = h;
-        float thresh = max(1.0e-6, t * 0.0002);
-        if (h < thresh) return false;                    // hit geometry → occluded
-        float stepW = max(thresh * 0.5, (h - uMb3dDEsub * thresh) * fudge * rSF);
+        float eps = max(0.1 * surfEps, surfEps + epsRate * t);
+        if (h < eps) return false;                       // hit geometry → occluded
+        float stepW = max(eps * 0.5, (h - uMb3dDEsub * eps) * fudge * rSF);
         rLastStep = stepW;
         primed = true;
         t += stepW;
@@ -706,6 +707,14 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         float visualLimitNEE = orthoPixelFootprintNEE * (1.0 / uDetail);
         float biasEps = max(floatLimitNEE, visualLimitNEE);
 
+        // Zoom-aware shadow-march precision (@see shadows.ts + docs/adr/0093):
+        // biasEps doubles as the shadow ray's surface eps; epsRateNEE is the
+        // footprint growth per world unit of camera distance, projected per-ray
+        // via dot(shadowDir, viewDirNEE). d/dt |p + rd·t| at t=0 IS that dot,
+        // so this stays correct for bounce rays too.
+        float epsRateNEE = (uCamType > 0.5 && uCamType < 1.5) ? 0.0 : pixelSizeScale / uDetail;
+        vec3 viewDirNEE = p_ray / max(cameraDist, 1.0e-12);
+
         if (activeCount > 0) {
             float lightSeed = blueNoise.r;
             int pick = clamp(int(lightSeed * float(activeCount)), 0, activeCount - 1);
@@ -728,7 +737,9 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                 #endif
 
                 bool isDirectional = uLightType[lightIdx] > 0.5 && uLightType[lightIdx] < 1.5;
-                vec3 shadowRo = p_ray + n * (biasEps * 2.0 + uShadowBias);
+                // Footprint-relative bias (the old additive uShadowBias was
+                // absolute — kills shadows at high zoom). Same ×500 mapping as pbr.ts.
+                vec3 shadowRo = p_ray + n * (biasEps * (2.0 + uShadowBias * 500.0));
 
                 vec3 lVec;
                 float distToLight;
@@ -884,7 +895,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                 // Cheap geometry-only visibility (was a full tracePTBounce that
                 // discarded its color/glow/volumetric work). Env is added only
                 // when nothing intercepts: no geometry AND no sphere light.
-                bool envBlocked = !envVisibility(envOrigin, envDir);
+                bool envBlocked = !envVisibility(envOrigin, envDir, biasEps, epsRateNEE * dot(envDir, viewDirNEE));
                 #ifdef PT_AREA_LIGHTS
                     // A sphere light across the env ray suppresses the env
                     // contribution — its emission is delivered by the light-NEE
