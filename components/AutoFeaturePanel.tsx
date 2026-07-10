@@ -347,10 +347,11 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             // default covers the dense-dock case). `parentId` pickers sit under
             // their parent's header and stay label-less; standalone params
             // (incl. the former `layout: 'embedded'` case) carry their label
-            // above the inline picker.
+            // above the inline picker. A param LIFTED to root via liftChildrenOf
+            // has no parent header in this context, so it carries its label too.
             return (
                 <div className={`pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
-                    {!config.parentId && config.label && <SectionLabel>{config.label}</SectionLabel>}
+                    {(!config.parentId || config.parentId === liftChildrenOf) && config.label && <SectionLabel>{config.label}</SectionLabel>}
                     <EmbeddedColorPicker color={hex} onColorChange={(c) => handleUpdate(key, c)} />
                 </div>
             );

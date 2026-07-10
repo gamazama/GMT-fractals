@@ -187,13 +187,15 @@ export const GmtPanels: PanelManifest = [
                     // beneath it via parentId (Upload/Rotation for Image, Sky
                     // Gradient for Gradient)...
                     { type: 'feature', id: 'materials', whitelistParams: ['envSource'] },
-                    // ...and the Solid colour picker follows as a sibling row
-                    // (it lives on atmosphere — same param surfaces as 'Fog
-                    // Color' beside the fog controls for Gradient/Image skies;
-                    // one visible home at a time, ADR-0098).
+                    // ...and the Solid colour picker follows as a sibling row.
+                    // The param lives on atmosphere NESTED under Fog Tint (its
+                    // Gradient/Image home) — liftChildrenOf surfaces it as a
+                    // root here, relabelled. One visible home at a time
+                    // (ADR-0098 + 0097 update #4).
                     {
                         type: 'feature', id: 'atmosphere',
                         whitelistParams: ['fogColor'],
+                        liftChildrenOf: 'fogTint',
                         labelOverrides: { fogColor: 'Sky Color' },
                         showIf: (s: any) => (s.materials?.envSource ?? 1) > 1.5,
                     },
@@ -206,18 +208,9 @@ export const GmtPanels: PanelManifest = [
             // NOT a collapsible: Fog Intensity is itself a parent-slider card
             // whose children (Range / Sky Tint / Density) expand when it's on —
             // wrapping that in another section would be a redundant layer (owner).
+            // (Fog Color needs no item here: it nests under Fog Tint inside the
+            // card, revealed while the tint is above 0 — ADR-0097 update #4.)
             { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
-
-            // Fog Color — the flat colour fog fades toward (Sky Tint < 1).
-            // Shown only for Gradient/Image skies; Solid skies edit the same
-            // param as 'Sky Color' above (fog fades toward the sky colour
-            // there by construction).
-            {
-                type: 'feature', id: 'atmosphere',
-                whitelistParams: ['fogColor'],
-                labelOverrides: { fogColor: 'Fog Color' },
-                showIf: (s: any) => (s.materials?.envSource ?? 1) <= 1.5,
-            },
 
             // Soft in-feature divider: Fog and Volumetric Scatter belong to the
             // same atmosphere run, so a full card end-cap between them would

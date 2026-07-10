@@ -122,6 +122,10 @@ export type PanelItem =
            *  under different names in different panel contexts (e.g.
            *  atmosphere.fogColor as 'Sky Color' vs 'Fog Color'). */
           labelOverrides?: Record<string, string>;
+          /** Opt children of this parent param in as roots (AutoFeaturePanel
+           *  liftChildrenOf) — lets a whitelist item surface a param that is
+           *  normally nested under another control elsewhere. */
+          liftChildrenOf?: string;
           /** Skip these param keys (combines with the other filters). */
           excludeParams?: string[];
           /** Optional Tailwind classes appended to the AutoFeaturePanel. */

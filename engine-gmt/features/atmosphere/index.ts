@@ -12,8 +12,9 @@ import { ATMOSPHERE_VOLUME_BODY, ATMOSPHERE_VOLUME_FINALIZE } from './shader';
 const FOG_POST_PROCESS = `
     // --- FOG (Atmosphere Feature) ---
     float fogFactor = smoothstep(uFogNear, uFogFar, d) * uFogIntensity;
-    // Per-direction in-scatter (aerial perspective) — falls back to the flat
-    // authored colour at uFogEnvTint 0. @see fogRadiance (env.ts), ADR-0097.
+    // Per-direction in-scatter (aerial perspective) — follows the sky by
+    // default, blends to the custom Fog Color as uFogTint rises.
+    // @see fogRadiance (env.ts), ADR-0097 (+ update #4).
     vec3 fogColor = fogRadiance(rd);
 
     // Volumetric fog absorption
@@ -43,8 +44,8 @@ export interface AtmosphereState {
     fogIntensity: number;
     fogNear: number;
     fogFar: number;
-    fogColor: THREE.Color; // UI label 'Background Color' — doubles as the no-sky backdrop
-    fogEnvTint: number; // 'Sky Tint' — per-direction fog radiance from the sky (ADR-0097)
+    fogColor: THREE.Color; // 'Fog Color' / 'Sky Color' (Solid) — one param, two homes (ADR-0098)
+    fogTint: number; // 'Fog Tint' — 0 = fog follows the sky, 1 = custom Fog Color (ADR-0097 #4)
     fogDensity: number;
     glowEnabled: boolean; // Compile-Time Switch
     glowQuality: number;
@@ -66,11 +67,6 @@ export const AtmosphereFeature: FeatureDefinition = {
         groupFilter: 'engine_settings'
     },
     groups: {
-        background: {
-            label: 'Background',
-            description: 'The backdrop colour shown when the sky is not visible.',
-            helpId: 'fog.settings',
-        },
         fog: {
             label: 'Fog',
             description: 'Distance-based fog that fades the scene toward a colour.',
@@ -110,18 +106,22 @@ export const AtmosphereFeature: FeatureDefinition = {
 
         // --- SKY / FOG COLOUR ---
         fogColor: {
-            // ONE param, two contextual homes (ADR-0098): with a SOLID sky
-            // (materials.envSource 2) this IS the sky — GetEnvMap returns
-            // uFogColorLinear — and the Scene panel surfaces it as 'Sky Color'
-            // in the Background & Sky section. With a Gradient/Image sky it
-            // surfaces as 'Fog Color' beside the fog controls (the flat colour
-            // fog fades toward at Sky Tint < 1). Both spots render THIS param
-            // via manifest whitelistParams + labelOverrides; the stored key and
-            // uniform never changed (no preset migration for the key itself —
-            // the v5 migration only converts old flat-backdrop scenes).
-            type: 'color', default: new THREE.Color(0,0,0), label: 'Sky / Fog Color', shortId: 'fc', uniform: 'uFogColor',
-            group: 'background',
-            description: 'The Solid sky colour — and the flat colour fog fades toward when Sky Tint is below 1.',
+            // ONE param, two contextual homes (ADR-0098 + 0097 update #4):
+            //  - SOLID sky (materials.envSource 2): this IS the sky — GetEnvMap
+            //    returns uFogColorLinear — surfaced as 'Sky Color' at the top of
+            //    Background & Sky (manifest whitelist item lifts it out of its
+            //    fogTint nesting via liftChildrenOf + relabels it).
+            //  - Gradient/Image sky: nests as 'Fog Color' UNDER the Fog Tint
+            //    slider, revealed when tint > 0 — the colour appears exactly
+            //    when something uses it. Stored key + uniform never changed.
+            type: 'color', default: new THREE.Color(0,0,0), label: 'Fog Color', shortId: 'fc', uniform: 'uFogColor',
+            group: 'fog',
+            parentId: 'fogTint',
+            condition: { or: [
+                { param: '$materials.envSource', gt: 1.5 },  // Solid: always live (it IS the sky)
+                { gt: 0.0 },                                 // else: only while Fog Tint uses it
+            ] },
+            description: 'The custom fog colour (and the Solid sky colour). Fog fades toward this when Fog Tint is above 0.',
             helpId: 'fog.settings',
         },
 
@@ -147,14 +147,21 @@ export const AtmosphereFeature: FeatureDefinition = {
             description: 'Distance where fog reaches full opacity.',
             helpId: 'fog.settings',
         },
-        fogEnvTint: {
-            // Back in the FOG group (moved to materials/env earlier today, then
-            // fogRadiance was DECOUPLED from the env-light strength — the fog
-            // follows the VISIBLE sky definition regardless of how strongly it
-            // lights the scene, so this is purely a fog property again).
-            type: 'float', default: 0.0, label: 'Sky Tint', shortId: 'fet', uniform: 'uFogEnvTint',
-            min: 0.0, max: 1.0, step: 0.01, group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
-            description: 'Tints the fog with the sky per direction (aerial perspective) — fog brightens toward the bright side of the sky. 0 = flat Background Color, 1 = the sky itself.',
+        fogTint: {
+            // INVERTED from the former fogEnvTint 'Sky Tint' (ADR-0097 update
+            // #4, owner design): fog follows the SKY by default (aerial
+            // perspective — for Solid skies that IS the colour), and this dial
+            // blends toward the custom Fog Color, which reveals beneath it
+            // while > 0. Hidden for Solid skies (nothing to tint away from —
+            // the sky already equals the colour). Migration v6 pins old scenes
+            // to 1 (their flat-colour look).
+            type: 'float', default: 0.0, label: 'Fog Tint', shortId: 'ftn', uniform: 'uFogTint',
+            min: 0.0, max: 1.0, step: 0.01, group: 'fog', parentId: 'fogIntensity',
+            condition: [
+                { gt: 0.0 },                                  // fog is on (parent)
+                { param: '$materials.envSource', lt: 1.5 },   // not a Solid sky
+            ],
+            description: 'Blends the fog colour away from the sky toward the custom Fog Color below. 0 = fog matches the sky (aerial perspective); 1 = fully the custom colour.',
             helpId: 'fog.settings',
         },
         fogDensity: {

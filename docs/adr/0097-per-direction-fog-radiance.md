@@ -1,5 +1,15 @@
 # ADR-0097: Per-direction fog radiance from the environment map (aerial perspective)
 
+> **Update 2026-07-10 #4 (Fog Tint inversion; owner design with ADR-0098):** the dial flipped.
+> `fogEnvTint` ("Sky Tint", 0 = flat colour) became `fogTint` ("Fog Tint", uniform `uFogTint`):
+> fog now follows the SKY per direction **by default** (`fogRadiance = mix(sky, fogColor, tint)`),
+> and the dial blends toward the custom Fog Color — which nests UNDER the tint slider in the UI,
+> revealed while tint > 0 (the colour appears exactly when something uses it). For SOLID skies the
+> tint is hidden entirely (sky already equals the colour, the mix endpoints coincide) and the same
+> param surfaces as 'Sky Color' at the top of Background & Sky (manifest `liftChildrenOf` +
+> `labelOverrides`). Migration v6 pins pre-existing scenes to `fogTint 1` (their flat-colour look);
+> new scenes default to aerial perspective.
+
 > **Update 2026-07-10 #3 (final layout — 'one sky, three consumers'; decision unchanged):**
 > `fogRadiance` DROPPED the `uEnvStrength` scaling: the tint follows the VISIBLE sky definition,
 > not the env-light strength (a sunset backdrop with the dome light at 0 should still be matchable

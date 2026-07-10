@@ -191,3 +191,26 @@ registerMigration({
         return p;
     },
 });
+
+// v6 (2026-07-10) — Fog Tint inversion (ADR-0097 update #4, owner design). The
+// former fogEnvTint ('Sky Tint', 0 = flat fog colour, 1 = sky-derived) inverts
+// into fogTint ('Fog Tint', 0 = fog follows the sky — the new default and the
+// physically-right aerial perspective; 1 = the custom Fog Color). Old scenes
+// carried implicit fogEnvTint 0 (flat colour), so absent maps to fogTint 1 —
+// every existing foggy scene keeps its flat-colour look; only NEW scenes get
+// sky-following fog by default. Animation retargeting is skipped on purpose:
+// fogEnvTint shipped for a few hours on an unpushed branch, and its keyed
+// values would be inverted anyway.
+registerMigration({
+    version: 6,
+    id: 'app-gmt.fog-tint-inversion',
+    apply: (p: any) => {
+        const a = p?.features?.atmosphere;
+        if (a && typeof a === 'object') {
+            const old = typeof a.fogEnvTint === 'number' ? a.fogEnvTint : 0;
+            a.fogTint = 1 - Math.min(1, Math.max(0, old));
+            delete a.fogEnvTint;
+        }
+        return p;
+    },
+});

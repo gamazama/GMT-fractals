@@ -82,14 +82,15 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
     return col;
 }
 
-// In-scattered fog radiance for a ray direction (ADR-0097). Physically the fog
-// IS the atmosphere lit by the sky, so its colour should track a heavily
-// blurred env sample per direction — aerial perspective: fog brightens toward
-// the bright side of the sky instead of being one flat colour. uFogEnvTint
-// ("Sky Tint") blends from the authored Background Color (0, legacy — zero
-// extra cost) to the sky-derived radiance (1).
+// In-scattered fog radiance for a ray direction (ADR-0097; semantics inverted
+// per ADR-0097 update #4). Physically the fog IS the atmosphere lit by the sky,
+// so BY DEFAULT it tracks a heavily blurred env sample per direction — aerial
+// perspective: fog brightens toward the bright side of the sky, and for a
+// SOLID sky it is exactly the Sky colour. uFogTint ("Fog Tint") blends toward
+// the custom flat Fog Color instead (1 = fully custom — the pre-inversion
+// legacy look; migration v6 pins old scenes there).
 //
-// DELIBERATELY NOT scaled by uEnvStrength: the tint follows the VISIBLE sky
+// DELIBERATELY NOT scaled by uEnvStrength: the fog follows the VISIBLE sky
 // definition, not the env-light strength — a sunset backdrop with the dome
 // light at 0 (already an artistic decouple) should still be matchable by the
 // fog. The HDR knee below bounds the brightness either way.
@@ -101,7 +102,7 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
 // roughness = 1 - 4/uEnvMaxMip): maximally soft but still directional.
 // Gradient/procedural env paths ignore the exact value and stay directional.
 vec3 fogRadiance(vec3 dir) {
-    if (uFogEnvTint < 0.001) return uFogColorLinear;
+    if (uFogTint > 0.999) return uFogColorLinear;
     float fogRough = clamp(1.0 - 4.0 / max(uEnvMaxMip, 5.0), 0.5, 1.0);
     vec3 envFog = GetEnvMap(dir, fogRough);
     // HDR soft knee: even blurred, a bright HDR sun region can carry luminance
@@ -112,7 +113,7 @@ vec3 fogRadiance(vec3 dir) {
     // AMBIENT light, never a sun-disc-bright emitter.
     float l = dot(envFog, vec3(0.2126, 0.7152, 0.0722));
     if (l > 1.0) envFog *= (2.0 - exp(-(l - 1.0))) / l;
-    return mix(uFogColorLinear, envFog, uFogEnvTint);
+    return mix(envFog, uFogColorLinear, uFogTint);
 }
 
 // Sample the env map at the resolution the CDF was built from. Used by
