@@ -1,5 +1,13 @@
 # ADR-0097: Per-direction fog radiance from the environment map (aerial perspective)
 
+> **Update 2026-07-10 (sampling corrected same day; decision unchanged):** `fogRadiance` no longer
+> samples at roughness 1.0 — for image env maps GetEnvMap's terminal LOD blends to the
+> direction-INDEPENDENT solid-angle average (the ADR-0069 avgMix window), so tinted fog came out
+> one flat colour (owner repro; gradient/procedural skies were unaffected). It now samples the
+> blurriest mip BELOW that window (`lod = uEnvMaxMip − 4`, i.e. `roughness = 1 − 4/uEnvMaxMip`,
+> clamped [0.5, 1]) — maximally soft but still directional. The formula below reads
+> `GetEnvMap(dir, 1.0)`; the shipped code uses this corrected roughness.
+
 **Status:** Accepted — 2026-07-10. Branch `feat/weave-core`. Follows the fog-over-env consistency
 pass (commit `ab472eb`); closes the biggest remaining gap between GMT's fog and the physical
 model.
