@@ -205,6 +205,10 @@ interface WorkshopProps {
      *  '<source>:<id>' (e.g. 'frag:3DickUlus/BuffaloBulb.frag', 'dec:fractal_de8').
      *  Used when the main formula picker's catalog sections launch the Workshop. */
     initialCatalogKey?: string;
+    /** Raw GLSL to load into the editor on open (a picked .frag/.glsl/.txt file),
+     *  with an optional base name for name detection. The lifted equivalent of the
+     *  Workshop's own load-file button, callable from the picker / File menu. */
+    initialSource?: { glsl: string; name?: string };
 }
 
 
@@ -233,9 +237,9 @@ interface WorkshopProps {
  * sanitised to valid GLSL identifiers via `rawName.replace(/[^a-zA-Z0-9_]/g, '')`
  * (`v3/compat.ts:125`) — the formula name doubles as the emitted function name.
  */
-export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula, initialCatalogKey }) => {
+export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula, initialCatalogKey, initialSource }) => {
     // ── State ──
-    const [source, setSource]                             = useState(editFormula ? '' : DEFAULT_SCRIPT);
+    const [source, setSource]                             = useState(editFormula || initialSource ? '' : DEFAULT_SCRIPT);
     const [sourceCollapsed, setSourceCollapsed]           = useState(false);
     const [sourceHeight, setSourceHeight]                 = useState(300);
     const [detected, setDetected]                         = useState<WorkshopDetection | null>(null);
@@ -288,7 +292,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
     // Skips when opened in re-edit mode (editFormula has its own rehydration
     // effect below) so editing an existing formula always loads that formula.
     useEffect(() => {
-        if (editFormula || initialCatalogKey) return;
+        if (editFormula || initialCatalogKey || initialSource) return;
         const draft = workshopDraft;
         if (!draft || !isMeaningfulDraft(draft.source)) return;
         setSource(draft.source);
@@ -312,7 +316,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
     // draft — skip, leaving any earlier free-form draft intact.
     useEffect(() => {
         return () => {
-            if (editFormula || initialCatalogKey) return;
+            if (editFormula || initialCatalogKey || initialSource) return;
             const s = liveStateRef.current;
             workshopDraft = (s && isMeaningfulDraft(s.source)) ? { ...s } : null;
         };
@@ -537,6 +541,21 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
         loadedCatalogKeyRef.current = initialCatalogKey;
         handleBrowseSelect(initialCatalogKey);
     }, [initialCatalogKey, libraryReady, handleBrowseSelect]);
+
+    // ── Load a raw source file on open ──
+    // The lifted equivalent of the Workshop's own load-file button — fired when a
+    // .frag/.glsl file is picked from the FormulaPicker footer or the File menu.
+    // Loads the GLSL + runs detection exactly like handleLoadFile. Ref-guarded so
+    // it runs once per distinct source object.
+    const loadedSourceRef = useRef<object | null>(null);
+    useEffect(() => {
+        if (!initialSource || loadedSourceRef.current === initialSource) return;
+        loadedSourceRef.current = initialSource;
+        const base = (initialSource.name ?? '').replace(/[^a-zA-Z0-9_]/g, '');
+        setSource(initialSource.glsl);
+        setCurrentEntryId(null);
+        runDetect(initialSource.glsl, base || undefined);
+    }, [initialSource, runDetect]);
 
     // ── Variable detection (highlight mode) ──
     useEffect(() => {

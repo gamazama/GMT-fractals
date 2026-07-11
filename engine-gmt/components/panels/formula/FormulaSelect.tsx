@@ -12,7 +12,9 @@ import { FractalEvents, FRACTAL_EVENTS } from '../../../../engine/FractalEvents'
 import { showToast } from '../../../../engine/store/toastStore';
 import { buildFormulaContextMenu } from './FormulaContextMenu';
 import { ModifyWithAIModal } from './ModifyWithAIModal';
-import { FormulaPicker, useSceneGroups, useCatalogData, sectionGroups } from '../../FormulaPicker';
+import { FormulaPicker, useSceneGroups, useCatalogData, sectionGroups, getMB3DCatalogGroup, loadMB3DCatalogScene, MB3D_CATALOG_ID } from '../../FormulaPicker';
+import { pickAndLoadM3pFile } from '../../../utils/mb3d/importM3pFile';
+import { pickAndLoadFragFile } from '../../../features/fragmentarium_import/pickFragFile';
 import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
 
 export { buildFormulaContextMenu } from './FormulaContextMenu';
@@ -23,14 +25,19 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
     const togglePanel = useEngineStore(s => s.togglePanel);
     const sceneGroups = useSceneGroups();
     const catalogData = useCatalogData();
-    const catalogGroups = useMemo(() => sectionGroups(catalogData), [catalogData]);
+    // MB3D bundled scenes lead the Catalog section (the retired Import-MB3D
+    // modal's sample scenes, now thumbnailed + click-to-load), followed by the
+    // Fragmentarium / DEC groups. Static MB3D group → stable ref.
+    const catalogGroups = useMemo(
+        () => [getMB3DCatalogGroup(), ...sectionGroups(catalogData)],
+        [catalogData],
+    );
     const btnRef = useRef<HTMLButtonElement>(null);
     const menuBtnRef = useRef<HTMLButtonElement>(null);
     const hamburgerAnchorRef = useTutorAnchor('formula-hamburger');
     const fileRef = useRef<HTMLInputElement>(null);
     const [rect, setRect] = useState<DOMRect | null>(null);
     const [aiOpen, setAiOpen] = useState(false);
-    const openImportMb3d = useEngineStore(s => (s as any).openImportMb3d as () => void);
 
     // Global Hooks
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
@@ -65,11 +72,6 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             {
                 label: 'Load formula from clipboard',
                 action: () => { void loadFormulaFromClipboard(); },
-            },
-            { label: 'Import', action: () => {}, isHeader: true },
-            {
-                label: 'Import Mandelbulb3D…',
-                action: () => openImportMb3d(),
             },
         ];
         const items = [...aiItems, ...buildFormulaContextMenu()];
@@ -272,10 +274,15 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                         if (c.action === 'launch' && c.id === 'workshop') {
                             openWorkshop(undefined);
                         } else if (c.action === 'catalog') {
-                            // Frag/DEC catalog pick → open the Workshop with the
-                            // formula's source loaded into the editor (it isn't a
-                            // registered formula, so we don't switch the live one).
-                            openWorkshop(undefined, `${c.source}:${c.id}`);
+                            if (c.source === 'mb3d') {
+                                // Bundled MB3D weave scene → load it live (full preset).
+                                loadMB3DCatalogScene(c.id);
+                            } else {
+                                // Frag/DEC catalog pick → open the Workshop with the
+                                // formula's source loaded into the editor (it isn't a
+                                // registered formula, so we don't switch the live one).
+                                openWorkshop(undefined, `${c.source}:${c.id}`);
+                            }
                         } else if (c.action === 'select') {
                             onChange(c.id as FormulaType);
                             // Picking Modular: surface the Graph panel on
@@ -287,25 +294,45 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                     }}
                     extraGroups={sceneGroups}
                     catalogGroups={catalogGroups}
-                    footerSlot={(
-                        <div className="space-y-1.5">
-                            <button
-                                onClick={() => { openImportMb3d(); setIsOpen(false); }}
-                                className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-line/[0.04] hover:bg-line/[0.08] text-fg-muted hover:text-fg text-[10px] font-bold rounded border border-line/15 hover:border-accent-500/40 transition-colors"
-                            >
-                                Import Mandelbulb3D…
-                            </button>
-                            {advancedMode && (
-                                <button
-                                    onClick={() => { fileRef.current?.click(); setIsOpen(false); }}
-                                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-accent-900/20 hover:bg-accent-900/40 text-accent-400 text-[10px] font-bold rounded border border-accent-500/20 hover:border-accent-500/50 transition-colors"
-                                >
-                                    <UploadIcon />
-                                    Import Formula (.GMF)
-                                </button>
-                            )}
-                        </div>
-                    )}
+                    // Contextual imports: the .m3p button shows only while the
+                    // Mandelbulb3D catalog group is active, the frag loader only
+                    // while a Fragmentarium/DEC group is active. The general .GMF
+                    // import stays (advanced mode). Other imports live in the File
+                    // menu's Import section.
+                    footerSlot={(activeCatId) => {
+                        const isMb3d = activeCatId === MB3D_CATALOG_ID;
+                        const isFrag = activeCatId === 'catalog:frag' || activeCatId === 'catalog:dec';
+                        if (!isMb3d && !isFrag && !advancedMode) return null;
+                        return (
+                            <div className="space-y-1.5">
+                                {isMb3d && (
+                                    <button
+                                        onClick={() => { pickAndLoadM3pFile(); setIsOpen(false); }}
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-line/[0.04] hover:bg-line/[0.08] text-fg-muted hover:text-fg text-[10px] font-bold rounded border border-line/15 hover:border-accent-500/40 transition-colors"
+                                    >
+                                        Import Mandelbulb3D (.m3p)…
+                                    </button>
+                                )}
+                                {isFrag && (
+                                    <button
+                                        onClick={() => { pickAndLoadFragFile(); setIsOpen(false); }}
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-line/[0.04] hover:bg-line/[0.08] text-fg-muted hover:text-fg text-[10px] font-bold rounded border border-line/15 hover:border-accent-500/40 transition-colors"
+                                    >
+                                        Load Fragmentarium file (.frag)…
+                                    </button>
+                                )}
+                                {advancedMode && (
+                                    <button
+                                        onClick={() => { fileRef.current?.click(); setIsOpen(false); }}
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-accent-900/20 hover:bg-accent-900/40 text-accent-400 text-[10px] font-bold rounded border border-accent-500/20 hover:border-accent-500/50 transition-colors"
+                                    >
+                                        <UploadIcon />
+                                        Import Formula (.GMF)
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    }}
                 />
             )}
 

@@ -569,7 +569,14 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       mb3dSZ = mb3dSZ * mb3dSZ + 1.2 * mb3dSZ * (1 - mb3dSZ);
       mb3dDEsub = Math.min(0.9, Math.sqrt(mb3dSZ));
     }
-    sceneQuality.fudgeFactor = Math.min(1.0, Math.max(0.01, mb3dSZ));
+    // Floor the authored step at 0.2. A very small authored ZstepDiv makes the
+    // march take tiny steps that exhaust the ray budget before reaching the
+    // surface → black render (Ellarien 0.05, Hal-Tenny 0.05, Theli-At 0.10 all
+    // blacked out from ray exhaustion; Chrystal 0.196 is the smallest authored
+    // step that renders, so 0.2 lifts only the three offenders and leaves every
+    // scene ≥ 0.2 unchanged). The faithful marcher's clamp+damper (ADR-0092)
+    // keeps the coarser step from overshooting thin surfaces.
+    sceneQuality.fudgeFactor = Math.min(1.0, Math.max(0.2, mb3dSZ));
     sceneQuality.mb3dDEsub = mb3dDEsub;
     // With the faithful step's clamp+damper preventing overshoot, GMT's own closest-miss
     // recovery band-aid (uOverstepTolerance, the round-2 Theli fix for the plain step) is

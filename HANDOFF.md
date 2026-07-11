@@ -4,6 +4,16 @@
 **Origin:** Forked from stable at `h:/GMT/workspace-gmt/stable/` (was `h:/GMT/gmt-0.8.5/`, kept as `upstream` remote)
 **Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors. **Mobile mode shipped 2026-05-01.** **True Area Lights shipped 2026-05-03.** **PT reflection quality (env MIS + IS + Sobol) shipped 2026-05-05** — see entry below.
 
+**📋 2026-07-11 — MB3D importer folded into the FormulaPicker (branch `feat/weave-core`):**
+
+Retired the standalone Import-Mandelbulb3D modal; its pieces now live in the unified `<FormulaPicker>`. See the ADR-0083 update block for the full map.
+- **MB3D scenes → Catalog section.** The 38 bundled `.m3p` sample scenes are a "Mandelbulb3D" group leading the picker's Catalog section (above Fragmentarium/DEC), thumbnailed (`public/thumbnails/mb3d-scenes/`, 35 harness renders + the user's better in-app renders for the rest). Picking loads the scene live. New `mb3dCatalogGroup.ts` (+ `CatalogSource` gains `'mb3d'`, commit routing in `FormulaSelect`).
+- **Import consolidated.** `.m3p` and `.frag` file imports are now: contextual picker-footer buttons (shown only while the matching Catalog category is active, via a new `footerSlot` render-prop) + a **File-menu "Import" section**. Removed the MB3D item from the formula hamburger. New shared utils `importM3pFile.ts` / `pickFragFile.ts`; the Workshop's buried frag-file load was lifted via a new store action `openWorkshopWithSource` + Workshop `initialSource` prop. Text-paste dropped.
+- **Importer fix — fudge clamp.** `emitFusedHybrid` floors `quality.fudgeFactor` at 0.2 (was 0.01): a tiny authored ZstepDiv exhausted the ray budget → black (Ellarien/Hal-Tenny 0.05, Theli-At 0.10). Only those flip; scenes ≥ 0.2 unchanged (`debug/mb3d-fudge-audit.mts` calibration).
+- **Deferred:** DsyneGrafix imports as dust (its IdesFormula slot has no analytic derivative but a sibling Amazing Box writes `dr`, so est7 doesn't auto-route). Static detection can't separate it from HalTenny-Freak (both have a `deOption 0` no-`dr` fractal, but HalTenny renders fine — Integer Power carries the DE). Left on manual-est7; `debug/mb3d-dr-audit.mts` documents the analysis for a future curated-escape-list pass.
+- Renamed the gallery's "My Submissions" → "My Fractals".
+- Gates: typecheck 0, `test:mb3d` 24/24, `test:mb3d:weave` 291/291, `smoke:boot` clean, no new orphans. Adversarial-reviewed (0 correctness findings). NOT pushed (rides the v1+weave hold). Local-only Julia3D wiring + the CategoryPickerMenu type-to-search hunks deliberately left uncommitted.
+
 **📋 2026-06-25 — Mandelbulb3D scene importer (branch `feat/mb3d-importer`):**
 
 Deterministic-from-source MB3D (`thargor6/mb3d`) → GMT importer. The user's standing rule (deterministic > AI) drove the whole design; the AI formula kit is the fallback, this is the default for a known format. See ADR-0083 + [`plans/mb3d/converter-design.md`](./plans/mb3d/converter-design.md).

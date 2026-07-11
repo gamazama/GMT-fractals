@@ -120,8 +120,8 @@ export type UISlice = Pick<EngineStoreState,
     // New Layout Props
     'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' |
     'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot' |
-    'workshopOpen' | 'workshopEditFormula' | 'workshopCatalogKey' |
-    'newSceneOpen' | 'importMb3dOpen' |
+    'workshopOpen' | 'workshopEditFormula' | 'workshopCatalogKey' | 'workshopInitialSource' |
+    'newSceneOpen' |
     // Tutorial
     'tutorialActive' | 'tutorialLessonId' | 'tutorialStepIndex' | 'tutorialCompleted'
 > & Pick<EngineActions,
@@ -143,9 +143,8 @@ export type UISlice = Pick<EngineStoreState,
     // Legacy Mappers
     'setActiveTab' | 'floatTab' | 'dockTab' |
     // Workshop
-    'openWorkshop' | 'closeWorkshop' |
+    'openWorkshop' | 'closeWorkshop' | 'openWorkshopWithSource' |
     'openNewScene' | 'closeNewScene' |
-    'openImportMb3d' | 'closeImportMb3d' |
     // Tutorial
     'startTutorial' | 'advanceTutorialStep' | 'skipTutorial' | 'completeTutorial'
 >;
@@ -239,9 +238,9 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     // Workshop
     workshopOpen: false,
     newSceneOpen: false,
-    importMb3dOpen: false,
     workshopEditFormula: undefined,
     workshopCatalogKey: undefined,
+    workshopInitialSource: undefined,
 
     // Tutorial System
     tutorialActive: false,
@@ -308,14 +307,14 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     }),
     closeContextMenu: () => set(s => ({ contextMenu: { ...s.contextMenu, visible: false } })),
 
-    openWorkshop: (editFormula, catalogKey) => set({ workshopOpen: true, workshopEditFormula: editFormula, workshopCatalogKey: catalogKey }),
-    closeWorkshop: () => set({ workshopOpen: false, workshopEditFormula: undefined, workshopCatalogKey: undefined }),
+    openWorkshop: (editFormula, catalogKey) => set({ workshopOpen: true, workshopEditFormula: editFormula, workshopCatalogKey: catalogKey, workshopInitialSource: undefined }),
+    // Open the Workshop with raw GLSL loaded into the editor (a .frag/.glsl/.txt
+    // file picked from the FormulaPicker footer or the File-menu Import section).
+    openWorkshopWithSource: (glsl, name) => set({ workshopOpen: true, workshopEditFormula: undefined, workshopCatalogKey: undefined, workshopInitialSource: { glsl, name } }),
+    closeWorkshop: () => set({ workshopOpen: false, workshopEditFormula: undefined, workshopCatalogKey: undefined, workshopInitialSource: undefined }),
 
     openNewScene: () => set({ newSceneOpen: true }),
     closeNewScene: () => set({ newSceneOpen: false }),
-
-    openImportMb3d: () => set({ importMb3dOpen: true }),
-    closeImportMb3d: () => set({ importMb3dOpen: false }),
 
     // --- NEW LAYOUT ACTIONS IMPLEMENTATION ---
 

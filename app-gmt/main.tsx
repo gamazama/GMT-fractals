@@ -86,6 +86,8 @@ import { installHud } from '../engine/plugins/Hud';
 import { applyPanelManifest } from '../engine/PanelManifest';
 import { GmtPanels } from '../engine-gmt/panels';
 import { loadGMFScene, saveGMFScene } from '../engine-gmt/utils/FormulaFormat';
+import { pickAndLoadM3pFile } from '../engine-gmt/utils/mb3d/importM3pFile';
+import { pickAndLoadFragFile } from '../engine-gmt/features/fragmentarium_import/pickFragFile';
 import { registry as gmtRegistry } from '../engine-gmt/engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { getSharedSceneById } from '../engine-gmt/gallery/sharedScene';
@@ -295,14 +297,26 @@ menu.registerItem('file', {
     onSelect: () => { useEngineStore.getState().openNewScene(); },
 });
 
-// Import a Mandelbulb3D scene / formula. Global dialog (also reachable from the
-// FormulaPicker footer); mounted once at app root.
+// Import section — external formula/scene files. The catalog browsers for
+// these live in the FormulaPicker (MB3D scenes + Fragmentarium/DEC formulas);
+// these menu items load an arbitrary file from disk.
+menu.registerItem('file', { id: 'import-section', type: 'section', label: 'Import', order: -9.5 });
+// Import a Mandelbulb3D `.m3p` scene file (the bundled sample scenes live in the
+// FormulaPicker's "Mandelbulb3D" catalog group).
 menu.registerItem('file', {
     id: 'import-mb3d',
     type: 'button',
-    label: 'Import Mandelbulb3D…',
+    label: 'Mandelbulb3D scene (.m3p)…',
     order: -9,
-    onSelect: () => { (useEngineStore.getState() as any).openImportMb3d(); },
+    onSelect: () => pickAndLoadM3pFile(),
+});
+// Load a Fragmentarium `.frag` (or .glsl) file into the Formula Workshop.
+menu.registerItem('file', {
+    id: 'import-frag',
+    type: 'button',
+    label: 'Fragmentarium formula (.frag)…',
+    order: -8.9,
+    onSelect: () => pickAndLoadFragFile(),
 });
 
 // Mobile users get Share Link only via this menu entry; desktop also

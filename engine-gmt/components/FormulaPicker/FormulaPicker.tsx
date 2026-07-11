@@ -53,10 +53,15 @@ import type { CatalogGroup, CatalogItem } from './catalogGroups';
 export type FormulaPickerCommit =
     | { action: 'select'; id: string }
     | { action: 'launch'; id: 'workshop' }
-    /** A frag/DEC catalog formula was picked. Not registered yet — the caller
-     *  loads its source into the Workshop editor (it doesn't switch the live
-     *  formula). `id` is the catalog id; `source` selects frag vs DEC loading. */
-    | { action: 'catalog'; id: string; source: 'frag' | 'dec' };
+    /** A catalog card was picked. For frag/DEC the caller loads the source into
+     *  the Workshop editor (not a registered formula); for mb3d the caller loads
+     *  the bundled weave scene live. `id` is the catalog id; `source` routes. */
+    | { action: 'catalog'; id: string; source: 'frag' | 'dec' | 'mb3d' };
+
+/** Footer content. A plain node, or a render fn receiving the active sidebar
+ *  category id — so callers can show category-contextual actions (e.g. an
+ *  "Import .m3p" button only while the Mandelbulb3D catalog group is active). */
+export type FooterSlot = React.ReactNode | ((activeCatId: string | null) => React.ReactNode);
 
 export interface FormulaPickerProps {
     variant: 'popover' | 'inline' | 'modal';
@@ -110,7 +115,7 @@ export interface FormulaPickerProps {
     headerLinks?: Array<{ label: string; href: string }>;
 
     headerSlot?: React.ReactNode;
-    footerSlot?: React.ReactNode;
+    footerSlot?: FooterSlot;
 }
 
 export interface FormulaPickerRef {
@@ -1059,7 +1064,7 @@ interface PickerBodyProps {
     cardRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>;
     headerLinks?: Array<{ label: string; href: string }>;
     headerSlot?: React.ReactNode;
-    footerSlot?: React.ReactNode;
+    footerSlot?: FooterSlot;
     showInlineHoverPreview: boolean;
 }
 
@@ -1199,7 +1204,7 @@ function PickerBody(p: PickerBodyProps) {
                                 )}
                                 {p.catalogSearchHits.length > 0 && (
                                     <CatalogPane
-                                        group={{ kind: 'catalog', id: '__search__', name: `Catalog — opens in Workshop (${p.catalogSearchHits.length})`, items: p.catalogSearchHits }}
+                                        group={{ kind: 'catalog', id: '__search__', name: `Catalog (${p.catalogSearchHits.length})`, items: p.catalogSearchHits }}
                                         viewMode={p.viewMode}
                                         onCommit={p.onCommitCatalogItem}
                                     />
@@ -1237,9 +1242,12 @@ function PickerBody(p: PickerBodyProps) {
                 )}
             </div>
 
-            {p.footerSlot && (
-                <div className="border-t border-line/10 px-3 py-2 bg-surface-raised">{p.footerSlot}</div>
-            )}
+            {(() => {
+                const footer = typeof p.footerSlot === 'function' ? p.footerSlot(p.activeCat) : p.footerSlot;
+                return footer ? (
+                    <div className="border-t border-line/10 px-3 py-2 bg-surface-raised">{footer}</div>
+                ) : null;
+            })()}
         </div>
     );
 }

@@ -11,7 +11,11 @@
  * @see debug/frag-thumbs-commit.mts (writes thumbnails/frag/<safeId>.jpg + index.json)
  */
 
-export type CatalogSource = 'frag' | 'dec';
+/** frag/dec = Workshop-imported formula fixtures (picking opens the Workshop).
+ *  mb3d = a bundled Mandelbulb3D weave SCENE (picking loads it live). Both render
+ *  as thumbnail cards in the Catalog section; the commit routing branches on
+ *  `source` (see FormulaSelect). */
+export type CatalogSource = 'frag' | 'dec' | 'mb3d';
 
 export interface CatalogItem {
     /** Catalog id — frag relative path ('3DickUlus/BuffaloBulb.frag') or DEC id ('fractal_de8'). */

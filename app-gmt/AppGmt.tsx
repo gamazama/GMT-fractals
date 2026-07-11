@@ -40,7 +40,6 @@ import { UnsavedWorkGuard } from '../engine/components/UnsavedWorkGuard';
 import { FirstRunHint } from '../engine-gmt/components/FirstRunHint';
 import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubmissionsOverlay } from '../engine-gmt/gallery';
 import { NewSceneModal } from '../components/NewSceneModal';
-import { ImportMandelbulb3DModalHost } from '../engine-gmt/components/panels/formula/ImportMandelbulb3DModal';
 import { LoadFilterPanel } from '../components/LoadFilterPanel';
 import { PalettePickerOverlayHost } from './PalettePickerOverlay';
 import { SettingsHost } from './SettingsHost';
@@ -125,6 +124,7 @@ export const AppGmt: React.FC = () => {
     const workshopOpen               = useEngineStore((s) => (s as any).workshopOpen);
     const workshopEditFormula        = useEngineStore((s) => (s as any).workshopEditFormula);
     const workshopCatalogKey         = useEngineStore((s) => (s as any).workshopCatalogKey);
+    const workshopInitialSource      = useEngineStore((s) => (s as any).workshopInitialSource);
     const histogramActiveCount       = useEngineStore((s) => (s as any).histogramActiveCount);
     const histogramAutoUpdate        = useEngineStore((s) => (s as any).histogramAutoUpdate);
     const histogramTrigger           = useEngineStore((s) => (s as any).histogramTrigger);
@@ -282,6 +282,7 @@ export const AppGmt: React.FC = () => {
                                     onClose={() => (useEngineStore.getState() as any).closeWorkshop()}
                                     editFormula={workshopEditFormula}
                                     initialCatalogKey={workshopCatalogKey}
+                                    initialSource={workshopInitialSource}
                                 />
                             </BenchProfiler>
                         </React.Suspense>
@@ -441,7 +442,6 @@ export const AppGmt: React.FC = () => {
                 <AuthOverlayHost />
                 <AccountPanelHost />
                 <NewSceneModal />
-                <ImportMandelbulb3DModalHost />
                 <LoadFilterPanel />
                 <PalettePickerOverlayHost />
                 <SettingsHost />
