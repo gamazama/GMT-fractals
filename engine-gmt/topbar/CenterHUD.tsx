@@ -2,7 +2,10 @@
  * CenterHUD — GMT's center-topbar widget.
  *
  * Ported verbatim from `h:/GMT/gmt-0.8.5/components/topbar/CenterHUD.tsx`
- * with mechanical import-path rewrites only. No logic edits.
+ * with mechanical import-path rewrites only. Sole logic deviation: the light
+ * drags open a param transaction (`beginLightDragUndo`) so they're undoable
+ * under the engine-fork's snapshot-diff undo model — the original relied on a
+ * different history mechanism. See the comment on `beginLightDragUndo`.
  *
  * Composition:
  *   - 3-light collapsed view + 8-light expanded 3x3 grid (click to
@@ -204,8 +207,27 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
         }, 600);
     };
 
+    // A HUD light drag (new-light drag-out OR existing-orb reposition) mutates the
+    // lighting slice through useInteractionManager's placement loop. That loop opens
+    // only the 'gizmo' INTERACTION session (the quality / adaptive-resolution axis,
+    // ADR-0061) — NOT a param transaction — so nothing records the change for undo.
+    // Wrap the whole gesture in a param transaction here: snapshot at drag start,
+    // diff on release, so the add + placement collapse into a single undo entry.
+    // Mirrors LightGizmo's handleInteractionStart('param') → handleInteractionEnd().
+    const beginLightDragUndo = () => {
+        handleInteractionStart('param');
+        const endLightDragUndo = () => {
+            handleInteractionEnd();
+            window.removeEventListener('pointerup', endLightDragUndo);
+            window.removeEventListener('pointercancel', endLightDragUndo);
+        };
+        window.addEventListener('pointerup', endLightDragUndo);
+        window.addEventListener('pointercancel', endLightDragUndo);
+    };
+
     const handleDragStartLogic = (i: number) => {
         vibrate(5);
+        beginLightDragUndo();
         const light = lights[i];
         state.setDraggedLight(light?.id ?? null);
         if (!isMobileMode) {
@@ -219,6 +241,9 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
     // Fired on pointerdown so a plain click (no drag) still just adds the light.
     const handleAddLightDragStart = () => {
         vibrate(5);
+        // Snapshot BEFORE addLight so undo removes the new light entirely (not just
+        // reverts it to the default spawn position).
+        beginLightDragUndo();
         state.addLight();
         const newLights = (useEngineStore.getState() as any).lighting?.lights ?? [];
         const newLight = newLights[newLights.length - 1];

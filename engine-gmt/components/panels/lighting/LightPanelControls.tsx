@@ -93,17 +93,25 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
       openGlobalMenu(e.clientX, e.clientY, items, ['panel.light']);
   };
   
+  // add/remove mutate the lighting slice directly, so wrap each in a param
+  // transaction to make it undoable (snapshot → diff → push). Same pattern as
+  // LightControls' Duplicate/Delete menu actions; addLight snapshots BEFORE the
+  // mutation so undo removes the new light rather than reverting its position.
   const handleAddLight = () => {
       if (lighting.lights.length < MAX_LIGHTS) {
+          actions.handleInteractionStart('param');
           actions.addLight();
+          actions.handleInteractionEnd();
           setActiveLight(lighting.lights.length);
       }
   };
-  
+
   const handleRemoveLight = (e: React.MouseEvent) => {
       e.stopPropagation();
       if (lighting.lights.length > 1) {
+          actions.handleInteractionStart('param');
           actions.removeLight(activeLight);
+          actions.handleInteractionEnd();
           setActiveLight(Math.max(0, activeLight - 1));
       }
   };
