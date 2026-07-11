@@ -49,9 +49,12 @@ const KeyCamButton: React.FC = () => {
     // Narrow per-field — destructuring useAnimationStore() was re-rendering
     // this button on every no-op set() (~60 Hz). The engineStore full sub
     // below is deliberate (the dirty check needs to react to anything).
-    const sequence     = useAnimationStore((s) => s.sequence);
-    const currentFrame = useAnimationStore((s) => s.currentFrame);
-    const isPlaying    = useAnimationStore((s) => s.isPlaying);
+    const sequence      = useAnimationStore((s) => s.sequence);
+    const currentFrame  = useAnimationStore((s) => s.currentFrame);
+    const isPlaying     = useAnimationStore((s) => s.isPlaying);
+    const snapshot      = useAnimationStore((s) => s.snapshot);
+    const removeKeyframe = useAnimationStore((s) => s.removeKeyframe);
+    const removeTracks  = useAnimationStore((s) => s.removeTracks);
 
     // Rebuild camera track list when apps (re-)register
     const tracks = useSyncExternalStore(
@@ -80,6 +83,19 @@ const KeyCamButton: React.FC = () => {
         // just-captured keyframes with zeros for camera.unified.* tracks.
         captureCameraKeyFrame(currentFrame);
         FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, tracks[0]);
+    };
+
+    const handleDeleteCamKey = () => {
+        let snapped = false;
+        tracks.forEach(tid => {
+            const k = sequence.tracks[tid]?.keyframes.find(k => Math.abs(k.frame - currentFrame) < 0.1);
+            if (k) { if (!snapped) { snapshot(); snapped = true; } removeKeyframe(tid, k.id); }
+        });
+    };
+
+    const handleDeleteCamTracks = () => {
+        const ids = tracks.filter(tid => sequence.tracks[tid]);
+        if (ids.length) removeTracks(ids);
     };
 
     const getStatus = (): KeyStatus => {
@@ -136,7 +152,7 @@ const KeyCamButton: React.FC = () => {
             onClick={handleKeyCam}
             title="Keyframe Camera (Position + Rotation)"
         >
-            <KeyframeButton status={status} onClick={handleKeyCam} />
+            <KeyframeButton status={status} label="Camera" onClick={handleKeyCam} onDeleteKey={handleDeleteCamKey} onDeleteTrack={handleDeleteCamTracks} />
             <span className="text-[10px] font-bold">Key Cam</span>
         </div>
     );

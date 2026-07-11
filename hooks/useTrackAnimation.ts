@@ -24,6 +24,7 @@ export const useTrackAnimation = (trackId: string | undefined, currentValue: num
     const addTrack       = useAnimationStore((s) => s.addTrack);
     const addKeyframe    = useAnimationStore((s) => s.addKeyframe);
     const removeKeyframe = useAnimationStore((s) => s.removeKeyframe);
+    const removeTrack    = useAnimationStore((s) => s.removeTrack);
     const snapshot       = useAnimationStore((s) => s.snapshot);
 
     // 1. Status Calculation
@@ -48,20 +49,36 @@ export const useTrackAnimation = (trackId: string | undefined, currentValue: num
         }
     })();
 
-    // 2. Click Handler (Toggle)
-    const toggleKey = () => {
-        if (!trackId) return;
-        snapshot();
+    // 2. Explicit actions — click sets, Ctrl+click deletes the key,
+    //    Ctrl+Shift+click deletes the whole track. KeyframeButton owns the
+    //    modifier/context-menu routing; the hook owns the per-track effects.
 
-        if (status === 'keyed') {
-            const k = sequence.tracks[trackId].keyframes.find(k => Math.abs(k.frame - currentFrame) < 0.1);
-            if (k) removeKeyframe(trackId, k.id);
-        } else {
-            if (!sequence.tracks[trackId]) addTrack(trackId, label);
-            // In keyed-dirty, dirty, partial, or none states, we add/overwrite key
-            addKeyframe(trackId, currentFrame, currentValue);
-        }
+    // Add or overwrite the key at the current frame. No-op when the frame is
+    // already keyed to the current value (avoids an empty undo step).
+    const setKey = () => {
+        if (!trackId) return;
+        if (status === 'keyed') return;
+        snapshot();
+        if (!sequence.tracks[trackId]) addTrack(trackId, label);
+        addKeyframe(trackId, currentFrame, currentValue);
         FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, trackId);
+    };
+
+    // Remove the key sitting on the current frame, if any.
+    const deleteKey = () => {
+        if (!trackId) return;
+        const track = sequence.tracks[trackId];
+        if (!track) return;
+        const k = track.keyframes.find(k => Math.abs(k.frame - currentFrame) < 0.1);
+        if (!k) return;
+        snapshot();
+        removeKeyframe(trackId, k.id);
+    };
+
+    // Remove the entire track (removeTrack snapshots internally).
+    const deleteTrack = () => {
+        if (!trackId || !sequence.tracks[trackId]) return;
+        removeTrack(trackId);
     };
 
     // 3. Auto-Recording Helpers
@@ -80,5 +97,5 @@ export const useTrackAnimation = (trackId: string | undefined, currentValue: num
         }
     };
 
-    return { status, toggleKey, autoKeyOnChange, autoKeyOnDragStart };
+    return { status, setKey, deleteKey, deleteTrack, autoKeyOnChange, autoKeyOnDragStart };
 };

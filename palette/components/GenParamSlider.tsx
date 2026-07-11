@@ -26,7 +26,7 @@ export const GenParamSlider: React.FC<{
 }> = ({ param, label, min, max, step, def, trackBackground }) => {
   const [v, setV] = useGenParam<number>(param);
   const value = v ?? def;
-  const { status, toggleKey } = useTrackAnimation(`paletteGenerator.${param}`, value, label);
+  const { status, setKey, deleteKey, deleteTrack } = useTrackAnimation(`paletteGenerator.${param}`, value, label);
   return (
     <ScalarInput
       value={value}
@@ -38,7 +38,7 @@ export const GenParamSlider: React.FC<{
       step={step}
       defaultValue={def}
       label={label}
-      headerRight={<KeyframeButton status={status} onClick={toggleKey} />}
+      headerRight={<KeyframeButton status={status} label={label} onClick={setKey} onDeleteKey={deleteKey} onDeleteTrack={deleteTrack} />}
       trackHeight={14}
       trackBackground={trackBackground}
     />

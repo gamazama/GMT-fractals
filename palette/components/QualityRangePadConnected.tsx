@@ -70,10 +70,9 @@ export const QualityRangePadConnected: React.FC<FeatureComponentProps & AxisProp
   // (deriveTrackBinding convention). One diamond keys both bounds together.
   const kLo = useTrackAnimation(`${featureId}.${axis}_x`, value[0], `${loLabel ?? axis} min`);
   const kHi = useTrackAnimation(`${featureId}.${axis}_y`, value[1], `${hiLabel ?? axis} max`);
-  const onToggleKey = useCallback(() => {
-    kLo.toggleKey();
-    kHi.toggleKey();
-  }, [kLo, kHi]);
+  const onSetKey = useCallback(() => { kLo.setKey(); kHi.setKey(); }, [kLo, kHi]);
+  const onDeleteKey = useCallback(() => { kLo.deleteKey(); kHi.deleteKey(); }, [kLo, kHi]);
+  const onDeleteTrack = useCallback(() => { kLo.deleteTrack(); kHi.deleteTrack(); }, [kLo, kHi]);
 
   return (
     <>
@@ -82,7 +81,7 @@ export const QualityRangePadConnected: React.FC<FeatureComponentProps & AxisProp
         onChange={onChange}
         loLabel={loLabel}
         hiLabel={hiLabel}
-        headerRight={<KeyframeButton status={combineKeyStatus(kLo.status, kHi.status)} onClick={onToggleKey} />}
+        headerRight={<KeyframeButton status={combineKeyStatus(kLo.status, kHi.status)} label={`${cap(axis)}`} onClick={onSetKey} onDeleteKey={onDeleteKey} onDeleteTrack={onDeleteTrack} />}
         drawTrack={track ? TRACKS[track] : undefined}
       />
       {hint && <Hint text={hint} />}

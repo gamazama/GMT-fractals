@@ -26,13 +26,13 @@ const DIR_TINT = 'linear-gradient(to bottom, rgb(var(--accent-400)/0.0), rgb(var
 const VerticalMixSlider: React.FC<{ param: string; label: string; height: number }> = ({ param, label, height }) => {
   const [v, setV] = useGenParam<number>(param);
   const value = v ?? 0;
-  const { status, toggleKey } = useTrackAnimation(`paletteGenerator.${param}`, value, label);
+  const { status, setKey, deleteKey, deleteTrack } = useTrackAnimation(`paletteGenerator.${param}`, value, label);
   const pct = Math.max(0, Math.min(100, value * 100)); // thumb/fill clamp for display; value may exceed
 
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="flex items-center gap-0.5">
-        <KeyframeButton status={status} onClick={toggleKey} />
+        <KeyframeButton status={status} label={label} onClick={setKey} onDeleteKey={deleteKey} onDeleteTrack={deleteTrack} />
         <span className="text-[10px] text-fg-muted">{label}</span>
       </div>
       <div

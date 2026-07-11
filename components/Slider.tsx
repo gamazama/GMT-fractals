@@ -205,7 +205,7 @@ const Slider: React.FC<SliderProps> = ({
 }) => {
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
     const slider = useInteractionGesture(INTERACTION_SOURCES.slider);
-    const { status, toggleKey, autoKeyOnChange, autoKeyOnDragStart } = useTrackAnimation(trackId, props.value ?? 0, props.label);
+    const { status, setKey, deleteKey, deleteTrack, autoKeyOnChange, autoKeyOnDragStart } = useTrackAnimation(trackId, props.value ?? 0, props.label);
 
     const helpIds = [];
     if (trackId) helpIds.push(trackId);
@@ -253,7 +253,13 @@ const Slider: React.FC<SliderProps> = ({
 
     // Construct Header Right
     const headerRight = (trackId && !props.disabled) ? (
-        <KeyframeButton status={status} onClick={() => { toggleKey(); if (onKeyToggle) onKeyToggle(); }} />
+        <KeyframeButton
+            status={status}
+            label={props.label}
+            onClick={() => { setKey(); if (onKeyToggle) onKeyToggle(); }}
+            onDeleteKey={deleteKey}
+            onDeleteTrack={deleteTrack}
+        />
     ) : undefined;
 
     // Pass unmapped min/max - ScalarInput handles the mapping internally.

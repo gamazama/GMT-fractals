@@ -121,7 +121,9 @@ const RangePairPad: React.FC<{
     const gesture = useInteractionGesture(INTERACTION_SOURCES.slider);
     const kLo = useTrackAnimation(trackIdMin, valueMin, minLabel);
     const kHi = useTrackAnimation(trackIdMax, valueMax, maxLabel);
-    const onToggleKey = () => { kLo.toggleKey(); kHi.toggleKey(); };
+    const onSetKey = () => { kLo.setKey(); kHi.setKey(); };
+    const onDeleteKey = () => { kLo.deleteKey(); kHi.deleteKey(); };
+    const onDeleteTrack = () => { kLo.deleteTrack(); kHi.deleteTrack(); };
     const dragStart = () => {
         handleInteractionStart('param');
         gesture.begin();
@@ -143,7 +145,13 @@ const RangePairPad: React.FC<{
                 min={min} max={max} step={step} format={format}
                 label={label} loLabel={minLabel} hiLabel={maxLabel}
                 headerRight={(trackIdMin || trackIdMax) && !disabled
-                    ? <KeyframeButton status={combineKeyStatus(kLo.status, kHi.status)} onClick={onToggleKey} />
+                    ? <KeyframeButton
+                        status={combineKeyStatus(kLo.status, kHi.status)}
+                        label={label}
+                        onClick={onSetKey}
+                        onDeleteKey={onDeleteKey}
+                        onDeleteTrack={onDeleteTrack}
+                      />
                     : undefined}
                 onDragStart={dragStart}
                 onDragEnd={dragEnd}

@@ -153,7 +153,7 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
     const lightMenuAnchorRef = useTutorAnchor('light-popup-menu');
 
     // Animation Store for Keyframing
-    const { addTrack, addKeyframe, currentFrame, sequence, isPlaying } = useAnimationStore();
+    const { addTrack, addKeyframe, removeKeyframe, removeTracks, snapshot, currentFrame, sequence, isPlaying } = useAnimationStore();
     
     // Temperature mode state - default to temperature if light has useTemperature flag
     const [useTempMode, setUseTempMode] = useState(light.useTemperature ?? false);
@@ -219,6 +219,8 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
          updateLight({ index, params: { fixed: !wasFixed, position: newPos, rotation: newRot } });
     };
 
+    const posTrackIds = ['X', 'Y', 'Z'].map(axis => `lighting.light${index}_pos${axis}`);
+
     const handlePositionKey = () => {
         const axes = ['X', 'Y', 'Z'];
         axes.forEach(axis => {
@@ -226,6 +228,19 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
             if (!sequence.tracks[id]) addTrack(id, `Light ${index+1} Pos ${axis}`);
             addKeyframe(id, currentFrame, light.position[axis.toLowerCase() as 'x' | 'y' | 'z']);
         });
+    };
+
+    const handleDeletePositionKey = () => {
+        let snapped = false;
+        posTrackIds.forEach(id => {
+            const k = sequence.tracks[id]?.keyframes.find(k => Math.abs(k.frame - currentFrame) < 0.1);
+            if (k) { if (!snapped) { snapshot(); snapped = true; } removeKeyframe(id, k.id); }
+        });
+    };
+
+    const handleDeletePositionTrack = () => {
+        const ids = posTrackIds.filter(id => sequence.tracks[id]);
+        if (ids.length) removeTracks(ids);
     };
 
     // Calculate aggregated status for 3 tracks (X, Y, Z)
@@ -367,7 +382,7 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
                                 <DragHandleIcon />
                             </button>
                         )}
-                        {!detached && light.type !== 'Directional' && <KeyframeButton status={posStatus} onClick={handlePositionKey} />}
+                        {!detached && light.type !== 'Directional' && <KeyframeButton status={posStatus} label={`Light ${index + 1} Position`} onClick={handlePositionKey} onDeleteKey={handleDeletePositionKey} onDeleteTrack={handleDeletePositionTrack} />}
                         <SectionLabel>Light {index + 1}</SectionLabel>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
