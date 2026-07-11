@@ -257,6 +257,17 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // transaction boundary so a colour edit is ONE undo step (ADR-0061 P3b).
     const colorSession = useInteractionDrag(INTERACTION_SOURCES.slider);
 
+    // Tracks whether THIS picker currently holds an open param transaction. Every
+    // colour edit opens/closes the shared param transaction through these two
+    // wrappers so the unmount safety-net below can tell "I left a transaction open"
+    // apart from "some OTHER gesture's transaction is open". Without this the net
+    // blindly closed whatever was open — e.g. a light-drag opens a transaction and
+    // then dismisses the hover popup that hosts this picker, and the picker's
+    // unmount would nuke the drag's transaction before it recorded anything.
+    const paramTxOpenRef = useRef(false);
+    const beginColorTx = useCallback(() => { handleInteractionStart('param'); paramTxOpenRef.current = true; }, [handleInteractionStart]);
+    const endColorTx = useCallback(() => { paramTxOpenRef.current = false; handleInteractionEnd(); }, [handleInteractionEnd]);
+
     const alphaEnabled = typeof alpha === 'number' && typeof onAlphaChange === 'function';
     const a = alphaEnabled ? alpha! : 100;
 
@@ -279,9 +290,10 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     }, []);
 
     // Safety net: if the picker unmounts mid-gesture (portal close, section collapse,
-    // focus steal) close any open param transaction. handleInteractionEnd no-ops when
-    // nothing is open, so this can't double-close a normally-ended gesture.
-    useEffect(() => () => handleInteractionEnd(), [handleInteractionEnd]);
+    // focus steal) close the param transaction IT opened. Gated on paramTxOpenRef so
+    // it only ends a transaction this picker actually owns — never one belonging to
+    // another in-flight gesture that happened to dismiss the picker.
+    useEffect(() => () => { if (paramTxOpenRef.current) endColorTx(); }, [endColorTx]);
 
     const hex = useMemo(() => hsbToHex(hsb), [hsb]);
     const rgb = useMemo(() => hsbToRgb(hsb.h, hsb.s, hsb.v), [hsb]);
@@ -306,10 +318,10 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const setFromHex = useCallback((raw: string) => {
         const rgbV = hexToRgb(raw);
         if (!rgbV) { setHexDraft(hex); return; }
-        handleInteractionStart('param');
+        beginColorTx();
         commit(rgbToHsb(rgbV));
-        handleInteractionEnd();
-    }, [commit, hex, handleInteractionStart, handleInteractionEnd]);
+        endColorTx();
+    }, [commit, hex, beginColorTx, endColorTx]);
 
     // RGB-slider edit: convert back to HSB but preserve the hue (and saturation when
     // fully dark) so dragging through a greyscale value doesn't reset the field handle.
@@ -320,8 +332,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         emit(next);
     }, [rgb, hsb.h, hsb.s, emit]);
 
-    const handleSliderStart = useCallback(() => { handleInteractionStart('param'); colorSession.onPointerDown(); }, [colorSession, handleInteractionStart]);
-    const handleSliderEnd = useCallback(() => { colorSession.onPointerUp(); handleInteractionEnd(); pushRecent(lastOutputHex.current); }, [colorSession, handleInteractionEnd]);
+    const handleSliderStart = useCallback(() => { beginColorTx(); colorSession.onPointerDown(); }, [colorSession, beginColorTx]);
+    const handleSliderEnd = useCallback(() => { colorSession.onPointerUp(); endColorTx(); pushRecent(lastOutputHex.current); }, [colorSession, endColorTx]);
 
     // --- 2D field (saturation × brightness for the current hue) ---
     useEffect(() => {
@@ -404,7 +416,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         ref.current.active = false;
         try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* already released */ }
         colorSession.onPointerUp();
-        handleInteractionEnd();
+        endColorTx();
         pushRecent(lastOutputHex.current);
     };
 
@@ -414,7 +426,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         const s = sat01(e, r);
         const v = bri01(e, r);
         e.currentTarget.setPointerCapture(e.pointerId);
-        handleInteractionStart('param');
+        beginColorTx();
         colorSession.onPointerDown();
         emit(clampHsb(hsb.h, s, v));
         fieldDrag.current = { active: true, x: e.clientX, y: e.clientY, s, v, shift: e.shiftKey, alt: e.altKey };
@@ -450,7 +462,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         const r = e.currentTarget.getBoundingClientRect();
         const h = hue01(e, r);
         e.currentTarget.setPointerCapture(e.pointerId);
-        handleInteractionStart('param');
+        beginColorTx();
         colorSession.onPointerDown();
         emit(clampHsb(h, hsb.s, hsb.v));
         hueDrag.current = { active: true, y: e.clientY, h, shift: e.shiftKey, alt: e.altKey };
@@ -494,7 +506,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         const hh = hueX(e, r);
         const l = lightY(e, r);
         e.currentTarget.setPointerCapture(e.pointerId);
-        handleInteractionStart('param');
+        beginColorTx();
         colorSession.onPointerDown();
         emit(hlColor(hh, l));
         hlPadDrag.current = { active: true, x: e.clientX, y: e.clientY, h: hh, l, shift: e.shiftKey, alt: e.altKey };
