@@ -306,7 +306,9 @@ export interface PackedParam {
  * of a slot value (packers, widgets) routes through this instead of restating the rule.
  */
 export function slotWriteValue(slotId: string, paramType: string | undefined, v: any): any {
-    if (paramType === 'vec3' && /^vec4[ABC]$/.test(slotId)) return { x: v.x, y: v.y, z: v.z, w: 0 };
+    // Matches the bare coreMath slot (`vec4A`) AND a per-slot bank key (`ws0Vec4A`,
+    // ADR-0090) — a banked MB3D slot can pack a vec3 param into its bank's vec4 unit.
+    if (paramType === 'vec3' && /^(ws\d+)?[Vv]ec4[ABC]$/.test(slotId)) return { x: v.x, y: v.y, z: v.z, w: 0 };
     return v;
 }
 

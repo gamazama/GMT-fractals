@@ -25,6 +25,34 @@
 > knobs now carry over on Build — only `quality.estimator` (the DE type) refreshes to
 > the rebuilt formula (owner call). See `loadUserWeave` JSDoc.
 
+> **Update 2026-07-11 (banks extended to MB3D slots; the dense cross-slot pack is
+> RETIRED — decision unchanged, scope widened):** the "dense/bake path survives ONLY
+> for MB3D slots" carve-out below proved to be the source of two live bugs: a woven
+> MB3D hybrid whose combined options overflowed the shared 24-lane pool (or contained a
+> Quaternion, or any un-bindable option) **baked EVERY MB3D param to a literal — the
+> Formula panel showed no sliders ("none")** — and even when it fit, the row-order
+> cross-slot pack needed the fragile `mergeDenseLanes` to keep values with their formula
+> on a reorder. Owner decision (2026-07-11): **a WOVEN MB3D slot now banks too**, exactly
+> like a native slot. `emitFusedHybrid.mb3dBankBody` transpiles the slot parametrically
+> against a PRIVATE allocator, then remaps its coreMath-lane reads onto bank `<idx>`
+> (`uParamA → uWs<idx>ParamA`, component/rotation lanes included) and re-keys its params
+> to `feature:'weave'`. Consequences: a slot can never overflow (its own 24 lanes) nor
+> drag the whole weave to "none" (a slot that can't bind bakes only ITS OWN literals);
+> `mergeWeaveBanks` — already formula-agnostic (identity by `kind:ref`) — carries MB3D
+> bank values across a reorder for free, so `mergeDenseLanes` narrows to the LONE
+> STANDALONE MB3D slot + legacy defs; the Weave Editor budget meter no longer meters a
+> shared pool (nothing to overflow); and a woven Quaternion now exposes its params live
+> (the coreMath 4D seeds are physically disjoint from its bank). A **single** active MB3D
+> slot stays on `coreMath` (a plain standalone formula + the standalone library —
+> byte-identical). **Byte-identity trade (owner-accepted):** this changes the emitted
+> GLSL (bank uniforms) + preset routing (`features.weave`) for every MULTI-slot MB3D
+> import, so the 38-scene byte-identity guarantee in Consequences no longer holds for
+> woven scenes — but renders are **pixel-identical** (the same values relocate from
+> `coreMath.<lane>` to `weave.ws<k><lane>`, synced by the same UniformManager path native
+> banks already GPU-prove), so the corpus is **re-certified** (GPU + owner visual), not
+> broken. All 31 woven bundled scenes emit fully banked (0 stray coreMath reads,
+> params == bank defaults). See `emitFusedHybrid.ts` (`mb3dBankBody`).
+
 ## Context
 
 ADR-0089 P4.1 made a registered native GMT formula a dispatcher-hosted weave

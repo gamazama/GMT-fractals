@@ -185,8 +185,11 @@ function mergeWeaveBanks(
 const CORE_SLOT_SET = new Set<string>(CORE_SLOTS);
 
 /** Merge freshly-built coreMath with the LIVE one on an editor Rebuild — the
- *  DENSE-LANE twin of {@link mergeWeaveBanks}. MB3D slots pack their params onto
- *  the shared coreMath lanes (`paramA..F` / `vec2..vec4 A..C`) in ROW ORDER, so
+ *  DENSE-LANE twin of {@link mergeWeaveBanks}. Since 2026-07-11 (ADR-0090 extended
+ *  to MB3D) a WOVEN MB3D slot banks onto its own uWs<k>* pool and is carried by
+ *  mergeWeaveBanks; this path now covers only a LONE STANDALONE MB3D slot (still on
+ *  the shared coreMath pool) + legacy pre-bank defs. Those slots pack their params
+ *  onto the shared coreMath lanes (`paramA..F` / `vec2..vec4 A..C`) in ROW ORDER, so
  *  live lane values can't be carried wholesale: a reorder/insert reallocates the
  *  lanes and each formula would read another formula's values, and a NEW slot
  *  would inherit stale lane values instead of its formula-file defaults. Policy:

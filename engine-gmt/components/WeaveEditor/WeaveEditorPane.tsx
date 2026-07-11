@@ -63,7 +63,6 @@ import { getNativeSlotCatalog, nativeSlotShell, nativeSlotReject, isNativeSlot }
 import { FOLD_OPTIONS } from '../../features/geometry/folds';
 import { WEAVE_MAX_LAYERS } from '../../features/weave';
 import { boxFoldFormulaId } from '../../formulas/boxFolds';
-import { LaneAllocator } from '../../utils/uniformSlots';
 import type { MB3DFormulaSlot } from '../../utils/mb3d/parseMB3D';
 import type { FractalDefinition } from '../../types/fractal';
 import Slider from '../../../components/Slider';
@@ -532,11 +531,10 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         return e ? slotFromCatalogEntry(e).optionValues : [...r.slot.optionValues];
     };
 
-    // Live lane-budget meter: a pure dry-run through the same allocator the build
-    // uses, recomputed when the draft changes. NATIVE rows use their own per-slot
-    // BANKS (ADR-0090) — always live, never consuming the shared coreMath pool — so
-    // the meter reports ONLY the MB3D dense pool (24 scalar lanes / 6 vec3 units).
-    // A native-only weave has no pool to meter (every param is live).
+    // Live parameter meter: a pure dry-run over the draft, recomputed on change. Every
+    // formula — native OR MB3D — now gets its OWN per-slot BANK (ADR-0090): a woven MB3D
+    // slot on uWs<k>*, a lone standalone slot on the coreMath pool. Nothing shares a pool,
+    // so nothing can go "over budget" and bake — the meter just counts live sliders.
     const meter = useMemo(() => {
         const active = draft.rows.filter((r) => r.slot.iterCount > 0);
         if (active.length === 0) return null;
@@ -545,21 +543,12 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         try {
             // No MB3D slots: every active row is a native on its own bank → all live.
             if (mb3d.length === 0) return { allNative: natives };
-            // A single MB3D slot owns the whole coreMath pool at fixed uParam* lanes.
-            if (mb3d.length === 1) {
-                const t = transpileSlot(mb3d[0].slot, 0, 'probe0', { parametric: true, bake: mb3d[0].bake });
-                return { single: t.params?.length ?? 0, natives };
-            }
-            if (mb3d.some((r) => r.slot.formulaIndex === 2)) {
-                return { note: '4D (Quaternion) hybrids bake parameters', natives };
-            }
-            const alloc = new LaneAllocator();
-            let ok = true;
+            // Each MB3D slot's own parametric dry-run — banks never collide across slots.
+            let sliders = 0;
             mb3d.forEach((r, k) => {
-                alloc.startSlot();
-                if (transpileSlot(r.slot, k, `probe${k}`, { alloc, bake: r.bake }).paramOk === false) ok = false;
+                sliders += transpileSlot(r.slot, k, `probe${k}`, { parametric: true, bake: r.bake }).params?.length ?? 0;
             });
-            return { scalars: alloc.scalarsUsed, vec3s: alloc.vec3sUsed, fits: ok && alloc.fits(), natives };
+            return { sliders, natives };
         } catch {
             return null;
         }
@@ -1339,16 +1328,15 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 </div>
             )}
 
-            {/* Live lane-budget meter (MB3D dense pool) */}
+            {/* Live parameter meter — every formula has its own bank (ADR-0090) */}
             {meter !== null && (
-                <p className={`text-[10px] px-0.5 ${'fits' in meter && !meter.fits ? 'text-warn' : 'text-fg-tertiary'}`}
-                    title="Live-slider budget: native formulas get their own per-formula parameter banks (always live). MB3D formulas share 24 scalar lanes (paramA–F + vec2/vec4 components) + 6 vec3 units; over that budget their parameters bake.">
-                    {'allNative' in meter ? `${meter.allNative} native formula${meter.allNative === 1 ? '' : 's'} — parameters always live` :
-                        (() => {
-                            const nativeSuffix = (meter as any).natives ? ` · +${(meter as any).natives} native live` : '';
-                            return 'single' in meter ? `${meter.single} MB3D parameter slider${meter.single === 1 ? '' : 's'}${nativeSuffix}` :
-                                'note' in meter ? `${meter.note}${nativeSuffix}` :
-                                `MB3D ${meter.scalars}/24 lanes · ${meter.vec3s}/6 vec3 — ${meter.fits ? 'live sliders' : 'over budget: parameters bake'}${nativeSuffix}`;
+                <p className="text-[10px] px-0.5 text-fg-tertiary"
+                    title="Every formula gets its own parameter bank — native and MB3D alike (ADR-0090). All sliders stay live in the Formula panel; there is no shared budget to overflow.">
+                    {'allNative' in meter
+                        ? `${meter.allNative} native formula${meter.allNative === 1 ? '' : 's'} — parameters always live`
+                        : (() => {
+                            const nativeSuffix = meter.natives ? ` · +${meter.natives} native live` : '';
+                            return `${meter.sliders} MB3D parameter slider${meter.sliders === 1 ? '' : 's'} — live${nativeSuffix}`;
                         })()}
                 </p>
             )}

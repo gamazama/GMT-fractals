@@ -92,9 +92,9 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     ck('emit dispatcher i-arg', /formula_MB3DHybrid\d+\(inout vec4 z, inout float dr, inout float trap, inout vec4 c, int i\)/.test(fn));
     ck('emit loopBody passes i', /formula_MB3DHybrid\d+\(z, dr, trap, c, i\);/.test(def.shader.loopBody), def.shader.loopBody);
     ck('emit preset camera cloned', !!(def.defaultPreset as any).cameraRot);
-    // Box(3 scalars)+RealPower(2) = 5 ≤ 6 → multi-slot parametric: body reads uParamA,
-    // the scale is a uniform default (in coreMath), not a baked -1.5 literal.
-    ck('emit multi-intern parametric (uParamA, not baked)', /uParamA/.test(fn) && !/-1\.5/.test(fn), 'multi-slot now exposes params');
+    // Box + RealPower woven → each slot BANKS (ADR-0090): slot0's scale reads its bank
+    // lane uWs0ParamA (a uniform default in features.weave), not a baked -1.5 literal.
+    ck('emit multi-intern banked (uWs0ParamA, not baked)', /uWs0ParamA/.test(fn) && !/-1\.5/.test(fn), 'multi-slot banks each slot');
   }
 }
 {
@@ -145,60 +145,57 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   }
 }
 {
-  // Multi-slot now exposes per-slot params when they fit the shared uniform budget:
-  // Amazing Box (3 scalars) + Real Power (2 scalars) = 5 ≤ 6. A cross-slot allocator
-  // threads distinct uniforms (Box→paramA/B/C, RealPower→paramD/E), values in coreMath.
+  // Multi-slot WOVEN → each MB3D slot BANKS (ADR-0090): Amazing Box (3 params) → bank 0,
+  // Real Power (2 params) → bank 1 = 5 live params total, all routed to the `weave`
+  // feature; the body reads bank lanes (uWs0ParamA), defaults land in features.weave.
   const { def } = emitFusedHybrid(scene([slot(2, 4, [-1.5, 0.5, 1]), slot(1, 1, [8, 1])]));
   const p = (def?.parameters ?? []) as any[];
   ck('multi-slot exposes 5 params', !!def && p.length === 5, p.map((x: any) => x.label));
-  ck('multi-slot body reads uniforms (not baked)', !!def && /uParamA/.test(def.shader.function) && !/-1\.5/.test(def.shader.function));
-  ck('multi-slot coreMath seeds scale=-1.5', (def?.defaultPreset as any)?.features?.coreMath?.paramA === -1.5);
+  ck('multi-slot params banked (feature:weave)', p.every((x: any) => x.feature === 'weave'), p.map((x: any) => `${x.id}/${x.feature}`));
+  ck('multi-slot body reads bank uniforms (not baked)', !!def && /uWs0ParamA/.test(def.shader.function) && !/-1\.5/.test(def.shader.function));
+  ck('multi-slot bank state seeds scale=-1.5', (def?.defaultPreset as any)?.features?.weave?.ws0ParamA === -1.5, (def?.defaultPreset as any)?.features?.weave);
 }
 
 {
-  // DENSE PARAM-PACKING: a >6-scalar multi-slot hybrid used to BAKE (old budget was
-  // 6 scalars paramA..F). Four Real Power slots = 8 scalars: paramA..F fill (6), then
-  // the 4th slot's two params pack into the idle uVec2A.{x,y} lanes as ONE combined
-  // vec2 slider. Previously this whole scene fell back to baking literals (no sliders).
+  // PER-SLOT BANKS (ADR-0090, extended to MB3D 2026-07-11): four Real Power slots = 8
+  // params. The OLD shared dense pool packed 8 scalars into paramA..F + one vec2 lane
+  // (and a bigger hybrid overflowed → baked ALL params = "none"). Now each slot banks
+  // onto its OWN uWs<k>* pool: 2 plain-scalar params each, no packing, no overflow.
   const { def } = emitFusedHybrid(scene([slot(1, 1, [8, 1]), slot(1, 1, [8, 1]), slot(1, 1, [8, 1]), slot(1, 1, [8, 1])]));
   const p = (def?.parameters ?? []) as any[];
-  ck('dense-pack: def not baked (non-null)', !!def);
-  ck('dense-pack: exposes 7 params (6 scalar + 1 packed vec2)', p.length === 7, p.map((x: any) => x.label));
-  const v2 = p.find((x: any) => x?.id === 'vec2A');
-  ck('dense-pack: a param packs into vec2A', !!v2 && v2.type === 'vec2', p.map((x: any) => `${x.id}:${x.type ?? 'float'}`));
-  ck('dense-pack: packed label joins members with " | "', !!v2 && /\|/.test(v2.label), v2?.label);
-  ck('dense-pack: body reads uVec2A component lane', !!def && /uVec2A\.[xy]/.test(def!.shader.function));
-  ck('dense-pack: still reads paramA..F too', !!def && /uParamA/.test(def!.shader.function) && /uParamF/.test(def!.shader.function));
-  ck('dense-pack: coreMath seeds vec2A {x:8,y:1}', (def?.defaultPreset as any)?.features?.coreMath?.vec2A?.x === 8 && (def?.defaultPreset as any)?.features?.coreMath?.vec2A?.y === 1, (def?.defaultPreset as any)?.features?.coreMath?.vec2A);
+  ck('banks: def not baked (non-null)', !!def);
+  ck('banks: exposes 8 params (2 per slot, no packing)', p.length === 8, p.map((x: any) => x.id));
+  ck('banks: params spread across ws0..ws3', new Set(p.map((x: any) => x.id.match(/^ws(\d)/)?.[1])).size === 4, p.map((x: any) => x.id));
+  ck('banks: every param feature:weave', p.every((x: any) => x.feature === 'weave'), p.map((x: any) => x.feature));
+  ck('banks: body reads bank lanes uWs0ParamA / uWs3ParamA', !!def && /uWs0ParamA/.test(def!.shader.function) && /uWs3ParamA/.test(def!.shader.function));
+  ck('banks: features.weave seeds ws0ParamA=8', (def?.defaultPreset as any)?.features?.weave?.ws0ParamA === 8, (def?.defaultPreset as any)?.features?.weave?.ws0ParamA);
 }
 {
-  // DEEP dense-pack: four Amazing Box slots = 12 scalars (3 each) overflow paramA..F →
-  // uVec2A/B/C → uVec4A. startSlot alignment never splits a vec uniform across two slots
-  // (so a slot ending mid-vec wastes the tail rather than colliding), which is why the
-  // 12 scalars reach the uVec4 lanes here. Confirms the allocator reaches uVec4 and never
-  // emits two params with the same base id.
+  // DEEP: four Amazing Box slots = 12 params (3 each). The OLD dense pool overflowed
+  // paramA..F into uVec2/uVec4 component lanes; banks give each slot its own paramA..F,
+  // so all 12 stay plain scalars on 4 distinct banks — no overflow, no vec packing.
   const { def } = emitFusedHybrid(scene(Array.from({ length: 4 }, () => slot(1, 4, [2, 0.5, 1]))));
   const p = (def?.parameters ?? []) as any[];
-  ck('deep-pack: def not baked', !!def);
-  ck('deep-pack: reaches uVec4 lane', !!def && /uVec4A\.[xyzw]/.test(def!.shader.function), p.map((x: any) => x.id));
-  ck('deep-pack: no duplicate param ids (vec not split across slots)', new Set(p.map((x: any) => x.id)).size === p.length, p.map((x: any) => x.id));
+  ck('deep-banks: def not baked', !!def);
+  ck('deep-banks: 12 params across ws0..ws3', p.length === 12 && new Set(p.map((x: any) => x.id.match(/^ws(\d)/)?.[1])).size === 4, p.map((x: any) => x.id));
+  ck('deep-banks: all plain scalar bank lanes (no vec pack)', p.every((x: any) => /^ws\d(Param[A-F])$/.test(x.id) && (x.type ?? 'float') === 'float'), p.map((x: any) => `${x.id}:${x.type ?? 'float'}`));
+  ck('deep-banks: no duplicate param ids', new Set(p.map((x: any) => x.id)).size === p.length, p.map((x: any) => x.id));
 }
 
 {
-  // vec4-AS-vec3 overflow: two Menger3 slots each need 3 vec3 units (CScale triple +
-  // Rotation1 + Rotation2) = 6 total. uVec3A/B/C hold 3; the surplus overflows into the
-  // shared uVec4* units as .xyz holders (rendered as 3-axis vec3 sliders). Previously a
-  // >3-vec3 scene baked outright.
+  // Two Menger3 slots, each needing 3 vec3 units (CScale triple + Rotation1 + Rotation2).
+  // OLD: 6 vec3 across a shared 3-unit pool overflowed into uVec4 holders. Banks give each
+  // slot its OWN uWs<k>Vec3A/B/C, so both fit with ZERO overflow (no vec4 holder).
   const menger = (): MB3DFormulaSlot => ({ iterCount: 1, formulaIndex: 20, name: 'Menger3', optionCount: 10, optionTypes: [0, 0, 0, 0, 6, 6, 6, 6, 6, 6, 0, 0, 0, 0, 0, 0], optionValues: [3, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
   const { def } = emitFusedHybrid(scene([menger(), menger()]));
   const p = (def?.parameters ?? []) as any[];
-  ck('vec4-as-vec3: def not baked', !!def);
-  const vec4held = p.filter((x: any) => /^vec4[ABC]$/.test(x.id) && x.type === 'vec3');
-  ck('vec4-as-vec3: vec3 params overflow into uVec4 holders', vec4held.length >= 1, p.map((x: any) => `${x.id}:${x.type}`));
-  ck('vec4-as-vec3: uVec3 units filled first', !!def && /uVec3A/.test(def!.shader.function) && /uVec3C/.test(def!.shader.function));
-  ck('vec4-as-vec3: rotation binds mb3dRot(uVec4*.xyz)', !!def && /mb3dRot\(uVec4[ABC]\.xyz/.test(def!.shader.function), 'rotation in a vec4 holder');
-  ck('vec4-as-vec3: triple binds uVec4*.x/.y/.z', !!def && /uVec4[ABC]\.x/.test(def!.shader.function));
-  ck('vec4-as-vec3: no duplicate param ids', new Set(p.map((x: any) => x.id)).size === p.length, p.map((x: any) => x.id));
+  ck('menger-banks: def not baked', !!def);
+  // Each slot: Scale (scalar) + CScale (vec3) + Rotation1 (vec3) + Rotation2 (vec3) = 4; ×2 = 8.
+  ck('menger-banks: 8 params across ws0/ws1', p.length === 8 && new Set(p.map((x: any) => x.id.match(/^ws(\d)/)?.[1])).size === 2, p.map((x: any) => x.id));
+  ck('menger-banks: no vec4 holder (fits own bank vec3 units)', p.every((x: any) => !/Vec4/.test(x.id)), p.map((x: any) => x.id));
+  ck('menger-banks: both banks bind their own vec3 units', !!def && /uWs0Vec3A/.test(def!.shader.function) && /uWs1Vec3A/.test(def!.shader.function));
+  ck('menger-banks: rotation binds mb3dRot(uWs<k>Vec3*)', !!def && /mb3dRot\(uWs[01]Vec3[ABC]/.test(def!.shader.function), 'rotation on a bank vec3 unit');
+  ck('menger-banks: no duplicate param ids', new Set(p.map((x: any) => x.id)).size === p.length, p.map((x: any) => x.id));
 }
 
 // ── Standalone catalog coverage ──────────────────────────────────────────────
@@ -424,7 +421,7 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   const p = (withBake.def?.parameters ?? []) as any[];
   ck('bake: multi-slot 4 sliders (power baked)', p.length === 4, p.map((x: any) => x.label));
   ck('bake: baked power is a literal 8.0', !!withBake.def && /fpow = 8\.0/.test(withBake.def.shader.function));
-  ck('bake: box params still live', !!withBake.def && /uParamA/.test(withBake.def.shader.function));
+  ck('bake: box params still live on bank 0', !!withBake.def && /uWs0ParamA/.test(withBake.def.shader.function));
 }
 {
   // Decompiled: bake the Scale scalar → 3 sliders left (CScale + 2 rotations), no
@@ -765,22 +762,26 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       ids.has('ws0Vec3A') && ids.has('ws1Vec3A'), [...ids]);
   }
 
-  // Mixed native + MB3D: DISJOINT pools — native on ws0*, MB3D on coreMath uParam*.
+  // Mixed native + MB3D: BOTH bank now (ADR-0090 extended to MB3D 2026-07-11) — native
+  // on ws0*, MB3D on ws1*, all params on the `weave` feature. The old disjoint split
+  // (MB3D on the shared coreMath pool) is retired.
   {
     const { def } = emitFusedHybrid(scene([nslot(2, 'Mandelbulb'), slot(1, 4)]));
     const fn = def?.shader.function ?? '';
     const params = (def?.parameters ?? []) as any[];
-    ck('mixed banks: native slot on ws0 bank, MB3D slot on coreMath',
-      /\buWs0ParamA\b/.test(fn) && /\buParamA\b/.test(fn), undefined);
-    const nativeP = params.filter((p) => p.feature === 'weave');
-    const mb3dP = params.filter((p) => !p.feature);
-    ck('mixed banks: native params feature:weave, MB3D params coreMath (no feature)',
-      nativeP.length > 0 && mb3dP.length > 0 && nativeP.every((p) => /^ws0/.test(p.id)),
+    ck('mixed banks: native on ws0, MB3D on ws1 (both banked, no coreMath uParamA)',
+      /\buWs0ParamA\b/.test(fn) && /\buWs1ParamA\b/.test(fn) && !/\buParamA\b/.test(fn), undefined);
+    ck('mixed banks: every param feature:weave',
+      params.length > 0 && params.every((p) => p.feature === 'weave'),
       params.map((p) => `${p.id}/${p.feature ?? 'coreMath'}`));
+    ck('mixed banks: native params on ws0, MB3D params on ws1',
+      params.some((p) => /^ws0/.test(p.id)) && params.some((p) => /^ws1/.test(p.id)),
+      params.map((p) => p.id));
     const w = (def?.defaultPreset as any)?.features?.weave ?? {};
     const cm = (def?.defaultPreset as any)?.features?.coreMath ?? {};
-    ck('mixed banks: native default in features.weave, MB3D default in coreMath',
-      w.ws0ParamA === 8 && cm.paramA !== undefined && cm.ws0ParamA === undefined, { weave: w.ws0ParamA, cm: cm.paramA });
+    ck('mixed banks: native ws0ParamA=8 + MB3D ws1ParamA in features.weave, none in coreMath',
+      w.ws0ParamA === 8 && w.ws1ParamA !== undefined && cm.paramA === undefined,
+      { ws0: w.ws0ParamA, ws1: w.ws1ParamA, cmParamA: cm.paramA });
   }
 }
 

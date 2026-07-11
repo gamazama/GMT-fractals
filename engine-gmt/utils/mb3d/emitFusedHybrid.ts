@@ -22,7 +22,7 @@ import { resolveNativeSlot, NATIVE_FORMULA_INDEX } from '../../engine/weave/nati
 import { transpileSlot } from './slotTranspiler';
 import type { SlotFlag, TranspiledSlot } from './slotTranspiler';
 import { mapDEMeta, MB3D_ROT_GLSL } from './constPacker';
-import { LaneAllocator } from '../uniformSlots';
+import { weaveBankKey } from '../uniformSlots';
 import { mapMB3DCamera } from './mapCamera';
 import { mapMB3DLighting } from './mapLighting';
 import { DECOMPILED_DE_META } from './decompiled-formulas';
@@ -145,16 +145,11 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   const seenSlots = new Set<number>();
   let minCoverIters = 1;
   plan.order.map(stepSlot).forEach((o, i) => { if (!seenSlots.has(o)) { seenSlots.add(o); minCoverIters = i + 1; } });
-  // Single-slot scenes expose the formula's options as editable sliders. Multi-slot
-  // hybrids now also expose them when every slot's params fit GMT's shared uniform
-  // budget: a cross-slot LaneAllocator threads a distinct uniform to each slot's
-  // options, packing surplus scalars DENSELY into the otherwise-idle uVec2*/uVec4*
-  // component lanes (24 scalar lanes total: paramA..F → uVec2* comps → uVec4* comps)
-  // plus a 3-unit uVec3* pool kept for genuine vec3 params (rotations, X/Y/Z triples).
-  // The old budget was 6 scalars + 3 vec3, so a 7-scalar hybrid baked despite 18 idle
-  // vec lanes; now it packs them. 4D (Quaternion) hybrids reserve paramA/B for the
-  // kernel's w-seeds (see has4D below), so they bake. If any slot can't bind or the
-  // pool overflows, the whole scene falls back to baking literals.
+  // Every slot exposes its options as editable sliders: a lone standalone MB3D slot on
+  // the shared coreMath pool (paramA..F → uVec2* comps → uVec4* comps + a 3-unit uVec3*
+  // pool), a woven slot on its own private bank (mb3dBankBody, below). Quaternion (#2)
+  // reserves the kernel's 4D w-seeds on coreMath paramA/paramB — physically disjoint
+  // from a slot's own bank, so a woven Quaternion still exposes its options live.
   const has4D = usedIdx.some((idx) => addon.slots[idx].formulaIndex === 2);
 
   // A weave slot body: the MB3D transpiler shape, optionally extended with the
@@ -203,32 +198,44 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     };
   };
 
-  // MB3D slots pack the shared coreMath dense pool exactly as before — native
-  // slots no longer consume it, so the budget/parametric decision is scoped to the
-  // MB3D slots. A pure-MB3D weave reduces to the pre-banks path byte-for-byte
-  // (mb3dActive === usedIdx). @invariant emit unchanged when no native slot present.
+  // MB3D slots (ADR-0090, extended from native slots 2026-07-11): a WEAVE (2+ active
+  // slots) binds every MB3D slot onto its OWN per-slot BANK (uWs<idx>*) — the exact
+  // treatment native slots already get. Each slot transpiles parametrically against a
+  // PRIVATE allocator, then mb3dBankBody remaps its coreMath-lane reads onto bank <idx>
+  // (uParamA → uWs<idx>ParamA) and routes its params through the `weave` feature. A slot
+  // can never overflow (its own 24 lanes) nor drop the WHOLE weave's params (a slot that
+  // can't bind bakes only ITS OWN literals). A single active MB3D slot is a plain
+  // STANDALONE formula and keeps its params on the shared coreMath pool (byte-identical
+  // to the pre-banks single-slot emit + the standalone formula library). RETIRED: the
+  // shared cross-slot LaneAllocator dense pack — which overflowed → baked ALL params
+  // ("none"), and needed mergeDenseLanes to follow slots on a reorder.
+  // @see docs/adr/0090-weave-slot-banks.md
   const mb3dTx = (idx: number, o: Parameters<typeof transpileSlot>[3]): SlotBody =>
     transpileSlot(addon.slots[idx], idx, `${id}_slot${idx}`, { ...o, bake: opts?.slotBake?.[idx] });
+  const mb3dBankBody = (idx: number): SlotBody => {
+    const t = mb3dTx(idx, { parametric: true });
+    // Unsupported / no-param (its own literals already baked) slots pass through unbanked.
+    if (!t.glsl || t.tier === 'unsupported' || !t.params?.length) return t;
+    // Rebind the shared-pool reads onto bank <idx> (uParamA → uWs<idx>ParamA), move the
+    // lane defaults into the bank state, and re-key params to the `weave` feature — the
+    // same shape buildBankBindings gives native slots, so mergeWeaveBanks carries MB3D
+    // bank values across a reorder identically.
+    const glsl = t.glsl.replace(/\bu(Param[A-F]|Vec[234][ABC])\b/g, `uWs${idx}$1`);
+    const weaveState: Record<string, any> = {};
+    for (const [k, v] of Object.entries(t.coreMath ?? {})) weaveState[weaveBankKey(idx, k)] = v;
+    const params = (t.params ?? []).map((p: any) => ({ ...p, id: weaveBankKey(idx, p.id), feature: 'weave' }));
+    return { ...t, glsl, params: params as any, coreMath: {}, weaveState };
+  };
   const mb3dActive = usedIdx.filter((idx) => !isNative(idx));
+  const woven = usedIdx.length >= 2;
   const mb3dBody = new Map<number, SlotBody>();
+  // coreMath dense exposure survives ONLY for a lone standalone MB3D slot.
   let mb3dParametric = false;
-  if (mb3dActive.length === 1) {
+  if (!woven && mb3dActive.length === 1) {
     mb3dParametric = true;
     mb3dBody.set(mb3dActive[0], mb3dTx(mb3dActive[0], { parametric: true }));
-  } else if (mb3dActive.length > 1) {
-    let shared = false;
-    if (!has4D) {
-      // startSlot() before each slot keeps a vec uniform from being split across
-      // two slots (which would collide on coreMath + emit duplicate vec params);
-      // fits() is the 24-lane / 3-vec3 budget gate.
-      const alloc = new LaneAllocator();
-      const tryB = mb3dActive.map((idx) => { alloc.startSlot(); return mb3dTx(idx, { alloc }); });
-      if (tryB.every((b) => b.paramOk !== false) && alloc.fits()) {
-        mb3dParametric = true; shared = true;
-        mb3dActive.forEach((idx, j) => mb3dBody.set(idx, tryB[j]));
-      }
-    }
-    if (!shared) mb3dActive.forEach((idx) => mb3dBody.set(idx, mb3dTx(idx, {})));
+  } else {
+    for (const idx of mb3dActive) mb3dBody.set(idx, mb3dBankBody(idx));
   }
 
   const bodies = usedIdx.map((idx) => isNative(idx) ? nativeBody(idx) : mb3dBody.get(idx)!);
@@ -670,7 +677,10 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // reorder (mergeDenseLanes in loadMB3DScene.ts). Def-object-only — no GLSL /
   // preset impact.
   const parameters = bodies.flatMap((b, k) => {
-    const exposed = isNative(usedIdx[k]) || mb3dParametric;
+    // Native + banked-MB3D slots always expose (their params carry feature:'weave');
+    // a lone standalone MB3D slot exposes when parametric. A woven slot that baked its
+    // own literals simply has no params → contributes nothing.
+    const exposed = isNative(usedIdx[k]) || woven || mb3dParametric;
     if (!exposed) return [];
     if (usedIdx.length <= 1 && !isNative(usedIdx[k])) {
       return (b.params ?? []).map((pp: any) => ({ ...pp, slotIndex: usedIdx[k] }));
