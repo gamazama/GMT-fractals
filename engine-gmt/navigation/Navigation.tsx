@@ -92,8 +92,26 @@
  *     each mode-gated useEffect.
  *   - new gesture? Add a useEffect grouping its DOM listeners; mind
  *     the absorbGenRef race guard if it issues async picks.
+ *   - new per-frame camera driver (a smooth transition, cinematic path,
+ *     turntable, fly-through)? See the InteractionSession invariant below —
+ *     it MUST register as camera activity or it renders as a single strip.
  *   - precision math? VirtualSpace + the absorb logic. Read
  *     `absorbOrbitPosition` and the absorb-gen comment first.
+ *
+ * @invariant Any code that drives the camera pose / sceneOffset per-frame
+ *   WITHOUT an open camera InteractionSession (orbit drag, WASD fly, wheel
+ *   zoom, and the smooth `transitionRef` lerp all register one) and WITHOUT
+ *   being an `isSceneAnimating` animation (timeline playback / LFO) will fall
+ *   into idle progressive TILING while it moves. Tiling renders one band per
+ *   tick and the per-frame move resets accumulation each tick, so the band
+ *   scheduler restarts at pass 0 and only ever paints the centre band — the
+ *   move shows as a single animated strip, not the whole frame. Fix at the
+ *   source: `pokeInteraction(INTERACTION_SOURCES.camera)` each frame the
+ *   driver is active (bare poke, no begin/end — the 200ms debounce tail
+ *   auto-releases it; mirrors the wheel-zoom + transition sites). This routes
+ *   the motion onto the adaptive full-frame path, same as a manual drag.
+ *   @see engine-gmt/engine/FractalEngine.ts (tiling gate, ~L708)
+ *   @see engine-gmt/engine/managers/UniformManager.ts (adaptive gate, ~L190)
  */
 
 import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
@@ -1144,6 +1162,15 @@ const Navigation: React.FC<NavigationProps> = ({
       // --- Smooth camera transition ---
       if (transitionRef.current?.active) {
           const t = transitionRef.current;
+
+          // Register the smooth transition (fired by saved-camera recall —
+          // slot hotkeys / panel clicks / Active-Camera binder) as camera
+          // activity so it rides the adaptive full-frame path instead of idle
+          // tiling. Bare poke, no begin/end: the ~50ms throttle + 200ms debounce
+          // tail keep the session hot across the move and auto-release it after.
+          // See the InteractionSession @invariant in the file header.
+          useFractalStore.getState().pokeInteraction(INTERACTION_SOURCES.camera);
+
           t.elapsed += delta;
           const raw = Math.min(t.elapsed / t.duration, 1.0);
           // Smoothstep easing
