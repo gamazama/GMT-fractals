@@ -1372,6 +1372,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                     onClose={() => setPicker(null)}
                     categoryWidth={130}
                     itemWidth={210}
+                    searchPlaceholder="Search formulas…"
                 />
             )}
 
