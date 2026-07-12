@@ -31,6 +31,8 @@
  * @see engine-gmt/features/core_math.ts (the uniform declarations these slots target)
  */
 
+import type { RotationDescriptor } from '../../engine/rotationDescriptor';
+
 // ── Slot vocabulary ─────────────────────────────────────────────────────────
 
 export const SCALAR_SLOTS = ['paramA', 'paramB', 'paramC', 'paramD', 'paramE', 'paramF'] as const;
@@ -223,8 +225,22 @@ export class LaneAllocator {
     private v: number;
     private vec3Vec4 = 0;   // uVec4* units claimed by vec3-overflow, from the high end (C→B→A)
     private overflowed = false;
+    private derived: Record<string, number> = {};
 
     constructor(scalarStart = 0, vec3Start = 0) { this.s = scalarStart; this.v = vec3Start; }
+
+    /** Claim the next index in a DERIVED-uniform bank (a fixed pool of CPU-computed
+     *  uniforms outside the packable lanes — e.g. the MB3D rotation matrices).
+     *  `kind` is an arbitrary bank key; `cap` its fixed size. Threaded across a
+     *  multi-slot hybrid like the scalar/vec3 cursors so each slot's derived
+     *  uniforms are distinct. Returns `null` (and flags overflow) when the bank
+     *  is exhausted — the caller falls back to baking. */
+    nextDerived(kind: string, cap: number): number | null {
+        const n = this.derived[kind] ?? 0;
+        if (n >= cap) { this.overflowed = true; return null; }
+        this.derived[kind] = n + 1;
+        return n;
+    }
 
     /** Number of `uVec4*` units scalar-packing has started using (from the low end). */
     private scalarVec4Used(): number { return Math.max(0, Math.ceil((this.s - FIXED_SCALAR_COUNT) / 4)); }
@@ -297,6 +313,10 @@ export interface PackedParam {
      *  emitted when the bool's name declares gating semantics, since mixed greys
      *  the slider while the toggle is off). */
     mode?: 'toggle' | 'mixed';
+    /** Rotation semantics of the stored value (kind / units / Euler order) —
+     *  stamped by the packers on angle-typed options so the widgets and the
+     *  rotation gizmo know what the components mean. See engine/rotationDescriptor. */
+    rotation?: RotationDescriptor;
 }
 
 /**
@@ -324,6 +344,7 @@ interface VecEntry {
      *  — eligible to drive a vec2 'mixed' control (toggle X gates slider Y). */
     gates: boolean;
     isVec3Param: boolean;
+    rotation?: RotationDescriptor;
 }
 
 /**
@@ -357,7 +378,7 @@ export class VecControlAccumulator {
     add(
         base: string, label: string, comps: readonly string[], values: readonly number[],
         min: number, max: number, step: number,
-        opts: { isBool?: boolean; gates?: boolean; isVec3Param?: boolean } = {},
+        opts: { isBool?: boolean; gates?: boolean; isVec3Param?: boolean; rotation?: RotationDescriptor } = {},
     ): void {
         const kind = vecKindOf(base);
         let slot = this.byBase.get(base);
@@ -368,7 +389,7 @@ export class VecControlAccumulator {
             this.out.push(param);
             this.coreMath[base] = zeroVec(kind);
         }
-        slot.entries.push({ label, comps, min, max, step, isBool: !!opts.isBool, gates: !!opts.gates, isVec3Param: !!opts.isVec3Param });
+        slot.entries.push({ label, comps, min, max, step, isBool: !!opts.isBool, gates: !!opts.gates, isVec3Param: !!opts.isVec3Param, rotation: opts.rotation });
 
         comps.forEach((c, i) => {
             const v = values[i] ?? values[0] ?? 0;
@@ -412,6 +433,12 @@ export class VecControlAccumulator {
         else if (kind === 'vec2' && gatesAt('x') && hasComp('y') && !boolAt('y')) param.mode = 'mixed';
         else delete param.mode;
 
+        // Rotation semantics survive only while the param is the base's SOLE
+        // occupant — once an unrelated scalar packs into the same vec unit, the
+        // combined control is no longer a rotation.
+        if (entries.length === 1 && entries[0].rotation) param.rotation = entries[0].rotation;
+        else delete param.rotation;
+
         param.type = kind === 'vec4' && entries.length === 1 && entries[0].isVec3Param ? 'vec3' : kind;
     }
 }
@@ -437,16 +464,17 @@ export class ScalarParamPacker {
      *  a paramA..F lane, per-component button in an all-bool vec pack); `opts.gates`
      *  marks a bool whose name declares gating semantics (vec2 'mixed' candidate). */
     scalar(label: string, value: number, min: number, max: number, step: number,
-        opts?: { bool?: boolean; gates?: boolean }): string | null {
+        opts?: { bool?: boolean; gates?: boolean; rotation?: RotationDescriptor }): string | null {
         const lane = this.alloc.nextScalar();
         if (!lane) return null;
         if (lane.component) {
             this.acc.add(lane.coreKey, label, [lane.component], [value], min, max, step,
-                opts?.bool ? { isBool: true, gates: opts.gates } : {});
+                { ...(opts?.bool ? { isBool: true, gates: opts.gates } : {}), rotation: opts?.rotation });
         } else {
             this.params.push({
                 label, id: lane.coreKey, min, max, step, default: value,
                 ...(opts?.bool ? { mode: 'toggle' as const } : {}),
+                ...(opts?.rotation ? { rotation: opts.rotation } : {}),
             });
             this.coreMath[lane.coreKey] = value;
         }
@@ -457,10 +485,12 @@ export class ScalarParamPacker {
      *  default, and return the lane (vec3Accessor for a whole-vec3 read, componentBase for
      *  `.x/.y/.z` binds) — or `null` if both the vec3 pool and vec4 holders are full. A
      *  vec4-held vec3 occupies `.xyz`; its coreMath gets `w:0` so the vec4 syncs cleanly. */
-    vec3(label: string, def: { x: number; y: number; z: number }, min: number, max: number, step: number): { id: string; vec3Accessor: string; componentBase: string } | null {
+    vec3(label: string, def: { x: number; y: number; z: number }, min: number, max: number, step: number,
+        opts?: { rotation?: RotationDescriptor }): { id: string; vec3Accessor: string; componentBase: string } | null {
         const lane = this.alloc.nextVec3();
         if (!lane) return null;
-        this.acc.add(lane.id, label, ['x', 'y', 'z'], [def.x, def.y, def.z], min, max, step, { isVec3Param: true });
+        this.acc.add(lane.id, label, ['x', 'y', 'z'], [def.x, def.y, def.z], min, max, step,
+            { isVec3Param: true, rotation: opts?.rotation });
         return lane;
     }
 }

@@ -32,6 +32,9 @@ import { text as themeText, border as themeBorder, surface } from '../../../../d
 import { FormulaSelect } from './FormulaSelect';
 import { slotWriteValue } from '../../../utils/uniformSlots';
 import type { FormulaType } from '../../../../types';
+import { rotationFromMode } from '../../../../engine/rotationDescriptor';
+import type { RotationDescriptor } from '../../../../engine/rotationDescriptor';
+import { useRotationGizmoStore } from '../../../store/rotationGizmoStore';
 
 // Iterations slider: cubic display feel over [1, 500] — fine control at low counts.
 const ITERATIONS_MAPPING = createPowMapping(1, 500, 3);
@@ -63,6 +66,9 @@ interface FormulaParam {
     type?: 'float' | 'vec2' | 'vec3' | 'vec4';
     mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed' | 'normal';
     linkable?: boolean;
+    /** Explicit rotation semantics — see engine/rotationDescriptor. units:'deg'
+     *  (MB3D imports) must keep the param's own bounds, not the radian ±2π override. */
+    rotation?: RotationDescriptor;
     /** Section divider: consecutive params sharing a group render under one
      *  header (fused weaves stamp each slot's formula name). */
     group?: string;
@@ -73,6 +79,8 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
     const state = store as any;
     const actions = store as any;
     const [loadTime, setLoadTime] = useState<string | null>(null);
+    // Open canvas rotation gizmos — lights the per-param header toggle.
+    const openGizmos = useRotationGizmoStore((s) => s.gizmos);
 
     useEffect(() => {
         const unsub = FractalEvents.on('compile_time', (sec: number) => {
@@ -139,7 +147,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                 const setter = feat ? (actions as any)[`set${feat.charAt(0).toUpperCase()}${feat.slice(1)}`] : actions.setCoreMath;
                 const set = (v: any) => setter({ [p.id]: slotWriteValue(p.id, p.type, v) });
                 const trackId = `${feat ?? 'coreMath'}.${p.id}`;
-                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId, type: p.type, mode: p.mode, linkable: p.linkable, scale: p.scale, options: p.options, group: p.group };
+                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId, type: p.type, mode: p.mode, linkable: p.linkable, scale: p.scale, options: p.options, group: p.group, rotation: p.rotation };
             });
         }
 
@@ -154,12 +162,29 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`];
             const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`];
             const vecMode = p.mode || 'normal';
-            const isAngleMode = vecMode === 'rotation' || vecMode === 'direction' || vecMode === 'axes';
+            const rotation = p.rotation ?? rotationFromMode(p.mode) ?? undefined;
+            // The ±2π bound override is a RADIANS convention — a degrees-native
+            // param (MB3D, rotation.units:'deg') keeps its own ±180 bounds.
+            const isAngleMode = (vecMode === 'rotation' || vecMode === 'direction' || vecMode === 'axes')
+                && rotation?.units !== 'deg';
             const rotTrackLabels: Record<string, string[]> = {
                 rotation: ['Azimuth', 'Pitch', 'Angle'],
                 direction: ['Azimuth', 'Pitch', 'Length'],
                 axes: trackLabels,
             };
+            // Canvas gizmo toggle — any rotation-kind vec3 (Euler / Rodrigues /
+            // direction) can spawn a viewport gizmo bound to this param. The key
+            // doubles as the store route (feature.paramId), so the overlay reads
+            // and writes through the exact same path this widget does.
+            const gizmoCapable = rotation && rotation.kind !== 'twist';
+            const gizmoToggle = gizmoCapable ? () => useRotationGizmoStore.getState().toggle({
+                key: p.trackId,
+                feature: p.trackId.split('.')[0],
+                paramId: p.id,
+                label: p.label,
+                rotation,
+                paramType: 'vec3',
+            }) : undefined;
             return (
                 <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector3Input label={p.label} value={new THREE.Vector3(v3.x, v3.y, v3.z)}
@@ -168,7 +193,8 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                         trackLabels={isAngleMode ? (rotTrackLabels[vecMode] || trackLabels) : trackLabels}
                         mode={vecMode === 'axes' ? 'normal' : vecMode as any}
                         defaultValue={p.def ? new THREE.Vector3((p.def as any).x ?? 0, (p.def as any).y ?? 0, (p.def as any).z ?? 0) : undefined}
-                        linkable={p.linkable} scale={p.scale} />
+                        linkable={p.linkable} scale={p.scale} rotation={rotation}
+                        onGizmoToggle={gizmoToggle} gizmoActive={!!openGizmos[p.trackId]} />
                 </div>
             );
         }

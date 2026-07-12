@@ -21,7 +21,8 @@ import { emitLayeredModuloGLSL, buildBlockPlan } from '../../engine/weave/schedu
 import { resolveNativeSlot, NATIVE_FORMULA_INDEX } from '../../engine/weave/nativeResolver';
 import { transpileSlot } from './slotTranspiler';
 import type { SlotFlag, TranspiledSlot } from './slotTranspiler';
-import { mapDEMeta, MB3D_ROT_GLSL } from './constPacker';
+import { mapDEMeta, DERIVED_ROT_BANKS } from './constPacker';
+import type { DerivedRotationSpec } from '../../types/fractal';
 import { weaveBankKey } from '../uniformSlots';
 import { mapMB3DCamera } from './mapCamera';
 import { mapMB3DLighting } from './mapLighting';
@@ -212,6 +213,10 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // @see docs/adr/0090-weave-slot-banks.md
   const mb3dTx = (idx: number, o: Parameters<typeof transpileSlot>[3]): SlotBody =>
     transpileSlot(addon.slots[idx], idx, `${id}_slot${idx}`, { ...o, bake: opts?.slotBake?.[idx] });
+  // Def-global derived-rotation cursor: each slot binds against a PRIVATE allocator
+  // (its uMb3dRotM*/RotSC*/Rot4D* indices restart at 0), so a woven def renumbers
+  // them onto one global sequence here before fusing.
+  const derivedCounts: Record<string, number> = {};
   const mb3dBankBody = (idx: number): SlotBody => {
     const t = mb3dTx(idx, { parametric: true });
     // Unsupported / no-param (its own literals already baked) slots pass through unbanked.
@@ -220,11 +225,39 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     // lane defaults into the bank state, and re-key params to the `weave` feature — the
     // same shape buildBankBindings gives native slots, so mergeWeaveBanks carries MB3D
     // bank values across a reorder identically.
-    const glsl = t.glsl.replace(/\bu(Param[A-F]|Vec[234][ABC])\b/g, `uWs${idx}$1`);
+    let glsl = t.glsl.replace(/\bu(Param[A-F]|Vec[234][ABC])\b/g, `uWs${idx}$1`);
     const weaveState: Record<string, any> = {};
     for (const [k, v] of Object.entries(t.coreMath ?? {})) weaveState[weaveBankKey(idx, k)] = v;
     const params = (t.params ?? []).map((p: any) => ({ ...p, id: weaveBankKey(idx, p.id), feature: 'weave' }));
-    return { ...t, glsl, params: params as any, coreMath: {}, weaveState };
+    // Renumber this slot's derived-rotation uniforms onto the def-global sequence
+    // and re-point their SOURCES at the bank lanes the rebind above just moved the
+    // body's reads onto. Def-global bank exhaustion (a 7th mat3 across slots…)
+    // re-transpiles the slot BAKED — its own literals only, same philosophy as a
+    // failed bind, never drags the rest of the weave down.
+    let derived: DerivedRotationSpec[] | undefined;
+    if (t.derivedRotations?.length) {
+      const need: Record<string, number> = {};
+      for (const s of t.derivedRotations) need[s.convert] = (need[s.convert] ?? 0) + 1;
+      const fits = Object.entries(need).every(([k, n]) =>
+        (derivedCounts[k] ?? 0) + n <= DERIVED_ROT_BANKS[k as DerivedRotationSpec['convert']].cap);
+      if (!fits) return mb3dTx(idx, {});
+      const remap: Record<string, string> = {};
+      derived = t.derivedRotations.map((spec) => {
+        const n = derivedCounts[spec.convert] ?? 0;
+        derivedCounts[spec.convert] = n + 1;
+        const renamed = `${DERIVED_ROT_BANKS[spec.convert].prefix}${n}`;
+        remap[spec.uniform] = renamed;
+        return {
+          ...spec,
+          uniform: renamed,
+          sources: spec.sources.map((s) => s.replace(/^u(Param[A-F]|Vec[234][ABC])\b/, `uWs${idx}$1`)),
+        };
+      });
+      // Single pass (simultaneous) — sequential replaces could cascade when an
+      // old name equals another spec's new name (M0→M1 then M1→M2 hits both).
+      glsl = glsl.replace(/\buMb3dRot(?:M|SC|4D)\d\b/g, (m) => remap[m] ?? m);
+    }
+    return { ...t, glsl, params: params as any, coreMath: {}, weaveState, derivedRotations: derived };
   };
   const mb3dActive = usedIdx.filter((idx) => !isNative(idx));
   const woven = usedIdx.length >= 2;
@@ -638,9 +671,8 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // (the fold is emitted per-dIFS-slot inside the dispatcher — see difsFold above.)
 
   // Assemble the kernel GLSL through the engine weave core (dispatcher + scratch
-  // threading + loopInit/loopBody). The mb3dRot() helper goes in the prelude — it is
-  // emitted ONCE when any slot's parametric body needs it; inlining it per slot would
-  // redefine the function (2+ rotation slots → fail).
+  // threading + loopInit/loopBody). Rotation conversions are CPU-side now — bodies
+  // bind directly to the derived uMb3dRot* bank, so no in-shader helper prelude.
   const assembled = assembleWeave({
     id,
     schedule: weave,
@@ -656,7 +688,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       loopInit: bodies[k].slotLoopInit,
       postCall: slotIsDifs(k) ? difsFold : bodies[k].postCall,
     })),
-    prelude: bodies.some((b) => b.needsRotHelper) ? MB3D_ROT_GLSL : '',
+    prelude: '',
     preDispatch: recomputeRout ? '  mb3dRout = dot(z.xyz, z.xyz);\n' : '',
     // mb3dVary (dIFS absScale) + mb3dDr1 (4D-with-DE derivative, MB3D Deriv1) both seed
     // to 1.0 ("set to 1 on start" / Calc.pas:2732 `Deriv1 := 1`); the rest to 0.
@@ -716,6 +748,10 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   const anyCP = bodies.some((b) => b.supportsCP);
   const fusedCaps = new Set<Capability>(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter']);
   if (anyCP) fusedCaps.add('estimator:cutting-plane');
+
+  // CPU-derived rotation uniforms across all slots (already def-globally numbered
+  // by mb3dBankBody; a lone standalone slot's fresh-allocator indices ARE global).
+  const derivedRotations = bodies.flatMap((b) => b.derivedRotations ?? []);
   // dIFS (DEoption 20): the fused def declares g_difsDE in preamble and writes
   // its running minimum in loopBody; estimator 6 reads it. The token gates both
   // the estimator UI and the compile dispatch, and round-trips via the GMF
@@ -736,6 +772,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       loopBody: assembled.loopBody,
       loopInit: assembled.loopInit,
       capabilities: fusedCaps,
+      derivedRotations: derivedRotations.length ? derivedRotations : undefined,
     },
     parameters,
     defaultPreset: preset,

@@ -24,6 +24,7 @@ import { ShaderBuilder, RenderVariant } from './ShaderBuilder';
 import type { ShaderConfig } from './ShaderConfig';
 import * as THREE from 'three';
 import { UniformDefinition } from './UniformSchema';
+import type { RotationDescriptor } from './rotationDescriptor';
 
 export type ParamType = 'float' | 'int' | 'vec2' | 'vec3' | 'vec4' | 'color' | 'boolean' | 'gradient' | 'image' | 'complex';
 export type ScaleType = 'linear' | 'log' | 'square' | 'root' | 'pi';
@@ -141,6 +142,11 @@ export interface ParamConfig {
     mode?: string;
     /** Whether vector components can be linked */
     linkable?: boolean;
+    /** Explicit rotation semantics (kind / units / Euler order) for rotation-
+     *  valued params. Absent → derived from `mode` via resolveRotation()
+     *  (legacy modes store radians). Drives the vector widgets' unit handling
+     *  and the canvas rotation gizmo. @see engine/rotationDescriptor.ts */
+    rotation?: RotationDescriptor;
     
     // Links to other parameters (e.g., an image param linking to its color profile param)
     linkedParams?: {

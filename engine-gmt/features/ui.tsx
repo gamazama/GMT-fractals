@@ -51,6 +51,7 @@ import { WeaveSection } from '../components/panels/formula/WeaveSection';
 // configures GMT's defaults — see app-gmt/main.tsx.
 import { LfoList } from '../../engine/components/modulation';
 import LightGizmo, { tick as lightGizmoTick } from './lighting/LightGizmo';
+import { RotationGizmoOverlay, tick as rotationGizmoTick } from './rotation_gizmo/RotationGizmoOverlay';
 import { DrawingOverlay, tick as drawingOverlayTick } from './drawing/DrawingOverlay';
 import { DrawingPanel } from './drawing/DrawingPanel';
 import { WebcamOverlay } from '../../engine/features/webcam/WebcamOverlay';
@@ -172,6 +173,9 @@ export const registerGmtUi = () => {
     componentRegistry.register('lfo-list', LfoList);
     componentRegistry.register('overlay-lighting', LightGizmo);
     registerTick('lightGizmoTick', TICK_PHASE.OVERLAY, lightGizmoTick);
+
+    componentRegistry.register('overlay-rotation-gizmo', RotationGizmoOverlay);
+    registerTick('rotationGizmoTick', TICK_PHASE.OVERLAY, rotationGizmoTick);
 
     componentRegistry.register('overlay-drawing', DrawingOverlay);
     registerTick('drawingOverlayTick', TICK_PHASE.OVERLAY, drawingOverlayTick);

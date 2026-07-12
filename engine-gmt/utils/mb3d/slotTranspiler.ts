@@ -25,6 +25,7 @@ import { DECOMPILED_FORMULAS, DECOMPILED_OPTIONS, DECOMPILED_SCRATCH, DECOMPILED
 import { packConstBuffer, bindOptions, PALIGNED16 } from './constPacker';
 import { LaneAllocator } from '../uniformSlots';
 import type { PackedParam } from '../uniformSlots';
+import type { DerivedRotationSpec } from '../../types/fractal';
 
 export type SlotTier = 'intern' | 'decompiled' | 'code-sub' | 'native' | 'unsupported';
 
@@ -62,10 +63,12 @@ export interface TranspiledSlot {
   /** Multi-slot parametric (alloc mode): false if this slot couldn't be exposed
    *  parametrically (unmapped option type / 4D quaternion) → caller bakes all. */
   paramOk?: boolean;
-  /** This slot's parametric body calls mb3dRot(). The helper DEFINITION is emitted
-   *  ONCE by emitFusedHybrid (not per-slot) — two rotation slots would otherwise
-   *  redefine mb3dRot() and fail to compile. */
-  needsRotHelper?: boolean;
+  /** CPU-derived rotation uniforms this slot's parametric body consumes
+   *  (angle options → the uMb3dRotM / uMb3dRotSC / uMb3dRot4D banks). Indices
+   *  are SLOT-LOCAL (fresh allocator per transpile) — emitFusedHybrid renumbers
+   *  them onto a def-global sequence when weaving (mb3dBankBody) and merges
+   *  everything onto def.shader.derivedRotations. */
+  derivedRotations?: DerivedRotationSpec[];
   /** True if this slot's [CODE] actually UPDATES the DE derivative (writes `w`, or
    *  `mb3dDr1` for a 4D-DE formula) — i.e. supplies a usable analytic `dr`. A
    *  position-only [CODE] (PseudoXDB, IdesFormula, Riemann2) never touches `w`, so the
@@ -419,13 +422,11 @@ ${body}
           // or pushed to `missing`, so a resolved Cp no longer rejects the slot.
           if (missing.length === 0 && !/\bCm\d+\b/.test(body)) {
             return {
-              // mb3dRot() DEFINITION is emitted once by emitFusedHybrid (needsRotHelper),
-              // not inlined here — two rotation slots would redefine it → compile error.
-              glsl: wrap(body, '', bound.matrixDecls),
+              glsl: wrap(body),
               fnName, tier: 'decompiled', flag: dflag('decompiled', 'decompiled from MB3D [CODE] (x87) — params exposed'),
               params: bound.params as any, coreMath: bound.coreMath, scratchVars,
               paramOk: true,
-              needsRotHelper: bound.needsRotHelper,
+              derivedRotations: bound.derivedRotations.length ? bound.derivedRotations : undefined,
               writesDeriv,
             };
           }
@@ -510,8 +511,10 @@ export function getSlotOptionMeta(slot: MB3DFormulaSlot): SlotOptionMeta[] {
     const t = types[i] ?? 0;
     const name = names[opt]?.name ?? `opt${opt}`;
     if (t === 6) { out.push({ index: i, span: 3, name, exposable: true }); i += 3; opt++; continue; }
-    if (t === 12) { out.push({ index: i, span: 6, name, exposable: false }); i += 6; opt++; continue; }
-    out.push({ index: i, span: 1, name, exposable: t === 0 || t === 1 || t === 2 || t === 7 || t === 8 || t === 11 || t === 14 });
+    // 4×4 six-plane rotation: live via the derived uMb3dRot4D bank (CPU mat4).
+    if (t === 12) { out.push({ index: i, span: 6, name, exposable: true }); i += 6; opt++; continue; }
+    // Types 3/4 (single angles): live via the derived uMb3dRotSC bank (CPU sin/cos).
+    out.push({ index: i, span: 1, name, exposable: t === 0 || t === 1 || t === 2 || t === 3 || t === 4 || t === 7 || t === 8 || t === 11 || t === 14 });
     i++; opt++;
   }
   return out;

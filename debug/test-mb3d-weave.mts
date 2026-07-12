@@ -118,11 +118,18 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck('Menger3 no unresolved Cm consts', !!def && !/\bCm\d+\b/.test(def.shader.function));
   ck('Menger3 has abs fold', !!def && /abs\(/.test(def.shader.function));
   // Parametric: Scale (scalar) + CScale (vec3, X/Y/Z grouped) + Rotation1 + Rotation2
-  // (vec3), uniforms + in-shader rotation. CScale X/Y/Z collapse into one vec3 slider.
+  // (vec3). Rotations bind to the CPU-derived uMb3dRotM* bank (matrix elements in
+  // GLSL, angles→mat3 on the CPU); CScale X/Y/Z collapse into one vec3 slider.
   const p = (def?.parameters ?? []) as any[];
   ck('Menger3 exposes 4 params', p.length === 4, p.map((x) => x.label));
   ck('Menger3 param labels', p[0].label === 'Scale' && p[1].label === 'CScale' && p[1].type === 'vec3' && p[2].label === 'Rotation1' && p[3].label === 'Rotation2', p.map((x) => x.label));
-  ck('Menger3 binds uniforms + rotation helper', !!def && /uParamA/.test(def.shader.function) && /mb3dRot/.test(def.shader.function));
+  ck('Menger3 binds uniforms + derived rot matrices', !!def && /uParamA/.test(def.shader.function) && /uMb3dRotM0\[/.test(def.shader.function) && /uMb3dRotM1\[/.test(def.shader.function));
+  const dr = def?.shader.derivedRotations ?? [];
+  ck('Menger3 derivedRotations specs (2× mat3 off vec3 lanes)',
+    dr.length === 2 && dr[0].uniform === 'uMb3dRotM0' && dr[1].uniform === 'uMb3dRotM1'
+    && dr.every((d: any) => d.convert === 'mb3d-euler-deg-mat3' && d.sources.length === 3 && /^uVec3[BC]\./.test(d.sources[0])), dr);
+  ck('Menger3 rotation params carry deg descriptor', p[2].rotation?.units === 'deg' && p[2].rotation?.order === 'mb3d-xyz', p[2].rotation);
+  ck('Menger3 no in-shader rotation helper', !!def && !/mb3dRot\(/.test(def.shader.function));
   const q = (def?.defaultPreset as any)?.features?.quality ?? {};
   // estimator 2 = r/dr (Sqrt(Rout)/Abs(w)), the source-correct DE for IFS/box folds
   // (doHybridPasDE, formulas.pas:3735; opt 2 falls through to the AmBox+IFS branch).
@@ -194,7 +201,15 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   ck('menger-banks: 8 params across ws0/ws1', p.length === 8 && new Set(p.map((x: any) => x.id.match(/^ws(\d)/)?.[1])).size === 2, p.map((x: any) => x.id));
   ck('menger-banks: no vec4 holder (fits own bank vec3 units)', p.every((x: any) => !/Vec4/.test(x.id)), p.map((x: any) => x.id));
   ck('menger-banks: both banks bind their own vec3 units', !!def && /uWs0Vec3A/.test(def!.shader.function) && /uWs1Vec3A/.test(def!.shader.function));
-  ck('menger-banks: rotation binds mb3dRot(uWs<k>Vec3*)', !!def && /mb3dRot\(uWs[01]Vec3[ABC]/.test(def!.shader.function), 'rotation on a bank vec3 unit');
+  // Rotations: 2 per slot × 2 slots = 4 derived mat3s, renumbered onto ONE
+  // def-global sequence (uMb3dRotM0..3), each sourcing its own slot's bank lanes.
+  const dr = (def?.shader.derivedRotations ?? []) as any[];
+  ck('menger-banks: 4 derived rotations, globally renumbered',
+    dr.length === 4 && new Set(dr.map((d) => d.uniform)).size === 4
+    && dr.map((d) => d.uniform).join() === 'uMb3dRotM0,uMb3dRotM1,uMb3dRotM2,uMb3dRotM3', dr.map((d) => d.uniform));
+  ck('menger-banks: derived sources point at each slot\'s bank',
+    dr.slice(0, 2).every((d) => /^uWs0Vec3/.test(d.sources[0])) && dr.slice(2).every((d) => /^uWs1Vec3/.test(d.sources[0])), dr.map((d) => d.sources[0]));
+  ck('menger-banks: GLSL binds renumbered matrices (uMb3dRotM2 present)', !!def && /uMb3dRotM2\[/.test(def!.shader.function));
   ck('menger-banks: no duplicate param ids', new Set(p.map((x: any) => x.id)).size === p.length, p.map((x: any) => x.id));
 }
 
@@ -426,7 +441,7 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
 {
   // Decompiled: bake the Scale scalar → 3 sliders left (CScale + 2 rotations), no
   // scalar lane used; bake a whole ROTATION group (span 3) → matrix baked as
-  // literals, its slider gone, the OTHER rotation still live via mb3dRot.
+  // literals, its slider gone, the OTHER rotation still live via the derived bank.
   const menger = (): MB3DFormulaSlot => ({
     iterCount: 1, formulaIndex: 20, name: 'Menger3', optionCount: 10,
     optionTypes: [0, 0, 0, 0, 6, 6, 6, 6, 6, 6, 0, 0, 0, 0, 0, 0],
@@ -442,7 +457,8 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   const rp = (br.def?.parameters ?? []) as any[];
   ck('bake: Menger3 Rotation1 group baked → 3 sliders', rp.length === 3, rp.map((x: any) => x.label));
   ck('bake: Rotation1 slider gone, Rotation2 live', !rp.some((x: any) => x.label === 'Rotation1') && rp.some((x: any) => x.label === 'Rotation2'), rp.map((x: any) => x.label));
-  ck('bake: live rotation still binds mb3dRot', !!br.def && /mb3dRot\(/.test(br.def.shader.function));
+  ck('bake: live rotation still binds derived mat3', !!br.def && /uMb3dRotM0\[/.test(br.def.shader.function)
+    && (br.def.shader.derivedRotations ?? []).length === 1);
 }
 {
   // Option metadata for the editor UI: names, rotation grouping, exposability.

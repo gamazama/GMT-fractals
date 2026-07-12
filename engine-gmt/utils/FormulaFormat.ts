@@ -202,6 +202,11 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
     if (shader.capabilities && shader.capabilities.size > 0) {
         shaderMeta.capabilities = [...shader.capabilities].sort();
     }
+    // CPU-derived rotation uniforms (MB3D live angle lanes) — plain JSON data;
+    // without it a reloaded body reads identity uMb3dRot* forever.
+    if (shader.derivedRotations?.length) {
+        shaderMeta.derivedRotations = shader.derivedRotations;
+    }
 
     const metadata = {
         ...meta,
@@ -333,6 +338,9 @@ export const parseGMF = (content: string): FractalDefinition => {
     // NEVER placed on the runtime shader object — the engine reads tokens only.
     const sm = metadata.shaderMeta;
     if (sm?.preambleVars) shader.preambleVars = sm.preambleVars;
+    if (Array.isArray(sm?.derivedRotations) && sm.derivedRotations.length) {
+        shader.derivedRotations = sm.derivedRotations;
+    }
 
     const caps = new Set<string>(Array.isArray(sm?.capabilities) ? sm.capabilities : []);
     if (metadata.id === 'Modular') {

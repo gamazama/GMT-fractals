@@ -16,6 +16,7 @@ import { LightSpheresFeature } from './lighting/light_spheres';
 import { OpticsFeature } from './optics';
 import { NavigationFeature } from './navigation';
 import { DrawingFeature } from './drawing/index';
+import { RotationGizmoFeature } from './rotation_gizmo/index';
 import { ShaderCompilerFeature } from './engine/index';
 import { registerBoxFoldFormulas } from '../formulas/boxFolds';
 import { AOFeature } from './ao/index';
@@ -89,6 +90,7 @@ export const registerFeatures = () => {
     // Systems (engine-core-shared — same module identity).
     featureRegistry.register(AudioFeature);
     featureRegistry.register(DrawingFeature);
+    featureRegistry.register(RotationGizmoFeature);
     featureRegistry.register(ModulationFeature);
     featureRegistry.register(WebcamFeature);
     featureRegistry.register(DebugToolsFeature);

@@ -18,6 +18,7 @@ import { OpticsState } from '../features/optics';
 import { LightingState } from '../features/lighting';
 import { QualityState } from '../features/quality';
 import type { GeometryState } from '../features/geometry';
+import { registry } from './FractalRegistry';
 import '../formulas';
 import { halton } from '../../engine/codec/halton';
 import { detectHardwareProfileMainThread } from './HardwareDetection';
@@ -1129,6 +1130,11 @@ export class FractalEngine {
     public syncFrame(camera: THREE.Camera, state: any) {
         if (!this.state.optics && !this.state.lighting) return;
         this.uniformManager.syncFrame(camera, state, this.renderer, this.state, this.state.optics || {} as any, this.state.lighting || {} as any, this.modulations, this.materials, this.state.geometry);
+        // CPU-side derived rotations (MB3D angle lanes → finished matrices) — after
+        // the main sync so source uniforms carry this frame's writes. Runs on every
+        // path that reaches syncFrame (live render, bucket, WorkerExporter).
+        this.uniformManager.syncDerivedRotations(
+            registry.get(this.configManager.config.formula as any)?.shader.derivedRotations);
     }
 
     public measureDistanceAtScreenPoint(x: number, y: number, renderer: THREE.WebGLRenderer, camera: THREE.Camera): number {

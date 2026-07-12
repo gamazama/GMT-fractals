@@ -9,6 +9,7 @@ import type { ShaderConfig } from '../ShaderFactory';
 import type { EngineRenderState } from '../FractalEngine';
 import type { VideoExportConfig } from '../../../engine/codec/VideoExportTypes';
 import type { BucketRenderConfig } from '../BucketRenderer';
+import type { DerivedRotationSpec } from '../../types/fractal';
 
 // ─── Serializable camera/offset data ─────────────────────────────────────
 
@@ -104,8 +105,10 @@ export type MainToWorkerMessage =
     // compile gates in the worker's core_math read tokens (shape:self-contained,
     // estimator:cutting-plane, estimator:difs). Emitters pass `def.shader`
     // whole, so extra fields also arrive; renderWorker self-heals cp/difs
-    // tokens from the body as belt-and-braces.
-    | { type: 'REGISTER_FORMULA'; id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; preambleVars?: string[]; capabilities?: ReadonlySet<string> } }
+    // tokens from the body as belt-and-braces. `derivedRotations` (CPU-computed
+    // rotation uniforms, plain data) is likewise formal wire contract — the
+    // worker's syncDerivedRotations reads it off its registry entry.
+    | { type: 'REGISTER_FORMULA'; id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; preambleVars?: string[]; capabilities?: ReadonlySet<string>; derivedRotations?: DerivedRotationSpec[] } }
     // ─── Shader Debug ───
     | { type: 'GET_SHADER_SOURCE'; id: string; variant: 'compiled' | 'translated' }
     | { type: 'GET_UNIFORMS_SNAPSHOT'; id: string }

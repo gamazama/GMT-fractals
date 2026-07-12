@@ -116,6 +116,23 @@ export const degreesMapping = {
     }
 };
 
+/**
+ * Degrees-NATIVE mapping: the STORED value already is degrees (MB3D-imported
+ * rotations, RotationDescriptor units:'deg'). Identity transform with °
+ * formatting — contrast degreesMapping above, which converts an internally-
+ * radian value for display.
+ */
+export const nativeDegreesMapping = {
+    toDisplay: (v: number): number => v,
+    fromDisplay: (v: number): number => v,
+    format: (v: number): string => `${v.toFixed(1)}°`,
+    parseInput: (s: string): number | null => {
+        const cleaned = s.trim().replace(/°/g, '');
+        const num = parseFloat(cleaned);
+        return isNaN(num) ? null : num;
+    }
+};
+
 /** Parse a plain float; null on NaN. Shared default for the mapping factories. */
 const plainParse = (s: string): number | null => {
     const num = parseFloat(s);

@@ -189,6 +189,8 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
     interactionMode = 'param',
     trackKeys,
     trackLabels,
+    onGizmoToggle,
+    gizmoActive,
     ...props
 }) => {
     const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
@@ -281,26 +283,44 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
         return 'none';
     };
 
-    // Construct Header Right with Keyframe Button
+    // Construct Header Right: optional canvas-gizmo toggle + Keyframe Button
     const headerRight = (!props.disabled) ? (
-        <KeyframeButton
-            status={getStatus()}
-            label={props.label}
-            onClick={() => {
-                const frame = Math.round(useAnimationStore.getState().currentFrame);
-                const axes = ['x', 'y', 'z'] as const;
-                if (getStatus() === 'keyed') return; // already keyed to current values
-                snapshot();
-                trackKeys?.forEach((tid, i) => {
-                    if (!tid) return;
-                    if (!sequence.tracks[tid]) addTrack(tid, trackLabels ? trackLabels[i] : tid);
-                    addKeyframe(tid, frame, lastValueRef.current[axes[i]]);
-                });
-                if (trackKeys?.[0]) FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, trackKeys[0]);
-            }}
-            onDeleteKey={() => deleteVecKeysAtFrame(trackKeys, sequence, Math.round(useAnimationStore.getState().currentFrame))}
-            onDeleteTrack={() => deleteVecTracks(trackKeys, sequence)}
-        />
+        <div className="flex items-center gap-1">
+            {onGizmoToggle && (
+                <button
+                    title={gizmoActive ? 'Hide canvas rotation gizmo' : 'Show rotation gizmo on canvas'}
+                    onClick={onGizmoToggle}
+                    className={`w-4 h-4 flex items-center justify-center rounded transition-colors ${
+                        gizmoActive
+                            ? 'text-accent-300 bg-accent-500/20'
+                            : 'text-fg-faint hover:text-fg-secondary hover:bg-line/10'
+                    }`}
+                >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 12a9 9 0 1 1-3-6.7" />
+                        <path d="M21 3v6h-6" />
+                    </svg>
+                </button>
+            )}
+            <KeyframeButton
+                status={getStatus()}
+                label={props.label}
+                onClick={() => {
+                    const frame = Math.round(useAnimationStore.getState().currentFrame);
+                    const axes = ['x', 'y', 'z'] as const;
+                    if (getStatus() === 'keyed') return; // already keyed to current values
+                    snapshot();
+                    trackKeys?.forEach((tid, i) => {
+                        if (!tid) return;
+                        if (!sequence.tracks[tid]) addTrack(tid, trackLabels ? trackLabels[i] : tid);
+                        addKeyframe(tid, frame, lastValueRef.current[axes[i]]);
+                    });
+                    if (trackKeys?.[0]) FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, trackKeys[0]);
+                }}
+                onDeleteKey={() => deleteVecKeysAtFrame(trackKeys, sequence, Math.round(useAnimationStore.getState().currentFrame))}
+                onDeleteTrack={() => deleteVecTracks(trackKeys, sequence)}
+            />
+        </div>
     ) : undefined;
 
     return (

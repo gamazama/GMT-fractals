@@ -3,6 +3,7 @@ import { LightParams } from './graphics';
 import { AnimationParams, AnimationSequence } from './animation';
 import { FractalGraph, PipelineNode } from './graph';
 import type { CapabilitySet } from './capabilities';
+import type { RotationDescriptor } from '../../engine/rotationDescriptor';
 
 export interface Preset {
   version?: number;
@@ -88,6 +89,31 @@ export interface FractalParameter {
     slotIndex?: number;
     mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed'; // 'rotation' = Rodrigues (A/P/∠), 'direction' = azimuth/pitch, 'axes' = per-axis angles, 'toggle' = bool on/off, 'mixed' = toggle X + slider Y
     linkable?: boolean; // For vec3/vec2: enable axis linking (uniform scale)
+    /** Explicit rotation semantics (kind / units / Euler order). Absent →
+     *  derived from `mode` via resolveRotation() (legacy modes store radians).
+     *  MB3D imports stamp this with units:'deg' — consumers must NOT apply the
+     *  radian ±2π bound override or rad→deg display mapping to those. */
+    rotation?: RotationDescriptor;
+}
+
+/**
+ * A CPU-derived rotation uniform: UniformManager.syncDerivedRotations reads the
+ * SOURCE lane uniforms each frame (already carrying config edits, UNIFORM events
+ * and animation writes), converts via rotationMath, and writes the finished
+ * matrix / sin-cos pair into the fixed derived bank (uMb3dMat0..5 mat3,
+ * uMb3dSC0..5 vec2, uMb3dMat4_0..1 mat4 — declared in UniformSchema BASE_SCHEMA).
+ * The shader consumes ONLY the derived uniform — raw angles never reach GLSL.
+ * Stamped by the MB3D live binder (constPacker.bindOptions); rides
+ * `def.shader` across the worker REGISTER_FORMULA wire (plain data, clones).
+ */
+export interface DerivedRotationSpec {
+    /** Target uniform in the derived bank ('uMb3dMat0', 'uMb3dSC2', 'uMb3dMat4_0'). */
+    uniform: string;
+    /** rotationMath conversion applied to the source values. */
+    convert: 'mb3d-euler-deg-mat3' | 'deg-sincos' | 'mb3d-6plane-deg-mat4';
+    /** Source uniform accessors ('uVec3A.x', 'uParamC'), convert-defined order:
+     *  mat3 = 3 angles (x,y,z), sincos = 1 angle, mat4 = 6 plane angles. */
+    sources: string[];
 }
 
 export interface FractalDefinition {
@@ -127,6 +153,10 @@ export interface FractalDefinition {
          *  Capability token instead (requires ADR-0059 amendment).
          *  @see dev/docs/gmt/35_Capability_Protocol.md */
         capabilities: CapabilitySet;
+        /** CPU-derived rotation uniforms this formula's body consumes (MB3D
+         *  live-bound angle options). Lives on `shader` so it rides the worker
+         *  REGISTER_FORMULA wire whole, like `capabilities`. Absent = none. */
+        derivedRotations?: DerivedRotationSpec[];
     };
     parameters: (FractalParameter | null)[];
     description?: string;
