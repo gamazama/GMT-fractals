@@ -161,17 +161,26 @@ export interface StateLibraryOptions<T> {
     dotDurationMs?: number;
 }
 
+/** Registries of every arrayKey / action name this factory has installed
+ *  in the current module lifetime. Close the two silent-collision gaps
+ *  from followup q-064: (a) same `arrayKey` with different action names
+ *  used to skip the guard and clobber `arrayKey: []` (wiping saved
+ *  snapshots); (b) overlapping action names across different libraries
+ *  used to silently redirect the first library's actions to the second's
+ *  storage. Module-scoped, so an HMR reload of this module resets them —
+ *  the store-field backstop below still catches that case. */
+const installedArrayKeys = new Set<string>();
+const installedActionNames = new Set<string>();
+
 /** Patches a state-library slice onto the engineStore. Idempotent —
  *  calling twice is a no-op (warns in dev). */
 /**
- * @invariant Idempotency guard AND-checks `arrayKey` + `actions.add`
- *   only. Two unchecked silent-failure scenarios:
- *   (a) same `arrayKey`, different `actions.add` — re-install silently
- *       clobbers `arrayKey: []` and wipes saved snapshots;
- *   (b) different `arrayKey`, same `actions.add` — second install's
- *       `addSnapshot` closure overrides the first, so the cameras
- *       library's action silently redirects to the views library's
- *       storage. GMT does not trip either today (followup q-064).
+ * @invariant Re-installing an `arrayKey` is a warn-and-no-op (never
+ *   clobbers saved snapshots), regardless of whether the action names
+ *   match. Reusing any action name across two different libraries
+ *   throws in dev / warn-and-no-ops in prod — a shared name would
+ *   silently redirect the first library's actions to the second's
+ *   storage (closure captures `arrayKey`). Followup q-064.
  */
 export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void {
     const set = useEngineStore.setState as (partial: any) => void;
@@ -179,12 +188,29 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
 
     const { arrayKey, activeIdKey, actions, defaultLabelPrefix = 'Snapshot' } = opts;
 
-    // Avoid clobbering an existing install.
+    // Avoid clobbering an existing install. The registry catches any
+    // repeat of an arrayKey (even with different action names); the
+    // store-field check is the backstop for module-reload re-entry,
+    // where the registry is fresh but the store still carries the slice.
     const existing = get();
-    if (Array.isArray(existing[arrayKey]) && typeof existing[actions.add] === 'function') {
+    if (installedArrayKeys.has(arrayKey) ||
+        (Array.isArray(existing[arrayKey]) && typeof existing[actions.add] === 'function')) {
         console.warn(`[StateLibrary] "${arrayKey}" already installed — ignoring duplicate install`);
         return;
     }
+    const actionNames = Object.values(actions) as string[];
+    const clash = actionNames.find((name) => installedActionNames.has(name));
+    if (clash) {
+        const msg =
+            `[StateLibrary] action name "${clash}" is already used by another state library — ` +
+            `installing "${arrayKey}" with it would silently redirect that action here. ` +
+            `Pick distinct action names per library.`;
+        if (import.meta.env.DEV) throw new Error(msg);
+        console.warn(`${msg} Ignoring install.`);
+        return;
+    }
+    installedArrayKeys.add(arrayKey);
+    actionNames.forEach((name) => installedActionNames.add(name));
 
     const readArray = (): StateSnapshot<T>[] => (get()[arrayKey] as StateSnapshot<T>[]) ?? [];
     const findSnap = (id: string) => readArray().find((s) => s.id === id);
