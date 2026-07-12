@@ -41,7 +41,12 @@ const GMT_NAMES = [
     "Guy's Math Toy", 'Gnarly Math Thing', 'Generally Mesmerizing Thingamajig',
     'Give Me Tentacles', 'Gloriously Melted Teapots', 'Gaze-into Mathematical Twilight',
     'Greenwich Mean Time', 'Geometrically Mangled Tesseracts', 'Gratuitous Mandelbulb Torture',
-    'Got More Tentacles', 'Groovy Morphing Thingamabob',
+    'Got More Tentacles', 'Groovy Morphing Thingamabob', 'Getting Mildly Transcendental',
+    'Guided Mandelbulb Tours', 'Glorious Mandelbox Terrain', 'Gnarled Möbius Tendrils',
+    'GPU Mortality Test', 'Gently Melting Transistors', 'Geometry Meets Therapy',
+    'Geometric Meditation Tool', 'GPU MandelBulb3D Translator', 'Guaranteed Mild Trance',
+    "Grandma's Mandelbrot Tapestry", 'Glowing Menger Tunnels', 'Gooey Mathematical Taffy',
+    'Gleefully Misspent Time',
 ];
 
 const pickRandomName = () => GMT_NAMES[Math.floor(Math.random() * GMT_NAMES.length)];
