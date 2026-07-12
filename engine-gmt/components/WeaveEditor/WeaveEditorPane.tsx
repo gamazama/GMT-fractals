@@ -998,6 +998,22 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         return draftSig !== liveSig;
     })();
 
+    // Live-timing sliders stay MOUNTED while the ACTIVE formula is a rhythm
+    // weave, but are DISABLED while the structure is dirty (user reports
+    // 2026-07-12). Two failure modes of the old `!dirty` gate:
+    //  1. LAYOUT: the first transient row move of a drag flipped `dirty`,
+    //     collapsed the slider block and swapped every layer row's compact
+    //     timing text back to steppers — the panel shifted under the captured
+    //     pointer.
+    //  2. MISMATCH: the shader's layer k ↔ slot binding is COMPILED at Build,
+    //     so while the draft structure differs from the built weave, a timing
+    //     control labeled with row X's formula would drive whatever slot the
+    //     OLD build has at that layer. Disabled-until-Build is the only state
+    //     where a visible control can't act on the wrong formula; the row
+    //     steppers are the fallback only while no live rhythm weave is loaded
+    //     yet (initial timing, nothing compiled is listening).
+    const liveTiming = rhythm && layerRowIdx.length > 0 && currentWs?.schedule.kind === 'modulo';
+
     // ── Render ───────────────────────────────────────────────────────────────
     return (
         <div className="space-y-3">
@@ -1107,29 +1123,42 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                             </p>
                         )}
 
-                        {/* Live keyframable rhythm sliders — appear AFTER Build (the weave is
-                            live), grouped per formula. Before Build, the compact start/every/
-                            beats controls in the rows above set the initial timing; these
-                            keyframe it live (no rebuild). */}
-                        {rhythm && !dirty && layerRowIdx.length > 0 && (
+                        {/* Live keyframable rhythm sliders — appear once a rhythm weave is
+                            BUILT and stay mounted through structure edits (no layout jump);
+                            DISABLED while the structure is dirty, because the shader's
+                            layer↔slot binding is compiled — a control edited mid-edit would
+                            drive the OLD build's slot at that layer, not the formula it's
+                            labeled with. Before the first Build, the compact start/every/
+                            beats controls in the rows above set the initial timing. */}
+                        {liveTiming && (
                             <div className="pt-1.5 mt-0.5 space-y-2 border-t border-line/10">
-                                <SectionLabel variant="secondary">Live timing — keyframable</SectionLabel>
+                                {/* Dirty hint shares the label row — appearing mid-drag must not
+                                    change the block's height (the panel would shift again). */}
+                                <div className="flex items-center justify-between gap-2">
+                                    <SectionLabel variant="secondary">Live timing — keyframable</SectionLabel>
+                                    {dirty && (
+                                        <span className="text-[10px] text-warn/90 truncate"
+                                            title="The shader still runs the previous formula order — these sliders re-link to the new order when you Build.">
+                                            Build to re-link
+                                        </span>
+                                    )}
+                                </div>
                                 {layerRowIdx.map((rowIdx, j) => {
                                     const k = j + 1;
                                     const v = layerVal(k);
                                     return (
-                                        <div key={draft.rows[rowIdx].key} className="space-y-1">
+                                        <div key={draft.rows[rowIdx].key} className={`space-y-1 ${dirty ? 'opacity-50' : ''}`}>
                                             <div className="flex items-center gap-1.5 text-[11px]">
                                                 <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SLOT_COLORS[(draft.rows[rowIdx]?.colorIdx ?? 0) % SLOT_COLORS.length] }} />
                                                 <span className="truncate text-fg">{draft.rows[rowIdx]?.label}</span>
                                             </div>
-                                            <Slider label="Start" value={v.start} min={0} max={8} step={1} className="-mx-3"
+                                            <Slider label="Start" value={v.start} min={0} max={8} step={1} className="-mx-3" disabled={dirty}
                                                 onChange={(n) => setLayerVal(k, 'weaveStartIter', n)} defaultValue={k}
                                                 trackId={`weave.weaveStartIter${k}`} liveValue={store.liveModulations?.[`weave.weaveStartIter${k}`]} />
-                                            <Slider label="Interval" value={v.interval} min={1} max={8} step={1} className="-mx-3"
+                                            <Slider label="Interval" value={v.interval} min={1} max={8} step={1} className="-mx-3" disabled={dirty}
                                                 onChange={(n) => setLayerVal(k, 'weaveInterval', n)} defaultValue={1}
                                                 trackId={`weave.weaveInterval${k}`} liveValue={store.liveModulations?.[`weave.weaveInterval${k}`]} />
-                                            <Slider label="Beats (0 = endless)" value={v.beats} min={0} max={8} step={1} className="-mx-3"
+                                            <Slider label="Beats (0 = endless)" value={v.beats} min={0} max={8} step={1} className="-mx-3" disabled={dirty}
                                                 onChange={(n) => setLayerVal(k, 'weaveBeats', n)} defaultValue={2}
                                                 trackId={`weave.weaveBeats${k}`} liveValue={store.liveModulations?.[`weave.weaveBeats${k}`]} />
                                         </div>
@@ -1235,7 +1264,12 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                                 <span className="text-[10px] text-fg-tertiary shrink-0" title="The base runs on every iteration no live layer claims.">base</span>
                             ) : layerK > 0 && lv ? (
                                 <>
-                                    {dirty ? (
+                                    {/* Steppers only while NO live rhythm weave is built (initial
+                                        timing — nothing compiled is listening). Once built, this
+                                        stays the compact read-only line even while dirty: constant
+                                        row height through a drag, and no control that could drive
+                                        the OLD build's slot at this layer index. */}
+                                    {!liveTiming ? (
                                         <div className="flex items-center gap-2 text-[10px] text-fg-tertiary flex-wrap"
                                             title="Layer timing — set here before Build; after Build the live keyframable sliders appear in the schedule above.">
                                             <Stepper label="start" value={lv.start} min={0} onChange={(n) => setLayerVal(layerK, 'weaveStartIter', n)} />
