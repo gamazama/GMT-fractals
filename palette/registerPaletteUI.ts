@@ -118,8 +118,8 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
   registerHistoryProvider('paletteEditor', { capture: captureEditorConfig, restore: applyEditorConfig });
 
   // The favients shelf rides Save/Load via the engine document-provider registry
-  // (W8). serialize = the current collection; restore = prompt Replace/Append,
-  // then merge-or-overwrite + write through to localStorage (gmt.favients) so a
+  // (W8). serialize = the current collection; restore = silently auto-append
+  // anything new (merge + write through to localStorage, gmt.favients) so a
   // loaded scene's palette is preserved. The reference consumer of the registry —
   // heavy authoring stores (generator/image/stops) register their own providers
   // in their Phase-1 streams. Idempotent (Map keyed by id).
