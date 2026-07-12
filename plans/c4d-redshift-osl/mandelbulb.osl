@@ -1,0 +1,317 @@
+/******************************************************************************
+ * mandelbulb.osl  —  Raymarched distance-estimated Mandelbulb fractal
+ *
+ * Target: Cinema 4D 2026 + Redshift 2026.x  (RS "OSL Shader" / "OSL Script" node)
+ * Author: GMT (gmt-fractals.com) — ported from GMT's verbatim GLSL DE.
+ *
+ * ============================================================================
+ *  WHAT THIS IS
+ * ============================================================================
+ *  An OSL *pattern* shader that sphere-traces a 3D Mandelbulb inside a bounding
+ *  cube and outputs the shaded result as a COLOR + OPACITY pair of node ports.
+ *
+ *  WHY A PROXY CUBE (verified architecture — verify.json "surface-emission"):
+ *  Per the OSL spec, a surface shader "may not alter the position of the
+ *  surface"; only a displacement shader may move P, and Redshift does not run
+ *  OSL as a displacement shader. An OSL shader therefore CANNOT relocate the
+ *  ray-surface hit point or create geometry. So we put this shader on a UNIT
+ *  BOUNDING CUBE, reconstruct the camera ray from the OSL globals (P, I), march
+ *  the fractal *inside the cube's object space*, and:
+ *     - on HIT  -> output shaded colour, Opacity = 1 (opaque)
+ *     - on MISS -> Opacity = 0 (fully transparent, cube proxy disappears)
+ *
+ * ============================================================================
+ *  REDSHIFT WIRING  —  LET REDSHIFT LIGHT IT (recommended)
+ * ============================================================================
+ *  1. Put a "OSL Shader" / "OSL Script" node in the RS node material graph.
+ *     File mode: folder icon -> point at this .osl. (Text mode: paste source.)
+ *  2. The shader inputs below auto-expose as node ports; the `output` vars
+ *     auto-expose as output ports.
+ *  3. Wire the OUTPUT PORTS into an RS Standard Material as follows:
+ *        outColor  (color)  -> Standard Material > "Base Color"
+ *                              (raw, UNLIT albedo — RS shades it).
+ *        outNormal (normal) -> RS "Bump Map" node set to OBJECT-SPACE NORMAL
+ *                              mode, then into the material's Normal/Bump input
+ *                              (or wire directly into the Normal input). This
+ *                              hands RS the true raymarched surface normal so
+ *                              lights/GI/reflections read the fractal shape.
+ *        outAO     (float)  -> multiply onto Diffuse Weight / Base Color (or
+ *                              feed an AO slot). Hand-marched cavity occlusion,
+ *                              since RS can't see the marched surface.
+ *        outAlpha  (float)  -> Standard Material > "Opacity" (geometry cutout,
+ *                              NOT refraction). 1 = opaque, 0 = invisible —
+ *                              cuts the cube silhouette down to the fractal.
+ *  4. Add an HDRI / dome light + RS area/spot lights. The fractal now RESPONDS
+ *     to Redshift lights, GI, shadows and reflections like real geometry —
+ *     the look is no longer baked into the shader.
+ *
+ *  SELF-LIT PREVIEW: set `selfLit = 1` to fall back to the legacy in-shader
+ *  Lambert look (uses lightDir + ambient). outColor then carries a pre-lit
+ *  preview instead of raw albedo — fast, but bypasses RS lights/GI. Leave at 0
+ *  for the RS-lit pipeline above.
+ *
+ *  CLOSURES: Redshift only supports the deprecated diffuse/oren_nayar/microfacet
+ *  closures; emission()/glass/etc. fail to compile or CRASH the RS core, and a
+ *  closure output wired to a material input is ignored. So this shader emits NO
+ *  closure — only the named color/float/normal ports (the supported, robust path).
+ *
+ * ============================================================================
+ *  THE DISTANCE ESTIMATOR  (GMT res_gmt_math.json keyFindings[0] + [7])
+ * ============================================================================
+ *  Iterate  z = z^power + c  in spherical (triplex) coordinates while tracking
+ *  a scalar running derivative dr:
+ *        rp1 = r^(power-1)
+ *        dr  = rp1 * power * dr + 1            // standard analytic Mandelbulb dr
+ *        theta = acos(z.z/r)*power ; phi = atan(z.y,z.x)*power
+ *        zr  = rp1 * r                         // == r^power
+ *        z   = zr * (sin(theta)cos(phi), sin(phi)sin(theta), cos(theta)) + c
+ *  Then the Hubbard-Douady DE (keyFindings[7] Julia3D getDist):
+ *        de  = 0.5 * log(r) * r / dr
+ *  This is a verbatim port of engine-gmt/formulas/Mandelbulb.ts (lines 13-68).
+ ******************************************************************************/
+
+#include "stdosl.h"
+
+/* ============================================================================
+ *  DISTANCE ESTIMATOR — top-level function (OSL forbids nested functions, so it
+ *  lives above `shader`). Evaluated at a FRACTAL-space point `zf`; returns the
+ *  Mandelbulb DE in fractal units and writes the orbit trap (min |z|) to trapOut.
+ *  c == zf (pure Mandelbulb, not Julia).
+ * ========================================================================== */
+float mandelDE(point zf, float power, int iterations, float bailout,
+               output float trapOut)
+{
+    vector z    = vector(zf[0], zf[1], zf[2]);
+    vector c    = z;                 // pure Mandelbulb: c = sample point
+    float  dr   = 1.0;               // running scalar derivative
+    float  trap = 1e10;              // orbit trap (min |z|)
+    float  r    = 0.0;
+
+    for (int i = 0; i < iterations; i += 1)
+    {
+        r = length(z);
+        if (r * r > bailout) break;  // early bailout before the expensive trig
+
+        float rp1 = pow(r, power - 1.0);
+        dr = rp1 * power * dr + 1.0;
+
+        // spherical exponentiation  z = z^power
+        float ct_in = (r > 1e-12) ? z[2] / r : 0.0;
+        float theta = acos(clamp(ct_in, -1.0, 1.0)) * power;
+        float phi   = atan2(z[1], z[0]) * power;
+        float zr    = rp1 * r;       // == r^power
+
+        z = zr * vector(sin(theta) * cos(phi),
+                        sin(phi)   * sin(theta),
+                        cos(theta));
+        z = z + c;                   // z = z^power + c
+
+        trap = min(trap, length(z));
+    }
+
+    trapOut = trap;
+    float rSafe  = max(r, 1.0e-5);
+    float drSafe = max(abs(dr), 1.0e-10);
+    return 0.5 * log(rSafe) * rSafe / drSafe;   // Hubbard-Douady DE, fractal units
+}
+
+shader mandelbulb
+[[ string help = "Raymarched distance-estimated Mandelbulb. Place on a unit "
+                 "bounding cube; wire outColor->Base Color, outNormal->RS Bump "
+                 "(object-space normal), outAO->diffuse multiply, "
+                 "outAlpha->Opacity. Let Redshift light it." ]]
+(
+    /* ---- Fractal shape ---------------------------------------------------- */
+    float power       = 8.0
+        [[ string label = "Power",        float min = 2.0, float max = 16.0 ]],
+    int   iterations  = 12
+        [[ string label = "Iterations",   int   min = 1,   int   max = 64,
+           string help  = "DE iteration count. 8-32 typical. Higher = more "
+                          "detail but slower / heavier GPU compile." ]],
+    float bailout     = 4.0
+        [[ string label = "Bailout (r^2)", float min = 1.0, float max = 64.0,
+           string help  = "Escape radius squared. ~4 is standard." ]],
+
+    /* ---- March controls --------------------------------------------------- */
+    int   maxSteps    = 200
+        [[ string label = "Max Steps",    int   min = 16,  int   max = 512 ]],
+    float minDist     = 0.0008
+        [[ string label = "Min Dist (eps)", float min = 0.00001, float max = 0.01,
+           string help  = "Base hit epsilon. Adaptive: eps grows with march "
+                          "distance t to fight precision loss far from origin." ]],
+    float maxDist     = 12.0
+        [[ string label = "Max Dist",     float min = 1.0, float max = 64.0 ]],
+
+    /* ---- Fit-to-cube ------------------------------------------------------ */
+    float scale       = 2.2
+        [[ string label = "Scale",        float min = 0.1, float max = 10.0,
+           string help  = "Object-space units the unit cube maps to in fractal "
+                          "space. ~2.2 frames the |z|<~1.25 Mandelbulb in a "
+                          "[-1,1] cube with margin." ]],
+    vector offset     = vector(0,0,0)
+        [[ string label = "Offset",
+           string help  = "Object-space recentering of the fractal in the cube." ]],
+
+    /* ---- Shading ---------------------------------------------------------- */
+    color colorA      = color(0.05, 0.15, 0.35)
+        [[ string label = "Color A (deep)" ]],
+    color colorB      = color(0.95, 0.65, 0.25)
+        [[ string label = "Color B (surface)" ]],
+    int   selfLit     = 0
+        [[ string label = "Self-Lit Preview", int min = 0, int max = 1,
+           string help  = "0 = output albedo for Redshift to light (recommended). "
+                          "1 = legacy in-shader Lambert preview." ]],
+    vector lightDir   = vector(0.5, 0.8, 0.35)
+        [[ string label = "Light Dir",
+           string help  = "Directional key light direction (object space), used "
+                          "ONLY when Self-Lit Preview = 1. Normalized internally." ]],
+    float aoStrength  = 0.85
+        [[ string label = "AO Strength",  float min = 0.0, float max = 2.0 ]],
+    float ambient     = 0.12
+        [[ string label = "Ambient",      float min = 0.0, float max = 1.0,
+           string help  = "Self-lit preview ambient term, used ONLY when "
+                          "Self-Lit Preview = 1." ]],
+
+    /* ---- Outputs (auto-expose as node ports) ------------------------------ */
+    output color  outColor  = color(0)        // -> RS Standard Material : Base Color (raw albedo)
+        [[ string label = "Out Color",
+           string help  = "Raw UNLIT albedo on hit (wire to Base Color; RS lights "
+                          "it). When Self-Lit Preview = 1, carries the legacy "
+                          "in-shader Lambert preview instead." ]],
+    output float  outAlpha  = 0.0             // -> RS Standard Material : Opacity (1 hit / 0 miss)
+        [[ string label = "Out Alpha" ]],
+    output normal outNormal = normal(0,0,1)   // object-space hit normal (-> RS Bump, object-space normal)
+        [[ string label = "Out Normal",
+           string help  = "Object-space surface normal at the hit. Wire into an "
+                          "RS Bump Map node in Object-Space-Normal mode so RS "
+                          "lights/GI/reflections shade the fractal. Miss = (0,0,1)." ]],
+    output float  outAO     = 1.0             // -> multiply onto diffuse / AO slot (1 hit-floor / 0 cavity)
+        [[ string label = "Out AO",
+           string help  = "0..1 cavity occlusion (hand-marched step-ratio AO, "
+                          "since RS can't see the marched surface). Multiply onto "
+                          "diffuse / Base Color. Miss = 1.0." ]]
+)
+{
+    // ---- Setup: object-space ray reconstruction ------------------------------
+    // P  = shading point (entry on the cube) in *render/common* space.
+    // I  = incident view vector (camera -> P) in common space.
+    // Transform both into the cube's OBJECT space so the fractal lives inside
+    // the cube regardless of how the cube is placed/scaled in the scene.
+    point  ro = transform("common", "object", P);
+    vector rd = normalize(transform("common", "object", I));
+
+    // Map object space -> fractal space via `scale` and `offset`.
+    float  fscale = scale;            // DE in fractal units -> divide by this for object units
+
+    // ---- Cube exit distance (object space). The proxy is the [-1,1] cube. ----
+    float tExit = maxDist;
+    {
+        float tFar = 1e20;
+        if (abs(rd[0]) > 1e-8) {
+            float t1 = (-1.0 - ro[0]) / rd[0];
+            float t2 = ( 1.0 - ro[0]) / rd[0];
+            tFar = min(tFar, max(t1, t2));
+        }
+        if (abs(rd[1]) > 1e-8) {
+            float t1 = (-1.0 - ro[1]) / rd[1];
+            float t2 = ( 1.0 - ro[1]) / rd[1];
+            tFar = min(tFar, max(t1, t2));
+        }
+        if (abs(rd[2]) > 1e-8) {
+            float t1 = (-1.0 - ro[2]) / rd[2];
+            float t2 = ( 1.0 - ro[2]) / rd[2];
+            tFar = min(tFar, max(t1, t2));
+        }
+        if (tFar > 0.0 && tFar < 1e19)
+            tExit = min(maxDist, tFar);
+    }
+
+    // ---- Raymarch ------------------------------------------------------------
+    // March in OBJECT space; evaluate the Mandelbulb DE in FRACTAL space and
+    // convert back: de_obj = de_f / fscale.
+    float t          = 0.0;
+    int   hit        = 0;
+    float hitTrap    = 1.0;       // normalized orbit trap at the hit (for tinting)
+    int   stepsTaken = 0;
+    point pHit       = ro;        // object-space hit point
+
+    for (int s = 0; s < maxSteps; s += 1)
+    {
+        if (t > tExit) break;
+
+        point pObj = ro + rd * t;
+        point zf   = (pObj - offset) * scale;   // fractal-space sample point
+
+        float trap;
+        float de_f   = mandelDE(zf, power, iterations, bailout, trap);
+        float de_obj = de_f / max(fscale, 1e-6);
+
+        // Adaptive epsilon: grows with march distance t to absorb precision loss.
+        float eps = minDist * (1.0 + t);
+        stepsTaken = s + 1;
+
+        if (de_obj < eps) {
+            hit     = 1;
+            pHit    = pObj;
+            hitTrap = clamp(trap / max(scale, 1e-6), 0.0, 1.0);
+            break;
+        }
+
+        // advance; never below a floor to avoid stalling in shallow valleys
+        t += max(de_obj, eps * 0.5);
+    }
+
+    /* ======================================================================
+     *  SHADING  (on hit)
+     * ====================================================================== */
+    if (hit == 1)
+    {
+        // ---- Tetrahedron 4-tap DE-gradient normal (keyFindings[4]) ----------
+        // Re-evaluate the DE at 4 tetrahedral offsets around the hit (object
+        // space), convert each to object units, and build the gradient.
+        float nEps = minDist * (1.0 + t) * 1.5;   // slightly larger than hit eps
+        vector o1 = vector( 1.0, -1.0, -1.0);
+        vector o2 = vector(-1.0, -1.0,  1.0);
+        vector o3 = vector(-1.0,  1.0, -1.0);
+        vector o4 = vector( 1.0,  1.0,  1.0);
+        float jt;
+        float d1 = mandelDE((pHit + o1 * nEps - offset) * scale, power, iterations, bailout, jt) / max(fscale, 1e-6);
+        float d2 = mandelDE((pHit + o2 * nEps - offset) * scale, power, iterations, bailout, jt) / max(fscale, 1e-6);
+        float d3 = mandelDE((pHit + o3 * nEps - offset) * scale, power, iterations, bailout, jt) / max(fscale, 1e-6);
+        float d4 = mandelDE((pHit + o4 * nEps - offset) * scale, power, iterations, bailout, jt) / max(fscale, 1e-6);
+
+        vector nrm = o1 * d1 + o2 * d2 + o3 * d3 + o4 * d4;
+        if (dot(nrm, nrm) < 1.0e-20)
+            nrm = vector(0, 1, 0);
+        else
+            nrm = normalize(nrm);
+
+        // ---- Orbit-trap tint: mix colorA (deep) -> colorB (surface) ---------
+        color albedo = mix(colorA, colorB, clamp(hitTrap, 0.0, 1.0));
+
+        // ---- Cheap cavity AO from step/iteration ratio ----------------------
+        float ao = clamp(1.0 - aoStrength * (float(stepsTaken) / float(maxSteps)), 0.0, 1.0);
+
+        outNormal = normal(nrm[0], nrm[1], nrm[2]);
+        outAlpha  = 1.0;
+        outAO     = ao;
+
+        if (selfLit == 1) {
+            // ---- Legacy in-shader Lambert preview (lightDir + ambient) ------
+            vector L   = normalize(lightDir);
+            float  ndl = max(dot(nrm, L), 0.0);
+            outColor   = albedo * (ambient + ndl) * ao;   // legacy preview look
+        } else {
+            // ---- Raw albedo; Redshift lights it -----------------------------
+            outColor   = albedo;
+        }
+    }
+    else
+    {
+        // ---- MISS: cube proxy disappears ------------------------------------
+        outColor  = color(0);
+        outAlpha  = 0.0;
+        outAO     = 1.0;
+        outNormal = normal(0, 0, 1);
+    }
+}
