@@ -330,7 +330,10 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     // 438-catalog with previews + disabledIds greying) — v1 keeps the lightweight
     // menu for parity with today's editor (owner call 2026-07-04).
     const catalog = useMemo(() => getMB3DCatalog(), []);
-    const nativeCatalog = useMemo(() => getNativeSlotCatalog(), []);
+    // Keyed on `picker` (new identity per open), NOT mount: the registry gains
+    // formulas while this pane is mounted — a Workshop import would otherwise be
+    // invisible in the "Imported" group until the panel remounts.
+    const nativeCatalog = useMemo(() => getNativeSlotCatalog(), [picker]);
     const entryByKey = useMemo(() => {
         const m = new Map<string, CatalogEntry>();
         for (const g of catalog) for (const e of g.entries) m.set(`${e.kind}:${e.ref}`, e);

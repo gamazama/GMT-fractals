@@ -47,7 +47,7 @@
     "smoke:gx-handles": "tsx debug/smoke-gx-geom-handles.mts",
     "bake:palette": "tsx debug/bake-palette-catalog.mts",
     "test:dither": "tsx debug/test-dither.mts",
-    "test:shader": "npm run test:baseline && npm run test:hybrid && npm run test:hybrid-adv && npm run test:interlace",
+    "test:shader": "npm run test:baseline && npm run test:hybrid && npm run test:hybrid-adv && npm run test:weave-sweep",
     "smoke:boot": "tsx debug/smoke-boot.mts",
     "smoke:interact": "tsx debug/smoke-interact.mts",
     "smoke:screenshot": "tsx debug/smoke-screenshot.mts",

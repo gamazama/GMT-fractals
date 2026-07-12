@@ -37,7 +37,7 @@ const DEC_HEADER_LINKS = [{ label: 'Distance Estimator Compendium', href: 'https
 import {
     loadLibrary, isLibraryLoaded, pickRandom,
     loadFragSource, loadDECSource,
-    getRecommendedPipeline, getFormulaCompat,
+    getRecommendedPipeline, getFormulaCompat, isFormulaWeavable,
 } from './formula-library';
 import type { FormulaEntry, RecommendedPipeline } from './formula-library';
 
@@ -271,6 +271,10 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
     /** Toggle: when true, include formulas where neither pipeline renders.
      *  Default false — most users don't want to see 170+ broken entries. */
     const [showIncompatible, setShowIncompatible]         = useState(false);
+    /** Toggle: when true, only show catalog formulas that can be WEAVE SLOTS
+     *  after import (catalog `weavable` flag: v3 passes + per-iteration mode).
+     *  Off by default — most imports are standalone formulas. */
+    const [weavableOnly, setWeavableOnly]                 = useState(false);
 
     // ── Refs ──
     const fileRef            = useRef<HTMLInputElement>(null);
@@ -440,10 +444,11 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
     // unless the user has opted into "show broken". When the catalog isn't
     // loaded (offline dev build), compat is undefined → predicate passes.
     const dicePredicate = useCallback((entry: FormulaEntry): boolean => {
+        if (weavableOnly && !isFormulaWeavable(entry.id)) return false;
         if (showIncompatible) return true;
         const compat = getFormulaCompat(entry.id);
         return !compat || compat.recommended !== 'none';
-    }, [showIncompatible]);
+    }, [showIncompatible, weavableOnly]);
 
     // ── File Loading ──
     const handleRandomDEC = useCallback(async () => {
@@ -503,9 +508,10 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
     const visibleCatalog = useMemo(() => {
         if (!catalogData.ready) return catalogData;
         const keep = (it: { id: string }) =>
-            showIncompatible || getFormulaCompat(it.id)?.recommended !== 'none';
+            (showIncompatible || getFormulaCompat(it.id)?.recommended !== 'none')
+            && (!weavableOnly || isFormulaWeavable(it.id));
         return { ...catalogData, frag: catalogData.frag.filter(keep), dec: catalogData.dec.filter(keep) };
-    }, [catalogData, showIncompatible]);
+    }, [catalogData, showIncompatible, weavableOnly]);
     const fragCatalogGroups = useMemo(
         () => (browseMode === 'folder' ? folderGroups(visibleCatalog, 'frag') : categoryGroups(visibleCatalog, 'frag')),
         [visibleCatalog, browseMode],
@@ -951,6 +957,18 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                             className="w-3 h-3 accent-cyan-500"
                         />
                         show broken
+                    </label>
+                    <label
+                        title="Only show formulas that can be woven with other formulas after import (Iteration-mode imports — the weave picker greys the rest as “can't weave”)."
+                        className="flex items-center gap-1 text-[10px] text-fg-dim hover:text-fg-tertiary cursor-pointer select-none shrink-0"
+                    >
+                        <input
+                            type="checkbox"
+                            checked={weavableOnly}
+                            onChange={e => setWeavableOnly(e.target.checked)}
+                            className="w-3 h-3 accent-cyan-500"
+                        />
+                        weavable only
                     </label>
                 </div>
             </div>
