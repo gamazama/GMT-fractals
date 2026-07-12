@@ -2,6 +2,18 @@
 
 **Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
 
+> **Update 2026-07-12 (P4.6 animation transfer landed; decision unchanged):** the
+> "remaining P4.6 item" below is DONE — keyframe tracks and LFO targets now follow
+> their formulas across a rebuild using the SAME old→new mapping the value transfer
+> computes (`mergeWeaveBanks`/`mergeDenseLanes` return it as
+> `LoadMB3DResult.paramRenames`; applied by `engine-gmt/animation/retargetTracks.ts`
+> as a simultaneous permutation, timeline-undoable). The "existing reorder-keyframe
+> warning" this ADR references is RETIRED: transfer is automatic at Build with a
+> post-Build report, and orphaned tracks (deleted/replaced slots) get a one-click
+> cleanup. Rhythm timing tracks transfer live in the editor's `syncRhythm`; while a
+> draft's structure is dirty, the Live-timing controls stay mounted but disabled
+> (the compiled layer↔slot binding lags the draft until Build).
+>
 > **Update 2026-07-04 (P4.4+P4.5 absorption landed; decision unchanged):** the
 > "banks BEFORE P4.4/P4.5" sequencing paid off as planned — legacy interlace
 > params migrate straight onto bank 1 (`weave.ws1*`) and the whole `uInterlace*`
