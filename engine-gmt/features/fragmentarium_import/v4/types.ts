@@ -142,7 +142,7 @@ export interface GlobalDecl {
 // ─── Stage 4: Emit ──────────────────────────────────────────────────────────
 
 export interface GeneratedFormula {
-    /** Ready-to-register FractalDefinition with selfContainedSDE: true. */
+    /** Ready-to-register FractalDefinition with `shape:self-contained` in capabilities. */
     definition: FractalDefinition;
     /** Map from original uniform name → engine slot (e.g. Scale → paramA). */
     slotAssignments: Record<string, string>;

@@ -90,15 +90,15 @@ export const ModifyWithAIModal: React.FC<ModifyWithAIModalProps> = ({ open, onCl
 
     // ── Is the current formula in the limited self-contained shape? ───────────
     // This is the set of formulas that LOSE interlace/hybrid/burning-ship and so
-    // benefit from a convert-to-native pass. Gate on the legacy flag OR the modern
-    // capability token (kept in sync; see import-capabilities.ts). Modular is
-    // excluded — buildFormulaBrief throws for it (its GLSL lives in the node graph).
+    // benefit from a convert-to-native pass. Gated on the capability token
+    // (legacy shaderMeta booleans are promoted to tokens at the GMF parse
+    // boundary). Modular is excluded — buildFormulaBrief throws for it (its
+    // GLSL lives in the node graph).
     const selectedDef = registry.get(formula);
     const formulaName = selectedDef?.name ?? formula;
     const isSelfContained =
         formula !== 'Modular' &&
-        (!!selectedDef?.shader.selfContainedSDE ||
-            !!selectedDef?.shader.capabilities?.has('shape:self-contained'));
+        !!selectedDef?.shader.capabilities?.has('shape:self-contained');
 
     // follow-up: converting the LIVE, unsaved Workshop editor buffer would need
     // FormulaWorkshop to expose its `source`/`mappings` state (currently local to

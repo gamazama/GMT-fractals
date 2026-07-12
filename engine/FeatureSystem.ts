@@ -52,7 +52,8 @@ export interface ParamOption {
      *  it returns true, AutoFeaturePanel renders this option as `<option disabled>`
      *  in the dropdown — selectable in the list but visibly grayed out and
      *  rejected by the browser. Used to gate options on formula capabilities
-     *  (e.g. estimator=Cutting Plane requires shader.supportsCuttingPlane). */
+     *  (e.g. estimator=Cutting Plane requires the formula to declare the
+     *  'estimator:cutting-plane' capability token). */
     disabledIf?: (state: any) => boolean;
 }
 

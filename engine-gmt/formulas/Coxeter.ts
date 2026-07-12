@@ -25,7 +25,7 @@ export const Coxeter: FractalDefinition = {
     vec3 uCox_nor;
     vec3 uCox_pca;
 
-    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).
+    // cp_dmin / cp_scale / cp_trap are engine-provided (estimator:cutting-plane capability).
 
     void Coxeter_precalc() {
         float N = uParamC;
@@ -75,8 +75,6 @@ export const Coxeter: FractalDefinition = {
     }`,
         loopBody: `formula_Coxeter(z, dr, trap, c);`,
         loopInit: `Coxeter_precalc(); gmt_precalcRodrigues(uVec3B);`,
-        usesSharedRotation: true,
-        supportsCuttingPlane: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 

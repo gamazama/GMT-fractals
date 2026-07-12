@@ -100,7 +100,12 @@ export type MainToWorkerMessage =
         outputWidth: number; outputHeight: number; sampleCap: number }
     | { type: 'PREVIEW_REGION_CLEAR' }
     // ─── Dynamic Formula Registration ───
-    | { type: 'REGISTER_FORMULA'; id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; selfContainedSDE?: boolean } }
+    // `capabilities` rides postMessage's structured clone (Sets survive) — the
+    // compile gates in the worker's core_math read tokens (shape:self-contained,
+    // estimator:cutting-plane, estimator:difs). Emitters pass `def.shader`
+    // whole, so extra fields also arrive; renderWorker self-heals cp/difs
+    // tokens from the body as belt-and-braces.
+    | { type: 'REGISTER_FORMULA'; id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; preambleVars?: string[]; capabilities?: ReadonlySet<string> } }
     // ─── Shader Debug ───
     | { type: 'GET_SHADER_SOURCE'; id: string; variant: 'compiled' | 'translated' }
     | { type: 'GET_UNIFORMS_SNAPSHOT'; id: string }

@@ -433,18 +433,19 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 // compilation.
                 //
                 // core_math.inject runs HERE (worker-side) and gates the cutting-plane
-                // preamble (the engine-owned cp_dmin/cp_scale/cp_trap globals) on the
-                // def's capability set. A runtime weave/hybrid whose body writes cp_*
-                // (e.g. a native Menger sponge slot) would otherwise emit those writes
-                // with no declaration → "cp_dmin: undeclared identifier". The capability
-                // Set isn't a formal part of the REGISTER_FORMULA contract, so self-heal
-                // it from the shader body — the same cp_* body scan parseGMF uses for
-                // legacy GMF files (FormulaFormat.ts). Union with anything the message
-                // happens to carry (postMessage's structured clone preserves Sets).
+                // preamble (the engine-owned cp_dmin/cp_scale/cp_trap globals) + the
+                // dIFS estimator dispatch on the def's capability set. A runtime
+                // weave/hybrid whose body writes cp_* (e.g. a native Menger sponge
+                // slot) would otherwise emit those writes with no declaration →
+                // "cp_dmin: undeclared identifier". `capabilities` is a formal part
+                // of the REGISTER_FORMULA contract (structured clone preserves Sets),
+                // but self-heal cp/difs from the shader body anyway — the same scans
+                // parseGMF uses for legacy GMF files (FormulaFormat.ts).
                 const incoming = (msg.shader as { capabilities?: Iterable<Capability> }).capabilities;
                 const caps = new Set<Capability>(incoming ?? []);
                 const body = `${msg.shader.function} ${msg.shader.loopBody} ${msg.shader.loopInit ?? ''} ${msg.shader.preamble ?? ''}`;
                 if (/\bcp_(dmin|scale|trap)\b/.test(body)) caps.add('estimator:cutting-plane');
+                if (/\bg_difsDE\b/.test(msg.shader.preamble ?? '')) caps.add('estimator:difs');
                 registry.register({
                     id: msg.id as any,
                     name: msg.id,

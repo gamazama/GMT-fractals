@@ -83,7 +83,6 @@ export const MixPinski: FractalDefinition = {
 
         loopBody: `formula_MixPinski(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3C);`,
-        usesSharedRotation: true,
 
         // Custom DE: 4D Chebyshev norm (faithful to original)
         // Offset hardcoded to 1.0 (original default). Use Quality panel estimator for tweaks.

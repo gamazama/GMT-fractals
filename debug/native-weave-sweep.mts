@@ -11,7 +11,7 @@
  *
  * Excluded from the sweep (nativeSlotReject — mirrors the resolver):
  *   - Modular (no GLSL to rewrite)
- *   - Formulas with shader.selfContainedSDE (JuliaMorph, MandelTerrain)
+ *   - Formulas with the shape:self-contained capability (JuliaMorph, MandelTerrain)
  *
  * Setup: requires `debug/validator.html` (gitignored by convention; copy from
  * stable: `cp ../stable/debug/validator.html debug/validator.html`).

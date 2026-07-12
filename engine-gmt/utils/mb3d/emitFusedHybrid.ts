@@ -194,7 +194,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       params: res.params as any, coreMath: res.coreMath, weaveState: res.weaveState, paramOk: true, writesDeriv: res.writesDeriv,
       call: res.call, preCall: res.preCall, postCall: res.postCall, slotLoopInit: res.loopInit,
       deMeta: res.deMeta, getDist: res.getDist,
-      supportsCP: !!ndef.shader.capabilities?.has('estimator:cutting-plane') || !!(ndef.shader as any).supportsCuttingPlane,
+      supportsCP: !!ndef.shader.capabilities?.has('estimator:cutting-plane'),
     };
   };
 
@@ -716,6 +716,12 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   const anyCP = bodies.some((b) => b.supportsCP);
   const fusedCaps = new Set<Capability>(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter']);
   if (anyCP) fusedCaps.add('estimator:cutting-plane');
+  // dIFS (DEoption 20): the fused def declares g_difsDE in preamble and writes
+  // its running minimum in loopBody; estimator 6 reads it. The token gates both
+  // the estimator UI and the compile dispatch, and round-trips via the GMF
+  // shaderMeta capabilities stash (parseGMF also self-heals it from g_difsDE
+  // in the body, like cp_*).
+  if (isDifs) fusedCaps.add('estimator:difs');
 
   const def: FractalDefinition = {
     id: id as any,
@@ -727,14 +733,10 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
       function: assembled.functionGLSL,
       getDist: leadGetDist,
       preamble: difsPreamble || undefined,
-      supportsDifs: isDifs || undefined,
       loopBody: assembled.loopBody,
       loopInit: assembled.loopInit,
-      // supportsCuttingPlane mirrors the capability for the estimator UI +
-      // GMF shaderMeta stash (parseGMF also self-heals it from cp_* in body).
-      supportsCuttingPlane: anyCP || undefined,
       capabilities: fusedCaps,
-    } as any,
+    },
     parameters,
     defaultPreset: preset,
   };

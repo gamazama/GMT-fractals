@@ -23,7 +23,7 @@
  *   function:     renamed DE function + formula_X wrapper
  *   loopBody:     formula_X(z, dr, trap, c); break;
  *   getDist:      return vec2(r, dr);  (Style A — see emit/wrapper.ts)
- *   selfContainedSDE: true
+ *   capabilities: includes 'shape:self-contained'
  */
 
 import { parse } from '@shaderfrog/glsl-parser';
@@ -295,7 +295,6 @@ export function emitSelfContained(
         shader: {
             ...shaderGlsl,
             preambleVars: preambleVars.length > 0 ? preambleVars : undefined,
-            selfContainedSDE: true,
             capabilities: deriveImportCapabilities(shaderGlsl, 'self-contained'),
         },
         parameters: fracParams,

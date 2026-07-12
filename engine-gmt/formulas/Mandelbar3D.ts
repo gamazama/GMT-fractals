@@ -38,7 +38,6 @@ export const Mandelbar3D: FractalDefinition = {
     }`,
         loopBody: `formula_Mandelbar3D(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3B);`,
-        usesSharedRotation: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 

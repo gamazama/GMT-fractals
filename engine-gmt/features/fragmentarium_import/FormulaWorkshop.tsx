@@ -650,14 +650,14 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
     }, []);
 
     // ── Build & register a formula definition ──
-    // V3 emit path. `result.mode` ('per-iteration' | 'full-de') drives both
-    // shader.capabilities (via deriveImportCapabilities) AND the legacy
-    // selfContainedSDE flag for full-de imports. Setting selfContainedSDE
-    // for full-de imports closes the silent-corruption hole flagged in
-    // docs/research/v4-rethink-prompt.md (engine features previously
-    // injected against full-de fallback formulas with no flag, producing
-    // black renders or "dust" geometry). See plans/capability-protocol.md
-    // (Phase 6).
+    // V3 emit path. `result.mode` ('per-iteration' | 'full-de') drives
+    // shader.capabilities via deriveImportCapabilities — full-de imports get
+    // `shape:self-contained`, which the engine compile gates read to emit
+    // SKIP_PRE_BAILOUT / suppress per-iteration injection. This closes the
+    // silent-corruption hole flagged in docs/research/v4-rethink-prompt.md
+    // (engine features previously injected against full-de fallback formulas
+    // with no flag, producing black renders or "dust" geometry). See
+    // plans/capability-protocol.md (Phase 6).
     const buildAndRegister = useCallback((
         id: string,
         name: string,
@@ -679,7 +679,6 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
             description: importSource ? 'Imported formula' : undefined,
             shader: {
                 ...shaderGlsl,
-                selfContainedSDE: isFullDe || undefined,
                 capabilities: deriveImportCapabilities(
                     shaderGlsl,
                     isFullDe ? 'self-contained' : 'per-iteration',

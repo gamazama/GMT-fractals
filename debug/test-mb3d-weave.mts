@@ -902,12 +902,10 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   // repointed sweep's failure class — 12/45 before this union).
   const cp = emitFusedHybrid(scene([nativeSlotShell('Mandelbulb', 1), nativeSlotShell('MengerSponge', 1)]));
   ck('cp-union: CP slot → fused def carries the capability',
-    !!cp.def && cp.def.shader.capabilities?.has('estimator:cutting-plane') === true
-    && (cp.def.shader as any).supportsCuttingPlane === true);
+    !!cp.def && cp.def.shader.capabilities?.has('estimator:cutting-plane') === true);
   const noCp = emitFusedHybrid(scene([nativeSlotShell('Mandelbulb', 1), nativeSlotShell('AmazingBox', 1)]));
   ck('cp-union: no CP slot → capability absent',
-    !!noCp.def && noCp.def.shader.capabilities?.has('estimator:cutting-plane') !== true
-    && (noCp.def.shader as any).supportsCuttingPlane === undefined);
+    !!noCp.def && noCp.def.shader.capabilities?.has('estimator:cutting-plane') !== true);
 }
 
 // ── P4.4: legacy interlace load-migration ───────────────────────────────────

@@ -18,7 +18,7 @@
  *    (Phoenix `z_prev`, Bristorbrot `rotX`) is hoisted: global declaration in the
  *    slot GLSL + plain assignment in the hoisted loopInit. Preamble-declared state
  *    (Julia3D `kk_minSurf`) already lands as a prefixed global via rewritePreamble.
- *  - SHARED ROTATION (`usesSharedRotation` / `iter:shared-rotation`): the slot's
+ *  - SHARED ROTATION (`iter:shared-rotation`): the slot's
  *    loopInit runs inside a save→capture→restore bracket (its `gmt_precalcRodrigues`
  *    result is captured into `ws<N>_rot*` globals); the dispatcher branch swaps the
  *    captured state into the fixed `gmt_rot*` globals around the call
@@ -238,7 +238,7 @@ export function resolveNativeSlot(
 ): NativeSlotResolution | NativeSlotReject {
     const sh = def.shader;
     const caps = sh.capabilities;
-    if (caps?.has('shape:self-contained') || (sh as any).selfContainedSDE) {
+    if (caps?.has('shape:self-contained')) {
         return { ok: false, reason: `${def.name ?? def.id} runs its own internal loop (self-contained) — it can't run as a weave slot.` };
     }
     if (caps?.has('shape:modular') || def.id === 'Modular') {
@@ -312,7 +312,7 @@ export function resolveNativeSlot(
     let preCall = `vec4 ${P}c = vec4(c.xyz, ${cw}); `;
     let postCall: string | undefined;
 
-    const needsRot = !!sh.usesSharedRotation || !!caps?.has('iter:shared-rotation');
+    const needsRot = !!caps?.has('iter:shared-rotation');
     if (needsRot) {
         globals.push(`vec3 ${P}rotAxis; float ${P}rotCos; float ${P}rotSin;`);
         // loopInit bracket: save the shared rotation state, let the slot's precalc

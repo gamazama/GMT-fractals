@@ -275,7 +275,6 @@ export const MandelTerrain: FractalDefinition = {
         dr = smoothVal;
     }`,
         // Self-contained SDE: formula runs its own full loop; outer loop fires once then breaks.
-        selfContainedSDE: true,
         loopBody: `formula_MandelTerrain(z, dr, trap, c); break;`,
         getDist: `
             // Standard return

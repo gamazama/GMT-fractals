@@ -12,7 +12,7 @@ The capability protocol gives every consumer — AutoFeaturePanel, Engine panel,
 
 ## Vocabulary
 
-Closed union of 8 tokens in [`engine-gmt/types/capabilities.ts`](../../engine-gmt/types/capabilities.ts). Adding a token requires an ADR amendment.
+Closed union of 9 tokens in [`engine-gmt/types/capabilities.ts`](../../engine-gmt/types/capabilities.ts). Adding a token requires an ADR amendment (`estimator:difs` added 2026-07-12 — see the ADR-0059 update block).
 
 | Token | Meaning | Declared by |
 |-------|---------|-------------|
@@ -22,6 +22,7 @@ Closed union of 8 tokens in [`engine-gmt/types/capabilities.ts`](../../engine-gm
 | `iter:c-constant` | Accepts Julia-style `c` override meaningfully (used or just-passed-through) | Formulas where `juliaType` is `'julia'` or `'offset'` and body reads `c` |
 | `iter:shared-rotation` | Reads/writes `gmt_rotAxis`/`rotCos`/`rotSin` — needs swap during interlace | Formulas using `gmt_precalcRodrigues` |
 | `estimator:cutting-plane` | Writes `cp_dmin`/`cp_scale`/`cp_trap` accumulators | 12 polyhedron formulas (Coxeter, Cuboctahedron, etc.) |
+| `estimator:difs` | Declares `g_difsDE` in preamble + writes its running minimum in loopBody; estimator 6 reads it | MB3D importer, fused dIFS scenes (DEoption 20) |
 | `render:writes-trap` | Populates `result.y` for trap-mode coloring | Universal in dev — all 43 native formulas |
 | `render:writes-iter` | Populates `result.z` (smoothiter) meaningfully | 41/43 (`KleinianJos`/`KleinianMobius` excepted — synthesized via custom `getDist`) |
 
@@ -36,12 +37,12 @@ Closed union of 8 tokens in [`engine-gmt/types/capabilities.ts`](../../engine-gm
 interface FractalDefinition {
   shader: {
     // ...existing fields...
-    capabilities?: ReadonlySet<Capability>;
+    capabilities: ReadonlySet<Capability>;   // REQUIRED — register() throws if missing
   };
 }
 ```
 
-Populated by `FractalRegistry.register()` via `deriveLegacy()` if not explicitly declared. Frozen-by-convention — downstream code mutates at its peril.
+Declared by the producer (native declaration, importer derivation, or parseGMF promotion — the `deriveLegacy()` shim was deleted in P8). Frozen-by-convention — downstream code mutates at its peril.
 
 ### Feature side
 
@@ -170,11 +171,11 @@ for (const feat of featureRegistry.getAll()) {
 
 ## Migration: legacy → explicit (HISTORICAL — shim removed in P8)
 
-**Status:** The `deriveLegacy` shim is DELETED as of P8. `shader.capabilities` is REQUIRED. `FractalRegistry.register()` throws if missing. The four legacy `shader.*` flags (`selfContainedSDE`, `usesSharedRotation`, `supportsCuttingPlane`) are marked `@deprecated` and retained only as inputs to GMF backward-compat parsing for pre-P0 files.
+**Status (2026-07-12 — retirement COMPLETE):** The `deriveLegacy` shim is DELETED as of P8. `shader.capabilities` is REQUIRED. `FractalRegistry.register()` throws if missing. The legacy `shader.*` boolean flags (`selfContainedSDE`, `usesSharedRotation`, `supportsCuttingPlane`, plus the later `supportsDifs`) are DELETED from `FractalDefinition` entirely — every runtime consumer (engine compile gates, estimator UI, weave resolver, mesh export, worker) reads capability tokens. The booleans survive ONLY as accepted input keys at the GMF parse boundary.
 
 **For new code:** declare `capabilities` directly via `new Set([...] satisfies Capability[])`. See any of the 44 native formulas in `engine-gmt/formulas/*.ts` for the pattern. V3/V4 Workshop imports derive automatically via `fragmentarium_import/import-capabilities.ts`.
 
-**GMF round-trip:** post-P8 saves stash `capabilities` directly in `shaderMeta`. Pre-P0 files (without capabilities in `shaderMeta`) fall through to inline derivation in `parseGMF` that mirrors the deleted shim's logic. Both paths produce a populated `Set` before the formula reaches `register()`.
+**GMF round-trip:** saves stash `capabilities` directly in `shaderMeta` (booleans are no longer written). On parse, `parseGMF` unions the stashed token set with PROMOTED legacy booleans (`shaderMeta.selfContainedSDE` → `shape:self-contained`, etc. — the GMF_API_DOCS banner still teaches the boolean as the hand-authoring interface) and with `cp_*` / `g_difsDE` body auto-detects, enforcing exactly one `shape:*` token. Old, hand-written, and AI-generated files all produce a populated `Set` before the formula reaches `register()`; the booleans never reach the runtime def.
 
 **Three tokens still require explicit declaration** (no legacy mapping, no auto-derivation): `iter:c-constant`, `render:writes-trap`, `render:writes-iter`. Native classifications live in [dev/plans/capability-protocol-p1-classification.md](../../plans/capability-protocol-p1-classification.md); V3/V4 emitters detect via regex against the assembled GLSL.
 
@@ -199,7 +200,7 @@ The harness:
 - **Per-pair snapshot**: extend the harness to snapshot `(primary, secondary)` matrix for interlace cases (currently only primary-side is covered).
 - **Shader-compile regression net**: port of stable's headless harnesses. Tracked separately from this protocol.
 - **`tabConfig.condition`**: existing but unused field on `FeatureTabConfig` (engine/FeatureSystem.ts:159). P8 either wires it via `evaluateCompat` or removes it.
-- **Sunsetting legacy flags**: P8 removes `shader.{selfContainedSDE, usesSharedRotation, supportsCuttingPlane}` from `FractalDefinition` once all consumers read from `capabilities`. GMF format stash also pivots to capability set.
+- ~~**Sunsetting legacy flags**~~ DONE 2026-07-12: `shader.{selfContainedSDE, usesSharedRotation, supportsCuttingPlane, supportsDifs}` deleted from `FractalDefinition`; all consumers read `capabilities`; GMF stash pivoted to the capability set with parse-boundary promotion for legacy files. See the ADR-0059 update block.
 
 ## See also
 

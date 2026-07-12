@@ -17,7 +17,7 @@ function check(formulaId: string, estimator: number) {
     const def = registry.get(formulaId);
     if (!def) { console.log(`  SKIP ${formulaId} — not in registry`); return; }
     const cfg: any = { definition: def, deType: 'auto', estimator };
-    const supportsCP = !!def.shader.supportsCuttingPlane;
+    const supportsCP = !!def.shader.capabilities?.has('estimator:cutting-plane');
     let ok = true;
     let lastErr = '';
     for (const [name, build] of [

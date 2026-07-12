@@ -17,7 +17,7 @@ export const Cuboctahedron: FractalDefinition = {
     // Cutting-plane DE: accumulates max(signed_distance_to_face_planes) across iterations
     // This avoids the fold boundary degeneracy that breaks r/dr estimation at (1,1,0)
     //
-    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).
+    // cp_dmin / cp_scale / cp_trap are engine-provided (estimator:cutting-plane capability).
 
     // Fold normal for octahedral symmetry: nc = (-0.5, -cos(pi/4), sqrt(0.75 - cos^2(pi/4)))
     const vec3 co_nc = vec3(-0.5, -0.70710678, 0.5);
@@ -69,8 +69,6 @@ export const Cuboctahedron: FractalDefinition = {
     }`,
         loopBody: `formula_Cuboctahedron(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3B);`,
-        usesSharedRotation: true,
-        supportsCuttingPlane: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 

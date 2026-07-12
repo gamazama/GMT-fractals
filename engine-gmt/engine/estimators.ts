@@ -95,18 +95,18 @@ export const ESTIMATORS: EstimatorEntry[] = [
     {
         id: 'cuttingPlane', value: 5.0, label: 'Cutting Plane',
         // Knighty fold-and-cut. Reads engine-provided cp_dmin/cp_trap accumulators
-        // (declared only when the formula pair has shader.supportsCuttingPlane).
+        // (declared only when the formula declares `estimator:cutting-plane`).
         threshold: 4.5,
         requires: (caps) => caps.supportsCuttingPlane,
         body: `
         vec2 getDist(float r, float dr, float iter, vec4 z) {
             return vec2(abs(cp_dmin), cp_trap);
         }`,
-        // Gray out unless the current formula declares supportsCuttingPlane
+        // Gray out unless the current formula declares `estimator:cutting-plane`
         // (a migrated legacy pair is one fused def whose capabilities union
         // the slots' — ADR-0089 P4.4). Engine falls back to Linear if forced
         // on a non-CP formula, so this is purely UX.
-        disabledIf: (state: any) => !registry.get(state?.formula)?.shader.supportsCuttingPlane,
+        disabledIf: (state: any) => !registry.get(state?.formula)?.shader.capabilities?.has('estimator:cutting-plane'),
     },
     {
         id: 'difs', value: 6.0, label: 'dIFS (Orbit Trap)',
@@ -122,9 +122,9 @@ export const ESTIMATORS: EstimatorEntry[] = [
         vec2 getDist(float r, float dr, float iter, vec4 z) {
             return vec2(g_difsDE, iter);
         }`,
-        // Only valid on an imported dIFS scene (declares shader.supportsDifs + a
+        // Only valid on an imported dIFS scene (declares `estimator:difs` + a
         // g_difsDE preamble). Engine falls back to Linear on any other formula.
-        disabledIf: (state: any) => !registry.get(state?.formula)?.shader.supportsDifs,
+        disabledIf: (state: any) => !registry.get(state?.formula)?.shader.capabilities?.has('estimator:difs'),
     },
     {
         id: 'numeric', value: 7.0, label: 'Numerical (Finite-Diff)',

@@ -1,6 +1,11 @@
 # GMT Feature Compatibility Protocol — Phased Implementation Spec
 
-**Status**: Plan, not built
+**Status**: COMPLETE (2026-07-12). P0–P8 all executed, including the P8 sunsetting
+step that had stalled at "@deprecated": the legacy booleans are deleted from
+`FractalDefinition`, all consumers read `capabilities`, and parseGMF promotes
+legacy shaderMeta booleans to tokens at the parse boundary. A 9th token
+`estimator:difs` replaced the never-protocoled `supportsDifs` boolean. See the
+ADR-0059 update block for the completion record.
 **Source root**: `h:/GMT/workspace-gmt/dev/`
 **Driving initiative**: New Scene wizard (this protocol is sequenced FIRST as the foundation)
 **Drafted**: 2026-05-25 via orchestrator audit chain

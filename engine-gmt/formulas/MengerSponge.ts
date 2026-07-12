@@ -63,7 +63,6 @@ export const MengerSponge: FractalDefinition = {
         cp_trap = trap;
     }`,
         loopBody: `formula_MengerSponge(z, dr, trap, c);`,
-        supportsCuttingPlane: true,
         capabilities: new Set(['shape:per-iteration', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 

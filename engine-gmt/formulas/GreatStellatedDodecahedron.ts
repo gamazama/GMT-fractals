@@ -37,7 +37,7 @@ export const GreatStellatedDodecahedron: FractalDefinition = {
     vec3 gsd_faceNor;
     float gsd_faceOff;
 
-    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).
+    // cp_dmin / cp_scale / cp_trap are engine-provided (estimator:cutting-plane capability).
 
     void GreatStellatedDodecahedron_precalc() {
         // Precompute stellated face normal from stellation parameter
@@ -99,8 +99,6 @@ export const GreatStellatedDodecahedron: FractalDefinition = {
         loopBody: `formula_GreatStellatedDodecahedron(z, dr, trap, c);`,
         loopInit: `GreatStellatedDodecahedron_precalc();
 gmt_precalcRodrigues(uVec3B);`,
-        usesSharedRotation: true,
-        supportsCuttingPlane: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 

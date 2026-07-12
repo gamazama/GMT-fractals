@@ -830,7 +830,7 @@ export class WorkerProxy implements AccumulationController {
         this.post({ type: 'CONFIG', config });
     }
 
-    registerFormula(id: string, shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; selfContainedSDE?: boolean }) {
+    registerFormula(id: string, shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; preambleVars?: string[]; capabilities?: ReadonlySet<string> }) {
         this.post({ type: 'REGISTER_FORMULA', id, shader });
     }
 

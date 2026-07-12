@@ -8,8 +8,10 @@
  *    `GMF_API_DOCS` comment) so the paste stays small. The minimal preset keeps
  *    only `coreMath` (iterations + the params the shader reads) + a known-good
  *    back-off camera; everything else is backfilled from DDFS defaults on load.
- *    Full `shaderMeta` (selfContainedSDE / capabilities / preambleVars / legacy
- *    flags) is preserved so self-contained & cutting-plane formulas round-trip.
+ *    Full `shaderMeta` (capabilities / preambleVars) is preserved so
+ *    self-contained & cutting-plane formulas round-trip. (The LLM may answer
+ *    with the legacy `shaderMeta.selfContainedSDE` boolean instead — parseGMF
+ *    promotes it to the `shape:self-contained` token on load.)
  *
  *  - {@link buildModifyPrompt} wraps that minimal GMF in a paste-ready LLM
  *    prompt (instruction + guide link + {goal} blank + strict output rules).
@@ -27,10 +29,10 @@
  *    null (→ friendly toast) so the loader never mis-routes prose into
  *    `JSON.parse`.
  *
- * @invariant `buildFormulaBrief` MUST NOT strip `shader.capabilities` / the
- *  legacy `selfContainedSDE`/`supportsCuttingPlane`/`usesSharedRotation` flags /
- *  `preambleVars`. There is NO auto-restore for self-contained formulas — losing
- *  the flag mis-derives `shape:per-iteration` and black-screens the render.
+ * @invariant `buildFormulaBrief` MUST NOT strip `shader.capabilities` /
+ *  `preambleVars`. There is NO body auto-detect for self-contained formulas —
+ *  losing the `shape:self-contained` token mis-derives `shape:per-iteration`
+ *  on reload and black-screens the render.
  *
  * @invariant `buildFormulaBrief` REFUSES `def.id === 'Modular'`: a Modular
  *  formula's GLSL lives in the node graph, not the shader blocks, so a minimised
@@ -109,8 +111,7 @@ export function buildFormulaBrief(def: FractalDefinition, opts: BuildFormulaBrie
 
     // ── Trimmed def clone: drop catalog/UI metadata, KEEP the full shader ──
     // (function, loopBody, loopInit, getDist, preamble, preambleVars,
-    //  capabilities + the legacy selfContainedSDE/supportsCuttingPlane/
-    //  usesSharedRotation flags — generateGMF stashes them into shaderMeta).
+    //  capabilities — generateGMF stashes the non-GLSL fields into shaderMeta).
     const minimalDef: FractalDefinition = {
         id: def.id,
         name: def.name,

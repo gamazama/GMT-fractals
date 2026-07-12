@@ -254,7 +254,8 @@ export class WorkerProxy implements AccumulationController {
             loopInit?: string;
             getDist?: string;
             preamble?: string;
-            selfContainedSDE?: boolean;
+            preambleVars?: string[];
+            capabilities?: ReadonlySet<string>;
         }
     ) {}
 

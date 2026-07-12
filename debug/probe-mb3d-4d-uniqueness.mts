@@ -78,7 +78,7 @@ for (const f of files) {
   try { scene = parseMB3DBinary(new Uint8Array(fs.readFileSync(path.join(dir, f))), name); ({ def } = emitFusedHybrid(scene)); } catch { continue; }
   if (!def) continue;
   const est = def.defaultPreset.features.quality?.estimator ?? 0;
-  const difs = !!(def.shader as any).supportsDifs;
+  const difs = !!def.shader.capabilities?.has('estimator:difs');
   const fn = (def.shader as any).function as string;
   // count NON-seed dr writes inside slot bodies (dr = <expr involving dr or r or math>)
   const drWrites = (fn.match(/\bdr\s*=\s*[^;]*(dr|pow|\*|r\b)[^;]*/g) ?? []).filter((m) => !/dr\s*=\s*w;|dr\s*=\s*mb3dDr1;/.test(m)).length;

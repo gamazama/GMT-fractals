@@ -16,7 +16,7 @@
  *  - c.w isolation    — 4D formulas (Tetrabrot, Quaternion, …) read their Julia /
  *    slice scalar from c.w; the slot gets its own `c` (`.w` = the namespace's
  *    ParamA) so it never sees the primary's;
- *  - rotation swap    — formulas with `usesSharedRotation` mutate the shared
+ *  - rotation swap    — formulas with `iter:shared-rotation` mutate the shared
  *    gmt_rot* state in loopInit; the loop GLSL snapshots both parties' states and
  *    swaps around the slot body.
  *

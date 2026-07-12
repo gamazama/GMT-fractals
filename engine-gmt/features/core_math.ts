@@ -31,7 +31,7 @@ export interface CoreMathState {
 }
 
 // Engine-provided cutting-plane accumulator globals + init lines.
-// Declared whenever a formula has shader.supportsCuttingPlane, regardless of estimator —
+// Declared whenever a formula declares `estimator:cutting-plane`, regardless of estimator —
 // the formula's writes need a target. When estimator != 5, the writes are dead code that
 // the GLSL optimizer strips.
 //
@@ -107,7 +107,7 @@ export const CoreMathFeature: FeatureDefinition = {
         }
 
         // 2. Analytic Opt-in: skip the pre-bailout distance check for formulas that
-        //    manage their own iteration loop (selfContainedSDE).
+        //    manage their own iteration loop (`shape:self-contained`).
         //    SELF_CONTAINED_SDE also gates off the outer-loop geometric-trap
         //    block in de.ts — these formulas run all fractal iterations
         //    inside the formula body and thread the trap through their own
@@ -115,7 +115,7 @@ export const CoreMathFeature: FeatureDefinition = {
         //    Accumulating in the outer loop too would either no-op or mix
         //    coordinate systems (MandelTerrain projects c-plane to XZ).
         const def = registry.get(formula);
-        if (def?.shader.selfContainedSDE) {
+        if (def?.shader.capabilities?.has('shape:self-contained')) {
             builder.addDefine('SKIP_PRE_BAILOUT', '1');
             builder.addDefine('SELF_CONTAINED_SDE', '1');
         }
@@ -138,9 +138,9 @@ export const CoreMathFeature: FeatureDefinition = {
         // Generate optimized getDist based on Quality Settings
         // Default to 0 (Analytic) if missing
         const estimatorType = quality?.estimator || 0;
-        // dIFS (estimator 6): the MB3D importer sets shader.supportsDifs on a fused
-        // dIFS scene; its preamble declares g_difsDE.
-        const supportsDifs = !!def?.shader.supportsDifs;
+        // dIFS (estimator 6): the MB3D importer declares `estimator:difs` on a
+        // fused dIFS scene; its preamble declares g_difsDE.
+        const supportsDifs = def ? pairHasCapability(def, undefined, 'estimator:difs') : false;
         let getDistBody = generateGetDist(estimatorType, { supportsCuttingPlane: pairSupportsCuttingPlane, supportsDifs });
 
         // 7: Numerical (finite-difference) DE — no analytic dr needed. Arms the

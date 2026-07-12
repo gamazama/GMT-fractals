@@ -39,7 +39,7 @@ export const RhombicDodecahedron: FractalDefinition = {
     // Centroid ≈ (2/3, 1/3, 0) direction = normalize(2,1,0)
     const vec3 rd_offset_dir = vec3(0.89442719, 0.44721360, 0.0);
 
-    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).`,
+    // cp_dmin / cp_scale / cp_trap are engine-provided (estimator:cutting-plane capability).`,
         function: `
     void formula_RhombicDodecahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
@@ -77,8 +77,6 @@ export const RhombicDodecahedron: FractalDefinition = {
     }`,
         loopBody: `formula_RhombicDodecahedron(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3B);`,
-        usesSharedRotation: true,
-        supportsCuttingPlane: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 

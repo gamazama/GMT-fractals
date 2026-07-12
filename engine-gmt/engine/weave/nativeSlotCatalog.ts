@@ -54,7 +54,7 @@ export interface NativeSlotGroup {
  */
 export function nativeSlotReject(def: FractalDefinition): string | undefined {
     const caps = def.shader.capabilities;
-    if (caps?.has('shape:self-contained') || (def.shader as any).selfContainedSDE)
+    if (caps?.has('shape:self-contained'))
         return 'Self-contained formula — owns its full iteration loop, so it can’t run as a weave slot.';
     if (caps?.has('shape:modular') || def.id === 'Modular')
         return 'Modular graph formula — not weavable as a slot yet.';

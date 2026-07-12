@@ -205,7 +205,7 @@ export const GeometryFeature: FeatureDefinition = {
         // effect without forcing another recompile. The ALU is one mix per
         // iter — acceptable cost paid only when the feature is compiled.
         const formula = config.formula as any;
-        const isSelfContainedSDE = registry.get(formula)?.shader.selfContainedSDE ?? false;
+        const isSelfContainedSDE = registry.get(formula)?.shader.capabilities?.has('shape:self-contained') ?? false;
         const burningOn = state?.burningEnabled ?? false;
         if (!isSelfContainedSDE && burningOn) {
             builder.addPerIterInject(`z.xyz = mix(z.xyz, abs(z.xyz), uBurningRuntime * uBurningMix);`);

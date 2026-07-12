@@ -110,36 +110,21 @@ export interface FractalDefinition {
         getDist?: string;
         preamble?: string;           // Global code before functions (for pre-calculation)
         preambleVars?: string[];     // Names of mutable globals declared in preamble (for interlace renaming)
-        /** @deprecated Since P8 of the capability protocol. Use the
-         *  `iter:shared-rotation` token in `capabilities` instead. Retained
-         *  only as an input to GMF backward-compat parsing and as runtime
-         *  metadata read by some engine paths during the transition. */
-        usesSharedRotation?: boolean;
-        /** @deprecated Since P8 of the capability protocol. Use the
-         *  `shape:self-contained` token in `capabilities` instead. Engine
-         *  guards (SKIP_PRE_BAILOUT, no hybrid fold injection, no interlacing)
-         *  continue to read this flag during the transition; will migrate
-         *  to capability checks in a follow-up. */
-        selfContainedSDE?: boolean;
-        /** @deprecated Since P8 of the capability protocol. Use the
-         *  `estimator:cutting-plane` token in `capabilities` instead. cp_*
-         *  global emission is still gated on this flag at the engine boundary
-         *  during the transition. */
-        supportsCuttingPlane?: boolean;
-        /** Set by the Mandelbulb3D importer on a fused dIFS scene (DEoption 20).
-         *  The fused formula declares a `float g_difsDE;` global in `preamble`,
-         *  initializes it in `loopInit`, and writes the running minimum of
-         *  `mb3dRout / mb3dVary` (MB3D's orbit-trap IFS distance) in `loopBody`.
-         *  estimator 6 reads it. Gates the dIFS getDist path so a manually
-         *  selected estimator 6 on a non-dIFS formula falls back to Linear (no
-         *  reference to an undeclared g_difsDE). @see emitFusedHybrid.ts */
-        supportsDifs?: boolean;
-        /** Capability tokens declared by this formula. Read by evaluateCompat()
-         *  for feature gating. REQUIRED since P8 — FractalRegistry.register()
-         *  throws if missing. The deriveLegacy shim is gone; native formulas
+        /** Capability tokens declared by this formula — the ONLY runtime
+         *  representation of formula capabilities. Read by evaluateCompat()
+         *  for feature gating and by the engine compile gates (self-contained
+         *  guards, cp_* emission, estimator availability). REQUIRED —
+         *  FractalRegistry.register() throws if missing. Native formulas
          *  declare via `new Set([...] satisfies Capability[])`, V3/V4 Workshop
          *  imports derive via fragmentarium_import/import-capabilities.ts at
          *  emit time, and GMF round-trip preserves the set via shaderMeta.
+         *
+         *  The pre-P8 legacy booleans (`selfContainedSDE`, `usesSharedRotation`,
+         *  `supportsCuttingPlane`, `supportsDifs`) were retired from this type;
+         *  parseGMF still reads them from old files' shaderMeta and PROMOTES
+         *  them to tokens at the parse boundary (plus cp_* and g_difsDE body
+         *  auto-detects). Do not reintroduce boolean capability flags — add a
+         *  Capability token instead (requires ADR-0059 amendment).
          *  @see dev/docs/gmt/35_Capability_Protocol.md */
         capabilities: CapabilitySet;
     };

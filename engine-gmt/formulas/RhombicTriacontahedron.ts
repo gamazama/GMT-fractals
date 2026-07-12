@@ -30,7 +30,7 @@ export const RhombicTriacontahedron: FractalDefinition = {
     // Offset direction: pbc = icosidodecahedron vertex = RT face center
     const vec3 rt_pbc = vec3(0.52573111, 0.0, 0.85065081);
 
-    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).`,
+    // cp_dmin / cp_scale / cp_trap are engine-provided (estimator:cutting-plane capability).`,
         function: `
     void formula_RhombicTriacontahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
@@ -73,8 +73,6 @@ export const RhombicTriacontahedron: FractalDefinition = {
     }`,
         loopBody: `formula_RhombicTriacontahedron(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3B);`,
-        usesSharedRotation: true,
-        supportsCuttingPlane: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 

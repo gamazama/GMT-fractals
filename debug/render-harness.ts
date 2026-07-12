@@ -83,7 +83,6 @@ function buildFragDefinition(fragSource: string, id: string, name: string, pipel
         name,
         shader: {
             ...shaderGlsl,
-            selfContainedSDE: isFullDe || undefined,
             capabilities: deriveImportCapabilities(shaderGlsl as any, isFullDe ? 'self-contained' : 'per-iteration'),
         } as any,
         parameters: uiParams,
