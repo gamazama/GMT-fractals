@@ -12,7 +12,10 @@ interface HelpBrowserProps {
     onNavigate: (id: string) => void;
 }
 
-const CATEGORY_ORDER = ['Getting Started', 'General', 'Formulas', 'Parameters', 'UI', 'Timeline', 'Graph', 'Animation', 'Lighting', 'Rendering', 'Coloring', 'Audio', 'Effects', 'Export'];
+// "What's New" sits second so it's prominent in the sidebar without displacing
+// "Getting Started" as CATEGORY_ORDER[0] — the default landing category when
+// Help opens with no active topic (see activeCategory fallback below).
+const CATEGORY_ORDER = ['Getting Started', "What's New", 'General', 'Formulas', 'Parameters', 'UI', 'Timeline', 'Graph', 'Animation', 'Lighting', 'Rendering', 'Coloring', 'Audio', 'Effects', 'Export'];
 
 const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNavigate }) => {
     // HelpBrowser is React.lazy-loaded, so by the time this component runs the
@@ -304,16 +307,20 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
 
     // Helper to parse inline formatting (Bold, Math, Link)
     const parseInline = (text: string) => {
-        // Split by bold (**...**), inline math ($...$), or links ([...](...))
+        // Split by bold (**...**), inline code (`...`), inline math ($...$), or links ([...](...))
         // Regex notes:
         // \*\*.*?\*\* matches bold
+        // `[^`]+` matches inline code
         // \$.*?\$ matches math
         // \[[^\]]+\]\([^)]+\) matches [text](url) - checks for non-] inside brackets and non-) inside parens
-        const parts = text.split(/(\*\*.*?\*\*|\$.*?\$|\[[^\]]+\]\([^)]+\))/g);
-        
+        const parts = text.split(/(\*\*.*?\*\*|`[^`]+`|\$.*?\$|\[[^\]]+\]\([^)]+\))/g);
+
         return parts.map((part, j) => {
             if (part.startsWith('**') && part.endsWith('**')) {
                 return <strong key={j} className="text-fg font-bold">{part.slice(2, -2)}</strong>;
+            }
+            if (part.length > 1 && part.startsWith('`') && part.endsWith('`')) {
+                return <code key={j} className="text-[11px] font-mono bg-line/10 text-accent-200 rounded px-1 py-0.5">{part.slice(1, -1)}</code>;
             }
             if (part.startsWith('$') && part.endsWith('$')) {
                 // Math styling: Serif, Italic, Cyan tint
@@ -345,7 +352,13 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
         return content.split('\n').map((line, i) => {
             if (line.startsWith('### ')) return <h3 key={i} className="text-sm font-bold text-fg mt-4 mb-2">{line.replace('### ', '')}</h3>;
             if (line.startsWith('## ')) return <h2 key={i} className="text-base font-bold text-accent-400 mt-5 mb-2 border-b border-line/10 pb-1">{line.replace('## ', '')}</h2>;
-            
+
+            // Horizontal rule: a line of --- / *** / ___ (section divider).
+            if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) return <hr key={i} className="border-0 border-t border-line/15 my-5" />;
+
+            // Blockquote: "> text" renders as a muted aside (used for entry dates).
+            if (line.startsWith('> ')) return <p key={i} className="text-[11px] text-fg-faint italic mb-2">{parseInline(line.slice(2))}</p>;
+
             // Block Math: $$ ... $$
             if (line.startsWith('$$')) {
                 const mathText = line.replace(/^\$\$\s*/, '').replace(/\s*\$\$$/, '');

@@ -1,5 +1,6 @@
 
 import { HelpSection } from '../../types/help';
+import { CHANGELOG_TOPICS } from './topics/changelog';
 import { GETTING_STARTED_TOPICS } from './topics/getting_started';
 import { GENERAL_TOPICS } from './topics/general';
 import { FORMULA_TOPICS } from './topics/formulas';
@@ -25,6 +26,7 @@ import { AUDIO_TOPICS } from './topics/audio';
  * chunk so main-bundle boot stays lean.
  */
 export const HELP_TOPICS: Record<string, HelpSection> = {
+    ...CHANGELOG_TOPICS,
     ...GETTING_STARTED_TOPICS,
     ...GENERAL_TOPICS,
     ...FORMULA_TOPICS,

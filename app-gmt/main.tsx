@@ -75,7 +75,7 @@ import { installGallery } from '../engine-gmt/gallery';
 import { useGalleryStore } from '../engine-gmt/gallery/galleryStore';
 import { installAuth } from '../engine-gmt/auth';
 import { feedbackMenuItem } from '../engine-gmt/feedback';
-import { AboutGmtBody } from './HelpExtras';
+import { AboutGmtBody, whatsNewMenuItem, isWhatsNewUnseen } from './HelpExtras';
 import { gmtSupportConfig } from '../engine-gmt/support';
 import { installTutorial, registerLessons } from '../engine/plugins/Tutorial';
 import { GMT_LESSONS } from './tutorial/lessons';
@@ -370,13 +370,16 @@ registerLessons(GMT_LESSONS);
 
 installHelp({
     tutorials: { label: 'Tutorials' },
-    extraItems: [feedbackMenuItem()],
+    extraItems: [feedbackMenuItem(), whatsNewMenuItem()],
     support: gmtSupportConfig(),
     about: {
         label: 'About GMT',
         body: AboutGmtBody,
     },
 });
+// Light the ? menu with a notification dot (and highlight the What's New item)
+// until the user opens the changelog for this release. See HelpExtras.
+menu.setBadge('help', isWhatsNewUnseen);
 installHud();
 
 // GMT camera animation binders — registers split-precision sceneOffset
