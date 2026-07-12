@@ -1,6 +1,5 @@
 
 import type { FoldDefinition } from '../types';
-import * as THREE from 'three';
 
 /** Menger/cubic fold — abs + axis sort + scale-coupled offset (full Menger IFS step).
  *  selfContained: the fold handles scaling, offset, and DR internally,
@@ -8,6 +7,7 @@ import * as THREE from 'three';
 export const mengerFold: FoldDefinition = {
     id: 'menger',
     label: 'Menger (Cubic)',
+    foldType: 8,
     glsl: `
 void foldOperation(inout vec3 z, inout float dr, vec3 foldLimit) {
     // 1. 48-fold octahedral symmetry: abs + branchless descending sort
@@ -32,18 +32,6 @@ void foldOperation(inout vec3 z, inout float dr, vec3 foldLimit) {
 }
 `,
     selfContained: true,
-    extraParams: {
-        hybridMengerOffset: {
-            type: 'vec3', default: new THREE.Vector3(1, 1, 1), label: 'Offset',
-            shortId: 'hmo', uniform: 'uHybridMengerOffset', min: 0.0, max: 2.0, step: 0.01,
-            group: 'hybrid', linkable: true
-        },
-        hybridMengerCenterZ: {
-            type: 'boolean', default: true, label: 'Center Z',
-            shortId: 'hmz', uniform: 'uHybridMengerCenterZ',
-            group: 'hybrid'
-        }
-    },
     defaults: {
         hybridScale: 3.0,
         hybridFoldLimitVec: { x: 1, y: 1, z: 1 },

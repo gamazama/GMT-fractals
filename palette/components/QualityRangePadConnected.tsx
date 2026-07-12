@@ -17,16 +17,16 @@ import type { FeatureComponentProps } from '../../components/registry/ComponentR
 import { useTrackAnimation } from '../../hooks/useTrackAnimation';
 import { KeyframeButton } from '../../components/KeyframeButton';
 import { Hint } from '../../components/Hint';
-import type { KeyStatus } from '../../components/Icons';
 import {
   QualityRangePad,
+  combineKeyStatus,
   type Range01,
   drawLightnessTrack,
   drawChromaTrack,
   drawWarmthTrack,
   drawComplexityTrack,
   drawRainbowTrack,
-} from './QualityRangePad';
+} from '../../components/QualityRangePad';
 
 const TRACKS: Record<string, (ctx: CanvasRenderingContext2D, w: number, h: number) => void> = {
   lightness: drawLightnessTrack,
@@ -37,16 +37,6 @@ const TRACKS: Record<string, (ctx: CanvasRenderingContext2D, w: number, h: numbe
 };
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-// Combine the two axis-track statuses into one diamond, matching GMT's
-// Vector2Input convention (a single diamond keys both bounds together).
-const combineStatus = (a: KeyStatus, b: KeyStatus): KeyStatus => {
-  if (a === 'keyed' && b === 'keyed') return 'keyed';
-  if (a === 'keyed' || b === 'keyed' || a === 'keyed-dirty' || b === 'keyed-dirty') return 'keyed-dirty';
-  if (a === 'dirty' || b === 'dirty') return 'dirty';
-  if (a === 'partial' || b === 'partial') return 'partial';
-  return 'none';
-};
 
 interface AxisProps {
   axis: string;
@@ -80,10 +70,9 @@ export const QualityRangePadConnected: React.FC<FeatureComponentProps & AxisProp
   // (deriveTrackBinding convention). One diamond keys both bounds together.
   const kLo = useTrackAnimation(`${featureId}.${axis}_x`, value[0], `${loLabel ?? axis} min`);
   const kHi = useTrackAnimation(`${featureId}.${axis}_y`, value[1], `${hiLabel ?? axis} max`);
-  const onToggleKey = useCallback(() => {
-    kLo.toggleKey();
-    kHi.toggleKey();
-  }, [kLo, kHi]);
+  const onSetKey = useCallback(() => { kLo.setKey(); kHi.setKey(); }, [kLo, kHi]);
+  const onDeleteKey = useCallback(() => { kLo.deleteKey(); kHi.deleteKey(); }, [kLo, kHi]);
+  const onDeleteTrack = useCallback(() => { kLo.deleteTrack(); kHi.deleteTrack(); }, [kLo, kHi]);
 
   return (
     <>
@@ -92,7 +81,7 @@ export const QualityRangePadConnected: React.FC<FeatureComponentProps & AxisProp
         onChange={onChange}
         loLabel={loLabel}
         hiLabel={hiLabel}
-        headerRight={<KeyframeButton status={combineStatus(kLo.status, kHi.status)} onClick={onToggleKey} />}
+        headerRight={<KeyframeButton status={combineKeyStatus(kLo.status, kHi.status)} label={`${cap(axis)}`} onClick={onSetKey} onDeleteKey={onDeleteKey} onDeleteTrack={onDeleteTrack} />}
         drawTrack={track ? TRACKS[track] : undefined}
       />
       {hint && <Hint text={hint} />}

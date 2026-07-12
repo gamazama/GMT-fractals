@@ -75,8 +75,6 @@ export const TruncatedIcosahedron: FractalDefinition = {
         t = dot(pf, trIco_n2); if (t > 0.0) pf -= 2.0 * t * trIco_n2;
         z.xyz = pf;
     }`,
-        usesSharedRotation: true,
-        supportsCuttingPlane: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 

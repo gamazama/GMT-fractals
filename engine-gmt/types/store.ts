@@ -213,6 +213,9 @@ export interface EngineStoreState extends FeatureStateMap {
   /** When opening the Workshop to load a frag/DEC catalog formula, the
    *  '<source>:<id>' key (e.g. 'frag:3DickUlus/BuffaloBulb.frag'). */
   workshopCatalogKey: string | undefined;
+  /** Raw GLSL to load into the Workshop editor on open (a picked .frag/.glsl
+   *  file), with an optional base name for name detection. */
+  workshopInitialSource: { glsl: string; name?: string } | undefined;
 
   // New Scene wizard
   newSceneOpen: boolean;
@@ -387,6 +390,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     closeContextMenu: () => void;
 
     openWorkshop: (editFormula?: string, catalogKey?: string) => void;
+    openWorkshopWithSource: (glsl: string, name?: string) => void;
     closeWorkshop: () => void;
     openNewScene: () => void;
     closeNewScene: () => void;

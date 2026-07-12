@@ -1,6 +1,14 @@
 # ADR-0088: MB3D-faithful marcher (compile-gated step dynamics)
 
-**Status:** Accepted — 2026-06-29. Branch `feat/mb3d-importer`. Implementation landed alongside this ADR; the importer enables it for every real `.m3p` import.
+**Status:** Accepted — 2026-06-29, superseded in part by ADR-0092 — 2026-07-05. Branch `feat/mb3d-importer`. Implementation landed alongside this ADR; the importer enables it for every real `.m3p` import.
+
+> **Update 2026-07-05 (ADR-0092; dynamics unchanged, gating superseded):** the faithful step is no
+> longer compile-gated — ADR-0092 retired GMT's legacy plain sphere step and made these dynamics
+> THE marcher (all trace variants + the shadow / PT-visibility marches), with `uFudgeFactor` as
+> the unified step divisor (`mb3dStepDiv`/`uMb3dStepDiv` retired; saved scenes migrate at load,
+> app-gmt migration v4). The "off-path byte-identical" guarantee and per-scene `quality.mb3dFaithful`
+> gate described below no longer exist. The dynamics port, the stepWidth-normalization analysis,
+> and the Performance data all still stand and motivated the promotion.
 
 > **Update 2026-07-02 (perf measured; decision unchanged, primary-marcher question answered).** GPU-benchmarked
 > compile + per-draw cost (timer-query, RTX 2070 / ANGLE D3D11) — see the **Performance** section below and

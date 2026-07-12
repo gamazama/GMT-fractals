@@ -1,51 +1,70 @@
 /**
- * ShareLinkButton — topbar right-slot button that copies the current
- * scene as a shareable URL (#s=... hash). Shows inline feedback:
- *   "Copied!"  — success
- *   "Too Long" — URL > 4096 chars; animations stripped, still copied
- *   "N/A"      — imported/Workshop formula, URL sharing unsupported
+ * ShareLinkButton — topbar right-slot button that shares the current scene as a
+ * short link (`?s=<id>`), backed by the gallery backend (share-scene edge
+ * function + shared_scenes table).
+ *
+ * Why backend, not the old `#s=` preset-diff hash: a GMF blob embeds the full
+ * fused shader (FormulaFormat.saveGMFScene), so this shares ANY scene — weaves,
+ * MB3D imports, Workshop formulas — the exact cases the `#s=` diff couldn't
+ * reconstruct. It's also a fixed-length link regardless of scene size. Free +
+ * no sign-in; a signed-in user's shares also land in "My Fractals".
+ *
+ * The upload is a network round-trip, so the button shows an in-flight state and
+ * the clipboard write happens after an await — which can lose transient
+ * activation in some browsers, so we fall back to surfacing the link in a toast
+ * for manual copy when the auto-copy is blocked.
  */
 
 import React, { useState } from 'react';
 import { useEngineStore } from '../../store/engineStore';
-import { registry } from '../engine/FractalRegistry';
+import { saveGMFScene } from '../utils/FormulaFormat';
+import { createSharedScene, ShareSceneError } from '../gallery/sharedScene';
 import { showToast } from '../../engine/store/toastStore';
 
-export type ShareLinkStatus = 'idle' | 'copied' | 'long' | 'na';
+export type ShareLinkStatus = 'idle' | 'sharing' | 'copied' | 'error';
 type Status = ShareLinkStatus;
 
 /**
- * Copy the current scene's share URL to the clipboard. Returns the
- * resulting status so callers can render feedback (or ignore it).
+ * Share the current scene and copy its link to the clipboard, firing toast
+ * feedback (so callers that aren't the button — e.g. the topbar menu item — get
+ * feedback too). Returns the resulting status for the button's badge.
  *
- *   'copied' — full URL ≤ 4096 chars copied
- *   'long'   — animations stripped to fit; truncated URL still copied
- *   'na'     — formula isn't in the built-in registry (Workshop / import)
- *              or clipboard write failed
+ *   'copied' — link created; copied to clipboard (or shown in a toast to copy)
+ *   'error'  — serialize / upload / network failure (message toasted)
  */
 export const copyShareLink = async (): Promise<Status> => {
-    const formula = (useEngineStore.getState() as any).formula;
-    const getShareString = (useEngineStore.getState() as any).getShareString;
-    const def = registry.get(formula);
-    // Imported/Workshop formulas live only in this session's registry —
-    // a recipient opening the link wouldn't have the formula, so the
-    // share URL would be broken. Refuse to copy (matches the disabled
-    // title + the Workshop Edit-button gate in FormulaSelect).
-    if (!def || def.importSource) return 'na';
+    const state = useEngineStore.getState() as any;
+    const preset = state.getPreset({ includeScene: true });
+
+    let gmf: string;
+    try {
+        gmf = saveGMFScene(preset);
+    } catch {
+        showToast("Couldn't prepare this scene for sharing.", 'error');
+        return 'error';
+    }
+    // saveGMFScene falls back to raw JSON (no <Scene> tag, no embedded shader)
+    // when the formula isn't in the registry — a recipient couldn't rebuild it,
+    // so refuse rather than mint a broken link.
+    if (!gmf.includes('<Scene>')) {
+        showToast("This scene can't be shared by link — try saving it as a .gmf file instead.", 'warning', 5000);
+        return 'error';
+    }
 
     try {
-        let shareStr = getShareString({ includeAnimations: true });
-        const url = `${window.location.origin}${window.location.pathname}#s=${shareStr}`;
-        if (url.length > 4096) {
-            shareStr = getShareString({ includeAnimations: false });
-            const shortUrl = `${window.location.origin}${window.location.pathname}#s=${shareStr}`;
-            await navigator.clipboard.writeText(shortUrl);
-            return 'long';
-        }
-        await navigator.clipboard.writeText(url);
+        const { id } = await createSharedScene(gmf, { title: preset.name, formula: preset.formula });
+        const url = `${window.location.origin}${window.location.pathname}?s=${id}`;
+        let copied = false;
+        try { await navigator.clipboard.writeText(url); copied = true; } catch { /* activation lost / blocked */ }
+        if (copied) showToast('Share link copied to clipboard.', 'success', 3500);
+        else showToast(`Share link: ${url}`, 'info', 8000);
         return 'copied';
-    } catch {
-        return 'na';
+    } catch (e) {
+        const msg = e instanceof ShareSceneError
+            ? (e.status === 429 ? 'Too many shares — try again in a bit.' : e.message)
+            : 'Couldn’t reach the share service — check your connection and try again.';
+        showToast(msg, 'error', 5000);
+        return 'error';
     }
 };
 
@@ -60,11 +79,6 @@ const LinkIcon: React.FC<{ active?: boolean }> = ({ active }) => (
 
 export const ShareLinkButton: React.FC = () => {
     const [status, setStatus] = useState<Status>('idle');
-    // Subscribe so the disabled-title updates when the formula changes
-    // (Workshop/imported formulas show "Share unavailable").
-    const formula = useEngineStore((s: any) => s.formula);
-    const def = registry.get(formula as any);
-    const shareable = !!def && !def.importSource;
 
     const flash = (s: Status) => {
         setStatus(s);
@@ -72,46 +86,32 @@ export const ShareLinkButton: React.FC = () => {
     };
 
     const handleClick = async () => {
-        // Imported/Workshop formulas can't be shared by URL — explain why
-        // rather than silently flashing "N/A", which leaves the user
-        // guessing. (The small badge still flashes for at-a-glance state.)
-        if (!shareable) {
-            flash('na');
-            showToast(
-                "Can't share this formula by link — imported & Workshop formulas only exist in your browser, so the link wouldn't open for anyone else. Save the scene as a .gmf file, or post it to the gallery, to share it.",
-                'warning',
-                5500,
-            );
-            return;
-        }
-        const result = await copyShareLink();
+        if (status === 'sharing') return;      // in-flight; ignore double-clicks
+        setStatus('sharing');
+        const result = await copyShareLink();  // fires its own toast feedback
         flash(result);
-        if (result === 'long') {
-            showToast("Link copied without animation — the full version was too long for a URL.", 'warning', 4000);
-        } else if (result === 'na') {
-            showToast("Couldn't copy the share link to your clipboard.", 'error');
-        }
     };
 
     const label: Record<Status, string> = {
-        idle:   '',
-        copied: 'Copied!',
-        long:   'Long URL',
-        na:     'N/A',
+        idle:    '',
+        sharing: 'Sharing…',
+        copied:  'Copied!',
+        error:   'Failed',
     };
     const color: Record<Status, string> = {
-        idle:   '',
-        copied: 'bg-ok-strong',
-        long:   'bg-warn-strong',
-        na:     'bg-fg-ghost',
+        idle:    '',
+        sharing: 'bg-line/40',
+        copied:  'bg-ok-strong',
+        error:   'bg-warn-strong',
     };
 
     return (
         <div className="relative flex items-center">
             <button
                 onClick={handleClick}
-                title={!shareable ? 'Share unavailable for imported formulas' : 'Copy share link'}
-                className="flex items-center justify-center w-7 h-7 rounded text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
+                disabled={status === 'sharing'}
+                title="Copy a share link for this scene"
+                className="flex items-center justify-center w-7 h-7 rounded text-fg-muted hover:text-fg hover:bg-line/10 transition-colors disabled:opacity-60"
             >
                 <LinkIcon active={status === 'copied'} />
             </button>

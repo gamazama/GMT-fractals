@@ -120,6 +120,18 @@ export interface MB3DHeader {
    *  threshold is crossed (surface refinement). */
   stepsAfterDEStop: number;
 
+  // ── Reflections (the CalcSR.pas "Calculate Reflections" pass params). @see ADR-0096.
+  /** `SRamount` @332 (Single) — reflected-light amount, ~0..1 in practice (header clamps
+   *  to 100). Maps to GMT `reflections.mixStrength`. */
+  srAmount: number;
+  /** `bCalcSRautomatic` @336 (Byte) — bit0 = calc reflections automatically (artist made
+   *  them part of the render), bit1 = transmission, bit2 = only dIFS objects. */
+  srOptions: number;
+  /** `SRreflectioncount` @337 (Byte) — reflection recursion depth. Decoded but
+   *  UNMAPPED since 2026-07-10: GMT Direct reflections are single-bounce by design
+   *  (the 'Max Bounces' param was removed; PT owns bounce recursion). */
+  srReflectionCount: number;
+
   // ── Lighting / material / colour (`Light: TLightingParas9` @432, TypeDefinitions.pas:800).
   //    All decoded for the lighting importer (mapLighting.ts). @see plans/mb3d/research/lighting-import-spec.md
   /** The 6 light slots (`Lights` @500). Inactive slots have `on: false`. */
@@ -343,6 +355,9 @@ function parseHeader(dv: DataView): MB3DHeader {
     deStop: dv.getFloat32(177, true),
     zStepDiv: dv.getFloat32(182, true),
     stepsAfterDEStop: dv.getUint8(134),
+    srAmount: dv.getFloat32(332, true),
+    srOptions: dv.getUint8(336),
+    srReflectionCount: dv.getUint8(337),
     // Lighting block (TLightingParas9 @432). Offsets walked from the packed record
     // (TypeDefinitions.pas:258-280); colours verified against real .m3p bytes.
     lights: parseLights(dv),

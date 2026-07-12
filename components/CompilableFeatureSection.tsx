@@ -15,7 +15,6 @@ function humanizeReason(raw: string): string {
     if (raw.includes('shape:self-contained')) return 'This formula owns its full iteration loop.';
     if (raw.includes('shape:modular')) return 'Modular graph formulas use the node editor instead.';
     if (raw.startsWith('rejected by primary capability')) return 'Not compatible with the current primary formula.';
-    if (raw.startsWith('rejected by secondary capability')) return 'Not compatible with the current interlace secondary.';
     if (raw.startsWith('requires')) return raw.replace('requires', 'Needs');
     return raw;
 }
@@ -24,11 +23,11 @@ function humanizeReason(raw: string): string {
 // changes via the feature setter; the scheduler picks up the config delta
 // and emits the spinner state with the correct strategy-aware label.
 import { FeatureSection } from './FeatureSection';
+import { CompileSection } from './CompileSection';
 import { CollapsibleSection } from './CollapsibleSection';
 import { StatusDot } from './StatusDot';
-import { SectionLabel, SectionDivider } from './SectionLabel';
-import { AlertIcon } from './Icons';
-import { warn, compileBar as compileBarClass } from '../data/theme';
+import { SectionDivider } from './SectionLabel';
+import { CompileBar } from './CompileBar';
 
 interface CompilableFeatureSectionProps extends Partial<CompilablePanelConfig> {
     /** Feature ID in the DDFS registry. Reads panelConfig if available. */
@@ -40,7 +39,7 @@ interface CompilableFeatureSectionProps extends Partial<CompilablePanelConfig> {
  *
  * Two sub-modes, picked by the presence of `runtimeToggleParam`:
  *
- *  A. **With runtime toggle** (Hybrid Box, Interlace, Volumetric, Local
+ *  A. **With runtime toggle** (Hybrid Box, Volumetric, Local
  *     Rotation, area shadows): the header toggle controls the runtime
  *     param instantly (no rebuild). A separate compile gate (`compileParam`)
  *     controls whether the feature is compiled into the shader. When the
@@ -264,16 +263,13 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     // mutated) so switching back to a compatible formula re-enables exactly
     // as it was. See dev/docs/gmt/35_Capability_Protocol.md.
     const primaryFormulaId = useEngineStore((s: any) => s.formula);
-    const interlaceCompiled = useEngineStore((s: any) => s.interlace?.interlaceCompiled);
-    const interlaceFormulaId = useEngineStore((s: any) => s.interlace?.interlaceFormula);
     const sectionRequires = src.requires;
     const compatReport = useMemo(() => {
         if (!primaryFormulaId) return undefined;
         const primary = formulaRegistry.get(primaryFormulaId);
         if (!primary) return undefined;
-        const secondary = interlaceCompiled && interlaceFormulaId
-            ? formulaRegistry.get(interlaceFormulaId)
-            : undefined;
+        // (The legacy interlace SECONDARY leg of the pair check retired with
+        // the feature — ADR-0089 P4.4; a woven scene is one fused def.)
         // Section-level requires (from CompilablePanelConfig) wins over the
         // feature's. Temporarily patch the registered feature def so the pure
         // reducer reads our section's rules instead. Cleanest is a single-
@@ -282,12 +278,12 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
         if (sectionRequires && feature) {
             const original = (feature as any).requires;
             (feature as any).requires = sectionRequires;
-            const report = evaluateCompat({ primary, secondary }).find(r => r.featureId === featureId);
+            const report = evaluateCompat({ primary }).find(r => r.featureId === featureId);
             (feature as any).requires = original;
             return report;
         }
-        return evaluateCompat({ primary, secondary }).find(r => r.featureId === featureId);
-    }, [primaryFormulaId, interlaceCompiled, interlaceFormulaId, featureId, sectionRequires, feature]);
+        return evaluateCompat({ primary }).find(r => r.featureId === featureId);
+    }, [primaryFormulaId, featureId, sectionRequires, feature]);
     const isProtocolDisabled = compatReport?.status === 'disabled';
     const primaryName = primaryFormulaId
         ? (formulaRegistry.get(primaryFormulaId)?.name ?? primaryFormulaId)
@@ -310,7 +306,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     // Protocol-disabled variant: grayed header + tooltip, body collapsed,
     // toggle is a no-op. Unload button stays FUNCTIONAL when the feature is
     // currently compiled — without this escape hatch, users who compiled a
-    // bad pairing (e.g. interlace + MandelTerrain) have no way to disable it.
+    // bad pairing have no way to disable it.
     // State is preserved (not mutated) so restoring a compatible formula
     // brings the feature back exactly as it was.
     if (isProtocolDisabled) {
@@ -340,24 +336,27 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     }
 
     return (
-        <div data-help-id={helpId}>
-            <FeatureSection
-                label={label}
-                featureId={featureId}
-                enabled={isOn}
-                onToggle={handleToggle}
-                forceBodyOpen={needsCompile}
-                statusContent={statusDots}
-                headerClassName={isCompiled ? '' : 'bg-transparent'}
-                onUnload={isCompiled ? handleUnload : undefined}
-                onReset={advancedMode ? handleReset : undefined}
-            >
-                <div className="bg-line/[0.02]">
+        <CompileSection
+            label={label}
+            featureId={featureId}
+            isOn={isOn}
+            isCompiled={isCompiled}
+            onToggle={handleToggle}
+            forceBodyOpen={needsCompile}
+            statusContent={statusDots}
+            onUnload={isCompiled ? handleUnload : undefined}
+            onReset={advancedMode ? handleReset : undefined}
+            helpId={helpId}
+        >
+                {/* Body sits flush at the root (no indent). Sub-sections
+                 *  (Compile Settings / Parameters) add their own indent + rail. */}
+                <div className="bg-surface-raised">
                     {/* CompileBar — the "compile question". Shown at the top of
                      *  the body whenever there's pending work: not compiled,
                      *  pending compile-settings change, or pending toggle. */}
                     {needsCompile && (
                         <CompileBar
+                            className="mt-1"
                             isCompiled={isCompiled}
                             pendingToggleOff={hasPendingToggle && pendingToggle === false}
                             onCompile={handleCompile}
@@ -368,12 +367,14 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                     {/* Compile Settings — feature-declared compile-flagged inputs. */}
                     {hasCompileSettings && (
                         <CollapsibleSection label="Compile Settings" defaultOpen={!isCompiled} variant="panel">
-                            <AutoFeaturePanel
-                                featureId={featureId}
-                                whitelistParams={compileSettingsParams}
-                                forcedState={mergedState}
-                                onChangeOverride={handleCompileParamChange}
-                            />
+                            <div className="pl-2 border-l border-line/10">
+                                <AutoFeaturePanel
+                                    featureId={featureId}
+                                    whitelistParams={compileSettingsParams}
+                                    forcedState={mergedState}
+                                    onChangeOverride={handleCompileParamChange}
+                                />
+                            </div>
                         </CollapsibleSection>
                     )}
 
@@ -386,13 +387,15 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                     {isCompiled && (
                         hasCompileSettings ? (
                             <CollapsibleSection label="Parameters" defaultOpen={true} variant="panel">
-                                <AutoFeaturePanel
-                                    featureId={featureId}
-                                    groupFilter={runtimeGroup}
-                                    excludeParams={fullExclude}
-                                    onChangeOverride={handleRuntimeOrCompileChange}
-                                    liftChildrenOf={runtimeToggleParam}
-                                />
+                                <div className="pl-2 border-l border-line/10">
+                                    <AutoFeaturePanel
+                                        featureId={featureId}
+                                        groupFilter={runtimeGroup}
+                                        excludeParams={fullExclude}
+                                        onChangeOverride={handleRuntimeOrCompileChange}
+                                        liftChildrenOf={runtimeToggleParam}
+                                    />
+                                </div>
                             </CollapsibleSection>
                         ) : (
                             <AutoFeaturePanel
@@ -405,60 +408,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                         )
                     )}
                 </div>
-            </FeatureSection>
-            <SectionDivider />
-        </div>
+        </CompileSection>
     );
 };
 
-/** Subtle engine icon — small bolt/zap */
-const EngineIcon = () => (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-);
-
-/** Amber compile/recompile bar with status + button + optional engine link.
- *  Message tracks whether the user has just toggled off a compiled feature
- *  (pendingToggleOff=true) so the prompt reads "Recompile to disable"
- *  instead of the ambiguous "Settings changed". */
-const CompileBar: React.FC<{
-    isCompiled: boolean;
-    pendingToggleOff?: boolean;
-    onCompile: () => void;
-    onOpenEngine?: () => void;
-}> = ({ isCompiled, pendingToggleOff, onCompile, onOpenEngine }) => {
-    const message = pendingToggleOff
-        ? 'Recompile to disable'
-        : !isCompiled
-            ? 'Not compiled'
-            : 'Settings changed';
-    const buttonLabel = !isCompiled ? 'Compile' : 'Recompile';
-    return (
-        <div className={`flex items-center justify-between px-2 py-1 mt-1 ${compileBarClass} rounded`}>
-            <div className={`flex items-center gap-1.5 ${warn.text}`}>
-                <AlertIcon />
-                <SectionLabel variant="secondary" color={warn.text}>
-                    {message}
-                </SectionLabel>
-            </div>
-            <div className="flex items-center gap-1">
-                {onOpenEngine && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onOpenEngine(); }}
-                        className="p-1 text-fg-dim hover:text-warn transition-colors"
-                        title="Open Engine Panel"
-                    >
-                        <EngineIcon />
-                    </button>
-                )}
-                <button
-                    onClick={onCompile}
-                    className={`px-3 py-0.5 ${warn.btnBg} ${warn.btnHover} ${warn.btnText} text-[9px] font-bold rounded transition-colors`}
-                >
-                    {buttonLabel}
-                </button>
-            </div>
-        </div>
-    );
-};

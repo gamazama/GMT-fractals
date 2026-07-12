@@ -55,6 +55,24 @@ interface WidgetProps {
     onSwitchTab: (t: PanelId) => void;
 }
 
+/** Walk up from `node` to `root`, checking whether any following sibling at any
+ *  level renders visible content (non-zero height). Used to decide whether a
+ *  section-opening lip has a section below it, or is the panel's final edge —
+ *  a non-capping section that still shows content (Chromatic Aberration at 0,
+ *  Droste toggled off) counts, so the prior section's lip stays visible. */
+const hasRenderedContentAfter = (node: Element, root: Element): boolean => {
+    let cur: Element | null = node;
+    while (cur && cur !== root) {
+        let sib = cur.nextElementSibling;
+        while (sib) {
+            if ((sib as HTMLElement).getBoundingClientRect().height > 0) return true;
+            sib = sib.nextElementSibling;
+        }
+        cur = cur.parentElement;
+    }
+    return false;
+};
+
 const renderWidget = (
     id: string,
     keySuffix: string,
@@ -113,7 +131,8 @@ const renderItem = (
             // Shared SectionDivider keeps the bespoke 1.5px bar + drop-
             // gradient consistent with the dividers each section component
             // (Runtime / Compilable / CompileDropdown) emits at its bottom.
-            return <div key={`sep-${index}`}><SectionDivider /></div>;
+            // variant 'fade' = the soft in-feature divider (no cap/lip).
+            return <div key={`sep-${index}`}><SectionDivider fade={item.variant === 'fade'} /></div>;
 
         case 'section':
             node = (
@@ -134,6 +153,8 @@ const renderItem = (
                     featureId={item.id}
                     groupFilter={item.groupFilter}
                     whitelistParams={item.whitelistParams}
+                    labelOverrides={item.labelOverrides}
+                    liftChildrenOf={item.liftChildrenOf}
                     excludeParams={item.excludeParams}
                     className={item.className}
                 />
@@ -146,6 +167,10 @@ const renderItem = (
                     key={`collapsible-${index}-${item.label}`}
                     label={item.label}
                     defaultOpen={item.defaultOpen}
+                    // Manifest roll-ups get the full card chrome (raised header +
+                    // body + SectionDivider cap) so they read like the bespoke
+                    // Compilable/Runtime sections, not floating text on the dock.
+                    variant="section"
                 >
                     {item.items.map((child, childIdx) =>
                         renderItem(child, index * 1000 + childIdx, state, widgetProps),
@@ -294,6 +319,24 @@ const PanelRouterInner: React.FC<PanelRouterProps> = ({
     // a subscription. The Dock-level subscription already covers most cases.)
     useEngineStore((s) => s);
 
+    // The opening lip baked into each SectionDivider must not appear when no
+    // section renders below it to open. A CSS `:last-child` rule can't capture
+    // this — it depends on runtime visibility and arbitrary nesting (group
+    // stacks, collapsibles, accordions), and "last lip" isn't even the right
+    // target: a non-capping section (Chromatic Aberration at 0, Droste off)
+    // still renders content below an earlier lip, which must stay visible. Only
+    // the final lip can be trailing, so reset all lips then hide the last one
+    // iff nothing renders after it. Resolved from the DOM after each commit.
+    const contentRef = React.useRef<HTMLDivElement>(null);
+    React.useLayoutEffect(() => {
+        const el = contentRef.current;
+        if (!el) return;
+        const lips = el.querySelectorAll<HTMLElement>('.section-lip');
+        lips.forEach((lip) => { lip.style.display = ''; });
+        const last = lips[lips.length - 1];
+        if (last && !hasRenderedContentAfter(last, el)) last.style.display = 'none';
+    });
+
     if (!def) {
         return (
             <div className="flex h-full items-center justify-center text-fg-faint text-xs italic">
@@ -334,8 +377,11 @@ const PanelRouterInner: React.FC<PanelRouterProps> = ({
     }
 
     const widgetProps: WidgetProps = { state, actions, onSwitchTab };
+    // Each section's SectionDivider carries the opening lip of the *next*
+    // section (so lips only appear where a real cap closed a section). The
+    // final lip in the column is hidden by the layout effect above.
     return (
-        <div className="flex flex-col" data-help-id={def.helpId}>
+        <div ref={contentRef} className="flex flex-col" data-help-id={def.helpId}>
             {items.map((item, idx) => renderItem(item, idx, state, widgetProps))}
         </div>
     );

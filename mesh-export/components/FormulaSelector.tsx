@@ -2,9 +2,9 @@ import React, { useRef } from 'react';
 import { useMeshExportStore, DEFAULT_QUALITY } from '../store/meshExportStore';
 import { registry } from '../../engine-gmt/engine/FractalRegistry';
 import { loadGMFScene } from '../../engine-gmt/utils/FormulaFormat';
+import { migrateLegacyWeavePreset } from '../../engine-gmt/utils/weaveMigration';
 import { GenericDropdown } from '../../components/GenericDropdown';
 import type { FractalDefinition } from '../../engine-gmt/types/fractal';
-import type { FormulaType } from '../../types';
 
 /** Build default parameter values from a FractalDefinition, including Julia from defaultPreset */
 export function buildDefaultParams(def: FractalDefinition): Record<string, any> {
@@ -38,25 +38,45 @@ export function buildDefaultParams(def: FractalDefinition): Record<string, any> 
  */
 export function loadGMFIntoStore(text: string, filename?: string): void {
   const store = useMeshExportStore.getState();
-  const { def, preset } = loadGMFScene(text);
-  if (!def) throw new Error('No formula definition found in GMF');
+  const { def: rawDef, preset: rawPreset } = loadGMFScene(text);
+  if (!rawDef) throw new Error('No formula definition found in GMF');
+  // Register the embedded def (mirrors the app's parseScene) so the legacy
+  // migration below can resolve it as a weave slot.
+  if (!registry.get(rawDef.id)) registry.register(rawDef);
+
+  // P4.4: legacy interlace scenes convert into a fused 2-slot weave def at
+  // load — same one-way migration as the main app (engine-gmt/utils/
+  // weaveMigration). Non-legacy scenes pass through untouched.
+  const preset: any = rawPreset ? migrateLegacyWeavePreset(rawPreset) : rawPreset;
+  const def = (preset?.formula && registry.get(preset.formula)) || rawDef;
 
   store.setSelectedFormula(def.id);
   store.setLoadedDefinition(def);
   store.setLoadedFilename(filename ?? null);
   store.setLoadError(null);
 
+  // Param values by the param's owning feature: coreMath (standalone formulas)
+  // or weave (fused weave defs' ws<k>* bank params — feature:'weave').
   const params: Record<string, any> = {};
   const coreMath = preset?.features?.coreMath;
+  const weaveFeat = preset?.features?.weave;
   for (const p of def.parameters) {
     if (!p) continue;
-    if (coreMath && coreMath[p.id] !== undefined) {
-      params[p.id] = coreMath[p.id];
-    } else {
-      params[p.id] = p.default;
-    }
+    const src = (p as any).feature === 'weave' ? weaveFeat : coreMath;
+    params[p.id] = src && src[p.id] !== undefined ? src[p.id] : p.default;
   }
   store.setFormulaParams(params);
+
+  // Rhythm/enable state (weave* keys) → the WeaveControls strip + uniform bag.
+  if (weaveFeat) {
+    const wv: Record<string, any> = {};
+    for (const [k, v] of Object.entries(weaveFeat)) {
+      if (k.startsWith('weave')) wv[k] = v;
+    }
+    store.setWeaveState(Object.keys(wv).length > 0 ? wv : null);
+  } else {
+    store.setWeaveState(null);
+  }
 
   if (coreMath?.iterations !== undefined) {
     store.setIters(Math.round(coreMath.iterations));
@@ -97,33 +117,6 @@ export function loadGMFIntoStore(text: string, filename?: string): void {
     store.setQualitySettings({ ...DEFAULT_QUALITY });
   }
 
-  const ilState = preset?.features?.interlace;
-  if (ilState?.interlaceCompiled && ilState?.interlaceFormula) {
-    const ilDef = registry.get(ilState.interlaceFormula as FormulaType);
-    if (ilDef) {
-      const ilParams: Record<string, any> = {};
-      for (const p of ilDef.parameters) {
-        if (!p) continue;
-        const ilKey = 'interlace' + p.id.charAt(0).toUpperCase() + p.id.slice(1);
-        if (ilState[ilKey] !== undefined) {
-          ilParams[p.id] = ilState[ilKey];
-        } else {
-          ilParams[p.id] = p.default;
-        }
-      }
-      store.setInterlaceState({
-        definition: ilDef,
-        params: ilParams,
-        enabled: ilState.interlaceEnabled !== false,
-        interval: ilState.interlaceInterval ?? 2,
-        startIter: ilState.interlaceStartIter ?? 0,
-      });
-    } else {
-      store.setInterlaceState(null);
-    }
-  } else {
-    store.setInterlaceState(null);
-  }
 }
 
 export const FormulaSelector: React.FC = () => {
@@ -152,7 +145,7 @@ export const FormulaSelector: React.FC = () => {
     if (def) {
       store.setLoadedDefinition(def);
       store.setFormulaParams(buildDefaultParams(def));
-      store.setInterlaceState(null);
+      store.setWeaveState(null);
       store.setLoadedFilename(null);
       store.setLoadError(null);
       // Load quality settings from formula's defaultPreset if available

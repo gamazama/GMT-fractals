@@ -39,23 +39,27 @@ vec3 renderPixel(vec2 uvCoord, float seedOffset, out float outDepth) {
 
     getCameraRay(uvCoord, ro, rd, stochasticSeed, roClean, rdClean);
 
-    // Background Logic (Direct Mode Miss)
-    vec3 bgCol = vec3(0.0);
-    vec3 safeFog = uFogColorLinear;
-
-    if (uEnvBackgroundStrength > 0.001) {
-        // Subtle camera-blur softening of the sky: a small mip-LOD blur scaled by
-        // the DoF aperture, ADDED on top of the aperture-jittered ray direction
-        // (rd, not rdClean) so the sky keeps the same grain as the fractal's DoF
-        // instead of reading artificially clean. Sky is at infinity → max
-        // defocus; sqrt makes modest apertures responsive, capped to stay subtle.
-        // uDOFStrength == 0 → skyBlur 0 → unchanged. @see docs/adr/0072
-        float skyBlur = min(0.4, sqrt(uDOFStrength) * 0.35);
-        vec3 env = GetEnvMap(rd, skyBlur) * uEnvBackgroundStrength;
-        bgCol = mix(env, safeFog, clamp(uFogIntensity, 0.0, 1.0));
-    } else {
-        bgCol = mix(safeFog + vec3(0.01), safeFog, abs(rd.y));
-    }
+    // Background = THE SKY (Solid / Gradient / Image via GetEnvMap) scaled by
+    // Sky Visibility — a plain brightness dial, 0 → black backdrop (ADR-0098;
+    // matches the path tracer's long-standing semantics). The old "fall back to
+    // the flat Background Color at visibility 0" rule is GONE: a flat-colour
+    // backdrop is now the Solid sky source.
+    //
+    // Camera-blur softening of the sky: a mip-LOD blur scaled by the DoF
+    // aperture, ADDED on top of the aperture-jittered ray direction (rd, not
+    // rdClean) so the sky keeps the same grain as the fractal's DoF. Sky is at
+    // infinity → max defocus. Fourth-root curve calibrated to the LOG aperture
+    // slider's practical range (0.001–0.1): 0.005 → lod ≈ 2.4 (visible),
+    // 0.05 → ≈ 4.3 (strong), 1.0 → ≈ 8.5 (washed). Supersedes ADR-0072's
+    // "capped to stay subtle" 0.4·sqrt curve — owner: camera blur must blur
+    // the background MEANINGFULLY. uDOFStrength == 0 → skyBlur 0 → unchanged.
+    float skyBlur = min(0.85, pow(uDOFStrength, 0.25) * 0.9);
+    // Per-direction fog in-scatter (fogRadiance, ADR-0097): with Sky Tint up,
+    // the fogged sky keeps its directional gradient instead of flattening.
+    vec3 bgCol = mix(
+        GetEnvMap(rd, skyBlur) * uEnvBackgroundStrength,
+        fogRadiance(rd),
+        clamp(uFogIntensity, 0.0, 1.0));
 
     vec3 col = bgCol;
     float d = 0.0;
@@ -70,7 +74,7 @@ vec3 renderPixel(vec2 uvCoord, float seedOffset, out float outDepth) {
 
     ${integrator}
 
-    col = applyPostProcessing(col, d, glow, volumetric, fogScatter);
+    col = applyPostProcessing(col, d, rd, glow, volumetric, fogScatter);
     // Project hit point onto clean (un-jittered) ray for stable depth readback
     // When DoF is off, roClean==ro and rdClean==rd so this equals d
     outDepth = dot(ro + rd * d - roClean, rdClean);

@@ -52,7 +52,7 @@ scenes are declared known gaps in the ledger.
 Protects every later stage. Mostly the "debt warm-up" already scoped in `fidelity-pass-SESSION.md`.
 - [ ] Delete superseded `engine-gmt/utils/mb3d/mapFormula.ts` + `mapScene.ts` + `debug/test-mb3d-map.mts`
       (dead since the weave path) and the `test:mb3d:map` package.json script. Confirm `npm run orphans`.
-- [ ] **Close the decompiler-drift gotcha for good.** Canonical decompiler is `/h/tmp/mb3d-decomp/`;
+- [ ] **Close the decompiler-drift gotcha for good.** Canonical decompiler is `H:/GMT/stuff/mb3d-decomp/`;
       the repo `plans/mb3d/decompiler/` copy has silently drifted twice (cost real time both). Add a
       sync-check gate (diff the two `.mjs`, fail on mismatch) OR make the repo copy canonical
       (vendor `capstone-wasm`). Single highest-leverage infra fix.

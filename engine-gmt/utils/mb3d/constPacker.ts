@@ -16,8 +16,10 @@
 import type { DecompiledOption, DecompiledDEMeta } from './decompiled-formulas';
 import { LaneAllocator, ScalarParamPacker } from '../uniformSlots';
 import type { PackedParam } from '../uniformSlots';
+import type { DerivedRotationSpec } from '../../types/fractal';
+import { mb3dEulerToMat3, mb3dSixPlaneToMat4, DEG_TO_RAD } from '../rotationMath';
 
-const PID180 = Math.PI / 180;
+const PID180 = DEG_TO_RAD;
 
 /**
  * DivUtils.pas:1616-1644 PAligned16 fixed table — positive byte offsets, FastMove'd
@@ -39,49 +41,9 @@ export const PALIGNED16: Record<number, number> = {
   160: 8, 168: 10, 176: 15, 184: 21, 192: 28, 200: 35, 208: 70,
 };
 
-/** Euler XYZ → row-major 3×3 (M[0,0]..M[2,2]). Mirrors BuildRotMatrix. */
-function buildRotMatrix(xa: number, ya: number, za: number): number[] {
-  const sinX = Math.sin(xa), cosX = Math.cos(xa);
-  const sinY = Math.sin(ya), cosY = Math.cos(ya);
-  const sinZ = Math.sin(za), cosZ = Math.cos(za);
-  return [
-    cosY * cosZ, -cosY * sinZ, sinY,
-    sinX * sinY * cosZ + cosX * sinZ, cosX * cosZ - sinX * sinY * sinZ, -sinX * cosY,
-    sinX * sinZ - cosX * sinY * cosZ, cosX * sinY * sinZ + sinX * cosZ, cosX * cosY,
-  ];
-}
-
-/** 6 plane-rotation angles (radians) → a flat row-major 4×4 matrix (16 elements,
- *  memory order MS4[0,0]..MS4[3,3]). Verbatim port of BuildRotMatrix4d
- *  (Math3D.pas:2548): six plane rotations LEFT-multiplied onto an identity start.
- *  Plane index tables i1=(1,0,0,0,1,2) i2=(2,2,1,3,3,3); each step composes
- *  `ms4 ← SM4_i · ms4` (Multiply2SMatrix4 writes the product into SM4, then
- *  `ms4 := SM4` retains it — the product is kept, NOT discarded). Returned in the
- *  same memory order the const buffer reads the matrix (descending Cm offsets). */
-function buildRotMatrix4d(angles: number[]): number[] {
-  const i1 = [1, 0, 0, 0, 1, 2];
-  const i2 = [2, 2, 1, 3, 3, 3];
-  // ms4 = identity, flat row-major (idx = row*4 + col).
-  let ms4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-  for (let i = 0; i < 6; i++) {
-    const s = Math.sin(angles[i]), c = Math.cos(angles[i]);
-    const a = i1[i], b = i2[i];
-    // SM4 = identity with the (a,b)-plane rotation written in.
-    const sm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-    sm[a * 4 + a] = c; sm[b * 4 + b] = c; sm[a * 4 + b] = -s; sm[b * 4 + a] = s;
-    // ms4 ← SM4 · ms4  (row-major: out[r,col] = Σ_k sm[r,k]·ms4[k,col]).
-    const out = new Array(16).fill(0);
-    for (let r = 0; r < 4; r++) {
-      for (let col = 0; col < 4; col++) {
-        let sum = 0;
-        for (let k = 0; k < 4; k++) sum += sm[r * 4 + k] * ms4[k * 4 + col];
-        out[r * 4 + col] = sum;
-      }
-    }
-    ms4 = out;
-  }
-  return ms4;
-}
+// Euler→mat3 / six-plane→mat4 conversions live in ../rotationMath (mb3dEulerToMat3 /
+// mb3dSixPlaneToMat4) — shared with UniformManager's derived-rotation sync and the
+// rotation gizmo. Offsets walked here must still match the decompiler's Cm tokens.
 
 const sqr = (v: number) => v * v;
 
@@ -103,7 +65,7 @@ export function packConstBuffer(optionValues: number[], optionTypes: number[], o
       case 3: off += 8; map.set(off, Math.sin(v(i) * PID180)); off += 8; map.set(off, Math.cos(v(i) * PID180)); break; // .DOUBLEANGLE
       case 4: off += 4; map.set(off, Math.sin(v(i) * PID180)); off += 4; map.set(off, Math.cos(v(i) * PID180)); break; // .SINGLEANGLE
       case 6: { // .3SINGLEANGLES → 3×3 matrix (9 singles)
-        const M = buildRotMatrix(v(i) * PID180, v(i + 1) * PID180, v(i + 2) * PID180);
+        const M = mb3dEulerToMat3(v(i) * PID180, v(i + 1) * PID180, v(i + 2) * PID180);
         for (let j = 0; j < 9; j++) { off += 4; map.set(off, M[j]); }
         i += 2;
         break;
@@ -121,7 +83,7 @@ export function packConstBuffer(optionValues: number[], optionTypes: number[], o
       case 9: off += 8; map.set(off, sqr(v(i))); break;                              // .DSQUARE
       case 11: for (const s of [1, 1, -1, -1]) { off += 8; map.set(off, s * v(i)); } break; // .FOLDING16
       case 12: { // .6SINGLEANGLES → 4×4 rotation matrix (16 singles), 6 angles consumed
-        const M4 = buildRotMatrix4d([v(i), v(i + 1), v(i + 2), v(i + 3), v(i + 4), v(i + 5)].map((d) => d * PID180));
+        const M4 = mb3dSixPlaneToMat4([v(i), v(i + 1), v(i + 2), v(i + 3), v(i + 4), v(i + 5)].map((d) => d * PID180));
         for (let j = 0; j < 16; j++) { off += 4; map.set(off, M4[j]); }
         i += 5; // + the outer i++ → 6 option values consumed (CustomFormulas.pas:504)
         break;
@@ -188,35 +150,48 @@ export function mapDEMeta(de: DecompiledDEMeta): Record<string, number> {
   };
 }
 
-/** GLSL helper: Euler-XYZ degrees → 9 row-major matrix elements (mirrors
- *  BuildRotMatrix). Included once when a parametric decompiled formula has
- *  a 3-angle rotation option. */
-export const MB3D_ROT_GLSL = `
-void mb3dRot(vec3 deg, out float M[9]) {
-  vec3 a = deg * 0.017453292519943295;
-  float sx=sin(a.x), cx=cos(a.x), sy=sin(a.y), cy=cos(a.y), sz=sin(a.z), cz=cos(a.z);
-  M[0]=cy*cz; M[1]=-cy*sz; M[2]=sy;
-  M[3]=sx*sy*cz+cx*sz; M[4]=cx*cz-sx*sy*sz; M[5]=-sx*cy;
-  M[6]=sx*sz-cx*sy*cz; M[7]=cx*sy*sz+sx*cz; M[8]=cx*cy;
-}`;
-
 /** A slider emitted by bindOptions — a scalar or a packed vec control. */
 export type DecompParam = PackedParam;
+
+/** Derived-rotation bank vocabulary (declared in UniformSchema BASE_SCHEMA;
+ *  values computed by UniformManager.syncDerivedRotations via rotationMath).
+ *  Rotation conversion happens on the CPU — the old in-shader mb3dRot() helper
+ *  (per-iteration sin/cos + matrix build) is gone; bodies read finished elements.
+ *  Keyed by DerivedRotationSpec.convert; emitFusedHybrid uses the same table to
+ *  renumber per-slot indices onto a def-global sequence when banking a weave. */
+export const DERIVED_ROT_BANKS: Record<DerivedRotationSpec['convert'], { prefix: string; cap: number }> = {
+  'mb3d-euler-deg-mat3': { prefix: 'uMb3dRotM', cap: 6 },  // .3SINGLEANGLES → mat3
+  'deg-sincos': { prefix: 'uMb3dRotSC', cap: 6 },          // .DOUBLEANGLE/.SINGLEANGLE → vec2(sin,cos)
+  'mb3d-6plane-deg-mat4': { prefix: 'uMb3dRot4D', cap: 2 }, // .6SINGLEANGLES → mat4
+};
+const ROT_MAT3_BANK = DERIVED_ROT_BANKS['mb3d-euler-deg-mat3'];
+const ROT_SINCOS_BANK = DERIVED_ROT_BANKS['deg-sincos'];
+const ROT_MAT4_BANK = DERIVED_ROT_BANKS['mb3d-6plane-deg-mat4'];
+
+/** Row-major element j of a flat 3×3 → GLSL mat3 subscript (column-major: [col][row]). */
+const mat3El = (u: string, j: number) => `${u}[${j % 3}][${(j / 3) | 0}]`;
+/** Row-major element j of a flat 4×4 → GLSL mat4 subscript (column-major: [col][row]). */
+const mat4El = (u: string, j: number) => `${u}[${j % 4}][${(j / 4) | 0}]`;
 
 export interface DecompBinding {
   /** const offset → GLSL expression (uniform read or rotation-matrix element). */
   bindings: Map<number, string>;
   params: DecompParam[];
   coreMath: Record<string, any>;
-  /** per-rotation matrix setup lines for the slot wrapper. */
-  matrixDecls: string[];
-  needsRotHelper: boolean;
+  /** CPU-derived rotation uniforms the bound body consumes (→ def.shader.derivedRotations). */
+  derivedRotations: DerivedRotationSpec[];
 }
 
-/** A trailing-axis name like "CScale X" → { prefix:'CScale', axis:'x' }, else null. */
+/** Axis-component name → { prefix, axis }, else null. The axis may TRAIL
+ *  ("CScale X", separator optional — the historical form) or LEAD with a required
+ *  separator ("Z halfwidth", "X add" — the *IFS convention; the separator guard
+ *  keeps "Zoom"-style names from reading as a Z component). */
 function axisOf(name: string): { prefix: string; axis: 'x' | 'y' | 'z' } | null {
-  const m = /^(.*?)[ _]?([XYZ])$/.exec(name.trim());
-  return m && m[1] ? { prefix: m[1].trim(), axis: m[2].toLowerCase() as 'x' | 'y' | 'z' } : null;
+  const t = /^(.*?)[ _]?([XYZ])$/.exec(name.trim());
+  if (t && t[1]) return { prefix: t[1].trim(), axis: t[2].toLowerCase() as 'x' | 'y' | 'z' };
+  const l = /^([XYZ])[ _-](.+)$/.exec(name.trim());
+  if (l) return { prefix: l[2].trim(), axis: l[1].toLowerCase() as 'x' | 'y' | 'z' };
+  return null;
 }
 
 /**
@@ -229,9 +204,20 @@ function axisOf(name: string): { prefix: string; axis: 'x' | 'y' | 'z' } | null 
  * once `paramA..F` is full, surplus scalars pack into the idle vec lanes — the
  * {@link ScalarParamPacker} groups same-base vec-lane scalars into ONE combined vec
  * slider (e.g. `uVec4A` carrying three unrelated params). Genuine vec3s — 3-angle
- * rotations (`mb3dRot`) and "<p> X/Y/Z" triples (e.g. Menger CScale) — take a true
- * `uVec3*` unit. Returns null if the pool overflows or an option type is unmapped —
- * the caller bakes. Offset walk mirrors packConstBuffer exactly.
+ * rotations and "<p> X/Y/Z" triples (e.g. Menger CScale) — take a true `uVec3*` unit.
+ * Returns null if the pool overflows or an option type is unmapped — the caller
+ * bakes. Offset walk mirrors packConstBuffer exactly.
+ *
+ * ANGLE options (types 3/4/6/12) bind their const offsets to the CPU-derived
+ * rotation bank ({@link DERIVED_ROT_BANKS}): the angle value lives on a normal
+ * lane (the slider), while UniformManager.syncDerivedRotations converts it to
+ * the sin/cos pair / mat3 / mat4 the body actually reads. No in-shader
+ * conversion; the emitted {@link DerivedRotationSpec}s ride def.shader.
+ *
+ * `bake` (P3b Task 2, per-option expose/bake directives): options flagged true are
+ * bound to LITERALS via packConstBuffer's exact math instead of taking lanes —
+ * including types with derived-bank live paths, so one odd option never forces
+ * the whole slot to bake. `bake` absent/empty ⇒ behavior is byte-identical.
  */
 export function bindOptions(
   optionValues: number[],
@@ -239,10 +225,10 @@ export function bindOptions(
   optionCount: number,
   options: DecompiledOption[],
   alloc: LaneAllocator,
+  bake?: boolean[],
 ): DecompBinding | null {
   const bindings = new Map<number, string>();
-  const matrixDecls: string[] = [];
-  let needsRotHelper = false;
+  const derivedRotations: DerivedRotationSpec[] = [];
   const packer = new ScalarParamPacker(alloc);
   const v = (i: number) => optionValues[i] ?? 0;
   const nm = (oi: number) => options[oi]?.name ?? `opt${oi}`;
@@ -257,17 +243,81 @@ export function bindOptions(
   while (i < Math.min(16, optionCount)) {
     const t = optionTypes[i] ?? 0;
     const name = nm(optIdx);
-    if (t === 0 || t === 1) {
-      // X/Y/Z triple → one vec3 (e.g. Menger "CScale X/Y/Z"). All three must be
-      // scalar options with the same prefix and consecutive X→Y→Z axes.
+    if (bake?.[i]) {
+      // BAKE DIRECTIVE: bind this option's const offsets to literals using
+      // packConstBuffer's exact math — no lanes consumed, all types coverable.
+      switch (t) {
+        case 0: off += 8; bindings.set(off, flit(v(i))); break;
+        case 1: off += 4; bindings.set(off, flit(v(i))); break;
+        case 2: off += 4; bindings.set(off, flit(Math.round(v(i)))); break;
+        case 3: off += 8; bindings.set(off, flit(Math.sin(v(i) * PID180))); off += 8; bindings.set(off, flit(Math.cos(v(i) * PID180))); break;
+        case 4: off += 4; bindings.set(off, flit(Math.sin(v(i) * PID180))); off += 4; bindings.set(off, flit(Math.cos(v(i) * PID180))); break;
+        case 6: {
+          // NB: a rotation is ONE logical option (one name entry) spanning 3 raw
+          // value slots — advance i by the extra 2, but optIdx only via the shared ++.
+          const M = mb3dEulerToMat3(v(i) * PID180, v(i + 1) * PID180, v(i + 2) * PID180);
+          for (let j = 0; j < 9; j++) { off += 4; bindings.set(off, flit(M[j])); }
+          i += 2;
+          break;
+        }
+        case 7: {
+          // Scale/MinR² needs the PRECEDING Scale — which may still be a live lane.
+          const minR2 = sqr(Math.max(1e-40, v(i)));
+          const scale = prevScalarUni ?? flit(v(i - 1));
+          off += 8; bindings.set(off, `(${scale} / ${flit(minR2)})`);
+          off += 8; bindings.set(off, flit(minR2));
+          break;
+        }
+        case 8: for (const s of [1, 2, -1, -2]) { off += 8; bindings.set(off, flit(s * v(i))); } off += 4; break;
+        case 9: off += 8; bindings.set(off, flit(sqr(v(i)))); break;
+        case 11: for (const s of [1, 1, -1, -1]) { off += 8; bindings.set(off, flit(s * v(i))); } break;
+        case 12: {
+          // One logical option spanning 6 raw value slots (see the t6 note above).
+          const M4 = mb3dSixPlaneToMat4([v(i), v(i + 1), v(i + 2), v(i + 3), v(i + 4), v(i + 5)].map((d) => d * PID180));
+          for (let j = 0; j < 16; j++) { off += 4; bindings.set(off, flit(M4[j])); }
+          i += 5;
+          break;
+        }
+        case 13: off += 8; bindings.set(off, flit(1 / (Math.abs(v(i)) < 1e-40 ? 1e-40 : v(i)))); break;
+        case 14: off += 8; bindings.set(off, flit(v(i))); off += 8; bindings.set(off, flit(v(i))); break;
+        case 15: off += 8; bindings.set(off, flit(1 / Math.max(1e-40, sqr(v(i))))); break;
+        case 21: off += 4; bindings.set(off, flit(v(i))); off += 4; bindings.set(off, flit(1 / (Math.abs(v(i)) < 1e-40 ? 1e-40 : v(i)))); break;
+        case 22: off += 8; bindings.set(off, flit(v(i))); off += 8; bindings.set(off, flit(1 / (Math.abs(v(i)) < 1e-40 ? 1e-40 : v(i)))); break;
+        default: return null; // unported type (mirrors packConstBuffer's throw)
+      }
+      // A baked Scale is still a valid .BOXSCALE dividend (a literal operand).
+      prevScalarUni = (t === 0 || t === 1) ? flit(v(i)) : null;
+      i++; optIdx++;
+      continue;
+    }
+    // Plain scalar shapes: .DOUBLE (0), .SINGLE (1), and .2DOUBLES (14 — SSE2: one
+    // value packed into BOTH 8-byte lanes, so its lane feeds two consecutive offsets).
+    const scalarish = (tt: number) => tt === 0 || tt === 1 || tt === 14;
+    /** Bind a scalar option's offset(s) to one GLSL expression, honoring its shape. */
+    const bindScalarOffsets = (tt: number, expr: string) => {
+      if (tt === 14) { off += 8; bindings.set(off, expr); off += 8; bindings.set(off, expr); }
+      else { off += (tt === 0 ? 8 : 4); bindings.set(off, expr); }
+    };
+    if (scalarish(t)) {
+      // X/Y/Z triple → one vec3 (e.g. Menger "CScale X/Y/Z", boxIFS "Z/Y/X halfwidth",
+      // mixed-shape "Z add"(t14)/"Y add"/"X add"). Three consecutive scalar-shaped
+      // options sharing one prefix whose axes cover {x,y,z} in ANY order — each
+      // member binds to the component its OWN axis names.
       const a0 = axisOf(name);
-      if (a0?.axis === 'x' && (optionTypes[i + 1] ?? -1) <= 1 && (optionTypes[i + 2] ?? -1) <= 1) {
+      // A bake directive on a later member breaks the triple — the members fall
+      // through as individual scalars (each exposed or baked on its own).
+      if (a0 && scalarish(optionTypes[i + 1] ?? -1) && scalarish(optionTypes[i + 2] ?? -1)
+          && !bake?.[i + 1] && !bake?.[i + 2]) {
         const a1 = axisOf(nm(optIdx + 1)), a2 = axisOf(nm(optIdx + 2));
-        if (a1?.axis === 'y' && a2?.axis === 'z' && a1.prefix === a0.prefix && a2.prefix === a0.prefix) {
-          const lane = packer.vec3(a0.prefix, { x: v(i), y: v(i + 1), z: v(i + 2) }, -8, 8, 0.001);
+        if (a1 && a2 && a1.prefix === a0.prefix && a2.prefix === a0.prefix
+            && new Set([a0.axis, a1.axis, a2.axis]).size === 3) {
+          const members = [a0, a1, a2];
+          const seed = { x: 0, y: 0, z: 0 };
+          members.forEach((a, k) => { seed[a.axis] = v(i + k); });
+          const lane = packer.vec3(a0.prefix, seed, -8, 8, 0.001);
           if (!lane) return null;
-          for (const [k, ax] of [[0, 'x'], [1, 'y'], [2, 'z']] as const) {
-            off += (optionTypes[i + k] === 0 ? 8 : 4); bindings.set(off, `${lane.componentBase}.${ax}`);
+          for (let k = 0; k < 3; k++) {
+            bindScalarOffsets(optionTypes[i + k] ?? 0, `${lane.componentBase}.${members[k].axis}`);
           }
           i += 2; optIdx += 2; prevScalarUni = null;
           i++; optIdx++;
@@ -276,14 +326,22 @@ export function bindOptions(
       }
       const acc = packer.scalar(name, v(i), -8, 8, 0.001);
       if (acc === null) return null;
-      off += t === 0 ? 8 : 4;
-      bindings.set(off, acc);
+      bindScalarOffsets(t, acc);
       prevScalarUni = acc;
     } else if (t === 2) {
-      // .INTEGER (e.g. Sphere/Cylinder toggle) → one scalar lane, rounded. The Cm
-      // token is a float operand in the decompiled body, so the lane reads as a float
-      // (no int() wrap) — identical whether it lands on paramA..F or a vec component.
-      const acc = packer.scalar(name, Math.round(v(i)), 0, 1, 1);
+      // .INTEGER → one scalar lane, rounded. The Cm token is a float operand in the
+      // decompiled body, so the lane reads as a float (no int() wrap) — identical
+      // whether it lands on paramA..F or a vec component. Control shape from the
+      // name + value: a declared range ("OTrap option (0..3)", "Modes (0 to 3)")
+      // becomes an integer slider over that range (the old hardcoded 0..1 max made
+      // 2..3 unreachable); a 0/1 value with no range is a BOOLEAN → toggle control,
+      // and a gating name ("apply scale+add") makes it a vec2 'mixed' candidate.
+      const val = Math.round(v(i));
+      const range = /\(0\s?(?:\.\.+|to|-)\s?(\d+)\)/i.exec(name);
+      const rangeMax = range ? Math.max(1, parseInt(range[1], 10)) : undefined;
+      const isBool = !rangeMax && (val === 0 || val === 1);
+      const acc = packer.scalar(name, val, 0, rangeMax ?? (isBool ? 1 : Math.max(4, val)), 1,
+        isBool ? { bool: true, gates: /^(apply|use|enable|with)\b/i.test(name) } : undefined);
       if (acc === null) return null;
       off += 4;
       bindings.set(off, acc);
@@ -310,18 +368,63 @@ export function bindOptions(
       if (t === 8) off += 4; // fHIntFunctions pointer slot (no binding)
       prevScalarUni = null;
     } else if (t === 6) {
-      const lane = packer.vec3(name, { x: v(i), y: v(i + 1), z: v(i + 2) }, -180, 180, 0.5);
+      // .3SINGLEANGLES — Euler angles, DEGREES-native (MB3D convention). The
+      // descriptor tells the widgets/gizmo not to treat the value as radians.
+      // The Euler→mat3 conversion happens on the CPU (rotationMath, per frame);
+      // the body binds directly to the derived uMb3dRotM* matrix elements.
+      const lane = packer.vec3(name, { x: v(i), y: v(i + 1), z: v(i + 2) }, -180, 180, 0.5,
+        { rotation: { kind: 'euler', units: 'deg', order: 'mb3d-xyz' } });
       if (!lane) return null;
-      const mvar = `mb3dM_${lane.id}`;
-      matrixDecls.push(`float ${mvar}[9]; mb3dRot(${lane.vec3Accessor}, ${mvar});`);
-      needsRotHelper = true;
-      for (let j = 0; j < 9; j++) { off += 4; bindings.set(off, `${mvar}[${j}]`); }
+      const mIdx = alloc.nextDerived('mb3d-mat3', ROT_MAT3_BANK.cap);
+      if (mIdx === null) return null;
+      const mu = `${ROT_MAT3_BANK.prefix}${mIdx}`;
+      derivedRotations.push({
+        uniform: mu, convert: 'mb3d-euler-deg-mat3',
+        sources: ['x', 'y', 'z'].map((c) => `${lane.componentBase}.${c}`),
+      });
+      for (let j = 0; j < 9; j++) { off += 4; bindings.set(off, mat3El(mu, j)); }
       i += 2;
+      prevScalarUni = null;
+    } else if (t === 3 || t === 4) {
+      // .DOUBLEANGLE / .SINGLEANGLE — one angle (degrees) whose const pair is
+      // (sin, cos). Exposed as a live degrees slider; the pair is CPU-computed
+      // into a derived uMb3dRotSC* vec2. Previously bake-only.
+      const acc = packer.scalar(name, v(i), -360, 360, 0.5,
+        { rotation: { kind: 'twist', units: 'deg' } });
+      if (acc === null) return null;
+      const scIdx = alloc.nextDerived('mb3d-sincos', ROT_SINCOS_BANK.cap);
+      if (scIdx === null) return null;
+      const su = `${ROT_SINCOS_BANK.prefix}${scIdx}`;
+      derivedRotations.push({ uniform: su, convert: 'deg-sincos', sources: [acc] });
+      const stride = t === 3 ? 8 : 4;
+      off += stride; bindings.set(off, `${su}.x`); // sin (packConstBuffer order)
+      off += stride; bindings.set(off, `${su}.y`); // cos
+      prevScalarUni = null;
+    } else if (t === 12) {
+      // .6SINGLEANGLES — six plane angles (degrees) → one CPU-derived 4×4
+      // (uMb3dRot4D*). Exposed as two vec3 sliders in MB3D's plane order
+      // (i1/i2 tables): (YZ,XZ,XY) then (XW,YW,ZW). Previously bake-only.
+      const a = packer.vec3(`${name} (YZ,XZ,XY)`, { x: v(i), y: v(i + 1), z: v(i + 2) }, -360, 360, 0.5);
+      if (!a) return null;
+      const b = packer.vec3(`${name} (XW,YW,ZW)`, { x: v(i + 3), y: v(i + 4), z: v(i + 5) }, -360, 360, 0.5);
+      if (!b) return null;
+      const m4Idx = alloc.nextDerived('mb3d-mat4', ROT_MAT4_BANK.cap);
+      if (m4Idx === null) return null;
+      const m4u = `${ROT_MAT4_BANK.prefix}${m4Idx}`;
+      derivedRotations.push({
+        uniform: m4u, convert: 'mb3d-6plane-deg-mat4',
+        sources: [
+          ...['x', 'y', 'z'].map((c) => `${a.componentBase}.${c}`),
+          ...['x', 'y', 'z'].map((c) => `${b.componentBase}.${c}`),
+        ],
+      });
+      for (let j = 0; j < 16; j++) { off += 4; bindings.set(off, mat4El(m4u, j)); }
+      i += 5; // + the outer i++ → 6 option values consumed (mirrors packConstBuffer)
       prevScalarUni = null;
     } else {
       return null; // unmapped type → caller bakes
     }
     i++; optIdx++;
   }
-  return { bindings, params: packer.params, coreMath: packer.coreMath, matrixDecls, needsRotHelper };
+  return { bindings, params: packer.params, coreMath: packer.coreMath, derivedRotations };
 }

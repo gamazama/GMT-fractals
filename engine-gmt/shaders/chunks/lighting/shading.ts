@@ -3,7 +3,9 @@ export const getShadingGLSL = (reflectionCode: string = '') => {
     // If no feature injects reflection code, use simple env-map fallback
     const reflectionBlock = reflectionCode || `
         // --- REFLECTIONS OFF (default) ---
-        vec3 envColor = GetEnvMap(reflDir, roughness) * uEnvStrength;
+        // Fog wraps the raw env radiance before the surface response (F, uSpecular) —
+        // same treatment as the ENV-mode injection; the dome sits at the fog far plane.
+        vec3 envColor = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength, reflDir);
         reflectionLighting = envColor * F * uSpecular;
     `;
 
@@ -12,16 +14,36 @@ export const getShadingGLSL = (reflectionCode: string = '') => {
 // DIRECT LIGHTING INTEGRATOR (Multi-Bounce)
 // ------------------------------------------------------------------
 
-// Apply fog to environment samples (treat as being at fog far plane)
-vec3 applyEnvFog(vec3 env) {
+// Apply fog to environment samples (treat as being at fog far plane).
+// dir = the direction the env was sampled along — the in-scatter colour is
+// per-direction (fogRadiance, ADR-0097), so a fogged sky keeps its gradient.
+vec3 applyEnvFog(vec3 env, vec3 dir) {
     if (uFogIntensity < 0.001 || uFogFar >= 1000.0) return env;
-    float fogFactor = uFogIntensity;
-    return mix(env, uFogColorLinear, fogFactor);
+    return mix(env, fogRadiance(dir), uFogIntensity);
 }
 
-// Sample environment for a miss ray (reflection/bounce), with fog and feature overrides
+// Sample environment for a miss ray (reflection/bounce), with fog and feature overrides.
+// The flat far-plane env fog spares the fraction covered by a self-fogged overlay
+// (light spheres fog themselves by their own distance inside sampleMiss and report
+// coverage via g_missSelfFogCover) — otherwise reflected emitters wipe to fog colour
+// at full intensity even when they sit right next to the reflector.
 vec3 sampleMissEnv(vec3 ro, vec3 rd, float roughness, vec3 throughput) {
-    return applyEnvFog(sampleMiss(ro, rd, roughness) * uEnvStrength) * throughput;
+    g_missSelfFogCover = 0.0;
+    vec3 raw = sampleMiss(ro, rd, roughness, uEnvStrength);
+    return mix(applyEnvFog(raw, rd), raw, g_missSelfFogCover) * throughput;
+}
+
+// Fog-hoisted twin of sampleMissEnv for the raymarched reflection block: takes the
+// caller's precomputed fog radiance + weight instead of running the per-direction
+// applyEnvFog -> fogRadiance -> env-sample chain per call site. fxc inlines that
+// chain at EVERY call site (~260ms each cold, section 2.6.2) — the reflection block
+// samples fog once at reflDir and shares it. fogW MUST be 0.0 when fog is inactive
+// (callers replicate applyEnvFog's uFogIntensity/uFogFar gate).
+vec3 sampleMissEnvPre(vec3 ro, vec3 rd, float roughness, vec3 throughput, vec3 fogRad, float fogW) {
+    g_missSelfFogCover = 0.0;
+    vec3 raw = sampleMiss(ro, rd, roughness, uEnvStrength);
+    vec3 fogged = mix(raw, fogRad, fogW);
+    return mix(fogged, raw, g_missSelfFogCover) * throughput;
 }
 
 vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSeed) {
@@ -71,11 +93,15 @@ vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSe
     float fresnelTerm = pow(1.0 - NdotV, uRimExponent);
     vec3 rimColor = uRimColor * fresnelTerm * uRim;
 
-    // 7. Ambient IBL
+    // 7. Ambient IBL — the env map acting as a dome light. Fog wraps the raw
+    // irradiance BEFORE the surface response (kD·albedo): in heavy fog the dome
+    // light reaching a surface dims/tints toward the fog colour, matching the
+    // fogged sky behind it — otherwise surfaces glow unfogged against the fog.
+    // (applyEnvFog is identity when fog is off.)
     if (uEnvStrength > 0.001) {
-        vec3 envIrradiance = GetEnvMap(n, 1.0);
+        vec3 envIrradiance = applyEnvFog(GetEnvMap(n, 1.0) * uEnvStrength, n);
         vec3 kD = (vec3(1.0) - F) * (1.0 - uReflection);
-        ambient = kD * albedo * envIrradiance * uEnvStrength * uDiffuse;
+        ambient = kD * albedo * envIrradiance * uDiffuse;
     }
 
     // 8. Compose

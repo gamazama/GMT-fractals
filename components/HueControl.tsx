@@ -3,14 +3,17 @@ import {
     useColorScheme,
     DEFAULT_ACCENT_HUE,
     DEFAULT_SECONDARY_HUE,
+    DEFAULT_SURFACE_HUE,
 } from '../engine/store/colorSchemeStore';
 
 /**
- * HueControl — the Settings ▸ Interface accent-hue sliders. A hue slider (0-359°)
- * over a rainbow track, with a live swatch of the resulting colour and a reset.
+ * HueControl — the Settings ▸ Interface hue sliders. A hue slider (0-359°) over a
+ * rainbow track, with a live swatch of the resulting colour and a reset.
  * `AccentHueControl` drives the primary accent; `SecondaryHueControl` the secondary
- * (audio / modulation / Path Tracer). Both recolour their accent on any colour scheme
- * (replaces the old per-accent duplicate themes). Reads/writes colorSchemeStore.
+ * (audio / modulation / Path Tracer); `SurfaceHueControl` the bluish surface tint
+ * (panel headers + sunken inputs — shown when the Surface tint toggle is on, gated in
+ * coreSettings). All recolour on any brightness (replaces the old duplicate themes).
+ * Reads/writes colorSchemeStore.
  *
  * @invariant Engine-core (components/) — consumes the colorScheme store only.
  */
@@ -18,7 +21,7 @@ const HUE_TRACK =
     'linear-gradient(to right, hsl(0 90% 55%), hsl(60 90% 55%), hsl(120 90% 55%), ' +
     'hsl(180 90% 55%), hsl(240 90% 55%), hsl(300 90% 55%), hsl(360 90% 55%))';
 
-const THUMB =
+export const THUMB =
     '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 ' +
     '[&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full ' +
     '[&::-webkit-slider-thumb]:bg-fg [&::-webkit-slider-thumb]:border ' +
@@ -88,6 +91,21 @@ export const SecondaryHueControl: React.FC = () => {
             isDefault={hue === DEFAULT_SECONDARY_HUE}
             swatchVar="--secondary"
             label="secondary accent"
+        />
+    );
+};
+
+export const SurfaceHueControl: React.FC = () => {
+    const hue = useColorScheme((s) => s.surfaceHue);
+    const setSurfaceHue = useColorScheme((s) => s.setSurfaceHue);
+    return (
+        <HueSlider
+            hue={hue}
+            onChange={setSurfaceHue}
+            onReset={() => setSurfaceHue(DEFAULT_SURFACE_HUE)}
+            isDefault={hue === DEFAULT_SURFACE_HUE}
+            swatchVar="--surface-header"
+            label="surface tint"
         />
     );
 };

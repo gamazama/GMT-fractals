@@ -84,7 +84,7 @@ preamble-SSE2 `Cp` formulas); **IEEE-754 bit-hacking** (Amazing Surf 2 manipulat
 
 `npm run test:mb3d` (parser, 24/24) · `test:mb3d:weave` (weave + decompile +
 params + **all-catalog emit coverage**, 42/42) · `check:mb3d-decompiler` (repo `decompile.mjs`/`xcheck.mjs` ==
-canonical `/h/tmp/mb3d-decomp/` — drift guard). The legacy `test:mb3d:map` was removed with the superseded
+canonical `H:/GMT/stuff/mb3d-decomp/` — drift guard). The legacy `test:mb3d:map` was removed with the superseded
 `mapFormula.ts`/`mapScene.ts` (2026-06-27, Stage 0). Render-triage (needs vite:5173): `debug/probe-mb3d-triage.mts`
 renders every catalog formula standalone and buckets by render coverage (**180 GOOD / 0 black / 0 empty** — the SSE2
 *IFS family all render visible structure, no new denylist entries; a handful of borderline transform-style formulas

@@ -90,7 +90,18 @@ export const LIGHT_SPHERE_MISS_GLSL = `
     if (_lsHit.x > 0.0) {
         int _li = int(_lsHit.y);
         vec3 _lc = uLightColor[_li] * uLightIntensity[_li];
+        // Fog the sphere by ITS OWN distance from the ray origin (same intersection
+        // math as compositeLightSpheres) — the caller's applyEnvFog is a flat
+        // far-plane mix that would wipe a NEAR emitter at full fog intensity.
+        // Report the coverage via g_missSelfFogCover so that flat fog spares us.
+        vec3 _oc = ro - uLightPos[_li];
+        float _b = dot(rd, _oc);
+        float _r = uLightRadius[_li];
+        float _disc = _r * _r - (dot(_oc, _oc) - _b * _b);
+        float _lsD = _disc > 0.0 ? max(0.001, -_b - sqrt(_disc)) : max(0.001, -_b);
+        _lc = mix(_lc, fogRadiance(rd), smoothstep(uFogNear, uFogFar, _lsD) * uFogIntensity);
         env = mix(env, _lc, _lsHit.x);
+        g_missSelfFogCover = _lsHit.x;
     }
 }
 #endif
@@ -99,7 +110,7 @@ export const LIGHT_SPHERE_MISS_GLSL = `
 // Primary ray compositing — injected via builder.addCompositeLogic()
 export const getLightSphereCompositeGLSL = () => `
 #ifdef LIGHT_SPHERES
-void compositeLightSpheres(vec3 ro, vec3 rd, inout vec3 col, inout float d, bool hit, float seed) {
+void compositeLightSpheres(vec3 ro, vec3 rd, inout vec3 col, inout float d, bool hit, inout float volumetric, float seed) {
     // Stochastic radius jitter: +-2% per frame, accumulation averages into smooth AA edges.
     // Disabled during navigation (uBlendFactor >= 0.99) for a clean image.
     float radiusJitter = uBlendFactor >= 0.99 ? 0.0 : (fract(seed * 91.3) - 0.5) * 0.04;
@@ -111,7 +122,14 @@ void compositeLightSpheres(vec3 ro, vec3 rd, inout vec3 col, inout float d, bool
 
         if (lsHit.z > 0.5) {
             // Inside sphere: tint the entire view like a glowing fog volume
-            col = mix(col, lc, lsHit.x * 0.6);
+            float cover = lsHit.x * 0.6;
+            col = mix(col, lc, cover);
+            // The glow medium surrounds the camera (near field) — spare the tinted
+            // fraction from the whole-path fog the post-process applies, same
+            // rationale as the depth-tested branch below. d pulls toward the light
+            // radius, not 0: the Main depth output feeds the navigation probe.
+            volumetric *= 1.0 - cover;
+            d = mix(d, min(d, uLightRadius[li]), cover);
         } else {
             // Outside: depth-test against fractal surface
             vec3 oc = ro - uLightPos[li];
@@ -122,6 +140,15 @@ void compositeLightSpheres(vec3 ro, vec3 rd, inout vec3 col, inout float d, bool
 
             if (!hit || lightD < d) {
                 col = mix(col, lc, lsHit.x);
+                // Fog correctness: traceScene integrated fog density along its FULL
+                // march (to the geometry hit, or the miss exit ~MAX_DIST) — it never
+                // knew this emitter sits in front. Without a rescale, the volumetric
+                // fog term (applyPostProcessing runs AFTER this composite) paints that
+                // whole-path fog over the sphere and wipes it. Rescale the accumulated
+                // density to the sphere's depth (uniform-density approximation),
+                // blended by sphere coverage so a faint halo keeps the fog behind it.
+                // Distance fog needs no such fix — it reads d, updated below.
+                volumetric *= mix(1.0, clamp(lightD / max(d, lightD), 0.0, 1.0), lsHit.x);
                 d = lightD;
             }
         }

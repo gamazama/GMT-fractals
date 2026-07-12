@@ -1,9 +1,8 @@
 import React from 'react';
-import { useMeshExportStore } from '../store/meshExportStore';
+import { useMeshExportStore, weaveBagFrom } from '../store/meshExportStore';
 import { registry } from '../../engine-gmt/engine/FractalRegistry';
 import { runMeshPipeline, runExportMesh } from '../pipeline/mesh-pipeline';
 import type { PipelineCallbacks, MeshPipelineParams } from '../pipeline/types';
-import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 import { downloadBlob } from '../algorithms/mesh-writers';
 import { resetCancel, requestCancel } from '../algorithms/dc-core';
 import { resetCancel as resetCancelSparse, requestCancel as requestCancelSparse } from '../algorithms/sparse-grid';
@@ -47,17 +46,8 @@ export const ExportPanel: React.FC = () => {
     if (state.cavityFill === 'escape') { cavityFillMode = 'escape'; cavityFillLevel = 1; }
     else { cavityFillMode = 'dilate'; cavityFillLevel = parseInt(state.cavityFill) || 0; }
 
-    // Build interlace config if present
-    let interlace: MeshInterlaceConfig | undefined;
-    if (state.interlaceState) {
-      interlace = {
-        definition: state.interlaceState.definition,
-        params: state.interlaceState.params,
-        enabled: state.interlaceState.enabled,
-        interval: state.interlaceState.interval,
-        startIter: state.interlaceState.startIter,
-      };
-    }
+    // Fused-weave uniform bag (bank params + rhythm/enable), if any
+    const weave = weaveBagFrom(state);
 
     const qs = state.qualitySettings;
 
@@ -71,7 +61,7 @@ export const ExportPanel: React.FC = () => {
       colorSamples: state.colorSamples, colorJitterMul: state.colorJitter,
       cavityFillMode, cavityFillLevel,
       gridMin, gridMax, boundsRange: gridMax[0] - gridMin[0],
-      interlace,
+      weave,
       estimator: qs.estimator,
       distanceMetric: qs.distanceMetric,
       surfaceThreshold: qs.surfaceThreshold,
@@ -140,7 +130,7 @@ export const ExportPanel: React.FC = () => {
         N: params.N, iters: params.iters, power: params.power,
         gridMin: params.gridMin, gridMax: params.gridMax,
         deSamples: params.deSamples, zSubSlices: params.zSubSlices,
-        interlace: params.interlace,
+        weave: params.weave,
         estimator: params.estimator,
         distanceMetric: params.distanceMetric,
         surfaceThreshold: params.surfaceThreshold,

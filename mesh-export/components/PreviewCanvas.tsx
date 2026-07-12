@@ -7,9 +7,8 @@
 // useCallback chain (drawBBoxOverlay → renderFractalPreview → requestRender).
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { useMeshExportStore, registerSlicePreview, unregisterSlicePreview } from '../store/meshExportStore';
+import { useMeshExportStore, weaveBagFrom, registerSlicePreview, unregisterSlicePreview } from '../store/meshExportStore';
 import { buildMeshPreviewShader, classifyDEType, MESH_SDF_VERT, MESH_FORMULA_UNIFORMS } from '../../engine-gmt/engine/SDFShaderBuilder';
-import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 import {
   orthoCamBasis, orthoProject, orthoUnprojectDelta,
   normAngle, findAxisSnap, add3, scale3, dot3,
@@ -109,7 +108,7 @@ export function PreviewCanvas() {
   const _bboxCenter = useMeshExportStore((s) => s.bboxCenter);
   const _bboxSize = useMeshExportStore((s) => s.bboxSize);
   const _formulaParams = useMeshExportStore((s) => s.formulaParams);
-  const _interlaceState = useMeshExportStore((s) => s.interlaceState);
+  const _weaveState = useMeshExportStore((s) => s.weaveState);
   const _iters = useMeshExportStore((s) => s.iters);
   const _qualitySettings = useMeshExportStore((s) => s.qualitySettings);
   const _clipOutsideBounds = useMeshExportStore((s) => s.clipOutsideBounds);
@@ -165,29 +164,18 @@ export function PreviewCanvas() {
     if (!pv.gl || !def) return;
     const gl = pv.gl;
 
-    // Build interlace config for shader
-    let interlace: MeshInterlaceConfig | undefined;
-    if (state.interlaceState) {
-      interlace = {
-        definition: state.interlaceState.definition,
-        params: state.interlaceState.params,
-        enabled: state.interlaceState.enabled,
-        interval: state.interlaceState.interval,
-        startIter: state.interlaceState.startIter,
-      };
-    }
-
-    // Cache key includes interlace formula + estimator to force recompile when they change
+    // Cache key includes the estimator to force recompile when it changes.
+    // (A fused weave def has its own unique id, so no extra key part needed.)
     const qs = state.qualitySettings;
     // For IFS formulas, override power-type estimator to Linear Fold 1.0 (sign-changing for IFS orbits)
     const defDeType = classifyDEType(def);
     const previewEstimator = (defDeType === 'ifs' && qs.estimator >= 1.5 && qs.estimator < 2.5) ? 1 : qs.estimator;
-    const cacheKey = def.id + (interlace ? '+' + interlace.definition.id : '') + ':e' + (previewEstimator ?? 0);
+    const cacheKey = def.id + ':e' + (previewEstimator ?? 0);
     if (pv.defId === cacheKey && pv.prog) return;
 
     if (pv.prog) { gl.deleteProgram(pv.prog); pv.prog = null; }
     try {
-      const fragSrc = buildMeshPreviewShader({ definition: def, deType: 'auto', interlace, estimator: previewEstimator });
+      const fragSrc = buildMeshPreviewShader({ definition: def, deType: 'auto', estimator: previewEstimator });
       console.log('[Preview] Compiling shader for', def.id, '| estimator:', previewEstimator, '| length:', fragSrc.length);
       pv.prog = createProgram(gl, MESH_SDF_VERT, fragSrc);
       console.log('[Preview] Shader compiled OK for', def.id);
@@ -357,29 +345,21 @@ export function PreviewCanvas() {
     gl.uniform1i(pv.loc.uIters!, state.iters);
     setFormulaUniforms(gl, pv.loc, params);
 
-    // Bind interlace uniforms
-    if (state.interlaceState) {
-      const il = state.interlaceState;
-      const ip = il.params || {};
-      if (pv.loc.uInterlaceEnabled) gl.uniform1f(pv.loc.uInterlaceEnabled, il.enabled ? 1.0 : 0.0);
-      if (pv.loc.uInterlaceInterval) gl.uniform1f(pv.loc.uInterlaceInterval, il.interval ?? 2);
-      if (pv.loc.uInterlaceStartIter) gl.uniform1f(pv.loc.uInterlaceStartIter, il.startIter ?? 0);
-      if (pv.loc.uInterlaceParamA) gl.uniform1f(pv.loc.uInterlaceParamA, ip.paramA ?? 0);
-      if (pv.loc.uInterlaceParamB) gl.uniform1f(pv.loc.uInterlaceParamB, ip.paramB ?? 0);
-      if (pv.loc.uInterlaceParamC) gl.uniform1f(pv.loc.uInterlaceParamC, ip.paramC ?? 0);
-      if (pv.loc.uInterlaceParamD) gl.uniform1f(pv.loc.uInterlaceParamD, ip.paramD ?? 0);
-      if (pv.loc.uInterlaceParamE) gl.uniform1f(pv.loc.uInterlaceParamE, ip.paramE ?? 0);
-      if (pv.loc.uInterlaceParamF) gl.uniform1f(pv.loc.uInterlaceParamF, ip.paramF ?? 0);
-      const setVec2 = (name: string, v: any) => {
-        if (pv.loc[name]) gl.uniform2f(pv.loc[name]!, v?.x ?? 0, v?.y ?? 0);
-      };
-      const setVec3 = (name: string, v: any) => {
-        if (pv.loc[name]) gl.uniform3f(pv.loc[name]!, v?.x ?? 0, v?.y ?? 0, v?.z ?? 0);
-      };
-      setVec2('uInterlaceVec2A', ip.vec2A); setVec2('uInterlaceVec2B', ip.vec2B); setVec2('uInterlaceVec2C', ip.vec2C);
-      setVec3('uInterlaceVec3A', ip.vec3A); setVec3('uInterlaceVec3B', ip.vec3B); setVec3('uInterlaceVec3C', ip.vec3C);
-    } else {
-      if (pv.loc.uInterlaceEnabled) gl.uniform1f(pv.loc.uInterlaceEnabled, 0.0);
+    // Fused-weave uniforms (bank params ride formulaParams; rhythm/enable
+    // rides weaveState). Guarded setters skip locations the shader lacks.
+    {
+      const weave = weaveBagFrom(state);
+      if (pv.loc.uWeaveEnabled) gl.uniform1f(pv.loc.uWeaveEnabled, weave?.weaveEnabled === false ? 0.0 : 1.0);
+      const capK = (k: string) => k.charAt(0).toUpperCase() + k.slice(1);
+      for (const [key, v] of Object.entries(weave ?? {})) {
+        if (key === 'weaveEnabled') continue;
+        const l = pv.loc['u' + capK(key)];
+        if (!l) continue;
+        if (/^ws\d+Vec2/.test(key)) gl.uniform2f(l, (v as any)?.x ?? 0, (v as any)?.y ?? 0);
+        else if (/^ws\d+Vec3/.test(key)) gl.uniform3f(l, (v as any)?.x ?? 0, (v as any)?.y ?? 0, (v as any)?.z ?? 0);
+        else if (/^ws\d+Vec4/.test(key)) gl.uniform4f(l, (v as any)?.x ?? 0, (v as any)?.y ?? 0, (v as any)?.z ?? 0, (v as any)?.w ?? 0);
+        else gl.uniform1f(l, typeof v === 'number' ? v : v ? 1.0 : 0.0);
+      }
     }
 
     // Quality uniforms for preview raymarching
@@ -530,20 +510,18 @@ export function PreviewCanvas() {
   useEffect(() => {
     if (mode !== 'fractal') return;
     const pv = pvRef.current;
-    const state = useMeshExportStore.getState();
-    const il = state.interlaceState;
-    const expectedKey = (loadedDefinition?.id ?? '') + (il ? '+' + il.definition.id : '');
-    if (loadedDefinition && pv.defId !== expectedKey) {
+    const expectedKey = loadedDefinition?.id ?? '';
+    if (loadedDefinition && !pv.defId?.startsWith(expectedKey)) {
       pv.defId = null; // force recompile
     }
     requestRender();
-  }, [loadedDefinition, _interlaceState, mode, requestRender]);
+  }, [loadedDefinition, mode, requestRender]);
 
   // ── Re-render when params/bounds change ──────────────────────────
 
   useEffect(() => {
     if (mode === 'fractal') requestRender();
-  }, [_formulaParams, _interlaceState, _iters, _bboxCenter, _bboxSize, _clipOutsideBounds, _qualitySettings, mode, requestRender]);
+  }, [_formulaParams, _weaveState, _iters, _bboxCenter, _bboxSize, _clipOutsideBounds, _qualitySettings, mode, requestRender]);
 
   // ── Update mesh preview when lastMesh changes ────────────────────
 

@@ -66,7 +66,7 @@ type EventMap = {
     [FRACTAL_EVENTS.TRACK_FOCUS]: string;
     [FRACTAL_EVENTS.TEXTURE]: { textureType: 'color' | 'env'; dataUrl: string | null };
     [FRACTAL_EVENTS.ENGINE_QUEUE]: { featureId: string; param: string; value: any };
-    [FRACTAL_EVENTS.REGISTER_FORMULA]: { id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; selfContainedSDE?: boolean } };
+    [FRACTAL_EVENTS.REGISTER_FORMULA]: { id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; preambleVars?: string[]; capabilities?: ReadonlySet<string> } };
     [FRACTAL_EVENTS.RESET_HINTS]: void;
     [FRACTAL_EVENTS.CAMERA_SLOT_SAVED]: { slot: number; label: string };
     [FRACTAL_EVENTS.WORKER_BOOTED]: void;

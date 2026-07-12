@@ -39,7 +39,7 @@ export const RhombicDodecahedron: FractalDefinition = {
     // Centroid ≈ (2/3, 1/3, 0) direction = normalize(2,1,0)
     const vec3 rd_offset_dir = vec3(0.89442719, 0.44721360, 0.0);
 
-    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).`,
+    // cp_dmin / cp_scale / cp_trap are engine-provided (estimator:cutting-plane capability).`,
         function: `
     void formula_RhombicDodecahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
@@ -77,8 +77,6 @@ export const RhombicDodecahedron: FractalDefinition = {
     }`,
         loopBody: `formula_RhombicDodecahedron(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3B);`,
-        usesSharedRotation: true,
-        supportsCuttingPlane: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
@@ -113,7 +111,7 @@ export const RhombicDodecahedron: FractalDefinition = {
                 layer3Color: "#ffffff", layer3Scale: 89, layer3Strength: 0, layer3Bump: 0, layer3Turbulence: 0, layer3Enabled: true
             },
             ao: { aoIntensity: 0.396, aoSpread: 0.135, aoSamples: 5, aoEnabled: true, aoMode: false },
-            reflections: { enabled: true, reflectionMode: 1, bounces: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
+            reflections: { enabled: true, reflectionMode: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
             materials: {
                 diffuse: 1.8, reflection: 0.1, specular: 1.2, roughness: 0.4,
                 rim: 0.307, rimExponent: 1.6, envStrength: 2.09, envBackgroundStrength: 0.15,

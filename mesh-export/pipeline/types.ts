@@ -2,7 +2,6 @@
 // GMT Fractal Explorer
 
 import type { FractalDefinition } from '../../engine-gmt/types/fractal';
-import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 import type { DCMeshResult } from '../algorithms/dc-core';
 
 /** UI callback object — all pipeline UI interaction goes through this */
@@ -41,7 +40,8 @@ export interface MeshPipelineParams {
   gridMin: [number, number, number];
   gridMax: [number, number, number];
   boundsRange: number;
-  interlace?: MeshInterlaceConfig;
+  /** Fused-weave uniform bag: ws<k>* bank params + weaveEnabled + rhythm keys. */
+  weave?: Record<string, any>;
 
   // Quality settings
   estimator?: number;        // 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2

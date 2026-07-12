@@ -37,7 +37,7 @@ export const GreatStellatedDodecahedron: FractalDefinition = {
     vec3 gsd_faceNor;
     float gsd_faceOff;
 
-    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).
+    // cp_dmin / cp_scale / cp_trap are engine-provided (estimator:cutting-plane capability).
 
     void GreatStellatedDodecahedron_precalc() {
         // Precompute stellated face normal from stellation parameter
@@ -99,8 +99,6 @@ export const GreatStellatedDodecahedron: FractalDefinition = {
         loopBody: `formula_GreatStellatedDodecahedron(z, dr, trap, c);`,
         loopInit: `GreatStellatedDodecahedron_precalc();
 gmt_precalcRodrigues(uVec3B);`,
-        usesSharedRotation: true,
-        supportsCuttingPlane: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
@@ -138,7 +136,7 @@ gmt_precalcRodrigues(uVec3B);`,
                 layer3Color: "#ffffff", layer3Scale: 89, layer3Strength: 0, layer3Bump: 0, layer3Turbulence: 0, layer3Enabled: true
             },
             ao: { aoIntensity: 0.42, aoSpread: 0.115, aoSamples: 12, aoEnabled: true, aoMode: false },
-            reflections: { enabled: true, reflectionMode: 1, bounces: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
+            reflections: { enabled: true, reflectionMode: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
             materials: {
                 diffuse: 2, reflection: 0, specular: 0.58, roughness: 0.132,
                 rim: 0, rimExponent: 5, envStrength: 0, envBackgroundStrength: 0.15,

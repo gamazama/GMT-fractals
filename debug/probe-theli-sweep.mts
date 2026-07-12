@@ -12,14 +12,15 @@ const scene = parseMB3DBinary(decodeSampleScene(s.b64), s.name);
 let w = scene.header.width || 480, h = scene.header.height || 360;
 const sc = 420 / Math.max(w, h); w = Math.round(w * sc); h = Math.round(h * sc);
 
+// Determinism + maxSteps-vs-convergence test. Same DE (est2, fudge0.3, detail4.125),
+// only maxSteps varies, repeated, to see if the background tracks maxSteps or render order.
 const grid = [
-  { tag: 'cur_est1_f0.2', estimator: 1, fudgeFactor: 0.2, deBailout: 1000, maxSteps: 1500 },
-  { tag: 'est2_f0.2', estimator: 2, fudgeFactor: 0.2, deBailout: 1000, maxSteps: 1500 },
-  { tag: 'est2_f0.5', estimator: 2, fudgeFactor: 0.5, deBailout: 1000, maxSteps: 1500 },
-  { tag: 'est1_f0.5', estimator: 1, fudgeFactor: 0.5, deBailout: 1000, maxSteps: 1500 },
-  { tag: 'est2_f0.2_steps2000', estimator: 2, fudgeFactor: 0.2, deBailout: 1000, maxSteps: 2000 },
-  { tag: 'est1_f0.1_steps2000', estimator: 1, fudgeFactor: 0.1, deBailout: 1000, maxSteps: 2000 },
-  { tag: 'est0_f0.3', estimator: 0, fudgeFactor: 0.3, deBailout: 1000, maxSteps: 1500 },
+  { tag: 'A_steps2000', estimator: 2, fudgeFactor: 0.3, detail: 4.125, deBailout: 1000, maxSteps: 2000 },
+  { tag: 'B_steps1000', estimator: 2, fudgeFactor: 0.3, detail: 4.125, deBailout: 1000, maxSteps: 1000 },
+  { tag: 'C_steps1500', estimator: 2, fudgeFactor: 0.3, detail: 4.125, deBailout: 1000, maxSteps: 1500 },
+  { tag: 'D_steps1000', estimator: 2, fudgeFactor: 0.3, detail: 4.125, deBailout: 1000, maxSteps: 1000 },
+  { tag: 'E_steps2000', estimator: 2, fudgeFactor: 0.3, detail: 4.125, deBailout: 1000, maxSteps: 2000 },
+  { tag: 'F_steps700', estimator: 2, fudgeFactor: 0.3, detail: 4.125, deBailout: 1000, maxSteps: 700 },
 ];
 
 const b = await chromium.launch({ headless: false, args: ['--use-angle=d3d11', '--ignore-gpu-blocklist', '--enable-webgl', '--disable-gpu-sandbox'] });

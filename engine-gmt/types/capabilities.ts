@@ -23,6 +23,9 @@ export type Capability =
   | 'iter:shared-rotation'   // reads/writes gmt_rotAxis/rotCos/rotSin
   // Estimator capabilities
   | 'estimator:cutting-plane'// writes cp_dmin/cp_scale/cp_trap accumulators
+  | 'estimator:difs'         // declares g_difsDE in preamble + writes its running
+                             // minimum in loopBody (MB3D dIFS, DEoption 20).
+                             // estimator 6 reads it; set by the MB3D importer.
   // Render-side outputs
   | 'render:writes-trap'     // populates result.y for trap-mode coloring
   | 'render:writes-iter';    // populates result.z (smoothiter) meaningfully

@@ -20,13 +20,18 @@
  *    lanes (`paramA..F` → `uVec2*` components → `uVec4*` components) plus a separate
  *    vec3 pool, used by the MB3D cross-slot allocator to thread a distinct uniform to
  *    every slot's params.
- *  - {@link ScalarParamPacker} — accumulates the slider schema + coreMath defaults as
- *    scalars are packed, grouping vec-lane scalars into ONE combined vec control per
- *    base uniform (mirrors the Workshop's `buildFractalParams` component packing).
+ *  - {@link VecControlAccumulator} — THE component-packing kernel: folds params sharing
+ *    a base vec uniform into ONE combined control + coreMath defaults. Consumed by both
+ *    {@link ScalarParamPacker} (MB3D, allocator-driven) and the Workshop's
+ *    `buildFractalParams` (mapping-driven).
+ *  - {@link slotWriteValue} — the vec4-held-vec3 `w:0` write contract, shared by the
+ *    packers and `FormulaParamsWidget`.
  *
  * Intentionally app-agnostic: no fractal-, Fragmentarium-, or MB3D-specific logic.
  * @see engine-gmt/features/core_math.ts (the uniform declarations these slots target)
  */
+
+import type { RotationDescriptor } from '../../engine/rotationDescriptor';
 
 // ── Slot vocabulary ─────────────────────────────────────────────────────────
 
@@ -34,6 +39,39 @@ export const SCALAR_SLOTS = ['paramA', 'paramB', 'paramC', 'paramD', 'paramE', '
 export const VEC2_SLOTS   = ['vec2A', 'vec2B', 'vec2C'] as const;
 export const VEC3_SLOTS   = ['vec3A', 'vec3B', 'vec3C'] as const;
 export const VEC4_SLOTS   = ['vec4A', 'vec4B', 'vec4C'] as const;
+
+// Component slots — pack multiple scalars into one vec uniform's components
+// ('vec3A.x', 'vec4B.w', …) — and swizzle slots — pack vec2 params into halves
+// of a vec3/vec4 ('vec4A.xy' / 'vec4A.zw' / 'vec3A.xy').
+export const VEC4_COMPONENTS = VEC4_SLOTS.flatMap(s => [`${s}.x`, `${s}.y`, `${s}.z`, `${s}.w`]);
+export const VEC3_COMPONENTS = VEC3_SLOTS.flatMap(s => [`${s}.x`, `${s}.y`, `${s}.z`]);
+export const VEC2_COMPONENTS = VEC2_SLOTS.flatMap(s => [`${s}.x`, `${s}.y`]);
+export const VEC4_VEC2_SLOTS = VEC4_SLOTS.flatMap(s => [`${s}.xy`, `${s}.zw`]);
+export const VEC3_VEC2_SLOTS = VEC3_SLOTS.flatMap(s => [`${s}.xy`]);
+
+/** Every core slot id, in declaration order — the full per-slot vocabulary a
+ *  native weave slot's BANK mirrors (6 scalars + 3 vec2 + 3 vec3 + 3 vec4). */
+export const CORE_SLOTS = [...SCALAR_SLOTS, ...VEC2_SLOTS, ...VEC3_SLOTS, ...VEC4_SLOTS] as const;
+
+/** Per-slot BANKS (ADR-0090): a native GMT formula woven as slot k presents its
+ *  declared params VERBATIM on its own bank — the coreMath vocabulary duplicated
+ *  under a `ws<k>` prefix. `WEAVE_BANK_COUNT` = the max weave slots (the MB3D
+ *  addon table), so every active slot 0..5 has a private bank and native slots
+ *  never share the coreMath dense pool with each other or with MB3D slots. */
+export const WEAVE_BANK_COUNT = 6;
+
+/** Bank state key for core slot id `slot` on bank `k` (`0`,`'paramA'` →
+ *  `'ws0ParamA'`). The DDFS `weave` feature declares one param per key; the
+ *  fused def's `parameters` reference them with `feature: 'weave'`. */
+export function weaveBankKey(bank: number, slot: string): string {
+    return `ws${bank}${slot.charAt(0).toUpperCase()}${slot.slice(1)}`;
+}
+
+/** GPU uniform accessor for a bank slot (`0`,`'paramA'` → `'uWs0ParamA'`) — the
+ *  uniform the DDFS bank param declares and the resolver remaps `uParamA` to. */
+export function weaveBankUniform(bank: number, slot: string): string {
+    return slotToUniform(weaveBankKey(bank, slot));
+}
 
 /** Given a component slot like `'vec3A.x'` or `'vec4A.xy'`, return its base slot
  *  (`'vec3A'`), or `null` for a plain scalar / non-component slot. */
@@ -187,8 +225,22 @@ export class LaneAllocator {
     private v: number;
     private vec3Vec4 = 0;   // uVec4* units claimed by vec3-overflow, from the high end (C→B→A)
     private overflowed = false;
+    private derived: Record<string, number> = {};
 
     constructor(scalarStart = 0, vec3Start = 0) { this.s = scalarStart; this.v = vec3Start; }
+
+    /** Claim the next index in a DERIVED-uniform bank (a fixed pool of CPU-computed
+     *  uniforms outside the packable lanes — e.g. the MB3D rotation matrices).
+     *  `kind` is an arbitrary bank key; `cap` its fixed size. Threaded across a
+     *  multi-slot hybrid like the scalar/vec3 cursors so each slot's derived
+     *  uniforms are distinct. Returns `null` (and flags overflow) when the bank
+     *  is exhausted — the caller falls back to baking. */
+    nextDerived(kind: string, cap: number): number | null {
+        const n = this.derived[kind] ?? 0;
+        if (n >= cap) { this.overflowed = true; return null; }
+        this.derived[kind] = n + 1;
+        return n;
+    }
 
     /** Number of `uVec4*` units scalar-packing has started using (from the low end). */
     private scalarVec4Used(): number { return Math.max(0, Math.ceil((this.s - FIXED_SCALAR_COUNT) / 4)); }
@@ -255,48 +307,175 @@ export interface PackedParam {
     max: number;
     step: number;
     default: number | { x: number; y: number; z?: number; w?: number };
+    /** 'toggle': on/off rendering — per-component buttons on an all-bool vec base,
+     *  or a segmented Off/On switch on a bool scalar lane. 'mixed': a vec2 whose
+     *  x is a GATING bool and y a value it enables (toggle X + slider Y — only
+     *  emitted when the bool's name declares gating semantics, since mixed greys
+     *  the slider while the toggle is off). */
+    mode?: 'toggle' | 'mixed';
+    /** Rotation semantics of the stored value (kind / units / Euler order) —
+     *  stamped by the packers on angle-typed options so the widgets and the
+     *  rotation gizmo know what the components mean. See engine/rotationDescriptor. */
+    rotation?: RotationDescriptor;
+}
+
+/**
+ * The vec4-held-vec3 write contract: a vec3 param stored in a `uVec4*` unit occupies
+ * `.xyz` and must pin `.w` to 0 so the full vec4 uniform syncs cleanly. Returns the
+ * coreMath-shaped value to store for a param value landing on `slotId`. Every writer
+ * of a slot value (packers, widgets) routes through this instead of restating the rule.
+ */
+export function slotWriteValue(slotId: string, paramType: string | undefined, v: any): any {
+    // Matches the bare coreMath slot (`vec4A`) AND a per-slot bank key (`ws0Vec4A`,
+    // ADR-0090) — a banked MB3D slot can pack a vec3 param into its bank's vec4 unit.
+    if (paramType === 'vec3' && /^(ws\d+)?[Vv]ec4[ABC]$/.test(slotId)) return { x: v.x, y: v.y, z: v.z, w: 0 };
+    return v;
+}
+
+/** One param's contribution to a combined vec control (see {@link VecControlAccumulator}). */
+interface VecEntry {
+    label: string;
+    comps: readonly string[];
+    min: number;
+    max: number;
+    step: number;
+    isBool: boolean;
+    /** Bool whose NAME declares gating semantics ("apply …", "use …", "enable …")
+     *  — eligible to drive a vec2 'mixed' control (toggle X gates slider Y). */
+    gates: boolean;
+    isVec3Param: boolean;
+    rotation?: RotationDescriptor;
+}
+
+/**
+ * THE component-packing kernel: folds params that share a base vec uniform into ONE
+ * combined control per base, plus the matching coreMath defaults. Shared by the MB3D
+ * {@link ScalarParamPacker} (allocator-driven, one scalar at a time) and the Workshop's
+ * `buildFractalParams` (mapping-driven, whole params at a time) — previously two
+ * hand-mirrored implementations.
+ *
+ * Semantics (rebuilt from ALL entries on every {@link add}):
+ *  - label: members joined with `" | "` in component order (x→w), consecutive
+ *    components of one param collapsed to a single mention;
+ *  - range: min/max widen across members, step narrows; all-bool bases clamp to
+ *    0..1 step 1 (and a fully-bool vec3 base renders as toggles);
+ *  - type: the base's own kind — EXCEPT a vec4 base whose sole occupant is a genuine
+ *    vec3 param, which presents as a vec3 control (the vec4-held-vec3 contract:
+ *    `.w` stays pinned to 0, see {@link slotWriteValue});
+ *  - the control is created on first touch and pushed to `out` (display order follows
+ *    first touch), then mutated in place.
+ */
+export class VecControlAccumulator {
+    private byBase = new Map<string, { param: PackedParam; entries: VecEntry[] }>();
+
+    constructor(
+        private out: PackedParam[],
+        private coreMath: Record<string, any>,
+    ) {}
+
+    /** Fold one param (its label, the components it occupies, per-component default
+     *  values, and slider range) into the combined control for `base`. */
+    add(
+        base: string, label: string, comps: readonly string[], values: readonly number[],
+        min: number, max: number, step: number,
+        opts: { isBool?: boolean; gates?: boolean; isVec3Param?: boolean; rotation?: RotationDescriptor } = {},
+    ): void {
+        const kind = vecKindOf(base);
+        let slot = this.byBase.get(base);
+        if (!slot) {
+            const param: PackedParam = { label, id: base, type: kind, min, max, step, default: zeroVec(kind) };
+            slot = { param, entries: [] };
+            this.byBase.set(base, slot);
+            this.out.push(param);
+            this.coreMath[base] = zeroVec(kind);
+        }
+        slot.entries.push({ label, comps, min, max, step, isBool: !!opts.isBool, gates: !!opts.gates, isVec3Param: !!opts.isVec3Param, rotation: opts.rotation });
+
+        comps.forEach((c, i) => {
+            const v = values[i] ?? values[0] ?? 0;
+            (slot!.param.default as any)[c] = v;
+            this.coreMath[base][c] = v;
+        });
+
+        this.rebuild(kind, slot);
+    }
+
+    private rebuild(kind: 'vec2' | 'vec3' | 'vec4', slot: { param: PackedParam; entries: VecEntry[] }): void {
+        const { param, entries } = slot;
+
+        const labelByComp: Record<string, string> = {};
+        for (const e of entries) for (const c of e.comps) labelByComp[c] = labelByComp[c] ?? e.label;
+        const parts: string[] = [];
+        const ALL = ['x', 'y', 'z', 'w'];
+        for (let i = 0; i < ALL.length;) {
+            const name = labelByComp[ALL[i]];
+            if (!name) { i++; continue; }
+            let j = i + 1;
+            while (j < ALL.length && labelByComp[ALL[j]] === name) j++;
+            parts.push(name);
+            i = j;
+        }
+        param.label = parts.join(' | ');
+
+        const allBools = entries.every(e => e.isBool);
+        param.min = allBools ? 0 : Math.min(...entries.map(e => e.min));
+        param.max = allBools ? 1 : Math.max(...entries.map(e => e.max));
+        param.step = allBools ? 1 : Math.min(...entries.map(e => e.step));
+        // Any FULLY-bool base renders as per-component toggles. A vec2 whose x is
+        // a GATING bool ("apply …") over a continuous y renders as 'mixed'
+        // (toggle X enables slider Y) — the gating check matters because mixed
+        // greys the slider while the toggle is off, which would be wrong for two
+        // unrelated params that merely share the lane.
+        const boolAt = (c: string) => entries.some(e => e.comps.includes(c) && e.isBool);
+        const gatesAt = (c: string) => entries.some(e => e.comps.includes(c) && e.gates);
+        const hasComp = (c: string) => entries.some(e => e.comps.includes(c));
+        if (allBools) param.mode = 'toggle';
+        else if (kind === 'vec2' && gatesAt('x') && hasComp('y') && !boolAt('y')) param.mode = 'mixed';
+        else delete param.mode;
+
+        // Rotation semantics survive only while the param is the base's SOLE
+        // occupant — once an unrelated scalar packs into the same vec unit, the
+        // combined control is no longer a rotation.
+        if (entries.length === 1 && entries[0].rotation) param.rotation = entries[0].rotation;
+        else delete param.rotation;
+
+        param.type = kind === 'vec4' && entries.length === 1 && entries[0].isVec3Param ? 'vec3' : kind;
+    }
 }
 
 /**
  * Wraps a {@link LaneAllocator} and accumulates the slider schema + coreMath defaults
  * as a slot's options are packed. Scalars landing on `paramA..F` become individual
- * sliders; scalars landing on vec lanes are grouped into ONE combined vec control per
- * base uniform — its label joins the members with `" | "`, its min/max/step collapse to
- * the widest, and each member writes its own component of the base vec's default object.
- * (Mirrors the Workshop's `buildFractalParams` component packing.)
+ * sliders; scalars landing on vec lanes — and whole vec3 units — are folded through the
+ * shared {@link VecControlAccumulator}.
  *
  * One packer per slot; the underlying allocator is shared across slots.
  */
 export class ScalarParamPacker {
     readonly params: PackedParam[] = [];
     readonly coreMath: Record<string, any> = {};
-    private vecByBase = new Map<string, PackedParam>();
+    private acc = new VecControlAccumulator(this.params, this.coreMath);
 
     constructor(private alloc: LaneAllocator) {}
 
     /** Allocate one scalar lane for an option, record its slider + default, and return
-     *  the GLSL accessor for the binding — or `null` if the scalar pool overflowed. */
-    scalar(label: string, value: number, min: number, max: number, step: number): string | null {
+     *  the GLSL accessor for the binding — or `null` if the scalar pool overflowed.
+     *  `opts.bool` marks a binary option (renders as a toggle — segmented Off/On on
+     *  a paramA..F lane, per-component button in an all-bool vec pack); `opts.gates`
+     *  marks a bool whose name declares gating semantics (vec2 'mixed' candidate). */
+    scalar(label: string, value: number, min: number, max: number, step: number,
+        opts?: { bool?: boolean; gates?: boolean; rotation?: RotationDescriptor }): string | null {
         const lane = this.alloc.nextScalar();
         if (!lane) return null;
         if (lane.component) {
-            const kind = vecKindOf(lane.coreKey);
-            let p = this.vecByBase.get(lane.coreKey);
-            if (!p) {
-                p = { label, id: lane.coreKey, type: kind, min, max, step, default: zeroVec(kind) };
-                this.vecByBase.set(lane.coreKey, p);
-                this.params.push(p);
-                this.coreMath[lane.coreKey] = zeroVec(kind);
-            } else {
-                p.label += ' | ' + label;
-                p.min = Math.min(p.min, min);
-                p.max = Math.max(p.max, max);
-                p.step = Math.min(p.step, step);
-            }
-            (p.default as any)[lane.component] = value;
-            this.coreMath[lane.coreKey][lane.component] = value;
+            this.acc.add(lane.coreKey, label, [lane.component], [value], min, max, step,
+                { ...(opts?.bool ? { isBool: true, gates: opts.gates } : {}), rotation: opts?.rotation });
         } else {
-            this.params.push({ label, id: lane.coreKey, min, max, step, default: value });
+            this.params.push({
+                label, id: lane.coreKey, min, max, step, default: value,
+                ...(opts?.bool ? { mode: 'toggle' as const } : {}),
+                ...(opts?.rotation ? { rotation: opts.rotation } : {}),
+            });
             this.coreMath[lane.coreKey] = value;
         }
         return lane.accessor;
@@ -306,11 +485,12 @@ export class ScalarParamPacker {
      *  default, and return the lane (vec3Accessor for a whole-vec3 read, componentBase for
      *  `.x/.y/.z` binds) — or `null` if both the vec3 pool and vec4 holders are full. A
      *  vec4-held vec3 occupies `.xyz`; its coreMath gets `w:0` so the vec4 syncs cleanly. */
-    vec3(label: string, def: { x: number; y: number; z: number }, min: number, max: number, step: number): { id: string; vec3Accessor: string; componentBase: string } | null {
+    vec3(label: string, def: { x: number; y: number; z: number }, min: number, max: number, step: number,
+        opts?: { rotation?: RotationDescriptor }): { id: string; vec3Accessor: string; componentBase: string } | null {
         const lane = this.alloc.nextVec3();
         if (!lane) return null;
-        this.params.push({ label, id: lane.id, type: 'vec3', min, max, step, default: def });
-        this.coreMath[lane.id] = lane.id.startsWith('vec4') ? { ...def, w: 0 } : def;
+        this.acc.add(lane.id, label, ['x', 'y', 'z'], [def.x, def.y, def.z], min, max, step,
+            { isVec3Param: true, rotation: opts?.rotation });
         return lane;
     }
 }

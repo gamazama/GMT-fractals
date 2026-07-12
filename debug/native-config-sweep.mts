@@ -103,7 +103,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'op'): Promise<T> {
 // ─── Eligibility ─────────────────────────────────────────────────────────────
 
 /** Modular uses a separate shader pipeline not exercised by this sweep. All
- *  other natives are eligible. hybrid modes skip selfContainedSDE internally
+ *  other natives are eligible. hybrid modes skip shape:self-contained internally
  *  (they compile cleanly but hybrid has no effect). */
 function eligibleFormulas(): string[] {
     return registry.getAll()

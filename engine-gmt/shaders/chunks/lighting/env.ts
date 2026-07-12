@@ -10,7 +10,61 @@ export const LIGHTING_ENV = `
 // (sampleProceduralEnv) both read it, so they can't drift. @see docs/adr/0070
 vec3 proceduralSunDir() { return normalize(vec3(1.0, 4.0, 2.0)); }
 
-vec3 GetEnvMap(vec3 dir, float roughness) {
+// 4-tap bicubic B-spline sample of the env map's BASE level (Sigg & Hadwiger
+// GPU Gems 2 formulation — four bilinear taps reconstruct the 16-texel cubic).
+// For MAGNIFIED low-res equirect skies (a 1k map across a full viewport),
+// plain bilinear shows diamond-shaped texel artifacts; the B-spline smooths
+// them into clean gradients. Only used in the near-base regime (lod < 1) —
+// mip-blurred lookups stay single-tap trilinear.
+vec3 sampleEnvBicubic(vec2 uv) {
+    vec2 ts = vec2(textureSize(uEnvMapTexture, 0));
+    vec2 coord = uv * ts - 0.5;
+    vec2 ix = floor(coord);
+    vec2 f = coord - ix;
+    vec2 f2 = f * f;
+    vec2 f3 = f2 * f;
+    vec2 w0 = (-f3 + 3.0 * f2 - 3.0 * f + 1.0) / 6.0;
+    vec2 w1 = (3.0 * f3 - 6.0 * f2 + 4.0) / 6.0;
+    vec2 w2 = (-3.0 * f3 + 3.0 * f2 + 3.0 * f + 1.0) / 6.0;
+    vec2 w3 = f3 / 6.0;
+    vec2 g0 = w0 + w1;
+    vec2 g1 = w2 + w3;
+    // Each tap lands between two texels so the hardware bilinear does the
+    // inner interpolation; +0.5 centres on texels. Horizontal wrap comes from
+    // the sampler (wrapS = Repeat on env textures — the equirect seam).
+    vec2 c0 = (ix - 1.0 + w1 / g0 + 0.5) / ts;
+    vec2 c1 = (ix + 1.0 + w3 / g1 + 0.5) / ts;
+    return texture(uEnvMapTexture, vec2(c0.x, c0.y)).rgb * (g0.x * g0.y)
+         + texture(uEnvMapTexture, vec2(c1.x, c0.y)).rgb * (g1.x * g0.y)
+         + texture(uEnvMapTexture, vec2(c0.x, c1.y)).rgb * (g0.x * g1.y)
+         + texture(uEnvMapTexture, vec2(c1.x, c1.y)).rgb * (g1.x * g1.y);
+}
+
+// Single-site image-path sample. Every GetEnvMap-body instance fxc inlines used
+// to carry TWO copies of the bicubic mix (both uEnvAvgColor branches) — at ~14
+// transitive instances in a raymarched build that was ~2.5s of cold compile
+// (measured 2026-07-10, §2.6.2). One call site here emits the bicubic once per
+// instance; baseFilter is CONSTANT at every caller, so fxc DCEs the bicubic
+// entirely out of instances that pass false (the fog chain — fogRadiance samples
+// at lod ≥ 1 on any real map, the magnification branch was dead there anyway).
+vec3 envImageSample(vec2 uv, float lod, bool baseFilter) {
+    if (baseFilter && lod < 1.0) {
+        // Near-base (magnification) regime: bicubic-smooth the base level
+        // and blend into the mip chain by lod 1 (continuous hand-off).
+        return mix(sampleEnvBicubic(uv), textureLod(uEnvMapTexture, uv, 1.0).rgb, max(lod, 0.0));
+    }
+    return textureLod(uEnvMapTexture, uv, max(lod, 0.0)).rgb;
+}
+
+// Core env sample — shared by GetEnvMap (baseFilter on) and fogRadiance
+// (baseFilter off). Callers MUST pass a constant baseFilter so fxc can DCE.
+vec3 envSampleCore(vec3 dir, float roughness, bool baseFilter) {
+    // Path 0: SOLID sky (uEnvSource 2) — the sky IS a flat colour
+    // (uFogColorLinear, the shared Sky/Fog colour, ADR-0098). Constant in every
+    // direction, so it also acts as a uniform dome light, appears in
+    // reflections, and feeds fogRadiance — all for free through this one exit.
+    if (uEnvSource > 1.5) return uFogColorLinear;
+
     // 1. Apply Rotation (CPU Optimized: uEnvRotationMatrix, identity when rotation is 0)
     dir.xz = uEnvRotationMatrix * dir.xz;
 
@@ -39,17 +93,16 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
         // capping the LOD short of the bad mips. @see docs/adr/0069
         if (uEnvAvgColor.r >= 0.0) {
             float lod = roughness * uEnvMaxMip;
-            col = textureLod(uEnvMapTexture, uv, lod).rgb;
+            col = envImageSample(uv, lod, baseFilter);
             float avgMix = smoothstep(uEnvMaxMip - 4.0, uEnvMaxMip, lod);
             col = mix(col, uEnvAvgColor, avgMix);
         } else {
-            float lod = roughness * max(0.0, uEnvMaxMip - 4.0);
-            col = textureLod(uEnvMapTexture, uv, lod).rgb;
+            col = envImageSample(uv, roughness * max(0.0, uEnvMaxMip - 4.0), baseFilter);
         }
-        
+
         // Apply Color Profile (Linear/ACES)
         col = applyTextureProfile(col, uEnvMapColorSpace);
-    } 
+    }
     else {
         // Path 3: Procedural Sky — simple gradient + sun glint + rim fill
         float y = dir.y * 0.5 + 0.5;  // Remap vertical direction [-1,1] → [0,1]
@@ -74,6 +127,47 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
     }
 
     return col;
+}
+
+vec3 GetEnvMap(vec3 dir, float roughness) {
+    return envSampleCore(dir, roughness, true);
+}
+
+// In-scattered fog radiance for a ray direction (ADR-0097; semantics inverted
+// per ADR-0097 update #4). Physically the fog IS the atmosphere lit by the sky,
+// so BY DEFAULT it tracks a heavily blurred env sample per direction — aerial
+// perspective: fog brightens toward the bright side of the sky, and for a
+// SOLID sky it is exactly the Sky colour. uFogTint ("Fog Tint") blends toward
+// the custom flat Fog Color instead (1 = fully custom — the pre-inversion
+// legacy look; migration v6 pins old scenes there).
+//
+// DELIBERATELY NOT scaled by uEnvStrength: the fog follows the VISIBLE sky
+// definition, not the env-light strength — a sunset backdrop with the dome
+// light at 0 (already an artistic decouple) should still be matchable by the
+// fog. The HDR knee below bounds the brightness either way.
+//
+// NOT roughness 1.0: for image env maps GetEnvMap's terminal LOD blends to the
+// direction-INDEPENDENT solid-angle average (ADR-0069 avgMix window, the last
+// 4 mips) — per-direction fog would come out one flat grey. Sample at the
+// blurriest mip BELOW that window instead (lod = uEnvMaxMip - 4, i.e.
+// roughness = 1 - 4/uEnvMaxMip): maximally soft but still directional.
+// Gradient/procedural env paths ignore the exact value and stay directional.
+vec3 fogRadiance(vec3 dir) {
+    if (uFogTint > 0.999) return uFogColorLinear;
+    float fogRough = clamp(1.0 - 4.0 / max(uEnvMaxMip, 5.0), 0.5, 1.0);
+    // baseFilter=false: at fogRough ≥ 0.5 the lod<1 magnification branch is dead
+    // at runtime — passing the constant lets fxc DCE the bicubic out of every
+    // fogRadiance inline (~8 instances in a raymarched build, §2.6.2).
+    vec3 envFog = envSampleCore(dir, fogRough, false);
+    // HDR soft knee: even blurred, a bright HDR sun region can carry luminance
+    // 10-50+, and fog radiance multiplies into EVERY fogged term (ambient, env,
+    // post fog) — the scene blew out with only a little tint (owner repro).
+    // Pass luminance <= 1 through untouched and compress the excess toward an
+    // asymptote of 2 (the clampReflLum curve with t = 1): fog is scattered
+    // AMBIENT light, never a sun-disc-bright emitter.
+    float l = dot(envFog, vec3(0.2126, 0.7152, 0.0722));
+    if (l > 1.0) envFog *= (2.0 - exp(-(l - 1.0))) / l;
+    return mix(envFog, uFogColorLinear, uFogTint);
 }
 
 // Sample the env map at the resolution the CDF was built from. Used by

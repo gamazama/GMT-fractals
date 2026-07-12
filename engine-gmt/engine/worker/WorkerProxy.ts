@@ -15,6 +15,7 @@ import type { CameraState } from '../../types/common';
 import type { VideoExportConfig } from '../../../engine/codec/VideoExportTypes';
 import type { BucketRenderConfig } from '../BucketRenderer';
 import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState, SerializedCamera, SerializedOffset } from './WorkerProtocol';
+import type { DerivedRotationSpec } from '../../types/fractal';
 import { injectMetadata } from '../../../utils/pngMetadata';
 import { showToast } from '../../../engine/store/toastStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
@@ -830,7 +831,7 @@ export class WorkerProxy implements AccumulationController {
         this.post({ type: 'CONFIG', config });
     }
 
-    registerFormula(id: string, shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; selfContainedSDE?: boolean }) {
+    registerFormula(id: string, shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; preambleVars?: string[]; capabilities?: ReadonlySet<string>; derivedRotations?: DerivedRotationSpec[] }) {
         this.post({ type: 'REGISTER_FORMULA', id, shader });
     }
 

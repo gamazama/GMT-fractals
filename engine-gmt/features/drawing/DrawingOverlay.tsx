@@ -23,6 +23,16 @@ const _centerVec = new THREE.Vector3();
 const _worldOriginVec = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
 
+/** True when a key event originates from an editable field — the drawing
+ *  tool's window-level key listeners must never swallow keys there (else
+ *  Space/Alt get stripped from every text input app-wide). */
+const isTypingTarget = (e: KeyboardEvent): boolean => {
+    const el = e.target as HTMLElement | null;
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+};
+
 // ── Shape projection ─────────────────────────────────────────────────
 
 interface ScreenPt { x: number; y: number; behind: boolean }
@@ -207,7 +217,25 @@ export const tick = () => {
     const tempShape = _overlayRef.tempShapeRef?.current ?? null;
 
     const hasContent = (shapes && shapes.length > 0) || tempShape || showAxes;
-    if (!hasContent) return;
+    if (!hasContent) {
+        // Nothing to draw — but any SVG paths, labels, and ✕ delete buttons
+        // left over from a just-removed shape must STILL be swept, or they
+        // stay orphaned on screen. Deleting the ONLY shape drops the count to
+        // zero, so an early `return` here (before the stale-element cleanup
+        // further down) left the last drawing — and its delete button — frozen
+        // on the viewport, making the ✕ look like it did nothing. Sweep the
+        // caches on the way out instead.
+        if (_svgCache.size) {
+            for (const el of _svgCache.values()) el.remove();
+            _svgCache.clear();
+        }
+        if (_labelCache.size) {
+            for (const el of _labelCache.values()) el.remove();
+            _labelCache.clear();
+        }
+        if (_overlayRef.axesSvgEl) _overlayRef.axesSvgEl.style.display = 'none';
+        return;
+    }
 
     const svgEl = _overlayRef.svgEl;
     const labelsEl = _overlayRef.labelsEl;
@@ -577,14 +605,24 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
     }, [getCamera]);
 
     // --- Keyboard listeners ---
+    // This overlay is mounted whenever the drawing feature slice exists (i.e.
+    // always, not just while the tool is active), so these window listeners are
+    // live app-wide. Two guards keep them from leaking:
+    //   1. Skip while the user is typing in a field — otherwise the Space/Alt
+    //      preventDefault below stripped the space character from EVERY text
+    //      input in the app (gallery title/description, save names, AI prompt…).
+    //   2. Only preventDefault while a draw can actually happen (`active`); the
+    //      modifier keys mean nothing to the idle tool, so don't suppress the
+    //      browser/app default for them when we're not drawing.
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Alt') e.preventDefault();
-            if (e.code === 'Space') { keys.current.space = true; e.preventDefault(); }
+            if (isTypingTarget(e)) return;
+            if (e.key === 'Alt') { if (active) e.preventDefault(); }
+            if (e.code === 'Space') { keys.current.space = true; if (active) e.preventDefault(); }
             if (e.key.toLowerCase() === 'x') keys.current.x = true;
         };
         const onKeyUp = (e: KeyboardEvent) => {
-            if (e.key === 'Alt') e.preventDefault();
+            if (e.key === 'Alt') { if (active) e.preventDefault(); }
             if (e.code === 'Space') keys.current.space = false;
             if (e.key.toLowerCase() === 'x') keys.current.x = false;
         };
@@ -594,7 +632,7 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
             window.removeEventListener('keydown', onKeyDown);
             window.removeEventListener('keyup', onKeyUp);
         };
-    }, []);
+    }, [active]);
 
     // --- Interaction Logic (pointer events on viewport canvas) ---
     useEffect(() => {

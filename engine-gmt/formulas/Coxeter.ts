@@ -25,7 +25,7 @@ export const Coxeter: FractalDefinition = {
     vec3 uCox_nor;
     vec3 uCox_pca;
 
-    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).
+    // cp_dmin / cp_scale / cp_trap are engine-provided (estimator:cutting-plane capability).
 
     void Coxeter_precalc() {
         float N = uParamC;
@@ -75,8 +75,6 @@ export const Coxeter: FractalDefinition = {
     }`,
         loopBody: `formula_Coxeter(z, dr, trap, c);`,
         loopInit: `Coxeter_precalc(); gmt_precalcRodrigues(uVec3B);`,
-        usesSharedRotation: true,
-        supportsCuttingPlane: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
@@ -121,7 +119,7 @@ export const Coxeter: FractalDefinition = {
                 layer3Color: "#ffffff", layer3Scale: 89, layer3Strength: 0, layer3Bump: 0, layer3Turbulence: 0, layer3Enabled: true
             },
             ao: { aoIntensity: 0.47, aoSpread: 0.2, aoSamples: 5, aoEnabled: true, aoMode: false },
-            reflections: { enabled: true, reflectionMode: 1, bounces: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
+            reflections: { enabled: true, reflectionMode: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.62 },
             materials: {
                 diffuse: 1.8, reflection: 0.15, specular: 0.67, roughness: 0.232,
                 rim: 0.3, rimExponent: 5, envStrength: 0.3, envBackgroundStrength: 0.18,

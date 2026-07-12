@@ -135,7 +135,7 @@ const GMF_API_DOCS = `
  *    3 Dampened      0.5*r*ln(r)/(dr+8) fixes slicing on thin structures
  *    4 Linear(2.0)   (r-2.0)/dr       classic Menger offset
  *  (5 Cutting-Plane is formula-gated; ignore for normal formulas.)
- *  fudgeFactor ("Slice Optimization"): default 1.0. Use ~0.5 for hand-written
+ *  fudgeFactor ("Step Size"): default 1.0. Use ~0.5 for hand-written
  *  DEs — values <1 take smaller raymarch steps so an imperfect/overestimating
  *  estimator doesn't overshoot the surface (which shows as flat "slices"/holes).
  *
@@ -189,20 +189,23 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
     // We clone to avoid mutating the original definition during delete
     const { shader, ...meta } = def;
 
-    // Preserve shader metadata that isn't GLSL code but is needed at load time
-    // (interlace, cutting-plane DE, etc). These live on the shader object but
-    // don't map to a GLSL block, so we stash them in Metadata.
-    // Auto-detection in parseGMF covers most missing flags for legacy files,
-    // but stashing keeps the round-trip explicit and survives obfuscation.
+    // Preserve shader metadata that isn't GLSL code but is needed at load time.
+    // These live on the shader object but don't map to a GLSL block, so we
+    // stash them in Metadata. Since the legacy-flag retirement (ADR-0059
+    // completion) the runtime carries capabilities only — the retired booleans
+    // (selfContainedSDE / usesSharedRotation / supportsCuttingPlane) are still
+    // ACCEPTED on parse (promoted to tokens) but no longer written.
     const shaderMeta: Record<string, any> = {};
     if (shader.preambleVars?.length) shaderMeta.preambleVars = shader.preambleVars;
-    if (shader.usesSharedRotation) shaderMeta.usesSharedRotation = true;
-    if (shader.supportsCuttingPlane) shaderMeta.supportsCuttingPlane = true;
-    if (shader.selfContainedSDE) shaderMeta.selfContainedSDE = true;
-    // P8: stash capabilities as a sorted array (Sets aren't JSON-serializable).
+    // Stash capabilities as a sorted array (Sets aren't JSON-serializable).
     // Sorted for stable diffs across round-trips. Restored as a Set in parseGMF.
     if (shader.capabilities && shader.capabilities.size > 0) {
         shaderMeta.capabilities = [...shader.capabilities].sort();
+    }
+    // CPU-derived rotation uniforms (MB3D live angle lanes) — plain JSON data;
+    // without it a reloaded body reads identity uMb3dRot* forever.
+    if (shader.derivedRotations?.length) {
+        shaderMeta.derivedRotations = shader.derivedRotations;
     }
 
     const metadata = {
@@ -259,12 +262,21 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
  * ship with empty `Shader_Function` / `Shader_Loop`; their GLSL is rebuilt
  * from the preset's pipeline at load time.
  *
- * @invariant `shaderMeta` is the survival path for non-GLSL shader fields.
- * `preambleVars`, `usesSharedRotation`, and `supportsCuttingPlane` are
- * stashed/restored. A future field added to the runtime shader object will
- * be silently dropped on save unless added to both the stash (generateGMF)
- * and the restore paths — OR derivable from the shader body (like the cp_*
- * auto-detect below, which self-heals legacy files retroactively).
+ * @invariant `shaderMeta` is the survival path for non-GLSL shader fields:
+ * `preambleVars` and `capabilities` are stashed/restored. A future field added
+ * to the runtime shader object will be silently dropped on save unless added
+ * to both the stash (generateGMF) and the restore paths — OR derivable from
+ * the shader body (like the cp_* and g_difsDE auto-detects below, which
+ * self-heal legacy files retroactively). Prefer a Capability token over a
+ * new field.
+ *
+ * @invariant This parse boundary is where the RETIRED legacy booleans
+ * (`selfContainedSDE`, `usesSharedRotation`, `supportsCuttingPlane`) remain
+ * load-bearing: old .gmf files (and hand/AI-authored ones — the GMF_API_DOCS
+ * banner teaches `shaderMeta.selfContainedSDE` as the authoring interface)
+ * carry them, and they are PROMOTED to capability tokens here. They must keep
+ * being read forever; they are never written back and never reach the runtime
+ * def. @see docs/adr/0059-feature-capability-protocol.md
  *
  * See ADR-0052 (GMF as two-tier HTML-style container).
  */
@@ -319,47 +331,48 @@ export const parseGMF = (content: string): FractalDefinition => {
         getDist: dist || undefined,
     };
 
-    // Restore shader metadata saved alongside the Metadata JSON
-    if (metadata.shaderMeta) {
-        if (metadata.shaderMeta.preambleVars) shader.preambleVars = metadata.shaderMeta.preambleVars;
-        if (metadata.shaderMeta.usesSharedRotation) shader.usesSharedRotation = true;
-        if (metadata.shaderMeta.supportsCuttingPlane) shader.supportsCuttingPlane = true;
-        if (metadata.shaderMeta.selfContainedSDE) shader.selfContainedSDE = true;
-        // P8: restore capabilities Set from stashed array. Modern GMFs (saved
-        // post-P8) include this directly; older files fall through to the
-        // inline derivation below.
-        if (Array.isArray(metadata.shaderMeta.capabilities)) {
-            shader.capabilities = new Set<string>(metadata.shaderMeta.capabilities);
-        }
-        delete metadata.shaderMeta;
+    // Restore shader metadata saved alongside the Metadata JSON, promoting
+    // everything capability-shaped into ONE token set. Modern files stash
+    // `capabilities` directly; legacy / hand-authored files carry the retired
+    // booleans instead (or nothing at all). The booleans are read here and
+    // NEVER placed on the runtime shader object — the engine reads tokens only.
+    const sm = metadata.shaderMeta;
+    if (sm?.preambleVars) shader.preambleVars = sm.preambleVars;
+    if (Array.isArray(sm?.derivedRotations) && sm.derivedRotations.length) {
+        shader.derivedRotations = sm.derivedRotations;
     }
 
-    // Auto-detect supportsCuttingPlane from the shader body: any formula that
-    // references the engine-provided cp_* accumulators needs CP_PREAMBLE_GLOBALS
-    // declared upstream, regardless of whether the flag was stashed at save time.
-    // Self-heals legacy GMF files written before the flag existed in shaderMeta.
-    if (!shader.supportsCuttingPlane) {
+    const caps = new Set<string>(Array.isArray(sm?.capabilities) ? sm.capabilities : []);
+    if (metadata.id === 'Modular') {
+        caps.add('shape:modular');
+    } else {
+        // Legacy boolean promotion. selfContainedSDE wins over a contradictory
+        // per-iteration token — the boolean was the load-bearing engine gate
+        // when these files were written.
+        if (sm?.selfContainedSDE) caps.add('shape:self-contained');
+        if (sm?.usesSharedRotation) caps.add('iter:shared-rotation');
+        if (sm?.supportsCuttingPlane) caps.add('estimator:cutting-plane');
+
+        // Body auto-detects — self-heal files saved before the corresponding
+        // flag/token existed. Any formula referencing the engine-provided cp_*
+        // accumulators needs CP_PREAMBLE declared upstream; any formula
+        // declaring g_difsDE in its preamble (MB3D dIFS import) needs the
+        // dIFS estimator gate open. The g_difsDE detect also RESCUES scenes
+        // saved while the old `supportsDifs` boolean was never stashed —
+        // those files reloaded with a silent Linear-estimator fallback.
         const body = `${shader.function} ${shader.loopBody} ${shader.preamble || ''} ${shader.loopInit || ''}`;
-        if (/\bcp_(dmin|scale|trap)\b/.test(body)) shader.supportsCuttingPlane = true;
-    }
+        if (/\bcp_(dmin|scale|trap)\b/.test(body)) caps.add('estimator:cutting-plane');
+        if (/\bg_difsDE\b/.test(shader.preamble || '')) caps.add('estimator:difs');
 
-    // P8 backward-compat: GMF files saved BEFORE P0 don't have capabilities
-    // in shaderMeta. Derive inline from the legacy flags + Modular id check.
-    // Mirrors the old deriveLegacy shim (now deleted) — kept here as a
-    // parse-time fallback so old saves continue to load. New imports always
-    // populate capabilities at their producer (declared natively, or via
-    // fragmentarium_import/import-capabilities.ts for V3/V4 imports).
-    if (!shader.capabilities) {
-        const caps = new Set<string>();
-        if (metadata.id === 'Modular') {
-            caps.add('shape:modular');
-        } else {
-            caps.add(shader.selfContainedSDE ? 'shape:self-contained' : 'shape:per-iteration');
-            if (shader.usesSharedRotation) caps.add('iter:shared-rotation');
-            if (shader.supportsCuttingPlane) caps.add('estimator:cutting-plane');
-        }
-        shader.capabilities = caps;
+        // Exactly one shape token per non-Modular formula: self-contained wins
+        // (whether promoted from the boolean or stashed directly); legacy files
+        // without any shape information default to per-iteration (mirrors the
+        // deleted deriveLegacy shim).
+        if (caps.has('shape:self-contained')) caps.delete('shape:per-iteration');
+        else caps.add('shape:per-iteration');
     }
+    shader.capabilities = caps;
+    if (sm) delete metadata.shaderMeta;
 
     return {
         ...metadata,

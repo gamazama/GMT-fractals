@@ -17,7 +17,9 @@ import * as THREE from 'three';
 import type { FeatureComponentProps } from '../../../../components/registry/ComponentRegistry';
 import type { LfoTarget } from '../../../../types';
 import Slider from '../../../../components/Slider';
+import { createPowMapping, piUnitMapping, formatDisplay, type ValueMapping } from '../../../../components/inputs';
 import Dropdown from '../../../../components/Dropdown';
+import ToggleSwitch from '../../../../components/ToggleSwitch';
 import { Vector2Input, Vector3Input, Vector4Input } from '../../../../components/vector-input';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
@@ -28,7 +30,24 @@ import { getProxy } from '../../../engine/worker/WorkerProxy';
 import { SectionLabel } from '../../../../components/SectionLabel';
 import { text as themeText, border as themeBorder, surface } from '../../../../data/theme';
 import { FormulaSelect } from './FormulaSelect';
+import { slotWriteValue } from '../../../utils/uniformSlots';
 import type { FormulaType } from '../../../../types';
+import { rotationFromMode } from '../../../../engine/rotationDescriptor';
+import type { RotationDescriptor } from '../../../../engine/rotationDescriptor';
+import { useRotationGizmoStore } from '../../../store/rotationGizmoStore';
+
+// Iterations slider: cubic display feel over [1, 500] — fine control at low counts.
+const ITERATIONS_MAPPING = createPowMapping(1, 500, 3);
+
+// "degrees" scale: the param value is in degrees, shown as a count of π (180° = π).
+// Distinct from piUnitMapping (which is radian-valued) — single use, kept local.
+const DEG_D2PI = 1 / 180;
+const DEGREES_PI_MAPPING: ValueMapping = {
+    toDisplay: (v) => v * DEG_D2PI,
+    fromDisplay: (v) => v / DEG_D2PI,
+    format: formatDisplay,
+    parseInput: (s) => { const n = parseFloat(s); return isNaN(n) ? null : n; },
+};
 
 const engine = getProxy();
 
@@ -47,6 +66,12 @@ interface FormulaParam {
     type?: 'float' | 'vec2' | 'vec3' | 'vec4';
     mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed' | 'normal';
     linkable?: boolean;
+    /** Explicit rotation semantics — see engine/rotationDescriptor. units:'deg'
+     *  (MB3D imports) must keep the param's own bounds, not the radian ±2π override. */
+    rotation?: RotationDescriptor;
+    /** Section divider: consecutive params sharing a group render under one
+     *  header (fused weaves stamp each slot's formula name). */
+    group?: string;
 }
 
 export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
@@ -54,6 +79,8 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
     const state = store as any;
     const actions = store as any;
     const [loadTime, setLoadTime] = useState<string | null>(null);
+    // Open canvas rotation gizmos — lights the per-param header toggle.
+    const openGizmos = useRotationGizmoStore((s) => s.gizmos);
 
     useEffect(() => {
         const unsub = FractalEvents.on('compile_time', (sec: number) => {
@@ -94,66 +121,33 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                 const id = key.charAt(0).toLowerCase() + key.slice(1) as LfoTarget;
                 if (!map) return null;
                 const label = map.labels.length > 1 ? `${key} (Mixed)` : (map.labels[0] || key);
-                let val = 0; let set = (v: number) => {};
-                switch(id) {
-                    case 'paramA': val = coreMath.paramA; set = (v) => actions.setCoreMath({ paramA: v }); break;
-                    case 'paramB': val = coreMath.paramB; set = (v) => actions.setCoreMath({ paramB: v }); break;
-                    case 'paramC': val = coreMath.paramC; set = (v) => actions.setCoreMath({ paramC: v }); break;
-                    case 'paramD': val = coreMath.paramD; set = (v) => actions.setCoreMath({ paramD: v }); break;
-                    case 'paramE': val = coreMath.paramE; set = (v) => actions.setCoreMath({ paramE: v }); break;
-                    case 'paramF': val = coreMath.paramF; set = (v) => actions.setCoreMath({ paramF: v }); break;
-                }
+                const val = (coreMath as any)[id] as number;
+                const set = (v: number) => actions.setCoreMath({ [id]: v });
                 return { label, val, set, min: -5.0, max: 5.0, step: 0.01, def: 0.0, id, trackId: `coreMath.${id}`, scale: 'linear' as const };
             });
         }
 
         const def = registry.get(state.formula);
         if (def) {
+            // Params address coreMath slots by id (paramA..F / vec2A..C / vec3A..C /
+            // vec4A..C — the uniformSlots vocabulary). A vec3 param whose id is a vec4
+            // base is the vec4-held-vec3 case (MB3D vec3 overflow, Workshop vec4.xyz
+            // mapping): it renders as a 3-axis control and slotWriteValue pins .w to 0.
+            //
+            // A param may declare `feature: 'weave'` (ADR-0090) — a NATIVE formula's
+            // per-slot BANK id (`ws<k>ParamA`). Then reads/writes/trackId route to the
+            // `weave` feature (store.weave / setWeave / weave.<id>) instead of coreMath;
+            // the id is already a real vec so slotWriteValue is a no-op (no vec4-held-vec3).
             return def.parameters.map((p: any) => {
                 if (!p) return null;
-                if (p.type === 'vec3') {
-                    let val = coreMath.vec3A; let set = (v: any) => actions.setCoreMath({ vec3A: v });
-                    switch(p.id) {
-                        case 'vec3A': val = coreMath.vec3A; set = (v) => actions.setCoreMath({ vec3A: v }); break;
-                        case 'vec3B': val = coreMath.vec3B; set = (v) => actions.setCoreMath({ vec3B: v }); break;
-                        case 'vec3C': val = coreMath.vec3C; set = (v) => actions.setCoreMath({ vec3C: v }); break;
-                        // A vec3 param packed into a uVec4* unit's .xyz (MB3D importer's vec3
-                        // overflow once uVec3A/B/C are full): read/write the .xyz components,
-                        // keep .w at 0. The control still renders as a 3-axis vec3 slider.
-                        case 'vec4A': val = coreMath.vec4A; set = (v) => actions.setCoreMath({ vec4A: { x: v.x, y: v.y, z: v.z, w: 0 } }); break;
-                        case 'vec4B': val = coreMath.vec4B; set = (v) => actions.setCoreMath({ vec4B: { x: v.x, y: v.y, z: v.z, w: 0 } }); break;
-                        case 'vec4C': val = coreMath.vec4C; set = (v) => actions.setCoreMath({ vec4C: { x: v.x, y: v.y, z: v.z, w: 0 } }); break;
-                    }
-                    return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec3' as const, mode: p.mode, linkable: p.linkable, scale: p.scale };
-                }
-                if (p.type === 'vec4') {
-                    let val = coreMath.vec4A; let set = (v: any) => actions.setCoreMath({ vec4A: v });
-                    switch(p.id) {
-                        case 'vec4A': val = coreMath.vec4A; set = (v) => actions.setCoreMath({ vec4A: v }); break;
-                        case 'vec4B': val = coreMath.vec4B; set = (v) => actions.setCoreMath({ vec4B: v }); break;
-                        case 'vec4C': val = coreMath.vec4C; set = (v) => actions.setCoreMath({ vec4C: v }); break;
-                    }
-                    return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec4' as const, mode: p.mode, linkable: p.linkable, scale: p.scale };
-                }
-                if (p.type === 'vec2') {
-                    let val = coreMath.vec2A; let set = (v: any) => actions.setCoreMath({ vec2A: v });
-                    switch(p.id) {
-                        case 'vec2A': val = coreMath.vec2A; set = (v) => actions.setCoreMath({ vec2A: v }); break;
-                        case 'vec2B': val = coreMath.vec2B; set = (v) => actions.setCoreMath({ vec2B: v }); break;
-                        case 'vec2C': val = coreMath.vec2C; set = (v) => actions.setCoreMath({ vec2C: v }); break;
-                    }
-                    return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec2' as const, mode: p.mode, linkable: p.linkable, scale: p.scale };
-                }
-                let val = 0; let set = (v: number) => {};
-                switch(p.id) {
-                    case 'paramA': val = coreMath.paramA; set = (v) => actions.setCoreMath({ paramA: v }); break;
-                    case 'paramB': val = coreMath.paramB; set = (v) => actions.setCoreMath({ paramB: v }); break;
-                    case 'paramC': val = coreMath.paramC; set = (v) => actions.setCoreMath({ paramC: v }); break;
-                    case 'paramD': val = coreMath.paramD; set = (v) => actions.setCoreMath({ paramD: v }); break;
-                    case 'paramE': val = coreMath.paramE; set = (v) => actions.setCoreMath({ paramE: v }); break;
-                    case 'paramF': val = coreMath.paramF; set = (v) => actions.setCoreMath({ paramF: v }); break;
-                }
-                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, scale: p.scale, options: p.options };
+                const feat: string | undefined = p.feature;
+                const sliceState = feat ? (state as any)[feat] : coreMath;
+                const val = sliceState?.[p.id];
+                if (val === undefined) return null; // id outside the feature's state — nothing to bind
+                const setter = feat ? (actions as any)[`set${feat.charAt(0).toUpperCase()}${feat.slice(1)}`] : actions.setCoreMath;
+                const set = (v: any) => setter({ [p.id]: slotWriteValue(p.id, p.type, v) });
+                const trackId = `${feat ?? 'coreMath'}.${p.id}`;
+                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId, type: p.type, mode: p.mode, linkable: p.linkable, scale: p.scale, options: p.options, group: p.group, rotation: p.rotation };
             });
         }
 
@@ -168,21 +162,39 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`];
             const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`];
             const vecMode = p.mode || 'normal';
-            const isAngleMode = vecMode === 'rotation' || vecMode === 'direction' || vecMode === 'axes';
+            const rotation = p.rotation ?? rotationFromMode(p.mode) ?? undefined;
+            // The ±2π bound override is a RADIANS convention — a degrees-native
+            // param (MB3D, rotation.units:'deg') keeps its own ±180 bounds.
+            const isAngleMode = (vecMode === 'rotation' || vecMode === 'direction' || vecMode === 'axes')
+                && rotation?.units !== 'deg';
             const rotTrackLabels: Record<string, string[]> = {
                 rotation: ['Azimuth', 'Pitch', 'Angle'],
                 direction: ['Azimuth', 'Pitch', 'Length'],
                 axes: trackLabels,
             };
+            // Canvas gizmo toggle — any rotation-kind vec3 (Euler / Rodrigues /
+            // direction) can spawn a viewport gizmo bound to this param. The key
+            // doubles as the store route (feature.paramId), so the overlay reads
+            // and writes through the exact same path this widget does.
+            const gizmoCapable = rotation && rotation.kind !== 'twist';
+            const gizmoToggle = gizmoCapable ? () => useRotationGizmoStore.getState().toggle({
+                key: p.trackId,
+                feature: p.trackId.split('.')[0],
+                paramId: p.id,
+                label: p.label,
+                rotation,
+                paramType: 'vec3',
+            }) : undefined;
             return (
-                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
+                <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector3Input label={p.label} value={new THREE.Vector3(v3.x, v3.y, v3.z)}
                         min={isAngleMode ? -Math.PI * 2 : p.min} max={isAngleMode ? Math.PI * 2 : p.max}
                         step={p.step} onChange={p.set} trackKeys={trackKeys}
                         trackLabels={isAngleMode ? (rotTrackLabels[vecMode] || trackLabels) : trackLabels}
                         mode={vecMode === 'axes' ? 'normal' : vecMode as any}
                         defaultValue={p.def ? new THREE.Vector3((p.def as any).x ?? 0, (p.def as any).y ?? 0, (p.def as any).z ?? 0) : undefined}
-                        linkable={p.linkable} scale={p.scale} />
+                        linkable={p.linkable} scale={p.scale} rotation={rotation}
+                        onGizmoToggle={gizmoToggle} gizmoActive={!!openGizmos[p.trackId]} />
                 </div>
             );
         }
@@ -192,7 +204,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`, `${p.trackId}_w`];
             const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`, `${p.label} W`];
             return (
-                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
+                <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector4Input label={p.label} value={new THREE.Vector4(v4.x, v4.y, v4.z, v4.w)}
                         min={p.min} max={p.max} step={p.step} onChange={p.set}
                         trackKeys={trackKeys} trackLabels={trackLabels}
@@ -207,7 +219,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`];
             const trackLabels = [`${p.label} X`, `${p.label} Y`];
             return (
-                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
+                <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector2Input label={p.label} value={new THREE.Vector2(v2.x, v2.y)}
                         min={p.min} max={p.max} step={p.step}
                         onChange={(v) => p.set({ x: v.x, y: v.y })}
@@ -220,9 +232,22 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
 
         const val = p.val as number;
 
+        // Boolean scalar lane (packer mode 'toggle') — a segmented Off/On switch
+        // instead of a 0..1 slider. Still a float uniform underneath (0.0/1.0),
+        // so keyframing/undo behave like any other param.
+        if (p.mode === 'toggle') {
+            return (
+                <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
+                    <ToggleSwitch label={p.label} value={val >= 0.5 ? 1 : 0}
+                        options={[{ label: 'Off', value: 0 }, { label: 'On', value: 1 }]}
+                        onChange={(v: number) => p.set(v)} />
+                </div>
+            );
+        }
+
         if (p.options) {
             return (
-                <div key={p.id} className="mb-px">
+                <div key={p.id}>
                     <Dropdown label={p.label} value={val} options={p.options} onChange={(v) => p.set(v as number)} fullWidth />
                 </div>
             );
@@ -238,21 +263,20 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                         onChange={p.set} defaultValue={p.def as number}
                         highlight={hasLfo || (p.id === 'paramA' && !hasLfo)}
                         trackId={p.trackId} liveValue={liveVal}
-                        customMapping={{ min: p.min / Math.PI, max: p.max / Math.PI, toSlider: (v) => v / Math.PI, fromSlider: (v) => v * Math.PI }}
+                        mapping={piUnitMapping}
                         mapTextInput overrideInputText={`${(val / Math.PI).toFixed(2)}π`} />
                 </div>
             );
         }
         if (p.scale === 'degrees') {
-            const D2PI = 1 / 180;
             return (
                 <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Slider label={p.label} value={val} min={p.min} max={p.max} step={p.step}
                         onChange={p.set} defaultValue={p.def as number}
                         highlight={hasLfo || (p.id === 'paramA' && !hasLfo)}
                         trackId={p.trackId} liveValue={liveVal}
-                        customMapping={{ min: p.min * D2PI, max: p.max * D2PI, toSlider: (v) => v * D2PI, fromSlider: (v) => v / D2PI }}
-                        mapTextInput overrideInputText={`${(val * D2PI).toFixed(2)}π`} />
+                        mapping={DEGREES_PI_MAPPING}
+                        mapTextInput overrideInputText={`${(val * DEG_D2PI).toFixed(2)}π`} />
                 </div>
             );
         }
@@ -284,11 +308,31 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                     <Slider label="Iterations" value={coreMath.iterations} min={1} max={500} step={1}
                         onChange={(v) => actions.setCoreMath({ iterations: Math.round(v) })}
                         highlight defaultValue={32}
-                        customMapping={{ min: 0, max: 100, toSlider: (val) => 100 * Math.pow((val - 1) / 499, 1/3), fromSlider: (val) => 1 + 499 * Math.pow(val / 100, 3) }}
+                        mapping={ITERATIONS_MAPPING}
                         mapTextInput={false} trackId="coreMath.iterations"
                         liveValue={state.liveModulations?.['coreMath.iterations']} />
                 </div>
-                {params.map((p) => renderControl(p))}
+                {(() => {
+                    // Group dividers: a header line whenever a param opens a new
+                    // group (fused weaves stamp each slot's "Formula N: <name>").
+                    // Suppressed when only ONE group is present (a single-formula
+                    // weave needs no redundant header).
+                    const groupN = new Set(params.map((p) => p?.group).filter(Boolean)).size;
+                    let lastGroup: string | undefined;
+                    return params.map((p, i) => {
+                        const ctrl = renderControl(p);
+                        if (!ctrl) return ctrl;
+                        const g = p?.group;
+                        const divider = groupN > 1 && g && g !== lastGroup ? (
+                            <div className="flex items-center gap-2 px-2 pt-2 pb-0.5">
+                                <SectionLabel color={themeText.dimLabel}>{g}</SectionLabel>
+                                <div className={`flex-1 border-t ${themeBorder.subtle}`} />
+                            </div>
+                        ) : null;
+                        lastGroup = g;
+                        return <React.Fragment key={`${p!.id}-${i}`}>{divider}{ctrl}</React.Fragment>;
+                    });
+                })()}
             </div>
         </>
     );

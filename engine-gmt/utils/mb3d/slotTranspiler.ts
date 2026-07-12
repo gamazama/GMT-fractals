@@ -23,10 +23,11 @@
 import type { MB3DFormulaSlot } from './parseMB3D';
 import { DECOMPILED_FORMULAS, DECOMPILED_OPTIONS, DECOMPILED_SCRATCH, DECOMPILED_DEFAULTS, DECOMPILED_DE_META } from './decompiled-formulas';
 import { packConstBuffer, bindOptions, PALIGNED16 } from './constPacker';
-import { LaneAllocator, ScalarParamPacker } from '../uniformSlots';
+import { LaneAllocator } from '../uniformSlots';
 import type { PackedParam } from '../uniformSlots';
+import type { DerivedRotationSpec } from '../../types/fractal';
 
-export type SlotTier = 'intern' | 'decompiled' | 'code-sub' | 'unsupported';
+export type SlotTier = 'intern' | 'decompiled' | 'code-sub' | 'native' | 'unsupported';
 
 export interface SlotFlag {
   slotIndex: number;
@@ -62,10 +63,12 @@ export interface TranspiledSlot {
   /** Multi-slot parametric (alloc mode): false if this slot couldn't be exposed
    *  parametrically (unmapped option type / 4D quaternion) → caller bakes all. */
   paramOk?: boolean;
-  /** This slot's parametric body calls mb3dRot(). The helper DEFINITION is emitted
-   *  ONCE by emitFusedHybrid (not per-slot) — two rotation slots would otherwise
-   *  redefine mb3dRot() and fail to compile. */
-  needsRotHelper?: boolean;
+  /** CPU-derived rotation uniforms this slot's parametric body consumes
+   *  (angle options → the uMb3dRotM / uMb3dRotSC / uMb3dRot4D banks). Indices
+   *  are SLOT-LOCAL (fresh allocator per transpile) — emitFusedHybrid renumbers
+   *  them onto a def-global sequence when weaving (mb3dBankBody) and merges
+   *  everything onto def.shader.derivedRotations. */
+  derivedRotations?: DerivedRotationSpec[];
   /** True if this slot's [CODE] actually UPDATES the DE derivative (writes `w`, or
    *  `mb3dDr1` for a 4D-DE formula) — i.e. supplies a usable analytic `dr`. A
    *  position-only [CODE] (PseudoXDB, IdesFormula, Riemann2) never touches `w`, so the
@@ -92,29 +95,6 @@ function resolveDecompiledName(name: string | undefined): string | undefined {
   if (!name) return undefined;
   if (DECOMPILED_FORMULAS[name]) return name;
   return DECOMPILED_KEY_BY_LC.get(name.toLowerCase());
-}
-
-/** Remap an intern formula's fixed-id params (paramA.., uParamA..) onto the shared
- *  cross-slot {@link LaneAllocator} for multi-slot parametric allocation. Interns are
- *  scalar-only; #2 Quaternion is excluded by the caller (reserves paramA/B for the 4D
- *  seeds). Each param takes the next dense scalar lane — once paramA..F is full, surplus
- *  scalars pack into idle vec lanes (the {@link ScalarParamPacker} groups them into one
- *  combined vec slider). Returns the dynamic uniformVars (the per-logical accessor) +
- *  relabelled params/coreMath, or null if the scalar pool overflows. */
-function internMultiParam(def: InternFormula, o: number[], alloc: LaneAllocator):
-  { vars: Vars; params: PackedParam[]; coreMath: Record<string, any> } | null {
-  if (!def.uniformVars || !def.params || !def.coreMath) return null;
-  const keys = Object.keys(def.uniformVars);            // logical names, in param order
-  const oldParams = def.params(o);
-  const packer = new ScalarParamPacker(alloc);
-  const vars: Vars = {};
-  for (let k = 0; k < keys.length; k++) {
-    const op = oldParams[k];
-    const acc = packer.scalar(op.label, op.default, op.min, op.max, op.step);
-    if (acc === null) return null;
-    vars[keys[k]] = acc;
-  }
-  return { vars, params: packer.params, coreMath: packer.coreMath };
 }
 
 /** Format a JS number as a GLSL float literal. */
@@ -317,36 +297,51 @@ const INTERN_NAMES: Record<number, string> = {
 };
 
 /**
- * Transpile one slot. In `parametric` mode (single-slot scenes) the body reads
- * uParam* and the result carries a `params` slider schema + `coreMath` defaults.
+ * Transpile one slot. In `parametric` mode the body reads the coreMath pool
+ * (`uParam*`) and the result carries a `params` slider schema + `coreMath`
+ * defaults; emitFusedHybrid then either keeps those on the shared pool (a lone
+ * standalone MB3D slot) or rebinds them onto a per-slot bank (a woven slot,
+ * ADR-0090). The retired `alloc` (shared cross-slot allocator) option is gone —
+ * every woven slot now packs against its OWN private allocator.
  */
 export function transpileSlot(
   slot: MB3DFormulaSlot,
   slotIndex: number,
   fnName: string,
-  opts?: { parametric?: boolean; alloc?: LaneAllocator },
+  opts?: {
+    parametric?: boolean;
+    /** Per-OPTION expose/bake directives (P3b Task 2), indexed by option index:
+     *  true = bake the value as a literal (no lane); absent/false = auto-expose. */
+    bake?: boolean[];
+  },
 ): TranspiledSlot {
   const fi = slot.formulaIndex;
-  const alloc = opts?.alloc; // multi-slot parametric: shared cross-slot lane allocator
   const def = INTERN[fi];
   // #0..#4 + #6 (Folding Int Pow) are transpiled; #5 Bulbox is still stubbed.
   if (def && ((fi >= 0 && fi <= 4) || fi === 6)) {
     const flag = { slotIndex, formulaIndex: fi, name: INTERN_NAMES[fi] ?? `#${fi}`, tier: 'intern' as const, note: 'transpiled from MB3D source math' };
-    // Multi-slot parametric: allocate this intern's scalars from the shared cursor.
-    // #2 Quaternion is excluded (the kernel reserves paramA/B for its 4D seeds).
-    if (alloc) {
-      const mp = fi !== 2 ? internMultiParam(def, slot.optionValues, alloc) : null;
-      if (!mp) return { glsl: '', fnName, tier: 'intern', flag, paramOk: false };
-      return { glsl: def.body(fnName, mp.vars), fnName, tier: 'intern', flag, params: mp.params, coreMath: mp.coreMath, paramOk: true, writesDeriv: true };
-    }
     const useUniform = !!opts?.parametric && !!def.uniformVars;
-    const vars = useUniform ? def.uniformVars! : def.literalVars(slot.optionValues);
+    const bake = opts?.bake;
+    // Single-slot parametric with bake directives: baked options read their literal,
+    // exposed ones keep the fixed uParam* lane (paramA gaps are fine — the schema is
+    // filtered below to match).
+    let vars: Vars;
+    if (useUniform && bake?.some(Boolean)) {
+      const lit = def.literalVars(slot.optionValues);
+      vars = {};
+      Object.keys(def.uniformVars!).forEach((key, k) => { vars[key] = bake[k] ? lit[key] : def.uniformVars![key]; });
+    } else {
+      vars = useUniform ? def.uniformVars! : def.literalVars(slot.optionValues);
+    }
     // Intern formulas (latitude bulbs / box / IntPow / folds) all thread a real
     // derivative through `dr` (`dr = pow(r,p-1)·p·dr + 1`, `dr = dr·|m| + 1`, …).
     const out: TranspiledSlot = { glsl: def.body(fnName, vars), fnName, tier: 'intern', flag, writesDeriv: true };
     if (useUniform && def.params && def.coreMath) {
-      out.params = def.params(slot.optionValues);
-      out.coreMath = def.coreMath(slot.optionValues);
+      const allParams = def.params(slot.optionValues);
+      out.params = allParams.filter((_, k) => !bake?.[k]);
+      const cm = def.coreMath(slot.optionValues);
+      allParams.forEach((p, k) => { if (bake?.[k]) delete cm[p.id]; });
+      out.coreMath = cm;
     }
     return out;
   }
@@ -403,11 +398,11 @@ ${body}
   trap = min(trap, length(z.xyz));
 }`;
     try {
-      // PARAMETRIC: bind options to uniforms + sliders instead of baking. Single-slot
-      // gets a fresh allocator (starts at paramA); multi-slot threads the shared
-      // cross-slot allocator so each slot's params land on distinct uniforms.
-      if (opts?.parametric || alloc) {
-        const bound = bindOptions(slot.optionValues, slot.optionTypes, slot.optionCount, DECOMPILED_OPTIONS[canonName!] ?? [], alloc ?? new LaneAllocator());
+      // PARAMETRIC: bind options to uniforms + sliders instead of baking, against a
+      // fresh allocator (starts at paramA). emitFusedHybrid rebinds these onto a
+      // per-slot bank for a woven slot; a lone standalone slot keeps them here.
+      if (opts?.parametric) {
+        const bound = bindOptions(slot.optionValues, slot.optionTypes, slot.optionCount, DECOMPILED_OPTIONS[canonName!] ?? [], new LaneAllocator(), opts?.bake);
         if (bound) {
           const missing: string[] = [];
           const body = decompiled
@@ -426,25 +421,20 @@ ${body}
           // undefined identifier → compile fail. Cp tokens are resolved above (PAligned16)
           // or pushed to `missing`, so a resolved Cp no longer rejects the slot.
           if (missing.length === 0 && !/\bCm\d+\b/.test(body)) {
-            // The shared allocator was advanced in place by bindOptions' packer — no
-            // post-hoc cursor bump needed (multi-slot threading is automatic).
             return {
-              // mb3dRot() DEFINITION is emitted once by emitFusedHybrid (needsRotHelper),
-              // not inlined here — two rotation slots would redefine it → compile error.
-              glsl: wrap(body, '', bound.matrixDecls),
+              glsl: wrap(body),
               fnName, tier: 'decompiled', flag: dflag('decompiled', 'decompiled from MB3D [CODE] (x87) — params exposed'),
               params: bound.params as any, coreMath: bound.coreMath, scratchVars,
               paramOk: true,
-              needsRotHelper: bound.needsRotHelper,
+              derivedRotations: bound.derivedRotations.length ? bound.derivedRotations : undefined,
               writesDeriv,
             };
           }
         }
-        // In multi-slot mode any failure aborts the whole parametric attempt (caller
-        // bakes all). Single-slot just falls through to baking this slot.
-        if (alloc) return { glsl: '', fnName, tier: 'decompiled', flag: dflag('decompiled', 'multi-slot param bind failed'), paramOk: false };
+        // A param bind that can't resolve every const falls through to baking THIS
+        // slot's literals (its own fallback — never drags the rest of the weave down).
       }
-      // BAKED (multi-slot, or parametric fallback): bake the const values as literals.
+      // BAKED (parametric fallback, or a slot with no exposable options): bake literals.
       const consts = packConstBuffer(slot.optionValues, slot.optionTypes, slot.optionCount);
       const missing: string[] = [];
       const baked = decompiled
@@ -486,4 +476,46 @@ ${body}
     tier: 'unsupported',
     flag: { slotIndex, formulaIndex: fi, name: slot.name || INTERN_NAMES[fi] || `#${fi}`, tier: 'unsupported', note },
   };
+}
+
+/** One logical option control for the Weave Editor's per-slot customization UI.
+ *  `span` = raw option indices consumed (3-angle rotations span 3, 4×4 rotations
+ *  span 6); `exposable` = the live binder can map this type to a uniform lane
+ *  (non-exposable types can still be BAKED via the per-option directive). */
+export interface SlotOptionMeta {
+  /** First raw option index of this control (the bake[] directive index). */
+  index: number;
+  span: number;
+  name: string;
+  exposable: boolean;
+}
+
+/** Option metadata for a slot — names, grouping, exposability — mirroring the
+ *  walks in bindOptions/packConstBuffer. Returns [] for unsupported slots. */
+export function getSlotOptionMeta(slot: MB3DFormulaSlot): SlotOptionMeta[] {
+  const fi = slot.formulaIndex;
+  const def = INTERN[fi];
+  if (def?.params && ((fi >= 0 && fi <= 4) || fi === 6)) {
+    return def.params(slot.optionValues).map((p, k) => ({ index: k, span: 1, name: p.label, exposable: true }));
+  }
+  const canonName = resolveDecompiledName(slot.name);
+  if (!canonName || !DECOMPILED_FORMULAS[canonName]) return [];
+  const names = DECOMPILED_OPTIONS[canonName] ?? [];
+  // Pad to the formula's full option list, like transpileSlot (truncated .m3p prefix).
+  const defaults = DECOMPILED_DEFAULTS[canonName];
+  const types = defaults && slot.optionCount < defaults.optionCount ? defaults.optionTypes : slot.optionTypes;
+  const count = defaults && slot.optionCount < defaults.optionCount ? defaults.optionCount : slot.optionCount;
+  const out: SlotOptionMeta[] = [];
+  let i = 0, opt = 0; // raw value index vs logical option index (rotations = 1 name, 3/6 values)
+  while (i < Math.min(16, count)) {
+    const t = types[i] ?? 0;
+    const name = names[opt]?.name ?? `opt${opt}`;
+    if (t === 6) { out.push({ index: i, span: 3, name, exposable: true }); i += 3; opt++; continue; }
+    // 4×4 six-plane rotation: live via the derived uMb3dRot4D bank (CPU mat4).
+    if (t === 12) { out.push({ index: i, span: 6, name, exposable: true }); i += 6; opt++; continue; }
+    // Types 3/4 (single angles): live via the derived uMb3dRotSC bank (CPU sin/cos).
+    out.push({ index: i, span: 1, name, exposable: t === 0 || t === 1 || t === 2 || t === 3 || t === 4 || t === 7 || t === 8 || t === 11 || t === 14 });
+    i++; opt++;
+  }
+  return out;
 }

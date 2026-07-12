@@ -85,6 +85,10 @@ export interface MenuButtonItem extends MenuItemBase {
     /** Grey-out the row and suppress onSelect. Bool or predicate for
      *  live state (e.g. Undo/Redo disabled when stack is empty). */
     disabled?: boolean | (() => boolean);
+    /** Optional "unseen"/notification indicator — when the getter returns
+     *  true, the row is highlighted and shows a small NEW badge. Re-evaluated
+     *  each render (e.g. an update the user hasn't opened yet). */
+    badge?: () => boolean;
 }
 
 export interface MenuToggleItem extends MenuItemBase {
@@ -139,6 +143,11 @@ export interface MenuDef {
     width?: string;
     /** Visibility of the topbar button itself. */
     when?: () => boolean;
+    /** Optional notification indicator — when the getter returns true, a dot
+     *  renders on the topbar anchor. Re-evaluated each render. Attach it
+     *  post-registration (e.g. to a menu another plugin registered) via
+     *  `menu.setBadge(id, getter)`. */
+    badge?: () => boolean;
 }
 
 // ── Registry ───────────────────────────────────────────────────────────
@@ -231,6 +240,18 @@ export const menu = {
     unregisterItem(menuId: string, itemId: string) {
         if (_items.get(menuId)?.delete(itemId)) _notify();
     },
+    /** Attach (or clear, with null) a notification-dot getter on an already
+     *  registered menu anchor. Lets an app light up a menu owned by a plugin
+     *  (e.g. GMT flags the engine Help menu when there's an unseen update). */
+    setBadge(menuId: string, badge: (() => boolean) | null) {
+        const def = _menus.get(menuId);
+        if (!def) return;
+        _menus.set(menuId, { ...def, badge: badge ?? undefined });
+        _notify();
+    },
+    /** Force anchors + open popovers to re-render (re-evaluate badge/label
+     *  getters). Use after mutating state a badge getter reads. */
+    refresh() { _notify(); },
     listMenus(): MenuDef[] {
         return Array.from(_menus.values());
     },
@@ -392,6 +413,14 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
                     across Camera / System / File / Help / etc. */}
                 <ChevronDown size={10} className="opacity-60" />
             </button>
+            {/* Notification dot — an app can light the anchor via menu.setBadge().
+                Ringed so it reads against the topbar regardless of button state. */}
+            {def.badge?.() && (
+                <span
+                    className="pointer-events-none absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent-400 ring-2 ring-surface-tabbar"
+                    aria-hidden="true"
+                />
+            )}
             {/* Popover path — desktop, or mobile when no MobileMenuHost. Portalled
                 at the `popover` tier so it floats above the floating panels (an
                 inline `absolute` dropdown is trapped in the shell — see ADR-0082). */}
@@ -461,6 +490,7 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
             const b = item;
             const isDisabled = typeof b.disabled === 'function' ? b.disabled() : !!b.disabled;
             const labelText = typeof b.label === 'function' ? b.label() : b.label;
+            const hasBadge = !isDisabled && (b.badge?.() ?? false);
             return (
                 <button
                     type="button"
@@ -472,7 +502,7 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
                         b.onSelect();
                         if (b.closeOnSelect !== false) close();
                     }}
-                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs transition-colors ${isDisabled ? 'text-fg-faint cursor-not-allowed' : 'text-fg-tertiary hover:text-fg hover:bg-line/10'} ${b.className || ''}`}
+                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs transition-colors ${isDisabled ? 'text-fg-faint cursor-not-allowed' : hasBadge ? 'text-accent-200 bg-accent-500/10 hover:bg-accent-500/15' : 'text-fg-tertiary hover:text-fg hover:bg-line/10'} ${b.className || ''}`}
                 >
                     <span className="flex items-center gap-2 min-w-0">
                         {renderIcon(b.icon)}
@@ -481,6 +511,9 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
                             <span className="text-[9px] text-fg-dim font-mono">[{b.shortcut}]</span>
                         )}
                     </span>
+                    {hasBadge && (
+                        <span className="shrink-0 px-1.5 py-0.5 text-[8px] font-bold rounded-sm bg-accent-500/25 text-accent-200 border border-accent-500/40">NEW</span>
+                    )}
                 </button>
             );
         }

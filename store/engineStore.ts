@@ -299,8 +299,8 @@ const storeFactory: StateCreator<
 
         // Restore non-DDFS document snapshots (W8). No-op when the scene predates
         // the `documents` key (legacy/back-compat) or carries garbage — each
-        // provider validates its own snapshot. Favients' provider prompts
-        // Replace/Append here (palette owns that UX; the engine stays generic).
+        // provider validates its own snapshot. Favients' provider auto-appends
+        // new gradients here (palette owns that UX; the engine stays generic).
         restoreDocuments(p.documents);
 
         // Emit CAMERA_TELEPORT so apps that drive a 3D camera (GMT-style

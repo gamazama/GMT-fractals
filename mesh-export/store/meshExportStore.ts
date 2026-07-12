@@ -23,13 +23,13 @@ export interface MemoryBlock {
   freed: boolean;
 }
 
-export interface MeshExportInterlaceState {
-  definition: FractalDefinition;
-  params: Record<string, any>;
-  enabled: boolean;
-  interval: number;
-  startIter: number;
-}
+/** `features.weave`-shaped rhythm/enable state for a FUSED WEAVE def
+ *  (migrated legacy-interlace scene or editor-built weave): `weaveEnabled` +
+ *  `weaveInterval<k>` / `weaveStartIter<k>` / `weaveBeats<k>`. Bank param
+ *  VALUES (`ws<k><Slot>` keys) live in `formulaParams` like any other def
+ *  param (the fused def's parameters carry those ids), so the standard param
+ *  UI renders them; the pipeline merges both into one uniform bag. */
+export type MeshWeaveState = Record<string, number | boolean>;
 
 export interface MeshQualitySettings {
   estimator: number;       // 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
@@ -54,7 +54,7 @@ export interface MeshExportState {
   selectedFormulaId: string;
   loadedDefinition: FractalDefinition | null;
   formulaParams: Record<string, any>;
-  interlaceState: MeshExportInterlaceState | null;
+  weaveState: MeshWeaveState | null;
   loadedFilename: string | null;
   loadError: string | null;
 
@@ -133,7 +133,7 @@ export interface MeshExportActions {
   setSelectedFormula: (id: string) => void;
   setLoadedDefinition: (def: FractalDefinition | null) => void;
   setFormulaParams: (params: Record<string, any>) => void;
-  setInterlaceState: (state: MeshExportInterlaceState | null) => void;
+  setWeaveState: (state: MeshWeaveState | null) => void;
   updateParam: (key: string, value: any) => void;
   setLoadedFilename: (name: string | null) => void;
   setLoadError: (err: string | null) => void;
@@ -207,7 +207,7 @@ export const useMeshExportStore = create<MeshExportState & MeshExportActions>()(
   selectedFormulaId: 'Mandelbulb',
   loadedDefinition: null,
   formulaParams: {},
-  interlaceState: null,
+  weaveState: null,
   loadedFilename: null,
   loadError: null,
 
@@ -265,7 +265,7 @@ export const useMeshExportStore = create<MeshExportState & MeshExportActions>()(
   setSelectedFormula: (id) => set({ selectedFormulaId: id }),
   setLoadedDefinition: (def) => set({ loadedDefinition: def }),
   setFormulaParams: (params) => set({ formulaParams: params }),
-  setInterlaceState: (state) => set({ interlaceState: state }),
+  setWeaveState: (state) => set({ weaveState: state }),
   updateParam: (key, value) => set((s) => ({
     formulaParams: { ...s.formulaParams, [key]: value },
   })),
@@ -338,3 +338,15 @@ export const useMeshExportStore = create<MeshExportState & MeshExportActions>()(
     logEntries: [], memoryBlocks: [], progress: 0, phaseName: '', status: '',
   }),
 }));
+
+/** Merge the fused-weave uniform bag for the GPU pipeline: bank param VALUES
+ *  (`ws<k>*` keys inside formulaParams — the fused def's own param ids) + the
+ *  rhythm/enable state. Undefined when the loaded def has no weave state. */
+export function weaveBagFrom(state: { formulaParams: Record<string, any>; weaveState: MeshWeaveState | null }): Record<string, any> | undefined {
+  const bag: Record<string, any> = {};
+  for (const [k, v] of Object.entries(state.formulaParams ?? {})) {
+    if (/^ws\d/.test(k)) bag[k] = v;
+  }
+  Object.assign(bag, state.weaveState ?? {});
+  return Object.keys(bag).length ? bag : undefined;
+}

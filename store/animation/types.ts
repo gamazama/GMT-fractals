@@ -104,6 +104,8 @@ export interface SequenceSliceActions {
     setSequence: (seq: AnimationSequence) => void;
     addTrack: (id: string, label: string) => void;
     removeTrack: (id: string) => void;
+    /** Delete several tracks in one undo step (e.g. "delete group"). */
+    removeTracks: (ids: string[]) => void;
     setTrackBehavior: (trackId: string, behavior: TrackBehavior) => void;
     
     addKeyframe: (trackId: string, frame: number, value: number, interpolation?: 'Linear' | 'Step' | 'Bezier') => void;

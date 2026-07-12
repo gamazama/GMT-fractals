@@ -1,0 +1,223 @@
+# ADR-0089: One engine weave core (WeaveSpec) behind every formula-scheduling front-end
+
+**Date:** 2026-07-04 · **Status:** Accepted · **Branch:** `feat/weave-core`
+
+> **Update 2026-07-05 (BoxFold audit — nine defs are now SEVEN; decision
+> unchanged):** the FOLD_LIST folds were audited against the certified MB3D
+> decompiles (utils/mb3d/decompiled-formulas.ts). 'half' (foldType 2, invented
+> fold with an embedded drift) and 'decoupled' (foldType 3, numerically
+> identical to standard at its default Folding Value = 2·Fold Limit) are
+> RETIRED; tetra/octa/icosa are reworked to selfContained MB3D-faithful KIFS
+> (`z·scale − offset·(scale−1)` — the old sphereFold wrapper could never form
+> the solids), with icosa's fold body re-ported from the IcosahedronIFS
+> decompile. Fold identity is now a STABLE `foldType` code (the persisted
+> legacy `hybridFoldType` value), not FOLD_LIST position; `boxFoldFormulaId`
+> maps retired code 3 → BoxFoldStandard and returns null for code 2 (migration
+> bails — scene loads unmigrated, warned). The P4.5 pixel-identical guarantee
+> therefore no longer extends to legacy fold types 2/3/5/6/7 (warned at
+> migration); 0/1/4/8 are untouched. Migration also now carries the
+> fold-specific vec4A value (kali constant / menger offset) via
+> BOXFOLD_VEC4_LEGACY — previously it silently reset to the default.
+
+> **Update 2026-07-04 (P4.4+P4.5 landed; decision unchanged; see ADR-0091):**
+> the absorption this ADR anticipated is DONE — the interlace feature and
+> Hybrid Box's interleaved mode are RETIRED, and legacy scenes convert into
+> weave-native form at LOAD (app-gmt migration v3 → weaveMigration.ts): host →
+> slot 0 / bank 0, Hybrid Box fold → a layer on the matching BoxFold FORMULA
+> (nine registered defs generated from FOLD_LIST), interlace secondary → the
+> next layer, schedules → `weave.weaveInterval<k>`/`StartIter<k>`/`Beats<k>`,
+> enables → the new whole-weave `weaveEnabled` gate (owner decision 1: live,
+> keyframable, default ON, opt-in per def via emitFusedHybrid opts.enableGate —
+> plain MB3D imports stay byte-identical), tracks retargeted by pure id rename,
+> legacy state cleared (owner decision 2 — accepted one-way door). The
+> resolver now splices the LEAD slot's custom getDist (accumulator DEs like
+> KleinianMobius survive weaving) and the fused def unions
+> `estimator:cutting-plane` from its slots (the old pairHasCapability leg).
+> ROUND-TRIP GATE: every migrated legacy scene rendered PIXEL-IDENTICAL
+> (0-diff) to its pre-migration reference on the real GPU, including both
+> custom-getDist hosts, the disabled case, Hybrid Box interleaved, and the
+> untouched fast-path control. The "latent same-iteration conflict" this ADR's
+> Context flagged is structurally gone (one dispatcher). The N×N interlace
+> sweep is repointed at 2-slot native weaves (native-weave-sweep.mts). MB3D
+> emit byte-identical throughout; suite 189→243. Full contract in ADR-0091.
+
+> **Update 2026-07-04 (per-slot BANKS landed; decision unchanged; see ADR-0090):**
+> a native formula woven as slot k no longer shares the coreMath dense
+> `LaneAllocator` — it binds its declared params VERBATIM onto its own per-slot
+> BANK (`uWs<k>ParamA` …, no vec decomposition; identity pairs on distinct banks),
+> so the P4.1 re-packing (which decomposed vec2/vec4 and overflowed a param-rich
+> pair like Phoenix ⊗ Phoenix into bake-everything) is superseded FOR NATIVE
+> SLOTS. Bank state lives on the DDFS `weave` feature (6 banks × 15 params);
+> `FractalParameter` gained a `feature: 'weave'` routing field so the Formula
+> panel drives `store.weave` / `setWeave` / `weave.<id>` tracks. The coreMath
+> dense pool is now MB3D-slots-only, physically disjoint from the native banks
+> (`uWs*` vs `uParam*`/`uVec*`) — no reservation. Fidelity is the default; compact
+> survives only for MB3D slots + pre-banks loader compat; the editor budget meter
+> meters only the MB3D pool. Runs BEFORE P4.4/P4.5 (the old hard gate lifted):
+> absorption maps interlace onto a bank and deletes `uInterlace*` (one migration).
+> MB3D emit byte-identical over all 38 bundled scenes; suite 170→188. Full
+> rationale + the banks-for-all-6 vs base-verbatim call in ADR-0090.
+
+> **Update 2026-07-04 (P4.3 landed; decision unchanged):** the Weave Editor
+> picker now lists REGISTERED native + imported (frag/DEC) formulas as slot
+> sources alongside the MB3D catalog. Picking one appends a native addon-slot
+> shell (`formulaIndex: -1`, `name` = formula id) via `nativeSlotShell`, which
+> the existing build path (buildWeaveScene → loadUserWeave → emitFusedHybrid →
+> nativeResolver) already accepts — the picker/UI was the only missing layer.
+> New engine module `engine/weave/nativeSlotCatalog.ts` owns the source list
+> (`getNativeSlotCatalog`, grouped by the FormulaPicker category map + an
+> "Imported" bucket for importSource/unclassified defs) and `nativeSlotReject`,
+> the pure predicate mirroring the resolver's capability rejects
+> (`shape:self-contained` / `shape:modular`). The picker GREYS exactly what the
+> resolver rejects, never hides — `test:mb3d:weave` asserts parity (greying set
+> == `resolveNativeSlot(...).ok === false`) over every registered formula.
+> Frag/DEC imports resolve through the SAME native resolver (design §1.3), so no
+> extra path. Native rows repurpose the per-row expansion to a note (params
+> auto-expose onto the shared lane budget; bake is engine-automatic on overflow;
+> the formula's own getDist is NOT spliced — the Quality estimator dropdown is
+> the escape hatch); the lane-budget meter dry-runs native rows through
+> `resolveNativeSlot` on the same LaneAllocator as MB3D rows. SCOPE (owner call):
+> only registered formulas are weavable — the raw 438-thumbnail catalog is
+> deferred (import via Workshop first); adopting the full thumbnail FormulaPicker
+> in the weave editor is a noted P4-follow-up. No emit-path file touched (the
+> P4.0–P4.2 byte-identity holds); gates green (typecheck, weave 162, mb3d 24,
+> refine 56, decompiler corpus, smoke:boot).
+
+> **Update 2026-07-04 (P4.2 landed; decision unchanged):** native slots carry a
+> DE policy. `writesDeriv` is detected from the formula source (dr-write scan) —
+> a weave where NO slot updates the derivative auto-routes to the est7 numeric
+> recipe (ADR-0085), the same no-ADE policy as MB3D [CODE] slots; frag/DEC
+> import slots (P4.3) inherit this for free. A native slot's tuned preset
+> quality subset (`deMeta`: estimator/fudge/metric/bailout/detail) leads the
+> fused preset — GENERIC estimators (0–4) only; capability-backed presets
+> (cutting-plane/dIFS/numeric) drop the subset whole, since a native
+> `shader.getDist` is NOT spliced into weaves (interlace-secondary semantics;
+> the estimator dropdown stays the manual escape hatch). Precedence: decompiled
+> DE owner → certified intern-box calibration → first native generic subset.
+> GPU-certed: mixed native+MB3D weave + AmazingBox-led pair (non-default
+> deMeta) render coherently; MB3D corpus byte-identical throughout.
+
+> **Update 2026-07-04 (P4.0+P4.1 landed; decision unchanged):** native formulas
+> are now dispatcher-hosted weave slots. The struct-state framework this ADR
+> anticipated ("per-iteration state remains flat named floats… the struct-state
+> framework (P4) lands inside assembleWeave") was **not needed** — the state
+> inventory (plans/mb3d/weave-p4-struct-state-design.md §1) showed native
+> cross-iteration state already lives in globals, so the shipped design is
+> **namespace-prefixed globals** per slot (`ws<N>_`), the interlace rewriter
+> generalized. `assembleWeave` gained per-slot `preCall`/`call`/`loopInit`
+> seams (P4.0, byte-identical when absent); `engine/weave/nativeResolver.ts`
+> (P4.1) binds one `createNativeSlotRewriter` per slot with a `uniformMap` that
+> lands declared params on allocated coreMath lanes (shared LaneAllocator with
+> MB3D slots — one budget) and bakes undeclared uniforms to preset defaults,
+> hoists loopInit-declared state to globals (Phoenix/Bristorbrot), hosts the
+> shared-rotation swap in the dispatcher branch, and isolates c.w per slot
+> (z.w rides the shared orbit — interlace semantics). Weave addon slots carry
+> natives as `formulaIndex: -1` + `name` = registered formula id
+> (`NATIVE_FORMULA_INDEX`); `weaveSource.slots[].kind` gained `'native'`.
+> MB3D slots keep the shared `inout float` scratch — two state channels reflect
+> two real semantics (shared fused orbit vs independent formulas), one
+> dispatcher. GPU canary: identity pair (Mandelbulb⊗Mandelbulb) + mixed
+> bulb⊗box render coherently (probe-native-weave.mts); interlace sweep 45/45.
+
+> **Update 2026-07-04 (P3b landed; decision unchanged):** the weaver's opt-in
+> **Rhythm (LAYERED modulo) schedule** ships: 2–6 active slots — the first is
+> the base (phase 0), each further slot k is an independent rhythm layer reading
+> `uWeaveInterval<k>`/`uWeaveStartIter<k>`/`uWeaveBeats<k>` from the DDFS `weave`
+> feature (live + keyframable — schedule edits never recompile). Layers are
+> checked in slot order, first beat wins — the same precedence rule as the
+> `skipMainFormula` arbitration above, so the GMT "Hybrid Box + interlace"
+> pattern maps 1:1 onto rhythm layers. `beats` caps a layer after N claims
+> (0 = endless); a dense capped layer doubles as a sequence-style intro, which is
+> why no baked counts-prefix hybrid schedule was added (deferred to P4 if ever
+> needed). Emitters: `emitLayeredModuloGLSL` (weaver) alongside the binary
+> `emitModuloScheduleGLSL` (interlace / Hybrid Box bindings, unchanged).
+> `emitFusedHybrid(scene, opts)` takes `opts.schedule = {kind:'modulo'}`; opts
+> absent stays the counts path, probe-proven byte-identical over all 38 bundled
+> scenes. `weaveSource.schedule = {kind:'modulo', layers:[…]}` persists the
+> built snapshot; the live values ride feature state. Task 2 adds per-OPTION
+> expose/bake directives (`opts.slotBake` → `bindOptions(..., bake)`): baked
+> options bind literals via packConstBuffer's math — covering even
+> non-live-mappable option types, so one odd option no longer bakes the whole
+> slot — and `weaveSource.slots[].bake` persists the choice; the editor's lane
+> budget meter dry-runs the same `LaneAllocator` (24 scalar lanes / 6 vec3 units).
+
+> **Update 2026-07-04 (P2/P2.5 landed; decision unchanged):** the interlace rewriter now
+> lives at `engine/weave/nativeSlot.ts` (namespace-parameterized `createNativeSlotRewriter`;
+> `features/interlace/glslRewriter.ts` is interlace's binding of it), and BOTH interlace and
+> Hybrid Box's interleaved mode dispatch through `emitModuloScheduleGLSL` phase functions
+> (`Interlace_weaveSlot` / `Hybrid_weaveSlot`, the latter using `maxCount`). The
+> `skipMainFormula` arbitration is defined: a weave block claims an iteration only if no
+> earlier block did (injection order = precedence). The mesh path shares the same rewriter +
+> schedule through the interlace binding. Persisted `interlace*`/`hybrid*` state is
+> UNCHANGED — old scenes load as-is; the conversion to weave-native state lands when the
+> weaver absorbs those UIs (P4).
+
+## Context
+
+GMT accumulated **three parallel implementations** of "schedule N formulas across the
+iteration loop", plus a coupled parameter layer:
+
+1. **Interlace** (`engine-gmt/features/interlace/`) — 2 formulas, runtime modulo
+   alternation (`uInterlaceInterval`/`uInterlaceStartIter` are live, keyframable DDFS
+   uniforms), inline GLSL rewriting of the secondary formula.
+2. **MB3D weave** (`engine-gmt/utils/mb3d/`) — N fixed slots, the `doHybridPas`
+   counts cursor precomputed into a baked `const int[]` LUT, mode 0 only (ADR-0083).
+3. **Hybrid Box** (`engine-gmt/features/geometry/`) — interleaved mode is a modulo
+   schedule with a start offset and an invocation cap; both it and interlace write
+   `skipMainFormula` with **no arbitration** (a latent same-iteration conflict).
+
+The engine's own rules forbid this ("genericize, don't fork"; "one source of truth"),
+and the planned user-facing weaver would have been a fourth copy.
+
+## Decision
+
+An **engine-level weave core** at `engine-gmt/engine/weave/`:
+
+- **`types.ts` — `WeaveSpec`**, the single contract: ordered slots
+  (`source: {kind: 'mb3d' | 'native'}`, per-slot `iterCount`) + a schedule. Every
+  front-end (MB3D importer, interlace, Hybrid Box, the weaver UI) *authors a spec*;
+  the core compiles it.
+- **Two first-class schedule kinds** (confirmed with the owner, 2026-07-03):
+  - `counts` — baked `const int[]` LUT phase function; exact, but structure edits
+    recompile. (MB3D semantics.)
+  - `modulo` — `{interval, startIter, maxCount?}` read from **runtime uniforms**;
+    live-editable and keyframable, no recompile. (`maxCount` covers Hybrid Box's
+    invocation cap; interlace omits it.)
+  Emission is per-spec: a counts weave carries zero modulo code and vice versa; with
+  no weave active nothing is emitted (byte-identical no-weave kernel).
+- **`schedule.ts`** — `buildCountsPlan` (the cursor walk, generalized input) +
+  `emitCountsScheduleGLSL` + `emitModuloScheduleGLSL`, all emitting the same
+  `int <id>_weaveSlot(int i)` phase-function shape.
+- **`emitWeave.ts` — `assembleWeave`**: phase dispatcher + flat `inout float` scratch
+  threading + loopInit/loopBody assembly. Front-end specifics (dIFS folds, Rout
+  recompute, scratch seed values, per-iteration refreshes) arrive as data/callbacks —
+  the core stays domain-free.
+- Front-ends stay thin: `utils/mb3d/weaveSequencer.ts` is the MB3D adapter (nibble
+  clamps, mode extraction, `weaveSpecFromMB3D`); `emitFusedHybrid.ts` keeps all MB3D
+  scene semantics and assembles through the core.
+
+## Consequences
+
+- The importer migration was proven **byte-identical** over all 38 bundled scenes
+  (full emit dump diff) before GPU re-certification — the certified corpus was never
+  at risk.
+- P2 folds interlace onto a 2-slot modulo WeaveSpec (generalizing its `glslRewriter`
+  into the native-slot transpiler) and migrates the mesh-export path; P2.5 folds
+  Hybrid Box's interleaved mode, which structurally fixes the `skipMainFormula`
+  arbitration hazard (one dispatcher, defined precedence). Hybrid Box's pre-loop
+  fast path is a prep pass, not weaving — it stays in geometry.
+- **Save migration:** legacy `interlace*`/`hybrid*` feature state must convert into
+  the weave-native form at load (the new system is a superset); old-scene round-trip
+  is a P2/P2.5 gate.
+- Per-iteration state remains flat named floats threaded `inout`; the struct-state
+  framework (P4) lands inside `assembleWeave` when it comes.
+- The modular graph builder is **not** part of this unification (it composes within
+  an iteration — an orthogonal axis; its `uModularParams` packing keeps its ADR-0050
+  parity contract). Its compiled formula is slot-shaped, so `source: {kind:'modular'}`
+  is a natural post-P4 extension that would also lift the interlace exclusion.
+
+## Related
+
+ADR-0083 (MB3D importer, mode-0 only) · ADR-0087 (cert blind spot — GPU-cert every
+weave/emit/DE change) · ADR-0050/0051 (modular) ·
+`plans/mb3d/sessions/S-nformula-weave-unification.md` (verified research + confirmed design)

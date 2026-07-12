@@ -5,6 +5,7 @@ import type { FoldDefinition } from '../types';
 export const mirrorFold: FoldDefinition = {
     id: 'mirror',
     label: 'Mirror',
+    foldType: 1,
     glsl: `
 void foldOperation(inout vec3 z, inout float dr, vec3 foldLimit) {
     z = foldLimit - abs(abs(z) - foldLimit);

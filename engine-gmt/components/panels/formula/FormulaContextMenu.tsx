@@ -104,7 +104,9 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
         }
 
         if (!curDef) { s.handleInteractionEnd(); return; }
-        const cur = s.coreMath;
+        // Native weave slots keep their params on the `weave` feature (per-slot
+        // BANKS, ADR-0090) — route those to setWeave, everything else to setCoreMath.
+        const weaveUpdates: Record<string, number | { x: number; y: number; z?: number; w?: number }> = {};
         const randFloat = (cur: number, min: number, max: number, step: number) => {
             const range = max - min;
             let r: number;
@@ -122,9 +124,13 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
             // Skip pure toggle (boolean) parameters — randomizing 0/1 booleans is jarring
             if (p.mode === 'toggle') return;
 
+            // Read from + write to the feature this param routes to (weave bank vs coreMath).
+            const cur = (p as any).feature === 'weave' ? (s as any).weave : s.coreMath;
+            const target = (p as any).feature === 'weave' ? weaveUpdates : updates;
+
             if (p.type === 'vec4') {
                 const cv = (cur as unknown as Record<string, unknown>)[p.id] as { x: number; y: number; z: number; w: number } || { x: 0, y: 0, z: 0, w: 0 };
-                updates[p.id] = {
+                target[p.id] = {
                     x: randFloat(cv.x, p.min, p.max, p.step),
                     y: randFloat(cv.y, p.min, p.max, p.step),
                     z: randFloat(cv.z, p.min, p.max, p.step),
@@ -132,7 +138,7 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
                 };
             } else if (p.type === 'vec3') {
                 const cv = (cur as unknown as Record<string, unknown>)[p.id] as { x: number; y: number; z: number } || { x: 0, y: 0, z: 0 };
-                updates[p.id] = {
+                target[p.id] = {
                     x: randFloat(cv.x, p.min, p.max, p.step),
                     y: randFloat(cv.y, p.min, p.max, p.step),
                     z: randFloat(cv.z, p.min, p.max, p.step),
@@ -141,9 +147,9 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
                 const cv = (cur as unknown as Record<string, unknown>)[p.id] as { x: number; y: number } || { x: 0, y: 0 };
                 if (p.mode === 'mixed') {
                     // x is a boolean toggle — preserve it; randomize only the float y
-                    updates[p.id] = { x: cv.x, y: randFloat(cv.y, p.min, p.max, p.step) };
+                    target[p.id] = { x: cv.x, y: randFloat(cv.y, p.min, p.max, p.step) };
                 } else {
-                    updates[p.id] = {
+                    target[p.id] = {
                         x: randFloat(cv.x, p.min, p.max, p.step),
                         y: randFloat(cv.y, p.min, p.max, p.step),
                     };
@@ -151,10 +157,11 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
             } else {
                 // float
                 const cv = ((cur as unknown as Record<string, unknown>)[p.id] as number) ?? ((p.min + p.max) / 2);
-                updates[p.id] = randFloat(cv, p.min, p.max, p.step);
+                target[p.id] = randFloat(cv, p.min, p.max, p.step);
             }
         });
         s.setCoreMath(updates);
+        if (Object.keys(weaveUpdates).length) (s as any).setWeave(weaveUpdates);
         s.handleInteractionEnd();
     };
 
@@ -164,12 +171,6 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
         const s = useEngineStore.getState(); // fresh state after params changed
         const geo = s.geometry;
         const geoUpdates: Record<string, number> = {};
-        if (geo.hybridMode) {
-            geoUpdates.hybridScale = pct >= 1 ? 1.5 + Math.random() * 1.5 : Math.max(1, Math.min(3, geo.hybridScale + (Math.random() * 2 - 1) * 2 * pct));
-            geoUpdates.hybridMinR = pct >= 1 ? Math.random() * 1.0 : Math.max(0, Math.min(1.5, geo.hybridMinR + (Math.random() * 2 - 1) * 1.5 * pct));
-            geoUpdates.hybridFixedR = pct >= 1 ? 0.5 + Math.random() * 1.5 : Math.max(0.1, Math.min(3, geo.hybridFixedR + (Math.random() * 2 - 1) * 2.9 * pct));
-            geoUpdates.hybridFoldLimit = pct >= 1 ? 0.5 + Math.random() * 1.5 : Math.max(0.1, Math.min(2, geo.hybridFoldLimit + (Math.random() * 2 - 1) * 1.9 * pct));
-        }
         if (geo.juliaMode) {
             geoUpdates.juliaX = pct >= 1 ? (Math.random() * 4 - 2) : Math.max(-2, Math.min(2, geo.juliaX + (Math.random() * 2 - 1) * 4 * pct));
             geoUpdates.juliaY = pct >= 1 ? (Math.random() * 4 - 2) : Math.max(-2, Math.min(2, geo.juliaY + (Math.random() * 2 - 1) * 4 * pct));

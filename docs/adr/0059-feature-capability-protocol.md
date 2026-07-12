@@ -1,5 +1,23 @@
 # ADR-0059: Feature compatibility as a closed capability vocabulary + pure reducer
 
+> **Update 2026-07-12 (legacy-flag retirement completed + `estimator:difs` token; decision unchanged):**
+> The P8 sunsetting step that had stalled at "@deprecated" is now fully executed. The three
+> legacy booleans (`shader.selfContainedSDE`, `shader.usesSharedRotation`,
+> `shader.supportsCuttingPlane`) and the never-protocoled `shader.supportsDifs` are DELETED
+> from `FractalDefinition` — `shader.capabilities` is the only runtime representation, and
+> the engine compile gates (SKIP_PRE_BAILOUT/SELF_CONTAINED_SDE in `core_math.ts`, burning
+> gate in `geometry/index.ts`, estimator `disabledIf`s in `estimators.ts`, mesh-export UI)
+> read tokens. The booleans remain load-bearing ONLY at the GMF parse boundary:
+> `parseGMF` reads legacy `shaderMeta` booleans from old/hand-authored files and PROMOTES
+> them to tokens (never writing them back); the GMF_API_DOCS authoring banner still teaches
+> `shaderMeta.selfContainedSDE` as the hand-authoring interface, which the promotion honors.
+> **Vocabulary amendment:** 9th token `estimator:difs` (declares `g_difsDE` in preamble +
+> writes its running minimum; MB3D dIFS, DEoption 20) replaces `supportsDifs` — this also
+> fixes a real data-loss bug where `supportsDifs` was never stashed in GMF shaderMeta, so
+> saved dIFS scenes silently reloaded onto a Linear estimator (a `g_difsDE` parse
+> auto-detect rescues previously-saved files retroactively). `REGISTER_FORMULA` wire types
+> now formally carry `capabilities` (structured clone preserves Sets).
+
 **Date:** 2026-05-25
 **Status:** Accepted (P0 landed; P1–P8 phased over ~2 weeks per dev/plans/capability-protocol.md)
 **Scope:** `engine-gmt/types/capabilities.ts` (new), `engine-gmt/engine/compat/` (new), `engine-gmt/types/fractal.ts` (`shader.capabilities`), `engine/FeatureSystem.ts` (`FeatureDefinition.requires`), `engine-gmt/engine/FractalRegistry.ts` (decoration), `debug/test-compat.mts` (new harness).

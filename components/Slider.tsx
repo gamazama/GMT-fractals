@@ -6,22 +6,8 @@ import { ContextMenuItem } from '../types/help';
 import { collectHelpIds } from '../utils/helpUtils';
 import { useTrackAnimation } from '../hooks/useTrackAnimation';
 import { KeyframeButton } from './KeyframeButton';
-import { ScalarInput, getMapping, formatDisplay } from './inputs';
-import type { CustomMapping } from './inputs';
-
-/** Build a mapping object from legacy customMapping props */
-function buildMapping(customMapping: CustomMapping | undefined) {
-    if (!customMapping) return undefined;
-    return {
-        toDisplay: customMapping.toSlider,
-        fromDisplay: customMapping.fromSlider,
-        format: formatDisplay,
-        parseInput: (s: string) => {
-            const num = parseFloat(s);
-            return isNaN(num) ? null : num;
-        }
-    };
-}
+import { ScalarInput } from './inputs';
+import type { ValueMapping } from './inputs';
 
 // Re-export for backward compatibility
 export { formatDisplay } from './inputs';
@@ -97,7 +83,7 @@ interface BaseSliderProps {
     hardMax?: number;
     highlight?: boolean;
     overrideText?: string;
-    customMapping?: CustomMapping;
+    mapping?: ValueMapping;
     mapTextInput?: boolean;
     liveValue?: number;
     headerRight?: React.ReactNode;
@@ -124,26 +110,22 @@ export const BaseSlider: React.FC<BaseSliderProps> = ({
     hardMin, 
     hardMax, 
     onChange, 
-    highlight, 
-    overrideText, 
-    customMapping, 
+    highlight,
+    overrideText,
+    mapping,
     mapTextInput,
-    liveValue, 
-    headerRight, 
-    footer, 
-    labelSuffix, 
-    onContextMenu, 
-    dataHelpId, 
-    onDragStart, 
-    onDragEnd, 
+    liveValue,
+    headerRight,
+    footer,
+    labelSuffix,
+    onContextMenu,
+    dataHelpId,
+    onDragStart,
+    onDragEnd,
     disabled = false,
     className = ''
 }) => {
-    const mapping = React.useMemo(() => buildMapping(customMapping), [customMapping]);
-
-    // Pass unmapped min/max - ScalarInput will handle mapping internally
-    // This fixes double-mapping bug where min/max were converted twice
-
+    // Pass unmapped min/max - ScalarInput handles the mapping internally.
     return (
         <ScalarInput
             label={label}
@@ -223,7 +205,7 @@ const Slider: React.FC<SliderProps> = ({
 }) => {
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
     const slider = useInteractionGesture(INTERACTION_SOURCES.slider);
-    const { status, toggleKey, autoKeyOnChange, autoKeyOnDragStart } = useTrackAnimation(trackId, props.value ?? 0, props.label);
+    const { status, setKey, deleteKey, deleteTrack, autoKeyOnChange, autoKeyOnDragStart } = useTrackAnimation(trackId, props.value ?? 0, props.label);
 
     const helpIds = [];
     if (trackId) helpIds.push(trackId);
@@ -271,37 +253,16 @@ const Slider: React.FC<SliderProps> = ({
 
     // Construct Header Right
     const headerRight = (trackId && !props.disabled) ? (
-        <KeyframeButton status={status} onClick={() => { toggleKey(); if (onKeyToggle) onKeyToggle(); }} />
+        <KeyframeButton
+            status={status}
+            label={props.label}
+            onClick={() => { setKey(); if (onKeyToggle) onKeyToggle(); }}
+            onDeleteKey={deleteKey}
+            onDeleteTrack={deleteTrack}
+        />
     ) : undefined;
 
-    // Construct Footer (default value marker)
-    const footer = (defaultValue !== undefined && !props.disabled) ? (
-        <>
-            <div className="absolute w-0.5 h-full bg-line/40 pointer-events-none z-0 transform -translate-x-1/2" 
-                style={{ left: `${((props.customMapping ? props.customMapping.toSlider(defaultValue) : defaultValue) - (props.customMapping?.min ?? props.min ?? 0)) / ((props.customMapping?.max ?? props.max ?? 1) - (props.customMapping?.min ?? props.min ?? 0)) * 100}%` }} 
-            />
-            <button 
-                onClick={(e) => { 
-                    e.preventDefault(); e.stopPropagation(); 
-                    handleInteractionStart('param');
-                    if (trackId) autoKeyOnDragStart(); 
-                    onChange(defaultValue);
-                    autoKeyOnChange(defaultValue); 
-                    handleInteractionEnd();
-                }} 
-                className="absolute top-0 bottom-0 right-0 w-2 bg-fg-dim/20 hover:bg-fg-muted/50 cursor-pointer z-20 transition-colors border-l border-black/10" 
-                title={`Reset to ${defaultValue}`} 
-                aria-label="Reset to default" 
-                tabIndex={-1} 
-            />
-        </>
-    ) : undefined;
-
-    const mapping = React.useMemo(() => buildMapping(props.customMapping), [props.customMapping]);
-
-    // Pass unmapped min/max - ScalarInput will handle mapping internally
-    // This fixes double-mapping bug where min/max were converted twice
-
+    // Pass unmapped min/max - ScalarInput handles the mapping internally.
     return (
         <ScalarInput
             label={props.label}
@@ -314,7 +275,7 @@ const Slider: React.FC<SliderProps> = ({
             max={props.max}
             hardMin={props.hardMin}
             hardMax={props.hardMax}
-            mapping={mapping}
+            mapping={props.mapping}
             format={overrideInputText ? () => overrideInputText : undefined}
             mapTextInput={props.mapTextInput}
             variant="full"

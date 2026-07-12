@@ -133,11 +133,11 @@ const APP_TIMEOUT_MS = parseInt(argVal('--app-timeout') ?? '30000', 10);
 // matrix benches across reflection modes / material variants.
 //
 //   --reflection-mode=off|env|raymarch       (default: leave alone — uses ENV)
-//   --reflection-bounces=1..3                (raymarch only)
 //   --material=default|matte|glossy|mirror   (presets that touch reflection,
 //                                             specular, roughness, metallic)
+// (--reflection-bounces removed 2026-07-10 with the Direct 'Max Bounces' param —
+//  Direct reflections are single-bounce; PT bounce depth is --pt-bounces.)
 const REFLECTION_MODE = argVal('--reflection-mode') ?? '';
-const REFLECTION_BOUNCES = parseInt(argVal('--reflection-bounces') ?? '1', 10);
 const MATERIAL_PRESET = argVal('--material') ?? '';
 const SCENE_TAG = argVal('--tag') ?? '';   // appended to image filenames so
                                             // matrix runs don't overwrite
@@ -186,15 +186,15 @@ const IS_PT = RENDER_MODE === 'PathTracing';
 const SHADOW_ALGORITHM = (argVal('--shadow-algorithm') ?? '').toLowerCase();
 const AREA_LIGHTS = parseBool(argVal('--area-lights'));
 
-// MB3D-faithful marcher toggle (compile gate) + its two runtime knobs. Lets the
-// bench A/B GMT's standard sphere march vs MB3D's damped/clamped march (ADR-0088)
-// on ANY formula — the gate lives in the trace kernel, not the importer, so the
-// default Mandelbulb is a clean controlled A/B.
-//   --mb3d-faithful=on|off   quality.mb3dFaithful (recompiles in/out)
-//   --mb3d-stepdiv=N         uMb3dStepDiv (0.01..1.0; default 0.5) — runtime knob.
-//                            Set 1.0 to isolate the faithful ALU cost at equal step size.
-//   --mb3d-desub=N           uMb3dDEsub   (0..0.9; default 0.0)   — runtime knob
-const MB3D_FAITHFUL = parseBool(argVal('--mb3d-faithful'));
+// MB3D-faithful marcher knobs. The faithful step IS the marcher since ADR-0092 —
+// the standard-vs-faithful compile A/B is gone (--mb3d-faithful is retired and
+// warns if passed). Both remaining knobs are runtime uniforms.
+//   --mb3d-stepdiv=N         quality.fudgeFactor (0.01..1.0) — the unified step
+//                            divisor. 1.0 isolates the marcher ALU at equal step size.
+//   --mb3d-desub=N           uMb3dDEsub (0..0.9; default 0.0) — runtime knob
+if (argVal('--mb3d-faithful') !== undefined) {
+    console.warn('[bench-shader] --mb3d-faithful is RETIRED (ADR-0092): the MB3D-faithful step is the unconditional marcher. Use --mb3d-stepdiv / --mb3d-desub.');
+}
 const MB3D_STEPDIV = argVal('--mb3d-stepdiv') !== undefined ? parseFloat(argVal('--mb3d-stepdiv')!) : null;
 const MB3D_DESUB   = argVal('--mb3d-desub')   !== undefined ? parseFloat(argVal('--mb3d-desub')!)   : null;
 
@@ -525,7 +525,6 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
     console.log(SCENE_PRESET ? '[bench-shader] applying scene preset from --scene file…' : '[bench-shader] applying formula defaultPreset…');
     const presetApplied = await page.evaluate((opts: {
         reflectionMode: string;
-        reflectionBounces: number;
         materialPreset: string;
         renderMode: string;
         ptBounces: number | null;
@@ -541,7 +540,6 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         volEmissive: number | null;
         volLights: number | null;
         volAnisotropy: number | null;
-        mb3dFaithful: boolean | null;
         mb3dStepDiv: number | null;
         mb3dDesub: number | null;
         formulaOverride: string;
@@ -569,9 +567,6 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
                 p.features.reflections = p.features.reflections || {};
                 p.features.reflections.enabled = true;
                 p.features.reflections.reflectionMode = m;
-                if (m === 3.0) {
-                    p.features.reflections.bounces = opts.reflectionBounces;
-                }
             }
         }
 
@@ -603,7 +598,7 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             const modeMap: Record<string, number> = { off: 0.0, env: 1.0, raymarch: 3.0 };
             const m = modeMap[opts.reflectionMode];
             if (m !== undefined && setters.setReflections) {
-                setters.setReflections({ enabled: true, reflectionMode: m, bounces: opts.reflectionBounces });
+                setters.setReflections({ enabled: true, reflectionMode: m });
             }
         }
         if (opts.materialPreset && setters.setMaterials) {
@@ -680,13 +675,12 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             setters.setVolumetric(volPatch);
         }
 
-        // MB3D-faithful marcher. mb3dFaithful is a compile gate (recompiles the
-        // trace kernel with the damped/clamped step); stepdiv/desub are runtime
-        // uniforms. setQuality is the DDFS auto-setter for the 'quality' feature.
-        if ((opts.mb3dFaithful !== null || opts.mb3dStepDiv !== null || opts.mb3dDesub !== null) && setters.setQuality) {
+        // Marcher knobs (the MB3D-faithful step is THE marcher, ADR-0092): the step
+        // divisor is quality.fudgeFactor; desub is uMb3dDEsub. Both runtime uniforms.
+        // setQuality is the DDFS auto-setter for the 'quality' feature.
+        if ((opts.mb3dStepDiv !== null || opts.mb3dDesub !== null) && setters.setQuality) {
             const qPatch: any = {};
-            if (opts.mb3dFaithful !== null) qPatch.mb3dFaithful = opts.mb3dFaithful;
-            if (opts.mb3dStepDiv !== null) qPatch.mb3dStepDiv = opts.mb3dStepDiv;
+            if (opts.mb3dStepDiv !== null) qPatch.fudgeFactor = opts.mb3dStepDiv;
             if (opts.mb3dDesub !== null) qPatch.mb3dDEsub = opts.mb3dDesub;
             setters.setQuality(qPatch);
         }
@@ -709,13 +703,11 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             appliedVolDensity:   after.volumetric?.volDensity   ?? 'unset',
             appliedVolEmissive:  after.volumetric?.volEmissive  ?? 'unset',
             appliedVolLights:    after.volumetric?.volMaxLights ?? 'unset',
-            appliedMb3dFaithful: after.quality?.mb3dFaithful ?? 'unset',
-            appliedMb3dStepDiv:  after.quality?.mb3dStepDiv  ?? 'unset',
-            appliedMb3dDesub:    after.quality?.mb3dDEsub    ?? 'unset',
+            appliedMb3dStepDiv:  after.quality?.fudgeFactor ?? 'unset',
+            appliedMb3dDesub:    after.quality?.mb3dDEsub   ?? 'unset',
         };
     }, {
         reflectionMode: REFLECTION_MODE,
-        reflectionBounces: REFLECTION_BOUNCES,
         materialPreset: MATERIAL_PRESET,
         renderMode: RENDER_MODE,
         ptBounces: PT_BOUNCES,
@@ -731,7 +723,6 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         volEmissive: VOL_EMISSIVE,
         volLights: VOL_LIGHTS,
         volAnisotropy: VOL_ANISOTROPY,
-        mb3dFaithful: MB3D_FAITHFUL,
         mb3dStepDiv: MB3D_STEPDIV,
         mb3dDesub: MB3D_DESUB,
         formulaOverride: FORMULA_OVERRIDE,
@@ -874,7 +865,13 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
     uniforms.uTime = 0.0;
     uniforms.uFrameCount = { int: 0 };
     uniforms.uJitter = [0, 0];
-    uniforms.uBlendFactor = 1.0;  // 100% fresh pixel — ignore (dummy) history
+    // 100% fresh pixel by default — ignore (dummy) history. --blend-factor=N
+    // overrides it: shader paths key "interacting?" off uBlendFactor >= 0.99
+    // (volumetric sampling clamp, VNDF reflection jitter), so steady-state
+    // accumulation cost needs a sub-0.99 value. NB below 0.99 the output blends
+    // with the harness's dummy (black) history — timing stays honest, the
+    // captured image darkens (don't image-diff those runs).
+    uniforms.uBlendFactor = parseFloat(argVal('--blend-factor') ?? '1.0');
     // FULL FRAME. The tiled progressive idle renderer (BandScheduler) confines the
     // trace to a band via uRegionMin/uRegionMax — the region check in main.ts skips
     // (history-copies) every pixel outside it. A snapshot taken mid-band would make
@@ -1168,7 +1165,7 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
         strippedUniforms: result.missingUniforms ?? [],
         timingsUs:        t,
         compileTiming:    result.compileTiming ?? null,
-        scene:            { reflectionMode: REFLECTION_MODE || null, material: MATERIAL_PRESET || null, tag: SCENE_TAG || null, reflectionBounces: REFLECTION_BOUNCES, renderMode: RENDER_MODE || null, ptBounces: PT_BOUNCES, ptNeeAll: PT_NEE_ALL, ptEnvNee: PT_ENV_NEE, volumetric: VOLUMETRIC, volDensity: VOL_DENSITY, volEmissive: VOL_EMISSIVE, volLights: VOL_LIGHTS, volAnisotropy: VOL_ANISOTROPY },
+        scene:            { reflectionMode: REFLECTION_MODE || null, material: MATERIAL_PRESET || null, tag: SCENE_TAG || null, renderMode: RENDER_MODE || null, ptBounces: PT_BOUNCES, ptNeeAll: PT_NEE_ALL, ptEnvNee: PT_ENV_NEE, volumetric: VOLUMETRIC, volDensity: VOL_DENSITY, volEmissive: VOL_EMISSIVE, volLights: VOL_LIGHTS, volAnisotropy: VOL_ANISOTROPY },
         pageErrors,
         refImage:         refPath.replace(process.cwd() + '\\', '').replace(process.cwd() + '/', ''),
         diff: diff ? { mae: diff.mae, rmse: diff.rmse, maxErr: diff.maxErr } : null,

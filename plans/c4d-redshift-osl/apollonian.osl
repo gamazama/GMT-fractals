@@ -1,0 +1,339 @@
+// ============================================================================
+//  apollonian.osl  —  Raymarched distance-estimated Apollonian gasket
+//  Target: Cinema 4D 2026 + Redshift 2026.x  (OSL Shader / "OSL Script" node)
+// ============================================================================
+//
+//  WHAT THIS IS
+//  ------------
+//  A self-contained OSL pattern `shader` (NOT `surface`) that sphere-traces a 3D
+//  Apollonian gasket distance estimator and outputs ALBEDO + object-space NORMAL
+//  + AO + ALPHA so Redshift lights it natively. It is a Proof of Concept
+//  faithfully ported from GMT's production GLSL formula
+//  (engine-gmt/formulas/Apollonian.ts) — see DE notes below.
+//
+//  WHY A BOUNDING CUBE (verified architecture — do not "fix" this)
+//  ---------------------------------------------------------------
+//  An OSL surface shader in Redshift CANNOT relocate the ray-surface hit point
+//  (OSL spec: surface shaders "may not alter the position of the surface"; only
+//  a displacement shader may touch P, and RS does not run OSL as displacement).
+//  Real BSDF closures also mostly don't work in RS OSL and can't feed downstream
+//  nodes. Therefore the only viable pattern is:
+//
+//      * Assign this material to a UNIT BOUNDING CUBE (an actual mesh cube,
+//        ideally 1x1x1 object-space, centered at origin: corners at +/-0.5).
+//      * Reconstruct the camera ray from the shading globals at the cube's
+//        front face: origin = P (the entry hit), direction = normalize(I).
+//      * March that ray *in the cube's OBJECT space* so the fractal is rigid to
+//        the cube (transform/scale/rotate the cube to place the fractal).
+//      * Clamp the march to the cube exit (slab test) and to maxDist.
+//      * On HIT: output color into `outColor` (drive Emission) and outAlpha=1.
+//      * On MISS: outAlpha = 0  -> opacity 0 -> the proxy silhouette is cut away.
+//
+//  REDSHIFT NODE WIRING  —  LET REDSHIFT LIGHT IT (recommended)
+//  ------------------------------------------------------------
+//  In the C4D Redshift node material graph, drop an "OSL Shader" (OSL Script)
+//  node, File-mode -> point it at this .osl. The declared outputs auto-expose
+//  as node ports. The shader now outputs raw geometry/albedo so RS does the
+//  lighting (HDRI/dome + lights + GI), instead of self-lighting (which looked
+//  homebrewed). Wire into a Standard Material as follows:
+//
+//      outColor  (color)   -> Standard Material : BASE COLOR
+//                             (raw, UNLIT albedo from the orbit-trap palette).
+//      outNormal (normal)  -> Bump Map node (set to OBJECT-SPACE NORMAL mode)
+//                             -> Standard Material : Bump/Normal input. This is
+//                             the object-space surface normal of the fractal, so
+//                             RS shades curvature/lighting correctly.
+//      outAO     (float)   -> multiply into Base Color (or RS AO mix); 0..1
+//                             cavity term that darkens tight foam.
+//      outAlpha  (float)   -> Standard Material : OPACITY (cutout). 1 = opaque
+//                             hit, 0 = miss (transparent) so the bounding cube
+//                             proxy is clipped to the fractal silhouette.
+//
+//  Light it with an HDRI / dome light + area/point lights; the fractal now
+//  responds to RS lighting, shadows, and GI like any other surface.
+//
+//  LEGACY SELF-LIT PREVIEW
+//  -----------------------
+//  Set the `selfLit` param to 1 to restore the old in-shader Lambert preview:
+//  outColor then carries baseCol * (ambient+Lambert) * AO * emissionGain, using
+//  the lightDir/ambient/emissionGain params, and you wire outColor -> Emission
+//  (Weight=1). Those three params are IGNORED when selfLit=0.
+//
+//  No closures are ever emitted: Redshift's OSL closures (emission/glass/etc.)
+//  crash the core; only the named color/float/normal ports are the supported path.
+//
+//  CONSTRAINTS HONORED
+//  -------------------
+//   * Bounded outer march loop (maxSteps) and bounded inner DE loop (iterations).
+//     No recursion, no closures inside loops (RS forbids that).
+//   * Only plain float/color/vector math + a directional Lambert term. No
+//     trace(), no getattribute(), no unsupported closures.
+//
+// ============================================================================
+
+// ---- forward declarations of helpers (OSL needs them before use) ----------
+
+// Apollonian distance estimator in OBJECT space.
+//   Faithful port of engine-gmt/formulas/Apollonian.ts:
+//     - per-axis fold-scale cc (GLSL: vec3 cc = uVec3A + 1.0; z *= cc;)
+//     - fold into [-1,1] cube:  z = -1 + 2*fract(0.5*z + 0.5)
+//     - undo scale:             z /= cc
+//     - sphere inversion:       k = t / dot(z,z);  z *= k;  dscale *= |k|
+//     - reference DE:           d = 0.375 * |z.y| / dscale
+//   `t` is the ray-constant modulation factor (kosalos). GMT computes it once
+//   from the *initial* fractal-space position; we do the same, passing it in.
+float apolloDE(
+    point  pObj,        // sample position in object space
+    int    iterations,  // bounded inner loop count
+    vector foldScale,   // per-axis cc-1 (so cc = foldScale + 1); GMT's uVec3A
+    float  tMod,        // ray-constant modulation factor (kosalos 't')
+    float  deCoef,      // DE coefficient (GMT uses 0.375)
+    output float trapOut)   // accumulated orbit trap (min |z|^2), for coloring
+{
+    vector z  = vector(pObj);             // iterate as a free vector
+    vector cc = foldScale + vector(1.0);  // per-axis fold scaling
+    // Guard against a zero component (division by cc below).
+    if (abs(cc[0]) < 1e-6) cc[0] = (cc[0] >= 0.0 ?  1e-6 : -1e-6);
+    if (abs(cc[1]) < 1e-6) cc[1] = (cc[1] >= 0.0 ?  1e-6 : -1e-6);
+    if (abs(cc[2]) < 1e-6) cc[2] = (cc[2] >= 0.0 ?  1e-6 : -1e-6);
+
+    float dscale = 1.0;     // GMT's `dr` — conformal derivative accumulator
+    float trap   = 1e10;    // orbit trap: minimum |z|^2 over the orbit
+
+    for (int i = 0; i < iterations; i += 1) {
+        // 1) per-axis scale
+        z = z * cc;
+        // 2) modular fold into the unit cell [-1,1]: -1 + 2*fract(0.5*z + 0.5)
+        vector h = 0.5 * z + vector(0.5);
+        h = h - floor(h);                 // fract()
+        z = vector(-1.0) + 2.0 * h;
+        // 3) undo the per-axis scale
+        z = z / cc;
+        // 4) sphere inversion through the t-sphere
+        float r2 = dot(z, z);
+        if (r2 < 1e-10) r2 = 1e-10;       // GLSL: max(dot, 1e-10)
+        float k = tMod / r2;
+        z = z * k;
+        dscale = dscale * abs(k);         // dr *= |z2|
+        // 5) orbit trap (GMT: trap = min(trap, |dot(z,z)|))
+        float rr = abs(dot(z, z));
+        if (rr < trap) trap = rr;
+    }
+
+    if (dscale < 1e-10) dscale = 1e-10;   // GLSL: max(dr, 1e-10)
+    trapOut = trap;
+    // Reference Apollonian DE (GMT getDist, inversion-pre-transform OFF branch).
+    return deCoef * abs(z[1]) / dscale;
+}
+
+// Compute the ray-constant modulation factor `t` exactly as GMT's loopInit:
+//   t = paramA * (paramB + 0.25 * cos(PI * paramC * (z.z - z.x)))
+// evaluated at the INITIAL object-space ray position.
+float apolloModT(point p0, float foam, float foam2, float modAmt)
+{
+    return foam * (foam2 + 0.25 * cos(3.14159265358979 * modAmt * (p0[2] - p0[0])));
+}
+
+// ============================================================================
+
+// Declared as a generic `shader` (NOT `surface`): in Redshift, OSL is used as a
+// pattern node feeding a native Standard Material. A `surface` shader's implicit
+// `Ci` closure path is unsupported (real closures crash the RS core), so we emit
+// only the plain color/float ports below — never a closure.
+shader apollonian
+[[ string help = "Raymarched Apollonian gasket on a bounding cube; emission out, transparent on miss." ]]
+(
+    // ---- DE / fractal shape -------------------------------------------------
+    int    iterations   = 12
+        [[ string help   = "Inner inversion-loop count (orbit depth). Bounded.",
+           int    min     = 1,  int max = 40 ]],
+    vector foldScale    = vector(0.946, -0.009, -0.055)
+        [[ string help   = "Per-axis fold scale offset (GMT uVec3A; cc = this+1). Defaults match kosalos cx=1.946,cy=0.991,cz=0.945." ]],
+    float  scale        = 1.032
+        [[ string help   = "Foam / inversion strength (GMT paramA). Drives modulation t. Sensitive: ~1.0-1.6.",
+           float  min     = 0.1, float max = 3.0 ]],
+    float  foam2        = 0.92
+        [[ string help   = "Foam bias (GMT paramB).", float min = 0.1, float max = 3.0 ]],
+    float  modAmt       = 0.658
+        [[ string help   = "Spatial modulation of t (GMT paramC). 0 = uniform t.",
+           float  min     = 0.0, float max = 2.0 ]],
+    float  deCoef       = 0.375
+        [[ string help   = "DE coefficient (GMT reference DE = 0.375*|z.y|/dr). Lower = more conservative march." ]],
+
+    // ---- raymarch controls --------------------------------------------------
+    int    maxSteps     = 160
+        [[ string help   = "Outer march step cap (bounded loop).", int min = 8, int max = 512 ]],
+    float  minDist      = 0.0008
+        [[ string help   = "Hit epsilon (surface threshold). Smaller = sharper/slower.",
+           float  min     = 1e-5, float max = 0.05 ]],
+    float  maxDist      = 6.0
+        [[ string help   = "Far clamp for the march, in object-space units.",
+           float  min     = 0.1, float max = 100.0 ]],
+
+    // ---- fit / placement controls ------------------------------------------
+    float  fitScale     = 1.0
+        [[ string help   = "Object-space zoom: divides the marched coordinate (>1 = fractal smaller in the cube).",
+           float  min     = 0.05, float max = 20.0 ]],
+    vector fitOffset    = vector(0.0, 0.0, 0.0)
+        [[ string help   = "Object-space translation of the fractal inside the cube." ]],
+    float  cubeHalf     = 0.5
+        [[ string help   = "Half-size of the bounding cube in object space (unit cube = 0.5). Slab clip extent." ]],
+
+    // ---- shading ------------------------------------------------------------
+    int    selfLit      = 0
+        [[ string label  = "Self Lit",
+           string help   = "0 = output albedo for Redshift to light (recommended). 1 = legacy in-shader Lambert preview." ]],
+    color  colorA       = color(0.05, 0.02, 0.13)
+        [[ string help   = "Orbit-trap LOW color (tight foam)." ]],
+    color  colorB       = color(1.0, 0.5, 0.18)
+        [[ string help   = "Orbit-trap HIGH color (open cells)." ]],
+    vector lightDir     = vector(0.4, 0.9, 0.5)
+        [[ string help   = "Directional light (object space). Used ONLY when selfLit=1." ]],
+    float  ambient      = 0.18
+        [[ string help   = "Flat ambient floor added to Lambert. Used ONLY when selfLit=1." ]],
+    float  aoStrength   = 0.9
+        [[ string help   = "Cheap AO from step/iteration ratio (0 = off, 1 = full).",
+           float  min     = 0.0, float max = 1.0 ]],
+    float  emissionGain = 1.4
+        [[ string help   = "Multiplier on the final emissive color. Used ONLY when selfLit=1." ]],
+    float  trapGamma    = 0.6
+        [[ string help   = "Shapes the trap->color remap (gamma on normalized trap)." ]],
+
+    // ---- OUTPUTS (auto-exposed as node ports; see header for wiring) --------
+    output color  outColor  = color(0)            // -> Standard Material : Base Color
+        [[ string help = "ALBEDO (raw/unlit) on hit -> Base Color. When selfLit=1, carries the legacy self-lit preview." ]],
+    output float  outAlpha  = 0.0                 // -> Standard Material : Opacity
+        [[ string help = "1 on fractal hit, 0 on miss (cuts the proxy silhouette)." ]],
+    output normal outNormal = normal(0, 0, 1)     // -> RS Bump Map (Object-Space Normal)
+        [[ string help = "Object-space surface normal on hit -> RS Bump Map node, Object-Space-Normal mode. (0,0,1) on miss." ]],
+    output float  outAO     = 1.0                 // -> multiply into Base Color
+        [[ string help = "0..1 cavity/AO multiplier (hand-marched step-ratio AO). 1.0 on miss." ]]
+)
+{
+    // ------------------------------------------------------------------------
+    // 1) Reconstruct the camera ray at the cube's front face, IN OBJECT SPACE.
+    //    Globals P (shading point) and I (incident dir, camera->point) are in
+    //    "common" (render) space; transform both to "object" so the fractal is
+    //    rigid to the proxy cube's transform.
+    // ------------------------------------------------------------------------
+    point  roObj = transform("common", "object", P);
+    vector rdObj = transform("common", "object", I);   // direction transform
+    float  rdLen = length(rdObj);
+    if (rdLen < 1e-12) rdLen = 1e-12;
+    rdObj = rdObj / rdLen;                               // normalize(I) in object space
+
+    // ------------------------------------------------------------------------
+    // 2) Object-space slab (cube) intersection to bound the march to the proxy.
+    //    Cube spans [-cubeHalf, +cubeHalf]^3. We already start *on* the front
+    //    face (roObj == entry), so we only need the EXIT distance tFar.
+    // ------------------------------------------------------------------------
+    float tFar = maxDist;
+    // Per-axis slab exit (guard near-zero direction components).
+    for (int ax = 0; ax < 3; ax += 1) {
+        float d = rdObj[ax];
+        if (abs(d) > 1e-8) {
+            float inv = 1.0 / d;
+            float t1 = (-cubeHalf - roObj[ax]) * inv;
+            float t2 = ( cubeHalf - roObj[ax]) * inv;
+            float tExit = max(t1, t2);     // far plane on this axis
+            if (tExit < tFar) tFar = tExit;
+        }
+    }
+    if (tFar > maxDist) tFar = maxDist;
+    if (tFar < 0.0)     tFar = 0.0;
+
+    // ------------------------------------------------------------------------
+    // 3) Precompute the ray-constant modulation factor `t` (kosalos) from the
+    //    INITIAL fractal-space position — matches GMT's loopInit semantics.
+    //    Fractal space = (objectPoint - fitOffset) * fitScale.
+    // ------------------------------------------------------------------------
+    point p0Fractal = (roObj - fitOffset) * fitScale;
+    float tMod = apolloModT(p0Fractal, scale, foam2, modAmt);
+
+    // ------------------------------------------------------------------------
+    // 4) Bounded sphere-trace march.
+    // ------------------------------------------------------------------------
+    float t        = 0.0;
+    int   hitStep  = -1;
+    float hitTrap  = 1e10;
+    point hitFrac  = p0Fractal;
+    float invFit   = (fitScale != 0.0) ? (1.0 / fitScale) : 1.0;
+
+    for (int s = 0; s < maxSteps; s += 1) {
+        point pObj  = roObj + rdObj * t;                 // object-space sample
+        point pFrac = (pObj - fitOffset) * fitScale;     // fractal-space sample
+
+        float trapTmp;
+        float deFrac = apolloDE(pFrac, iterations, foldScale, tMod, deCoef, trapTmp);
+        // DE was measured in fractal space; convert step back to object space.
+        float deObj  = deFrac * invFit;
+
+        if (deObj < minDist) {                           // HIT
+            hitStep = s;
+            hitTrap = trapTmp;
+            hitFrac = pFrac;
+            break;
+        }
+
+        t += deObj;
+        if (t > tFar) break;                             // left the cube / maxDist
+    }
+
+    // ------------------------------------------------------------------------
+    // 5) Shade or discard.
+    // ------------------------------------------------------------------------
+    if (hitStep < 0) {
+        // MISS -> fully transparent so the proxy cube is invisible here.
+        outColor  = color(0);
+        outAlpha  = 0.0;
+        outAO     = 1.0;
+        outNormal = normal(0, 0, 1);
+        return;
+    }
+
+    // -- 5a) Tetrahedron 4-tap DE-gradient normal (GMT material_eval pattern).
+    //        Evaluate DE in fractal space at 4 tetrahedral offsets; build the
+    //        gradient; transform isn't needed for a Lambert dot in object space.
+    point  pHitObj = roObj + rdObj * (t);                // object-space hit
+    float  ne      = max(minDist, 1e-4);                 // normal epsilon (fractal space)
+    float  junk;
+    // k = (1,-1): offsets (+,-,-),(-,-,+),(-,+,-),(+,+,+)
+    vector o1 = vector( 1.0, -1.0, -1.0);
+    vector o2 = vector(-1.0, -1.0,  1.0);
+    vector o3 = vector(-1.0,  1.0, -1.0);
+    vector o4 = vector( 1.0,  1.0,  1.0);
+    float d1 = apolloDE(hitFrac + o1 * ne, iterations, foldScale, tMod, deCoef, junk);
+    float d2 = apolloDE(hitFrac + o2 * ne, iterations, foldScale, tMod, deCoef, junk);
+    float d3 = apolloDE(hitFrac + o3 * ne, iterations, foldScale, tMod, deCoef, junk);
+    float d4 = apolloDE(hitFrac + o4 * ne, iterations, foldScale, tMod, deCoef, junk);
+    vector nrm = o1 * d1 + o2 * d2 + o3 * d3 + o4 * d4;
+    if (dot(nrm, nrm) < 1e-20) nrm = vector(0.0, 1.0, 0.0);
+    nrm = normalize(nrm);
+
+    // -- 5b) Orbit-trap tint: normalize the accumulated min |z|^2 to [0,1],
+    //        gamma-shape it, mix colorA -> colorB. This is the raw ALBEDO.
+    float  trapN = clamp(hitTrap, 0.0, 1.0);             // |z|^2 trap is ~[0,1] in-foam
+    trapN = pow(trapN, max(trapGamma, 1e-3));
+    color  baseCol = mix(colorA, colorB, trapN);
+
+    // -- 5c) Cheap AO from step/iteration ratio: surfaces reached in many
+    //        marching steps sit deep in tight foam -> darker. Cheap and stable.
+    float ao = clamp(1.0 - aoStrength * (float(hitStep) / float(max(maxSteps, 1))), 0.0, 1.0);
+
+    // -- 5d) Emit geometry/albedo ports. Redshift lights it (selfLit=0), or we
+    //        deliver the legacy in-shader Lambert preview (selfLit=1).
+    outNormal = normal(nrm[0], nrm[1], nrm[2]);
+    outAlpha  = 1.0;
+    outAO     = ao;
+    if (selfLit == 1) {
+        vector L = normalize(lightDir);
+        float  nl = max(dot(nrm, L), 0.0);
+        float  lambert = ambient + (1.0 - ambient) * nl;
+        outColor = baseCol * lambert * ao * emissionGain;   // legacy preview look
+    } else {
+        outColor = baseCol;                                 // raw albedo; Redshift lights it
+    }
+    // Look + cutout + lighting inputs are delivered via the named node ports above.
+    // No closure is emitted: Redshift's OSL closures (emission/glass/etc.) crash
+    // the core; only the named ports are the supported path.
+}

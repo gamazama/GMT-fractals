@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import type { EngineStoreState as FractalState, EngineActions as FractalActions } from '../../../../types';
 import Slider from '../../../../components/Slider';
+import { createLog1pMapping, createPowMapping } from '../../../../components/inputs';
 import { Vector3Input } from '../../../../components/vector-input';
 import EmbeddedColorPicker from '../../../../components/EmbeddedColorPicker';
 import ToggleSwitch from '../../../../components/ToggleSwitch';
@@ -20,6 +21,12 @@ import { getViewportCamera } from '../../../engine/worker/ViewportRefs';
 import { LightDirectionControl } from '../../../features/lighting/components/LightDirectionControl';
 import type { ContextMenuItem } from '../../../../types/help';
 import type { FalloffType, IntensityUnit } from '../../../../types/graphics';
+
+// Canonical slider mappings, shared with LightControls (the CenterHUD popup).
+// Module-scope so they aren't reallocated per render.
+const POWER_SPHERE_MAPPING = createLog1pMapping(10000);   // Sphere "Power" 0..10000 (reaches 0)
+const POWER_MAPPING = createPowMapping(0, 100, 2);        // other lights' "Power" 0..100 (sqrt feel)
+const RANGE_MAPPING = createLog1pMapping(100);            // "Range"/falloff 0..100 (reaches 0)
 
 /**
  * Advanced/debug light panel — exposed in Advanced Mode via the dock tab system.
@@ -86,17 +93,25 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
       openGlobalMenu(e.clientX, e.clientY, items, ['panel.light']);
   };
   
+  // add/remove mutate the lighting slice directly, so wrap each in a param
+  // transaction to make it undoable (snapshot → diff → push). Same pattern as
+  // LightControls' Duplicate/Delete menu actions; addLight snapshots BEFORE the
+  // mutation so undo removes the new light rather than reverting its position.
   const handleAddLight = () => {
       if (lighting.lights.length < MAX_LIGHTS) {
+          actions.handleInteractionStart('param');
           actions.addLight();
+          actions.handleInteractionEnd();
           setActiveLight(lighting.lights.length);
       }
   };
-  
+
   const handleRemoveLight = (e: React.MouseEvent) => {
       e.stopPropagation();
       if (lighting.lights.length > 1) {
+          actions.handleInteractionStart('param');
           actions.removeLight(activeLight);
+          actions.handleInteractionEnd();
           setActiveLight(Math.max(0, activeLight - 1));
       }
   };
@@ -313,11 +328,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                  value={currentLight.intensity}
                  min={0} max={10000} step={0.01}
                  onChange={(v) => actions.updateLight({ index: activeLight, params: { intensity: v } })}
-                 customMapping={{
-                     min: 0, max: 10000,
-                     toSlider: (val) => (Math.log10(val + 1) / Math.log10(10001)) * 100,
-                     fromSlider: (val) => Math.pow(10001, val / 100) - 1,
-                 }}
+                 mapping={POWER_SPHERE_MAPPING}
                  mapTextInput={false}
                  overrideInputText={formatValue(currentLight.intensity)}
                  dataHelpId="light.intensity"
@@ -330,11 +341,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                  value={currentLight.intensity}
                  min={0} max={100} step={0.1}
                  onChange={(v) => actions.updateLight({ index: activeLight, params: { intensity: v } })}
-                 customMapping={{
-                     min: 0, max: 100,
-                     toSlider: (val) => Math.sqrt(val / 100) * 100,
-                     fromSlider: (val) => (val * val) / 100
-                 }}
+                 mapping={POWER_MAPPING}
                  mapTextInput={false}
                  overrideInputText={formatValue(currentLight.intensity)}
                  dataHelpId="light.intensity"
@@ -351,11 +358,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                      value={currentLight.range ?? 0}
                      min={0} max={100} step={0.1}
                      onChange={(v) => actions.updateLight({ index: activeLight, params: { range: v } })}
-                     customMapping={{
-                         min: 0, max: 100,
-                         toSlider: (val) => (Math.log10(val + 1) / Math.log10(101)) * 100,
-                         fromSlider: (val) => Math.pow(101, val / 100) - 1
-                     }}
+                     mapping={RANGE_MAPPING}
                      mapTextInput={false}
                      overrideInputText={(currentLight.range ?? 0) < 0.01 ? 'Infinite' : formatValue(currentLight.range ?? 0)}
                      dataHelpId="light.falloff"

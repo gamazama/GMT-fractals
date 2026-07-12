@@ -43,7 +43,7 @@ export { registerFeatures as registerGmtFeatures } from './features/index';
 
 // Feature state types — apps wire typed-slice augmentations via these.
 export type {
-    CoreMathState, GeometryState, InterlaceState, LightingState, LightSpheresState,
+    CoreMathState, GeometryState, LightingState, LightSpheresState,
     AOState, ReflectionsState, AtmosphereState, VolumetricState, MaterialState,
     WaterPlaneState, ColoringState, TexturingState, QualityState, DrosteState,
     PostEffectsState, ColorGradingState, OpticsState, NavigationState,

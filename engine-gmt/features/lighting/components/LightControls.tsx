@@ -8,6 +8,7 @@ import { getProxy } from '../../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { getViewportCamera } from '../../../engine/worker/ViewportRefs';
 import Slider from '../../../../components/Slider';
+import { createLogMapping, createLog1pMapping, createPowMapping } from '../../../../components/inputs';
 import { Vector3Input } from '../../../../components/vector-input';
 import EmbeddedColorPicker from '../../../../components/EmbeddedColorPicker';
 import { KeyIcon, KeyStatus, AnchorIcon, UnanchoredIcon, MenuIcon, DragHandleIcon, CloseIcon } from '../../../../components/Icons';
@@ -21,11 +22,12 @@ import { SectionLabel } from '../../../../components/SectionLabel';
 import { Popover } from '../../../../components/Popover';
 import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
 
-// Log-scale endpoints for the Light Radius slider — module-scope so the
-// Slider's customMapping closure doesn't allocate them per render.
-const LR_LOG_MIN = -4;                          // log10(0.0001)
-const LR_LOG_MAX = Math.log10(5);
-const LR_LOG_RANGE = LR_LOG_MAX - LR_LOG_MIN;
+// Canonical slider mappings for the per-light controls — module-scope so they
+// aren't reallocated per render. See components/inputs/primitives/FormatUtils.
+const RADIUS_MAPPING = createLogMapping(0.0001, 5, { reserveZero: false }); // radius floors at 0.0001 (no hard 0)
+const POWER_SPHERE_MAPPING = createLog1pMapping(10000);   // Sphere "Power" 0..10000 (reaches 0)
+const POWER_MAPPING = createPowMapping(0, 100, 2);        // other lights' "Power" 0..100 (sqrt feel)
+const RANGE_MAPPING = createLog1pMapping(100);            // "Range"/falloff 0..100 (reaches 0)
 
 export const LightOrb = ({ index, color, active, type, rotation, onClick, onDragStart }: { index: number, color: string, active: boolean, type?: LightType, rotation?: {x:number, y:number, z:number}, onClick: () => void, onDragStart: () => void }) => {
     
@@ -151,7 +153,7 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
     const lightMenuAnchorRef = useTutorAnchor('light-popup-menu');
 
     // Animation Store for Keyframing
-    const { addTrack, addKeyframe, currentFrame, sequence, isPlaying } = useAnimationStore();
+    const { addTrack, addKeyframe, removeKeyframe, removeTracks, snapshot, currentFrame, sequence, isPlaying } = useAnimationStore();
     
     // Temperature mode state - default to temperature if light has useTemperature flag
     const [useTempMode, setUseTempMode] = useState(light.useTemperature ?? false);
@@ -217,6 +219,8 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
          updateLight({ index, params: { fixed: !wasFixed, position: newPos, rotation: newRot } });
     };
 
+    const posTrackIds = ['X', 'Y', 'Z'].map(axis => `lighting.light${index}_pos${axis}`);
+
     const handlePositionKey = () => {
         const axes = ['X', 'Y', 'Z'];
         axes.forEach(axis => {
@@ -224,6 +228,19 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
             if (!sequence.tracks[id]) addTrack(id, `Light ${index+1} Pos ${axis}`);
             addKeyframe(id, currentFrame, light.position[axis.toLowerCase() as 'x' | 'y' | 'z']);
         });
+    };
+
+    const handleDeletePositionKey = () => {
+        let snapped = false;
+        posTrackIds.forEach(id => {
+            const k = sequence.tracks[id]?.keyframes.find(k => Math.abs(k.frame - currentFrame) < 0.1);
+            if (k) { if (!snapped) { snapshot(); snapped = true; } removeKeyframe(id, k.id); }
+        });
+    };
+
+    const handleDeletePositionTrack = () => {
+        const ids = posTrackIds.filter(id => sequence.tracks[id]);
+        if (ids.length) removeTracks(ids);
     };
 
     // Calculate aggregated status for 3 tracks (X, Y, Z)
@@ -319,13 +336,7 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
                             label={isSphereLight ? 'Light Radius' : 'Sphere Radius'}
                             value={light.radius ?? 0.1}
                             min={0.0001} max={5.0} step={0.0001}
-                            customMapping={{
-                                min: 0.0001, max: 5.0,
-                                // Log scale spans 5 decades (0.0001 → 5) so tiny fractal-scale
-                                // lights are reachable without crowding all useful values to the left.
-                                toSlider: (val) => (Math.log10(Math.max(0.0001, val)) - LR_LOG_MIN) / LR_LOG_RANGE * 100,
-                                fromSlider: (val) => Math.pow(10, LR_LOG_MIN + (val / 100) * LR_LOG_RANGE),
-                            }}
+                            mapping={RADIUS_MAPPING}
                             mapTextInput={false}
                             overrideInputText={formatValue(light.radius ?? 0.1)}
                             onChange={(v) => updateLight({ index, params: { radius: v } })}
@@ -371,7 +382,7 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
                                 <DragHandleIcon />
                             </button>
                         )}
-                        {!detached && light.type !== 'Directional' && <KeyframeButton status={posStatus} onClick={handlePositionKey} />}
+                        {!detached && light.type !== 'Directional' && <KeyframeButton status={posStatus} label={`Light ${index + 1} Position`} onClick={handlePositionKey} onDeleteKey={handleDeletePositionKey} onDeleteTrack={handleDeletePositionTrack} />}
                         <SectionLabel>Light {index + 1}</SectionLabel>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -467,11 +478,7 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
                             value={light.intensity}
                             min={0} max={10000} step={0.01}
                             onChange={(v) => updateLight({ index, params: { intensity: v } })}
-                            customMapping={{
-                                min: 0, max: 10000,
-                                toSlider: (val) => (Math.log10(val + 1) / Math.log10(10001)) * 100,
-                                fromSlider: (val) => Math.pow(10001, val / 100) - 1,
-                            }}
+                            mapping={POWER_SPHERE_MAPPING}
                             mapTextInput={false}
                             overrideInputText={formatValue(light.intensity)}
                             trackId={`${prefix}_intensity`}
@@ -482,11 +489,7 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
                             value={light.intensity}
                             min={0} max={100} step={0.1}
                             onChange={(v) => updateLight({ index, params: { intensity: v } })}
-                            customMapping={{
-                                min: 0, max: 100,
-                                toSlider: (val) => Math.sqrt(val / 100) * 100,
-                                fromSlider: (val) => (val * val) / 100
-                            }}
+                            mapping={POWER_MAPPING}
                             mapTextInput={false}
                             overrideInputText={formatValue(light.intensity)}
                             trackId={`${prefix}_intensity`}
@@ -499,11 +502,7 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
                             value={light.range ?? 0}
                             min={0} max={100} step={0.1}
                             onChange={(v) => updateLight({ index, params: { range: v } })}
-                            customMapping={{
-                                min: 0, max: 100,
-                                toSlider: (val) => (Math.log10(val + 1) / Math.log10(101)) * 100,
-                                fromSlider: (val) => Math.pow(101, val / 100) - 1
-                            }}
+                            mapping={RANGE_MAPPING}
                             mapTextInput={false}
                             overrideInputText={(light.range ?? 0) < 0.01 ? 'Infinite' : formatValue(light.range ?? 0)}
                             trackId={`${prefix}_falloff`}

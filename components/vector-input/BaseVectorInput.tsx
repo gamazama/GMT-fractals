@@ -4,7 +4,7 @@ import { VectorAxisCell } from './VectorAxisCell';
 import { DualAxisPad } from './DualAxisPad';
 import { RotationHeliotrope } from './RotationHeliotrope';
 import { BaseVectorInputProps } from './types';
-import { piMapping, degreesMapping, getMapping, ValueMapping, formatDisplay, computePercentage } from '../inputs/primitives/FormatUtils';
+import { piMapping, degreesMapping, nativeDegreesMapping, getMapping, ValueMapping, formatDisplay, computePercentage } from '../inputs/primitives/FormatUtils';
 import { AXIS_CONFIG } from '../inputs/types';
 import { useEngineStore } from '../../store/engineStore';
 import { ContextMenuItem } from '../../types/help';
@@ -69,6 +69,8 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
     linkable = false,
     // Display scale mode
     scale,
+    // Rotation semantics (kind / units / order) — units:'deg' = degrees-native value
+    rotation,
 }) => {
     // Local state for immediate visual feedback during drag
     const [localValue, setLocalValue] = useState(value.clone());
@@ -148,6 +150,9 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
 
     // Get appropriate mapping for the current mode and axis
     const getAxisMapping = (axis: 'x' | 'y' | 'z' | 'w'): ValueMapping | undefined => {
+        // Degrees-NATIVE param (RotationDescriptor units:'deg', e.g. MB3D imports):
+        // the stored value already IS degrees — identity display, never rad→deg.
+        if (rotation?.units === 'deg') return nativeDegreesMapping;
         if (isRotationMode) {
             // Use degrees by default, allow toggle to radians (π units)
             return rotationDisplayMode === 'degrees' ? degreesMapping : piMapping;
@@ -438,7 +443,7 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
     };
 
     return (
-        <div className="mb-px animate-slider-entry">
+        <div className="mt-px animate-slider-entry">
             {/* Header row with label and keyframe button */}
             {label && (
                 <div className="flex items-stretch bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-line/5">

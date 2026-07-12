@@ -11,54 +11,53 @@ import { CollapsibleSection } from '../../components/CollapsibleSection';
 import { ScalarInput } from '../../components/inputs/ScalarInput';
 import { useMeshExportStore } from '../store/meshExportStore';
 
-function InterlaceControls() {
+/** Rhythm/enable controls for a FUSED WEAVE def (migrated legacy-interlace
+ *  scene or editor-built weave). Bank param sliders render through the main
+ *  FormulaParams panel (the fused def's parameters carry the ws<k>* ids); this
+ *  strip exposes only the live schedule state (ADR-0089 P4.4). */
+function WeaveControls() {
   const store = useMeshExportStore();
-  const interlaceState = useMeshExportStore((s) => s.interlaceState);
+  const weaveState = useMeshExportStore((s) => s.weaveState);
 
-  if (!interlaceState) return null;
+  if (!weaveState) return null;
+  const layers = [1, 2, 3, 4, 5].filter((k) => weaveState[`weaveInterval${k}`] !== undefined);
+  const setKey = (key: string, v: number | boolean) => store.setWeaveState({ ...weaveState, [key]: v });
 
   return (
     <div className="flex flex-col gap-1.5 border border-secondary/40 rounded px-2 py-1.5 bg-secondary/10 mt-1">
       <div className="text-[11px] text-secondary font-bold flex items-center justify-between">
-        <span>Interlace: {interlaceState.definition.name}</span>
+        <span>Weave</span>
         <label className="flex items-center gap-1 cursor-pointer">
           <input
             type="checkbox"
-            checked={interlaceState.enabled}
-            onChange={(e) => store.setInterlaceState({ ...interlaceState, enabled: e.target.checked })}
+            checked={weaveState.weaveEnabled !== false}
+            onChange={(e) => setKey('weaveEnabled', e.target.checked)}
           />
-          <span className="text-[10px] text-secondary">enabled</span>
+          <span className="text-[10px] text-secondary">active</span>
         </label>
       </div>
-      <div className="flex gap-3 text-[11px] text-fg-muted">
-        <label className="flex items-center gap-1">
-          Interval
-          <input
-            type="number" min={1} max={16} step={1}
-            value={interlaceState.interval}
-            onChange={(e) => store.setInterlaceState({ ...interlaceState, interval: Math.max(1, parseInt(e.target.value) || 1) })}
-            className="w-12 bg-surface-header border border-line/20 rounded px-1 text-fg-secondary text-center"
-          />
-        </label>
-        <label className="flex items-center gap-1">
-          Start iter
-          <input
-            type="number" min={0} max={64} step={1}
-            value={interlaceState.startIter}
-            onChange={(e) => store.setInterlaceState({ ...interlaceState, startIter: Math.max(0, parseInt(e.target.value) || 0) })}
-            className="w-12 bg-surface-header border border-line/20 rounded px-1 text-fg-secondary text-center"
-          />
-        </label>
-      </div>
-      {/* Secondary formula parameters */}
-      <FormulaParams
-        definition={interlaceState.definition}
-        params={interlaceState.params}
-        onUpdate={(key, value) => store.setInterlaceState({
-          ...interlaceState,
-          params: { ...interlaceState.params, [key]: value },
-        })}
-      />
+      {layers.map((k) => (
+        <div key={k} className="flex gap-3 text-[11px] text-fg-muted">
+          <label className="flex items-center gap-1">
+            Layer {k} every
+            <input
+              type="number" min={1} max={32} step={1}
+              value={Number(weaveState[`weaveInterval${k}`] ?? 2)}
+              onChange={(e) => setKey(`weaveInterval${k}`, Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-12 bg-surface-header border border-line/20 rounded px-1 text-fg-secondary text-center"
+            />
+          </label>
+          <label className="flex items-center gap-1">
+            from
+            <input
+              type="number" min={0} max={64} step={1}
+              value={Number(weaveState[`weaveStartIter${k}`] ?? 0)}
+              onChange={(e) => setKey(`weaveStartIter${k}`, Math.max(0, parseInt(e.target.value) || 0))}
+              className="w-12 bg-surface-header border border-line/20 rounded px-1 text-fg-secondary text-center"
+            />
+          </label>
+        </div>
+      ))}
     </div>
   );
 }
@@ -204,7 +203,7 @@ export function MeshExportPage() {
             <CollapsibleSection label="Parameters" defaultOpen>
               <div className="flex flex-col gap-1 mt-1">
                 <FormulaParams />
-                <InterlaceControls />
+                <WeaveControls />
               </div>
             </CollapsibleSection>
           </div>

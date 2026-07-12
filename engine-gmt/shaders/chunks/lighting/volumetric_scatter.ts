@@ -8,6 +8,23 @@
 //   uVolDensity, uVolAnisotropy, uVolMaxLights,
 //   uVolEmissive, uVolEmissiveFalloff, uVolStepJitter,
 //   uVolScatterTint, uVolHeightFalloff, uVolHeightOrigin
+//
+// MEASURED COST PROFILE (2026-07-10, Mandelbulb 720p, RTX 2070, 3-point-light
+// scene — protocol §2.6.3 of docs/policy/shader-compile-optimization.md):
+// - Compile (cold gpu=): +1557ms with shadows compiled (+674ms with the stub —
+//   the difference is the GetHardShadow inline in the light loop). No fxc
+//   nested-loop pathology: the runtime-capped MAX_LIGHTS loop stays cheap.
+// - FPS p50, steady-state: not-compiled 2.2ms · density@1-light 28.5ms ·
+//   density@3-lights 74.6ms (linear in lights) · emissive-only 5.9ms ·
+//   quality ladder 1/128→1/8 = 20.4→74.6ms; interaction clamp verified
+//   (1/32 → 37.2ms during nav).
+// - @invariant-adjacent gotcha: COMPILED-IN BUT RUNTIME-OFF COSTS ~2.2×
+//   baseline (2.16→4.75ms) — and enabled-with-zero-density measures identical,
+//   so it is REGISTER PRESSURE from this body inflating the trace loop's
+//   allocation, not the uniform branch. No runtime toggle can recover it; the
+//   panel's compile toggle (ptVolumetric off) is the only true off. Any future
+//   fix means moving scatter OUT of the per-step march (second-pass segment
+//   sampling) — an estimator redesign, not a branch tweak.
 
 export const VOLUMETRIC_SCATTER_BODY = `
 #ifdef PT_VOLUMETRIC
@@ -49,6 +66,14 @@ export const VOLUMETRIC_SCATTER_BODY = `
 
                 // --- DENSITY SCATTER (shadow rays — expensive) ---
                 if (_hasDensity && _sigma > 0.001) {
+                    // Zoom-aware fog-shadow precision (@see shadows.ts +
+                    // docs/adr/0093): the scatter point sits at depth d along
+                    // the primary ray, so its footprint eps mirrors the trace's
+                    // finalEps there. Light-loop-invariant — hoisted.
+                    float _epsPerDist = uPixelSizeBase * (uPixelThreshold / (uDetail / uInternalScale));
+                    bool _orthoCam = uCamType > 0.5 && uCamType < 1.5;
+                    float _surfEps = _orthoCam ? _epsPerDist : _epsPerDist * d;
+                    float _epsRateBase = _orthoCam ? 0.0 : _epsPerDist;
                     float _jScale = min(h.x * 0.2, 0.35);
                     vec3 _jDir = normalize(vec3(
                         fract(stochasticSeed * 127.1 + d * 31.7) * 2.0 - 1.0,
@@ -80,7 +105,10 @@ export const VOLUMETRIC_SCATTER_BODY = `
                         }
                         if (uLightIntensity[_li] * _att * _sigma * _trans * _seg < 1e-5) continue;
                         vec3 _l_shadow = normalize(_l + _jDir * _jScale);
-                        float _sh = GetHardShadow(p + _l_shadow * max(h.x * 2.0, 0.01), _l_shadow, _ld);
+                        // Origin offset in footprint units (was absolute 0.01 —
+                        // same high-zoom killer as the surface-shadow bias).
+                        float _sh = GetHardShadow(p + _l_shadow * max(h.x * 2.0, _surfEps * 2.0), _l_shadow, _ld,
+                                                  _surfEps, _epsRateBase * dot(_l_shadow, rd));
                         if (_sh < 0.01) continue;
                         // Henyey-Greenstein phase
                         float _cosT  = dot(rd, -_l);

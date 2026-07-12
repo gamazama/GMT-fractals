@@ -124,6 +124,7 @@ export const AppGmt: React.FC = () => {
     const workshopOpen               = useEngineStore((s) => (s as any).workshopOpen);
     const workshopEditFormula        = useEngineStore((s) => (s as any).workshopEditFormula);
     const workshopCatalogKey         = useEngineStore((s) => (s as any).workshopCatalogKey);
+    const workshopInitialSource      = useEngineStore((s) => (s as any).workshopInitialSource);
     const histogramActiveCount       = useEngineStore((s) => (s as any).histogramActiveCount);
     const histogramAutoUpdate        = useEngineStore((s) => (s as any).histogramAutoUpdate);
     const histogramTrigger           = useEngineStore((s) => (s as any).histogramTrigger);
@@ -281,6 +282,7 @@ export const AppGmt: React.FC = () => {
                                     onClose={() => (useEngineStore.getState() as any).closeWorkshop()}
                                     editFormula={workshopEditFormula}
                                     initialCatalogKey={workshopCatalogKey}
+                                    initialSource={workshopInitialSource}
                                 />
                             </BenchProfiler>
                         </React.Suspense>

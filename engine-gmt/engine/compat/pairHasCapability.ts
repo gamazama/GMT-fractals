@@ -3,10 +3,13 @@
  * the given capability?
  *
  * Replaces the two-file CP-pair mirror flagged in ADR-0052
- * (`features/core_math.ts` ↔ `engine/SDFShaderBuilder.ts`). Currently
- * unused — wired up in Phase 7 of capability-protocol implementation.
+ * (`features/core_math.ts` ↔ `engine/SDFShaderBuilder.ts`) — both compile
+ * gates delegate here (wired in Phase 7). Token-only by design: the legacy
+ * booleans were deleted from FractalDefinition; parseGMF promotes them to
+ * tokens at the parse boundary, so every registered def carries a set.
  *
  * @see dev/plans/capability-protocol.md (Phase 7)
+ * @see docs/adr/0059-feature-capability-protocol.md (update block: flag retirement)
  */
 
 import type { FractalDefinition } from '../../types';

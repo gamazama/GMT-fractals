@@ -362,6 +362,136 @@ censused; then localized by temporarily stubbing the reflection-hit surface shad
   structural win shipped.** Any cut here is an owner quality decision, not a
   compile-neutral fold.
 
+  > **Superseded for the post-overhaul body:** the ADR-0094/95/96 reflection
+  > overhaul (2026-07-10) replaced this march + shade; the current cost map and a
+  > NEW fxc pathology finding are in §2.6.2. The verdict above still applies to
+  > the 4-tap normal share of the cost.
+
+### 2.6.2 Reflection-overhaul regression + the fxc outer-loop pathology (2026-07-10, owner machine)
+
+The ADR-0094/95/96 reflection overhaul (faithful marcher + candidate recovery +
+multi-bounce + env/fog fill) regressed the default Raymarched cold compile
+**~4.4s (published) → ~42s** — caught pre-publish and fixed the same day. Owner
+machine ≈1.9× slower than the §2.6 session-5 machine (Direct minimal 2404ms vs
+1162ms); compare marginals via that scale, not absolutes.
+
+**Root cause (measured, hypotheses falsified in order):**
+
+| Probe | Result | Conclusion |
+|---|---|---|
+| Isolated toggle AND 4-param UI cascade | exactly **1** `[Compile]` line each (~42s) | NOT multiple compiles — the doubled `[ConfigManager] Rebuild` console lines are change-detection logs; the generation counter coalesces to one `compileAsync` |
+| Reflection-march bound 128→32 | flat (43.7s → 46.4s) | the inner march is NOT unrolled (still `[loop]`) |
+| **Bounce `for`-wrapper removed, body identical** | **42s → 8.0s** | **the wrapper is the regression** |
+
+**The pathology:** wrapping a body that inlines a `[loop]`-bounded `DE_Dist`
+march in an outer `for` makes fxc's translation of the region ~5× more
+expensive, **worst at trip-count 1** (`MAX_REFL_BOUNCES = 1`: +34s) and cheaper
+at 2–3 (~+11.4s) — so it is not classic unrolling (cost is not ∝ trip count).
+This is a NEW cost-model fact alongside §7.3: **never wrap a heavy-inline body
+in a constant-bounded outer loop when the common case is one trip — emission-gate
+the wrapper instead** (fix shipped: `getReflRaymarchShading(multiBounce)` in
+[`reflections/index.ts`](../../engine-gmt/features/reflections/index.ts) emits
+the loop only at `bounces ≥ 2`; the single-bounce form is behaviour-identical
+since the continuation code is dead at 1 bounce).
+
+**Post-fix reflection cost map** (cold `gpu=`, Mandelbulb, 2 passes, min/median
+coherent, no fallbacks; tool:
+[`measure-reflection-compile.mts`](../../debug/scratch/measure-reflection-compile.mts)):
+
+| Config | cold gpu= | marginal |
+|---|---:|---|
+| Reflections off (Direct minimal) | 2404ms | anchor |
+| **Raymarched, bounces=1 (default)** | **8173ms** | **+5.8s over off** (was 43.7s pre-fix) |
+| Raymarched bounces=2 / 3 | 19508 / 19592ms | **+11.4s step** for the loop; 2→3 = +84ms (free) |
+| + accurateColors (one `DE()` at march exit) | 8970ms | +0.8s (≈noise floor) |
+| + refineEnabled (bisection in both marchers) | 9193ms | +1.0s |
+| + bounceShadows | — | ≈free (canonical costmap: +0.6s) |
+
+The remaining +5.8s raymarched marginal (vs pre-overhaul +1.5s on a ~1.9×
+faster machine ≈ +2.9s here) is the overhaul's legitimate ~2× body growth
+(faithful-march state + recovery + doubled `GetEnvMap`+bicubic env fill) — a
+quality-path cost the owner accepted. `estCompileMs` annotations recalibrated;
+`sumParamCompileMs` gained int-param support (flat step above default) so the
+`bounces` cost is actually counted.
+
+**Protocol notes (new):**
+- **Same-process anchors can silently in-process cache-hit**: `refl-env` read
+  22ms because its emitted source matched an already-compiled shader in the
+  process (`--disable-gpu-shader-disk-cache` does not disable ANGLE's in-memory
+  program cache). Use an anchor whose source is guaranteed distinct.
+- **Console `Rebuild` lines ≠ compiles.** Count `[Compile]` lines (each = one
+  real `compileAsync`) when diagnosing "it compiles N times" reports.
+
+#### §2.6.2.1 Optimization pass (same day) — 8.2s → 5.0s, features unchanged
+
+Owner rejected the residual +5.8s marginal; a localize-then-fix pass (stub one
+suspect → cold oneshot → revert, per §5) partitioned it:
+
+| Probe (stubbed) | cold gpu= | share |
+|---|---:|---|
+| — baseline (post-gate b1) | 8277ms | — |
+| fogRadiance's env sample (P2) | 4933ms | **fog chain ~3.3s** — full env body inlined per `applyEnvFog`/fog site (~8 instances) |
+| bicubic in GetEnvMap (P8) | 5787ms | **bicubic ~2.5s** — inlined 2× per env-body instance (overlaps P2) |
+| reflected-hit surface shade (P7) | 6639ms | **~1.6s** — the §2.6.1 4-tap-normal share, scaled |
+
+Three structural fixes shipped (features + defaults unchanged):
+- **F1 — single image-sample site in the env body** (`envImageSample`): the
+  bicubic mix was duplicated in both `uEnvAvgColor` branches → every instance
+  carried it twice. One call site now; also shrinks the reflections-off shader
+  (2404→2090ms).
+- **F2 — `baseFilter=false` constant on the fog path** (`envSampleCore`): fxc
+  DCEs the bicubic out of every `fogRadiance` inline — it was runtime-dead there
+  (fogRough ≥ 0.5 → lod ≥ 1). F1+F2 = −1.2s.
+- **F4 — one `fogRadiance(reflDir)` per pixel for the reflection block** (7 fog
+  inlines → 1; `sampleMissEnvPre` carries the hoisted value) = −1.15s. Scoped
+  approximation documented in ADR-0097 update #5; fog-off bit-exact.
+- **F3 — single `sampleMissEnvPre` site in the single-bounce form**
+  (`mix(miss,hit,fade) ≡ hit·fade + miss·(1−fade)` → one weighted epilogue call;
+  halves the inlined `sampleMiss` bodies) = −0.9s.
+
+**Post-optimization matrix (cold gpu=, Mandelbulb):** off 2090 · **raymarched b1
+5026 (+2.9s marginal — published-parity)** · b2/b3 10191/10785 (bounce step
++5.2s, was +11.4s) · accurateColors +540ms · refine +625ms. Runtime p50 on the
+identical mirror-scene uniforms: 9852µs vs 10147µs pre-opt (no regression;
+within noise). Annotations recalibrated (Raymarched 2900, bounces 5200,
+accurateColors 600).
+
+> **Update (same day): Direct multi-bounce REMOVED entirely** (ADR-0096 update
+> #2) — the +5.2s bounce step and the FPS ladder (b1+shadows +39%, b2 +75%, Full
+> tier 2.3×) priced it out vs PT's existing bounce recursion. The b2/b3 rows
+> above and the `bounces 5200` annotation are historical; `sumParamCompileMs`'s
+> int-param step rule was removed with its only consumer.
+
+**Lesson (extends the §8-L5 "inline unit" model):** the unit of compile cost is
+the *transitively inlined body instance*. A helper that calls a heavy function
+(`applyEnvFog → fogRadiance → env sample`) multiplies that body by its OWN call
+count — hoist one sample into a local and pass it (or pass a constant flag the
+callee can DCE on) instead of calling through at every site. The remaining
+irreducible reflection cost is the §2.6.1 verdict (4-tap normal at the hit,
+~1.6s) — a quality tradeoff, not a structural one.
+
+### 2.6.3 Volumetric scatter measured (2026-07-10, owner machine)
+
+Same treatment for `volumetric.ptVolumetric` (annotation was speculative 5500).
+Compile (cold `gpu=`, Mandelbulb, 2 passes, spread ≤12ms): marginal **+1557ms
+with shadows compiled** (the honest god-ray config; annotated 1600), +674ms with
+the shadow stub — the ~880ms difference is the `GetHardShadow` inline in the
+per-step light loop. **No fxc pathology** — the runtime-capped `MAX_LIGHTS` loop
+inside the trace `[loop]` compiles fine (unlike the reflection bounce wrapper,
+§2.6.2), so nesting per se is not the trigger; the trip-1 constant outer wrapper
+was.
+
+FPS (p50 720p, RTX 2070, 3-point-light scene, steady-state `--blend-factor=0.5`
+— new bench-shader flag, the volume body clamps sampling during interaction):
+not-compiled 2.16ms · **compiled-but-runtime-off 4.75ms (2.2×)** · density
+1-light 28.5ms · 3-light 74.6ms (linear) · emissive-only 5.9ms · quality
+1/128→1/8 = 20.4→74.6ms; nav clamp verified (37.2ms). The **runtime-off toll is
+register pressure**, not the uniform branch (enabled-with-zero-density measures
+identical) — the compiled body inflates the trace loop's allocation; only the
+compile toggle truly turns it off. Probe snapshots: `debug/vol-shaders/`; tools:
+`debug/scratch/measure-vol-compile.mts`, `dump-vol-shaders.mts`,
+`bench-vol-fps.sh`.
+
 [`profiles.ts`](../../engine-gmt/features/engine/profiles.ts) has
 `estimateCompileTime(state)` (≈L161–196): `BASE_COMPILE_MS = 4200` plus a sum of
 per-param `estCompileMs` annotations for enabled `onUpdate:'compile'` params. It
@@ -1002,6 +1132,34 @@ deliberate scope change.
   before the user reaches them. Hides cost; doesn't remove it.
 - **Parallel-compile tuning** — already correctly used (ADR-0040); §7.2 confirms
   no further wall-time win is available.
+
+### 8.1 Measured: uniform-count headroom is (almost) free — 2026-07-04
+
+Question (weave param-lane planning): what does WIDENING the uniform slot
+vocabulary cost, i.e. declaring more `uniform float/vec4` lanes that most
+shaders never read? Measured with `debug/probe-uniform-headroom.mts` (headed
+Chrome → ANGLE/D3D11, RTX 2070; the live production frag snapshot, 89 KB /
+250 declared uniforms; interleaved cache-busted rounds, median of 7 full
+compile+link cycles):
+
+| variant | median compile+link | Δ vs base | ACTIVE_UNIFORMS |
+|---|---|---|---|
+| base | 2426 ms | — | 122 |
+| +24 float +6 vec4 unread | 2473 ms | +47 ms (+1.9%) | 122 |
+| +96 float +24 vec4 unread | 2476 ms | +50 ms (+2.1%) | 122 |
+
+Findings:
+- **Cold-compile cost ≈ +2%, flat** — the delta barely moves between +30 and
+  +120 declarations (GLSL parse overhead, not per-uniform translation work).
+- **Zero runtime cost** — `ACTIVE_UNIFORMS` is unchanged: uniforms a program
+  never reads are INACTIVE after link (no D3D constant registers), and
+  three.js's WebGLUniforms upload loop iterates only active uniforms, so idle
+  lanes are never uploaded either. FPS is structurally unaffected.
+- Implication: the real price of widening the slot vocabulary is **code
+  surface** (FractalParameter id union, SCALAR_SLOTS/VEC*_SLOTS, animation
+  targets, GMF round-trip compat), not performance. Dense packing remains
+  worthwhile only as an opt-in for the marginal compile-time and for keeping
+  the animation-target list short.
 
 ---
 

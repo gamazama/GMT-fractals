@@ -42,9 +42,10 @@
             .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
             .mobile-scroll::-webkit-scrollbar-track { background: transparent; }
         </style>
-        <!-- Apply the saved UI color scheme before first paint (gmt.colorScheme
-             is shared across all GMT apps; absent/"dark" = the :root default). -->
-        <script>try{var t=localStorage.getItem('gmt.colorScheme');if(t&&t!=='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+        <!-- Paint the saved UI theme before first frame. colorSchemeStore caches its
+             computed CSS vars to gmt.themeVars (shared across all GMT apps); absent = the
+             :root Dark default. -->
+        <script>try{var s=localStorage.getItem('gmt.themeVars');if(s)document.documentElement.style.cssText+=s;}catch(e){}</script>
     </head>
     <body>
         <div id="root"></div>

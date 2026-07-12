@@ -6,7 +6,7 @@ const engine = getProxy();
 import { TrashIcon, CropIcon, CheckIcon, SquareIcon, CircleIcon, CubeIcon } from '../../../components/Icons';
 import Button from '../../../components/Button';
 import ToggleSwitch from '../../../components/ToggleSwitch';
-import SmallColorPicker from '../../../components/SmallColorPicker';
+import EmbeddedColorPicker from '../../../components/EmbeddedColorPicker';
 import Slider from '../../../components/Slider';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { CollapsibleSection } from '../../../components/CollapsibleSection';
@@ -25,6 +25,12 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
     
     // Local state for depth readout
     const [currentDepth, setCurrentDepth] = useState(engine.lastMeasuredDistance);
+
+    // Which colour swatch is expanded into an inline picker ('__default' = the
+    // Default Color row, else a shape id). SmallColorPicker's swatch+body-portal
+    // popup is retired — the embedded picker's compact MINI state expands
+    // in-place instead (no portal, no stacking-context games).
+    const [colorEditId, setColorEditId] = useState<string | null>(null);
 
     // Poll depth when panel is open and mode is surface
     useEffect(() => {
@@ -88,12 +94,21 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
 
                 <div className="flex items-center justify-between mb-1">
                      <SectionLabel variant="secondary">Default Color</SectionLabel>
-                     <SmallColorPicker 
-                         color={'#' + color.getHexString()} 
-                         onChange={(c) => setDrawing({ color: new THREE.Color(c) })} 
-                         label="" 
+                     <button
+                         className="w-16 h-6 rounded border border-line/10 shadow-lg transition-all hover:scale-105 active:scale-95"
+                         style={{ backgroundColor: '#' + color.getHexString() }}
+                         title="Default Color"
+                         onClick={() => setColorEditId(colorEditId === '__default' ? null : '__default')}
                      />
                 </div>
+                {colorEditId === '__default' && (
+                    <div className="mb-1 animate-fade-in">
+                        <EmbeddedColorPicker
+                            color={'#' + color.getHexString()}
+                            onColorChange={(c) => setDrawing({ color: new THREE.Color(c) })}
+                        />
+                    </div>
+                )}
                 
                 {active && (
                     <div className="mt-2 px-2 py-1.5 bg-accent-900/20 border border-accent-500/20 rounded flex flex-col items-center gap-1 text-[9px] text-cyan-200 animate-fade-in text-center font-mono">
@@ -179,13 +194,12 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                                          <div key={shape.id} className="flex flex-col bg-line/5 rounded border border-line/5 hover:border-accent-500/30 transition-colors group">
                                              <div className="flex items-center justify-between p-2">
                                                  <div className="flex items-center gap-3">
-                                                     <div className="transform scale-75 origin-left">
-                                                         <SmallColorPicker 
-                                                            color={shape.color} 
-                                                            onChange={(c) => updateDrawnShape({ id: shape.id, updates: { color: c } })} 
-                                                            label=""
-                                                         />
-                                                     </div>
+                                                     <button
+                                                        className="w-6 h-6 rounded border border-line/10 shrink-0 transition-all hover:scale-105 active:scale-95"
+                                                        style={{ backgroundColor: shape.color }}
+                                                        title="Edit colour"
+                                                        onClick={() => setColorEditId(colorEditId === shape.id ? null : shape.id)}
+                                                     />
                                                      <div className="flex flex-col">
                                                          <div className="flex items-center gap-2">
                                                              <span className="text-[10px] text-fg-tertiary font-mono font-bold">#{i+1}</span>
@@ -220,7 +234,17 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                                                      </button>
                                                  </div>
                                              </div>
-                                             
+
+                                             {/* Inline colour editor (expand-in-place, mirrors the cube-slider block) */}
+                                             {colorEditId === shape.id && (
+                                                <div className="px-2 pb-2 pt-0 animate-slider-entry bg-surface-section mt-1 rounded border border-line/5 mx-1">
+                                                    <EmbeddedColorPicker
+                                                        color={shape.color}
+                                                        onColorChange={(c) => updateDrawnShape({ id: shape.id, updates: { color: c } })}
+                                                    />
+                                                </div>
+                                             )}
+
                                              {/* Sliders for Cubes */}
                                              {isCube && (
                                                 <div className="px-2 pb-2 pt-0 space-y-1 animate-slider-entry bg-surface-section mt-1 rounded border border-line/5 mx-1">

@@ -12,7 +12,10 @@ import { ATMOSPHERE_VOLUME_BODY, ATMOSPHERE_VOLUME_FINALIZE } from './shader';
 const FOG_POST_PROCESS = `
     // --- FOG (Atmosphere Feature) ---
     float fogFactor = smoothstep(uFogNear, uFogFar, d) * uFogIntensity;
-    vec3 fogColor = uFogColorLinear;
+    // Per-direction in-scatter (aerial perspective) — follows the sky by
+    // default, blends to the custom Fog Color as uFogTint rises.
+    // @see fogRadiance (env.ts), ADR-0097 (+ update #4).
+    vec3 fogColor = fogRadiance(rd);
 
     // Volumetric fog absorption
     if (uFogDensity > 0.0001) {
@@ -20,13 +23,11 @@ const FOG_POST_PROCESS = `
         col = mix(col, fogColor, volAlpha);
     }
 
-    // Distance fog
-    if (uEnvBackgroundStrength > 0.001) {
-        // Background visible: only fog geometry, preserve env map on miss
-        if (d < MISS_DIST - 10.0) {
-            col = mix(col, fogColor, fogFactor);
-        }
-    } else {
+    // Distance fog — geometry only. Miss pixels (the sky) are fogged ONCE at
+    // bgCol composition (main.ts mixes toward fogRadiance by intensity); the
+    // old visibility-0 else-branch is gone with the flat-backdrop fallback
+    // (ADR-0098 — the backdrop is always the sky now).
+    if (d < MISS_DIST - 10.0) {
         col = mix(col, fogColor, fogFactor);
     }
 `;
@@ -43,7 +44,8 @@ export interface AtmosphereState {
     fogIntensity: number;
     fogNear: number;
     fogFar: number;
-    fogColor: THREE.Color;
+    fogColor: THREE.Color; // 'Fog Color' / 'Sky Color' (Solid) — one param, two homes (ADR-0098)
+    fogTint: number; // 'Fog Tint' — 0 = fog follows the sky, 1 = custom Fog Color (ADR-0097 #4)
     fogDensity: number;
     glowEnabled: boolean; // Compile-Time Switch
     glowQuality: number;
@@ -102,6 +104,27 @@ export const AtmosphereFeature: FeatureDefinition = {
             noAccumReset: true
         },
 
+        // --- SKY / FOG COLOUR ---
+        fogColor: {
+            // ONE param, two contextual homes (ADR-0098 + 0097 update #4):
+            //  - SOLID sky (materials.envSource 2): this IS the sky — GetEnvMap
+            //    returns uFogColorLinear — surfaced as 'Sky Color' at the top of
+            //    Background & Sky (manifest whitelist item lifts it out of its
+            //    fogTint nesting via liftChildrenOf + relabels it).
+            //  - Gradient/Image sky: nests as 'Fog Color' UNDER the Fog Tint
+            //    slider, revealed when tint > 0 — the colour appears exactly
+            //    when something uses it. Stored key + uniform never changed.
+            type: 'color', default: new THREE.Color(0,0,0), label: 'Fog Color', shortId: 'fc', uniform: 'uFogColor',
+            group: 'fog',
+            parentId: 'fogTint',
+            condition: { or: [
+                { param: '$materials.envSource', gt: 1.5 },  // Solid: always live (it IS the sky)
+                { gt: 0.0 },                                 // else: only while Fog Tint uses it
+            ] },
+            description: 'The custom fog colour (and the Solid sky colour). Fog fades toward this when Fog Tint is above 0.',
+            helpId: 'fog.settings',
+        },
+
         // --- FOG (Runtime) ---
         fogIntensity: {
             type: 'float', default: 0.0, label: 'Fog Intensity', shortId: 'fi', uniform: 'uFogIntensity',
@@ -110,8 +133,11 @@ export const AtmosphereFeature: FeatureDefinition = {
             helpId: 'fog.settings',
         },
         fogNear: {
+            // rangePairWith: Start + End render as ONE dual-thumb RangeSlider
+            // ('Fog Range') — first consumer of the generic pairing.
             type: 'float', default: 0.0, label: 'Fog Start', shortId: 'fn', uniform: 'uFogNear',
             min: 0, max: 10, step: 0.1, scale: 'square', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
+            rangePairWith: 'fogFar', rangeLabel: 'Fog Range',
             description: 'Distance where fog begins to appear.',
             helpId: 'fog.settings',
         },
@@ -121,15 +147,26 @@ export const AtmosphereFeature: FeatureDefinition = {
             description: 'Distance where fog reaches full opacity.',
             helpId: 'fog.settings',
         },
-        fogColor: {
-            type: 'color', default: new THREE.Color(0,0,0), label: 'Fog Color', shortId: 'fc', uniform: 'uFogColor',
-            group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
-            description: 'Colour distant geometry fades toward.',
+        fogTint: {
+            // INVERTED from the former fogEnvTint 'Sky Tint' (ADR-0097 update
+            // #4, owner design): fog follows the SKY by default (aerial
+            // perspective — for Solid skies that IS the colour), and this dial
+            // blends toward the custom Fog Color, which reveals beneath it
+            // while > 0. Hidden for Solid skies (nothing to tint away from —
+            // the sky already equals the colour). Migration v6 pins old scenes
+            // to 1 (their flat-colour look).
+            type: 'float', default: 0.0, label: 'Fog Tint', shortId: 'ftn', uniform: 'uFogTint',
+            min: 0.0, max: 1.0, step: 0.01, group: 'fog', parentId: 'fogIntensity',
+            condition: [
+                { gt: 0.0 },                                  // fog is on (parent)
+                { param: '$materials.envSource', lt: 1.5 },   // not a Solid sky
+            ],
+            description: 'Blends the fog colour away from the sky toward the custom Fog Color below. 0 = fog matches the sky (aerial perspective); 1 = fully the custom colour.',
             helpId: 'fog.settings',
         },
         fogDensity: {
             type: 'float', default: 0.01, label: 'Fog Density', shortId: 'fd', uniform: 'uFogDensity',
-            min: 0.001, max: 5.0, step: 0.01, scale: 'log', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
+            min: 0.001, max: 5.0, step: 0.05, group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
             description: 'Basic volumetric fog absorption density. For god rays and scatter, enable Volumetric Scattering in Engine.',
             helpId: 'fog.settings',
         },

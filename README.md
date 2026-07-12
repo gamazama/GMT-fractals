@@ -8,7 +8,7 @@ Three apps ship in this repo as proof:
 
 | App | Entry | What it shows | README |
 |-----|-------|---------------|--------|
-| `app-gmt` | `app-gmt.html` | Full GMT fractal renderer (42 formulas, 26 features) | [app-gmt/README.md](app-gmt/README.md) |
+| `app-gmt` | `app-gmt.html` | Full GMT fractal renderer — 42 built-in formulas, formula weaving, Mandelbulb3D `.m3p` import, Fragmentarium/DEC workshop | [app-gmt/README.md](app-gmt/README.md) |
 | `fluid-toy` | `fluid-toy.html` | 2D fluid simulation (Julia/Mandelbrot field) | [fluid-toy/README.md](fluid-toy/README.md) |
 | `fractal-toy` | `fractal-toy.html` | Minimal Mandelbulb playground | — |
 | `demo` | `index.html` | Hello-world engine plugin (start here) | [demo/README.md](demo/README.md) |
@@ -48,6 +48,7 @@ Every app is a plugin. See [demo/README.md](demo/README.md) for the minimal thre
 ## Docs
 
 Architecture docs live in [docs/](docs/). Start with [docs/DOCS_INDEX.md](docs/DOCS_INDEX.md).
+User-facing release notes live in [docs/releases/](docs/releases/).
 
 ## Contributing
 

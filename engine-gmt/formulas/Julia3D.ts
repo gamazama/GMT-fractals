@@ -149,7 +149,6 @@ void kk_invert(inout vec3 z, inout float dr, vec3 cen, float R2) {
     }`,
         loopBody: `formula_Julia3D(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3B); kk_minSurf = 1e10;`,
-        usesSharedRotation: true,
 
         // Branch the DE on the Variant: limit-set surface distance vs the
         // analytic escape-time DE (0.5·r·ln r / dr).

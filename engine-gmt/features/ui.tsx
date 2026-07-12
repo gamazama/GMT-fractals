@@ -9,7 +9,7 @@
  * Scope of this first pass:
  *   - Widget components that slot into AutoFeaturePanel via each
  *     feature's `customUI` entries (ColoringHistogram, scene widgets,
- *     HybridAdvancedLock, JuliaRandomize).
+ *     JuliaRandomize).
  *   - Bespoke `panel-*` components that the manifest's panel entries
  *     reference by `component:` (ShaderCompilerPanel, CameraManagerPanel).
  *
@@ -36,13 +36,13 @@ import { ColoringHistogram } from '../components/panels/gradient/ColoringHistogr
 import { GradientPreviewLayer1, GradientPreviewLayer2 } from '../components/panels/gradient/GradientPreview';
 import { TexturingSourceToggle } from '../components/panels/gradient/TexturingSourceToggle';
 import { HistogramLayerMarker } from '../components/panels/gradient/HistogramLayerMarker';
-import { HybridAdvancedLock } from '../components/panels/HybridAdvancedLock';
 import { JuliaRandomize } from '../components/widgets/JuliaRandomize';
 import { InteractionPicker } from '../../components/InteractionPicker';
 import { FormulaSelect } from '../components/panels/formula/FormulaSelect';
 import { QualityRenderControls } from '../components/panels/quality/QualityRenderControls';
 import LightPanelControls from '../components/panels/lighting/LightPanelControls';
 import { FormulaParamsWidget } from '../components/panels/formula/FormulaParamsWidget';
+import { WeaveSection } from '../components/panels/formula/WeaveSection';
 // LfoList lifted to engine/components/modulation. installModulationUI()
 // registers `'lfo-list'` so the manifest entry below would normally be
 // redundant — but app-gmt installs UI components from this single
@@ -51,6 +51,7 @@ import { FormulaParamsWidget } from '../components/panels/formula/FormulaParamsW
 // configures GMT's defaults — see app-gmt/main.tsx.
 import { LfoList } from '../../engine/components/modulation';
 import LightGizmo, { tick as lightGizmoTick } from './lighting/LightGizmo';
+import { RotationGizmoOverlay, tick as rotationGizmoTick } from './rotation_gizmo/RotationGizmoOverlay';
 import { DrawingOverlay, tick as drawingOverlayTick } from './drawing/DrawingOverlay';
 import { DrawingPanel } from './drawing/DrawingPanel';
 import { WebcamOverlay } from '../../engine/features/webcam/WebcamOverlay';
@@ -67,7 +68,6 @@ import { ShaderCompilerPanel } from '../components/panels/ShaderCompilerPanel';
 import { CameraManagerPanel } from './camera_manager/CameraManagerPanel';
 import { FeedbackPanel } from '../feedback/FeedbackPanel';
 import React_FlowEditor from '../components/panels/flow/FlowEditor';
-import { InterlaceSecondaryPicker } from '../components/FormulaPicker';
 
 // ── Connectors: widgets that need to subscribe to store-managed
 // histogram probe registration (coloring + scene color grading).
@@ -159,7 +159,6 @@ export const registerGmtUi = () => {
     componentRegistry.register('gradient-preview-layer2', GradientPreviewLayer2);
     componentRegistry.register('texturing-source-toggle', TexturingSourceToggle);
     componentRegistry.register('coloring-histogram-layer-marker', HistogramLayerMarker);
-    componentRegistry.register('hybrid-advanced-lock', HybridAdvancedLock);
     componentRegistry.register('julia-randomize', JuliaRandomize);
     componentRegistry.register('interaction-picker', InteractionPicker);
     componentRegistry.register('formula-select', ConnectedFormulaSelect);
@@ -167,13 +166,16 @@ export const registerGmtUi = () => {
     componentRegistry.register('hints-footer', HintsFooter);
     componentRegistry.register('light-panel-controls', LightPanelControls);
     componentRegistry.register('formula-params', FormulaParamsWidget);
-    componentRegistry.register('interlace-secondary-picker', InterlaceSecondaryPicker);
+    componentRegistry.register('weave-section', WeaveSection);
 
     // LfoList no longer needs a store-wrapping shim — the lifted
     // version reads the engine store itself via useEngineStore.
     componentRegistry.register('lfo-list', LfoList);
     componentRegistry.register('overlay-lighting', LightGizmo);
     registerTick('lightGizmoTick', TICK_PHASE.OVERLAY, lightGizmoTick);
+
+    componentRegistry.register('overlay-rotation-gizmo', RotationGizmoOverlay);
+    registerTick('rotationGizmoTick', TICK_PHASE.OVERLAY, rotationGizmoTick);
 
     componentRegistry.register('overlay-drawing', DrawingOverlay);
     registerTick('drawingOverlayTick', TICK_PHASE.OVERLAY, drawingOverlayTick);

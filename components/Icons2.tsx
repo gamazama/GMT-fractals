@@ -49,6 +49,16 @@ export const ChevronRight = chevron('9 18 15 12 9 6');
 export const ChevronLeft = chevron('15 18 9 12 15 6');
 
 /**
+ * Minus glyph — pairs with the shared {@link PlusIcon} (Icons.tsx, now full) at
+ * the same 10px / strokeWidth-4 weight, so a `−`/`+` stepper reads as one set.
+ */
+export const MinusIcon: React.FC<{ size?: number }> = ({ size = 10 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round">
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+/**
  * Filled disclosure caret — a solid right-pointing triangle, the panel/section
  * collapse glyph (distinct from the OUTLINE {@link ChevronRight}). Shared by
  * CollapsibleSection, DynamicList, and the Gradient Explorer section headers,
@@ -106,12 +116,91 @@ export const CheckCircleIcon: React.FC<GlyphProps> = ({ size = 48, className }) 
   </svg>
 );
 
+/** Adaptive-resolution glyph variants. The GMT topbar toggle swaps the glyph to
+ *  reflect what adaptive is doing; the engine `AdaptiveResolutionBadge` (other
+ *  apps) still renders the default arc+check by passing no variant.
+ *    - 'pixelated' — blocky, low-res circle outline: adaptive is downscaling
+ *      (cyan "Auto" / orange "Always").
+ *    - 'smooth'    — clean circle outline: adaptive is on but settled at full
+ *      res (green "Locked").
+ *    - 'fire'      — circle with a flame inside: adaptive is Off, so the GPU
+ *      runs flat-out at maximum resolution.
+ */
+export type AdaptiveVariant = 'pixelated' | 'smooth' | 'fire';
+
+/** Rasterised circle ring ([col,row]) for the 'pixelated' variant. A coarse 7×7
+ *  grid (bigger cells than an 8×8) so the blocky stair-stepping reads clearly
+ *  even at the 16px topbar size. */
+const PIXEL_RING: ReadonlyArray<readonly [number, number]> = [
+  [2, 0], [3, 0], [4, 0],
+  [1, 1], [5, 1],
+  [0, 2], [6, 2],
+  [0, 3], [6, 3],
+  [0, 4], [6, 4],
+  [1, 5], [5, 5],
+  [2, 6], [3, 6], [4, 6],
+];
+/** 7 cells spanning a 20px inset ring — matches the r≈10 footprint of the others. */
+const PIXEL_CELL = 20 / 7;
+
 /** Refresh-arc with check — the adaptive-resolution badge glyph. Shared by the
- *  engine-gmt topbar toggle and engine/viewport's AdaptiveResolutionBadge, which
- *  each inlined the identical 16px arc+polyline. */
-export const AdaptiveIcon: React.FC<GlyphProps> = ({ size = 16, className }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    <polyline points="22 2 13 11 9 7" />
-  </svg>
-);
+ *  engine-gmt topbar toggle (which passes a {@link AdaptiveVariant}) and
+ *  engine/viewport's AdaptiveResolutionBadge (default arc+check). */
+export const AdaptiveIcon: React.FC<GlyphProps & { variant?: AdaptiveVariant }> = ({ size = 16, className, variant }) => {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    className,
+  };
+
+  if (variant === 'smooth') {
+    return (
+      <svg {...common} fill="none" stroke="currentColor" strokeWidth={2}>
+        <circle cx={12} cy={12} r={9} />
+      </svg>
+    );
+  }
+
+  if (variant === 'pixelated') {
+    // Filled square cells with no rounding → crisp "low-res" ring. Cell 2.5px on
+    // an 8×8 grid inset 2px, so the ring spans the same footprint as the r=9 arc.
+    return (
+      <svg {...common} fill="currentColor" stroke="none">
+        {PIXEL_RING.map(([col, row], i) => (
+          <rect key={i} x={2 + col * PIXEL_CELL} y={2 + row * PIXEL_CELL} width={PIXEL_CELL} height={PIXEL_CELL} />
+        ))}
+      </svg>
+    );
+  }
+
+  if (variant === 'fire') {
+    // Same r=9 ring as the other states; a defined two-tone flame nearly fills
+    // it — red body (currentColor = danger) with an orange inner lick (--warn).
+    return (
+      <svg {...common} fill="none" stroke="currentColor" strokeWidth={2}>
+        <circle cx={12} cy={12} r={9} />
+        <path
+          d="M12 5.2 C 14.6 7.8, 16.6 10.2, 16.6 13.6 A 4.6 4.6 0 0 1 7.4 13.6 C 7.4 10.6, 9.2 9.6, 9.6 7.4 C 10.6 8.8, 11.2 9.6, 11.2 11 C 11.9 9.4, 11.6 7.2, 12 5.2 Z"
+          fill="currentColor"
+          stroke="none"
+        />
+        <path
+          d="M12 10.4 C 13.4 11.8, 14.3 13, 14.3 14.7 A 2.3 2.3 0 0 1 9.7 14.7 C 9.7 13.2, 10.6 12.8, 11 11.6 C 11.5 12.4, 11.7 12.6, 11.7 13.4 C 12.1 12.5, 11.9 11.4, 12 10.4 Z"
+          style={{ fill: 'rgb(var(--warn))' }}
+          stroke="none"
+        />
+      </svg>
+    );
+  }
+
+  // Default (engine badge): refresh-arc + check.
+  return (
+    <svg {...common} fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+      <polyline points="22 2 13 11 9 7" />
+    </svg>
+  );
+};

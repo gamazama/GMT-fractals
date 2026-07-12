@@ -110,6 +110,7 @@ Controls the physical bounds of the spiral.
   - **Clamp**: Stretches the edge pixels (Smear effect).
   - **Transparent**: Only draws the spiral ring, leaving the center/outside empty (or showing the background).
 - **Center Shift**: Moves the vanishing point of the spiral.
+- **Smooth Upscaling**: Softens the magnified recursion. At 0 you get the raw pixelated look; low values apply a crisp bicubic smoothing that removes the blocky texels; higher values progressively widen into a broad blur. Slide to taste.
 `
     },
     'droste.structure': {

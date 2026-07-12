@@ -1,0 +1,343 @@
+// =============================================================================
+// sierpinski-tetrahedron.osl
+// -----------------------------------------------------------------------------
+// Raymarched distance-estimated Sierpinski tetrahedron (Tetrix) for
+// Cinema 4D 2026 + Redshift (RS 2026.x). Production-quality proof-of-concept.
+//
+// PORT SOURCE: GMT's verbatim GLSL distance estimator,
+//   engine-gmt/formulas/SierpinskiTetrahedron.ts  (tetrahedral 3-plane fold)
+//   + engine-gmt/shaders/chunks/{trace,de,material_eval}.ts (march + normal).
+// See research cache: h:/tmp/c4d-osl/res_gmt_math.json keyFindings[1,3,4,7,8].
+//
+// -----------------------------------------------------------------------------
+// ARCHITECTURE (verified — h:/tmp/c4d-osl/verify.json, claim "surface-emission")
+// -----------------------------------------------------------------------------
+// A Redshift OSL *surface* shader CANNOT relocate the ray-surface hit point
+// (OSL spec: surface shaders "may not alter the position of the surface"; only
+// a displacement shader may write P, and RS never runs OSL as displacement).
+// Therefore this shader does NOT generate geometry. Instead:
+//
+//   1. Place this material on a UNIT BOUNDING CUBE (C4D Cube, size 2 = [-1,1],
+//      or any cube; the march clamps to the cube faces in object space).
+//   2. In the surface shader we reconstruct the camera ray from globals:
+//        origin    = P                (the cube-surface shading point = entry)
+//        direction = normalize(I)     (I = incident vector, camera -> P)
+//      and march that ray *in the cube's OBJECT space* so the fractal lives
+//      locked inside the cube regardless of where the cube is in the world.
+//   3. Sphere-trace the Sierpinski DE, clamped to the cube exit / maxDist.
+//   4. On HIT  -> opaque (outAlpha=1); output RAW ALBEDO + object-space NORMAL +
+//      AO so REDSHIFT lights the fractal (HDRI/dome + lights + GI). The march
+//      stays LIVE/animatable — only the SHADING/OUTPUT changed, never the DE.
+//      On MISS -> fully transparent (outAlpha = 0) so the proxy cube vanishes.
+//
+// NO recursion (forbidden in OSL); both loops are bounded for-loops.
+// Real BSDF closures mostly don't work in RS OSL, so we output plain
+// color/float/normal ports and let the RS Standard Material light them.
+//
+// -----------------------------------------------------------------------------
+// REDSHIFT NODE WIRING — LET REDSHIFT LIGHT IT (recommended, selfLit = 0)
+// -----------------------------------------------------------------------------
+// Load this .osl in an "OSL Shader / OSL Script" node (File mode = folder icon,
+// or paste into the Code field). Declared outputs auto-expose as node ports:
+//
+//   outColor  (color)  ->  RS Standard Material : "Base Color"   (raw albedo)
+//   outNormal (normal) ->  RS Bump Map node (Input Map Type = Object-Space
+//                          Normal) -> Standard Material : "Bump Map / Normal".
+//   outAO     (float)  ->  multiply into Base Color (or RS AO) for cavity dark.
+//   outAlpha  (float)  ->  RS Standard Material : "Opacity Color" / "Opacity"
+//                          (1 = opaque hit, 0 = transparent miss; cuts the
+//                           bounding-cube silhouette down to the fractal).
+//
+// Add an HDRI / dome light + area/sun lights; the fractal then RESPONDS to RS
+// lighting, shadows and GI like real geometry. The in-shader Lambert/ambient is
+// NOT used in this mode.
+//
+//   selfLit = 1  ->  legacy in-shader Lambert preview: outColor carries the old
+//                    self-lit look (wire to Emission Color, Emission Weight 1).
+//                    Uses lightDir / ambient / emissionGain. No RS light needed.
+//
+// The look is delivered ENTIRELY via the named output ports (the supported,
+// robust RS path). No Ci/closure output is written: RS ignores most OSL closures
+// wired to material inputs, and this stays a generic `shader` (not `surface`).
+// =============================================================================
+
+#define SIERP_INV_SQRT3 0.57735027   // 1/sqrt(3); tetra face-plane normal scale
+
+// -----------------------------------------------------------------------------
+// Sierpinski tetrahedron distance estimator (object space).
+//
+// Ported from GMT keyFindings[1]. Each fold iteration:
+//   (a) reflect the point across the 3 tetrahedral symmetry planes via the
+//       classic conditional swaps (if x+y<0 swap & negate, etc.). This is the
+//       step/mix form in GLSL; here it is the equivalent branch form.
+//   (b) scale about a tetra vertex:  p = scale*p - offset*(scale-1).
+//   (c) accumulate scale for the analytic IFS distance.
+// DE = length(p) * scale^(-iterations)   (the "(r-1)/dr"-equivalent linear
+// estimator GMT ships for this IFS at scale 2 / offset 1, see its
+// defaultPreset quality.estimator = 1.0).
+//
+// `iters` is clamped against MAX_FOLD (a hard cap) so the loop bound is finite
+// for the GPU compiler even if the exposed `iterations` input is large.
+// -----------------------------------------------------------------------------
+float sierpinskiDE(
+    point  p0,
+    float  scale,
+    int    iters,
+    vector foldOffset,   // tetra vertex the scale folds about (default (1,1,1))
+    float  twist)        // optional per-height z-twist (GMT uParamF analogue)
+{
+    int MAX_FOLD = 64;            // hard fold cap (loop bound for GPU compile)
+    int n = iters;
+    if (n > MAX_FOLD) n = MAX_FOLD;
+    if (n < 1)        n = 1;
+
+    point p = p0;
+
+    for (int i = 0; i < MAX_FOLD; i += 1)
+    {
+        if (i >= n) break;        // honour the runtime fold count
+
+        // --- optional twist about Z (GMT gmt_applyTwist, uParamF) -------------
+        if (twist != 0.0)
+        {
+            float a = p[2] * twist;
+            float s = sin(a), c = cos(a);
+            float px = c * p[0] - s * p[1];
+            float py = s * p[0] + c * p[1];
+            p[0] = px; p[1] = py;
+        }
+
+        // --- (a) tetrahedral fold: 3 mutually-perpendicular reflections -------
+        // GLSL form: sf = step(0, x+y); xy = mix(-yx, xy, sf);  (swap+negate
+        // the pair when their sum is negative). Equivalent branch form:
+        if (p[0] + p[1] < 0.0) { float t = -p[1]; p[1] = -p[0]; p[0] = t; }
+        if (p[0] + p[2] < 0.0) { float t = -p[2]; p[2] = -p[0]; p[0] = t; }
+        if (p[1] + p[2] < 0.0) { float t = -p[2]; p[2] = -p[1]; p[1] = t; }
+
+        // --- (b) scale about the tetra vertex (foldOffset) --------------------
+        p = scale * p - foldOffset * (scale - 1.0);
+    }
+
+    // --- (c) analytic IFS distance ------------------------------------------
+    // length(p) carried back through `iters` scalings = length * scale^-iters.
+    return length(vector(p)) * pow(scale, -float(n));
+}
+
+// 4-tap tetrahedron-technique normal (GMT keyFindings[4]). Samples the DE at 4
+// tetrahedral offsets to build the gradient; robust for the loose IFS DE.
+normal sierpinskiNormal(
+    point  p,
+    float  eps,
+    float  scale,
+    int    iters,
+    vector foldOffset,
+    float  twist)
+{
+    // k.xyy=(+,-,-) k.yyx=(-,-,+) k.yxy=(-,+,-) k.xxx=(+,+,+)
+    vector e1 = vector( 1.0, -1.0, -1.0);
+    vector e2 = vector(-1.0, -1.0,  1.0);
+    vector e3 = vector(-1.0,  1.0, -1.0);
+    vector e4 = vector( 1.0,  1.0,  1.0);
+
+    vector g =
+        e1 * sierpinskiDE(p + e1 * eps, scale, iters, foldOffset, twist) +
+        e2 * sierpinskiDE(p + e2 * eps, scale, iters, foldOffset, twist) +
+        e3 * sierpinskiDE(p + e3 * eps, scale, iters, foldOffset, twist) +
+        e4 * sierpinskiDE(p + e4 * eps, scale, iters, foldOffset, twist);
+
+    if (dot(g, g) < 1.0e-20) return normal(0, 1, 0);
+    return normal(normalize(g));
+}
+
+// Slab intersection of an object-space ray with the axis-aligned bounding cube
+// [bmin, bmax]. Returns near/far hit distances in `t0`,`t1`; ok=false if missed.
+void cubeSlab(point ro, vector rd, point bmin, point bmax,
+              output float t0, output float t1, output int ok)
+{
+    t0 = -1.0e30; t1 = 1.0e30; ok = 1;
+    for (int a = 0; a < 3; a += 1)
+    {
+        if (abs(rd[a]) < 1.0e-12)
+        {
+            // Ray parallel to this slab: must already be inside it.
+            if (ro[a] < bmin[a] || ro[a] > bmax[a]) { ok = 0; return; }
+        }
+        else
+        {
+            float inv = 1.0 / rd[a];
+            float ta = (bmin[a] - ro[a]) * inv;
+            float tb = (bmax[a] - ro[a]) * inv;
+            if (ta > tb) { float tmp = ta; ta = tb; tb = tmp; }
+            if (ta > t0) t0 = ta;
+            if (tb < t1) t1 = tb;
+            if (t0 > t1) { ok = 0; return; }
+        }
+    }
+}
+
+// =============================================================================
+// SHADER
+// =============================================================================
+shader SierpinskiTetrahedron
+(
+    // ---- fractal shape ------------------------------------------------------
+    float  scale        = 2.0
+        [[ string help = "IFS scale per fold (~2.0 is the classic Tetrix)",
+           float min = 1.1, float max = 4.0 ]],
+    int    iterations   = 12
+        [[ string help = "Fold iterations (DE detail). Clamped to 64.",
+           int min = 1, int max = 64 ]],
+    vector foldOffset   = vector(1, 1, 1)
+        [[ string help = "Tetra vertex the scale folds about (classic (1,1,1))" ]],
+    float  twist        = 0.0
+        [[ string help = "Optional per-height Z twist (GMT uParamF)",
+           float min = -2.0, float max = 2.0 ]],
+    float  fractalFit   = 0.9
+        [[ string help = "Scales the cube-local march extent (object-space fit)",
+           float min = 0.1, float max = 4.0 ]],
+
+    // ---- raymarch -----------------------------------------------------------
+    int    maxSteps     = 128
+        [[ string help = "Max sphere-trace steps. Clamped to 512.",
+           int min = 8, int max = 512 ]],
+    float  minDist      = 0.0006
+        [[ string help = "Hit epsilon (surface threshold)",
+           float min = 0.00001, float max = 0.05 ]],
+    float  maxDist      = 8.0
+        [[ string help = "Max march distance (object space units)",
+           float min = 0.1, float max = 100.0 ]],
+
+    // ---- shading ------------------------------------------------------------
+    int    selfLit      = 0
+        [[ string label = "Self-Lit Preview",
+           string help = "0 = output albedo for Redshift to light (recommended). "
+                         "1 = legacy in-shader Lambert preview." ]],
+    color  colorA       = color(0.05, 0.20, 0.45)
+        [[ string help = "Orbit-trap colour A (low trap)" ]],
+    color  colorB       = color(1.00, 0.65, 0.15)
+        [[ string help = "Orbit-trap colour B (high trap)" ]],
+    vector lightDir     = vector(0.5, 0.8, 0.3)
+        [[ string help = "Self-lit (selfLit=1) only: directional light dir (obj space)" ]],
+    float  ambient      = 0.15
+        [[ string help = "Self-lit (selfLit=1) only: ambient/fill term",
+           float min = 0.0, float max = 1.0 ]],
+    float  aoStrength   = 0.6
+        [[ string help = "Cheap step/iteration-ratio AO (feeds outAO)",
+           float min = 0.0, float max = 1.0 ]],
+    float  emissionGain = 1.0
+        [[ string help = "Self-lit (selfLit=1) only: output emission multiplier",
+           float min = 0.0, float max = 8.0 ]],
+
+    // ---- outputs (wire these in the RS material graph; see header) ----------
+    output color  outColor  = color(0)        // -> Standard Material : Base Color
+                                              //    (albedo; self-lit when selfLit=1)
+,   output float  outAlpha  = 0.0             // -> Standard Material : Opacity
+,   output normal outNormal = normal(0, 0, 1) // -> RS Bump Map (Object-Space Normal)
+,   output float  outAO     = 1.0             // -> multiply into Base Color / RS AO
+)
+{
+    // -------------------------------------------------------------------------
+    // 1. Reconstruct the camera ray and move it into the cube's OBJECT space.
+    //    P and I are in render/common space; transform("object", ...) maps them
+    //    so the fractal stays locked inside the cube wherever the cube sits.
+    // -------------------------------------------------------------------------
+    point  ro = transform("object", P);
+    vector rd = normalize(transform("object", I));
+
+    // Object-space bounding cube. A C4D Cube of size 2 spans [-1,1]; we shrink
+    // by fractalFit so the Tetrix body sits comfortably inside the proxy.
+    float  half = fractalFit;
+    point  bmin = point(-half, -half, -half);
+    point  bmax = point( half,  half,  half);
+
+    // Clamp marching to the cube interval (entry -> exit).
+    float tNear, tFar; int boxOK;
+    cubeSlab(ro, rd, bmin, bmax, tNear, tFar, boxOK);
+
+    // Start at the cube entry (or current point if the ray origin is inside).
+    float t = max(tNear, 0.0);
+    float tEnd = min(tFar, maxDist);
+
+    // Clamp loop bound for the GPU compiler.
+    int steps = maxSteps; if (steps > 512) steps = 512; if (steps < 8) steps = 8;
+
+    // -------------------------------------------------------------------------
+    // 2. Sphere-trace the Sierpinski DE. Track an orbit trap for colour:
+    //    min |p| along the march approximates a soft proximity field.
+    // -------------------------------------------------------------------------
+    int   hit = 0;
+    point hitP = ro;
+    float trap = 1.0e10;
+    int   usedSteps = 0;
+
+    if (boxOK == 1)
+    {
+        for (int i = 0; i < 512; i += 1)
+        {
+            if (i >= steps) break;
+            if (t > tEnd)   break;
+
+            point p = ro + t * rd;
+            float d = sierpinskiDE(p, scale, iterations, foldOffset, twist);
+
+            trap = min(trap, length(vector(p)));   // orbit-trap proxy
+            usedSteps = i;
+
+            if (d < minDist)                        // surface hit
+            {
+                hit  = 1;
+                hitP = p;
+                break;
+            }
+
+            t += d;                                 // advance by full DE
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. Shade on hit; transparent on miss.
+    // -------------------------------------------------------------------------
+    if (hit == 1)
+    {
+        // Surface-relative hit epsilon for a clean gradient at this distance.
+        float nEps = max(minDist, t * 0.0008);
+        normal n = sierpinskiNormal(hitP, nEps, scale, iterations, foldOffset, twist);
+
+        // Cheap AO: fewer march steps to reach the surface => more exposed.
+        float aoRaw = 1.0 - float(usedSteps) / float(steps);
+        float ao = 1.0 - aoStrength * (1.0 - clamp(aoRaw, 0.0, 1.0));
+
+        // Orbit-trap tint (mix colorA -> colorB). Trap is min |p|; squash to
+        // [0,1] so the gradient reads across the body. This is the RAW ALBEDO.
+        float tnorm = clamp(trap * 0.8, 0.0, 1.0);
+        color albedo = mix(colorA, colorB, tnorm);
+
+        // Geometry outputs (used by Redshift to light it): object-space normal,
+        // opaque hit, and the cavity/AO multiplier.
+        outNormal = normal(n[0], n[1], n[2]);
+        outAlpha  = 1.0;
+        outAO     = ao;
+
+        if (selfLit == 1)
+        {
+            // Legacy in-shader Lambert preview (Emission Color path).
+            vector L = normalize(lightDir);
+            float  lambert = max(dot(vector(n), L), 0.0);
+            color  shaded = albedo * ((lambert + ambient) * ao);
+            outColor = shaded * emissionGain;
+        }
+        else
+        {
+            // Recommended: hand Redshift the raw albedo; let RS lights + GI shade.
+            outColor = albedo;
+        }
+    }
+    else
+    {
+        // MISS: fully transparent so the bounding cube proxy disappears.
+        outColor  = color(0);
+        outAlpha  = 0.0;
+        outAO     = 1.0;
+        outNormal = normal(0, 0, 1);
+    }
+}

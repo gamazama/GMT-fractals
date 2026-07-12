@@ -8,7 +8,7 @@ import { MaterialFeature } from './materials';
 import { TexturingFeature } from './texturing';
 import { ColoringFeature } from './coloring';
 import { GeometryFeature } from './geometry';
-import { InterlaceFeature } from './interlace';
+import { WeaveFeature } from './weave';
 import { QualityFeature } from './quality';
 import { CoreMathFeature } from './core_math';
 import { LightingFeature } from './lighting/index';
@@ -16,7 +16,9 @@ import { LightSpheresFeature } from './lighting/light_spheres';
 import { OpticsFeature } from './optics';
 import { NavigationFeature } from './navigation';
 import { DrawingFeature } from './drawing/index';
+import { RotationGizmoFeature } from './rotation_gizmo/index';
 import { ShaderCompilerFeature } from './engine/index';
+import { registerBoxFoldFormulas } from '../formulas/boxFolds';
 import { AOFeature } from './ao/index';
 import { ReflectionsFeature } from './reflections/index';
 import { WaterPlaneFeature } from './water_plane';
@@ -60,7 +62,7 @@ export const registerFeatures = () => {
     // Core
     featureRegistry.register(CoreMathFeature);
     featureRegistry.register(GeometryFeature);
-    featureRegistry.register(InterlaceFeature);
+    featureRegistry.register(WeaveFeature);
 
     // Rendering & Shading
     featureRegistry.register(LightingFeature);
@@ -88,10 +90,18 @@ export const registerFeatures = () => {
     // Systems (engine-core-shared — same module identity).
     featureRegistry.register(AudioFeature);
     featureRegistry.register(DrawingFeature);
+    featureRegistry.register(RotationGizmoFeature);
     featureRegistry.register(ModulationFeature);
     featureRegistry.register(WebcamFeature);
     featureRegistry.register(DebugToolsFeature);
     featureRegistry.register(ShaderCompilerFeature);
+
+    // BoxFold FORMULA defs (ADR-0089 P4.5): geometry's Hybrid Box fold step as
+    // registered formulas, one per fold type — the weave slots the legacy
+    // interleaved-mode migration targets (and picker entries for free). The
+    // formula registry has no freeze, but registering here keeps every entry
+    // (app, harness, sweep) consistent without touching formulas/index.ts.
+    registerBoxFoldFormulas();
 };
 
 // --- EXPORT TYPES ---
@@ -112,7 +122,7 @@ export type { NavigationState } from './navigation';
 export type { OpticsState } from './optics';
 export type { QualityState } from './quality';
 export type { GeometryState } from './geometry';
-export type { InterlaceState } from './interlace';
+export type { WeaveState } from './weave';
 export type { ColoringState } from './coloring';
 export type { TexturingState } from './texturing';
 export type { MaterialState } from './materials';

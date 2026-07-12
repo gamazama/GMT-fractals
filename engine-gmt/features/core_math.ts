@@ -3,11 +3,11 @@ import * as THREE from 'three';
 import { FeatureDefinition } from '../engine/FeatureSystem';
 import { registry } from '../engine/FractalRegistry';
 import { pairHasCapability } from '../engine/compat';
+import { generateGetDist, isNumericDEEstimator } from '../engine/estimators';
 import { MAX_MODULAR_PARAMS } from '../../data/constants';
 import { compileGraph } from '../utils/GraphCompiler';
 import { FormulaType } from '../types';
 import { QualityState } from './quality';
-import type { InterlaceState } from './interlace';
 import { Uniforms } from '../engine/UniformNames';
 
 export interface CoreMathState {
@@ -30,92 +30,8 @@ export interface CoreMathState {
     vec4C: { x: number; y: number; z: number; w: number } | THREE.Vector4;
 }
 
-// Generate optimized DE logic based on compile-time estimator type
-const generateGetDist = (estimatorType: number, supportsCuttingPlane = false, supportsDifs = false) => {
-    // 6: dIFS (MB3D orbit-trap IFS) — reads the engine-provided g_difsDE accumulator,
-    // the running minimum over the orbit of mb3dRout/mb3dVary, written each iteration by
-    // an MB3D-imported fused dIFS formula (g_difsDE declared in its preamble, init in
-    // loopInit). Mirrors MB3D's doHybridIFS3D (formulas.pas:3210), which returns that
-    // MinDE directly. Gated on supportsDifs so a non-dIFS formula forced to estimator 6
-    // falls back to Linear (no reference to an undeclared g_difsDE). MUST precede the
-    // >4.5 CP checks, which would otherwise coerce 6 → CP/Linear and break the dIFS DE.
-    if (estimatorType > 5.5 && supportsDifs) {
-        return `
-        vec2 getDist(float r, float dr, float iter, vec4 z) {
-            return vec2(g_difsDE, iter);
-        }`;
-    }
-    if (estimatorType > 5.5) estimatorType = 1.0; // dIFS on a non-dIFS formula → Linear
-    // 5: Cutting Plane — Knighty fold-and-cut. Reads engine-provided cp_dmin/cp_trap
-    // accumulators (declared only when formula has shader.supportsCuttingPlane).
-    // For non-CP formulas, fall back to Linear (1.0) — picking CP on a formula that
-    // doesn't write to cp_* would otherwise produce undeclared-identifier compile errors.
-    if (estimatorType > 4.5 && supportsCuttingPlane) {
-        return `
-        vec2 getDist(float r, float dr, float iter, vec4 z) {
-            return vec2(abs(cp_dmin), cp_trap);
-        }`;
-    }
-    // Treat estimator=5 on a non-CP formula as Linear (best-effort fallback).
-    if (estimatorType > 4.5) estimatorType = 1.0;
-
-    let mathLine = "d = 0.5 * log(max(r, 1.0e-5)) * r / dr_safe;"; // Default 0 (Analytic)
-
-    // Optimized GPU math using log2 where possible
-    if (estimatorType < 0.5) {
-        // 0: Analytic (Log) - Standard for Power Fractals
-        // d = 0.5 * r * log(r) / dr
-        mathLine = `
-        float logR2 = log2(m2);
-        // 0.5 * ln(2) / 2 ≈ 0.17328679 — converts log2(r²) to 0.5*r*ln(r) for DE formula
-        d = 0.17328679 * logR2 * r / dr_safe;
-        `;
-    } else if (estimatorType < 1.5) {
-        // 1: Linear (Fold 1.0) - Standard for Box/Menger
-        // d = (r - 1.0) / dr
-        mathLine = `d = (r - 1.0) / dr_safe;`;
-    } else if (estimatorType < 2.5) {
-        // 2: Pseudo (Raw) - Good for Artifacts
-        // d = r / dr
-        mathLine = `d = r / dr_safe;`;
-    } else if (estimatorType < 3.5) {
-        // 3: Dampened - Fix Slices
-        // d = 0.5 * r * log(r) / (dr + K)
-        mathLine = `
-        float logR2 = log2(m2);
-        // 0.5 * ln(2) ≈ 0.34657359 — converts log2(r²) to r*ln(r), then halved by dampening term
-        d = 0.34657359 * logR2 * r / (dr_safe + 8.0);
-        `;
-    } else {
-        // 4: Linear (Fold 2.0) - Classic Menger offset
-        // d = (r - 2.0) / dr
-        mathLine = `d = (r - 2.0) / dr_safe;`;
-    }
-
-    return `
-        vec2 getDist(float r, float dr, float iter, vec4 z) {
-            float m2 = r * r;
-            if (m2 < 1.0e-20) return vec2(0.0, iter);
-
-            // Log Smoothing Calculation (Shared)
-            // Guarded: Only calculate log smoothing if we have actually escaped (> 1.0)
-            float smoothIter = iter;
-            if (m2 > 1.0) {
-                float threshLog = log2(max(uEscapeThresh, 1.1));
-                smoothIter = iter + 1.0 - log2(log2(m2) / threshLog);
-            }
-
-            float d = 0.0;
-            float dr_safe = max(abs(dr), 1.0e-20);
-
-            ${mathLine}
-
-            return vec2(d, smoothIter);
-        }`;
-};
-
 // Engine-provided cutting-plane accumulator globals + init lines.
-// Declared whenever a formula has shader.supportsCuttingPlane, regardless of estimator —
+// Declared whenever a formula declares `estimator:cutting-plane`, regardless of estimator —
 // the formula's writes need a target. When estimator != 5, the writes are dead code that
 // the GLSL optimizer strips.
 //
@@ -191,7 +107,7 @@ export const CoreMathFeature: FeatureDefinition = {
         }
 
         // 2. Analytic Opt-in: skip the pre-bailout distance check for formulas that
-        //    manage their own iteration loop (selfContainedSDE).
+        //    manage their own iteration loop (`shape:self-contained`).
         //    SELF_CONTAINED_SDE also gates off the outer-loop geometric-trap
         //    block in de.ts — these formulas run all fractal iterations
         //    inside the formula body and thread the trap through their own
@@ -199,7 +115,7 @@ export const CoreMathFeature: FeatureDefinition = {
         //    Accumulating in the outer loop too would either no-op or mix
         //    coordinate systems (MandelTerrain projects c-plane to XZ).
         const def = registry.get(formula);
-        if (def?.shader.selfContainedSDE) {
+        if (def?.shader.capabilities?.has('shape:self-contained')) {
             builder.addDefine('SKIP_PRE_BAILOUT', '1');
             builder.addDefine('SELF_CONTAINED_SDE', '1');
         }
@@ -209,37 +125,30 @@ export const CoreMathFeature: FeatureDefinition = {
         let loopBody = "";
         let loopInit = "";
 
-        // Detect if EITHER side of an interlace pair supports cutting-plane DE.
-        // Without this check, interlacing a non-CP primary (e.g. Mandelbulb) with a
-        // CP-aware secondary (e.g. MengerSponge) would emit cp_* writes from the
-        // secondary's body without the corresponding engine-side declarations.
-        // Single source of truth via the capability protocol — see
-        // engine-gmt/engine/compat/pairHasCapability.ts. SDFShaderBuilder's local
-        // pairSupportsCP helper delegates to the same function; the two-file
-        // mirror flagged in ADR-0052 is collapsed.
-        const interlaceState = config.interlace as InterlaceState | undefined;
-        const interlaceDef = interlaceState?.interlaceCompiled && interlaceState.interlaceFormula
-            ? registry.get(interlaceState.interlaceFormula as FormulaType)
-            : undefined;
+        // Cutting-plane support is a formula capability. (The legacy interlace
+        // PAIR check retired with the feature — ADR-0089 P4.4: a migrated
+        // legacy pair is one fused def whose capability set already unions the
+        // slots'. Single source of truth via the capability protocol — see
+        // engine-gmt/engine/compat/pairHasCapability.ts; SDFShaderBuilder's
+        // supportsCP delegates to the same function.)
         const pairSupportsCuttingPlane = def
-            ? pairHasCapability(def, interlaceDef, 'estimator:cutting-plane')
+            ? pairHasCapability(def, undefined, 'estimator:cutting-plane')
             : false;
 
         // Generate optimized getDist based on Quality Settings
         // Default to 0 (Analytic) if missing
         const estimatorType = quality?.estimator || 0;
-        // dIFS (estimator 6): the MB3D importer sets shader.supportsDifs on a fused
-        // dIFS scene; its preamble declares g_difsDE. Not interlaceable (single-scene
-        // import), so no pair check needed.
-        const supportsDifs = !!def?.shader.supportsDifs;
-        let getDistBody = generateGetDist(estimatorType, pairSupportsCuttingPlane, supportsDifs);
+        // dIFS (estimator 6): the MB3D importer declares `estimator:difs` on a
+        // fused dIFS scene; its preamble declares g_difsDE.
+        const supportsDifs = def ? pairHasCapability(def, undefined, 'estimator:difs') : false;
+        let getDistBody = generateGetDist(estimatorType, { supportsCuttingPlane: pairSupportsCuttingPlane, supportsDifs });
 
         // 7: Numerical (finite-difference) DE — no analytic dr needed. Arms the
         // escape-radius-gradient path in DE_MASTER (map()/mapDist() re-iterate
         // perturbed seeds). The getDist body above is dead code in this path (falls
         // back to Linear, unused). For any formula whose analytic DE is missing/wrong
         // (MB3D [CODE] hybrids, hard frag imports). @see docs/adr/0085.
-        if (estimatorType > 6.5) {
+        if (isNumericDEEstimator(estimatorType)) {
             builder.enableNumericDE(true);
             builder.addDefine('NUMERIC_DE', '1'); // material_eval uses numericNormal()
         }
@@ -266,15 +175,15 @@ export const CoreMathFeature: FeatureDefinition = {
             }
             // Cutting-plane formulas: engine declares the cp_* accumulators and
             // initializes them. The formula's own loopBody writes to them; getDist
-            // reads them iff estimator===5 (Cutting Plane). Triggered when either
-            // the primary or the interlace secondary supports CP — addPreamble
+            // reads them iff estimator===5 (Cutting Plane). addPreamble
             // dedupes by exact string so duplicate calls are safe.
             if (pairSupportsCuttingPlane) {
                 builder.addPreamble(CP_PREAMBLE);
                 loopInit = CP_INIT + loopInit;
             }
-            // Custom getDist override: keep for Frags/legacy formulas. Skipped when
-            // CP estimator is selected — engine's getDist takes precedence.
+            // Custom getDist override: Frags/legacy formulas + fused weave defs
+            // (P4.4 lead-slot splice). Skipped when the CP estimator is
+            // selected — engine's getDist takes precedence.
             if (def.shader.getDist && estimatorType < 4.5) {
                  getDistBody = `vec2 getDist(float r, float dr, float iter, vec4 z) { ${def.shader.getDist} }`;
             }

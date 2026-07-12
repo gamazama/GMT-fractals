@@ -257,7 +257,7 @@ export const Mandelorus: FractalDefinition = {
     "reflections": {
       "mixStrength": 1,
       "roughnessThreshold": 0.5,
-      "bounces": 1,
+      
       "steps": 64,
       "enabled": true
     },

@@ -19,7 +19,7 @@ export function PipelineControls() {
   const qs = useMeshExportStore((state) => state.qualitySettings);
   const loadedDef = useMeshExportStore((state) => state.loadedDefinition);
   const isVDB = useMeshExportStore((state) => state.exportFormat) === 'vdb';
-  const supportsCP = !!loadedDef?.shader.supportsCuttingPlane;
+  const supportsCP = !!loadedDef?.shader.capabilities?.has('estimator:cutting-plane');
 
   return (
     <CollapsibleSection label="Pipeline" defaultOpen>

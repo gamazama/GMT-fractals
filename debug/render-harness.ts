@@ -42,6 +42,12 @@ import { processFormula as v4ProcessFormula } from '../engine-gmt/features/fragm
 import type { FractalDefinition } from '../engine-gmt/types';
 import { emitFusedHybrid } from '../engine-gmt/utils/mb3d/emitFusedHybrid';
 import type { MB3DScene } from '../engine-gmt/utils/mb3d/parseMB3D';
+import { migrateLegacyWeavePreset } from '../engine-gmt/utils/weaveMigration';
+import {
+    buildMeshSDFShader, buildMeshEscapeShader, buildMeshNewtonShader,
+    buildMeshColorShader, buildMeshPreviewShader, MESH_SDF_VERT,
+} from '../engine-gmt/engine/SDFShaderBuilder';
+import { ShaderFactory } from '../engine-gmt/engine/ShaderFactory';
 
 registerFeatures();
 
@@ -77,7 +83,6 @@ function buildFragDefinition(fragSource: string, id: string, name: string, pipel
         name,
         shader: {
             ...shaderGlsl,
-            selfContainedSDE: isFullDe || undefined,
             capabilities: deriveImportCapabilities(shaderGlsl as any, isFullDe ? 'self-contained' : 'per-iteration'),
         } as any,
         parameters: uiParams,
@@ -638,6 +643,96 @@ async function runOne(spec: TestSpec): Promise<TestResult> {
   })();
   inflight = run;
   try { return await run; } finally { inflight = null; }
+};
+
+// Run the P4.4/P4.5 legacy-save migration on a preset, then render the MIGRATED
+// scene (the fused weave def the migration registered + the remapped feature
+// state). Pairs with runRenderTest on the same legacy preset (configOverrides =
+// its raw features) for the pixel-equivalence side-by-side — the harness never
+// calls loadPreset, so the store-side migration hook can't interfere with the
+// legacy reference path here.
+(window as any).runLegacyMigrationTest = async (
+  presetJson: any,
+  spec: TestSpec,
+): Promise<TestResult> => {
+  if (inflight) await inflight;
+  const run = (async (): Promise<TestResult> => {
+    const t0 = performance.now();
+    try {
+      const p = migrateLegacyWeavePreset(JSON.parse(JSON.stringify(presetJson)));
+      const res = await runOne({ ...spec, formula: p.formula, configOverrides: p.features });
+      // Diagnostic: which formula actually rendered (proves the migration ran —
+      // a silent no-op would re-render the legacy path and trivially "match").
+      (res as any).migratedFormula = p.formula;
+      (res as any).migrated = p.formula !== presetJson.formula;
+      return res;
+    } catch (e: any) {
+      return {
+        id: spec.id, ok: false, error: `[stage=migrate] ${e?.message ?? String(e)}`,
+        compile: { totalMs: 0 }, render: { sigma: [0, 0, 0], nanFraction: 0, nonBlackFraction: 0 },
+        timeMs: Math.round(performance.now() - t0),
+      };
+    }
+  })();
+  inflight = run;
+  try { return await run; } finally { inflight = null; }
+};
+
+// P4.4 mesh gate: verify the MESH EXPORT shader set compiles for a FUSED WEAVE
+// def (migrated legacy scene). Runs the migration, then compiles all five
+// standalone SDFShaderBuilder passes + the ShaderFactory mesh SDF library
+// (setupSDFPipeline's path) on a fresh WebGL2 context. webglCompile is the
+// gate (feedback_shader_testing_gates) — no render needed.
+(window as any).runMeshWeaveCompileTest = async (presetJson: any): Promise<Record<string, string>> => {
+  const results: Record<string, string> = {};
+  try {
+    const p = migrateLegacyWeavePreset(JSON.parse(JSON.stringify(presetJson)));
+    const def = registry.get(p.formula);
+    if (!def) return { migrate: `FAIL: formula ${p.formula} not registered` };
+    results.migratedFormula = p.formula;
+    const cvs = document.createElement('canvas');
+    const gl = cvs.getContext('webgl2')!;
+    const compile = (name: string, vertSrc: string, fragSrc: string) => {
+      const sh = (type: number, src: string) => {
+        const o = gl.createShader(type)!;
+        gl.shaderSource(o, src);
+        gl.compileShader(o);
+        if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) {
+          throw new Error(gl.getShaderInfoLog(o)?.split('\n').slice(0, 4).join(' | ') ?? 'compile failed');
+        }
+        return o;
+      };
+      try {
+        const prog = gl.createProgram()!;
+        gl.attachShader(prog, sh(gl.VERTEX_SHADER, vertSrc));
+        gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fragSrc));
+        gl.linkProgram(prog);
+        results[name] = gl.getProgramParameter(prog, gl.LINK_STATUS) ? 'ok'
+          : `LINK FAIL: ${gl.getProgramInfoLog(prog)?.slice(0, 200)}`;
+      } catch (e: any) {
+        results[name] = `FAIL: ${e.message}`;
+      }
+    };
+    const cfg = { definition: def, deType: 'auto' as const, estimator: p.features?.quality?.estimator ?? 0 };
+    compile('sdf', MESH_SDF_VERT, buildMeshSDFShader(cfg));
+    compile('escape', MESH_SDF_VERT, buildMeshEscapeShader(cfg));
+    compile('newton', MESH_SDF_VERT, buildMeshNewtonShader(cfg));
+    compile('color', MESH_SDF_VERT, buildMeshColorShader(cfg));
+    compile('preview', MESH_SDF_VERT, buildMeshPreviewShader(cfg));
+    // The gpu-pipeline SDF pass: ShaderFactory library wrapped like setupSDFPipeline.
+    const lib = ShaderFactory.generateMeshSDFLibrary({ formula: def.id, pipelineRevision: 0 } as any);
+    const libFrag = `#version 300 es
+precision highp float;
+uniform float uZ; uniform float uPower; uniform int uIters; uniform float uInvRes;
+uniform vec2 uTileOffset; uniform vec3 uBoundsMin; uniform float uBoundsRange; uniform float uSurfaceThreshold;
+out vec4 fragColor;
+${lib}
+void main() { fragColor = vec4(formulaDE(vec3(uZ)), 0.0, 0.0, 1.0); }`;
+    compile('factory-lib', MESH_SDF_VERT, libFrag);
+  } catch (e: any) {
+    results.error = String(e?.message ?? e);
+  }
+  return results;
 };
 
 // ─── PT bench: headless bucket-render driver (debug/bench-pt.mts) ────────────

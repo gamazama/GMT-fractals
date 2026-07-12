@@ -118,6 +118,14 @@ export type PanelItem =
            *  groupFilter). Lets a panel cherry-pick a few sliders out
            *  of a larger feature. */
           whitelistParams?: string[];
+          /** Per-param label overrides (key → label). Lets one param surface
+           *  under different names in different panel contexts (e.g.
+           *  atmosphere.fogColor as 'Sky Color' vs 'Fog Color'). */
+          labelOverrides?: Record<string, string>;
+          /** Opt children of this parent param in as roots (AutoFeaturePanel
+           *  liftChildrenOf) — lets a whitelist item surface a param that is
+           *  normally nested under another control elsewhere. */
+          liftChildrenOf?: string;
           /** Skip these param keys (combines with the other filters). */
           excludeParams?: string[];
           /** Optional Tailwind classes appended to the AutoFeaturePanel. */
@@ -138,6 +146,11 @@ export type PanelItem =
       })
     | (PanelItemHelp & {
           type: 'separator';
+          /** 'fade' renders the soft in-feature divider (a raised rectangle
+           *  fading into shadow at its bottom, SectionDivider `fade`) instead
+           *  of the full card end-cap — for separating sibling blocks in the
+           *  same feature run (e.g. Fog ↔ Volumetric Scatter). */
+          variant?: 'fade';
           showIf?: ShowIfPredicate;
       })
     | (PanelItemHelp & {

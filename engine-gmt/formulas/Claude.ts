@@ -109,7 +109,6 @@ export const Claude: FractalDefinition = {
         loopBody: `formula_Claude(z, dr, trap, c);`,
         loopInit: `Claude_precalc(); gmt_precalcRodrigues(uVec3B);`,
         preambleVars: ['uCl_n4', 'uCl_doHarmonic', 'claude_Phi', 'claude_n1', 'claude_n2', 'claude_n3', 'claude_goldenAxis'],
-        usesSharedRotation: true,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 

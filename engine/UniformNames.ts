@@ -68,10 +68,6 @@ export const Uniforms = {
     PostRotMatrix: 'uPostRotMatrix',
     WorldRotMatrix: 'uWorldRotMatrix',
     
-    // Interlace
-    InterlaceEnabled: 'uInterlaceEnabled',
-    InterlaceInterval: 'uInterlaceInterval',
-    InterlaceStartIter: 'uInterlaceStartIter',
 
     // Export/Render Scale
     InternalScale: 'uInternalScale',

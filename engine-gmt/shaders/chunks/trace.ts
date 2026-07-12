@@ -1,24 +1,34 @@
+import type { KernelFeatures } from './kernel';
 
+export interface TraceOptions {
+    isMobile?: boolean;
+    enableGlow?: boolean;
+    precisionMode?: number;
+    glowQuality?: number;
+    /** Injected volume-integration code (per-step body / miss finalize). */
+    volumeBodyCode?: string;
+    volumeFinalizeCode?: string;
+    functionName?: string;
+    /** Kernel feature gates — the trace kernel reads `refine` (post-hit damped
+     *  bisection, @see docs/adr/0084). When a gate is off, NO GLSL for it is
+     *  emitted — the kernel is byte-identical to the ungated march, so default
+     *  scenes carry zero compile/runtime cost. (The MB3D-faithful marcher is no
+     *  longer a gate — it IS the marcher, @see docs/adr/0092.) */
+    kernel?: KernelFeatures;
+}
 
-// Updated signature to accept injected code block for volume logic
-export const getTraceGLSL = (
-    isMobile: boolean,
-    enableGlow: boolean,
-    precisionMode: number = 0,
-    glowQuality: number = 0,
-    volumeBodyCode: string = "",
-    volumeFinalizeCode: string = "",
-    functionName: string = "traceScene",
-    // Post-hit surface refinement (damped bisection). When false (default), NO
-    // refinement GLSL is emitted at all — the kernel is byte-identical to the
-    // unrefined march, so default scenes carry zero compile/runtime cost. Armed
-    // compile-time from the quality `refineSteps` control. @see docs/adr/0084
-    enableRefine: boolean = false,
-    // MB3D-faithful marcher (compile-gated). When false (default) NO MB3D GLSL is
-    // emitted — the kernel is byte-identical to the standard march. Armed from the
-    // quality `mb3dFaithful` compile gate; imported MB3D scenes opt in. @see docs/adr/0088
-    enableMB3DFaithful: boolean = false
-) => {
+export const getTraceGLSL = (options: TraceOptions = {}) => {
+    const {
+        isMobile = false,
+        enableGlow = false,
+        precisionMode = 0,
+        glowQuality = 0,
+        volumeBodyCode = '',
+        volumeFinalizeCode = '',
+        functionName = 'traceScene',
+        kernel = {},
+    } = options;
+    const enableRefine = !!kernel.refine;
 
     const useLowPrecision = (precisionMode === 1) || isMobile;
 
@@ -55,8 +65,11 @@ export const getTraceGLSL = (
     //   1. refineDeclare  — carry the last OUTSIDE ray parameter across iterations.
     //   2. refineBlock    — the bisection itself, inside the hit block.
     //   3. refineRemember — record the outside sample just before each step advance.
+    // Both declares carry their own trailing newline so an OFF gate collapses to
+    // NOTHING (no stray blank line) — the off kernel stays byte-identical to the
+    // pre-gate source. Guarded by test-trace-refine.mts ("dPrev-insert collapsed").
     const refineDeclare = enableRefine
-        ? `    float dPrev = d;          // last OUTSIDE sample → bracket [dPrev,d] for the hit refine below`
+        ? `    float dPrev = d;          // last OUTSIDE sample → bracket [dPrev,d] for the hit refine below\n`
         : ``;
     const refineBlock = enableRefine
         ? `            // --- MB3D-style damped-bisection SURFACE REFINEMENT ---
@@ -91,29 +104,30 @@ export const getTraceGLSL = (
         `
         : ``;
 
-    // --- MB3D-FAITHFUL MARCHER (compile-gated; all three blocks empty when off) ---
-    // Ports MB3D's live marcher CONVERGENCE DYNAMICS (TMandCalcThread.Execute,
-    // CalcThread.pas:196-230) into GMT's world-unit march: the Lipschitz overstep
-    // CLAMP (a DE that grew faster than the last step can't be trusted — reject the
-    // non-Lipschitz spike), the RSFmul DAMPER (shrink the step toward 0.5 as the DE
-    // collapses onto a surface), and the msDEsub safety-SUBTRACTION. Those three are
-    // what stop an over-estimating / discontinuous fused DE from overshooting a thin
-    // surface into "dust". NOTE: MB3D's absolute constants (s011 floor, msDEstop,
-    // max-step clamp) are stepWidth-NORMALIZED units (mZZ/Zend live in stepWidth
-    // space — mVgradsFOV is rotated by the stepWidth-scaled VGrads, Calc.pas:1220),
-    // so they do NOT map to GMT's world-unit DE. We instead reuse GMT's world-unit
-    // hit threshold (finalEps — cone-traced + DEstop-calibrated by the importer, the
-    // world-unit twin of MB3D's msDEstop) and step floor (floatPrecision). The
-    // depth-scaling of msDEstop is already supplied by GMT's cone tracing
-    // (pixelFootprint ∝ d). @see docs/adr/0088, plans/mb3d/research/render-conversion-plan.md
-    const mb3dDeclare = enableMB3DFaithful
-        ? `    float mb3dRLastDE = 0.0;     // DE at the previous march point
+    // --- THE MARCHER: MB3D-faithful step dynamics (unconditional, ADR-0092) ---
+    // GMT's legacy plain sphere step (`d += DE·fudge`) is RETIRED; every trace
+    // variant (Main, PT lean, Histogram) marches with MB3D's live convergence
+    // dynamics (TMandCalcThread.Execute, CalcThread.pas:196-230) on GMT's
+    // world-unit cone-traced threshold: the Lipschitz overstep CLAMP (a DE that
+    // grew faster than the last step can't be trusted — reject the non-Lipschitz
+    // spike), the RSFmul DAMPER (shrink the step toward 0.5 as the DE collapses
+    // onto a surface), and the msDEsub safety-SUBTRACTION. Those three are what
+    // stop an over-estimating / discontinuous DE from overshooting a thin surface
+    // into "dust". The step divisor is uFudgeFactor (quality.fudgeFactor — MB3D's
+    // sZstepDiv maps 1:1 onto it; the separate uMb3dStepDiv uniform is retired).
+    // NOTE: MB3D's absolute constants (s011 floor, msDEstop, max-step clamp) are
+    // stepWidth-NORMALIZED units (mZZ/Zend live in stepWidth space — mVgradsFOV
+    // is rotated by the stepWidth-scaled VGrads, Calc.pas:1220), so they do NOT
+    // map to GMT's world-unit DE. We instead reuse GMT's world-unit hit threshold
+    // (finalEps — cone-traced + DEstop-calibrated by the importer, the world-unit
+    // twin of MB3D's msDEstop) and step floor (floatPrecision). The depth-scaling
+    // of msDEstop is already supplied by GMT's cone tracing (pixelFootprint ∝ d).
+    // @see docs/adr/0092, docs/adr/0088, plans/mb3d/research/render-conversion-plan.md
+    const mb3dDeclare = `    float mb3dRLastDE = 0.0;     // DE at the previous march point
     float mb3dRLastStep = 0.0;   // previous step width (world units)
     float mb3dRSF = 1.0;         // RSFmul convergence damper, clamped to [0.5, 1.0]
-    bool  mb3dPrimed = false;    // skip clamp/damper on the first sample (no history yet)`
-        : ``;
-    const mb3dPreHit = enableMB3DFaithful
-        ? `            // MB3D overstep clamp + RSFmul damper (CalcThread.pas:223-230)
+    bool  mb3dPrimed = false;    // skip clamp/damper on the first sample (no history yet)\n`;
+    const mb3dPreHit = `            // MB3D overstep clamp + RSFmul damper (CalcThread.pas:223-230)
             if (mb3dPrimed) {
                 h.x = min(h.x, mb3dRLastDE + mb3dRLastStep);     // clamp a non-Lipschitz DE jump
                 if (mb3dRLastDE > h.x + 1.0e-30) {
@@ -121,18 +135,15 @@ export const getTraceGLSL = (
                     mb3dRSF = (mb3dT < 1.0) ? max(0.5, mb3dT) : 1.0;
                 } else { mb3dRSF = 1.0; }
             }
-`
-        : ``;
-    const mb3dStep = enableMB3DFaithful
-        ? `mb3dRLastDE = h.x;
+`;
+    const mb3dStep = `mb3dRLastDE = h.x;
             // MB3D step: safety-subtract a fraction of the hit threshold, scale by the
-            // authored step divisor (uMb3dStepDiv = MB3D sZstepDiv), damp by RSFmul
+            // step divisor (uFudgeFactor = MB3D sZstepDiv), damp by RSFmul
             // (CalcThread.pas:200). uMb3dDEsub = MB3D msDEsub (iOptions bit 2; 0 when unset).
-            float mb3dStepW = max(floatPrecision * 0.5, (h.x - uMb3dDEsub * finalEps) * uMb3dStepDiv * mb3dRSF);
+            float mb3dStepW = max(floatPrecision * 0.5, (h.x - uMb3dDEsub * finalEps) * uFudgeFactor * mb3dRSF);
             mb3dRLastStep = mb3dStepW;
             mb3dPrimed = true;
-            d += mb3dStepW * stepJitter;`
-        : `d += max(h.x, floatPrecision * 0.5) * currentFudge * stepJitter;`;
+            d += mb3dStepW * stepJitter;`;
 
     return `
 // ------------------------------------------------------------------
@@ -173,8 +184,7 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
     float minCandidateRatio = 1.0e10;
     float candidateD = -1.0;
     vec4 candidateH = vec4(0.0);
-${refineDeclare}
-${mb3dDeclare}
+${refineDeclare}${mb3dDeclare}
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= limit) break;
 
@@ -249,7 +259,6 @@ ${refineBlock}
         // F. Step Advance
         // (Dynamic "Step Relaxation" removed 2026-06-19 — never-useful control,
         // default-0 and inert; straight-line ALU so removal is compile-neutral.)
-        float currentFudge = uFudgeFactor;
 
         // Stochastic step jitter: break up deterministic DE banding.
         // Asymmetric [1-jitter, 1.0] — biased short to avoid overshoot.

@@ -7,7 +7,7 @@ import { registerFeatures } from '../features';
 // Ensure features are registered before schema is built
 registerFeatures();
 
-export type GLSLType = 'float' | 'int' | 'vec2' | 'vec3' | 'vec4' | 'sampler2D' | 'mat3' | 'mat2';
+export type GLSLType = 'float' | 'int' | 'vec2' | 'vec3' | 'vec4' | 'sampler2D' | 'mat4' | 'mat3' | 'mat2';
 
 export interface UniformDefinition {
     name: string;
@@ -81,6 +81,27 @@ const BASE_SCHEMA: UniformDefinition[] = [
     { name: Uniforms.WorldRotMatrix, type: 'mat3', default: new THREE.Matrix3() },
     { name: Uniforms.EnvRotationMatrix, type: 'mat2', default: [1, 0, 0, 1] },
     { name: Uniforms.FogColorLinear, type: 'vec3', default: new THREE.Vector3(0, 0, 0), comment: 'CPU: InverseACESFilm(uFogColor)' },
+
+    // MB3D derived rotation bank — CPU-computed from live angle lanes each frame
+    // (rotationMath via UniformManager.syncDerivedRotations); shaders receive
+    // finished matrices / sin-cos pairs, never raw angles. Which lane feeds which
+    // bank entry is declared per formula via shader.derivedRotations (stamped by
+    // constPacker.bindOptions). Sizing: mat3 cap 6 = the vec3-shaped lane ceiling
+    // (3 uVec3* + 3 vec4-holders); identity/(0,1) defaults are inert when unused.
+    { name: 'uMb3dRotM0', type: 'mat3', default: new THREE.Matrix3() },
+    { name: 'uMb3dRotM1', type: 'mat3', default: new THREE.Matrix3() },
+    { name: 'uMb3dRotM2', type: 'mat3', default: new THREE.Matrix3() },
+    { name: 'uMb3dRotM3', type: 'mat3', default: new THREE.Matrix3() },
+    { name: 'uMb3dRotM4', type: 'mat3', default: new THREE.Matrix3() },
+    { name: 'uMb3dRotM5', type: 'mat3', default: new THREE.Matrix3() },
+    { name: 'uMb3dRotSC0', type: 'vec2', default: new THREE.Vector2(0, 1) },
+    { name: 'uMb3dRotSC1', type: 'vec2', default: new THREE.Vector2(0, 1) },
+    { name: 'uMb3dRotSC2', type: 'vec2', default: new THREE.Vector2(0, 1) },
+    { name: 'uMb3dRotSC3', type: 'vec2', default: new THREE.Vector2(0, 1) },
+    { name: 'uMb3dRotSC4', type: 'vec2', default: new THREE.Vector2(0, 1) },
+    { name: 'uMb3dRotSC5', type: 'vec2', default: new THREE.Vector2(0, 1) },
+    { name: 'uMb3dRot4D0', type: 'mat4', default: new THREE.Matrix4() },
+    { name: 'uMb3dRot4D1', type: 'mat4', default: new THREE.Matrix4() },
 ];
 
 const featureUniforms = featureRegistry.getUniformDefinitions();

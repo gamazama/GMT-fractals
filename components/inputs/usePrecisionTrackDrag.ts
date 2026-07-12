@@ -13,7 +13,16 @@ import React from 'react';
 export interface PrecisionMapping {
     toDisplay: (v: number) => number;
     fromDisplay: (v: number) => number;
+    /** Optional explicit display-domain edges — see ValueMapping.domainMin. */
+    domainMin?: number;
+    domainMax?: number;
 }
+
+/** Display-space track edges, honouring a mapping's reserved domain (e.g. log's zero band). */
+const trackEdges = (min: number, max: number, mapping?: PrecisionMapping) => ({
+    dMin: mapping ? (mapping.domainMin ?? mapping.toDisplay(min)) : min,
+    dMax: mapping ? (mapping.domainMax ?? mapping.toDisplay(max)) : max,
+});
 
 /**
  * The GMT precision-drag sensitivity multiplier from a pointer/keyboard-modifier
@@ -60,8 +69,7 @@ export function usePrecisionTrackDrag(opts: PrecisionTrackDragOptions) {
 
         const rect = e.currentTarget.getBoundingClientRect();
         const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const dMin = mapping ? mapping.toDisplay(min!) : min!;
-        const dMax = mapping ? mapping.toDisplay(max!) : max!;
+        const { dMin, dMax } = trackEdges(min!, max!, mapping);
         const clickedDisplay = quantize(dMin + pct * (dMax - dMin));
         const v = clampHard(mapping ? mapping.fromDisplay(clickedDisplay) : clickedDisplay);
 
@@ -80,8 +88,7 @@ export function usePrecisionTrackDrag(opts: PrecisionTrackDragOptions) {
         e.preventDefault();
 
         const rect = e.currentTarget.getBoundingClientRect();
-        const dMin = mapping ? mapping.toDisplay(min!) : min!;
-        const dMax = mapping ? mapping.toDisplay(max!) : max!;
+        const { dMin, dMax } = trackEdges(min!, max!, mapping);
         const base = (dMax - dMin) / rect.width;
 
         // Modifier toggled mid-drag → bake the current value as the new anchor.

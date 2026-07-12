@@ -878,8 +878,8 @@ ${indent(bodyLines.join('\n'), 4)}
         shader: {
             ...perIterShaderGlsl,
             preambleVars: preambleVars.length > 0 ? preambleVars : undefined,
-            // Intentionally omit selfContainedSDE — engine runs its outer loop
-            // normally, driving per-iteration composability with features.
+            // shape:per-iteration (not self-contained) — engine runs its outer
+            // loop normally, driving per-iteration composability with features.
             capabilities: deriveImportCapabilities(perIterShaderGlsl, 'per-iteration'),
         },
         parameters: uiParams,

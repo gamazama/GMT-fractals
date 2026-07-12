@@ -1,5 +1,34 @@
 # ADR-0083: Mandelbulb3D scene importer — deterministic-from-source transpile + x87 `[CODE]` decompiler with a numeric cross-check gate
 
+> **Update 2026-07-11 (import UI folded into the FormulaPicker; decisions stand):** the
+> `ImportMandelbulb3DModal` is **retired**. Its surfaces relocated:
+> - The bundled `.m3p` **sample scenes** are now a "Mandelbulb3D" group in the unified
+>   `<FormulaPicker>`'s **Catalog** section (leading it, above Fragmentarium/DEC):
+>   `engine-gmt/components/FormulaPicker/mb3dCatalogGroup.ts` (`getMB3DCatalogGroup` +
+>   `loadMB3DCatalogScene`), a `CatalogGroup` with `source: 'mb3d'` (widened `CatalogSource`).
+>   Picking a card loads the weave scene live (`loadMB3DSceneBytes`), routed by
+>   `{action:'catalog', source:'mb3d'}` in `FormulaSelect`. Thumbnails: `debug/mb3d-scene-thumbs.mts`
+>   (harness render) + `debug/mb3d-thumbs-from-renders.mts` (from in-app renders) →
+>   `public/thumbnails/mb3d-scenes/`, path helper `engine-gmt/utils/mb3d/mb3dSceneThumbs.ts`.
+> - **`.m3p` file import** is a shared user-gesture picker (`engine-gmt/utils/mb3d/importM3pFile.ts`
+>   → `pickAndLoadM3pFile`), wired to the picker footer (contextual — shows only while the
+>   Mandelbulb3D catalog group is active, via the new `footerSlot` render-prop) and the **File-menu
+>   Import section**. Removed from the formula hamburger.
+> - The **standalone formula library** is dropped from this surface (those formulas are already
+>   reachable in the Weave editor's "+ Add formula" picker, and most render empty as standalone
+>   thumbnails). The **text-paste** path is removed (owner call).
+> - Symmetrically, the Workshop's buried **frag-file load** was lifted to
+>   `engine-gmt/features/fragmentarium_import/pickFragFile.ts` (`pickAndLoadFragFile`) via a new store
+>   action `openWorkshopWithSource` + Workshop `initialSource` prop; contextual picker-footer button
+>   (Fragmentarium/DEC categories) + File-menu Import section.
+>
+> The `openImportMb3d`/`closeImportMb3d`/`importMb3dOpen` store members and the modal component/host
+> are deleted. The underlying load path (`loadMB3DSceneBytes` → `parseMB3DBinary` → `emitFusedHybrid`
+> → `loadScene`) is unchanged. Same day, an importer fix: `emitFusedHybrid` floors the authored
+> step (`quality.fudgeFactor`) at **0.2** — a very small authored ZstepDiv (Ellarien/Hal-Tenny 0.05,
+> Theli-At 0.10) exhausts the ray budget before reaching the surface → black; 0.2 lifts only those
+> (Chrystal 0.196 is the smallest that renders, so scenes ≥ 0.2 are unchanged).
+
 > **Update 2026-06-27 (corrections from the plan-surface survey; decisions stand):** three
 > original-Consequences claims are now known wrong, corrected by `plans/mb3d/research/coverage-unlocks.md`:
 > - **`Cp<n>` PAligned16 consts are NOT "ambiguous / need a runtime MB3D dump".** They are a

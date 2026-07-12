@@ -427,17 +427,34 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 }
                 break;
 
-            case 'REGISTER_FORMULA':
-                // Register a dynamically-imported formula (Workshop/DEC) in the worker's registry
-                // so core_math.ts inject() can find it during shader compilation.
+            case 'REGISTER_FORMULA': {
+                // Register a dynamically-imported formula (Workshop/DEC/weave) in the
+                // worker's registry so core_math.ts inject() can find it during shader
+                // compilation.
+                //
+                // core_math.inject runs HERE (worker-side) and gates the cutting-plane
+                // preamble (the engine-owned cp_dmin/cp_scale/cp_trap globals) + the
+                // dIFS estimator dispatch on the def's capability set. A runtime
+                // weave/hybrid whose body writes cp_* (e.g. a native Menger sponge
+                // slot) would otherwise emit those writes with no declaration →
+                // "cp_dmin: undeclared identifier". `capabilities` is a formal part
+                // of the REGISTER_FORMULA contract (structured clone preserves Sets),
+                // but self-heal cp/difs from the shader body anyway — the same scans
+                // parseGMF uses for legacy GMF files (FormulaFormat.ts).
+                const incoming = (msg.shader as { capabilities?: Iterable<Capability> }).capabilities;
+                const caps = new Set<Capability>(incoming ?? []);
+                const body = `${msg.shader.function} ${msg.shader.loopBody} ${msg.shader.loopInit ?? ''} ${msg.shader.preamble ?? ''}`;
+                if (/\bcp_(dmin|scale|trap)\b/.test(body)) caps.add('estimator:cutting-plane');
+                if (/\bg_difsDE\b/.test(msg.shader.preamble ?? '')) caps.add('estimator:difs');
                 registry.register({
                     id: msg.id as any,
                     name: msg.id,
-                    shader: { ...msg.shader, capabilities: new Set<Capability>() }, // worker registry is injection-only; capability gating is main-thread (message carries none)
+                    shader: { ...msg.shader, capabilities: caps },
                     parameters: [],
                     defaultPreset: {},
                 });
                 break;
+            }
 
             case 'CONFIG':
                 if (engine) {
@@ -641,6 +658,9 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                         tex.mapping = THREE.EquirectangularReflectionMapping;
                         tex.minFilter = THREE.LinearMipmapLinearFilter;
                         tex.generateMipmaps = true;
+                        // Equirect wraps horizontally — Repeat closes the u=0/1
+                        // seam for bilinear AND the bicubic base filter's taps.
+                        tex.wrapS = THREE.RepeatWrapping;
                         const envBmp = msg.bitmap as ImageBitmap;
                         engine.materials.setUniform('uEnvMaxMip', Math.floor(Math.log2(Math.max(envBmp.width, envBmp.height))));
                         engine.materials.setUniform('uEnvMapTexture', tex);
@@ -664,6 +684,13 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                         const hdrTex = new THREE.DataTexture(hdrData.data as any, hdrData.width, hdrData.height, THREE.RGBAFormat, hdrData.type);
                         hdrTex.mapping = THREE.EquirectangularReflectionMapping;
                         hdrTex.minFilter = THREE.LinearMipmapLinearFilter;
+                        // DataTexture defaults BOTH filters to NearestFilter (unlike
+                        // plain Texture) — minFilter was overridden above but magFilter
+                        // wasn't, so any MAGNIFIED sky view (low-res equirect across a
+                        // full viewport) rendered hard pixel blocks, and no amount of
+                        // mip blur could hide the base level. RGBA16F linear filtering
+                        // is core WebGL2 — just ask for it.
+                        hdrTex.magFilter = THREE.LinearFilter;
                         hdrTex.generateMipmaps = true;
                         hdrTex.flipY = true;
                         hdrTex.needsUpdate = true;
@@ -673,6 +700,9 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                             engine.materials.setUniform('uTexture', hdrTex);
                             engine.materials.setUniform('uUseTexture', 1.0);
                         } else {
+                            // Equirect wraps horizontally — Repeat closes the u=0/1
+                            // seam for bilinear AND the bicubic base filter's taps.
+                            hdrTex.wrapS = THREE.RepeatWrapping;
                             engine.materials.setUniform('uEnvMaxMip', Math.floor(Math.log2(Math.max(hdrData.width, hdrData.height))));
                             engine.materials.setUniform('uEnvMapTexture', hdrTex);
                             engine.materials.rebuildEnvCDF(hdrTex);

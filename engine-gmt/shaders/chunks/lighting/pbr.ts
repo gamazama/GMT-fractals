@@ -15,8 +15,28 @@ const getLoopOpen = (stochasticShadows: boolean) => `
 vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughness, float metallic, float stochasticSeed, bool calcShadows) {
     vec3 Lo = vec3(0.0);
 
-    float pixelSizeScale = uPixelSizeBase / uInternalScale;
-    float biasAmount = uShadowBias + pixelSizeScale * 2.0;
+    // --- Zoom-aware shadow precision (@see shadows.ts + docs/adr/0093) ---
+    // surfEps replicates the primary march's finalEps at this hit: cone-traced
+    // pixel footprint at p's camera distance (p is camera-local, so length(p)
+    // IS the camera distance), floored by float precision. epsRateBase is the
+    // footprint growth per world unit of view depth — each light's shadow ray
+    // scales it by dot(shadowDir, viewDir) (MB3D's ZZ2, CalcHardShadow.pas:374)
+    // so shadow resolution tracks primary resolution at every zoom level.
+    float cameraDist = max(1.0e-12, length(p));
+    vec3  viewDirN = p / cameraDist;
+    float distFromFractalOrigin = length(p + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh);
+    float floatLimit = max(1.0e-20, distFromFractalOrigin * PRECISION_RATIO_HIGH);
+    bool  orthoCam = uCamType > 0.5 && uCamType < 1.5;
+    float epsPerDist = uPixelSizeBase * (uPixelThreshold / (uDetail / uInternalScale));
+    float surfEps = max(orthoCam ? epsPerDist : epsPerDist * cameraDist, floatLimit);
+    float epsRateBase = orthoCam ? 0.0 : epsPerDist;
+
+    // Shadow-acne bias in footprint units. The old ABSOLUTE bias (default
+    // 0.002 world units) pushed the ray origin past all visible geometry at
+    // high zoom — one of the two reasons shadows vanished when zoomed in.
+    // uShadowBias keeps its stored scale: legacy default 0.002 maps to ~1
+    // footprint of extra bias (×500), slider max 1.0 → 500 footprints.
+    float biasAmount = surfEps * (2.0 + uShadowBias * 500.0);
     vec3 shadowRo = p + n * biasAmount;
 
     // BRDF invariants — depend only on roughness/metallic/albedo/n/v, NOT on
@@ -104,7 +124,11 @@ ${stochasticShadows ? `
                 shK = 2000.0;
             }
 ` : ``}
-            float s = GetSoftShadow(shadowRo, shadowL, shK, shadowDist, stochasticSeed);
+            // Signed view-depth growth for THIS ray (after any stochastic
+            // re-aim of shadowL above): rays receding from the camera get a
+            // coarsening threshold, rays approaching get a finer one.
+            float epsRate = epsRateBase * dot(shadowL, viewDirN);
+            float s = GetSoftShadow(shadowRo, shadowL, shK, shadowDist, stochasticSeed, surfEps, epsRate);
             shadow = mix(1.0, s, uShadowIntensity);
         }
 

@@ -1,8 +1,11 @@
 /**
- * MySubmissionsOverlay — lists the signed-in user's own gallery submissions
- * regardless of status (pending / approved / rejected) or visibility
- * (public / private). RLS lets owners read all of their own rows even when
- * the public browse query would filter them out.
+ * MySubmissionsOverlay — the "My Fractals" overlay. Lists the signed-in user's
+ * own gallery submissions (any status / visibility — RLS lets owners read all
+ * their own rows even when the public browse query would filter them out) AND,
+ * in a second section, their free quick-share links (`shared_scenes`, the ?s=<id>
+ * links). Anonymous shares aren't owned, so they never appear here.
+ *
+ * Shared-link actions: Open (load into the editor), Copy link, Delete.
  *
  * Per-row actions for owner:
  *   - Toggle visibility (public ↔ private)
@@ -26,6 +29,9 @@ import {
     listMySubmissions, deleteMySubmission, updateMyVisibility,
     GalleryItem, GALLERY_FEATURED_BADGE,
 } from './GalleryClient';
+import { listMySharedScenes, deleteMySharedScene, type SharedScene } from './sharedScene';
+import { openSharedSceneById, shareUrlForId } from './openSharedScene';
+import { showToast } from '../../engine/store/toastStore';
 import type { Profile } from '../auth/authStore';
 
 /** Mirrors the server-side cap in backend/supabase/functions/_shared/auth.ts.
@@ -58,6 +64,7 @@ export const MySubmissionsOverlay: React.FC = () => {
     const profile  = useAuthStore(s => s.profile);
 
     const [items, setItems]       = useState<GalleryItem[]>([]);
+    const [shares, setShares]     = useState<SharedScene[]>([]);
     const [loading, setLoading]   = useState(false);
     const [error, setError]       = useState<string | null>(null);
     const [busyId, setBusyId]     = useState<string | null>(null);
@@ -75,8 +82,13 @@ export const MySubmissionsOverlay: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const rows = await listMySubmissions(profile.id);
-            if (mountedRef.current) setItems(rows);
+            // Shares are secondary — a failure there must not blank the gallery
+            // submissions list, so it degrades to an empty share section.
+            const [rows, myShares] = await Promise.all([
+                listMySubmissions(profile.id),
+                listMySharedScenes().catch(() => [] as SharedScene[]),
+            ]);
+            if (mountedRef.current) { setItems(rows); setShares(myShares); }
         } catch (err) {
             if (mountedRef.current) setError(err instanceof Error ? err.message : String(err));
         } finally {
@@ -99,7 +111,7 @@ export const MySubmissionsOverlay: React.FC = () => {
     if (!profile) {
         return createPortal(
             <div className="fixed inset-0 bg-surface/85 backdrop-blur-md flex items-center justify-center" style={{ zIndex: Z.overlayNested }}>
-                <div className="text-sm text-fg-muted">Sign in to view your submissions.</div>
+                <div className="text-sm text-fg-muted">Sign in to view your fractals.</div>
             </div>,
             document.body,
         );
@@ -130,11 +142,31 @@ export const MySubmissionsOverlay: React.FC = () => {
         return wrap(item.id, () => deleteMySubmission(item.id, profile.id));
     };
 
+    // ── Shared-link (quick-share) actions ────────────────────────────────────
+    const onOpenShare = async (id: string) => {
+        try {
+            const opened = await openSharedSceneById(id);
+            if (opened) close();
+            else showToast('That share is no longer available.', 'warning', 4000);
+        } catch {
+            showToast('Could not open that scene.', 'error', 4000);
+        }
+    };
+    const onCopyShare = async (id: string) => {
+        const url = shareUrlForId(id);
+        try { await navigator.clipboard.writeText(url); showToast('Link copied.', 'success', 2500); }
+        catch { showToast(`Link: ${url}`, 'info', 8000); }
+    };
+    const onDeleteShare = (s: SharedScene) => {
+        if (!window.confirm(`Delete this share link${s.title ? ` for "${s.title}"` : ''}?\n\nThe link will stop working. Cannot be undone.`)) return;
+        return wrap(s.id, () => deleteMySharedScene(s.id));
+    };
+
     return createPortal(
         <div className="fixed inset-0 bg-surface/85 backdrop-blur-md flex flex-col" style={{ zIndex: Z.overlayNested }}>
             <header className="flex items-center justify-between px-6 py-3 border-b border-line/10 bg-surface-tabbar flex-shrink-0">
                 <div className="flex items-baseline gap-3">
-                    <h1 className="text-lg font-bold text-fg">My Submissions</h1>
+                    <h1 className="text-lg font-bold text-fg">My Fractals</h1>
                     <span className="text-[10px] text-fg-dim">
                         {loading
                             ? 'loading…'
@@ -165,11 +197,12 @@ export const MySubmissionsOverlay: React.FC = () => {
                     </ErrorNote>
                 )}
 
-                {!loading && items.length === 0 && (
+                {!loading && items.length === 0 && shares.length === 0 && (
                     <div className="text-sm text-fg-dim max-w-xl mx-auto mt-12 text-center leading-relaxed">
-                        No submissions yet.<br/>
+                        Nothing here yet.<br/>
                         <span className="text-[11px] text-fg-faint">
-                            Compose a scene and use File → Submit to Gallery to share it.
+                            Copy a share link (🔗 in the top bar) to send a scene to anyone, or use
+                            File → Submit to Gallery to publish one.
                         </span>
                     </div>
                 )}
@@ -251,6 +284,56 @@ export const MySubmissionsOverlay: React.FC = () => {
                         </div>
                     ))}
                 </div>
+
+                {shares.length > 0 && (
+                    <div className="max-w-3xl mx-auto mt-8">
+                        <h2 className="text-xs font-bold text-fg-muted uppercase tracking-wider mb-2">
+                            Shared links{' '}
+                            <span className="text-fg-faint font-normal normal-case tracking-normal">
+                                · {shares.length} scene{shares.length === 1 ? '' : 's'} you've shared by link
+                            </span>
+                        </h2>
+                        <div className="space-y-2">
+                            {shares.map(s => (
+                                <div
+                                    key={s.id}
+                                    className={`flex items-center gap-3 p-2.5 rounded-lg border bg-line/[0.02] border-line/10 ${busyId === s.id ? 'pointer-events-none opacity-50' : ''}`}
+                                >
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-bold text-fg truncate">{s.title || 'Untitled scene'}</div>
+                                        <div className="text-[10px] text-fg-muted">
+                                            {s.formula || 'scene'}
+                                            <span className="text-fg-faint"> · {new Date(s.created_at).toLocaleDateString()}</span>
+                                            <span className="text-fg-faint font-mono"> · ?s={s.id}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-1.5 flex-shrink-0">
+                                        <GhostButton
+                                            onClick={() => void onOpenShare(s.id)}
+                                            className="text-[10px] font-bold px-3 py-1.5 rounded text-fg-tertiary"
+                                            title="Load this scene into the editor"
+                                        >
+                                            Open
+                                        </GhostButton>
+                                        <GhostButton
+                                            onClick={() => void onCopyShare(s.id)}
+                                            className="text-[10px] font-bold px-3 py-1.5 rounded text-fg-tertiary"
+                                            title="Copy the share link"
+                                        >
+                                            Copy link
+                                        </GhostButton>
+                                        <button
+                                            onClick={() => onDeleteShare(s)}
+                                            className="text-[10px] font-bold px-3 py-1.5 rounded bg-danger/30 hover:bg-danger/60 text-danger border border-danger/50"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>,
         document.body,

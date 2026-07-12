@@ -299,7 +299,12 @@ export const LightingFeature: FeatureDefinition = {
             description: 'Deprecated — kept so old scene files load without dropping state. Migrated to ptReflMode at boot.'
         },
         ptMaxLuminance: {
-            type: 'float', default: 10.0, label: 'Firefly Clamp', shortId: 'pfl', uniform: 'uPTMaxLuminance',
+            // Default 10 → 2.5 (owner call 2026-07-10, with the reflection noise pass):
+            // both soft-knee clamps (PT clampByLuminance + reflections clampReflLum,
+            // ADR-0071) pass l ≤ t through untouched, so 10 only engaged on extreme
+            // spikes and left reflected/bounced highlights noisy. Scenes that stored
+            // the old value keep it (presets carry explicit params).
+            type: 'float', default: 2.5, label: 'Firefly Clamp', shortId: 'pfl', uniform: 'uPTMaxLuminance',
             min: 0.5, max: 200.0, step: 0.5, scale: 'log',
             group: 'engine_settings', parentId: 'ptEnabled',
             description: 'Clamps per-sample luminance to suppress bright firefly spikes. Lower = cleaner but slightly biased. Raise to effectively disable.'
@@ -371,8 +376,8 @@ export const LightingFeature: FeatureDefinition = {
     inject: (builder, config, variant) => {
         if (variant !== 'Main') {
              builder.addPostDEFunction(`
-             float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) { return 1.0; }
-             float GetHardShadow(vec3 ro, vec3 rd, float lightDist) { return 1.0; }
+             float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise, float surfEps, float epsRate) { return 1.0; }
+             float GetHardShadow(vec3 ro, vec3 rd, float lightDist, float surfEps, float epsRate) { return 1.0; }
              vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSeed) { return vec3(0.0); }
              vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, float seed) { return vec3(0.0); }
              `);
@@ -385,8 +390,8 @@ export const LightingFeature: FeatureDefinition = {
         if (state && !state.advancedLighting) {
              builder.addDefine('MAX_LIGHTS', '0');
              builder.addPostDEFunction(`
-             float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) { return 1.0; }
-             float GetHardShadow(vec3 ro, vec3 rd, float lightDist) { return 1.0; }
+             float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise, float surfEps, float epsRate) { return 1.0; }
+             float GetHardShadow(vec3 ro, vec3 rd, float lightDist, float surfEps, float epsRate) { return 1.0; }
              vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSeed) {
                  vec3 p = ro + rd * d;
                  vec3 p_fractal = p + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh;
@@ -404,11 +409,25 @@ export const LightingFeature: FeatureDefinition = {
                  float t1 = pow(abs(fract(mod(t1Raw, 1.0))), uGradientBias);
                  vec3 albedo = textureLod0(uGradientTexture, vec2(t1, 0.5)).rgb;
 
-                 // Simple N·L + ambient
-                 float NdotL = max(dot(n, normalize(vec3(-0.5, 1.0, 0.8))), 0.0);
-                 float rim = pow(1.0 - max(dot(n, -rd), 0.0), 3.0) * 0.08;
-                 float light = 0.03 + NdotL * 0.3 + rim;
-                 return albedo * light;
+                 // Cheap high-contrast preview shading — pure ALU (no marches, so
+                 // no shadow/AO cost and negligible compile impact). Key + weak cool
+                 // fill + hemispheric ambient give form; a Blinn highlight and rim
+                 // add pop the old flat N·L lacked.
+                 vec3 view = -rd;
+                 vec3 keyDir = normalize(vec3(-0.5, 1.0, 0.8));
+                 float key = max(dot(n, keyDir), 0.0);
+                 key = key * (key * 0.4 + 0.6);              // sharper terminator -> punchier form
+                 vec3 fillDir = normalize(vec3(0.6, 0.25, -0.6));
+                 float fill = max(dot(n, fillDir), 0.0);
+                 float hemi = 0.5 + 0.5 * n.y;               // sky-above / darker-below ambient
+                 vec3 ambient = mix(vec3(0.015, 0.017, 0.022), vec3(0.045, 0.05, 0.06), hemi);
+                 vec3 h = normalize(keyDir + view);
+                 float spec = pow(max(dot(n, h), 0.0), 28.0) * 0.35;
+                 float rim = pow(1.0 - max(dot(n, view), 0.0), 3.0) * 0.14;
+                 vec3 col = albedo * (ambient + key * 0.6 + fill * vec3(0.08, 0.10, 0.14));
+                 col += spec * vec3(1.0, 0.98, 0.92);        // warm highlight
+                 col += rim * vec3(0.85, 0.92, 1.0);         // cool edge
+                 return col;
              }
              vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, float seed) {
                  return calculateShading(ro, rd, d_init, result_init, seed);

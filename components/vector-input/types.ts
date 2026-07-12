@@ -1,5 +1,6 @@
 
 import * as THREE from 'three';
+import type { RotationDescriptor } from '../../engine/rotationDescriptor';
 
 export interface AxisConfig {
     label: string;
@@ -95,12 +96,21 @@ export interface BaseVectorInputProps {
     linkable?: boolean;
     /** Display scale mode — 'pi' shows values in π units, 'degrees' keeps internal degrees but displays π */
     scale?: 'linear' | 'log' | 'pi' | 'degrees';
+    /** Rotation semantics of the value (kind / units / Euler order). units:'deg'
+     *  switches display to degrees-NATIVE (no rad→deg mapping — the stored value
+     *  already is degrees, e.g. MB3D-imported rotations). Also what the canvas
+     *  rotation gizmo reads to interpret the components. */
+    rotation?: RotationDescriptor;
 }
 
 export interface ConnectedVectorInputProps extends Omit<BaseVectorInputProps, 'onDragStart' | 'onDragEnd' | 'headerRight'> {
     interactionMode?: 'param' | 'camera';
     trackKeys?: string[];
     trackLabels?: string[];
+    /** When provided, a "canvas gizmo" toggle renders in the header (rotation-kind
+     *  params). The CALLER owns the gizmo registry — this component stays pure. */
+    onGizmoToggle?: () => void;
+    gizmoActive?: boolean;
 }
 
 // Utility to format floats nicely for UI

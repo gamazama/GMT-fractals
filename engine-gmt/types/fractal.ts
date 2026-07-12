@@ -3,6 +3,7 @@ import { LightParams } from './graphics';
 import { AnimationParams, AnimationSequence } from './animation';
 import { FractalGraph, PipelineNode } from './graph';
 import type { CapabilitySet } from './capabilities';
+import type { RotationDescriptor } from '../../engine/rotationDescriptor';
 
 export interface Preset {
   version?: number;
@@ -51,9 +52,17 @@ export interface Preset {
   features?: Record<string, any>;
 }
 
+/** The fixed coreMath slot vocabulary a param addresses by id. */
+export type CoreSlotId = 'paramA' | 'paramB' | 'paramC' | 'paramD' | 'paramE' | 'paramF' | 'vec2A' | 'vec2B' | 'vec2C' | 'vec3A' | 'vec3B' | 'vec3C' | 'vec4A' | 'vec4B' | 'vec4C';
+/** Per-slot BANK slot id (ADR-0090): the coreMath vocabulary under a `ws<k>`
+ *  prefix (`ws0ParamA` … `ws5Vec4C`). A native formula woven as weave slot k
+ *  presents its declared params on bank k, routed to the `weave` feature via
+ *  `feature: 'weave'`. */
+export type WeaveBankSlotId = `ws${number}${Capitalize<CoreSlotId>}`;
+
 export interface FractalParameter {
     label: string;
-    id: 'paramA' | 'paramB' | 'paramC' | 'paramD' | 'paramE' | 'paramF' | 'vec2A' | 'vec2B' | 'vec2C' | 'vec3A' | 'vec3B' | 'vec3C' | 'vec4A' | 'vec4B' | 'vec4C';
+    id: CoreSlotId | WeaveBankSlotId;
     type?: 'float' | 'vec2' | 'vec3' | 'vec4';
     min: number;
     max: number;
@@ -61,8 +70,50 @@ export interface FractalParameter {
     default: number | { x: number; y: number } | { x: number; y: number; z: number } | { x: number; y: number; z: number; w: number };
     scale?: 'linear' | 'log' | 'pi'; // Explicit UI scaling mode
     options?: { label: string; value: number }[];
+    /** Section header for the Formula panel: consecutive params sharing a group
+     *  render under one divider (fused weaves stamp each slot's formula name).
+     *  Absent = no divider (single-formula defs unchanged). */
+    group?: string;
+    /** Feature whose state / auto-setter / animation trackId this param routes to
+     *  (ADR-0090). Absent = `coreMath` (the default). `'weave'` = a per-slot bank
+     *  (a native formula woven as a slot); the panel reads `store.weave[id]`,
+     *  writes `setWeave`, and keys the track `weave.<id>`. */
+    feature?: string;
+    /** Weave addon slot (= `weaveSource.slots` row index) this param belongs to.
+     *  Stamped by emitFusedHybrid on every exposed weave-slot param so an editor
+     *  Rebuild can transfer live DENSE-LANE values slot-by-slot (mergeDenseLanes):
+     *  MB3D lanes reallocate in row order, so without the slot identity a reorder
+     *  scrambles which formula reads which live value. Absent on plain
+     *  (non-weave) formula params and on defs built before the field existed
+     *  (mergeDenseLanes falls back to parsing the `group` divider). */
+    slotIndex?: number;
     mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed'; // 'rotation' = Rodrigues (A/P/∠), 'direction' = azimuth/pitch, 'axes' = per-axis angles, 'toggle' = bool on/off, 'mixed' = toggle X + slider Y
     linkable?: boolean; // For vec3/vec2: enable axis linking (uniform scale)
+    /** Explicit rotation semantics (kind / units / Euler order). Absent →
+     *  derived from `mode` via resolveRotation() (legacy modes store radians).
+     *  MB3D imports stamp this with units:'deg' — consumers must NOT apply the
+     *  radian ±2π bound override or rad→deg display mapping to those. */
+    rotation?: RotationDescriptor;
+}
+
+/**
+ * A CPU-derived rotation uniform: UniformManager.syncDerivedRotations reads the
+ * SOURCE lane uniforms each frame (already carrying config edits, UNIFORM events
+ * and animation writes), converts via rotationMath, and writes the finished
+ * matrix / sin-cos pair into the fixed derived bank (uMb3dMat0..5 mat3,
+ * uMb3dSC0..5 vec2, uMb3dMat4_0..1 mat4 — declared in UniformSchema BASE_SCHEMA).
+ * The shader consumes ONLY the derived uniform — raw angles never reach GLSL.
+ * Stamped by the MB3D live binder (constPacker.bindOptions); rides
+ * `def.shader` across the worker REGISTER_FORMULA wire (plain data, clones).
+ */
+export interface DerivedRotationSpec {
+    /** Target uniform in the derived bank ('uMb3dMat0', 'uMb3dSC2', 'uMb3dMat4_0'). */
+    uniform: string;
+    /** rotationMath conversion applied to the source values. */
+    convert: 'mb3d-euler-deg-mat3' | 'deg-sincos' | 'mb3d-6plane-deg-mat4';
+    /** Source uniform accessors ('uVec3A.x', 'uParamC'), convert-defined order:
+     *  mat3 = 3 angles (x,y,z), sincos = 1 angle, mat4 = 6 plane angles. */
+    sources: string[];
 }
 
 export interface FractalDefinition {
@@ -85,38 +136,27 @@ export interface FractalDefinition {
         getDist?: string;
         preamble?: string;           // Global code before functions (for pre-calculation)
         preambleVars?: string[];     // Names of mutable globals declared in preamble (for interlace renaming)
-        /** @deprecated Since P8 of the capability protocol. Use the
-         *  `iter:shared-rotation` token in `capabilities` instead. Retained
-         *  only as an input to GMF backward-compat parsing and as runtime
-         *  metadata read by some engine paths during the transition. */
-        usesSharedRotation?: boolean;
-        /** @deprecated Since P8 of the capability protocol. Use the
-         *  `shape:self-contained` token in `capabilities` instead. Engine
-         *  guards (SKIP_PRE_BAILOUT, no hybrid fold injection, no interlacing)
-         *  continue to read this flag during the transition; will migrate
-         *  to capability checks in a follow-up. */
-        selfContainedSDE?: boolean;
-        /** @deprecated Since P8 of the capability protocol. Use the
-         *  `estimator:cutting-plane` token in `capabilities` instead. cp_*
-         *  global emission is still gated on this flag at the engine boundary
-         *  during the transition. */
-        supportsCuttingPlane?: boolean;
-        /** Set by the Mandelbulb3D importer on a fused dIFS scene (DEoption 20).
-         *  The fused formula declares a `float g_difsDE;` global in `preamble`,
-         *  initializes it in `loopInit`, and writes the running minimum of
-         *  `mb3dRout / mb3dVary` (MB3D's orbit-trap IFS distance) in `loopBody`.
-         *  estimator 6 reads it. Gates the dIFS getDist path so a manually
-         *  selected estimator 6 on a non-dIFS formula falls back to Linear (no
-         *  reference to an undeclared g_difsDE). @see emitFusedHybrid.ts */
-        supportsDifs?: boolean;
-        /** Capability tokens declared by this formula. Read by evaluateCompat()
-         *  for feature gating. REQUIRED since P8 — FractalRegistry.register()
-         *  throws if missing. The deriveLegacy shim is gone; native formulas
+        /** Capability tokens declared by this formula — the ONLY runtime
+         *  representation of formula capabilities. Read by evaluateCompat()
+         *  for feature gating and by the engine compile gates (self-contained
+         *  guards, cp_* emission, estimator availability). REQUIRED —
+         *  FractalRegistry.register() throws if missing. Native formulas
          *  declare via `new Set([...] satisfies Capability[])`, V3/V4 Workshop
          *  imports derive via fragmentarium_import/import-capabilities.ts at
          *  emit time, and GMF round-trip preserves the set via shaderMeta.
+         *
+         *  The pre-P8 legacy booleans (`selfContainedSDE`, `usesSharedRotation`,
+         *  `supportsCuttingPlane`, `supportsDifs`) were retired from this type;
+         *  parseGMF still reads them from old files' shaderMeta and PROMOTES
+         *  them to tokens at the parse boundary (plus cp_* and g_difsDE body
+         *  auto-detects). Do not reintroduce boolean capability flags — add a
+         *  Capability token instead (requires ADR-0059 amendment).
          *  @see dev/docs/gmt/35_Capability_Protocol.md */
         capabilities: CapabilitySet;
+        /** CPU-derived rotation uniforms this formula's body consumes (MB3D
+         *  live-bound angle options). Lives on `shader` so it rides the worker
+         *  REGISTER_FORMULA wire whole, like `capabilities`. Absent = none. */
+        derivedRotations?: DerivedRotationSpec[];
     };
     parameters: (FractalParameter | null)[];
     description?: string;
@@ -137,5 +177,48 @@ export interface FractalDefinition {
             uiDefault: number | number[];
             isDegrees?: boolean;
         }>;
+    };
+    /** Present on user-authored weaves (the Weave Editor). Enables reopening the
+     *  weave for re-editing — the importSource pattern for WeaveSpecs.
+     *  @see docs/adr/0089-weave-core-unification.md (ADR-0058 for the pattern) */
+    weaveSource?: {
+        version: 1;
+        title: string;
+        /** Editor rows: catalog identity (kind/ref/label for the picker) + the exact
+         *  MB3DFormulaSlot built from it (iterCount = the weave iteration count). */
+        slots: Array<{
+            label: string;
+            /** `native` = a registered GMT formula (ref = formula id); the slot's
+             *  MB3DFormulaSlot shell carries formulaIndex -1 + name = id (P4.1). */
+            kind: 'intern' | 'decompiled' | 'native';
+            ref: string | number;
+            slot: {
+                iterCount: number;
+                formulaIndex: number;
+                optionCount: number;
+                name: string;
+                optionTypes: number[];
+                optionValues: number[];
+            };
+            /** Per-option expose/bake directives (true = baked literal, no
+             *  uniform lane), indexed by option index. Absent = auto-expose. */
+            bake?: boolean[];
+        }>;
+        /** Schedule kind — counts is the baked-LUT sequence; modulo (live Rhythm)
+         *  is layered: `baseRow` (a SLOT index — the tail formula run when no layer
+         *  claims; absent ⇒ the first active slot, so pre-base-election weaves load
+         *  byte-identical) is the base, and each NON-base active slot in row order
+         *  is a layer with its own interval/start[/beats] snapshot (the LIVE values
+         *  ride the DDFS `weave` feature state; these are the built snapshot for
+         *  re-pick/hydrate). beats 0/absent = endless. @see plans/mb3d/weave-seq-rhythm-conversion.md §7
+         *
+         *  Counts LOOP DIVIDERS (P4.7): `breaks` partitions the rows into blocks —
+         *  the block ending at `afterRow` plays `repeat` times as intro; the
+         *  segment after the last divider is the repeating cycle (see
+         *  buildBlockPlan). Absent `breaks` falls back to `repeatFrom` (MB3D's
+         *  "repeat from here": one divider, repeat 1) — MB3D imports carry no
+         *  breaks, so their emission is unchanged. */
+        schedule: { kind: 'counts'; repeatFrom?: number; breaks?: Array<{ afterRow: number; repeat: number }> }
+                | { kind: 'modulo'; baseRow?: number; layers: Array<{ interval: number; startIter: number; beats?: number }> };
     };
 }

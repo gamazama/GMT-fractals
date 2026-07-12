@@ -1,9 +1,12 @@
 export { DraggableNumber } from './DraggableNumber';
-export { 
-    formatDisplay, 
-    piMapping, 
-    linearMapping, 
+export {
+    formatDisplay,
+    piMapping,
+    piUnitMapping,
+    linearMapping,
     createLogMapping,
+    createLog1pMapping,
+    createPowMapping,
     getMapping,
-    type ValueMapping 
+    type ValueMapping
 } from './FormatUtils';

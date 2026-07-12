@@ -148,9 +148,61 @@ vec3 linearToSRGB(vec3 color) {
     );
 }
 
+// Cubic B-spline bicubic (Sigg & Hadwiger, 4 linear taps). A SMOOTHING /
+// approximating filter — its weights are all non-negative (no overshoot), so
+// magnified UV warps like the Droste recursion soften cleanly instead of showing
+// the blocky texel creases of a single bilinear tap. (Catmull-Rom would sharpen
+// here — its negative lobes crisp up the low-res source, the opposite of what we
+// want.) Four linear fetches: each collapses a 2-wide non-negative weight pair
+// into one hardware-filtered tap, so the result is exact. Requires the source to
+// be LinearFilter (the accumulation targets are on any GPU with linear-filterable
+// HDR; Nearest-fallback GPUs degrade to blocky, same as the single-tap path).
+// texSize = source texture dimensions, which equals uResolution for this pass.
+vec4 bsplineWeights(float t) {
+    float t2 = t * t;
+    float t3 = t2 * t;
+    return vec4(
+        (1.0 - t) * (1.0 - t) * (1.0 - t),          // w0
+        3.0 * t3 - 6.0 * t2 + 4.0,                   // w1
+        -3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0,        // w2
+        t3                                           // w3
+    ) / 6.0;
+}
+
+vec4 sampleBicubicSmooth(sampler2D tex, vec2 uv, vec2 texSize) {
+    vec2 invTexSize = 1.0 / texSize;
+    vec2 coord = uv * texSize - 0.5;
+    vec2 fxy = fract(coord);
+    coord -= fxy;
+
+    vec4 wx = bsplineWeights(fxy.x);
+    vec4 wy = bsplineWeights(fxy.y);
+
+    // Collapse each weight pair (w0,w1) and (w2,w3) into one linear tap.
+    // Constants -0.5 / +1.5: coord is the base texel INDEX, so the two fetch
+    // positions are (base-1)+0.5 = base-0.5 and (base+1)+0.5 = base+1.5 in texel
+    // space (the +0.5 recentres index→texel-centre), plus the intra-pair offset.
+    vec2 sx = vec2(wx.x + wx.y, wx.z + wx.w);
+    vec2 sy = vec2(wy.x + wy.y, wy.z + wy.w);
+    vec2 ox = (coord.x + vec2(-0.5, 1.5) + vec2(wx.y, wx.w) / sx) * invTexSize.x;
+    vec2 oy = (coord.y + vec2(-0.5, 1.5) + vec2(wy.y, wy.w) / sy) * invTexSize.y;
+
+    vec4 c0 = texture(tex, vec2(ox.x, oy.x));
+    vec4 c1 = texture(tex, vec2(ox.y, oy.x));
+    vec4 c2 = texture(tex, vec2(ox.x, oy.y));
+    vec4 c3 = texture(tex, vec2(ox.y, oy.y));
+
+    return (c0 * sx.x + c1 * sx.y) * sy.x
+         + (c2 * sx.x + c3 * sx.y) * sy.y;
+}
+
 void main() {
     vec2 sampleUV = vUv;
     float mask = 1.0;
+    // Raised by a UV-warp feature (e.g. Droste) to soften the source at the warped
+    // coordinate: 0 = single bilinear tap; small = the smooth cubic B-spline; up to
+    // 1 = a broad Gaussian blur. Continuous, so the feature exposes it as a slider.
+    float smoothAmount = 0.0;
 
     // --- FEATURE INJECTION: UV MODIFICATION ---
     ${injectedMainUV}
@@ -158,7 +210,34 @@ void main() {
     vec4 tex;
     int boxTaps = int(uPreviewBoxTaps + 0.5);
     if (boxTaps <= 1) {
-        tex = texture(map, sampleUV);
+        // A UV-warp feature (Droste) can raise smoothAmount (0..1) to soften the
+        // magnified recursion. The base is the smooth cubic B-spline (the low-end
+        // look); higher values blend toward a broad [1 2 1]^2 Gaussian whose tap
+        // SPACING grows with the slider. Every offset is added in continuous UV
+        // (real texels), so — unlike coarsening the grid — nothing snaps to a cell
+        // and there are no blocks at any value. Cross-faded up from the raw tap so
+        // 0 stays sharp. No cost when 0.
+        if (smoothAmount > 0.001) {
+            vec4 sm = sampleBicubicSmooth(map, sampleUV, uResolution);
+            float wide = smoothstep(0.0, 1.0, smoothAmount);
+            if (wide > 0.002) {
+                vec2 t = (1.0 + smoothAmount * 3.0) / uResolution;  // spacing 1..4 texels
+                vec4 g = vec4(0.0);
+                g += texture(map, sampleUV + t * vec2(-1.0, -1.0)) * 1.0;
+                g += texture(map, sampleUV + t * vec2( 0.0, -1.0)) * 2.0;
+                g += texture(map, sampleUV + t * vec2( 1.0, -1.0)) * 1.0;
+                g += texture(map, sampleUV + t * vec2(-1.0,  0.0)) * 2.0;
+                g += texture(map, sampleUV + t * vec2( 0.0,  0.0)) * 4.0;
+                g += texture(map, sampleUV + t * vec2( 1.0,  0.0)) * 2.0;
+                g += texture(map, sampleUV + t * vec2(-1.0,  1.0)) * 1.0;
+                g += texture(map, sampleUV + t * vec2( 0.0,  1.0)) * 2.0;
+                g += texture(map, sampleUV + t * vec2( 1.0,  1.0)) * 1.0;
+                sm = mix(sm, g / 16.0, wide);
+            }
+            tex = mix(texture(map, sampleUV), sm, smoothstep(0.0, 0.04, smoothAmount));
+        } else {
+            tex = texture(map, sampleUV);
+        }
     } else {
         // NxN box average to filter heavy downsampling (live blit during a
         // bucket render at high export res). Capped at 8x8 so worst-case is

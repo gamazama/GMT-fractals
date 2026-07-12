@@ -3,8 +3,7 @@ import React from 'react';
 import { featureRegistry, RuntimePanelConfig } from '../engine/FeatureSystem';
 import { useEngineStore } from '../store/engineStore';
 import { AutoFeaturePanel } from './AutoFeaturePanel';
-import { FeatureSection } from './FeatureSection';
-import { SectionDivider } from './SectionLabel';
+import { CompileSection } from './CompileSection';
 
 interface RuntimeSectionProps extends Partial<RuntimePanelConfig> {
     /** Feature ID in the DDFS registry. */
@@ -48,24 +47,28 @@ export const RuntimeSection: React.FC<RuntimeSectionProps> = (props) => {
         return Array.from(exclude);
     }, [runtimeToggleParam, runtimeExcludeParams]);
 
+    // Reuse the shared compilable-section shell for the header tone + edge-fade
+    // + divider bottom-lip fade. A runtime section has no compile gate, so
+    // `isCompiled` is always true: the section is simply active (surface-raised)
+    // when on and disabled (grey, fading into its bottom lip) when off — the
+    // `bg-transparent` "needs compiling" tone never applies.
     return (
-        <div data-help-id={helpId}>
-            <FeatureSection
-                label={label}
-                featureId={featureId}
-                enabled={isOn}
-                onToggle={handleToggle}
-            >
-                <div className="bg-line/[0.02]">
-                    <AutoFeaturePanel
-                        featureId={featureId}
-                        groupFilter={runtimeGroup}
-                        excludeParams={fullExclude}
-                        liftChildrenOf={runtimeToggleParam}
-                    />
-                </div>
-            </FeatureSection>
-            <SectionDivider />
-        </div>
+        <CompileSection
+            label={label}
+            featureId={featureId}
+            isOn={isOn}
+            isCompiled={true}
+            onToggle={handleToggle}
+            helpId={helpId}
+        >
+            <div className="bg-line/[0.02]">
+                <AutoFeaturePanel
+                    featureId={featureId}
+                    groupFilter={runtimeGroup}
+                    excludeParams={fullExclude}
+                    liftChildrenOf={runtimeToggleParam}
+                />
+            </div>
+        </CompileSection>
     );
 };

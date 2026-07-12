@@ -8,6 +8,8 @@ import { LightingState } from '../../features/lighting';
 import { MAX_LIGHTS } from '../../../data/constants';
 import { EngineRenderState } from '../FractalEngine';
 import type { GeometryState } from '../../features/geometry';
+import type { DerivedRotationSpec } from '../../types/fractal';
+import { mb3dEulerToMat3, mb3dSixPlaneToMat4, sinCosDeg, DEG_TO_RAD } from '../../utils/rotationMath';
 import {
     type AdaptiveResolutionState,
     createAdaptiveResolutionState,
@@ -537,5 +539,57 @@ export class UniformManager {
 
         const u = this.uniforms[uniformKey];
         if (u) u.value.copy(this.rotScratch3);
+    }
+
+    /** Read one scalar from a source-uniform accessor ('uVec3A.x', 'uParamC'). */
+    private readUniformComponent(accessor: string): number {
+        const dot = accessor.indexOf('.');
+        if (dot < 0) return (this.uniforms[accessor]?.value as number) ?? 0;
+        const u = this.uniforms[accessor.slice(0, dot)];
+        return (u?.value?.[accessor.slice(dot + 1) as 'x' | 'y' | 'z' | 'w'] as number) ?? 0;
+    }
+
+    /**
+     * CPU-side rotation conversion for the active formula's derived-rotation
+     * bank (MB3D angle options — see FractalDefinition shader.derivedRotations).
+     * Reads the SOURCE lane uniforms (uVec3A / uWs<k>Vec3A / scalar lanes) —
+     * which at this point already carry config edits, UNIFORM events and
+     * animation writes — converts via rotationMath, and writes the finished
+     * mat3 / sin-cos / mat4 into the fixed uMb3dRot* bank. Called from
+     * FractalEngine.syncFrame every frame; ≤14 specs × a few sin/cos = noise.
+     * The shader consumes ONLY the derived uniforms — raw angles never reach
+     * GLSL (and the old per-march-step mb3dRot() rebuild is gone).
+     */
+    public syncDerivedRotations(specs: readonly DerivedRotationSpec[] | undefined) {
+        if (!specs?.length) return;
+        for (const spec of specs) {
+            const target = this.uniforms[spec.uniform];
+            if (!target) continue;
+            switch (spec.convert) {
+                case 'mb3d-euler-deg-mat3': {
+                    const m = mb3dEulerToMat3(
+                        this.readUniformComponent(spec.sources[0]) * DEG_TO_RAD,
+                        this.readUniformComponent(spec.sources[1]) * DEG_TO_RAD,
+                        this.readUniformComponent(spec.sources[2]) * DEG_TO_RAD,
+                    );
+                    // rotationMath returns row-major; Matrix3.set takes row-major args.
+                    (target.value as THREE.Matrix3).set(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8]);
+                    break;
+                }
+                case 'deg-sincos': {
+                    const sc = sinCosDeg(this.readUniformComponent(spec.sources[0]));
+                    (target.value as THREE.Vector2).set(sc.sin, sc.cos);
+                    break;
+                }
+                case 'mb3d-6plane-deg-mat4': {
+                    const m = mb3dSixPlaneToMat4(spec.sources.map((s) => this.readUniformComponent(s) * DEG_TO_RAD));
+                    (target.value as THREE.Matrix4).set(
+                        m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7],
+                        m[8], m[9], m[10], m[11], m[12], m[13], m[14], m[15],
+                    );
+                    break;
+                }
+            }
+        }
     }
 }

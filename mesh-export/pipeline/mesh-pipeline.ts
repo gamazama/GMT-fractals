@@ -7,7 +7,6 @@
 //   runExportMesh(format, lastMesh, lastBaseName, vdbParams, ui) -> ExportResult
 
 import type { FractalDefinition } from '../../engine-gmt/types/fractal';
-import type { MeshInterlaceConfig } from '../../engine-gmt/engine/SDFShaderBuilder';
 import { classifyDEType } from '../../engine-gmt/engine/SDFShaderBuilder';
 import type { DCMeshResult } from '../algorithms/dc-core';
 import type {
@@ -114,7 +113,7 @@ export async function runMeshPipeline(
     gridMin,
     gridMax,
     boundsRange,
-    interlace,
+    weave,
     estimator,
     distanceMetric,
   } = params;
@@ -222,10 +221,10 @@ export async function runMeshPipeline(
       ui.setStatus('Pass 1: Coarse SDF (' + coarseN + '\u00B3)...');
       await _pipelineTick(ui);
 
-      const coarsePipeline = setupSDFPipeline(gl, Math.min(coarseN, 2048), definition, deSamples, ui.log, interlace, quality);
+      const coarsePipeline = setupSDFPipeline(gl, Math.min(coarseN, 2048), definition, deSamples, ui.log, weave, quality);
       const coarseMB = Math.round(coarseN * coarseN * coarseN * 4 / (1024 * 1024));
       ui.memAlloc('coarseGrid', 'Coarse SDF', coarseMB, ui.MEM_COLORS.coarseGrid);
-      let coarseGrid: Float32Array | null = await sampleDenseGrid(gl, coarsePipeline, coarseN, power, iters, formulaParams, gridMin, gridMax, 0, 10, 1, null, null, gpuCallbacks, interlace, effectiveSurfaceThreshold);
+      let coarseGrid: Float32Array | null = await sampleDenseGrid(gl, coarsePipeline, coarseN, power, iters, formulaParams, gridMin, gridMax, 0, 10, 1, null, null, gpuCallbacks, weave, effectiveSurfaceThreshold);
       tCoarse = performance.now();
 
       let cPos = 0;
@@ -277,8 +276,8 @@ export async function runMeshPipeline(
 
       gl.deleteTexture(coarsePipeline.tex);
       gl.deleteFramebuffer(coarsePipeline.fbo);
-      const finePipeline = setupSDFPipeline(gl, Math.min(N, 2048), definition, deSamples, ui.log, interlace, quality);
-      await sampleSparseGrid(gl, finePipeline, sparseGrid, power, iters, formulaParams, gridMin, gridMax, 10, 25, gpuCallbacks, interlace, effectiveSurfaceThreshold);
+      const finePipeline = setupSDFPipeline(gl, Math.min(N, 2048), definition, deSamples, ui.log, weave, quality);
+      await sampleSparseGrid(gl, finePipeline, sparseGrid, power, iters, formulaParams, gridMin, gridMax, 10, 25, gpuCallbacks, weave, effectiveSurfaceThreshold);
 
       t1 = performance.now();
       tFine = t1;
@@ -288,9 +287,9 @@ export async function runMeshPipeline(
       const gridMemMB = Math.round(N * N * N * 4 / (1024 * 1024));
       ui.memAlloc('sdfGrid', 'SDF Grid', gridMemMB, ui.MEM_COLORS.sdfGrid);
       ui.log('Dense SDF ' + N + '\u00B3 (' + gridMemMB + ' MB grid)', 'info');
-      const denseZRange = await coarsePrePass(gl, definition, formulaParams, N, power, iters, gridMin, gridMax, voxelSize, gpuCallbacks, interlace, quality, effectiveSurfaceThreshold);
-      const pipeline = setupSDFPipeline(gl, Math.min(N, 2048), definition, deSamples, ui.log, interlace, quality);
-      sdfGrid = await sampleDenseGrid(gl, pipeline, N, power, iters, formulaParams, gridMin, gridMax, 0, 35, zSubSlices, denseZRange.zSliceMin, denseZRange.zSliceMax, gpuCallbacks, interlace, effectiveSurfaceThreshold);
+      const denseZRange = await coarsePrePass(gl, definition, formulaParams, N, power, iters, gridMin, gridMax, voxelSize, gpuCallbacks, weave, quality, effectiveSurfaceThreshold);
+      const pipeline = setupSDFPipeline(gl, Math.min(N, 2048), definition, deSamples, ui.log, weave, quality);
+      sdfGrid = await sampleDenseGrid(gl, pipeline, N, power, iters, formulaParams, gridMin, gridMax, 0, 35, zSubSlices, denseZRange.zSliceMin, denseZRange.zSliceMax, gpuCallbacks, weave, effectiveSurfaceThreshold);
       t1 = performance.now();
 
       let nPos = 0;
@@ -410,7 +409,7 @@ export async function runMeshPipeline(
           const escResult = await sampleEscapeTest(gl, sparseGrid, definition, power, iters,
             formulaParams, gridMin, gridMax, gpuCallbacks, (pct: number) => {
               ui.setPhase('Phase 1b: Escape Test', pct);
-            }, interlace);
+            }, weave);
           let escapeFilled = 0;
           sparseGrid.blocks.forEach((block: Float32Array, key: number) => {
             const esc = escResult.escapeMap.get(key);
@@ -562,7 +561,7 @@ export async function runMeshPipeline(
       ui.setPhase('Phase 3: Newton Projection', 50);
       await _pipelineTick(ui);
 
-      gpuNewtonProject(gl, mesh, definition, formulaParams, power, iters, voxSize, newtonSteps, ui.log, interlace);
+      gpuNewtonProject(gl, mesh, definition, formulaParams, power, iters, voxSize, newtonSteps, ui.log, weave);
       tNewton = performance.now();
       newtonApplied = true;
       ui.setPhase('Phase 3: Newton Projection', 100);
@@ -633,7 +632,7 @@ export async function runMeshPipeline(
     }
 
     const colorJitterRadius = voxelSize * colorJitterMul;
-    mesh!.colors = await colorizeVerticesGPU(gl, mesh!, definition, formulaParams, power, iters, colorSamples, colorJitterRadius, gpuCallbacks, interlace);
+    mesh!.colors = await colorizeVerticesGPU(gl, mesh!, definition, formulaParams, power, iters, colorSamples, colorJitterRadius, gpuCallbacks, weave);
     t4 = performance.now();
     ui.setPhase('Phase 5: Vertex Coloring', 100);
     const colorMB = (mesh!.vertexCount * 3 / (1024 * 1024)).toFixed(1);
@@ -712,7 +711,7 @@ export interface VDBExportParams {
   gridMax: [number, number, number];
   deSamples: number;
   zSubSlices: number;
-  interlace?: MeshInterlaceConfig;
+  weave?: Record<string, any>;
   estimator?: number;
   distanceMetric?: number;
   surfaceThreshold?: number;
@@ -753,7 +752,7 @@ export async function runExportMesh(
       gridMax: vdbMax,
       deSamples: vdbDeSamples,
       zSubSlices: vdbZSubSlices,
-      interlace: vdbInterlace,
+      weave: vdbWeave,
       estimator: vdbEstimator,
       distanceMetric: vdbDistanceMetric,
       surfaceThreshold: vdbSurfaceThreshold,
@@ -779,7 +778,7 @@ export async function runExportMesh(
       memFree: ui.memFree,
     };
     const vdbResult = await generateVDB(gl, definition, formulaParams, vdbN, vdbPower, vdbIters,
-      vdbMin, vdbMax, 'solid', vdbDeSamples, vdbZSubSlices, vdbGpuCallbacks, vdbInterlace, vdbQuality, vdbSurfaceThreshold,
+      vdbMin, vdbMax, 'solid', vdbDeSamples, vdbZSubSlices, vdbGpuCallbacks, vdbWeave, vdbQuality, vdbSurfaceThreshold,
       vdbParams.vdbColor);
     try {
       const ext = gl.getExtension('WEBGL_lose_context');

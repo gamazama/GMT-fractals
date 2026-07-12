@@ -38,7 +38,14 @@ debug/bench-shader-baseline*.json
 debug/bench-shader-refs/Mandelbulb-*.png
 debug/bench-shader-refs/Apollonian-*.png
 debug/bench-shader-refs/AmazingBox-*.png
+# custom-<hash> refs are per-session verification shots for one-off bench configs
+debug/bench-shader-refs/custom-*.png
+# --compare outputs, regenerated every run against the base ref
+debug/bench-shader-refs/*-compare.png
+debug/bench-shader-refs/*-diff.png
 debug/shader-dump/
+# Volumetric-bench shader dumps (register-pressure investigation, see HANDOFF)
+debug/vol-shaders/
 
 # One-off scratch probes (leading-underscore convention = throwaway, never tracked).
 # Used heavily during MB3D/DE investigations (debug/_dsyne-*, _numde-*, _lbm-*, …).

@@ -17,7 +17,7 @@ import React from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { CollapsibleSection } from './CollapsibleSection';
 import Slider from './Slider';
-import SmallColorPicker from './SmallColorPicker';
+import EmbeddedColorPicker from './EmbeddedColorPicker';
 import type { CompositionOverlayType } from '../types';
 
 const OVERLAY_OPTIONS: { type: CompositionOverlayType; label: string }[] = [
@@ -78,11 +78,11 @@ export const CompositionOverlayControls: React.FC<CompositionOverlayControlsProp
                         min={0.5} max={3} step={0.5}
                         onChange={(v) => setSettings({ lineThickness: v })} />
 
-                    <div className="flex items-center gap-2">
-                        <label className="text-[9px] text-fg-dim w-16">Color</label>
-                        <SmallColorPicker
+                    <div>
+                        <label className="text-[9px] text-fg-dim">Color</label>
+                        <EmbeddedColorPicker
                             color={settings.color}
-                            onChange={(c: string) => setSettings({ color: c })}
+                            onColorChange={(c: string) => setSettings({ color: c })}
                         />
                     </div>
 

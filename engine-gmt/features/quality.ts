@@ -1,7 +1,7 @@
 
 import { FeatureDefinition } from '../engine/FeatureSystem';
 import { DEFAULT_HARD_CAP, REFINE_HARD_CAP } from '../../data/constants';
-import { registry } from '../engine/FractalRegistry';
+import { ESTIMATOR_OPTIONS } from '../engine/estimators';
 
 export interface QualityState {
     engineQuality: boolean; // Master Anchor
@@ -24,9 +24,7 @@ export interface QualityState {
     refineActive: boolean; // Surface-refinement instant runtime on/off (uRefineActive)
     refineSteps: number; // Surface-refinement bisection step count (runtime, live)
     numDEeps: number; // Numerical-DE magnitude calibration (MB3D dDEscale); probe is auto-derived
-    mb3dFaithful: boolean; // MB3D-faithful marcher compile gate (importer-set for MB3D imports)
-    mb3dStepDiv: number; // MB3D sZstepDiv → uMb3dStepDiv (faithful step divisor)
-    mb3dDEsub: number; // MB3D msDEsub → uMb3dDEsub (faithful step safety-subtraction fraction)
+    mb3dDEsub: number; // MB3D msDEsub → uMb3dDEsub (marcher step safety-subtraction fraction)
     physicsProbeMode: number; // 0=GPU Probe, 1=CPU Calculation, 2=Manual
     manualDistance: number; // Manual distance override when probe is disabled
 }
@@ -105,48 +103,9 @@ export const QualityFeature: FeatureDefinition = {
         estimator: {
             type: 'float', default: 0.0, label: 'Estimator', shortId: 'es',
             group: 'metric',
-            options: [
-                { label: 'Analytic (Log)', value: 0.0 },
-                { label: 'Linear (Unit 1.0)', value: 1.0 },
-                { label: 'Linear (Offset 2.0)', value: 4.0 },
-                { label: 'Pseudo (Raw)', value: 2.0 },
-                { label: 'Dampened', value: 3.0 },
-                {
-                    label: 'Cutting Plane',
-                    value: 5.0,
-                    // Gray out unless either the current formula OR the active interlace
-                    // secondary declares supportsCuttingPlane. Engine falls back to Linear
-                    // if a user somehow forces this on a non-CP pair, so this is purely UX.
-                    disabledIf: (state: any) => {
-                        const primary = registry.get(state?.formula);
-                        if (primary?.shader.supportsCuttingPlane) return false;
-                        const il = state?.interlace;
-                        if (il?.interlaceCompiled && il.interlaceFormula) {
-                            const sec = registry.get(il.interlaceFormula);
-                            if (sec?.shader.supportsCuttingPlane) return false;
-                        }
-                        return true;
-                    },
-                },
-                {
-                    // MB3D dIFS orbit-trap estimator — only valid on an imported dIFS
-                    // scene (declares shader.supportsDifs + a g_difsDE preamble). Engine
-                    // falls back to Linear on any other formula, so this is purely UX.
-                    label: 'dIFS (Orbit Trap)',
-                    value: 6.0,
-                    disabledIf: (state: any) => !registry.get(state?.formula)?.shader.supportsDifs,
-                },
-                {
-                    // Numerical (finite-difference) DE — the only estimator that needs NO
-                    // analytic derivative. It re-iterates the orbit at perturbed seed points
-                    // and estimates distance from the escape-radius gradient (port of MB3D
-                    // CalcDEnoADE). For ANY formula whose analytic dr is missing or wrong:
-                    // MB3D [CODE] hybrids, hard frag imports, hand-written formulas. ~4× the
-                    // DE cost (re-iterates 3 extra orbits), so it recompiles + runs slower.
-                    label: 'Numerical (Finite-Diff)',
-                    value: 7.0,
-                }
-            ],
+            // The estimator catalog (labels, values, capability greying, dispatch) has ONE
+            // owner: engine/estimators.ts. Add estimators there, not here.
+            options: ESTIMATOR_OPTIONS,
             description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix, Cutting Plane=Knighty fold-and-cut polyhedra, Numerical=finite-difference (no analytic DE needed; ~4× slower, fixes formulas that render as dust/noise).',
             helpId: 'quality.estimator',
             onUpdate: 'compile',
@@ -159,9 +118,9 @@ export const QualityFeature: FeatureDefinition = {
             helpId: 'quality.metric',
         },
         fudgeFactor: {
-            type: 'float', default: 1.0, label: 'Slice Optimization', shortId: 'ff', uniform: 'uFudgeFactor',
+            type: 'float', default: 1.0, label: 'Step Size', shortId: 'ff', uniform: 'uFudgeFactor',
             min: 0.01, max: 1.0, step: 0.01, group: 'kernel',
-            description: 'Multiplies step size. Lower = Higher quality but slower. Set to < 0.2 for deep zooms.',
+            description: 'March step multiplier (MB3D ZstepDiv). Lower = finer march, higher quality but slower. Set to < 0.2 for deep zooms. Also paces shadow / visibility rays.',
             helpId: 'quality.fudge',
             format: (v) => v.toFixed(2)
         },
@@ -261,33 +220,18 @@ export const QualityFeature: FeatureDefinition = {
             format: (v: number) => `${v.toFixed(0)} steps`,
         },
 
-        // MB3D-FAITHFUL MARCHER. Imported MB3D scenes render with MB3D's actual march
-        // convergence dynamics (overstep clamp + RSFmul damper + msDEsub safety-sub,
-        // CalcThread.pas:196-230) instead of GMT's plain sphere step — what stops an
-        // over-estimating fused DE from scattering thin surfaces into "dust". Compile-
-        // gated (mb3dFaithful, importer-set); when off the kernel is byte-identical.
-        // The two scalar uniforms carry the authored step params (no header parse beyond
-        // what the importer already reads). @see docs/adr/0088.
-        mb3dFaithful: {
-            type: 'boolean', default: false, label: 'MB3D-Faithful March', shortId: 'm3f', group: 'kernel',
-            description: "Use MB3D's own raymarch step (damped, Lipschitz-clamped, safety-subtracted) instead of GMT's plain sphere step — resolves overshoot 'dust' on hard hybrid / MB3D imports. Auto-enabled when you import a .m3p scene; toggle here to A/B against GMT's standard march. Recompiles in/out.",
-            helpId: 'quality.estimator',
-            onUpdate: 'compile',
-            noAccumReset: true,
-        },
-        // Runtime tuning knobs for the faithful marcher, shown in the MB3D-Faithful
-        // March section body (group 'mb3d_faithful') once it's compiled in. Live
-        // (no recompile) — lower DE Sub if a conservative scene under-steps to empty.
-        mb3dStepDiv: {
-            type: 'float', default: 0.5, label: 'Step Div', shortId: 'm3s', uniform: 'uMb3dStepDiv',
-            min: 0.01, max: 1.0, step: 0.01, group: 'mb3d_faithful',
-            description: "MB3D sZstepDiv — step divisor for the faithful marcher (smaller = finer/slower). Authored from the scene; tweak to taste.",
-            format: (v: number) => v.toFixed(2),
-        },
+        // MARCHER SAFETY-SUBTRACTION (MB3D msDEsub). The raymarch step is the
+        // MB3D-faithful step for EVERY scene (overstep clamp + RSFmul damper +
+        // this safety-sub, CalcThread.pas:196-230 — ADR-0092 retired the legacy
+        // plain sphere step). The step divisor is fudgeFactor above; this knob is
+        // the remaining scene-authored parameter. Runtime (no recompile); 0 for
+        // native scenes, set by the importer when the scene authored iOptions bit 2.
         mb3dDEsub: {
             type: 'float', default: 0.0, label: 'DE Sub', shortId: 'm3d', uniform: 'uMb3dDEsub',
-            min: 0.0, max: 0.9, step: 0.01, group: 'mb3d_faithful',
-            description: "MB3D msDEsub — per-step DE safety-subtraction (0 unless the scene set iOptions bit 2). Higher = more cautious near surfaces; too high can under-step a scene to empty — lower it if a scene renders blank.",
+            min: 0.0, max: 0.9, step: 0.01, group: 'kernel',
+            isAdvanced: true,
+            description: "MB3D msDEsub — per-step DE safety-subtraction (0 unless the imported scene set iOptions bit 2). Higher = more cautious near surfaces; too high can under-step a scene to empty — lower it if a scene renders blank.",
+            helpId: 'quality.fudge',
             format: (v: number) => v.toFixed(2),
         },
 
@@ -368,10 +312,7 @@ export const QualityFeature: FeatureDefinition = {
             builder.enableRefinement(true);
         }
 
-        // MB3D-faithful marcher. Compile-gated on the importer-set toggle; off (default)
-        // emits zero MB3D GLSL → byte-identical kernel. @see docs/adr/0088.
-        if (state?.mb3dFaithful) {
-            builder.enableMB3DFaithful(true);
-        }
+        // (The mb3dFaithful compile gate was retired by ADR-0092 — the MB3D-faithful
+        // step is the unconditional marcher; nothing to arm here.)
     }
 };

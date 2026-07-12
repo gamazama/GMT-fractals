@@ -9,7 +9,7 @@
 //  6. Coloring           — (core)
 //  7. Preambles          — addPreamble()
 //  8. Pre-DE Functions   — addFunction()
-//  9. DE (map/mapDist)   — setFormula(), setDistOverride(), addHybridFold()
+//  9. DE (map/mapDist)   — setFormula(), setDistOverride(), addPerIterInject()
 //                          + addPostMapCode() / addPostDistCode() [accumulative, injected inside map/mapDist]
 // 10. Post-DE Functions  — addPostDEFunction()         [can call map()/mapDist()]
 // 11. Material Eval      — addMaterialLogic()          [inside getSurfaceMaterial()]
@@ -27,6 +27,8 @@
 import { UNIFORMS } from '../shaders/chunks/uniforms';
 import { getMathGLSL, MESH_GLSL_UNIFORMS, GLSL_MATH_CONSTANTS, GLSL_SPHERE_FOLD, GLSL_BOX_FOLD, getSnoiseFunctions } from '../shaders/chunks/math';
 import { DE_MASTER } from '../shaders/chunks/de';
+import type { DEMasterOptions } from '../shaders/chunks/de';
+import type { KernelFeatures } from '../shaders/chunks/kernel';
 import { generateMaterialEval } from '../shaders/chunks/material_eval';
 import { getFragmentMainGLSL } from '../shaders/chunks/main';
 import { getRayGLSL } from '../shaders/chunks/ray';
@@ -60,9 +62,7 @@ export class ShaderBuilder {
     private postProcessLogic: string[] = [];   // Position 16: Inside applyPostProcessing(), after glow
     private shadingReflectionCode: string[] = []; // Position 15: Injected into calculateShading() reflection block
     private needsShading: boolean = false;        // Set by requestShading(); triggers getShadingGLSL() in buildFragment()
-    private hybridInit: string[] = [];
-    private hybridPreLoop: string[] = [];
-    private hybridInLoop: string[] = [];
+    private perIterInject: string[] = [];      // Position 9: top of each DE iteration, before the formula (burning mix, geom-trap accum)
 
     // 3. Distance Estimator Configuration
     private formulaLoopBody: string = "";
@@ -88,11 +88,8 @@ export class ShaderBuilder {
     // map()/mapDist() then estimate distance from the escape-radius gradient instead of
     // an analytic dr (for formulas with no/wrong analytic DE). @see docs/adr/0085
     private numericDE: boolean = false;
-    // MB3D-faithful marcher. Armed by the quality feature's inject() when an imported
-    // MB3D scene sets quality.mb3dFaithful. The Main trace kernel then advances with
-    // MB3D's overstep-clamp + RSFmul damper + msDEsub safety-subtraction instead of
-    // the plain sphere step; off (default) it is byte-identical. @see docs/adr/0088
-    private mb3dFaithful: boolean = false;
+    // (The mb3dFaithful gate was retired by ADR-0092 — the MB3D-faithful step
+    // is now THE marcher, emitted unconditionally by getTraceGLSL.)
     // Depth output is always enabled for MRT - removes shader recompilation issue
     
     // 5. Variant Specific
@@ -133,15 +130,31 @@ export class ShaderBuilder {
         this.numericDE = enabled;
     }
 
-    /** Arms the MB3D-faithful marcher for the Main trace kernel. Called from the quality
-     *  feature's inject() when an imported scene sets quality.mb3dFaithful. The Physics
-     *  probe + path-tracer lean trace keep the standard march. @see docs/adr/0088 */
-    public enableMB3DFaithful(enabled: boolean) {
-        this.mb3dFaithful = enabled;
-    }
-
     public setMaxLights(n: number) {
         this.maxLights = n;
+    }
+
+    /** The armed kernel feature gates as one object — the single seam threaded into
+     *  the kernel chunk builders (DE_MASTER reads numericDE; getTraceGLSL reads
+     *  refine). @see shaders/chunks/kernel.ts */
+    private kernelFeatures(): KernelFeatures {
+        return { refine: this.enableRefine, numericDE: this.numericDE };
+    }
+
+    /** The builder's accumulated injection state as DE_MASTER's options bag. */
+    private deMasterOptions(kernel: KernelFeatures): DEMasterOptions {
+        return {
+            loopInit: this.formulaInit,
+            perIterInject: this.perIterInject.join('\n'),
+            distOverrideInit: this.distOverrideInit,
+            distOverrideInLoopFull: this.distOverrideInLoopFull,
+            distOverrideInLoopGeom: this.distOverrideInLoopGeom,
+            distOverridePostFull: this.distOverridePostFull,
+            distOverridePostGeom: this.distOverridePostGeom,
+            postMapCode: this.postMapCode.join('\n'),
+            postDistCode: this.postDistCode.join('\n'),
+            kernel,
+        };
     }
     
 
@@ -224,12 +237,11 @@ export class ShaderBuilder {
         this.distOverridePostGeom = opts.postGeom ?? '';
     }
 
-    /** Position 9: Hybrid fold injection into the DE loop.
-     *  Used for: multi-formula hybrid fractals with pre/in-loop transforms. */
-    addHybridFold(init: string, preLoop: string, inLoop: string) {
-        if(init) this.hybridInit.push(init);
-        if(preLoop) this.hybridPreLoop.push(preLoop);
-        if(inLoop) this.hybridInLoop.push(inLoop);
+    /** Position 9: code injected at the TOP of each DE iteration loop, before the
+     *  main formula step. Used by geometry (burning-mode abs mix) and coloring
+     *  (geometric orbit-trap accumulation). */
+    addPerIterInject(code: string) {
+        if (code) this.perIterInject.push(code);
     }
 
     /** Position 11: Code injected inside getSurfaceMaterial() for material property overrides.
@@ -254,7 +266,8 @@ export class ShaderBuilder {
     }
 
     /** Position 16: Code injected inside applyPostProcessing(). All post-processing is feature-injected.
-     *  Variables in scope: col (modifiable), d, glow, volumetric, fogScatter.
+     *  Variables in scope: col (modifiable), d, rd (primary ray direction — per-direction fog via
+     *  fogRadiance(dir), ADR-0097), glow, volumetric, fogScatter.
      *  Injection order follows feature registration: Atmosphere (fog+glow) → Volumetric (scatter) → others.
      *  Used for: fog, glow, volumetric scatter, custom atmosphere effects. */
     addPostProcessLogic(code: string) {
@@ -278,15 +291,18 @@ export class ShaderBuilder {
         this.shadingReflectionCode.push(code);
     }
 
-    /** Position 17: Compositing code injected inside renderPixel(), after the integrator runs.
-     *  Variables in scope: ro, rd, col, d, hit, stochasticSeed.
+    /** Position 17: Compositing code injected inside renderPixel(), after the integrator runs
+     *  and BEFORE applyPostProcessing — composited surfaces must fix up d / volumetric so the
+     *  post-process fog sees the depth of what is actually visible.
+     *  Variables in scope: ro, rd, col, d, hit, volumetric, stochasticSeed.
      *  Used for: light sphere compositing, overlay effects. */
     addCompositeLogic(code: string) {
         this.compositeLogic.push(code);
     }
 
     /** Position 12: Code injected inside sampleMiss() to override the environment color.
-     *  Variables in scope: ro, rd, roughness, env (modifiable vec3).
+     *  Variables in scope: ro, rd, roughness, env (modifiable vec3 — already scaled by the
+     *  caller's envScale; overlays mix in unscaled emitter colour on top).
      *  Used for: light sphere rendering on miss, portals, custom skyboxes. */
     addMissLogic(code: string) {
         this.missLogic.push(code);
@@ -298,8 +314,20 @@ export class ShaderBuilder {
     private buildMissHandler(): string {
         const injectedCode = this.missLogic.join('\n');
         return `
-vec3 sampleMiss(vec3 ro, vec3 rd, float roughness) {
-    vec3 env = GetEnvMap(rd, roughness);
+// Coverage [0..1] of the last sampleMiss() ray by an overlay that already fogged
+// ITSELF by its own distance (light spheres). The flat far-plane env fog that
+// callers apply (applyEnvFog in sampleMissEnv) reads this to SPARE that fraction —
+// otherwise a near emitter seen in a reflection is wiped to pure fog colour at
+// full fog intensity (it isn't at the far plane). Callers reset before the call;
+// injections that self-fog set it.
+float g_missSelfFogCover = 0.0;
+
+// envScale: the caller's env-strength factor, applied to the SKY SAMPLE ONLY —
+// injected overlays (light spheres) mix in unscaled, physical emitter colour on
+// top, matching the primary-view composite (a light's brightness must not track
+// the env/dome strength slider).
+vec3 sampleMiss(vec3 ro, vec3 rd, float roughness, float envScale) {
+    vec3 env = GetEnvMap(rd, roughness) * envScale;
 
     // --- FEATURE INJECTION: MISS RAY OVERRIDE ---
     ${injectedCode}
@@ -353,7 +381,7 @@ vec3 sampleMiss(vec3 ro, vec3 rd, float roughness) {
      *   `ShaderFactory.generateMeshSDFLibrary`.
      */
     buildMeshSDFLibrary(): string {
-        // Build feature-injected uniforms (interlace params etc.) from addUniform() calls
+        // Build feature-injected uniforms (mesh weave params etc.) from addUniform() calls
         let injectedUniforms = '';
         this.uniforms.forEach((info, name) => {
             if (info.arraySize) {
@@ -363,21 +391,9 @@ vec3 sampleMiss(vec3 ro, vec3 rd, float roughness) {
             }
         });
 
-        const de = DE_MASTER(
-            this.formulaLoopBody,
-            this.formulaInit,
-            this.formulaDist,
-            this.hybridInit.join('\n'),
-            this.hybridPreLoop.join('\n'),
-            this.hybridInLoop.join('\n'),
-            this.distOverrideInit,
-            this.distOverrideInLoopFull,
-            this.distOverrideInLoopGeom,
-            this.distOverridePostFull,
-            this.distOverridePostGeom,
-            this.postMapCode.join('\n'),
-            this.postDistCode.join('\n')
-        );
+        // Mesh SDF library: no kernel gates (numeric DE / refine / MB3D march are
+        // viewport-trace concerns; the mesh path keeps the analytic kernel).
+        const de = DE_MASTER(this.formulaLoopBody, this.formulaDist, this.deMasterOptions({}));
 
         // Base mesh helpers — sphereFold/boxFold/getLength/rotation stubs/snoise.
         // Does NOT include SHARED_TRANSFORMS_GLSL — that arrives via geometry.inject()
@@ -405,7 +421,7 @@ ${MESH_GLSL_UNIFORMS}
 
 // Stub uniforms required by DE_MASTER generated code (map + mapDist reference these;
 // only mapDist is called in the mesh SDF path but both functions must compile).
-// Any uniform referenced by features' hybridInLoop/hybridPreLoop injections also goes here.
+// Any uniform referenced by features' perIterInject injections also goes here.
 uniform vec3  uSceneOffsetLow;
 uniform vec3  uSceneOffsetHigh;
 uniform vec3  uCameraPosition;
@@ -417,7 +433,7 @@ uniform float uTextureModeU;
 uniform float uTextureModeV;
 uniform float uBurningEnabled;
 
-// Feature-injected uniforms (e.g. interlace params from Interlace.inject())
+// Feature-injected uniforms (e.g. weave bank params from the weave feature's Mesh inject)
 ${injectedUniforms}
 
 // Precision offset stub — mesh SDF operates in local space (no camera offset needed)
@@ -429,7 +445,7 @@ ${meshBaseHelpers}
 // Preambles from feature inject() calls (e.g. SHARED_TRANSFORMS_GLSL from Geometry)
 ${this.preambles.join('\n')}
 
-// Pre-DE functions (primary formula + secondary interlace formula functions)
+// Pre-DE functions (formula functions, incl. fused weave slot fns)
 ${this.preDEFunctions.join('\n')}
 
 // Distance estimator — generates map(vec3 p) -> vec4 and mapDist(vec3 p) -> float
@@ -462,22 +478,7 @@ float formulaDE(vec3 pos) {
         const math = getMathGLSL(this.useRotation);
 
         // Core DE
-        const de = DE_MASTER(
-            this.formulaLoopBody,
-            this.formulaInit,
-            this.formulaDist,
-            this.hybridInit.join('\n'),
-            this.hybridPreLoop.join('\n'),
-            this.hybridInLoop.join('\n'),
-            this.distOverrideInit,
-            this.distOverrideInLoopFull,
-            this.distOverrideInLoopGeom,
-            this.distOverridePostFull,
-            this.distOverridePostGeom,
-            this.postMapCode.join('\n'),
-            this.postDistCode.join('\n'),
-            this.numericDE
-        );
+        const de = DE_MASTER(this.formulaLoopBody, this.formulaDist, this.deMasterOptions(this.kernelFeatures()));
 
         // --- VARIANT: PHYSICS (Distance Measurement) ---
         if (this.variant === 'Physics') {
@@ -559,7 +560,7 @@ void main() {
 
         // --- VARIANT: HISTOGRAM (Data Analysis) ---
         if (this.variant === 'Histogram') {
-            const traceGLSL = getTraceGLSL(false, false, this.precisionMode, 0, "", "");
+            const traceGLSL = getTraceGLSL({ precisionMode: this.precisionMode });
             const rayGLSL = getRayGLSL('Direct'); // Use direct ray generation for sampling
 
             // Update: Use actual mapping value for accuracy
@@ -617,9 +618,15 @@ void main() {
         const missHandler = this.buildMissHandler();
         const isPathTracing = this.renderMode === 'PathTracing';
 
-        const traceGLSL = getTraceGLSL(this.isLite, true, this.precisionMode, 0, this.volumeBody.join('\n'), this.volumeFinalize.join('\n'), "traceScene", this.enableRefine, this.mb3dFaithful);
+        const traceGLSL = getTraceGLSL({
+            isMobile: this.isLite, enableGlow: true, precisionMode: this.precisionMode,
+            volumeBodyCode: this.volumeBody.join('\n'), volumeFinalizeCode: this.volumeFinalize.join('\n'),
+            kernel: this.kernelFeatures(),
+        });
+        // The lean PT trace deliberately takes NO kernel gates (no refine). It still
+        // marches with the MB3D-faithful step — that's the unconditional marcher (ADR-0092).
         const traceLeanGLSL = isPathTracing
-            ? getTraceGLSL(this.isLite, false, this.precisionMode, 0, "", "", "traceSceneLean")
+            ? getTraceGLSL({ isMobile: this.isLite, precisionMode: this.precisionMode, functionName: 'traceSceneLean' })
             : "";
         const mainGLSL = getFragmentMainGLSL(isPathTracing, this.maxLights, this.compositeLogic.join('\n'));
         const rayGLSL = getRayGLSL(this.renderMode);

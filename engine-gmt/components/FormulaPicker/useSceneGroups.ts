@@ -177,7 +177,7 @@ export function useSceneGroups(opts: UseSceneGroupsOptions = {}): SceneGroup[] {
 
         const mySubmissions: SceneGroup = {
             id: 'my-submissions',
-            name: 'My Submissions',
+            name: 'My Fractals',
             isLoading: submissionsLoading,
             emptyMessage: profile?.id
                 ? (submissionsError

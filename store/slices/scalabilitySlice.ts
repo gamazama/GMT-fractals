@@ -37,7 +37,10 @@ function applyTierOverrides(subsystems: Record<string, number>, get: any) {
     const updatesByFeature: Record<string, Record<string, any>> = {};
 
     for (const sub of getShaderCompilerSubsystems()) {
-        const tierIndex = subsystems[sub.id] ?? 0;
+        // Clamp to the top tier: tier lists can shrink across versions (e.g. the
+        // atmosphere 'Volumetric' tier was removed 2026-07-10) — a stored higher
+        // index should degrade to the best remaining tier, not apply nothing.
+        const tierIndex = Math.min(subsystems[sub.id] ?? 0, sub.tiers.length - 1);
         const tier = sub.tiers[tierIndex];
         if (!tier) continue;
 

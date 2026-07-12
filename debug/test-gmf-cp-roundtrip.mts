@@ -10,11 +10,11 @@ if (!def) throw new Error('not found');
 
 const gmf = generateGMF(def, def.defaultPreset || {});
 const reparsed = parseGMF(gmf);
-console.log('1) roundtrip preserves supportsCuttingPlane:', reparsed.shader.supportsCuttingPlane === true);
+console.log('1) roundtrip preserves estimator:cutting-plane:', reparsed.shader.capabilities?.has('estimator:cutting-plane') === true);
 
 const stripped = gmf.replace(/,?\s*"shaderMeta":\s*\{[^}]*\}/, '');
 const legacy = parseGMF(stripped);
-console.log('2) auto-detect rescues legacy file:', legacy.shader.supportsCuttingPlane === true);
+console.log('2) auto-detect rescues legacy file:', legacy.shader.capabilities?.has('estimator:cutting-plane') === true);
 
 const src = buildMeshPreviewShader({ definition: reparsed, deType: 'auto', estimator: 0 });
 const declAt = src.indexOf('float cp_dmin;');

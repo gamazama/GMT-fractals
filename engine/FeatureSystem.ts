@@ -24,6 +24,7 @@ import { ShaderBuilder, RenderVariant } from './ShaderBuilder';
 import type { ShaderConfig } from './ShaderConfig';
 import * as THREE from 'three';
 import { UniformDefinition } from './UniformSchema';
+import type { RotationDescriptor } from './rotationDescriptor';
 
 export type ParamType = 'float' | 'int' | 'vec2' | 'vec3' | 'vec4' | 'color' | 'boolean' | 'gradient' | 'image' | 'complex';
 export type ScaleType = 'linear' | 'log' | 'square' | 'root' | 'pi';
@@ -52,7 +53,8 @@ export interface ParamOption {
      *  it returns true, AutoFeaturePanel renders this option as `<option disabled>`
      *  in the dropdown — selectable in the list but visibly grayed out and
      *  rejected by the browser. Used to gate options on formula capabilities
-     *  (e.g. estimator=Cutting Plane requires shader.supportsCuttingPlane). */
+     *  (e.g. estimator=Cutting Plane requires the formula to declare the
+     *  'estimator:cutting-plane' capability token). */
     disabledIf?: (state: any) => boolean;
 }
 
@@ -140,6 +142,11 @@ export interface ParamConfig {
     mode?: string;
     /** Whether vector components can be linked */
     linkable?: boolean;
+    /** Explicit rotation semantics (kind / units / Euler order) for rotation-
+     *  valued params. Absent → derived from `mode` via resolveRotation()
+     *  (legacy modes store radians). Drives the vector widgets' unit handling
+     *  and the canvas rotation gizmo. @see engine/rotationDescriptor.ts */
+    rotation?: RotationDescriptor;
     
     // Links to other parameters (e.g., an image param linking to its color profile param)
     linkedParams?: {
@@ -148,6 +155,17 @@ export interface ParamConfig {
 
     // Reference to another parameter whose value should be used as this param's max
     dynamicMaxRef?: string;
+
+    /** Render this float param and the named partner param as ONE dual-thumb
+     *  RangeSlider row (this param = the range MIN, the partner = the MAX).
+     *  The partner's own row is suppressed; the row's visibility follows THIS
+     *  param's parentId/condition. Both params keep their identity — animation,
+     *  undo, presets and uniforms are untouched (the row writes each key
+     *  through the normal setter). Float params only. */
+    rangePairWith?: string;
+    /** Header label for the combined RangeSlider row (defaults to this param's
+     *  label). The individual param labels still name the two thumbs/inputs. */
+    rangeLabel?: string;
 
     /** Dynamic config overrides computed from slice state. Returned fields merge over static config.
      *  Use for params whose label, range, mode, etc. change based on other state (e.g. interlace

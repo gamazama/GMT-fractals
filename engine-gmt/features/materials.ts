@@ -13,8 +13,8 @@ export interface MaterialState {
     rimExponent: number;
     rimColor: THREE.Color;
     envStrength: number;
-    envBackgroundStrength: number; // Renamed UI label to BG Visibility
-    envSource: number;
+    envBackgroundStrength: number; // UI label 'Sky Visibility'
+    envSource: number; // 0=Sky Image, 1=Gradient, 2=Solid (ADR-0098)
     envMapData: string | null;
     envMapColorSpace: number; // 0=sRGB, 1=Linear, 2=ACES
     useEnvMap: boolean;
@@ -65,7 +65,7 @@ export const MaterialFeature: FeatureDefinition = {
         env: {
             label: 'Environment',
             description: 'Image-based lighting and sky source for indirect light.',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
         emission: {
             label: 'Self-Illumination',
@@ -158,7 +158,31 @@ export const MaterialFeature: FeatureDefinition = {
             helpId: 'mat.rim',
         },
 
-        // --- ENVIRONMENT ---
+        // --- ENVIRONMENT (the 'Background & Sky' Scene section) ---
+        // ONE sky, three consumers: the backdrop (Sky Visibility), surface
+        // lighting (Environment Light), and the fog colour (atmosphere Sky
+        // Tint). Definition order = render order: the two consumer sliders
+        // first, then the shared sky definition (Source/Upload/Rotation),
+        // which is deliberately NOT gated on either consumer — any of the
+        // three may need it.
+        envBackgroundStrength: {
+            // NOT gated on envStrength: the backdrop draw (main.ts bgCol) reads
+            // uEnvBackgroundStrength independently of the env LIGHT strength, so
+            // this slider works even with the environment light at 0 — hiding it
+            // there orphaned a live control (owner report 2026-07-10).
+            // Semantics (ADR-0098): a plain BRIGHTNESS dial on the visible sky.
+            // 0 = black backdrop — the old "fall back to the flat Background
+            // Color" rule is gone; a flat backdrop is the Solid sky source.
+            type: 'float',
+            default: 0.0,
+            label: 'Sky Visibility',
+            shortId: 'eb',
+            uniform: 'uEnvBackgroundStrength',
+            min: 0.0, max: 2.0, step: 0.01,
+            group: 'env',
+            description: 'Brightness of the sky behind the fractal — independent of the environment light strength. 0 = black backdrop.',
+            helpId: 'scene.background',
+        },
         envStrength: {
             type: 'float',
             default: 0.0,
@@ -167,21 +191,8 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEnvStrengthSlider',
             min: 0.0, max: 5.0, step: 0.01,
             group: 'env',
-            description: 'Brightness of the sky-based reflection on the surface.',
-            helpId: 'mat.env',
-        },
-        envBackgroundStrength: {
-            type: 'float',
-            default: 0.0,
-            label: 'BG Visibility',
-            shortId: 'eb',
-            uniform: 'uEnvBackgroundStrength',
-            min: 0.0, max: 2.0, step: 0.01,
-            group: 'env',
-            parentId: 'envStrength',
-            condition: { gt: 0.0, param: 'envStrength' },
-            description: 'How visible the sky is behind the fractal (0 = black background).',
-            helpId: 'mat.env',
+            description: 'How strongly the sky lights the scene (dome light on surfaces and reflections).',
+            helpId: 'scene.background',
         },
         envSource: {
             type: 'float',
@@ -190,14 +201,13 @@ export const MaterialFeature: FeatureDefinition = {
             shortId: 'eo',
             uniform: 'uEnvSource',
             group: 'env',
-            parentId: 'envStrength',
-            condition: { gt: 0.0, param: 'envStrength' },
             options: [
-                { label: 'Sky Image', value: 0.0 },
-                { label: 'Gradient', value: 1.0 }
+                { label: 'Solid', value: 2.0 },
+                { label: 'Gradient', value: 1.0 },
+                { label: 'Sky Image', value: 0.0 }
             ],
-            description: 'Whether the environment uses a panorama image or a procedural gradient.',
-            helpId: 'mat.env',
+            description: 'What the sky is — a solid colour, a procedural gradient, or a panorama image. Shared by the backdrop, the environment light, reflections, and the fog Sky Tint.',
+            helpId: 'scene.background',
         },
         envMapData: {
             type: 'image',
@@ -207,6 +217,11 @@ export const MaterialFeature: FeatureDefinition = {
             group: 'env',
             parentId: 'envSource',
             condition: { eq: 0.0 },
+            // Hidden: the 'sky-library' customUI component owns the whole
+            // loader row for this param ([Load Image | Skies | profile chip] +
+            // the sample/user sky shelf) — the generic image widget would
+            // duplicate it. State/serialisation unchanged.
+            hidden: true,
             uniform: 'uEnvMapTexture',
             textureSettings: {
                 mapping: THREE.EquirectangularReflectionMapping,
@@ -217,7 +232,7 @@ export const MaterialFeature: FeatureDefinition = {
                 colorSpace: 'envMapColorSpace'
             },
             description: 'Equirectangular HDR or LDR image used as the sky.',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
         // Linked Color Space Param (Hidden, controlled by Image UI)
         envMapColorSpace: {
@@ -248,12 +263,9 @@ export const MaterialFeature: FeatureDefinition = {
             min: 0.0, max: 6.28, step: 0.01,
             group: 'env',
             parentId: 'envSource',
-            condition: [
-                { param: 'envStrength', gt: 0.0 },
-                { param: 'envSource', eq: 0.0 }
-            ],
+            condition: { eq: 0.0 },
             description: 'Spins the sky image around the vertical axis.',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
         envGradientStops: {
             type: 'gradient',
@@ -269,7 +281,7 @@ export const MaterialFeature: FeatureDefinition = {
             parentId: 'envSource',
             condition: { eq: 1.0 },
             description: 'Vertical sky gradient: ground colour to zenith.',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
 
         // --- EMISSION ---
@@ -334,6 +346,21 @@ export const MaterialFeature: FeatureDefinition = {
             helpId: 'mat.emission',
         }
     },
+    // Sky loader + library — owns the envMapData row (the param is hidden):
+    // [Load Image | Skies ▾ | profile chip] with bundled samples + IndexedDB
+    // user skies behind the toggle. App-registered ('sky-library',
+    // app-gmt/registerFeatures.ts); apps that don't register it (fluid-toy)
+    // silently skip the entry — but then have no env upload UI, so register
+    // it if the env section is surfaced there.
+    customUI: [
+        {
+            componentId: 'sky-library',
+            group: 'env',
+            parentId: 'envSource',
+            condition: { eq: 0.0 }, // Sky Image source
+            placement: 'top',       // loader row ABOVE Rotation (owner)
+        },
+    ],
     inject: (builder, _config, variant) => {
         if (variant === 'Mesh') return; // Mesh SDF library doesn't use materials or env map
         builder.addHeader(MAIN_HEADER);

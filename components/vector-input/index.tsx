@@ -13,6 +13,32 @@ import { useInteractionGesture } from '../../engine/hooks/useInteractionDrag';
 import { INTERACTION_SOURCES } from '../../engine-gmt/interaction/interactionSources';
 import type { Track, Keyframe } from '../../types/animation';
 
+// Shared keyframe deletes for the multi-track vector inputs. Delete-key /
+// delete-track act on ALL axis tracks at once, mirroring the "set" click.
+// One snapshot is taken only if something is actually removed.
+type Sequence = { tracks: Record<string, Track> };
+
+const deleteVecKeysAtFrame = (trackKeys: (string | undefined)[] | undefined, sequence: Sequence, frame: number) => {
+    if (!trackKeys) return;
+    const store = useAnimationStore.getState();
+    let snapped = false;
+    trackKeys.forEach((tid) => {
+        if (!tid) return;
+        const t = sequence.tracks[tid] as Track | undefined;
+        const kf = t?.keyframes.find((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
+        if (kf) {
+            if (!snapped) { store.snapshot(); snapped = true; }
+            store.removeKeyframe(tid, kf.id);
+        }
+    });
+};
+
+const deleteVecTracks = (trackKeys: (string | undefined)[] | undefined, sequence: Sequence) => {
+    if (!trackKeys) return;
+    const ids = trackKeys.filter((t): t is string => !!t && !!sequence.tracks[t]);
+    if (ids.length) useAnimationStore.getState().removeTracks(ids);
+};
+
 // --- CONNECTED VECTOR2 INPUT ---
 
 interface Vector2InputProps extends Omit<ConnectedVectorInputProps, 'value' | 'onChange'> {
@@ -120,31 +146,21 @@ export const Vector2Input: React.FC<Vector2InputProps> = ({
     const headerRight = (!props.disabled) ? (
         <KeyframeButton
             status={getStatus()}
+            label={props.label}
             onClick={() => {
                 const frame = Math.round(useAnimationStore.getState().currentFrame);
                 const axes = ['x', 'y'] as const;
-                const currentStatus = getStatus();
+                if (getStatus() === 'keyed') return; // already keyed to current values
                 snapshot();
-
-                // Mirror useTrackAnimation: only remove when exactly 'keyed', otherwise add/overwrite
-                if (currentStatus === 'keyed') {
-                    trackKeys?.forEach((tid) => {
-                        if (!tid) return;
-                        const t = sequence.tracks[tid] as Track | undefined;
-                        if (t) {
-                            const kf = t.keyframes.find((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
-                            if (kf) useAnimationStore.getState().removeKeyframe(tid, kf.id);
-                        }
-                    });
-                } else {
-                    trackKeys?.forEach((tid, i) => {
-                        if (!tid) return;
-                        if (!sequence.tracks[tid]) addTrack(tid, trackLabels ? trackLabels[i] : tid);
-                        addKeyframe(tid, frame, lastValueRef.current[axes[i]]);
-                    });
-                    if (trackKeys?.[0]) FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, trackKeys[0]);
-                }
+                trackKeys?.forEach((tid, i) => {
+                    if (!tid) return;
+                    if (!sequence.tracks[tid]) addTrack(tid, trackLabels ? trackLabels[i] : tid);
+                    addKeyframe(tid, frame, lastValueRef.current[axes[i]]);
+                });
+                if (trackKeys?.[0]) FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, trackKeys[0]);
             }}
+            onDeleteKey={() => deleteVecKeysAtFrame(trackKeys, sequence, Math.round(useAnimationStore.getState().currentFrame))}
+            onDeleteTrack={() => deleteVecTracks(trackKeys, sequence)}
         />
     ) : undefined;
 
@@ -173,6 +189,8 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
     interactionMode = 'param',
     trackKeys,
     trackLabels,
+    onGizmoToggle,
+    gizmoActive,
     ...props
 }) => {
     const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
@@ -265,36 +283,44 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
         return 'none';
     };
 
-    // Construct Header Right with Keyframe Button
+    // Construct Header Right: optional canvas-gizmo toggle + Keyframe Button
     const headerRight = (!props.disabled) ? (
-        <KeyframeButton
-            status={getStatus()}
-            onClick={() => {
-                const frame = Math.round(useAnimationStore.getState().currentFrame);
-                const axes = ['x', 'y', 'z'] as const;
-                const currentStatus = getStatus();
-                snapshot();
-
-                // Mirror useTrackAnimation: only remove when exactly 'keyed', otherwise add/overwrite
-                if (currentStatus === 'keyed') {
-                    trackKeys?.forEach((tid) => {
-                        if (!tid) return;
-                        const t = sequence.tracks[tid] as Track | undefined;
-                        if (t) {
-                            const kf = t.keyframes.find((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
-                            if (kf) useAnimationStore.getState().removeKeyframe(tid, kf.id);
-                        }
-                    });
-                } else {
+        <div className="flex items-center gap-1">
+            {onGizmoToggle && (
+                <button
+                    title={gizmoActive ? 'Hide canvas rotation gizmo' : 'Show rotation gizmo on canvas'}
+                    onClick={onGizmoToggle}
+                    className={`w-4 h-4 flex items-center justify-center rounded transition-colors ${
+                        gizmoActive
+                            ? 'text-accent-300 bg-accent-500/20'
+                            : 'text-fg-faint hover:text-fg-secondary hover:bg-line/10'
+                    }`}
+                >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 12a9 9 0 1 1-3-6.7" />
+                        <path d="M21 3v6h-6" />
+                    </svg>
+                </button>
+            )}
+            <KeyframeButton
+                status={getStatus()}
+                label={props.label}
+                onClick={() => {
+                    const frame = Math.round(useAnimationStore.getState().currentFrame);
+                    const axes = ['x', 'y', 'z'] as const;
+                    if (getStatus() === 'keyed') return; // already keyed to current values
+                    snapshot();
                     trackKeys?.forEach((tid, i) => {
                         if (!tid) return;
                         if (!sequence.tracks[tid]) addTrack(tid, trackLabels ? trackLabels[i] : tid);
                         addKeyframe(tid, frame, lastValueRef.current[axes[i]]);
                     });
                     if (trackKeys?.[0]) FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, trackKeys[0]);
-                }
-            }}
-        />
+                }}
+                onDeleteKey={() => deleteVecKeysAtFrame(trackKeys, sequence, Math.round(useAnimationStore.getState().currentFrame))}
+                onDeleteTrack={() => deleteVecTracks(trackKeys, sequence)}
+            />
+        </div>
     ) : undefined;
 
     return (
@@ -415,30 +441,21 @@ export const Vector4Input: React.FC<Vector4InputProps> = ({
     const headerRight = (!props.disabled) ? (
         <KeyframeButton
             status={getStatus()}
+            label={props.label}
             onClick={() => {
                 const frame = Math.round(useAnimationStore.getState().currentFrame);
                 const axes = ['x', 'y', 'z', 'w'] as const;
-                const currentStatus = getStatus();
+                if (getStatus() === 'keyed') return; // already keyed to current values
                 snapshot();
-
-                if (currentStatus === 'keyed') {
-                    trackKeys?.forEach((tid) => {
-                        if (!tid) return;
-                        const t = sequence.tracks[tid] as Track | undefined;
-                        if (t) {
-                            const kf = t.keyframes.find((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
-                            if (kf) useAnimationStore.getState().removeKeyframe(tid, kf.id);
-                        }
-                    });
-                } else {
-                    trackKeys?.forEach((tid, i) => {
-                        if (!tid) return;
-                        if (!sequence.tracks[tid]) addTrack(tid, trackLabels ? trackLabels[i] : tid);
-                        addKeyframe(tid, frame, lastValueRef.current[axes[i]]);
-                    });
-                    if (trackKeys?.[0]) FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, trackKeys[0]);
-                }
+                trackKeys?.forEach((tid, i) => {
+                    if (!tid) return;
+                    if (!sequence.tracks[tid]) addTrack(tid, trackLabels ? trackLabels[i] : tid);
+                    addKeyframe(tid, frame, lastValueRef.current[axes[i]]);
+                });
+                if (trackKeys?.[0]) FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, trackKeys[0]);
             }}
+            onDeleteKey={() => deleteVecKeysAtFrame(trackKeys, sequence, Math.round(useAnimationStore.getState().currentFrame))}
+            onDeleteTrack={() => deleteVecTracks(trackKeys, sequence)}
         />
     ) : undefined;
 

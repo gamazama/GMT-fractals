@@ -43,9 +43,9 @@ export const GmtPanels: PanelManifest = [
 
     // Formula — manifest-driven. Each formula-related capability gets its
     // own section in the user's mental order. Geometry is one DDFS feature
-    // exposed as multiple panel surfaces (julia / local rotation / burning /
-    // hybrid box) so each user-visible concept has a dedicated section
-    // header without splitting the underlying feature module.
+    // exposed as multiple panel surfaces (julia / local rotation / burning)
+    // so each user-visible concept has a dedicated section header without
+    // splitting the underlying feature module.
     {
         id: 'Formula',
         dock: 'right',
@@ -69,22 +69,11 @@ export const GmtPanels: PanelManifest = [
                 runtimeGroup: 'julia',
                 label: 'Julia / Offset',
                 helpId: 'julia.mode',
-                showIf: (s: any) => {
-                    if (registry.get(s.formula)?.juliaType !== 'none') return true;
-                    const il = s.interlace;
-                    if (il?.interlaceCompiled && registry.get(il.interlaceFormula)?.juliaType !== 'none') return true;
-                    return false;
-                },
+                showIf: (s: any) => registry.get(s.formula)?.juliaType !== 'none',
                 labelFn: (s: any) => {
                     const primary = registry.get(s.formula);
                     if (primary?.juliaType === 'julia') return 'Julia';
                     if (primary?.juliaType === 'offset') return 'Offset';
-                    const il = s.interlace;
-                    if (il?.interlaceCompiled) {
-                        const sec = registry.get(il.interlaceFormula);
-                        if (sec?.juliaType === 'julia') return 'Julia';
-                        if (sec?.juliaType === 'offset') return 'Offset';
-                    }
                     return undefined;
                 },
             },
@@ -124,23 +113,16 @@ export const GmtPanels: PanelManifest = [
                 label: 'Burning Mode',
             },
 
-            // Hybrid Box — uses geometry's feature panelConfig (hybridCompiled
-            // compile gate, hybridMode runtime toggle, fold-type compile
-            // settings, hybrid group runtime params). Explicit label so the
-            // section reads "Hybrid Box" rather than falling back to the
-            // feature's name ("Geometry").
-            // Section-level reject: self-contained formulas skip hybrid
-            // wiring (geometry/index.ts:474). Modular composes fine.
-            {
-                type: 'compilable',
-                id: 'geometry',
-                label: 'Hybrid Box',
-                helpId: 'hybrid.mode',
-                requires: { rejects: { primary: ['shape:self-contained'] } },
-            },
-
-            // Formula Interlace — uses interlace's feature panelConfig.
-            { type: 'compilable', id: 'interlace' },
+            // Weave — author an N-formula weave across the iteration loop:
+            // slot structure, schedule (Sequence / Rhythm), Hybrid Box presets,
+            // budget meter, Build. This ONE section replaces both the retired
+            // Hybrid Box fast-path compilable section AND the "Edit weave…"
+            // affordance (ADR-0089 P4.7) — the Formula panel is now the single
+            // weave authoring surface. Per-formula param sliders render in
+            // formula-params above (bank params route feature:'weave', grouped
+            // per formula). Old interlace + Hybrid Box scenes migrate to weaves
+            // at load.
+            { type: 'widget', id: 'weave-section' },
 
             // Distance Estimator + Metric + Escape Radius — one block. Estimator
             // (compile-flagged) + Metric render as the dropdown row; runtimeGroup
@@ -185,20 +167,63 @@ export const GmtPanels: PanelManifest = [
             { type: 'section', label: 'Camera & Navigation', showIf: 'advancedMode' },
             { type: 'feature', id: 'navigation', groupFilter: 'controls', showIf: 'advancedMode' },
 
-            { type: 'separator' },
+            { type: 'separator', showIf: 'advancedMode' },
 
-            // --- Atmosphere (fog) ---
+            // --- Background & Sky ---
+            // ONE sky, three consumers (ADR-0097 layout, owner-approved):
+            // Background Color (the no-sky backdrop + fog base), then the sky's
+            // two consumer sliders (Sky Visibility = see it, Environment Light
+            // = be lit by it), then the shared sky definition (Source/Upload/
+            // Rotation — un-gated; any consumer may need it). Fog follows as
+            // its own section with Sky Tint reaching over to the same sky.
+            // Both render via the SAME CollapsibleSection the Effects roll-up
+            // uses (reuse the component, don't imitate its styling — owner).
+            {
+                type: 'collapsible',
+                label: 'Background & Sky',
+                defaultOpen: true,
+                items: [
+                    // SOURCE first — what the sky is. Its own sub-controls nest
+                    // beneath it via parentId (Upload/Rotation for Image, Sky
+                    // Gradient for Gradient)...
+                    { type: 'feature', id: 'materials', whitelistParams: ['envSource'] },
+                    // ...and the Solid colour picker follows as a sibling row.
+                    // The param lives on atmosphere NESTED under Fog Tint (its
+                    // Gradient/Image home) — liftChildrenOf surfaces it as a
+                    // root here, relabelled. One visible home at a time
+                    // (ADR-0098 + 0097 update #4).
+                    {
+                        type: 'feature', id: 'atmosphere',
+                        whitelistParams: ['fogColor'],
+                        liftChildrenOf: 'fogTint',
+                        labelOverrides: { fogColor: 'Sky Color' },
+                        showIf: (s: any) => (s.materials?.envSource ?? 1) > 1.5,
+                    },
+                    // Then the sky's two consumers: see it / be lit by it.
+                    { type: 'feature', id: 'materials', whitelistParams: ['envBackgroundStrength', 'envStrength'] },
+                ],
+            },
+
+            // --- Fog ---
+            // NOT a collapsible: Fog Intensity is itself a parent-slider card
+            // whose children (Range / Sky Tint / Density) expand when it's on —
+            // wrapping that in another section would be a redundant layer (owner).
+            // (Fog Color needs no item here: it nests under Fog Tint inside the
+            // card, revealed while the tint is above 0 — ADR-0097 update #4.)
             { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
+
+            // Soft in-feature divider: Fog and Volumetric Scatter belong to the
+            // same atmosphere run, so a full card end-cap between them would
+            // over-separate — the fade variant just breathes.
+            { type: 'separator', variant: 'fade' },
 
             // --- Volumetric scatter (compile-toggle UI) ---
             // Renders via <CompilableFeatureSection> reading the
-            // feature's panelConfig — same shape hybrid box and
-            // interlace use. Plain `type: 'feature'` showed only the
-            // runtime sliders without the compile toggle, leaving the
-            // user dependent on the Engine panel to compile it on.
+            // feature's panelConfig — same shape as Burning Mode. Plain
+            // `type: 'feature'` showed only the runtime sliders without
+            // the compile toggle, leaving the user dependent on the
+            // Engine panel to compile it on.
             { type: 'compilable', id: 'volumetric' },
-
-            { type: 'separator' },
 
             // --- Water plane (only when enabled) ---
             { type: 'section', label: 'Water Plane', showIf: 'waterPlane.waterEnabled' },
@@ -278,8 +303,9 @@ export const GmtPanels: PanelManifest = [
         ],
     },
 
-    // Shader — material surface + environment + reflections + glow +
-    // emission + ambient occlusion. Mirrors GMT's RenderPanel layout
+    // Shader — material surface + reflections + glow + emission + ambient
+    // occlusion (environment moved to the Scene panel beside Fog, ADR-0097).
+    // Mirrors GMT's RenderPanel layout
     // exactly: a flat sequence of group-filtered features rather than
     // the whole feature stack. The features listed here are *only*
     // used for the groups they expose to this panel — other panels
@@ -291,7 +317,7 @@ export const GmtPanels: PanelManifest = [
         helpId: 'panel.render',
         items: [
             { type: 'feature', id: 'materials',   groupFilter: 'surface'   },
-            { type: 'feature', id: 'materials',   groupFilter: 'env'       },
+            // (Environment group moved to the Scene panel, beside Fog — ADR-0097 ties them.)
             { type: 'feature', id: 'reflections', groupFilter: 'shading'   },
             { type: 'feature', id: 'atmosphere',  groupFilter: 'glow'      },
             { type: 'feature', id: 'materials',   groupFilter: 'emission'  },
@@ -425,27 +451,14 @@ export const GmtPanels: PanelManifest = [
             // Raymarching: max steps
             { type: 'feature', id: 'quality', whitelistParams: ['maxSteps'] },
 
-            // Step tuning
+            // Step tuning. The march step is the MB3D-faithful step for every scene
+            // (ADR-0092 — the legacy plain sphere step and its separate MB3D-Faithful
+            // March compilable section are retired). fudgeFactor is THE step divisor;
+            // mb3dDEsub is the scene-authored safety-subtraction (advanced, usually 0).
             {
                 type: 'feature',
                 id: 'quality',
-                whitelistParams: ['fudgeFactor', 'stepJitter'],
-            },
-
-            // MB3D-Faithful March — compile-only CompilableFeatureSection (no runtime
-            // toggle; the marcher swaps the whole step so it must recompile to switch,
-            // like Burning Mode's compile-only mode). Header toggle buffers the change
-            // → Compile button flips mb3dFaithful + rebuilds in place. When compiled,
-            // the body shows the Step Div / DE Sub tuning sliders (group 'mb3d_faithful').
-            // Auto-on for .m3p imports; toggle here to A/B against GMT's standard march.
-            // When on, Slice Optimization above goes inert (the step uses Step Div). @see docs/adr/0088.
-            {
-                type: 'compilable',
-                id: 'quality',
-                compileParam: 'mb3dFaithful',
-                runtimeGroup: 'mb3d_faithful',
-                label: 'MB3D-Faithful March',
-                helpId: 'quality.estimator',
+                whitelistParams: ['fudgeFactor', 'stepJitter', 'mb3dDEsub'],
             },
 
             { type: 'separator' },

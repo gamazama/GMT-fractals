@@ -60,7 +60,7 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
         const rot = CameraUtils.getRotationFromEngine();
         return new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
     };
-    const { sequence, currentFrame, isPlaying, addTrack, addKeyframe, removeKeyframe, snapshot, isRecording } = useAnimationStore();
+    const { sequence, currentFrame, isPlaying, addTrack, addKeyframe, removeKeyframe, removeTracks, snapshot, isRecording } = useAnimationStore();
 
     // --- MATH HELPERS ---
 
@@ -191,27 +191,33 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
         return isDirty ? 'dirty' : 'partial';
     })();
 
-    const handleKeyToggle = () => {
+    const handleSetKey = () => {
+        if (keyStatus === 'keyed') return;
         snapshot();
-        if (keyStatus === 'keyed') {
-            trackKeys.forEach(tid => {
-                const t = sequence.tracks[tid];
-                const k = t?.keyframes.find(k => Math.abs(k.frame - currentFrame) < 0.1);
-                if (k) removeKeyframe(tid, k.id);
-            });
-        } else {
-            trackKeys.forEach((tid, i) => {
-                if (!sequence.tracks[tid]) addTrack(tid, i===0 ? `Light ${index+1} Pitch` : `Light ${index+1} Yaw`);
-                addKeyframe(tid, currentFrame, i===0 ? safeValue.x : safeValue.y);
-            });
-        }
+        trackKeys.forEach((tid, i) => {
+            if (!sequence.tracks[tid]) addTrack(tid, i===0 ? `Light ${index+1} Pitch` : `Light ${index+1} Yaw`);
+            addKeyframe(tid, currentFrame, i===0 ? safeValue.x : safeValue.y);
+        });
+    };
+
+    const handleDeleteKey = () => {
+        let snapped = false;
+        trackKeys.forEach(tid => {
+            const k = sequence.tracks[tid]?.keyframes.find(k => Math.abs(k.frame - currentFrame) < 0.1);
+            if (k) { if (!snapped) { snapshot(); snapped = true; } removeKeyframe(tid, k.id); }
+        });
+    };
+
+    const handleDeleteTrack = () => {
+        const ids = trackKeys.filter(tid => sequence.tracks[tid]);
+        if (ids.length) removeTracks(ids);
     };
 
     return (
         <div className="flex flex-col items-center mb-2">
             <div className="w-full flex justify-between items-center mb-1 px-1">
                 <label className="text-[9px] font-bold text-fg-dim">Heliotrope</label>
-                <KeyframeButton status={keyStatus} onClick={handleKeyToggle} />
+                <KeyframeButton status={keyStatus} label={`Light ${index + 1} Heliotrope`} onClick={handleSetKey} onDeleteKey={handleDeleteKey} onDeleteTrack={handleDeleteTrack} />
             </div>
             
             <div 

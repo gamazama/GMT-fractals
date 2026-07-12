@@ -75,7 +75,7 @@ import { installGallery } from '../engine-gmt/gallery';
 import { useGalleryStore } from '../engine-gmt/gallery/galleryStore';
 import { installAuth } from '../engine-gmt/auth';
 import { feedbackMenuItem } from '../engine-gmt/feedback';
-import { AboutGmtBody } from './HelpExtras';
+import { AboutGmtBody, whatsNewMenuItem, isWhatsNewUnseen } from './HelpExtras';
 import { gmtSupportConfig } from '../engine-gmt/support';
 import { installTutorial, registerLessons } from '../engine/plugins/Tutorial';
 import { GMT_LESSONS } from './tutorial/lessons';
@@ -86,8 +86,12 @@ import { installHud } from '../engine/plugins/Hud';
 import { applyPanelManifest } from '../engine/PanelManifest';
 import { GmtPanels } from '../engine-gmt/panels';
 import { loadGMFScene, saveGMFScene } from '../engine-gmt/utils/FormulaFormat';
+import { pickAndLoadM3pFile } from '../engine-gmt/utils/mb3d/importM3pFile';
+import { pickAndLoadFragFile } from '../engine-gmt/features/fragmentarium_import/pickFragFile';
 import { registry as gmtRegistry } from '../engine-gmt/engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import { getSharedSceneById } from '../engine-gmt/gallery/sharedScene';
+import { showToast } from '../engine/store/toastStore';
 import { consumeStashedScene } from '../engine-gmt/auth/oauthSceneStash';
 import type { Preset } from '../types';
 
@@ -293,6 +297,28 @@ menu.registerItem('file', {
     onSelect: () => { useEngineStore.getState().openNewScene(); },
 });
 
+// Import section — external formula/scene files. The catalog browsers for
+// these live in the FormulaPicker (MB3D scenes + Fragmentarium/DEC formulas);
+// these menu items load an arbitrary file from disk.
+menu.registerItem('file', { id: 'import-section', type: 'section', label: 'Import', order: -9.5 });
+// Import a Mandelbulb3D `.m3p` scene file (the bundled sample scenes live in the
+// FormulaPicker's "Mandelbulb3D" catalog group).
+menu.registerItem('file', {
+    id: 'import-mb3d',
+    type: 'button',
+    label: 'Mandelbulb3D scene (.m3p)…',
+    order: -9,
+    onSelect: () => pickAndLoadM3pFile(),
+});
+// Load a Fragmentarium `.frag` (or .glsl) file into the Formula Workshop.
+menu.registerItem('file', {
+    id: 'import-frag',
+    type: 'button',
+    label: 'Fragmentarium formula (.frag)…',
+    order: -8.9,
+    onSelect: () => pickAndLoadFragFile(),
+});
+
 // Mobile users get Share Link only via this menu entry; desktop also
 // has the topbar icon (registered separately in registerGmtTopbar).
 menu.registerItem('file', { id: 'share-sep', type: 'separator' });
@@ -344,13 +370,16 @@ registerLessons(GMT_LESSONS);
 
 installHelp({
     tutorials: { label: 'Tutorials' },
-    extraItems: [feedbackMenuItem()],
+    extraItems: [feedbackMenuItem(), whatsNewMenuItem()],
     support: gmtSupportConfig(),
     about: {
         label: 'About GMT',
         body: AboutGmtBody,
     },
 });
+// Light the ? menu with a notification dot (and highlight the What's New item)
+// until the user opens the changelog for this release. See HelpExtras.
+menu.setBadge('help', isWhatsNewUnseen);
 installHud();
 
 // GMT camera animation binders — registers split-precision sceneOffset
@@ -533,22 +562,55 @@ shortcuts.register({
     handler: () => { (useEngineStore.getState() as any).redoCamera?.(); },
 });
 
-// Hydrate store from either a shared URL (#s=...) or the current
-// formula's defaultPreset. Mirrors GMT's useAppStartup — populates
-// every DDFS slice + scene fields via the presetFieldRegistry.
-// Without this, getShaderConfigFromState reads undefined slices and
-// the worker boots a half-formed shader.
-let bootPreset: any = null;
-const hash = typeof window !== 'undefined' ? window.location.hash : '';
-if (hash.startsWith('#s=')) {
-    try {
-        bootPreset = parseShareString(hash.slice(3));
-        if (bootPreset) console.info('[app-gmt] Loaded scene from share URL');
-    } catch (err) {
-        console.error('[app-gmt] Share URL parse failed:', err);
+// Resolve the store's boot preset from (in priority order) a #s= share hash, a
+// ?s=<id> backend share link, an OAuth-round-trip stash, or the default formula.
+// Mirrors GMT's useAppStartup — populates every DDFS slice so
+// getShaderConfigFromState builds a complete BOOT config.
+//
+// CRITICAL: this must finish BEFORE the worker boots. The BOOT config
+// (getShaderConfigFromState) and the pre-boot env-texture stash
+// (WorkerProxy.pendingTextures) both read the store at boot time, so a scene
+// hydrated AFTER boot boots the wrong shader (raster instead of Path Tracing) and
+// drops its env map — needing a manual PT toggle + sky-visibility bump to activate.
+// #s= is synchronous so it always wins that race; ?s= is a network fetch, so the
+// caller AWAITS this and defers the React mount until the store is hydrated.
+async function resolveBootPreset(): Promise<any> {
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    if (hash.startsWith('#s=')) {
+        try {
+            const p = parseShareString(hash.slice(3));
+            if (p) { console.info('[app-gmt] Loaded scene from share URL'); return p; }
+        } catch (err) {
+            console.error('[app-gmt] Share URL parse failed:', err);
+        }
     }
-}
-if (!bootPreset) {
+
+    // ?s=<id> — backend-stored shared scene (share-scene / shared_scenes). Fetch +
+    // hydrate here, BEFORE boot, so the worker boots directly into it. GMF carries
+    // the full shader, so this opens ANY scene: weaves, MB3D imports, Workshop
+    // formulas. The id is wiped from the URL so a refresh lands on a clean viewport.
+    const shareId = new URLSearchParams(window.location.search).get('s');
+    if (shareId) {
+        const cleaned = new URL(window.location.href);
+        cleaned.searchParams.delete('s');
+        window.history.replaceState({}, '', cleaned.toString());
+        try {
+            const shared = await getSharedSceneById(shareId);
+            if (shared?.gmf_text) {
+                const { def, preset } = loadGMFScene(shared.gmf_text);
+                if (def && !gmtRegistry.get(def.id)) {
+                    gmtRegistry.register(def);
+                    FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+                }
+                return preset;
+            }
+            showToast('That share link is invalid or has been removed.', 'warning', 5000);
+        } catch (err) {
+            console.error('[app-gmt] shared-scene load failed', err);
+            showToast('Could not open that shared scene.', 'error', 5000);
+        }
+    }
+
     // OAuth round-trips reload the page and lose the in-progress scene.
     // signInWithGoogle stashes it just before redirecting; restore it here.
     // consumeStashedScene self-expires + clears, so a normal reload won't
@@ -561,26 +623,17 @@ if (!bootPreset) {
                 gmtRegistry.register(def);
                 FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
             }
-            bootPreset = preset;
             console.info('[app-gmt] Restored scene stashed before OAuth redirect');
+            return preset;
         } catch (err) {
             console.error('[app-gmt] Failed to restore OAuth scene stash:', err);
         }
     }
-}
-if (!bootPreset) {
+
     const mandelbulbDef = registry.get('Mandelbulb');
-    bootPreset = mandelbulbDef?.defaultPreset
+    return mandelbulbDef?.defaultPreset
         ? JSON.parse(JSON.stringify(mandelbulbDef.defaultPreset))
         : null;
-}
-if (bootPreset) {
-    // loadScene fires CAMERA_TELEPORT — installGmtCameraSlice's listener
-    // stashes it on proxy.pendingTeleport for GmtRendererTickDriver to
-    // replay once the worker is boot-ready.
-    useEngineStore.getState().loadScene({ preset: bootPreset });
-} else {
-    console.warn('[app-gmt] No boot preset available — worker may boot un-hydrated');
 }
 
 applyPanelManifest([
@@ -632,8 +685,23 @@ try {
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Could not find root element to mount to');
 
-ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-        <AppGmt />
-    </React.StrictMode>,
-);
+// Resolve the boot preset (awaiting a ?s= backend fetch when present), hydrate the
+// store, THEN mount React — so the worker's first BOOT config carries the scene's
+// renderMode + the pre-boot texture stash captures its env map (see
+// resolveBootPreset). For everything except ?s= this resolves synchronously, so
+// the mount is not delayed; a shared-link open pays a brief pre-loader blank in
+// exchange for a correct first compile instead of a raster/no-sky boot.
+void resolveBootPreset().then((bootPreset) => {
+    if (bootPreset) {
+        // loadScene fires CAMERA_TELEPORT — installGmtCameraSlice's listener stashes
+        // it on proxy.pendingTeleport for GmtRendererTickDriver to replay at boot.
+        useEngineStore.getState().loadScene({ preset: bootPreset });
+    } else {
+        console.warn('[app-gmt] No boot preset available — worker may boot un-hydrated');
+    }
+    ReactDOM.createRoot(rootElement).render(
+        <React.StrictMode>
+            <AppGmt />
+        </React.StrictMode>,
+    );
+});

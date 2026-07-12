@@ -10,8 +10,9 @@
 import { createElement } from 'react';
 import { registerSetting } from './settingsRegistry';
 import { useAutosaveSettings } from '../engine/store/autosaveStore';
-import { useColorScheme, COLOR_SCHEMES, type ColorScheme } from '../engine/store/colorSchemeStore';
-import { AccentHueControl, SecondaryHueControl } from '../components/HueControl';
+import { useColorScheme } from '../engine/store/colorSchemeStore';
+import { AccentHueControl, SecondaryHueControl, SurfaceHueControl } from '../components/HueControl';
+import { ThemePresetPicker, BrightnessControl } from '../components/ThemeControls';
 
 let registered = false;
 
@@ -19,17 +20,65 @@ export const registerCoreSettings = (): void => {
     if (registered) return;
     registered = true;
 
+    // The theme is composed from axes (brightness + tint + contrast + hues), applied
+    // across all GMT apps; fractal output and gradients are unaffected. The presets are
+    // quick-picks that set the axes. Order groups: presets → brightness → toggles → hues.
     registerSetting({
-        id: 'color-scheme',
+        id: 'theme-presets',
         tab: 'Interface',
         section: 'Colour',
-        label: 'Color scheme',
-        description: 'Recolor the entire interface. Applies across all GMT apps; fractal output and gradients are unaffected.',
-        control: { kind: 'enum', options: COLOR_SCHEMES.map((s) => ({ value: s.value, label: s.label })) },
-        get: () => useColorScheme.getState().scheme,
-        set: (v) => useColorScheme.getState().setScheme(v as ColorScheme),
-        subscribe: (cb) => useColorScheme.subscribe(cb),
+        label: 'Preset',
+        control: { kind: 'custom', render: () => createElement(ThemePresetPicker) },
         order: 0,
+    });
+
+    registerSetting({
+        id: 'brightness',
+        tab: 'Interface',
+        section: 'Colour',
+        label: 'Brightness',
+        description: 'Overall interface lightness, from near-black to near-white. Text inverts automatically for legibility.',
+        control: { kind: 'custom', render: () => createElement(BrightnessControl) },
+        order: 1,
+    });
+
+    registerSetting({
+        id: 'surface-tint',
+        tab: 'Interface',
+        section: 'Colour',
+        label: 'Surface tint',
+        description: 'Give panel headers and sunken inputs a subtle colour tint.',
+        control: { kind: 'boolean' },
+        get: () => useColorScheme.getState().surfaceTint,
+        set: (v) => useColorScheme.getState().setSurfaceTint(!!v),
+        subscribe: (cb) => useColorScheme.subscribe(cb),
+        order: 2,
+    });
+
+    registerSetting({
+        id: 'surface-hue',
+        tab: 'Interface',
+        section: 'Colour',
+        label: 'Tint hue',
+        description: 'Hue of the surface tint.',
+        control: { kind: 'custom', render: () => createElement(SurfaceHueControl) },
+        // Only meaningful when the surface tint is on.
+        when: () => useColorScheme.getState().surfaceTint,
+        subscribe: (cb) => useColorScheme.subscribe(cb),
+        order: 3,
+    });
+
+    registerSetting({
+        id: 'high-contrast',
+        tab: 'Interface',
+        section: 'Colour',
+        label: 'High contrast',
+        description: 'Push surfaces to the extremes with a higher-contrast text ladder.',
+        control: { kind: 'boolean' },
+        get: () => useColorScheme.getState().highContrast,
+        set: (v) => useColorScheme.getState().setHighContrast(!!v),
+        subscribe: (cb) => useColorScheme.subscribe(cb),
+        order: 4,
     });
 
     registerSetting({
@@ -37,9 +86,9 @@ export const registerCoreSettings = (): void => {
         tab: 'Interface',
         section: 'Colour',
         label: 'Accent colour',
-        description: 'Hue of the primary interface accent. Applies on top of any colour scheme.',
+        description: 'Hue of the primary interface accent.',
         control: { kind: 'custom', render: () => createElement(AccentHueControl) },
-        order: 1,
+        order: 5,
     });
 
     registerSetting({
@@ -49,7 +98,7 @@ export const registerCoreSettings = (): void => {
         label: 'Secondary accent',
         description: 'Hue of the secondary accent (audio, modulation, Path Tracer).',
         control: { kind: 'custom', render: () => createElement(SecondaryHueControl) },
-        order: 2,
+        order: 6,
     });
 
     registerSetting({

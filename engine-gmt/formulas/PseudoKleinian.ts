@@ -98,7 +98,7 @@ export const PseudoKleinian: FractalDefinition = {
             lighting: { shadows: true, shadowSoftness: 178.25, shadowIntensity: 1, shadowBias: 0.000016 },
             quality: { fudgeFactor: 0.48, detail: 7.7, pixelThreshold: 0.3, maxSteps: 384, estimator: 4.0, distanceMetric: 2 },
             optics: { camFov: 37, dofStrength: 0.00147, dofFocus: 1.235 },
-            reflections: { enabled: true, reflectionMode: 1, bounces: 3, steps: 128, mixStrength: 1, roughnessThreshold: 0.5 }
+            reflections: { enabled: true, reflectionMode: 1, steps: 128, mixStrength: 1, roughnessThreshold: 0.5 }
         },
         cameraPos: { x: 0, y: 0, z: 0 },
         cameraRot: { x: -0.23563338320385452, y: 0.05927570030462831, z: -0.43792255558493787, w: 0.8655559689490069 },

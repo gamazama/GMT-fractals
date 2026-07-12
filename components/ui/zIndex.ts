@@ -101,8 +101,6 @@ const BASE_TIERS = {
 const TIER_TABLE: Record<string, TierDef> = { ...BASE_TIERS };
 
 export type Tier = keyof typeof BASE_TIERS;
-/** @deprecated historical alias for {@link Tier}. */
-export type ZTier = Tier;
 
 /** Resolve a tier to its base value, or `undefined` for an unknown tier. */
 const tierDef = (tier: string): TierDef | undefined => TIER_TABLE[tier];
