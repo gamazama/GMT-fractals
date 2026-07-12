@@ -123,25 +123,38 @@ interface SupportItemProps {
     onAfterOpen: () => void;
 }
 
-const SupportItem: React.FC<SupportItemProps> = ({ label, modalTitle, intro, body, accent, hoverReveal, onAfterOpen }) => (
-    // The wrapper is the `.group` so an optional app-supplied hover reveal
-    // (e.g. a photo that slides up) animates when the menu item is hovered,
-    // while the heart/label still get their group-hover accent.
-    <div className="group">
-        {hoverReveal && <div className="px-2 pt-1">{renderBody(hoverReveal)}</div>}
-        <button
-            onClick={(e) => {
-                e.stopPropagation();
-                _setSupportModal({ modalTitle, intro, body, accent });
-                onAfterOpen();
-            }}
-            className={`w-full flex items-center justify-between p-2 rounded transition-colors ${ACCENT_HOVER[accent]}`}
-        >
-            <span className="text-xs font-bold">{label}</span>
-            <HeartIcon />
-        </button>
-    </div>
-);
+const SupportItem: React.FC<SupportItemProps> = ({ label, modalTitle, intro, body, accent, hoverReveal, onAfterOpen }) => {
+    // Both the label button and the hover-revealed photo open the modal, so
+    // clicking the photo does the same thing as clicking the label.
+    const openModal = (e: React.MouseEvent<HTMLElement>) => {
+        e.stopPropagation();
+        _setSupportModal({ modalTitle, intro, body, accent });
+        onAfterOpen();
+    };
+    return (
+        // The wrapper is the `.group` so an optional app-supplied hover reveal
+        // (e.g. a photo that slides up) animates when the menu item is hovered,
+        // while the heart/label still get their group-hover accent.
+        <div className="group">
+            {hoverReveal && (
+                // Own click target — the revealed photo opens the modal too.
+                // The photo img sets pointer-events-none, so the click lands
+                // on this button.
+                <button type="button" onClick={openModal} className="block w-full px-2 pt-1 cursor-pointer">
+                    {renderBody(hoverReveal)}
+                </button>
+            )}
+            <button
+                type="button"
+                onClick={openModal}
+                className={`w-full flex items-center justify-between p-2 rounded transition-colors ${ACCENT_HOVER[accent]}`}
+            >
+                <span className="text-xs font-bold">{label}</span>
+                <HeartIcon />
+            </button>
+        </div>
+    );
+};
 
 const SupportModalHost: React.FC = () => {
     const m = React.useSyncExternalStore(_supportSubscribe, _supportSnapshot, _supportSnapshot);
@@ -373,6 +386,17 @@ export const installHelp = (options: InstallHelpOptions = {}) => {
         menu.registerItem('help', { id: 'sep-app', type: 'separator' });
     }
 
+    // About registers before Support so the Support entry (with its donate
+    // photo reveal) sits at the very bottom of the Help menu.
+    if (options.about) {
+        const cfg = options.about;
+        menu.registerItem('help', {
+            id: 'about',
+            type: 'custom',
+            component: () => <AboutItem label={cfg.label ?? 'About'} body={cfg.body} />,
+        });
+    }
+
     if (options.support) {
         const cfg = options.support;
         const accent = cfg.accent ?? 'pink';
@@ -390,15 +414,6 @@ export const installHelp = (options: InstallHelpOptions = {}) => {
                     onAfterOpen={close}
                 />
             ),
-        });
-    }
-
-    if (options.about) {
-        const cfg = options.about;
-        menu.registerItem('help', {
-            id: 'about',
-            type: 'custom',
-            component: () => <AboutItem label={cfg.label ?? 'About'} body={cfg.body} />,
         });
     }
 
