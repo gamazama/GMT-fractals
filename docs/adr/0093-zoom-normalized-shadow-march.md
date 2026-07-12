@@ -3,6 +3,9 @@
 **Status:** Accepted — 2026-07-10. Branch `feat/weave-core`. Complements ADR-0092 (which unified
 the *step dynamics* of all marches; this ADR unifies their *units*).
 
+> **Update 2026-07-12 (path move; decision unchanged):** the MB3D Pascal source checkout cited
+> below moved from `h:/tmp/mb3d-probe/` to `H:/GMT/stuff/mb3d-probe/`.
+
 ## Context
 
 The primary trace is fully zoom-aware: its hit threshold `finalEps` is cone-traced

@@ -2,7 +2,7 @@
 /**
  * MB3D decompiler drift guard.
  *
- * The canonical decompiler lives OUTSIDE the repo at `H:/tmp/mb3d-decomp/` (it carries a
+ * The canonical decompiler lives OUTSIDE the repo at `H:/GMT/stuff/mb3d-decomp/` (it carries a
  * `node_modules/capstone-wasm` the repo copy lacks, so edits + library regeneration happen
  * there). The repo snapshot at `plans/mb3d/decompiler/{decompile,xcheck}.mjs` is what reproduces
  * the committed `engine-gmt/utils/mb3d/decompiled-formulas.ts`. Twice now the canonical copy was
@@ -21,7 +21,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoDir = dirname(fileURLToPath(import.meta.url));
-const canonicalDir = process.env.MB3D_DECOMP_CANONICAL || 'H:/tmp/mb3d-decomp';
+const canonicalDir = process.env.MB3D_DECOMP_CANONICAL || 'H:/GMT/stuff/mb3d-decomp';
 // All four decompiler scripts that, when edited at the canonical copy, must be copied back:
 // the two emitters (decompile/xcheck) AND the two cross-check harnesses (generate-library
 // regenerates decompiled-formulas.ts; corpus-check is the 279/0 gate). U1/U6 touch all four.

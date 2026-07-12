@@ -243,7 +243,7 @@ carrying the `bFirstIt`/VaryScale pattern, and only when a scene's `Scale vary â
 - Every certified Menger/Sierpinski/box scene uses a DE formula with no vary
   option â†’ unaffected.
 
-**Decompiler source note.** The canonical decompiler is `/h/tmp/mb3d-decomp/`. The
+**Decompiler source note.** The canonical decompiler is `H:/GMT/stuff/mb3d-decomp/`. The
 repo snapshot at `plans/mb3d/decompiler/` had drifted: commit `906280a`'s `shr ah`
 fix was never copied back. This round re-synced `decompile.mjs` + `xcheck.mjs` from
 `/h/tmp` (so the committed snapshot reproduces the committed `decompiled-formulas.ts`).
