@@ -33,39 +33,40 @@
             .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
             .mobile-scroll::-webkit-scrollbar-track { background: transparent; }
         </style>
-        <!-- Apply the saved UI color scheme before first paint (gmt.colorScheme
-             is shared across all GMT apps; absent/"dark" = the :root default). -->
-        <script>try{var t=localStorage.getItem('gmt.colorScheme');if(t&&t!=='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-      <script type="module" crossorigin src="./assets/three-DQWx7qFd.js"></script>
-      <script type="module" crossorigin src="./assets/three-fiber-GKfjny8F.js"></script>
-      <script type="module" crossorigin src="./assets/three-drei-D2x72drd.js"></script>
+        <!-- Paint the saved UI theme before first frame. colorSchemeStore caches its
+             computed CSS vars to gmt.themeVars (shared across all GMT apps); absent = the
+             :root Dark default. -->
+        <script>try{var s=localStorage.getItem('gmt.themeVars');if(s)document.documentElement.style.cssText+=s;}catch(e){}</script>
+      <script type="module" crossorigin src="./assets/three-t6Th-fjv.js"></script>
+      <script type="module" crossorigin src="./assets/three-fiber-BpjhY67l.js"></script>
+      <script type="module" crossorigin src="./assets/three-drei-7h0TGCLY.js"></script>
       <script type="module" crossorigin src="./assets/pako-DwGzBETv.js"></script>
-      <script type="module" crossorigin src="./assets/CollapsibleSection-Ct4WF3DD.js"></script>
+      <script type="module" crossorigin src="./assets/CollapsibleSection-CW3xQtQK.js"></script>
       <script type="module" crossorigin src="./assets/createSingleSlot-BAHyf9Ga.js"></script>
-      <script type="module" crossorigin src="./assets/gradientEditorEntrance-BUgjjaMI.js"></script>
-      <script type="module" crossorigin src="./assets/FormulaFormat-BRafsvy3.js"></script>
-      <script type="module" crossorigin src="./assets/gradientSeam-CwOqg_8j.js"></script>
-      <script type="module" crossorigin src="./assets/registerFeatures-C8O2Cg5B.js"></script>
-      <script type="module" crossorigin src="./assets/Undo-BkVnS3BI.js"></script>
-      <script type="module" crossorigin src="./assets/CompositionOverlay-D7kNe2FZ.js"></script>
-      <script type="module" crossorigin src="./assets/Camera-CCS0b9LZ.js"></script>
+      <script type="module" crossorigin src="./assets/gradientEditorEntrance-CfFverW5.js"></script>
+      <script type="module" crossorigin src="./assets/FormulaFormat-D8DAs25J.js"></script>
+      <script type="module" crossorigin src="./assets/gradientSeam-DIlS80FJ.js"></script>
+      <script type="module" crossorigin src="./assets/weaveMigration-BMETwkoB.js"></script>
+      <script type="module" crossorigin src="./assets/Undo-Nr8Ovh9C.js"></script>
+      <script type="module" crossorigin src="./assets/CompositionOverlay-DC1Sv8sW.js"></script>
+      <script type="module" crossorigin src="./assets/Camera-ka38gWUX.js"></script>
       <script type="module" crossorigin src="./assets/AudioAnalysisEngine-DyaB3DyZ.js"></script>
-      <script type="module" crossorigin src="./assets/ModulationEngine-fGx0zqS8.js"></script>
-      <script type="module" crossorigin src="./assets/modulationTick-tPPgKwcc.js"></script>
-      <script type="module" crossorigin src="./assets/MobileViewportShell-BuYoYLU_.js"></script>
-      <script type="module" crossorigin src="./assets/colorSchemeStore-C2iy8W_s.js"></script>
-      <script type="module" crossorigin src="./assets/support-2fiYCS_W.js"></script>
+      <script type="module" crossorigin src="./assets/ModulationEngine-rIkqJrj1.js"></script>
+      <script type="module" crossorigin src="./assets/modulationTick-qDX0k8xm.js"></script>
+      <script type="module" crossorigin src="./assets/MobileViewportShell-BqeltJqW.js"></script>
+      <script type="module" crossorigin src="./assets/colorSchemeStore-Bf00I4fz.js"></script>
+      <script type="module" crossorigin src="./assets/support-DzTicjRW.js"></script>
       <script type="module" crossorigin src="./assets/renderPopupRegistry-49PcnqqE.js"></script>
-      <script type="module" crossorigin src="./assets/applyAt-CnEL1kx8.js"></script>
-      <script type="module" crossorigin src="./assets/installBucketRender-D6a_8ogk.js"></script>
-      <script type="module" crossorigin src="./assets/CompilingIndicator-BSHSldoh.js"></script>
-      <script type="module" crossorigin src="./assets/MobileControls-6buWpzHD.js"></script>
-      <script type="module" crossorigin src="./assets/cameraKeyRegistry-FcTOvauO.js"></script>
-      <script type="module" crossorigin src="./assets/DebugToolsOverlay-EVuBuEk7.js"></script>
-      <script type="module" crossorigin src="./assets/AnchoredMenu-C3qy38hv.js"></script>
+      <script type="module" crossorigin src="./assets/applyAt-2KiOXb9o.js"></script>
+      <script type="module" crossorigin src="./assets/installBucketRender-DvdwlWx6.js"></script>
+      <script type="module" crossorigin src="./assets/CompilingIndicator-B-HH9mMQ.js"></script>
+      <script type="module" crossorigin src="./assets/MobileControls-DbwtesSg.js"></script>
+      <script type="module" crossorigin src="./assets/cameraKeyRegistry-rUTwsJT9.js"></script>
+      <script type="module" crossorigin src="./assets/DebugToolsOverlay-DiMKaDK9.js"></script>
+      <script type="module" crossorigin src="./assets/AnchoredMenu-CHylv5tt.js"></script>
       <script type="module" crossorigin src="./assets/audioFileCache-7_CT7NEx.js"></script>
-      <script type="module" crossorigin src="./assets/main-Na3cwRyQ.js"></script>
-      <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-DrbQpp3u.css">
+      <script type="module" crossorigin src="./assets/main-CiXMaZqh.js"></script>
+      <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-Lp1rn14s.css">
       <link rel="stylesheet" crossorigin href="./assets/main-Fd0xVSp_.css">
     <link rel="manifest" href="./manifest.webmanifest"></head>
     <body>
