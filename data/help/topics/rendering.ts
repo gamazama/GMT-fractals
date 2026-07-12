@@ -289,16 +289,6 @@ In Path Tracing mode, the **Illumination Power** slider controls how much light 
 - **> 1.0**: Boosts the bounce light intensity. Great for making dim emissive veins light up a whole room without blowing out the surface detail.
 `
     },
-    'mat.env': {
-        id: 'mat.env',
-        category: 'Rendering',
-        title: 'Environment Map',
-        parentId: 'panel.render',
-        content: `
-Adds a fake sky reflection to the surface.
-Useful for making metals look realistic by giving them something to reflect, even if the background is black.
-`
-    },
     'mat.glow': {
         id: 'mat.glow',
         category: 'Rendering',
@@ -379,23 +369,25 @@ Simulates a physical camera lens by blurring areas outside the focus plane. See 
         title: 'Reflections',
         parentId: 'panel.render',
         content: `
-Adds reflective surfaces to the fractal. Three modes available, from cheapest to most expensive:
+Makes the fractal surface reflect its surroundings. Choose a **Reflection Method**, cheapest to most expensive:
 
 ## Reflection Methods
 - **Off**: No reflections. Fastest.
-- **Environment Map**: Samples the environment map at the reflection angle. Cheap, adds realism to metals. Uses Fresnel weighting.
-- **Raymarched (Quality)**: Fires actual reflection rays through the fractal. Physically accurate but adds ~7.5s compile time.
+- **Environment Map**: The surface mirrors the sky only, with Fresnel weighting — cheap, and enough to make metals read as metal even against a black background.
+- **Raymarched (Quality)**: Fires real reflection rays through the fractal, so polished surfaces show the *fractal itself* — nearby structure mirrored back, with real multi-bounce so reflections-of-reflections resolve correctly and pick up accurate color. Adds about 5 seconds of shader compile time; the other methods are free.
 
 ## Raymarched Settings
-- **Max Bounces (1-3)**: Recursion depth. Each bounce adds a full raytrace pass.
-- **Trace Steps**: Precision of the reflection ray (16-128).
-- **Roughness Cutoff**: Surfaces rougher than this skip raymarching (performance optimization).
-- **Raymarch Mix**: Blend between raymarched (1.0) and environment map (0.0) reflections.
-- **Bounce Shadows**: Compute shadows on reflected surfaces. Adds ~4.5s compile time.
+- **Raymarch Mix**: Blend between the raymarched reflection (1.0) and the environment reflection (0.0).
+- **Roughness Cutoff**: Surfaces rougher than this skip the expensive raymarched path and fall back to the environment reflection — polished surfaces get the full treatment, matte ones don't pay for it.
+- **Trace Steps**: How far each reflected ray marches — higher reaches more distant reflected detail.
+- **Accurate Colors**: Fuller color reproduction in the reflection, at some extra cost.
+- **Bounce Shadows**: Let reflected rays cast their own shadows. More realistic, slower.
+
+Fog applies along reflected rays too, so reflections in a foggy scene fade with distance like everything else.
 
 ## Tips
-- Combine with low **Roughness** (0.0-0.3) and high **Metallic** for dramatic mirror effects.
-- Use Environment Map mode during editing, then switch to Raymarched for final renders.
+- Combine with low **Roughness** (0.0–0.3) and high **Metallic** for dramatic mirror effects.
+- Use Environment Map mode while editing, then switch to Raymarched for final renders.
 `
     },
     'render.volumetric': {

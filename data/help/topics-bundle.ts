@@ -3,6 +3,7 @@ import { HelpSection } from '../../types/help';
 import { GETTING_STARTED_TOPICS } from './topics/getting_started';
 import { GENERAL_TOPICS } from './topics/general';
 import { FORMULA_TOPICS } from './topics/formulas';
+import { WEAVE_TOPICS } from './topics/weave';
 import { FORMULA_LIBRARY } from './topics/formula_library';
 import { PARAM_TOPICS } from './topics/parameters';
 import { UI_TOPICS } from './topics/ui';
@@ -27,6 +28,7 @@ export const HELP_TOPICS: Record<string, HelpSection> = {
     ...GETTING_STARTED_TOPICS,
     ...GENERAL_TOPICS,
     ...FORMULA_TOPICS,
+    ...WEAVE_TOPICS,
     ...FORMULA_LIBRARY,
     ...PARAM_TOPICS,
     ...UI_TOPICS,

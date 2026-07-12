@@ -7,16 +7,57 @@ export const SCENE_TOPICS: Record<string, HelpSection> = {
         category: 'UI',
         title: 'Scene Panel',
         content: `
-Configures the camera, navigation physics, and atmospheric optics.
+Configures the camera, the sky and atmosphere, and post-processing.
 
 ## Sections
 - **Optics (DOF & Lens)**: Field of view, projection mode, and Depth of Field (blur).
 - **Camera & Navigation** (Advanced Mode Only): Movement mode, speed, and absolute coordinates.
-- **Atmosphere (Fog)**: Distance fog and volumetric density.
-- **Volumetric Scatter**: Atmospheric light scattering.
+- **Background & Sky**: What surrounds the fractal — a solid color, gradient, or HDR sky image — and how much it shows and lights the scene.
+- **Fog**: Distance fog that follows the sky's colors by default.
+- **Volumetric Scatter**: Atmospheric light scattering (compiled in only when you enable it).
 - **Water Plane** (when enabled): Water surface simulation.
 - **Color Correction**: Saturation, levels, and gamma adjustments.
 - **Effects**: Bloom, Chromatic Aberration, and Droste effect.
+`
+    },
+    'scene.background': {
+        id: 'scene.background',
+        category: 'UI',
+        title: 'Background & Sky',
+        parentId: 'panel.scene',
+        content: `
+The backdrop IS the sky: one environment definition feeds everything that looks at it — the visible background, environment lighting, fog color, and reflections.
+
+## Source
+Pick what the sky is:
+- **Solid**: A single **Sky Color**. Simple, and still a real sky — lighting and fog read from it.
+- **Gradient**: A **Sky Gradient** you can edit like any other gradient.
+- **Sky Image**: An HDR environment map. The **Skies** button opens the Sky Library — bundled sample skies load with one click, and skies you upload are kept on your device. **Rotation** turns the sky around you.
+
+## The two consumer sliders
+- **Sky Visibility**: How much of the sky you *see* behind the fractal. At 0 the backdrop is black but the sky can still light the scene.
+- **Environment Light**: How much the sky *illuminates* the fractal surface.
+
+Camera Blur (Depth of Field) softens the backdrop consistently with scene depth, so an out-of-focus sky reads naturally.
+`
+    },
+    'scene.fog': {
+        id: 'scene.fog',
+        category: 'UI',
+        title: 'Fog',
+        parentId: 'panel.scene',
+        content: `
+Distance fog fades the fractal toward the sky. Turn up **Fog Intensity** and its controls unfold beneath it.
+
+## Controls
+- **Fog Range**: A dual-thumb slider — where the fog starts and where it saturates.
+- **Sky Tint**: How much the fog takes its color from the sky, per viewing direction. At full tint, fog in front of a sunset horizon is warm while fog against the zenith is cool — it belongs to the scene. Lower the tint to reveal a flat **Fog Color** of your choosing underneath.
+- **Density**: How thick the fog builds across the range.
+
+Fog is consistent everywhere it appears: it also grades reflections along their reflected rays and dims distant light spheres, so foggy scenes hold together.
+
+## Volumetric Scatter
+The section below Fog adds true light scattering — god-rays and glowing air around lights. It costs compile time and framerate, so it is **compiled in only when you enable it** with its toggle; quality presets never switch it on behind your back.
 `
     },
     'scene.grading': {

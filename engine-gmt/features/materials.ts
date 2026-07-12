@@ -65,7 +65,7 @@ export const MaterialFeature: FeatureDefinition = {
         env: {
             label: 'Environment',
             description: 'Image-based lighting and sky source for indirect light.',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
         emission: {
             label: 'Self-Illumination',
@@ -181,7 +181,7 @@ export const MaterialFeature: FeatureDefinition = {
             min: 0.0, max: 2.0, step: 0.01,
             group: 'env',
             description: 'Brightness of the sky behind the fractal — independent of the environment light strength. 0 = black backdrop.',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
         envStrength: {
             type: 'float',
@@ -192,7 +192,7 @@ export const MaterialFeature: FeatureDefinition = {
             min: 0.0, max: 5.0, step: 0.01,
             group: 'env',
             description: 'How strongly the sky lights the scene (dome light on surfaces and reflections).',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
         envSource: {
             type: 'float',
@@ -207,7 +207,7 @@ export const MaterialFeature: FeatureDefinition = {
                 { label: 'Sky Image', value: 0.0 }
             ],
             description: 'What the sky is — a solid colour, a procedural gradient, or a panorama image. Shared by the backdrop, the environment light, reflections, and the fog Sky Tint.',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
         envMapData: {
             type: 'image',
@@ -232,7 +232,7 @@ export const MaterialFeature: FeatureDefinition = {
                 colorSpace: 'envMapColorSpace'
             },
             description: 'Equirectangular HDR or LDR image used as the sky.',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
         // Linked Color Space Param (Hidden, controlled by Image UI)
         envMapColorSpace: {
@@ -265,7 +265,7 @@ export const MaterialFeature: FeatureDefinition = {
             parentId: 'envSource',
             condition: { eq: 0.0 },
             description: 'Spins the sky image around the vertical axis.',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
         envGradientStops: {
             type: 'gradient',
@@ -281,7 +281,7 @@ export const MaterialFeature: FeatureDefinition = {
             parentId: 'envSource',
             condition: { eq: 1.0 },
             description: 'Vertical sky gradient: ground colour to zenith.',
-            helpId: 'mat.env',
+            helpId: 'scene.background',
         },
 
         // --- EMISSION ---

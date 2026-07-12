@@ -246,6 +246,7 @@ For *true* area lights with geometrically-correct soft shadows + visible specula
 - Shadows may appear noisy or grainy while the camera is moving.
 - They converge to a clean, high-quality result when the camera stops (via Temporal Accumulation).
 - This technique is essential for accurate shadowing on complex sponge/box fractals where traditional methods fail.
+- **Shadows hold up at any zoom.** The shadow march is scaled to what the camera can actually resolve, so shadows no longer quietly disappear when you zoom deep into fine detail — the same lighting reads correctly at every magnification.
 `
     },
     'light.pos': {
