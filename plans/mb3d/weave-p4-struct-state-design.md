@@ -245,6 +245,19 @@ owner (`S-nformula-weave-unification.md:141-144`) — the gate is visual equival
 
 ## 4. Animation-transfer tool sketch (retarget keyframes on slot reorder)
 
+> **Update 2026-07-12 (P4.6 BUILT — this sketch superseded by the ADR-0090 bank reality):** per-slot banks
+> (ADR-0090 + its 2026-07-11 MB3D extension) made every woven slot's params whole-bank-addressed
+> (`weave.ws<k>*`, k = row index), so the component-level lane map below is only needed for the retired
+> cross-slot dense pack. The shipped mechanism instead RETURNS the old→new mapping from the value-transfer
+> functions themselves (`mergeWeaveBanks`/`mergeDenseLanes` → `LoadMB3DResult.paramRenames`) and applies it to
+> keyframe tracks + LFO targets via `engine-gmt/animation/retargetTracks.ts` — values and tracks can never
+> diverge, and no pre-rebuild editor-side map retention is needed. The prompt became an auto-transfer +
+> post-Build report (values already followed silently since 2026-07-05, so a "No" answer would have produced a
+> broken values-moved/tracks-stale hybrid); the interactive choice is reserved for orphaned tracks (deleted /
+> replaced slots), offered as one-click cleanup. Rhythm timing tracks (`weave.weave{Interval,StartIter,Beats}<k>`,
+> a family this sketch predates) transfer live inside the editor's `syncRhythm`, at the same moment their values
+> permute.
+
 **How a track is keyed.** A `Track` is identified by a single dotted string `id` (`engine-gmt/types/animation.ts:44-53`);
 `LfoTarget = string` e.g. `'coreMath.paramA'` (`types/animation.ts:3,13`). `AnimationEngine.scrub()` resolves the
 writer *purely* from `track.id` via `getBinder(track.id)` (`engine/AnimationEngine.ts:340`) — **the dotted id is the
@@ -329,7 +342,7 @@ typecheck` · `test:mb3d` (24) · `test:mb3d:weave` · `test:refine` · `check:m
 | **P4.3** | `[importer][ui]` | **Frag/DEC slot sources** in the weaver picker — reuse the native resolver (imports self-limit to global/tracker shapes, §1.3). Add reject-cap greying (`InterlaceSecondaryPicker` logic). | A V4-import slot + a native slot woven together renders |
 | **P4.4** | `[engine][ui]` | **Fold interlace UI into the weaver** + `modulo`-schedule authoring in the editor; **save-migration** `interlace*` → `weaveSource` (add `ModuloSchedule.active`; clear legacy `features.interlace` on migrate, §3.3). | **Old interlace scene loads pixel-equivalent** (round-trip GPU-cert); native-canary byte-identical |
 | **P4.5** | `[engine][ui]` | **Fold Hybrid Box interleaved** into the weaver; migrate `hybrid*` (branch on `hybridComplex`; `skip/swap/iter → interval/startIter/maxCount`). Pre-loop fast path **untouched**. | **Old Hybrid-Box interleaved scene pixel-equivalent**; fast-path scenes unchanged |
-| **P4.6** | `[ui]` | **Animation-transfer tool** (§4): capture before/after lane maps, prompt on reorder, component-level track rename. Replaces the current warn (`WeaveEditorPane.tsx:439-446`). | Reorder-with-keyframes remaps tracks correctly (a keyframed slot param still animates the same semantic param post-reorder) |
+| **P4.6** | `[ui]` | **Animation-transfer tool** (§4) — **DONE 2026-07-12** (see the §4 update block): `mergeWeaveBanks`/`mergeDenseLanes` return their old→new mapping (`paramRenames`), `retargetAnimationTargets` applies it to tracks + LFOs as a simultaneous permutation at Build (rhythm timing live in `syncRhythm`); post-Build report + orphan cleanup replaces the warn. | ✅ Acceptance test in `test:mb3d:weave` (313/0): keyframed slot param's track and live value land on the same lane post-reorder |
 | **P4.7** | `[ui]` | **Panel promotion** (§5): `componentRegistry.register('panel-weave', …)` + `GmtPanels` float entry (Feedback template). | Panel mounts, docks, floats; compile progress + live preview work; `check:zindex` green |
 
 Then **push v1 + the weave UI together** → deploy (per `S-nformula-weave-unification.md:87`).

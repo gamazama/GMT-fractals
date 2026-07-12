@@ -21,7 +21,8 @@ import type { Preset } from '../../types/fractal';
 import { registry } from '../../engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { useEngineStore } from '../../../store/engineStore';
-import { CORE_SLOTS, slotWriteValue } from '../uniformSlots';
+import { CORE_SLOTS, slotWriteValue, weaveBankKey } from '../uniformSlots';
+import type { ParamRename } from '../../animation/retargetTracks';
 
 export interface LoadMB3DResult {
   ok: boolean;
@@ -29,6 +30,13 @@ export interface LoadMB3DResult {
   ledger: WeaveLedger;
   /** One-line summary of the woven formulas, for a success toast. */
   summary?: string;
+  /** Routing-string renames the rebuild's value transfer implies (ADR-0089
+   *  P4.6): the same old→new param mapping mergeWeaveBanks / mergeDenseLanes
+   *  used to move live VALUES, lifted to `feature.key` track-target form so
+   *  the editor can move keyframe tracks + LFO targets identically
+   *  (retargetAnimationTargets). Only present on editor rebuilds
+   *  (loadUserWeave); scene imports have no continuity to preserve. */
+  paramRenames?: ParamRename[];
 }
 
 function loadFromScene(scene: MB3DScene): LoadMB3DResult {
@@ -136,13 +144,20 @@ function weaveSourceFromScene(scene: MB3DScene): FractalDefinition['weaveSource'
  *     takes the fresh defaults. Duplicates of one formula claim old banks in order;
  *   - for a FIRST build off a single formula, that formula's live coreMath params
  *     carry onto bank 0 (same continuity).
+ *  `renames` (P4.6) collects the same old→new mapping as routing-string pairs
+ *  (`weave.ws1ParamA` → `weave.ws0ParamA`, `coreMath.paramA` → `weave.ws0ParamA`)
+ *  so keyframe tracks / LFO targets can follow the values (retargetAnimationTargets).
+ *  Bank claims emit the FULL bank vocabulary (not just live keys) — a track can
+ *  exist for a param that was never scrubbed into the live state.
+ *  Exported for debug/test-mb3d-weave.mts.
  *  @see docs/adr/0090-weave-slot-banks.md */
-function mergeWeaveBanks(
+export function mergeWeaveBanks(
   fresh: Record<string, any>,
   live: Record<string, any>,
   newSlots: Array<{ kind: string; ref: string | number }>,
-  oldFormula: string,
+  oldDef: FractalDefinition | undefined,
   oldCoreMath: Record<string, any>,
+  renames?: ParamRename[],
 ): Record<string, any> {
   const merged: Record<string, any> = { ...fresh };
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -150,7 +165,7 @@ function mergeWeaveBanks(
   for (const [k, v] of Object.entries(live)) if (k.startsWith('weave')) merged[k] = v;
 
   const ident = (s?: { kind: string; ref: string | number }) => (s ? `${s.kind}:${s.ref}` : '');
-  const oldSlots = (registry.get(oldFormula as any) as FractalDefinition | undefined)?.weaveSource?.slots ?? [];
+  const oldSlots = oldDef?.weaveSource?.slots ?? [];
   const claimed = new Set<number>();
 
   newSlots.forEach((s, k) => {
@@ -170,11 +185,19 @@ function mergeWeaveBanks(
         const m = key.match(re);
         if (m) merged[`ws${k}${m[1]}`] = v;
       }
-    } else if (k === 0 && oldSlots.length === 0 && id === `native:${oldFormula}`) {
+      if (oldIdx !== k && renames) {
+        for (const slot of CORE_SLOTS) {
+          renames.push({ from: `weave.${weaveBankKey(oldIdx, slot)}`, to: `weave.${weaveBankKey(k, slot)}` });
+        }
+      }
+    } else if (k === 0 && oldSlots.length === 0 && id === `native:${oldDef?.id}`) {
       // First build off a single formula → carry its coreMath onto bank 0.
       for (const [key, v] of Object.entries(oldCoreMath)) {
         const bk = `ws0${cap(key)}`;
-        if (bk in merged) merged[bk] = v;
+        if (bk in merged) {
+          merged[bk] = v;
+          renames?.push({ from: `coreMath.${key}`, to: `weave.${bk}` });
+        }
       }
     }
     // else: genuinely new slot → keep the fresh defaults already in `merged`.
@@ -213,6 +236,7 @@ export function mergeDenseLanes(
   live: Record<string, any>,
   newDef: FractalDefinition,
   oldDef: FractalDefinition | undefined,
+  renames?: ParamRename[],
 ): Record<string, any> {
   const merged: Record<string, any> = { ...live };
   for (const lane of CORE_SLOTS) {
@@ -275,6 +299,10 @@ export function mergeDenseLanes(
       }
       if (oi < 0) continue;
       usedOld.add(oi);
+      if (oldParams[oi].id !== np.id) {
+        // Same param, different lane after the reorder — tracks follow (P4.6).
+        renames?.push({ from: `coreMath.${oldParams[oi].id}`, to: `coreMath.${np.id}` });
+      }
       const v = live[oldParams[oi].id];
       if (v === undefined) continue;
       // slotWriteValue keeps the vec4-held-vec3 contract (.w pinned to 0) when
@@ -375,6 +403,11 @@ export function loadUserWeave(
   const preset: any = def.defaultPreset;
   const store = useEngineStore.getState() as any;
   const current = store.getPreset();
+  // P4.6: the merge fns below record the old→new param mapping their value
+  // transfer implies; the editor applies the SAME mapping to keyframe tracks
+  // and LFO targets so animation follows each slot exactly like its values.
+  const paramRenames: ParamRename[] = [];
+  const oldDef = registry.get(current.formula as any) as FractalDefinition | undefined;
   store.loadPreset({
     ...preset,
     cameraPos: current.cameraPos, cameraRot: current.cameraRot,
@@ -400,7 +433,8 @@ export function loadUserWeave(
         preset.features?.coreMath ?? {},
         current.features?.coreMath ?? {},
         def,
-        registry.get(current.formula as any) as FractalDefinition | undefined,
+        oldDef,
+        paramRenames,
       ),
       geometry: current.features?.geometry,
       quality: {
@@ -416,11 +450,12 @@ export function loadUserWeave(
         preset.features?.weave ?? {},
         current.features?.weave ?? {},
         weaveSource?.slots ?? [],
-        current.formula,
+        oldDef,
         current.features?.coreMath ?? {},
+        paramRenames,
       ),
     },
   });
   const names = ledger.slotFlags.map((s) => s.name).join(' → ');
-  return { ok: true, ledger, summary: names };
+  return { ok: true, ledger, summary: names, paramRenames };
 }

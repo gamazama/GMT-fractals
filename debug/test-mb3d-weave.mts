@@ -1454,6 +1454,167 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
   }
 }
 
+// ── P4.6 animation transfer: keyframes/LFOs follow their formulas ────────────
+// mergeWeaveBanks emits the routing-string renames its value transfer implies;
+// retargetAnimationTargets applies them to BOTH animation stores as one
+// simultaneous permutation. The acceptance criterion: after a reorder, a
+// keyframed slot param's track and its live value land on the SAME new lane.
+{
+  const { mergeWeaveBanks } = await import('../engine-gmt/utils/mb3d/loadMB3DScene.ts');
+  const { retargetAnimationTargets, findWeaveBankOrphans, removeWeaveOrphans } =
+    await import('../engine-gmt/animation/retargetTracks.ts');
+  const { useAnimationStore } = await import('../store/animationStore.ts');
+  const { useEngineStore } = await import('../store/engineStore.ts');
+  type Rename = { from: string; to: string };
+
+  const nSlot = (ref: string) => ({ kind: 'native', ref });
+  const defWith = (slots: any[]): any => ({
+    id: 'W', name: 'W', shader: {}, defaultPreset: {},
+    weaveSource: { version: 1, title: 't', slots: slots.map((s) => ({ ...s, label: String(s.ref), slot: {} })), schedule: { kind: 'counts', repeatFrom: 0 } },
+  });
+
+  // Reorder [Bulb, ABox] → [ABox, Bulb]: values re-index AND the rename set
+  // carries the full bank vocabulary both ways (a swap, applied simultaneously).
+  {
+    const renames: Rename[] = [];
+    const m = mergeWeaveBanks(
+      { ws0ParamA: 0, ws1ParamA: 0 }, { ws0ParamA: 3.3, ws1ParamA: 7 },
+      [nSlot('ABox'), nSlot('Bulb')], defWith([nSlot('Bulb'), nSlot('ABox')]), {}, renames,
+    );
+    ck('banks: reorder re-indexes live values', m.ws0ParamA === 7 && m.ws1ParamA === 3.3, [m.ws0ParamA, m.ws1ParamA]);
+    ck('banks: swap emits both directions × full vocabulary (30 renames)', renames.length === 30, renames.length);
+    ck('banks: rename set contains ws0→ws1 and ws1→ws0 pairs',
+      renames.some((r) => r.from === 'weave.ws0ParamA' && r.to === 'weave.ws1ParamA')
+      && renames.some((r) => r.from === 'weave.ws1Vec4C' && r.to === 'weave.ws0Vec4C'));
+  }
+  // Unchanged order → no renames; append-at-end → no renames for survivors.
+  {
+    const renames: Rename[] = [];
+    mergeWeaveBanks({}, {}, [nSlot('Bulb'), nSlot('ABox')], defWith([nSlot('Bulb'), nSlot('ABox')]), {}, renames);
+    ck('banks: identity claim emits no renames', renames.length === 0, renames.length);
+    mergeWeaveBanks({}, {}, [nSlot('Bulb'), nSlot('ABox'), nSlot('Koch')], defWith([nSlot('Bulb'), nSlot('ABox')]), {}, renames);
+    ck('banks: append-at-end emits no renames', renames.length === 0, renames.length);
+  }
+  // Delete slot 0 of [Bulb, ABox]: ABox claims bank 0 (ws1→ws0); Bulb's old
+  // bank is unclaimed (its tracks become stale occupants for the applier).
+  {
+    const renames: Rename[] = [];
+    mergeWeaveBanks({}, {}, [nSlot('ABox')], defWith([nSlot('Bulb'), nSlot('ABox')]), {}, renames);
+    ck('banks: delete shifts the survivor down (15 renames ws1→ws0)',
+      renames.length === 15 && renames.every((r) => r.from.startsWith('weave.ws1') && r.to.startsWith('weave.ws0')));
+  }
+  // First build off a standalone native formula: its live coreMath carries onto
+  // bank 0, and the renames follow (only keys the bank vocabulary mirrors).
+  {
+    const renames: Rename[] = [];
+    const m = mergeWeaveBanks(
+      { ws0ParamA: 0, ws0Vec2A: { x: 0, y: 0 } }, {},
+      [nSlot('Phoenix'), nSlot('ABox')], { id: 'Phoenix' } as any, { paramA: 5, vec2A: { x: 1, y: 2 }, iterations: 60 }, renames,
+    );
+    ck('banks: coreMath carry moves values onto bank 0', m.ws0ParamA === 5 && m.ws0Vec2A.x === 1);
+    ck('banks: coreMath carry renames only bank-vocabulary keys',
+      renames.length === 2
+      && renames.some((r) => r.from === 'coreMath.paramA' && r.to === 'weave.ws0ParamA')
+      && renames.some((r) => r.from === 'coreMath.vec2A' && r.to === 'weave.ws0Vec2A'), renames);
+  }
+
+  // Applier: simultaneous swap across both stores, axis variants, selection,
+  // timeline-undoability, untouched foreign namespaces.
+  const kf = (id: string, v: number) => ({ id, frame: 10, value: v, interpolation: 'Linear' as const });
+  const track = (id: string, label: string, v = 1): any => ({ id, type: 'float', label, keyframes: [kf(`${id}-k`, v)] });
+  const seed = (tracks: Record<string, any>, sel: string[] = []) =>
+    useAnimationStore.setState({
+      sequence: { durationFrames: 300, tracks },
+      selectedTrackIds: sel,
+      selectedKeyframeIds: sel.map((t) => `${t}::${t}-k`),
+      undoStack: [], redoStack: [],
+    } as any);
+  {
+    seed({
+      'weave.ws0ParamA': track('weave.ws0ParamA', 'Scale', 3.3),
+      'weave.ws1ParamA': track('weave.ws1ParamA', 'Fold', 7),
+      'weave.ws0Vec2A_x': track('weave.ws0Vec2A_x', 'Julia X'),
+      'camera.fov': track('camera.fov', 'FOV'),
+    }, ['weave.ws0ParamA']);
+    useEngineStore.setState({ animations: [{ id: 'l1', target: 'weave.ws0ParamB', enabled: true } as any] });
+    const res = retargetAnimationTargets([
+      { from: 'weave.ws0ParamA', to: 'weave.ws1ParamA' }, { from: 'weave.ws1ParamA', to: 'weave.ws0ParamA' },
+      { from: 'weave.ws0Vec2A', to: 'weave.ws1Vec2A' }, { from: 'weave.ws0ParamB', to: 'weave.ws1ParamB' },
+    ]);
+    const a = useAnimationStore.getState() as any;
+    const t = a.sequence.tracks;
+    ck('retarget: swap applied simultaneously (no chaining)',
+      t['weave.ws1ParamA']?.label === 'Scale' && t['weave.ws0ParamA']?.label === 'Fold');
+    ck('retarget: keyframe values untouched', t['weave.ws1ParamA']?.keyframes[0]?.value === 3.3);
+    ck('retarget: track.id field renamed', t['weave.ws1ParamA']?.id === 'weave.ws1ParamA');
+    ck('retarget: vec axis variant follows the base rename', !!t['weave.ws1Vec2A_x'] && !t['weave.ws0Vec2A_x']);
+    ck('retarget: foreign namespaces untouched', !!t['camera.fov']);
+    ck('retarget: selection remapped',
+      a.selectedTrackIds[0] === 'weave.ws1ParamA' && a.selectedKeyframeIds[0] === 'weave.ws1ParamA::weave.ws0ParamA-k');
+    ck('retarget: LFO target renamed', (useEngineStore.getState() as any).animations[0].target === 'weave.ws1ParamB');
+    ck('retarget: counts', res.tracks === 3 && res.lfos === 1 && res.displaced === 0, res);
+    ck('retarget: one timeline-undo step taken', a.undoStack.length === 1, a.undoStack.length);
+    a.undo();
+    const t2 = (useAnimationStore.getState() as any).sequence.tracks;
+    ck('retarget: timeline undo restores the old ids', t2['weave.ws0ParamA']?.label === 'Scale');
+  }
+  // Displacement: a stale occupant on a rename destination (its slot was
+  // deleted) is removed, never left to drive another formula's param.
+  {
+    seed({
+      'weave.ws0ParamA': track('weave.ws0ParamA', 'Deleted slot'),
+      'weave.ws1ParamA': track('weave.ws1ParamA', 'Survivor', 7),
+    });
+    useEngineStore.setState({ animations: [] });
+    const res = retargetAnimationTargets([{ from: 'weave.ws1ParamA', to: 'weave.ws0ParamA' }]);
+    const t = (useAnimationStore.getState() as any).sequence.tracks;
+    ck('retarget: stale occupant displaced, survivor lands on its lane',
+      t['weave.ws0ParamA']?.label === 'Survivor' && !t['weave.ws1ParamA'] && res.displaced === 1,
+      { labels: Object.keys(t), displaced: res.displaced });
+  }
+  // Orphans: bank targets the def no longer exposes — rhythm + coreMath are out
+  // of scope; axis variants of exposed vec params are valid.
+  {
+    seed({
+      'weave.ws0ParamA': track('weave.ws0ParamA', 'valid'),
+      'weave.ws0Vec2A_y': track('weave.ws0Vec2A_y', 'valid axis'),
+      'weave.ws3ParamC': track('weave.ws3ParamC', 'orphan'),
+      'weave.weaveInterval1': track('weave.weaveInterval1', 'rhythm — skip'),
+      'coreMath.paramA': track('coreMath.paramA', 'dense — skip'),
+    });
+    useEngineStore.setState({ animations: [{ id: 'l2', target: 'weave.ws2ParamA', enabled: true } as any] });
+    const def: any = {
+      parameters: [
+        { id: 'ws0ParamA', feature: 'weave' },
+        { id: 'ws0Vec2A', feature: 'weave', type: 'vec2' },
+      ],
+    };
+    const o = findWeaveBankOrphans(def);
+    ck('orphans: only unexposed bank targets flagged',
+      o.trackIds.length === 1 && o.trackIds[0] === 'weave.ws3ParamC' && o.lfoIds[0] === 'l2', o);
+    removeWeaveOrphans(o);
+    const t = (useAnimationStore.getState() as any).sequence.tracks;
+    ck('orphans: cleanup removes them (valid tracks stay)',
+      !t['weave.ws3ParamC'] && !!t['weave.ws0ParamA'] && (useEngineStore.getState() as any).animations.length === 0);
+  }
+  // Acceptance chain (the P4.6 gate): keyframed slot param + its live value
+  // land on the SAME lane after a reorder — the same semantic param animates.
+  {
+    seed({ 'weave.ws0ParamA': track('weave.ws0ParamA', 'Bulb Power', 8) });
+    useEngineStore.setState({ animations: [] });
+    const renames: Rename[] = [];
+    const m = mergeWeaveBanks(
+      { ws0ParamA: 0, ws1ParamA: 0 }, { ws0ParamA: 8 },
+      [nSlot('ABox'), nSlot('Bulb')], defWith([nSlot('Bulb'), nSlot('ABox')]), {}, renames,
+    );
+    retargetAnimationTargets(renames);
+    const t = (useAnimationStore.getState() as any).sequence.tracks;
+    ck('ACCEPTANCE: track and value follow the slot to the same lane',
+      m.ws1ParamA === 8 && t['weave.ws1ParamA']?.keyframes[0]?.value === 8 && !t['weave.ws0ParamA'],
+      { value: m.ws1ParamA, tracks: Object.keys(t) });
+  }
+}
+
 console.log(`\n==== MB3D weave: ${pass} passed, ${fails.length} failed ====`);
 if (fails.length) {
   console.log('FAILURES:\n - ' + fails.join('\n - '));

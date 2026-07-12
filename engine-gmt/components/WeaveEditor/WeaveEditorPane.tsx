@@ -30,9 +30,14 @@
  *    lanes, mergeWeaveBanks for native banks — loadMB3DScene.ts) and rhythm
  *    timing re-maps live in the editor (syncRhythm). A NEW formula always
  *    starts at its formula-file defaults.
- *  - Reordering while keyframed formula-param tracks exist shows a warning
- *    (tracks target lanes/banks by name and may retarget) — a transfer tool
- *    comes later.
+ *  - ANIMATION follows the formulas too (P4.6): a Build applies the exact
+ *    old→new param mapping the value transfer used (loadUserWeave returns it)
+ *    to keyframe tracks + LFO targets (retargetAnimationTargets), and
+ *    syncRhythm renames timing tracks live alongside the values it permutes.
+ *    A post-Build report banner shows what moved and offers one-click cleanup
+ *    of orphaned tracks (deleted/replaced slots, baked-away params). The
+ *    report survives the panel variant's key={formula} remount via a
+ *    module-scoped relay (same pattern as the draft cache).
  *  - Schedule kinds are a user choice: layered modulo ("Live", the DEFAULT,
  *    2026-07-09) vs counts ("Baked", LUT — structure edits rebuild). Live
  *    supports up to 6 active slots (the first is
@@ -51,6 +56,9 @@ import { CategoryPickerMenu } from '../../../components/CategoryPickerMenu';
 import type { PickerCategory, PickerItem } from '../../../components/CategoryPickerMenu';
 import { showToast } from '../../../engine/store/toastStore';
 import { useEngineStore } from '../../../store/engineStore';
+import { useAnimationStore } from '../../../store/animationStore';
+import { retargetAnimationTargets, findWeaveBankOrphans, removeWeaveOrphans } from '../../animation/retargetTracks';
+import type { ParamRename, RetargetResult, WeaveOrphans } from '../../animation/retargetTracks';
 import { registry } from '../../engine/FractalRegistry';
 import { buildBlockPlan } from '../../engine/weave/schedule';
 import { BOUNDS, fitRhythmFromPlan, runsFromRhythm, rhythmPhase, planPhase, rhythmPreviewPlan, certify, planStructure, rhythmStructure } from '../../engine/weave/convert';
@@ -122,6 +130,19 @@ let weaveDraft: WeaveDraft | null = null;
 const panelDraftCache = new Map<string, WeaveDraft>();
 let rowSeq = 0;
 const rowKey = () => `wrow${rowSeq++}`;
+
+/** Post-Build animation-transfer report (P4.6): what moved with its formula,
+ *  and what's now orphaned (with a one-click cleanup offer). */
+interface TransferReport {
+    moved: RetargetResult;
+    orphans: WeaveOrphans;
+}
+// A Build registers a NEW fused def id, so the PANEL variant (keyed by formula
+// in WeaveSection) remounts right after build() runs. Component state wouldn't
+// survive that; this module-scoped relay carries the report to the freshly
+// mounted instance, which consumes + clears it. The MODAL variant doesn't
+// remount and reads its own setState instead.
+let pendingTransferReport: TransferReport | null = null;
 
 const cloneRows = (rows: SlotRow[]): SlotRow[] =>
     rows.map((r) => ({
@@ -284,7 +305,14 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         return { title: '', rows: [], dividers: [], scheduleKind: 'modulo' };
     });
     const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
-    const [reorderWarn, setReorderWarn] = useState(false);
+    // Animation-transfer report (P4.6). The initializer consumes the module
+    // relay: after a panel-variant Build the pane remounts under the new
+    // formula id, and the report set by the OLD instance's build() arrives here.
+    const [transferReport, setTransferReport] = useState<TransferReport | null>(() => {
+        const r = pendingTransferReport;
+        pendingTransferReport = null;
+        return r;
+    });
     const [picker, setPicker] = useState<{ x: number; y: number; right: number; replaceKey?: string } | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -480,13 +508,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         commit(next);
         syncRhythm(draft, next); // crossing 0 ↔ active re-maps rows→layers
     };
-    // Keyframed formula-param tracks that a structure change can retarget:
-    // MB3D dense lanes (coreMath.*) AND native slot banks (weave.ws<k>*).
-    const hasFormulaTracks = () =>
-        (store.animations ?? []).some((a: any) => a.enabled && typeof a.target === 'string'
-            && (a.target.startsWith('coreMath.') || /^weave\.ws\d/.test(a.target)));
     const remove = (key: string) => {
-        if (hasFormulaTracks()) setReorderWarn(true);
         const next = {
             ...draft,
             rows: draft.rows.filter((r) => r.key !== key),
@@ -617,11 +639,12 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         const base = dragBase.current;
         dragBase.current = null;
         if (base && base.rows.map((r) => r.key).join() !== draft.rows.map((r) => r.key).join()) {
-            // One undo step for the whole drag.
+            // One undo step for the whole drag. Bank keyframes/LFOs move with
+            // their formulas at Build (loadUserWeave's paramRenames); rhythm
+            // timing tracks move right here via syncRhythm.
             past.current.push(base);
             if (past.current.length > 50) past.current.shift();
             future.current = [];
-            if (hasFormulaTracks()) setReorderWarn(true);
             syncRhythm(base, draft); // timing follows the reordered rows
         }
     };
@@ -686,6 +709,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         if (next.scheduleKind !== 'modulo') return;
         const prevKeys = layerKeysOf(prev);
         const writes: Record<string, number> = {};
+        const renames: ParamRename[] = [];
         layerKeysOf(next).forEach((key, i) => {
             const k = i + 1;
             if (k > WEAVE_MAX_LAYERS) return;
@@ -696,7 +720,17 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
             if (cur.interval !== v.interval) writes[`weaveInterval${k}`] = v.interval;
             if (cur.start !== v.start) writes[`weaveStartIter${k}`] = v.start;
             if (cur.beats !== v.beats) writes[`weaveBeats${k}`] = v.beats;
+            if (pi >= 0 && pi + 1 !== k) {
+                // P4.6: timing keyframes/LFOs follow their row across the
+                // layer re-map, exactly like the live values above. Applied as
+                // one simultaneous permutation (a layer swap must not chain);
+                // a vacated index's stale tracks are displaced by the applier.
+                for (const f of ['weaveInterval', 'weaveStartIter', 'weaveBeats']) {
+                    renames.push({ from: `weave.${f}${pi + 1}`, to: `weave.${f}${k}` });
+                }
+            }
         });
+        if (renames.length) retargetAnimationTargets(renames);
         if (Object.keys(writes).length) store.setWeave?.(writes);
     };
 
@@ -733,16 +767,22 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     // Both toggles convert the CURRENT LUT into the target mode's params EXACTLY, or
     // flip mode without writes + a one-line reason (never approximate). Idempotence
     // is checked first so an untouched round-trip is lossless. @see the logic spec.
-    const hasRhythmTracks = () =>
-        (store.animations ?? []).some((a: any) => a.enabled && typeof a.target === 'string'
-            && /^weave\.weave(Interval|StartIter|Beats)\d/.test(a.target));
+    // Keyframed rhythm timing, in EITHER durable store: LFO modulations
+    // (engineStore.animations) and timeline keyframe tracks (the separate
+    // animation store's sequence). Conversions can't transfer these (a fitted
+    // decomposition re-parameterizes the pattern), so they warn.
+    const hasRhythmTracks = () => {
+        const re = /^weave\.weave(Interval|StartIter|Beats)\d/;
+        return (store.animations ?? []).some((a: any) => a.enabled && typeof a.target === 'string' && re.test(a.target))
+            || Object.keys(useAnimationStore.getState().sequence.tracks).some((id) => re.test(id));
+    };
     const rowLabel = (i: number) => draft.rows[i]?.label ?? `slot ${i + 1}`;
 
     const makeBase = (key: string) => {
-        // Overrule the elected base. Re-maps layer→uniform indices, so if rhythm
-        // timing is keyframed, warn like a reorder (same retarget policy, spec §7.3).
+        // Overrule the elected base. Re-maps layer→uniform indices; syncRhythm
+        // below permutes the live values AND renames timing tracks with them
+        // (P4.6 — same retarget policy as a reorder, spec §7.3).
         if (draft.baseKey === key) return;
-        if (hasRhythmTracks()) setReorderWarn(true);
         const next = { ...draft, baseKey: key };
         commit(next);
         // The other layers' timing follows their rows; the old base joins the
@@ -863,7 +903,19 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 setStatus({ kind: 'error', text: res.reason || 'This weave is not supported.' });
                 showToast(res.reason || 'Weave build failed.', 'error', 6000);
             } else {
-                setReorderWarn(false);
+                // P4.6: keyframe tracks + LFO targets follow their formulas with
+                // the exact mapping the value transfer used, then anything left
+                // aiming at a param the new weave doesn't expose is reported
+                // with a one-click cleanup offer.
+                const moved = retargetAnimationTargets(res.paramRenames ?? []);
+                const newDef = registry.get((useEngineStore.getState() as any).formula) as FractalDefinition | undefined;
+                const orphans = findWeaveBankOrphans(newDef);
+                const movedN = moved.tracks + moved.lfos;
+                const report = movedN || moved.displaced || orphans.trackIds.length || orphans.lfoIds.length
+                    ? { moved, orphans } : null;
+                if (variant === 'panel') pendingTransferReport = report; // survives the key={formula} remount
+                setTransferReport(report);
+                if (movedN) showToast(`Moved ${movedN} animation track${movedN === 1 ? '' : 's'} with the formulas.`, 'info', 4000);
                 setStatus({
                     kind: 'ok',
                     text: rhythm
@@ -878,6 +930,18 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
         } finally {
             setBusy(false);
         }
+    };
+
+    /** One-click cleanup from the transfer report: drop tracks/LFOs that aim at
+     *  parameters the rebuilt weave no longer exposes. Track removal is
+     *  timeline-undoable (removeTracks snapshots). */
+    const cleanOrphans = () => {
+        if (!transferReport) return;
+        const n = removeWeaveOrphans(transferReport.orphans);
+        const total = n.tracks + n.lfos;
+        showToast(`Removed ${total} orphaned animation track${total === 1 ? '' : 's'}.`, 'info', 3000);
+        const rest = { ...transferReport, orphans: { trackIds: [], lfoIds: [] } };
+        setTransferReport(rest.moved.tracks + rest.moved.lfos + rest.moved.displaced > 0 ? rest : null);
     };
 
     const clearAll = () => commit({ ...draft, rows: [], dividers: [], scheduleKind: 'modulo' });
@@ -1313,15 +1377,45 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 </div>
             </div>
 
-            {reorderWarn && (
-                <div className="flex items-start gap-2 text-xs bg-warn/10 border border-warn/25 rounded-lg px-3 py-2 text-warn">
-                    <p className="leading-relaxed">
-                        You have keyframed formula parameters — their tracks target parameter lanes by name, and a
-                        structure change can re-map which formula a lane belongs to. Your current values follow their
-                        formulas; check the animation tracks after rebuilding.
-                    </p>
-                </div>
-            )}
+            {/* Post-Build animation-transfer report (P4.6) — informational when
+                everything moved cleanly; amber with a cleanup offer when tracks
+                are left aiming at parameters the weave no longer has. */}
+            {transferReport && (() => {
+                const { moved, orphans } = transferReport;
+                const movedN = moved.tracks + moved.lfos;
+                const orphanN = orphans.trackIds.length + orphans.lfoIds.length;
+                return (
+                    <div className={`text-xs rounded-lg px-3 py-2 border space-y-1.5 ${orphanN
+                        ? 'bg-warn/10 border-warn/25 text-warn'
+                        : 'bg-ok/10 border-ok/25 text-ok'}`}>
+                        {(movedN > 0 || moved.displaced > 0) && (
+                            <div className="flex items-start gap-2">
+                                <p className="flex-1 leading-relaxed">
+                                    {movedN > 0 && <>Moved {movedN} animation track{movedN === 1 ? '' : 's'} with the formulas — keyframes untouched, only the target parameter followed.</>}
+                                    {moved.displaced > 0 && <> Removed {moved.displaced} stale track{moved.displaced === 1 ? '' : 's'} whose formula was gone (timeline undo restores).</>}
+                                </p>
+                                {orphanN === 0 && (
+                                    <button onClick={() => setTransferReport(null)}
+                                        className="icon-btn shrink-0" title="Dismiss"><CloseIcon /></button>
+                                )}
+                            </div>
+                        )}
+                        {orphanN > 0 && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <p className="flex-1 min-w-[140px] leading-relaxed">
+                                    {orphanN} animation track{orphanN === 1 ? ' targets' : 's target'} parameters this weave no longer has.
+                                </p>
+                                <button onClick={cleanOrphans} className="t-btn-sm t-btn-default shrink-0">
+                                    Remove {orphanN === 1 ? 'it' : 'them'}
+                                </button>
+                                <button onClick={() => setTransferReport(null)} className="t-btn-sm t-btn-default shrink-0">
+                                    Keep
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
 
             {status && (
                 <div className={`flex items-start gap-2 text-xs rounded-lg px-3 py-2 border ${status.kind === 'ok'
