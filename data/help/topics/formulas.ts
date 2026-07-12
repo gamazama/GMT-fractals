@@ -10,7 +10,7 @@ export const FORMULA_TOPICS: Record<string, HelpSection> = {
 The formula is the mathematical equation that generates the 3D fractal shape. Different formulas produce radically different structures — from organic bulbs to architectural grids to alien landscapes.
 
 ## How to Switch Formulas
-Open the **Formula** dropdown at the top of the sidebar. You will see a gallery with **thumbnail previews** of each fractal, organized by category. Click any thumbnail to load that formula with its default settings.
+Open the **Formula** dropdown at the top of the sidebar. You will see a gallery with **thumbnail previews** of each fractal, organized by category. Click any thumbnail to load that formula with its default settings. To jump straight to a formula, just **start typing its name** — the search box at the top filters the gallery as you type.
 
 You can also **import .gmf formula files** — these are saved scenes that include both the formula and all its parameter settings. Drag a .gmf file into the app window or use the Load button.
 
@@ -19,6 +19,7 @@ You can also **import .gmf formula files** — these are saved scenes that inclu
 - **Geometric & Folding**: Box folds, Sponges, Polyhedra, and IFS fractals — architectural, crystalline, and grid-based structures.
 - **Hybrids & Experiments**: Formulas that combine folding with power functions, cyclic feedback, or novel mappings for unusual shapes.
 - **Systems**: The **Modular Builder**, where you construct your own fractal by chaining operations together.
+- **Mandelbulb3D**: a library of formulas converted from the classic Mandelbulb3D program. While this group is active you can also **import your own .m3p parameter files**.
 
 ## Want more formulas?
 Open the **Formula Workshop** to browse hundreds of community fractals from Fragmentarium and the Distance Estimator Compendium. Right-click inside the Workshop for a dedicated help topic.

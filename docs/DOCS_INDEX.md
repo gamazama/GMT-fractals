@@ -25,6 +25,7 @@ docs/
 │   ├── 08_Animation.md
 │   ├── 09_Bridges_and_Derived.md
 │   ├── 10_Viewport.md
+│   ├── 11_TSAA.md                 TSAA subsystem breakdown (worked example from doc 13)
 │   ├── 11_Plugin_Authoring.md     how to build a new core plugin
 │   ├── 12_App_Handles.md          typed cross-tree state pattern
 │   ├── 13_Extracting_From_GMT.md  cookbook for lifting GMT features into engine-core
@@ -39,16 +40,25 @@ docs/
 │   ├── 06_Troubleshooting_and_Quirks.md
 │   ├── 07_Code_Health.md          GMT technical debt tracker
 │   ├── 08_File_Structure.md       GMT codebase layout (pre-extraction)
-│   ├── 21–27_*.md                 formula / frag importer / shader tests
+│   ├── 21–27, 35–36_*.md          formula / frag importer / capability protocol / shader tests
 │   ├── 25_Formula_Dev_Reference.md  GLSL formula contract: signature, uniforms, helpers, estimators, gotchas (native + GMF authoring)
 │   ├── 30_Mesh_Export_Prototype.md
 │   ├── 43_Bucket_Render_Overhaul.md
 │   └── 44_Preview_Region_Plan.md
 │
+├── adr/                           architecture decision records — append-only, cited from source via @see
+├── policy/                        cross-cutting rules (engine-fork-rules, ddfs contracts, shader-compile, …)
+├── modules/                       generated worklists (bugs.md, backlog.md) + sibling-app overviews
 ├── archive/                       truly retired design notes
 ├── research/                      open investigations
 └── specs/                         spec-ish deep dives
 ```
+
+## Decisions, policy & generated worklists
+
+- [adr/](adr/) — Architecture Decision Records, append-only. Source cites them via `@see docs/adr/NNNN-*.md`; the authority order (source JSDoc → ADRs → policy docs) is defined in [CLAUDE.md](../CLAUDE.md).
+- [policy/](policy/) — cross-cutting rules that span many files: engine-fork-rules, ddfs-string-contract, ddfs-auto-wiring, uniform-plugin-contract, shared-ui-coupling-rules, shader-compile-optimization, context-loading-protocol.
+- [modules/](modules/) — auto-generated worklists: [bugs.md](modules/bugs.md) and [backlog.md](modules/backlog.md) (regen via `npm run health`), plus kept overviews for the sibling apps (fluid-toy, fractal-toy, mesh-export).
 
 ## Stability markers
 
@@ -150,7 +160,7 @@ about to work on this app":
 The [gmt/](gmt/) subdir preserves pre-extraction GMT docs for the eventual port. **Do not treat these as engine commitments** — they describe what GMT does today, which will become GMT-plugin concerns when we port.
 
 - `01–08` — GMT architecture, rendering, modular graph, animation, data, file structure (pre-engine-split).
-- `21–27` — Fragmentarium importer, formula dev, shader test harness.
+- `21–27, 35–36` — Fragmentarium importer, formula dev, capability protocol, shader test harness.
 - `30, 43, 44` — Mesh export, bucket render, preview region.
 
 ### Formula authoring
@@ -183,4 +193,4 @@ Don't. Move to `archive/` with a one-line "why archived" at the top. Keeps histo
 
 ---
 
-*Engine fork point: GMT 0.9.2 (commit `ece5c84`). Last doc refresh: 2026-04-23 (engine/gmt subdir split; `11_Plugin_Authoring` + `12_App_Handles` added; `toy-fluid/` reference fork retired; debug scratch cleaned).*
+*Engine fork point: GMT 0.9.2 (commit `ece5c84`). Last doc refresh: 2026-04-23 (engine/gmt subdir split; `11_Plugin_Authoring` + `12_App_Handles` added; `toy-fluid/` reference fork retired; debug scratch cleaned). Index refreshed 2026-07-12 (adr/policy/modules made discoverable; `11_TSAA` listed; gmt catchall range corrected).*

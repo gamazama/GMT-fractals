@@ -9,7 +9,7 @@ export type { LayerProps } from './Layer';
 export { clampToViewport } from './viewportClamp';
 export type { ClampOptions, Point, Size } from './viewportClamp';
 export { Z, z, isPortalTier, registerTiers, allTiers, findPortalOverlaps } from './zIndex';
-export type { ZTier, Tier, TierDef, LayerDomain } from './zIndex';
+export type { Tier, TierDef, LayerDomain } from './zIndex';
 export { getLayerHost, setLayerHost } from './layerHost';
 export { useLayerStack, useLayerStackZ } from './layerStack';
 export { stopNavKeys } from './stopNavKeys';

@@ -87,7 +87,7 @@ Source files at h:/GMT/workspace-gmt/dev/. Many invariants are already documente
 - on `_convergenceNeeded` (:86): already documented in source at :79-86; no JSDoc addition needed.
 
 **File: engine/BloomPass.ts**
-- header (:1): `@stale Header comment says "5 mip levels" but MIP_COUNT = 7 since the radius/spread refactor. Fix when next touching this file.` (cite :6, :16 — known drift.)
+- header (:1): `@stale Header comment says "5 mip levels" but MIP_COUNT = 7 since the radius/spread refactor. Fix when next touching this file.` (VERIFIED CLEAN 2026-07-12 — header already says 7 mip levels.) (cite :6, :16 — known drift.)
 - on `dispose` (:339): `@invariant Does NOT dispose the shared fullscreen geometry — the comment at engine/BloomPass.ts:348 records the rule. Future code that reaches into this.mesh.geometry and disposes it will break every other consumer of the shared fullscreen pass.` (cite :348; already in source at :348 but worth promoting.)
 
 **File: engine/AccumulationController.ts**
