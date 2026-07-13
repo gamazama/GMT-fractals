@@ -71,13 +71,18 @@ const REFL_RAYMARCH_SHADING = `
         // distribution conditioned on the view dir, so the single-sample weight
         // collapses to F * G1(L) — bounded, no grazing-angle fireflies — and
         // accumulated samples converge on the true glossy lobe instead of a
-        // wrong-shaped blur. Perfect-mirror surfaces and in-motion frames keep
-        // the deterministic reflDir for a clean, responsive view.
+        // wrong-shaped blur. Perfect-mirror surfaces (roughness <= 0.05) keep the
+        // deterministic reflDir; glossy surfaces run VNDF in BOTH navigation and
+        // accumulation, so the first accumulation sample (drawn with blend==1) is a
+        // valid sample of the final estimator rather than a sharp-mirror frame that
+        // biases the running mean. Stable blue noise while moving (frozen per-pixel
+        // -> no shimmer), animated once accumulating -- the DOF/stochasticSeed idiom.
         bool isMoving = uBlendFactor >= 0.99;
         float reflG1L = 1.0;
-        vec3 reflF = F;  // macro Fresnel fallback (mirror / in-motion)
-        if (roughness > 0.05 && !isMoving) {
-            vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy);
+        vec3 reflF = F;  // macro Fresnel fallback (perfect mirror only)
+        if (roughness > 0.05) {
+            vec4 blueNoise = isMoving ? getStableBlueNoise4(gl_FragCoord.xy)
+                                      : getBlueNoise4(gl_FragCoord.xy);
             vec3 H = sampleReflVNDF(n, v, reflRough, blueNoise.gb);
             vec3 vndfDir = reflect(-v, H);
             if (dot(vndfDir, n) > 0.001) {

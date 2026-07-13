@@ -263,10 +263,11 @@ ${refineBlock}
         // Stochastic step jitter: break up deterministic DE banding.
         // Asymmetric [1-jitter, 1.0] — biased short to avoid overshoot.
         // uStepJitter=0 disables (stepJitter=1.0). uStepJitter=0.15 is default.
-        // Disabled during navigation for a clean image — banding
-        // averages away once accumulation starts.
+        // Applied in navigation too so the seed frame's march matches the converged
+        // one — stochasticSeed is frozen (getStableBlueNoise4) while moving, so the
+        // dither is stable (no shimmer) and animates only once accumulation starts.
         // Stochastic step jitter — coprime hash constants (127.1, 31.7) prevent banding artifacts
-        float stepJitter = uBlendFactor >= 0.99 ? 1.0 : (1.0 - uStepJitter) + uStepJitter * fract(stochasticSeed * 127.1 + d * 31.7);
+        float stepJitter = (1.0 - uStepJitter) + uStepJitter * fract(stochasticSeed * 127.1 + d * 31.7);
         ${refineRemember}${mb3dStep}
 
         if (d > maxMarch) break;

@@ -2,20 +2,15 @@
 
 export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
     
-     const noiseLogic = renderMode === 'PathTracing' ? 
-        `needNoise = true;` :
-        `
-        // Always apply DOF noise for blur preview - even during navigation
-        if (uDOFStrength > 0.000001) needNoise = true;
-        if (!isMoving) needNoise = true;  // Other effects need noise when stationary
-        if (uAreaLights > 0.5) needNoise = true;
-        // Volumetric scatter: gate hash relies on per-pixel stochasticSeed
-        // for spatial decorrelation. Without this clause, during navigation
-        // the seed defaults to 0.5 for every pixel and the gate fires/skips
-        // identically across the whole screen — producing visible bands
-        // synced to fixed d-values.
-        if (uVolEnabled > 0.5) needNoise = true;
-        `;
+     // Both render modes now always seed the per-pixel stochasticSeed. Direct used
+     // to gate this on isMoving + per-feature flags, which left the navigation frame
+     // with a flat 0.5 seed and a DIFFERENT look from accumulation (un-dithered DE
+     // march, sharp light-sphere edges). Seeding unconditionally makes navigation
+     // render the same integrand as the final image; the stable-vs-animated select
+     // below (getStableBlueNoise4 while moving) keeps nav frozen so nothing shimmers.
+     // (renderMode retained for call-site clarity; both branches are now identical.)
+     void renderMode;
+     const noiseLogic = `needNoise = true;`;
 
     return `
 // ------------------------------------------------------------------

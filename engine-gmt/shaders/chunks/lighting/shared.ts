@@ -112,8 +112,10 @@ export const getLightSphereCompositeGLSL = () => `
 #ifdef LIGHT_SPHERES
 void compositeLightSpheres(vec3 ro, vec3 rd, inout vec3 col, inout float d, bool hit, inout float volumetric, float seed) {
     // Stochastic radius jitter: +-2% per frame, accumulation averages into smooth AA edges.
-    // Disabled during navigation (uBlendFactor >= 0.99) for a clean image.
-    float radiusJitter = uBlendFactor >= 0.99 ? 0.0 : (fract(seed * 91.3) - 0.5) * 0.04;
+    // Applied in navigation too so the seed frame's edge matches the converged one;
+    // 'seed' (stochasticSeed) is frozen while moving (stable blue noise), so the
+    // jittered edge stays put rather than shimmering.
+    float radiusJitter = (fract(seed * 91.3) - 0.5) * 0.04;
 
     vec3 lsHit = intersectLightSphere(ro, rd, radiusJitter);
     if (lsHit.x > 0.001) {

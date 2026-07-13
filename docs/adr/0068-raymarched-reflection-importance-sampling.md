@@ -15,6 +15,18 @@
 > half-vector sampler was removed from `pathtracer.ts`. The technique choice
 > (bounded spherical-cap VNDF) is unchanged — it now also governs PT bounces.
 
+> **Update 2026-07-13 (in-motion no longer forces `reflDir`; decision unchanged):**
+> Decision point 1 below said "Perfect-mirror surfaces **and in-motion frames**
+> keep the deterministic `reflDir`." The in-motion clause is removed (see
+> ADR-0100): glossy surfaces now run VNDF in navigation as well as accumulation,
+> seeded by `getStableBlueNoise4` while the camera moves (frozen per-pixel → no
+> shimmer) and `getBlueNoise4` once accumulating. This makes the first
+> accumulation sample a valid sample of the same estimator instead of a
+> sharp-mirror frame that biased the running mean. **Only** perfect mirrors
+> (`roughness <= 0.05`) still short-circuit to `reflDir`. The VNDF technique
+> itself is unchanged. The trade — glossy reflections now read soft-not-mirror
+> while flying — is accepted (owner call, 2026-07-13).
+
 ## Context
 
 The raymarched reflection mode (`reflectionMode === REFL_MODE_RAYMARCH`,
