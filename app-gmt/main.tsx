@@ -165,6 +165,18 @@ FractalEvents.on(FRACTAL_EVENTS.TEXTURE, ({ textureType, dataUrl }) => {
     if (!proxy.isBooted) proxy.pendingTextures.set(textureType, dataUrl);
 });
 
+// Forward formula registrations to the worker from module-eval — so a scene
+// hydrated BEFORE boot (share link / OAuth stash) delivers its custom formula's
+// shader (MB3D-hybrid / Workshop). proxy.post() queues it in the pre-boot outbox
+// and flushes it to the worker before the boot compile (WorkerProxy._outbox);
+// post-boot it delivers immediately. Registered here (not in GmtRendererTickDriver,
+// which mounts too late) so the boot-time REGISTER_FORMULA emit is never missed —
+// without this the boot compile runs before the shader arrives and renders a
+// fallback sphere until a manual recompile.
+FractalEvents.on(FRACTAL_EVENTS.REGISTER_FORMULA, ({ id, shader }: any) => {
+    getProxy().registerFormula(id, shader);
+});
+
 // GMT modular slice — Modular formula's pipeline + graph state.
 // Without this, switching to the Modular formula crashes FlowEditor
 // on `state.graph.nodes` (undefined).

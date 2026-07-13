@@ -154,6 +154,11 @@ export class WorkerProxy implements AccumulationController {
             this._handleWorkerCrash('Worker error: ' + (e.message || 'unknown'));
         };
 
+        // Deliver any pre-boot-queued messages (e.g. a boot-hydrated scene's
+        // custom-formula REGISTER_FORMULA) to the worker BEFORE INIT, so they're
+        // processed ahead of the (deferred) boot compile.
+        this._flushOutbox();
+
         const initMsg: MainToWorkerMessage = {
             type: 'INIT',
             canvas: offscreen,
@@ -217,6 +222,10 @@ export class WorkerProxy implements AccumulationController {
             console.error('[WorkerProxy] Worker error:', e);
             this._handleWorkerCrash('Worker error: ' + (e.message || 'unknown'));
         };
+
+        // Same pre-INIT outbox flush as initWorkerMode — a restart (e.g. Firefox
+        // compile-cancel) re-creates the worker, so re-deliver queued messages.
+        this._flushOutbox();
 
         const initMsg: MainToWorkerMessage = {
             type: 'INIT',
@@ -413,9 +422,38 @@ export class WorkerProxy implements AccumulationController {
         }
     }
 
-    /** Post a typed message to the render worker */
+    /**
+     * Pre-boot outbox. Messages posted before the worker exists are QUEUED here
+     * rather than dropped, then flushed to the worker at creation (in FIFO order,
+     * before INIT) by {@link _flushOutbox}. This is what makes a scene hydrated
+     * at boot (share link / OAuth stash) deliver its custom-formula
+     * REGISTER_FORMULA — and any other pre-boot message — to the worker BEFORE the
+     * boot compile, so the worker can never be asked to compile a formula it
+     * hasn't received (the sphere-fallback bug). One general mechanism, replacing
+     * the need for per-type pre-boot stashes.
+     * @invariant Flushed exactly once per worker, at creation, before INIT.
+     */
+    private _outbox: Array<{ msg: MainToWorkerMessage; transfer?: Transferable[] }> = [];
+
+    /** Post a typed message to the render worker (queued in _outbox if the worker
+     *  isn't created yet — see {@link _outbox}). */
     post(msg: MainToWorkerMessage, transfer?: Transferable[]) {
-        if (this._worker) {
+        if (!this._worker) {
+            this._outbox.push({ msg, transfer });
+            return;
+        }
+        if (transfer) this._worker.postMessage(msg, transfer);
+        else this._worker.postMessage(msg);
+    }
+
+    /** Drain the pre-boot outbox to the freshly-created worker, in FIFO order.
+     *  Called at both worker-creation sites BEFORE the INIT message, so queued
+     *  registrations reach the worker ahead of the (deferred) boot compile. */
+    private _flushOutbox() {
+        if (!this._worker || this._outbox.length === 0) return;
+        const queued = this._outbox;
+        this._outbox = [];
+        for (const { msg, transfer } of queued) {
             if (transfer) this._worker.postMessage(msg, transfer);
             else this._worker.postMessage(msg);
         }

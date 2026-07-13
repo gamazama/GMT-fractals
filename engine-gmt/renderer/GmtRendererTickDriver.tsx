@@ -231,9 +231,9 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
                 // the stash once the worker is ready.
                 if (proxy.isBooted) proxy.updateTexture(textureType, dataUrl);
             }),
-            FractalEvents.on(FRACTAL_EVENTS.REGISTER_FORMULA, ({ id, shader }: any) => {
-                proxy.registerFormula(id, shader);
-            }),
+            // REGISTER_FORMULA is bridged from app-gmt/main.tsx at module-eval (so a
+            // pre-boot scene hydration's custom shader isn't missed) — not here,
+            // which mounts too late for the boot-time emit.
         ];
 
         return () => { unsubs.forEach((u) => u()); };
