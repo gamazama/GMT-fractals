@@ -41,6 +41,14 @@ export interface QualityRangePadProps {
   /** Domain edges (default 0 / 1). The pad normalises internally. */
   min?: number;
   max?: number;
+  /** When true, the two numeric fields may be typed / scrubbed BEYOND the
+   *  visible domain edges — min/max are a *suggested* track span, not a hard
+   *  limit, exactly like every DDFS scalar slider (whose min/max are soft). The
+   *  mutual min<max separation is still enforced. The track GESTURE stays bounded
+   *  to the visible span either way (a thumb can't leave the track). Default
+   *  false = domain edges are hard (the GX quality axes, whose 0..1 span is a
+   *  true limit). Fog Range opts in via RangePairPad. */
+  softRange?: boolean;
   /** Step + formatter for the two numeric fields (default 0.01 / 2 dp). */
   step?: number;
   format?: (v: number) => string;
@@ -96,6 +104,7 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
   onChange,
   min = 0,
   max = 1,
+  softRange = false,
   step = 0.01,
   format,
   label,
@@ -200,10 +209,15 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
   // Number-field edits — clamp to keep the separation; DraggableNumber's own
   // hardMin/hardMax do the live clamp during scrub, these are belt-and-braces.
   const gapD = MIN_GAP * span; // separation in domain units
-  const setMin = useCallback((v: number) => onChange([clamp(v, min, fromN(valueRef.current[1]) - gapD), fromN(valueRef.current[1])]), [onChange, min, fromN, gapD]);
-  const setMax = useCallback((v: number) => onChange([fromN(valueRef.current[0]), clamp(v, fromN(valueRef.current[0]) + gapD, max)]), [onChange, max, fromN, gapD]);
+  // Outer field bound: the hard domain edge by default, or unbounded when
+  // `softRange` (the visible span is a suggestion — a field may exceed it, like
+  // any DDFS scalar slider). Ordering (min<max−gap) is enforced separately below.
+  const loFloor = softRange ? -Infinity : min;
+  const hiCeil = softRange ? Infinity : max;
+  const setMin = useCallback((v: number) => onChange([clamp(v, loFloor, fromN(valueRef.current[1]) - gapD), fromN(valueRef.current[1])]), [onChange, loFloor, fromN, gapD]);
+  const setMax = useCallback((v: number) => onChange([fromN(valueRef.current[0]), clamp(v, fromN(valueRef.current[0]) + gapD, hiCeil)]), [onChange, hiCeil, fromN, gapD]);
 
-  const numberCell = (val: number, set: (v: number) => void, hardMin: number, hardMax: number) => (
+  const numberCell = (val: number, set: (v: number) => void, hardMin: number | undefined, hardMax: number | undefined) => (
     <div
       className="relative flex-1 min-w-0 border-l border-line/10 bg-line/[0.02] touch-none"
       style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.03) 5px, rgba(255,255,255,0.03) 10px)' }}
@@ -233,8 +247,8 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
         </div>
         {/* Value region = w-1/2 (matches a GMT slider's value area), split into two equal fields. */}
         <div className="w-1/2 flex shrink-0">
-          {numberCell(a, setMin, min, Math.max(min, b - gapD))}
-          {numberCell(b, setMax, Math.min(max, a + gapD), max)}
+          {numberCell(a, setMin, softRange ? undefined : min, Math.max(loFloor, b - gapD))}
+          {numberCell(b, setMax, Math.min(hiCeil, a + gapD), softRange ? undefined : max)}
         </div>
       </div>
 

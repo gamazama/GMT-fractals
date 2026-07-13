@@ -142,6 +142,10 @@ const RangePairPad: React.FC<{
                     if (lo !== valueMin) { onMinChange(lo); kLo.autoKeyOnChange(lo); }
                     if (hi !== valueMax) { onMaxChange(hi); kHi.autoKeyOnChange(hi); }
                 }}
+                // DDFS range pairs treat min/max as a soft/suggested span (like
+                // every scalar slider) — the numeric fields accept out-of-range
+                // values (e.g. a Fog End well past the visible 10-unit track).
+                softRange
                 min={min} max={max} step={step} format={format}
                 label={label} loLabel={minLabel} hiLabel={maxLabel}
                 headerRight={(trackIdMin || trackIdMax) && !disabled
