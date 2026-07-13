@@ -79,7 +79,7 @@ The table below covers **domain topics** (specific subsystems). If your task is 
 | **DDFS feature catalog (engine-gmt)** — feature mounting, engine-core sharing | JSDoc on `engine-gmt/features/index.ts` + `features/core_math.ts` | ADRs 0054-0055 |
 | **Camera Manager (engine-gmt)** — savedCameras, slot hotkeys, installStateLibrary consumer | JSDoc on `engine-gmt/store/cameraSlice.ts` + `features/camera_manager/*` | ADRs 0056-0057 |
 | **Formula Workshop** — V3/V4 importer, importSource lifecycle | JSDoc on `engine-gmt/features/fragmentarium_import/FormulaWorkshop.tsx` | ADR-0058 |
-| **Mandelbulb3D importer** — `.m3p`/text parse, hybrid weave, x87 `[CODE]` decompiler + cross-check, fused FractalDefinition; hand-ported bit-hacking formulas via `mb3dFormulaLibrary.ts` overlay | [`plans/mb3d/converter-design.md`](./plans/mb3d/converter-design.md) + `engine-gmt/utils/mb3d/*` | ADR-0083, 0101 |
+| **Mandelbulb3D importer** — `.m3p`/text parse, hybrid weave, x87 `[CODE]` decompiler + cross-check, fused FractalDefinition; hand-ported bit-hacking formulas via `mb3dFormulaLibrary.ts` overlay; 4D-coord (`wIsCoord`) DE radius + c.w julia seed | [`plans/mb3d/converter-design.md`](./plans/mb3d/converter-design.md) + `engine-gmt/utils/mb3d/*` | ADR-0083, 0101, 0102 |
 | **Anything spanning engine/ + engine-gmt/** (fork rules — when to shim vs fork) | [`docs/policy/engine-fork-rules.md`](./docs/policy/engine-fork-rules.md) | — |
 | **fluid-toy** — sibling app | `fluid-toy/README.md` + `docs/modules/fluid-toy/index.md` (overview) | — |
 | **fractal-toy** — sibling app | `docs/modules/fractal-toy/index.md` (overview) | — |

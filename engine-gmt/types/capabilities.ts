@@ -29,8 +29,8 @@ export type Capability =
   // Render-side outputs
   | 'render:writes-trap'     // populates result.y for trap-mode coloring
   | 'render:writes-iter'     // populates result.z (smoothiter) meaningfully
-  | 'render:de-4d';          // z.w is a real 4th spatial coord (MB3D deOption 5/6) → the DE
-                             // radius + escape bailout use the 4D magnitude, not length(z.xyz)
+  | 'render:de-4d';          // z.w is a real 4th spatial coord (MB3D deOption 6, IFS family) → the
+                             // DE radius + bailout use the 4D magnitude, not length(z.xyz). @see docs/adr/0102
 
 export type CapabilitySet = ReadonlySet<Capability>;
 
