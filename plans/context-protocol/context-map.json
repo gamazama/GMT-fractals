@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-13T14:11:06.396Z",
+  "generated_at": "2026-07-13T14:59:10.327Z",
   "repo_root": "H:/GMT/workspace-gmt/stable",
   "heavy_token_threshold": 4000,
   "estimator": "char-ratio-per-filetype (see scripts/tokens.mjs)",
   "totals": {
     "files": 3326,
-    "bytes": 80767325,
-    "tokens": 11205787,
-    "loadable_tokens": 11073985,
-    "context_worthy_tokens": 4232778,
-    "source_of_truth_tokens": 3493878,
-    "orientation_tokens": 29938,
-    "architecture_tokens": 708962,
+    "bytes": 80759448,
+    "tokens": 11203041,
+    "loadable_tokens": 11071239,
+    "context_worthy_tokens": 4199612,
+    "source_of_truth_tokens": 3493874,
+    "orientation_tokens": 29948,
+    "architecture_tokens": 675790,
     "reachable_union_files": 1011,
     "reachable_union_tokens": 2896633,
     "dead_context_files": 22,
@@ -164,7 +164,7 @@
   ],
   "by_tier": {
     "root": {
-      "tokens": 529556,
+      "tokens": 529582,
       "files": 153
     },
     "app-gmt": {
@@ -176,16 +176,16 @@
       "files": 237
     },
     "tooling": {
-      "tokens": 4079124,
-      "files": 363
+      "tokens": 4043053,
+      "files": 355
     },
     "demo": {
       "tokens": 8998,
       "files": 8
     },
     "docs": {
-      "tokens": 1646468,
-      "files": 474
+      "tokens": 1679767,
+      "files": 482
     },
     "engine-gmt": {
       "tokens": 2918687,
@@ -214,7 +214,7 @@
   },
   "by_context_class": {
     "orient": {
-      "tokens": 29938,
+      "tokens": 29948,
       "files": 15
     },
     "source": {
@@ -222,7 +222,7 @@
       "files": 1044
     },
     "data": {
-      "tokens": 5679302,
+      "tokens": 5676477,
       "files": 869
     },
     "config": {
@@ -230,20 +230,20 @@
       "files": 11
     },
     "architecture": {
-      "tokens": 708962,
-      "files": 214
+      "tokens": 675790,
+      "files": 206
     },
     "asset": {
       "tokens": 0,
       "files": 602
     },
     "source-tooling": {
-      "tokens": 498119,
+      "tokens": 498115,
       "files": 229
     },
     "reference-legacy": {
-      "tokens": 1161905,
-      "files": 341
+      "tokens": 1195150,
+      "files": 349
     },
     "generated": {
       "tokens": 131802,
@@ -252,28 +252,28 @@
   },
   "by_load_policy": {
     "read-first": {
-      "tokens": 29938,
+      "tokens": 29948,
       "files": 15
     },
     "on-demand": {
-      "tokens": 3493878,
+      "tokens": 3493874,
       "files": 1284
     },
     "skip": {
-      "tokens": 4141316,
+      "tokens": 4138491,
       "files": 256
     },
     "read-for-area": {
-      "tokens": 708962,
-      "files": 214
+      "tokens": 675790,
+      "files": 206
     },
     "never": {
       "tokens": 131802,
       "files": 603
     },
     "reference-only": {
-      "tokens": 2699891,
-      "files": 954
+      "tokens": 2733136,
+      "files": 962
     }
   },
   "tier_policy_matrix": {
@@ -281,7 +281,7 @@
       "read-first": 14099,
       "on-demand": 345914,
       "skip": 10577,
-      "read-for-area": 27164
+      "read-for-area": 27190
     },
     "app-gmt": {
       "on-demand": 50923,
@@ -291,9 +291,9 @@
       "on-demand": 590234
     },
     "tooling": {
-      "on-demand": 498174,
-      "skip": 3157665,
-      "read-for-area": 420585,
+      "on-demand": 498170,
+      "skip": 3154828,
+      "read-for-area": 387355,
       "read-first": 2700
     },
     "demo": {
@@ -301,10 +301,10 @@
       "read-first": 1542
     },
     "docs": {
-      "read-for-area": 256607,
-      "read-first": 3722,
-      "reference-only": 1161905,
-      "skip": 224234
+      "read-for-area": 256639,
+      "read-first": 3732,
+      "reference-only": 1195150,
+      "skip": 224246
     },
     "engine-gmt": {
       "on-demand": 1367175,
@@ -346,13 +346,13 @@
     },
     {
       "path": "docs/CHANGELOG_DEV.md",
-      "tokens": 44906,
+      "tokens": 44917,
       "tier": "docs",
       "loadPolicy": "read-for-area"
     },
     {
       "path": "plans/execution/execution-progress.md",
-      "tokens": 38242,
+      "tokens": 38258,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
     },
@@ -382,7 +382,7 @@
     },
     {
       "path": "HANDOFF.md",
-      "tokens": 27164,
+      "tokens": 27190,
       "tier": "root",
       "loadPolicy": "read-for-area"
     },
@@ -502,13 +502,13 @@
     },
     {
       "path": "docs/BENCH_SHADER_HANDOFF.md",
-      "tokens": 13772,
+      "tokens": 13788,
       "tier": "docs",
       "loadPolicy": "read-for-area"
     },
     {
       "path": "plans/fullscreen-v2-rescope.md",
-      "tokens": 13700,
+      "tokens": 13711,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
     },
@@ -904,7 +904,7 @@
     },
     {
       "path": "docs/UI_PERF_HANDOFF.md",
-      "tokens": 7717,
+      "tokens": 7722,
       "tier": "docs",
       "loadPolicy": "read-for-area"
     },
@@ -943,12 +943,6 @@
       "tokens": 7448,
       "tier": "root",
       "loadPolicy": "on-demand"
-    },
-    {
-      "path": "plans/area-lights.md",
-      "tokens": 7443,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
     },
     {
       "path": "engine-gmt/utils/mb3d/constPacker.ts",
@@ -1129,12 +1123,6 @@
       "tokens": 6426,
       "tier": "engine-gmt",
       "loadPolicy": "on-demand"
-    },
-    {
-      "path": "plans/mobile-mode-app-gmt.md",
-      "tokens": 6317,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
     },
     {
       "path": "debug/test-dither.mts",
@@ -1633,12 +1621,6 @@
       "tokens": 4803,
       "tier": "engine-gmt",
       "loadPolicy": "on-demand"
-    },
-    {
-      "path": "plans/fullscreen-v2-scope.md",
-      "tokens": 4787,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
     },
     {
       "path": "engine/plugins/tutorial/Overlay.tsx",
@@ -10948,10 +10930,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 54119,
+      "bytes": 54182,
       "lines": 988,
-      "tokens": 13772,
-      "structuralTokens": 16365,
+      "tokens": 13788,
+      "structuralTokens": 16389,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -10963,10 +10945,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 176114,
+      "bytes": 176156,
       "lines": 1337,
-      "tokens": 44906,
-      "structuralTokens": 54189,
+      "tokens": 44917,
+      "structuralTokens": 54205,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -10978,10 +10960,10 @@
       "loadPolicy": "read-first",
       "ext": ".md",
       "reason": "orient:docs-index",
-      "bytes": 4057,
+      "bytes": 4097,
       "lines": 66,
-      "tokens": 1012,
-      "structuralTokens": 1372,
+      "tokens": 1022,
+      "structuralTokens": 1385,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -12628,10 +12610,10 @@
       "loadPolicy": "skip",
       "ext": ".yaml",
       "reason": "docs-state-data",
-      "bytes": 114296,
+      "bytes": 114338,
       "lines": 3354,
-      "tokens": 33617,
-      "structuralTokens": 28828,
+      "tokens": 33629,
+      "structuralTokens": 28844,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -12913,10 +12895,10 @@
       "loadPolicy": "reference-only",
       "ext": ".md",
       "reason": "legacy-docs",
-      "bytes": 25875,
+      "bytes": 25896,
       "lines": 95,
-      "tokens": 6596,
-      "structuralTokens": 7715,
+      "tokens": 6602,
+      "structuralTokens": 7723,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -14383,10 +14365,10 @@
       "loadPolicy": "reference-only",
       "ext": ".md",
       "reason": "legacy-docs",
-      "bytes": 4789,
+      "bytes": 4810,
       "lines": 42,
-      "tokens": 1223,
-      "structuralTokens": 1539,
+      "tokens": 1229,
+      "structuralTokens": 1547,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -15742,6 +15724,36 @@
       "reachableFrom": []
     },
     {
+      "path": "docs/history/plans-archive/ai-formula-kit-family-archetypes.md",
+      "tier": "docs",
+      "contextClass": "reference-legacy",
+      "loadPolicy": "reference-only",
+      "ext": ".md",
+      "reason": "legacy-docs",
+      "bytes": 13449,
+      "lines": 162,
+      "tokens": 3413,
+      "structuralTokens": 4614,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/history/plans-archive/ai-formula-kit-sota-research.md",
+      "tier": "docs",
+      "contextClass": "reference-legacy",
+      "loadPolicy": "reference-only",
+      "ext": ".md",
+      "reason": "legacy-docs",
+      "bytes": 4782,
+      "lines": 33,
+      "tokens": 1205,
+      "structuralTokens": 1448,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
       "path": "docs/history/plans-archive/app-gmt-touchups.md",
       "tier": "docs",
       "contextClass": "reference-legacy",
@@ -15752,6 +15764,21 @@
       "lines": 426,
       "tokens": 9070,
       "structuralTokens": 11414,
+      "cpt": 3.9,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/history/plans-archive/area-lights.md",
+      "tier": "docs",
+      "contextClass": "reference-legacy",
+      "loadPolicy": "reference-only",
+      "ext": ".md",
+      "reason": "legacy-docs",
+      "bytes": 29193,
+      "lines": 629,
+      "tokens": 7443,
+      "structuralTokens": 8713,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -15922,6 +15949,21 @@
       "reachableFrom": []
     },
     {
+      "path": "docs/history/plans-archive/fullscreen-v2-scope.md",
+      "tier": "docs",
+      "contextClass": "reference-legacy",
+      "loadPolicy": "reference-only",
+      "ext": ".md",
+      "reason": "legacy-docs",
+      "bytes": 18810,
+      "lines": 295,
+      "tokens": 4787,
+      "structuralTokens": 5920,
+      "cpt": 3.9,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "docs/history/plans-archive/gradient-tech-competitive-research.md",
       "tier": "docs",
       "contextClass": "reference-legacy",
@@ -15982,6 +16024,21 @@
       "reachableFrom": []
     },
     {
+      "path": "docs/history/plans-archive/mobile-mode-app-gmt.md",
+      "tier": "docs",
+      "contextClass": "reference-legacy",
+      "loadPolicy": "reference-only",
+      "ext": ".md",
+      "reason": "legacy-docs",
+      "bytes": 24823,
+      "lines": 300,
+      "tokens": 6317,
+      "structuralTokens": 7915,
+      "cpt": 3.9,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "docs/history/plans-archive/new-scene-spec.md",
       "tier": "docs",
       "contextClass": "reference-legacy",
@@ -16007,6 +16064,21 @@
       "lines": 154,
       "tokens": 2470,
       "structuralTokens": 2856,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/history/plans-archive/nucleus-reference-handoff.md",
+      "tier": "docs",
+      "contextClass": "reference-legacy",
+      "loadPolicy": "reference-only",
+      "ext": ".md",
+      "reason": "legacy-docs",
+      "bytes": 10061,
+      "lines": 154,
+      "tokens": 2560,
+      "structuralTokens": 3058,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -16162,6 +16234,21 @@
       "reachableFrom": []
     },
     {
+      "path": "docs/history/plans-archive/perf-warning-bucket-collapse-handoff.md",
+      "tier": "docs",
+      "contextClass": "reference-legacy",
+      "loadPolicy": "reference-only",
+      "ext": ".md",
+      "reason": "legacy-docs",
+      "bytes": 14566,
+      "lines": 223,
+      "tokens": 3699,
+      "structuralTokens": 4537,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
       "path": "docs/history/plans-archive/picker-seam-handoff.md",
       "tier": "docs",
       "contextClass": "reference-legacy",
@@ -16247,6 +16334,21 @@
       "lines": 68,
       "tokens": 1228,
       "structuralTokens": 1528,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/history/plans-archive/tiled-progressive-rendering-HANDOVER.md",
+      "tier": "docs",
+      "contextClass": "reference-legacy",
+      "loadPolicy": "reference-only",
+      "ext": ".md",
+      "reason": "legacy-docs",
+      "bytes": 15027,
+      "lines": 217,
+      "tokens": 3809,
+      "structuralTokens": 4474,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -16528,10 +16630,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 30293,
+      "bytes": 30314,
       "lines": 651,
-      "tokens": 7717,
-      "structuralTokens": 8840,
+      "tokens": 7722,
+      "structuralTokens": 8848,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -38452,10 +38554,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 106915,
+      "bytes": 107020,
       "lines": 708,
-      "tokens": 27164,
-      "structuralTokens": 33511,
+      "tokens": 27190,
+      "structuralTokens": 33551,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -41036,36 +41138,6 @@
       ]
     },
     {
-      "path": "plans/ai-formula-kit-family-archetypes.md",
-      "tier": "tooling",
-      "contextClass": "architecture",
-      "loadPolicy": "read-for-area",
-      "ext": ".md",
-      "reason": "in-tree-notes",
-      "bytes": 13449,
-      "lines": 162,
-      "tokens": 3413,
-      "structuralTokens": 4614,
-      "cpt": 3.9,
-      "heavy": false,
-      "reachableFrom": []
-    },
-    {
-      "path": "plans/ai-formula-kit-sota-research.md",
-      "tier": "tooling",
-      "contextClass": "architecture",
-      "loadPolicy": "read-for-area",
-      "ext": ".md",
-      "reason": "in-tree-notes",
-      "bytes": 4782,
-      "lines": 33,
-      "tokens": 1205,
-      "structuralTokens": 1448,
-      "cpt": 3.9,
-      "heavy": false,
-      "reachableFrom": []
-    },
-    {
       "path": "plans/ai-formula-kit-spec.md",
       "tier": "tooling",
       "contextClass": "architecture",
@@ -41078,21 +41150,6 @@
       "structuralTokens": 2809,
       "cpt": 3.9,
       "heavy": false,
-      "reachableFrom": []
-    },
-    {
-      "path": "plans/area-lights.md",
-      "tier": "tooling",
-      "contextClass": "architecture",
-      "loadPolicy": "read-for-area",
-      "ext": ".md",
-      "reason": "in-tree-notes",
-      "bytes": 29193,
-      "lines": 629,
-      "tokens": 7443,
-      "structuralTokens": 8713,
-      "cpt": 3.9,
-      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -41252,10 +41309,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 1416766,
-      "lines": 56194,
-      "tokens": 488540,
-      "structuralTokens": 468391,
+      "bytes": 1408536,
+      "lines": 55805,
+      "tokens": 485703,
+      "structuralTokens": 465413,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -41267,10 +41324,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 11345,
+      "bytes": 11249,
       "lines": 161,
-      "tokens": 2904,
-      "structuralTokens": 4442,
+      "tokens": 2880,
+      "structuralTokens": 4376,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -41342,10 +41399,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mjs",
       "reason": "tooling-script",
-      "bytes": 10685,
+      "bytes": 10674,
       "lines": 231,
-      "tokens": 3133,
-      "structuralTokens": 4081,
+      "tokens": 3129,
+      "structuralTokens": 4077,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -41477,10 +41534,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 151233,
+      "bytes": 151296,
       "lines": 1515,
-      "tokens": 38242,
-      "structuralTokens": 47413,
+      "tokens": 38258,
+      "structuralTokens": 47437,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -41567,25 +41624,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 53953,
+      "bytes": 53995,
       "lines": 537,
-      "tokens": 13700,
-      "structuralTokens": 17146,
-      "cpt": 3.9,
-      "heavy": true,
-      "reachableFrom": []
-    },
-    {
-      "path": "plans/fullscreen-v2-scope.md",
-      "tier": "tooling",
-      "contextClass": "architecture",
-      "loadPolicy": "read-for-area",
-      "ext": ".md",
-      "reason": "in-tree-notes",
-      "bytes": 18810,
-      "lines": 295,
-      "tokens": 4787,
-      "structuralTokens": 5920,
+      "tokens": 13711,
+      "structuralTokens": 17162,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -42611,36 +42653,6 @@
       "reachableFrom": []
     },
     {
-      "path": "plans/mobile-mode-app-gmt.md",
-      "tier": "tooling",
-      "contextClass": "architecture",
-      "loadPolicy": "read-for-area",
-      "ext": ".md",
-      "reason": "in-tree-notes",
-      "bytes": 24823,
-      "lines": 300,
-      "tokens": 6317,
-      "structuralTokens": 7915,
-      "cpt": 3.9,
-      "heavy": true,
-      "reachableFrom": []
-    },
-    {
-      "path": "plans/nucleus-reference-handoff.md",
-      "tier": "tooling",
-      "contextClass": "architecture",
-      "loadPolicy": "read-for-area",
-      "ext": ".md",
-      "reason": "in-tree-notes",
-      "bytes": 10061,
-      "lines": 154,
-      "tokens": 2560,
-      "structuralTokens": 3058,
-      "cpt": 3.9,
-      "heavy": false,
-      "reachableFrom": []
-    },
-    {
       "path": "plans/p2-a-picker-interaction.md",
       "tier": "tooling",
       "contextClass": "architecture",
@@ -42716,21 +42728,6 @@
       "reachableFrom": []
     },
     {
-      "path": "plans/perf-warning-bucket-collapse-handoff.md",
-      "tier": "tooling",
-      "contextClass": "architecture",
-      "loadPolicy": "read-for-area",
-      "ext": ".md",
-      "reason": "in-tree-notes",
-      "bytes": 14566,
-      "lines": 223,
-      "tokens": 3699,
-      "structuralTokens": 4537,
-      "cpt": 3.9,
-      "heavy": false,
-      "reachableFrom": []
-    },
-    {
       "path": "plans/pt-validation-report.md",
       "tier": "tooling",
       "contextClass": "architecture",
@@ -42756,21 +42753,6 @@
       "lines": 195,
       "tokens": 2939,
       "structuralTokens": 3764,
-      "cpt": 3.9,
-      "heavy": false,
-      "reachableFrom": []
-    },
-    {
-      "path": "plans/tiled-progressive-rendering-HANDOVER.md",
-      "tier": "tooling",
-      "contextClass": "architecture",
-      "loadPolicy": "read-for-area",
-      "ext": ".md",
-      "reason": "in-tree-notes",
-      "bytes": 15027,
-      "lines": 217,
-      "tokens": 3809,
-      "structuralTokens": 4474,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []

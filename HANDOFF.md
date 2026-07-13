@@ -158,7 +158,7 @@ User context: env-map reflections in PT mode remained noisy after 4000 samples e
 
 **📋 2026-05-03 — True area lights for the path tracer (Phases 1–4 + UX cleanup):**
 
-Plan: [plans/area-lights.md](plans/area-lights.md). Code in `engine-gmt/shaders/chunks/pathtracer.ts` + `engine-gmt/features/lighting/` + `engine-gmt/engine/managers/UniformManager.ts` + duplicate type plumbing in both `types/graphics.ts` copies.
+Plan: [docs/history/plans-archive/area-lights.md](docs/history/plans-archive/area-lights.md). Code in `engine-gmt/shaders/chunks/pathtracer.ts` + `engine-gmt/features/lighting/` + `engine-gmt/engine/managers/UniformManager.ts` + duplicate type plumbing in both `types/graphics.ts` copies.
 
 User context: prior to this, "Area Lights" in GMT was a stochastic-shadow-jitter trick — a runtime cone perturbation on the shadow ray that *looked* like a soft area light but was still mathematically a delta point. No MIS, no BSDF-side direct catches, ~256 frames to converge clean shadows. New system adds a real light type and physically-correct integration.
 
@@ -192,7 +192,7 @@ User context: prior to this, "Area Lights" in GMT was a stochastic-shadow-jitter
 
 **Pending:**
 - Visual smoke testing (user does this — memory `feedback_visual_smokes`).
-- Phase 4 unbias bench: spec is in `plans/area-lights.md` "Phase 4 unbias bench spec" section. Requires building `debug/bench-area-lights-unbias.mts` plus a `PT_NEE_DISABLE` compile gate. Without it, the math is "reasonably believed correct" but not proven bias-free.
+- Phase 4 unbias bench: spec is in `docs/history/plans-archive/area-lights.md` "Phase 4 unbias bench spec" section. Requires building `debug/bench-area-lights-unbias.mts` plus a `PT_NEE_DISABLE` compile gate. Without it, the math is "reasonably believed correct" but not proven bias-free.
 - Phase 5 (re-attempt power-weighted light selection from S3 history) — would build on the MIS framework; deferred per plan.
 
 **Known limitations:**
@@ -202,7 +202,7 @@ User context: prior to this, "Area Lights" in GMT was a stochastic-shadow-jitter
 
 **📋 2026-05-01 — Mobile mode for app-gmt (Phase A–C iter, D6, E1, F1):**
 
-Plan: [plans/mobile-mode-app-gmt.md](plans/mobile-mode-app-gmt.md). Reference doc: [docs/history/engine/17_Mobile_Layout.md](docs/history/engine/17_Mobile_Layout.md).
+Plan: [docs/history/plans-archive/mobile-mode-app-gmt.md](docs/history/plans-archive/mobile-mode-app-gmt.md). Reference doc: [docs/history/engine/17_Mobile_Layout.md](docs/history/engine/17_Mobile_Layout.md).
 
 User report: stable's mobile rendering path works but its UI is "not mobile-friendly"; same true of app-gmt after the port. Goal: make app-gmt usable on phone + tablet (landscape-only) without resorting to desktop tooling, with primitives reusable by sibling apps (`fluid-toy`, `fractal-toy`, `demo`).
 

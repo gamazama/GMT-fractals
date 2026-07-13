@@ -631,7 +631,7 @@ What worked across the shader-perf sessions:
 - `docs/BENCH_SHADER_HANDOFF.md` — the model handoff doc. Style: full
   procedure, what worked, what didn't, lessons distilled. Worth reading
   even though it's GPU-perf not UI-perf — the methodology generalizes.
-- `plans/area-lights.md` — example feature-plan style: phased,
+- `docs/history/plans-archive/area-lights.md` — example feature-plan style: phased,
   bench-verifiable per phase, with open questions and references.
 - `CLAUDE.md` (in `stable/`) — project conventions, key files,
   architecture patterns. Read before changing core architecture.

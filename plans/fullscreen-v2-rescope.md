@@ -1,7 +1,7 @@
 # Fullscreen-v2 RE-SCOPE — Gradient Explorer fullscreen overlay, second pass
 
 **Date:** 2026-06-08
-**Status:** FRESH RE-SCOPE on the merged foundation. **Supersedes** `plans/fullscreen-v2-scope.md`. **PENDING-HUMAN-REVIEW.**
+**Status:** FRESH RE-SCOPE on the merged foundation. **Supersedes** `docs/history/plans-archive/fullscreen-v2-scope.md`. **PENDING-HUMAN-REVIEW.**
 **Workspace:** `h:/GMT/workspace-gmt/dev/` (all paths relative to here).
 
 > **The old blocker is RESOLVED.** The early `fullscreen-v2-scope.md` was gated on the live-fractal carve and the
@@ -295,7 +295,7 @@ records. v2 Phase-0's contract **must keep the non-pure escape hatch** for `'fra
 - **Targets / open path:** `gradientTargets.ts:237` (`'fullscreen'` SendTarget).
 - **Export:** `utils/SceneFormat.ts:129`.
 - **Determinism harness:** `debug/test-palette-rampgeometry.mts`.
-- **Superseded / cross-stream:** `plans/fullscreen-v2-scope.md` (this doc supersedes it);
+- **Superseded / cross-stream:** `docs/history/plans-archive/fullscreen-v2-scope.md` (this doc supersedes it);
   `plans/gx-live-fractal-coloring-scope.md`; `plans/p2-scope.md:250-254`.
 
 ---

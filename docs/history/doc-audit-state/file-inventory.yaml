@@ -3064,7 +3064,7 @@ entries:
     bytes: 35181
     lines: 426
     blob_sha: ecc11f8bd39432f9c3be8ef1bd67fba05260f420
-  - path: plans/area-lights.md
+  - path: docs/history/plans-archive/area-lights.md
     bytes: 28564
     lines: 629
     blob_sha: 89d1ffd6a9648c8f4ed092f3644a37374576e471
@@ -3088,7 +3088,7 @@ entries:
     bytes: 12634
     lines: 124
     blob_sha: 908a762153ada2bd258b9794be1625bde9a7597a
-  - path: plans/mobile-mode-app-gmt.md
+  - path: docs/history/plans-archive/mobile-mode-app-gmt.md
     bytes: 24491
     lines: 300
     blob_sha: 4f35078d03032f92ab1aabcde2a8b6d0fd1d0d3d

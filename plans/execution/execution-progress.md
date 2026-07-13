@@ -450,7 +450,7 @@ From the [amendment plan](../gradient-explorer-amendments-plan.md) "Locked decis
   test:palette + smoke:boot + orphans, all green).
 
 - **Fullscreen mode v2 — NOW A MAJOR FEATURE INITIATIVE (user expanded 2026-06-08).** The early
-  `plans/fullscreen-v2-scope.md` (per-geometry parametric controls + new geoms + animated preview +
+  `docs/history/plans-archive/fullscreen-v2-scope.md` (per-geometry parametric controls + new geoms + animated preview +
   comparison grid + zoom-pan) is **necessary but INSUFFICIENT** — and its triple-overlap blocker is now
   CLEARED (live-fractal + P2 well-migration both merged). **Added scope:** horizontal **SPLITSCREEN** ·
   high-quality **SOTA dithering** · **MESH + FLUID modes** · **aesthetic & customizability overhaul of ALL
@@ -1270,7 +1270,7 @@ merges, plan amendments. Newest first.)_
   restored). Each cleanup gate-passed (tsc 0 + test:palette green) before committing; /code-review +
   /simplify clean on all.
   **Review queue (suggested order):**
-    1. **fullscreen-v2 scope doc** — `plans/fullscreen-v2-scope.md` (untracked, READ + decide). Has 3
+    1. **fullscreen-v2 scope doc** — `docs/history/plans-archive/fullscreen-v2-scope.md` (untracked, READ + decide). Has 3
        decisions for you: (a) confirm S6 fullscreen is actually live+visually-correct before any v2 work
        (gates≠runtime); (b) v2 before/after P2+live-fractal (probe recommends v2 P0+P1 lands independently,
        accept one planned re-touch); (c) which geometries are v1 + S-curve control style. **Key risk to
@@ -1338,7 +1338,7 @@ merges, plan amendments. Newest first.)_
   `engine-gmt/.../FormulaGallery.tsx`, `engine-gmt/formulas/categories.ts`, + 2 debug helpers — flagged for
   the morning, NOT touched. Session correctly left my uncommitted log edits + the scope doc alone; restored
   to `exec/gradient-explorer`. No worktree/node_modules/merge ops.
-- 2026-06-07 — **[AUTONOMOUS] fullscreen-v2 scope probe DELIVERED** → `plans/fullscreen-v2-scope.md`
+- 2026-06-07 — **[AUTONOMOUS] fullscreen-v2 scope probe DELIVERED** → `docs/history/plans-archive/fullscreen-v2-scope.md`
   (295 lines, untracked, **PENDING-HUMAN-REVIEW**; run `wf_ab0fe679-24a`, 5 agents). **Verdict:** v2 is
   mostly ADDITIVE over the clean pure deterministic `palette/core/rampGeometry.ts` core — geometry-math is
   the easy part; the **sharp edge is sequencing vs P2 + live-fractal** (triple-overlap on

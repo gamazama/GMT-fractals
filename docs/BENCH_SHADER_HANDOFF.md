@@ -763,7 +763,7 @@ at end of trace, not in BSDF intersection), not a true emission surface.
 
 Result: mirror-mode renders look "wrong" because the scene fundamentally
 can't render colored highlights of the lights via specular paths. Until
-true area lights ship (`plans/area-lights.md`), reflection-quality
+true area lights ship (`docs/history/plans-archive/area-lights.md`), reflection-quality
 optimization is hard to validate visually — the underlying scene is
 incomplete for specular evaluation.
 
@@ -789,7 +789,7 @@ reduction is convergence-rate not per-frame GPU). Image effect:
 2. Hardcoded `0.1 * bounce` is a magic number; if shipped, should be a
    slider. Defer until area lights make the visual validation meaningful.
 
-**When to revisit:** after `plans/area-lights.md` Phase 3 ships and
+**When to revisit:** after `docs/history/plans-archive/area-lights.md` Phase 3 ships and
 mirror-mode renders are visually correct. Then re-attempt with proper
 visual validation; consider exposing the floor as a slider.
 
@@ -853,7 +853,7 @@ Recorded so future sessions don't waste time exploring:
 
 ### Where this goes next
 
-The clear architectural step is `plans/area-lights.md`:
+The clear architectural step is `docs/history/plans-archive/area-lights.md`:
 - Phase 3 (BSDF rays detect sphere hits) makes mirror-mode rendering
   correct (lights become visible in reflections).
 - Phase 4 (MIS power-heuristic) unlocks the textbook variance reduction
