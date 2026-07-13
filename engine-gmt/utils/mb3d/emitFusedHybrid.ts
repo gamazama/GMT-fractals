@@ -478,6 +478,13 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
     return !!d && (d.deOption === 5 || d.deOption === 6);
   });
   if (has4DCoord && !has4D) {
+    // c.w = uParamA (shader: `c = mix(z, vec4(uJulia, uParamA), juliaMode)`) — for a 4D-coord
+    // JULIA the iteration constant's 4th component must be the julia W (jw), NOT the scaffold's
+    // garbage paramA. Without this, c.w drifts z.w every iteration; the sphere inversion reads
+    // the 4D magnitude x²+y²+z²+w², so a diverging w distorts x/y/z and smears the surface
+    // detail (ABoxSphereOffset4d's missing bulbs; it also blew up the experimental 4D DE radius).
+    // Mandelbrot-mode 4D formulas (Menger4/MixPinski4/…) read c.w = z.w, so paramA is a no-op there.
+    preset.features.coreMath.paramA = h.isJulia ? h.jw : 0; // c.w = julia W (4th-dim constant)
     preset.features.coreMath.paramB = h.isJulia ? h.jw : 0; // z.w start (4th-coord slice)
   }
 
