@@ -42,6 +42,7 @@ import { fileURLToPath } from 'node:url';
 import { fmtTokens } from './tokens.mjs';
 import { sliceGuide } from './symbols.mjs';
 import { buildEdges, closure } from './edges.mjs';
+import { tierOf } from './classify.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
@@ -462,18 +463,32 @@ function resolveFileArg(arg, trackedPaths) {
     cands.slice(0, 12).map((p) => '  ' + p).join('\n') + (cands.length > 12 ? '\n  …' : ''));
 }
 
+// Live tracked set from git — so an edge query always sees THIS session's
+// new/edited files. It must NOT inherit the committed map's staleness: a
+// blast-radius tool that silently under-reports is worse than grep, which
+// always sees the working tree. The map is consulted only for token/tier annotation.
+function liveTrackedPaths() {
+  const run = (cmd) => execSync(cmd, { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const tracked = run('git ls-files');
+  let untracked = '';
+  try { untracked = run('git ls-files --others --exclude-standard'); } catch { /* optional */ }
+  return [...tracked.split('\n'), ...untracked.split('\n')].map((s) => s.trim()).filter(Boolean);
+}
+
 function runEdgeQuery(verb, fileArg, opts) {
   if (!fileArg) fail(`usage: npm run context:cost -- ${verb} <file> [--transitive] [--json]`);
-  const map = loadMap();
-  const index = byPath(map.entries);
-  const trackedPaths = map.entries.map((e) => e.path);
+  const trackedPaths = liveTrackedPaths();
+  let index = new Map();
+  if (existsSync(MAP_PATH)) {
+    try { index = byPath(JSON.parse(readFileSync(MAP_PATH, 'utf8')).entries); } catch { /* annotate best-effort */ }
+  }
   const file = resolveFileArg(fileArg, trackedPaths);
 
   const { deps, dependents } = buildEdges(REPO_ROOT, trackedPaths);
   const adj = verb === 'deps' ? deps : dependents;
   const set = opts.transitive ? closure(file, adj) : new Set(adj.get(file) || []);
   const rows = [...set]
-    .map((p) => index.get(p) || { path: p, tokens: 0, tier: '?' })
+    .map((p) => index.get(p) || { path: p, tokens: 0, tier: tierOf(p) })
     .sort((a, b) => (a.tier || '').localeCompare(b.tier || '') || (b.tokens || 0) - (a.tokens || 0));
   const totalTok = rows.reduce((s, r) => s + (r.tokens || 0), 0);
   const scope = opts.transitive ? 'transitive' : 'direct';
@@ -502,7 +517,7 @@ function runEdgeQuery(verb, fileArg, opts) {
   L.push('');
   L.push(verb === 'deps'
     ? `> In-repo resolved imports only (bare/external like react, three are not shown).${opts.transitive ? '' : ' Add `--transitive` for the full forward closure.'}`
-    : `> ${opts.transitive ? 'Full reverse closure' : 'Direct importers'} — the blast radius of changing this file.${opts.transitive ? '' : ' Add `--transitive` for the transitive closure.'}`);
+    : `> ${opts.transitive ? 'Full reverse closure' : 'Direct importers'} — the blast radius of changing this file. File-level: includes type-only importers; for a values-vs-types edit boundary, grep the specific export.${opts.transitive ? '' : ' Add `--transitive` for the transitive closure.'}`);
   process.stdout.write(L.join('\n') + '\n');
 }
 
