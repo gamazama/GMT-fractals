@@ -21,7 +21,7 @@
  *   have a FIXED option order.
  */
 import type { MB3DFormulaSlot } from './parseMB3D';
-import { DECOMPILED_FORMULAS, DECOMPILED_OPTIONS, DECOMPILED_SCRATCH, DECOMPILED_DEFAULTS, DECOMPILED_DE_META } from './decompiled-formulas';
+import { DECOMPILED_FORMULAS, DECOMPILED_OPTIONS, DECOMPILED_SCRATCH, DECOMPILED_DEFAULTS, DECOMPILED_DE_META } from './mb3dFormulaLibrary';
 import { packConstBuffer, bindOptions, PALIGNED16 } from './constPacker';
 import { LaneAllocator } from '../uniformSlots';
 import type { PackedParam } from '../uniformSlots';

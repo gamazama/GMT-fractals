@@ -10,7 +10,7 @@
  * @see plans/mb3d/converter-design.md · loadDecompiledFormula / loadInternFormula
  */
 import type { MB3DFormulaSlot } from './parseMB3D';
-import { DECOMPILED_FORMULAS, DECOMPILED_DEFAULTS } from './decompiled-formulas';
+import { DECOMPILED_FORMULAS, DECOMPILED_DEFAULTS } from './mb3dFormulaLibrary';
 import { transpileSlot } from './slotTranspiler';
 
 export interface CatalogEntry {
@@ -81,7 +81,7 @@ function categorize(name: string): string {
   // Quaternion / 4D hypercomplex families (incl. their 4D transform variants).
   if (/quat|4d|hopf|julibrot|exp4d|tanh4d/.test(k)) return 'Quaternion & 4D';
   // Amazing Box / Mandelbox / Surf / Tetra-box family.
-  if (/box|asurf|surfmod|atetra|platinum/.test(k)) return 'Boxes & Folds';
+  if (/box|surf|atetra|platinum/.test(k)) return 'Boxes & Folds';
   // IFS / kaleidoscopic / kali.
   if (/ifs|menger|sierp|koch|cantor|octa|octo|halfoct|cross|mixpinski|ngon|kali|hilbert|scherk/.test(k)) return 'IFS & Kaleidoscopic';
   // Strange attractors.

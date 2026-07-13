@@ -26,7 +26,7 @@ import type { DerivedRotationSpec } from '../../types/fractal';
 import { weaveBankKey } from '../uniformSlots';
 import { mapMB3DCamera } from './mapCamera';
 import { mapMB3DLighting } from './mapLighting';
-import { DECOMPILED_DE_META } from './decompiled-formulas';
+import { DECOMPILED_DE_META } from './mb3dFormulaLibrary';
 import { registry } from '../../engine/FractalRegistry';
 import { DEFAULT_HARD_CAP } from '../../../data/constants';
 

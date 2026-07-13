@@ -16,7 +16,7 @@ import { emitFusedHybrid } from './emitFusedHybrid';
 import type { WeaveLedger } from './emitFusedHybrid';
 import { weaveSpecFromMB3D } from './weaveSequencer';
 import type { FractalDefinition } from '../../types/fractal';
-import { DECOMPILED_FORMULAS, DECOMPILED_DEFAULTS } from './decompiled-formulas';
+import { DECOMPILED_FORMULAS, DECOMPILED_DEFAULTS } from './mb3dFormulaLibrary';
 import type { Preset } from '../../types/fractal';
 import { registry } from '../../engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
