@@ -22,6 +22,13 @@ export interface DEMasterOptions {
      *  port of MB3D CalcDEnoADE (Calc.pas:445-523). When false, NOTHING changes — the
      *  analytic path is byte-identical. @see docs/adr/0085 */
     kernel?: KernelFeatures;
+    /** 4D formula (MB3D deOption 5/6): `z.w` is a real 4th SPATIAL coordinate the
+     *  formula iterates + carries forward, not the DE derivative. MB3D's DE numerator
+     *  and escape bailout are the 4D radius `Sqrt(x²+y²+z²+w²)` (Rout); GMT defaults to
+     *  the 3D `length(z.xyz)`, which flattens w-direction surface detail (missing bulbs).
+     *  When set, the DE radius `r` and the escape bailout include `z.w`. Coloring/orbit-trap
+     *  stay 3D (they operate on the 3D projection). @see emitFusedHybrid wIsCoord. */
+    is4D?: boolean;
 }
 
 export const DE_MASTER = (
@@ -40,8 +47,14 @@ export const DE_MASTER = (
         postMapCode = '',
         postDistCode = '',
         kernel = {},
+        is4D = false,
     } = options;
     const numericDE = !!kernel.numericDE;
+    // 4D DE (deOption 5/6): the DE radius + escape bailout use the full 4D magnitude
+    // (incl. z.w) to match MB3D's Sqrt(Rout); otherwise the 3D length drops w-direction
+    // surface detail. `length(z)` is Euclidean 4D (MB3D has no distance-metric option).
+    const rExpr = is4D ? 'length(z)' : 'getLength(z.xyz)';
+    const bail4 = is4D ? 'dot(z, z)' : 'dot(z.xyz, z.xyz)';
 
     // --- Numerical (finite-difference) DE support (emitted only when numericDE) ---
     // Port of MB3D CalcDEnoADE (Calc.pas:445-523), conditioned for WebGL2 float32.
@@ -403,7 +416,7 @@ vec4 map(vec3 p) {
             decompCaptured = true;
         }
 
-        if (dr > 1.0e10 || r2 > bailout) {
+        if (dr > 1.0e10 || ${is4D ? 'dot(z, z)' : 'r2'} > bailout) {
             escaped = true;
             break;
         }
@@ -411,7 +424,7 @@ vec4 map(vec3 p) {
         ${distOverrideInLoopFull}
     }
 
-    float r = getLength(z.xyz);
+    float r = ${rExpr};
     float safeDr = max(abs(dr), 1.0e-10);
 
     if (!decompCaptured) {
@@ -490,7 +503,7 @@ float mapDist(vec3 p) {
             applyPreRotation(z.xyz);
 
             #ifndef SKIP_PRE_BAILOUT
-            if (dot(z.xyz, z.xyz) > bailout) break;
+            if (${bail4} > bailout) break;
             #endif
 
             ${formulaBody}
@@ -501,12 +514,12 @@ float mapDist(vec3 p) {
         // (e.g. r * pow(Scale, -iter)) receive the correct count for shadow marching.
         iter += 1.0;
 
-        if (dr > 1.0e10 || dot(z.xyz, z.xyz) > bailout) break;
+        if (dr > 1.0e10 || ${bail4} > bailout) break;
 
         ${distOverrideInLoopGeom}
     }
 
-    float r = getLength(z.xyz);
+    float r = ${rExpr};
     float safeDr = max(abs(dr), 1.0e-10);
 
     ${mapDistGeomResult}

@@ -340,6 +340,12 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   const deMeta = deSlot ? DECOMPILED_DE_META[deSlot.flag.name] : undefined;
   const isDifs = (deMeta?.deOption ?? -1) === 20
     && allScratch.includes('mb3dRout') && allScratch.includes('mb3dVary');
+  // 4D formula (deOption 5/6 + an mb3dDr1 derivative): the DE slot iterates z.w as a real
+  // 4th spatial coordinate (wIsCoord in slotTranspiler). MB3D's DE radius + escape bailout
+  // are the 4D magnitude (Sqrt(Rout)); GMT's default 3D `length(z.xyz)` drops w-direction
+  // surface detail (missing bulbs on ABoxSphereOffset4d). Flags the `render:de-4d` capability
+  // so DE_MASTER uses the 4D radius. Coloring/orbit-trap stay on the 3D projection.
+  const is4D = (deMeta?.deOption === 5 || deMeta?.deOption === 6) && allScratch.includes('mb3dDr1');
 
   // NO-ANALYTIC-DERIVATIVE detection → auto-route to the numerical estimator (7, ADR-0085).
   // When NO active slot updates the DE derivative (`writesDeriv`) and the scene isn't dIFS, the
@@ -755,6 +761,7 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   const anyCP = bodies.some((b) => b.supportsCP);
   const fusedCaps = new Set<Capability>(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter']);
   if (anyCP) fusedCaps.add('estimator:cutting-plane');
+  if (is4D) fusedCaps.add('render:de-4d'); // z.w is a 4th spatial coord → 4D DE radius (see is4D above)
 
   // CPU-derived rotation uniforms across all slots (already def-globally numbered
   // by mb3dBankBody; a lone standalone slot's fresh-allocator indices ARE global).

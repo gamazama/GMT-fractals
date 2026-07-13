@@ -119,6 +119,11 @@ export const CoreMathFeature: FeatureDefinition = {
             builder.addDefine('SKIP_PRE_BAILOUT', '1');
             builder.addDefine('SELF_CONTAINED_SDE', '1');
         }
+        // 4D MB3D formula (deOption 5/6): DE radius + escape bailout use the 4D magnitude
+        // (incl. z.w) so w-direction surface detail isn't flattened. @see DE_MASTER is4D.
+        if (def?.shader.capabilities?.has('render:de-4d')) {
+            builder.enableIs4D(true);
+        }
 
         // 3. Generate Code
         let functions = "";

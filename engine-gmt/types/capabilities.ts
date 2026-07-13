@@ -28,7 +28,9 @@ export type Capability =
                              // estimator 6 reads it; set by the MB3D importer.
   // Render-side outputs
   | 'render:writes-trap'     // populates result.y for trap-mode coloring
-  | 'render:writes-iter';    // populates result.z (smoothiter) meaningfully
+  | 'render:writes-iter'     // populates result.z (smoothiter) meaningfully
+  | 'render:de-4d';          // z.w is a real 4th spatial coord (MB3D deOption 5/6) → the DE
+                             // radius + escape bailout use the 4D magnitude, not length(z.xyz)
 
 export type CapabilitySet = ReadonlySet<Capability>;
 

@@ -88,6 +88,7 @@ export class ShaderBuilder {
     // map()/mapDist() then estimate distance from the escape-radius gradient instead of
     // an analytic dr (for formulas with no/wrong analytic DE). @see docs/adr/0085
     private numericDE: boolean = false;
+    private is4D: boolean = false;
     // (The mb3dFaithful gate was retired by ADR-0092 — the MB3D-faithful step
     // is now THE marcher, emitted unconditionally by getTraceGLSL.)
     // Depth output is always enabled for MRT - removes shader recompilation issue
@@ -130,6 +131,14 @@ export class ShaderBuilder {
         this.numericDE = enabled;
     }
 
+    /** Marks the formula as 4D (MB3D deOption 5/6 — z.w is a real 4th spatial coordinate).
+     *  DE_MASTER then uses the 4D radius for the DE numerator + escape bailout instead of
+     *  length(z.xyz), so w-direction surface detail isn't flattened. Called from coreMath
+     *  inject() when the def declares `render:de-4d`. */
+    public enableIs4D(enabled: boolean) {
+        this.is4D = enabled;
+    }
+
     public setMaxLights(n: number) {
         this.maxLights = n;
     }
@@ -154,6 +163,7 @@ export class ShaderBuilder {
             postMapCode: this.postMapCode.join('\n'),
             postDistCode: this.postDistCode.join('\n'),
             kernel,
+            is4D: this.is4D,
         };
     }
     
