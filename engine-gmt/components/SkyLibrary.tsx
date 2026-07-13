@@ -95,8 +95,18 @@ export const SkyLibrary: React.FC<FeatureComponentProps> = ({ featureId, sliceSt
         idbAll().then(setUserSkies).catch(() => setUserSkies([]));
     }, []);
 
-    const applySky = (data: string, cs: number) =>
-        setter?.({ envMapData: data, useEnvMap: true, envMapColorSpace: cs });
+    const applySky = (data: string, cs: number) => {
+        const updates: Record<string, unknown> = { envMapData: data, useEnvMap: true, envMapColorSpace: cs };
+        // A freshly loaded sky is invisible AND lights nothing if both strength
+        // sliders sit at their 0 default — the load looks like a no-op. Lift each
+        // to 1 when it's parked at 0 (Sky Visibility = envBackgroundStrength, the
+        // backdrop draw; Environment Light = envStrength, surface lighting) so the
+        // image actually shows and illuminates. Deliberate non-zero values are left
+        // alone; a user who zeroed one on purpose and reloads gets it back at 1.
+        if ((sliceState?.envBackgroundStrength ?? 0) === 0) updates.envBackgroundStrength = 1;
+        if ((sliceState?.envStrength ?? 0) === 0) updates.envStrength = 1;
+        setter?.(updates);
+    };
 
     const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
