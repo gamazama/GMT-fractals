@@ -1,5 +1,18 @@
 # ADR-0097: Per-direction fog radiance from the environment map (aerial perspective)
 
+> **Update 2026-07-13 (env-lighting fog re-couples uEnvStrength AT THE APPLICATION SITE;
+> decision unchanged):** Update #3 decoupled `fogRadiance` from `uEnvStrength` so the VISIBLE fog
+> (background sky, primary + reflected distance fog) matches the sky even with the dome light
+> dialed down — that stands. But `applyEnvFog` and the raymarched reflection env-fills use that
+> same unscaled radiance to fog SURFACE IRRADIANCE, whose base is `sky * uEnvStrength`. With the
+> dome dimmed/off, a little fog therefore re-injected the sky at FULL strength as ambient +
+> reflected light — the fractal "lit up" as if an env light switched on (hard pop 0 → 0.1, owner
+> repro). Fix: at the lighting sites only, mix toward `fogRadiance(dir) * uEnvStrength` (shading.ts
+> `applyEnvFog`; reflections' new `reflFogLit = reflFogRad * uEnvStrength`). Fog now TINTS the
+> received irradiance toward the fog colour without adding energy the dome never emitted; identical
+> at `uEnvStrength 1`. `fogRadiance` itself is untouched, so every VISIBLE-fog term (the unscaled
+> `reflFogRad` still drives the reflected-segment distance fog) renders exactly as before.
+
 > **Update 2026-07-10 #5 (compile-cost pass; decision unchanged, one scoped approximation):**
 > fxc inlines the `fogRadiance -> env-sample` chain at EVERY call site (~260ms cold each —
 > §2.6.2 of the compile policy doc). Two changes: (1) `fogRadiance` now samples via

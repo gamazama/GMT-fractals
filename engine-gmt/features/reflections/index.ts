@@ -56,9 +56,18 @@ const REFL_RAYMARCH_SHADING = `
         // directions within this pixel's reflection. Primary-view fog terms
         // (Ambient IBL, sky, light spheres) keep exact per-direction sampling.
         // reflFogW replicates applyEnvFog's gate bit-exactly: 0 when fog is off
-        // or the far plane is parked, so mix(env, reflFogRad, reflFogW) == env.
+        // or the far plane is parked, so mix(env, reflFog*, reflFogW) == env.
         bool reflFogOn = uFogIntensity >= 0.001;
+        // Atmospheric fog-volume colour (UNSCALED) — the reflected-segment DISTANCE
+        // fog target that fades a reflected surface colour toward the fog, exactly
+        // like the primary post-process distance fog.
         vec3 reflFogRad = reflFogOn ? fogRadiance(reflDir) : vec3(0.0);
+        // Env-LIGHTING fog target: the same colour scaled by uEnvStrength so the env
+        // fills below (each a GetEnvMap * uEnvStrength term) fog toward a consistent
+        // brightness. Raw reflFogRad here would inject full-strength sky as reflected
+        // LIGHT when the dome is dimmed/off — the "fog switches the env light on" pop
+        // (mirrors applyEnvFog's fix in shading.ts). @see docs/adr/0097
+        vec3 reflFogLit = reflFogRad * uEnvStrength;
         float reflFogW = (reflFogOn && uFogFar < 1000.0) ? uFogIntensity : 0.0;
 
         // Roughness regularization: floor the lobe width so near-mirror
@@ -163,14 +172,14 @@ const REFL_RAYMARCH_SHADING = `
                     // Fog wraps the raw env radiance BEFORE the surface response
                     // (kD·albedo / F) — fogging after tinted dark-albedo surfaces
                     // toward gray. Matches the primary Ambient IBL (shading.ts step 7).
-                    // Fog mix uses the block-shared reflFogRad (see hoist above).
+                    // Fog mix uses the block-shared reflFogLit (env-lighting target).
                     vec3  r_kD    = (vec3(1.0) - r_F) * (1.0 - uReflection);
-                    vec3  r_envDiff = r_kD * r_albedo * mix(GetEnvMap(r_n, 1.0) * uEnvStrength, reflFogRad, reflFogW) * uDiffuse;
+                    vec3  r_envDiff = r_kD * r_albedo * mix(GetEnvMap(r_n, 1.0) * uEnvStrength, reflFogLit, reflFogW) * uDiffuse;
                     // Fresnel-weighted specular env lobe — the chain terminates
                     // at this hit (single bounce), so the env stands in for the
                     // ray we don't spawn.
                     vec3  r_specDir = reflect(currRd, r_n);
-                    vec3  r_envSpec = r_F * mix(GetEnvMap(r_specDir, r_rough) * uEnvStrength, reflFogRad, reflFogW);
+                    vec3  r_envSpec = r_F * mix(GetEnvMap(r_specDir, r_rough) * uEnvStrength, reflFogLit, reflFogW);
                     hitColor += r_envDiff + r_envSpec;
                 }
 
@@ -211,13 +220,13 @@ const REFL_RAYMARCH_SHADING = `
             }
             // The ONE miss-env evaluation (see reflMissW above).
             if (reflMissW > 0.0001) {
-                reflectionLighting += reflMissW * sampleMissEnvPre(currRo, currRd, roughness, currentThroughput, reflFogRad, reflFogW);
+                reflectionLighting += reflMissW * sampleMissEnvPre(currRo, currRd, roughness, currentThroughput, reflFogLit, reflFogW);
             }
         } else {
-            reflectionLighting += mix(GetEnvMap(currRd, roughness) * uEnvStrength, reflFogRad, reflFogW) * currentThroughput;
+            reflectionLighting += mix(GetEnvMap(currRd, roughness) * uEnvStrength, reflFogLit, reflFogW) * currentThroughput;
         }
 
-        vec3 simpleEnv = mix(GetEnvMap(reflDir, roughness) * uEnvStrength, reflFogRad, reflFogW);
+        vec3 simpleEnv = mix(GetEnvMap(reflDir, roughness) * uEnvStrength, reflFogLit, reflFogW);
         simpleEnv *= currentThroughput;
 
         reflectionLighting = mix(simpleEnv, reflectionLighting, uReflStrength);

@@ -17,9 +17,19 @@ export const getShadingGLSL = (reflectionCode: string = '') => {
 // Apply fog to environment samples (treat as being at fog far plane).
 // dir = the direction the env was sampled along — the in-scatter colour is
 // per-direction (fogRadiance, ADR-0097), so a fogged sky keeps its gradient.
+//
+// 'env' is always surface-received IRRADIANCE — the sky sample already scaled by
+// uEnvStrength (every caller passes '... * uEnvStrength', or sampleMiss(...,
+// uEnvStrength)). fogRadiance is DELIBERATELY unscaled (env.ts) because it is the
+// visible fog-VOLUME colour for the background / distance fog. Using it raw here
+// re-injected the sky at FULL strength through the fog channel, so with the dome
+// light dimmed/off a little fog "switched the env light back on" — a hard pop from
+// 0 → 0.1 (owner repro). Scale the fog target by uEnvStrength too: fog now TINTS
+// the received irradiance toward the fog colour without adding energy the dome
+// never emitted. Identical to before at uEnvStrength 1. @see docs/adr/0097
 vec3 applyEnvFog(vec3 env, vec3 dir) {
     if (uFogIntensity < 0.001 || uFogFar >= 1000.0) return env;
-    return mix(env, fogRadiance(dir), uFogIntensity);
+    return mix(env, fogRadiance(dir) * uEnvStrength, uFogIntensity);
 }
 
 // Sample environment for a miss ray (reflection/bounce), with fog and feature overrides.
