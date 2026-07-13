@@ -340,12 +340,16 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   const deMeta = deSlot ? DECOMPILED_DE_META[deSlot.flag.name] : undefined;
   const isDifs = (deMeta?.deOption ?? -1) === 20
     && allScratch.includes('mb3dRout') && allScratch.includes('mb3dVary');
-  // 4D formula (deOption 5/6 + an mb3dDr1 derivative): the DE slot iterates z.w as a real
-  // 4th spatial coordinate (wIsCoord in slotTranspiler). MB3D's DE radius + escape bailout
-  // are the 4D magnitude (Sqrt(Rout)); GMT's default 3D `length(z.xyz)` drops w-direction
-  // surface detail (missing bulbs on ABoxSphereOffset4d). Flags the `render:de-4d` capability
-  // so DE_MASTER uses the 4D radius. Coloring/orbit-trap stay on the 3D projection.
-  const is4D = (deMeta?.deOption === 5 || deMeta?.deOption === 6) && allScratch.includes('mb3dDr1');
+  // 4D DE radius — deOption 6 (the IFS 4D family: MixPinski4/Sierpinski4ex/Menger4/
+  // Octahedron4/HalfOct4) ONLY. These iterate z.w as a real 4th spatial coordinate and
+  // MB3D's DE uses the 4D magnitude Sqrt(Rout); GMT's 3D length(z.xyz) flattens w-direction
+  // detail. The IFS folds are contractions, so z.w stays bounded → the 4D radius is well-behaved.
+  // deOption 5 (the box "pas" 4D family: ABoxMod4d/ABoxSphereOffset4d/ABoxVaryScale4d/_ScaleC4d)
+  // is DELIBERATELY EXCLUDED: its box+sphere lets z.w diverge, so a 4D DE radius explodes → the
+  // render goes flat (owner-verified on ABoxSphereOffset4d). MB3D's deOption-5 DE reads as ~3D
+  // too (GMT's 3D radius already matches its export bar the surface bulbs, which are a SEPARATE
+  // issue, not the DE radius). Flags `render:de-4d` so DE_MASTER uses the 4D radius + bailout.
+  const is4D = deMeta?.deOption === 6 && allScratch.includes('mb3dDr1');
 
   // NO-ANALYTIC-DERIVATIVE detection → auto-route to the numerical estimator (7, ADR-0085).
   // When NO active slot updates the DE derivative (`writesDeriv`) and the scene isn't dIFS, the
