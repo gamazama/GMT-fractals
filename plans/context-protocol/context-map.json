@@ -1,20 +1,20 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-13T14:59:10.327Z",
+  "generated_at": "2026-07-13T15:13:08.132Z",
   "repo_root": "H:/GMT/workspace-gmt/stable",
   "heavy_token_threshold": 4000,
   "estimator": "char-ratio-per-filetype (see scripts/tokens.mjs)",
   "totals": {
-    "files": 3326,
-    "bytes": 80759448,
-    "tokens": 11203041,
-    "loadable_tokens": 11071239,
-    "context_worthy_tokens": 4199612,
-    "source_of_truth_tokens": 3493874,
-    "orientation_tokens": 29948,
-    "architecture_tokens": 675790,
+    "files": 3327,
+    "bytes": 80768902,
+    "tokens": 11205710,
+    "loadable_tokens": 11073908,
+    "context_worthy_tokens": 4202368,
+    "source_of_truth_tokens": 3495998,
+    "orientation_tokens": 30193,
+    "architecture_tokens": 676177,
     "reachable_union_files": 1011,
-    "reachable_union_tokens": 2896633,
+    "reachable_union_tokens": 2896693,
     "dead_context_files": 22,
     "dead_context_tokens": 72721
   },
@@ -22,7 +22,7 @@
     "app-gmt": {
       "entry": "app-gmt/main.tsx",
       "files": 807,
-      "tokens": 2379998
+      "tokens": 2380058
     },
     "fluid-toy": {
       "entry": "fluid-toy/main.tsx",
@@ -164,7 +164,7 @@
   ],
   "by_tier": {
     "root": {
-      "tokens": 529582,
+      "tokens": 529642,
       "files": 153
     },
     "app-gmt": {
@@ -176,15 +176,15 @@
       "files": 237
     },
     "tooling": {
-      "tokens": 4043053,
-      "files": 355
+      "tokens": 4045275,
+      "files": 356
     },
     "demo": {
       "tokens": 8998,
       "files": 8
     },
     "docs": {
-      "tokens": 1679767,
+      "tokens": 1680154,
       "files": 482
     },
     "engine-gmt": {
@@ -214,7 +214,7 @@
   },
   "by_context_class": {
     "orient": {
-      "tokens": 29948,
+      "tokens": 30193,
       "files": 15
     },
     "source": {
@@ -222,15 +222,15 @@
       "files": 1044
     },
     "data": {
-      "tokens": 5676477,
+      "tokens": 5676390,
       "files": 869
     },
     "config": {
-      "tokens": 9018,
+      "tokens": 9078,
       "files": 11
     },
     "architecture": {
-      "tokens": 675790,
+      "tokens": 676177,
       "files": 206
     },
     "asset": {
@@ -238,8 +238,8 @@
       "files": 602
     },
     "source-tooling": {
-      "tokens": 498115,
-      "files": 229
+      "tokens": 500179,
+      "files": 230
     },
     "reference-legacy": {
       "tokens": 1195150,
@@ -252,19 +252,19 @@
   },
   "by_load_policy": {
     "read-first": {
-      "tokens": 29948,
+      "tokens": 30193,
       "files": 15
     },
     "on-demand": {
-      "tokens": 3493874,
-      "files": 1284
+      "tokens": 3495998,
+      "files": 1285
     },
     "skip": {
-      "tokens": 4138491,
+      "tokens": 4138404,
       "files": 256
     },
     "read-for-area": {
-      "tokens": 675790,
+      "tokens": 676177,
       "files": 206
     },
     "never": {
@@ -279,7 +279,7 @@
   "tier_policy_matrix": {
     "root": {
       "read-first": 14099,
-      "on-demand": 345914,
+      "on-demand": 345974,
       "skip": 10577,
       "read-for-area": 27190
     },
@@ -291,17 +291,17 @@
       "on-demand": 590234
     },
     "tooling": {
-      "on-demand": 498170,
-      "skip": 3154828,
+      "on-demand": 500234,
+      "skip": 3154741,
       "read-for-area": 387355,
-      "read-first": 2700
+      "read-first": 2945
     },
     "demo": {
       "on-demand": 7456,
       "read-first": 1542
     },
     "docs": {
-      "read-for-area": 256639,
+      "read-for-area": 257026,
       "read-first": 3732,
       "reference-only": 1195150,
       "skip": 224246
@@ -975,6 +975,12 @@
       "loadPolicy": "read-for-area"
     },
     {
+      "path": "plans/context-protocol/scripts/context-cost.mjs",
+      "tokens": 7284,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "engine-gmt/renderer/GmtRendererTickDriver.tsx",
       "tokens": 7258,
       "tier": "engine-gmt",
@@ -1236,12 +1242,6 @@
       "path": "components/vector-input/index.tsx",
       "tokens": 5998,
       "tier": "gmt-app",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "plans/context-protocol/scripts/context-cost.mjs",
-      "tokens": 5986,
-      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -16450,10 +16450,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 12277,
-      "lines": 240,
-      "tokens": 3117,
-      "structuralTokens": 3911,
+      "bytes": 13801,
+      "lines": 264,
+      "tokens": 3504,
+      "structuralTokens": 4411,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -39398,10 +39398,10 @@
       "loadPolicy": "on-demand",
       "ext": ".json",
       "reason": "config",
-      "bytes": 9033,
-      "lines": 138,
-      "tokens": 3115,
-      "structuralTokens": 3429,
+      "bytes": 9207,
+      "lines": 140,
+      "tokens": 3175,
+      "structuralTokens": 3491,
       "cpt": 2.9,
       "heavy": false,
       "reachableFrom": [
@@ -41309,10 +41309,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 1408536,
-      "lines": 55805,
-      "tokens": 485703,
-      "structuralTokens": 465413,
+      "bytes": 1408286,
+      "lines": 55787,
+      "tokens": 485616,
+      "structuralTokens": 465326,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -41354,10 +41354,10 @@
       "loadPolicy": "read-first",
       "ext": ".md",
       "reason": "orient:app-readme",
-      "bytes": 6442,
-      "lines": 123,
-      "tokens": 1615,
-      "structuralTokens": 1909,
+      "bytes": 7406,
+      "lines": 136,
+      "tokens": 1860,
+      "structuralTokens": 2209,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -41429,12 +41429,27 @@
       "loadPolicy": "on-demand",
       "ext": ".mjs",
       "reason": "tooling-script",
-      "bytes": 20420,
-      "lines": 489,
-      "tokens": 5986,
-      "structuralTokens": 7564,
+      "bytes": 24846,
+      "lines": 569,
+      "tokens": 7284,
+      "structuralTokens": 9310,
       "cpt": 3.4,
       "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "plans/context-protocol/scripts/edges.mjs",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mjs",
+      "reason": "tooling-script",
+      "bytes": 2616,
+      "lines": 68,
+      "tokens": 766,
+      "structuralTokens": 908,
+      "cpt": 3.4,
+      "heavy": false,
       "reachableFrom": []
     },
     {

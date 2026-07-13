@@ -46,7 +46,17 @@ npm run context:cost -- engine/plugins       # path load plan
 npm run context:cost -- e03-animation --pack --budget 60000  # packed reading list
 npm run context:cost -- --profile ddfs-feature   # canned bundle → packed list
 npm run context:cost -- mesh-export --json   # machine-readable
+npm run context:cost -- dependents engine/FeatureSystem.ts   # who imports it (blast radius)
+npm run context:cost -- deps engine/plugins/Camera.ts        # its in-repo imports
+npm run context:cost -- dependents Navigation.tsx --transitive --json
 ```
+
+`deps`/`dependents` answer the import-graph questions an agent would otherwise
+fan out to trace: `deps <file>` = what it imports, `dependents <file>` = what
+imports it (the blast radius of a change), `--transitive` for the full closure.
+`<file>` accepts a tracked path, a path tail, or a basename (ambiguity lists
+candidates). Computed **live** from the graph each call (~0.3s) — no committed
+index. Same `context:deps` / `context:dependents` npm aliases exist.
 
 A load plan has three layers — **0 orientation** (assume loaded), **1
 architecture/docs** (read first, cheap), **2 source of truth** (targeted,
@@ -111,6 +121,9 @@ efficiently and smoothly.** Phases 2–6a are now built:
 - ✅ **Phase 5 — Honesty gate.** `context:check` fails on file-set drift, warns on
   stale map / `fallback` classification, reports doc-coverage + dead context.
 - ✅ **Phase 6a — Discoverability.** Pointers added to `AGENTS.md` + `CLAUDE.md`.
+- ✅ **Phase 6c — Import-graph queries.** `edges.mjs` reuses the reachability
+  resolver to answer `deps` / `dependents` (+ `--transitive`) live per call —
+  the fan-out an agent would otherwise pay to trace paths. No committed index.
 
 Remaining:
 - **One-time real calibration.** Measure the orientation bundle's real Claude

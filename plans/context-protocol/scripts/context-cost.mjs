@@ -14,6 +14,14 @@
 // Usage (from dev/):
 //   npm run context:cost -- <target> [--budget N] [--full]
 //   npm run context:cost -- --list
+//   npm run context:cost -- deps <file> [--transitive] [--json]
+//   npm run context:cost -- dependents <file> [--transitive] [--json]
+//
+//   deps <file>        in-repo files <file> imports (its direct dependencies).
+//   dependents <file>  in-repo files that import <file> — the blast radius of a
+//                      change. Add --transitive for the full reverse closure.
+//                      <file> = a tracked path, a path tail, or a basename.
+//                      Computed LIVE from the import graph — no committed index.
 //
 //   <target>   a subsystem id (e.g. e01-feature-system), a tier
 //              (engine-core | engine-gmt | gmt-app | app-gmt | fluid-toy | ...),
@@ -33,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 
 import { fmtTokens } from './tokens.mjs';
 import { sliceGuide } from './symbols.mjs';
+import { buildEdges, closure } from './edges.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
@@ -433,6 +442,70 @@ function listSubsystems(subsystems, map, profiles) {
   return L.join('\n');
 }
 
+// ---------------------------------------------------------------------------
+// Edge queries — deps / dependents (live import-graph).
+// ---------------------------------------------------------------------------
+// Resolve a user-typed file arg to a single tracked path. Accepts an exact
+// repo-relative path, a path tail (`engine/FeatureSystem.ts`), or a basename
+// (`FeatureSystem.ts`). Ambiguity fails with the candidate list.
+function resolveFileArg(arg, trackedPaths) {
+  const a = arg.replace(/\\/g, '/');
+  if (trackedPaths.includes(a)) return a;
+  const base = a.split('/').pop();
+  let cands = trackedPaths.filter((p) => p.endsWith('/' + a));           // path tail
+  if (!cands.length) cands = trackedPaths.filter((p) => p.split('/').pop() === base); // basename
+  if (!cands.length) cands = trackedPaths.filter((p) => p.includes(a));  // substring
+  cands = [...new Set(cands)];
+  if (cands.length === 1) return cands[0];
+  if (!cands.length) fail(`no tracked file matches "${arg}".`);
+  fail(`"${arg}" is ambiguous (${cands.length} matches):\n` +
+    cands.slice(0, 12).map((p) => '  ' + p).join('\n') + (cands.length > 12 ? '\n  …' : ''));
+}
+
+function runEdgeQuery(verb, fileArg, opts) {
+  if (!fileArg) fail(`usage: npm run context:cost -- ${verb} <file> [--transitive] [--json]`);
+  const map = loadMap();
+  const index = byPath(map.entries);
+  const trackedPaths = map.entries.map((e) => e.path);
+  const file = resolveFileArg(fileArg, trackedPaths);
+
+  const { deps, dependents } = buildEdges(REPO_ROOT, trackedPaths);
+  const adj = verb === 'deps' ? deps : dependents;
+  const set = opts.transitive ? closure(file, adj) : new Set(adj.get(file) || []);
+  const rows = [...set]
+    .map((p) => index.get(p) || { path: p, tokens: 0, tier: '?' })
+    .sort((a, b) => (a.tier || '').localeCompare(b.tier || '') || (b.tokens || 0) - (a.tokens || 0));
+  const totalTok = rows.reduce((s, r) => s + (r.tokens || 0), 0);
+  const scope = opts.transitive ? 'transitive' : 'direct';
+  const noun = verb === 'deps' ? 'import' : 'importer';
+
+  if (opts.json) {
+    process.stdout.write(JSON.stringify({
+      file, verb, scope, count: rows.length, tokens: totalTok,
+      files: rows.map((r) => ({ path: r.path, tier: r.tier, tokens: r.tokens || 0 })),
+    }, null, 2) + '\n');
+    return;
+  }
+
+  const L = [];
+  L.push(`# ${verb} of ${file} — ${rows.length} ${scope} ${noun}${rows.length === 1 ? '' : 's'} (~${fmtTokens(totalTok)})`);
+  L.push('');
+  if (!rows.length) {
+    L.push(verb === 'deps'
+      ? '_No in-repo imports (leaf file, or only external/bare specifiers)._'
+      : '_Nothing in the repo imports this file._');
+  } else {
+    L.push(`| ${verb === 'deps' ? 'Imports' : 'Importer'} | tier | tokens |`);
+    L.push('|---|---|--:|');
+    for (const r of rows) L.push(`| [${r.path}](../../${r.path}) | ${r.tier || '?'} | ${fmtTokens(r.tokens || 0)} |`);
+  }
+  L.push('');
+  L.push(verb === 'deps'
+    ? `> In-repo resolved imports only (bare/external like react, three are not shown).${opts.transitive ? '' : ' Add `--transitive` for the full forward closure.'}`
+    : `> ${opts.transitive ? 'Full reverse closure' : 'Direct importers'} — the blast radius of changing this file.${opts.transitive ? '' : ' Add `--transitive` for the transitive closure.'}`);
+  process.stdout.write(L.join('\n') + '\n');
+}
+
 function fail(msg) {
   process.stderr.write(`context-cost: ${msg}\n`);
   process.exit(1);
@@ -449,9 +522,16 @@ function main() {
     else if (a === '--full') opts.full = true;
     else if (a === '--json') opts.json = true;
     else if (a === '--pack') opts.pack = true;
+    else if (a === '--transitive') opts.transitive = true;
     else if (a === '--profile') profileName = argv[++i];
     else if (a === '--list' || a === '--list-subsystems') opts.list = true;
     else positional.push(a);
+  }
+
+  // Edge queries: deps / dependents (live import-graph; no committed index).
+  if (positional[0] === 'deps' || positional[0] === 'dependents') {
+    runEdgeQuery(positional[0], positional[1], opts);
+    return;
   }
 
   const subsystems = loadSubsystems();
@@ -473,7 +553,7 @@ function main() {
     if (!opts.pack && !opts.json) opts.pack = true; // profiles default to a packed reading list
   }
   if (!target) {
-    fail('missing target.\nUsage: npm run context:cost -- <app:name|subsystem-id|tier|path> [--budget N] [--pack] [--json]\n       npm run context:cost -- --profile <name>\n       npm run context:cost -- --list');
+    fail('missing target.\nUsage: npm run context:cost -- <app:name|subsystem-id|tier|path> [--budget N] [--pack] [--json]\n       npm run context:cost -- deps <file> [--transitive] [--json]\n       npm run context:cost -- dependents <file> [--transitive] [--json]\n       npm run context:cost -- --profile <name>\n       npm run context:cost -- --list');
   }
 
   const map = loadMap();

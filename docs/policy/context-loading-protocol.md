@@ -115,6 +115,9 @@ npm run context:cost -- --profile <name>  # canned task bundle → packed list
 npm run context:cost -- <target> --json   # machine-readable plan
 npm run context:symbols                   # symbol-index.json for heavy files
 npm run context:check [-- --strict]       # CI gate: staleness / classification
+npm run context:cost -- deps <file>       # in-repo files <file> imports
+npm run context:cost -- dependents <file> # in-repo files that import <file>
+npm run context:cost -- dependents <file> --transitive --json
 ```
 
 `<target>` is one of:
@@ -144,6 +147,27 @@ reach it. From this:
   shadowing (e.g. `engine/ConfigDefaults.ts`, shadowed by the engine-gmt copy).
   **`npm run orphans` (knip) is the authority for true deletion** — it also
   counts debug/test entrypoints, which this deliberately does not.
+
+### Import-graph queries — `deps` / `dependents` (Phase 6c)
+
+The same `reachability.mjs` resolver, run over every tracked source file, yields
+the per-file edge map (`edges.mjs`). Two verbs on `context:cost` expose it:
+
+- **`context:cost -- deps <file>`** — the in-repo files `<file>` imports.
+- **`context:cost -- dependents <file>`** — the in-repo files that import
+  `<file>`: the **blast radius** of changing it. `--transitive` walks the full
+  reverse closure.
+
+`<file>` accepts a tracked path, a path tail, or a basename (ambiguity lists the
+candidates). Bare/external specifiers (`react`, `three`) are dropped — this is
+the in-repo graph only. **Why a homegrown query and not `madge`/`dependency-cruiser`:**
+the in-house resolver already knows this repo's `@/` alias, `?raw`/`?worker`/`?url`
+suffixes, worker-`URL` imports, and bundler `.js`→`.ts` resolution — a generic
+tool would mis-resolve them without matching config. **Why no committed index:**
+the graph builds live per call (~0.3s), so there is nothing to keep fresh or
+gate on — the minimize-maintained-artifacts rule. It's regex-generous (via
+`reachability.mjs`), so verify at the source when precision matters; for "what
+imports X," an LSP `find-references` is the exact-but-interactive-only alternative.
 
 ### Sub-file slicing (Phase 3)
 

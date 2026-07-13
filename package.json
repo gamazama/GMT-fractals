@@ -18,6 +18,8 @@
     "orphans": "knip --reporter compact",
     "context:map": "node plans/context-protocol/scripts/build-context-map.mjs",
     "context:cost": "node plans/context-protocol/scripts/context-cost.mjs",
+    "context:deps": "node plans/context-protocol/scripts/context-cost.mjs deps",
+    "context:dependents": "node plans/context-protocol/scripts/context-cost.mjs dependents",
     "context:symbols": "node plans/context-protocol/scripts/build-symbol-index.mjs",
     "context:check": "node plans/context-protocol/scripts/context-check.mjs",
     "orphans:strict": "knip --reporter compact --no-progress",
