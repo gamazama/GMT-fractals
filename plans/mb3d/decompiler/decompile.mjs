@@ -277,12 +277,21 @@ export async function decompileFormula(bytes, opts = {}) {
     // the guarded `fchs` negates the swapped-in coord, not the compared one). Collect such
     // interior ops; emitBranch snapshots the compared values into temps and emits the
     // interior swaps before the guard, so the guarded block runs on the post-swap stack.
+    // Gap A: a flag-neutral `fld [mem]` scheduled between `fnstsw` and the flag-extract
+    // (the compiler preloads a value the taken branch consumes) — e.g. `fcompp; fnstsw ax;
+    // fld [edi]; and ah,0x41; jne` (_PartlyJuliaRoff) / `fcomp st(1); fnstsw ax;
+    // fld [esi-0x10]; shr ah,1; jb` (ABoxSphereOffset4d). It's a stack PUSH (not a
+    // depth-neutral reshuffle), but the same `interior` path is correct: it overwrites the
+    // now-popped compared temp, so the capLines snapshot (built because interior is non-empty)
+    // preserves the compared values, and emitBranch's `run(idx,idx+1)` emits the push with the
+    // proper `top++`. Memory operand only — `mem(o)` is top-independent; `fld st(i)` is not.
     const interior = [];
     const skipI = (i) => {
       while (ins[i]) {
         const mi = ins[i].m;
         if (/^(wait|fwait|fnop|nop)$/.test(mi)) { i++; continue; }
         if (mi === 'fxch' || (mi === 'fst' && /^st\(\d+\)$/.test(ins[i].o))) { interior.push(i); i++; continue; }
+        if (mi === 'fld' && /\[/.test(ins[i].o)) { interior.push(i); i++; continue; }
         break;
       }
       return i;

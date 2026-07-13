@@ -670,6 +670,96 @@ export const DECOMPILED_FORMULAS: Record<string, string> = {
   x = f1;
   f0 = f0;
 `,
+  "ABoxSphereOffset4d": `
+  float f0, f1, f2, f3, f4, f5, f6, f7;
+  f0 = Cm40;
+  f1 = x;
+  f2 = f1;
+  f2 = f2 - f0;
+  f2 = abs(f2);
+  f2 = f2 + f1;
+  { float t = f2; f2 = f1; f1 = t; }
+  f2 = f2 + f0;
+  f2 = abs(f2);
+  f1 = f2 - f1;
+  f1 = f1 - Cm48;
+  f2 = y;
+  f3 = f2;
+  f3 = f3 - f0;
+  f3 = abs(f3);
+  f3 = f3 + f2;
+  { float t = f3; f3 = f2; f2 = t; }
+  f3 = f3 + f0;
+  f3 = abs(f3);
+  f2 = f3 - f2;
+  f2 = f2 - Cm56;
+  f3 = zz;
+  f4 = f3;
+  f4 = f4 - f0;
+  f4 = abs(f4);
+  f4 = f4 + f3;
+  { float t = f4; f4 = f3; f3 = t; }
+  f4 = f4 + f0;
+  f4 = abs(f4);
+  f3 = f4 - f3;
+  f3 = f3 - Cm64;
+  f4 = w;
+  f5 = f4;
+  f5 = f5 - f0;
+  f5 = abs(f5);
+  f5 = f5 + f4;
+  { float t = f5; f5 = f4; f4 = t; }
+  f5 = f5 + f0;
+  f5 = abs(f5);
+  f4 = f5 - f4;
+  f4 = f4 - Cm72;
+  { float t = f4; f4 = f0; f0 = t; }
+  f4 = f4;
+  f4 = f3;
+  f4 = f4 * f3;
+  f5 = f2;
+  f5 = f5 * f2;
+  f4 = f4 + f5;
+  f5 = f1;
+  f5 = f5 * f1;
+  f4 = f4 + f5;
+  f5 = f0;
+  f5 = f5 * f0;
+  f4 = f4 + f5;
+  if (!(f4 >= Cm32)) {
+  f4 = f4;
+  f4 = Cm24;
+  } else {
+  f5 = 1.0;
+  float _bca0 = f5, _bcb0 = f4;
+  f5 = Cm16;
+  if (!(_bca0 < _bcb0)) {
+  f5 = f5 / f4;
+  }
+  { float t = f5; f5 = f4; f4 = t; }
+  f5 = f5;
+  }
+  f5 = mb3dDr1;
+  f5 = f5 * f4;
+  mb3dDr1 = f5;
+  f0 = f0 * f4;
+  f1 = f1 * f4;
+  f2 = f2 * f4;
+  f3 = f3 * f4;
+  f3 = f3 + c.z;
+  f3 = f3 + Cm64;
+  zz = f3;
+  f2 = f2 + c.y;
+  f2 = f2 + Cm56;
+  y = f2;
+  f1 = f1 + c.x;
+  f1 = f1 + Cm48;
+  x = f1;
+  f0 = f0 + Cm80;
+  f0 = f0 + Cm72;
+  f0 = f0 + c.w;
+  w = f0;
+`,
   "ABoxVSWavy": `
   float f0, f1, f2, f3, f4, f5, f6, f7;
   float loc_ebp_m16 = 0.0, loc_ebp_m24 = 0.0, loc_ebp_m32 = 0.0, loc_ebp_m40 = 0.0, loc_ebp_m48 = 0.0, loc_ebp_m56 = 0.0, loc_ebp_m64 = 0.0;
@@ -17108,6 +17198,51 @@ export const DECOMPILED_FORMULAS: Record<string, string> = {
   f0 = f0 - Cm16;
   zz = f0;
 `,
+  "_PartlyJuliaRoff": `
+  float f0, f1, f2, f3, f4, f5, f6, f7;
+  f0 = x;
+  f0 = f0 - Cm16;
+  f1 = y;
+  f1 = f1 - Cm24;
+  f2 = zz;
+  f2 = f2 - Cm32;
+  f3 = f0;
+  f3 = f3 * f3;
+  f4 = f1;
+  f4 = f4 * f4;
+  f3 = f3 + f4;
+  f4 = f2;
+  f4 = f4 * f4;
+  f3 = f3 + f4;
+  f3 = sqrt(f3);
+  if (!(f3 <= Cm40)) {
+  f4 = f3;
+  f4 = f4 - Cm40;
+  f5 = f3;
+  f5 = abs(f5);
+  if (!(f5 > 1e-10)) {
+  { float t = f4; f4 = f3; f3 = t; }
+  f5 = 0.0;
+  float _bca0 = f5, _bcb0 = f4;
+  f4 = 1e-10;
+  if (!(_bca0 <= _bcb0)) {
+  f4 = -(f4);
+  }
+  { float t = f4; f4 = f3; f3 = t; }
+  }
+  f3 = f4 / f3;
+  f0 = f0 * f3;
+  f1 = f1 * f3;
+  f2 = f2 * f3;
+  f2 = f2 + c.z;
+  c.z = f2;
+  f1 = f1 + c.y;
+  c.y = f1;
+  f0 = f0 + c.x;
+  c.x = f0;
+  } else {
+  }
+`,
   "_PolyFold-sym": `
   float f0, f1, f2, f3, f4, f5, f6, f7;
   float loc_esp_p0 = 0.0;
@@ -25218,6 +25353,7 @@ export const DECOMPILED_OPTIONS: Record<string, DecompiledOption[]> = {
   "ABoxModKali": [{"name":"Scale","type":0},{"name":"Min R","type":7},{"name":"Z add","type":14},{"name":"Y add","type":0},{"name":"X add","type":0}],
   "ABoxPlatinum": [{"name":"Scale","type":0},{"name":"MinR/IR","type":7},{"name":"Fold","type":0},{"name":"Rotate","type":6},{"name":"Inv xC","type":0},{"name":"Inv yC","type":0},{"name":"Inv zC","type":0},{"name":"Inv Radius","type":13},{"name":"FoldX, XY angle","type":3},{"name":"FoldX, XZ angle","type":3},{"name":"FoldY, XY angle","type":3},{"name":"FoldY, YZ angle","type":3},{"name":"Abs XYZ switches","type":2}],
   "ABoxPlatinumB": [{"name":"Scale","type":0},{"name":"MinR/IR","type":7},{"name":"Fold","type":0},{"name":"Rotate","type":6},{"name":"Inv xC","type":0},{"name":"Inv yC","type":0},{"name":"Inv zC","type":0},{"name":"Inv Radius","type":13},{"name":"FoldX, XY angle","type":3},{"name":"FoldX, XZ angle","type":3},{"name":"FoldY, XY angle","type":3},{"name":"FoldY, YZ angle","type":3},{"name":"Abs XYZ switches","type":2}],
+  "ABoxSphereOffset4d": [{"name":"Scale","type":0},{"name":"Min R","type":7},{"name":"Fold","type":0},{"name":"Sphere offset X","type":0},{"name":"Sphere offset Y","type":0},{"name":"Sphere offset Z","type":0},{"name":"Sphere offset W","type":0},{"name":"W add","type":0}],
   "ABoxVSWavy": [{"name":"Scale","type":0},{"name":"Min R","type":7},{"name":"Fold","type":0},{"name":"Scale vary","type":0},{"name":"Wave Amp","type":0},{"name":"Wave Frq","type":0},{"name":"Wave2 Amp","type":0},{"name":"Radius mul","type":0},{"name":"Wave2 alt mode","type":2}],
   "ABoxVS_icen1": [{"name":"Scale","type":0},{"name":"Min R","type":0},{"name":"Fold","type":0},{"name":"Scale vary","type":0},{"name":"Inversion radius","type":0},{"name":"Inversion xC","type":0},{"name":"Inversion yC","type":0},{"name":"Inversion zC","type":0},{"name":"C-Swap mode","type":2}],
   "ABoxVS_icen2": [{"name":"Scale","type":0},{"name":"Min R","type":7},{"name":"Fold","type":0},{"name":"Scale vary","type":0},{"name":"R power","type":0},{"name":"Inversion xC","type":0},{"name":"Inversion yC","type":0},{"name":"Inversion zC","type":0},{"name":"C-Swap mode","type":2}],
@@ -25407,6 +25543,7 @@ export const DECOMPILED_OPTIONS: Record<string, DecompiledOption[]> = {
   "_NeoSqrX": [{"name":"fixX","type":0},{"name":"fixSq","type":0},{"name":"Mul","type":0},{"name":"Div","type":0}],
   "_NeoSqrY": [{"name":"fixY","type":0},{"name":"fixSq","type":0},{"name":"Mul","type":0},{"name":"Div","type":0}],
   "_NeoSqrZ": [{"name":"fixZ","type":0},{"name":"fixSq","type":0},{"name":"Mul","type":0},{"name":"Div","type":0}],
+  "_PartlyJuliaRoff": [{"name":"X sphere","type":0},{"name":"Y sphere","type":0},{"name":"Z sphere","type":0},{"name":"Radius sphere","type":0}],
   "_PolyFold-sym": [{"name":"Order","type":0},{"name":"Shift (deg)","type":0},{"name":"Shift x","type":0},{"name":"Shift y","type":0},{"name":"Skew (deg)","type":0}],
   "_PolyFolding": [{"name":"Order","type":0},{"name":"Shift (deg)","type":0},{"name":"Shift x","type":0},{"name":"Shift y","type":0},{"name":"Skew (deg)","type":0}],
   "_QuadrayTransform": [],
@@ -25554,6 +25691,7 @@ export const DECOMPILED_DE_META: Record<string, DecompiledDEMeta> = {
   "ABoxModKali": {"deOption":2,"deScale":0.15,"rStop":1024},
   "ABoxPlatinum": {"deOption":2,"deScale":0.2,"rStop":1024},
   "ABoxPlatinumB": {"deOption":2,"deScale":0.2,"rStop":1024},
+  "ABoxSphereOffset4d": {"deOption":5,"deScale":0.2,"rStop":1024},
   "ABoxVSWavy": {"deOption":11,"deScale":0.2,"rStop":1024},
   "ABoxVS_icen1": {"deOption":11,"deScale":0.2,"rStop":1024},
   "ABoxVS_icen2": {"deOption":11,"deScale":0.2,"rStop":1024},
@@ -25743,6 +25881,7 @@ export const DECOMPILED_DE_META: Record<string, DecompiledDEMeta> = {
   "_NeoSqrX": {"deOption":-1,"deScale":1,"rStop":100},
   "_NeoSqrY": {"deOption":-1,"deScale":1,"rStop":100},
   "_NeoSqrZ": {"deOption":-1,"deScale":1,"rStop":100},
+  "_PartlyJuliaRoff": {"deOption":-1,"deScale":1,"rStop":100},
   "_PolyFold-sym": {"deOption":-1,"deScale":1,"rStop":100},
   "_PolyFolding": {"deOption":-1,"deScale":1,"rStop":100},
   "_QuadrayTransform": {"deOption":-1,"deScale":1,"rStop":100},
@@ -25890,6 +26029,7 @@ export const DECOMPILED_DEFAULTS: Record<string, DecompiledDefaults> = {
   "ABoxModKali": {"optionTypes":[0,7,14,0,0],"optionValues":[1.5,0.6,0.5,0.5,0.5],"optionCount":5},
   "ABoxPlatinum": {"optionTypes":[0,7,0,6,6,6,0,0,0,13,3,3,3,3,2],"optionValues":[2,0.5,1,0,0,0,0,0,0,1,0,0,0,0,0],"optionCount":15},
   "ABoxPlatinumB": {"optionTypes":[0,7,0,6,6,6,0,0,0,13,3,3,3,3,2],"optionValues":[2,0.5,1,0,0,0,0,0,0,1,0,0,0,0,0],"optionCount":15},
+  "ABoxSphereOffset4d": {"optionTypes":[0,7,0,0,0,0,0,0],"optionValues":[2,0.5,1,0,0,0,0,0],"optionCount":8},
   "ABoxVSWavy": {"optionTypes":[0,7,0,0,0,0,0,0,2],"optionValues":[2,0.4,1,0,0.6,0.3,-0.4,1.3,0],"optionCount":9},
   "ABoxVS_icen1": {"optionTypes":[0,0,0,0,0,0,0,0,2],"optionValues":[2,0.5,1,0,1,0.5,0,0,0],"optionCount":9},
   "ABoxVS_icen2": {"optionTypes":[0,7,0,0,0,0,0,0,2],"optionValues":[2,0.5,1,0,1,0.5,0,0,0],"optionCount":9},
@@ -26079,6 +26219,7 @@ export const DECOMPILED_DEFAULTS: Record<string, DecompiledDefaults> = {
   "_NeoSqrX": {"optionTypes":[0,0,0,0],"optionValues":[0,1,1,1],"optionCount":4},
   "_NeoSqrY": {"optionTypes":[0,0,0,0],"optionValues":[0,1,1,1],"optionCount":4},
   "_NeoSqrZ": {"optionTypes":[0,0,0,0],"optionValues":[0,1,1,1],"optionCount":4},
+  "_PartlyJuliaRoff": {"optionTypes":[0,0,0,0],"optionValues":[0,0,0,0],"optionCount":4},
   "_PolyFold-sym": {"optionTypes":[0,0,0,0,0],"optionValues":[4,0,0,0,0],"optionCount":5},
   "_PolyFolding": {"optionTypes":[0,0,0,0,0],"optionValues":[5,0,0,0,0],"optionCount":5},
   "_QuadrayTransform": {"optionTypes":[],"optionValues":[],"optionCount":0},
@@ -26224,6 +26365,7 @@ export const DECOMPILED_DEFAULTS: Record<string, DecompiledDefaults> = {
 export const DECOMPILED_SCRATCH: Record<string, string[]> = {
   "ABoxMod1": ["mb3dFirst","mb3dVary"],
   "ABoxMod4d": ["mb3dDr1"],
+  "ABoxSphereOffset4d": ["mb3dDr1"],
   "ABoxVSWavy": ["mb3dFirst","mb3dVary"],
   "ABoxVS_icen1": ["mb3dFirst","mb3dVary"],
   "ABoxVS_icen2": ["mb3dFirst","mb3dVary"],
