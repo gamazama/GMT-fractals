@@ -176,6 +176,21 @@ const MANUAL_DEFAULTS: Record<string, DecompiledDefaults> = {
 
 const MANUAL_SCRATCH: Record<string, string[]> = {};
 
+/**
+ * Per-formula DE-quality overrides applied AFTER `mapDEMeta` (emitFusedHybrid). MB3D's source
+ * DE for a box/surf fold is `Sqrt(Rout)/Abs(w)` = r/dr → `mapDEMeta` maps it to estimator 2
+ * ("Pseudo (Raw)"). But — exactly like the intern Amazing Box, which is force-routed to a
+ * linear estimator because r/dr renders it dark/mushy — some folds read correctly only with a
+ * linear-OFFSET estimator. Owner-verified 2026-07-13: Amazing Surf 2 (fold bounds ±2, Scale 2)
+ * renders correctly as estimator 4 = "Linear (Offset 2.0)" (d = (r-2)/dr), NOT the source-mapped
+ * estimator 2 = "Pseudo (Raw)" (d = r/dr), with fudgeFactor 0.5 (the source .m3f DEscale 0.2 was
+ * too tight — rays over-stepped). Only affects hand-ported formulas + their scenes (never the
+ * cross-check-certified corpus, which has no override entry).
+ */
+export const MB3D_DE_QUALITY_OVERRIDES: Record<string, Record<string, number>> = {
+  'Amazing Surf 2': { estimator: 4.0, fudgeFactor: 0.5 },
+};
+
 // Manual entries win on key collision (spread last) so a future regeneration that happens
 // to include a same-named formula never silently shadows a verified hand-port.
 export const DECOMPILED_FORMULAS: Record<string, string> = { ...GEN_FORMULAS, ...MANUAL_FORMULAS };

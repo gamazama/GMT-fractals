@@ -26,7 +26,7 @@ import type { DerivedRotationSpec } from '../../types/fractal';
 import { weaveBankKey } from '../uniformSlots';
 import { mapMB3DCamera } from './mapCamera';
 import { mapMB3DLighting } from './mapLighting';
-import { DECOMPILED_DE_META } from './mb3dFormulaLibrary';
+import { DECOMPILED_DE_META, MB3D_DE_QUALITY_OVERRIDES } from './mb3dFormulaLibrary';
 import { registry } from '../../engine/FractalRegistry';
 import { DEFAULT_HARD_CAP } from '../../../data/constants';
 
@@ -484,7 +484,14 @@ export function emitFusedHybrid(scene: MB3DScene, opts?: EmitFusedOptions): Emit
   // their ratio into g_difsDE for estimator 6 (see the dIFS wiring below).
   // deSlot / deMeta / isDifs are computed above (before the dispatcher).
   if (deSlot) {
-    preset.features.quality = { ...(preset.features.quality ?? {}), ...mapDEMeta(DECOMPILED_DE_META[deSlot.flag.name]) };
+    // mapDEMeta derives the estimator from the source deOption; a hand-ported formula may carry
+    // an owner-verified estimator override (its source r/dr reads wrong in GMT — see the intern
+    // Amazing Box precedent below). Override wins over the deOption-derived value. @see ADR-0101.
+    preset.features.quality = {
+      ...(preset.features.quality ?? {}),
+      ...mapDEMeta(DECOMPILED_DE_META[deSlot.flag.name]),
+      ...(MB3D_DE_QUALITY_OVERRIDES[deSlot.flag.name] ?? {}),
+    };
   } else {
     // Intern formulas (#0..#4) aren't in DECOMPILED_DE_META, so the decompiled-DE
     // path above never fires for them — they'd inherit the scaffold's analytic

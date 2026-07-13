@@ -49,9 +49,14 @@ cross-check referee untouched.**
 
 ## Consequences
 
-- Amazing Surf 2 is a supported formula: transpiles `decompiled` (no leftover `Cm`), analytic r/dr DE,
+- Amazing Surf 2 is a supported formula: transpiles `decompiled` (no leftover `Cm`),
   params exposed (Scale/Min R/FoldXY/Rotation1/Fold fiddler), catalogued under "Boxes & Folds".
   Renders coherent infinitized-fold geometry on GPU (nonBlack ≈ 0.4, σ ≈ 80, 0 NaN, no compile error).
+- **DE estimator override (owner-verified):** its source DE (`r/dr`) maps to estimator 2 ("Pseudo (Raw)")
+  but renders correctly only as estimator 4 ("Linear (Offset 2.0)", `(r-2)/dr`) — the same empirical
+  divergence the intern Amazing Box carries (force-routed off `r/dr`). Applied via
+  `MB3D_DE_QUALITY_OVERRIDES` in the overlay, merged after `mapDEMeta`. The overlay is now the home
+  for both hand-ported bodies AND their DE-quality quirks; new hand-ports add one entry each.
 - The overlay is the home for any *future* bit-hacking formula: hand-port + offline byte-exact verify,
   never a decompiler capability. If the count ever grows past a handful, revisit — but three or four
   hand-ports still beat poisoning the referee.
