@@ -154,9 +154,10 @@ export class WorkerProxy implements AccumulationController {
             this._handleWorkerCrash('Worker error: ' + (e.message || 'unknown'));
         };
 
-        // Deliver any pre-boot-queued messages (e.g. a boot-hydrated scene's
-        // custom-formula REGISTER_FORMULA) to the worker BEFORE INIT, so they're
-        // processed ahead of the (deferred) boot compile.
+        // Re-populate the fresh worker's (empty) formula registry, then deliver any
+        // other pre-boot-queued messages — both BEFORE INIT, so they're processed
+        // ahead of the (deferred) boot compile.
+        this._replayFormulas();
         this._flushOutbox();
 
         const initMsg: MainToWorkerMessage = {
@@ -223,8 +224,11 @@ export class WorkerProxy implements AccumulationController {
             this._handleWorkerCrash('Worker error: ' + (e.message || 'unknown'));
         };
 
-        // Same pre-INIT outbox flush as initWorkerMode — a restart (e.g. Firefox
-        // compile-cancel) re-creates the worker, so re-deliver queued messages.
+        // Re-register formulas into the fresh worker + flush the outbox, BEFORE
+        // INIT. This is the Firefox fix: a restart (synchronous-compile cancel)
+        // makes a new worker with an empty registry, so the custom formula must be
+        // replayed or the boot compile falls back to a sphere.
+        this._replayFormulas();
         this._flushOutbox();
 
         const initMsg: MainToWorkerMessage = {
@@ -423,17 +427,30 @@ export class WorkerProxy implements AccumulationController {
     }
 
     /**
-     * Pre-boot outbox. Messages posted before the worker exists are QUEUED here
-     * rather than dropped, then flushed to the worker at creation (in FIFO order,
-     * before INIT) by {@link _flushOutbox}. This is what makes a scene hydrated
-     * at boot (share link / OAuth stash) deliver its custom-formula
-     * REGISTER_FORMULA — and any other pre-boot message — to the worker BEFORE the
-     * boot compile, so the worker can never be asked to compile a formula it
-     * hasn't received (the sphere-fallback bug). One general mechanism, replacing
-     * the need for per-type pre-boot stashes.
+     * Pre-boot outbox — a GENERAL safety net for arbitrary messages posted before
+     * the worker exists: they are QUEUED here (rather than dropped) and flushed to
+     * the worker at creation, before INIT, by {@link _flushOutbox}. NOTE: custom
+     * formula registration does NOT ride the outbox — it's PERSISTENT state that
+     * must survive worker RESTARTS, so it lives in {@link _registeredFormulas}.
      * @invariant Flushed exactly once per worker, at creation, before INIT.
      */
     private _outbox: Array<{ msg: MainToWorkerMessage; transfer?: Transferable[] }> = [];
+
+    /**
+     * Custom formulas (MB3D-hybrid / Workshop) registered via {@link registerFormula}.
+     * The worker's formula registry is PER-WORKER and starts EMPTY, so on every
+     * worker (re)creation — initWorkerMode + restart() (+ crash-recovery, which
+     * re-creates via one of those) — this map is replayed BEFORE INIT
+     * ({@link _replayFormulas}). Persistent (never cleared) so a restarted worker
+     * can never be asked to compile a formula it lacks.
+     *
+     * Why not the one-shot outbox: Firefox's synchronous compile blocks BOOTED, so
+     * the boot flow cancels + restarts to interrupt it (bootWithConfig → restart).
+     * The restart makes a FRESH worker, but the outbox had already been consumed by
+     * the first worker → the second worker never got the formula → fallback sphere.
+     * A replayed map fixes it regardless of how many times Firefox restarts.
+     */
+    private _registeredFormulas: Map<string, Extract<MainToWorkerMessage, { type: 'REGISTER_FORMULA' }>['shader']> = new Map();
 
     /** Post a typed message to the render worker (queued in _outbox if the worker
      *  isn't created yet — see {@link _outbox}). */
@@ -447,8 +464,7 @@ export class WorkerProxy implements AccumulationController {
     }
 
     /** Drain the pre-boot outbox to the freshly-created worker, in FIFO order.
-     *  Called at both worker-creation sites BEFORE the INIT message, so queued
-     *  registrations reach the worker ahead of the (deferred) boot compile. */
+     *  Called at both worker-creation sites BEFORE the INIT message. */
     private _flushOutbox() {
         if (!this._worker || this._outbox.length === 0) return;
         const queued = this._outbox;
@@ -456,6 +472,16 @@ export class WorkerProxy implements AccumulationController {
         for (const { msg, transfer } of queued) {
             if (transfer) this._worker.postMessage(msg, transfer);
             else this._worker.postMessage(msg);
+        }
+    }
+
+    /** Replay all registered custom formulas to the current worker, BEFORE INIT, so
+     *  a freshly-created worker (initial boot OR a Firefox restart / crash-recovery)
+     *  has them in its registry ahead of the boot compile. */
+    private _replayFormulas() {
+        if (!this._worker || this._registeredFormulas.size === 0) return;
+        for (const [id, shader] of this._registeredFormulas) {
+            this._worker.postMessage({ type: 'REGISTER_FORMULA', id, shader });
         }
     }
 
@@ -870,7 +896,12 @@ export class WorkerProxy implements AccumulationController {
     }
 
     registerFormula(id: string, shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; preambleVars?: string[]; capabilities?: ReadonlySet<string>; derivedRotations?: DerivedRotationSpec[] }) {
-        this.post({ type: 'REGISTER_FORMULA', id, shader });
+        // Persist so it survives worker restarts (replayed at every creation —
+        // _replayFormulas). Post immediately only when the worker already exists
+        // (post-boot / runtime import); pre-boot registrations are delivered by the
+        // creation-time replay, so they must NOT ride the one-shot outbox.
+        this._registeredFormulas.set(id, shader);
+        if (this._worker) this.post({ type: 'REGISTER_FORMULA', id, shader });
     }
 
     // ─── Video Export ────────────────────────────────────────────────
