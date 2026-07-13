@@ -6,7 +6,7 @@
  *
  * `drawGraph` used to walk every visible track's keyframes on every redraw,
  * which during `graph-play` cost ~2 ms × 480 commits in the bench (see
- * docs/animation-refactor/08_ENGINE_PROBE_FINDINGS.md). The polyline shape
+ * docs/history/animation-refactor/08_ENGINE_PROBE_FINDINGS.md). The polyline shape
  * only changes when the track's keyframes change or the viewport zoom changes
  * — pan is folded into viewKey. The soft-selection mask only changes when the
  * selection set, soft radius/type, or viewport change. Both costs are now

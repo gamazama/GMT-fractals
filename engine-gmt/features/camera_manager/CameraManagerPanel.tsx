@@ -11,7 +11,7 @@
  * modified marker, slot-shortcut hint) is the engine primitive. The
  * camera slice (engine-gmt/store/cameraSlice.ts) wires capture / apply
  * / dirty-check / thumbnail / suggestLabel into a generic state-library
- * slice — see docs/engine/15_Camera_Manager_Extraction.md for the
+ * slice — see docs/history/engine/15_Camera_Manager_Extraction.md for the
  * design.
  */
 

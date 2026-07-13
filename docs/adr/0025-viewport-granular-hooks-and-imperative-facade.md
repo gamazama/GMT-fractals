@@ -18,7 +18,7 @@ Five granular hooks (`useQualityFraction`, `useViewportSize`,
 imperative `viewport.*` façade (`frameTick`, `reportFps`,
 `holdAdaptive`, `suppressAdaptive`, `setConfig`). The planned
 `useViewport` / `setAdaptive` / `setMode` / `onResize` callback
-surface from `docs/engine/10_Viewport.md` was deliberately not built.
+surface from `docs/history/engine/10_Viewport.md` was deliberately not built.
 
 ## Consequences
 

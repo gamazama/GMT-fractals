@@ -18,7 +18,7 @@
  * This module owns all three steps and registers itself as a pair of
  * scrub hooks plus four binders (active_index + 3 unified axes + 3
  * rotation axes). Before this lived inside AnimationEngine — see F5
- * in docs/engine/20_Fragility_Audit.md for the migration history.
+ * in docs/history/engine/20_Fragility_Audit.md for the migration history.
  */
 
 import * as THREE from 'three';

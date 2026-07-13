@@ -8,7 +8,7 @@
  *
  * panX is baked into the cached canvas (in the viewKey) instead of applied at
  * composite time — matches the GraphRendererBuilder tradeoff (see
- * docs/animation-refactor/11_CANVAS_GRAPH_REPORT.md §"Surprises" #4). Holds 100%
+ * docs/history/animation-refactor/11_CANVAS_GRAPH_REPORT.md §"Surprises" #4). Holds 100%
  * cache hits during play/scrub which keep pan fixed; rebuilds per pan-frame on
  * continuous-pan. Revisit if pan smoothness regresses.
  */

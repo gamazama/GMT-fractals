@@ -204,7 +204,7 @@ const isInputFocused = (selector: string): boolean => {
  * @invariant Tiebreak rule: most-recently-registered wins within the
  *   same scope-score + priority. Stable sort + Map insertion order
  *   means later registrations end up later in the matches array and
- *   win the head slot. (NB: docs/engine/06_Undo_Transactions.md:116
+ *   win the head slot. (NB: docs/history/engine/06_Undo_Transactions.md:116
  *   still inverts this; that doc is pre-audit reference and append-only.)
  */
 const resolve = (normalized: string): ShortcutDef | null => {

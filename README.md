@@ -39,11 +39,11 @@ demo/          Hello-world plugin (minimal three-file contract)
 docs/          Architecture docs — start with docs/DOCS_INDEX.md
 ```
 
-Apps sit on top of the engine via plugins. They don't fork it. See [docs/engine/01_Architecture.md](docs/engine/01_Architecture.md) for the three-tier model.
+Apps sit on top of the engine via plugins. They don't fork it. See [docs/history/engine/01_Architecture.md](docs/history/engine/01_Architecture.md) for the three-tier model.
 
 ## Plugin model
 
-Every app is a plugin. See [demo/README.md](demo/README.md) for the minimal three-file contract (`registerFeatures.ts` → `setup.ts` → mount), and [docs/engine/03_Plugin_Contract.md](docs/engine/03_Plugin_Contract.md) for the full spec.
+Every app is a plugin. See [demo/README.md](demo/README.md) for the minimal three-file contract (`registerFeatures.ts` → `setup.ts` → mount), and [docs/history/engine/03_Plugin_Contract.md](docs/history/engine/03_Plugin_Contract.md) for the full spec.
 
 ## Docs
 

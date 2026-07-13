@@ -45,4 +45,4 @@ and registrations from engine-gmt code didn't reach the engine-core run loop.
 - HMR adds complexity: if the module is re-executed, the bindings reset.
   Duplicate-name guards survive HMR (different module-instance but same id);
   warn-once flags do not (each module instance has its own).
-- See followup q-025 (`plans/doc-audit-state/survey/_followups/q-025.md`).
+- See followup q-025 (`docs/history/doc-audit-state/survey/_followups/q-025.md`).

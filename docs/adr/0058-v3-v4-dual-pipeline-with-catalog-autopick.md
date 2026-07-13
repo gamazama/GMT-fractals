@@ -26,7 +26,7 @@ importer that turns user-supplied source into a registered
   formulas with `selfContainedSDE: true`. Simpler internal shape but does
   NOT compose with interlace / hybrid fold (the self-contained SDE forbids
   outer-loop modifications). V4 plan paused 2026-04-17 per
-  `docs/gmt/26_Formula_Workshop_V4_Plan.md:3-12`.
+  `docs/history/gmt/26_Formula_Workshop_V4_Plan.md:3-12`.
 
 Each pipeline passes a different subset of the formula library. The honest
 bakeoff numbers (from the V4 plan doc): V3 = 216 passes / 46 with real GMT

@@ -248,7 +248,7 @@ export const drawGraph = (props: GraphRenderProps) => {
     // get instead of a track.keyframes.find — at heavy seed the old form ran
     // O(T × S × N) (e.g. 9000 keys all selected on one track ≈ 81M find ops
     // per repaint). Same fix as canvas DopeSheet's drawDopeSheetSelection;
-    // see docs/animation-refactor/16_CANVAS_DOPESHEET_REPORT.md surprise #5.
+    // see docs/history/animation-refactor/16_CANVAS_DOPESHEET_REPORT.md surprise #5.
     const selectedByTrack = new Map<string, string[]>();
     for (const compositeId of selectedKeyframeIds) {
         const sepIdx = compositeId.indexOf('::');

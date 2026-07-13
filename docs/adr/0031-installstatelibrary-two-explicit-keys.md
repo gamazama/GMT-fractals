@@ -7,7 +7,7 @@
 ## Context
 
 The original proposal
-(`docs/engine/15_Camera_Manager_Extraction.md:131`) imagined a
+(`docs/history/engine/15_Camera_Manager_Extraction.md:131`) imagined a
 single `storeKey` option with derived field names. As the factory
 shipped, GMT and fluid-toy both wanted to control the active-id
 field name independently (`activeCameraId` vs `activeViewId`) for

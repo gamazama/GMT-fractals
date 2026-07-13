@@ -1,7 +1,7 @@
 /**
  * Feature compatibility protocol — barrel.
  *
- * @see dev/docs/gmt/35_Capability_Protocol.md
+ * @see docs/history/gmt/35_Capability_Protocol.md
  * @see dev/docs/adr/0059-feature-capability-protocol.md
  */
 

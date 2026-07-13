@@ -48,7 +48,7 @@ the registry boundary. The five legacy aliases are accepted as runtime-only
 strings; new code that needs to round-trip aliases (e.g. GMF load) must
 accept `string` and check membership at runtime.
 
-Three remediation options are recorded in followup `plans/doc-audit-state/survey/_followups/q-102.md`
+Three remediation options are recorded in followup `docs/history/doc-audit-state/survey/_followups/q-102.md`
 for future consideration:
 
 1. Drop the union — adopt `FormulaType = string` (parent project's path).

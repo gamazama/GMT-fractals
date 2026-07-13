@@ -508,7 +508,7 @@ merges, plan amendments. Newest first.)_
   test:palette 44/44 · bench:pt green headless+GPU). **Orchestrator merge: diff scope verified
   debug/+plans/+package.json only (no engine/app touch) + user GPU sign-off ⇒ no separate heavyweight review
   warranted for test-infra+report.** **RECOMMENDED NEXT (the remaining PT item, now a scoped FOLLOW-UP not a
-  blocker): ship the bloom "render-once, sample-many" v2 fix** (`docs/gmt/43:111` option b) — `bench:pt
+  blocker): ship the bloom "render-once, sample-many" v2 fix** (`docs/history/gmt/43:111` option b) — `bench:pt
   --suite=seamconv` measures it directly (after the fix the bloom seamExcess(spp) curve should collapse onto the
   no-post curve); until then the existing bloom-tiling UI warning is correct (optionally auto-suggest bloom-off /
   single-tile for bloomed exports). Report: `plans/pt-validation-report.md`. Memories: NEW
@@ -521,7 +521,7 @@ merges, plan amendments. Newest first.)_
 - 2026-06-10 — **PT PERF+QUALITY VALIDATION session SCOPED** (cutover-blocker: bucket-render PT noise). User
   reports the **low-FPS perf warning is now FIXED** (drop #6 from the perf backlog). Read-only probe mapped the
   PT/bucket/accumulation system + harnesses. **KEY FINDING: the bucket-noise is well-CHARACTERIZED, the gap is
-  MEASUREMENT.** Root causes already documented (`docs/gmt/43_Bucket_Render_Overhaul.md:103-114`): (1) bloom/CA
+  MEASUREMENT.** Root causes already documented (`docs/history/gmt/43_Bucket_Render_Overhaul.md:103-114`): (1) bloom/CA
   run per-tile on isolated composites → edge samples black → the **main visible seam** (v2 plan = "render bloom
   once, sample many"; today a UI warning fires when cols×rows>1 && bloom>0); (2) blue-noise tile-repeat — **already
   FIXED** (noiseCoord offset by `uFullOutputResolution + uTilePixelOrigin`); (3) **convergence-variance seams** —

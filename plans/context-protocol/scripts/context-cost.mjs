@@ -24,7 +24,7 @@
 //   --json     emit the plan as JSON instead of markdown.
 //
 // Reads plans/context-protocol/context-map.json (run `npm run context:map`
-// first). Reads plans/doc-audit-state/subsystems.json for curated bundles.
+// first). Reads plans/context-protocol/subsystems.json for curated bundles.
 
 import { execSync } from 'node:child_process';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -37,7 +37,7 @@ import { sliceGuide } from './symbols.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
 const MAP_PATH = join(REPO_ROOT, 'plans', 'context-protocol', 'context-map.json');
-const SUBSYS_PATH = join(REPO_ROOT, 'plans', 'doc-audit-state', 'subsystems.json');
+const SUBSYS_PATH = join(REPO_ROOT, 'plans', 'context-protocol', 'subsystems.json');
 const PROFILES_PATH = join(REPO_ROOT, 'plans', 'context-protocol', 'profiles.json');
 
 const KNOWN_TIERS = new Set([
@@ -160,7 +160,7 @@ function planFromTier(tier, map, index, subsystems) {
   const archInTier = inTier.filter((e) => e.loadPolicy === 'read-for-area').map((e) => e.path);
   const source = inTier.filter((e) => e.loadPolicy === 'on-demand').map((e) => e.path);
   // Design docs (which live in the docs/ tier) that describe this tier, pulled
-  // from subsystems.json so e.g. `engine-core` surfaces docs/engine/* up front.
+  // from subsystems.json so e.g. `engine-core` surfaces docs/history/engine/* up front.
   const docsForTier = [];
   for (const s of subsystems) {
     if (s.tier !== tier) continue;

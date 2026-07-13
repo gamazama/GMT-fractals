@@ -33,6 +33,6 @@ Sibling app: minimal 2D fractal demo (Mandelbrot, Julia) using the engine. Small
 
 ## Historical context
 
-The full file catalog is archived at [`docs/audit-2026-05-20/archive/sibling-apps/fractal-toy-catalog.md`](../../audit-2026-05-20/archive/sibling-apps/fractal-toy-catalog.md). fractal-toy has no `README.md` of its own — this overview IS the entry point for the sibling app.
+The full file catalog is archived at [`docs/history/audit-2026-05-20/archive/sibling-apps/fractal-toy-catalog.md`](../../audit-2026-05-20/archive/sibling-apps/fractal-toy-catalog.md). fractal-toy has no `README.md` of its own — this overview IS the entry point for the sibling app.
 
 Decisions affecting fractal-toy: the same DDFS contracts and engine plugin slots apply (ADRs 0007-0014, 0021).

@@ -163,7 +163,7 @@ gmt-engine/
 | Shared utility function (not UI) | `utils/` |
 | Shared TS type | `types/` |
 | Generic DDFS feature (audio, webcam, modulation, …) | `engine/features/` |
-| New core plugin (opt-in, slot-based) | `engine/plugins/` — follow `docs/engine/11_Plugin_Authoring.md` |
+| New core plugin (opt-in, slot-based) | `engine/plugins/` — follow `docs/history/engine/11_Plugin_Authoring.md` |
 | App-specific UI | `<app>/components/` |
 | App-specific DDFS feature | `<app>/features/` |
 | App cross-tree singleton state | `<app>/<name>Handles.ts` — use `defineAppHandles<T>()` |
@@ -173,5 +173,5 @@ gmt-engine/
 
 - **App code must not be imported by engine code.** `engine/**`, `components/**`, `store/**`, `utils/**`, `hooks/**`, `types/**`, `data/**`, `shaders/**` must never `import '../fluid-toy/…'` or `'../fractal-toy/…'`. Apps import from shared, not the other way around.
 - **Engine features are generic.** Anything in `engine/features/` must work independently of any specific app. App-specific features live under `<app>/features/` instead.
-- **Plugin authoring pattern:** see [`docs/engine/11_Plugin_Authoring.md`](docs/engine/11_Plugin_Authoring.md) for the four-part shape every plugin follows.
-- **Cross-tree state:** see [`docs/engine/12_App_Handles.md`](docs/engine/12_App_Handles.md) for `defineAppHandles<T>()` — avoid growing grab-bag singletons.
+- **Plugin authoring pattern:** see [`docs/history/engine/11_Plugin_Authoring.md`](docs/history/engine/11_Plugin_Authoring.md) for the four-part shape every plugin follows.
+- **Cross-tree state:** see [`docs/history/engine/12_App_Handles.md`](docs/history/engine/12_App_Handles.md) for `defineAppHandles<T>()` — avoid growing grab-bag singletons.

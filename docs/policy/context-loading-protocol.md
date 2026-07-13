@@ -43,9 +43,9 @@ This is the heart of the protocol — the "good context vs not necessary" call.
 | Policy | Meaning | Examples |
 |---|---|---|
 | `read-first` | Orientation. Load once at the start of (almost) any task. | `CLAUDE.md`, `CODEBASE_MAP.md`, `AGENTS.md`, `docs/DOCS_INDEX.md`, `FEATURE_STATUS.md`, app `README.md` |
-| `read-for-area` | Architecture/design docs for the subsystem you touch. | `docs/engine/*`, `docs/modules/*`, `docs/specs/*`, `docs/adr/*`, `docs/policy/*`, in-tree `plans/*.md` |
+| `read-for-area` | Architecture/design docs for the subsystem you touch. | `docs/history/engine/*`, `docs/modules/*`, `docs/specs/*`, `docs/adr/*`, `docs/policy/*`, in-tree `plans/*.md` |
 | `on-demand` | Source of truth. Load **targeted**; prefer the area's doc first. | `engine/**/*.ts(x)`, `engine-gmt/**`, shaders, tooling scripts, config |
-| `reference-only` | Legacy/historical. Load only if explicitly relevant. | `docs/gmt/*`, `docs/archive/*`, `**/reference/**` import corpora |
+| `reference-only` | Legacy/historical. Load only if explicitly relevant. | `docs/history/gmt/*`, `docs/history/archive/*`, `**/reference/**` import corpora |
 | `skip` | Data/fixtures/snapshots. Not context unless the task is about the data. | `public/**`, `*.gmf`, `*.json`/`*.yaml` snapshots & manifests, `debug/*.json` probe dumps |
 | `never` | Generated/binary. Never load as text. | `dist/`, `node_modules/`, `*-lock.json`, `*.tsbuildinfo`, images/fonts/media |
 
@@ -122,7 +122,7 @@ npm run context:check [-- --strict]       # CI gate: staleness / classification
   (`app:app-gmt`, `app:fluid-toy`, …). The code the running app actually pulls
   in — far smaller than its tiers.
 - **subsystem id** — `e01-feature-system`, from
-  [`subsystems.json`](../../plans/doc-audit-state/subsystems.json) (`--list`).
+  [`subsystems.json`](../../plans/context-protocol/subsystems.json) (`--list`).
 - **tier** — `engine-core`, `fluid-toy`, … (also pulls the tier's design docs).
 - **path / prefix / substring** — `engine/plugins`, `FormulaWorkshop`, `animation`.
 

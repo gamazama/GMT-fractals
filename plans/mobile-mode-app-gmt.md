@@ -7,7 +7,7 @@
 
 Companion docs:
 - Stable reference: `h:/GMT/workspace-gmt/stable/` (production app, mobile rendering proven)
-- Engine viewport docs: [docs/engine/10_Viewport.md](../docs/engine/10_Viewport.md)
+- Engine viewport docs: [docs/history/engine/10_Viewport.md](../docs/history/engine/10_Viewport.md)
 - Codebase map: [CODEBASE_MAP.md](../CODEBASE_MAP.md)
 
 ---
@@ -237,7 +237,7 @@ C4. **Tabs in dock panels** — right-dock tab strip overflows on phone (Formula
   - **F1:** `<TimelineHost>` skipped on mobile.
   - **GMT-specific touch:** Right Dock hidden in Fly mode on mobile (joystick reach). Mounted `<MobileControls />` in AppGmt — was missing entirely from app-gmt's port.
   - **Cleanup pass:** review-agent audit pruned narration comments, hoisted style consts in `MobileViewportShell`, dropped a redundant `useState`/`useEffect` mirror in `MobileControls`, extracted a `pillClass(active, extra)` helper for the cyan active-button pattern, dropped the `extraItems` API from `SceneIO` (apps register file-menu items directly), replaced an inline X-close SVG with `CloseIcon`, flattened the right-dock conditional in AppGmt, added a defensive `useEffect` to close stale `MenuAnchor` `open` state when the user toggles into Force Mobile.
-  - **Reference doc:** [docs/engine/17_Mobile_Layout.md](../docs/engine/17_Mobile_Layout.md) created. CLAUDE.md and DOCS_INDEX.md updated.
+  - **Reference doc:** [docs/history/engine/17_Mobile_Layout.md](../docs/history/engine/17_Mobile_Layout.md) created. CLAUDE.md and DOCS_INDEX.md updated.
 
 ### Deferred (still in plan, not done)
 - D1 (slider hit-target audit), D2 (`touch-action: none` sweep), D3 (FormulaGallery hover→tap), D5 (vibration extension), D7 (right-dock drawer alternative)

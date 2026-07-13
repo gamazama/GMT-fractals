@@ -151,7 +151,7 @@ export interface FractalDefinition {
          *  them to tokens at the parse boundary (plus cp_* and g_difsDE body
          *  auto-detects). Do not reintroduce boolean capability flags — add a
          *  Capability token instead (requires ADR-0059 amendment).
-         *  @see dev/docs/gmt/35_Capability_Protocol.md */
+         *  @see docs/history/gmt/35_Capability_Protocol.md */
         capabilities: CapabilitySet;
         /** CPU-derived rotation uniforms this formula's body consumes (MB3D
          *  live-bound angle options). Lives on `shader` so it rides the worker

@@ -239,4 +239,4 @@ Implement in this order:
 
 - [plans/capability-protocol.md](./capability-protocol.md) — picker is a consumer of the capability protocol's `disabledIds` outputs.
 - [plans/partial-apply-utility.md](./partial-apply-utility.md) — picker provides the formula ID for shading-source; partial-apply does the actual copy.
-- [docs/gmt/35_Capability_Protocol.md](../docs/gmt/35_Capability_Protocol.md) — reducer that produces `disabledIds`.
+- [docs/history/gmt/35_Capability_Protocol.md](../docs/history/gmt/35_Capability_Protocol.md) — reducer that produces `disabledIds`.

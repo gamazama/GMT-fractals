@@ -13,7 +13,7 @@
  *   features to register without forcing simultaneous protocol updates).
  *
  * @see dev/plans/capability-protocol.md
- * @see dev/docs/gmt/35_Capability_Protocol.md
+ * @see docs/history/gmt/35_Capability_Protocol.md
  */
 
 import type { FractalDefinition } from '../../types';

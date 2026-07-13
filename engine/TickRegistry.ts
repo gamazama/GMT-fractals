@@ -99,7 +99,7 @@ export function registerTick(
                         'has never been called. Animations, overlays, and timeline will not ' +
                         'update. Mount <RenderLoopDriver /> from engine/plugins/RenderLoop ' +
                         '(or call runTicks(dt) every frame yourself). See ' +
-                        'docs/engine/01_Architecture.md § The render-loop contract.'
+                        'docs/history/engine/01_Architecture.md § The render-loop contract.'
                     );
                     _warnedNoTicks = true;
                 }

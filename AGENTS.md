@@ -21,8 +21,8 @@ points at it.
 | Session-by-session progress log | [`HANDOFF.md`](HANDOFF.md) |
 | Per-file / per-feature module docs (post-2026-05-19 audit) | [`docs/modules/`](docs/modules/) |
 | **What to load, in what order, at what token cost** | [`docs/policy/context-loading-protocol.md`](docs/policy/context-loading-protocol.md) |
-| GMT-era reference (raymarching, formulas, shaders) — historical | [`docs/gmt/`](docs/gmt/) |
-| Engine architecture, plugin contract, feature registry | [`docs/engine/`](docs/engine/) |
+| GMT-era reference (raymarching, formulas, shaders) — historical | [`docs/history/gmt/`](docs/history/gmt/) |
+| Engine architecture, plugin contract, feature registry | [`docs/history/engine/`](docs/history/engine/) |
 
 ## Reading order for AI agents
 
@@ -52,23 +52,23 @@ Lifted briefly from `CLAUDE.md` — read that file for the full version.
 
 - **Features are isolated.** State lives at `store[featureId]`. Cross-feature
   reads require `dependsOn`. Bridges or derived values for coordination, never
-  store reach-through. (`docs/engine/02_Feature_Registry.md`,
-  `docs/engine/09_Bridges_and_Derived.md`)
+  store reach-through. (`docs/history/engine/02_Feature_Registry.md`,
+  `docs/history/engine/09_Bridges_and_Derived.md`)
 - **Render loop is app-owned.** Engine exposes `TickRegistry` phases; the app
   (or `@engine/render-loop` core plugin) calls `runTicks(dt)`. Don't bypass
-  with ad-hoc `useFrame`. (`docs/engine/01_Architecture.md`)
+  with ad-hoc `useFrame`. (`docs/history/engine/01_Architecture.md`)
 - **Feature registry freezes at store construction.** All
   `featureRegistry.register()` calls happen before `createEngineStore()`. Late
-  registration throws in dev. (`docs/engine/03_Plugin_Contract.md`)
+  registration throws in dev. (`docs/history/engine/03_Plugin_Contract.md`)
 - **Every DDFS param is animatable + undoable by construction.** No
-  per-feature wiring. (`docs/engine/08_Animation.md`)
+  per-feature wiring. (`docs/history/engine/08_Animation.md`)
 - **TypeScript `isolatedModules: true`.** Cross-module type-only re-exports
   MUST use `export type { X }` / `import type { X }`. Otherwise esbuild leaves
   the export in JS and you get a runtime SyntaxError.
 - **No `as any` without a comment.** Type-grafts (engine-core stub vs
   engine-gmt real) sometimes need them; document why.
-- **Don't edit `docs/gmt/`.** Pre-extraction reference. Engine-scope changes
-  go in `docs/engine/` or `docs/modules/`.
+- **Don't edit `docs/history/gmt/`.** Pre-extraction reference. Engine-scope changes
+  go in `docs/history/engine/` or `docs/modules/`.
 - **Citations.** Every architectural claim cites `path/to/file.ts:N` or
   `path/to/file.ts:N-M`. If you can't cite, you don't know it yet.
 

@@ -34,7 +34,7 @@ Sibling app: real-time 2D fluid simulation using the same engine as GMT, with br
 
 ## Historical context
 
-The full file catalog (80 files across feature/shader/store/UI/preset/component subtrees) is archived at [`docs/audit-2026-05-20/archive/sibling-apps/fluid-toy-catalog.md`](../../audit-2026-05-20/archive/sibling-apps/fluid-toy-catalog.md) — useful when navigating the codebase but heavy. The README + `CODE_MAP.md` (in the sibling-app root) are the canonical onboarding entry points per the audit's `keep-as-is` disposition for `fluid-toy/README.md`.
+The full file catalog (80 files across feature/shader/store/UI/preset/component subtrees) is archived at [`docs/history/audit-2026-05-20/archive/sibling-apps/fluid-toy-catalog.md`](../../audit-2026-05-20/archive/sibling-apps/fluid-toy-catalog.md) — useful when navigating the codebase but heavy. The README + `CODE_MAP.md` (in the sibling-app root) are the canonical onboarding entry points per the audit's `keep-as-is` disposition for `fluid-toy/README.md`.
 
 Cross-cutting decisions affecting fluid-toy (see ADR descriptions):
 - ADR-0046 — unified-coordinate camera + treadmill absorb (also used here for deep-zoom precision)

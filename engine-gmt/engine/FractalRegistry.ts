@@ -37,7 +37,7 @@ class FractalRegistry {
                 `FractalRegistry.register: formula '${def.id}' is missing ` +
                 `shader.capabilities. Declare via ` +
                 `new Set([...] satisfies Capability[]). See ` +
-                `dev/docs/gmt/35_Capability_Protocol.md.`,
+                `docs/history/gmt/35_Capability_Protocol.md.`,
             );
         }
         this.definitions.set(def.id, def);

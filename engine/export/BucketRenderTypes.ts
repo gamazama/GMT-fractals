@@ -8,7 +8,7 @@
  *
  * The runner is host-agnostic. Each app (app-gmt, fluid-toy) implements
  * `BucketRenderHost` to plug its renderer's primitives in. See
- * [docs/gmt/43_Bucket_Render_Overhaul.md] for the design.
+ * [docs/history/gmt/43_Bucket_Render_Overhaul.md] for the design.
  */
 
 import * as THREE from 'three';

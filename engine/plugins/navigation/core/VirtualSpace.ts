@@ -15,7 +15,7 @@
  * those uniforms (fluid-toy, fractal-toy) use VirtualSpace purely for
  * offset bookkeeping and smoothing.
  *
- * Canonical state invariants (see `docs/gmt/01_System_Architecture.md#6`):
+ * Canonical state invariants (see `docs/history/gmt/01_System_Architecture.md#6`):
  *   - `camera.position === (0,0,0)` except during an active orbit drag
  *   - `sceneOffset` holds world position at high precision
  *   - `targetDistance` is physics-probed surface distance (never orbit

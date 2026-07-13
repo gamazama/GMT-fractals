@@ -121,5 +121,5 @@ Phases per [dev/plans/capability-protocol.md](../../plans/capability-protocol.md
 - [dev/plans/capability-protocol.md](../../plans/capability-protocol.md) — phased implementation spec
 - [dev/plans/capability-protocol-p1-classification.md](../../plans/capability-protocol-p1-classification.md) — per-formula capability classification
 - [dev/plans/capability-protocol-latent-fixes.md](../../plans/capability-protocol-latent-fixes.md) — pre-P0 latent issue fixes
-- [dev/docs/gmt/35_Capability_Protocol.md](../gmt/35_Capability_Protocol.md) — reference doc (vocabulary, examples, semantics)
+- [docs/history/gmt/35_Capability_Protocol.md](../gmt/35_Capability_Protocol.md) — reference doc (vocabulary, examples, semantics)
 - [ADR-0048](./0048-formula-type-literal-union-vs-registry.md) — FormulaType / registry drift

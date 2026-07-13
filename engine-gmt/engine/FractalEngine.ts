@@ -141,7 +141,7 @@ for (let i = 1; i <= 2048; i++) {
  * @invariant `engine.renderer` and `engine.pipeline` are NULL on the main
  *   thread under worker mode. Code MUST guard via `engine.isBooted` or
  *   use the shadow state on `WorkerProxy`. Matches the "What NOT to Do"
- *   rule in `CLAUDE.md` / `docs/gmt/01_System_Architecture.md`.
+ *   rule in `CLAUDE.md` / `docs/history/gmt/01_System_Architecture.md`.
  */
 export class FractalEngine {
     public materials: MaterialController;

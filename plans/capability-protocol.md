@@ -59,15 +59,15 @@ Other audit claims confirmed:
 
 ## Sub-investigations required
 
-**Before P1** (~3h): per-formula classification of `iter:c-constant`, `render:writes-trap`, `render:writes-iter`. Audit method = scan `shader.function` body. Output = table in `dev/docs/gmt/23_Formula_Audit.md`.
+**Before P1** (~3h): per-formula classification of `iter:c-constant`, `render:writes-trap`, `render:writes-iter`. Audit method = scan `shader.function` body. Output = table in `docs/history/gmt/23_Formula_Audit.md`.
 
-**Before P6** (~3h): audit each of the 9 V3 fallback trigger sites in `v3/generate/index.ts:520-595`. Confirm `'shape:self-contained'` is semantically correct. Sample 20 V3-passing formulas, predict + verify capability assignments. Output = table in `dev/docs/gmt/21_Frag_Importer_Current_Status.md`.
+**Before P6** (~3h): audit each of the 9 V3 fallback trigger sites in `v3/generate/index.ts:520-595`. Confirm `'shape:self-contained'` is semantically correct. Sample 20 V3-passing formulas, predict + verify capability assignments. Output = table in `docs/history/gmt/21_Frag_Importer_Current_Status.md`.
 
 ## Documentation deliverables (per-phase)
 
 | Phase | New / updated doc |
 |---|---|
-| P0 | NEW `dev/docs/gmt/35_Capability_Protocol.md` (vocabulary, reducer, examples) + NEW `dev/docs/adr/0059-feature-capability-protocol.md` |
+| P0 | NEW `docs/history/gmt/35_Capability_Protocol.md` (vocabulary, reducer, examples) + NEW `dev/docs/adr/0059-feature-capability-protocol.md` |
 | P1 | Update `25_Formula_Dev_Reference.md` §3.7–3.9 |
 | P2 | Update `03_Modular_System.md` + Modular matrix in `35_Capability_Protocol.md` |
 | P3 | Update `01_System_Architecture.md` §2.2 |
@@ -113,7 +113,7 @@ Protocol does NOT mutate state on formula switch — UI displays disabled afford
 | `dev/engine-gmt/engine/compat/index.ts` | Barrel. |
 | `dev/debug/test-compat.mts` | Snapshot matrix sweep. |
 | `dev/debug/compat-snapshot.jsonl` | Initial snapshot, committed after review. |
-| `dev/docs/gmt/35_Capability_Protocol.md` | Reference doc. |
+| `docs/history/gmt/35_Capability_Protocol.md` | Reference doc. |
 | `dev/docs/adr/0059-feature-capability-protocol.md` | ADR. |
 
 ## Backward compatibility
@@ -345,7 +345,7 @@ Revert. Inline duplication returns.
 | `dev/engine-gmt/utils/FormulaFormat.ts` | `generateGMF` stashes `shaderMeta.capabilities` as serialized array. `parseGMF` reads; missing → legacy auto-detect fallback. |
 | `dev/engine-gmt/formulas/*.ts` | Delete legacy flags (capabilities are SoT). |
 | `dev/engine-gmt/engine/FeatureSystem.ts` | Remove `tabConfig.condition` if unused, OR rename to `tabConfig.requires`. |
-| `dev/docs/gmt/25_Formula_Dev_Reference.md` | §3.7–3.9 rewritten. |
+| `docs/history/gmt/25_Formula_Dev_Reference.md` | §3.7–3.9 rewritten. |
 
 ## Verification
 - `npx tsc --noEmit` clean. Any lingering `shader.selfContainedSDE` read errors out.
@@ -368,11 +368,11 @@ Revert. **Only phase with non-trivial rollback** — GMF files saved between P8 
 | Phase | Read before starting |
 |---|---|
 | P0 | `dev/engine-gmt/types/fractal.ts`, `dev/engine-gmt/engine/FractalRegistry.ts`, `dev/engine/FeatureSystem.ts`, `dev/docs/adr/0048-...md`, this spec |
-| P1 | `dev/docs/gmt/25_Formula_Dev_Reference.md`, `dev/docs/gmt/23_Formula_Audit.md`, P1 sub-investigation report |
-| P2 | `dev/docs/gmt/03_Modular_System.md`, `dev/engine-gmt/features/geometry/index.ts:440-500`, `dev/engine-gmt/features/interlace/index.ts:300-340` |
-| P3 | `dev/docs/gmt/01_System_Architecture.md` §2.2, `dev/engine/components/AutoFeaturePanel.tsx`, `dev/engine/components/CompilableFeatureSection.tsx` |
+| P1 | `docs/history/gmt/25_Formula_Dev_Reference.md`, `docs/history/gmt/23_Formula_Audit.md`, P1 sub-investigation report |
+| P2 | `docs/history/gmt/03_Modular_System.md`, `dev/engine-gmt/features/geometry/index.ts:440-500`, `dev/engine-gmt/features/interlace/index.ts:300-340` |
+| P3 | `docs/history/gmt/01_System_Architecture.md` §2.2, `dev/engine/components/AutoFeaturePanel.tsx`, `dev/engine/components/CompilableFeatureSection.tsx` |
 | P4 | `dev/engine-gmt/features/interlace/index.ts:44-52`, P3 PR for the pattern |
-| P5 | `dev/docs/gmt/26_Formula_Workshop_V4_Plan.md` §0, `dev/engine-gmt/features/fragmentarium_import/v4/emit/index.ts`, ADR-0058 |
-| P6 | `dev/docs/gmt/21_Frag_Importer_Current_Status.md`, `dev/engine-gmt/features/fragmentarium_import/v3/generate/index.ts:500-612`, P6 sub-investigation report, `dev/docs/research/v4-rethink-prompt.md` |
+| P5 | `docs/history/gmt/26_Formula_Workshop_V4_Plan.md` §0, `dev/engine-gmt/features/fragmentarium_import/v4/emit/index.ts`, ADR-0058 |
+| P6 | `docs/history/gmt/21_Frag_Importer_Current_Status.md`, `dev/engine-gmt/features/fragmentarium_import/v3/generate/index.ts:500-612`, P6 sub-investigation report, `dev/docs/research/v4-rethink-prompt.md` |
 | P7 | `dev/docs/adr/0052-...md`, `dev/engine-gmt/features/core_math.ts:100-250`, `dev/engine-gmt/engine/SDFShaderBuilder.ts:195-220` |
 | P8 | This spec + P1–P7 PRs |

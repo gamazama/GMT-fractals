@@ -9,7 +9,7 @@
 ## Why
 
 The bucket-render PT noise question is the named dev→prod cutover blocker. The root causes
-were already documented ([docs/gmt/43_Bucket_Render_Overhaul.md:103-114]); what was missing
+were already documented ([docs/history/gmt/43_Bucket_Render_Overhaul.md:103-114]); what was missing
 was reproducible, decision-grade measurement. This report + the `bench:pt` harness replace
 "looks fine to me" with numbers.
 
@@ -306,7 +306,7 @@ the VRAM-safety decomposition is free. **The cutover is unblocked** on the noise
 
 In priority order (this session is measurement-only; these are the scoped follow-ups):
 
-1. **Ship the bloom "render-once, sample-many" v2 fix** (docs/gmt/43:111 option (b)). It is
+1. **Ship the bloom "render-once, sample-many" v2 fix** (docs/history/gmt/43:111 option (b)). It is
    the ONLY cause that does not converge away, and `bench:pt --suite=seamconv` now measures
    it directly: re-run after the fix and confirm the bloom `seamExcess(spp)` curve collapses
    onto the no-post (noise-phase) curve. Quantified residual today (Mandelbulb dark-bg, the

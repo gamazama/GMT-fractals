@@ -95,7 +95,7 @@ Chronological log of significant changes during the v0.9.6 development cycle (en
 - New [`engine-gmt/formulas/SineJulia3D.ts`](../engine-gmt/formulas/SineJulia3D.ts). Per-iter body computes `z' = scale · vec3(sin(x)cosh(y), cos(x)sinh(y)cos(z), sin(z)cosh(y)) + c` then multiplies a running `dz²` by amoser's closed-form `S = scale²(sinh²y(2+A−B) + A+B)/3` with `max(S, 0.5)` to guard against inversion overshoot. `dr` carries `sqrt(max(dz²))` across iters; custom `getDist` returns `0.25 · scale / dr`. `preambleVars` lists `sj_dz2`, `sj_cWrap` for interlace correctness.
 - Sphere inversion and 3-axis per-plane rotation run once in `loopInit`, matching amoser exactly. The Julia constant is wrapped into `[-π, π]` once via `mod`.
 - Registered in [`types/common.ts`](../engine-gmt/types/common.ts) (FormulaType union), [`formulas/index.ts`](../engine-gmt/formulas/index.ts) (loading-screen list, Featured row after Claude), [`formulas/categories.ts`](../engine-gmt/formulas/categories.ts) (Hybrids & Experiments).
-- Audit entry: [docs/gmt/23_Formula_Audit.md](gmt/23_Formula_Audit.md#new-formulas-audit-2026-05-26).
+- Audit entry: [docs/history/gmt/23_Formula_Audit.md](gmt/23_Formula_Audit.md#new-formulas-audit-2026-05-26).
 
 **Caveats**
 - Default preset uses `escape: 1e10` so the loop always runs all 12 iterations — sinh-driven z growth would otherwise trip the standard bailout. Lowering `coloring.escape` will produce degenerate geometry.
@@ -115,7 +115,7 @@ Chronological log of significant changes during the v0.9.6 development cycle (en
 
 ### Audio clips on the timeline now play their full duration + survive fps changes
 
-Full report: [docs/animation-refactor/22_AUDIO_TIMELINE_SYNC_REPORT.md](animation-refactor/22_AUDIO_TIMELINE_SYNC_REPORT.md). Commit `0814749` on branch `feature/audio-fps-sync`.
+Full report: [docs/history/animation-refactor/22_AUDIO_TIMELINE_SYNC_REPORT.md](animation-refactor/22_AUDIO_TIMELINE_SYNC_REPORT.md). Commit `0814749` on branch `feature/audio-fps-sync`.
 
 **User-facing**
 - **Audio clips loaded into the timeline now play through to the end.** Previously, dropping an audio file in and hitting play would cut off the sound about halfway through (e.g. the iconic Mario death sound stopped before the recognisable ending). The clip and the playhead now agree on where the audio ends.
@@ -200,7 +200,7 @@ Plan: [plans/app-gmt-touchups.md](../plans/app-gmt-touchups.md). Ten small items
 - Volumetric god-rays scatter had the same Sphere-as-Directional bug. Fixed.
 
 **Implementation**
-- Plan: `plans/area-lights.md`. Live status: `HANDOFF.md`. Architecture notes: `docs/gmt/02_Rendering_Internals.md` § Sphere Area Lights & MIS.
+- Plan: `plans/area-lights.md`. Live status: `HANDOFF.md`. Architecture notes: `docs/history/gmt/02_Rendering_Internals.md` § Sphere Area Lights & MIS.
 - New shader helpers in `engine-gmt/shaders/chunks/pathtracer.ts`: `intersectAreaLight` (closest-hit test against type-2 lights, reuses `intersectSphere` from `math.ts`), `pdfSphereLightDir`, `pdfVNDF` (Heitz 2018 §3 eq. 17), `pdfBSDF` (mixture density matching the bounce-direction sampler), `misPower2` (Veach 1995 power-heuristic), `tracePTBounce` (wrapper around `traceSceneLean` that runs the sphere-light intersection alongside the fractal march).
 - New light-type-2 NEE branch samples a point on the sphere surface (Marsaglia 1972) and uses `1/pdfSphereDir` as the compensation factor instead of the delta-light `activeCount`. Shadow ray for sphere lights forces `GetHardShadow` on the sampled direction so accumulation across frames produces the correct soft shadow — no double-soften from `GetSoftShadow`'s penumbra approximation, no override from the stochastic-jitter path.
 - BSDF estimator at the next-iter `!hit` branch reads previous-bounce surface state (`n_prev` / `viewDir_prev` / `roughness_prev` / `probSpec_prev`, captured before each bounce trace), evaluates `pdfBSDF` against the direction now hitting a light, weights against `pdfSphereLightDir` via `misPower2`. Delta lights collapse to `w_nee = 1, w_bsdf = 0` automatically.
@@ -233,7 +233,7 @@ Plan: [plans/app-gmt-touchups.md](../plans/app-gmt-touchups.md). Ten small items
 - `engine-gmt/navigation/Navigation.tsx`: one-line touch gate `if (e.pointerType === 'touch') return;` added to the custom cursor-anchored orbit `pointerdown` handler at line 666. Restores drei's native `THREE.TOUCH.ROTATE` / `DOLLY_PAN` on touch (which was already declared at line 1326 but was being shadowed because the handler's only gate was `e.button !== 0`, which passes for touch).
 - `hooks/useAppStartup.ts`: after `detectHardwareProfileMainThread()`, if mobile and the active scalability preset is the engine default `'balanced'`, calls `applyScalabilityPreset('fastest')`. User-chosen presets are respected.
 - `app-gmt/AppGmt.tsx`: hardcoded `isMobile={false}` props on `<GmtNavigationHud>` mounts (lines 206, 253) replaced with the real flag. Right-dock JSX now `{isMobileMenuOpen ? <MobileMenuHost /> : !(isMobile && cameraMode === 'Fly') && <Dock side="right" />}`. `<MobileControls />` mounted (was missing entirely from the port). `<TimelineHost>` and `<Dock side="left">` gated on `!isMobile`.
-- Plan: `plans/mobile-mode-app-gmt.md`. Reference doc: `docs/engine/17_Mobile_Layout.md` (covers detection, preference, layout primitives, mobile-menu architecture, sibling-app adoption checklist, known limitations).
+- Plan: `plans/mobile-mode-app-gmt.md`. Reference doc: `docs/history/engine/17_Mobile_Layout.md` (covers detection, preference, layout primitives, mobile-menu architecture, sibling-app adoption checklist, known limitations).
 - Pending: real-device validation by user. Known limitations: mobile menu outside-tap dismissal not implemented (X button only); `installBucketRender` install-time gate is non-reactive (reload required to dynamically remove); ~15 redundant resize listeners across an active session (single global listener would be cleaner — works fine for now).
 
 ### Compile progress UI unification
@@ -277,7 +277,7 @@ Plan: [plans/app-gmt-touchups.md](../plans/app-gmt-touchups.md). Ten small items
 - `AnimationEngine.tick` now accumulates wall-clock dt under deterministic playback and emits integer frames once `accum ≥ 1/fps`. Accumulator resets on pause and discards backlogs `> 250ms` (tab hidden, debugger pause).
 - `TimelineToolbar` kebab menu portals to `document.body` and uses `position: fixed` with measured viewport coords. The previous `top-full` / `bottom-full` approach was clipped by the timeline panel's `overflow-hidden` ancestor; portaling escapes both the overflow clip and the `backdrop-blur` containing-block trap.
 
-Docs: [docs/engine/08_Animation.md](engine/08_Animation.md) decisions log + Sequence shape, [docs/gmt/04_Animation_Engine.md](gmt/04_Animation_Engine.md) §6.1 / §7.1, help topic `ui.timeline` / `anim.transport` updated.
+Docs: [docs/history/engine/08_Animation.md](engine/08_Animation.md) decisions log + Sequence shape, [docs/history/gmt/04_Animation_Engine.md](gmt/04_Animation_Engine.md) §6.1 / §7.1, help topic `ui.timeline` / `anim.transport` updated.
 
 ### Bucket render: redesigned panel + UI primitives
 
@@ -298,7 +298,7 @@ Docs: [docs/engine/08_Animation.md](engine/08_Animation.md) decisions log + Sequ
 - `BucketRenderPanel`'s `BUCKET_STATUS` event handler now performs change-detection before calling `setProgress` / `setTileInfo`, so engine-rate status events don't trigger a React re-render every tick when nothing has actually moved.
 - `BucketRenderPanel`'s match-viewport-aspect `useEffect` had no dependency array and was running every render. Now declares `[matchViewportAspect, outputWidth, outputHeight, viewportPixels]` and reads `viewportPixels` from the existing memo instead of re-grabbing store state inside the effect body.
 
-Docs: [docs/engine/05_Shared_UI.md](engine/05_Shared_UI.md) catalog updated with `<Hint>` and `<NumberInput>`; help topic `bucket.render` updated to describe the rendering view's tile/elapsed/ETA stat strip and the new Ratio dropdown.
+Docs: [docs/history/engine/05_Shared_UI.md](engine/05_Shared_UI.md) catalog updated with `<Hint>` and `<NumberInput>`; help topic `bucket.render` updated to describe the rendering view's tile/elapsed/ETA stat strip and the new Ratio dropdown.
 
 ### Undo: per-scope stacks (camera/param no longer conflate)
 

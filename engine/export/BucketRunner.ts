@@ -10,7 +10,7 @@
  * itself imports nothing from any specific app — it works for any host that can
  * accumulate into a render target and honour region uniforms.
  *
- * See [docs/gmt/43_Bucket_Render_Overhaul.md] for the original design discussion.
+ * See [docs/history/gmt/43_Bucket_Render_Overhaul.md] for the original design discussion.
  */
 
 import * as THREE from 'three';

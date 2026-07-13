@@ -87,9 +87,9 @@ Three-phase audit (Phase 1: 28 subsystem surveys + 9 docs-existing summaries; Ph
 - **Source-file JSDoc** — ~95 invariant + per-export blocks across ~60 source files. Trust this first; surfaced on IDE hover.
 - **ADRs at `docs/adr/`** — 58 dated, append-only decision records (0001-0058). Each: Context / Decision / Consequences. Cited from source via `@see docs/adr/NNNN-*.md`.
 - **Policy docs at `docs/policy/`** — 5 prescriptive cross-cuts: `engine-fork-rules.md`, `ddfs-string-contract.md`, `ddfs-auto-wiring.md`, `shared-ui-coupling-rules.md`, `uniform-plugin-contract.md`.
-- **CLAUDE.md** — rewritten "Read Docs Before Coding" table to point at source JSDoc + ADRs + policy as the three canonical layers. Pre-extraction `docs/engine/*` retained as legacy reference but explicitly demoted (JSDoc + ADRs take precedence where they disagree).
+- **CLAUDE.md** — rewritten "Read Docs Before Coding" table to point at source JSDoc + ADRs + policy as the three canonical layers. Pre-extraction `docs/history/engine/*` retained as legacy reference but explicitly demoted (JSDoc + ADRs take precedence where they disagree).
 - **`docs/modules/`** — pruned to 3 sibling-app overviews (fluid-toy / fractal-toy / mesh-export) + 2 auto-generated indexes (`bugs.md`, `backlog.md`).
-- **Archive at `docs/audit-2026-05-20/archive/`** — 31 archived module docs for traceability (not canonical).
+- **Archive at `docs/history/audit-2026-05-20/archive/`** — 31 archived module docs for traceability (not canonical).
 
 **Bug findings** (3 fixed same-day, 2 queued):
 - ✅ q-112 — `WorkerDepthReadback` focus-pick hardcoded `< 1000` → fixed to `< MAX_SKY_DISTANCE`
@@ -100,11 +100,11 @@ Three-phase audit (Phase 1: 28 subsystem surveys + 9 docs-existing summaries; Ph
 
 **Coverage gap (honest)**: audit reached 63% file coverage (527/837), not "every file." 310 uncovered: ~70 claimed-via-glob but never recorded in `coverage.yaml` (post-processing failure) + ~219 truly unclaimed (mostly `components/*`, `engine-gmt/components/*`, `utils/*`, `engine-gmt/gallery/*`, `data/help/*`). 8-file sample found 5 load-bearing with hidden invariants — closure pass deferred; tracked in `docs/modules/backlog.md`.
 
-**Tooling at `plans/doc-audit-state/scripts/`**: `verify-doc.mjs`, `extract-bugs.mjs`, `extract-backlog.mjs`, `reconcile-coverage.mjs`, `coverage-check.mjs`, `blob-sha.mjs`, `build-inventory.mjs`, `record-coverage.mjs`.
+**Tooling at `docs/history/doc-audit-state/scripts/`**: `verify-doc.mjs`, `extract-bugs.mjs`, `extract-backlog.mjs`, `reconcile-coverage.mjs`, `coverage-check.mjs`, `blob-sha.mjs`, `build-inventory.mjs`, `record-coverage.mjs`.
 
 **📋 2026-05-05 — Cutting-plane DE promoted to engine-level estimator (option 5):**
 
-Code in `engine-gmt/types/fractal.ts` + `engine-gmt/features/quality.ts` + `engine-gmt/features/core_math.ts` + `engine-gmt/engine/SDFShaderBuilder.ts` + the 5 cutting-plane formulas. Full architecture writeup in `docs/gmt/24_Formula_Interlace_System.md` ("Cutting-Plane Estimator (2026-05-05)" section).
+Code in `engine-gmt/types/fractal.ts` + `engine-gmt/features/quality.ts` + `engine-gmt/features/core_math.ts` + `engine-gmt/engine/SDFShaderBuilder.ts` + the 5 cutting-plane formulas. Full architecture writeup in `docs/history/gmt/24_Formula_Interlace_System.md` ("Cutting-Plane Estimator (2026-05-05)" section).
 
 User reported GSD + MengerSponge interlace produced "tiny dust" instead of solid surfaces (test GMF in `debug/errors/greatstellateddodecahedron-mengerSponge.gmf`). Diagnosis: GSD's custom `getDist` returned `vec2(abs(gsd_dmin), gsd_trap)` which silently overrode the user's estimator dropdown choice; the formula-private `gsd_dmin` accumulator is incoherent under interlace because the secondary doesn't update its scale tracker.
 
@@ -202,7 +202,7 @@ User context: prior to this, "Area Lights" in GMT was a stochastic-shadow-jitter
 
 **📋 2026-05-01 — Mobile mode for app-gmt (Phase A–C iter, D6, E1, F1):**
 
-Plan: [plans/mobile-mode-app-gmt.md](plans/mobile-mode-app-gmt.md). Reference doc: [docs/engine/17_Mobile_Layout.md](docs/engine/17_Mobile_Layout.md).
+Plan: [plans/mobile-mode-app-gmt.md](plans/mobile-mode-app-gmt.md). Reference doc: [docs/history/engine/17_Mobile_Layout.md](docs/history/engine/17_Mobile_Layout.md).
 
 User report: stable's mobile rendering path works but its UI is "not mobile-friendly"; same true of app-gmt after the port. Goal: make app-gmt usable on phone + tablet (landscape-only) without resorting to desktop tooling, with primitives reusable by sibling apps (`fluid-toy`, `fractal-toy`, `demo`).
 
@@ -245,7 +245,7 @@ User report: stable's mobile rendering path works but its UI is "not mobile-frie
 - `installBucketRender` install-time gate is non-reactive — toggling Force Mobile after boot won't dynamically remove the installed item; reload required.
 - ~15 resize listeners across an active session (every `useMobileLayout` consumer registers its own). Works fine, but a single global listener writing to the store would be cleaner.
 
-**Files touched.** New: `engine/components/LandscapeGate.tsx`, `engine/components/MobileViewportShell.tsx`, `docs/engine/17_Mobile_Layout.md`. Modified: `App.tsx`, `app-gmt/AppGmt.tsx`, `app-gmt/main.tsx`, `components/MobileControls.tsx`, `engine-gmt/navigation/Navigation.tsx`, `engine-gmt/navigation/useInputController.ts`, `engine-gmt/topbar.tsx`, `engine-gmt/topbar/CenterHUD.tsx`, `engine-gmt/topbar/ShareLinkButton.tsx`, `engine-gmt/types/store.ts`, `engine/plugins/Menu.tsx`, `engine/plugins/SceneIO.tsx`, `hooks/useAppStartup.ts`, `hooks/useMobileLayout.ts`, `store/slices/uiSlice.ts`, `types/store.ts`, `CLAUDE.md`, `docs/DOCS_INDEX.md`, `docs/engine/04_Core_Plugins.md`. `npx tsc --noEmit` → 0 errors. Pending real-device validation by user.
+**Files touched.** New: `engine/components/LandscapeGate.tsx`, `engine/components/MobileViewportShell.tsx`, `docs/history/engine/17_Mobile_Layout.md`. Modified: `App.tsx`, `app-gmt/AppGmt.tsx`, `app-gmt/main.tsx`, `components/MobileControls.tsx`, `engine-gmt/navigation/Navigation.tsx`, `engine-gmt/navigation/useInputController.ts`, `engine-gmt/topbar.tsx`, `engine-gmt/topbar/CenterHUD.tsx`, `engine-gmt/topbar/ShareLinkButton.tsx`, `engine-gmt/types/store.ts`, `engine/plugins/Menu.tsx`, `engine/plugins/SceneIO.tsx`, `hooks/useAppStartup.ts`, `hooks/useMobileLayout.ts`, `store/slices/uiSlice.ts`, `types/store.ts`, `CLAUDE.md`, `docs/DOCS_INDEX.md`, `docs/history/engine/04_Core_Plugins.md`. `npx tsc --noEmit` → 0 errors. Pending real-device validation by user.
 
 **📋 2026-04-30 — Undo system: per-scope stacks (refactor of the 2026-04-26 fix):**
 
@@ -260,7 +260,7 @@ User report: Ctrl+Z occasionally undid a camera move when intending to undo a pa
 - `app-gmt/AppGmt.tsx`: `GmtNavigation.onStart` calls `pushCameraTransaction(s)` directly. The `as any` cast on the camera-state argument is gone — the entry point is properly typed.
 - `types/store.ts` + `engine-gmt/types/store.ts`: declarations updated to per-scope stacks + required scope on the methods.
 
-`npx tsc --noEmit` → 0 errors. Documented in [docs/engine/06_Undo_Transactions.md](docs/engine/06_Undo_Transactions.md) (rewritten), [F2b](docs/engine/20_Fragility_Audit.md#f2b--undo-lane-conflation) (updated with the regression-then-fix history), and [07_Shortcuts.md](docs/engine/07_Shortcuts.md) (keybinding table).
+`npx tsc --noEmit` → 0 errors. Documented in [docs/history/engine/06_Undo_Transactions.md](docs/history/engine/06_Undo_Transactions.md) (rewritten), [F2b](docs/history/engine/20_Fragility_Audit.md#f2b--undo-lane-conflation) (updated with the regression-then-fix history), and [07_Shortcuts.md](docs/history/engine/07_Shortcuts.md) (keybinding table).
 
 **📋 2026-04-27 — Workspace tidy + camera-manager shortcut wiring + state-library notification system:**
 
@@ -371,7 +371,7 @@ Spawned 4 parallel research agents to verify status of every "active backlog" / 
 - **Initial `sampleCap` past max** — known race (initial SET_SAMPLE_CAP arrives at worker pre-engine-creation, silent no-op). Ported gmt-0.8.5's onBooted re-push pattern: [`engine-gmt/renderer/install.ts`](engine-gmt/renderer/install.ts) wraps the app's onBooted callback with a re-push of isPaused / sampleCap.
 - **Bucket popup stay-open conditions** — gmt-0.8.5's `RenderTools.tsx:50-69` suppresses click-outside-dismissal during isBucketRendering / previewRegion / `interactionMode === 'selecting_preview'`. Ported to `BucketRenderToggle` in `engine-gmt/topbar.tsx`.
 - **Dead code removed** — `bindStoreToEngine`'s isPaused/sampleCap subscriptions were wiring the engine-core stub proxy (different singleton from the real GMT worker proxy) — silently inert in GMT. Removed.
-- **Architecture doc**: [11_TSAA.md](docs/engine/11_TSAA.md) — full protocol + algorithm + per-app integration patterns + plumbing-pitfalls audit checklist.
+- **Architecture doc**: [11_TSAA.md](docs/history/engine/11_TSAA.md) — full protocol + algorithm + per-app integration patterns + plumbing-pitfalls audit checklist.
 
 **📋 2026-04-26 — GMT port complete. Final wiring pass:**
 - **Loading screen** — GMT-branded splash with CPU Julia spinner, formula picker dropdown, Load From File, Lite Render toggle ported to `app-gmt/LoadingScreen.tsx`. Replaces the minimal engine stub.
@@ -398,7 +398,7 @@ Spawned 4 parallel research agents to verify status of every "active backlog" / 
 - **FPS counter** — `GmtRendererTickDriver` was tracking FPS privately in `throttleRef` but never calling `viewport.reportFps()`, so `useViewportFps()` / `FpsCounter` always showed the default 60. Fixed: `viewport.reportFps(t.fps)` on each 500ms sample window. `fluid-toy` was already correct (called `viewport.frameTick()` via `onFrameEnd`).
 - **F16/F17/F18** — all fixed/closed (commit `f2b119d`). TopBar snapshot now returns `_rev`; GLSLToJS dead require path corrected; dual AnimationEngine confirmed non-issue (no local copy exists).
 
-**📋 2026-04-25 sweep (see `docs/engine/20_Fragility_Audit.md` F5–F15 entries):**
+**📋 2026-04-25 sweep (see `docs/history/engine/20_Fragility_Audit.md` F5–F15 entries):**
 - **F5 closed** — AnimationEngine camera tracks moved to GMT-side binder module; engine pipeline is camera-shape-agnostic.
 - **F7 closed** — `window.useAnimationStore` was leftover scaffolding (no real cycle). Direct imports everywhere.
 - **F14 fixed** — Duplicate `ViewportRefs.ts` in `engine/worker/` and `engine-gmt/engine/worker/` had separate module-level `_camera`. Capture path used one copy, dirty-check used the other. Collapsed to a re-export shim. The whole class of "engine-gmt overlay duplicates an engine-core module" is now an audit target.
@@ -552,7 +552,7 @@ The "real confidence anchor" previously flagged in Remaining Work has landed: GM
 
 Dock panels moved from "each feature declares its own tab" to "apps declare a PanelManifest". The old tabConfig path suited fluid-toy (9 features, 1:1 panels) but blocked the GMT port (26 features → 10 curated panels composing 2-9 features each). New model:
 
-- **`engine/PanelManifest.ts`** — `PanelDefinition` type with `features[]` stacking, `component` path for bespoke panels (Graph/FlowEditor), `widgets.before/after/between` slotting, and `showIf` predicates (string path or function). See `docs/engine/14_Panel_Manifest.md`.
+- **`engine/PanelManifest.ts`** — `PanelDefinition` type with `features[]` stacking, `component` path for bespoke panels (Graph/FlowEditor), `widgets.before/after/between` slotting, and `showIf` predicates (string path or function). See `docs/history/engine/14_Panel_Manifest.md`.
 - **`applyPanelManifest(m)` + `addPanel(def)`** — merge-seed `state.panels`; dynamic additions (fractal-toy formulas) survive regardless of call order.
 - **`PanelRouter` rewritten** — three render paths (bespoke component / feature stack with widgets / empty). No hardcoded Graph/CameraManager/Engine special-cases.
 - **`Dock.tsx` filters via `evalShowIf`** — hardcoded `Graph if Modular` / `Light if advanced` / `Audio if enabled` / `Drawing if enabled` conditionals pulled out, now declared in each app's manifest.
@@ -705,4 +705,4 @@ If the experiment turns out not to work: `rm -rf h:/GMT/gmt-engine`. GMT is unto
 
 ## Code review
 
-`docs/engine/21_Code_Review_2026-04-25.md` — independent multi-agent source survey (2026-04-25). Records what matches the architecture docs, where docs overstate, three live bugs (F16–F18), and the full dual-tree inventory. Read before touching `engine/plugins/`, the dual-tree (`engine-gmt/engine/`), or the onboarding surfaces (README, demo, package.json).
+`docs/history/engine/21_Code_Review_2026-04-25.md` — independent multi-agent source survey (2026-04-25). Records what matches the architecture docs, where docs overstate, three live bugs (F16–F18), and the full dual-tree inventory. Read before touching `engine/plugins/`, the dual-tree (`engine-gmt/engine/`), or the onboarding surfaces (README, demo, package.json).

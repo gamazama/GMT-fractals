@@ -26,7 +26,7 @@ import { fmtTokens } from './tokens.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
 const MAP_PATH = join(REPO_ROOT, 'plans', 'context-protocol', 'context-map.json');
-const SUBSYS_PATH = join(REPO_ROOT, 'plans', 'doc-audit-state', 'subsystems.json');
+const SUBSYS_PATH = join(REPO_ROOT, 'plans', 'context-protocol', 'subsystems.json');
 
 const problems = []; // { level: 'error'|'warn'|'info', msg }
 function err(msg) { problems.push({ level: 'error', msg }); }

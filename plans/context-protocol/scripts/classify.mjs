@@ -26,7 +26,7 @@ export const LOAD_POLICY = {
 export const CONTEXT_CLASS = {
   ORIENT: 'orient', // nav/meta docs that tell you where everything is
   ARCHITECTURE: 'architecture', // how/why docs (engine/, specs, adr, modules, policy)
-  REFERENCE_LEGACY: 'reference-legacy', // docs/gmt, docs/archive — historical
+  REFERENCE_LEGACY: 'reference-legacy', // docs/history/* — archived narrative + audit state
   SOURCE: 'source', // application/engine code — the truth
   SOURCE_TOOLING: 'source-tooling', // scripts, harnesses, build config
   CONFIG: 'config', // package.json, tsconfig, dotfiles
@@ -59,8 +59,8 @@ const GMT_APP_DIRS = new Set([
 ]);
 
 // The minimal "boot fresh on this repo" orientation set — nav + rules only.
-// Deliberately excludes the heavy running logs (HANDOFF.md ~22k, CHANGELOG_DEV
-// ~44k, HEALTH.md): those are read-for-area, not part of cheap orientation.
+// Deliberately excludes the heavy running logs (HANDOFF.md ~22k,
+// CHANGELOG_DEV ~44k): those are read-for-area, not part of cheap orientation.
 const ROOT_META_FILES = new Set([
   'CLAUDE.md', 'AGENTS.md', 'CODEBASE_MAP.md',
   'README.md', 'CONTRIBUTING.md', '.clinerules',
@@ -154,10 +154,10 @@ export function classifyFile(relPath) {
     if (base === 'DOCS_INDEX.md' || base === 'FEATURE_STATUS.md') {
       return mk(tier, CONTEXT_CLASS.ORIENT, LOAD_POLICY.READ_FIRST, ext, 'orient:docs-index');
     }
-    if (relPath.startsWith('docs/gmt/') || relPath.startsWith('docs/archive/')) {
+    if (relPath.startsWith('docs/history/')) {
       return mk(tier, CONTEXT_CLASS.REFERENCE_LEGACY, LOAD_POLICY.REFERENCE_ONLY, ext, 'legacy-docs');
     }
-    // engine/, modules/, specs/, adr/, policy/, research/, animation-refactor/, *.md
+    // modules/, specs/, adr/, policy/, research/, *.md (engine/gmt/audit narrative is now under docs/history/)
     return mk(tier, CONTEXT_CLASS.ARCHITECTURE, LOAD_POLICY.READ_FOR_AREA, ext, 'architecture-docs');
   }
 

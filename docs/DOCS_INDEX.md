@@ -1,196 +1,66 @@
 # gmt-engine Documentation — Master Index
 
-## What this is
+## Authority model
 
-**gmt-engine** is a generic application engine extracted from GMT. It provides the plumbing — DDFS, animation, UI primitives, save/load, shortcuts, undo, plugin seams, HUD — on top of which apps build their domain (fractals, fluids, whatever's next). The engine ships **one tiny core** plus a set of **opt-in core plugins**; apps install what they need.
+The source tree is the truth. In order of authority:
 
-These docs are split into **engine** (authoritative, forward-looking) and **gmt** (legacy GMT-era reference, preserved for the eventual GMT-onto-engine port).
+1. **Source JSDoc + greppable markers** (`@invariant`, `@bug PRODUCTION:`, `@see`, `@stale`, `@deprecated`) — freshest, most-trusted. The default navigation path for agents.
+2. **ADRs** ([`adr/`](adr/)) — dated, append-only decision records; cited from source via `@see docs/adr/NNNN-*.md`.
+3. **Policy docs** ([`policy/`](policy/)) — cross-cutting rules that span many files.
 
-## Layout
+External narrative docs (the old `docs/engine/*` and `docs/gmt/*`) have been **archived to [`history/`](history/)** — pre-extraction reference, superseded by the three layers above. Don't navigate *from* them; navigate from **CLAUDE.md's "Read first" table**, which maps each subsystem to its authoritative source JSDoc + ADRs.
+
+## Live layout
 
 ```
 docs/
-├── DOCS_INDEX.md                  ← you are here
-├── FEATURE_STATUS.md              engine snapshot (what works / what's missing)
-├── CHANGELOG_DEV.md               running dev log
-│
-├── engine/                        ← engine docs — authoritative
-│   ├── 01_Architecture.md
-│   ├── 02_Feature_Registry.md
-│   ├── 03_Plugin_Contract.md
-│   ├── 04_Core_Plugins.md
-│   ├── 05_Shared_UI.md
-│   ├── 06_Undo_Transactions.md
-│   ├── 07_Shortcuts.md
-│   ├── 08_Animation.md
-│   ├── 09_Bridges_and_Derived.md
-│   ├── 10_Viewport.md
-│   ├── 11_TSAA.md                 TSAA subsystem breakdown (worked example from doc 13)
-│   ├── 11_Plugin_Authoring.md     how to build a new core plugin
-│   ├── 12_App_Handles.md          typed cross-tree state pattern
-│   ├── 13_Extracting_From_GMT.md  cookbook for lifting GMT features into engine-core
-│   └── 20_Fragility_Audit.md
-│
-├── gmt/                           ← legacy GMT docs — reference only
-│   ├── 01_System_Architecture.md  engine-bridge pattern (pre-extraction)
-│   ├── 02_Rendering_Internals.md  raymarching, SDF, path tracing
-│   ├── 03_Modular_System.md       modular graph builder, node-to-GLSL
-│   ├── 04_Animation_Engine.md     (pre-engine-port version)
-│   ├── 05_Data_and_Export.md      GMF format, presets, video export
-│   ├── 06_Troubleshooting_and_Quirks.md
-│   ├── 07_Code_Health.md          GMT technical debt tracker
-│   ├── 08_File_Structure.md       GMT codebase layout (pre-extraction)
-│   ├── 21–27, 35–36_*.md          formula / frag importer / capability protocol / shader tests
-│   ├── 25_Formula_Dev_Reference.md  GLSL formula contract: signature, uniforms, helpers, estimators, gotchas (native + GMF authoring)
-│   ├── 30_Mesh_Export_Prototype.md
-│   ├── 43_Bucket_Render_Overhaul.md
-│   └── 44_Preview_Region_Plan.md
-│
-├── adr/                           architecture decision records — append-only, cited from source via @see
-├── policy/                        cross-cutting rules (engine-fork-rules, ddfs contracts, shader-compile, …)
-├── modules/                       generated worklists (bugs.md, backlog.md) + sibling-app overviews
-├── archive/                       truly retired design notes
-├── research/                      open investigations
-└── specs/                         spec-ish deep dives
+├── DOCS_INDEX.md        ← you are here
+├── FEATURE_STATUS.md    engine snapshot (what works / what's missing)
+├── CHANGELOG_DEV.md     running dev log
+├── adr/                 architecture decision records — append-only, @see-cited from source
+├── policy/              cross-cutting rules (engine-fork-rules, ddfs contracts, shader-compile, context-loading, …)
+├── releases/            user-facing release notes (going-forward home)
+├── specs/               spec-ish deep dives
+├── research/            open investigations
+├── modules/             sibling-app / subsystem overviews (fluid-toy, fractal-toy, gradient-explorer, mesh-export, palette)
+└── history/             📦 archived — reference only (see below)
 ```
 
-## Decisions, policy & generated worklists
+## Where to start
 
-- [adr/](adr/) — Architecture Decision Records, append-only. Source cites them via `@see docs/adr/NNNN-*.md`; the authority order (source JSDoc → ADRs → policy docs) is defined in [CLAUDE.md](../CLAUDE.md).
-- [policy/](policy/) — cross-cutting rules that span many files: engine-fork-rules, ddfs-string-contract, ddfs-auto-wiring, uniform-plugin-contract, shared-ui-coupling-rules, shader-compile-optimization, context-loading-protocol.
-- [modules/](modules/) — auto-generated worklists: [bugs.md](modules/bugs.md) and [backlog.md](modules/backlog.md) (regen via `npm run health`), plus kept overviews for the sibling apps (fluid-toy, fractal-toy, mesh-export).
+- **Any task** → [`CLAUDE.md`](../CLAUDE.md) — rules + the "Read first" table mapping each subsystem to its authoritative source JSDoc + ADRs.
+- **New contributor** → [`../CONTRIBUTING.md`](../CONTRIBUTING.md), then the app README below.
+- **Repo geography** → [`CODEBASE_MAP.md`](../CODEBASE_MAP.md).
+- **What to load & at what token cost** → `npm run context:cost -- <subsystem|tier|path|app:name>` (see [`policy/context-loading-protocol.md`](policy/context-loading-protocol.md)).
 
-## Stability markers
+Each app owns the canonical entry point for "I'm about to work on this app":
 
-Each engine architecture doc opens with a marker:
+| App | README |
+|---|---|
+| `app-gmt` | [app-gmt/README.md](../app-gmt/README.md) |
+| `fluid-toy` | [fluid-toy/README.md](../fluid-toy/README.md) |
+| `demo` | [demo/README.md](../demo/README.md) |
 
-- 🔒 **Stable** — API committed; breaking changes only with major version.
-- 🚧 **Evolving** — shape likely but details under active design.
-- ⚠️ **Fragile** — known issues (see `engine/20_Fragility_Audit.md`); consult before depending.
-- 🧪 **Experimental** — proof-of-concept, not yet committed.
+## Decisions & policy
 
-## Engine docs — table of contents
+- [adr/](adr/) — Architecture Decision Records, append-only. The authority order (source JSDoc → ADRs → policy) is defined in [CLAUDE.md](../CLAUDE.md).
+- [policy/](policy/) — engine-fork-rules, ddfs-string-contract, ddfs-auto-wiring, uniform-plugin-contract, shared-ui-coupling-rules, shader-compile-optimization, context-loading-protocol.
 
-### Foundation
-| # | File | Status | Scope |
-|---|---|---|---|
-| 01 | [Architecture](engine/01_Architecture.md) | 🚧 | Core + plugins + apps model; engine boundaries; render-loop ownership |
-| 02 | [Feature Registry](engine/02_Feature_Registry.md) | 🚧 | `defineFeature`, isolation via `dependsOn`, lifecycle hooks, auto-derivation |
-| 03 | [Plugin Contract](engine/03_Plugin_Contract.md) | 🚧 | Three-step add-on: `registerFeatures.ts` → store → `setup.ts`; freeze semantics |
-| 04 | [Core Plugins](engine/04_Core_Plugins.md) | 🚧 | viewport, topbar, scene-io, render-loop, shortcuts, undo, camera, animation, menu, hud, help — 11 shipped |
+## History (reference only)
 
-### Subsystems
-| # | File | Status | Scope |
-|---|---|---|---|
-| 05 | [Shared UI](engine/05_Shared_UI.md) | 🚧 | Pure primitives; `AnimationContext` / `UndoContext` / `ShortcutContext` opt-in |
-| 06 | [Undo & Transactions](engine/06_Undo_Transactions.md) | 🚧 | Unified stack; scopes; debounce groups |
-| 07 | [Shortcuts](engine/07_Shortcuts.md) | 🚧 | Registry, scope stack, priority, text-input guard, rebinding |
-| 08 | [Animation](engine/08_Animation.md) | 🚧 | DDFS param auto-animation; BinderRegistry; interpolators by type |
-| 09 | [Bridges & Derived](engine/09_Bridges_and_Derived.md) | 🚧 | Explicit intra-feature coordination; `derive()` / `bridge()` |
-| 10 | [Viewport](engine/10_Viewport.md) | 🚧 | Size modes, DPR, interaction state, FPS probe, adaptive quality |
+[`history/`](history/) holds what used to live directly under `docs/`:
 
-### Authoring & App Patterns
-| # | File | Status | Scope |
-|---|---|---|---|
-| 11 | [Plugin Authoring](engine/11_Plugin_Authoring.md) | 🚧 | How to build a new core plugin — the four-part shape, seven rules |
-| 12 | [App Handles](engine/12_App_Handles.md) | 🚧 | Typed cross-tree state (`defineAppHandles<T>`) for apps |
-| 13 | [Extracting From GMT](engine/13_Extracting_From_GMT.md) | ✅ | Cookbook for lifting GMT features into engine-core — triage + worked example (TSAA + pause button) |
-| 14 | [Panel Manifest](engine/14_Panel_Manifest.md) | 🚧 | How `panels.ts` declares which features compose into which panels |
-| 15 | [Camera Manager Extraction](engine/15_Camera_Manager_Extraction.md) | 🚧 | StateLibrary primitive — how cameras/views/palettes share one mechanism |
-| 16 | [Type Augmentation](engine/16_Type_Augmentation.md) | 🔒 | DDFS slices + state-library keys — the two-target declaration-merge rule |
-| 17 | [Mobile Layout](engine/17_Mobile_Layout.md) | 🚧 | Mobile detection, UI-mode preference, layout primitives, mobile menu rendering, sibling-app adoption |
+- `engine/`, `gmt/` — pre-extraction narrative architecture docs. Superseded by source JSDoc + ADRs; kept for archaeology.
+- `audit-2026-05-20/`, `doc-audit-state/` — the 2026-05-20 doc audit (surveys, followups, module-doc archive) that produced ADRs 0001-0058.
+- `animation-refactor/`, `archive/`, `plans-archive/` — completed-refactor findings and retired design notes.
 
-### Audit
-| # | File | Status | Scope |
-|---|---|---|---|
-| 20 | [Fragility Audit](engine/20_Fragility_Audit.md) | 🔒 | Known issues + remediation status |
-| 21 | [Code Review 2026-04-25](engine/21_Code_Review_2026-04-25.md) | 🔒 | Independent multi-agent survey: what matches docs, what's overstated, 3 live bugs, onboarding gaps |
-| — | [Feature Status](FEATURE_STATUS.md) | 🔒 | Post-phase-5 snapshot across engine + apps |
-
-## Apps — per-app onboarding
-
-Each app folder owns a README that's the canonical entry point for "I'm
-about to work on this app":
-
-| App | README | What it covers |
-|---|---|---|
-| `app-gmt` | [app-gmt/README.md](../app-gmt/README.md) | File map, boot order, how to add a GMT feature/formula, key shortcuts, GMF format |
-| `fluid-toy` | [fluid-toy/README.md](../fluid-toy/README.md) | File map, "how to add a feature" recipe, deliberate-weirdness gotchas, smoke commands |
-| `demo` | [demo/README.md](../demo/README.md) | Minimal three-file plugin contract walkthrough |
-
-## Reading paths
-
-### New contributor
-1. [../CONTRIBUTING.md](../CONTRIBUTING.md) — setup, PR checklist, architecture rules summary.
-2. [engine/01_Architecture.md](engine/01_Architecture.md) — three-tier model.
-3. [engine/02_Feature_Registry.md](engine/02_Feature_Registry.md) — the core primitive.
-4. [engine/03_Plugin_Contract.md](engine/03_Plugin_Contract.md) — how apps plug in.
-5. [../demo/README.md](../demo/README.md) — a real three-file add-on walkthrough.
-
-### Adding a feature
-1. [engine/02_Feature_Registry.md](engine/02_Feature_Registry.md) — `defineFeature` shape.
-2. [engine/08_Animation.md](engine/08_Animation.md) — how your params become animatable.
-3. [engine/09_Bridges_and_Derived.md](engine/09_Bridges_and_Derived.md) — if your feature talks to another.
-
-### Authoring a core plugin
-1. [engine/11_Plugin_Authoring.md](engine/11_Plugin_Authoring.md) — the pattern + seven rules.
-2. [engine/04_Core_Plugins.md](engine/04_Core_Plugins.md) — shipped plugins as reference.
-3. [engine/03_Plugin_Contract.md](engine/03_Plugin_Contract.md) — registration/boot contract.
-
-### Porting an app onto the engine
-1. [engine/01_Architecture.md](engine/01_Architecture.md) — what the engine provides.
-2. [engine/04_Core_Plugins.md](engine/04_Core_Plugins.md) — which plugins to install.
-3. [engine/12_App_Handles.md](engine/12_App_Handles.md) — cross-tree state pattern.
-4. [engine/16_Type_Augmentation.md](engine/16_Type_Augmentation.md) — typed slices + state-library keys.
-5. [engine/20_Fragility_Audit.md](engine/20_Fragility_Audit.md) — sharp edges to avoid.
-
-### Working on fluid-toy
-1. [fluid-toy/README.md](../fluid-toy/README.md) — file map, recipes, gotchas. **Start here.**
-2. [engine/02_Feature_Registry.md](engine/02_Feature_Registry.md) — `defineFeature` shape (for adding a feature).
-3. [engine/16_Type_Augmentation.md](engine/16_Type_Augmentation.md) — when adding a slice or state library.
-4. [engine/14_Panel_Manifest.md](engine/14_Panel_Manifest.md) — when changing how panels compose.
-
-### Debugging
-1. [engine/20_Fragility_Audit.md](engine/20_Fragility_Audit.md) — check for known issues first.
-2. Relevant subsystem doc (06–10).
-3. [gmt/06_Troubleshooting_and_Quirks.md](gmt/06_Troubleshooting_and_Quirks.md) — for WebGL / raymarching issues (legacy GMT).
-
-## GMT-era reference
-
-The [gmt/](gmt/) subdir preserves pre-extraction GMT docs for the eventual port. **Do not treat these as engine commitments** — they describe what GMT does today, which will become GMT-plugin concerns when we port.
-
-- `01–08` — GMT architecture, rendering, modular graph, animation, data, file structure (pre-engine-split).
-- `21–27, 35–36` — Fragmentarium importer, formula dev, capability protocol, shader test harness.
-- `30, 43, 44` — Mesh export, bucket render, preview region.
-
-### Formula authoring
-
-| # | File | Status | Scope |
-|---|---|---|---|
-| 25 | [Formula Dev Reference](gmt/25_Formula_Dev_Reference.md) | ⚠️ | Writing/modifying fractal formulas — `formula_NAME()` GLSL contract, `uParam*`/`uVec*` uniforms, `sphereFold`/`boxFold`/`gmt_*` helpers, distance estimators, `paramA→c.w` / `paramB→z.w` wiring. NOTE: registration section (FormulaType/index.ts) is pre-extraction; `capabilities` is now REQUIRED on `shader` (P8). |
-
-- **Public formula-authoring guide** (for the in-app "Modify with AI" `.gmf` paste workflow) lives on the landing site at **gmt-fractals.com/learn/create-formula** — derived from `gmt/25_Formula_Dev_Reference.md`, minus native `.ts` registration. The canonical machine-readable contract is the `GMF_API_DOCS` comment in `engine-gmt/utils/FormulaFormat.ts`.
+**Rule:** don't cite `history/` as a current contract. A source breadcrumb (`@see docs/history/…`) pointing at rationale is fine, but the authoritative answer lives in source JSDoc or an ADR.
 
 ## Style
 
-- File paths in markdown links: `[text](path/to/file.ts)` for clickable references.
-- Line references: `[FeatureSystem.ts:236](engine/FeatureSystem.ts#L236)`.
-- **Rule:** prefix for normative guidance.
-- **Why:** explanation immediately after.
-- **Decision** blocks at the bottom of architecture docs: what/when/alternatives/rationale.
-- Stability marker in every doc's H1.
-
-### Adding a doc
-
-- New subsystem or core plugin → new numbered doc in `engine/`.
-- New primitive or pattern within existing subsystem → section in existing doc.
-- Bug fix with non-obvious root cause → note in `engine/20_Fragility_Audit.md`.
-- Design decision (even rejected) → "Decisions" section of the relevant doc.
-
-### Deleting a doc
-
-Don't. Move to `archive/` with a one-line "why archived" at the top. Keeps history discoverable.
+- Markdown links for paths: `[text](path/to/file.ts)`; line refs `[FeatureSystem.ts:236](../engine/FeatureSystem.ts#L236)`.
+- New decision (even rejected) → new ADR in `adr/` (append-only). New cross-cutting rule → a doc in `policy/`. A subsystem contract or invariant → JSDoc at the source site, **not** a new markdown file.
 
 ---
 
-*Engine fork point: GMT 0.9.2 (commit `ece5c84`). Last doc refresh: 2026-04-23 (engine/gmt subdir split; `11_Plugin_Authoring` + `12_App_Handles` added; `toy-fluid/` reference fork retired; debug scratch cleaned). Index refreshed 2026-07-12 (adr/policy/modules made discoverable; `11_TSAA` listed; gmt catchall range corrected).*
+*Reorg 2026-07-13: external narrative (`docs/engine`, `docs/gmt`) + the 2026-05-20 audit apparatus moved to `docs/history/`; generated worklists (bugs.md / backlog.md / HEALTH.md) retired in favour of grepped `@bug`/`@stale` markers + `npm run context:cost`.*

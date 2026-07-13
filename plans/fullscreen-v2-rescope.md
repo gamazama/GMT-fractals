@@ -285,7 +285,7 @@ records. v2 Phase-0's contract **must keep the non-pure escape hatch** for `'fra
 - **Fractal renderer (carve precedent):** `engine/fractal/FractalColorRenderer.ts:1-142`;
   kernel `engine/fractal/shaders/fractalKernel.ts:1-100`.
 - **Dithering:** `engine/utils/createBlueNoiseWebGL2.ts:1-80`; `shaders/chunks/blue_noise.ts:1-52`.
-- **Mesh carve source:** `docs/gmt/30_Mesh_Export_Prototype.md`; `mesh-export/gpu/gpu-pipeline.ts`;
+- **Mesh carve source:** `docs/history/gmt/30_Mesh_Export_Prototype.md`; `mesh-export/gpu/gpu-pipeline.ts`;
   `mesh-export/preview/mesh-preview.ts:1-106`.
 - **Fluid carve source:** `fluid-toy/fluid/FluidEngine.ts:1-200`; `fluid-toy/fluid/shaders/{index,sim}.ts`;
   `fluid-toy/brush/particles.ts`.

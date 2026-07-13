@@ -699,7 +699,7 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
     // returned (0,0,0) for non-GMT apps. All call sites now go through
     // engine/animation/cameraKeyRegistry.captureCameraKeyFrame which is
     // the single host-pluggable entry point. See F5 in
-    // docs/engine/20_Fragility_Audit.md.
+    // docs/history/engine/20_Fragility_Audit.md.
 
     simplifySelectedKeys: (tolerance = 0.01) => {
         get().snapshot();

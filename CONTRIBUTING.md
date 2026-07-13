@@ -39,7 +39,7 @@ store/           Shared Zustand store composition (used by all apps).
 components/      Shared UI primitives (no store imports — pure components).
 ```
 
-Understand the three-tier model before writing code: [docs/engine/01_Architecture.md](docs/engine/01_Architecture.md).
+Understand the three-tier model before writing code: [docs/history/engine/01_Architecture.md](docs/history/engine/01_Architecture.md).
 
 ## Read the docs first
 
@@ -47,18 +47,18 @@ Every subsystem has a doc. The `CLAUDE.md` table maps "what you're touching" to 
 
 | Working on | Read first |
 |-----------|-----------|
-| Adding a feature (DDFS) | [docs/engine/02_Feature_Registry.md](docs/engine/02_Feature_Registry.md) |
-| Writing a new plugin | [docs/engine/11_Plugin_Authoring.md](docs/engine/11_Plugin_Authoring.md) |
-| Porting an app onto the engine | [docs/engine/03_Plugin_Contract.md](docs/engine/03_Plugin_Contract.md) |
+| Adding a feature (DDFS) | [docs/history/engine/02_Feature_Registry.md](docs/history/engine/02_Feature_Registry.md) |
+| Writing a new plugin | [docs/history/engine/11_Plugin_Authoring.md](docs/history/engine/11_Plugin_Authoring.md) |
+| Porting an app onto the engine | [docs/history/engine/03_Plugin_Contract.md](docs/history/engine/03_Plugin_Contract.md) |
 | GMT fractal renderer | [app-gmt/README.md](app-gmt/README.md) |
 | Fluid toy | [fluid-toy/README.md](fluid-toy/README.md) |
 | Minimal plugin example | [demo/README.md](demo/README.md) |
-| Animation / keyframes | [docs/engine/08_Animation.md](docs/engine/08_Animation.md) |
-| Undo / redo | [docs/engine/06_Undo_Transactions.md](docs/engine/06_Undo_Transactions.md) |
-| Keyboard shortcuts | [docs/engine/07_Shortcuts.md](docs/engine/07_Shortcuts.md) |
-| Panel layout | [docs/engine/14_Panel_Manifest.md](docs/engine/14_Panel_Manifest.md) |
-| TypeScript augmentation | [docs/engine/16_Type_Augmentation.md](docs/engine/16_Type_Augmentation.md) |
-| Known fragilities | [docs/engine/20_Fragility_Audit.md](docs/engine/20_Fragility_Audit.md) |
+| Animation / keyframes | [docs/history/engine/08_Animation.md](docs/history/engine/08_Animation.md) |
+| Undo / redo | [docs/history/engine/06_Undo_Transactions.md](docs/history/engine/06_Undo_Transactions.md) |
+| Keyboard shortcuts | [docs/history/engine/07_Shortcuts.md](docs/history/engine/07_Shortcuts.md) |
+| Panel layout | [docs/history/engine/14_Panel_Manifest.md](docs/history/engine/14_Panel_Manifest.md) |
+| TypeScript augmentation | [docs/history/engine/16_Type_Augmentation.md](docs/history/engine/16_Type_Augmentation.md) |
+| Known fragilities | [docs/history/engine/20_Fragility_Audit.md](docs/history/engine/20_Fragility_Audit.md) |
 
 Full index: [docs/DOCS_INDEX.md](docs/DOCS_INDEX.md).
 
@@ -66,19 +66,19 @@ Full index: [docs/DOCS_INDEX.md](docs/DOCS_INDEX.md).
 
 - Check open issues on GitHub for `good first issue` tags.
 - [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) tracks what's done, what's in-progress, and what's deferred.
-- [docs/engine/20_Fragility_Audit.md](docs/engine/20_Fragility_Audit.md) lists known issues with remediation notes.
+- [docs/history/engine/20_Fragility_Audit.md](docs/history/engine/20_Fragility_Audit.md) lists known issues with remediation notes.
 
 ## Adding a DDFS feature (most common contribution)
 
 A DDFS feature is a self-contained bundle of state + UI + optional shader injection. Adding one doesn't require touching engine or UI core.
 
-1. Read [docs/engine/02_Feature_Registry.md](docs/engine/02_Feature_Registry.md).
+1. Read [docs/history/engine/02_Feature_Registry.md](docs/history/engine/02_Feature_Registry.md).
 2. Look at `demo/DemoFeature.ts` — the minimal three-field shape.
 3. Look at `fluid-toy/features/julia.ts` — a real feature with sync and shader injection.
 4. Create `<your-app>/features/<name>.ts` — export `FeatureDefinition` and a `sync<Name>ToEngine` function.
 5. Register it in `<your-app>/registerFeatures.ts` — a single `featureRegistry.register(YourFeature)` call.
 6. Add a `sync<Name>ToEngine` call in the app's `useEngineSync.ts` (or equivalent).
-7. Declare your feature's state slice in `<your-app>/storeTypes.ts` (see [docs/engine/16_Type_Augmentation.md](docs/engine/16_Type_Augmentation.md)).
+7. Declare your feature's state slice in `<your-app>/storeTypes.ts` (see [docs/history/engine/16_Type_Augmentation.md](docs/history/engine/16_Type_Augmentation.md)).
 8. Run `npm run typecheck` — should exit 0.
 
 Everything else (save/load, URL sharing, undo, animation keyframes, auto-generated UI) works automatically.
@@ -120,13 +120,13 @@ These are the most common review blockers:
 - **No app-specific names in engine-core.** No `if (formula === 'Mandelbulb')` in `engine/**`.
 - **No `as any` without a comment explaining why.**
 
-Full rules: [CLAUDE.md](CLAUDE.md) and [docs/engine/01_Architecture.md](docs/engine/01_Architecture.md).
+Full rules: [CLAUDE.md](CLAUDE.md) and [docs/history/engine/01_Architecture.md](docs/history/engine/01_Architecture.md).
 
 ## Doc update policy
 
-After making changes, update the affected doc. If you discover undocumented behaviour, add it. If a doc says something no longer true, fix it in the same PR. Docs live in `docs/engine/` (authoritative) and per-app READMEs (`fluid-toy/README.md`, `app-gmt/README.md`, `demo/README.md`).
+After making changes, update the affected doc. If you discover undocumented behaviour, add it. If a doc says something no longer true, fix it in the same PR. Docs live in `docs/history/engine/` (authoritative) and per-app READMEs (`fluid-toy/README.md`, `app-gmt/README.md`, `demo/README.md`).
 
-Don't modify `docs/gmt/` — those are pre-extraction GMT reference docs, read-only.
+Don't modify `docs/history/gmt/` — those are pre-extraction GMT reference docs, read-only.
 
 ## Code style
 

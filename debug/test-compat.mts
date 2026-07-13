@@ -22,7 +22,7 @@
  * test:interlace) which is queued as separate work.
  *
  * @see dev/plans/capability-protocol.md (Phase 0)
- * @see dev/docs/gmt/35_Capability_Protocol.md
+ * @see docs/history/gmt/35_Capability_Protocol.md
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';

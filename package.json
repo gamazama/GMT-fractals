@@ -20,8 +20,6 @@
     "context:cost": "node plans/context-protocol/scripts/context-cost.mjs",
     "context:symbols": "node plans/context-protocol/scripts/build-symbol-index.mjs",
     "context:check": "node plans/context-protocol/scripts/context-check.mjs",
-    "health": "node plans/doc-audit-state/scripts/extract-health.mjs",
-    "verify-findings": "node plans/doc-audit-state/scripts/verify-findings.mjs",
     "orphans:strict": "knip --reporter compact --no-progress",
     "test:frag": "tsx debug/test-frag-importer.mts",
     "test:frag:v": "tsx debug/test-frag-importer.mts --verbose",

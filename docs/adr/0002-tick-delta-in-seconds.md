@@ -40,6 +40,6 @@ opaquely.
 - No type-level enforcement; the contract lives in code comments and this ADR.
   A typed `Seconds` brand could be added but hasn't been deemed worth the
   ergonomic cost.
-- See followup q-022 (`plans/doc-audit-state/survey/_followups/q-022.md`) for
-  the audit-time investigation that surfaced this drift in `docs/engine/01_Architecture.md:83`
+- See followup q-022 (`docs/history/doc-audit-state/survey/_followups/q-022.md`) for
+  the audit-time investigation that surfaced this drift in `docs/history/engine/01_Architecture.md:83`
   (the existing doc said `runTicks(deltaMs)`).

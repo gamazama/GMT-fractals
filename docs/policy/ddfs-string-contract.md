@@ -152,9 +152,9 @@ No prior doc covered these two contracts as a standalone reference. The fragment
 
 - **`engine/animation/trackBinding.ts:1-30`** — the file header is the de-facto authoritative spec for contract 2. It names F12/F13 directly and explains the composeFrom carve-out.
 - **`engine/animation/binderRegistry.ts:1-25`** — the file header explains the escape hatch for both contracts (non-standard setters → register an explicit binder).
-- **`docs/engine/20_Fragility_Audit.md` F6 (READ-ONLY historical doc)** — the original write-up of the silent setter-name mismatch. It motivated the convention but did not document the four-site fan-out.
-- **`docs/engine/02_Feature_Registry.md` (READ-ONLY historical doc)** — describes an aspirational `defineFeature(...)` API with stricter enforcement that did not ship; the current code relies on convention instead.
-- **`docs/engine/08_Animation.md:53-54` (READ-ONLY historical doc)** — names case 4 / case 5 in the binder-resolution chain. Treats both DOT and UNDERSCORE forms as live without naming the legacy carve-out.
+- **`docs/history/engine/20_Fragility_Audit.md` F6 (READ-ONLY historical doc)** — the original write-up of the silent setter-name mismatch. It motivated the convention but did not document the four-site fan-out.
+- **`docs/history/engine/02_Feature_Registry.md` (READ-ONLY historical doc)** — describes an aspirational `defineFeature(...)` API with stricter enforcement that did not ship; the current code relies on convention instead.
+- **`docs/history/engine/08_Animation.md:53-54` (READ-ONLY historical doc)** — names case 4 / case 5 in the binder-resolution chain. Treats both DOT and UNDERSCORE forms as live without naming the legacy carve-out.
 - **`CLAUDE.md:73`** — one-line author guidance: "Don't depend on `set${Feature}` by name-inference in animation — the engine auto-binds via the registry. If you need a custom binder, `binderRegistry.register()` it explicitly."
 
 This module doc supersedes those fragments as the canonical reference for both string contracts.

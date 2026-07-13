@@ -280,7 +280,7 @@ Post-processing (bloom, CA, tone map, sRGB encode) is host-specific via `host.ge
 ## Where to look when stuck
 
 - Original (pre-extraction) reference: `h:/GMT/workspace-gmt/stable/` — same code, different file layout. Especially `stable/components/topbar/BucketRenderControls.tsx`, `stable/engine/BucketRenderer.ts`, `stable/store/fractalStore.ts`.
-- Design doc: `docs/gmt/43_Bucket_Render_Overhaul.md`.
-- Plugin extraction cookbook: `docs/engine/13_Extracting_From_GMT.md`.
-- Engine plugin contracts: `docs/engine/04_Core_Plugins.md`.
+- Design doc: `docs/history/gmt/43_Bucket_Render_Overhaul.md`.
+- Plugin extraction cookbook: `docs/history/engine/13_Extracting_From_GMT.md`.
+- Engine plugin contracts: `docs/history/engine/04_Core_Plugins.md`.
 - Fluid-toy code map: `fluid-toy/CODE_MAP.md`.

@@ -3,7 +3,7 @@
 **Last updated:** 2026-05-03
 **Status:** Shipped on dev branch.
 **Companion docs:**
-- [`docs/gmt/02_Rendering_Internals.md`](gmt/02_Rendering_Internals.md) §2.6 — current architecture, params, performance, gotchas (authoritative reference).
+- [`docs/history/gmt/02_Rendering_Internals.md`](gmt/02_Rendering_Internals.md) §2.6 — current architecture, params, performance, gotchas (authoritative reference).
 - [`docs/BENCH_SHADER_HANDOFF.md`](BENCH_SHADER_HANDOFF.md) — bench harness, optimization log, ANGLE/D3D11 stack rules.
 
 ---
@@ -96,7 +96,7 @@ engine-gmt/features/volumetric/index.ts                # uVolQuality slider para
 engine-gmt/shaders/chunks/lighting/volumetric_scatter.ts  # gate logic, DIR_LIGHT_DIST
 engine-gmt/shaders/chunks/ray.ts                       # uVolEnabled → needNoise clause
 debug/bench-shader.mts                                 # --volumetric=* flags, fatal regex
-docs/gmt/02_Rendering_Internals.md                     # §2.6 rewrite
+docs/history/gmt/02_Rendering_Internals.md                     # §2.6 rewrite
 data/help/topics/rendering.ts                          # render.volumetric helpfile
 docs/VOLUMETRIC_HANDOFF.md                             # this doc
 ```

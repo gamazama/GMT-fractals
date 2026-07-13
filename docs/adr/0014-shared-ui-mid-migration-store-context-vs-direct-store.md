@@ -8,7 +8,7 @@
 
 Primitives in `components/` initially read `useEngineStore` directly.
 A target design ("pure primitives, store via opt-in context") was
-sketched in `docs/engine/05_Shared_UI.md` with five contexts
+sketched in `docs/history/engine/05_Shared_UI.md` with five contexts
 (Animation / Undo / ContextMenu / Shortcut / FeatureCompile).
 Migrating all primitives at once is high-risk.
 
@@ -25,7 +25,7 @@ audited.
 ## Consequences
 
 - The "primitives must not import the store" rule from the original
-  `docs/engine/05_Shared_UI.md` is aspirational, not enforced.
+  `docs/history/engine/05_Shared_UI.md` is aspirational, not enforced.
 - Migration risk is per-host re-render correctness — must be tested
   empirically (fluid-toy max-depth-guard cascade is the historical
   pain point).

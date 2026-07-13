@@ -1,6 +1,6 @@
 /**
  * spike-diff — diff two bench-perf-timeline runs and print pass/fail vs.
- * the spike criteria in docs/animation-refactor/05_SPIKE_PROMPT.md §Step 5.
+ * the spike criteria in docs/history/animation-refactor/05_SPIKE_PROMPT.md §Step 5.
  *
  * Usage:
  *   npx tsx debug/spike-diff.mts [pre.json] [post.json]

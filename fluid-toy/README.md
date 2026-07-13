@@ -27,7 +27,7 @@ fluid-toy/
 ├── setup.ts                    one-call panel-manifest install (post-boot).
 ├── storeTypes.ts               TYPE-ONLY. Declares fluid-toy slices into
 │                               AppFeatureSlices + FeatureStateMap. Read
-│                               docs/engine/16_Type_Augmentation.md before
+│                               docs/history/engine/16_Type_Augmentation.md before
 │                               touching this.
 ├── migrations.ts               registerMigration v1 (preset shape changes).
 ├── constants.ts                gesture sensitivity / drag thresholds.
@@ -152,7 +152,7 @@ fluid-toy/
 
 3. **`storeTypes.ts`** — add `<name>: <Name>Slice` to BOTH the
    `AppFeatureSlices` and `FeatureStateMap` augmentations. (See
-   [docs/engine/16_Type_Augmentation.md](../docs/engine/16_Type_Augmentation.md)
+   [docs/history/engine/16_Type_Augmentation.md](../docs/history/engine/16_Type_Augmentation.md)
    for why both.)
 
 4. **`useEngineSync.ts`** — one `useSlice('<name>')` call + one
@@ -218,7 +218,7 @@ push logic is co-located with the param defaults that drive it.
 `viewLibrary.ts` declare-merges `savedViews` / `addView` / etc. into
 `EngineStoreState` and `EngineActions` at the same site that calls
 `installStateLibrary`. The keys are configurable strings — only the
-consumer knows what names it picked. See [docs/engine/16_Type_Augmentation.md](../docs/engine/16_Type_Augmentation.md).
+consumer knows what names it picked. See [docs/history/engine/16_Type_Augmentation.md](../docs/history/engine/16_Type_Augmentation.md).
 
 ---
 
@@ -255,16 +255,16 @@ It boots vite on a free port, sets `ENGINE_URL`, runs the smoke, kills vite.
 | Deep-zoom quantizing past 1e-15 | [pointer/gestures/](pointer/gestures/) DD pan accumulator + [deepZoom/HighPrecComplex.ts](deepZoom/HighPrecComplex.ts) `fromNumber` extracts IEEE-754 mantissa/exp |
 | Modulation not driving a target | Check `state.animations` has the LFO entry; `state.liveModulations[target]` should update each frame; sync function for that feature must read liveMod via `applyLiveMod` (see useEngineSync.ts) |
 | Preset load drops a field | Field is on a slice not in [presets/apply.ts](presets/apply.ts), or shape changed without a [migrations.ts](migrations.ts) entry |
-| Adaptive quality stuck low | engine — see [docs/engine/10_Viewport.md](../docs/engine/10_Viewport.md) and [docs/engine/11_TSAA.md](../docs/engine/11_TSAA.md) |
+| Adaptive quality stuck low | engine — see [docs/history/engine/10_Viewport.md](../docs/history/engine/10_Viewport.md) and [docs/history/engine/11_TSAA.md](../docs/history/engine/11_TSAA.md) |
 | Saved-views panel placeholder | [viewLibrary.ts](viewLibrary.ts) install ordering — must run AFTER installMenu/installShortcuts and BEFORE setupFluidToy |
 
 ---
 
 ## Cross-refs
 
-- [docs/engine/01_Architecture.md](../docs/engine/01_Architecture.md) — three-tier model
-- [docs/engine/02_Feature_Registry.md](../docs/engine/02_Feature_Registry.md) — `defineFeature` shape
-- [docs/engine/03_Plugin_Contract.md](../docs/engine/03_Plugin_Contract.md) — boot order & freeze semantics
-- [docs/engine/14_Panel_Manifest.md](../docs/engine/14_Panel_Manifest.md) — how panels.ts works
-- [docs/engine/16_Type_Augmentation.md](../docs/engine/16_Type_Augmentation.md) — store-typing pattern
-- [docs/engine/12_App_Handles.md](../docs/engine/12_App_Handles.md) — engineHandles.ts pattern
+- [docs/history/engine/01_Architecture.md](../docs/history/engine/01_Architecture.md) — three-tier model
+- [docs/history/engine/02_Feature_Registry.md](../docs/history/engine/02_Feature_Registry.md) — `defineFeature` shape
+- [docs/history/engine/03_Plugin_Contract.md](../docs/history/engine/03_Plugin_Contract.md) — boot order & freeze semantics
+- [docs/history/engine/14_Panel_Manifest.md](../docs/history/engine/14_Panel_Manifest.md) — how panels.ts works
+- [docs/history/engine/16_Type_Augmentation.md](../docs/history/engine/16_Type_Augmentation.md) — store-typing pattern
+- [docs/history/engine/12_App_Handles.md](../docs/history/engine/12_App_Handles.md) — engineHandles.ts pattern

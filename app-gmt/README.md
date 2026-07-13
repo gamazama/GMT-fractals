@@ -75,13 +75,13 @@ The 100 ms delay in step 7 is intentional: `GmtRendererCanvas` (mounted by React
 
 ## Adding a GMT feature
 
-1. Read [docs/engine/02_Feature_Registry.md](../docs/engine/02_Feature_Registry.md) — the `defineFeature` shape.
+1. Read [docs/history/engine/02_Feature_Registry.md](../docs/history/engine/02_Feature_Registry.md) — the `defineFeature` shape.
 2. Look at an existing feature: `engine-gmt/features/ao/` or `engine-gmt/features/coloring/`.
 3. Create `engine-gmt/features/<name>/index.ts` — export `FeatureDefinition`.
 4. Register it in `app-gmt/registerFeatures.ts`.
 5. Add a `sync<Name>ToEngine` call in `engine-gmt/features/ui.tsx` (or the app's `useEngineSync.ts`).
-6. Declare the slice in `engine-gmt/storeTypes.ts` — see [docs/engine/16_Type_Augmentation.md](../docs/engine/16_Type_Augmentation.md).
-7. Add the feature to the relevant panel in `engine-gmt/panels.ts` — see [docs/engine/14_Panel_Manifest.md](../docs/engine/14_Panel_Manifest.md).
+6. Declare the slice in `engine-gmt/storeTypes.ts` — see [docs/history/engine/16_Type_Augmentation.md](../docs/history/engine/16_Type_Augmentation.md).
+7. Add the feature to the relevant panel in `engine-gmt/panels.ts` — see [docs/history/engine/14_Panel_Manifest.md](../docs/history/engine/14_Panel_Manifest.md).
 
 Run `npm run typecheck` — exits 0 means the plumbing is correct.
 
@@ -93,7 +93,7 @@ Run `npm run typecheck` — exits 0 means the plumbing is correct.
 2. Register it in `engine-gmt/formulas/index.ts`.
 3. Run `npm run test:baseline` (from `../stable/`) to confirm the shader compiles.
 
-GMT-era formula docs (from `stable/`): [stable/docs/gmt/25_Formula_Dev_Reference.md](../../stable/docs/25_Formula_Dev_Reference.md).
+GMT-era formula docs (from `stable/`): [stable/docs/history/gmt/25_Formula_Dev_Reference.md](../../stable/docs/25_Formula_Dev_Reference.md).
 
 ---
 
@@ -140,5 +140,5 @@ PNG snapshots embed GMF in iTXt metadata — drag a screenshot back into GMT to 
 
 - [engine-gmt/](../engine-gmt/) — GMT plugin layer (start here for rendering / formula work)
 - [docs/DOCS_INDEX.md](../docs/DOCS_INDEX.md) — full docs table of contents
-- [docs/engine/01_Architecture.md](../docs/engine/01_Architecture.md) — three-tier model
+- [docs/history/engine/01_Architecture.md](../docs/history/engine/01_Architecture.md) — three-tier model
 - [HANDOFF.md](../HANDOFF.md) — session progress log, deferred work, known issues

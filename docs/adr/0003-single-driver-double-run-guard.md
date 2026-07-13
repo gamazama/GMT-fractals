@@ -37,5 +37,5 @@ canonical RenderLoopDriver + GmtRendererTickDriver collision case
 - The DEV warning is one-shot — once `_warnedDoubleRun` flips, no further
   warnings fire in the same module lifetime. HMR may or may not reset this
   depending on whether the module is re-executed.
-- See followup q-023 (`plans/doc-audit-state/survey/_followups/q-023.md`) for
+- See followup q-023 (`docs/history/doc-audit-state/survey/_followups/q-023.md`) for
   the audit-time investigation.

@@ -15,7 +15,7 @@
  * way than leaving the field undefined.
  *
  * See:
- * - dev/docs/gmt/35_Capability_Protocol.md
+ * - docs/history/gmt/35_Capability_Protocol.md
  * - dev/plans/capability-protocol.md (Phases 5 + 6)
  */
 

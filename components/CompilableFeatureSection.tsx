@@ -261,7 +261,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     // resolved config wins over the feature's own; falls back to feature-level
     // if absent. Same schema either way. Preserves underlying state (not
     // mutated) so switching back to a compatible formula re-enables exactly
-    // as it was. See dev/docs/gmt/35_Capability_Protocol.md.
+    // as it was. See docs/history/gmt/35_Capability_Protocol.md.
     const primaryFormulaId = useEngineStore((s: any) => s.formula);
     const sectionRequires = src.requires;
     const compatReport = useMemo(() => {

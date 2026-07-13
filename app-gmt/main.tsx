@@ -398,7 +398,7 @@ installHud();
 // + Euler rotation track writers via the binderRegistry, plus pre/post
 // scrub hooks that read the live camera and emit CAMERA_TELEPORT once
 // per animated frame. Used to live inline inside AnimationEngine; moved
-// out as part of F5 (see docs/engine/20_Fragility_Audit.md).
+// out as part of F5 (see docs/history/engine/20_Fragility_Audit.md).
 installGmtCameraBinders();
 
 // GMT gradient (coloring) animation binders — keyframed phase/repeats are
