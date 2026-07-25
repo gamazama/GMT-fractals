@@ -13,7 +13,13 @@
  *   tsx debug/test-filterbank.mts
  */
 
-import { FilterBank, BANK_MIN_HZ } from '../engine/features/audioMod/filterBank';
+import { FilterBank, BANK_MIN_HZ, dbToUnit } from '../engine/features/audioMod/filterBank';
+
+const DB_FLOOR = -90;
+const DB_CEIL = -10;
+/** Analyse with the panel's default dB window. */
+const runFrame = (b: FilterBank, data: Float32Array, normalize = false, dt = 1 / 60) =>
+    b.analyse(data, { dbFloor: DB_FLOOR, dbCeiling: DB_CEIL, normalize, deltaSec: dt });
 
 let failures = 0;
 const assert = (cond: boolean, msg: string, detail?: unknown) => {
@@ -81,17 +87,63 @@ console.log('\n[4] every band covers at least one bin, none run past the array')
 }
 
 // ── Reading a frame ─────────────────────────────────────────────────────────
+/** dBFS frame (what getFloatFrequencyData returns). Silent bins sit at the
+ *  floor; `level` is the target 0..1 position in the dB window, so the helper
+ *  inverts `dbToUnit` to place the tone. */
 const frameWith = (fft: number, hz: number, level: number) => {
-  const data = new Uint8Array(fft / 2);
+  const data = new Float32Array(fft / 2).fill(-Infinity);
   const bin = Math.round(hz / (SR / fft));
-  if (bin < data.length) data[bin] = Math.round(level * 255);
+  if (bin < data.length) data[bin] = DB_FLOOR + level * (DB_CEIL - DB_FLOOR);
   return data;
 };
+/** A frame with EVERY bin at the same dB — a flat spectrum. */
+const flatFrame = (fft: number, level: number) =>
+  new Float32Array(fft / 2).fill(DB_FLOOR + level * (DB_CEIL - DB_FLOOR));
+const silentFrame = (fft: number) => new Float32Array(fft / 2).fill(-Infinity);
+
+// ── Float path: scale must match the byte path it replaced ──────────────────
+console.log('\n[4b] dB→unit mapping and linear-domain averaging');
+{
+  assert(dbToUnit(DB_FLOOR, DB_FLOOR, DB_CEIL) === 0, 'the floor maps to 0');
+  assert(dbToUnit(DB_CEIL, DB_FLOOR, DB_CEIL) === 1, 'the ceiling maps to 1');
+  assert(near(dbToUnit((DB_FLOOR + DB_CEIL) / 2, DB_FLOOR, DB_CEIL), 0.5, 1e-9),
+    'and the midpoint to 0.5 — the same ramp getByteFrequencyData applied');
+  assert(dbToUnit(-Infinity, DB_FLOOR, DB_CEIL) === 0, 'a silent bin is 0, not NaN');
+  assert(dbToUnit(0, DB_FLOOR, DB_CEIL) === 1, 'above-ceiling clamps');
+  assert(dbToUnit(-200, DB_FLOOR, DB_CEIL) === 0, 'below-floor clamps');
+
+  // A FLAT band must read back exactly its input level: averaging power then
+  // returning to dB is an identity when every bin is equal. This is the check
+  // that pins the 0..1 scale to the byte path's.
+  const b = mk(4096, 6);
+  runFrame(b, flatFrame(4096, 0.6));
+  const mid = b.bands.findIndex(x => x.centerHz > 1000);
+  assert(near(b.levels[mid], 0.6, 1e-4),
+    'a flat -42dB spectrum reads 0.6 on the same scale as before',
+    b.levels[mid]);
+
+  // And averaging happens in LINEAR power, not in dB. A band holding one loud
+  // bin and one silent bin must read ~3dB under the loud one (half the power),
+  // NOT the arithmetic mean of the two dB values.
+  const fft = 4096;
+  const two = new Float32Array(fft / 2).fill(-Infinity);
+  const bank = mk(fft, 3);
+  const target = bank.bands.findIndex(x => x.binHi - x.binLo >= 2);
+  const band = bank.bands[target];
+  const loudDb = -20;
+  two[band.binLo] = loudDb;
+  const nBins = band.binHi - band.binLo;
+  runFrame(bank, two);
+  const expectedDb = loudDb + 10 * Math.log10(1 / nBins);
+  assert(near(bank.levels[target], dbToUnit(expectedDb, DB_FLOOR, DB_CEIL), 1e-4),
+    `one loud bin among ${nBins} reads as power/${nBins}, not a dB average`,
+    { got: bank.levels[target], expected: dbToUnit(expectedDb, DB_FLOOR, DB_CEIL) });
+}
 
 console.log('\n[5] a tone lands in the band that contains it');
 {
   const b = mk(8192, 6);
-  b.analyse(frameWith(8192, 1000, 1), false, 1 / 60);
+  runFrame(b, frameWith(8192, 1000, 1));
   let best = 0;
   for (let i = 1; i < b.levels.length; i++) if (b.levels[i] > b.levels[best]) best = i;
   const band = b.bands[best];
@@ -121,7 +173,7 @@ console.log('\n[6] rule ranges map onto bands');
 console.log('\n[7] normalisation off is a pass-through');
 {
   const b = mk(4096, 6);
-  b.analyse(frameWith(4096, 1000, 0.5), false, 1 / 60);
+  runFrame(b, frameWith(4096, 1000, 0.5));
   assert(b.levels.every((v, i) => near(v, b.normalized[i])),
     'normalized === levels when the toggle is off');
 }
@@ -130,7 +182,7 @@ console.log('\n[8] a quiet band self-calibrates to full range');
 {
   const b = mk(4096, 6);
   const quiet = frameWith(4096, 8000, 0.30);
-  for (let i = 0; i < 5; i++) b.analyse(quiet, true, 1 / 60);
+  for (let i = 0; i < 5; i++) runFrame(b, quiet, true);
   const [lo] = b.bandRangeForHz(8000, 8000);
   assert(b.normalized[lo] > b.levels[lo] * 2,
     'a band sitting at 0.30 absolute is lifted toward full scale',
@@ -142,7 +194,7 @@ console.log('\n[9] near-silent bands are NOT amplified to full scale');
 {
   const b = mk(4096, 6);
   const whisper = frameWith(4096, 8000, 0.03);
-  for (let i = 0; i < 60; i++) b.analyse(whisper, true, 1 / 60);
+  for (let i = 0; i < 60; i++) runFrame(b, whisper, true);
   const [lo] = b.bandRangeForHz(8000, 8000);
   assert(b.normalized[lo] < 0.35,
     'a band whose peak never clears the minimum stays quiet rather than '
@@ -154,19 +206,19 @@ console.log('\n[10] silence freezes the follower (no ratchet through a gap)');
 {
   const b = mk(4096, 6);
   const loud = frameWith(4096, 1000, 0.9);
-  for (let i = 0; i < 10; i++) b.analyse(loud, true, 1 / 60);
+  for (let i = 0; i < 10; i++) runFrame(b, loud, true);
   const [lo] = b.bandRangeForHz(1000, 1000);
   const peakDuring = (b as any).peaks[lo];
 
-  const silence = new Uint8Array(2048);
-  for (let i = 0; i < 600; i++) b.analyse(silence, true, 1 / 60);   // 10s gap
+  const silence = silentFrame(4096);
+  for (let i = 0; i < 600; i++) runFrame(b, silence, true);   // 10s gap
   assert(near((b as any).peaks[lo], peakDuring, 1e-9),
     'the follower holds through silence — releasing would shrink the divisor '
     + 'and detonate on the next downbeat',
     { before: peakDuring, after: (b as any).peaks[lo] });
 
   // And the downbeat returns at a sane level, not slammed to full scale.
-  b.analyse(frameWith(4096, 1000, 0.45), true, 1 / 60);
+  runFrame(b, frameWith(4096, 1000, 0.45), true);
   assert(b.normalized[lo] < 0.8,
     'a quieter return reads proportionally, not pinned', b.normalized[lo].toFixed(3));
 }
@@ -175,13 +227,13 @@ console.log('\n[11] the follower releases when the music merely gets quieter');
 {
   const b = mk(4096, 6);
   const loud = frameWith(4096, 1000, 0.9);
-  for (let i = 0; i < 10; i++) b.analyse(loud, true, 1 / 60);
+  for (let i = 0; i < 10; i++) runFrame(b, loud, true);
   const [lo] = b.bandRangeForHz(1000, 1000);
 
   const softer = frameWith(4096, 1000, 0.35);
-  b.analyse(softer, true, 1 / 60);
+  runFrame(b, softer, true);
   const oneFrame = b.normalized[lo];
-  for (let i = 0; i < 600; i++) b.analyse(softer, true, 1 / 60);
+  for (let i = 0; i < 600; i++) runFrame(b, softer, true);
   assert(b.normalized[lo] > oneFrame,
     'a sustained quieter passage is gradually brought back up',
     { oneFrame: oneFrame.toFixed(3), settled: b.normalized[lo].toFixed(3) });
@@ -190,7 +242,7 @@ console.log('\n[11] the follower releases when the music merely gets quieter');
 console.log('\n[12] a rebuild drops stale per-band state');
 {
   const b = mk(4096, 6);
-  for (let i = 0; i < 30; i++) b.analyse(frameWith(4096, 1000, 0.9), true, 1 / 60);
+  for (let i = 0; i < 30; i++) runFrame(b, frameWith(4096, 1000, 0.9), true);
   b.rebuild({ sampleRate: SR, fftSize: 4096, bandsPerOctave: 12 });
   assert((b as any).peaks.every((v: number) => v === 0),
     'band k means a different frequency at a new width, so peaks reset',

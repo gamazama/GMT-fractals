@@ -261,7 +261,7 @@ class ModulationEngine {
      *  for a harder hit. Users trim from there with the rule's Gain knob. */
     private static readonly TRANSIENT_FULL_SCALE = 20;
 
-    private processAudioSignal(rule: ModulationRule, _data: Uint8Array, delta: number): number {
+    private processAudioSignal(rule: ModulationRule, _data: Float32Array, delta: number): number {
         if (rule.freqEnd <= rule.freqStart) return 0;
 
         // Read the fractional-octave BANDS, not raw bins. The bands are already

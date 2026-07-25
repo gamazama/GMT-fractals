@@ -36,6 +36,23 @@
  * @see docs/adr/0104-fractional-octave-filterbank.md
  */
 
+/**
+ * Map a magnitude in dBFS onto the 0..1 display/modulation scale.
+ *
+ * @invariant This is the ONLY place the dB window is applied, and it defines
+ *   the scale every downstream threshold is calibrated against —
+ *   `NORMALIZE_SILENCE_FLOOR`, `NORMALIZE_MIN_PEAK`, `AGC_FLOOR`, every rule's
+ *   `thresholdMin/Max`, and the spectrum's bar heights. It replaced
+ *   `getByteFrequencyData`'s identical [minDecibels, maxDecibels] → [0,255]
+ *   ramp, which is why none of those constants needed retuning: same window,
+ *   same endpoints, 256 quantisation levels traded for float.
+ */
+export const dbToUnit = (db: number, dbFloor: number, dbCeiling: number): number => {
+    if (!Number.isFinite(db)) return 0;          // -Infinity = a silent bin
+    const span = Math.max(1e-6, dbCeiling - dbFloor);
+    return Math.max(0, Math.min(1, (db - dbFloor) / span));
+};
+
 /** Lowest band centre. Below a kick fundamental, above room rumble / DC. */
 export const BANK_MIN_HZ = 25;
 /** Highest band centre. Above hi-hat energy; clamped to below nyquist. */
@@ -58,6 +75,15 @@ export interface FilterBankOptions {
     sampleRate: number;
     fftSize: number;
     bandsPerOctave: number;
+}
+
+export interface AnalyseOptions {
+    /** dB window mapped onto 0..1 — see `dbToUnit`. */
+    dbFloor: number;
+    dbCeiling: number;
+    /** Apply per-band adaptive gain. */
+    normalize: boolean;
+    deltaSec: number;
 }
 
 /**
@@ -94,6 +120,12 @@ export class FilterBank {
     /** Levels after per-band adaptive gain (identical to `levels` when off). */
     public normalized: Float32Array = new Float32Array(0);
     private peaks: Float32Array = new Float32Array(0);
+    /** Per-bin linear power scratch, reused across frames. */
+    private power: Float32Array = new Float32Array(0);
+
+    private ensurePowerScratch(binCount: number): void {
+        if (this.power.length < binCount) this.power = new Float32Array(binCount);
+    }
 
     constructor(opts?: Partial<FilterBankOptions>) {
         this.rebuild({
@@ -158,28 +190,51 @@ export class FilterBank {
     }
 
     /**
-     * Read one FFT frame into band levels.
+     * Read one FFT frame (dBFS magnitudes from `getFloatFrequencyData`) into
+     * band levels.
      *
-     * RMS rather than mean, matching `aggregateBand` — see its @invariant.
-     * Within a band the difference is small (bands are narrow by construction);
-     * keeping the same statistic everywhere is what stops the display and the
-     * modulation signal from disagreeing.
+     * @invariant Band energy is averaged in the LINEAR domain, never in dB.
+     *   `getFloatFrequencyData` returns 20·log10(magnitude); averaging those
+     *   directly computes a geometric mean of amplitudes, which is not a band
+     *   level and under-reads any band containing a peak. Each bin is converted
+     *   to power (`10^(dB/10)`), averaged, and only then returned to dB and
+     *   mapped through `dbToUnit`.
+     *
+     * The 0..1 output scale is deliberately identical to the byte path this
+     * replaces — same dB window, same endpoints — so the AGC and the per-band
+     * followers keep their calibration. What changes is precision: 256
+     * quantisation steps become float, which matters most exactly where the
+     * old path was worst, in quiet bands near the floor.
      *
      * Cost is one pass over the bins the bank covers, regardless of how many
      * rules are active — cheaper than the previous per-rule scans once more
      * than one rule exists.
      */
-    public analyse(data: Uint8Array, normalize: boolean, deltaSec: number): void {
+    public analyse(data: Float32Array, opts: AnalyseOptions): void {
+        const { dbFloor, dbCeiling, normalize, deltaSec } = opts;
         const n = this.bands.length;
+
+        // Per-bin power, computed ONCE per frame. Bands overlap (and will
+        // overlap more once kernels land), so converting inside the band loop
+        // would redo this for every band that touches a bin.
+        this.ensurePowerScratch(data.length);
+        const power = this.power;
+        for (let i = 0; i < data.length; i++) {
+            const db = data[i];
+            power[i] = Number.isFinite(db) ? Math.pow(10, db * 0.1) : 0;
+        }
+
         for (let k = 0; k < n; k++) {
             const b = this.bands[k];
-            let sumSq = 0;
+            let sum = 0;
             let c = 0;
             for (let i = b.binLo; i < b.binHi && i < data.length; i++) {
-                sumSq += data[i] * data[i];
+                sum += power[i];
                 c++;
             }
-            this.levels[k] = c > 0 ? Math.sqrt(sumSq / c) / 255 : 0;
+            if (c === 0) { this.levels[k] = 0; continue; }
+            const rms = Math.sqrt(sum / c);                     // linear amplitude
+            this.levels[k] = dbToUnit(20 * Math.log10(rms), dbFloor, dbCeiling);
         }
 
         if (!normalize) {

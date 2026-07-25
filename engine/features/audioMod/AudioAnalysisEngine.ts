@@ -25,7 +25,7 @@
  *   clips to 1-second slices; do not reintroduce it.
  */
 import { ModulationRule } from '../modulation/index';
-import { filterBank } from './filterBank';
+import { filterBank, dbToUnit } from './filterBank';
 
 class Deck {
     public element: HTMLAudioElement;
@@ -81,7 +81,7 @@ export class AudioAnalysisEngine {
     /** Live-capture trim, analyser-side only. @see the class @invariant. */
     private inputGain: GainNode | null = null;
 
-    private dataArray: Uint8Array<ArrayBuffer> | null = null;
+    private dataArray: Float32Array<ArrayBuffer> | null = null;
 
     // State
     public isMicActive: boolean = false;
@@ -118,7 +118,7 @@ export class AudioAnalysisEngine {
         this.analyser.fftSize = this.desiredFftSize;
         this.analyser.smoothingTimeConstant = 0.8; // Default smoothing
         this.applyDecibelRange();
-        this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+        this.dataArray = new Float32Array(this.analyser.frequencyBinCount);
 
         // Live-capture trim → analyser. Decks reach the analyser via masterGain
         // (which also feeds destination); live sources route through here
@@ -177,7 +177,7 @@ export class AudioAnalysisEngine {
             this.analyser.fftSize = clamped;
             // frequencyBinCount changed — the read buffer must be resized or
             // getByteFrequencyData writes a truncated / stale-tailed frame.
-            this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+            this.dataArray = new Float32Array(this.analyser.frequencyBinCount);
         }
     }
 
@@ -473,7 +473,12 @@ export class AudioAnalysisEngine {
         normalizeBands = false,
     ) {
         if (!this.analyser || !this.dataArray) return;
-        this.analyser.getByteFrequencyData(this.dataArray);
+        // FLOAT, not byte. getByteFrequencyData quantises to 256 steps across
+        // the dB window before we ever see it, which throws away precision
+        // exactly where it is scarcest — quiet bands near the floor. The float
+        // path hands us raw dBFS and we apply the window ourselves in
+        // `dbToUnit`, so the 0..1 scale is unchanged.
+        this.analyser.getFloatFrequencyData(this.dataArray);
 
         // Refresh the filterbank shape only when a setting actually changed —
         // rebuild reallocates and drops the per-band followers.
@@ -483,7 +488,12 @@ export class AudioAnalysisEngine {
             bandsPerOctave,
         };
         if (!filterBank.matches(bankOpts)) filterBank.rebuild(bankOpts);
-        filterBank.analyse(this.dataArray, normalizeBands, deltaSec);
+        filterBank.analyse(this.dataArray, {
+            dbFloor: this.dbFloor,
+            dbCeiling: this.dbCeiling,
+            normalize: normalizeBands,
+            deltaSec,
+        });
 
         if (!agcEnabled) { this.agcGain = 1; this.agcPeak = 0; return; }
 
@@ -533,14 +543,20 @@ export class AudioAnalysisEngine {
 
     /** Loudest bin this frame, 0..1. Drives the panel's level/clip meter —
      *  the one readout that tells you at a glance whether the input is too
-     *  quiet to gate or hot enough to pin. */
+     *  quiet to gate or hot enough to pin.
+     *
+     *  Peaks in dB, then maps ONCE through the same `dbToUnit` window the bands
+     *  use. (dB is monotonic in magnitude, so the loudest bin is the same bin
+     *  either way — mapping after the scan keeps this to one conversion.)
+     *  Identical 0..1 scale to the byte path, so `AGC_FLOOR` and the meter's
+     *  amber/red points keep their calibration. */
     public getPeakLevel(): number {
         if (!this.dataArray) return 0;
-        let peak = 0;
+        let peakDb = -Infinity;
         for (let i = 0; i < this.dataArray.length; i++) {
-            if (this.dataArray[i] > peak) peak = this.dataArray[i];
+            if (this.dataArray[i] > peakDb) peakDb = this.dataArray[i];
         }
-        return peak / 255;
+        return dbToUnit(peakDb, this.dbFloor, this.dbCeiling);
     }
 }
 

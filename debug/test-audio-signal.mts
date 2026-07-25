@@ -26,22 +26,28 @@ const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
 
 const FFT = 2048;
 const BINS = FFT / 2;
-const buf = new Uint8Array(BINS);
+// dBFS frame, as getFloatFrequencyData delivers.
+const buf = new Float32Array(BINS);
 // Stub the graph: update() only needs an analyser that reports its size and
 // fills dataArray, and we fill it ourselves so each test frame is exact.
 (audioAnalysisEngine as any).analyser = {
   fftSize: FFT,
   frequencyBinCount: BINS,
-  getByteFrequencyData: () => { /* buf is pre-filled */ },
+  getFloatFrequencyData: () => { /* buf is pre-filled */ },
 };
 (audioAnalysisEngine as any).dataArray = buf;
 (audioAnalysisEngine as any).desiredFftSize = FFT;
 
-/** Fill bins [0, upTo) with a normalised level, rest silent. */
+const DB_FLOOR = -90;
+const DB_CEIL = -10;
+
+/** Fill bins [0, upTo) at a normalised 0..1 level, rest silent. `level` is a
+ *  position in the dB window, so the resulting band levels and peak read back
+ *  as that same number — the scale the AGC and followers are calibrated to. */
 const setBand = (level: number, upTo = 128) => {
-  buf.fill(0);
-  const v = Math.round(level * 255);
-  for (let i = 0; i < upTo; i++) buf[i] = v;
+  buf.fill(-Infinity);
+  const db = DB_FLOOR + level * (DB_CEIL - DB_FLOOR);
+  for (let i = 0; i < upTo; i++) buf[i] = db;
 };
 
 const resetAgc = () => {
