@@ -30,13 +30,21 @@ const BINS = FFT / 2;
 const buf = new Float32Array(BINS);
 // Stub the graph: update() only needs an analyser that reports its size and
 // fills dataArray, and we fill it ourselves so each test frame is exact.
-(audioAnalysisEngine as any).analyser = {
+//
+// Poked on the ANALYSIS half, not the facade. `AudioAnalysisEngine` is pure
+// delegation since ADR-0110 — the analyser, the read buffer and the AGC state
+// all live on `AudioAnalysis`, and stubbing the facade would write to a dead
+// object while the real one stayed empty (which is exactly what it did).
+// Reaching for `.analysis` keeps this a white-box harness over the half that
+// the worklet migration will replace wholesale.
+const analysis = (audioAnalysisEngine as any).analysis;
+analysis.analyser = {
   fftSize: FFT,
   frequencyBinCount: BINS,
   getFloatFrequencyData: () => { /* buf is pre-filled */ },
 };
-(audioAnalysisEngine as any).dataArray = buf;
-(audioAnalysisEngine as any).desiredFftSize = FFT;
+analysis.dataArray = buf;
+analysis.desiredFftSize = FFT;
 
 const DB_FLOOR = -90;
 const DB_CEIL = -10;
@@ -51,8 +59,8 @@ const setBand = (level: number, upTo = 128) => {
 };
 
 const resetAgc = () => {
-  (audioAnalysisEngine as any).agcPeak = 0;
-  (audioAnalysisEngine as any).agcGain = 1;
+  analysis.agcPeak = 0;
+  analysis.agcGain = 1;
 };
 
 // ── AGC ─────────────────────────────────────────────────────────────────────
