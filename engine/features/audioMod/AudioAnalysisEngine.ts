@@ -9,6 +9,17 @@
  *   capture is connected to BOTH analyser and destination so the user
  *   hears it. Loading a track also disables an active mic; connecting
  *   the mic only PAUSES decks (asymmetric).
+ * @invariant Live capture requests `echoCancellation`, `noiseSuppression`
+ *   and `autoGainControl` explicitly OFF. Chrome/Edge default all three
+ *   ON for `getUserMedia({audio: true})`; on a line feed from a mixer
+ *   they duck the signal, notch the spectrum and pump the levels, which
+ *   is indistinguishable from "the audio modulation is broken". Never
+ *   fall back to a bare `{audio: true}`.
+ * @invariant `inputGain` sits between the live source and the analyser —
+ *   NOT on `masterGain`. masterGain feeds `destination`, so boosting a
+ *   quiet line-in there would also boost monitoring volume; and the mic
+ *   deliberately bypasses masterGain, so it had no gain stage at all
+ *   before this node existed.
  * @invariant `getTrackInfo().duration` returns 0 (NOT 1) when metadata
  *   has not yet loaded. The `|| 1` fallback used to lock AudioStrip
  *   clips to 1-second slices; do not reintroduce it.
@@ -63,14 +74,37 @@ export class AudioAnalysisEngine {
     
     // Inputs
     private micSource: MediaStreamAudioSourceNode | null = null;
+    private micStream: MediaStream | null = null;
     private decks: [Deck | null, Deck | null] = [null, null];
     private masterGain: GainNode | null = null;
+    /** Live-capture trim, analyser-side only. @see the class @invariant. */
+    private inputGain: GainNode | null = null;
 
     private dataArray: Uint8Array<ArrayBuffer> | null = null;
-    
+
     // State
     public isMicActive: boolean = false;
     public crossfade: number = 0.5; // 0.0 = A, 1.0 = B
+    /** Which live input is running, for the panel's readout. */
+    public inputKind: 'none' | 'mic' | 'system' = 'none';
+    /** `deviceId` of the running capture device, so the picker can show it
+     *  selected and a reconnect can target the same hardware. */
+    public inputDeviceId: string | null = null;
+    public inputDeviceLabel: string | null = null;
+
+    /** Constraints for every live capture. The three processors are OFF by
+     *  contract — see the class @invariant. `channelCount: 1` because the
+     *  analyser sums to mono anyway and asking for 1 avoids a needless
+     *  downmix on multi-channel interfaces. */
+    private captureConstraints(deviceId?: string | null): MediaTrackConstraints {
+        return {
+            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            channelCount: 1,
+        };
+    }
 
     public init() {
         if (this.audioContext) return;
@@ -80,13 +114,20 @@ export class AudioAnalysisEngine {
         this.masterGain.connect(this.audioContext.destination);
         
         this.analyser = this.audioContext.createAnalyser();
-        this.analyser.fftSize = 2048; 
+        this.analyser.fftSize = 2048;
         this.analyser.smoothingTimeConstant = 0.8; // Default smoothing
         this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-        
+
+        // Live-capture trim → analyser. Decks reach the analyser via masterGain
+        // (which also feeds destination); live sources route through here
+        // instead so a quiet line-in can be boosted without raising monitoring.
+        this.inputGain = this.audioContext.createGain();
+        this.inputGain.gain.value = 1.0;
+        this.inputGain.connect(this.analyser);
+
         // Connect Master to Analyser
         this.masterGain.connect(this.analyser);
-        
+
         // Initialize Decks
         this.decks[0] = new Deck(this.audioContext);
         this.decks[1] = new Deck(this.audioContext);
@@ -102,52 +143,140 @@ export class AudioAnalysisEngine {
         }
     }
 
-    public async connectMicrophone() {
-        this.init();
-        if (!this.audioContext || !this.masterGain) return;
-        
-        // Stop Decks
-        this.decks.forEach(d => d?.pause());
+    /** Tear down the running live capture — graph node AND the underlying
+     *  device tracks. Stopping the tracks is what releases the hardware and
+     *  clears the browser's recording indicator; without it, switching devices
+     *  leaves the old one held open. */
+    private releaseLiveInput() {
+        if (this.micSource) { this.micSource.disconnect(); this.micSource = null; }
+        if (this.micStream) {
+            this.micStream.getTracks().forEach(t => t.stop());
+            this.micStream = null;
+        }
+        this.isMicActive = false;
+        this.inputKind = 'none';
+    }
 
+    /**
+     * Audio input devices, for the panel's picker.
+     *
+     * Labels are empty strings until the origin holds mic permission — a
+     * browser privacy rule, not a bug. Callers that need names should connect
+     * once (or call this again after a successful `connectMicrophone`) rather
+     * than trying to work around it.
+     */
+    public async listInputDevices(): Promise<MediaDeviceInfo[]> {
+        if (!navigator.mediaDevices?.enumerateDevices) return [];
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            
-            if (this.micSource) this.micSource.disconnect();
-            
-            this.micSource = this.audioContext.createMediaStreamSource(stream);
-            // Mic goes directly to analyzer, bypassing master gain (avoid feedback loop if speakers on)
-            // Or connect to masterGain but mute local output? 
-            // Better: Mic -> Analyser. NOT to Destination.
-            this.micSource.connect(this.analyser!);
-            
-            this.isMicActive = true;
-            if (this.audioContext.state === 'suspended') this.audioContext.resume();
+            const all = await navigator.mediaDevices.enumerateDevices();
+            return all.filter(d => d.kind === 'audioinput');
         } catch (e) {
-            console.error("AudioEngine: Mic access denied", e);
-            alert("Microphone access denied.");
+            console.warn('AudioEngine: device enumeration failed', e);
+            return [];
         }
     }
 
-    public async connectSystemAudio() {
+    /** Fires whenever the live input changes (connect / disconnect / device
+     *  switch) so the panel can refresh without polling. */
+    private inputListeners = new Set<() => void>();
+    public onInputChange(fn: () => void): () => void {
+        this.inputListeners.add(fn);
+        return () => { this.inputListeners.delete(fn); };
+    }
+    private emitInputChange() { this.inputListeners.forEach(fn => fn()); }
+
+    /**
+     * Connect a hardware input. `deviceId` targets a specific device (an
+     * audio-interface line-in at a gig); omit it for the system default.
+     *
+     * Returns true on success. On failure the previous input is already
+     * released — a failed switch leaves NO input rather than silently
+     * continuing on the old device, which would misreport what is running.
+     */
+    public async connectMicrophone(deviceId?: string | null): Promise<boolean> {
+        this.init();
+        if (!this.audioContext || !this.masterGain) return false;
+
+        // Stop Decks
+        this.decks.forEach(d => d?.pause());
+        this.releaseLiveInput();
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: this.captureConstraints(deviceId),
+            });
+
+            this.micStream = stream;
+            this.micSource = this.audioContext.createMediaStreamSource(stream);
+            // Mic → inputGain → analyser. NOT to destination: monitoring a room
+            // mic through the same speakers it hears is a feedback loop.
+            this.micSource.connect(this.inputGain!);
+
+            const track = stream.getAudioTracks()[0];
+            this.inputDeviceId = track?.getSettings().deviceId ?? deviceId ?? null;
+            this.inputDeviceLabel = track?.label || null;
+            this.isMicActive = true;
+            this.inputKind = 'mic';
+            if (this.audioContext.state === 'suspended') this.audioContext.resume();
+            this.emitInputChange();
+            return true;
+        } catch (e) {
+            console.error('AudioEngine: mic access failed', e);
+            this.emitInputChange();
+            return false;
+        }
+    }
+
+    public async connectSystemAudio(): Promise<boolean> {
         // Similar to Mic, but typically want to hear it too.
         this.init();
-        if (!this.audioContext) return;
+        if (!this.audioContext) return false;
         try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: true,
+                // Same processor-off contract as the mic path: a shared tab's
+                // music must reach the FFT unprocessed.
+                audio: this.captureConstraints(),
+            });
             stream.getVideoTracks().forEach(track => track.stop());
-            
-            if (stream.getAudioTracks().length === 0) return;
 
-            if (this.micSource) this.micSource.disconnect();
+            if (stream.getAudioTracks().length === 0) {
+                stream.getTracks().forEach(t => t.stop());
+                console.warn('AudioEngine: share dialog returned no audio track — "Share system audio" was left unchecked');
+                return false;
+            }
+
+            this.releaseLiveInput();
+            this.micStream = stream;
             this.micSource = this.audioContext.createMediaStreamSource(stream);
-            this.micSource.connect(this.analyser!); // Visualize
+            this.micSource.connect(this.inputGain!);              // Visualize
             this.micSource.connect(this.audioContext.destination); // Listen
-            
+
+            this.inputDeviceId = null;
+            this.inputDeviceLabel = stream.getAudioTracks()[0]?.label || 'System audio';
             this.isMicActive = true;
+            this.inputKind = 'system';
             if (this.audioContext.state === 'suspended') this.audioContext.resume();
+            this.emitInputChange();
+            return true;
         } catch (e) {
-            console.error("AudioEngine: System audio capture failed", e);
-            alert("System audio capture failed. Check browser permissions.");
+            console.error('AudioEngine: system audio capture failed', e);
+            this.emitInputChange();
+            return false;
+        }
+    }
+
+    /** Disconnect the live input and release the device. */
+    public disconnectLiveInput() {
+        this.releaseLiveInput();
+        this.inputDeviceLabel = null;
+        this.emitInputChange();
+    }
+
+    /** Live-capture trim (analyser-side only — never affects monitoring). */
+    public setInputGain(val: number) {
+        if (this.inputGain && this.audioContext) {
+            this.inputGain.gain.setTargetAtTime(val, this.audioContext.currentTime, 0.05);
         }
     }
     
@@ -155,11 +284,11 @@ export class AudioAnalysisEngine {
         this.init();
         if (!this.audioContext || !this.masterGain) return;
         
-        // Disable Mic
+        // Disable live input — a deck and a mic on the same analyser would sum.
         if (this.micSource) {
-            this.micSource.disconnect();
-            this.micSource = null;
-            this.isMicActive = false;
+            this.releaseLiveInput();
+            this.inputDeviceLabel = null;
+            this.emitInputChange();
         }
 
         this.decks[deckIndex]?.load(file, this.audioContext, this.masterGain);
@@ -251,6 +380,28 @@ export class AudioAnalysisEngine {
 
     public getRawData() {
         return this.dataArray;
+    }
+
+    /**
+     * Device sample rate. The FFT's bins span 0..sampleRate/2, so this is what
+     * turns a normalised bin position into real Hz — see `binNormToHz` in
+     * `freqScale.ts`. Returns 48000 before `init()`: the common default, and
+     * only used to label a spectrum that isn't running yet.
+     */
+    public get sampleRate(): number {
+        return this.audioContext?.sampleRate ?? 48000;
+    }
+
+    /** Loudest bin this frame, 0..1. Drives the panel's level/clip meter —
+     *  the one readout that tells you at a glance whether the input is too
+     *  quiet to gate or hot enough to pin. */
+    public getPeakLevel(): number {
+        if (!this.dataArray) return 0;
+        let peak = 0;
+        for (let i = 0; i < this.dataArray.length; i++) {
+            if (this.dataArray[i] > peak) peak = this.dataArray[i];
+        }
+        return peak / 255;
     }
 }
 

@@ -20,6 +20,7 @@ export interface AudioState {
     highPass: number;
     lowPass: number;
     gain: number;
+    inputGain: number;
 }
 
 // AudioActions removed - link management is now in ModulationActions
@@ -56,6 +57,11 @@ export const AudioFeature: FeatureDefinition = {
         decay: { type: 'float', default: 0.3, label: 'Global Decay', shortId: 'gd', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
         highPass: { type: 'float', default: 20, label: 'High Pass', shortId: 'hp', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
         lowPass: { type: 'float', default: 20000, label: 'Low Pass', shortId: 'lp', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
-        gain: { type: 'float', default: 0.8, label: 'Volume', shortId: 'vl', group: 'system', noAccumReset: true, preserveOnApply: true, min: 0, max: 2, step: 0.01 }
+        gain: { type: 'float', default: 0.8, label: 'Volume', shortId: 'vl', group: 'system', noAccumReset: true, preserveOnApply: true, min: 0, max: 2, step: 0.01 },
+        // Trim on the LIVE capture only (mic / line-in / system audio), applied
+        // before the analyser. Distinct from `gain` above, which is monitoring
+        // volume on the deck path: a room mic or a quiet line feed needs to be
+        // boosted INTO the FFT without anything getting louder in the room.
+        inputGain: { type: 'float', default: 1.0, label: 'Input Trim', shortId: 'ig', group: 'system', noAccumReset: true, preserveOnApply: true, min: 0, max: 8, step: 0.05 }
     },
 };

@@ -126,6 +126,173 @@ const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: s
     );
 };
 
+// --- LIVE INPUT (mic / line-in / system audio) ---
+// Split out of AudioPanel because it owns real device state: which input is
+// running, what the browser will let us name it, and the trim + level readout
+// that tell a performer whether the signal is usable BEFORE they trust it.
+const LiveInputControls: React.FC = () => {
+    const { audio, setAudio } = useEngineStore();
+    const inputGain = audio?.inputGain ?? 1;
+
+    const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+    const [running, setRunning] = useState(() => ({
+        kind: audioAnalysisEngine.inputKind,
+        deviceId: audioAnalysisEngine.inputDeviceId,
+        label: audioAnalysisEngine.inputDeviceLabel,
+    }));
+    const [error, setError] = useState<string | null>(null);
+    const [peak, setPeak] = useState(0);
+
+    const refreshDevices = () => { audioAnalysisEngine.listInputDevices().then(setDevices); };
+
+    // Device list + running-input mirror. `devicechange` fires when an
+    // interface is plugged in mid-set, which is exactly when the list is
+    // stale and the user is in a hurry.
+    useEffect(() => {
+        refreshDevices();
+        const sync = () => setRunning({
+            kind: audioAnalysisEngine.inputKind,
+            deviceId: audioAnalysisEngine.inputDeviceId,
+            label: audioAnalysisEngine.inputDeviceLabel,
+        });
+        const offInput = audioAnalysisEngine.onInputChange(() => { sync(); refreshDevices(); });
+        const md = navigator.mediaDevices;
+        md?.addEventListener?.('devicechange', refreshDevices);
+        return () => {
+            offInput();
+            md?.removeEventListener?.('devicechange', refreshDevices);
+        };
+    }, []);
+
+    // Level meter. Only while a live input is running — a deck-only session
+    // has nothing to trim, and an idle rAF at 20 Hz is still an idle rAF.
+    const isLive = running.kind !== 'none';
+    useEffect(() => {
+        if (!isLive || !audio?.isEnabled) { setPeak(0); return; }
+        let raf = 0;
+        let last = 0;
+        const loop = (t: number) => {
+            raf = requestAnimationFrame(loop);
+            if (t - last < 50) return;   // 20 Hz is plenty for a meter
+            last = t;
+            setPeak(audioAnalysisEngine.getPeakLevel());
+        };
+        raf = requestAnimationFrame(loop);
+        return () => cancelAnimationFrame(raf);
+    }, [isLive, audio?.isEnabled]);
+
+    const connect = async (deviceId?: string | null) => {
+        setError(null);
+        const ok = await audioAnalysisEngine.connectMicrophone(deviceId);
+        if (!ok) setError('Could not open that input — check the browser mic permission.');
+        else refreshDevices();  // labels populate once permission is granted
+    };
+
+    const connectSystem = async () => {
+        setError(null);
+        const ok = await audioAnalysisEngine.connectSystemAudio();
+        if (!ok) setError('No audio track shared — tick "Share system audio" in the dialog.');
+    };
+
+    const handleTrim = (v: number) => {
+        setAudio({ inputGain: v });
+        audioAnalysisEngine.setInputGain(v);
+    };
+
+    // Clip warning at 0.98: the FFT is 8-bit, so a pinned bin has already lost
+    // the transient shape the envelope follower keys off.
+    const hot = peak > 0.98;
+    const quiet = isLive && peak > 0 && peak < 0.15;
+
+    return (
+        <div className="mb-2" data-help-id="audio.sources">
+            <div className="flex gap-1 mb-1">
+                <button
+                    onClick={() => connect(running.deviceId)}
+                    className={`flex-1 py-1.5 text-[9px] font-bold rounded border transition-all ${
+                        running.kind === 'mic'
+                            ? 'bg-ok/15 border-ok/30 text-ok'
+                            : 'bg-surface-header hover:bg-line/10 border-line/5 text-fg-muted hover:text-fg'
+                    }`}
+                >
+                    {running.kind === 'mic' ? 'Live Input ●' : 'Mic / Line In'}
+                </button>
+                <button
+                    onClick={connectSystem}
+                    className={`flex-1 py-1.5 text-[9px] font-bold rounded border transition-all ${
+                        running.kind === 'system'
+                            ? 'bg-ok/15 border-ok/30 text-ok'
+                            : 'bg-surface-header hover:bg-line/10 border-line/5 text-fg-muted hover:text-fg'
+                    }`}
+                >
+                    {running.kind === 'system' ? 'System ●' : 'System Audio'}
+                </button>
+                {isLive && (
+                    <button
+                        onClick={() => audioAnalysisEngine.disconnectLiveInput()}
+                        className="px-2 py-1.5 text-[9px] font-bold rounded border border-line/5 bg-surface-header text-fg-dim hover:text-danger transition-all"
+                        title="Release the input device"
+                    >
+                        Stop
+                    </button>
+                )}
+            </div>
+
+            {/* Device picker. Labels are blank until the origin holds mic
+                permission, so an unconnected first run shows "Input 1, 2…". */}
+            {devices.length > 0 && (
+                <select
+                    value={running.kind === 'mic' ? (running.deviceId ?? '') : ''}
+                    onChange={(e) => connect(e.target.value || null)}
+                    className="t-select w-full text-[9px] mb-1"
+                    title="Which hardware input to analyse"
+                >
+                    <option value="">System default input</option>
+                    {devices.map((d, i) => (
+                        <option key={d.deviceId || i} value={d.deviceId}>
+                            {d.label || `Input ${i + 1}`}
+                        </option>
+                    ))}
+                </select>
+            )}
+
+            {/* Trim + level. The meter is the point: it answers "is this signal
+                strong enough to gate on?" without guessing from the spectrum. */}
+            {isLive && (
+                <div className="flex items-center gap-2">
+                    <Slider
+                        label="Input Trim"
+                        value={inputGain}
+                        min={0} max={8} step={0.05}
+                        onChange={handleTrim}
+                        className="flex-1"
+                    />
+                    <div
+                        className="w-14 h-2 bg-line/10 rounded overflow-hidden shrink-0"
+                        title={`Input level ${Math.round(peak * 100)}%`}
+                    >
+                        <div
+                            className={`h-full origin-left transition-transform duration-75 ${
+                                hot ? 'bg-danger' : quiet ? 'bg-warn' : 'bg-ok'
+                            }`}
+                            style={{ transform: `scaleX(${peak})` }}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {(error || hot || quiet) && (
+                <div className={`text-[8px] mt-1 leading-snug ${error || hot ? 'text-danger' : 'text-warn'}`}>
+                    {error
+                        ?? (hot
+                            ? 'Input is clipping — lower the trim (or the desk send) so peaks stop pinning.'
+                            : 'Input is very quiet — raise the trim until peaks reach most of the meter.')}
+                </div>
+            )}
+        </div>
+    );
+};
+
 // --- COLLAPSED MODULATION LIST COMPONENT ---
 const AudioModulationList: React.FC = () => {
     const store = useEngineStore();
@@ -259,9 +426,12 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
         audioAnalysisEngine.setMasterGain(v);
     };
 
-    // Initialize engine with current gain on mount
+    // Push the store's persisted levels into the WebAudio graph on mount. The
+    // graph is a module singleton that outlives any panel, but a scene load can
+    // change these values while the panel is closed, so re-assert on open.
     useEffect(() => {
         audioAnalysisEngine.setMasterGain(gain ?? 0.8);
+        audioAnalysisEngine.setInputGain(audio?.inputGain ?? 1);
     }, []);
 
     return (
@@ -294,14 +464,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
                  </div>
 
                  {/* Live Inputs */}
-                 <div className="flex gap-1 mb-2" data-help-id="audio.sources">
-                     <button onClick={() => audioAnalysisEngine.connectMicrophone()} className="flex-1 py-1.5 bg-surface-header hover:bg-line/10 text-[9px] font-bold text-fg-muted hover:text-fg rounded border border-line/5 transition-all">
-                         Microphone
-                     </button>
-                     <button onClick={() => audioAnalysisEngine.connectSystemAudio()} className="flex-1 py-1.5 bg-surface-header hover:bg-line/10 text-[9px] font-bold text-fg-muted hover:text-fg rounded border border-line/5 transition-all">
-                         System Audio
-                     </button>
-                 </div>
+                 <LiveInputControls />
 
                  {/* Decks */}
                  <div className="flex flex-col gap-1">
