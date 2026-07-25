@@ -263,18 +263,18 @@ console.log('\n[8] the result stays within what the slider itself can reach');
 
 console.log('\n[9] every applier composes identically');
 {
-  // Four separate code paths add an offset to a base: the tick, the DDFS
-  // auto-setter's double-writer guard, and TWO export dispatchers. When the tick
-  // and the setter disagreed the uniform alternated between their two answers —
-  // the modulated-slider flicker. When the tick and the export path disagree,
-  // a render doesn't match the preview. All four now call composeModulatedValue,
-  // so this asserts the call sites exist rather than re-deriving the maths.
+  // The compose has exactly TWO call sites now (ADR-0109 collapsed the three
+  // dispatchers into one):
+  //   - applyTarget.ts     — the shared dispatcher the tick AND export run
+  //   - createFeatureSlice — the DDFS auto-setter's double-writer guard
+  // When the tick and the setter disagreed the uniform alternated between their
+  // two answers — the modulated-slider flicker — so the setter genuinely is a
+  // second site and must stay in step. Asserts the call sites exist rather than
+  // re-deriving the maths; test-modulation-parity covers the dispatcher itself.
   const fs = await import('node:fs/promises');
   const appliers = [
-    'engine/animation/AnimationSystem.tsx',
+    'engine/features/modulation/applyTarget.ts',
     'store/createFeatureSlice.ts',
-    'components/timeline/exportModulations.ts',
-    'engine-gmt/components/timeline/exportModulations.ts',
   ];
   const missing: string[] = [];
   const rawAdds: string[] = [];

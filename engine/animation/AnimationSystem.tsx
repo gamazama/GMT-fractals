@@ -25,7 +25,6 @@
  */
 
 import React from 'react';
-import * as THREE from 'three';
 import { animationEngine } from '../AnimationEngine';
 import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
@@ -64,11 +63,9 @@ import { audioAnalysisEngine } from '../features/audioMod/AudioAnalysisEngine';
 import { syncAudioClips } from './audioClipSync';
 import { modulationEngine } from '../features/modulation/ModulationEngine';
 import { classifyModulationTarget } from '../features/modulation/targetRouting';
-import { composeModulatedValue } from '../features/modulation/paramMapping';
+import { planModulationTarget, flushModulationComposites, newCompositeAccumulator } from '../features/modulation/applyTarget';
 import { AudioState } from '../features/audioMod';
 import { ModulationState } from '../features/modulation';
-// ColoringState was a fractal feature; treat as opaque here.
-type ColoringState = Record<string, any>;
 import { evaluateTrackValue } from '../../utils/timelineUtils';
 
 // Global refs for animation system state
@@ -78,7 +75,6 @@ const activeTargetsRef = { current: new Set<string>() };
 // offset is merely non-zero (a constant or slow LFO otherwise reset every
 // frame, so the path tracer never converged).
 const prevOffsets = { current: {} as Record<string, number> };
-const juliaScratch = new THREE.Vector3();
 const lastFrameRecorded = { current: -1 };
 const initialStaticValues = { current: {} as Record<string, number> };
 // Tracks isRecordingModulation across ticks so the per-tick driver
@@ -234,13 +230,7 @@ export const tick = (delta: number) => {
     currentTargets.forEach(t => allTargetsToProcess.add(t));
     prevTargets.forEach(t => allTargetsToProcess.add(t));
     
-    let juliaX = 0, juliaY = 0, juliaZ = 0;
-    let juliaDirty = false;
-
-    // Per-vec uniform scratch: baseUniform → the composed vector. Filled by the
-    // vec branch (one entry per modulated axis), flushed once after the loop so
-    // multi-axis modulation of a single vec composes instead of racing.
-    const vecEmits = new Map<string, unknown>();
+    const composites = newCompositeAccumulator();
 
     // Track if anything visual actually changed to reset accumulation
     let hasVisualChange = false;
@@ -274,280 +264,41 @@ export const tick = (delta: number) => {
         // frame's offsets against the previous frame's (delta-based), not here
         // per-target against zero.
 
-        // Base value, uniform name and BRANCH, all from the one pure resolver
-        // that `debug/test-modulation-coverage.mts` also calls. The branch
-        // predicates below read `routing.branch` rather than re-testing the
-        // prefixes, so the coverage gate can never grade a routing this loop
-        // doesn't actually take.
         const routing = classifyModulationTarget(targetKey, storeState as unknown as Record<string, unknown>);
-        let resolvedBase = routing.base;
-        const uniformName = routing.uniform ?? '';
-        const isNoReset = routing.noAccumReset;
-        // Tracks whether the target resolved to a known DDFS param
-        // (vec axis or scalar). Targets that don't resolve are still
-        // processed by GMT's special-case branches above; the flag
-        // controls whether the generic scalar fallback at the bottom
-        // writes to liveModulations or skips to avoid polluting the
-        // consumer map with zeros for unrecognized targets.
-        const isDDFSResolved = routing.ddfsResolved;
 
-        // Every `base + offset` in this loop goes through `mod()`. On a linear
-        // target it IS `base + offset`; on a curved one (log/log1p/pow) the
-        // offset is applied as slider TRAVEL so the same rule moves the param
-        // by the same visible amount wherever the base sits. Keeping it a
-        // single local means no site can quietly opt out. ADR-0108.
-        const mod = (b: number) => composeModulatedValue(b, offset, routing.curve);
-
-        // --- RECORDING LOGIC (With Feedback Loop Prevention) ---
-        if (shouldRecord && Math.abs(offset) > 0.000001) {
-            // If recording, we must use the CLEAN base value, not the dirty store value (which has prev recorded mods)
-            let cleanBase = resolvedBase;
-            
-            // 1. Try to get value from Snapshot Sequence (if track existed before recording)
-            const snapshotSeq = animStore.recordingSnapshot;
-            if (snapshotSeq && snapshotSeq.tracks[targetKey]) {
-                const track = snapshotSeq.tracks[targetKey];
-                const isRotation = targetKey.includes('rotation');
-                cleanBase = evaluateTrackValue(track.keyframes, animStore.currentFrame, isRotation);
-            } else {
-                // 2. If no track, use Initial Static Value (captured at start of recording)
-                if (initialStaticValues.current[targetKey] === undefined) {
-                    initialStaticValues.current[targetKey] = resolvedBase;
-                }
-                cleanBase = initialStaticValues.current[targetKey];
-            }
-
-            // Instead of calling addKeyframe immediately, push to batch
-            keysToRecord.push({
-                trackId: targetKey,
-                value: mod(cleanBase)
-            });
-            
-            // Important: We still want to SHOW the modulated value in the UI
-            resolvedBase = cleanBase; 
-        }
-
-        // --- APPLY TO SHADER ---
-
-        // A. Coloring Repeats/Phase Special Case — GMT-specific.
-        //    Scoped to apps that have a `coloring` slice so engine-fork
-        //    apps can register their own `coloring` feature without
-        //    inheriting GMT's uColorScale/uColorOffset bindings.
-        if (routing.branch === 'coloring') {
-            if (targetKey === 'coloring.repeats') {
-                const c = (storeState as any).coloring as ColoringState;
-                if (c && Math.abs(c.repeats) > 0.001) {
-                    const effectiveBase = shouldRecord ? resolvedBase : c.repeats;
-                    const ratio = c.scale / effectiveBase; 
-                    const modulated = mod(effectiveBase);
-                    const finalScale = modulated * ratio;
-                    if (!isRemoved) liveModulations[targetKey] = modulated;
-                    emitUniform('uColorScale', finalScale);
-                }
-                return;
-            }
-            if (targetKey === 'coloring.phase') {
-                const c = (storeState as any).coloring as ColoringState;
-                const effectiveBase = shouldRecord ? resolvedBase : c.phase;
-                if (!isRemoved) liveModulations[targetKey] = mod(effectiveBase);
-                emitUniform('uColorOffset', mod(c.offset));
-                return;
-            }
-            // ... same for repeats2/phase2 ...
-            if (targetKey === 'coloring.repeats2') {
-                const c = (storeState as any).coloring as ColoringState;
-                if (c && Math.abs(c.repeats2) > 0.001) {
-                    const effectiveBase = shouldRecord ? resolvedBase : c.repeats2;
-                    const ratio = c.scale2 / effectiveBase;
-                    const modulated = mod(effectiveBase);
-                    const finalScale = modulated * ratio;
-                    if (!isRemoved) liveModulations[targetKey] = modulated;
-                    emitUniform('uColorScale2', finalScale);
-                }
-                return;
-            }
-            if (targetKey === 'coloring.phase2') {
-                const c = (storeState as any).coloring as ColoringState;
-                const effectiveBase = shouldRecord ? resolvedBase : c.phase2;
-                if (!isRemoved) liveModulations[targetKey] = mod(effectiveBase);
-                emitUniform('uColorOffset2', mod(c.offset2));
-                return;
-            }
-        }
-
-        // B. Julia Vector Composite — GMT-specific (`geometry.juliaX/Y/Z` →
-        //    `uJulia` composite). Scoped to apps that have a `geometry`
-        //    slice. Engine-fork apps that name a feature `julia` (e.g.
-        //    fluid-toy's Julia-set feature) fall through to the generic
-        //    DDFS vec handler below so their targets aren't hijacked.
-        if (routing.branch === 'julia') {
-            const g = (storeState as any).geometry;
-            const baseX = g?.juliaX ?? 0;
-            const baseY = g?.juliaY ?? 0;
-            const baseZ = g?.juliaZ ?? 0;
-
-            if (targetKey.endsWith('juliaX') || targetKey.endsWith('x')) {
-                juliaX = mod(baseX); liveModulations[targetKey] = juliaX;
-                if (shouldRecord) keysToRecord.push({ trackId: 'geometry.juliaX', value: juliaX });
-            } else if (targetKey.endsWith('juliaY') || targetKey.endsWith('y')) {
-                juliaY = mod(baseY); liveModulations[targetKey] = juliaY;
-                if (shouldRecord) keysToRecord.push({ trackId: 'geometry.juliaY', value: juliaY });
-            } else if (targetKey.endsWith('juliaZ') || targetKey.endsWith('z')) {
-                juliaZ = mod(baseZ); liveModulations[targetKey] = juliaZ;
-                if (shouldRecord) keysToRecord.push({ trackId: 'geometry.juliaZ', value: juliaZ });
-            }
-            juliaDirty = true;
-            return;
-        }
-
-        // C. Camera Modulation
-        if (routing.branch === 'camera') {
-            if (targetKey.startsWith('camera.unified')) {
-                if (targetKey.endsWith('x')) { engine.modulations['camera.unified.x'] = offset; }
-                else if (targetKey.endsWith('y')) { engine.modulations['camera.unified.y'] = offset; }
-                else if (targetKey.endsWith('z')) { engine.modulations['camera.unified.z'] = offset; }
-            } else if (targetKey.startsWith('camera.rotation')) {
-                if (targetKey.endsWith('x')) { engine.modulations['camera.rotation.x'] = offset; }
-                else if (targetKey.endsWith('y')) { engine.modulations['camera.rotation.y'] = offset; }
-                else if (targetKey.endsWith('z')) { engine.modulations['camera.rotation.z'] = offset; }
-            }
-            liveModulations[targetKey] = offset; // Just display offset for camera
-            return;
-        }
-
-        // D. Geometry Pre/Post/World Rotation — GMT-specific.
-        //    UniformManager.syncFrame reads engine.modulations to build
-        //    rotation matrices. Scoped to apps that have a `geometry`
-        //    slice; engine-fork apps registering their own `geometry`
-        //    feature take over this namespace.
-        if (routing.branch === 'geometryRotation') {
-            engine.modulations[targetKey] = offset;
-            if (!isRemoved) liveModulations[targetKey] = mod(resolvedBase);
-            return;
-        }
-
-        // E. Lighting Array
-        if (routing.branch === 'lighting') {
-            const match = targetKey.match(/lighting\.light(\d+)_(\w+)/);
-            if (match) {
-                const idx = parseInt(match[1]);
-                const prop = match[2];
-                
-                const lights = (storeState as any).lighting?.lights;
-                if (lights && lights[idx]) {
-                    const l = lights[idx];
-                    let baseVal = 0;
-                    let valid = false;
-
-                    // Must stay in step with LIGHT_PROPS in targetRouting.ts and
-                    // with the `modulations[...]` reads in UniformManager's light
-                    // loop. rotX/Y/Z were read there but never produced here, so
-                    // light-rotation modulation resolved to nothing.
-                    if (prop === 'intensity') { baseVal = l.intensity; valid = true; }
-                    else if (prop === 'falloff') { baseVal = l.falloff; valid = true; }
-                    else if (prop === 'posX') { baseVal = l.position.x; valid = true; }
-                    else if (prop === 'posY') { baseVal = l.position.y; valid = true; }
-                    else if (prop === 'posZ') { baseVal = l.position.z; valid = true; }
-                    else if (prop === 'rotX') { baseVal = l.rotation?.x ?? 0; valid = true; }
-                    else if (prop === 'rotY') { baseVal = l.rotation?.y ?? 0; valid = true; }
-                    else if (prop === 'rotZ') { baseVal = l.rotation?.z ?? 0; valid = true; }
-                    
-                    if (valid) {
-                        if (shouldRecord) {
-                            // Re-implement Clean Base logic for Lights
-                            let cleanBase = baseVal;
-                            if (animStore.recordingSnapshot && animStore.recordingSnapshot.tracks[targetKey]) {
-                                cleanBase = evaluateTrackValue(animStore.recordingSnapshot.tracks[targetKey].keyframes, animStore.currentFrame, false);
-                            } else {
-                                 if (initialStaticValues.current[targetKey] === undefined) initialStaticValues.current[targetKey] = baseVal;
-                                 cleanBase = initialStaticValues.current[targetKey];
-                            }
-                            
-                            // BATCH
-                            keysToRecord.push({ trackId: targetKey, value: mod(cleanBase) });
-                            
-                            // Update live mod for UI
-                            liveModulations[targetKey] = mod(cleanBase);
-                        } else {
-                            liveModulations[targetKey] = mod(baseVal);
-                        }
-                        
-                        engine.modulations[targetKey] = offset; 
+        // The branch chain itself lives in `planModulationTarget` — the SAME
+        // dispatcher the export path runs, so a render cannot silently disagree
+        // with the preview. This loop only executes the plan and adds what is
+        // specific to the live tick: uniform ownership, liveModulations, and
+        // keyframe capture. ADR-0109.
+        const plan = planModulationTarget(
+            targetKey, offset, storeState as unknown as Record<string, any>, routing, composites,
+            {
+                isRemoved,
+                // Recording replaces the store's (already-modulated) base with the
+                // clean pre-recording one, or each frame would compound the last
+                // frame's modulation into the next frame's base.
+                cleanBase: shouldRecord ? (trackId, naturalBase) => {
+                    const snapshotSeq = animStore.recordingSnapshot;
+                    if (snapshotSeq && snapshotSeq.tracks[trackId]) {
+                        return evaluateTrackValue(
+                            snapshotSeq.tracks[trackId].keyframes,
+                            animStore.currentFrame,
+                            trackId.includes('rotation'),
+                        );
                     }
-                }
-            }
-            return;
-        }
-        
-        // F. Vector Params — any feature with vec2/3/4 params (e.g.,
-        //    `coreMath.vec3A_x`, `julia.juliaC_x`). Works for uniform-backed
-        //    DDFS params (GMT) AND uniformless DDFS params (engine-fork
-        //    apps like fluid-toy read liveModulations directly from the
-        //    store). The uniform write is conditional; the liveModulations
-        //    update always happens so React consumers see the modulation.
-        if (routing.branch === 'vecAxis') {
-            const vectorMatch = targetKey.match(/^(\w+)\.([\w]+)_(x|y|z|w)$/)!;
-            const featureId = vectorMatch[1];
-            const paramName = vectorMatch[2];
-            const axis = vectorMatch[3] as 'x' | 'y' | 'z' | 'w';
-
-            const slice = (storeState as any)[featureId];
-            if (slice && slice[paramName] && typeof slice[paramName] === 'object') {
-                const vec = slice[paramName];
-                const baseVal = (vec as any)[axis] ?? 0;
-                const finalVal = mod(baseVal);
-
-                let liveVal = finalVal;
-                if (shouldRecord) {
-                    let cleanBase = baseVal;
-                    if (animStore.recordingSnapshot && animStore.recordingSnapshot.tracks[targetKey]) {
-                        cleanBase = evaluateTrackValue(animStore.recordingSnapshot.tracks[targetKey].keyframes, animStore.currentFrame, false);
-                    } else {
-                        if (initialStaticValues.current[targetKey] === undefined) initialStaticValues.current[targetKey] = baseVal;
-                        cleanBase = initialStaticValues.current[targetKey];
+                    if (initialStaticValues.current[trackId] === undefined) {
+                        initialStaticValues.current[trackId] = naturalBase;
                     }
-                    keysToRecord.push({ trackId: targetKey, value: mod(cleanBase) });
-                    liveVal = mod(cleanBase);
-                }
+                    return initialStaticValues.current[trackId];
+                } : undefined,
+            },
+        );
 
-                if (!isRemoved) liveModulations[targetKey] = liveVal;
-
-                // Uniform write only when the feature declares one.
-                //
-                // ACCUMULATE into a per-vec scratch rather than emitting here.
-                // Each axis is its OWN target, so this branch runs once per
-                // modulated axis; cloning the base vec and emitting per axis
-                // meant the second axis's emit reset the first back to base —
-                // modulating X and Y of one vec silently dropped X. Compose all
-                // axes first, emit once after the loop (same shape as the
-                // juliaDirty composite below).
-                if (uniformName && uniformName.endsWith(`_${axis}`)) {
-                    const baseUniform = uniformName.replace(/_[xyzw]$/, '');
-                    let scratch = vecEmits.get(baseUniform);
-                    if (!scratch) {
-                        scratch = typeof (vec as any).clone === 'function'
-                            ? (vec as any).clone()
-                            : { ...vec };
-                        vecEmits.set(baseUniform, scratch);
-                    }
-                    (scratch as any)[axis] = finalVal;
-                }
-            }
-            return;
-        }
-
-        // Apply Standard — liveModulations for every DDFS scalar;
-        // uniform only if the feature declared one. Skip entirely if
-        // the target isn't a known DDFS param AND has no uniform (it
-        // was a typo, a removed param, or handled by an earlier special
-        // case above).
-        if (uniformName || isDDFSResolved) {
-            const finalScalar = mod(resolvedBase);
-            if (!isRemoved) liveModulations[targetKey] = finalScalar;
-            if (uniformName) {
-                emitUniform(uniformName, finalScalar, isNoReset);
-            }
-        }
+        for (const u of plan.uniforms) emitUniform(u.key, u.value, u.noAccumReset);
+        for (const [k, v] of plan.engineMods) engine.modulations[k] = v;
+        if (plan.live !== undefined) liveModulations[targetKey] = plan.live;
+        for (const r of plan.records) keysToRecord.push(r);
     });
 
     // --- BUFFER & THROTTLED FLUSH ---
@@ -567,20 +318,10 @@ export const tick = (delta: number) => {
         }
     }
 
-    // Flush composed vec uniforms — one emit per vec, all modulated axes applied.
-    if (vecEmits.size > 0) {
-        vecEmits.forEach((composed, baseUniform) => emitUniform(baseUniform, composed));
-    }
-
-    // Apply Julia Composite
-    if (juliaDirty) {
-         const geom = (storeState as any).geometry;
-         if (liveModulations['geometry.juliaX'] === undefined && liveModulations['julia.x'] === undefined) juliaX = geom?.juliaX ?? 0;
-         if (liveModulations['geometry.juliaY'] === undefined && liveModulations['julia.y'] === undefined) juliaY = geom?.juliaY ?? 0;
-         if (liveModulations['geometry.juliaZ'] === undefined && liveModulations['julia.z'] === undefined) juliaZ = geom?.juliaZ ?? 0;
-         
-         juliaScratch.set(juliaX, juliaY, juliaZ);
-         emitUniform('uJulia', juliaScratch);
+    // Composites (vec axes, julia) can only be emitted once every target has
+    // been planned — see flushModulationComposites.
+    for (const u of flushModulationComposites(composites, storeState as unknown as Record<string, any>)) {
+        emitUniform(u.key, u.value, u.noAccumReset);
     }
 
     // Reset accumulation only when the modulation OUTPUT actually changed
