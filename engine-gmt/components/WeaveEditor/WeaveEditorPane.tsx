@@ -1231,9 +1231,14 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                             onClickCapture={(e) => { if (suppressClick.current) { suppressClick.current = false; e.preventDefault(); e.stopPropagation(); } }}
                             title="Drag to reorder"
                         >
-                            <button onClick={() => setExpandedKey(isExpanded ? null : r.key)}
-                                className="shrink-0 w-3 flex items-center justify-center text-fg-tertiary hover:text-fg transition-colors"
-                                title="Parameters and per-layer timing"><CaretRight className={`w-2 h-2 transition-transform ${isExpanded ? 'rotate-90' : ''}`} /></button>
+                            {/* Expand chevron → the per-formula parameters section (fixed/live
+                                bake state, MB3D option values). An advanced concept, so it shows
+                                only in advanced mode; casual users edit params via the panel sliders. */}
+                            {store.advancedMode && (
+                                <button onClick={() => setExpandedKey(isExpanded ? null : r.key)}
+                                    className="shrink-0 w-3 flex items-center justify-center text-fg-tertiary hover:text-fg transition-colors"
+                                    title="Parameters and per-layer timing"><CaretRight className={`w-2 h-2 transition-transform ${isExpanded ? 'rotate-90' : ''}`} /></button>
+                            )}
                             <button onClick={(e) => openPicker(e, r.key)}
                                 className="flex-1 min-w-0 text-left text-xs text-fg truncate underline underline-offset-[3px] decoration-line/40 hover:text-accent-300 hover:decoration-accent-300/50 transition-colors"
                                 title={`Change formula (${r.label})`}>
@@ -1293,7 +1298,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                         </div>
                     </div>
                     </div>
-                    {isExpanded && (
+                    {isExpanded && store.advancedMode && (
                         <div className="relative bg-line/[0.06] pl-9 pr-2 py-1.5">
                             {/* The parent row's color line continues down through the
                                 expansion — the visual anchor for the indent (dimmed so
