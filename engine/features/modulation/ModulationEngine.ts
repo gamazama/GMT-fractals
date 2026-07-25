@@ -282,7 +282,7 @@ class ModulationEngine {
         let raw: number;
         if (rule.mode === 'transient') {
             // SuperFlux, computed per BAND inside the bank and averaged over
-            // this rule's range — see FilterBank.superflux. The max-filter
+            // this rule's range — see FilterBank.computeFluxRate. The max-filter
             // along frequency is what stops a drifting or vibrato'd tone
             // reading as a continuous onset, which plain flux could not
             // distinguish from a real hit.
@@ -294,8 +294,11 @@ class ModulationEngine {
             // every rule differences the same pair of frames and switching a
             // rule into transient mode mid-set cannot spike off a stale value
             // it was never updating.
-            const dt = Math.max(1e-4, delta);
-            const rate = filterBank.superflux(bandLo, bandHi) / dt;
+            // The rate division moved INTO the bank (`computeFluxRate`), so
+            // both producers — the main-thread path and the worklet — emit the
+            // same per-second units and this constant is unaffected by which
+            // one is running.
+            const rate = filterBank.aggregateFlux(bandLo, bandHi);
             raw = Math.min(1, rate / ModulationEngine.TRANSIENT_FULL_SCALE);
         } else {
             raw = level;

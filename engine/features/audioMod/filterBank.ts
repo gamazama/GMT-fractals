@@ -125,6 +125,15 @@ export class FilterBank {
     public levels: Float32Array = new Float32Array(0);
     /** Levels after per-band adaptive gain (identical to `levels` when off). */
     public normalized: Float32Array = new Float32Array(0);
+    /**
+     * Positive SuperFlux per band, in level-units PER SECOND.
+     *
+     * Filled by `analyse()` on the main-thread path, or written wholesale by
+     * the worklet path — which is the point of storing it per band rather than
+     * computing it inside the rule query. Both producers use the same units, so
+     * `TRANSIENT_FULL_SCALE` is unchanged by the switch.
+     */
+    public fluxRate: Float32Array = new Float32Array(0);
     private peaks: Float32Array = new Float32Array(0);
     /** Previous frame's normalised levels — the SuperFlux reference. Owned
      *  here rather than per-rule so every rule differences the same pair of
@@ -175,6 +184,7 @@ export class FilterBank {
 
         this.bands = bands;
         this.levels = new Float32Array(bands.length);
+        this.fluxRate = new Float32Array(bands.length);
         this.normalized = new Float32Array(bands.length);
         // Adaptive-gain state is NOT carried across a rebuild: band k means a
         // different frequency at a different bandsPerOctave, so stale state
@@ -267,7 +277,7 @@ export class FilterBank {
         }
 
         // Snapshot the frame the RULES last saw, before overwriting
-        // `normalized`. `superflux` differences the new frame against this, so
+        // `normalized`. `computeFluxRate` differences the new frame against this, so
         // it has to be the previous frame's OUTPUT (post-normalisation), not
         // the raw levels — otherwise the adaptive gain's own movement would
         // read as onset energy.
@@ -288,6 +298,11 @@ export class FilterBank {
         } else {
             this.applyPeakFollower(deltaSec);
         }
+
+        // Per-band flux, stored rather than computed per rule query — so the
+        // worklet path can write the same slot instead of duplicating the rule
+        // aggregation. @see docs/adr/0110-audio-analysis-in-a-worklet.md
+        this.computeFluxRate(deltaSec);
 
         this.framesAnalysed++;
     }
@@ -354,14 +369,13 @@ export class FilterBank {
      * different numbers of bands, and a sum would make a wide rule read
      * stronger than a narrow one on identical material.
      */
-    public superflux(bandLo: number, bandHi: number, width = SUPERFLUX_WIDTH): number {
+    private computeFluxRate(deltaSec: number, width = SUPERFLUX_WIDTH): void {
         const n = this.bands.length;
-        const lo = Math.max(0, bandLo);
-        const hi = Math.min(n, bandHi);
-        if (hi <= lo || !this.hasPrevFrame) return 0;
+        const flux = this.fluxRate;
+        if (!this.hasPrevFrame) { flux.fill(0); return; }
         const half = Math.max(1, Math.floor(width / 2));
-        let sum = 0;
-        for (let k = lo; k < hi; k++) {
+        const dt = Math.max(1e-4, deltaSec);
+        for (let k = 0; k < n; k++) {
             let prevMax = 0;
             const from = Math.max(0, k - half);
             const to = Math.min(n - 1, k + half);
@@ -369,8 +383,19 @@ export class FilterBank {
                 if (this.prev[j] > prevMax) prevMax = this.prev[j];
             }
             const d = this.normalized[k] - prevMax;
-            if (d > 0) sum += d;
+            flux[k] = d > 0 ? d / dt : 0;
         }
+    }
+
+    /** Mean flux rate over a band range, in level-units per second. The one
+     *  number a transient-mode rule reads. */
+    public aggregateFlux(bandLo: number, bandHi: number): number {
+        const n = this.bands.length;
+        const lo = Math.max(0, bandLo);
+        const hi = Math.min(n, bandHi);
+        if (hi <= lo) return 0;
+        let sum = 0;
+        for (let k = lo; k < hi; k++) sum += this.fluxRate[k];
         return sum / (hi - lo);
     }
 

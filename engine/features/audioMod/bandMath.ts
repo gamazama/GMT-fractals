@@ -206,5 +206,5 @@ export function buildTilt(bands: Band[], slopeDbPerOct: number): Float32Array {
     return out;
 }
 
-/** Max-filter width in BANDS for SuperFlux — see `FilterBank.superflux`. */
+/** Max-filter width in BANDS for SuperFlux — see `FilterBank.computeFluxRate`. */
 export const SUPERFLUX_WIDTH = 3;

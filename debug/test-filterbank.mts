@@ -366,8 +366,8 @@ console.log('\n[11b] SuperFlux: real onsets survive, drifting tones do not');
   const steady = mk(FFT, 6);
   const [lo, hi] = steady.bandRangeForHz(400, 3000);
   for (let i = 0; i < 20; i++) runFrame(steady, tone(1000, 0.7), false);
-  assert(steady.superflux(lo, hi) < 1e-6,
-    'a sustained tone yields no onset energy', steady.superflux(lo, hi));
+  assert(steady.aggregateFlux(lo, hi) < 1e-6,
+    'a sustained tone yields no onset energy', steady.aggregateFlux(lo, hi));
 
   // A GENUINE onset: something appears where nothing was loud nearby.
   const onset = mk(FFT, 6);
@@ -378,7 +378,7 @@ console.log('\n[11b] SuperFlux: real onsets survive, drifting tones do not');
     if (second[i] > twoTones[i]) twoTones[i] = second[i];
   }
   runFrame(onset, twoTones, false);
-  const onsetFlux = onset.superflux(lo, hi);
+  const onsetFlux = onset.aggregateFlux(lo, hi);
   assert(onsetFlux > 0.001, 'a new tone registers as an onset', onsetFlux);
 
   // A DRIFTING tone — the false positive plain flux fires on. Same energy,
@@ -389,7 +389,7 @@ console.log('\n[11b] SuperFlux: real onsets survive, drifting tones do not');
   let driftFlux = 0;
   for (let i = 1; i <= 12; i++) {
     runFrame(drift, tone(1000 * Math.pow(2, i / 200), 0.7), false);  // ~9 cents/frame
-    driftFlux = Math.max(driftFlux, drift.superflux(lo, hi));
+    driftFlux = Math.max(driftFlux, drift.aggregateFlux(lo, hi));
   }
   assert(driftFlux < onsetFlux,
     'a drifting tone reads weaker than a real onset (the SuperFlux claim)',
@@ -417,12 +417,12 @@ console.log('\n[11c] SuperFlux has no reference until a second frame exists');
   const b = mk(4096, 6);
   const [lo, hi] = b.bandRangeForHz(100, 10000);
   runFrame(b, flatFrame(4096, 0.9), false);
-  assert(b.superflux(lo, hi) === 0,
+  assert(b.aggregateFlux(lo, hi) === 0,
     'the very first frame is not one giant onset across every band');
   b.rebuild({ sampleRate: SR, fftSize: 4096, bandsPerOctave: 12 });
   runFrame(b, flatFrame(4096, 0.9), false);
   const [lo2, hi2] = b.bandRangeForHz(100, 10000);
-  assert(b.superflux(lo2, hi2) === 0, 'nor the first frame after a reshape');
+  assert(b.aggregateFlux(lo2, hi2) === 0, 'nor the first frame after a reshape');
 }
 
 console.log('\n[12] a rebuild drops stale per-band state');
