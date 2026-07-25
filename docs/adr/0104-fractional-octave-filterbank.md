@@ -99,3 +99,42 @@ on rhythm. Deferred deliberately, with that tradeoff on the record.
 - Guarded by `debug/test-filterbank.mts`; `debug/test-audio-signal.mts` now
   drives the real engine path rather than a hand-rolled band array, so the
   display and signal cannot silently diverge again.
+
+## Addendum (same day): four upgrades on this substrate
+
+With the bank in place, four contained improvements landed on top of it. Each
+depended on the previous one.
+
+**Float magnitudes.** `getByteFrequencyData` quantised to 256 steps before we
+saw the data. The float path also changes DOMAIN, not just precision: it returns
+raw dBFS, and averaging dB values computes a geometric mean of amplitudes, which
+is not a band level. Bins are now converted to power, averaged, and returned to
+dB via the new `dbToUnit` — which applies the same window the byte path applied
+internally, so no downstream threshold needed retuning. The unchanged follower
+and AGC tests are the evidence.
+
+**Hann kernels.** The rectangular bin-sum was a boxcar in the frequency domain,
+leaking through sinc sidelobes and tiling without overlap so a tone crossed band
+edges in one step. Replaced with Brown & Puckette (1992) kernels spanning
+centre±one band, normalised to unit SUM (not unit energy — these weights average
+power, and unit energy would rescale every level and shift the calibration).
+This does NOT move `resolutionLimitHz`; it improves every band above it and
+makes the region below degrade smoothly rather than in steps.
+
+**PCEN.** Replaces the peak follower's unbounded divide, whose silence freeze
+was a patch over that unboundedness. Two corrections were needed against the
+spec as received: the `+ delta` inside the power is load-bearing (without it
+silence evaluates to −1.414, a negative level), and the output needs scaling by
+1/PCEN(1,1) because raw PCEN tops out near 0.318 for sustained content. The
+`MIN_PEAK` floor is kept as `PCEN_FLOOR` — compression bounds ratcheting, not
+amplification of room tone. Confirmed stable with no freeze; the follower and
+its freeze remain only for A/B and go together.
+
+**SuperFlux onsets.** Transient mode now max-filters the previous frame along
+frequency before differencing (Böck & Widmer, DAFx-13), so a drifting or
+vibrato'd tone stops reading as a continuous onset. Measured 100% suppression of
+a 9-cent-per-frame drift while a genuine new tone still registers. The
+previous-frame reference moved from per-rule into the bank, which also removed
+the mode-switch spike hazard by construction. Filter width is 3 bands: at 6
+bands/octave that spans half an octave, deliberately wider in octave terms than
+the paper's 3-at-24 because our bands are coarser.

@@ -253,12 +253,14 @@ class ModulationEngine {
 
     /** Previous frame's band average per rule — the reference for the flux
      *  measurement in `transient` mode. */
-    private prevBandLevel: Record<string, number> = {};
-
-    /** Flux (units per second) that maps to a full-scale transient signal.
-     *  A kick attack moves a narrow band by roughly 0.3 in one 60 fps frame,
-     *  i.e. ~18/s; 20 puts that near the top of the range while leaving room
-     *  for a harder hit. Users trim from there with the rule's Gain knob. */
+    /** SuperFlux (units per second) that maps to a full-scale transient signal.
+     *  A kick attack moves its bands by roughly 0.3 in one 60 fps frame, i.e.
+     *  ~18/s; 20 puts that near the top of the range while leaving room for a
+     *  harder hit. Users trim from there with the rule's Gain knob.
+     *
+     *  Field-tunable: the max-filter makes SuperFlux read at or below plain
+     *  flux for the same hit (never above — `prevMax >= prev` by definition),
+     *  so if onsets come out weak this is the constant to lower. */
     private static readonly TRANSIENT_FULL_SCALE = 20;
 
     private processAudioSignal(rule: ModulationRule, _data: Float32Array, delta: number): number {
@@ -279,19 +281,23 @@ class ModulationEngine {
 
         let raw: number;
         if (rule.mode === 'transient') {
-            // Positive spectral flux — the standard onset measure. Rate per
-            // SECOND, not per frame, so the response doesn't change with frame
-            // rate (a 30 fps preview and a 60 fps one trigger identically).
-            const prev = this.prevBandLevel[rule.id];
-            this.prevBandLevel[rule.id] = level;
-            if (prev === undefined) return 0;   // first frame has no reference
+            // SuperFlux, computed per BAND inside the bank and averaged over
+            // this rule's range — see FilterBank.superflux. The max-filter
+            // along frequency is what stops a drifting or vibrato'd tone
+            // reading as a continuous onset, which plain flux could not
+            // distinguish from a real hit.
+            //
+            // Rate per SECOND, not per frame, so response doesn't change with
+            // frame rate (a 30 fps preview triggers like a 60 fps output).
+            //
+            // No per-rule previous-frame state: the bank owns the reference, so
+            // every rule differences the same pair of frames and switching a
+            // rule into transient mode mid-set cannot spike off a stale value
+            // it was never updating.
             const dt = Math.max(1e-4, delta);
-            const rate = Math.max(0, level - prev) / dt;
+            const rate = filterBank.superflux(bandLo, bandHi) / dt;
             raw = Math.min(1, rate / ModulationEngine.TRANSIENT_FULL_SCALE);
         } else {
-            // Keep the reference fresh even in level mode, so toggling to
-            // transient mid-set doesn't fire a spurious spike off a stale value.
-            this.prevBandLevel[rule.id] = level;
             raw = level;
         }
 

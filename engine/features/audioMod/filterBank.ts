@@ -168,6 +168,9 @@ const PCEN_SCALE = 1 / (
 
 export type NormalizeMode = 'peak' | 'pcen';
 
+/** Max-filter width in BANDS for SuperFlux — see `FilterBank.superflux`. */
+export const SUPERFLUX_WIDTH = 3;
+
 export class FilterBank {
     public bands: Band[] = [];
     public sampleRate = 48000;
@@ -183,6 +186,13 @@ export class FilterBank {
     private peaks: Float32Array = new Float32Array(0);
     /** PCEN one-pole smoother state, per band. */
     private pcenM: Float32Array = new Float32Array(0);
+    /** Previous frame's normalised levels — the SuperFlux reference. Owned
+     *  here rather than per-rule so every rule differences the same pair of
+     *  frames, and so switching a rule to transient mode mid-set cannot fire a
+     *  spike off a stale reference it never updated. */
+    private prev: Float32Array = new Float32Array(0);
+    private hasPrevFrame = false;
+    private framesAnalysed = 0;
     /** Per-bin linear power scratch, reused across frames. */
     private power: Float32Array = new Float32Array(0);
     /** All band kernels concatenated; index via `band.kernelOffset`. */
@@ -310,6 +320,11 @@ export class FilterBank {
         // would mis-scale the new band until it re-learned.
         this.peaks = new Float32Array(bands.length);
         this.pcenM = new Float32Array(bands.length);
+        this.prev = new Float32Array(bands.length);
+        // No reference frame after a reshape — the first frame must not read as
+        // one giant onset across every band.
+        this.hasPrevFrame = false;
+        this.framesAnalysed = 0;
     }
 
     /**
@@ -363,20 +378,33 @@ export class FilterBank {
             this.levels[k] = dbToUnit(20 * Math.log10(rms), dbFloor, dbCeiling);
         }
 
+        // Snapshot the frame the RULES last saw, before overwriting
+        // `normalized`. `superflux` differences the new frame against this, so
+        // it has to be the previous frame's OUTPUT (post-normalisation), not
+        // the raw levels — otherwise the adaptive gain's own movement would
+        // read as onset energy.
+        //
+        // Guarded on having actually analysed a frame: on the first call
+        // `normalized` is still zeros, and differencing against zeros would
+        // make frame one read as a full-scale onset in every band.
+        if (this.framesAnalysed > 0) {
+            this.prev.set(this.normalized);
+            this.hasPrevFrame = true;
+        }
+
         if (!normalize) {
             this.normalized.set(this.levels);
             // Decay the followers toward the live signal while disabled so that
             // re-enabling doesn't apply state learned minutes ago.
             this.peaks.set(this.levels);
             this.pcenM.set(this.levels);
-            return;
-        }
-
-        if ((opts.normalizeMode ?? 'pcen') === 'pcen') {
+        } else if ((opts.normalizeMode ?? 'pcen') === 'pcen') {
             this.applyPcen(deltaSec);
         } else {
             this.applyPeakFollower(deltaSec);
         }
+
+        this.framesAnalysed++;
     }
 
     /** Legacy adaptive gain: divide by a slow-release running peak. Retained
@@ -432,6 +460,56 @@ export class FilterBank {
         let hi = lo;
         while (hi < n && this.bands[hi].lowHz < highHz) hi++;
         return [lo, Math.max(lo + 1, hi)];
+    }
+
+    /**
+     * SuperFlux onset strength over a band range (Böck & Widmer, DAFx-13).
+     *
+     * Plain spectral flux differences consecutive frames and keeps the positive
+     * part. Its weakness is that a tone which merely MOVES — vibrato, a bent
+     * note, a filter sweep, any pitch drift — leaves its old band and enters a
+     * new one, and the entering band registers a rise indistinguishable from a
+     * genuine onset. On sustained material that fires continuously.
+     *
+     * SuperFlux adds one step: max-filter the PREVIOUS frame along the
+     * FREQUENCY axis before differencing.
+     *
+     *     prevMax[k] = max(prev[k-1], prev[k], prev[k+1])
+     *     flux       = Σ max(0, cur[k] − prevMax[k])
+     *
+     * A tone drifting into band k was already loud in band k±1 last frame, so
+     * prevMax[k] is high and the difference vanishes. A real onset appears
+     * where nothing was loud in the neighbourhood, and survives.
+     *
+     * @invariant The filter width is in BANDS, so its frequency span depends on
+     *   `bandsPerOctave`. The paper uses width 3 at 24 bands/octave (⅛ octave);
+     *   at our default 6 b/o the same width spans ½ an octave — deliberately
+     *   wider, because our bands are coarser and a drifting tone crosses fewer
+     *   of them. Widening further would start suppressing genuine onsets whose
+     *   neighbours are merely busy.
+     *
+     * Returns MEAN positive flux per band, not the paper's sum: rules span
+     * different numbers of bands, and a sum would make a wide rule read
+     * stronger than a narrow one on identical material.
+     */
+    public superflux(bandLo: number, bandHi: number, width = SUPERFLUX_WIDTH): number {
+        const n = this.bands.length;
+        const lo = Math.max(0, bandLo);
+        const hi = Math.min(n, bandHi);
+        if (hi <= lo || !this.hasPrevFrame) return 0;
+        const half = Math.max(1, Math.floor(width / 2));
+        let sum = 0;
+        for (let k = lo; k < hi; k++) {
+            let prevMax = 0;
+            const from = Math.max(0, k - half);
+            const to = Math.min(n - 1, k + half);
+            for (let j = from; j <= to; j++) {
+                if (this.prev[j] > prevMax) prevMax = this.prev[j];
+            }
+            const d = this.normalized[k] - prevMax;
+            if (d > 0) sum += d;
+        }
+        return sum / (hi - lo);
     }
 
     /** RMS of the normalised levels across a band range — the ONE statistic the

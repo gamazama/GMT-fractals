@@ -359,6 +359,82 @@ console.log('\n[11e] near-silent bands still are not amplified under PCEN');
     b.normalized[mid].toFixed(3));
 }
 
+// ── SuperFlux ───────────────────────────────────────────────────────────────
+console.log('\n[11f] SuperFlux: real onsets survive, drifting tones do not');
+{
+  const FFT = 4096;
+  const bin = (hz: number) => Math.round(hz / (SR / FFT));
+  const tone = (hz: number, level: number) => {
+    const f = new Float32Array(FFT / 2).fill(-Infinity);
+    const db = DB_FLOOR + level * (DB_CEIL - DB_FLOOR);
+    // A few bins wide so it lands in a band rather than between kernels.
+    for (let d = -2; d <= 2; d++) f[bin(hz) + d] = db;
+    return f;
+  };
+
+  // A steady tone produces no onset once the reference frame exists.
+  const steady = mk(FFT, 6);
+  const [lo, hi] = steady.bandRangeForHz(400, 3000);
+  for (let i = 0; i < 20; i++) runFrame(steady, tone(1000, 0.7), false);
+  assert(steady.superflux(lo, hi) < 1e-6,
+    'a sustained tone yields no onset energy', steady.superflux(lo, hi));
+
+  // A GENUINE onset: something appears where nothing was loud nearby.
+  const onset = mk(FFT, 6);
+  for (let i = 0; i < 20; i++) runFrame(onset, tone(1000, 0.7), false);
+  const twoTones = tone(1000, 0.7);
+  const second = tone(2400, 0.8);
+  for (let i = 0; i < twoTones.length; i++) {
+    if (second[i] > twoTones[i]) twoTones[i] = second[i];
+  }
+  runFrame(onset, twoTones, false);
+  const onsetFlux = onset.superflux(lo, hi);
+  assert(onsetFlux > 0.001, 'a new tone registers as an onset', onsetFlux);
+
+  // A DRIFTING tone — the false positive plain flux fires on. Same energy,
+  // sliding a little in frequency each frame. It enters new bands, but those
+  // bands' NEIGHBOURS were already loud, so the max-filter cancels it.
+  const drift = mk(FFT, 6);
+  for (let i = 0; i < 20; i++) runFrame(drift, tone(1000, 0.7), false);
+  let driftFlux = 0;
+  for (let i = 1; i <= 12; i++) {
+    runFrame(drift, tone(1000 * Math.pow(2, i / 200), 0.7), false);  // ~9 cents/frame
+    driftFlux = Math.max(driftFlux, drift.superflux(lo, hi));
+  }
+  assert(driftFlux < onsetFlux,
+    'a drifting tone reads weaker than a real onset (the SuperFlux claim)',
+    { driftFlux, onsetFlux });
+
+  // Quantify against the plain-flux baseline the max-filter replaces.
+  const plainDrift = mk(FFT, 6);
+  for (let i = 0; i < 20; i++) runFrame(plainDrift, tone(1000, 0.7), false);
+  let plainMax = 0;
+  for (let i = 1; i <= 12; i++) {
+    const before = Float32Array.from(plainDrift.normalized);
+    runFrame(plainDrift, tone(1000 * Math.pow(2, i / 200), 0.7), false);
+    let s = 0;
+    for (let k = lo; k < hi; k++) s += Math.max(0, plainDrift.normalized[k] - before[k]);
+    plainMax = Math.max(plainMax, s / (hi - lo));
+  }
+  assert(driftFlux <= plainMax,
+    'and weaker than plain flux on that same drift — width-3 max-filter '
+    + `(${(plainMax > 0 ? (1 - driftFlux / plainMax) * 100 : 100).toFixed(0)}% suppressed)`,
+    { superflux: driftFlux, plainFlux: plainMax });
+}
+
+console.log('\n[11g] SuperFlux has no reference until a second frame exists');
+{
+  const b = mk(4096, 6);
+  const [lo, hi] = b.bandRangeForHz(100, 10000);
+  runFrame(b, flatFrame(4096, 0.9), false);
+  assert(b.superflux(lo, hi) === 0,
+    'the very first frame is not one giant onset across every band');
+  b.rebuild({ sampleRate: SR, fftSize: 4096, bandsPerOctave: 12 });
+  runFrame(b, flatFrame(4096, 0.9), false);
+  const [lo2, hi2] = b.bandRangeForHz(100, 10000);
+  assert(b.superflux(lo2, hi2) === 0, 'nor the first frame after a reshape');
+}
+
 console.log('\n[12] a rebuild drops stale per-band state');
 {
   const b = mk(4096, 6);

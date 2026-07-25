@@ -116,6 +116,11 @@ Each audio link chooses how the band becomes a signal.
 - **Level** (default): follows the band's loudness. The parameter rises with the sound and stays high for as long as it lasts. Good for pads, swells and overall energy.
 - **Transient**: fires on the *attack* only — how fast the band is getting louder. The parameter punches on each hit and falls back between them. This is what you want for kicks and snares: level-following always lags the attack and then holds through the sustain, which reads as mushy on a beat.
 
+Transient uses SuperFlux onset detection, which compares each frame against the
+loudest of its neighbouring bands rather than the same band alone. That means a
+note that merely *moves* — vibrato, a bent note, a filter sweep — no longer
+reads as a hit, which plain onset detection cannot tell apart from a real one.
+
 Tips for Transient:
 - Pair it with the **Kick** quick band and a low **Attack**; use **Decay** to set how long the punch trails.
 - If hits feel soft, lower **FFT Smooth**. Heavy smoothing averages away the very transients this mode reads.
