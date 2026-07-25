@@ -36,7 +36,7 @@ import {
 import { registerTick, runTicks, TICK_PHASE } from '../engine/TickRegistry';
 import { viewport } from '../../engine/plugins/Viewport';
 import { reportAccumulationToStore } from '../../store/slices/installAccumulationBindings';
-import { buildRenderInteractionState } from './renderInteractionState';
+import { buildRenderInteractionState, hasLiveModulationSource } from './renderInteractionState';
 import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 
 // ── Tick Registration — SNAPSHOT phase ──────────────────────────────────
@@ -370,17 +370,32 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             // cameraInUse (which ORed isPlaying/isScrubbing) loses nothing.
             sessionHoldActive: storeState.isInteracting({ only: [INTERACTION_SOURCES.camera, INTERACTION_SOURCES.gizmo, INTERACTION_SOURCES.scrub] }),
             isPlaying: animState.isPlaying,
-            // Active LFO ≈ master switch on AND at least one ENABLED animation.
-            // This is the autonomous-animation axis (NOT a gesture) adaptive + hold
-            // compose with `interacting`.
+            // Autonomous-animation axis (NOT a gesture) that adaptive + hold
+            // compose with `interacting`. TWO independent sources, mirroring
+            // ModulationEngine's own two gates:
             //
-            // MUST mirror ModulationEngine.updateOscillators' per-anim gate
-            // (`if (!anim.enabled) continue`): a `.length > 0` test counts
-            // DISABLED entries too, so a scene saved with inert/leftover animation
-            // entries (all enabled:false) produces zero actual modulation yet pins
-            // isSceneAnimating true forever → adaptive stuck at low res, accumulation
-            // never converges (the "stuck after loading some gallery items" bug).
-            hasActiveModulation: !!storeState.lfosEnabled && !!storeState.animations?.some((a: { enabled?: boolean }) => a.enabled),
+            //   LFO   — master switch on AND at least one ENABLED animation.
+            //           MUST mirror updateOscillators' per-anim gate
+            //           (`if (!anim.enabled) continue`): a `.length > 0` test
+            //           counts DISABLED entries too, so a scene saved with
+            //           inert/leftover animation entries (all enabled:false)
+            //           produces zero actual modulation yet pins
+            //           isSceneAnimating true forever → adaptive stuck at low
+            //           res, accumulation never converges (the "stuck after
+            //           loading some gallery items" bug).
+            //   AUDIO — master switch on AND at least one ENABLED audio-sourced
+            //           rule. Mirrors ModulationEngine.update's
+            //           `if (rule.source === 'audio' && !audioEnabled) continue`.
+            //           Without this term an audio-reactive scene reported
+            //           isSceneAnimating:false while resetting accumulation every
+            //           frame — so progressive banding stayed engaged and
+            //           restarted at pass 0 each tick (only the centre band ever
+            //           repainted) AND adaptive never downscaled. Exactly the
+            //           failure the tiling gate's own comment describes for
+            //           playback/LFO; audio was simply never added here.
+            //           LFO-SOURCED rules need no term: they can only produce an
+            //           offset when the LFO clause above is already true.
+            hasActiveModulation: hasLiveModulationSource(storeState),
         });
 
         const renderState = {

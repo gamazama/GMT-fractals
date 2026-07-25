@@ -40,6 +40,40 @@ export interface RenderInteractionInputs {
     hasActiveModulation: boolean;
 }
 
+/** The slices `hasLiveModulationSource` reads. Structural (not the store type)
+ *  so this module stays store-free and node-testable. */
+export interface ModulationSourceState {
+    lfosEnabled?: boolean;
+    animations?: { enabled?: boolean }[];
+    audio?: { isEnabled?: boolean };
+    modulation?: { rules?: { enabled?: boolean; source?: string }[] };
+}
+
+/**
+ * Is ANY modulation source actually driving params this frame?
+ *
+ * @invariant Must mirror ModulationEngine's two master gates exactly. That
+ *   engine skips LFO work when `!lfosEnabled` (updateOscillators' early
+ *   return) and skips a rule when `rule.source === 'audio' && !audioEnabled`
+ *   — and per-entry when `!anim.enabled` / `!rule.enabled`. A predicate that
+ *   is too LOOSE (e.g. `animations.length > 0`, counting disabled entries)
+ *   pins `isSceneAnimating` true forever → adaptive stuck at low res,
+ *   accumulation never converges. Too TIGHT (the pre-2026-07-25 version,
+ *   which omitted audio entirely) leaves an audio-reactive scene reporting
+ *   "static" while it invalidates the frame every tick → progressive banding
+ *   stays engaged and restarts at pass 0 each frame, so only the centre band
+ *   repaints, and adaptive never downscales.
+ *
+ * LFO-sourced RULES need no clause of their own: they read `lfoValues`, which
+ * only refresh while the LFO clause below is already true.
+ */
+export function hasLiveModulationSource(s: ModulationSourceState): boolean {
+    const lfoLive = !!s.lfosEnabled && !!s.animations?.some(a => a.enabled);
+    const audioLive = !!s.audio?.isEnabled
+        && !!s.modulation?.rules?.some(r => r.enabled && r.source === 'audio');
+    return lfoLive || audioLive;
+}
+
 /** Gesture-activity boolean that crosses to the worker. UNUSED downstream in
  *  P2 — sent so the transport + read path exist; P4 wires adaptive to it. */
 export function deriveInteracting(i: RenderInteractionInputs): boolean {
