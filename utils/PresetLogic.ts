@@ -79,6 +79,15 @@ export const applyPresetState = (
 
         const incomingData = (features as any)[feat.id];
         const liveSlice = (actions as any)[feat.id] as Record<string, unknown> | undefined;
+
+        // Live session state (the audio-modulation rig) — performance
+        // equipment, not scene content. While the feature reports it is live,
+        // skip the slice entirely: the incoming scene neither overwrites it nor
+        // (when the file omits the feature) resets it to param defaults. The
+        // predicate is FALSE on an idle rig, so a boot / share-link load still
+        // hydrates a scene-saved rig normally. @see FeatureDefinition.holdsLiveSession
+        if (feat.holdsLiveSession?.(liveSlice ?? {}, actions as Record<string, unknown>)) return;
+
         const nextState: Record<string, unknown> = {};
         if (feat.state) Object.assign(nextState, feat.state);
 

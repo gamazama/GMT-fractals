@@ -1,4 +1,14 @@
-
+/**
+ * Modulation feature — the durable store of modulation-link routing.
+ *
+ * @invariant `rules[].target` is one of THREE durable routing-string stores
+ *   (with `animationStore.sequence.tracks` and `engineStore.animations`). Any
+ *   code that renames DDFS param ids — weave rebuilds are the live case — must
+ *   update all three or links silently drive the wrong param.
+ *   @see engine-gmt/animation/retargetTracks.ts
+ * @invariant Held across scene loads while the audio engine is running.
+ *   @see docs/adr/0103-live-session-state-survives-scene-load.md
+ */
 import { FeatureDefinition } from '../../../engine/FeatureSystem';
 import { nanoid } from 'nanoid';
 
@@ -57,6 +67,14 @@ export const ModulationFeature: FeatureDefinition = {
         rules: [],
         selectedRuleId: null
     },
+    // The links belong to the same live rig as the audio engine, so they are
+    // held on the same condition: audio running AND at least one rule to
+    // protect. Gating on `audio.isEnabled` (rather than on rules alone) keeps
+    // LFO-only scenes fully scene-driven — their rules load from the file as
+    // before, since nothing is performing.
+    holdsLiveSession: (live, store) =>
+        !!(store.audio as { isEnabled?: boolean } | undefined)?.isEnabled
+        && ((live.rules as unknown[] | undefined)?.length ?? 0) > 0,
     actions: {
         addModulation: (state: ModulationState, payload: { target: string, source?: ModulationSource }) => {
             const color = PRESET_COLORS[state.rules.length % PRESET_COLORS.length];

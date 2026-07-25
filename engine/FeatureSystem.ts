@@ -272,6 +272,32 @@ export interface FeatureDefinition {
     state?: any;       // Extra state not covered by params (e.g. arrays, complex objects)
     actions?: Record<string, (state: any, payload: any) => Partial<any>>;
 
+    /**
+     * Opt-in seam for features whose slice can hold LIVE SESSION state —
+     * performance equipment rather than scene content (the audio-modulation
+     * rig is the motivating case: input source, links, envelopes).
+     *
+     * Return `true` when the slice currently holds such state. While it does,
+     * `applyPresetState` leaves the whole slice ALONE on a scene load / formula
+     * switch instead of overwriting it from the file (or resetting it to
+     * `ParamConfig.default` when the file omits the feature entirely).
+     *
+     * @invariant Must be FALSE when the rig is idle. That is what keeps a boot
+     *   / share-link load working: on a fresh session the slice is at its
+     *   defaults, the predicate reads false, and the file's saved rig hydrates
+     *   normally. An unconditional `() => true` would make scene-borne session
+     *   state permanently unloadable.
+     *
+     * Distinct from the two existing axes: `userScoped` is per-PARAM and
+     * unconditional (device prefs), `preserveOnApply` is the bulk-copy axis
+     * read only by `applyPartialPreset`. This one is per-FEATURE, conditional,
+     * and read only by full preset application. @see docs/adr/0078-noreset-axis-split.md
+     */
+    holdsLiveSession?: (
+        live: Record<string, any>,
+        store: Record<string, any>,
+    ) => boolean;
+
     // --- UI Configuration ---
     tabConfig?: FeatureTabConfig;           // Registers a panel tab for this feature
     viewportConfig?: FeatureViewportConfig; // Registers a viewport overlay component
