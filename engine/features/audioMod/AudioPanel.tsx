@@ -294,6 +294,70 @@ const LiveInputControls: React.FC = () => {
     );
 };
 
+// --- ANALYSIS SETTINGS (FFT size + dynamic range) ---
+// Collapsed by default: these are set-once-per-venue controls, not performance
+// controls. They live here rather than in the auto-panel because they read
+// clearly only next to the live bin-width readout.
+const AnalysisControls: React.FC = () => {
+    const { audio, setAudio } = useEngineStore();
+    const fftSize = audio?.fftSize ?? 4096;
+    const dbFloor = audio?.dbFloor ?? -90;
+    const dbCeiling = audio?.dbCeiling ?? -10;
+    const binHz = audioAnalysisEngine.binWidthHz;
+    const windowMs = (fftSize / audioAnalysisEngine.sampleRate) * 1000;
+
+    return (
+        <CollapsibleSection
+            label="Analysis"
+            defaultOpen={false}
+            labelColor="text-fg-tertiary"
+            className="bg-surface-section border border-line/10 rounded mt-2 overflow-hidden"
+            headerClassName="px-3 py-1.5 bg-line/5 hover:bg-line/10"
+            rightContent={
+                <span className="text-[8px] font-mono text-fg-faint">
+                    {binHz.toFixed(1)} Hz · {windowMs.toFixed(0)} ms
+                </span>
+            }
+        >
+            <div className="p-2 flex flex-col gap-2">
+                <div>
+                    <label className="text-[9px] text-fg-dim font-bold block mb-1">Detail</label>
+                    <select
+                        value={fftSize}
+                        onChange={(e) => setAudio({ fftSize: parseInt(e.target.value, 10) })}
+                        className="t-select w-full text-[9px]"
+                        title="Finer bins separate bass better; coarser bins react faster to attacks"
+                    >
+                        <option value={2048}>Fast — 23 Hz bins, punchy attacks</option>
+                        <option value={4096}>Balanced — 12 Hz bins</option>
+                        <option value={8192}>Fine — 6 Hz bins, bass detail</option>
+                    </select>
+                    <p className="text-[8px] text-fg-faint mt-1 leading-snug">
+                        Finer bins resolve a kick from its harmonics, but widen the analysis
+                        window — which softens how sharply Transient mode fires.
+                    </p>
+                </div>
+                <Slider
+                    label="Floor"
+                    value={dbFloor}
+                    min={-120} max={-40} step={1}
+                    onChange={(v) => setAudio({ dbFloor: v })}
+                />
+                <Slider
+                    label="Ceiling"
+                    value={dbCeiling}
+                    min={-40} max={0} step={1}
+                    onChange={(v) => setAudio({ dbCeiling: v })}
+                />
+                <p className="text-[8px] text-fg-faint leading-snug">
+                    Floor/Ceiling set the loudness window the spectrum maps onto. Narrow it
+                    for more contrast; widen it if peaks are saturating into a flat wall.
+                </p>
+            </div>
+        </CollapsibleSection>
+    );
+};
+
 // --- COLLAPSED MODULATION LIST COMPONENT ---
 const AudioModulationList: React.FC = () => {
     const store = useEngineStore();
@@ -427,13 +491,23 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
         audioAnalysisEngine.setMasterGain(v);
     };
 
-    // Push the store's persisted levels into the WebAudio graph on mount. The
+    // Push the store's persisted analysis settings into the WebAudio graph. The
     // graph is a module singleton that outlives any panel, but a scene load can
-    // change these values while the panel is closed, so re-assert on open.
+    // change these values while the panel is closed, so re-assert on open — and
+    // whenever they change, since fftSize / dB range are graph state with no
+    // other writer.
     useEffect(() => {
         audioAnalysisEngine.setMasterGain(gain ?? 0.8);
         audioAnalysisEngine.setInputGain(audio?.inputGain ?? 1);
     }, []);
+
+    useEffect(() => {
+        audioAnalysisEngine.setFftSize(audio?.fftSize ?? 4096);
+    }, [audio?.fftSize]);
+
+    useEffect(() => {
+        audioAnalysisEngine.setDecibelRange(audio?.dbFloor ?? -90, audio?.dbCeiling ?? -10);
+    }, [audio?.dbFloor, audio?.dbCeiling]);
 
     return (
         <div
@@ -481,6 +555,8 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
 
                  {/* Live Inputs */}
                  <LiveInputControls />
+
+                 <AnalysisControls />
 
                  {/* Decks */}
                  <div className="flex flex-col gap-1">

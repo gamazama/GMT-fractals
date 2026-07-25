@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { audioAnalysisEngine } from './AudioAnalysisEngine';
-import { hzToBinNorm, formatHz } from './freqScale';
+import { hzToBinNorm, formatHz, aggregateBand } from './freqScale';
 import { useEngineStore } from '../../../store/engineStore';
 import { ModulationRule } from '../modulation/index';
 import { modulationEngine } from '../modulation/ModulationEngine';
@@ -144,13 +144,12 @@ export const AudioSpectrum: React.FC = () => {
 
                     const binStart = Math.floor(fStart * rawData.length);
                     const binEnd = Math.max(binStart + 1, Math.floor(fEnd * rawData.length));
-                    
-                    let val = 0;
-                    for(let b=binStart; b<binEnd && b < rawData.length; b++) {
-                        val = Math.max(val, rawData[b]);
-                    }
-                    
-                    val = val / 255.0;
+
+                    // Same aggregation the rules use — see aggregateBand. This
+                    // bar height IS the signal a rule over these bins would
+                    // produce, so the display can't overstate what the
+                    // modulation will do.
+                    const val = aggregateBand(rawData, binStart, binEnd);
                     const barH = val * h;
                     
                     ctx.fillRect(i * barWidth, h - barH, barWidth + 1, barH);

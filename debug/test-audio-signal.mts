@@ -185,5 +185,71 @@ console.log('\n[10] switching modes mid-set does not fire a spurious hit');
     'no phantom spike on the first transient frame after a switch', signalOf(r));
 }
 
+// ── Band aggregation: display and signal must agree ─────────────────────────
+const { aggregateBand } = await import('../engine/features/audioMod/freqScale');
+
+console.log('\n[11] band aggregation is the shared statistic');
+{
+  // The spectrum bar and the rule signal over the same bins must be identical —
+  // they diverged before (display max-pooled, rules took the mean), so a band
+  // could look strong and drive nothing.
+  const r = mkRule('level');
+  setBand(0.6, 128);
+  const ruleSignal = signalOf(r);              // thresholdMin 0, gain 1 → raw level
+  const displayBar = aggregateBand(buf, 0, Math.floor(0.1 * BINS));
+  assert(near(ruleSignal, displayBar, 1e-6),
+    'a bar and the rule over the same bins produce the same number',
+    { ruleSignal, displayBar });
+}
+
+console.log('\n[12] aggregation favours a peak without discarding band width');
+{
+  // A narrow tonal source (kick fundamental) inside a wide band: RMS must beat
+  // the plain mean, or raising fftSize would dilute the kick rather than
+  // resolve it.
+  const band = new Uint8Array([235, 232, 220, 180, 110, 70, 55]);
+  const mean = band.reduce((s, v) => s + v, 0) / band.length / 255;
+  const agg = aggregateBand(band, 0, band.length);
+  assert(agg > mean, 'a peaky band reads stronger than its plain mean', { agg, mean });
+  assert(agg < 235 / 255, 'but not as strong as peak-only (band width still counts)', agg);
+
+  // Broadband material — all bins similar — must be left alone.
+  const flat = new Uint8Array([180, 178, 182, 179, 181]);
+  const flatMean = flat.reduce((s, v) => s + v, 0) / flat.length / 255;
+  assert(Math.abs(aggregateBand(flat, 0, flat.length) - flatMean) < 0.005,
+    'a flat band is unchanged (RMS ≈ mean when bins agree)',
+    { agg: aggregateBand(flat, 0, flat.length), flatMean });
+}
+
+console.log('\n[13] empty / inverted ranges are safe');
+{
+  assert(aggregateBand(buf, 10, 10) === 0, 'zero-width range returns 0');
+  assert(aggregateBand(buf, 50, 10) === 0, 'inverted range returns 0');
+  assert(aggregateBand(buf, -5, 4) >= 0, 'negative start is clamped, not indexed');
+  assert(aggregateBand(buf, BINS - 2, BINS + 100) >= 0, 'overrun end is clamped');
+}
+
+// ── Uniform ownership (the flicker skip list) ───────────────────────────────
+console.log('\n[14] modulated-uniform ownership tracking');
+{
+  const changed1 = modulationEngine.setOwnedUniforms(new Set(['uPower', 'uJulia']));
+  assert(changed1 === true, 'a new set reports changed');
+  assert(modulationEngine.getOwnedUniforms().sort().join() === 'uJulia,uPower',
+    'the names are published', modulationEngine.getOwnedUniforms());
+
+  const changed2 = modulationEngine.setOwnedUniforms(new Set(['uJulia', 'uPower']));
+  assert(changed2 === false,
+    'the same set in a different order reports UNCHANGED (no per-frame rebuild)');
+
+  modulationEngine.setOwnedUniforms(new Set(['uPower']));
+  assert(modulationEngine.getOwnedUniforms().join() === 'uPower',
+    'a target that stops modulating drops out of the skip list — otherwise its '
+    + 'uniform would stay frozen at the last modulated value',
+    modulationEngine.getOwnedUniforms());
+
+  modulationEngine.setOwnedUniforms(new Set());
+  assert(modulationEngine.getOwnedUniforms().length === 0, 'empties cleanly');
+}
+
 console.log(`\n${failures === 0 ? '✓ all assertions passed' : `✗ ${failures} assertion(s) failed`}`);
 process.exit(failures === 0 ? 0 : 1);

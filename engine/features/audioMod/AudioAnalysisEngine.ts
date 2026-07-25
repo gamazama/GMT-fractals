@@ -114,8 +114,9 @@ export class AudioAnalysisEngine {
         this.masterGain.connect(this.audioContext.destination);
         
         this.analyser = this.audioContext.createAnalyser();
-        this.analyser.fftSize = 2048;
+        this.analyser.fftSize = this.desiredFftSize;
         this.analyser.smoothingTimeConstant = 0.8; // Default smoothing
+        this.applyDecibelRange();
         this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
         // Live-capture trim → analyser. Decks reach the analyser via masterGain
@@ -141,6 +142,70 @@ export class AudioAnalysisEngine {
             // Clamp to avoid errors (WebAudio max is < 1)
             this.analyser.smoothingTimeConstant = Math.max(0, Math.min(0.99, val));
         }
+    }
+
+    // ── Analysis window + dynamic range ─────────────────────────────────────
+    private desiredFftSize = 4096;
+    private dbFloor = -90;
+    private dbCeiling = -10;
+
+    /**
+     * FFT size — the frequency-vs-time resolution trade, and the single biggest
+     * lever on how well a kick can be isolated.
+     *
+     * Bin width is `sampleRate / fftSize`, and the analysis window is
+     * `fftSize / sampleRate`. At 48kHz:
+     *   2048 → 23.4 Hz/bin,  43ms window — a 40-120Hz kick band is ~3 bins
+     *   4096 → 11.7 Hz/bin,  85ms window — ~7 bins   (default)
+     *   8192 →  5.9 Hz/bin, 171ms window — ~14 bins
+     *
+     * @invariant Rule bands are stored as FRACTIONS of the bin array, and a
+     *   fraction maps to `f × nyquist` at any fftSize — so changing this never
+     *   invalidates existing rules or saved scenes.
+     *
+     * The window is the cost: a longer one smears attacks across more frames,
+     * which blunts transient mode. 4096 is the default because 2048 could not
+     * resolve a kick from its own harmonics, and 8192's 171ms window is too
+     * slow to punch on a beat.
+     */
+    public setFftSize(size: number) {
+        const clamped = Math.max(32, Math.min(32768, 2 ** Math.round(Math.log2(size))));
+        if (clamped === this.desiredFftSize && this.analyser?.fftSize === clamped) return;
+        this.desiredFftSize = clamped;
+        if (this.analyser) {
+            this.analyser.fftSize = clamped;
+            // frequencyBinCount changed — the read buffer must be resized or
+            // getByteFrequencyData writes a truncated / stale-tailed frame.
+            this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+        }
+    }
+
+    /**
+     * Dynamic range mapped onto the 0-255 byte spectrum.
+     *
+     * WebAudio's defaults (-100 .. -30 dB) are wrong for a music feed: anything
+     * above -30 dBFS pins at 255, so a loud snare's broadband energy saturates
+     * into a solid wall and the whole spectrum reads flat. Widening the ceiling
+     * gives loud material somewhere to go, and lifting the floor keeps room
+     * noise out of the bottom of the display.
+     */
+    public setDecibelRange(floor: number, ceiling: number) {
+        // WebAudio throws if min >= max.
+        this.dbFloor = Math.min(floor, ceiling - 10);
+        this.dbCeiling = ceiling;
+        this.applyDecibelRange();
+    }
+
+    private applyDecibelRange() {
+        if (!this.analyser) return;
+        this.analyser.minDecibels = this.dbFloor;
+        this.analyser.maxDecibels = this.dbCeiling;
+    }
+
+    /** Hz covered by one FFT bin — the finest band the current settings can
+     *  resolve. Shown in the panel so the trade is visible, not implicit. */
+    public get binWidthHz(): number {
+        return this.sampleRate / this.desiredFftSize;
     }
 
     /** Tear down the running live capture — graph node AND the underlying

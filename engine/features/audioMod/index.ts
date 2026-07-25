@@ -21,6 +21,9 @@ export interface AudioState {
     lowPass: number;
     gain: number;
     inputGain: number;
+    fftSize: number;
+    dbFloor: number;
+    dbCeiling: number;
 }
 
 // AudioActions removed - link management is now in ModulationActions
@@ -69,6 +72,36 @@ export const AudioFeature: FeatureDefinition = {
         // before the analyser. Distinct from `gain` above, which is monitoring
         // volume on the deck path: a room mic or a quiet line feed needs to be
         // boosted INTO the FFT without anything getting louder in the room.
-        inputGain: { type: 'float', default: 1.0, label: 'Input Trim', shortId: 'ig', group: 'system', noAccumReset: true, preserveOnApply: true, min: 0, max: 8, step: 0.05 }
+        inputGain: { type: 'float', default: 1.0, label: 'Input Trim', shortId: 'ig', group: 'system', noAccumReset: true, preserveOnApply: true, min: 0, max: 8, step: 0.05 },
+        // Frequency-vs-time resolution. Bin width is sampleRate/fftSize and the
+        // analysis window is fftSize/sampleRate, so finer bins cost attack
+        // sharpness. 2048 (the old fixed value) put only ~3 bins across a
+        // 40-120Hz kick band, which is why a kick could not drive a clean
+        // signal. @see AudioAnalysisEngine.setFftSize
+        fftSize: {
+            type: 'float', default: 4096, label: 'Analysis Detail', shortId: 'fz', group: 'system',
+            noAccumReset: true, preserveOnApply: true,
+            options: [
+                { label: 'Fast (23 Hz, punchy)', value: 2048 },
+                { label: 'Balanced (12 Hz)', value: 4096 },
+                { label: 'Fine (6 Hz, bass detail)', value: 8192 },
+            ],
+            description: 'Finer bins separate bass better; coarser bins react faster to attacks.',
+        },
+        // Dynamic range mapped onto the 0-255 spectrum. WebAudio's defaults
+        // (-100/-30) pin anything above -30 dBFS at full scale, which is what
+        // made loud material read as a flat saturated wall.
+        dbFloor: {
+            type: 'float', default: -90, label: 'Floor', shortId: 'df', group: 'system',
+            noAccumReset: true, preserveOnApply: true, min: -120, max: -40, step: 1,
+            format: (v) => `${Math.round(v)} dB`,
+            description: 'Quietest level the spectrum shows. Raise it to keep room noise out of the bottom.',
+        },
+        dbCeiling: {
+            type: 'float', default: -10, label: 'Ceiling', shortId: 'dc', group: 'system',
+            noAccumReset: true, preserveOnApply: true, min: -40, max: 0, step: 1,
+            format: (v) => `${Math.round(v)} dB`,
+            description: 'Loudest level before the spectrum saturates. Lower it for a hotter, more contrasty reading.',
+        }
     },
 };

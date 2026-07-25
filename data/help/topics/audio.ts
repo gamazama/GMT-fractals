@@ -28,6 +28,27 @@ While a live input is running, a small meter sits beside the Input Trim slider.
 - **Amber**: too quiet. Thresholds will barely trigger; raise the trim.
 - **Red**: clipping. The analysis is 8-bit, so a pinned signal loses the transient shape that Attack keys off — lower the trim (or the desk send).
 
+## Analysis (collapsible section)
+Set-once-per-venue controls for how the sound is measured. The header shows the
+resulting bin width and analysis window.
+
+- **Detail**: the frequency-vs-time trade.
+  - *Fast* (23 Hz bins, 43 ms) — snappiest attacks, but only ~3 bins across a kick band.
+  - *Balanced* (12 Hz bins, 85 ms) — the default.
+  - *Fine* (6 Hz bins, 171 ms) — separates bass notes best; softens how sharply Transient mode fires.
+- **Floor / Ceiling**: the loudness window the spectrum maps onto. If everything looks like a solid flat wall, your material is louder than the ceiling and is saturating — raise it. If the bottom of the display is full of room noise, raise the floor.
+
+## Why bands read the way they do
+The spectrum bar and the modulation signal are computed by the *same* function,
+so a band that looks strong will drive a parameter strongly — the display can't
+overstate what you'll get.
+
+That reading is weighted toward the loudest parts of a band rather than a flat
+average. A kick fundamental is a narrow peak inside a wide band, so a flat
+average would dilute it further every time you raised the Detail setting. On
+broadband material like a snare, where the whole band is roughly even, the two
+agree and nothing changes.
+
 ## Performance
 Audio analysis uses the WebAudio API which processes audio efficiently, but the visualization and modulation application run in the main rendering loop. Modulating complex geometry parameters (like Loop Iterations) every frame can impact GPU performance.
 `

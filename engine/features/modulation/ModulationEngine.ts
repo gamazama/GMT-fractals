@@ -19,6 +19,7 @@
  */
 import { ModulationRule } from './index';
 import { audioAnalysisEngine } from '../audioMod/AudioAnalysisEngine';
+import { aggregateBand } from '../audioMod/freqScale';
 import { AnimationParams } from '../../../types';
 import { ImprovedNoise } from 'three-stdlib';
 
@@ -267,19 +268,13 @@ class ModulationEngine {
 
         if (startBin >= binCount || endBin <= startBin) return 0;
 
-        let sum = 0;
-        let count = 0;
-
-        for(let i = startBin; i < endBin; i++) {
-            sum += data[i];
-            count++;
-        }
-
-        if (count === 0) return 0;
-
-        // AGC multiplies the band average, so a quieter track drives the same
+        // Shared with the spectrum display — see aggregateBand's @invariant.
+        // AGC multiplies the band level, so a quieter track drives the same
         // range without the user re-dialling every threshold. 1 when off.
-        const level = Math.min(1, ((sum / count) / 255.0) * audioAnalysisEngine.getSignalGain());
+        const level = Math.min(
+            1,
+            aggregateBand(data, startBin, endBin) * audioAnalysisEngine.getSignalGain(),
+        );
 
         let raw: number;
         if (rule.mode === 'transient') {

@@ -23,6 +23,42 @@
  *   not a migration.
  */
 
+/**
+ * Reduce a range of FFT bins to a single 0..1 level — the ONE statistic both
+ * the spectrum display and the modulation rules use.
+ *
+ * @invariant Display and signal MUST call this same function. They diverged
+ *   before: the display max-pooled while rules took the mean, so on the log
+ *   axis (where one bar spans hundreds of bins in the top octaves) broadband
+ *   content drew as a solid wall while the band feeding a rule averaged out far
+ *   weaker — "it looks strong but nothing moves".
+ *
+ * RMS rather than mean, because the mean actively fights frequency resolution.
+ * A kick fundamental is a narrow peak inside a wide band, so raising fftSize
+ * adds mostly-empty bins and DILUTES it: across 2048→8192 a kick's share of a
+ * 40-120Hz band average falls from 25% to 7%. RMS weights the loud bins more
+ * heavily, so finer analysis makes the kick clearer instead of quieter.
+ *
+ * Where a band's bins are all similar — broadband material like a snare — RMS
+ * and mean agree, so this changes nothing for that content. The gain is
+ * entirely on peaky, tonal bands. Peak-only was rejected: it discards how much
+ * of the band is active, which is exactly what a "Full" or "Highs" band needs.
+ *
+ * Costs one multiply per bin over the mean — a single O(bins) pass either way.
+ */
+export const aggregateBand = (
+    data: Uint8Array,
+    startBin: number,
+    endBin: number,
+): number => {
+    const lo = Math.max(0, startBin);
+    const hi = Math.min(data.length, endBin);
+    if (hi <= lo) return 0;
+    let sumSq = 0;
+    for (let i = lo; i < hi; i++) sumSq += data[i] * data[i];
+    return Math.sqrt(sumSq / (hi - lo)) / 255;
+};
+
 /** Normalised bin position (0..1) → Hz, for a given device sample rate. */
 export const binNormToHz = (norm: number, sampleRate: number): number =>
     norm * (sampleRate / 2);
