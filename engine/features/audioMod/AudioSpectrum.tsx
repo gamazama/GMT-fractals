@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import { audioAnalysisEngine } from './AudioAnalysisEngine';
-import { hzToBinNorm, formatHz } from './freqScale';
+import { formatHz } from './freqScale';
 import { filterBank, BANK_MIN_HZ } from './filterBank';
 import { useEngineStore } from '../../../store/engineStore';
 import { ModulationRule } from '../modulation/index';
@@ -44,37 +44,41 @@ export const AudioSpectrum: React.FC = () => {
     // it replaces. Rule boxes and spectrum bars therefore share one mapping —
     // a box edge sits exactly on the band boundary it selects.
     //
-    // Rules still STORE `freqStart/freqEnd` as fractions of nyquist, so
-    // existing scenes and share links are unaffected; this is only how those
-    // fractions are drawn and hit-tested.
+    // Rules store their band in real Hz (ADR-0106), and this axis is built
+    // from the same band table the analysis uses, so a box edge sits exactly
+    // on the band boundary it selects with no representation change in
+    // between. Everything below is Hz ↔ screen-x.
 
     const bandCount = () => Math.max(1, filterBank.bands.length);
 
-    /** Fractional band position of a normalised frequency. Band k's centre is
+    /** Fractional band position of a frequency. Band k's centre is
      *  `BANK_MIN_HZ · 2^(k/B)`, so its low edge lands on integer k and its high
      *  edge on k+1 once the half-band offset is added. */
-    const freqNormToBandPos = (freqNorm: number) => {
-        const hz = freqNorm * (audioAnalysisEngine.sampleRate / 2);
+    const hzToBandPos = (hz: number) => {
         if (hz <= BANK_MIN_HZ) return 0;
         return filterBank.bandsPerOctave * Math.log2(hz / BANK_MIN_HZ) + 0.5;
     };
 
-    const getScreenX = (freqNorm: number, width: number) => {
-        const pos = freqNormToBandPos(freqNorm);
-        return Math.max(0, Math.min(width, (pos / bandCount()) * width));
-    };
+    const getScreenX = (hz: number, width: number) =>
+        Math.max(0, Math.min(width, (hzToBandPos(hz) / bandCount()) * width));
 
-    const getFreqFromX = (x: number, width: number) => {
+    const getHzFromX = (x: number, width: number) => {
         if (width === 0) return 0;
         const nyquist = audioAnalysisEngine.sampleRate / 2;
         // Snap the far left to 0 so the lowest band stays grabbable — the axis
         // is logarithmic and cannot represent DC.
         if (x < width * 0.015) return 0;
-        if (x >= width) return 1;
+        if (x >= width) return nyquist;
         const pos = (x / width) * bandCount() - 0.5;
         const hz = BANK_MIN_HZ * Math.pow(2, pos / filterBank.bandsPerOctave);
-        return Math.max(0, Math.min(1, hz / nyquist));
+        return Math.max(0, Math.min(nyquist, hz));
     };
+
+    /** Minimum selection width, as a RATIO rather than an absolute Hz gap.
+     *  The axis is logarithmic, so the old fixed 0.001-of-nyquist floor was
+     *  24 Hz — invisible at 10 kHz but wider than a whole 1/6-octave band at
+     *  the kick, which is exactly where hairline selections matter. */
+    const MIN_BAND_RATIO = 1.02;
 
     // Render Loop
     useEffect(() => {
@@ -110,7 +114,7 @@ export const AudioSpectrum: React.FC = () => {
             // where a kick or a hi-hat actually sits.
             const nyquist = audioAnalysisEngine.sampleRate / 2;
             const hzTicks = [100, 1000, 10000];
-            const gridSteps = [0, ...hzTicks.map(hz => hzToBinNorm(hz, audioAnalysisEngine.sampleRate)), 1.0];
+            const gridSteps = [0, ...hzTicks, nyquist];
             gridSteps.forEach(f => {
                 const x = getScreenX(f, w);
                 ctx.moveTo(x, 0); ctx.lineTo(x, h);
@@ -132,7 +136,7 @@ export const AudioSpectrum: React.FC = () => {
                 ctx.font = '8px monospace';
                 hzTicks.forEach(hz => {
                     if (hz >= nyquist) return;
-                    const x = getScreenX(hzToBinNorm(hz, audioAnalysisEngine.sampleRate), w);
+                    const x = getScreenX(hz, w);
                     ctx.fillText(formatHz(hz), x + 2, h - 2);
                 });
             }
@@ -163,8 +167,8 @@ export const AudioSpectrum: React.FC = () => {
             sortedRules.forEach(rule => {
                 const isSelected = rule.id === selectedId;
                 
-                const xStart = getScreenX(rule.freqStart, w);
-                const xEnd = getScreenX(rule.freqEnd, w);
+                const xStart = getScreenX(rule.lowHz, w);
+                const xEnd = getScreenX(rule.highHz, w);
                 
                 const x = xStart;
                 // Allow width to be as small as 1px for precise bass selection
@@ -245,8 +249,8 @@ export const AudioSpectrum: React.FC = () => {
         if (selectedId) {
             const rule = rules.find(r => r.id === selectedId);
             if (rule) {
-                const x = getScreenX(rule.freqStart, w);
-                const width = getScreenX(rule.freqEnd, w) - x;
+                const x = getScreenX(rule.lowHz, w);
+                const width = getScreenX(rule.highHz, w) - x;
                 const topY = h - (rule.thresholdMax * h);
                 const height = (rule.thresholdMax - rule.thresholdMin) * h;
                 const bottomY = topY + height;
@@ -277,8 +281,8 @@ export const AudioSpectrum: React.FC = () => {
         // Selection Check
         for (let i = rules.length - 1; i >= 0; i--) {
             const rule = rules[i];
-            const x = getScreenX(rule.freqStart, w);
-            const width = getScreenX(rule.freqEnd, w) - x;
+            const x = getScreenX(rule.lowHz, w);
+            const width = getScreenX(rule.highHz, w) - x;
             const topY = h - (rule.thresholdMax * h);
             const height = (rule.thresholdMax - rule.thresholdMin) * h;
             
@@ -311,30 +315,30 @@ export const AudioSpectrum: React.FC = () => {
         const update: Partial<ModulationRule> = {};
         
         if (type === 'move') {
-            const startScreenX = getScreenX(startRule.freqStart, w);
-            const endScreenX = getScreenX(startRule.freqEnd, w);
+            const startScreenX = getScreenX(startRule.lowHz, w);
+            const endScreenX = getScreenX(startRule.highHz, w);
             const widthPx = endScreenX - startScreenX;
             
             const newStartPx = startScreenX + dxPx;
             const newEndPx = newStartPx + widthPx;
-            
-            let newStartFreq = getFreqFromX(newStartPx, w);
-            let newEndFreq = getFreqFromX(newEndPx, w);
-            
-            // Bounds Check
-            if (newStartFreq <= 0) {
-                 newStartFreq = 0;
-                 // Re-calculate end freq based on original width in log space? 
-                 // No, fixed width in screen space feels better for dragging.
-                 newEndFreq = getFreqFromX(getScreenX(0, w) + widthPx, w);
+
+            const nyquist = audioAnalysisEngine.sampleRate / 2;
+            let newLowHz = getHzFromX(newStartPx, w);
+            let newHighHz = getHzFromX(newEndPx, w);
+
+            // Bounds Check — hold the width in SCREEN space when the box hits
+            // an edge, which is what a drag feels like it should do.
+            if (newLowHz <= 0) {
+                 newLowHz = 0;
+                 newHighHz = getHzFromX(getScreenX(0, w) + widthPx, w);
             }
-            if (newEndFreq >= 1) {
-                 newEndFreq = 1;
-                 newStartFreq = getFreqFromX(getScreenX(1, w) - widthPx, w);
+            if (newHighHz >= nyquist) {
+                 newHighHz = nyquist;
+                 newLowHz = getHzFromX(getScreenX(nyquist, w) - widthPx, w);
             }
-            
-            update.freqStart = newStartFreq;
-            update.freqEnd = newEndFreq;
+
+            update.lowHz = newLowHz;
+            update.highHz = newHighHz;
 
             const currentHeight = startRule.thresholdMax - startRule.thresholdMin;
             let newMin = startRule.thresholdMin + dy;
@@ -353,17 +357,18 @@ export const AudioSpectrum: React.FC = () => {
             update.gain = Math.max(0, Math.min(10.0, startRule.gain + gainDelta));
         }
         else if (type === 'l') {
-            const startScreenX = getScreenX(startRule.freqStart, w);
+            const startScreenX = getScreenX(startRule.lowHz, w);
             const newStartPx = startScreenX + dxPx;
-            const newStartFreq = getFreqFromX(newStartPx, w);
-            // Allow getting very close to end freq (0.001) for thin selection
-            update.freqStart = Math.max(0, Math.min(startRule.freqEnd - 0.001, newStartFreq));
+            const newLowHz = getHzFromX(newStartPx, w);
+            // Hairline selections stay possible — see MIN_BAND_RATIO.
+            update.lowHz = Math.max(0, Math.min(startRule.highHz / MIN_BAND_RATIO, newLowHz));
         }
         else if (type === 'r') {
-            const endScreenX = getScreenX(startRule.freqEnd, w);
+            const endScreenX = getScreenX(startRule.highHz, w);
             const newEndPx = endScreenX + dxPx;
-            const newEndFreq = getFreqFromX(newEndPx, w);
-            update.freqEnd = Math.min(1, Math.max(startRule.freqStart + 0.001, newEndFreq));
+            const newHighHz = getHzFromX(newEndPx, w);
+            const nyquist = audioAnalysisEngine.sampleRate / 2;
+            update.highHz = Math.min(nyquist, Math.max(startRule.lowHz * MIN_BAND_RATIO, newHighHz));
         }
         else if (type === 'b') update.thresholdMin = Math.max(0, Math.min(startRule.thresholdMax - 0.05, startRule.thresholdMin + dy));
         else if (type === 't') update.thresholdMax = Math.min(1, Math.max(startRule.thresholdMin + 0.05, startRule.thresholdMax + dy));
@@ -380,7 +385,7 @@ export const AudioSpectrum: React.FC = () => {
         if (!containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
         const mx = e.clientX - rect.left;
-        const freq = getFreqFromX(mx, rect.width);
+        const hzAtClick = getHzFromX(mx, rect.width);
         const my = 1.0 - ((e.clientY - rect.top) / rect.height);
         
         addModulation({ target: 'coreMath.paramA', source: 'audio' });
@@ -390,16 +395,15 @@ export const AudioSpectrum: React.FC = () => {
             const newRule = currentRules[currentRules.length - 1];
             if (newRule) {
                 // Span a few bands either side of the click. Expressed in
-                // BANDS (not a fixed fraction of nyquist) so a new box is the
+                // BANDS (not a fixed slice of the axis) so a new box is the
                 // same visual width wherever it is dropped.
                 const nyq = audioAnalysisEngine.sampleRate / 2;
                 const octaves = 3 / bandsPerOctave;   // ≈3 bands wide
-                const hz = freq * nyq;
-                const lo = Math.max(BANK_MIN_HZ, hz / Math.pow(2, octaves / 2));
-                const hi = hz * Math.pow(2, octaves / 2);
+                const lo = Math.max(BANK_MIN_HZ, hzAtClick / Math.pow(2, octaves / 2));
+                const hi = hzAtClick * Math.pow(2, octaves / 2);
                 updateModulation(newRule.id, {
-                    freqStart: Math.max(0, lo / nyq),
-                    freqEnd: Math.min(1, hi / nyq),
+                    lowHz: Math.max(0, lo),
+                    highHz: Math.min(nyq, hi),
                     thresholdMin: Math.max(0, my - 0.15),
                     thresholdMax: Math.min(1, my + 0.15)
                 });

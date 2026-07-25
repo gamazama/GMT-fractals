@@ -221,3 +221,36 @@ registerMigration({
         return p;
     },
 });
+
+// v7 (2026-07-25) — modulation rule bands move from a fraction of nyquist to
+// real Hz. @see docs/adr/0106-modulation-bands-in-hz.md
+//
+// The stored fraction was `hz / (sampleRate/2)`, and the AUTHORING sample rate
+// was never recorded. 48 kHz is ASSUMED rather than read from the loading
+// device, for two reasons: it is the common Web Audio rate on desktop, and —
+// decisively — a share link has to mean the same thing everywhere. Using the
+// local rate would make one link decode to different frequencies on different
+// machines, and would freeze a 44.1 kHz reader's already-misread bands as if
+// they had been intended. Worst case on a genuinely 44.1 kHz-authored scene is
+// an 8.8% shift, about 1.5 semitones.
+const LEGACY_NYQUIST_HZ = 24000;
+
+registerMigration({
+    version: 7,
+    id: 'app-gmt.modulation-band-to-hz',
+    apply: (p: any) => {
+        const rules = p?.features?.modulation?.rules;
+        if (!Array.isArray(rules)) return p;
+        for (const r of rules) {
+            if (!r || typeof r !== 'object') continue;
+            // Idempotent: a rule already carrying Hz is left alone, so a re-run
+            // (or a mixed-vintage scene) cannot double-convert.
+            if (typeof r.lowHz === 'number' || typeof r.highHz === 'number') continue;
+            if (typeof r.freqStart === 'number') r.lowHz = r.freqStart * LEGACY_NYQUIST_HZ;
+            if (typeof r.freqEnd === 'number') r.highHz = r.freqEnd * LEGACY_NYQUIST_HZ;
+            delete r.freqStart;
+            delete r.freqEnd;
+        }
+        return p;
+    },
+});

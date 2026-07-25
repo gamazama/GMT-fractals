@@ -42,9 +42,17 @@ export interface ModulationRule {
     
     source: ModulationSource;
     
-    // Audio Specifics (Frequency Range)
-    freqStart: number;
-    freqEnd: number;
+    /** Audio band, in REAL Hz — not a fraction of nyquist.
+     *
+     *  @invariant Hz is device-independent. The previous representation was a
+     *    fraction of nyquist, so the same rule selected a different frequency
+     *    range on a 44.1 kHz device than on a 48 kHz one, and a share link
+     *    could not mean one thing. It also baked a LINEAR FFT axis into
+     *    persisted data, which every non-FFT analysis backend would have had
+     *    to keep emulating. Migrated by `app-gmt.modulation-band-to-hz` (v7).
+     *  @see docs/adr/0106-modulation-bands-in-hz.md */
+    lowHz: number;
+    highHz: number;
     thresholdMin: number; // Noise Gate
     thresholdMax: number; // Ceiling
     /** Level-following vs onset detection. Optional for back-compat — rules
@@ -103,9 +111,12 @@ export const ModulationFeature: FeatureDefinition = {
                 enabled: true,
                 color,
                 
-                // Defaults designed for Audio, harmless for LFO
-                freqStart: 0.0,
-                freqEnd: 0.2,
+                // Defaults designed for Audio, harmless for LFO. 0–4800 Hz is
+                // exactly what the old 0.0–0.2 nyquist-fraction default meant
+                // at 48 kHz; kept identical so the migration is a pure change
+                // of representation.
+                lowHz: 0,
+                highHz: 4800,
                 thresholdMin: 0.1,
                 thresholdMax: 1.0,
                 mode: 'level',

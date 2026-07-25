@@ -1559,7 +1559,7 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     }, ['weave.ws0ParamA']);
     useEngineStore.setState({ animations: [{ id: 'l1', target: 'weave.ws0ParamB', enabled: true } as any] });
     seedRules([
-      { id: 'r1', target: 'weave.ws0Vec2A_x', source: 'audio', enabled: true, freqStart: 0, freqEnd: 0.1 },
+      { id: 'r1', target: 'weave.ws0Vec2A_x', source: 'audio', enabled: true, lowHz: 0, highHz: 2400 },
       { id: 'r2', target: 'camera.fov', source: 'audio', enabled: true },
     ]);
     const res = retargetAnimationTargets([
@@ -1580,7 +1580,7 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     ck('retarget: audio-link target follows the vec-axis rename',
       ruleById('r1')?.target === 'weave.ws1Vec2A_x', ruleById('r1')?.target);
     ck('retarget: audio-link band/envelope settings untouched by the rename',
-      ruleById('r1')?.freqEnd === 0.1 && ruleById('r1')?.enabled === true);
+      ruleById('r1')?.highHz === 2400 && ruleById('r1')?.enabled === true);
     ck('retarget: audio link on a foreign namespace untouched',
       ruleById('r2')?.target === 'camera.fov');
     ck('retarget: counts', res.tracks === 3 && res.lfos === 1 && res.rules === 1 && res.displaced === 0, res);

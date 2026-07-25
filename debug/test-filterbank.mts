@@ -267,16 +267,14 @@ console.log('\n[5] a tone lands in the band that contains it');
 console.log('\n[6] rule ranges map onto bands');
 {
   const b = mk(4096, 6);
-  const nyq = SR / 2;
   const [lo, hi] = b.bandRangeForHz(40, 120);
   assert(hi > lo, 'the 40-120Hz kick band resolves to a real range', { lo, hi });
   assert(b.bands[lo].highHz >= 40 && b.bands[hi - 1].lowHz <= 120,
     'and the range brackets the requested frequencies',
     { lowEdge: b.bands[lo].lowHz.toFixed(0), highEdge: b.bands[hi - 1].highHz.toFixed(0) });
 
-  const [nlo, nhi] = b.bandRangeForNorm(40 / nyq, 120 / nyq);
-  assert(nlo === lo && nhi === hi, 'the normalised entry point agrees with the Hz one');
-
+  // Hz is the ONLY entry point now — the nyquist-fraction one is gone with
+  // the rule representation it served (ADR-0106).
   const [zlo, zhi] = b.bandRangeForHz(1000, 1000);
   assert(zhi > zlo, 'a zero-width selection still reads at least one band');
 }

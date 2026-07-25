@@ -489,7 +489,7 @@ const AudioModulationList: React.FC = () => {
                                 </span>
                                 {isAudio && (
                                     <span className="text-fg-faint">
-                                        {formatBand(rule.freqStart, rule.freqEnd, audioAnalysisEngine.sampleRate)}
+                                        {formatBand(rule.lowHz, rule.highHz)}
                                     </span>
                                 )}
                                 <DotToggle

@@ -59,7 +59,7 @@ const apply = (store: any, preset: any) =>
 
 const RULE = {
   id: 'rule-kick', target: 'coreMath.paramA', source: 'audio', enabled: true,
-  color: '#ef4444', freqStart: 0, freqEnd: 0.04, thresholdMin: 0.1, thresholdMax: 1,
+  color: '#ef4444', lowHz: 0, highHz: 960, thresholdMin: 0.1, thresholdMax: 1,
   attack: 0.1, decay: 0.3, smoothing: 0, gain: 3.5, offset: 0,
 };
 

@@ -140,7 +140,7 @@ const signalOf = (rule: any, dt = 1 / 60): number => {
 
 const mkRule = (mode: 'level' | 'transient') => ({
   id: `r-${mode}`, target: 't', source: 'audio', enabled: true, color: '#fff',
-  freqStart: 0, freqEnd: 0.1, thresholdMin: 0, thresholdMax: 1,
+  lowHz: 0, highHz: 2400, thresholdMin: 0, thresholdMax: 1,
   attack: 0.1, decay: 0.3, smoothing: 0, gain: 1, offset: 0, mode,
 });
 
@@ -215,7 +215,7 @@ console.log('\n[11] the spectrum bar IS the rule signal');
   const r = mkRule('level');
   setBand(0.6, 128);
   const ruleSignal = signalOf(r);              // thresholdMin 0, gain 1 → raw level
-  const [lo, hi] = filterBank.bandRangeForNorm(r.freqStart, r.freqEnd);
+  const [lo, hi] = filterBank.bandRangeForHz(r.lowHz, r.highHz);
   const displayBars = filterBank.aggregate(lo, hi);
   assert(near(ruleSignal, displayBars, 1e-6),
     'a rule and the bars it spans produce the same number',

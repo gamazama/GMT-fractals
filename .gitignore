@@ -77,6 +77,7 @@ debug/v4-verify-results.jsonl
 debug/render-sweep-phase1.jsonl
 debug/render-matrix-phase1.html
 debug/native-config-sweep.jsonl
+debug/native-weave-sweep.jsonl
 debug/native-interlace-sweep.jsonl
 debug/native-interlace-matrix.html
 debug/v3-v4-catalog.json

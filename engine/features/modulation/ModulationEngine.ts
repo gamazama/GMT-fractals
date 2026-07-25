@@ -264,7 +264,7 @@ class ModulationEngine {
     private static readonly TRANSIENT_FULL_SCALE = 20;
 
     private processAudioSignal(rule: ModulationRule, _data: Float32Array, delta: number): number {
-        if (rule.freqEnd <= rule.freqStart) return 0;
+        if (rule.highHz <= rule.lowHz) return 0;
 
         // Read the fractional-octave BANDS, not raw bins. The bands are already
         // RMS-aggregated and (optionally) per-band normalised, and the spectrum
@@ -273,7 +273,7 @@ class ModulationEngine {
         // Global AGC still multiplies here. It composes cleanly with per-band
         // normalisation rather than fighting it: a global scale factor cancels
         // out of a per-band ratio, so turning both on is not double-normalising.
-        const [bandLo, bandHi] = filterBank.bandRangeForNorm(rule.freqStart, rule.freqEnd);
+        const [bandLo, bandHi] = filterBank.bandRangeForHz(rule.lowHz, rule.highHz);
         const level = Math.min(
             1,
             filterBank.aggregate(bandLo, bandHi) * audioAnalysisEngine.getSignalGain(),

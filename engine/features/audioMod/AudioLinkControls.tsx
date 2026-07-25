@@ -9,7 +9,7 @@ import { FeatureComponentProps } from '../../../components/registry/ComponentReg
 import { collectHelpIds } from '../../../utils/helpUtils';
 import { ModulationRule } from '../modulation/index';
 import { audioAnalysisEngine } from './AudioAnalysisEngine';
-import { QUICK_BANDS, quickBandToNorm, formatBand } from './freqScale';
+import { QUICK_BANDS, formatBand } from './freqScale';
 
 export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () => {
     const store = useEngineStore();
@@ -51,8 +51,8 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
     // If user selected a non-audio rule, hide frequency controls or show simplified UI
     const isAudio = rule.source === 'audio';
 
-    const setBand = (start: number, end: number) => {
-        updateRule(rule.id, { freqStart: start, freqEnd: end });
+    const setBand = (lowHz: number, highHz: number) => {
+        updateRule(rule.id, { lowHz, highHz });
     };
 
     return (
@@ -146,11 +146,11 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
                     <label className="text-[9px] text-fg-dim font-bold block mb-1">Quick Frequency Bands</label>
                     <div className="flex gap-1">
                         {QUICK_BANDS.map((b) => {
-                            const n = quickBandToNorm(b, sampleRate);
+                            // Presets are already in Hz — no conversion left.
                             return (
                                 <button
                                     key={b.label}
-                                    onClick={() => setBand(n.freqStart, n.freqEnd)}
+                                    onClick={() => setBand(b.lowHz, b.highHz)}
                                     title={b.title}
                                     className="flex-1 py-1.5 bg-line/5 hover:bg-line/10 text-[9px] font-bold text-fg-muted rounded border border-line/5"
                                 >
@@ -218,7 +218,7 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
                 whole-bass band. */}
             {isAudio && (
                 <div className="flex justify-between text-[9px] text-fg-faint px-1">
-                     <span>Band: {formatBand(rule.freqStart, rule.freqEnd, sampleRate)}</span>
+                     <span>Band: {formatBand(rule.lowHz, rule.highHz)}</span>
                      <span>Threshold: {Math.round(rule.thresholdMin*100)}% - {Math.round(rule.thresholdMax*100)}%</span>
                 </div>
             )}

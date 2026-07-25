@@ -537,10 +537,12 @@ export class AudioAnalysisEngine {
     }
 
     /**
-     * Device sample rate. The FFT's bins span 0..sampleRate/2, so this is what
-     * turns a normalised bin position into real Hz — see `binNormToHz` in
-     * `freqScale.ts`. Returns 48000 before `init()`: the common default, and
-     * only used to label a spectrum that isn't running yet.
+     * Device sample rate. The FFT's bins span 0..sampleRate/2, so this bounds
+     * what the spectrum can display and how far a rule's band can reach.
+     *
+     * Note rule bands are stored in real Hz (ADR-0106), so this no longer
+     * decodes them — it only bounds them. Returns 48000 before `init()`: the
+     * common default, and only used to label a spectrum that isn't running yet.
      */
     public get sampleRate(): number {
         return this.audioContext?.sampleRate ?? 48000;

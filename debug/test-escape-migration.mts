@@ -90,5 +90,46 @@ delete (p6 as any)._migrationVersion; // simulate save/reload (version not persi
 const p6b = applyMigrations(p6);
 assert((p6b.features as any).coloring?.escape === 20 && (p6b.features as any).quality?.deBailout === 5, 'second pass is a no-op');
 
+// --- Test 7: v7 modulation bands, nyquist-fraction → real Hz -----------------
+// @see docs/adr/0106-modulation-bands-in-hz.md
+console.log('\n[7] v7 — modulation rule bands convert to Hz');
+{
+  const legacy = {
+    formula: 'Mandelbulb',
+    features: {
+      modulation: {
+        rules: [
+          { id: 'kick', target: 'coreMath.paramA', source: 'audio', freqStart: 0, freqEnd: 0.005 },
+          { id: 'full', target: 'coreMath.paramB', source: 'audio', freqStart: 0, freqEnd: 1 },
+          { id: 'lfo', target: 'coreMath.paramC', source: 'lfo' },
+        ],
+      },
+    },
+  };
+  const p7 = applyMigrations(legacy);
+  const rules = (p7.features as any).modulation.rules;
+
+  assert(rules[0].lowHz === 0 && rules[0].highHz === 120,
+    'a 0–0.005 fraction becomes 0–120 Hz (assumed 48kHz authoring rate)');
+  assert(rules[1].highHz === 24000, 'a full-range rule becomes 0–24000 Hz');
+  assert(rules[0].freqStart === undefined && rules[0].freqEnd === undefined,
+    'the old fields are removed, not left alongside');
+  assert(rules[2].lowHz === undefined,
+    'a non-audio rule with no band is left untouched');
+
+  // Idempotence matters here: the version tag is not persisted in GMF, so a
+  // save/reload replays the whole chain. Double-converting would drop a
+  // 120 Hz kick band to 0.005 Hz.
+  delete (p7 as any)._migrationVersion;
+  const p7b = applyMigrations(p7);
+  const again = (p7b.features as any).modulation.rules;
+  assert(again[0].lowHz === 0 && again[0].highHz === 120,
+    'a second pass leaves already-migrated Hz alone');
+
+  // A scene with no modulation slice must not throw.
+  const p7c = applyMigrations({ formula: 'Mandelbulb', features: {} });
+  assert(!!p7c, 'a scene without modulation survives the migration');
+}
+
 console.log(`\n${failures === 0 ? '✓ all assertions passed' : `✗ ${failures} assertion(s) failed`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -449,14 +449,9 @@ export class FilterBank {
         }
     }
 
-    /** Band index range covering a normalised bin position span (`freqStart` /
-     *  `freqEnd` on a rule, which are fractions of nyquist). Half-open, and
-     *  always at least one band so a hairline selection still reads something. */
-    public bandRangeForNorm(startNorm: number, endNorm: number): [number, number] {
-        const nyquist = this.sampleRate / 2;
-        return this.bandRangeForHz(startNorm * nyquist, endNorm * nyquist);
-    }
-
+    /** Band index range covering an Hz span (`lowHz`/`highHz` on a rule).
+     *  Half-open, and always at least one band so a hairline selection still
+     *  reads something. */
     public bandRangeForHz(lowHz: number, highHz: number): [number, number] {
         const n = this.bands.length;
         if (n === 0) return [0, 0];
