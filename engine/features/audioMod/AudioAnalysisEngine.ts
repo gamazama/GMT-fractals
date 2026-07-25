@@ -25,12 +25,67 @@
  */
 import { AudioTransport } from './AudioTransport';
 import { AudioAnalysis } from './AudioAnalysis';
+import { WorkletAnalysis } from './WorkletAnalysis';
+import type { AnalysisBackend } from './analysisBackend';
+
+/** Which analysis backend is running. TEMPORARY A/B — see the @invariant. */
+export type AnalysisBackendKind = 'analyser' | 'worklet';
 
 export class AudioAnalysisEngine {
-    private analysis = new AudioAnalysis();
-    private transport = new AudioTransport(
-        (ctx, tap) => this.analysis.attach(ctx, tap),
-    );
+    private node = new AudioAnalysis();
+    private worklet = new WorkletAnalysis();
+    private kind: AnalysisBackendKind = 'analyser';
+    private ctx: AudioContext | null = null;
+    private tap: AudioNode | null = null;
+
+    private get analysis(): AnalysisBackend {
+        // Fall back while the worklet module is still loading, and permanently
+        // if it failed — a rig mid-set must not go silent because addModule
+        // rejected on some browser.
+        if (this.kind === 'worklet' && this.worklet.isReady) return this.worklet;
+        return this.node;
+    }
+
+    private transport = new AudioTransport((ctx, tap) => {
+        this.ctx = ctx;
+        this.tap = tap;
+        this.node.attach(ctx, tap);
+        if (this.kind === 'worklet') this.worklet.attach(ctx, tap);
+    });
+
+    /**
+     * Switch analysis backend.
+     *
+     * @invariant BOTH backends stay attached while the worklet is selected.
+     *   The AnalyserNode costs one FFT per tick and is what covers the load
+     *   window and any addModule failure; detaching it would turn a recoverable
+     *   fallback into a dead rig. This is a TEMPORARY A/B — when the worklet is
+     *   confirmed in the field, delete `AudioAnalysis`, the `analysisBackend`
+     *   param, and this method together.
+     */
+    public setBackend(kind: AnalysisBackendKind) {
+        if (kind === this.kind) return;
+        this.kind = kind;
+        if (kind === 'worklet' && this.ctx && this.tap) {
+            this.worklet.attach(this.ctx, this.tap);
+        }
+    }
+
+    public getBackend(): AnalysisBackendKind { return this.kind; }
+    /** True when the selected backend is actually the one running — the panel
+     *  shows this so a silent fallback is visible rather than mysterious. */
+    public get backendActive(): boolean {
+        return this.kind === 'analyser' || this.worklet.isReady;
+    }
+    /** Snapshot nearest an AudioContext time — modulation recording's
+     *  per-frame back-fill. Null on the AnalyserNode backend, which keeps no
+     *  history. */
+    public snapshotAt(t: number) {
+        return this.kind === 'worklet' && this.worklet.isReady
+            ? this.worklet.snapshotAt(t)
+            : null;
+    }
+    public get contextTime(): number { return this.ctx?.currentTime ?? 0; }
 
     public init() { this.transport.init(); }
 
@@ -71,9 +126,15 @@ export class AudioAnalysisEngine {
      */
     public get sampleRate() { return this.transport.sampleRate; }
     public get binWidthHz() { return this.analysis.binWidthHz; }
-    public setSmoothing(val: number) { this.analysis.setSmoothing(val); }
-    public setFftSize(size: number) { this.analysis.setFftSize(size); }
-    public setDecibelRange(floor: number, ceiling: number) { this.analysis.setDecibelRange(floor, ceiling); }
+    // Settings go to BOTH backends, not just the active one: the inactive arm
+    // is the fallback, and a fallback configured differently from what the user
+    // set would be worse than no fallback at all.
+    public setSmoothing(val: number) { this.node.setSmoothing(val); this.worklet.setSmoothing(val); }
+    public setFftSize(size: number) { this.node.setFftSize(size); this.worklet.setFftSize(size); }
+    public setDecibelRange(floor: number, ceiling: number) {
+        this.node.setDecibelRange(floor, ceiling);
+        this.worklet.setDecibelRange(floor, ceiling);
+    }
     public getRawData() { return this.analysis.getRawData(); }
     public getPeakLevel() { return this.analysis.getPeakLevel(); }
     public getSignalGain() { return this.analysis.getSignalGain(); }

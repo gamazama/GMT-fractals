@@ -64,6 +64,7 @@ class AnalysisProcessor extends AudioWorkletProcessor {
     // Batching
     private staging!: Float32Array;
     private stagingTimes!: Float64Array;
+    private stagingPeaks!: Float32Array;
     private staged = 0;
     private dropped = 0;
     private lastPost = 0;
@@ -92,6 +93,7 @@ class AnalysisProcessor extends AudioWorkletProcessor {
         const n = this.analyser.bands.length;
         this.staging = new Float32Array(MAX_SNAPSHOTS_PER_POST * n * 2);
         this.stagingTimes = new Float64Array(MAX_SNAPSHOTS_PER_POST);
+        this.stagingPeaks = new Float32Array(MAX_SNAPSHOTS_PER_POST);
         this.staged = 0;
     }
 
@@ -191,6 +193,7 @@ class AnalysisProcessor extends AudioWorkletProcessor {
         this.staging.set(this.analyser.levels, base);
         this.staging.set(this.analyser.flux, base + bandCount);
         this.stagingTimes[this.staged] = currentTime;
+        this.stagingPeaks[this.staged] = this.analyser.peakLevel;
         this.staged++;
     }
 
@@ -201,6 +204,7 @@ class AnalysisProcessor extends AudioWorkletProcessor {
             bandCount,
             count: this.staged,
             times: this.stagingTimes.subarray(0, this.staged),
+            peaks: this.stagingPeaks.subarray(0, this.staged),
             data: this.staging.subarray(0, this.staged * bandCount * 2),
             dropped: this.dropped,
         };

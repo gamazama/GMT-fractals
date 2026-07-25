@@ -37,11 +37,15 @@
  */
 import { filterBank } from './filterBank';
 import { dbToUnit } from './bandMath';
+import { AutoGain } from './dsp/autoGain';
+import type { AnalysisBackend } from './analysisBackend';
 
-export class AudioAnalysis {
+export class AudioAnalysis implements AnalysisBackend {
     private audioContext: AudioContext | null = null;
     private analyser: AnalyserNode | null = null;
     private dataArray: Float32Array<ArrayBuffer> | null = null;
+    private tap: AudioNode | null = null;
+    private agc = new AutoGain();
 
     // ── Analysis window + dynamic range ─────────────────────────────────────
     private desiredFftSize = 4096;
@@ -62,7 +66,19 @@ export class AudioAnalysis {
         this.analyser.smoothingTimeConstant = this.smoothing;
         this.applyDecibelRange();
         this.dataArray = new Float32Array(this.analyser.frequencyBinCount);
+        this.tap = tap;
         tap.connect(this.analyser);
+    }
+
+    public detach(): void {
+        if (this.tap && this.analyser) {
+            try { this.tap.disconnect(this.analyser); } catch { /* already gone */ }
+        }
+        this.analyser = null;
+        this.dataArray = null;
+        this.tap = null;
+        this.audioContext = null;
+        this.agc.reset();
     }
 
     public setSmoothing(val: number) {
@@ -139,26 +155,6 @@ export class AudioAnalysis {
         return this.sampleRate / this.desiredFftSize;
     }
 
-    // ── Auto gain (AGC) ─────────────────────────────────────────────────────
-    /** Slow-release peak follower over the whole spectrum, 0..1. */
-    private agcPeak = 0;
-    /** Gain the rule pipeline multiplies its band average by. 1 when AGC is off. */
-    private agcGain = 1;
-
-    /** Below this the input is treated as silence and the gain is FROZEN rather
-     *  than climbing — otherwise a quiet passage between tracks would ramp the
-     *  boost up and detonate on the next downbeat. */
-    private static readonly AGC_FLOOR = 0.04;
-    /** Ceiling on the boost. Past this you are amplifying noise, not signal. */
-    private static readonly AGC_MAX_BOOST = 8;
-    /** Where AGC aims to put the running peak. Short of 1.0 so genuine peaks
-     *  keep some headroom instead of sitting pinned at the gate ceiling. */
-    private static readonly AGC_TARGET = 0.8;
-    /** Per-second release rate of the peak follower. Attack is instantaneous
-     *  (a peak is a peak); release is what sets how fast the rig adapts to a
-     *  quieter track — ~2.5 s to fall an order of magnitude. */
-    private static readonly AGC_RELEASE = 0.4;
-
     /**
      * Pull the current FFT frame and drive the filterbank.
      *
@@ -200,29 +196,7 @@ export class AudioAnalysis {
             deltaSec,
         });
 
-        if (!agcEnabled) { this.agcGain = 1; this.agcPeak = 0; return; }
-
-        const peak = this.getPeakLevel();
-
-        // Silence gate FIRST. Gating on the released peak instead of the live
-        // input is the trap: through a gap between tracks the follower keeps
-        // decaying, the gain is recomputed against an ever-smaller peak, and it
-        // ratchets to the ×8 ceiling before the peak finally drops under the
-        // floor — so the next downbeat arrives at maximum boost and detonates.
-        // While the input is silent, hold BOTH the follower and the gain.
-        if (peak < AudioAnalysis.AGC_FLOOR) return;
-
-        if (peak > this.agcPeak) {
-            this.agcPeak = peak;
-        } else {
-            const k = Math.exp(-AudioAnalysis.AGC_RELEASE * Math.max(0, deltaSec) * 10);
-            this.agcPeak = peak + (this.agcPeak - peak) * k;
-        }
-
-        this.agcGain = Math.min(
-            AudioAnalysis.AGC_MAX_BOOST,
-            AudioAnalysis.AGC_TARGET / Math.max(AudioAnalysis.AGC_FLOOR, this.agcPeak),
-        );
+        this.agc.update(agcEnabled, this.getPeakLevel(), deltaSec);
     }
 
     public getRawData() {
@@ -232,7 +206,7 @@ export class AudioAnalysis {
     /** Multiplier the rule pipeline applies to a band average. 1 when AGC is
      *  off, so the non-AGC path is bit-identical to before. */
     public getSignalGain(): number {
-        return this.agcGain;
+        return this.agc.value;
     }
 
     /** Loudest bin this frame, 0..1. Drives the panel's level/clip meter —

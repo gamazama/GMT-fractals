@@ -62,6 +62,16 @@ export class BandAnalyser {
     /** Positive spectral flux per band, in level-units PER SECOND. */
     public flux: Float32Array = new Float32Array(0);
     public resolutionLimitHz = 0;
+    /**
+     * Loudest BIN this hop, on the 0..1 scale — what the global AGC follows.
+     *
+     * @invariant Computed over raw bins, NOT over bands, to match the
+     *   main-thread path exactly. Bands are kernel-averaged, so a band peak
+     *   sits below a bin peak and the AGC would boost harder on this backend
+     *   than on the other. Keeping the two identical is what makes the A/B a
+     *   test of the architecture rather than of the gain staging.
+     */
+    public peakLevel = 0;
 
     private cfg!: BandAnalyserConfig;
     private frame!: SpectrumFrame;
@@ -133,10 +143,13 @@ export class BandAnalyser {
         // Per-bin linear power, computed ONCE — bands overlap, so converting
         // inside the band loop would redo this for every band touching a bin.
         const power = this.power;
+        let peakDb = -Infinity;
         for (let i = 0; i < db.length; i++) {
             const v = db[i];
             power[i] = Number.isFinite(v) ? Math.pow(10, v * 0.1) : 0;
+            if (v > peakDb) peakDb = v;
         }
+        this.peakLevel = dbToUnit(peakDb, dbFloor, dbCeiling);
 
         const kernel = this.kernel;
         const tilt = this.tiltDb;

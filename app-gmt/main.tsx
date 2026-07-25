@@ -47,6 +47,7 @@ import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { copyShareLink } from '../engine-gmt/topbar/ShareLinkButton';
 import { installModulation } from '../engine/animation/modulationTick';
+import { installAudioAnalysis } from '../engine/animation/audioTick';
 import { installModulationUI, setLfoListConfig } from '../engine/components/modulation';
 import { installShortcuts, shortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
@@ -352,6 +353,9 @@ installGallery();
 installAuth({ when: () => !isMobileSnapshot() });
 
 installModulation();
+// Audio analysis at SNAPSHOT, ahead of the modulation dispatch that reads it.
+// @see docs/adr/0110-audio-analysis-in-a-worklet.md
+installAudioAnalysis();
 // GMT's LFO defaults: a fresh LFO targets coreMath.paramA (the first
 // formula param) so the user gets a visible reaction immediately
 // after clicking "Add LFO". The default seedBaseValue handler already

@@ -173,18 +173,10 @@ export const tick = (delta: number) => {
     const modulationSlice = (storeState as any).modulation as ModulationState;
     const audioSlice = (storeState as any).audio as AudioState;
     
-    // 2. Update Audio Engine Hardware. AGC is passed per tick rather than
-    //    latched, so the store's live value always wins — including for a rig
-    //    whose panel is closed or one restored by a scene load.
-    if (audioSlice && audioSlice.isEnabled) {
-        audioAnalysisEngine.update(
-            !!audioSlice.agcEnabled,
-            delta,
-            audioSlice.bandsPerOctave ?? 6,
-            !!audioSlice.normalizeBands,
-            audioSlice.spectralTilt ?? 3,
-        );
-    }
+    // 2. Audio analysis has moved to its own tick — `engine/animation/audioTick`,
+    //    registered at SNAPSHOT so `filterBank` is filled before the dispatch
+    //    below reads it. It used to live here, which meant only apps using this
+    //    dispatcher ever analysed audio. @see docs/adr/0110-*.md
 
     // 2b. Sync each audio clip's deck playback to the timeline frame.
     const audioClips = (animStore as { audioClips?: (import('../../store/animation/types').AudioClip | null)[] }).audioClips;

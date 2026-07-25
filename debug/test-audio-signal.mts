@@ -58,10 +58,12 @@ const setBand = (level: number, upTo = 128) => {
   for (let i = 0; i < upTo; i++) buf[i] = db;
 };
 
-const resetAgc = () => {
-  analysis.agcPeak = 0;
-  analysis.agcGain = 1;
-};
+// The AGC moved into a shared `AutoGain` (ADR-0110) so both analysis backends
+// follow one implementation rather than drifting copies. Reset through it —
+// poking `agcPeak`/`agcGain` on the analysis object is now a silent no-op,
+// which showed up as the boost-cap assertion reading a peak left over from the
+// previous case.
+const resetAgc = () => { analysis.agc.reset(); };
 
 // ── AGC ─────────────────────────────────────────────────────────────────────
 console.log('\n[1] AGC off is a no-op');

@@ -307,9 +307,20 @@ export class FilterBank {
         this.framesAnalysed++;
     }
 
+    /** Track the follower toward the live signal and pass levels through
+     *  unchanged — the adaptive-gain-OFF path. Public because the worklet
+     *  backend fills `levels` itself and still needs the follower kept warm,
+     *  so re-enabling does not apply state learned minutes ago. */
+    public syncFollowerToLevels(): void {
+        this.normalized.set(this.levels);
+        this.peaks.set(this.levels);
+    }
+
     /** Per-band adaptive gain: divide by a slow-release running peak. See the
-     *  `NORMALIZE_*` constant block for why this defaults OFF. */
-    private applyPeakFollower(deltaSec: number): void {
+     *  `NORMALIZE_*` constant block for why this defaults OFF. Public for the
+     *  same reason as `syncFollowerToLevels` — either backend can fill
+     *  `levels` and then ask for the follower to run over them. */
+    public applyPeakFollower(deltaSec: number): void {
         const n = this.bands.length;
         const k = Math.exp(-NORMALIZE_RELEASE_PER_SEC * Math.max(0, deltaSec) * 10);
         for (let i = 0; i < n; i++) {

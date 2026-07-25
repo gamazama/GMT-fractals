@@ -27,6 +27,7 @@ export interface AudioState {
     bandsPerOctave: number;
     normalizeBands: boolean;
     spectralTilt: number;
+    analysisBackend: number;
 }
 
 // AudioActions removed - link management is now in ModulationActions
@@ -141,6 +142,22 @@ export const AudioFeature: FeatureDefinition = {
             noAccumReset: true, preserveOnApply: true,
             min: 0, max: 6, step: 0.5,
             description: 'Lift the high bands to compensate for music\'s natural roll-off. A fixed offset, so it costs no dynamics — 3 is neutral for typical material, 0 is the raw spectrum.',
+        },
+        // TEMPORARY A/B control, advanced-only. The worklet runs analysis on
+        // the audio thread, so it keeps analysing (and accumulating onsets)
+        // when the main thread is blocked — where the AnalyserNode path
+        // collapses to 1Hz and loses whole seconds of transients.
+        // Delete this param, AudioAnalysis and setBackend together once the
+        // worklet is confirmed in the field.
+        // @see docs/adr/0110-audio-analysis-in-a-worklet.md
+        analysisBackend: {
+            type: 'float', default: 0, label: 'Analysis', shortId: 'ab', group: 'system',
+            noAccumReset: true, preserveOnApply: true, isAdvanced: true,
+            options: [
+                { label: 'Main thread (AnalyserNode)', value: 0 },
+                { label: 'Audio thread (Worklet)', value: 1 },
+            ],
+            description: 'Where the spectrum is analysed. The audio thread keeps working when the UI is busy, so transients are not lost while the scene is heavy.',
         },
     },
 };

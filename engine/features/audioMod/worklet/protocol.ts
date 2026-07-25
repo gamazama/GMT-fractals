@@ -61,6 +61,10 @@ export interface AnalysisBatchMessage {
     count: number;
     /** AudioContext time at the end of each analysed window, seconds. */
     times: Float64Array;
+    /** Loudest BIN per snapshot, 0..1 — what the global AGC follows. Sent
+     *  rather than derived from bands, so the AGC sees the same number on both
+     *  backends. @see BandAnalyser.peakLevel */
+    peaks: Float32Array;
     data: Float32Array;
     /** Hops discarded because a batch overflowed. Non-zero means something is
      *  badly wrong upstream; the main thread logs it rather than hiding it. */

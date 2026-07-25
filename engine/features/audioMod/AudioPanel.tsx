@@ -306,6 +306,11 @@ const AnalysisControls: React.FC = () => {
     const dbCeiling = audio?.dbCeiling ?? -10;
     const bandsPerOctave = audio?.bandsPerOctave ?? 6;
     const windowMs = (fftSize / audioAnalysisEngine.sampleRate) * 1000;
+    const advancedMode = useEngineStore(s => (s as any).advancedMode) as boolean;
+    // Re-read each frame while the A/B exists: `addModule` resolves
+    // asynchronously, so "selected" and "running" differ for a moment and the
+    // panel must not claim the worklet is live before it is.
+    const backendActive = audioAnalysisEngine.backendActive;
 
     return (
         <CollapsibleSection
@@ -343,6 +348,28 @@ const AnalysisControls: React.FC = () => {
                         push that lower.
                     </p>
                 </div>
+
+                {/* TEMPORARY A/B — advanced only. Remove with AudioAnalysis
+                    once the worklet is confirmed. @see docs/adr/0110-*.md */}
+                {advancedMode && (
+                    <div>
+                        <label className="text-[9px] text-fg-dim font-bold block mb-1">Analysis</label>
+                        <select
+                            value={audio?.analysisBackend ?? 0}
+                            onChange={(e) => setAudio({ analysisBackend: parseInt(e.target.value, 10) })}
+                            className="t-select w-full text-[9px]"
+                            title="Where the spectrum is analysed"
+                        >
+                            <option value={0}>Main thread (AnalyserNode)</option>
+                            <option value={1}>Audio thread (Worklet)</option>
+                        </select>
+                        <p className="text-[8px] text-fg-faint mt-1 leading-snug">
+                            {(audio?.analysisBackend ?? 0) === 1 && !backendActive
+                                ? <span className="text-warn">Worklet loading or unavailable — running on the main thread.</span>
+                                : 'The audio thread keeps analysing when the UI is busy, so transients are not lost while the scene is heavy.'}
+                        </p>
+                    </div>
+                )}
 
                 {/* Fixed tilt — a constant dB ramp, NOT adaptive gain. Sits
                     above Balance Bands because it is the answer that one is
