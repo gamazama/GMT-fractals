@@ -9,14 +9,29 @@
  * here is a candidate to move onto the audio thread, and nothing here holds a
  * `<audio>` element that would block the move.
  *
- * @invariant Analysis is pulled once per RENDER FRAME, and that is a known
- *   defect this class is staged to fix. `AnalyserNode.smoothingTimeConstant`
+ * @invariant Analysis is pulled once per MAIN-THREAD TICK, which makes the
+ *   analysis rate a property of main-thread health rather than of the audio.
+ *
+ *   Note what this is NOT: a heavy fractal does not slow it down. Rendering
+ *   runs in a worker, and `GmtRendererTickDriver` documents that "the main
+ *   thread runs at 60 while the worker may render far slower". Owner-confirmed
+ *   in the field — no audio degradation under GPU load. An earlier version of
+ *   this comment claimed otherwise and was wrong.
+ *
+ *   The real exposure is main-thread BLOCKING. When UI fps drops under 20,
+ *   `GmtRendererTickDriver` throttles `runTicks` to once per SECOND — so
+ *   analysis collapses to 1 Hz, the spectrum freezes, and every transient in
+ *   that second is lost rather than merely late. That is the "uncomfortable to
+ *   work on when strained" case, and it is what moving analysis onto the audio
+ *   thread actually fixes: the worklet keeps running and accumulating, and a
+ *   late tick reads a current value instead of a stale one.
+ *
+ *   Secondary, and smaller than it sounds: `AnalyserNode.smoothingTimeConstant`
  *   is applied per `getFloatFrequencyData` CALL with no time compensation, so
- *   the effective smoothing time is set by the frame rate: ~74ms at 60fps,
- *   ~297ms at 15fps. Audio reactivity therefore gets sluggish in proportion to
- *   how heavy the scene is. The per-band followers and the AGC below do NOT
- *   share the bug — they take `deltaSec` and use `exp(-k·dt)` — which is
- *   exactly why the test suite cannot see it.
+ *   its effective time constant scales with the gap between calls (~74ms at
+ *   60fps). At a steady 60 that is simply the tuning; it only misbehaves when
+ *   the call rate moves. The per-band followers and the AGC below do NOT share
+ *   the bug — they take `deltaSec` and use `exp(-k·dt)`.
  *
  * @see docs/adr/0110-audio-analysis-in-a-worklet.md
  */
