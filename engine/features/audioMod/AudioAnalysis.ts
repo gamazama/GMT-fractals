@@ -20,7 +20,8 @@
  *
  * @see docs/adr/0110-audio-analysis-in-a-worklet.md
  */
-import { filterBank, dbToUnit } from './filterBank';
+import { filterBank } from './filterBank';
+import { dbToUnit } from './bandMath';
 
 export class AudioAnalysis {
     private audioContext: AudioContext | null = null;
