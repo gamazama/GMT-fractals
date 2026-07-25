@@ -12,12 +12,22 @@
  * same semantic parameter. Keyframe VALUES never change — only the routing
  * string (track id / LFO target) is renamed.
  *
- * The two stores touched:
+ * The three stores touched — every DURABLE store of routing strings:
  *  - `useAnimationStore.sequence.tracks` (+ track `id` + selection ids). One
  *    timeline `snapshot()` is taken first, so the rename is undoable in the
  *    timeline's own per-scope history — no parallel undo stack.
  *  - `useEngineStore.animations` (LFO `AnimationParams.target`). LFO edits
  *    carry no history anywhere; the rename doesn't invent one.
+ *  - `useEngineStore.modulation.rules` (audio/LFO link `ModulationRule.target`).
+ *    Added 2026-07-25: this store was MISSED in the original P4.6 pass, which
+ *    counted only two. An audio link is exactly as durable as an LFO — the
+ *    "transient consumers need no rename" carve-out below covers
+ *    `liveModulations` (recomputed per frame), NOT the rules that produce it.
+ *    Symptom of the omission: building a weave off a plain formula emits
+ *    `coreMath.paramA → weave.ws0ParamA`; keyframes and LFOs followed while
+ *    audio links kept pointing at the retired `coreMath` id and went silently
+ *    dead. A reorder was worse — the link survived but drove a DIFFERENT
+ *    formula's slot.
  *
  * @invariant Renames are applied as a SIMULTANEOUS permutation (a 0↔1 bank
  * swap must not chain), and a rename DESTINATION occupied by a track/LFO that
@@ -51,6 +61,8 @@ export interface RetargetResult {
     tracks: number;
     /** LFO modulations renamed. */
     lfos: number;
+    /** Modulation rules (audio links) renamed. */
+    rules: number;
     /** Stale occupants removed from a rename destination (their own slot/layer
      *  was removed and another slot's animation moved onto their old lane). */
     displaced: number;
@@ -75,7 +87,7 @@ function expandRenames(renames: ParamRename[]): Map<string, string> {
  *  when nothing matches. */
 export function retargetAnimationTargets(renames: ParamRename[]): RetargetResult {
     const map = expandRenames(renames);
-    const result: RetargetResult = { tracks: 0, lfos: 0, displaced: 0 };
+    const result: RetargetResult = { tracks: 0, lfos: 0, rules: 0, displaced: 0 };
     if (map.size === 0) return result;
     const dests = new Set(map.values());
     // Stale occupant: sits on a rename destination but is not itself renamed
@@ -126,6 +138,33 @@ export function retargetAnimationTargets(renames: ParamRename[]): RetargetResult
         result.lfos = lfoAffected;
         result.displaced += lfoStale;
     }
+
+    // Modulation rules (audio links). Same permutation + displacement policy as
+    // the LFOs above, and the same "no history to invent" note — rule edits go
+    // through updateModulation, which carries no undo of its own.
+    //
+    // Displacement differs in ONE respect and deliberately so: a stale audio
+    // link is DISABLED, not deleted. Two links legitimately share a target
+    // (that's how you stack bass + treble on one param), so a destination
+    // collision is not the double-drive hazard it is for LFOs — but a link left
+    // enabled on a lane another formula just moved onto would silently drive the
+    // wrong slot mid-set. Disabling keeps the user's freq band, envelope and
+    // gain intact to re-point by hand, which matters far more during a live set
+    // than during a timeline edit.
+    const rules = (eng.modulation?.rules ?? []) as Array<{ target: string; enabled: boolean }>;
+    const ruleAffected = rules.filter((r) => map.has(r.target)).length;
+    const ruleStale = rules.filter((r) => isStale(r.target)).length;
+    if (ruleAffected || ruleStale) {
+        eng.setModulation?.({
+            rules: rules.map((r) => {
+                if (map.has(r.target)) return { ...r, target: map.get(r.target)! };
+                if (isStale(r.target)) return { ...r, enabled: false };
+                return r;
+            }),
+        });
+        result.rules = ruleAffected;
+        result.displaced += ruleStale;
+    }
     return result;
 }
 
@@ -133,6 +172,8 @@ export interface WeaveOrphans {
     trackIds: string[];
     /** LFO `AnimationParams.id`s (not targets). */
     lfoIds: string[];
+    /** Modulation-rule `ModulationRule.id`s (not targets). */
+    ruleIds: string[];
 }
 
 /** Tracks / LFOs that target a `weave.ws<k>*` bank param the given def no
@@ -155,22 +196,38 @@ export function findWeaveBankOrphans(def: FractalDefinition | undefined): WeaveO
 
     const tracks = useAnimationStore.getState().sequence.tracks;
     const trackIds = Object.keys(tracks).filter((id) => isBankTarget(id) && !exposed.has(id));
-    const lfoIds = (((useEngineStore.getState() as any).animations ?? []) as Array<{ id: string; target: string }>)
+    const eng = useEngineStore.getState() as any;
+    const lfoIds = ((eng.animations ?? []) as Array<{ id: string; target: string }>)
         .filter((a) => isBankTarget(a.target) && !exposed.has(a.target))
         .map((a) => a.id);
-    return { trackIds, lfoIds };
+    const ruleIds = ((eng.modulation?.rules ?? []) as Array<{ id: string; target: string }>)
+        .filter((r) => isBankTarget(r.target) && !exposed.has(r.target))
+        .map((r) => r.id);
+    return { trackIds, lfoIds, ruleIds };
 }
 
-/** Remove orphaned tracks (timeline-undoable via removeTracks' snapshot) and
- *  LFOs. Returns how many of each were removed. */
-export function removeWeaveOrphans(orphans: WeaveOrphans): { tracks: number; lfos: number } {
+/** Remove orphaned tracks (timeline-undoable via removeTracks' snapshot), LFOs
+ *  and modulation rules. Returns how many of each were removed. */
+export function removeWeaveOrphans(
+    orphans: WeaveOrphans,
+): { tracks: number; lfos: number; rules: number } {
     if (orphans.trackIds.length) {
         useAnimationStore.getState().removeTracks(orphans.trackIds);
     }
+    const eng = useEngineStore.getState() as any;
     if (orphans.lfoIds.length) {
-        const eng = useEngineStore.getState() as any;
         const drop = new Set(orphans.lfoIds);
         eng.setAnimations((eng.animations ?? []).filter((a: any) => !drop.has(a.id)));
     }
-    return { tracks: orphans.trackIds.length, lfos: orphans.lfoIds.length };
+    if (orphans.ruleIds?.length) {
+        const drop = new Set(orphans.ruleIds);
+        eng.setModulation?.({
+            rules: (eng.modulation?.rules ?? []).filter((r: any) => !drop.has(r.id)),
+        });
+    }
+    return {
+        tracks: orphans.trackIds.length,
+        lfos: orphans.lfoIds.length,
+        rules: orphans.ruleIds?.length ?? 0,
+    };
 }

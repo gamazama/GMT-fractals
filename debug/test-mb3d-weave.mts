@@ -1545,6 +1545,11 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       selectedKeyframeIds: sel.map((t) => `${t}::${t}-k`),
       undoStack: [], redoStack: [],
     } as any);
+  // Audio links — the THIRD durable routing-string store (see retargetTracks.ts).
+  const seedRules = (rules: any[]) =>
+    useEngineStore.setState({ modulation: { rules, selectedRuleId: null } } as any);
+  const ruleById = (id: string): any =>
+    ((useEngineStore.getState() as any).modulation?.rules ?? []).find((r: any) => r.id === id);
   {
     seed({
       'weave.ws0ParamA': track('weave.ws0ParamA', 'Scale', 3.3),
@@ -1553,6 +1558,10 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       'camera.fov': track('camera.fov', 'FOV'),
     }, ['weave.ws0ParamA']);
     useEngineStore.setState({ animations: [{ id: 'l1', target: 'weave.ws0ParamB', enabled: true } as any] });
+    seedRules([
+      { id: 'r1', target: 'weave.ws0Vec2A_x', source: 'audio', enabled: true, freqStart: 0, freqEnd: 0.1 },
+      { id: 'r2', target: 'camera.fov', source: 'audio', enabled: true },
+    ]);
     const res = retargetAnimationTargets([
       { from: 'weave.ws0ParamA', to: 'weave.ws1ParamA' }, { from: 'weave.ws1ParamA', to: 'weave.ws0ParamA' },
       { from: 'weave.ws0Vec2A', to: 'weave.ws1Vec2A' }, { from: 'weave.ws0ParamB', to: 'weave.ws1ParamB' },
@@ -1568,7 +1577,13 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     ck('retarget: selection remapped',
       a.selectedTrackIds[0] === 'weave.ws1ParamA' && a.selectedKeyframeIds[0] === 'weave.ws1ParamA::weave.ws0ParamA-k');
     ck('retarget: LFO target renamed', (useEngineStore.getState() as any).animations[0].target === 'weave.ws1ParamB');
-    ck('retarget: counts', res.tracks === 3 && res.lfos === 1 && res.displaced === 0, res);
+    ck('retarget: audio-link target follows the vec-axis rename',
+      ruleById('r1')?.target === 'weave.ws1Vec2A_x', ruleById('r1')?.target);
+    ck('retarget: audio-link band/envelope settings untouched by the rename',
+      ruleById('r1')?.freqEnd === 0.1 && ruleById('r1')?.enabled === true);
+    ck('retarget: audio link on a foreign namespace untouched',
+      ruleById('r2')?.target === 'camera.fov');
+    ck('retarget: counts', res.tracks === 3 && res.lfos === 1 && res.rules === 1 && res.displaced === 0, res);
     ck('retarget: one timeline-undo step taken', a.undoStack.length === 1, a.undoStack.length);
     a.undo();
     const t2 = (useAnimationStore.getState() as any).sequence.tracks;
@@ -1582,11 +1597,16 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       'weave.ws1ParamA': track('weave.ws1ParamA', 'Survivor', 7),
     });
     useEngineStore.setState({ animations: [] });
+    // A stale audio link differs from a stale track/LFO: it is DISABLED, not
+    // deleted, so the user keeps the band + envelope to re-point by hand.
+    seedRules([{ id: 'r3', target: 'weave.ws0ParamA', source: 'audio', enabled: true, gain: 4 }]);
     const res = retargetAnimationTargets([{ from: 'weave.ws1ParamA', to: 'weave.ws0ParamA' }]);
     const t = (useAnimationStore.getState() as any).sequence.tracks;
     ck('retarget: stale occupant displaced, survivor lands on its lane',
-      t['weave.ws0ParamA']?.label === 'Survivor' && !t['weave.ws1ParamA'] && res.displaced === 1,
+      t['weave.ws0ParamA']?.label === 'Survivor' && !t['weave.ws1ParamA'] && res.displaced === 2,
       { labels: Object.keys(t), displaced: res.displaced });
+    ck('retarget: stale audio link disabled but PRESERVED (not deleted)',
+      ruleById('r3')?.enabled === false && ruleById('r3')?.gain === 4, ruleById('r3'));
   }
   // Orphans: bank targets the def no longer exposes — rhythm + coreMath are out
   // of scope; axis variants of exposed vec params are valid.
@@ -1599,6 +1619,11 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
       'coreMath.paramA': track('coreMath.paramA', 'dense — skip'),
     });
     useEngineStore.setState({ animations: [{ id: 'l2', target: 'weave.ws2ParamA', enabled: true } as any] });
+    seedRules([
+      { id: 'r4', target: 'weave.ws4ParamA', source: 'audio', enabled: true },  // orphan
+      { id: 'r5', target: 'weave.ws0ParamA', source: 'audio', enabled: true },  // valid
+      { id: 'r6', target: 'coreMath.paramA', source: 'audio', enabled: true },  // dense — out of scope
+    ]);
     const def: any = {
       parameters: [
         { id: 'ws0ParamA', feature: 'weave' },
@@ -1608,10 +1633,14 @@ function expand(plan: ReturnType<typeof buildWeaveSequence>, n: number): number[
     const o = findWeaveBankOrphans(def);
     ck('orphans: only unexposed bank targets flagged',
       o.trackIds.length === 1 && o.trackIds[0] === 'weave.ws3ParamC' && o.lfoIds[0] === 'l2', o);
+    ck('orphans: unexposed audio link flagged; valid + dense ones are not',
+      o.ruleIds.length === 1 && o.ruleIds[0] === 'r4', o.ruleIds);
     removeWeaveOrphans(o);
     const t = (useAnimationStore.getState() as any).sequence.tracks;
     ck('orphans: cleanup removes them (valid tracks stay)',
       !t['weave.ws3ParamC'] && !!t['weave.ws0ParamA'] && (useEngineStore.getState() as any).animations.length === 0);
+    ck('orphans: cleanup removes the orphan link, keeps valid + dense links',
+      !ruleById('r4') && !!ruleById('r5') && !!ruleById('r6'));
   }
   // Acceptance chain (the P4.6 gate): keyframed slot param + its live value
   // land on the SAME lane after a reorder — the same semantic param animates.

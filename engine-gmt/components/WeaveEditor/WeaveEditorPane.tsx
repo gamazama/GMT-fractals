@@ -910,12 +910,15 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 const moved = retargetAnimationTargets(res.paramRenames ?? []);
                 const newDef = registry.get((useEngineStore.getState() as any).formula) as FractalDefinition | undefined;
                 const orphans = findWeaveBankOrphans(newDef);
-                const movedN = moved.tracks + moved.lfos;
-                const report = movedN || moved.displaced || orphans.trackIds.length || orphans.lfoIds.length
+                // Audio links (moved.rules) count alongside tracks + LFOs — all
+                // three are durable routing strings that must follow their slot.
+                const movedN = moved.tracks + moved.lfos + moved.rules;
+                const report = movedN || moved.displaced
+                    || orphans.trackIds.length || orphans.lfoIds.length || orphans.ruleIds.length
                     ? { moved, orphans } : null;
                 if (variant === 'panel') pendingTransferReport = report; // survives the key={formula} remount
                 setTransferReport(report);
-                if (movedN) showToast(`Moved ${movedN} animation track${movedN === 1 ? '' : 's'} with the formulas.`, 'info', 4000);
+                if (movedN) showToast(`Moved ${movedN} animation target${movedN === 1 ? '' : 's'} with the formulas.`, 'info', 4000);
                 setStatus({
                     kind: 'ok',
                     text: rhythm
@@ -938,10 +941,11 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
     const cleanOrphans = () => {
         if (!transferReport) return;
         const n = removeWeaveOrphans(transferReport.orphans);
-        const total = n.tracks + n.lfos;
-        showToast(`Removed ${total} orphaned animation track${total === 1 ? '' : 's'}.`, 'info', 3000);
-        const rest = { ...transferReport, orphans: { trackIds: [], lfoIds: [] } };
-        setTransferReport(rest.moved.tracks + rest.moved.lfos + rest.moved.displaced > 0 ? rest : null);
+        const total = n.tracks + n.lfos + n.rules;
+        showToast(`Removed ${total} orphaned animation target${total === 1 ? '' : 's'}.`, 'info', 3000);
+        const rest = { ...transferReport, orphans: { trackIds: [], lfoIds: [], ruleIds: [] } };
+        const keptN = rest.moved.tracks + rest.moved.lfos + rest.moved.rules + rest.moved.displaced;
+        setTransferReport(keptN > 0 ? rest : null);
     };
 
     const clearAll = () => commit({ ...draft, rows: [], dividers: [], scheduleKind: 'modulo' });
@@ -1421,8 +1425,8 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                 are left aiming at parameters the weave no longer has. */}
             {transferReport && (() => {
                 const { moved, orphans } = transferReport;
-                const movedN = moved.tracks + moved.lfos;
-                const orphanN = orphans.trackIds.length + orphans.lfoIds.length;
+                const movedN = moved.tracks + moved.lfos + moved.rules;
+                const orphanN = orphans.trackIds.length + orphans.lfoIds.length + orphans.ruleIds.length;
                 return (
                     <div className={`text-xs rounded-lg px-3 py-2 border space-y-1.5 ${orphanN
                         ? 'bg-warn/10 border-warn/25 text-warn'
@@ -1430,8 +1434,8 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                         {(movedN > 0 || moved.displaced > 0) && (
                             <div className="flex items-start gap-2">
                                 <p className="flex-1 leading-relaxed">
-                                    {movedN > 0 && <>Moved {movedN} animation track{movedN === 1 ? '' : 's'} with the formulas — keyframes untouched, only the target parameter followed.</>}
-                                    {moved.displaced > 0 && <> Removed {moved.displaced} stale track{moved.displaced === 1 ? '' : 's'} whose formula was gone (timeline undo restores).</>}
+                                    {movedN > 0 && <>Moved {movedN} animation target{movedN === 1 ? '' : 's'} with the formulas — keyframes, LFO settings and audio links untouched, only the target parameter followed.</>}
+                                    {moved.displaced > 0 && <> Cleared {moved.displaced} stale target{moved.displaced === 1 ? '' : 's'} whose formula was gone (tracks removed — timeline undo restores; audio links disabled, not deleted).</>}
                                 </p>
                                 {orphanN === 0 && (
                                     <button onClick={() => setTransferReport(null)}
@@ -1442,7 +1446,7 @@ export function WeaveEditorPane({ variant = 'modal', seedFormulaId }: WeaveEdito
                         {orphanN > 0 && (
                             <div className="flex items-center gap-2 flex-wrap">
                                 <p className="flex-1 min-w-[140px] leading-relaxed">
-                                    {orphanN} animation track{orphanN === 1 ? ' targets' : 's target'} parameters this weave no longer has.
+                                    {orphanN} animation target{orphanN === 1 ? ' aims at a parameter' : 's aim at parameters'} this weave no longer has.
                                 </p>
                                 <button onClick={cleanOrphans} className="t-btn-sm t-btn-default shrink-0">
                                     Remove {orphanN === 1 ? 'it' : 'them'}
