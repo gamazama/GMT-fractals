@@ -39,6 +39,7 @@
     "test:session-hold": "tsx debug/test-session-hold.mts",
     "test:modulated-setter": "tsx debug/test-modulated-setter.mts",
     "test:audio-signal": "tsx debug/test-audio-signal.mts",
+    "test:filterbank": "tsx debug/test-filterbank.mts",
     "test:migrations": "tsx debug/test-escape-migration.mts",
     "test:baseline": "tsx debug/native-config-sweep.mts --mode=baseline --fresh",
     "test:hybrid": "tsx debug/native-config-sweep.mts --mode=hybrid --fresh",

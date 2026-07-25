@@ -29,9 +29,13 @@ While a live input is running, a small meter sits beside the Input Trim slider.
 - **Red**: clipping. The analysis is 8-bit, so a pinned signal loses the transient shape that Attack keys off — lower the trim (or the desk send).
 
 ## Analysis (collapsible section)
-Set-once-per-venue controls for how the sound is measured. The header shows the
-resulting bin width and analysis window.
+Set-once-per-venue controls for how the sound is measured. The header shows how
+many bands you have and the analysis window.
 
+- **Band Width**: how finely the spectrum is divided, in musical terms — 1/3, 1/6 or 1/12 of an octave. Bands are equal *musical* width, so the bass gets as many as the treble. (A raw FFT does the opposite: it would give the whole kick octave 3 slices and the top octave 683, which is why placing a kick band used to mean dragging a hairline.)
+  - Narrower bands separate more, but need a finer **Detail** setting to stay honest down low. The panel tells you the frequency below which the current combination can no longer resolve, and those bands are drawn dimmed on the spectrum so you can see where analysis runs out rather than trusting a number that isn't really there.
+- **Balance Bands**: lets every band self-calibrate against its own recent peak. Hi-hats sit far below a kick in absolute terms, so without this they barely move a parameter at settings that suit the kick. With it on, one set of thresholds keeps working across tracks — and it stays steady through gaps between tracks rather than winding up and detonating on the next downbeat.
+  - It stacks safely with **Auto Gain**: that one tracks the overall level, this one tracks the balance between frequencies. Turning on both is not doubling up.
 - **Detail**: the frequency-vs-time trade.
   - *Fast* (23 Hz bins, 43 ms) — snappiest attacks, but only ~3 bins across a kick band.
   - *Balanced* (12 Hz bins, 85 ms) — the default.
@@ -39,15 +43,9 @@ resulting bin width and analysis window.
 - **Floor / Ceiling**: the loudness window the spectrum maps onto. If everything looks like a solid flat wall, your material is louder than the ceiling and is saturating — raise it. If the bottom of the display is full of room noise, raise the floor.
 
 ## Why bands read the way they do
-The spectrum bar and the modulation signal are computed by the *same* function,
-so a band that looks strong will drive a parameter strongly — the display can't
-overstate what you'll get.
-
-That reading is weighted toward the loudest parts of a band rather than a flat
-average. A kick fundamental is a narrow peak inside a wide band, so a flat
-average would dilute it further every time you raised the Detail setting. On
-broadband material like a snare, where the whole band is roughly even, the two
-agree and nothing changes.
+The bars you see *are* the analysis — one bar per band — and a link reads those
+same numbers. So a band that looks strong will drive a parameter strongly; the
+display can't overstate what you'll get.
 
 ## Performance
 Audio analysis uses the WebAudio API which processes audio efficiently, but the visualization and modulation application run in the main rendering loop. Modulating complex geometry parameters (like Loop Iterations) every frame can impact GPU performance.
@@ -94,7 +92,7 @@ The box on the spectrum defines which frequencies drive the parameter.
 - **Drag** the box to move it across the frequency range.
 - **Drag individual edges** (left, right, top, bottom) to resize the box. The top and bottom edges also control the threshold — signals below the bottom are ignored (noise gate) and signals above the top are clamped (ceiling).
 - **Ctrl+Drag** on a box to adjust its gain visually.
-- **Right-click** on the spectrum to toggle between **Logarithmic** and **Linear** frequency scale. Logarithmic is the useful one — it spreads out the bass, where nearly all rhythmic energy lives. The 100 / 1k / 10k markers along the bottom show where you are.
+- **Right-click** on the spectrum to change **Band Width**. The horizontal axis is logarithmic — one bar per analysis band — so the bass gets as much room as the treble. The 100 / 1k / 10k markers along the bottom show where you are.
 - **Quick band buttons** set the box to a real frequency range:
   - **Kick** (40–120 Hz): just the kick fundamental. The tightest band for locking onto four-to-the-floor without the bassline bleeding in.
   - **Bass** (30–250 Hz): kick and bassline together.

@@ -25,6 +25,7 @@
  *   clips to 1-second slices; do not reintroduce it.
  */
 import { ModulationRule } from '../modulation/index';
+import { filterBank } from './filterBank';
 
 class Deck {
     public element: HTMLAudioElement;
@@ -465,9 +466,24 @@ export class AudioAnalysisEngine {
      * flag can only ever be the store's live value — a rig whose panel is
      * closed, or one restored by a scene load, still behaves as configured.
      */
-    public update(agcEnabled = false, deltaSec = 1 / 60) {
+    public update(
+        agcEnabled = false,
+        deltaSec = 1 / 60,
+        bandsPerOctave = 6,
+        normalizeBands = false,
+    ) {
         if (!this.analyser || !this.dataArray) return;
         this.analyser.getByteFrequencyData(this.dataArray);
+
+        // Refresh the filterbank shape only when a setting actually changed —
+        // rebuild reallocates and drops the per-band followers.
+        const bankOpts = {
+            sampleRate: this.sampleRate,
+            fftSize: this.desiredFftSize,
+            bandsPerOctave,
+        };
+        if (!filterBank.matches(bankOpts)) filterBank.rebuild(bankOpts);
+        filterBank.analyse(this.dataArray, normalizeBands, deltaSec);
 
         if (!agcEnabled) { this.agcGain = 1; this.agcPeak = 0; return; }
 

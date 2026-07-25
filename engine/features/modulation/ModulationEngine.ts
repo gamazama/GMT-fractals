@@ -19,7 +19,7 @@
  */
 import { ModulationRule } from './index';
 import { audioAnalysisEngine } from '../audioMod/AudioAnalysisEngine';
-import { aggregateBand } from '../audioMod/freqScale';
+import { filterBank } from '../audioMod/filterBank';
 import { AnimationParams } from '../../../types';
 import { ImprovedNoise } from 'three-stdlib';
 
@@ -261,19 +261,20 @@ class ModulationEngine {
      *  for a harder hit. Users trim from there with the rule's Gain knob. */
     private static readonly TRANSIENT_FULL_SCALE = 20;
 
-    private processAudioSignal(rule: ModulationRule, data: Uint8Array, delta: number): number {
-        const binCount = data.length;
-        const startBin = Math.floor(rule.freqStart * binCount);
-        const endBin = Math.floor(rule.freqEnd * binCount);
+    private processAudioSignal(rule: ModulationRule, _data: Uint8Array, delta: number): number {
+        if (rule.freqEnd <= rule.freqStart) return 0;
 
-        if (startBin >= binCount || endBin <= startBin) return 0;
-
-        // Shared with the spectrum display — see aggregateBand's @invariant.
-        // AGC multiplies the band level, so a quieter track drives the same
-        // range without the user re-dialling every threshold. 1 when off.
+        // Read the fractional-octave BANDS, not raw bins. The bands are already
+        // RMS-aggregated and (optionally) per-band normalised, and the spectrum
+        // display reads the same array — see FilterBank.aggregate.
+        //
+        // Global AGC still multiplies here. It composes cleanly with per-band
+        // normalisation rather than fighting it: a global scale factor cancels
+        // out of a per-band ratio, so turning both on is not double-normalising.
+        const [bandLo, bandHi] = filterBank.bandRangeForNorm(rule.freqStart, rule.freqEnd);
         const level = Math.min(
             1,
-            aggregateBand(data, startBin, endBin) * audioAnalysisEngine.getSignalGain(),
+            filterBank.aggregate(bandLo, bandHi) * audioAnalysisEngine.getSignalGain(),
         );
 
         let raw: number;

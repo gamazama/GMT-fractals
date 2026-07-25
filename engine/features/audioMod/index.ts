@@ -24,6 +24,8 @@ export interface AudioState {
     fftSize: number;
     dbFloor: number;
     dbCeiling: number;
+    bandsPerOctave: number;
+    normalizeBands: boolean;
 }
 
 // AudioActions removed - link management is now in ModulationActions
@@ -102,6 +104,28 @@ export const AudioFeature: FeatureDefinition = {
             noAccumReset: true, preserveOnApply: true, min: -40, max: 0, step: 1,
             format: (v) => `${Math.round(v)} dB`,
             description: 'Loudest level before the spectrum saturates. Lower it for a hotter, more contrasty reading.',
+        },
+        // Fractional-octave band width. Bands are the same MUSICAL width at
+        // every frequency, so the bass gets as many as the treble — a linear
+        // FFT gives the whole kick octave 3 bins and the top octave 683.
+        // @see engine/features/audioMod/filterBank.ts
+        bandsPerOctave: {
+            type: 'float', default: 6, label: 'Band Width', shortId: 'bo', group: 'system',
+            noAccumReset: true, preserveOnApply: true,
+            options: [
+                { label: 'Wide — 1/3 octave', value: 3 },
+                { label: 'Medium — 1/6 octave', value: 6 },
+                { label: 'Narrow — 1/12 octave', value: 12 },
+            ],
+            description: 'How finely the spectrum is divided. Narrower bands separate more, but need a finer Detail setting to stay honest in the bass.',
+        },
+        // Per-band adaptive gain. Each band divides by its own slow-release
+        // peak, so quiet bands (hi-hats are always far below a kick) still use
+        // the full range and one set of thresholds keeps working across tracks.
+        normalizeBands: {
+            type: 'boolean', default: false, label: 'Balance Bands', shortId: 'nb', group: 'system',
+            noAccumReset: true, preserveOnApply: true,
+            description: 'Let every frequency band self-calibrate, so quiet bands react as readily as loud ones.',
         }
     },
 };

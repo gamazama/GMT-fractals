@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useEngineStore } from '../../../store/engineStore';
 import { audioAnalysisEngine } from './AudioAnalysisEngine';
 import { formatBand } from './freqScale';
+import { filterBank } from './filterBank';
 import { AudioSpectrum } from './AudioSpectrum';
 import { AudioLinkControls } from './AudioLinkControls';
 import { collectHelpIds } from '../../../utils/helpUtils';
@@ -303,7 +304,7 @@ const AnalysisControls: React.FC = () => {
     const fftSize = audio?.fftSize ?? 4096;
     const dbFloor = audio?.dbFloor ?? -90;
     const dbCeiling = audio?.dbCeiling ?? -10;
-    const binHz = audioAnalysisEngine.binWidthHz;
+    const bandsPerOctave = audio?.bandsPerOctave ?? 6;
     const windowMs = (fftSize / audioAnalysisEngine.sampleRate) * 1000;
 
     return (
@@ -315,11 +316,52 @@ const AnalysisControls: React.FC = () => {
             headerClassName="px-3 py-1.5 bg-line/5 hover:bg-line/10"
             rightContent={
                 <span className="text-[8px] font-mono text-fg-faint">
-                    {binHz.toFixed(1)} Hz · {windowMs.toFixed(0)} ms
+                    {filterBank.bands.length} bands · {windowMs.toFixed(0)} ms
                 </span>
             }
         >
             <div className="p-2 flex flex-col gap-2">
+                <div>
+                    <label className="text-[9px] text-fg-dim font-bold block mb-1">Band Width</label>
+                    <select
+                        value={bandsPerOctave}
+                        onChange={(e) => setAudio({ bandsPerOctave: parseInt(e.target.value, 10) })}
+                        className="t-select w-full text-[9px]"
+                        title="How finely the spectrum is divided into musical bands"
+                    >
+                        <option value={3}>Wide — 1/3 octave</option>
+                        <option value={6}>Medium — 1/6 octave</option>
+                        <option value={12}>Narrow — 1/12 octave</option>
+                    </select>
+                    {/* The honest limit: a band narrower than one FFT bin can't
+                        resolve, so say where that starts instead of hiding it.
+                        Those bands also render dimmed on the spectrum. */}
+                    <p className="text-[8px] text-fg-faint mt-1 leading-snug">
+                        Bands are equal musical width, so bass gets as many as treble.
+                        Below <b>{filterBank.resolutionLimitHz.toFixed(0)} Hz</b> they are finer
+                        than this Detail setting can resolve — shown dimmed. Raise Detail to
+                        push that lower.
+                    </p>
+                </div>
+
+                <label
+                    className="flex items-center gap-2 cursor-pointer"
+                    title="Let each band self-calibrate against its own recent peak"
+                >
+                    <DotToggle
+                        value={audio?.normalizeBands ?? false}
+                        onChange={(v) => setAudio({ normalizeBands: v })}
+                        accent="cyan"
+                        size="sm"
+                    />
+                    <span className="text-[9px] font-bold text-fg-muted">Balance Bands</span>
+                </label>
+                <p className="text-[8px] text-fg-faint -mt-1 leading-snug">
+                    Every band uses its full range regardless of how loud it is in absolute
+                    terms — hi-hats react as readily as a kick, and one set of thresholds
+                    keeps working across tracks.
+                </p>
+
                 <div>
                     <label className="text-[9px] text-fg-dim font-bold block mb-1">Detail</label>
                     <select

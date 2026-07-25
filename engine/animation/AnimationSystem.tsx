@@ -162,7 +162,12 @@ export const tick = (delta: number) => {
     //    latched, so the store's live value always wins — including for a rig
     //    whose panel is closed or one restored by a scene load.
     if (audioSlice && audioSlice.isEnabled) {
-        audioAnalysisEngine.update(!!audioSlice.agcEnabled, delta);
+        audioAnalysisEngine.update(
+            !!audioSlice.agcEnabled,
+            delta,
+            audioSlice.bandsPerOctave ?? 6,
+            !!audioSlice.normalizeBands,
+        );
     }
 
     // 2b. Sync each audio clip's deck playback to the timeline frame.

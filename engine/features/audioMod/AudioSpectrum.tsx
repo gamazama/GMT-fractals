@@ -1,7 +1,8 @@
 
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { audioAnalysisEngine } from './AudioAnalysisEngine';
-import { hzToBinNorm, formatHz, aggregateBand } from './freqScale';
+import { hzToBinNorm, formatHz } from './freqScale';
+import { filterBank, BANK_MIN_HZ } from './filterBank';
 import { useEngineStore } from '../../../store/engineStore';
 import { ModulationRule } from '../modulation/index';
 import { modulationEngine } from '../modulation/ModulationEngine';
@@ -14,7 +15,10 @@ export const AudioSpectrum: React.FC = () => {
     const store = useEngineStore();
     const { modulation, selectModulation, addModulation, openContextMenu } = store;
     const audioState = (store as any).audio;
-    const [isLogScale, setIsLogScale] = useState(true);
+    // The linear/log toggle retired with the filterbank: the axis is now band
+    // index, which IS a log-frequency axis, and a linear option would put the
+    // rule boxes on a different mapping from the bars they select.
+    const bandsPerOctave = audioState?.bandsPerOctave ?? 6;
     
     // DDFS Wrapper for Modulation
     const updateModulation = (id: string, update: Partial<ModulationRule>) => {
@@ -33,32 +37,43 @@ export const AudioSpectrum: React.FC = () => {
     } | null>(null);
 
     // --- COORDINATE HELPERS ---
-    
+    //
+    // The x axis IS the filterbank: band k occupies [k, k+1) × barWidth, and
+    // the bands are log-spaced by construction, so this is an exact
+    // log-frequency axis rather than the ad-hoc `log(f·999+1)/log(1000)` curve
+    // it replaces. Rule boxes and spectrum bars therefore share one mapping —
+    // a box edge sits exactly on the band boundary it selects.
+    //
+    // Rules still STORE `freqStart/freqEnd` as fractions of nyquist, so
+    // existing scenes and share links are unaffected; this is only how those
+    // fractions are drawn and hit-tested.
+
+    const bandCount = () => Math.max(1, filterBank.bands.length);
+
+    /** Fractional band position of a normalised frequency. Band k's centre is
+     *  `BANK_MIN_HZ · 2^(k/B)`, so its low edge lands on integer k and its high
+     *  edge on k+1 once the half-band offset is added. */
+    const freqNormToBandPos = (freqNorm: number) => {
+        const hz = freqNorm * (audioAnalysisEngine.sampleRate / 2);
+        if (hz <= BANK_MIN_HZ) return 0;
+        return filterBank.bandsPerOctave * Math.log2(hz / BANK_MIN_HZ) + 0.5;
+    };
+
     const getScreenX = (freqNorm: number, width: number) => {
-        if (!isLogScale) return freqNorm * width;
-        // Log mapping: Exp scale to better visualize Bass
-        const N = 1000;
-        const logVal = Math.log(freqNorm * (N - 1) + 1);
-        const logMax = Math.log(N);
-        return (logVal / logMax) * width;
+        const pos = freqNormToBandPos(freqNorm);
+        return Math.max(0, Math.min(width, (pos / bandCount()) * width));
     };
 
     const getFreqFromX = (x: number, width: number) => {
         if (width === 0) return 0;
-        
-        // --- SNAP TO ZERO ---
-        // If within first 2% of screen, force 0.0 frequency to allow grabbing sub-bass
-        if (x < width * 0.02) return 0.0;
-        if (x >= width) return 1.0;
-
-        const normX = x / width;
-        if (!isLogScale) return Math.max(0, Math.min(1, normX));
-        
-        // Inverse Log
-        const N = 1000;
-        const logMax = Math.log(N);
-        const val = Math.exp(normX * logMax) - 1;
-        return Math.max(0, Math.min(1, val / (N - 1)));
+        const nyquist = audioAnalysisEngine.sampleRate / 2;
+        // Snap the far left to 0 so the lowest band stays grabbable — the axis
+        // is logarithmic and cannot represent DC.
+        if (x < width * 0.015) return 0;
+        if (x >= width) return 1;
+        const pos = (x / width) * bandCount() - 0.5;
+        const hz = BANK_MIN_HZ * Math.pow(2, pos / filterBank.bandsPerOctave);
+        return Math.max(0, Math.min(1, hz / nyquist));
     };
 
     // Render Loop
@@ -95,9 +110,7 @@ export const AudioSpectrum: React.FC = () => {
             // where a kick or a hi-hat actually sits.
             const nyquist = audioAnalysisEngine.sampleRate / 2;
             const hzTicks = [100, 1000, 10000];
-            const gridSteps = isLogScale
-                ? [0, ...hzTicks.map(hz => hzToBinNorm(hz, audioAnalysisEngine.sampleRate)), 1.0]
-                : [0.0, 0.25, 0.5, 0.75, 1.0];
+            const gridSteps = [0, ...hzTicks.map(hz => hzToBinNorm(hz, audioAnalysisEngine.sampleRate)), 1.0];
             gridSteps.forEach(f => {
                 const x = getScreenX(f, w);
                 ctx.moveTo(x, 0); ctx.lineTo(x, h);
@@ -114,7 +127,7 @@ export const AudioSpectrum: React.FC = () => {
             // 2b. Frequency ruler — labels the decade lines so a band can be
             // placed by ear-knowledge ("kick is under 100") instead of by
             // dragging until it reacts.
-            if (isLogScale) {
+            {
                 ctx.fillStyle = '#555';
                 ctx.font = '8px monospace';
                 hzTicks.forEach(hz => {
@@ -124,34 +137,22 @@ export const AudioSpectrum: React.FC = () => {
                 });
             }
 
-            // 3. Spectrum Bars
-            if (rawData) {
-                const barCount = 128; // Number of visual bars to draw
-                const barWidth = w / barCount;
-                
-                ctx.fillStyle = '#334155';
-                
-                for(let i=0; i<barCount; i++) {
-                    const screenXStart = i / barCount;
-                    const screenXEnd = (i + 1) / barCount;
-                    
-                    const fStart = isLogScale 
-                        ? getFreqFromX(screenXStart * w, w) 
-                        : screenXStart;
-                    const fEnd = isLogScale
-                        ? getFreqFromX(screenXEnd * w, w)
-                        : screenXEnd;
-
-                    const binStart = Math.floor(fStart * rawData.length);
-                    const binEnd = Math.max(binStart + 1, Math.floor(fEnd * rawData.length));
-
-                    // Same aggregation the rules use — see aggregateBand. This
-                    // bar height IS the signal a rule over these bins would
-                    // produce, so the display can't overstate what the
-                    // modulation will do.
-                    const val = aggregateBand(rawData, binStart, binEnd);
+            // 3. Spectrum bars — ONE BAR PER ANALYSIS BAND.
+            //    The bands are already log-spaced, so band index maps straight
+            //    to screen x and the bars ARE the analysis rather than a
+            //    resampling of it. Bar height is the same normalised value a
+            //    rule over that band reads, so the display cannot overstate
+            //    what the modulation will do.
+            const bands = filterBank.bands;
+            if (rawData && bands.length > 0) {
+                const barWidth = w / bands.length;
+                for (let i = 0; i < bands.length; i++) {
+                    const val = filterBank.normalized[i] ?? 0;
                     const barH = val * h;
-                    
+                    // Bin-limited bands (below the FFT's resolution — see
+                    // FilterBank's @invariant) are drawn dimmer so the analysis
+                    // floor is visible instead of implied.
+                    ctx.fillStyle = bands[i].resolutionLimited ? '#243044' : '#334155';
                     ctx.fillRect(i * barWidth, h - barH, barWidth + 1, barH);
                 }
             }
@@ -228,7 +229,7 @@ export const AudioSpectrum: React.FC = () => {
         
         draw();
         return () => cancelAnimationFrame(rafId);
-    }, [rules, selectedId, isLogScale, audioState?.isEnabled]);
+    }, [rules, selectedId, bandsPerOctave, audioState?.isEnabled]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
         if (e.button === 2) return; 
@@ -388,11 +389,17 @@ export const AudioSpectrum: React.FC = () => {
             const currentRules = useEngineStore.getState().modulation.rules;
             const newRule = currentRules[currentRules.length - 1];
             if (newRule) {
-                // Default size - wider for easier resizing
-                const width = isLogScale ? 0.1 : 0.05;
+                // Span a few bands either side of the click. Expressed in
+                // BANDS (not a fixed fraction of nyquist) so a new box is the
+                // same visual width wherever it is dropped.
+                const nyq = audioAnalysisEngine.sampleRate / 2;
+                const octaves = 3 / bandsPerOctave;   // ≈3 bands wide
+                const hz = freq * nyq;
+                const lo = Math.max(BANK_MIN_HZ, hz / Math.pow(2, octaves / 2));
+                const hi = hz * Math.pow(2, octaves / 2);
                 updateModulation(newRule.id, {
-                    freqStart: Math.max(0, freq - width/2),
-                    freqEnd: Math.min(1, freq + width/2),
+                    freqStart: Math.max(0, lo / nyq),
+                    freqEnd: Math.min(1, hi / nyq),
                     thresholdMin: Math.max(0, my - 0.15),
                     thresholdMax: Math.min(1, my + 0.15)
                 });
@@ -403,10 +410,12 @@ export const AudioSpectrum: React.FC = () => {
     const handleContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        const setBands = (v: number) => (store as any).setAudio({ bandsPerOctave: v });
         const items: ContextMenuItem[] = [
-            { label: 'Spectrum Scale', action: () => {}, isHeader: true },
-            { label: 'Logarithmic (Bass Focus)', checked: isLogScale, action: () => setIsLogScale(true) },
-            { label: 'Linear', checked: !isLogScale, action: () => setIsLogScale(false) }
+            { label: 'Band Width', action: () => {}, isHeader: true },
+            { label: 'Wide — 1/3 octave', checked: bandsPerOctave === 3, action: () => setBands(3) },
+            { label: 'Medium — 1/6 octave', checked: bandsPerOctave === 6, action: () => setBands(6) },
+            { label: 'Narrow — 1/12 octave', checked: bandsPerOctave === 12, action: () => setBands(12) },
         ];
         openContextMenu(e.clientX, e.clientY, items, ['panel.audio']);
     };
@@ -429,7 +438,7 @@ export const AudioSpectrum: React.FC = () => {
             <div className="absolute top-1 right-2 flex gap-2 pointer-events-none">
                 <div className="text-[8px] font-bold text-fg-dim bg-surface/80 px-1 rounded">Ctrl+Drag = Gain</div>
                 <div className="text-[8px] font-bold text-fg-faint bg-surface/80 px-1 rounded">
-                    {isLogScale ? 'LOG' : 'LIN'}
+                    1/{bandsPerOctave} OCT
                 </div>
             </div>
             

@@ -24,12 +24,18 @@ const assert = (cond: boolean, msg: string, detail?: unknown) => {
 };
 const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
 
-const BINS = 1024;
+const FFT = 2048;
+const BINS = FFT / 2;
 const buf = new Uint8Array(BINS);
-// Stub the graph: update() only needs an analyser that fills dataArray, and we
-// fill it ourselves so each test frame is exact.
-(audioAnalysisEngine as any).analyser = { getByteFrequencyData: () => { /* buf is pre-filled */ } };
+// Stub the graph: update() only needs an analyser that reports its size and
+// fills dataArray, and we fill it ourselves so each test frame is exact.
+(audioAnalysisEngine as any).analyser = {
+  fftSize: FFT,
+  frequencyBinCount: BINS,
+  getByteFrequencyData: () => { /* buf is pre-filled */ },
+};
 (audioAnalysisEngine as any).dataArray = buf;
+(audioAnalysisEngine as any).desiredFftSize = FFT;
 
 /** Fill bins [0, upTo) with a normalised level, rest silent. */
 const setBand = (level: number, upTo = 128) => {
@@ -117,8 +123,14 @@ console.log('\n[6] AGC attacks instantly, releases gradually');
 
 // ── Transient mode ──────────────────────────────────────────────────────────
 resetAgc();
-const signalOf = (rule: any, dt = 1 / 60): number =>
-  (modulationEngine as any).processAudioSignal(rule, buf, dt);
+// Drive the real path: update() rebuilds/reads the filterbank from `buf`, and
+// processAudioSignal reads the bands. Testing through the engine rather than
+// against a hand-rolled band array is what keeps this honest — the two used to
+// compute different statistics.
+const signalOf = (rule: any, dt = 1 / 60): number => {
+  audioAnalysisEngine.update(false, dt, 6, false);
+  return (modulationEngine as any).processAudioSignal(rule, buf, dt);
+};
 
 const mkRule = (mode: 'level' | 'transient') => ({
   id: `r-${mode}`, target: 't', source: 'audio', enabled: true, color: '#fff',
@@ -185,52 +197,28 @@ console.log('\n[10] switching modes mid-set does not fire a spurious hit');
     'no phantom spike on the first transient frame after a switch', signalOf(r));
 }
 
-// ── Band aggregation: display and signal must agree ─────────────────────────
-const { aggregateBand } = await import('../engine/features/audioMod/freqScale');
+// ── Display and signal must read the same numbers ───────────────────────────
+const { filterBank } = await import('../engine/features/audioMod/filterBank');
 
-console.log('\n[11] band aggregation is the shared statistic');
+console.log('\n[11] the spectrum bar IS the rule signal');
 {
-  // The spectrum bar and the rule signal over the same bins must be identical —
-  // they diverged before (display max-pooled, rules took the mean), so a band
-  // could look strong and drive nothing.
+  // The display draws filterBank.normalized[k] per band; a rule aggregates the
+  // same array over its range. They diverged before (display max-pooled over
+  // bins, rules took the mean), so a band could look strong and drive nothing.
+  // Band-level aggregation itself is covered by debug/test-filterbank.mts.
   const r = mkRule('level');
   setBand(0.6, 128);
   const ruleSignal = signalOf(r);              // thresholdMin 0, gain 1 → raw level
-  const displayBar = aggregateBand(buf, 0, Math.floor(0.1 * BINS));
-  assert(near(ruleSignal, displayBar, 1e-6),
-    'a bar and the rule over the same bins produce the same number',
-    { ruleSignal, displayBar });
-}
-
-console.log('\n[12] aggregation favours a peak without discarding band width');
-{
-  // A narrow tonal source (kick fundamental) inside a wide band: RMS must beat
-  // the plain mean, or raising fftSize would dilute the kick rather than
-  // resolve it.
-  const band = new Uint8Array([235, 232, 220, 180, 110, 70, 55]);
-  const mean = band.reduce((s, v) => s + v, 0) / band.length / 255;
-  const agg = aggregateBand(band, 0, band.length);
-  assert(agg > mean, 'a peaky band reads stronger than its plain mean', { agg, mean });
-  assert(agg < 235 / 255, 'but not as strong as peak-only (band width still counts)', agg);
-
-  // Broadband material — all bins similar — must be left alone.
-  const flat = new Uint8Array([180, 178, 182, 179, 181]);
-  const flatMean = flat.reduce((s, v) => s + v, 0) / flat.length / 255;
-  assert(Math.abs(aggregateBand(flat, 0, flat.length) - flatMean) < 0.005,
-    'a flat band is unchanged (RMS ≈ mean when bins agree)',
-    { agg: aggregateBand(flat, 0, flat.length), flatMean });
-}
-
-console.log('\n[13] empty / inverted ranges are safe');
-{
-  assert(aggregateBand(buf, 10, 10) === 0, 'zero-width range returns 0');
-  assert(aggregateBand(buf, 50, 10) === 0, 'inverted range returns 0');
-  assert(aggregateBand(buf, -5, 4) >= 0, 'negative start is clamped, not indexed');
-  assert(aggregateBand(buf, BINS - 2, BINS + 100) >= 0, 'overrun end is clamped');
+  const [lo, hi] = filterBank.bandRangeForNorm(r.freqStart, r.freqEnd);
+  const displayBars = filterBank.aggregate(lo, hi);
+  assert(near(ruleSignal, displayBars, 1e-6),
+    'a rule and the bars it spans produce the same number',
+    { ruleSignal, displayBars });
+  assert(hi > lo, 'and the rule actually spans bands', { lo, hi });
 }
 
 // ── Uniform ownership (the flicker skip list) ───────────────────────────────
-console.log('\n[14] modulated-uniform ownership tracking');
+console.log('\n[12] modulated-uniform ownership tracking');
 {
   const changed1 = modulationEngine.setOwnedUniforms(new Set(['uPower', 'uJulia']));
   assert(changed1 === true, 'a new set reports changed');
