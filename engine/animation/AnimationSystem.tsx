@@ -31,7 +31,12 @@ const engine = getProxy();
 // GmtRendererTickDriver) receive them. Engine-core's WorkerProxy
 // is a stub — calling engine.setUniform directly would be a no-op and
 // the modulated uniform never reaches the render pipeline.
+// Names collected per tick and handed to modulationEngine, which forwards them
+// to the worker so `syncConfigUniforms` doesn't overwrite them from the raw base
+// config between ticks. See ModulationEngine.setOwnedUniforms.
+const ownedUniforms = new Set<string>();
 const emitUniform = (key: string, value: unknown, noAccumReset = false) => {
+    ownedUniforms.add(key);
     FractalEvents.emit(FRACTAL_EVENTS.UNIFORM, { key, value, noAccumReset });
 };
 const emitResetAccum = () => {
@@ -169,6 +174,10 @@ export const tick = (delta: number) => {
     // 3. Reset Engine Buffer
     modulationEngine.resetOffsets();
     engine.modulations = {}; // Reset engine buffer
+    // Rebuilt from scratch each tick: a target that stops being modulated must
+    // drop out of the skip list, or its uniform would stay frozen at the last
+    // modulated value (config sync could never correct it back to base).
+    ownedUniforms.clear();
 
     // 4. Update Oscillators
     //    Deterministic playback phases the oscillators by `currentFrame /
@@ -632,6 +641,10 @@ export const tick = (delta: number) => {
         useEngineStore.getState().setLiveModulations(liveModulations);
     }
     
+    // Publish the uniforms this tick owns (after the vec + julia flushes, so
+    // composite uniforms like uJulia / uColorScale are included).
+    modulationEngine.setOwnedUniforms(ownedUniforms);
+
      activeTargetsRef.current = currentTargets;
 };
 

@@ -138,3 +138,29 @@ but the last. Axes now accumulate into a per-vec scratch flushed once after the
 loop, mirroring the existing `juliaDirty` composite.
 
 Guarded by `debug/test-modulated-setter.mts`.
+
+## Addendum 2: the flicker had a THIRD writer
+
+The setter fix above was necessary but not sufficient — the flicker survived it.
+The setter emits on two channels, and only the `uniform` one had been fixed.
+
+Its `config` emit carries the **raw base**, and in the worker
+`FractalEngine.setConfig` responds to any runtime config update by calling
+`MaterialController.syncConfigUniforms`, which rewrites *every* uniform-backed
+param from that config. A slider drag emits one config update per pointermove,
+so the base write lands between modulation ticks and the uniform alternates —
+the same flicker, arriving by a different route. (`ConfigManager.syncUniform`
+also mirrors uniform writes back into the config, so the two channels fight
+inside the config as well; only the render-visible half matters here.)
+
+**Decision:** the modulation tick publishes the uniform names it owns
+(`modulationEngine.setOwnedUniforms`, rebuilt each tick so a stopped target
+drops out), those cross to the worker in `renderState.modulatedUniforms`, and
+`syncConfigUniforms` skips them. The tick re-asserts them every frame, so
+skipping loses nothing. Composing values into the config instead was rejected:
+`configManager.config` is the base-state mirror, and a modulated value stored
+there would be re-applied as base on the next recompile and then offset again.
+
+Post-compile callers deliberately pass no skip list — everything must be
+re-established from scratch, and the tick corrects modulated uniforms on the
+next frame.

@@ -644,8 +644,23 @@ export class MaterialController {
         (this.histogramUniforms[Uniforms.ModularParams].value as Float32Array).set(modularParams);
     }
 
-    public syncConfigUniforms(config: ShaderConfig, skipModularSync: boolean = false) {
+    /**
+     * Rewrite every uniform-backed param from `config`.
+     *
+     * `skipUniforms` names uniforms that live modulation currently owns; they
+     * are left alone because this writes the RAW BASE and the modulation tick
+     * writes base+offset every frame. A config update lands per pointermove
+     * during a drag, so without the skip the two alternate — the
+     * modulated-slider flicker. Omit it (post-compile callers) to re-establish
+     * everything from scratch; the tick corrects modulated ones next frame.
+     */
+    public syncConfigUniforms(
+        config: ShaderConfig,
+        skipModularSync: boolean = false,
+        skipUniforms?: string[],
+    ) {
         const features = featureRegistry.getAll();
+        const skip = skipUniforms?.length ? new Set(skipUniforms) : null;
 
         features.forEach(feat => {
             const featureData = (config as any)[feat.id];
@@ -653,6 +668,7 @@ export class MaterialController {
                 Object.entries(feat.params).forEach(([key, paramConfig]) => {
                     // Skip image types — they need dedicated texture transfer (data URLs)
                     if (paramConfig.type === 'image') return;
+                    if (skip && paramConfig.uniform && skip.has(paramConfig.uniform)) return;
                     if (paramConfig.type === 'gradient' && paramConfig.uniform && featureData[key]) {
                         // Convert gradient stop array to texture buffer
                         const buffer = generateGradientTextureBuffer(featureData[key]);

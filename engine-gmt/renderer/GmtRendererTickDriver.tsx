@@ -37,6 +37,7 @@ import { registerTick, runTicks, TICK_PHASE } from '../engine/TickRegistry';
 import { viewport } from '../../engine/plugins/Viewport';
 import { reportAccumulationToStore } from '../../store/slices/installAccumulationBindings';
 import { buildRenderInteractionState, hasLiveModulationSource } from './renderInteractionState';
+import { modulationEngine } from '../../engine/features/modulation/ModulationEngine';
 import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 
 // ── Tick Registration — SNAPSHOT phase ──────────────────────────────────
@@ -399,6 +400,12 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         });
 
         const renderState = {
+            // Uniforms the modulation tick owns this frame, so the worker's
+            // config→uniform sync doesn't overwrite them from the raw base
+            // between ticks (the modulated-slider flicker). The array identity
+            // only changes when the SET changes, so this is a cached reference
+            // in the steady state, not a per-frame allocation.
+            modulatedUniforms: modulationEngine.getOwnedUniforms(),
             cameraMode: storeState.cameraMode,
             optics:   storeState.optics   ?? null,
             lighting: storeState.lighting ?? null,

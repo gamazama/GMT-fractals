@@ -217,6 +217,39 @@ class ModulationEngine {
         this.offsets = {};
     }
 
+    // ── Uniform ownership ───────────────────────────────────────────────────
+    /** Uniform NAMES the modulation tick wrote this frame. */
+    private ownedUniforms: string[] = [];
+    /** Join of the above, so consumers can detect set changes without
+     *  re-comparing arrays every frame. */
+    private ownedKey = '';
+
+    /**
+     * Record which uniforms live modulation is currently driving.
+     *
+     * @invariant These uniforms have TWO writers — this engine (every frame,
+     *   base+offset) and the worker's `syncConfigUniforms`, which rewrites every
+     *   uniform-backed param from the RAW BASE config whenever any config
+     *   update lands. A slider drag emits a config update per pointermove, so
+     *   without a skip list the base write lands between ticks and the value
+     *   alternates — the modulated-slider flicker. The worker consults this list
+     *   and leaves these uniforms to the tick.
+     *
+     * Returns true when the SET changed, so the caller can avoid rebuilding the
+     * transport array on every frame.
+     */
+    public setOwnedUniforms(names: Set<string>): boolean {
+        const key = Array.from(names).sort().join('|');
+        if (key === this.ownedKey) return false;
+        this.ownedKey = key;
+        this.ownedUniforms = Array.from(names);
+        return true;
+    }
+
+    public getOwnedUniforms(): string[] {
+        return this.ownedUniforms;
+    }
+
     /** Previous frame's band average per rule — the reference for the flux
      *  measurement in `transient` mode. */
     private prevBandLevel: Record<string, number> = {};

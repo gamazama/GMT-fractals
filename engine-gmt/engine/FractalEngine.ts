@@ -125,6 +125,17 @@ export interface EngineRenderState {
      *  compositor/responsiveness rate the band renderer exists to protect, and the
      *  signal the analytic cost estimate can't see (per-tick overhead). */
     fps?: number;
+    /** Uniform names live modulation is currently driving (main-thread
+     *  `modulationEngine.getOwnedUniforms()`).
+     *
+     *  @invariant `syncConfigUniforms` must SKIP these. It rewrites every
+     *  uniform-backed param from the raw base config, and a slider drag emits a
+     *  config update per pointermove — so without the skip the base write lands
+     *  between modulation ticks and the uniform alternates base / base+offset,
+     *  which is the modulated-slider flicker. The tick re-asserts these every
+     *  frame, so skipping them here loses nothing.
+     *  @see docs/adr/0103-live-session-state-survives-scene-load.md */
+    modulatedUniforms?: string[];
 }
 
 // Precompute 2048 jitter values using Halton sequence for faster access.
@@ -508,7 +519,14 @@ export class FractalEngine {
             }
 
             if (uniformUpdate) {
-                this.materials.syncConfigUniforms(this.configManager.config);
+                // Skip uniforms live modulation owns — see EngineRenderState
+                // .modulatedUniforms. Without this, every config update during a
+                // drag rewrites the modulated uniform from the raw base.
+                this.materials.syncConfigUniforms(
+                    this.configManager.config,
+                    /* skipModularSync= */ false,
+                    this.state.modulatedUniforms,
+                );
                 if (this.configManager.config.pipeline) {
                     this.materials.syncModularUniforms(this.configManager.config.pipeline, this.configManager.config.graph?.edges ?? []);
                 }
