@@ -37,7 +37,9 @@
  * get called with new fields).
  */
 
+import * as THREE from 'three';
 import { useEngineStore } from '../store/engineStore';
+import { readLiveVec } from './animation/trackBinding';
 import type { ParamConfig } from './FeatureSystem';
 import type { GradientConfig } from '../types';
 import type { LfoTarget } from '../types/animation';
@@ -135,6 +137,33 @@ const EMPTY_LIVE_MODS: Readonly<Partial<Record<LfoTarget, number>>> = Object.fre
 export const useLiveModulations = (): Partial<Record<LfoTarget, number>> => {
     return useEngineStore((s) => s.liveModulations ?? EMPTY_LIVE_MODS);
 };
+
+/**
+ * Live value for a VECTOR widget, composed from its per-axis track keys.
+ *
+ * The counterpart to `trackKeys` on the vector inputs: `trackKeys` makes a
+ * widget keyframeable, this makes it show modulation. Passing one without the
+ * other is the recurring bug — the param modulates, the image changes, and the
+ * widget renders no live indicator because it was never told the live value.
+ * `AutoFeaturePanel` wires both; every hand-built vector widget has to as well.
+ *
+ * Returns `undefined` when no axis is modulated, so the widget renders as an
+ * ordinary control rather than an indicator pinned at zero.
+ *
+ * @invariant Axes with no entry fall back to `base`, never to 0 — only
+ *   modulated targets appear in `liveModulations`, so a one-axis link would
+ *   otherwise report the other axes as zero.
+ * @param additive `liveModulations` normally holds the ABSOLUTE modulated
+ *   value, but the camera branch stores the raw OFFSET (there is no slice base
+ *   to add it to — the base is the live camera). Camera widgets pass true so
+ *   the indicator lands at `base + offset` like everywhere else.
+ */
+export const useLiveVec = (
+    trackKeys: readonly string[],
+    base: { x: number; y: number; z?: number; w?: number },
+    additive = false,
+): THREE.Vector2 | THREE.Vector3 | THREE.Vector4 | undefined =>
+    readLiveVec(useLiveModulations(), { trackKeys: trackKeys as string[] }, base, additive);
 
 /**
  * Subscribe imperatively to slice changes (for use in non-React code

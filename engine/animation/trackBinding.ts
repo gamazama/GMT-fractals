@@ -102,11 +102,14 @@ export function readLiveVec(
     liveModulations: Partial<Record<string, number>>,
     binding: TrackBinding,
     base?: { x: number; y: number; z?: number; w?: number },
+    additive = false,
 ): THREE.Vector2 | THREE.Vector3 | THREE.Vector4 | undefined {
     const vals = binding.trackKeys.map((k) => liveModulations[k]);
     if (vals.every((v) => v === undefined)) return undefined;
     const baseAxis = [base?.x ?? 0, base?.y ?? 0, base?.z ?? 0, base?.w ?? 0];
-    const safe = vals.map((v, i) => v ?? baseAxis[i]);
+    // `additive` covers the camera branch, which stores the raw OFFSET rather
+    // than the absolute modulated value (it has no slice base to add it to).
+    const safe = vals.map((v, i) => (v === undefined ? baseAxis[i] : additive ? baseAxis[i] + v : v));
     switch (safe.length) {
         case 2: return new THREE.Vector2(safe[0], safe[1]);
         case 3: return new THREE.Vector3(safe[0], safe[1], safe[2]);

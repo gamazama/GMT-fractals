@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import * as THREE from 'three';
 import { useEngineStore } from '../../../../store/engineStore';
+import { useLiveVec } from '../../../../engine/typedSlices';
 import { useAnimationStore } from '../../../../store/animationStore';
 import { getLightFromSlice } from '../index';
 import { getProxy } from '../../../engine/worker/WorkerProxy';
@@ -147,6 +148,13 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
     const duplicateLight = useEngineStore(s => s.duplicateLight);
     const openContextMenu = useEngineStore(s => s.openContextMenu);
     const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
+    // Modulated reading for the detached-panel position editor. Without it the
+    // widget is keyframeable (it has trackKeys) but blind to modulation — the
+    // light moves and the control shows no live indicator.
+    const posLive = useLiveVec(
+        [`lighting.light${index}_posX`, `lighting.light${index}_posY`, `lighting.light${index}_posZ`],
+        light?.position ?? { x: 0, y: 0, z: 0 },
+    ) as THREE.Vector3 | undefined;
 
     const menuBtnRef = useRef<HTMLButtonElement>(null);
     const lightAnchorRef = useTutorAnchor('light-anchor');
@@ -606,6 +614,7 @@ export const LightSettingsContent = ({ index, onClose, detached = false, onHandl
                         <Vector3Input
                             label={light.fixed ? 'Offset XYZ' : 'World Position'}
                             value={new THREE.Vector3(light.position.x, light.position.y, light.position.z)}
+                            liveValue={posLive}
                             onChange={(v) => updateLight({ index, params: { position: { x: v.x, y: v.y, z: v.z } } })}
                             min={-10} max={10} step={0.01}
                             interactionMode="param"

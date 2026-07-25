@@ -76,9 +76,14 @@ export interface BaseVectorInputProps {
     mode?: 'normal' | 'rotation' | 'translation' | 'scale' | 'direction' | 'toggle' | 'mixed' | 'axes';
     /** Allow user to toggle between modes */
     modeToggleable?: boolean;
-    /** Show animated live value indicator */
+    /** Show the animated live-value indicator. Defaults to TRUE — it is inert
+     *  without `liveValue`, and defaulting it off meant every widget that
+     *  forgot the prop silently showed no modulation. Pass false only to
+     *  deliberately suppress the indicator on a widget that has a live value. */
     showLiveIndicator?: boolean;
-    /** Live values for animation (if different from current value) */
+    /** Modulated reading of this param, when something is driving it. Compose
+     *  it with `useLiveVec(trackKeys, base)` — passing `trackKeys` without this
+     *  makes the widget keyframeable but blind to modulation. */
     liveValue?: THREE.Vector2 | THREE.Vector3 | THREE.Vector4;
     /** Default values for reset functionality */
     defaultValue?: THREE.Vector2 | THREE.Vector3 | THREE.Vector4;

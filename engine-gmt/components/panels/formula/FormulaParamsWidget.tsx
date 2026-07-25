@@ -21,6 +21,7 @@ import { createPowMapping, piUnitMapping, formatDisplay, type ValueMapping } fro
 import Dropdown from '../../../../components/Dropdown';
 import ToggleSwitch from '../../../../components/ToggleSwitch';
 import { Vector2Input, Vector3Input, Vector4Input } from '../../../../components/vector-input';
+import { readLiveVec } from '../../../../engine/animation/trackBinding';
 import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
 import { nodeRegistry } from '../../../engine/NodeRegistry';
@@ -97,6 +98,19 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
     const coreMath = state.coreMath;
     if (!coreMath || !state.formula) return null;
 
+    // Live vector for a vec widget — the counterpart to `trackKeys`, without
+    // which the param modulates but the widget shows no indicator. The scalar
+    // branches below already pass `liveValue`; the vec branches did not, which
+    // is why a linked formula scalar showed a purple marker and a linked vec
+    // axis (`…_x`) did not.
+    //
+    // The PURE `readLiveVec`, not the `useLiveVec` hook: renderParam runs once
+    // per param inside a map, so a hook here would be a conditional call.
+    const liveVecFor = (
+        trackKeys: string[],
+        base: { x: number; y: number; z?: number; w?: number },
+    ) => readLiveVec(state.liveModulations ?? {}, { trackKeys }, base);
+
     const switchFormula = (f: FormulaType) => { actions.setFormula(f); };
 
     const getParams = (): (FormulaParam | null)[] => {
@@ -160,6 +174,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
         if (p.type === 'vec3') {
             const v3 = p.val as { x: number; y: number; z: number };
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`];
+            const liveVec3 = liveVecFor(trackKeys, v3);
             const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`];
             const vecMode = p.mode || 'normal';
             const rotation = p.rotation ?? rotationFromMode(p.mode) ?? undefined;
@@ -190,6 +205,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                     <Vector3Input label={p.label} value={new THREE.Vector3(v3.x, v3.y, v3.z)}
                         min={isAngleMode ? -Math.PI * 2 : p.min} max={isAngleMode ? Math.PI * 2 : p.max}
                         step={p.step} onChange={p.set} trackKeys={trackKeys}
+                        liveValue={liveVec3}
                         trackLabels={isAngleMode ? (rotTrackLabels[vecMode] || trackLabels) : trackLabels}
                         mode={vecMode === 'axes' ? 'normal' : vecMode as any}
                         defaultValue={p.def ? new THREE.Vector3((p.def as any).x ?? 0, (p.def as any).y ?? 0, (p.def as any).z ?? 0) : undefined}
@@ -202,12 +218,13 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
         if (p.type === 'vec4') {
             const v4 = p.val as { x: number; y: number; z: number; w: number };
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`, `${p.trackId}_w`];
+            const liveVec4 = liveVecFor(trackKeys, v4);
             const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`, `${p.label} W`];
             return (
                 <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector4Input label={p.label} value={new THREE.Vector4(v4.x, v4.y, v4.z, v4.w)}
                         min={p.min} max={p.max} step={p.step} onChange={p.set}
-                        trackKeys={trackKeys} trackLabels={trackLabels}
+                        trackKeys={trackKeys} trackLabels={trackLabels} liveValue={liveVec4}
                         defaultValue={p.def ? new THREE.Vector4((p.def as any).x ?? 0, (p.def as any).y ?? 0, (p.def as any).z ?? 0, (p.def as any).w ?? 0) : undefined}
                         linkable={p.linkable} scale={p.scale} />
                 </div>
@@ -217,13 +234,14 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
         if (p.type === 'vec2') {
             const v2 = p.val as { x: number; y: number };
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`];
+            const liveVec2 = liveVecFor(trackKeys, v2);
             const trackLabels = [`${p.label} X`, `${p.label} Y`];
             return (
                 <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector2Input label={p.label} value={new THREE.Vector2(v2.x, v2.y)}
                         min={p.min} max={p.max} step={p.step}
                         onChange={(v) => p.set({ x: v.x, y: v.y })}
-                        trackKeys={trackKeys} trackLabels={trackLabels}
+                        trackKeys={trackKeys} trackLabels={trackLabels} liveValue={liveVec2}
                         defaultValue={p.def ? new THREE.Vector2((p.def as any).x ?? 0, (p.def as any).y ?? 0) : undefined}
                         linkable={p.linkable} mode={p.mode} scale={p.scale} />
                 </div>

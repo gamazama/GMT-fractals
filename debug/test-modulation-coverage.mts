@@ -195,5 +195,48 @@ console.log('[7] the tick delivers rotation offsets to the proxy the worker ship
     installed.modulations);
 }
 
+console.log('[8] vector widgets that are keyframeable are also modulation-aware');
+{
+  // `trackKeys` makes a vector widget keyframeable; `liveValue` makes it show
+  // modulation. Passing one without the other is silent — the param modulates,
+  // the image changes, and the control renders no indicator. That is exactly
+  // how formula vec2/vec3/vec4 params (phase/theta and friends) looked broken
+  // while modulating correctly, in the same file whose SCALAR branch wired
+  // liveValue properly.
+  //
+  // A source check rather than a runtime one: the failure lives in JSX props,
+  // which no amount of store poking reaches.
+  const fs = await import('node:fs/promises');
+  const files = [
+    'components/AutoFeaturePanel.tsx',
+    'engine-gmt/components/panels/formula/FormulaParamsWidget.tsx',
+    'engine-gmt/components/panels/lighting/LightPanelControls.tsx',
+    'engine-gmt/features/lighting/components/LightControls.tsx',
+    'engine-gmt/components/panels/scene_widgets.tsx',
+  ];
+  // Widgets that intentionally omit liveValue, with the reason. Keep this list
+  // short and justified — it is the escape hatch that makes the check honest
+  // rather than the place bugs go to hide.
+  const EXEMPT = new Set([
+    // rotDeg is DEGREES, the stored camera.rotation.* offset is RADIANS.
+    "trackKeys={['camera.rotation.x', 'camera.rotation.y', 'camera.rotation.z']}",
+  ]);
+
+  const offenders: string[] = [];
+  for (const f of files) {
+    const src = await fs.readFile(new URL(`../${f}`, import.meta.url), 'utf8');
+    // Each JSX element opens at `<Vector{2,3,4}Input` and ends at the first `/>`.
+    for (const m of src.matchAll(/<Vector[234]Input[\s\S]*?\/>/g)) {
+      const el = m[0];
+      if (!el.includes('trackKeys')) continue;
+      if (el.includes('liveValue')) continue;
+      if ([...EXEMPT].some(x => el.includes(x))) continue;
+      offenders.push(`${f}: ${el.slice(0, 90).replace(/\s+/g, ' ')}…`);
+    }
+  }
+  assert(offenders.length === 0,
+    'every Vector*Input with trackKeys also receives liveValue', offenders);
+}
+
 console.log(failures === 0 ? '\n✓ all assertions passed' : `\n✗ ${failures} assertion(s) failed`);
 process.exit(failures === 0 ? 0 : 1);

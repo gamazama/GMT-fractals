@@ -1,6 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useEngineStore } from '../../../store/engineStore';
+import { useLiveVec } from '../../../engine/typedSlices';
 import { useAnimationStore } from '../../../store/animationStore';
 import { captureCameraKeyFrame } from '../../../engine/animation/cameraKeyRegistry';
 import { getProxy } from '../../engine/worker/WorkerProxy';
@@ -281,6 +282,20 @@ export const CameraPositionDisplay: React.FC = () => {
     const unified = CameraUtils.getUnifiedPosition({ x: 0, y: 0, z: 0 }, sceneOffset);
     const rotDeg = CameraUtils.getRotationDegrees(cameraRot);
 
+    // ADDITIVE: the camera branch stores the raw OFFSET in liveModulations, not
+    // the absolute modulated value — there is no slice base to fold it into,
+    // the base IS the live camera. Same world units as `unified`, so adding is
+    // well-defined here.
+    const posLive = useLiveVec(
+        ['camera.unified.x', 'camera.unified.y', 'camera.unified.z'], unified, true,
+    ) as THREE.Vector3 | undefined;
+
+    // Rotation deliberately has NO liveValue. `rotDeg` is DEGREES (see
+    // CameraUtils.getRotationDegrees) while the stored offset is RADIANS, so
+    // composing the two would place the indicator at a meaningless position.
+    // No marker beats a marker in the wrong place; fixing it means settling the
+    // units on the camera.rotation.* targets first.
+
     return (
         <>
             <div data-help-id="cam.position">
@@ -292,6 +307,7 @@ export const CameraPositionDisplay: React.FC = () => {
                     min={-Infinity}
                     max={Infinity}
                     interactionMode="camera"
+                    liveValue={posLive}
                     trackKeys={['camera.unified.x', 'camera.unified.y', 'camera.unified.z']}
                     trackLabels={['Position X', 'Position Y', 'Position Z']}
                 />

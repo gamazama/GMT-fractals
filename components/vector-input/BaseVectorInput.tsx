@@ -52,7 +52,7 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
     // New props for unified system
     mode = 'normal',
     modeToggleable = false,
-    showLiveIndicator = false,
+    showLiveIndicator = true,
     liveValue,
     defaultValue,
     hardMin,
