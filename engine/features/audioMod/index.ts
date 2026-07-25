@@ -26,6 +26,7 @@ export interface AudioState {
     dbCeiling: number;
     bandsPerOctave: number;
     normalizeBands: boolean;
+    spectralTilt: number;
 }
 
 // AudioActions removed - link management is now in ModulationActions
@@ -130,6 +131,16 @@ export const AudioFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'Balance Bands', shortId: 'nb', group: 'system',
             noAccumReset: true, preserveOnApply: true,
             description: 'Let every frequency band self-calibrate, so quiet bands react as readily as loud ones. Trades spectral contrast for consistency — off usually reads better.',
+        },
+        // Fixed spectral tilt. Unlike Balance Bands this is the SAME dB offset
+        // every frame, so it lifts the highs without flattening anything — it
+        // is the answer ADR-0105 points at. +3 dB/oct makes pink noise read
+        // flat given the mean-power statistic; see filterBank's TILT_* block.
+        spectralTilt: {
+            type: 'float', default: 3, label: 'Tilt', shortId: 'st', group: 'system',
+            noAccumReset: true, preserveOnApply: true,
+            min: 0, max: 6, step: 0.5,
+            description: 'Lift the high bands to compensate for music\'s natural roll-off. A fixed offset, so it costs no dynamics — 3 is neutral for typical material, 0 is the raw spectrum.',
         },
     },
 };

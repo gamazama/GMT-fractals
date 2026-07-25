@@ -471,6 +471,10 @@ export class AudioAnalysisEngine {
         deltaSec = 1 / 60,
         bandsPerOctave = 6,
         normalizeBands = false,
+        /** dB/octave, 0 = raw. Defaults to no tilt so a caller that does not
+         *  know about it gets the untouched spectrum; the user-facing default
+         *  is 3, set on the `spectralTilt` param. */
+        spectralTilt = 0,
     ) {
         if (!this.analyser || !this.dataArray) return;
         // FLOAT, not byte. getByteFrequencyData quantises to 256 steps across
@@ -492,6 +496,7 @@ export class AudioAnalysisEngine {
             dbFloor: this.dbFloor,
             dbCeiling: this.dbCeiling,
             normalize: normalizeBands,
+            tiltDbPerOct: spectralTilt,
             deltaSec,
         });
 

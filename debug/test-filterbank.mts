@@ -17,14 +17,19 @@ import { FilterBank, BANK_MIN_HZ, dbToUnit } from '../engine/features/audioMod/f
 
 const DB_FLOOR = -90;
 const DB_CEIL = -10;
-/** Analyse with the panel's default dB window. */
+/** Analyse with the panel's default dB window.
+ *
+ *  Tilt defaults to 0 here, NOT to the param's user-facing default of 3: every
+ *  assertion below about absolute levels is written against the untilted
+ *  spectrum. Tilt tests pass theirs explicitly. */
 const runFrame = (
     b: FilterBank,
     data: Float32Array,
     normalize = false,
     dt = 1 / 60,
+    tiltDbPerOct = 0,
 ) =>
-    b.analyse(data, { dbFloor: DB_FLOOR, dbCeiling: DB_CEIL, normalize, deltaSec: dt });
+    b.analyse(data, { dbFloor: DB_FLOOR, dbCeiling: DB_CEIL, normalize, tiltDbPerOct, deltaSec: dt });
 
 let failures = 0;
 const assert = (cond: boolean, msg: string, detail?: unknown) => {
@@ -181,6 +186,70 @@ console.log('\n[4c] Hann kernels: unit sum, zero at the edges, overlapping');
   assert(b.levels[i] > 0 && b.levels[i + 1] > 0,
     'a tone between two centres registers in both bands',
     { lower: b.levels[i], upper: b.levels[i + 1] });
+}
+
+console.log('\n[4d] spectral tilt: a fixed dB ramp that costs no dynamics');
+{
+  const b = mk(4096, 6);
+  const flat = flatFrame(4096, 0.5);
+  const SLOPE = 3;
+  const span = DB_CEIL - DB_FLOOR;
+
+  // A flat-dB spectrum reads the same in every band untilted — which is what
+  // makes it the right substrate for measuring the ramp.
+  runFrame(b, flat, false, 1 / 60, 0);
+  const base = Array.from(b.levels);
+  assert(Math.max(...base) - Math.min(...base) < 1e-6,
+    'with no tilt a flat spectrum reads flat',
+    Math.max(...base) - Math.min(...base));
+
+  runFrame(b, flat, false, 1 / 60, SLOPE);
+  let worst = 0;
+  for (let k = 0; k < b.bands.length; k++) {
+    const expected = Math.min(1,
+      base[k] + (SLOPE * Math.log2(b.bands[k].centerHz / BANK_MIN_HZ)) / span);
+    worst = Math.max(worst, Math.abs(b.levels[k] - expected));
+  }
+  assert(worst < 1e-5,
+    'every band is lifted by exactly slope×log2(f/25) dB', worst);
+
+  // Referenced at the low end, so the tilt only ever boosts. A mid-referenced
+  // tilt would attenuate 25Hz by ~16dB and gut the kick.
+  assert(near(b.levels[0], base[0], 1e-6),
+    'the lowest band is exactly unchanged — tilt boosts, never attenuates',
+    { before: base[0], after: b.levels[0] });
+  assert(b.levels[b.bands.length - 1] > base[b.bands.length - 1],
+    'and the top band is lifted');
+
+  // THE claim: the offset is the same regardless of level, so a loud-vs-quiet
+  // difference survives the tilt untouched. This is what per-band adaptive
+  // gain could not do (ADR-0105).
+  const mid = b.bands.findIndex(x => x.centerHz > 800 && x.centerHz < 1200);
+  const quietF = flatFrame(4096, 0.30);
+  const loudF = flatFrame(4096, 0.55);
+  runFrame(b, quietF, false, 1 / 60, 0);     const rawQuiet = b.levels[mid];
+  runFrame(b, loudF, false, 1 / 60, 0);      const rawLoud = b.levels[mid];
+  runFrame(b, quietF, false, 1 / 60, SLOPE); const tiltQuiet = b.levels[mid];
+  runFrame(b, loudF, false, 1 / 60, SLOPE);  const tiltLoud = b.levels[mid];
+  assert(tiltLoud < 1, 'the probe band has not clamped', tiltLoud);
+  assert(near(tiltLoud - tiltQuiet, rawLoud - rawQuiet, 1e-5),
+    'a loud-vs-quiet difference is identical tilted and untilted — no dynamics cost',
+    { raw: (rawLoud - rawQuiet).toFixed(4), tilted: (tiltLoud - tiltQuiet).toFixed(4) });
+
+  // Moving the slider must not rebuild: a drag would otherwise reset the
+  // adaptive-gain followers and drop the SuperFlux reference every frame.
+  const b2 = mk(4096, 6);
+  for (let i = 0; i < 10; i++) runFrame(b2, flat, true, 1 / 60, 0);
+  const framesBefore = (b2 as any).framesAnalysed as number;
+  runFrame(b2, flat, true, 1 / 60, 4);
+  assert((b2 as any).framesAnalysed === framesBefore + 1,
+    'a slope change does not reset the frame counter (so: no rebuild)');
+  assert((b2 as any).hasPrevFrame === true,
+    'and the SuperFlux reference frame survives it');
+
+  // Out-of-range slopes clamp rather than producing a runaway ramp.
+  runFrame(b, flat, false, 1 / 60, 999);
+  assert(b.levels.every(v => v >= 0 && v <= 1), 'an absurd slope stays in 0..1');
 }
 
 console.log('\n[5] a tone lands in the band that contains it');

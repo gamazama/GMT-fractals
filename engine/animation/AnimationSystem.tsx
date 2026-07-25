@@ -167,6 +167,7 @@ export const tick = (delta: number) => {
             delta,
             audioSlice.bandsPerOctave ?? 6,
             !!audioSlice.normalizeBands,
+            audioSlice.spectralTilt ?? 3,
         );
     }
 

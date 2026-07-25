@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useEngineStore } from '../../../store/engineStore';
 import { audioAnalysisEngine } from './AudioAnalysisEngine';
 import { formatBand } from './freqScale';
-import { filterBank } from './filterBank';
+import { filterBank, BANK_MIN_HZ, TILT_MAX_DB_PER_OCT } from './filterBank';
 import { AudioSpectrum } from './AudioSpectrum';
 import { AudioLinkControls } from './AudioLinkControls';
 import { collectHelpIds } from '../../../utils/helpUtils';
@@ -341,6 +341,26 @@ const AnalysisControls: React.FC = () => {
                         Below <b>{filterBank.resolutionLimitHz.toFixed(0)} Hz</b> they are finer
                         than this Detail setting can resolve — shown dimmed. Raise Detail to
                         push that lower.
+                    </p>
+                </div>
+
+                {/* Fixed tilt — a constant dB ramp, NOT adaptive gain. Sits
+                    above Balance Bands because it is the answer that one is
+                    usually reached for. @see docs/adr/0105-*.md */}
+                <div>
+                    <Slider
+                        label="Tilt"
+                        value={audio?.spectralTilt ?? 3}
+                        min={0} max={TILT_MAX_DB_PER_OCT} step={0.5}
+                        onChange={(v) => setAudio({ spectralTilt: v })}
+                    />
+                    <p className="text-[8px] text-fg-faint mt-1 leading-snug">
+                        Lifts the highs to offset music's natural roll-off — {' '}
+                        <b>{(audio?.spectralTilt ?? 3).toFixed(1)} dB/octave</b>, so
+                        16 kHz reads {' '}
+                        <b>+{((audio?.spectralTilt ?? 3) * Math.log2(16000 / BANK_MIN_HZ)).toFixed(0)} dB</b>
+                        {' '} against 25 Hz. A fixed offset, so it costs no dynamics.
+                        0 is the raw spectrum.
                     </p>
                 </div>
 

@@ -95,6 +95,9 @@ export interface AnalyseOptions {
     dbCeiling: number;
     /** Apply per-band adaptive gain. Defaults OFF — see `NORMALIZE_*` below. */
     normalize: boolean;
+    /** Fixed spectral tilt in dB/octave, referenced at `BANK_MIN_HZ`. Boost
+     *  only; 0 disables. See the `TILT_*` block. */
+    tiltDbPerOct: number;
     deltaSec: number;
 }
 
@@ -131,6 +134,33 @@ const NORMALIZE_RELEASE_PER_SEC = 0.35;
 const NORMALIZE_SILENCE_FLOOR = 0.02;
 const NORMALIZE_MIN_PEAK = 0.15;
 
+/**
+ * Spectral tilt — a FIXED per-band dB offset correcting music's average
+ * spectral slope.
+ *
+ * This is the honest answer to "the highs read weak", and the reason per-band
+ * adaptive gain is not (see the NORMALIZE_* block and ADR-0105). A tilt adds
+ * the SAME number of dB to a given band on every frame, so relative dynamics
+ * survive exactly — within a band and between bands. A kick still towers over
+ * a hi-hat; the hi-hat just starts from a usable floor instead of the basement.
+ *
+ * Why +3 dB/octave is the principled default: `analyse` reports each band's
+ * MEAN power per bin, not its total. A fractional-octave band's width grows
+ * with frequency, so for pink noise — constant power per octave, and roughly
+ * the long-term average of music — the total per band is flat but the MEAN
+ * falls at 3 dB/octave. +3 cancels exactly that, making pink noise read flat.
+ * Note the slope comes from the mean-vs-sum statistic, not from the source.
+ *
+ * @invariant Referenced at `BANK_MIN_HZ`, so the tilt only ever BOOSTS. A
+ *   mid-referenced tilt (neutral at 1 kHz) would attenuate 25 Hz by ~16 dB at
+ *   the default slope, gutting the kick — the single most important band for a
+ *   VJ rig. Lows stay exactly where they are and the highs come up to meet
+ *   them; the dB ceiling and the AGC handle overall level as they already did.
+ */
+const TILT_REF_HZ = BANK_MIN_HZ;
+/** Slider bound. Past ~6 the top octaves just pin against the dB ceiling. */
+export const TILT_MAX_DB_PER_OCT = 6;
+
 /** Max-filter width in BANDS for SuperFlux — see `FilterBank.superflux`. */
 export const SUPERFLUX_WIDTH = 3;
 
@@ -158,6 +188,9 @@ export class FilterBank {
     private power: Float32Array = new Float32Array(0);
     /** All band kernels concatenated; index via `band.kernelOffset`. */
     private kernel: Float32Array = new Float32Array(0);
+    /** Per-band tilt offset in dB — see the `TILT_*` block. */
+    private tiltDb: Float32Array = new Float32Array(0);
+    private tiltDbPerOct = 0;
 
     private ensurePowerScratch(binCount: number): void {
         if (this.power.length < binCount) this.power = new Float32Array(binCount);
@@ -285,6 +318,32 @@ export class FilterBank {
         // one giant onset across every band.
         this.hasPrevFrame = false;
         this.framesAnalysed = 0;
+        // Tilt is per-band, so a reshape invalidates the curve. The SLOPE is
+        // carried over — it is a user setting, not learned state.
+        this.rebuildTilt(this.tiltDbPerOct);
+    }
+
+    /**
+     * Recompute the per-band tilt curve — see the `TILT_*` block.
+     *
+     * Deliberately NOT part of `rebuild`: the slope is a slider the user drags,
+     * and a full rebuild would reset the adaptive-gain followers and drop the
+     * SuperFlux reference frame on every pointermove. Cost is one pass over
+     * ~56 bands, and only when the value actually changes.
+     */
+    private rebuildTilt(slopeDbPerOct: number): void {
+        this.tiltDbPerOct = slopeDbPerOct;
+        if (this.tiltDb.length !== this.bands.length) {
+            this.tiltDb = new Float32Array(this.bands.length);
+        }
+        for (let k = 0; k < this.bands.length; k++) {
+            this.tiltDb[k] = slopeDbPerOct * Math.log2(this.bands[k].centerHz / TILT_REF_HZ);
+        }
+    }
+
+    /** Tilt applied to band `k`, in dB. Zero when the slope is zero. */
+    public tiltDbAt(k: number): number {
+        return this.tiltDb[k] ?? 0;
     }
 
     /**
@@ -312,6 +371,10 @@ export class FilterBank {
         const { dbFloor, dbCeiling, normalize, deltaSec } = opts;
         const n = this.bands.length;
 
+        // Cheap guard, not a rebuild — see `rebuildTilt`.
+        const wantTilt = Math.max(0, Math.min(TILT_MAX_DB_PER_OCT, opts.tiltDbPerOct || 0));
+        if (wantTilt !== this.tiltDbPerOct) this.rebuildTilt(wantTilt);
+
         // Per-bin power, computed ONCE per frame. Bands overlap (and will
         // overlap more once kernels land), so converting inside the band loop
         // would redo this for every band that touches a bin.
@@ -323,6 +386,7 @@ export class FilterBank {
         }
 
         const kernel = this.kernel;
+        const tilt = this.tiltDb;
         for (let k = 0; k < n; k++) {
             const b = this.bands[k];
             // Weighted mean of power. Weights sum to 1, so this is already the
@@ -335,7 +399,9 @@ export class FilterBank {
             }
             if (acc <= 0) { this.levels[k] = 0; continue; }
             const rms = Math.sqrt(acc);                         // linear amplitude
-            this.levels[k] = dbToUnit(20 * Math.log10(rms), dbFloor, dbCeiling);
+            // Tilt is a dB offset applied BEFORE the window, so it shifts the
+            // band up the same ramp every frame — dynamics untouched.
+            this.levels[k] = dbToUnit(20 * Math.log10(rms) + tilt[k], dbFloor, dbCeiling);
         }
 
         // Snapshot the frame the RULES last saw, before overwriting
