@@ -93,80 +93,43 @@ export interface AnalyseOptions {
     /** dB window mapped onto 0..1 — see `dbToUnit`. */
     dbFloor: number;
     dbCeiling: number;
-    /** Apply per-band adaptive gain. */
+    /** Apply per-band adaptive gain. Defaults OFF — see `NORMALIZE_*` below. */
     normalize: boolean;
-    /** Which adaptive-gain implementation. Defaults to PCEN. */
-    normalizeMode?: NormalizeMode;
     deltaSec: number;
 }
 
 /**
- * Per-band adaptive gain, LEGACY peak-follower mode ("every band
- * self-calibrates"). Superseded by PCEN below; retained only so the two can be
- * A/B'd on real material. @deprecated Delete with `applyPeakFollower` and the
- * `normalizeMode` param once PCEN is confirmed in the field.
+ * Per-band adaptive gain ("every band self-calibrates") — the implementation
+ * behind `normalizeBands`, which defaults OFF and should stay that way.
  *
  * Each band divides by its own slow-release running peak, so a band that is
  * quiet in absolute terms — hi-hats are always far below a kick — still uses
  * the full 0..1 range.
  *
+ * @invariant OFF is the better setting; this mode is retained as an option,
+ *   not because it is good. A field A/B (2026-07-25) found that
+ *   per-band adaptive gain of ANY kind costs more fidelity than it buys.
+ *   Dividing each band by its own recent level removes the spectrum's shape,
+ *   and that shape IS the signal — a kick is louder than a hi-hat and the
+ *   visual reacts to exactly that difference. PCEN was implemented, measured
+ *   against this follower and rejected on the same grounds: it compresses
+ *   within each frame rather than across minutes, so it flattens harder still.
+ *   Do not make normalisation the default, and do not "fix" the flatness by
+ *   adding compression. The real need behind this mode — highs reading weak —
+ *   is answered by a FIXED spectral tilt, which corrects the average 1/f shape
+ *   without touching dynamics at all.
+ *   @see docs/adr/0105-per-band-adaptive-gain-rejected.md
  * @invariant Silence FREEZES the follower. Releasing through a gap would let
  *   the peak decay toward zero, the divisor shrink, and the gain ratchet up —
  *   so the next downbeat arrives at maximum boost and detonates. (The global
- *   AGC shipped with exactly this bug; same fix, same reason.) This freeze is
- *   the structural weakness PCEN removes: it is a patch over an unbounded
- *   divide, where PCEN's compression bounds the output by construction and so
- *   needs no gate at all. The freeze stays only as long as this mode does —
- *   `debug/test-filterbank.mts` [11d] holds PCEN to the no-freeze standard.
+ *   AGC shipped with exactly this bug; same fix, same reason.)
  * @invariant A band whose peak never clears `MIN_PEAK` is normalised against
  *   MIN_PEAK rather than its own peak, so near-silent bands stay near-silent
- *   instead of amplifying their own noise floor to full scale. PCEN keeps this
- *   guard (as `PCEN_FLOOR`) — it addresses amplification, not ratcheting, and
- *   compression does not subsume it.
+ *   instead of amplifying their own noise floor to full scale.
  */
 const NORMALIZE_RELEASE_PER_SEC = 0.35;
 const NORMALIZE_SILENCE_FLOOR = 0.02;
 const NORMALIZE_MIN_PEAK = 0.15;
-
-/**
- * PCEN — per-channel energy normalisation (Wang et al. 2017).
- *
- *   M[k] ← (1-s)·M[k] + s·E[k]                       one-pole, per band
- *   out  = (E[k] / (eps + M[k])^alpha + delta)^r − delta^r
- *
- * Structurally the same job as the peak follower — divide each band by its own
- * running average — but the compression exponent bounds the output by
- * construction, so the "divisor shrinks, gain ratchets" failure mode the
- * follower needs an explicit silence freeze to avoid cannot arise.
- *
- * @invariant The `+ delta` INSIDE the power is load-bearing and easy to drop.
- *   Without it the expression is `(E/(eps+M)^alpha)^r − delta^r`, which
- *   evaluates to −delta^r at silence — i.e. −1.414 at these settings, a
- *   negative level. With it, E=0 maps to exactly 0.
- * @invariant `M` is floored at `PCEN_FLOOR` before the divide. PCEN's own eps
- *   guards division by zero, not amplification: a band sitting just above the
- *   dB floor (room tone) would otherwise divide by its own tiny average and be
- *   lifted to ~0.6. The floor is the same value as `NORMALIZE_MIN_PEAK` so the
- *   "near-silent bands stay quiet" behaviour is identical across both modes.
- * @invariant Output is scaled by `PCEN_SCALE` so a band at full scale sitting
- *   at its own average reads 1.0. Raw PCEN tops out near 0.318 for sustained
- *   content, which would silently shift every calibrated threshold — see
- *   `dbToUnit`. Genuine transients exceed 1 and clamp, which is correct.
- */
-const PCEN_ALPHA = 0.8;
-const PCEN_R = 0.5;
-const PCEN_DELTA = 2;
-const PCEN_EPS = 1e-6;
-/** Smoother time constant, matched to the peak follower's ~0.29s release so
- *  the two modes adapt at a comparable rate and A/B fairly. */
-const PCEN_TAU_SEC = 0.3;
-const PCEN_FLOOR = NORMALIZE_MIN_PEAK;
-const PCEN_SCALE = 1 / (
-    Math.pow(1 / Math.pow(PCEN_EPS + 1, PCEN_ALPHA) + PCEN_DELTA, PCEN_R)
-    - Math.pow(PCEN_DELTA, PCEN_R)
-);
-
-export type NormalizeMode = 'peak' | 'pcen';
 
 /** Max-filter width in BANDS for SuperFlux — see `FilterBank.superflux`. */
 export const SUPERFLUX_WIDTH = 3;
@@ -184,8 +147,6 @@ export class FilterBank {
     /** Levels after per-band adaptive gain (identical to `levels` when off). */
     public normalized: Float32Array = new Float32Array(0);
     private peaks: Float32Array = new Float32Array(0);
-    /** PCEN one-pole smoother state, per band. */
-    private pcenM: Float32Array = new Float32Array(0);
     /** Previous frame's normalised levels — the SuperFlux reference. Owned
      *  here rather than per-rule so every rule differences the same pair of
      *  frames, and so switching a rule to transient mode mid-set cannot fire a
@@ -319,7 +280,6 @@ export class FilterBank {
         // different frequency at a different bandsPerOctave, so stale state
         // would mis-scale the new band until it re-learned.
         this.peaks = new Float32Array(bands.length);
-        this.pcenM = new Float32Array(bands.length);
         this.prev = new Float32Array(bands.length);
         // No reference frame after a reshape — the first frame must not read as
         // one giant onset across every band.
@@ -394,12 +354,9 @@ export class FilterBank {
 
         if (!normalize) {
             this.normalized.set(this.levels);
-            // Decay the followers toward the live signal while disabled so that
+            // Track the follower toward the live signal while disabled so that
             // re-enabling doesn't apply state learned minutes ago.
             this.peaks.set(this.levels);
-            this.pcenM.set(this.levels);
-        } else if ((opts.normalizeMode ?? 'pcen') === 'pcen') {
-            this.applyPcen(deltaSec);
         } else {
             this.applyPeakFollower(deltaSec);
         }
@@ -407,8 +364,8 @@ export class FilterBank {
         this.framesAnalysed++;
     }
 
-    /** Legacy adaptive gain: divide by a slow-release running peak. Retained
-     *  for A/B against PCEN; slated for removal once PCEN is confirmed. */
+    /** Per-band adaptive gain: divide by a slow-release running peak. See the
+     *  `NORMALIZE_*` constant block for why this defaults OFF. */
     private applyPeakFollower(deltaSec: number): void {
         const n = this.bands.length;
         const k = Math.exp(-NORMALIZE_RELEASE_PER_SEC * Math.max(0, deltaSec) * 10);
@@ -423,24 +380,6 @@ export class FilterBank {
             }
             const divisor = Math.max(NORMALIZE_MIN_PEAK, this.peaks[i]);
             this.normalized[i] = Math.min(1, level / divisor);
-        }
-    }
-
-    /** PCEN — see the constant block above for the formula and its invariants. */
-    private applyPcen(deltaSec: number): void {
-        const n = this.bands.length;
-        const s = 1 - Math.exp(-Math.max(0, deltaSec) / PCEN_TAU_SEC);
-        const deltaR = Math.pow(PCEN_DELTA, PCEN_R);
-        for (let i = 0; i < n; i++) {
-            const level = this.levels[i];
-            // One-pole smoother. NO silence gate: the compression bounds the
-            // output, so a decaying M cannot ratchet the gain the way a
-            // shrinking peak divisor could.
-            this.pcenM[i] += s * (level - this.pcenM[i]);
-            const m = Math.max(PCEN_FLOOR, this.pcenM[i]);
-            const compressed = level / Math.pow(PCEN_EPS + m, PCEN_ALPHA);
-            const out = Math.pow(compressed + PCEN_DELTA, PCEN_R) - deltaR;
-            this.normalized[i] = Math.min(1, Math.max(0, out * PCEN_SCALE));
         }
     }
 

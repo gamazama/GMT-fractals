@@ -26,7 +26,6 @@ export interface AudioState {
     dbCeiling: number;
     bandsPerOctave: number;
     normalizeBands: boolean;
-    normalizeMode: number;
 }
 
 // AudioActions removed - link management is now in ModulationActions
@@ -122,24 +121,15 @@ export const AudioFeature: FeatureDefinition = {
         },
         // Per-band adaptive gain. Each band divides by its own slow-release
         // peak, so quiet bands (hi-hats are always far below a kick) still use
-        // the full range and one set of thresholds keeps working across tracks.
+        // the full range. Defaults OFF and should stay that way — the A/B on
+        // real material found it costs more spectral contrast than it buys.
+        // @see docs/adr/0105-per-band-adaptive-gain-rejected.md and the
+        // NORMALIZE_* block in filterBank.ts. Kept as an option, not for
+        // compatibility — `nb` was never pushed, so nothing in the wild has it.
         normalizeBands: {
             type: 'boolean', default: false, label: 'Balance Bands', shortId: 'nb', group: 'system',
             noAccumReset: true, preserveOnApply: true,
-            description: 'Let every frequency band self-calibrate, so quiet bands react as readily as loud ones.',
+            description: 'Let every frequency band self-calibrate, so quiet bands react as readily as loud ones. Trades spectral contrast for consistency — off usually reads better.',
         },
-        // TEMPORARY A/B control. PCEN (Wang et al. 2017) is the intended
-        // implementation; the peak follower is kept alongside it only so the
-        // two can be compared on real material before the old path is deleted.
-        // Remove this param and the `applyPeakFollower` branch together.
-        normalizeMode: {
-            type: 'float', default: 1, label: 'Balance Method', shortId: 'nm', group: 'system',
-            noAccumReset: true, preserveOnApply: true, isAdvanced: true,
-            options: [
-                { label: 'Peak follower (legacy)', value: 0 },
-                { label: 'PCEN', value: 1 },
-            ],
-            description: 'How Balance Bands adapts. PCEN compresses rather than dividing by a peak, so its gain is bounded by construction.',
-        }
     },
 };

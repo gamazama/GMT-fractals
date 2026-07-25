@@ -17,19 +17,14 @@ import { FilterBank, BANK_MIN_HZ, dbToUnit } from '../engine/features/audioMod/f
 
 const DB_FLOOR = -90;
 const DB_CEIL = -10;
-/** Analyse with the panel's default dB window.
- *
- *  The mode is pinned to 'peak' rather than left to default: `analyse` defaults
- *  to PCEN, so the legacy-follower tests below would silently have been testing
- *  PCEN instead. Mode-specific tests pass theirs explicitly. */
+/** Analyse with the panel's default dB window. */
 const runFrame = (
     b: FilterBank,
     data: Float32Array,
     normalize = false,
     dt = 1 / 60,
-    normalizeMode: 'peak' | 'pcen' = 'peak',
 ) =>
-    b.analyse(data, { dbFloor: DB_FLOOR, dbCeiling: DB_CEIL, normalize, normalizeMode, deltaSec: dt });
+    b.analyse(data, { dbFloor: DB_FLOOR, dbCeiling: DB_CEIL, normalize, deltaSec: dt });
 
 let failures = 0;
 const assert = (cond: boolean, msg: string, detail?: unknown) => {
@@ -287,80 +282,8 @@ console.log('\n[11] the follower releases when the music merely gets quieter');
     { oneFrame: oneFrame.toFixed(3), settled: b.normalized[lo].toFixed(3) });
 }
 
-// ── PCEN ────────────────────────────────────────────────────────────────────
-const runPcen = (b: FilterBank, data: Float32Array, dt = 1 / 60) =>
-  b.analyse(data, {
-    dbFloor: DB_FLOOR, dbCeiling: DB_CEIL,
-    normalize: true, normalizeMode: 'pcen', deltaSec: dt,
-  });
-
-console.log('\n[11b] PCEN maps silence to exactly zero');
-{
-  // The `+ delta` inside the power is what makes E=0 -> 0. Dropping it (an easy
-  // transcription slip) yields -delta^r — a NEGATIVE level, -1.414 here.
-  const b = mk(4096, 6);
-  for (let i = 0; i < 30; i++) runPcen(b, silentFrame(4096));
-  assert(b.normalized.every(v => v === 0),
-    'every band reads exactly 0 on a silent frame, never negative',
-    Math.min(...Array.from(b.normalized)));
-}
-
-console.log('\n[11c] PCEN self-calibrates and stays bounded');
-{
-  const b = mk(4096, 6);
-  const quiet = flatFrame(4096, 0.25);
-  for (let i = 0; i < 240; i++) runPcen(b, quiet);
-  const mid = b.bands.findIndex(x => x.centerHz > 1000);
-  assert(b.normalized[mid] > b.levels[mid] * 1.5,
-    'a sustained quiet band is lifted well above its raw level',
-    { raw: b.levels[mid].toFixed(3), pcen: b.normalized[mid].toFixed(3) });
-  assert(b.normalized.every(v => v >= 0 && v <= 1),
-    'and nothing leaves 0..1');
-}
-
-console.log('\n[11d] PCEN needs no silence freeze — the ratchet cannot occur');
-{
-  // This is the property the peak follower needed an explicit freeze for: the
-  // divisor decays through a gap and the gain climbs. PCEN's smoother decays
-  // too, but the compression exponent plus the M floor bound the output, so no
-  // freeze is required. Drive a worst case and confirm.
-  const b = mk(4096, 6);
-  for (let i = 0; i < 120; i++) runPcen(b, flatFrame(4096, 0.9));   // loud passage
-  for (let i = 0; i < 1800; i++) runPcen(b, silentFrame(4096));      // 30s gap
-  assert(b.normalized.every(v => v === 0), 'output stays 0 across a long gap');
-
-  // The downbeat after the gap must not detonate: a quiet return reads quiet.
-  runPcen(b, flatFrame(4096, 0.2));
-  const mid = b.bands.findIndex(x => x.centerHz > 1000);
-  assert(b.normalized[mid] <= 1,
-    'the first frame after silence is bounded', b.normalized[mid]);
-
-  // Sweep a full silence-to-full-scale ramp and check monotone, bounded output.
-  const b2 = mk(4096, 6);
-  let maxSeen = 0;
-  for (let step = 0; step <= 100; step++) {
-    runPcen(b2, flatFrame(4096, step / 100));
-    for (const v of b2.normalized) maxSeen = Math.max(maxSeen, v);
-  }
-  assert(maxSeen <= 1, 'a full ramp never exceeds 1', maxSeen);
-  assert(Number.isFinite(maxSeen), 'and never goes non-finite');
-}
-
-console.log('\n[11e] near-silent bands still are not amplified under PCEN');
-{
-  // PCEN's eps guards division by zero, not amplification. Without the M floor
-  // a band of room tone would divide by its own tiny average and be lifted to
-  // ~0.6. Same guard value as the peak follower, so both modes agree here.
-  const b = mk(4096, 6);
-  for (let i = 0; i < 300; i++) runPcen(b, flatFrame(4096, 0.03));
-  const mid = b.bands.findIndex(x => x.centerHz > 1000);
-  assert(b.normalized[mid] < 0.35,
-    'room tone stays quiet rather than being normalised to full scale',
-    b.normalized[mid].toFixed(3));
-}
-
 // ── SuperFlux ───────────────────────────────────────────────────────────────
-console.log('\n[11f] SuperFlux: real onsets survive, drifting tones do not');
+console.log('\n[11b] SuperFlux: real onsets survive, drifting tones do not');
 {
   const FFT = 4096;
   const bin = (hz: number) => Math.round(hz / (SR / FFT));
@@ -422,7 +345,7 @@ console.log('\n[11f] SuperFlux: real onsets survive, drifting tones do not');
     { superflux: driftFlux, plainFlux: plainMax });
 }
 
-console.log('\n[11g] SuperFlux has no reference until a second frame exists');
+console.log('\n[11c] SuperFlux has no reference until a second frame exists');
 {
   const b = mk(4096, 6);
   const [lo, hi] = b.bandRangeForHz(100, 10000);

@@ -305,7 +305,6 @@ const AnalysisControls: React.FC = () => {
     const dbFloor = audio?.dbFloor ?? -90;
     const dbCeiling = audio?.dbCeiling ?? -10;
     const bandsPerOctave = audio?.bandsPerOctave ?? 6;
-    const advancedMode = useEngineStore(s => (s as any).advancedMode) as boolean;
     const windowMs = (fftSize / audioAnalysisEngine.sampleRate) * 1000;
 
     return (
@@ -359,23 +358,9 @@ const AnalysisControls: React.FC = () => {
                 </label>
                 <p className="text-[8px] text-fg-faint -mt-1 leading-snug">
                     Every band uses its full range regardless of how loud it is in absolute
-                    terms — hi-hats react as readily as a kick, and one set of thresholds
-                    keeps working across tracks.
+                    terms — hi-hats react as readily as a kick. Costs spectral contrast,
+                    though: off usually reads better.
                 </p>
-                {/* TEMPORARY comparison control — advanced only. Remove together
-                    with the legacy follower once PCEN is confirmed on real
-                    material. @see filterBank.applyPeakFollower */}
-                {advancedMode && (audio?.normalizeBands ?? false) && (
-                    <select
-                        value={audio?.normalizeMode ?? 1}
-                        onChange={(e) => setAudio({ normalizeMode: parseInt(e.target.value, 10) })}
-                        className="t-select w-full text-[9px]"
-                        title="How Balance Bands adapts — for comparison while PCEN is evaluated"
-                    >
-                        <option value={1}>PCEN (compressed, bounded)</option>
-                        <option value={0}>Peak follower (legacy)</option>
-                    </select>
-                )}
 
                 <div>
                     <label className="text-[9px] text-fg-dim font-bold block mb-1">Detail</label>

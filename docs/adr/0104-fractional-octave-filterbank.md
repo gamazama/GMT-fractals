@@ -4,6 +4,13 @@
 - **Date:** 2026-07-25
 - **Relates to:** ADR-0103 (the audio rig as live session state)
 
+> **Update 2026-07-25 (adaptive gain amended by ADR-0105; filterbank unchanged):**
+> the fractional-octave filterbank below stands in full. The **per-band adaptive
+> gain** portion did not survive field testing — it flattens the spectral
+> contrast the visuals react to, and stays off by default. See
+> [ADR-0105](./0105-per-band-adaptive-gain-rejected.md) for the measurement and
+> the mechanism.
+
 ## Context
 
 The spectrum → band-select → modulation path was working but not competitive.
