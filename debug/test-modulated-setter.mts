@@ -20,6 +20,7 @@ import '../engine-gmt/formulas/index';
 import { registerFeatures } from '../engine-gmt/features/index';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import { composeModulatedValue, mappingForParam, isCurvedScale } from '../engine/features/modulation/paramMapping';
 
 // GMT's feature set must be registered before the store builds its slices —
 // createFeatureSlice freezes the registry on first construction.
@@ -45,16 +46,28 @@ function captureUniforms(fn: () => void): Map<string, any> {
 // Find real targets from the live registry rather than hardcoding names, so a
 // param rename can't quietly turn this test into a no-op.
 const feats = featureRegistry.getAll();
-let scalar: { featId: string; key: string; uniform: string } | null = null;
-let vec: { featId: string; key: string; uniform: string } | null = null;
+type Pick = { featId: string; key: string; uniform: string; cfg: any };
+let scalar: Pick | null = null;        // any float param (may be curved)
+let linearScalar: Pick | null = null;  // explicitly LINEAR — compose must be exact
+let curvedScalar: Pick | null = null;  // explicitly CURVED — compose must bend
+let vec: Pick | null = null;
 for (const f of feats) {
   for (const [key, c] of Object.entries(f.params) as [string, any][]) {
     if (!c.uniform || c.composeFrom) continue;
-    if (!scalar && c.type === 'float') scalar = { featId: f.id, key, uniform: c.uniform };
-    if (!vec && c.type === 'vec3') vec = { featId: f.id, key, uniform: c.uniform };
+    if (c.type === 'float') {
+      if (!scalar) scalar = { featId: f.id, key, uniform: c.uniform, cfg: c };
+      if (!linearScalar && !isCurvedScale(c.scale)) linearScalar = { featId: f.id, key, uniform: c.uniform, cfg: c };
+      if (!curvedScalar && isCurvedScale(c.scale)) curvedScalar = { featId: f.id, key, uniform: c.uniform, cfg: c };
+    }
+    if (!vec && c.type === 'vec3') vec = { featId: f.id, key, uniform: c.uniform, cfg: c };
   }
-  if (scalar && vec) break;
 }
+
+/** The value the TICK would write — the thing the setter must agree with. */
+const expected = (p: Pick, base: number, offset: number) =>
+  composeModulatedValue(base, offset, {
+    mapping: mappingForParam(p.cfg), min: p.cfg.min ?? 0, max: p.cfg.max ?? 1,
+  });
 
 const setterFor = (featId: string) =>
   (useEngineStore.getState() as any)[`set${featId.charAt(0).toUpperCase()}${featId.slice(1)}`];
@@ -71,13 +84,37 @@ if (!scalar) {
 }
 
 // --- 2: the reported flicker — a modulated scalar composes the offset
-console.log('\n[2] modulated scalar emits base + offset');
-if (scalar) {
+// The setter must produce EXACTLY what the tick produces, which since ADR-0108
+// means composing through the param's slider curve rather than adding raw.
+// Asserted against the shared compose rather than a hardcoded sum, so this
+// checks AGREEMENT — the actual invariant — instead of arithmetic.
+console.log('\n[2] modulated scalar emits what the tick would write');
+if (linearScalar) {
   modulationEngine.resetOffsets();
-  modulationEngine.offsets[`${scalar.featId}.${scalar.key}`] = 0.5;
-  const seen = captureUniforms(() => setterFor(scalar!.featId)({ [scalar!.key]: 2 }));
-  assert(seen.get(scalar.uniform) === 2.5,
-    'setter agrees with the tick instead of racing it', seen.get(scalar.uniform));
+  modulationEngine.offsets[`${linearScalar.featId}.${linearScalar.key}`] = 0.5;
+  const seen = captureUniforms(() => setterFor(linearScalar!.featId)({ [linearScalar!.key]: 2 }));
+  assert(seen.get(linearScalar.uniform) === 2.5,
+    `a LINEAR param (${linearScalar.featId}.${linearScalar.key}) still composes as base + offset`,
+    seen.get(linearScalar.uniform));
+} else {
+  assert(false, 'found a linear float param with a uniform to test');
+}
+
+if (curvedScalar) {
+  modulationEngine.resetOffsets();
+  modulationEngine.offsets[`${curvedScalar.featId}.${curvedScalar.key}`] = 0.5;
+  const seen = captureUniforms(() => setterFor(curvedScalar!.featId)({ [curvedScalar!.key]: 2 }));
+  const want = expected(curvedScalar, 2, 0.5);
+  assert(seen.get(curvedScalar.uniform) === want,
+    `a CURVED param (${curvedScalar.featId}.${curvedScalar.key}, scale '${curvedScalar.cfg.scale}') agrees with the tick`,
+    { got: seen.get(curvedScalar.uniform), want });
+  assert(want !== 2.5,
+    'and the curve actually bent it — the setter is not silently adding raw', want);
+} else {
+  assert(false, 'found a curved float param with a uniform to test');
+}
+
+if (scalar) {
 
   // A zero offset must still take the composed path — a signal momentarily at
   // silence must not flip the writer back to raw-base for a frame.

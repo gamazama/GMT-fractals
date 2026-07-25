@@ -26,6 +26,7 @@
 
 import { featureRegistry } from '../../FeatureSystem';
 import { MAX_LIGHTS } from '../../../data/constants';
+import { mappingForParam, mappingForVirtual, virtualScaleFor, LINEAR_CURVE, type TargetCurve } from './paramMapping';
 
 /** Where a target's offset ends up. */
 export type ModulationSink =
@@ -73,6 +74,11 @@ export interface ModulationRouting {
     /** Param declared `noAccumReset`; its uniform write must not reset the
      *  accumulation buffer. */
     noAccumReset: boolean;
+    /** Slider geometry for this target. Every applier composes through
+     *  `composeModulatedValue(base, offset, curve)` so a curved param modulates
+     *  with the same feel its slider drags with. Linear targets get
+     *  `LINEAR_CURVE`, for which the compose is exactly `base + offset`. */
+    curve: TargetCurve;
 }
 
 const COLORING_COMPOSITES = new Set([
@@ -123,6 +129,15 @@ export function classifyModulationTarget(
     let ddfsResolved = false;
     let base = 0;
     let noAccumReset = false;
+    // Slider geometry, filled wherever a ParamConfig is found. Stays
+    // LINEAR_CURVE for targets with no declared curve, which makes the compose
+    // an exact `base + offset`.
+    let curve: TargetCurve = LINEAR_CURVE;
+    const curveFromConfig = (c: { scale?: unknown; min?: number; max?: number }): TargetCurve => ({
+        mapping: mappingForParam(c as Parameters<typeof mappingForParam>[0]),
+        min: c.min ?? 0,
+        max: c.max ?? 1,
+    });
 
     if (targetKey.includes('.')) {
         const [featureId, paramId] = targetKey.split('.');
@@ -136,6 +151,7 @@ export function classifyModulationTarget(
                 const paramConfig = feature.params[vectorName];
                 if (paramConfig) {
                     base = (vecVal as Record<string, number>)[vectorMatch[2]] ?? 0;
+                    curve = curveFromConfig(paramConfig);
                     if (paramConfig.uniform) uniform = `${paramConfig.uniform}_${vectorMatch[2]}`;
                     if (paramConfig.noAccumReset) noAccumReset = true;
                     ddfsResolved = true;
@@ -145,6 +161,7 @@ export function classifyModulationTarget(
                 if (paramConfig) {
                     const raw = (slice as Record<string, unknown>)[paramId];
                     if (typeof raw === 'number') base = raw;
+                    curve = curveFromConfig(paramConfig);
                     if (paramConfig.uniform) uniform = paramConfig.uniform;
                     if (paramConfig.noAccumReset) noAccumReset = true;
                     ddfsResolved = true;
@@ -154,10 +171,17 @@ export function classifyModulationTarget(
     } else if (targetKey === 'iterations') {
         uniform = 'uIterations';
         base = ((storeState.coreMath as Record<string, number> | undefined)?.iterations) ?? 0;
+        // Legacy bare alias for `coreMath.iterations` — take the same curve, or
+        // the alias would modulate on a linear track while its canonical form
+        // used the cube one.
+        const cfg = featureRegistry.get('coreMath')?.params?.iterations;
+        if (cfg) curve = curveFromConfig(cfg);
         ddfsResolved = true;
     } else if (targetKey.startsWith('param')) {
         uniform = 'u' + targetKey.charAt(0).toUpperCase() + targetKey.slice(1);
         base = ((storeState.coreMath as Record<string, number> | undefined)?.[targetKey]) ?? 0;
+        const cfg = featureRegistry.get('coreMath')?.params?.[targetKey];
+        if (cfg) curve = curveFromConfig(cfg);
         ddfsResolved = true;
     }
 
@@ -166,19 +190,19 @@ export function classifyModulationTarget(
     // A. Coloring composites. Note the fall-through: a `coloring.` target that
     //    is NOT one of the four composites drops to the generic path below.
     if (targetKey.startsWith('coloring.') && storeState.coloring && COLORING_COMPOSITES.has(targetKey)) {
-        return { branch: 'coloring', sink: 'uniform', uniform: undefined, ddfsResolved, base, noAccumReset };
+        return { branch: 'coloring', sink: 'uniform', uniform: undefined, ddfsResolved, base, noAccumReset, curve };
     }
 
     // B. Julia composite → uJulia. Swallows the whole prefix.
     if ((targetKey.startsWith('julia.') || targetKey.startsWith('geometry.julia')) && storeState.geometry) {
-        return { branch: 'julia', sink: 'uniform', uniform: 'uJulia', ddfsResolved, base, noAccumReset };
+        return { branch: 'julia', sink: 'uniform', uniform: 'uJulia', ddfsResolved, base, noAccumReset, curve };
     }
 
     // C. Camera. Swallows the whole `camera.` prefix, including keys no
     //    consumer reads (only unified.*/rotation.* are applied).
     if (targetKey.startsWith('camera.')) {
         const applied = targetKey.startsWith('camera.unified') || targetKey.startsWith('camera.rotation');
-        return { branch: 'camera', sink: applied ? 'engine-mods' : 'none', ddfsResolved, base, noAccumReset };
+        return { branch: 'camera', sink: applied ? 'engine-mods' : 'none', ddfsResolved, base, noAccumReset, curve };
     }
 
     // D. Geometry pre/post/world rotation → rotation matrices in syncFrame.
@@ -192,7 +216,7 @@ export function classifyModulationTarget(
         // vec3 widget (`preRot`) is not a target — the picker skips composeFrom
         // composites and the axis form has no reader.
         const applied = /^geometry\.(pre|post|world)Rot[XYZ]$/.test(targetKey);
-        return { branch: 'geometryRotation', sink: applied ? 'engine-mods' : 'none', ddfsResolved, base, noAccumReset };
+        return { branch: 'geometryRotation', sink: applied ? 'engine-mods' : 'none', ddfsResolved, base, noAccumReset, curve };
     }
 
     // E. Light array. Swallows the whole `lighting.light` prefix.
@@ -200,7 +224,15 @@ export function classifyModulationTarget(
         const match = targetKey.match(/^lighting\.light(\d+)_(\w+)$/);
         const idx = match ? parseInt(match[1], 10) : -1;
         const applied = !!match && idx >= 0 && idx < MAX_LIGHTS && LIGHT_PROP_SET.has(match[2]);
-        return { branch: 'lighting', sink: applied ? 'engine-mods' : 'none', ddfsResolved, base, noAccumReset };
+        if (applied) {
+            // Light "Power" curves differ by TYPE (Sphere 0..10000 log1p vs
+            // 0..100 sqrt for the rest), so the type has to come off the store.
+            const lights = (storeState.lighting as { lights?: Array<{ type?: string }> } | undefined)?.lights;
+            const lightType = lights?.[idx]?.type;
+            const v = virtualScaleFor(targetKey, lightType);
+            if (v) curve = { mapping: mappingForVirtual(targetKey, lightType), min: v.min, max: v.max };
+        }
+        return { branch: 'lighting', sink: applied ? 'engine-mods' : 'none', ddfsResolved, base, noAccumReset, curve };
     }
 
     // F. Vec axis on any feature.
@@ -226,6 +258,7 @@ export function classifyModulationTarget(
             ddfsResolved,
             base,
             noAccumReset,
+            curve,
         };
     }
 
@@ -238,10 +271,11 @@ export function classifyModulationTarget(
             ddfsResolved,
             base,
             noAccumReset,
+            curve,
         };
     }
 
-    return { branch: 'unresolved', sink: 'none', ddfsResolved: false, base, noAccumReset };
+    return { branch: 'unresolved', sink: 'none', ddfsResolved: false, base, noAccumReset, curve };
 }
 
 // ── What the picker offers ──────────────────────────────────────────────────

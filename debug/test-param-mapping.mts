@@ -23,7 +23,7 @@ import {
 } from '../components/inputs/primitives/FormatUtils';
 import {
   mappingForScale, mappingForParam, mappingForVirtual, LIGHT_RADIUS_SCALE,
-  isCurvedScale,
+  isCurvedScale, composeModulatedValue, LINEAR_CURVE,
 } from '../engine/features/modulation/paramMapping';
 
 registerFeatures();
@@ -189,6 +189,105 @@ console.log('\n[5] no new widget-local curve constants');
 
   assert(offenders.length === 0,
     'no panel builds its own curve — all resolve via paramMapping', offenders);
+}
+
+console.log('\n[6] a curved param modulates with CONSTANT slider travel');
+{
+  // The bug: modulation adds a linear offset in VALUE space while a curved
+  // slider moves in display space, so the same rule looked wildly different
+  // depending on where the base sat. coloring.repeats (log, 0.1..100) moved the
+  // handle 25.9% of the track at base 0.2 and 0.2% at base 80 — 130×.
+  const min = 0.1, max = 100;
+  const m = mappingForScale('log', min, max)!;
+  const curve = { mapping: m, min, max };
+  const offset = 1.0;
+
+  const travels = [0.2, 1, 5, 20, 80].map(base => {
+    const out = composeModulatedValue(base, offset, curve);
+    return m.toDisplay(out) - m.toDisplay(base);
+  });
+  const spread = Math.max(...travels) - Math.min(...travels);
+  assert(spread < 1e-9,
+    'travel is identical at every base along a log track',
+    travels.map(t => `${t.toFixed(3)}%`));
+
+  // And it equals what the same offset gives on a LINEAR slider of that range —
+  // "responds the way sliders do" means matching what linear already did.
+  const expected = (offset / (max - min)) * 100;
+  assert(Math.abs(travels[0] - expected) < 1e-9,
+    `and matches the linear-slider travel for the same offset (${expected.toFixed(3)}%)`,
+    travels[0]);
+}
+
+console.log('\n[7] linear params are bit-identical to before');
+{
+  // The compensation must not touch anything that was already correct — that is
+  // what lets Gain / Offset / LFO amplitude keep their meaning.
+  for (const [base, off] of [[0, 1], [5, -2.5], [-3, 0.25], [100, 0]] as const) {
+    const out = composeModulatedValue(base, off, LINEAR_CURVE);
+    assert(out === base + off, `linear compose ${base} + ${off} is exactly ${base + off}`, out);
+  }
+  // A curve with a degenerate range must also fall back rather than divide by 0.
+  const degenerate = { mapping: mappingForScale('log', 5, 5), min: 5, max: 5 };
+  assert(composeModulatedValue(5, 2, degenerate) === 7,
+    'a zero-width range falls back to plain addition instead of dividing by zero');
+}
+
+console.log('\n[8] the result stays within what the slider itself can reach');
+{
+  // Outside the display domain a curve is meaningless (log of a negative, a
+  // pow root of a negative), so the curved path clamps where the linear one
+  // does not. The bound is the mapping's OWN domain, not [min, max]: a log
+  // param whose min is at or below LOG_ZERO_EPS (0.1) gets a reserved band at
+  // the bottom of the track for an exact 0, so 0 is a legitimate destination —
+  // it is where dragging the handle to the far left lands too. Asserting
+  // `>= min` here would be asserting something the slider doesn't obey.
+  const min = 0.1, max = 100;
+  const m = mappingForScale('log', min, max)!;
+  const curve = { mapping: m, min, max };
+  const floor = m.fromDisplay(m.domainMin ?? m.toDisplay(min));
+  const ceil = m.fromDisplay(m.domainMax ?? m.toDisplay(max));
+
+  const hi = composeModulatedValue(80, 1e6, curve);
+  const lo = composeModulatedValue(0.2, -1e6, curve);
+  assert(Math.abs(hi - ceil) < 1e-9, 'a huge positive offset lands on the top of the track', { hi, ceil });
+  assert(Math.abs(lo - floor) < 1e-9, 'a huge negative offset lands on the bottom of the track', { lo, floor });
+  assert(floor === 0, 'and for this param that bottom is an exact 0 (reserved-zero band)', floor);
+  assert(Number.isFinite(hi) && Number.isFinite(lo), 'never produces NaN/Infinity', { hi, lo });
+
+  // A log param whose min is a real value keeps that min as its floor.
+  const m2 = mappingForScale('log', 1, 1000)!;
+  const lo2 = composeModulatedValue(5, -1e6, { mapping: m2, min: 1, max: 1000 });
+  assert(Math.abs(lo2 - 1) < 1e-9, 'a min above the zero-epsilon stays the floor', lo2);
+}
+
+console.log('\n[9] every applier composes identically');
+{
+  // Four separate code paths add an offset to a base: the tick, the DDFS
+  // auto-setter's double-writer guard, and TWO export dispatchers. When the tick
+  // and the setter disagreed the uniform alternated between their two answers —
+  // the modulated-slider flicker. When the tick and the export path disagree,
+  // a render doesn't match the preview. All four now call composeModulatedValue,
+  // so this asserts the call sites exist rather than re-deriving the maths.
+  const fs = await import('node:fs/promises');
+  const appliers = [
+    'engine/animation/AnimationSystem.tsx',
+    'store/createFeatureSlice.ts',
+    'components/timeline/exportModulations.ts',
+    'engine-gmt/components/timeline/exportModulations.ts',
+  ];
+  const missing: string[] = [];
+  const rawAdds: string[] = [];
+  for (const f of appliers) {
+    const src = await fs.readFile(new URL(`../${f}`, import.meta.url), 'utf8');
+    if (!src.includes('composeModulatedValue')) missing.push(f);
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    // A bare `<something> + offset` in an applier is a site that skipped the
+    // compose — the exact shape this change replaced.
+    if (/\w\s*\+\s*offset\b/.test(code)) rawAdds.push(f);
+  }
+  assert(missing.length === 0, 'every applier calls the shared compose', missing);
+  assert(rawAdds.length === 0, 'and none still adds an offset raw', rawAdds);
 }
 
 console.log(failures === 0 ? '\n✓ all assertions passed' : `\n✗ ${failures} assertion(s) failed`);

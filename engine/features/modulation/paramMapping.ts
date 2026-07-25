@@ -46,6 +46,17 @@ export const isCurvedScale = (scale?: ScaleType): boolean =>
     !!scale && CURVED_SCALES.has(scale);
 
 /**
+ * Memo for built mappings. The modulation compose path resolves a curve for
+ * every modulated target on every frame; `createLogMapping` and friends
+ * allocate a closure pair per call, so building them fresh each time would
+ * churn the allocator through the hot tick for no reason. Keyed by the full
+ * argument tuple, so a param whose range changes gets a new entry rather than a
+ * stale curve. Bounded by the number of distinct (scale, min, max) triples in
+ * the app — a few dozen.
+ */
+const _mappingMemo = new Map<string, ValueMapping | undefined>();
+
+/**
  * Build the ValueMapping for a scale + range. Returns `undefined` for linear
  * (the widgets' "no mapping" case).
  *
@@ -53,6 +64,20 @@ export const isCurvedScale = (scale?: ScaleType): boolean =>
  * exact 0 with no reserved band, which is the whole reason it exists.
  */
 export function mappingForScale(
+    scale: ScaleType | undefined,
+    min: number,
+    max: number,
+    opts?: { reserveZero?: boolean },
+): ValueMapping | undefined {
+    const key = `${scale}|${min}|${max}|${opts?.reserveZero ?? ''}`;
+    const hit = _mappingMemo.get(key);
+    if (hit !== undefined || _mappingMemo.has(key)) return hit;
+    const built = buildMapping(scale, min, max, opts);
+    _mappingMemo.set(key, built);
+    return built;
+}
+
+function buildMapping(
     scale: ScaleType | undefined,
     min: number,
     max: number,
@@ -136,4 +161,57 @@ export function mappingForVirtual(target: string, lightType?: string): ValueMapp
     const v = virtualScaleFor(target, lightType);
     if (!v) return undefined;
     return mappingForScale(v.scale, v.min, v.max, { reserveZero: v.reserveZero });
+}
+
+// ── Composing a modulation offset ───────────────────────────────────────────
+
+/** A target's slider geometry: the curve plus the range it spans. */
+export interface TargetCurve {
+    /** Undefined for a linear param — the compose then reduces to `base + offset`. */
+    mapping?: ValueMapping;
+    min: number;
+    max: number;
+}
+
+/** Linear targets (no curve, no range) — the identity case. */
+export const LINEAR_CURVE: TargetCurve = { min: 0, max: 0 };
+
+const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+
+/**
+ * Add a modulation offset to a base value, in SLIDER space.
+ *
+ * The problem this solves: modulation adds a linear offset in VALUE space,
+ * while a curved slider moves in display space. On `coloring.repeats`
+ * (log, 0.1–100) one unchanged rule moved the handle 25.9% of the track at
+ * base 0.2 and 0.2% at base 80 — a 130× swing in apparent depth from nothing
+ * but where the base sat. Gain was unusable: you re-dialled it per param, and
+ * moving the base threw the tuning away.
+ *
+ * The fix converts the offset to the TRAVEL it would produce on a linear
+ * slider of the same range, then applies that travel along the curve:
+ *
+ *     travel = offset / (max - min)
+ *     final  = fromDisplay( toDisplay(base) + travel × trackLength )
+ *
+ * @invariant Units are PRESERVED. `offset` stays in value units, so Gain,
+ *   Offset and LFO amplitude/min/max keep their meaning and linear params are
+ *   bit-identical to before. This compensates curved params up to what linear
+ *   params already do — it does not redefine the controls.
+ * @invariant The result is CLAMPED to `[min, max]`. Outside the display domain
+ *   a curve is meaningless (log of a negative, a pow root of a negative), so
+ *   unlike the linear path this cannot push a param past its slider range.
+ * @see docs/adr/0108-modulation-in-slider-space.md
+ */
+export function composeModulatedValue(base: number, offset: number, curve: TargetCurve): number {
+    const { mapping, min, max } = curve;
+    if (!mapping || offset === 0) return base + offset;
+    const span = max - min;
+    if (!(span > 0)) return base + offset;
+
+    const dMin = mapping.domainMin ?? mapping.toDisplay(min);
+    const dMax = mapping.domainMax ?? mapping.toDisplay(max);
+    const travel = (offset / span) * (dMax - dMin);
+    const d = mapping.toDisplay(clamp(base, min, max)) + travel;
+    return mapping.fromDisplay(clamp(d, Math.min(dMin, dMax), Math.max(dMin, dMax)));
 }

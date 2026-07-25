@@ -5,6 +5,8 @@ const engine = getProxy();
 import { useEngineStore } from '../../store/engineStore';
 import { modulationEngine } from '../../engine/features/modulation/ModulationEngine';
 import { featureRegistry } from '../../engine/FeatureSystem';
+import { classifyModulationTarget } from '../../engine/features/modulation/targetRouting';
+import { composeModulatedValue } from '../../engine/features/modulation/paramMapping';
 
 /**
  * Apply modulations (LFOs + rules) for a given export time.
@@ -39,40 +41,47 @@ export function applyExportModulations(time: number, dt: number) {
         const offset = offsets[targetKey];
         if (Math.abs(offset) < 0.000001) continue;
 
+        // Compose exactly as AnimationSystem's tick does — same resolver, same
+        // curve. This file is a second dispatcher over the same offsets, so any
+        // drift here shows up as an export that doesn't match the preview.
+        // ADR-0108.
+        const curve = classifyModulationTarget(targetKey, storeState as unknown as Record<string, unknown>).curve;
+        const mod = (b: number) => composeModulatedValue(b, offset, curve);
+
         // A. Coloring special cases
         if (targetKey === 'coloring.repeats') {
             const c = (storeState as any).coloring;
             if (c && Math.abs(c.repeats) > 0.001) {
                 const ratio = c.scale / c.repeats;
-                engine.setUniform('uColorScale', (c.repeats + offset) * ratio);
+                engine.setUniform('uColorScale', mod(c.repeats) * ratio);
             }
             continue;
         }
         if (targetKey === 'coloring.phase') {
             const c = (storeState as any).coloring;
-            engine.setUniform('uColorOffset', (c?.offset ?? 0) + offset);
+            engine.setUniform('uColorOffset', mod(c?.offset ?? 0));
             continue;
         }
         if (targetKey === 'coloring.repeats2') {
             const c = (storeState as any).coloring;
             if (c && Math.abs(c.repeats2) > 0.001) {
                 const ratio = c.scale2 / c.repeats2;
-                engine.setUniform('uColorScale2', (c.repeats2 + offset) * ratio);
+                engine.setUniform('uColorScale2', mod(c.repeats2) * ratio);
             }
             continue;
         }
         if (targetKey === 'coloring.phase2') {
             const c = (storeState as any).coloring;
-            engine.setUniform('uColorOffset2', (c?.offset2 ?? 0) + offset);
+            engine.setUniform('uColorOffset2', mod(c?.offset2 ?? 0));
             continue;
         }
 
         // B. Julia vector composite
         if (targetKey.startsWith('julia.') || targetKey.startsWith('geometry.julia')) {
             const g = (storeState as any).geometry;
-            if (targetKey.endsWith('juliaX') || targetKey.endsWith('x')) juliaX = (g?.juliaX ?? 0) + offset;
-            else if (targetKey.endsWith('juliaY') || targetKey.endsWith('y')) juliaY = (g?.juliaY ?? 0) + offset;
-            else if (targetKey.endsWith('juliaZ') || targetKey.endsWith('z')) juliaZ = (g?.juliaZ ?? 0) + offset;
+            if (targetKey.endsWith('juliaX') || targetKey.endsWith('x')) juliaX = mod(g?.juliaX ?? 0);
+            else if (targetKey.endsWith('juliaY') || targetKey.endsWith('y')) juliaY = mod(g?.juliaY ?? 0);
+            else if (targetKey.endsWith('juliaZ') || targetKey.endsWith('z')) juliaZ = mod(g?.juliaZ ?? 0);
             juliaDirty = true;
             continue;
         }
@@ -105,7 +114,7 @@ export function applyExportModulations(time: number, dt: number) {
             if (slice && slice[paramName]) {
                 const vec = slice[paramName];
                 const uniformName = 'u' + paramName.charAt(0).toUpperCase() + paramName.slice(1);
-                engine.setUniform(uniformName, { ...vec, [axis]: (vec[axis] ?? 0) + offset });
+                engine.setUniform(uniformName, { ...vec, [axis]: mod(vec[axis] ?? 0) });
             }
             continue;
         }
@@ -128,7 +137,7 @@ export function applyExportModulations(time: number, dt: number) {
         }
 
         if (uniformName) {
-            engine.setUniform(uniformName, baseVal + offset);
+            engine.setUniform(uniformName, mod(baseVal));
         }
     }
 

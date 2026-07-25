@@ -33,6 +33,7 @@ import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { presetFieldRegistry } from '../utils/PresetFieldRegistry';
 import { registerDefaultPresetFields } from '../utils/defaultPresetFields';
 import { modulationEngine } from '../engine/features/modulation/ModulationEngine';
+import { composeModulatedValue, mappingForParam, LINEAR_CURVE } from '../engine/features/modulation/paramMapping';
 
 // Generic type for the dynamic slice
 export interface FeatureSlice {
@@ -50,14 +51,22 @@ export interface FeatureSlice {
  */
 const MOD_AXES = ['x', 'y', 'z', 'w'] as const;
 function composeModulated(featureId: string, paramKey: string, value: any): any {
+    // MUST compose exactly as AnimationSystem's tick does — this setter and the
+    // tick both write the same uniform, and any disagreement between them is
+    // the double-writer flicker. That is why the curve is applied here too
+    // rather than only in the tick. ADR-0108.
+    const config = featureRegistry.get(featureId)?.params?.[paramKey];
+    const curve = config
+        ? { mapping: mappingForParam(config), min: config.min ?? 0, max: config.max ?? 1 }
+        : LINEAR_CURVE;
     if (typeof value === 'number') {
-        return value + modulationEngine.getOffset(`${featureId}.${paramKey}`);
+        return composeModulatedValue(value, modulationEngine.getOffset(`${featureId}.${paramKey}`), curve);
     }
     if (value && typeof value === 'object' && typeof value.x === 'number') {
         const out = typeof value.clone === 'function' ? value.clone() : { ...value };
         for (const a of MOD_AXES) {
             if (typeof out[a] !== 'number') continue;
-            out[a] += modulationEngine.getOffset(`${featureId}.${paramKey}_${a}`);
+            out[a] = composeModulatedValue(out[a], modulationEngine.getOffset(`${featureId}.${paramKey}_${a}`), curve);
         }
         return out;
     }

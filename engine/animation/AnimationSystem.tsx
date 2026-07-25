@@ -64,6 +64,7 @@ import { audioAnalysisEngine } from '../features/audioMod/AudioAnalysisEngine';
 import { syncAudioClips } from './audioClipSync';
 import { modulationEngine } from '../features/modulation/ModulationEngine';
 import { classifyModulationTarget } from '../features/modulation/targetRouting';
+import { composeModulatedValue } from '../features/modulation/paramMapping';
 import { AudioState } from '../features/audioMod';
 import { ModulationState } from '../features/modulation';
 // ColoringState was a fractal feature; treat as opaque here.
@@ -290,6 +291,13 @@ export const tick = (delta: number) => {
         // consumer map with zeros for unrecognized targets.
         const isDDFSResolved = routing.ddfsResolved;
 
+        // Every `base + offset` in this loop goes through `mod()`. On a linear
+        // target it IS `base + offset`; on a curved one (log/log1p/pow) the
+        // offset is applied as slider TRAVEL so the same rule moves the param
+        // by the same visible amount wherever the base sits. Keeping it a
+        // single local means no site can quietly opt out. ADR-0108.
+        const mod = (b: number) => composeModulatedValue(b, offset, routing.curve);
+
         // --- RECORDING LOGIC (With Feedback Loop Prevention) ---
         if (shouldRecord && Math.abs(offset) > 0.000001) {
             // If recording, we must use the CLEAN base value, not the dirty store value (which has prev recorded mods)
@@ -312,7 +320,7 @@ export const tick = (delta: number) => {
             // Instead of calling addKeyframe immediately, push to batch
             keysToRecord.push({
                 trackId: targetKey,
-                value: cleanBase + offset
+                value: mod(cleanBase)
             });
             
             // Important: We still want to SHOW the modulated value in the UI
@@ -331,8 +339,9 @@ export const tick = (delta: number) => {
                 if (c && Math.abs(c.repeats) > 0.001) {
                     const effectiveBase = shouldRecord ? resolvedBase : c.repeats;
                     const ratio = c.scale / effectiveBase; 
-                    const finalScale = (effectiveBase + offset) * ratio;
-                    if (!isRemoved) liveModulations[targetKey] = effectiveBase + offset;
+                    const modulated = mod(effectiveBase);
+                    const finalScale = modulated * ratio;
+                    if (!isRemoved) liveModulations[targetKey] = modulated;
                     emitUniform('uColorScale', finalScale);
                 }
                 return;
@@ -340,8 +349,8 @@ export const tick = (delta: number) => {
             if (targetKey === 'coloring.phase') {
                 const c = (storeState as any).coloring as ColoringState;
                 const effectiveBase = shouldRecord ? resolvedBase : c.phase;
-                if (!isRemoved) liveModulations[targetKey] = effectiveBase + offset;
-                emitUniform('uColorOffset', c.offset + offset);
+                if (!isRemoved) liveModulations[targetKey] = mod(effectiveBase);
+                emitUniform('uColorOffset', mod(c.offset));
                 return;
             }
             // ... same for repeats2/phase2 ...
@@ -350,8 +359,9 @@ export const tick = (delta: number) => {
                 if (c && Math.abs(c.repeats2) > 0.001) {
                     const effectiveBase = shouldRecord ? resolvedBase : c.repeats2;
                     const ratio = c.scale2 / effectiveBase;
-                    const finalScale = (effectiveBase + offset) * ratio;
-                    if (!isRemoved) liveModulations[targetKey] = effectiveBase + offset;
+                    const modulated = mod(effectiveBase);
+                    const finalScale = modulated * ratio;
+                    if (!isRemoved) liveModulations[targetKey] = modulated;
                     emitUniform('uColorScale2', finalScale);
                 }
                 return;
@@ -359,8 +369,8 @@ export const tick = (delta: number) => {
             if (targetKey === 'coloring.phase2') {
                 const c = (storeState as any).coloring as ColoringState;
                 const effectiveBase = shouldRecord ? resolvedBase : c.phase2;
-                if (!isRemoved) liveModulations[targetKey] = effectiveBase + offset;
-                emitUniform('uColorOffset2', c.offset2 + offset);
+                if (!isRemoved) liveModulations[targetKey] = mod(effectiveBase);
+                emitUniform('uColorOffset2', mod(c.offset2));
                 return;
             }
         }
@@ -377,13 +387,13 @@ export const tick = (delta: number) => {
             const baseZ = g?.juliaZ ?? 0;
 
             if (targetKey.endsWith('juliaX') || targetKey.endsWith('x')) {
-                juliaX = baseX + offset; liveModulations[targetKey] = juliaX;
+                juliaX = mod(baseX); liveModulations[targetKey] = juliaX;
                 if (shouldRecord) keysToRecord.push({ trackId: 'geometry.juliaX', value: juliaX });
             } else if (targetKey.endsWith('juliaY') || targetKey.endsWith('y')) {
-                juliaY = baseY + offset; liveModulations[targetKey] = juliaY;
+                juliaY = mod(baseY); liveModulations[targetKey] = juliaY;
                 if (shouldRecord) keysToRecord.push({ trackId: 'geometry.juliaY', value: juliaY });
             } else if (targetKey.endsWith('juliaZ') || targetKey.endsWith('z')) {
-                juliaZ = baseZ + offset; liveModulations[targetKey] = juliaZ;
+                juliaZ = mod(baseZ); liveModulations[targetKey] = juliaZ;
                 if (shouldRecord) keysToRecord.push({ trackId: 'geometry.juliaZ', value: juliaZ });
             }
             juliaDirty = true;
@@ -412,7 +422,7 @@ export const tick = (delta: number) => {
         //    feature take over this namespace.
         if (routing.branch === 'geometryRotation') {
             engine.modulations[targetKey] = offset;
-            if (!isRemoved) liveModulations[targetKey] = resolvedBase + offset;
+            if (!isRemoved) liveModulations[targetKey] = mod(resolvedBase);
             return;
         }
 
@@ -454,12 +464,12 @@ export const tick = (delta: number) => {
                             }
                             
                             // BATCH
-                            keysToRecord.push({ trackId: targetKey, value: cleanBase + offset });
+                            keysToRecord.push({ trackId: targetKey, value: mod(cleanBase) });
                             
                             // Update live mod for UI
-                            liveModulations[targetKey] = cleanBase + offset;
+                            liveModulations[targetKey] = mod(cleanBase);
                         } else {
-                            liveModulations[targetKey] = baseVal + offset;
+                            liveModulations[targetKey] = mod(baseVal);
                         }
                         
                         engine.modulations[targetKey] = offset; 
@@ -485,7 +495,7 @@ export const tick = (delta: number) => {
             if (slice && slice[paramName] && typeof slice[paramName] === 'object') {
                 const vec = slice[paramName];
                 const baseVal = (vec as any)[axis] ?? 0;
-                const finalVal = baseVal + offset;
+                const finalVal = mod(baseVal);
 
                 let liveVal = finalVal;
                 if (shouldRecord) {
@@ -496,8 +506,8 @@ export const tick = (delta: number) => {
                         if (initialStaticValues.current[targetKey] === undefined) initialStaticValues.current[targetKey] = baseVal;
                         cleanBase = initialStaticValues.current[targetKey];
                     }
-                    keysToRecord.push({ trackId: targetKey, value: cleanBase + offset });
-                    liveVal = cleanBase + offset;
+                    keysToRecord.push({ trackId: targetKey, value: mod(cleanBase) });
+                    liveVal = mod(cleanBase);
                 }
 
                 if (!isRemoved) liveModulations[targetKey] = liveVal;
@@ -532,7 +542,7 @@ export const tick = (delta: number) => {
         // was a typo, a removed param, or handled by an earlier special
         // case above).
         if (uniformName || isDDFSResolved) {
-            const finalScalar = resolvedBase + offset;
+            const finalScalar = mod(resolvedBase);
             if (!isRemoved) liveModulations[targetKey] = finalScalar;
             if (uniformName) {
                 emitUniform(uniformName, finalScalar, isNoReset);
