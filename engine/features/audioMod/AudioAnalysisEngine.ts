@@ -26,6 +26,7 @@
  */
 import { ModulationRule } from '../modulation/index';
 import { filterBank, dbToUnit } from './filterBank';
+import type { NormalizeMode } from './filterBank';
 
 class Deck {
     public element: HTMLAudioElement;
@@ -471,6 +472,7 @@ export class AudioAnalysisEngine {
         deltaSec = 1 / 60,
         bandsPerOctave = 6,
         normalizeBands = false,
+        normalizeMode: NormalizeMode = 'pcen',
     ) {
         if (!this.analyser || !this.dataArray) return;
         // FLOAT, not byte. getByteFrequencyData quantises to 256 steps across
@@ -492,6 +494,7 @@ export class AudioAnalysisEngine {
             dbFloor: this.dbFloor,
             dbCeiling: this.dbCeiling,
             normalize: normalizeBands,
+            normalizeMode,
             deltaSec,
         });
 

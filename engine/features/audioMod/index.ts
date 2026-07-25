@@ -26,6 +26,7 @@ export interface AudioState {
     dbCeiling: number;
     bandsPerOctave: number;
     normalizeBands: boolean;
+    normalizeMode: number;
 }
 
 // AudioActions removed - link management is now in ModulationActions
@@ -126,6 +127,19 @@ export const AudioFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'Balance Bands', shortId: 'nb', group: 'system',
             noAccumReset: true, preserveOnApply: true,
             description: 'Let every frequency band self-calibrate, so quiet bands react as readily as loud ones.',
+        },
+        // TEMPORARY A/B control. PCEN (Wang et al. 2017) is the intended
+        // implementation; the peak follower is kept alongside it only so the
+        // two can be compared on real material before the old path is deleted.
+        // Remove this param and the `applyPeakFollower` branch together.
+        normalizeMode: {
+            type: 'float', default: 1, label: 'Balance Method', shortId: 'nm', group: 'system',
+            noAccumReset: true, preserveOnApply: true, isAdvanced: true,
+            options: [
+                { label: 'Peak follower (legacy)', value: 0 },
+                { label: 'PCEN', value: 1 },
+            ],
+            description: 'How Balance Bands adapts. PCEN compresses rather than dividing by a peak, so its gain is bounded by construction.',
         }
     },
 };
