@@ -26,6 +26,9 @@ import { ImprovedNoise } from 'three-stdlib';
 // each gets its own seed offset (see lfoStates below).
 const noiseGen = new ImprovedNoise();
 
+/** Vec-axis suffixes in the DDFS target convention (`vec3A_x`). */
+const AXES = ['x', 'y', 'z', 'w'] as const;
+
 class ModulationEngine {
     // Persistent state for envelope following (smooth transitions)
     private ruleValues: Record<string, number> = {};
@@ -43,6 +46,36 @@ class ModulationEngine {
 
     public getRuleValue(id: string): number {
         return this.ruleValues[id] || 0;
+    }
+
+    /**
+     * Offset currently applied to a DDFS target (`<featureId>.<paramKey>`, or
+     * `..._x/_y/_z/_w` for a vec axis). 0 when the target is not modulated.
+     *
+     * Reads the buffer from the LAST tick — that is deliberate. The consumer is
+     * the DDFS auto-setter, which runs on pointermove between ticks and needs
+     * "is this param modulated right now", not a value recomputed mid-drag.
+     */
+    public getOffset(target: string): number {
+        return this.offsets[target] ?? 0;
+    }
+
+    /**
+     * Is any modulation currently driving this param — the scalar itself or any
+     * vec axis of it?
+     *
+     * @invariant This is the guard against the DOUBLE-WRITER flicker. Both the
+     *   DDFS auto-setter (on slider move) and AnimationSystem's tick (once per
+     *   frame) write the same uniform. The setter wrote the RAW base while the
+     *   tick wrote base+offset, so during a drag the uniform alternated between
+     *   the two — a visible flicker at roughly half the frame rate. The setter
+     *   must compose the offset in rather than emitting the bare base.
+     */
+    public hasOffsetFor(featureId: string, paramKey: string): boolean {
+        const base = `${featureId}.${paramKey}`;
+        if (base in this.offsets) return true;
+        for (const a of AXES) if (`${base}_${a}` in this.offsets) return true;
+        return false;
     }
     
     public updateOscillators(animations: AnimationParams[], time: number, delta: number, lfosEnabled: boolean = true) {

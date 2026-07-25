@@ -32,10 +32,36 @@ import { FractalEvents } from '../engine/FractalEvents';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { presetFieldRegistry } from '../utils/PresetFieldRegistry';
 import { registerDefaultPresetFields } from '../utils/defaultPresetFields';
+import { modulationEngine } from '../engine/features/modulation/ModulationEngine';
 
 // Generic type for the dynamic slice
 export interface FeatureSlice {
-    [key: string]: any; 
+    [key: string]: any;
+}
+
+/**
+ * Add the live modulation offset to a value about to be written as a uniform.
+ * Scalars take `<featureId>.<paramKey>`; vectors take the per-axis targets
+ * (`..._x/_y/_z/_w`) and are cloned so the store's instance is never mutated.
+ *
+ * Only numeric shapes are composed — booleans, colours, gradients and images
+ * are not modulation targets (`ParameterSelector.isModulatable` agrees), so
+ * anything else is returned untouched.
+ */
+const MOD_AXES = ['x', 'y', 'z', 'w'] as const;
+function composeModulated(featureId: string, paramKey: string, value: any): any {
+    if (typeof value === 'number') {
+        return value + modulationEngine.getOffset(`${featureId}.${paramKey}`);
+    }
+    if (value && typeof value === 'object' && typeof value.x === 'number') {
+        const out = typeof value.clone === 'function' ? value.clone() : { ...value };
+        for (const a of MOD_AXES) {
+            if (typeof out[a] !== 'number') continue;
+            out[a] += modulationEngine.getOffset(`${featureId}.${paramKey}_${a}`);
+        }
+        return out;
+    }
+    return value;
 }
 
 export const createFeatureSlice: StateCreator<any> = (set, get) => {
@@ -216,7 +242,24 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                                 let finalVal = val;
                                 if (config.type === 'boolean') finalVal = val ? 1.0 : 0.0;
                                 if (config.type === 'color' && !(finalVal instanceof THREE.Color)) finalVal = new THREE.Color(finalVal);
-                                
+
+                                // DOUBLE-WRITER GUARD. This setter and
+                                // AnimationSystem's per-frame tick both write this
+                                // uniform. Emitting the bare base here made the
+                                // uniform alternate between `base` and `base+offset`
+                                // during a drag on a modulated param — a flicker at
+                                // roughly half the frame rate. Compose the live
+                                // offset in so both writers agree on the value.
+                                //
+                                // Composing (rather than suppressing the emit) is what
+                                // keeps the accumulation reset: on a SILENT audio
+                                // input the tick sees no offset change and never
+                                // resets, so a suppressed emit would leave the drag
+                                // painting nothing.
+                                if (modulationEngine.hasOffsetFor(feat.id, paramKey)) {
+                                    finalVal = composeModulated(feat.id, paramKey, finalVal);
+                                }
+
                                 FractalEvents.emit('uniform', { key: config.uniform, value: finalVal, noAccumReset: !!config.noAccumReset || !paramChanged });
                             }
                         }

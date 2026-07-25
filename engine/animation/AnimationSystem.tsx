@@ -201,6 +201,11 @@ export const tick = (delta: number) => {
     let juliaX = 0, juliaY = 0, juliaZ = 0;
     let juliaDirty = false;
 
+    // Per-vec uniform scratch: baseUniform → the composed vector. Filled by the
+    // vec branch (one entry per modulated axis), flushed once after the loop so
+    // multi-axis modulation of a single vec composes instead of racing.
+    const vecEmits = new Map<string, unknown>();
+
     // Track if anything visual actually changed to reset accumulation
     let hasVisualChange = false;
     
@@ -507,13 +512,24 @@ export const tick = (delta: number) => {
                 if (!isRemoved) liveModulations[targetKey] = liveVal;
 
                 // Uniform write only when the feature declares one.
+                //
+                // ACCUMULATE into a per-vec scratch rather than emitting here.
+                // Each axis is its OWN target, so this branch runs once per
+                // modulated axis; cloning the base vec and emitting per axis
+                // meant the second axis's emit reset the first back to base —
+                // modulating X and Y of one vec silently dropped X. Compose all
+                // axes first, emit once after the loop (same shape as the
+                // juliaDirty composite below).
                 if (uniformName && uniformName.endsWith(`_${axis}`)) {
                     const baseUniform = uniformName.replace(/_[xyzw]$/, '');
-                    const fullVec = typeof (vec as any).clone === 'function'
-                        ? (vec as any).clone()
-                        : { ...vec };
-                    (fullVec as any)[axis] = finalVal;
-                    emitUniform(baseUniform, fullVec);
+                    let scratch = vecEmits.get(baseUniform);
+                    if (!scratch) {
+                        scratch = typeof (vec as any).clone === 'function'
+                            ? (vec as any).clone()
+                            : { ...vec };
+                        vecEmits.set(baseUniform, scratch);
+                    }
+                    (scratch as any)[axis] = finalVal;
                 }
             }
             return;
@@ -548,6 +564,11 @@ export const tick = (delta: number) => {
             flushRecordBuffer();
             lastRecordFlushMs = now;
         }
+    }
+
+    // Flush composed vec uniforms — one emit per vec, all modulated axes applied.
+    if (vecEmits.size > 0) {
+        vecEmits.forEach((composed, baseUniform) => emitUniform(baseUniform, composed));
     }
 
     // Apply Julia Composite
