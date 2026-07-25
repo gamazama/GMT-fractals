@@ -22,15 +22,22 @@
  * WHAT THIS DOES NOT DO
  * ---------------------
  * @invariant The bank is built ON the FFT and cannot beat time-frequency
- *   uncertainty. Below `resolutionLimitHz` a band is narrower than one bin, so
- *   neighbouring bands read overlapping bins and report near-identical values.
- *   That degrades gracefully (similar numbers, not garbage) but it is REAL, it
- *   is why `fftSize` still matters, and it is exposed rather than hidden —
- *   callers render that region distinctly. At 48kHz:
+ *   uncertainty. The analysis window is still `fftSize` samples, so
+ *   `resolutionLimitHz` — below which a band is narrower than one bin — is
+ *   unchanged by any amount of kernel shaping. At 48kHz:
  *     1/6 octave @ 2048 → limited below 203Hz
  *     1/6 octave @ 4096 → limited below 101Hz
  *     1/6 octave @ 8192 → limited below  51Hz
- *   Genuinely beating this needs a dual-resolution FFT (long window for lows,
+ *   It is why `fftSize` still matters, and it is exposed rather than hidden —
+ *   callers render that region distinctly.
+ *
+ *   What the Hann kernels DO change is the quality of every band above that
+ *   limit (correct, leak-free readings instead of boxcar sidelobes) and the
+ *   MANNER of failure below it: overlapping windows degrade smoothly into each
+ *   other rather than snapping between shared bin sets in discrete steps. The
+ *   limit itself does not move.
+ *
+ *   Genuinely beating it needs a dual-resolution FFT (long window for lows,
  *   short for highs), which costs bass lagging treble by up to ~85ms. Not done.
  *
  * @see docs/adr/0104-fractional-octave-filterbank.md
@@ -63,9 +70,14 @@ export interface Band {
     centerHz: number;
     lowHz: number;
     highHz: number;
-    /** FFT bin range, half-open. Always at least one bin wide. */
+    /** FFT bin range the KERNEL touches, half-open. Always at least one bin.
+     *  Wider than [lowHz, highHz] would imply: the kernel spans neighbouring
+     *  centres so adjacent bands overlap (see `rebuild`). */
     binLo: number;
     binHi: number;
+    /** Offset into the flat `kernel` array, and how many weights. */
+    kernelOffset: number;
+    kernelLength: number;
     /** True when the band is narrower than one FFT bin — see the class
      *  @invariant. Such bands share bins with their neighbours. */
     resolutionLimited: boolean;
@@ -122,6 +134,8 @@ export class FilterBank {
     private peaks: Float32Array = new Float32Array(0);
     /** Per-bin linear power scratch, reused across frames. */
     private power: Float32Array = new Float32Array(0);
+    /** All band kernels concatenated; index via `band.kernelOffset`. */
+    private kernel: Float32Array = new Float32Array(0);
 
     private ensurePowerScratch(binCount: number): void {
         if (this.power.length < binCount) this.power = new Float32Array(binCount);
@@ -162,25 +176,82 @@ export class FilterBank {
 
         const count = Math.max(1, Math.ceil(B * Math.log2(fMax / BANK_MIN_HZ)));
         const bands: Band[] = [];
+        const kernel: number[] = [];
+
+        // WINDOWED KERNELS (Brown & Puckette 1992). Each band is a Hann window
+        // over its log-frequency span rather than a hard bin range.
+        //
+        // Why: a rectangular bin-sum is a boxcar in the frequency domain, whose
+        // transform is a sinc — it leaks energy from well outside the band, and
+        // a tone crossing a band edge jumps between neighbours in one step. A
+        // Hann kernel rolls off smoothly, so a tone crossfades between adjacent
+        // bands and the analysis stops depending on where the edges happen to
+        // fall relative to the bins.
+        //
+        // The window spans centre_{k-1}..centre_{k+1} (peaking at centre_k), so
+        // neighbours overlap by 50% and every frequency is covered by exactly
+        // two bands. Edge bands extend by one band-width so they are not
+        // half-windows.
+        const octave = 1 / B;
         for (let k = 0; k < count; k++) {
             const centerHz = BANK_MIN_HZ * Math.pow(2, k / B);
             if (centerHz > fMax) break;
             const lowHz = centerHz / half;
             const highHz = centerHz * half;
-            const binLo = Math.max(0, Math.floor(lowHz / binHz));
-            // At least one bin wide, and never past the array.
-            const binHi = Math.min(binCount, Math.max(binLo + 1, Math.ceil(highHz / binHz)));
+
+            // Kernel support: one full band-width either side of centre.
+            const kLoHz = centerHz * Math.pow(2, -octave);
+            const kHiHz = centerHz * Math.pow(2, octave);
+            const binLo = Math.max(0, Math.floor(kLoHz / binHz));
+            const binHi = Math.min(binCount, Math.max(binLo + 1, Math.ceil(kHiHz / binHz)));
+
+            const kernelOffset = kernel.length;
+            const logLo = Math.log2(kLoHz);
+            const logSpan = Math.log2(kHiHz) - logLo;
+            let weightSum = 0;
+            for (let i = binLo; i < binHi; i++) {
+                // Bin CENTRE frequency; bin 0 is DC and has no log position.
+                const f = (i + 0.5) * binHz;
+                const p = logSpan > 0 ? (Math.log2(Math.max(1e-6, f)) - logLo) / logSpan : 0.5;
+                // Hann over the support, zero at both ends, peak at centre.
+                const w = p <= 0 || p >= 1 ? 0 : 0.5 * (1 - Math.cos(2 * Math.PI * p));
+                kernel.push(w);
+                weightSum += w;
+            }
+
+            // Normalise to UNIT SUM, not unit energy. These weights average
+            // POWER, so sum(w)=1 makes the result a weighted mean of power and
+            // keeps the 0..1 scale identical to the rectangular mean it
+            // replaces. A unit-ENERGY kernel (sum(w²)=1) would scale the level
+            // by the window's shape factor and shift every calibrated
+            // threshold — see `dbToUnit`'s @invariant.
+            if (weightSum > 0) {
+                for (let j = kernelOffset; j < kernel.length; j++) kernel[j] /= weightSum;
+            } else {
+                // Degenerate support (band far below bin resolution): fall back
+                // to a flat kernel over whatever bins it touches, so the band
+                // still reports its neighbourhood rather than zero.
+                const len = kernel.length - kernelOffset;
+                for (let j = kernelOffset; j < kernel.length; j++) kernel[j] = 1 / len;
+            }
+
             bands.push({
                 centerHz,
                 lowHz,
                 highHz,
                 binLo,
                 binHi,
+                kernelOffset,
+                kernelLength: binHi - binLo,
                 resolutionLimited: highHz - lowHz < binHz,
             });
         }
 
         this.bands = bands;
+        // Flat array with per-band offsets: the inner loop runs every frame
+        // over every band, so it stays in one contiguous buffer rather than
+        // chasing a pointer per band.
+        this.kernel = new Float32Array(kernel);
         this.levels = new Float32Array(bands.length);
         this.normalized = new Float32Array(bands.length);
         // Peaks are NOT carried across a rebuild: band k means a different
@@ -224,16 +295,19 @@ export class FilterBank {
             power[i] = Number.isFinite(db) ? Math.pow(10, db * 0.1) : 0;
         }
 
+        const kernel = this.kernel;
         for (let k = 0; k < n; k++) {
             const b = this.bands[k];
-            let sum = 0;
-            let c = 0;
-            for (let i = b.binLo; i < b.binHi && i < data.length; i++) {
-                sum += power[i];
-                c++;
+            // Weighted mean of power. Weights sum to 1, so this is already the
+            // band's mean power — no divide.
+            let acc = 0;
+            const off = b.kernelOffset;
+            const end = Math.min(b.binHi, data.length);
+            for (let i = b.binLo, j = off; i < end; i++, j++) {
+                acc += kernel[j] * power[i];
             }
-            if (c === 0) { this.levels[k] = 0; continue; }
-            const rms = Math.sqrt(sum / c);                     // linear amplitude
+            if (acc <= 0) { this.levels[k] = 0; continue; }
+            const rms = Math.sqrt(acc);                         // linear amplitude
             this.levels[k] = dbToUnit(20 * Math.log10(rms), dbFloor, dbCeiling);
         }
 

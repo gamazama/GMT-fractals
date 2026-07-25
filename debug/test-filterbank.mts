@@ -123,21 +123,59 @@ console.log('\n[4b] dB→unit mapping and linear-domain averaging');
     b.levels[mid]);
 
   // And averaging happens in LINEAR power, not in dB. A band holding one loud
-  // bin and one silent bin must read ~3dB under the loud one (half the power),
-  // NOT the arithmetic mean of the two dB values.
+  // bin among quiet ones must land near the POWER mean (a few dB under the
+  // loud bin) and nowhere near the dB mean (which the quiet bins would drag
+  // almost down to their own level).
   const fft = 4096;
-  const two = new Float32Array(fft / 2).fill(-Infinity);
   const bank = mk(fft, 3);
-  const target = bank.bands.findIndex(x => x.binHi - x.binLo >= 2);
+  const target = bank.bands.findIndex(x => x.kernelLength >= 8);
   const band = bank.bands[target];
-  const loudDb = -20;
-  two[band.binLo] = loudDb;
-  const nBins = band.binHi - band.binLo;
-  runFrame(bank, two);
-  const expectedDb = loudDb + 10 * Math.log10(1 / nBins);
-  assert(near(bank.levels[target], dbToUnit(expectedDb, DB_FLOOR, DB_CEIL), 1e-4),
-    `one loud bin among ${nBins} reads as power/${nBins}, not a dB average`,
-    { got: bank.levels[target], expected: dbToUnit(expectedDb, DB_FLOOR, DB_CEIL) });
+  const frame = new Float32Array(fft / 2).fill(-80);
+  // Centre bin of the band — the kernel peaks there, and Hann is zero at the
+  // support edges by construction, so an edge bin would contribute nothing.
+  frame[Math.round((band.binLo + band.binHi) / 2)] = -20;
+  runFrame(bank, frame);
+  const got = bank.levels[target];
+  const dbMeanish = dbToUnit(-70, DB_FLOOR, DB_CEIL);
+  assert(got > dbMeanish,
+    'a loud bin lifts the band far above where a dB average would leave it',
+    { got, dbMeanish });
+  assert(got < dbToUnit(-20, DB_FLOOR, DB_CEIL),
+    'but not to the loud bin itself — the rest of the band still counts', got);
+}
+
+console.log('\n[4c] Hann kernels: unit sum, zero at the edges, overlapping');
+{
+  const b = mk(4096, 6);
+  const kernel = (b as any).kernel as Float32Array;
+
+  // Unit SUM (not unit energy) is what keeps the weighted power mean on the
+  // same 0..1 scale as the rectangular mean it replaced.
+  let worst = 0;
+  for (const band of b.bands) {
+    let s = 0;
+    for (let j = 0; j < band.kernelLength; j++) s += kernel[band.kernelOffset + j];
+    worst = Math.max(worst, Math.abs(s - 1));
+  }
+  assert(worst < 1e-5, 'every band kernel sums to 1', worst);
+
+  // Hann tapers to zero at its support edges — that is the leak suppression.
+  const wide = b.bands.filter(x => x.kernelLength >= 6);
+  assert(wide.length > 0, 'there are bands wide enough to shape');
+  const edgesZero = wide.every(x =>
+    kernel[x.kernelOffset] < kernel[x.kernelOffset + (x.kernelLength >> 1)]);
+  assert(edgesZero, 'and weights rise from the edge toward the centre');
+
+  // 50% overlap: a tone between two band centres must register in BOTH, which
+  // is what makes a sweep crossfade instead of stepping.
+  const i = b.bands.findIndex(x => x.centerHz > 2000);
+  const between = Math.sqrt(b.bands[i].centerHz * b.bands[i + 1].centerHz);
+  const f = new Float32Array(2048).fill(-Infinity);
+  f[Math.round(between / (SR / 4096))] = -20;
+  runFrame(b, f);
+  assert(b.levels[i] > 0 && b.levels[i + 1] > 0,
+    'a tone between two centres registers in both bands',
+    { lower: b.levels[i], upper: b.levels[i + 1] });
 }
 
 console.log('\n[5] a tone lands in the band that contains it');
