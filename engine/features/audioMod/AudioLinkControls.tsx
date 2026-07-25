@@ -8,10 +8,13 @@ import { DotToggle } from '../../../components/DotToggle';
 import { FeatureComponentProps } from '../../../components/registry/ComponentRegistry';
 import { collectHelpIds } from '../../../utils/helpUtils';
 import { ModulationRule } from '../modulation/index';
+import { audioAnalysisEngine } from './AudioAnalysisEngine';
+import { QUICK_BANDS, quickBandToNorm, formatBand } from './freqScale';
 
 export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () => {
     const store = useEngineStore();
     const { modulation, removeModulation, addModulation, openContextMenu } = store;
+    const sampleRate = audioAnalysisEngine.sampleRate;
     
     // Wrapper for DDFS action
     const updateRule = (id: string, update: Partial<ModulationRule>) => {
@@ -104,10 +107,19 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
                 <div>
                     <label className="text-[9px] text-fg-dim font-bold block mb-1">Quick Frequency Bands</label>
                     <div className="flex gap-1">
-                        <button onClick={() => setBand(0, 0.1)} className="flex-1 py-1.5 bg-line/5 hover:bg-line/10 text-[9px] font-bold text-fg-muted rounded border border-line/5">Bass</button>
-                        <button onClick={() => setBand(0.1, 0.5)} className="flex-1 py-1.5 bg-line/5 hover:bg-line/10 text-[9px] font-bold text-fg-muted rounded border border-line/5">Mids</button>
-                        <button onClick={() => setBand(0.5, 1.0)} className="flex-1 py-1.5 bg-line/5 hover:bg-line/10 text-[9px] font-bold text-fg-muted rounded border border-line/5">Treble</button>
-                        <button onClick={() => setBand(0, 1.0)} className="flex-1 py-1.5 bg-line/5 hover:bg-line/10 text-[9px] font-bold text-fg-muted rounded border border-line/5">Full</button>
+                        {QUICK_BANDS.map((b) => {
+                            const n = quickBandToNorm(b, sampleRate);
+                            return (
+                                <button
+                                    key={b.label}
+                                    onClick={() => setBand(n.freqStart, n.freqEnd)}
+                                    title={b.title}
+                                    className="flex-1 py-1.5 bg-line/5 hover:bg-line/10 text-[9px] font-bold text-fg-muted rounded border border-line/5"
+                                >
+                                    {b.label}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -162,10 +174,13 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
                  </div>
             </div>
             
-            {/* Info Footer */}
+            {/* Info Footer — real Hz, not a percentage of the FFT axis. See
+                freqScale.ts: a kick sits below 0.5% of that axis, so the old
+                percentage readout could not distinguish a kick band from a
+                whole-bass band. */}
             {isAudio && (
                 <div className="flex justify-between text-[9px] text-fg-faint px-1">
-                     <span>Freq: {Math.round(rule.freqStart*100)}% - {Math.round(rule.freqEnd*100)}%</span>
+                     <span>Band: {formatBand(rule.freqStart, rule.freqEnd, sampleRate)}</span>
                      <span>Threshold: {Math.round(rule.thresholdMin*100)}% - {Math.round(rule.thresholdMax*100)}%</span>
                 </div>
             )}

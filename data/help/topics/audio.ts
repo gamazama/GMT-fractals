@@ -73,13 +73,15 @@ The box on the spectrum defines which frequencies drive the parameter.
 - **Drag** the box to move it across the frequency range.
 - **Drag individual edges** (left, right, top, bottom) to resize the box. The top and bottom edges also control the threshold — signals below the bottom are ignored (noise gate) and signals above the top are clamped (ceiling).
 - **Ctrl+Drag** on a box to adjust its gain visually.
-- **Right-click** on the spectrum to toggle between **Logarithmic** and **Linear** frequency scale.
-- **Quick band buttons**: Bass, Mids, Treble, Full — instantly position the box over common frequency ranges.
+- **Right-click** on the spectrum to toggle between **Logarithmic** and **Linear** frequency scale. Logarithmic is the useful one — it spreads out the bass, where nearly all rhythmic energy lives. The 100 / 1k / 10k markers along the bottom show where you are.
+- **Quick band buttons** set the box to a real frequency range:
+  - **Kick** (40–120 Hz): just the kick fundamental. The tightest band for locking onto four-to-the-floor without the bassline bleeding in.
+  - **Bass** (30–250 Hz): kick and bassline together.
+  - **Mids** (250 Hz – 2 kHz): vocals, synths, guitar body.
+  - **Highs** (4–16 kHz): hi-hats, cymbals, air.
+  - **Full**: the whole spectrum — overall loudness.
 
-Frequency guide:
-- **Left (Bass)**: Kick drums, basslines.
-- **Middle (Mids)**: Vocals, synths, guitars.
-- **Right (Treble)**: Hi-hats, cymbals, air.
+Bands are shown and edited in **Hz**. A kick occupies well under 1% of the raw analysis range, so a percentage readout could not tell a kick band apart from a whole-bass band.
 
 ## Source Selector
 Each link has a **Source** dropdown to choose what drives the modulation:

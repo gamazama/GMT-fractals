@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useEngineStore } from '../../../store/engineStore';
 import { audioAnalysisEngine } from './AudioAnalysisEngine';
+import { formatBand } from './freqScale';
 import { AudioSpectrum } from './AudioSpectrum';
 import { AudioLinkControls } from './AudioLinkControls';
 import { collectHelpIds } from '../../../utils/helpUtils';
@@ -362,7 +363,7 @@ const AudioModulationList: React.FC = () => {
                                 </span>
                                 {isAudio && (
                                     <span className="text-fg-faint">
-                                        {Math.round(rule.freqStart * 100)}-{Math.round(rule.freqEnd * 100)}%
+                                        {formatBand(rule.freqStart, rule.freqEnd, audioAnalysisEngine.sampleRate)}
                                     </span>
                                 )}
                                 <DotToggle

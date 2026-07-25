@@ -1,6 +1,7 @@
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { audioAnalysisEngine } from './AudioAnalysisEngine';
+import { hzToBinNorm, formatHz } from './freqScale';
 import { useEngineStore } from '../../../store/engineStore';
 import { ModulationRule } from '../modulation/index';
 import { modulationEngine } from '../modulation/ModulationEngine';
@@ -88,13 +89,20 @@ export const AudioSpectrum: React.FC = () => {
             ctx.lineWidth = 1;
             ctx.beginPath();
             
-            // Vertical Grid (Freq)
-            const gridSteps = isLogScale ? [0.0, 0.1, 0.25, 0.5, 1.0] : [0.0, 0.25, 0.5, 0.75, 1.0];
+            // Vertical grid. On the log axis, rule the MUSICAL decades (100 Hz,
+            // 1 kHz, 10 kHz) rather than round numbers on the normalised axis —
+            // those bunch into the right-hand third and tell you nothing about
+            // where a kick or a hi-hat actually sits.
+            const nyquist = audioAnalysisEngine.sampleRate / 2;
+            const hzTicks = [100, 1000, 10000];
+            const gridSteps = isLogScale
+                ? [0, ...hzTicks.map(hz => hzToBinNorm(hz, audioAnalysisEngine.sampleRate)), 1.0]
+                : [0.0, 0.25, 0.5, 0.75, 1.0];
             gridSteps.forEach(f => {
                 const x = getScreenX(f, w);
                 ctx.moveTo(x, 0); ctx.lineTo(x, h);
             });
-            
+
             // Horizontal Grid (Amplitude)
             for(let i=0.1; i<1.0; i+=0.2) { 
                 const y = i * h; 
@@ -102,6 +110,19 @@ export const AudioSpectrum: React.FC = () => {
                 ctx.lineTo(w, y); 
             }
             ctx.stroke();
+
+            // 2b. Frequency ruler — labels the decade lines so a band can be
+            // placed by ear-knowledge ("kick is under 100") instead of by
+            // dragging until it reacts.
+            if (isLogScale) {
+                ctx.fillStyle = '#555';
+                ctx.font = '8px monospace';
+                hzTicks.forEach(hz => {
+                    if (hz >= nyquist) return;
+                    const x = getScreenX(hzToBinNorm(hz, audioAnalysisEngine.sampleRate), w);
+                    ctx.fillText(formatHz(hz), x + 2, h - 2);
+                });
+            }
 
             // 3. Spectrum Bars
             if (rawData) {
