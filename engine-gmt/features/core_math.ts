@@ -62,7 +62,10 @@ export const CoreMathFeature: FeatureDefinition = {
         { name: Uniforms.ModularParams, type: 'float', arraySize: MAX_MODULAR_PARAMS, default: new Float32Array(MAX_MODULAR_PARAMS), backingOnly: true }
     ],
     params: {
-        iterations: { type: 'float', default: 16, label: 'Iterations', shortId: 'it', uniform: 'uIterations', min: 1, max: 500, step: 1, group: 'main' },
+        // scale:'cube' is the pow-3 curve FormulaParamsWidget always drew from
+        // a local constant; declaring it here makes the curve visible to the
+        // modulation compose path, which could not see a widget-local one.
+        iterations: { type: 'float', default: 16, label: 'Iterations', shortId: 'it', uniform: 'uIterations', min: 1, max: 500, step: 1, scale: 'cube', group: 'main' },
         paramA: { type: 'float', default: 8.0, label: 'Param A', shortId: 'pa', uniform: 'uParamA', min: -10, max: 10, step: 0.001, group: 'params' },
         paramB: { type: 'float', default: 0.0, label: 'Param B', shortId: 'pb', uniform: 'uParamB', min: -10, max: 10, step: 0.001, group: 'params' },
         paramC: { type: 'float', default: 0.0, label: 'Param C', shortId: 'pc', uniform: 'uParamC', min: -10, max: 10, step: 0.001, group: 'params' },

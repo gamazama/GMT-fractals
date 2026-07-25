@@ -2,13 +2,20 @@
 import React, { useRef, useEffect } from 'react';
 import Histogram from '../../../../components/Histogram';
 import Slider from '../../../../components/Slider';
-import { createLogMapping } from '../../../../components/inputs';
+import { featureRegistry } from '../../../../engine/FeatureSystem';
+import { mappingForParam } from '../../../../engine/features/modulation/paramMapping';
 import { analyzeHistogram, calculateSmartLevels } from '../../../../utils/histogramUtils';
 import { ColoringState } from '../../../features/coloring';
 
-// Repeats: matches `coloring.repeats[2]` param def (min: 0.1, max: 100, scale: 'log').
-// Built here because this Slider doesn't go through AutoFeaturePanel.
-const REPEATS_LOG_MAPPING = createLogMapping(0.1, 100);
+// Repeats curve, read from the `coloring.repeats` param def rather than
+// re-declared. This Slider doesn't go through AutoFeaturePanel, which is why it
+// used to hand-build createLogMapping(0.1, 100) — a second copy of the param's
+// own scale that would drift the moment the def's range changed, and that the
+// modulation compose path could not see.
+const REPEATS_LOG_MAPPING = (() => {
+    const cfg = featureRegistry.get('coloring')?.params?.repeats;
+    return cfg ? mappingForParam(cfg) : undefined;
+})();
 
 interface ColoringHistogramProps {
     layer: 1 | 2;

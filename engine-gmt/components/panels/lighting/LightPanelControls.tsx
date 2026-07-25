@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import type { EngineStoreState as FractalState, EngineActions as FractalActions } from '../../../../types';
 import Slider from '../../../../components/Slider';
-import { createLog1pMapping, createPowMapping } from '../../../../components/inputs';
+import { mappingForVirtual } from '../../../../engine/features/modulation/paramMapping';
 import { Vector3Input } from '../../../../components/vector-input';
 import EmbeddedColorPicker from '../../../../components/EmbeddedColorPicker';
 import ToggleSwitch from '../../../../components/ToggleSwitch';
@@ -22,11 +22,13 @@ import { LightDirectionControl } from '../../../features/lighting/components/Lig
 import type { ContextMenuItem } from '../../../../types/help';
 import type { FalloffType, IntensityUnit } from '../../../../types/graphics';
 
-// Canonical slider mappings, shared with LightControls (the CenterHUD popup).
-// Module-scope so they aren't reallocated per render.
-const POWER_SPHERE_MAPPING = createLog1pMapping(10000);   // Sphere "Power" 0..10000 (reaches 0)
-const POWER_MAPPING = createPowMapping(0, 100, 2);        // other lights' "Power" 0..100 (sqrt feel)
-const RANGE_MAPPING = createLog1pMapping(100);            // "Range"/falloff 0..100 (reaches 0)
+// Light curves resolve from engine/features/modulation/paramMapping.ts. They
+// used to be duplicated verbatim in BOTH light widgets (this file and the
+// other), agreeing by luck; now they are one definition the modulation compose
+// path reads too. Sphere lights run 0..10000, every other type 0..100.
+const POWER_SPHERE_MAPPING = mappingForVirtual('lighting.light0_intensity', 'Sphere');
+const POWER_MAPPING = mappingForVirtual('lighting.light0_intensity', 'Point');
+const RANGE_MAPPING = mappingForVirtual('lighting.light0_falloff');
 
 /**
  * Advanced/debug light panel — exposed in Advanced Mode via the dock tab system.

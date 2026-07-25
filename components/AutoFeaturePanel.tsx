@@ -26,7 +26,7 @@ import React, { useMemo, useState, Suspense } from 'react';
 import { featureRegistry, ParamConfig, ParamCondition, CustomUIConfig, GroupConfig } from '../engine/FeatureSystem';
 import { useEngineStore } from '../store/engineStore';
 import Slider, { DraggableNumber } from './Slider';
-import { createLogMapping, createPowMapping, piUnitMapping, type ValueMapping } from './inputs';
+import { mappingForParam } from '../engine/features/modulation/paramMapping';
 import ToggleSwitch from './ToggleSwitch';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import { QualityRangePad, combineKeyStatus } from './QualityRangePad';
@@ -85,15 +85,11 @@ interface AutoFeaturePanelProps {
  * in FormatUtils (one impl per family — log/pow/pi). Returns undefined for
  * linear params (ScalarInput then runs identity).
  */
-const getMapping = (config: ParamConfig): ValueMapping | undefined => {
-    const min = config.min ?? 0;
-    const max = config.max ?? 1;
-    if (config.scale === 'pi') return piUnitMapping;
-    if (!config.scale || config.scale === 'linear') return undefined;
-    if (config.scale === 'square') return createPowMapping(min, max, 2);
-    if (config.scale === 'log') return createLogMapping(min, max);
-    return undefined;
-};
+// Curve resolution lives in engine/features/modulation/paramMapping.ts — the
+// same module the modulation compose path reads, so a slider's feel and its
+// modulation feel are one decision. (This used to be a local switch that knew
+// only pi/square/log, silently dropping 'root'.)
+const getMapping = mappingForParam;
 
 /** DDFS adapter binding TWO scalar params (`rangePairWith`) to the shared
  *  QualityRangePad master — the scalar-pair twin of the palette's

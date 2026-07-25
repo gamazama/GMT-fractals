@@ -17,7 +17,8 @@ import * as THREE from 'three';
 import type { FeatureComponentProps } from '../../../../components/registry/ComponentRegistry';
 import type { LfoTarget } from '../../../../types';
 import Slider from '../../../../components/Slider';
-import { createPowMapping, piUnitMapping, formatDisplay, type ValueMapping } from '../../../../components/inputs';
+import { piUnitMapping, formatDisplay, type ValueMapping } from '../../../../components/inputs';
+import { mappingForScale } from '../../../../engine/features/modulation/paramMapping';
 import Dropdown from '../../../../components/Dropdown';
 import ToggleSwitch from '../../../../components/ToggleSwitch';
 import { Vector2Input, Vector3Input, Vector4Input } from '../../../../components/vector-input';
@@ -37,8 +38,10 @@ import { rotationFromMode } from '../../../../engine/rotationDescriptor';
 import type { RotationDescriptor } from '../../../../engine/rotationDescriptor';
 import { useRotationGizmoStore } from '../../../store/rotationGizmoStore';
 
-// Iterations slider: cubic display feel over [1, 500] — fine control at low counts.
-const ITERATIONS_MAPPING = createPowMapping(1, 500, 3);
+// Iterations slider: cubic display feel over [1, 500] — fine control at low
+// counts. Resolved from the param's own `scale: 'cube'` rather than built here,
+// so the modulation compose path sees the same curve the slider draws.
+const ITERATIONS_MAPPING = mappingForScale('cube', 1, 500);
 
 // "degrees" scale: the param value is in degrees, shown as a count of π (180° = π).
 // Distinct from piUnitMapping (which is radian-valued) — single use, kept local.

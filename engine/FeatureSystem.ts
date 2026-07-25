@@ -27,7 +27,27 @@ import { UniformDefinition } from './UniformSchema';
 import type { RotationDescriptor } from './rotationDescriptor';
 
 export type ParamType = 'float' | 'int' | 'vec2' | 'vec3' | 'vec4' | 'color' | 'boolean' | 'gradient' | 'image' | 'complex';
-export type ScaleType = 'linear' | 'log' | 'square' | 'root' | 'pi';
+/**
+ * Slider display curve for a numeric param.
+ *
+ * Load-bearing beyond the widget: modulation composes its offset in DISPLAY
+ * space for any non-linear scale, so that a fixed Gain moves the param by a
+ * fixed fraction of its slider travel no matter where the base sits. A param
+ * that declares the wrong scale here will modulate with the wrong feel.
+ * @see engine/features/modulation/paramMapping.ts
+ *
+ * - `linear` — no curve (also the default when omitted).
+ * - `log`    — decades across the track; each drag is a RATIO. For ranges
+ *              spanning orders of magnitude whose min is a real value.
+ * - `log1p`  — log-feel over `[0, max]` that reaches an exact 0 with no
+ *              reserved band (intensities, ranges/falloffs).
+ * - `square` — pow-2 display: fine control near min.
+ * - `cube`   — pow-3: stronger version of the same (Iterations).
+ * - `root`   — pow-0.5: the inverse feel, fine control near max.
+ * - `pi`     — a UNIT relabel (value / π), not a curve. Linear, so it needs
+ *              no modulation compensation.
+ */
+export type ScaleType = 'linear' | 'log' | 'log1p' | 'square' | 'cube' | 'root' | 'pi';
 
 export interface ParamCondition {
     param?: string;
