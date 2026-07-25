@@ -91,6 +91,16 @@ Each link has a **Source** dropdown to choose what drives the modulation:
 ## Target Parameter
 Each link has a dropdown to choose which fractal parameter to modulate (e.g., Scale, Rotation, Fold Amount).
 
+## Response: Level vs Transient
+Each audio link chooses how the band becomes a signal.
+
+- **Level** (default): follows the band's loudness. The parameter rises with the sound and stays high for as long as it lasts. Good for pads, swells and overall energy.
+- **Transient**: fires on the *attack* only — how fast the band is getting louder. The parameter punches on each hit and falls back between them. This is what you want for kicks and snares: level-following always lags the attack and then holds through the sustain, which reads as mushy on a beat.
+
+Tips for Transient:
+- Pair it with the **Kick** quick band and a low **Attack**; use **Decay** to set how long the punch trails.
+- If hits feel soft, lower **FFT Smooth**. Heavy smoothing averages away the very transients this mode reads.
+
 ## Dynamics (Knobs)
 Five knobs shape how the signal behaves before it reaches the parameter:
 - **Attack** (Rise): How fast the value rises when a sound hits. Low = snappy, high = smooth.

@@ -172,7 +172,7 @@ class ModulationEngine {
             // 1. Get Source Signal
             if (rule.source === 'audio') {
                 if (audioData) {
-                    signal = this.processAudioSignal(rule, audioData);
+                    signal = this.processAudioSignal(rule, audioData, delta);
                 }
             } else if (rule.source.startsWith('lfo-')) {
                 signal = this.lfoValues[rule.source] || 0;
@@ -217,11 +217,21 @@ class ModulationEngine {
         this.offsets = {};
     }
 
-    private processAudioSignal(rule: ModulationRule, data: Uint8Array): number {
+    /** Previous frame's band average per rule — the reference for the flux
+     *  measurement in `transient` mode. */
+    private prevBandLevel: Record<string, number> = {};
+
+    /** Flux (units per second) that maps to a full-scale transient signal.
+     *  A kick attack moves a narrow band by roughly 0.3 in one 60 fps frame,
+     *  i.e. ~18/s; 20 puts that near the top of the range while leaving room
+     *  for a harder hit. Users trim from there with the rule's Gain knob. */
+    private static readonly TRANSIENT_FULL_SCALE = 20;
+
+    private processAudioSignal(rule: ModulationRule, data: Uint8Array, delta: number): number {
         const binCount = data.length;
         const startBin = Math.floor(rule.freqStart * binCount);
         const endBin = Math.floor(rule.freqEnd * binCount);
-        
+
         if (startBin >= binCount || endBin <= startBin) return 0;
 
         let sum = 0;
@@ -234,13 +244,33 @@ class ModulationEngine {
 
         if (count === 0) return 0;
 
-        const rawAvg = (sum / count) / 255.0;
+        // AGC multiplies the band average, so a quieter track drives the same
+        // range without the user re-dialling every threshold. 1 when off.
+        const level = Math.min(1, ((sum / count) / 255.0) * audioAnalysisEngine.getSignalGain());
 
-        if (rawAvg < rule.thresholdMin) return 0;
-        
+        let raw: number;
+        if (rule.mode === 'transient') {
+            // Positive spectral flux — the standard onset measure. Rate per
+            // SECOND, not per frame, so the response doesn't change with frame
+            // rate (a 30 fps preview and a 60 fps one trigger identically).
+            const prev = this.prevBandLevel[rule.id];
+            this.prevBandLevel[rule.id] = level;
+            if (prev === undefined) return 0;   // first frame has no reference
+            const dt = Math.max(1e-4, delta);
+            const rate = Math.max(0, level - prev) / dt;
+            raw = Math.min(1, rate / ModulationEngine.TRANSIENT_FULL_SCALE);
+        } else {
+            // Keep the reference fresh even in level mode, so toggling to
+            // transient mid-set doesn't fire a spurious spike off a stale value.
+            this.prevBandLevel[rule.id] = level;
+            raw = level;
+        }
+
+        if (raw < rule.thresholdMin) return 0;
+
         const range = Math.max(0.001, rule.thresholdMax - rule.thresholdMin);
-        const gated = (rawAvg - rule.thresholdMin) / range;
-        
+        const gated = (raw - rule.thresholdMin) / range;
+
         return Math.min(1.0, gated);
     }
 }

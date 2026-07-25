@@ -462,6 +462,21 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
                         onChange={handleGain}
                         className="w-28"
                     />
+                    {/* Auto Gain — the "the DJ changed track and everything
+                        stopped reacting" fix. Sits next to FFT Smooth because
+                        both shape the signal before any rule sees it. */}
+                    <label
+                        className="flex items-center gap-1.5 shrink-0 cursor-pointer"
+                        title="Normalise the input level so thresholds keep working when the music gets quieter or louder"
+                    >
+                        <DotToggle
+                            value={audio?.agcEnabled ?? false}
+                            onChange={(v) => setAudio({ agcEnabled: v })}
+                            accent="cyan"
+                            size="sm"
+                        />
+                        <span className="text-[9px] font-bold text-fg-muted">Auto Gain</span>
+                    </label>
                  </div>
 
                  {/* Live Inputs */}

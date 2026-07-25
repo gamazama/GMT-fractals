@@ -18,6 +18,21 @@ const PRESET_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#
 // --- TYPES ---
 export type ModulationSource = 'audio' | 'lfo-1' | 'lfo-2' | 'lfo-3';
 
+/**
+ * How an audio band is turned into a signal.
+ *
+ * - `level`     — the band's average magnitude. Follows loudness; the param
+ *                 sits high for as long as the sound is present.
+ * - `transient` — positive spectral flux: how fast the band is GETTING louder.
+ *                 Near-zero on a sustained pad, spikes on a kick or snare hit.
+ *                 This is what makes a param punch on the beat and fall back
+ *                 between beats, which level-following cannot do (it lags the
+ *                 attack and holds through the sustain).
+ *
+ * Absent on rules authored before transient mode; treated as `level`.
+ */
+export type ModulationMode = 'level' | 'transient';
+
 export interface ModulationRule {
     id: string;
     target: string;
@@ -32,6 +47,9 @@ export interface ModulationRule {
     freqEnd: number;
     thresholdMin: number; // Noise Gate
     thresholdMax: number; // Ceiling
+    /** Level-following vs onset detection. Optional for back-compat — rules
+     *  saved before transient mode have no `mode` and read as 'level'. */
+    mode?: ModulationMode;
     
     // Envelope (Used for Audio, maybe future LFO smoothing)
     attack: number;
@@ -87,10 +105,11 @@ export const ModulationFeature: FeatureDefinition = {
                 
                 // Defaults designed for Audio, harmless for LFO
                 freqStart: 0.0,
-                freqEnd: 0.2, 
+                freqEnd: 0.2,
                 thresholdMin: 0.1,
                 thresholdMax: 1.0,
-                
+                mode: 'level',
+
                 attack: 0.1,
                 decay: 0.3,
                 smoothing: 0.0,

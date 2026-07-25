@@ -103,6 +103,44 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
                  </select>
             </div>
             
+            {/* Response mode. Level follows loudness (param sits high while the
+                sound lasts); Transient fires on the attack and falls back, which
+                is what makes a param punch ON the beat rather than lagging it. */}
+            {isAudio && (
+                <div>
+                    <label className="text-[9px] text-fg-dim font-bold block mb-1">Response</label>
+                    <div className="flex gap-1">
+                        <button
+                            onClick={() => updateRule(rule.id, { mode: 'level' })}
+                            title="Follow the band's loudness — rises and falls with the sound"
+                            className={`flex-1 py-1.5 text-[9px] font-bold rounded border transition-colors ${
+                                (rule.mode ?? 'level') === 'level'
+                                    ? 'bg-accent-900/50 border-accent-500/30 text-accent-300'
+                                    : 'bg-line/5 hover:bg-line/10 border-line/5 text-fg-muted'
+                            }`}
+                        >
+                            Level
+                        </button>
+                        <button
+                            onClick={() => updateRule(rule.id, { mode: 'transient' })}
+                            title="Fire on the attack only — punches on each hit and falls back between them. Use a low Attack and a longer Decay."
+                            className={`flex-1 py-1.5 text-[9px] font-bold rounded border transition-colors ${
+                                rule.mode === 'transient'
+                                    ? 'bg-accent-900/50 border-accent-500/30 text-accent-300'
+                                    : 'bg-line/5 hover:bg-line/10 border-line/5 text-fg-muted'
+                            }`}
+                        >
+                            Transient
+                        </button>
+                    </div>
+                    {rule.mode === 'transient' && (
+                        <p className="text-[8px] text-fg-faint mt-1 leading-snug">
+                            Fires on attacks. Lower <b>FFT Smooth</b> if hits feel soft — heavy smoothing flattens the very transients this reads.
+                        </p>
+                    )}
+                </div>
+            )}
+
             {isAudio && (
                 <div>
                     <label className="text-[9px] text-fg-dim font-bold block mb-1">Quick Frequency Bands</label>

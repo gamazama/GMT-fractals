@@ -153,9 +153,11 @@ export const tick = (delta: number) => {
     const modulationSlice = (storeState as any).modulation as ModulationState;
     const audioSlice = (storeState as any).audio as AudioState;
     
-    // 2. Update Audio Engine Hardware
+    // 2. Update Audio Engine Hardware. AGC is passed per tick rather than
+    //    latched, so the store's live value always wins — including for a rig
+    //    whose panel is closed or one restored by a scene load.
     if (audioSlice && audioSlice.isEnabled) {
-        audioAnalysisEngine.update();
+        audioAnalysisEngine.update(!!audioSlice.agcEnabled, delta);
     }
 
     // 2b. Sync each audio clip's deck playback to the timeline frame.
