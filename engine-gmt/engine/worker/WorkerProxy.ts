@@ -875,15 +875,27 @@ export class WorkerProxy implements AccumulationController {
 
     // ─── Worker communication ────────────────────────────────────────────
 
+    /**
+     * @invariant `modulations` ships on EVERY tick, including when empty. The
+     *   dict is the frame's COMPLETE set and the worker replaces its copy
+     *   wholesale — sending it only when non-empty would leave a target that
+     *   stopped being modulated frozen at its last offset, since nothing else
+     *   ever clears the worker's dict. Same drop-out hazard `setOwnedUniforms`
+     *   guards for uniform names.
+     * @invariant Must be read AFTER the ANIMATE tick phase has run, which is
+     *   where `AnimationSystem` fills the dict. GmtRendererTickDriver's
+     *   `runTicks()` precedes its dispatch block, so this holds.
+     */
     sendRenderTick(camera: SerializedCamera, offset: SerializedOffset, delta: number, renderState: Partial<EngineRenderState>) {
+        const modulations = this.modulations;
         // If an offset sync is queued (from orbit absorb), embed it in this tick
         // so camera and offset arrive atomically — no 1-frame mismatch.
         if (this._pendingOffsetSync) {
             const syncOffset = this._pendingOffsetSync;
             this._pendingOffsetSync = null;
-            this.post({ type: 'RENDER_TICK', camera, offset: syncOffset, delta, timestamp: performance.now(), renderState, syncOffset: true });
+            this.post({ type: 'RENDER_TICK', camera, offset: syncOffset, delta, timestamp: performance.now(), renderState, syncOffset: true, modulations });
         } else {
-            this.post({ type: 'RENDER_TICK', camera, offset, delta, timestamp: performance.now(), renderState });
+            this.post({ type: 'RENDER_TICK', camera, offset, delta, timestamp: performance.now(), renderState, modulations });
         }
     }
 

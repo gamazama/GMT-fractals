@@ -207,13 +207,21 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
       z: liveModulations[`${prefix}_rotZ`] ?? currentLight.rotation.z
   };
 
-  const mixedPosition = {
-      x: liveModulations[`${prefix}_posX`] ?? currentLight.position.x,
-      y: liveModulations[`${prefix}_posY`] ?? currentLight.position.y,
-      z: liveModulations[`${prefix}_posZ`] ?? currentLight.position.z
-  };
-  
-  const posVec = new THREE.Vector3(mixedPosition.x, mixedPosition.y, mixedPosition.z);
+  // Position follows the engine-wide widget convention: `value` is the stored
+  // base and `liveValue` is the modulated reading, so the input paints the
+  // live indicator instead of silently swapping its own value. (It used to
+  // pass only the mixed value, which moved the number but left the modulation
+  // invisible — no purple marker on a linked light.) `liveValue` stays
+  // undefined when nothing is linked so the widget renders as a plain control.
+  const posBase = new THREE.Vector3(currentLight.position.x, currentLight.position.y, currentLight.position.z);
+  const posLiveKeys = [`${prefix}_posX`, `${prefix}_posY`, `${prefix}_posZ`] as const;
+  const posLive = posLiveKeys.some(k => liveModulations[k] !== undefined)
+      ? new THREE.Vector3(
+          liveModulations[posLiveKeys[0]] ?? posBase.x,
+          liveModulations[posLiveKeys[1]] ?? posBase.y,
+          liveModulations[posLiveKeys[2]] ?? posBase.z,
+        )
+      : undefined;
 
   return (
  <div className="animate-fade-in" onContextMenu={handleLightStudioMenu}>
@@ -278,7 +286,9 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                <div data-help-id="light.pos">
                    <Vector3Input 
                        label={currentLight.fixed ? "Offset XYZ" : "World Position"}
-                       value={posVec}
+                       value={posBase}
+                       liveValue={posLive}
+                       showLiveIndicator={true}
                        onChange={(v) => actions.updateLight({ 
                            index: activeLight, 
                            params: { position: { x: v.x, y: v.y, z: v.z } } 

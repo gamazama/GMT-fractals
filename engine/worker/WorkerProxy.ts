@@ -82,11 +82,22 @@ export class WorkerProxy implements AccumulationController {
     pendingTeleport: CameraState | null = null;
 
     /**
-     * Modulation offsets set by AnimationSystem.
+     * Modulation offsets set by AnimationSystem — the SECOND of modulation's
+     * two paths to the shader.
      *
-     * @invariant Public mutable field — `AnimationSystem` writes
-     *   `modulations` every frame; the real worker reads it on
-     *   `sendRenderTick`.
+     * Most targets reach the GPU as a uniform write (`FRACTAL_EVENTS.UNIFORM`).
+     * The ones here cannot: geometry pre/post/world rotation, camera
+     * position/rotation and the light array are consumed by
+     * `UniformManager.syncFrame`, which composes them into matrices and packed
+     * arrays rather than reading a per-param uniform.
+     *
+     * @invariant Public mutable field — `AnimationSystem` REPLACES it every
+     *   frame (not mutates), and the real proxy forwards it on every
+     *   `sendRenderTick`. For years this field was written but never
+     *   transported, so these targets modulated in a render export (where
+     *   `EXPORT_RENDER_FRAME` did carry it) and did nothing in the live
+     *   viewport. Any new sink here must ride the same message or it will
+     *   reproduce that split. @see docs/adr/0107-live-modulation-transport.md
      */
     modulations: Record<string, number> = {};
 

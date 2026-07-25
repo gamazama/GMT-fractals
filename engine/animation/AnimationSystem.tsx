@@ -10,11 +10,18 @@
  * `storeState.coloring`, `storeState.lighting`) so apps without those
  * slices fall through to the generic path untouched.
  *
+ * @invariant Branch SELECTION is not decided here. Every target is classified
+ *   by `classifyModulationTarget` (engine/features/modulation/targetRouting.ts)
+ *   and the chain below switches on `routing.branch`. That module is also what
+ *   `debug/test-modulation-coverage.mts` grades, so the gate cannot pass a
+ *   routing this loop doesn't actually take. Adding a branch means teaching the
+ *   resolver first — the predicates here are no longer the source of truth.
+ *
  * FUTURE REFACTOR — branch registry:
- *   The GMT-specific branches should move into engine-gmt via a
- *   `registerModulationBranch()` extension point. Until that lands, the
- *   gating keeps cross-contamination out and this file is allowed to
- *   know about GMT slice names.
+ *   The GMT-specific branch BODIES should still move into engine-gmt via a
+ *   `registerModulationBranch()` extension point; extracting the classifier was
+ *   the first half. Until that lands, the slice gating keeps cross-contamination
+ *   out and this file is allowed to know about GMT slice names.
  */
 
 import React from 'react';
@@ -24,7 +31,17 @@ import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 import { getProxy } from '../worker/WorkerProxy';
 import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
-const engine = getProxy();
+
+// Resolved PER TICK, never captured at module scope.
+//
+// @invariant `getProxy()` returns the lazily-created stub until the host app
+//   calls `setProxy()` (engine-gmt does it in `installGmtRenderer`). A
+//   module-scope capture races that install: whichever module evaluates first
+//   wins, and if this one did, every `engine.modulations` write below landed on
+//   an orphaned stub while the real proxy shipped its own empty dict — the
+//   rotation / camera / lighting offsets would be built correctly each frame
+//   and then dropped. Resolving inside the tick makes the capture order
+//   irrelevant. @see docs/adr/0107-live-modulation-transport.md
 
 // Uniform writes flow through FRACTAL_EVENTS.UNIFORM so apps that have
 // installed a real worker-proxy bridge (engine-gmt via
@@ -43,10 +60,10 @@ const emitResetAccum = () => {
     FractalEvents.emit(FRACTAL_EVENTS.RESET_ACCUM, undefined);
 };
 
-import { featureRegistry } from '../FeatureSystem';
 import { audioAnalysisEngine } from '../features/audioMod/AudioAnalysisEngine';
 import { syncAudioClips } from './audioClipSync';
 import { modulationEngine } from '../features/modulation/ModulationEngine';
+import { classifyModulationTarget } from '../features/modulation/targetRouting';
 import { AudioState } from '../features/audioMod';
 import { ModulationState } from '../features/modulation';
 // ColoringState was a fractal feature; treat as opaque here.
@@ -99,6 +116,7 @@ function flushRecordBuffer() {
  */
 // Exported tick function for orchestrator pattern
 export const tick = (delta: number) => {
+    const engine = getProxy();
     const animStore = useAnimationStore.getState();
     const storeState = useEngineStore.getState();
 
@@ -255,73 +273,22 @@ export const tick = (delta: number) => {
         // frame's offsets against the previous frame's (delta-based), not here
         // per-target against zero.
 
-        // F. Standard Feature Params & DDFS Lookup (Moved Up for Base Value Logic)
-        let resolvedBase = 0;
-        let uniformName = '';
-        let isNoReset = false;
+        // Base value, uniform name and BRANCH, all from the one pure resolver
+        // that `debug/test-modulation-coverage.mts` also calls. The branch
+        // predicates below read `routing.branch` rather than re-testing the
+        // prefixes, so the coverage gate can never grade a routing this loop
+        // doesn't actually take.
+        const routing = classifyModulationTarget(targetKey, storeState as unknown as Record<string, unknown>);
+        let resolvedBase = routing.base;
+        const uniformName = routing.uniform ?? '';
+        const isNoReset = routing.noAccumReset;
         // Tracks whether the target resolved to a known DDFS param
         // (vec axis or scalar). Targets that don't resolve are still
         // processed by GMT's special-case branches above; the flag
         // controls whether the generic scalar fallback at the bottom
         // writes to liveModulations or skips to avoid polluting the
         // consumer map with zeros for unrecognized targets.
-        let isDDFSResolved = false;
-
-        // --- BASE VALUE RESOLUTION ---
-        if (targetKey.includes('.')) {
-            const [featureId, paramId] = targetKey.split('.');
-            const feature = featureRegistry.get(featureId);
-            const slice = (storeState as any)[featureId];
-            if (feature && slice) {
-                // Check for vector component target — UNDERSCORE form
-                // (e.g. `juliaC_x`, `vec3A_y`). Generic: matches any
-                // paramName ending in _x/_y/_z/_w when the base points
-                // at a vec-shaped object in the slice. Falls through
-                // to the scalar branch when the base is a scalar
-                // (e.g. a param literally named `power_x`).
-                const vectorMatch = paramId.match(/^(.+)_(x|y|z|w)$/);
-                const vectorName = vectorMatch?.[1];
-                if (vectorMatch && vectorName && slice[vectorName] && typeof slice[vectorName] === 'object') {
-                    const axis = vectorMatch[2];
-                    const paramConfig = feature.params[vectorName];
-                    if (paramConfig) {
-                        const vector = slice[vectorName];
-                        resolvedBase = (vector as any)[axis] ?? 0;
-                        if (paramConfig.uniform) {
-                            // Map to individual uniform components
-                            uniformName = `${paramConfig.uniform}_${axis}`;
-                        }
-                        if (paramConfig.noAccumReset) isNoReset = true;
-                        isDDFSResolved = true;
-                    }
-                } else {
-                    const paramConfig = feature.params[paramId];
-                    if (paramConfig) {
-                        // 1. Get Base Value
-                        if (typeof slice[paramId] === 'number') {
-                            resolvedBase = slice[paramId];
-                        }
-                        // 2. Get Uniform Name
-                        if (paramConfig.uniform) {
-                            uniformName = paramConfig.uniform;
-                        }
-                        if (paramConfig.noAccumReset) isNoReset = true;
-                        isDDFSResolved = true;
-                    }
-                }
-            }
-        } else {
-             // Legacy Root Params
-             if (targetKey === 'iterations') {
-                 uniformName = 'uIterations';
-                 resolvedBase = (storeState as any).coreMath?.iterations ?? 0;
-                 isDDFSResolved = true;
-             } else if (targetKey.startsWith('param')) {
-                 uniformName = 'u' + targetKey.charAt(0).toUpperCase() + targetKey.slice(1);
-                 resolvedBase = (storeState as any).coreMath?.[targetKey] ?? 0;
-                 isDDFSResolved = true;
-             }
-        }
+        const isDDFSResolved = routing.ddfsResolved;
 
         // --- RECORDING LOGIC (With Feedback Loop Prevention) ---
         if (shouldRecord && Math.abs(offset) > 0.000001) {
@@ -358,7 +325,7 @@ export const tick = (delta: number) => {
         //    Scoped to apps that have a `coloring` slice so engine-fork
         //    apps can register their own `coloring` feature without
         //    inheriting GMT's uColorScale/uColorOffset bindings.
-        if (targetKey.startsWith('coloring.') && (storeState as any).coloring) {
+        if (routing.branch === 'coloring') {
             if (targetKey === 'coloring.repeats') {
                 const c = (storeState as any).coloring as ColoringState;
                 if (c && Math.abs(c.repeats) > 0.001) {
@@ -403,7 +370,7 @@ export const tick = (delta: number) => {
         //    slice. Engine-fork apps that name a feature `julia` (e.g.
         //    fluid-toy's Julia-set feature) fall through to the generic
         //    DDFS vec handler below so their targets aren't hijacked.
-        if ((targetKey.startsWith('julia.') || targetKey.startsWith('geometry.julia')) && (storeState as any).geometry) {
+        if (routing.branch === 'julia') {
             const g = (storeState as any).geometry;
             const baseX = g?.juliaX ?? 0;
             const baseY = g?.juliaY ?? 0;
@@ -424,7 +391,7 @@ export const tick = (delta: number) => {
         }
 
         // C. Camera Modulation
-        if (targetKey.startsWith('camera.')) {
+        if (routing.branch === 'camera') {
             if (targetKey.startsWith('camera.unified')) {
                 if (targetKey.endsWith('x')) { engine.modulations['camera.unified.x'] = offset; }
                 else if (targetKey.endsWith('y')) { engine.modulations['camera.unified.y'] = offset; }
@@ -443,14 +410,14 @@ export const tick = (delta: number) => {
         //    rotation matrices. Scoped to apps that have a `geometry`
         //    slice; engine-fork apps registering their own `geometry`
         //    feature take over this namespace.
-        if ((targetKey.startsWith('geometry.preRot') || targetKey.startsWith('geometry.postRot') || targetKey.startsWith('geometry.worldRot')) && (storeState as any).geometry) {
+        if (routing.branch === 'geometryRotation') {
             engine.modulations[targetKey] = offset;
             if (!isRemoved) liveModulations[targetKey] = resolvedBase + offset;
             return;
         }
 
         // E. Lighting Array
-        if (targetKey.startsWith('lighting.light')) {
+        if (routing.branch === 'lighting') {
             const match = targetKey.match(/lighting\.light(\d+)_(\w+)/);
             if (match) {
                 const idx = parseInt(match[1]);
@@ -462,11 +429,18 @@ export const tick = (delta: number) => {
                     let baseVal = 0;
                     let valid = false;
 
+                    // Must stay in step with LIGHT_PROPS in targetRouting.ts and
+                    // with the `modulations[...]` reads in UniformManager's light
+                    // loop. rotX/Y/Z were read there but never produced here, so
+                    // light-rotation modulation resolved to nothing.
                     if (prop === 'intensity') { baseVal = l.intensity; valid = true; }
                     else if (prop === 'falloff') { baseVal = l.falloff; valid = true; }
                     else if (prop === 'posX') { baseVal = l.position.x; valid = true; }
                     else if (prop === 'posY') { baseVal = l.position.y; valid = true; }
                     else if (prop === 'posZ') { baseVal = l.position.z; valid = true; }
+                    else if (prop === 'rotX') { baseVal = l.rotation?.x ?? 0; valid = true; }
+                    else if (prop === 'rotY') { baseVal = l.rotation?.y ?? 0; valid = true; }
+                    else if (prop === 'rotZ') { baseVal = l.rotation?.z ?? 0; valid = true; }
                     
                     if (valid) {
                         if (shouldRecord) {
@@ -501,8 +475,8 @@ export const tick = (delta: number) => {
         //    apps like fluid-toy read liveModulations directly from the
         //    store). The uniform write is conditional; the liveModulations
         //    update always happens so React consumers see the modulation.
-        const vectorMatch = targetKey.match(/^(\w+)\.([\w]+)_(x|y|z|w)$/);
-        if (vectorMatch) {
+        if (routing.branch === 'vecAxis') {
+            const vectorMatch = targetKey.match(/^(\w+)\.([\w]+)_(x|y|z|w)$/)!;
             const featureId = vectorMatch[1];
             const paramName = vectorMatch[2];
             const axis = vectorMatch[3] as 'x' | 'y' | 'z' | 'w';

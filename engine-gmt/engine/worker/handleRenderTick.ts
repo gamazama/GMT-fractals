@@ -22,6 +22,10 @@ import type { WorkerExporter } from './WorkerExporter';
 import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState } from './WorkerProtocol';
 import { bucketRenderer } from '../BucketRenderer';
 
+/** Shared no-modulation dict. Safe to alias: `engine.modulations` is read-only
+ *  downstream (UniformManager indexes it; nothing writes through it). */
+const EMPTY_MODULATIONS: Record<string, number> = Object.freeze({});
+
 // ── DEBUG: per-frame timing instrumentation ──────────────────────────────────
 // Diagnoses fly-stutter. Question it answers: is the worker's OWN frame timing
 // flat or jittery?
@@ -206,6 +210,14 @@ export const handleRenderTick = (
     if (msg.renderState) {
         engine.setRenderState(msg.renderState);
     }
+
+    // Modulation offsets that reach the shader through UniformManager.syncFrame
+    // rather than through a uniform write (geometry rotation, camera, lights).
+    // REPLACE wholesale, and replace even when the message carries nothing: the
+    // dict is the frame's complete set, so a target that stopped being modulated
+    // must vanish from it or its offset stays applied forever. Assigned before
+    // the update/syncFrame below, which is the only reader.
+    engine.modulations = msg.modulations ?? EMPTY_MODULATIONS;
 
     // FractalEngine.update releases any held final frame when the user has moved
     // camera / changed params; the held path below only runs when no interaction

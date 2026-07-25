@@ -497,7 +497,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const x = val?.x ?? config.default?.x ?? 0;
             const y = val?.y ?? config.default?.y ?? 0;
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y'], composeFrom: config.composeFrom });
-            const liveVec2 = readLiveVec(liveModulations, binding) as THREE.Vector2 | undefined;
+            const liveVec2 = readLiveVec(liveModulations, binding, { x, y }) as THREE.Vector2 | undefined;
             return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} liveValue={liveVec2} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec3') {
@@ -506,7 +506,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const z = val?.z ?? config.default?.z ?? 0;
             const v3 = new THREE.Vector3(x, y, z);
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y', 'z'], composeFrom: config.composeFrom });
-            const liveVec3 = readLiveVec(liveModulations, binding) as THREE.Vector3 | undefined;
+            const liveVec3 = readLiveVec(liveModulations, binding, { x, y, z }) as THREE.Vector3 | undefined;
             return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec3} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec4') {
@@ -516,7 +516,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const w = val?.w ?? config.default?.w ?? 0;
             const v4 = new THREE.Vector4(x, y, z, w);
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y', 'z', 'w'], composeFrom: config.composeFrom });
-            const liveVec4 = readLiveVec(liveModulations, binding) as THREE.Vector4 | undefined;
+            const liveVec4 = readLiveVec(liveModulations, binding, { x, y, z, w }) as THREE.Vector4 | undefined;
             return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec4} showLiveIndicator={true} /></div>;
         }
 

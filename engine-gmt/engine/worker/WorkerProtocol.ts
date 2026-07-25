@@ -60,7 +60,13 @@ export type MainToWorkerMessage =
     | { type: 'CONFIG'; config: Partial<ShaderConfig> }
     | { type: 'BOOT'; config: ShaderConfig; camera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number } }
     | { type: 'UNIFORM'; key: string; value: unknown; noAccumReset?: boolean }
-    | { type: 'RENDER_TICK'; camera: SerializedCamera; offset: SerializedOffset; delta: number; timestamp: number; renderState: Partial<EngineRenderState>; syncOffset?: boolean }
+    /** `modulations` carries the offsets that reach the shader through
+     *  `UniformManager.syncFrame` rather than through a uniform write —
+     *  geometry pre/post/world rotation, camera position/rotation, and the
+     *  light array. Same dict `EXPORT_RENDER_FRAME` carries, so the live
+     *  preview and a render export resolve those targets identically.
+     *  @see docs/adr/0107-live-modulation-transport.md */
+    | { type: 'RENDER_TICK'; camera: SerializedCamera; offset: SerializedOffset; delta: number; timestamp: number; renderState: Partial<EngineRenderState>; syncOffset?: boolean; modulations?: Record<string, number> }
     | { type: 'RESET_ACCUM' }
     | { type: 'OFFSET_SET'; offset: SerializedOffset; noAccumReset?: boolean }
     | { type: 'OFFSET_SHIFT'; x: number; y: number; z: number }

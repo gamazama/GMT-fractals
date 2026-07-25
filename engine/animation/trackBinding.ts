@@ -89,14 +89,24 @@ export function deriveTrackBinding(input: TrackBindingInput): TrackBinding {
  * when no axis is live — consumers then fall back to the unmodulated
  * base value from the DDFS slice. Axis count is inferred from the
  * binding's trackKeys length.
+ *
+ * @invariant Axes with no entry fall back to `base`, NOT to 0. Only
+ *   modulated targets appear in `liveModulations`, so modulating X of a vec3
+ *   yields entries for `_x` alone. Defaulting the rest to 0 made the widget
+ *   report Y and Z as zero and paint a live indicator on them — the base
+ *   value was lost and two axes appeared to jump to the origin the moment a
+ *   third was linked. Callers hold the base vector already; passing it is
+ *   what makes the composed vector mean "current value of this param".
  */
 export function readLiveVec(
     liveModulations: Partial<Record<string, number>>,
     binding: TrackBinding,
+    base?: { x: number; y: number; z?: number; w?: number },
 ): THREE.Vector2 | THREE.Vector3 | THREE.Vector4 | undefined {
     const vals = binding.trackKeys.map((k) => liveModulations[k]);
     if (vals.every((v) => v === undefined)) return undefined;
-    const safe = vals.map((v) => v ?? 0);
+    const baseAxis = [base?.x ?? 0, base?.y ?? 0, base?.z ?? 0, base?.w ?? 0];
+    const safe = vals.map((v, i) => v ?? baseAxis[i]);
     switch (safe.length) {
         case 2: return new THREE.Vector2(safe[0], safe[1]);
         case 3: return new THREE.Vector3(safe[0], safe[1], safe[2]);

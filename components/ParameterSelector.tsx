@@ -21,6 +21,7 @@ import { useEngineStore } from '../store/engineStore';
 import { CategoryPickerMenu } from './CategoryPickerMenu';
 import type { PickerCategory, PickerItem } from './CategoryPickerMenu';
 import { checkParamActive } from '../utils/paramConditions';
+import { isModulatable, LIGHT_PROPS, MODULATION_EXCLUDED_FEATURES } from '../engine/features/modulation/targetRouting';
 
 interface ParameterSelectorProps {
     value: string;
@@ -28,34 +29,42 @@ interface ParameterSelectorProps {
     className?: string;
 }
 
-// Features excluded from modulation (not visual params)
-const EXCLUDED_IDS = new Set(['audio', 'navigation', 'drawing', 'webcam', 'debugTools', 'shaderCompiler', 'quality', 'reflections']);
+// Features excluded from modulation (not visual params). Shared with the
+// coverage gate via targetRouting so the menu and the audit filter alike.
+const EXCLUDED_IDS = MODULATION_EXCLUDED_FEATURES;
 // Display ordering for the dropdown menu
 const PRIORITY_ORDER = ['coreMath', 'geometry', 'materials', 'coloring', 'atmosphere', 'lighting', 'optics'];
 
-// Virtual Expansions for Array-based features
+// Virtual Expansions for Array-based features.
+//
+// The light array is not a DDFS param set — its targets are synthesised here
+// and applied by AnimationSystem's lighting branch. LIGHT_PROPS is the shared
+// list of props that branch knows how to apply, so offering exactly it keeps
+// the menu from listing a target nothing consumes (falloff and rotation used
+// to be the other way round: applied, or read by UniformManager, but never
+// offered).
+const LIGHT_PROP_LABELS: Record<string, string> = {
+    intensity: 'Intensity',
+    falloff: 'Falloff',
+    posX: 'Pos X', posY: 'Pos Y', posZ: 'Pos Z',
+    rotX: 'Rot X', rotY: 'Rot Y', rotZ: 'Rot Z',
+};
 const getVirtualParams = (featureId: string): { label: string, key: string }[] => {
     if (featureId === 'lighting') {
         const opts = [];
-        for(let i=0; i<MAX_LIGHTS; i++) {
-            opts.push({ label: `Light ${i+1} Intensity`, key: `light${i}_intensity` });
-            opts.push({ label: `Light ${i+1} Pos X`, key: `light${i}_posX` });
-            opts.push({ label: `Light ${i+1} Pos Y`, key: `light${i}_posY` });
-            opts.push({ label: `Light ${i+1} Pos Z`, key: `light${i}_posZ` });
+        for (let i = 0; i < MAX_LIGHTS; i++) {
+            for (const prop of LIGHT_PROPS) {
+                opts.push({ label: `Light ${i + 1} ${LIGHT_PROP_LABELS[prop] ?? prop}`, key: `light${i}_${prop}` });
+            }
         }
         return opts;
     }
     return [];
 };
 
-/** Check if a param is modulatable: has a uniform, isn't compile-time, and is a numeric type */
-const isModulatable = (config: any): boolean => {
-    if (config.onUpdate === 'compile') return false;
-    // Skip vec params that are UI composites of individual floats (e.g., preRot composed from preRotX/Y/Z)
-    if (config.composeFrom) return false;
-    const type = config.type;
-    return type === 'float' || type === 'int' || type === 'vec2' || type === 'vec3' || type === 'vec4';
-};
+// `isModulatable` lives in engine/features/modulation/targetRouting.ts — the
+// same module the dispatcher and the coverage gate read, so what the picker
+// offers and what the tick can route are one decision, not two that drift.
 
 /** Per-formula groups of the active woven scene (ADR-0090). A fused weave stamps
  *  each slot's params with `group` = "Formula <n>: <name>" — whether the slot is a
@@ -253,9 +262,13 @@ export const ParameterSelector: React.FC<ParameterSelectorProps> = ({ value, onC
         const [fid, pid] = value.split('.');
 
         if (fid === 'lighting' && pid.startsWith('light')) {
-             const idx = parseInt(pid.match(/\d+/)?.[0] || '0');
-             const type = pid.includes('intensity') ? 'Intensity' : pid.includes('pos') ? 'Pos' : 'Param';
-             label = `Light ${idx+1} ${type}`;
+             // Read the prop off the key rather than sniffing substrings — the
+             // old `includes('pos')` collapsed all three position axes to "Pos",
+             // so three different links displayed the same label.
+             const m = pid.match(/^light(\d+)_(\w+)$/);
+             const idx = parseInt(m?.[1] ?? '0');
+             const prop = m?.[2] ?? '';
+             label = `Light ${idx + 1} ${LIGHT_PROP_LABELS[prop] ?? prop ?? 'Param'}`;
         }
         else if (fid === 'camera') {
              if (pid.includes('unified')) {

@@ -38,6 +38,7 @@ import { viewport } from '../../engine/plugins/Viewport';
 import { reportAccumulationToStore } from '../../store/slices/installAccumulationBindings';
 import { buildRenderInteractionState, hasLiveModulationSource } from './renderInteractionState';
 import { modulationEngine } from '../../engine/features/modulation/ModulationEngine';
+import { applyLiveMod } from '../../engine/typedSlices';
 import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 
 // ── Tick Registration — SNAPSHOT phase ──────────────────────────────────
@@ -326,10 +327,25 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         // Run all registered ticks: SNAPSHOT → ANIMATE → OVERLAY → UI.
         runTicks(clampedDelta);
 
+        // Optics, with any live modulation folded in. `optics` params are read
+        // straight off this block by the worker (UniformManager's orthoScale,
+        // FractalEngine's target FOV) rather than through a uniform write, so
+        // without this merge a link on camFov / orthoScale moved its slider and
+        // its purple indicator while the image never changed. `applyLiveMod`
+        // returns the SAME reference when nothing is modulated, so the common
+        // path allocates nothing. Read once here and reused for renderState
+        // below, so the main-thread camera and the worker cannot disagree about
+        // this frame's FOV.
+        const optics = applyLiveMod(
+            (useEngineStore.getState() as any).optics ?? {},
+            'optics',
+            (useEngineStore.getState() as any).liveModulations ?? {},
+        );
+
         // Sync R3F camera FOV with optics — raycaster/gizmo projections
         // must match the rendered image's FOV.
         const cam = camera as THREE.PerspectiveCamera;
-        const storeFov = (useEngineStore.getState() as any).optics?.camFov ?? 60;
+        const storeFov = optics.camFov ?? 60;
         if (cam.fov !== storeFov) {
             cam.fov = storeFov;
             cam.updateProjectionMatrix();
@@ -407,7 +423,7 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             // in the steady state, not a per-frame allocation.
             modulatedUniforms: modulationEngine.getOwnedUniforms(),
             cameraMode: storeState.cameraMode,
-            optics:   storeState.optics   ?? null,
+            optics,
             lighting: storeState.lighting ?? null,
             quality:  storeState.quality  ?? null,
             geometry: storeState.geometry ?? null,
