@@ -37,18 +37,18 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         content: `
 Every GMT release, newest first.
 
-## 0.9.9 — Audio modulation, rebuilt
+## 0.9.8.1 — Audio modulation
 > July 25, 2026
 
-- **The spectrum reads like music.** Analysis bands are now equal *musical* width, so the bass gets as many bands as the treble — a kick band is 40–120 Hz and says so, instead of being a hairline on a linear axis. **Tilt** lifts the highs to offset music's natural roll-off, so hi-hats read as strongly as a kick.
-- **Transient mode** — a link punches on each hit and falls back between them, rather than lagging the attack and holding through the sustain. It ignores notes merely sliding in pitch, so vibrato and filter sweeps stop reading as continuous hits.
-- **Live input built for a venue** — device picker for mic, line-in and system audio, input trim with a clipping/too-quiet meter, and the browser's echo cancellation, noise suppression and auto-gain explicitly disabled. Those are on by default in Chrome and quietly duck, notch and pump a feed from a desk.
-- **Auto Gain** keeps one set of thresholds working when the track changes.
-- **Analysis runs on the audio thread.** It keeps working at full rate while the interface is busy compiling or loading, where the spectrum used to freeze and lose whole seconds of hits. About 40% less lag overall, and the response you dial in no longer drifts with frame rate.
-- **Scenes remember their audio links** — loading a scene restores the modulation saved with it, while your input stays connected so you are not re-patching between looks.
-- **Modulation recording captures every frame**, instead of flattening busy stretches into a single held value.
-- **Rotation, camera and lighting now modulate live**, not only in rendered output — and curved parameters respond evenly across their range, where light intensity and falloff used to feel dead at high values.
-- Audio panel rebuilt around the spectrum and the links, with input, decks and analysis in collapsible sections.
+- **Musical frequency bands.** Analysis bands are equal width per octave, so the bass gets as many as the treble, and bands are picked in real Hz rather than as a share of the spectrum. **Tilt** lifts the highs to offset music's natural roll-off.
+- **Transient mode** fires a link on each hit instead of following loudness, and ignores notes merely sliding in pitch — vibrato and filter sweeps no longer read as continuous hits.
+- **Live input** gained a device picker for mic, line-in and system audio, an input trim and a level meter. Chrome's echo cancellation, noise suppression and auto-gain are now switched off; they were ducking and notching desk feeds.
+- **Auto Gain** keeps one set of thresholds working across tracks.
+- **Analysis moved to the audio thread**, so it keeps running while the interface is busy compiling or loading. About 40% less lag, and response no longer varies with frame rate.
+- **Scenes restore their audio links** when loaded, while the input stays connected.
+- **Modulation recording** captures every frame, instead of holding one value through busy stretches.
+- **Rotation, camera and lighting** now modulate live, and curved parameters respond evenly across their range.
+- Audio panel reorganised around the spectrum and the links.
 
 ---
 
