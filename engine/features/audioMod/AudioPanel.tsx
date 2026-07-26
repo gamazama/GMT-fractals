@@ -640,6 +640,45 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
                      >
                          <LiveInputControls />
 
+                         {/* Audio file decks. Moved in from the panel body:
+                             a loaded track is an input SOURCE, so it belongs
+                             beside the live-input picker rather than in a
+                             separate block further down. */}
+                         <div className="flex flex-col gap-1 px-2 pt-1">
+                             {!deck1Active && !deck2Active && (
+                                 <button
+                                    onClick={() => setDeck1Active(true)}
+                                    className="w-full py-2 border border-dashed border-line/10 rounded text-[9px] text-fg-dim hover:text-accent-400 hover:border-accent-500/30 transition-all font-bold"
+                                 >
+                                     + Load Audio File
+                                 </button>
+                             )}
+
+                             <AudioDeck index={0} label="Track A" isActive={deck1Active} onClose={() => setDeck1Active(false)} />
+
+                             {deck1Active && !deck2Active && (
+                                 <div className="flex justify-center -my-1 z-10">
+                                     <button
+                                        onClick={() => setDeck2Active(true)}
+                                        className="bg-surface-sunken border border-line/20 rounded-full w-5 h-5 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-surface-header transition-colors"
+                                        title="Add 2nd Track"
+                                     >
+                                         <PlusIcon />
+                                     </button>
+                                 </div>
+                             )}
+
+                             <AudioDeck index={1} label="Track B" isActive={deck2Active} onClose={() => setDeck2Active(false)} />
+                         </div>
+                         {deck2Active && (
+                             <Slider
+                                label="Crossfade"
+                                value={crossfade}
+                                min={0} max={1} step={0.01}
+                                onChange={onCrossfade}
+                             />
+                         )}
+
                          {/* Signal conditioning — everything that shapes the
                              input before any rule reads it. Lives with the
                              input rather than in the header: it is set up once
@@ -656,62 +695,30 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
                              />
                              <span className="text-[9px] font-bold text-fg-muted">Auto Gain</span>
                          </label>
-                         <Slider
-                             label="Response"
-                             value={smoothing || 0.8}
-                             min={0} max={0.99} step={0.01}
-                             onChange={handleSmoothing}
-                         />
-                         <Slider
-                             label="Volume"
-                             value={gain ?? 0.8}
-                             min={0} max={2} step={0.01}
-                             onChange={handleGain}
-                         />
+                         {/* Side by side, and deliberately WITHOUT a gap:
+                             ScalarInput already carries `px-2`, so two of them
+                             abutting leave 16px between the controls and 8px at
+                             each outer edge — a gap here would double it. */}
+                         <div className="grid grid-cols-2">
+                             <Slider
+                                 label="Response"
+                                 value={smoothing || 0.8}
+                                 min={0} max={0.99} step={0.01}
+                                 onChange={handleSmoothing}
+                             />
+                             <Slider
+                                 label="Volume"
+                                 value={gain ?? 0.8}
+                                 min={0} max={2} step={0.01}
+                                 onChange={handleGain}
+                             />
+                         </div>
                          <Hint text="Response sets how quickly band levels follow the music. Volume is monitoring only — it never affects what the rules read." />
                      </CollapsibleSection>
 
                      <AnalysisControls />
                  </div>
 
-                 {/* Decks */}
-                 <div className="flex flex-col gap-1 px-2">
-                     {!deck1Active && !deck2Active && (
-                         <button
-                            onClick={() => setDeck1Active(true)}
-                            className="w-full py-2 border border-dashed border-line/10 rounded text-[9px] text-fg-dim hover:text-accent-400 hover:border-accent-500/30 transition-all font-bold"
-                         >
-                             + Load Audio File
-                         </button>
-                     )}
-
-                     <AudioDeck index={0} label="Track A" isActive={deck1Active} onClose={() => setDeck1Active(false)} />
-
-                     {deck1Active && !deck2Active && (
-                         <div className="flex justify-center -my-1 z-10">
-                             <button
-                                onClick={() => setDeck2Active(true)}
-                                className="bg-surface-sunken border border-line/20 rounded-full w-5 h-5 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-surface-header transition-colors"
-                                title="Add 2nd Track"
-                             >
-                                 <PlusIcon />
-                             </button>
-                         </div>
-                     )}
-
-                     <AudioDeck index={1} label="Track B" isActive={deck2Active} onClose={() => setDeck2Active(false)} />
-
-                     {deck2Active && (
-                        <div className="px-2 pt-1">
-                             <Slider
-                                label="Crossfade"
-                                value={crossfade}
-                                min={0} max={1} step={0.01}
-                                onChange={onCrossfade}
-                             />
-                        </div>
-                     )}
-                 </div>
              </div>
 
              <div className={`flex-1 overflow-y-auto custom-scroll p-1`}>
