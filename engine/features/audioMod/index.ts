@@ -59,7 +59,16 @@ export const AudioFeature: FeatureDefinition = {
     holdsLiveSession: (live) => !!live.isEnabled,
     params: {
         isEnabled: { type: 'boolean', default: false, label: 'Enable Audio Engine', shortId: 'en', group: 'system', noAccumReset: true, preserveOnApply: true },
-        smoothing: { type: 'float', default: 0.8, label: 'FFT Smoothing', shortId: 'sm', group: 'system', noAccumReset: true, preserveOnApply: true, min: 0, max: 0.99, step: 0.01 },
+        // Response time. Was "FFT Smoothing" when it drove AnalyserNode's
+        // per-call coefficient; since ADR-0110 it maps to a time constant via
+        // tau = -dt/ln(s), so the label follows. The 0..0.99 range and the 0.8
+        // default are unchanged, which is what keeps saved scenes reading the
+        // same. @see WorkletAnalysis.setSmoothing
+        smoothing: {
+            type: 'float', default: 0.8, label: 'Response', shortId: 'sm', group: 'system',
+            noAccumReset: true, preserveOnApply: true, min: 0, max: 0.99, step: 0.01,
+            description: 'How quickly band levels follow the music. Higher is smoother and slower to react.',
+        },
         threshold: { type: 'float', default: 0.1, label: 'Gate Threshold', shortId: 'gt', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
         // Auto gain: normalises the whole spectrum against a slow-release peak
         // follower, so a quieter track drives the same range without re-dialling

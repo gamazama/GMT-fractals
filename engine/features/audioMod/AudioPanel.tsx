@@ -23,16 +23,18 @@ const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: s
     });
     const [isPlaying, setIsPlaying] = useState(() => audioAnalysisEngine.getTrackInfo(index).isPlaying);
 
-    // Poll playback status — also syncs isPlaying from the engine
+    // Poll playback status — also syncs isPlaying from the engine.
+    // Gated on a track actually being loaded: an empty deck has nothing to
+    // report, and this used to run a timer per mounted deck regardless.
     useEffect(() => {
-        if (!isActive) return;
+        if (!isActive || !status.hasTrack) return;
         const interval = setInterval(() => {
             const info = audioAnalysisEngine.getTrackInfo(index);
             setStatus(info);
             setIsPlaying(info.isPlaying);
         }, 100);
         return () => clearInterval(interval);
-    }, [index, isActive]);
+    }, [index, isActive, status.hasTrack]);
 
     const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -209,7 +211,7 @@ const LiveInputControls: React.FC = () => {
     const quiet = isLive && peak > 0 && peak < 0.15;
 
     return (
-        <div className="mb-2" data-help-id="audio.sources">
+        <div className="px-2 py-2" data-help-id="audio.sources">
             <div className="flex gap-1 mb-1">
                 <button
                     onClick={() => connect(running.deviceId)}
@@ -324,7 +326,7 @@ const AnalysisControls: React.FC = () => {
             label="Analysis"
             defaultOpen={false}
             labelColor="text-fg-tertiary"
-            className="bg-surface-section border border-line/10 rounded mt-2 overflow-hidden"
+            className="bg-surface-section border border-line/10 rounded mt-1.5 overflow-hidden"
             headerClassName="px-3 py-1.5 bg-line/5 hover:bg-line/10"
             rightContent={
                 <span className="text-[8px] font-mono text-fg-faint">
@@ -456,16 +458,11 @@ const AudioModulationList: React.FC = () => {
             labelColor="text-accent-400"
             className="bg-surface-section border border-line/10 rounded mb-2 overflow-hidden"
             headerClassName="px-3 py-2 bg-line/5 hover:bg-line/10"
-            rightContent={
-                <DotToggle
-                    value={audioEnabled}
-                    onChange={(v) => setAudio({ isEnabled: v })}
-                    accent="cyan"
-                    variant="master"
-                    stopPropagation
-                    title={audioEnabled ? 'Disable audio modulation' : 'Enable audio modulation'}
-                />
-            }
+            /* No engine toggle here any more — it moved to the panel header,
+               where it is reachable without opening this section. Two controls
+               for one boolean, one of them behind a collapsible, was a way to
+               end up unsure which had been clicked. The `count` badge is the
+               useful thing to show on this header. */
         >
             <div className="max-h-32 overflow-y-auto custom-scroll">
                 {allRules.map((rule, index) => {
@@ -582,15 +579,21 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
             data-help-id="panel.audio"
             onContextMenu={handleContextMenu}
         >
-             {/* Header */}
-             <div className="p-2 bg-surface-tabbar border-b border-line/5">
+             {/* Header.
+                 py only, no px: GMT's convention is that row wrappers carry NO
+                 horizontal padding — `Slider` and `Hint` supply their own, so a
+                 hint's background band runs full-bleed. Wrapping these in `p-2`
+                 inset every one of them by 8px and made the bands float. Items
+                 that DO need an inset (headings, buttons) add `px-2`
+                 themselves. */}
+             <div className="py-2 bg-surface-tabbar border-b border-line/5">
                  {/* Title row on its own. The two sliders and the toggle used to
                      share this line under `justify-between`, which gave four
                      unrelated controls a width each and no alignment between
                      them — the labels sat at different heights and the spacing
                      drifted with the title's length. Splitting the rows lets the
                      controls share one grid and line up. */}
-                 <div className="flex items-center justify-between mb-2">
+                 <div className="flex items-center mb-2 px-2">
                     {/* The engine toggle lives HERE, not only in the Active
                         Links header. The tab used to disappear when audio was
                         off (`tabConfig.condition`), so the one control that
@@ -609,44 +612,66 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
                         />
                         <h3 className="text-[10px] font-bold text-fg-tertiary">Audio Engine</h3>
                     </label>
-                    {/* Auto Gain — the "the DJ changed track and everything
-                        stopped reacting" fix. */}
-                    <label
-                        className="flex items-center gap-1.5 shrink-0 cursor-pointer"
-                        title="Normalise the input level so thresholds keep working when the music gets quieter or louder"
-                    >
-                        <DotToggle
-                            value={audio?.agcEnabled ?? false}
-                            onChange={(v) => setAudio({ agcEnabled: v })}
-                            accent="cyan"
-                            size="sm"
-                        />
-                        <span className="text-[9px] font-bold text-fg-muted">Auto Gain</span>
-                    </label>
                  </div>
 
-                 <div className="grid grid-cols-2 gap-x-3 mb-2">
-                     <Slider
-                        label="Response"
-                        value={smoothing || 0.8}
-                        min={0} max={0.99} step={0.01}
-                        onChange={handleSmoothing}
-                    />
-                     <Slider
-                        label="Volume"
-                        value={gain ?? 0.8}
-                        min={0} max={2} step={0.01}
-                        onChange={handleGain}
-                    />
+                 {/* Input and Analysis as PEER collapsibles, not nested — both
+                     are set-once-per-venue controls, and leaving them open in
+                     the header made the "header" most of the panel, pushing the
+                     spectrum and the links (what you actually watch) below the
+                     fold. Analysis already owned a collapsible of its own, so
+                     wrapping the pair would have nested one inside another. */}
+                 <div className="px-2 mb-2">
+                     <CollapsibleSection
+                         label="Input"
+                         defaultOpen={false}
+                         labelColor="text-fg-tertiary"
+                         className="bg-surface-section border border-line/10 rounded overflow-hidden"
+                         headerClassName="px-3 py-1.5 bg-line/5 hover:bg-line/10"
+                         rightContent={
+                             <span className="text-[8px] font-mono text-fg-faint">
+                                 {audioAnalysisEngine.inputDeviceLabel
+                                     ?? (audioAnalysisEngine.inputKind === 'none' ? 'no input' : audioAnalysisEngine.inputKind)}
+                             </span>
+                         }
+                     >
+                         <LiveInputControls />
+
+                         {/* Signal conditioning — everything that shapes the
+                             input before any rule reads it. Lives with the
+                             input rather than in the header: it is set up once
+                             alongside the source, not reached for mid-set. */}
+                         <label
+                             className="flex items-center gap-1.5 cursor-pointer px-2 pb-1"
+                             title="Normalise the input level so thresholds keep working when the music gets quieter or louder"
+                         >
+                             <DotToggle
+                                 value={audio?.agcEnabled ?? false}
+                                 onChange={(v) => setAudio({ agcEnabled: v })}
+                                 accent="cyan"
+                                 size="sm"
+                             />
+                             <span className="text-[9px] font-bold text-fg-muted">Auto Gain</span>
+                         </label>
+                         <Slider
+                             label="Response"
+                             value={smoothing || 0.8}
+                             min={0} max={0.99} step={0.01}
+                             onChange={handleSmoothing}
+                         />
+                         <Slider
+                             label="Volume"
+                             value={gain ?? 0.8}
+                             min={0} max={2} step={0.01}
+                             onChange={handleGain}
+                         />
+                         <Hint text="Response sets how quickly band levels follow the music. Volume is monitoring only — it never affects what the rules read." />
+                     </CollapsibleSection>
+
+                     <AnalysisControls />
                  </div>
-
-                 {/* Live Inputs */}
-                 <LiveInputControls />
-
-                 <AnalysisControls />
 
                  {/* Decks */}
-                 <div className="flex flex-col gap-1">
+                 <div className="flex flex-col gap-1 px-2">
                      {!deck1Active && !deck2Active && (
                          <button
                             onClick={() => setDeck1Active(true)}

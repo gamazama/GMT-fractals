@@ -494,17 +494,21 @@ export const GmtPanels: PanelManifest = [
         ],
     },
 
-    // Audio — visible only while audio reactivity is on. Uses the
-    // bespoke panel-audio component (AudioPanel) which contains the
-    // full GMT modulation UI: dual decks with playback, spectrum canvas
-    // with draggable frequency-band rules, per-rule LinkControls editor,
-    // and the collapsible ModulationList of all active bindings.
+    // Audio — the bespoke panel-audio component (AudioPanel), which contains
+    // the full GMT modulation UI: dual decks with playback, spectrum canvas
+    // with draggable frequency-band rules, per-rule LinkControls editor, and
+    // the collapsible ModulationList of all active bindings.
+    //
+    // NO `showIf: 'audio.isEnabled'`. It used to hide the panel whenever audio
+    // was switched off — including the toggle that switches it back on — so the
+    // feature became reachable only from the menu, and switching off felt like
+    // the panel had crashed. The panel carries its own engine toggle in its
+    // header and reads fine while idle.
     {
         id: 'Audio',
         dock: 'left',
         order: 30,
         component: 'panel-audio',
-        showIf: 'audio.isEnabled',
         helpId: 'panel.audio',
     },
 
