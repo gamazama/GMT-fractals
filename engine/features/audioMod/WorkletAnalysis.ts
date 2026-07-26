@@ -290,6 +290,27 @@ export class WorkletAnalysis {
         return best;
     }
 
+    /**
+     * Write the snapshot nearest `t` into `filterBank`, for modulation
+     * recording's per-frame back-fill. Returns false when the ring does not
+     * reach back that far, so the caller can stop rather than fill with
+     * whatever the oldest entry happens to be.
+     *
+     * @invariant Does NOT touch the AGC or the flux cursor. This is a rewind
+     *   for one frame's capture, not a tick — advancing either would corrupt
+     *   the live path's state, and `takeMaxFlux` would then skip snapshots the
+     *   real read still needs.
+     */
+    public applySnapshotAt(t: number, maxAgeSec: number): boolean {
+        const s = this.snapshotAt(t);
+        if (!s || Math.abs(s.t - t) > maxAgeSec) return false;
+        if (s.levels.length !== filterBank.levels.length) return false;
+        filterBank.levels.set(s.levels);
+        filterBank.normalized.set(s.levels);
+        filterBank.fluxRate.set(s.flux);
+        return true;
+    }
+
     /** True once at least one snapshot has arrived. Replaces `getRawData()`,
      *  which returned a bin array both callers only null-checked. */
     public hasSignal(): boolean { return this.latest !== null; }

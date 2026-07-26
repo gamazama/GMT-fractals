@@ -192,6 +192,20 @@ export const tick = (delta: number) => {
     // modulated value (config sync could never correct it back to base).
     ownedUniforms.clear();
 
+    // Recording Check
+    const currentFrame = Math.floor(animStore.currentFrame);
+    // We use the ref version of isRecordingModulation to avoid effect re-runs,
+    // but we must read fresh from store inside loop or use the ref passed from prop/store
+    const isRec = useAnimationStore.getState().isRecordingModulation;
+    const shouldRecord = isRec && currentFrame > lastFrameRecorded.current;
+    // First gap frame to back-fill so slow renders don't leave holes between
+    // FFT samples — captures the same FFT for every integer frame between the
+    // last recorded one and now. lastFrameRecorded starts at -1 on arm, so the
+    // first record on a fresh session writes from frame 0 through currentFrame.
+    const recordingStartFrame = shouldRecord ? lastFrameRecorded.current + 1 : currentFrame;
+
+    if (shouldRecord) lastFrameRecorded.current = currentFrame;
+
     // 4. Update Oscillators
     //    Deterministic playback phases the oscillators by `currentFrame /
     //    fps` instead of `performance.now() / 1000`, so an LFO that's at
@@ -204,6 +218,71 @@ export const tick = (delta: number) => {
     const oscDt = deterministic && animStore.isPlaying
         ? 1 / Math.max(1, animStore.fps)
         : delta;
+    // 4b. PER-FRAME BACK-FILL, before the live pass.
+    //
+    // When the tick runs slower than the timeline advances, the frames in
+    // between still need keyframes. The original behaviour repeated ONE value
+    // across the whole gap — complete, but flat: under the 1Hz tick throttle a
+    // whole second of automation became a single step.
+    //
+    // The worklet analysed those moments for real (ADR-0110), so the ring can
+    // give each frame its own bands. Re-running the rule pipeline per frame is
+    // more than interpolation — envelopes, thresholds and flux step as they
+    // would have if the tick had actually run there.
+    //
+    // @invariant Runs BEFORE step 4/5, never after. `combinedOffsets` below is
+    //   a live REFERENCE to `modulationEngine.offsets`, so a sub-pass running
+    //   afterwards would mutate the object the live pass had already read and
+    //   leave `currentTargets` describing a different frame's targets.
+    // @invariant Sub-frames take ONLY `plan.records`. Uniforms, engine
+    //   modulations and liveModulations belong to the present — emitting a past
+    //   frame's uniform would flicker the viewport backwards through the gap.
+    //   The plan is a description; the caller chooses what to execute.
+    // @invariant A frame the ring cannot cover is SKIPPED, not guessed — it
+    //   falls back to the repeat below. A wrong value dressed as a measurement
+    //   is worse than an honest repeat. Misses cluster at the oldest end, so
+    //   what survives is a suffix; `backfillFrom` is where it starts.
+    // @invariant Entries are staged, not pushed, and emitted in ASCENDING frame
+    //   order after the live pass. `batchAddKeyframesMultiRange` has a fast
+    //   path only while frames increase — writing the gap after `currentFrame`
+    //   would send every back-filled frame down a filter+sort path its own
+    //   comment calls cold.
+    const backfill: { startFrame: number, endFrame: number, updates: { trackId: string, value: number }[] }[] = [];
+    let backfillFrom = currentFrame;
+    if (shouldRecord && currentFrame > recordingStartFrame
+        && isAudioEnabled && modulationSlice?.rules?.length) {
+        const fps = Math.max(1, animStore.fps);
+        const subDt = 1 / fps;
+        const nowT = audioAnalysisEngine.contextTime;
+        for (let f = recordingStartFrame; f < currentFrame; f++) {
+            const ageSec = (currentFrame - f) / fps;
+            if (!audioAnalysisEngine.applySnapshotAt(nowT - ageSec, subDt)) continue;
+
+            modulationEngine.resetOffsets();
+            modulationEngine.update(modulationSlice.rules, subDt, isAudioEnabled, lfosEnabled);
+
+            const subComposites = newCompositeAccumulator();
+            const subRecords: { trackId: string, value: number }[] = [];
+            for (const targetKey of Object.keys(modulationEngine.offsets)) {
+                const routing = classifyModulationTarget(
+                    targetKey, storeState as unknown as Record<string, unknown>);
+                const plan = planModulationTarget(
+                    targetKey, modulationEngine.offsets[targetKey] ?? 0,
+                    storeState as unknown as Record<string, any>, routing, subComposites,
+                    { isRemoved: false },
+                );
+                for (const r of plan.records) subRecords.push(r);
+            }
+            if (subRecords.length > 0) {
+                if (f < backfillFrom) backfillFrom = f;
+                backfill.push({ startFrame: f, endFrame: f, updates: subRecords });
+            }
+        }
+        // Return the bank to the present before the live pass reads it.
+        audioAnalysisEngine.applySnapshotAt(nowT, Number.POSITIVE_INFINITY);
+        modulationEngine.resetOffsets();
+    }
+
     modulationEngine.updateOscillators(animations, oscTime, oscDt, lfosEnabled);
 
     // 5. Process Modulation Rules
@@ -227,20 +306,6 @@ export const tick = (delta: number) => {
     // Track if anything visual actually changed to reset accumulation
     let hasVisualChange = false;
     
-    // Recording Check
-    const currentFrame = Math.floor(animStore.currentFrame);
-    // We use the ref version of isRecordingModulation to avoid effect re-runs,
-    // but we must read fresh from store inside loop or use the ref passed from prop/store
-    const isRec = useAnimationStore.getState().isRecordingModulation;
-    const shouldRecord = isRec && currentFrame > lastFrameRecorded.current;
-    // First gap frame to back-fill so slow renders don't leave holes between
-    // FFT samples — captures the same FFT for every integer frame between the
-    // last recorded one and now. lastFrameRecorded starts at -1 on arm, so the
-    // first record on a fresh session writes from frame 0 through currentFrame.
-    const recordingStartFrame = shouldRecord ? lastFrameRecorded.current + 1 : currentFrame;
-
-    if (shouldRecord) lastFrameRecorded.current = currentFrame;
-
     // BATCH: Collect keys to record here, update store ONCE at end of frame
     const keysToRecord: { trackId: string, value: number }[] = [];
 
@@ -300,7 +365,19 @@ export const tick = (delta: number) => {
     // visible re-render rate stays low regardless of how many keyframes have
     // accumulated.
     if (keysToRecord.length > 0) {
-        recordBuffer.push({ startFrame: recordingStartFrame, endFrame: currentFrame, updates: keysToRecord });
+        // Ascending frame order, so the fast path holds: the repeat covers only
+        // the prefix the ring could NOT reach, then each measured frame, then
+        // the present. With no back-fill this collapses to the original single
+        // [recordingStartFrame, currentFrame] range.
+        if (backfillFrom > recordingStartFrame) {
+            recordBuffer.push({
+                startFrame: recordingStartFrame,
+                endFrame: backfillFrom - 1,
+                updates: keysToRecord,
+            });
+        }
+        for (const e of backfill) recordBuffer.push(e);
+        recordBuffer.push({ startFrame: currentFrame, endFrame: currentFrame, updates: keysToRecord });
     }
     if (recordBuffer.length > 0) {
         const now = performance.now();

@@ -96,6 +96,11 @@ export class AudioAnalysisEngine {
     /** Snapshot nearest an AudioContext time — modulation recording's
      *  per-frame back-fill. Null when the ring does not reach that far back. */
     public snapshotAt(t: number) { return this.analysis.snapshotAt(t); }
+    /** Rewind `filterBank` to the snapshot nearest `t`. False when the ring
+     *  does not reach back that far. @see WorkletAnalysis.applySnapshotAt */
+    public applySnapshotAt(t: number, maxAgeSec: number) {
+        return this.analysis.applySnapshotAt(t, maxAgeSec);
+    }
 
     public update(
         agcEnabled = false,
