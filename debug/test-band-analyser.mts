@@ -186,5 +186,19 @@ console.log('\n[7] tilt lifts the highs without a rebuild');
     { before: before.toFixed(3), after: after.toFixed(3) });
 }
 
+console.log('\n[8] the panel smoothing knob keeps its old meaning');
+{
+  // The 0..0.99 control was AnalyserNode's per-CALL coefficient. It is now
+  // mapped to a time constant by tau = -dt/ln(s) at dt = 1/60 — the rate it was
+  // tuned at — so a scene saved with 0.8 still responds the way its author
+  // dialled in. @see WorkletAnalysis.setSmoothing
+  const tauFor = (s: number) => (s <= 0 ? 0 : -(1 / 60) / Math.log(s));
+  assert(near(tauFor(0.8), DEFAULT_SMOOTHING_TAU_SEC, 1e-3),
+    '0.8 maps onto the default tau, which is where that default came from',
+    { mapped: tauFor(0.8).toFixed(4), default: DEFAULT_SMOOTHING_TAU_SEC });
+  assert(tauFor(0) === 0, '0 is no smoothing rather than a division by -Infinity');
+  assert(tauFor(0.99) > tauFor(0.8), 'and the knob still runs the same direction');
+}
+
 console.log(`\n${failures === 0 ? '✓ all assertions passed' : `✗ ${failures} assertion(s) failed`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -8,19 +8,20 @@
  *    flux instead of level, so a param punches ON each hit and falls back
  *    between them rather than lagging the attack and holding through sustain.
  *
- * Drives the real DSP against synthetic FFT frames.
+ * SCOPE (ADR-0110): this covers the RULE pipeline given band values — what the
+ * main thread still does. Producing those values from audio moved to the audio
+ * thread, so the level→flux derivation, the SuperFlux max-filter and their
+ * rate-independence are covered by `test:band-analyser` where they now live.
+ * Deriving them again here would be the duplication that refactor removed.
  *
- * Since ADR-0110 analysis runs in an AudioWorklet, so there is no AnalyserNode
- * left to stub and no `update()` that reads one. This
- * harness drives the same two stages the engine does — `filterBank.analyse`
- * then `AutoGain.update` — which is strictly closer to the real path than
- * stubbing a node ever was, and does not depend on private field names.
+ * Band values are therefore set DIRECTLY, exactly as `WorkletAnalysis` sets
+ * them from a snapshot.
  *
  *   tsx debug/test-audio-signal.mts
  */
 
 const { modulationEngine } = await import('../engine/features/modulation/ModulationEngine');
-const { filterBank, dbToUnit } = await import('../engine/features/audioMod/filterBank');
+const { filterBank } = await import('../engine/features/audioMod/filterBank');
 const { AutoGain } = await import('../engine/features/audioMod/dsp/autoGain');
 
 let failures = 0;
@@ -30,48 +31,39 @@ const assert = (cond: boolean, msg: string, detail?: unknown) => {
 };
 const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
 
-const FFT = 2048;
-const BINS = FFT / 2;
 const SR = 48000;
-// dBFS frame, as the worklet's spectrum stage produces.
-const buf = new Float32Array(BINS);
+/** Rules below span 0-2400Hz; keep the fill inside that so `aggregate`'s RMS
+ *  over the range equals the level set. */
+const BAND_TOP_HZ = 2400;
+filterBank.rebuild({ sampleRate: SR, fftSize: 2048, bandsPerOctave: 6 });
 
 const agc = new AutoGain();
-filterBank.rebuild({ sampleRate: SR, fftSize: FFT, bandsPerOctave: 6 });
+let peakLevel = 0;
 
-/** Loudest bin, on the 0..1 scale — what the AGC follows. Mirrors
- *  `BandAnalyser.peakLevel`. */
-const peakOf = () => {
-  let peakDb = -Infinity;
-  for (let i = 0; i < buf.length; i++) if (buf[i] > peakDb) peakDb = buf[i];
-  return dbToUnit(peakDb, DB_FLOOR, DB_CEIL);
+/** Fill the rule's band range at one level — a worklet snapshot, by hand. */
+const setBand = (level: number) => {
+  filterBank.levels.fill(0);
+  for (let k = 0; k < filterBank.bands.length; k++) {
+    if (filterBank.bands[k].centerHz <= BAND_TOP_HZ) filterBank.levels[k] = level;
+  }
+  peakLevel = level;
 };
 
-/** One analysis frame: bank then AGC, the same order the engine runs them. */
-const update = (agcEnabled = false, dt = 1 / 60, bandsPerOctave = 6, normalize = false) => {
-  const opts = { sampleRate: SR, fftSize: FFT, bandsPerOctave };
-  if (!filterBank.matches(opts)) filterBank.rebuild(opts);
-  filterBank.analyse(buf, {
-    dbFloor: DB_FLOOR, dbCeiling: DB_CEIL,
-    normalize, tiltDbPerOct: 0, deltaSec: dt,
-  });
-  agc.update(agcEnabled, peakOf(), dt);
+/** Per-band flux rate, in level-units per second. */
+const setFlux = (rate: number) => filterBank.fluxRate.fill(rate);
+
+/** One tick: follower then AGC, the order `WorkletAnalysis.update` runs them. */
+const update = (agcEnabled = false, dt = 1 / 60, normalize = false) => {
+  if (normalize) filterBank.applyPeakFollower(dt);
+  else filterBank.syncFollowerToLevels();
+  agc.update(agcEnabled, peakLevel, dt);
 };
 const getSignalGain = () => agc.value;
-
-const DB_FLOOR = -90;
-const DB_CEIL = -10;
-
-/** Fill bins [0, upTo) at a normalised 0..1 level, rest silent. `level` is a
- *  position in the dB window, so the resulting band levels and peak read back
- *  as that same number — the scale the AGC and followers are calibrated to. */
-const setBand = (level: number, upTo = 128) => {
-  buf.fill(-Infinity);
-  const db = DB_FLOOR + level * (DB_CEIL - DB_FLOOR);
-  for (let i = 0; i < upTo; i++) buf[i] = db;
-};
-
 const resetAgc = () => { agc.reset(); };
+
+/** The rule's full-scale flux constant, read off the class so this cannot
+ *  drift from it. */
+const FULL_SCALE = (modulationEngine as any).constructor.TRANSIENT_FULL_SCALE as number;
 
 // ── AGC ─────────────────────────────────────────────────────────────────────
 console.log('\n[1] AGC off is a no-op');
@@ -147,76 +139,76 @@ console.log('\n[6] AGC attacks instantly, releases gradually');
 
 // ── Transient mode ──────────────────────────────────────────────────────────
 resetAgc();
-// Drive the real path: update() reads the filterbank from `buf`, and
-// processAudioSignal reads the bands. Testing through the engine rather than
-// against a hand-rolled band array is what keeps this honest — the two used to
-// compute different statistics.
 const signalOf = (rule: any, dt = 1 / 60): number => {
-  update(false, dt, 6, false);
+  update(false, dt, false);
   return (modulationEngine as any).processAudioSignal(rule, dt);
 };
 
 const mkRule = (mode: 'level' | 'transient') => ({
   id: `r-${mode}`, target: 't', source: 'audio', enabled: true, color: '#fff',
-  lowHz: 0, highHz: 2400, thresholdMin: 0, thresholdMax: 1,
+  lowHz: 0, highHz: BAND_TOP_HZ, thresholdMin: 0, thresholdMax: 1,
   attack: 0.1, decay: 0.3, smoothing: 0, gain: 1, offset: 0, mode,
 });
 
 console.log('\n[7] level mode follows loudness (unchanged behaviour)');
 {
   const r = mkRule('level');
-  setBand(0.6);
+  setBand(0.6); setFlux(0);
   signalOf(r);
   assert(near(signalOf(r), 0.6, 0.01), 'a sustained tone holds its level', signalOf(r));
 }
 
-console.log('\n[8] transient mode ignores sustain, fires on the attack');
+console.log('\n[8] transient mode reads flux, not level');
 {
   const r = mkRule('transient');
-  setBand(0.6);
-  signalOf(r);                        // first frame: no reference yet
-  const sustained = signalOf(r);      // same level again
-  assert(sustained === 0, 'a sustained tone produces no transient signal', sustained);
+  setBand(0.9); setFlux(0);           // loud but steady
+  signalOf(r);
+  assert(signalOf(r) === 0,
+    'a sustained tone produces no transient signal however loud it is', signalOf(r));
 
-  setBand(0.9);                       // +0.3 in one frame — a hit
-  const hit = signalOf(r);
-  assert(hit > 0.5, 'a sharp rise produces a strong transient signal', hit);
+  setFlux(FULL_SCALE);
+  signalOf(r);
+  assert(near(signalOf(r), 1, 1e-6),
+    'flux at TRANSIENT_FULL_SCALE reads full scale', signalOf(r));
 
-  setBand(0.9);
+  setFlux(FULL_SCALE / 2);
+  signalOf(r);
+  assert(near(signalOf(r), 0.5, 1e-6), 'and half of it reads half', signalOf(r));
+
+  setFlux(FULL_SCALE * 10);
+  signalOf(r);
+  assert(signalOf(r) === 1, 'an enormous hit clamps rather than overshooting', signalOf(r));
+
+  setFlux(0);
+  signalOf(r);
   assert(signalOf(r) === 0, 'it falls straight back once the attack is over', signalOf(r));
-
-  setBand(0.2);                       // decaying — negative flux
-  assert(signalOf(r) === 0, 'a falling level never produces a signal', signalOf(r));
 }
 
-console.log('\n[9] transient response is frame-rate independent');
+console.log('\n[9] transient response does not depend on the tick rate');
 {
-  // The same physical event (a 0.3 rise over 1/30 s) must read the same whether
-  // it arrives as one 30 fps frame or is measured at 30 fps — the DSP works in
-  // units per SECOND, so dt is what carries the difference.
+  // Flux arrives as a RATE (per second) from the audio thread, so the same
+  // event must read the same however often the main thread happens to sample
+  // it. This is the property that survives the 1Hz tick throttle.
   const a = mkRule('transient');
-  setBand(0.5); signalOf(a, 1 / 30); signalOf(a, 1 / 30);
-  setBand(0.8);
-  const at30 = signalOf(a, 1 / 30);
+  setBand(0.5); setFlux(FULL_SCALE / 2);
+  signalOf(a, 1 / 30); const at30 = signalOf(a, 1 / 30);
 
   const b = mkRule('transient');
-  setBand(0.5); signalOf(b, 1 / 60); signalOf(b, 1 / 60);
-  setBand(0.65);                      // half the rise in half the time = same rate
-  const at60 = signalOf(b, 1 / 60);
+  setBand(0.5); setFlux(FULL_SCALE / 2);
+  signalOf(b, 1 / 60); const at60 = signalOf(b, 1 / 60);
 
   assert(near(at30, at60, 0.02),
-    'the same rate-of-change reads the same at 30 and 60 fps', { at30, at60 });
+    'the same flux rate reads the same at 30 and 60 fps', { at30, at60 });
 }
 
 console.log('\n[10] switching modes mid-set does not fire a spurious hit');
 {
-  // Level mode must keep the flux reference fresh, or the first transient frame
-  // after a switch measures against a stale value and spikes.
+  // No per-rule flux state: the bank owns it, so a rule switched into
+  // transient mode cannot spike off a reference it was never updating.
   const r = mkRule('level');
-  setBand(0.2); signalOf(r);
-  setBand(0.9); signalOf(r);          // big change, but we're in level mode
+  setBand(0.2); setFlux(0); signalOf(r);
+  setBand(0.9); signalOf(r);          // big level change, but we are in level mode
   (r as any).mode = 'transient';
-  setBand(0.9);
   assert(signalOf(r) === 0,
     'no phantom spike on the first transient frame after a switch', signalOf(r));
 }
@@ -231,7 +223,7 @@ console.log('\n[11] the spectrum bar IS the rule signal');
   // bins, rules took the mean), so a band could look strong and drive nothing.
   // Band-level aggregation itself is covered by debug/test-filterbank.mts.
   const r = mkRule('level');
-  setBand(0.6, 128);
+  setBand(0.6);
   const ruleSignal = signalOf(r);              // thresholdMin 0, gain 1 → raw level
   const [lo, hi] = filterBank.bandRangeForHz(r.lowHz, r.highHz);
   const displayBars = filterBank.aggregate(lo, hi);

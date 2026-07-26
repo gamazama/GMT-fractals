@@ -44,6 +44,7 @@
     "test:audio-signal": "tsx debug/test-audio-signal.mts",
     "test:fft": "tsx debug/test-fft.mts",
     "test:band-analyser": "tsx debug/test-band-analyser.mts",
+    "test:band-math": "tsx debug/test-band-math.mts",
     "test:filterbank": "tsx debug/test-filterbank.mts",
     "test:migrations": "tsx debug/test-escape-migration.mts",
     "test:baseline": "tsx debug/native-config-sweep.mts --mode=baseline --fresh",

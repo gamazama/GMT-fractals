@@ -63,7 +63,6 @@ export class WorkletAnalysis {
     private ctx: AudioContext | null = null;
     private node: AudioWorkletNode | null = null;
     private agc = new AutoGain();
-    private ready = false;
     private failed = false;
 
     private desiredFftSize = 4096;
@@ -85,9 +84,6 @@ export class WorkletAnalysis {
 
     public get sampleRate(): number { return this.ctx?.sampleRate ?? 48000; }
     public get binWidthHz(): number { return this.sampleRate / this.desiredFftSize; }
-    /** False until `addModule` resolves. Analysis simply produces nothing until
-     *  then; there is no fallback by design — see the facade's @invariant. */
-    public get isReady(): boolean { return this.ready; }
     public get hasFailed(): boolean { return this.failed; }
 
     public attach(ctx: AudioContext, tap: AudioNode): void {
@@ -112,7 +108,6 @@ export class WorkletAnalysis {
             node.port.onmessage = (e: MessageEvent<AnalysisBatchMessage>) => this.onBatch(e.data);
             tap.connect(node);
             this.node = node;
-            this.ready = true;
             this.sendConfig();
         } catch (err) {
             // No fallback by design — the panel surfaces `hasFailed` instead.
@@ -120,16 +115,6 @@ export class WorkletAnalysis {
             this.failed = true;
             console.error('[audio] AudioWorklet analysis failed to load — audio modulation will not run', err);
         }
-    }
-
-    public detach(): void {
-        try { this.node?.disconnect(); } catch { /* already gone */ }
-        this.node = null;
-        this.ctx = null;
-        this.ready = false;
-        this.ring = [];
-        this.ringCount = 0;
-        this.latest = null;
     }
 
     private sendConfig() {
@@ -196,12 +181,28 @@ export class WorkletAnalysis {
 
     // ── Public surface ─────────────────────────────────────────────────────
 
-    public setSmoothing(_val: number): void {
-        // The AnalyserNode's smoothingTimeConstant has no counterpart here: it
-        // was applied per read CALL, which is the rate-dependence this backend
-        // exists to remove. The panel's control maps onto `smoothingTauSec`,
-        // set at config time; a runtime setter would imply the two are the same
-        // knob, and they are not. @see AudioAnalysis's @invariant.
+    /**
+     * The panel's 0..0.99 "FFT Smooth" control, mapped onto a time constant.
+     *
+     * `AnalyserNode.smoothingTimeConstant` was a per-CALL coefficient, so its
+     * effective time constant moved with how often the caller read — the
+     * rate-dependence this backend exists to remove. The control itself is
+     * still the useful knob (it sets response time), so rather than delete it,
+     * map it through the exact relation that gave the old value its meaning:
+     *
+     *     tau = -dt / ln(s)      with dt = 1/60, the rate it was tuned at
+     *
+     * @invariant s = 0.8 must land on `DEFAULT_SMOOTHING_TAU_SEC` (~74ms).
+     *   That is where the default came from, so every saved scene keeps the
+     *   response its author dialled in — the knob is now rate-independent
+     *   without having changed meaning. `test:band-analyser` [8] pins it.
+     */
+    public setSmoothing(val: number): void {
+        const s = Math.max(0, Math.min(0.99, val));
+        // s = 0 is "no smoothing at all"; ln(0) is -Infinity, so special-case
+        // it rather than relying on the arithmetic to land on 0.
+        this.smoothingTauSec = s <= 0 ? 0 : -(1 / 60) / Math.log(s);
+        this.sendConfig();
     }
 
     public setFftSize(size: number): void {

@@ -2,7 +2,8 @@
 import React, { useRef, useEffect } from 'react';
 import { audioAnalysisEngine } from './AudioAnalysisEngine';
 import { formatHz } from './freqScale';
-import { filterBank, BANK_MIN_HZ } from './filterBank';
+import { filterBank } from './filterBank';
+import { BANK_MIN_HZ } from './bandMath';
 import { useEngineStore } from '../../../store/engineStore';
 import { ModulationRule } from '../modulation/index';
 import { modulationEngine } from '../modulation/ModulationEngine';
