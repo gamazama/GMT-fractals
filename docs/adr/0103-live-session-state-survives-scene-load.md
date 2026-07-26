@@ -4,6 +4,23 @@
 - **Date:** 2026-07-25
 - **Relates to:** ADR-0078 (the `noAccumReset` / `preserveOnApply` axis split), ADR-0089/0090 (weave slot banks)
 
+> **Update 2026-07-25 (the MODULATION half is reversed; the audio half stands):**
+> this ADR held `modulation` alongside `audio`, reasoning that both are one live
+> rig. Field use showed that conflates two different things. The audio INPUT is
+> equipment — a mic, a line feed, a deck, set up once and kept across scene
+> changes so a performer is not re-patching between looks. The modulation RULES
+> are scene CONTENT: which band drives which parameter *is* the look, and a
+> saved scene that cannot restore its own modulation is not really saved.
+>
+> `modulation.holdsLiveSession` is therefore removed. `audio` keeps its hold, so
+> loading a scene now applies that scene's rules while the input keeps running —
+> which is what the original motivating complaint ("loading a fractal mid-set
+> disarms the rig") actually asked for. Consequence: a scene carrying no
+> modulation data resets rules to empty by ordinary preset semantics. Every
+> scene `getPreset` writes serialises the slice, so in practice that only
+> affects files predating the feature. `debug/test-session-hold.mts` [1], [2]
+> and [5] pin the new split.
+
 ## Context
 
 Preparing GMT for live VJ use surfaced three defects in how the audio-modulation

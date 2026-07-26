@@ -93,14 +93,23 @@ export const ModulationFeature: FeatureDefinition = {
         rules: [],
         selectedRuleId: null
     },
-    // The links belong to the same live rig as the audio engine, so they are
-    // held on the same condition: audio running AND at least one rule to
-    // protect. Gating on `audio.isEnabled` (rather than on rules alone) keeps
-    // LFO-only scenes fully scene-driven — their rules load from the file as
-    // before, since nothing is performing.
-    holdsLiveSession: (live, store) =>
-        !!(store.audio as { isEnabled?: boolean } | undefined)?.isEnabled
-        && ((live.rules as unknown[] | undefined)?.length ?? 0) > 0,
+    // NO `holdsLiveSession` — deliberately, and this is a reversal.
+    //
+    // ADR-0103 held the links alongside the audio engine, on the reasoning that
+    // both are one live rig. Field use showed that conflates two different
+    // things. The audio INPUT is equipment: a mic, a line feed, a deck, set up
+    // once and kept across scene changes so a performer is not re-patching
+    // between looks. The modulation RULES are scene content — which band drives
+    // which parameter IS the look, and a saved scene that cannot restore its
+    // own modulation is not really saved.
+    //
+    // So `audio` still holds (see its feature def) and `modulation` no longer
+    // does. Loading a scene now applies its rules while the input keeps running.
+    //
+    // @invariant A scene carrying no modulation data resets rules to empty, by
+    //   ordinary preset semantics. Every scene saved by `getPreset` serialises
+    //   the slice, so in practice this only affects files predating the feature.
+    // @see docs/adr/0103-live-session-state-survives-scene-load.md
     actions: {
         addModulation: (state: ModulationState, payload: { target: string, source?: ModulationSource }) => {
             const color = PRESET_COLORS[state.rules.length % PRESET_COLORS.length];

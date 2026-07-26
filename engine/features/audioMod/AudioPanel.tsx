@@ -12,6 +12,7 @@ import Slider from '../../../components/Slider';
 import { PlayIcon, PauseIcon, StopIcon, UploadIcon, PlusIcon, CloseIcon } from '../../../components/Icons';
 import { CollapsibleSection } from '../../../components/CollapsibleSection';
 import { DotToggle } from '../../../components/DotToggle';
+import { Hint } from '../../../components/Hint';
 
 // --- DECK COMPONENT ---
 const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: string, onClose?: () => void, isActive: boolean }) => {
@@ -284,8 +285,17 @@ const LiveInputControls: React.FC = () => {
                 </div>
             )}
 
-            {(error || hot || quiet) && (
-                <div className={`text-[8px] mt-1 leading-snug ${error || hot ? 'text-danger' : 'text-warn'}`}>
+            {/* Fixed height, always rendered. Conditionally mounting this made
+                the whole panel jump every time a quiet passage crossed the
+                threshold — the message is transient by nature, so it must not
+                be able to move anything below it. */}
+            {isLive && (
+                <div
+                    className={`h-6 mt-1 flex items-start text-[8px] leading-snug transition-opacity ${
+                        error || hot ? 'text-danger' : 'text-warn'
+                    } ${(error || hot || quiet) ? 'opacity-100' : 'opacity-0'}`}
+                    aria-live="polite"
+                >
                     {error
                         ?? (hot
                             ? 'Input is clipping — lower the trim (or the desk send) so peaks stop pinning.'
@@ -338,12 +348,9 @@ const AnalysisControls: React.FC = () => {
                     {/* The honest limit: a band narrower than one FFT bin can't
                         resolve, so say where that starts instead of hiding it.
                         Those bands also render dimmed on the spectrum. */}
-                    <p className="text-[8px] text-fg-faint mt-1 leading-snug">
-                        Bands are equal musical width, so bass gets as many as treble.
-                        Below <b>{filterBank.resolutionLimitHz.toFixed(0)} Hz</b> they are finer
-                        than this Detail setting can resolve — shown dimmed. Raise Detail to
-                        push that lower.
-                    </p>
+                    <Hint text={`Bands are equal musical width, so bass gets as many as treble. `
+                        + `Below ${filterBank.resolutionLimitHz.toFixed(0)} Hz they are finer than this `
+                        + `Detail setting can resolve — shown dimmed. Raise Detail to push that lower.`} />
                 </div>
 
                 {/* Analysis runs on the audio thread and there is no fallback
@@ -366,14 +373,10 @@ const AnalysisControls: React.FC = () => {
                         min={0} max={TILT_MAX_DB_PER_OCT} step={0.5}
                         onChange={(v) => setAudio({ spectralTilt: v })}
                     />
-                    <p className="text-[8px] text-fg-faint mt-1 leading-snug">
-                        Lifts the highs to offset music's natural roll-off — {' '}
-                        <b>{(audio?.spectralTilt ?? 3).toFixed(1)} dB/octave</b>, so
-                        16 kHz reads {' '}
-                        <b>+{((audio?.spectralTilt ?? 3) * Math.log2(16000 / BANK_MIN_HZ)).toFixed(0)} dB</b>
-                        {' '} against 25 Hz. A fixed offset, so it costs no dynamics.
-                        0 is the raw spectrum.
-                    </p>
+                    <Hint text={`Lifts the highs to offset music's natural roll-off — `
+                        + `${(audio?.spectralTilt ?? 3).toFixed(1)} dB/octave, so 16 kHz reads `
+                        + `+${((audio?.spectralTilt ?? 3) * Math.log2(16000 / BANK_MIN_HZ)).toFixed(0)} dB `
+                        + `against 25 Hz. A fixed offset, so it costs no dynamics. 0 is the raw spectrum.`} />
                 </div>
 
                 <label
@@ -388,11 +391,7 @@ const AnalysisControls: React.FC = () => {
                     />
                     <span className="text-[9px] font-bold text-fg-muted">Balance Bands</span>
                 </label>
-                <p className="text-[8px] text-fg-faint -mt-1 leading-snug">
-                    Every band uses its full range regardless of how loud it is in absolute
-                    terms — hi-hats react as readily as a kick. Costs spectral contrast,
-                    though: off usually reads better.
-                </p>
+                <Hint text="Every band uses its full range regardless of how loud it is in absolute terms — hi-hats react as readily as a kick. Costs spectral contrast, though: off usually reads better." />
 
                 <div>
                     <label className="text-[9px] text-fg-dim font-bold block mb-1">Detail</label>
@@ -406,10 +405,7 @@ const AnalysisControls: React.FC = () => {
                         <option value={4096}>Balanced — 12 Hz bins</option>
                         <option value={8192}>Fine — 6 Hz bins, bass detail</option>
                     </select>
-                    <p className="text-[8px] text-fg-faint mt-1 leading-snug">
-                        Finer bins resolve a kick from its harmonics, but widen the analysis
-                        window — which softens how sharply Transient mode fires.
-                    </p>
+                    <Hint text="Finer bins resolve a kick from its harmonics, but widen the analysis window — which softens how sharply Transient mode fires." />
                 </div>
                 <Slider
                     label="Floor"
@@ -423,10 +419,7 @@ const AnalysisControls: React.FC = () => {
                     min={-40} max={0} step={1}
                     onChange={(v) => setAudio({ dbCeiling: v })}
                 />
-                <p className="text-[8px] text-fg-faint leading-snug">
-                    Floor/Ceiling set the loudness window the spectrum maps onto. Narrow it
-                    for more contrast; widen it if peaks are saturating into a flat wall.
-                </p>
+                <Hint text="Floor/Ceiling set the loudness window the spectrum maps onto. Narrow it for more contrast; widen it if peaks are saturating into a flat wall." />
             </div>
         </CollapsibleSection>
     );
@@ -591,28 +584,33 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
         >
              {/* Header */}
              <div className="p-2 bg-surface-tabbar border-b border-line/5">
-                 <div className="flex justify-between items-center mb-2">
-                     <div className="flex items-center gap-2">
-                        <span className={`w-1.5 h-1.5 rounded-full ${isEnabled ? 'bg-ok-strong animate-pulse' : 'bg-danger/40'}`} />
+                 {/* Title row on its own. The two sliders and the toggle used to
+                     share this line under `justify-between`, which gave four
+                     unrelated controls a width each and no alignment between
+                     them — the labels sat at different heights and the spacing
+                     drifted with the title's length. Splitting the rows lets the
+                     controls share one grid and line up. */}
+                 <div className="flex items-center justify-between mb-2">
+                    {/* The engine toggle lives HERE, not only in the Active
+                        Links header. The tab used to disappear when audio was
+                        off (`tabConfig.condition`), so the one control that
+                        turns it back on was inside a panel you could no longer
+                        reach — you had to know about the menu. The panel now
+                        stays put and carries its own switch. */}
+                    <label
+                        className="flex items-center gap-2 cursor-pointer"
+                        title={isEnabled ? 'Stop the audio engine' : 'Start the audio engine'}
+                    >
+                        <DotToggle
+                            value={isEnabled}
+                            onChange={(v) => setAudio({ isEnabled: v })}
+                            accent="cyan"
+                            size="sm"
+                        />
                         <h3 className="text-[10px] font-bold text-fg-tertiary">Audio Engine</h3>
-                     </div>
-                     <Slider
-                        label="FFT Smooth"
-                        value={smoothing || 0.8}
-                        min={0} max={0.99} step={0.01}
-                        onChange={handleSmoothing}
-                        className="w-28"
-                    />
-                     <Slider
-                        label="Volume"
-                        value={gain ?? 0.8}
-                        min={0} max={2} step={0.01}
-                        onChange={handleGain}
-                        className="w-28"
-                    />
+                    </label>
                     {/* Auto Gain — the "the DJ changed track and everything
-                        stopped reacting" fix. Sits next to FFT Smooth because
-                        both shape the signal before any rule sees it. */}
+                        stopped reacting" fix. */}
                     <label
                         className="flex items-center gap-1.5 shrink-0 cursor-pointer"
                         title="Normalise the input level so thresholds keep working when the music gets quieter or louder"
@@ -625,6 +623,21 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
                         />
                         <span className="text-[9px] font-bold text-fg-muted">Auto Gain</span>
                     </label>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-x-3 mb-2">
+                     <Slider
+                        label="Response"
+                        value={smoothing || 0.8}
+                        min={0} max={0.99} step={0.01}
+                        onChange={handleSmoothing}
+                    />
+                     <Slider
+                        label="Volume"
+                        value={gain ?? 0.8}
+                        min={0} max={2} step={0.01}
+                        onChange={handleGain}
+                    />
                  </div>
 
                  {/* Live Inputs */}

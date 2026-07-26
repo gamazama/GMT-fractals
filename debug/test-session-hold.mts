@@ -64,7 +64,7 @@ const RULE = {
 };
 
 // --- 1: the reported bug — a scene with NO audio data must not disarm a live rig
-console.log('\n[1] live rig survives a scene that omits audio/modulation');
+console.log('\n[1] the audio ENGINE survives a scene that omits audio data');
 {
   const s = makeStore();
   s.audio = { ...s.audio, isEnabled: true, gain: 1.4, smoothing: 0.65 };
@@ -74,13 +74,16 @@ console.log('\n[1] live rig survives a scene that omits audio/modulation');
 
   assert(s.audio.isEnabled === true, 'audio engine stays enabled', s.audio.isEnabled);
   assert(s.audio.gain === 1.4 && s.audio.smoothing === 0.65, 'audio engine settings kept');
-  assert(s.modulation.rules.length === 1, 'modulation rule kept', s.modulation.rules.length);
-  assert(s.modulation.rules[0].gain === 3.5, 'rule gain/band untouched');
+  // Rules are SCENE CONTENT, not equipment — a scene carrying none applies
+  // none. The input stays connected either way, which is the split.
+  assert(s.modulation.rules.length === 0,
+    'modulation rules follow the scene, so one without them clears them',
+    s.modulation.rules.length);
   assert(s.coloring.repeats === 3, 'the rest of the scene still loads normally', s.coloring.repeats);
 }
 
-// --- 2: a scene that DOES carry audio data still cannot clobber a live rig
-console.log('\n[2] live rig wins over scene-borne audio data');
+// --- 2: scene audio data cannot clobber the running ENGINE, but its links load
+console.log('\n[2] the ENGINE wins over scene-borne audio data; the LINKS do not');
 {
   const s = makeStore();
   s.audio = { ...s.audio, isEnabled: true };
@@ -95,7 +98,9 @@ console.log('\n[2] live rig wins over scene-borne audio data');
   });
 
   assert(s.audio.isEnabled === true, 'scene cannot switch the running engine off');
-  assert(s.modulation.rules.length === 1, 'scene cannot wipe the live links');
+  assert(s.modulation.rules.length === 0,
+    'but its links DO load — that is what makes a saved look restorable',
+    s.modulation.rules.length);
 }
 
 // --- 3: the boot / share-link path — an IDLE rig loads from the file
@@ -117,8 +122,8 @@ console.log('\n[3] idle rig hydrates from the scene (boot + share links)');
   assert(s.modulation.rules.length === 1, 'scene-saved links load', s.modulation.rules.length);
 }
 
-// --- 4: an idle rig is still reset to defaults by a scene that omits audio
-console.log('\n[4] idle rig follows normal preset semantics');
+// --- 4: links reset to the scene's regardless of rig state
+console.log('\n[4] links are scene-driven whether or not the rig is idle');
 {
   const s = makeStore();
   s.modulation = { rules: [RULE], selectedRuleId: RULE.id }; // links but engine OFF
@@ -126,19 +131,22 @@ console.log('\n[4] idle rig follows normal preset semantics');
   apply(s, { formula: 'Mandelbulb', features: {} });
 
   assert(s.modulation.rules.length === 0,
-    'links from a non-performing session are scene-driven as before', s.modulation.rules.length);
+    'links are scene-driven regardless of whether audio is running',
+    s.modulation.rules.length);
 }
 
 // --- 5: the hold is opt-in — no other feature may declare it by accident
-console.log('\n[5] hold is scoped to the audio rig');
+console.log('\n[5] hold is scoped to the audio ENGINE alone');
 {
   const holders = featureRegistry.getAll()
     .filter((f) => typeof (f as any).holdsLiveSession === 'function')
     .map((f) => f.id)
     .sort();
+  // `modulation` used to hold too. It was removed deliberately: the input is
+  // equipment, the links are the look. @see ADR-0103's 2026-07-25 update.
   assert(
-    holders.length === 2 && holders[0] === 'audio' && holders[1] === 'modulation',
-    'exactly audio + modulation declare holdsLiveSession', holders,
+    holders.length === 1 && holders[0] === 'audio',
+    'the audio ENGINE alone declares holdsLiveSession', holders,
   );
 }
 

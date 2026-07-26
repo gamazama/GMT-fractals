@@ -38,9 +38,12 @@ export const AudioFeature: FeatureDefinition = {
     shortId: 'au',
     name: 'Audio',
     category: 'Audio',
+    // NO `condition` here, deliberately. Gating the tab on `isEnabled` hid the
+    // panel the moment audio was switched off — including the control that
+    // switches it back on, which left the feature reachable only from the menu.
+    // The panel carries its own engine toggle in its header instead.
     tabConfig: {
         label: 'Audio',
-        condition: { param: 'isEnabled', bool: true }
     },
     menuConfig: {
         label: 'Audio Modulation',
