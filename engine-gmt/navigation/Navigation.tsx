@@ -592,6 +592,23 @@ const Navigation: React.FC<NavigationProps> = ({
   // when idle, picks fire at near-mousemove rate. No fixed time cap.
   // A 10 px movement gate skips picks while the cursor is parked.
   //
+  // @bug PRODUCTION: UNCONFIRMED — suspected cause of GMT rendering ~30fps
+  //   while focused and ~60fps while another window has focus (owner-observed
+  //   2026-07-25; visibly faster, same resolution, so not a counter artifact).
+  //   30 is exactly half of 60, the signature of frames missing the vsync
+  //   deadline rather than a gradual slowdown. This pick is a worker
+  //   `readPixels` — a GPU SYNC POINT that stalls the pipeline until the frame
+  //   completes — fired at near-mousemove rate with no time cap, and only
+  //   while the cursor is over the canvas, which correlates exactly with the
+  //   window being focused. The 10px gate should suppress a parked cursor, but
+  //   a resting hand produces continuous sub-pixel jitter and the gate may
+  //   measure from the last EVENT rather than the last PICK.
+  //   TEST: keep GMT focused, move the mouse off the canvas. Jumping to 60
+  //   confirms it is the pick, not focus. Orbit mode only — this effect
+  //   early-returns otherwise, which is a second check.
+  //   If confirmed: rate-cap the picks, or gate on orbit intent rather than
+  //   bare hover. Not investigated further; nothing changed here.
+  //
   // Result is cached in WORLD space so it stays valid across gestures
   // even when sceneOffset shifts (treadmill absorb, mode switch, etc.).
   // Localization happens at gesture-start via snapshotHoverPivotLocal.
