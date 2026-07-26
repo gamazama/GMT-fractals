@@ -186,18 +186,67 @@ console.log('\n[7] tilt lifts the highs without a rebuild');
     { before: before.toFixed(3), after: after.toFixed(3) });
 }
 
-console.log('\n[8] the panel smoothing knob keeps its old meaning');
+console.log('\n[8] Response and Detail share ONE latency budget');
 {
-  // The 0..0.99 control was AnalyserNode's per-CALL coefficient. It is now
-  // mapped to a time constant by tau = -dt/ln(s) at dt = 1/60 — the rate it was
-  // tuned at — so a scene saved with 0.8 still responds the way its author
-  // dialled in. @see WorkletAnalysis.setSmoothing
-  const tauFor = (s: number) => (s <= 0 ? 0 : -(1 / 60) / Math.log(s));
-  assert(near(tauFor(0.8), DEFAULT_SMOOTHING_TAU_SEC, 1e-3),
-    '0.8 maps onto the default tau, which is where that default came from',
-    { mapped: tauFor(0.8).toFixed(4), default: DEFAULT_SMOOTHING_TAU_SEC });
-  assert(tauFor(0) === 0, '0 is no smoothing rather than a division by -Infinity');
-  assert(tauFor(0.99) > tauFor(0.8), 'and the knob still runs the same direction');
+  // The FFT window is itself a smoother: a 4096 window lands its energy
+  // centroid ~43ms in the past. Adding a one-pole on top used to STACK, so
+  // raising Detail for bass resolution quietly made the rig sluggish. Response
+  // now names the total, and the window's share is subtracted from it.
+  // @see WorkletAnalysis.setSmoothing
+  const REF = 4096;
+  const windowLag = (fft: number) => (fft / 2) / SR;
+  const tauFor = (s: number, fft: number) => {
+    if (s <= 0) return 0;
+    const budget = -(1 / 60) / Math.log(s) + windowLag(REF);
+    return Math.max(0, budget - windowLag(fft));
+  };
+  const totalFor = (s: number, fft: number) => tauFor(s, fft) + windowLag(fft);
+
+  assert(near(tauFor(0.8, REF), DEFAULT_SMOOTHING_TAU_SEC, 1e-3),
+    'at the reference Detail, 0.8 still maps onto the default tau — nothing moves for anyone on it',
+    { mapped: tauFor(0.8, REF).toFixed(4), default: DEFAULT_SMOOTHING_TAU_SEC });
+
+  // THE property: total response is flat across Detail.
+  const totals = [2048, 4096, 8192].map(f => totalFor(0.8, f));
+  const spread = Math.max(...totals) - Math.min(...totals);
+  assert(spread < 1e-6,
+    'total response is identical at 2048, 4096 and 8192 — Detail changes resolution, not speed',
+    totals.map(t => `${(t * 1000).toFixed(0)}ms`));
+
+  // A window bigger than the whole budget cannot be smoothed back down.
+  assert(tauFor(0.8, 8192) < tauFor(0.8, 2048),
+    'a longer window leaves less for the one-pole');
+  assert(tauFor(0.5, 32768) === 0,
+    'and past the budget the one-pole disappears rather than going negative');
+
+  assert(tauFor(0, REF) === 0, '0 is no smoothing rather than a division by -Infinity');
+  assert(tauFor(0.99, REF) > tauFor(0.8, REF), 'the knob still runs the same direction');
+}
+
+console.log('\n[9] envelope curves became time constants, tuned at 60fps');
+{
+  // attack/decay/smoothing were per-FRAME fractions with no dt, so the response
+  // a user dialled in moved with the frame rate — 36ms at 60fps, 72ms at 30,
+  // ~2.2s under the tick throttle. Converting at the rate they were tuned at
+  // keeps every saved rule identical at 60fps.
+  const ENV_FPS = 60;
+  const envTau = (v: number) => (v <= 0 ? 0 : -1 / (Math.log(Math.pow(v, 0.2)) * ENV_FPS));
+  const perFrameCoeff = (v: number) => 1 - Math.pow(v, 0.2);
+
+  for (const a of [0.1, 0.3, 0.9]) {
+    // One frame at 60fps through the new form must equal the old fixed fraction.
+    const viaTau = 1 - Math.exp(-(1 / ENV_FPS) / envTau(a));
+    assert(near(viaTau, perFrameCoeff(a), 1e-9),
+      `attack ${a} is bit-identical at 60fps (${(envTau(a) * 1000).toFixed(0)}ms)`,
+      { viaTau, old: perFrameCoeff(a) });
+  }
+
+  // And the point of the change: half the frame rate, same wall-clock response.
+  const a = 0.1;
+  const at60 = 1 - Math.exp(-(2 / 60) / envTau(a));   // two 60fps frames
+  const at30 = 1 - Math.exp(-(1 / 30) / envTau(a));   // one 30fps frame
+  assert(near(at60, at30, 1e-9),
+    'the same elapsed time reaches the same level at 30 and 60fps', { at60, at30 });
 }
 
 console.log(`\n${failures === 0 ? '✓ all assertions passed' : `✗ ${failures} assertion(s) failed`}`);

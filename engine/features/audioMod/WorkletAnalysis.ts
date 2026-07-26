@@ -52,6 +52,11 @@ const loadWorkletUrl = async (): Promise<string> => {
  *  worst tick throttle (1Hz), which is the gap it exists to cover. */
 const RING_SNAPSHOTS = 512;
 
+/** The Detail setting the Response curve was calibrated against. Response's
+ *  budget is measured from here, so 4096 reproduces the old tau exactly and
+ *  every other Detail compensates around it. */
+const REFERENCE_FFT_SIZE = 4096;
+
 export interface BandSnapshot {
     t: number;
     levels: Float32Array;
@@ -71,6 +76,8 @@ export class WorkletAnalysis {
     private bandsPerOctave = 6;
     private tiltDbPerOct = 0;
     private smoothingTauSec = DEFAULT_SMOOTHING_TAU_SEC;
+    /** Raw 0..0.99 Response value; tau is derived from it AND fftSize. */
+    private smoothingParam = 0.8;
 
     // Bounded history ring.
     private ring: BandSnapshot[] = [];
@@ -182,33 +189,58 @@ export class WorkletAnalysis {
     // ── Public surface ─────────────────────────────────────────────────────
 
     /**
-     * The panel's 0..0.99 "FFT Smooth" control, mapped onto a time constant.
+     * The panel's 0..0.99 Response control.
      *
      * `AnalyserNode.smoothingTimeConstant` was a per-CALL coefficient, so its
      * effective time constant moved with how often the caller read — the
-     * rate-dependence this backend exists to remove. The control itself is
-     * still the useful knob (it sets response time), so rather than delete it,
-     * map it through the exact relation that gave the old value its meaning:
+     * rate-dependence this backend exists to remove. The control is still the
+     * useful knob, so it maps through the relation that gave the old value its
+     * meaning: `tau = -dt / ln(s)` at dt = 1/60, the rate it was tuned at.
      *
-     *     tau = -dt / ln(s)      with dt = 1/60, the rate it was tuned at
+     * @invariant Response and Detail share ONE latency budget instead of
+     *   stacking. The FFT window is itself a smoother — a 4096 window averages
+     *   85ms of audio and lands its energy centroid ~43ms in the past — so
+     *   adding a 75ms one-pole on top used to make ~118ms of total lag, and
+     *   RAISING Detail for bass resolution silently made the rig sluggish.
      *
-     * @invariant s = 0.8 must land on `DEFAULT_SMOOTHING_TAU_SEC` (~74ms).
-     *   That is where the default came from, so every saved scene keeps the
-     *   response its author dialled in — the knob is now rate-independent
-     *   without having changed meaning. `test:band-analyser` [8] pins it.
+     *   Response now names the TOTAL response time. The window's contribution
+     *   is subtracted from it, so the smoother only makes up the difference:
+     *   at Detail 8192 (85ms of window) the one-pole nearly disappears, and at
+     *   2048 it does more. Total response stays put, and the two controls
+     *   become what they claim to be — one sets speed, the other sets frequency
+     *   resolution.
+     * @invariant Calibrated so Detail 4096 reproduces the previous tau exactly.
+     *   Nothing changes for anyone on the default; the coupling only shows up
+     *   when Detail moves. `test:band-analyser` [8] pins both ends.
      */
     public setSmoothing(val: number): void {
-        const s = Math.max(0, Math.min(0.99, val));
-        // s = 0 is "no smoothing at all"; ln(0) is -Infinity, so special-case
-        // it rather than relying on the arithmetic to land on 0.
-        this.smoothingTauSec = s <= 0 ? 0 : -(1 / 60) / Math.log(s);
+        this.smoothingParam = Math.max(0, Math.min(0.99, val));
+        this.recomputeTau();
         this.sendConfig();
+    }
+
+    /** Half a window of group delay, in seconds — what the FFT costs before
+     *  any smoothing is applied. */
+    private windowLagSec(fftSize: number): number {
+        return (fftSize / 2) / this.sampleRate;
+    }
+
+    private recomputeTau(): void {
+        const s = this.smoothingParam;
+        if (s <= 0) { this.smoothingTauSec = 0; return; }
+        // The tau this control used to mean, plus the window it was implicitly
+        // sitting on top of — that sum is the total the user actually dialled.
+        const budget = -(1 / 60) / Math.log(s) + this.windowLagSec(REFERENCE_FFT_SIZE);
+        this.smoothingTauSec = Math.max(0, budget - this.windowLagSec(this.desiredFftSize));
     }
 
     public setFftSize(size: number): void {
         const clamped = Math.max(32, Math.min(32768, 2 ** Math.round(Math.log2(size))));
         if (clamped === this.desiredFftSize) return;
         this.desiredFftSize = clamped;
+        // Detail moved, so the window's share of the response budget moved —
+        // see `recomputeTau`'s @invariant on setSmoothing.
+        this.recomputeTau();
         this.syncBankShape();
         this.sendConfig();
     }

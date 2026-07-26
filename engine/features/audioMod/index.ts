@@ -64,10 +64,16 @@ export const AudioFeature: FeatureDefinition = {
         // tau = -dt/ln(s), so the label follows. The 0..0.99 range and the 0.8
         // default are unchanged, which is what keeps saved scenes reading the
         // same. @see WorkletAnalysis.setSmoothing
+        // Default lowered 0.8 → 0.5 (≈118ms total response → ≈67ms). 0.8 was
+        // inherited from AnalyserNode's smoothingTimeConstant default, tuned
+        // against a jittery once-per-frame read. Analysis now runs at ~187Hz
+        // with 94% window overlap, so consecutive frames are far more
+        // correlated and there is much less jitter left to smooth — the old
+        // value was paying for noise that no longer exists.
         smoothing: {
-            type: 'float', default: 0.8, label: 'Response', shortId: 'sm', group: 'system',
+            type: 'float', default: 0.5, label: 'Response', shortId: 'sm', group: 'system',
             noAccumReset: true, preserveOnApply: true, min: 0, max: 0.99, step: 0.01,
-            description: 'How quickly band levels follow the music. Higher is smoother and slower to react.',
+            description: 'Total time band levels take to follow the music. Detail is accounted for inside this, so changing it does not make the rig slower.',
         },
         threshold: { type: 'float', default: 0.1, label: 'Gate Threshold', shortId: 'gt', group: 'hidden', hidden: true, noAccumReset: true, preserveOnApply: true },
         // Auto gain: normalises the whole spectrum against a slow-release peak

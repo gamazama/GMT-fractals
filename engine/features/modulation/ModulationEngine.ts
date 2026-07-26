@@ -30,6 +30,38 @@ const noiseGen = new ImprovedNoise();
 /** Vec-axis suffixes in the DDFS target convention (`vec3A_x`). */
 const AXES = ['x', 'y', 'z', 'w'] as const;
 
+/**
+ * The frame rate the envelope curves were originally tuned at.
+ *
+ * Attack, decay and smoothing were per-frame fractions. Converting them to time
+ * constants AT THIS RATE is what lets the fix be invisible: a rule authored
+ * before it behaves identically at 60fps and merely stops drifting elsewhere.
+ */
+const ENVELOPE_TUNED_FPS = 60;
+
+/**
+ * `attack` / `decay` (0..1) → time constant in seconds.
+ *
+ * The old curve applied `1 - a^0.2` of the remaining distance per frame, so the
+ * retention per frame was `a^0.2` and the time constant is
+ * `-1 / ln(a^0.2)` frames. At the tuned rate: 0.1 → 36ms, 0.3 → 69ms,
+ * 0.9 → 791ms. Higher is slower, as before.
+ */
+const envelopeTauSec = (v: number): number => {
+    const a = Math.min(0.999, Math.max(0, v || 0));
+    if (a <= 0) return 0;                       // instant
+    const retention = Math.pow(a, 0.2);
+    return -1 / (Math.log(retention) * ENVELOPE_TUNED_FPS);
+};
+
+/** `smoothing` (0..1) → time constant in seconds. Old curve: `1 - s^0.5` per
+ *  frame, so retention is `s^0.5`. */
+const smoothingTauSec = (v: number): number => {
+    const s = Math.min(0.999, Math.max(0, v || 0));
+    if (s <= 0) return 0;
+    return -1 / (Math.log(Math.sqrt(s)) * ENVELOPE_TUNED_FPS);
+};
+
 class ModulationEngine {
     // Persistent state for envelope following (smooth transitions)
     private ruleValues: Record<string, number> = {};
@@ -179,29 +211,37 @@ class ModulationEngine {
                 signal = this.lfoValues[rule.source] || 0;
             }
 
-            // 2. Apply Envelope (Attack/Decay)
+            // 2. Apply Envelope (Attack/Decay) — dt-CORRECT.
+            //
+            // These used to be a fixed fraction PER FRAME (`1 - attack^0.2`)
+            // with no reference to `delta`, so the response a user dialled in
+            // moved with the frame rate: attack 0.1 was 36ms at 60fps, 72ms at
+            // 30fps, and ~2.2 SECONDS under the tick throttle. That is the same
+            // defect ADR-0110 removed from the analysis layer, one stage
+            // downstream — and it was undoing that work, re-smearing on the
+            // main thread the timing the audio thread had just preserved.
+            //
+            // @invariant The per-frame coefficients are converted to TIME
+            //   CONSTANTS at the 60fps they were tuned against, so every saved
+            //   rule keeps the response its author dialled in and only stops
+            //   drifting with frame rate. `attackTauSec` is the whole mapping.
             const prevVal = this.ruleValues[rule.id] || 0;
-            let envelope = prevVal;
+            const tau = signal > prevVal
+                ? envelopeTauSec(rule.attack)
+                : envelopeTauSec(rule.decay);
+            const coeff = tau <= 0 ? 1 : 1 - Math.exp(-Math.max(0, delta) / tau);
+            const envelope = prevVal + (signal - prevVal) * coeff;
 
-            if (signal > prevVal) {
-                // Rising (Attack)
-                const coeff = 1.0 - Math.pow(rule.attack, 0.2); 
-                envelope = prevVal + (signal - prevVal) * coeff;
-            } else {
-                // Falling (Decay)
-                const coeff = 1.0 - Math.pow(rule.decay, 0.2);
-                envelope = prevVal + (signal - prevVal) * coeff;
-            }
-            
             this.ruleValues[rule.id] = envelope;
-            
-            // 3. Apply Secondary Smoothing (Lerp)
-            // This smooths the "steps" from the envelope follower or FFT jitter
+
+            // 3. Apply Secondary Smoothing (Lerp) — dt-correct for the same
+            // reason. Smooths the steps from the envelope follower or FFT
+            // jitter; off by default.
             let finalSignal = envelope;
             if (rule.smoothing && rule.smoothing > 0.001) {
                 const prevOut = this.outputValues[rule.id] || 0;
-                // t approaches 0 as smoothing approaches 1.0
-                const t = 1.0 - Math.pow(rule.smoothing, 0.5); 
+                const sTau = smoothingTauSec(rule.smoothing);
+                const t = sTau <= 0 ? 1 : 1 - Math.exp(-Math.max(0, delta) / sTau);
                 finalSignal = prevOut + (envelope - prevOut) * t;
             }
             this.outputValues[rule.id] = finalSignal;
