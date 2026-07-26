@@ -197,7 +197,11 @@ const LiveInputControls: React.FC = () => {
     const connectSystem = async () => {
         setError(null);
         const ok = await audioAnalysisEngine.connectSystemAudio();
-        if (!ok) setError('No audio track shared — tick "Share system audio" in the dialog.');
+        // The common wrong turn is picking a WINDOW to keep the capture small.
+        // Chrome offers no audio checkbox for windows at all — only for a tab
+        // ("Share tab audio") or the whole screen ("Share system audio") — so a
+        // window share always lands here with video and no audio.
+        if (!ok) setError('No audio track shared. Pick "Entire Screen" and tick "Share system audio" — a window share carries no audio in Chrome.');
     };
 
     const handleTrim = (v: number) => {
