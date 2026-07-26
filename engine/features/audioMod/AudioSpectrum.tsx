@@ -97,7 +97,7 @@ export const AudioSpectrum: React.FC = () => {
 
             const w = canvas.width;
             const h = canvas.height;
-            const rawData = audioAnalysisEngine.getRawData();
+            const audioLive = audioAnalysisEngine.hasSignal();
 
             // 1. Background
             ctx.fillStyle = '#050505';
@@ -148,7 +148,7 @@ export const AudioSpectrum: React.FC = () => {
             //    rule over that band reads, so the display cannot overstate
             //    what the modulation will do.
             const bands = filterBank.bands;
-            if (rawData && bands.length > 0) {
+            if (audioLive && bands.length > 0) {
                 const barWidth = w / bands.length;
                 for (let i = 0; i < bands.length; i++) {
                     const val = filterBank.normalized[i] ?? 0;

@@ -157,7 +157,7 @@ class ModulationEngine {
     public update(rules: ModulationRule[], delta: number, audioEnabled: boolean = true, lfosEnabled: boolean = true) {
         // Note: offsets buffer is cleared by AnimationSystem before calling this.
 
-        const audioData = audioAnalysisEngine.getRawData();
+        const audioLive = audioAnalysisEngine.hasSignal();
 
         for (const rule of rules) {
             if (!rule.enabled) continue;
@@ -172,8 +172,8 @@ class ModulationEngine {
 
             // 1. Get Source Signal
             if (rule.source === 'audio') {
-                if (audioData) {
-                    signal = this.processAudioSignal(rule, audioData, delta);
+                if (audioLive) {
+                    signal = this.processAudioSignal(rule, delta);
                 }
             } else if (rule.source.startsWith('lfo-')) {
                 signal = this.lfoValues[rule.source] || 0;
@@ -263,7 +263,7 @@ class ModulationEngine {
      *  so if onsets come out weak this is the constant to lower. */
     private static readonly TRANSIENT_FULL_SCALE = 20;
 
-    private processAudioSignal(rule: ModulationRule, _data: Float32Array, delta: number): number {
+    private processAudioSignal(rule: ModulationRule, delta: number): number {
         if (rule.highHz <= rule.lowHz) return 0;
 
         // Read the fractional-octave BANDS, not raw bins. The bands are already

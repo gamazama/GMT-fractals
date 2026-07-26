@@ -30,7 +30,6 @@ export const installAudioAnalysis = () => {
         const audio = (useEngineStore.getState() as any).audio as AudioState | undefined;
         if (!audio || !audio.isEnabled) return;
 
-        audioAnalysisEngine.setBackend((audio.analysisBackend ?? 0) === 1 ? 'worklet' : 'analyser');
         audioAnalysisEngine.update(
             !!audio.agcEnabled,
             delta,

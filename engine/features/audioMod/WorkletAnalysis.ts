@@ -1,11 +1,11 @@
 /**
  * WorkletAnalysis — main-thread receiver for the analysis worklet.
  *
- * The second producer for `filterBank`. It writes the SAME slots the
- * main-thread path writes (`levels`, `normalized`, `fluxRate`), so every
- * consumer — `ModulationEngine`, `AudioSpectrum`, the rule pipeline — is
- * unchanged and unaware of which backend is running. That is the whole point:
- * the A/B varies one thing.
+ * Fills `filterBank` — `levels`, `normalized`, `fluxRate` — from batches the
+ * worklet posts. It briefly had a main-thread counterpart as the other arm of
+ * an A/B (ADR-0110); that arm was concluded and deleted, and this is now the
+ * only producer. `ModulationEngine` and `AudioSpectrum` read the bank exactly
+ * as they did before either existed.
  *
  * @invariant The band TABLE is built locally, never received. Both sides
  *   derive it from `(sampleRate, fftSize, bandsPerOctave)` via
@@ -31,7 +31,6 @@ import {
     ANALYSIS_PROCESSOR_NAME,
     type AnalysisBatchMessage, type AnalysisConfigMessage,
 } from './worklet/protocol';
-import type { AnalysisBackend } from './analysisBackend';
 
 /**
  * The processor URL, resolved lazily.
@@ -60,7 +59,7 @@ export interface BandSnapshot {
     peak: number;
 }
 
-export class WorkletAnalysis implements AnalysisBackend {
+export class WorkletAnalysis {
     private ctx: AudioContext | null = null;
     private node: AudioWorkletNode | null = null;
     private agc = new AutoGain();
@@ -86,7 +85,8 @@ export class WorkletAnalysis implements AnalysisBackend {
 
     public get sampleRate(): number { return this.ctx?.sampleRate ?? 48000; }
     public get binWidthHz(): number { return this.sampleRate / this.desiredFftSize; }
-    /** False until `addModule` resolves — the facade uses this to fall back. */
+    /** False until `addModule` resolves. Analysis simply produces nothing until
+     *  then; there is no fallback by design — see the facade's @invariant. */
     public get isReady(): boolean { return this.ready; }
     public get hasFailed(): boolean { return this.failed; }
 
@@ -115,9 +115,10 @@ export class WorkletAnalysis implements AnalysisBackend {
             this.ready = true;
             this.sendConfig();
         } catch (err) {
-            // Not fatal: the facade keeps the AnalyserNode backend running.
+            // No fallback by design — the panel surfaces `hasFailed` instead.
+            // A silent downgrade would hide whichever bug caused this.
             this.failed = true;
-            console.warn('[audio] AudioWorklet analysis unavailable, staying on the AnalyserNode path', err);
+            console.error('[audio] AudioWorklet analysis failed to load — audio modulation will not run', err);
         }
     }
 
@@ -193,7 +194,7 @@ export class WorkletAnalysis implements AnalysisBackend {
         }
     }
 
-    // ── AnalysisBackend ─────────────────────────────────────────────────────
+    // ── Public surface ─────────────────────────────────────────────────────
 
     public setSmoothing(_val: number): void {
         // The AnalyserNode's smoothingTimeConstant has no counterpart here: it
@@ -289,12 +290,9 @@ export class WorkletAnalysis implements AnalysisBackend {
         return best;
     }
 
-    /** Liveness signal only — the bin contents have no consumer. Returns the
-     *  band levels so `AudioSpectrum` and `ModulationEngine`'s null checks read
-     *  true once analysis is running. */
-    public getRawData(): Float32Array | null {
-        return this.latest ? filterBank.levels : null;
-    }
+    /** True once at least one snapshot has arrived. Replaces `getRawData()`,
+     *  which returned a bin array both callers only null-checked. */
+    public hasSignal(): boolean { return this.latest !== null; }
 
     public getPeakLevel(): number { return this.lastPeak; }
     public getSignalGain(): number { return this.agc.value; }

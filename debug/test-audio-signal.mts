@@ -8,14 +8,20 @@
  *    flux instead of level, so a param punches ON each hit and falls back
  *    between them rather than lagging the attack and holding through sustain.
  *
- * Both run headless: the WebAudio nodes are stubbed and the real DSP is
- * exercised against synthetic FFT frames.
+ * Drives the real DSP against synthetic FFT frames.
+ *
+ * Since ADR-0110 analysis runs in an AudioWorklet, so there is no AnalyserNode
+ * left to stub and no `update()` that reads one. This
+ * harness drives the same two stages the engine does — `filterBank.analyse`
+ * then `AutoGain.update` — which is strictly closer to the real path than
+ * stubbing a node ever was, and does not depend on private field names.
  *
  *   tsx debug/test-audio-signal.mts
  */
 
-const { audioAnalysisEngine } = await import('../engine/features/audioMod/AudioAnalysisEngine');
 const { modulationEngine } = await import('../engine/features/modulation/ModulationEngine');
+const { filterBank, dbToUnit } = await import('../engine/features/audioMod/filterBank');
+const { AutoGain } = await import('../engine/features/audioMod/dsp/autoGain');
 
 let failures = 0;
 const assert = (cond: boolean, msg: string, detail?: unknown) => {
@@ -26,25 +32,32 @@ const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
 
 const FFT = 2048;
 const BINS = FFT / 2;
-// dBFS frame, as getFloatFrequencyData delivers.
+const SR = 48000;
+// dBFS frame, as the worklet's spectrum stage produces.
 const buf = new Float32Array(BINS);
-// Stub the graph: update() only needs an analyser that reports its size and
-// fills dataArray, and we fill it ourselves so each test frame is exact.
-//
-// Poked on the ANALYSIS half, not the facade. `AudioAnalysisEngine` is pure
-// delegation since ADR-0110 — the analyser, the read buffer and the AGC state
-// all live on `AudioAnalysis`, and stubbing the facade would write to a dead
-// object while the real one stayed empty (which is exactly what it did).
-// Reaching for `.analysis` keeps this a white-box harness over the half that
-// the worklet migration will replace wholesale.
-const analysis = (audioAnalysisEngine as any).analysis;
-analysis.analyser = {
-  fftSize: FFT,
-  frequencyBinCount: BINS,
-  getFloatFrequencyData: () => { /* buf is pre-filled */ },
+
+const agc = new AutoGain();
+filterBank.rebuild({ sampleRate: SR, fftSize: FFT, bandsPerOctave: 6 });
+
+/** Loudest bin, on the 0..1 scale — what the AGC follows. Mirrors
+ *  `BandAnalyser.peakLevel`. */
+const peakOf = () => {
+  let peakDb = -Infinity;
+  for (let i = 0; i < buf.length; i++) if (buf[i] > peakDb) peakDb = buf[i];
+  return dbToUnit(peakDb, DB_FLOOR, DB_CEIL);
 };
-analysis.dataArray = buf;
-analysis.desiredFftSize = FFT;
+
+/** One analysis frame: bank then AGC, the same order the engine runs them. */
+const update = (agcEnabled = false, dt = 1 / 60, bandsPerOctave = 6, normalize = false) => {
+  const opts = { sampleRate: SR, fftSize: FFT, bandsPerOctave };
+  if (!filterBank.matches(opts)) filterBank.rebuild(opts);
+  filterBank.analyse(buf, {
+    dbFloor: DB_FLOOR, dbCeiling: DB_CEIL,
+    normalize, tiltDbPerOct: 0, deltaSec: dt,
+  });
+  agc.update(agcEnabled, peakOf(), dt);
+};
+const getSignalGain = () => agc.value;
 
 const DB_FLOOR = -90;
 const DB_CEIL = -10;
@@ -58,94 +71,89 @@ const setBand = (level: number, upTo = 128) => {
   for (let i = 0; i < upTo; i++) buf[i] = db;
 };
 
-// The AGC moved into a shared `AutoGain` (ADR-0110) so both analysis backends
-// follow one implementation rather than drifting copies. Reset through it —
-// poking `agcPeak`/`agcGain` on the analysis object is now a silent no-op,
-// which showed up as the boost-cap assertion reading a peak left over from the
-// previous case.
-const resetAgc = () => { analysis.agc.reset(); };
+const resetAgc = () => { agc.reset(); };
 
 // ── AGC ─────────────────────────────────────────────────────────────────────
 console.log('\n[1] AGC off is a no-op');
 {
   resetAgc();
   setBand(0.2);
-  audioAnalysisEngine.update(false, 1 / 60);
-  assert(audioAnalysisEngine.getSignalGain() === 1,
-    'gain stays exactly 1 when AGC is off', audioAnalysisEngine.getSignalGain());
+  update(false, 1 / 60);
+  assert(getSignalGain() === 1,
+    'gain stays exactly 1 when AGC is off', getSignalGain());
 }
 
 console.log('\n[2] AGC normalises a quiet input toward the target');
 {
   resetAgc();
   setBand(0.2);                       // peak 0.2 → target 0.8 wants ×4
-  audioAnalysisEngine.update(true, 1 / 60);
-  assert(near(audioAnalysisEngine.getSignalGain(), 4, 1e-3),
-    'a 0.2 peak is boosted ×4 toward the 0.8 target', audioAnalysisEngine.getSignalGain());
+  update(true, 1 / 60);
+  assert(near(getSignalGain(), 4, 1e-3),
+    'a 0.2 peak is boosted ×4 toward the 0.8 target', getSignalGain());
 }
 
 console.log('\n[3] AGC leaves an already-hot input alone');
 {
   resetAgc();
   setBand(0.8);
-  audioAnalysisEngine.update(true, 1 / 60);
-  assert(near(audioAnalysisEngine.getSignalGain(), 1, 1e-3),
-    'a peak already at target gets unity gain', audioAnalysisEngine.getSignalGain());
+  update(true, 1 / 60);
+  assert(near(getSignalGain(), 1, 1e-3),
+    'a peak already at target gets unity gain', getSignalGain());
 }
 
 console.log('\n[4] AGC boost is capped');
 {
   resetAgc();
   setBand(0.05);                      // 0.8/0.05 = 16, over the ×8 ceiling
-  audioAnalysisEngine.update(true, 1 / 60);
-  assert(audioAnalysisEngine.getSignalGain() === 8,
-    'boost clamps at ×8 instead of amplifying noise', audioAnalysisEngine.getSignalGain());
+  update(true, 1 / 60);
+  assert(getSignalGain() === 8,
+    'boost clamps at ×8 instead of amplifying noise', getSignalGain());
 }
 
 console.log('\n[5] AGC holds through silence rather than ramping into it');
 {
   resetAgc();
   setBand(0.8);
-  audioAnalysisEngine.update(true, 1 / 60);
-  const before = audioAnalysisEngine.getSignalGain();
+  update(true, 1 / 60);
+  const before = getSignalGain();
   setBand(0);                         // gap between tracks
-  for (let i = 0; i < 200; i++) audioAnalysisEngine.update(true, 1 / 60);
-  assert(audioAnalysisEngine.getSignalGain() === before,
+  for (let i = 0; i < 200; i++) update(true, 1 / 60);
+  assert(getSignalGain() === before,
     'gain is frozen at silence, so the next downbeat does not detonate',
-    { before, after: audioAnalysisEngine.getSignalGain() });
+    { before, after: getSignalGain() });
 }
 
 console.log('\n[6] AGC attacks instantly, releases gradually');
 {
   resetAgc();
   setBand(0.8);
-  audioAnalysisEngine.update(true, 1 / 60);
+  update(true, 1 / 60);
   setBand(0.2);                       // level drops — release should be slow
-  audioAnalysisEngine.update(true, 1 / 60);
-  const oneFrame = audioAnalysisEngine.getSignalGain();
+  update(true, 1 / 60);
+  const oneFrame = getSignalGain();
   assert(oneFrame > 1 && oneFrame < 4,
     'one frame after a drop the gain is partway, not snapped to the new peak', oneFrame);
 
-  for (let i = 0; i < 300; i++) audioAnalysisEngine.update(true, 1 / 60);
-  assert(near(audioAnalysisEngine.getSignalGain(), 4, 1e-2),
-    'it settles on the new level after the release window', audioAnalysisEngine.getSignalGain());
+  for (let i = 0; i < 300; i++) update(true, 1 / 60);
+  assert(near(getSignalGain(), 4, 1e-2),
+    'it settles on the new level after the release window', getSignalGain());
 
   setBand(0.8);                       // a peak returns — must be instant
-  audioAnalysisEngine.update(true, 1 / 60);
-  assert(near(audioAnalysisEngine.getSignalGain(), 1, 1e-3),
+  update(true, 1 / 60);
+  assert(near(getSignalGain(), 1, 1e-3),
     'a returning peak is caught in a single frame (instant attack)',
-    audioAnalysisEngine.getSignalGain());
+    getSignalGain());
 }
 
 // ── Transient mode ──────────────────────────────────────────────────────────
 resetAgc();
-// Drive the real path: update() rebuilds/reads the filterbank from `buf`, and
+// Drive the real path: update() reads the filterbank from `buf`, and
 // processAudioSignal reads the bands. Testing through the engine rather than
 // against a hand-rolled band array is what keeps this honest — the two used to
 // compute different statistics.
 const signalOf = (rule: any, dt = 1 / 60): number => {
-  audioAnalysisEngine.update(false, dt, 6, false);
-  return (modulationEngine as any).processAudioSignal(rule, buf, dt);
+  update(false, dt, 6, false);
+  return (modulationEngine as any).processAudioSignal(rule, dt);
 };
 
 const mkRule = (mode: 'level' | 'transient') => ({
@@ -214,7 +222,7 @@ console.log('\n[10] switching modes mid-set does not fire a spurious hit');
 }
 
 // ── Display and signal must read the same numbers ───────────────────────────
-const { filterBank } = await import('../engine/features/audioMod/filterBank');
+// (filterBank is imported at the top now — the harness drives it directly.)
 
 console.log('\n[11] the spectrum bar IS the rule signal');
 {
