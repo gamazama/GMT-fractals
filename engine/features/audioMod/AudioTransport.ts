@@ -269,8 +269,11 @@ export class AudioTransport {
                 // Same processor-off contract as the mic path: a shared tab's
                 // music must reach the analysis unprocessed.
                 audio: this.captureConstraints(),
-                // Offer audio alongside whole screens too, not just tabs and
-                // windows — a DJ app is usually not the browser.
+                // Offer audio alongside whole screens too, not just tabs — a
+                // DJ app is usually not the browser. Chrome also offers the
+                // system-audio checkbox for a WINDOW share, so the user can
+                // pick a small window as the surface and keep the composite
+                // cheap while still getting full system audio.
                 systemAudio: 'include',
                 monitorTypeSurfaces: 'include',
                 // Hide GMT's own tab from the picker: capturing the tab you are
