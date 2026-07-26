@@ -425,29 +425,51 @@ export const AudioSpectrum: React.FC = () => {
         openContextMenu(e.clientX, e.clientY, items, ['panel.audio']);
     };
 
+    const isEnabled = !!audioState?.isEnabled;
+
     return (
-        <div 
+        <div
             ref={containerRef}
             className="w-full h-32 bg-black border border-line/10 rounded overflow-hidden cursor-crosshair relative group"
-            style={{ display: audioState?.isEnabled ? 'block' : 'none' }}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onDoubleClick={handleDoubleClick}
-            onContextMenu={handleContextMenu}
+            onMouseDown={isEnabled ? handleMouseDown : undefined}
+            onMouseMove={isEnabled ? handleMouseMove : undefined}
+            onMouseUp={isEnabled ? handleMouseUp : undefined}
+            onMouseLeave={isEnabled ? handleMouseUp : undefined}
+            onDoubleClick={isEnabled ? handleDoubleClick : undefined}
+            onContextMenu={isEnabled ? handleContextMenu : undefined}
         >
-            <canvas ref={canvasRef} width={400} height={150} className="w-full h-full block" />
-            
-            {/* Legend / Overlay */}
-            <div className="absolute top-1 right-2 flex gap-2 pointer-events-none">
-                <div className="text-[8px] font-bold text-fg-dim bg-surface/80 px-1 rounded">Ctrl+Drag = Gain</div>
-                <div className="text-[8px] font-bold text-fg-faint bg-surface/80 px-1 rounded">
-                    1/{bandsPerOctave} OCT
+            {/*
+              * IDLE STATE, not `display: none`.
+              *
+              * This used to hide itself entirely while audio was off, which was
+              * invisible as long as the whole panel was gated on the same flag.
+              * Once the panel became persistent (so the engine toggle stays
+              * reachable) that guard turned into a silent hole: the panel was
+              * there, its main content was not. The frame stays and says why.
+              *
+              * The canvas is UNMOUNTED rather than left blank — its draw loop
+              * stops when audio is disabled, so it would otherwise keep showing
+              * whatever spectrum happened to be on it when the engine stopped.
+              */}
+            {isEnabled ? (
+                <canvas ref={canvasRef} width={400} height={150} className="w-full h-full block" />
+            ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-fg-faint text-[10px]">
+                    Audio engine is off
                 </div>
-            </div>
-            
-            {rules.length === 0 && (
+            )}
+
+            {/* Legend / Overlay */}
+            {isEnabled && (
+                <div className="absolute top-1 right-2 flex gap-2 pointer-events-none">
+                    <div className="text-[8px] font-bold text-fg-dim bg-surface/80 px-1 rounded">Ctrl+Drag = Gain</div>
+                    <div className="text-[8px] font-bold text-fg-faint bg-surface/80 px-1 rounded">
+                        1/{bandsPerOctave} OCT
+                    </div>
+                </div>
+            )}
+
+            {isEnabled && rules.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-fg-faint text-[10px]">
                     Double-click to add modulator
                 </div>
