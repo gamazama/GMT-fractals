@@ -24,6 +24,15 @@
  *   `AudioContext.destination` — to prevent feedback. System-audio capture is
  *   connected to BOTH so the user hears it. Loading a track also disables an
  *   active mic; connecting the mic only PAUSES decks (asymmetric).
+ * @invariant System-audio capture COSTS GPU and cannot be made not to. The
+ *   spec requires a video surface — audio-only `getDisplayMedia` is still an
+ *   unimplemented request as of 2026 — so Chrome starts a screen-capture
+ *   session, and stopping the video track does not fully tear it down while
+ *   the audio track is live. `connectSystemAudio` asks for 1fps to keep that
+ *   as cheap as it can be, but the honest answer for a performance rig is to
+ *   route audio into a VIRTUAL INPUT DEVICE (VB-Cable / VoiceMeeter /
+ *   BlackHole) or a hardware line-in and use `connectMicrophone` instead:
+ *   same code path, no video surface, no GPU.
  * @invariant Live capture requests `echoCancellation`, `noiseSuppression` and
  *   `autoGainControl` explicitly OFF. Chrome/Edge default all three ON for
  *   `getUserMedia({audio: true})`; on a line feed from a mixer they duck the
@@ -246,11 +255,35 @@ export class AudioTransport {
         if (!this.audioContext) return false;
         try {
             const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: true,
+                // Video is MANDATORY and cannot be avoided — audio-only
+                // getDisplayMedia is still an unimplemented spec request as of
+                // 2026, so every browser rejects `video: false` here. We want
+                // none of the frames, so ask for the cheapest stream that will
+                // be granted and stop the track the moment it exists.
+                //
+                // @invariant Cap the FRAME RATE, not the resolution. Constraining
+                //   width/height makes the compositor downscale every frame,
+                //   which costs MORE GPU than leaving it native — the opposite
+                //   of the intent. 1fps is the lever that actually helps.
+                video: { frameRate: { max: 1 } },
                 // Same processor-off contract as the mic path: a shared tab's
                 // music must reach the analysis unprocessed.
                 audio: this.captureConstraints(),
-            });
+                // Offer audio alongside whole screens too, not just tabs and
+                // windows — a DJ app is usually not the browser.
+                systemAudio: 'include',
+                monitorTypeSurfaces: 'include',
+                // Hide GMT's own tab from the picker: capturing the tab you are
+                // running in is never what you want here, and it invites a
+                // render-feedback loop.
+                selfBrowserSurface: 'exclude',
+                // No mid-capture "switch surface" bar; the source is chosen once.
+                surfaceSwitching: 'exclude',
+            } as DisplayMediaStreamOptions);
+            // Stop the video immediately — we only ever wanted the audio track.
+            // Chrome keeps the capture SESSION alive for audio, so some
+            // compositing cost may remain; a virtual audio device routed through
+            // the mic path avoids it entirely. @see the class @invariant.
             stream.getVideoTracks().forEach(track => track.stop());
 
             if (stream.getAudioTracks().length === 0) {

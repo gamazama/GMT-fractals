@@ -225,6 +225,7 @@ const LiveInputControls: React.FC = () => {
                 </button>
                 <button
                     onClick={connectSystem}
+                    title="Captures whatever is playing on this machine. Chrome requires a screen-share surface for this, which costs some GPU — for a gig, a virtual audio device or line-in on the Mic input avoids it."
                     className={`flex-1 py-1.5 text-[9px] font-bold rounded border transition-all ${
                         running.kind === 'system'
                             ? 'bg-ok/15 border-ok/30 text-ok'
