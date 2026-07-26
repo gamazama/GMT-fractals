@@ -334,8 +334,13 @@ const AnalysisControls: React.FC = () => {
                 </span>
             }
         >
-            <div className="p-2 flex flex-col gap-2">
-                <div>
+            {/* py only. Sliders and Hints are full-bleed by GMT convention —
+                they carry their own inset — so a `p-2` here pushed every one of
+                them in by 8px and left the hint bands floating. Only the rows
+                that are NOT those primitives (labels, selects, toggles) take
+                `px-2` themselves. */}
+            <div className="py-2 flex flex-col gap-2">
+                <div className="px-2">
                     <label className="text-[9px] text-fg-dim font-bold block mb-1">Band Width</label>
                     <select
                         value={bandsPerOctave}
@@ -347,19 +352,19 @@ const AnalysisControls: React.FC = () => {
                         <option value={6}>Medium — 1/6 octave</option>
                         <option value={12}>Narrow — 1/12 octave</option>
                     </select>
-                    {/* The honest limit: a band narrower than one FFT bin can't
-                        resolve, so say where that starts instead of hiding it.
-                        Those bands also render dimmed on the spectrum. */}
-                    <Hint text={`Bands are equal musical width, so bass gets as many as treble. `
-                        + `Below ${filterBank.resolutionLimitHz.toFixed(0)} Hz they are finer than this `
-                        + `Detail setting can resolve — shown dimmed. Raise Detail to push that lower.`} />
                 </div>
+                {/* The honest limit: a band narrower than one FFT bin can't
+                    resolve, so say where that starts instead of hiding it.
+                    Those bands also render dimmed on the spectrum. */}
+                <Hint text={`Bands are equal musical width, so bass gets as many as treble. `
+                    + `Below ${filterBank.resolutionLimitHz.toFixed(0)} Hz they are finer than this `
+                    + `Detail setting can resolve — shown dimmed. Raise Detail to push that lower.`} />
 
                 {/* Analysis runs on the audio thread and there is no fallback
                     by design, so a load failure has to be visible rather than
                     silently inert. @see docs/adr/0110-*.md */}
                 {analysisFailed && (
-                    <p className="text-[8px] text-danger leading-snug">
+                    <p className="text-[8px] text-danger leading-snug px-2">
                         Audio analysis failed to start — modulation will not respond.
                         Check the browser console.
                     </p>
@@ -368,21 +373,19 @@ const AnalysisControls: React.FC = () => {
                 {/* Fixed tilt — a constant dB ramp, NOT adaptive gain. Sits
                     above Balance Bands because it is the answer that one is
                     usually reached for. @see docs/adr/0105-*.md */}
-                <div>
-                    <Slider
-                        label="Tilt"
-                        value={audio?.spectralTilt ?? 3}
-                        min={0} max={TILT_MAX_DB_PER_OCT} step={0.5}
-                        onChange={(v) => setAudio({ spectralTilt: v })}
-                    />
-                    <Hint text={`Lifts the highs to offset music's natural roll-off — `
-                        + `${(audio?.spectralTilt ?? 3).toFixed(1)} dB/octave, so 16 kHz reads `
-                        + `+${((audio?.spectralTilt ?? 3) * Math.log2(16000 / BANK_MIN_HZ)).toFixed(0)} dB `
-                        + `against 25 Hz. A fixed offset, so it costs no dynamics. 0 is the raw spectrum.`} />
-                </div>
+                <Slider
+                    label="Tilt"
+                    value={audio?.spectralTilt ?? 3}
+                    min={0} max={TILT_MAX_DB_PER_OCT} step={0.5}
+                    onChange={(v) => setAudio({ spectralTilt: v })}
+                />
+                <Hint text={`Lifts the highs to offset music's natural roll-off — `
+                    + `${(audio?.spectralTilt ?? 3).toFixed(1)} dB/octave, so 16 kHz reads `
+                    + `+${((audio?.spectralTilt ?? 3) * Math.log2(16000 / BANK_MIN_HZ)).toFixed(0)} dB `
+                    + `against 25 Hz. A fixed offset, so it costs no dynamics. 0 is the raw spectrum.`} />
 
                 <label
-                    className="flex items-center gap-2 cursor-pointer"
+                    className="flex items-center gap-2 cursor-pointer px-2"
                     title="Let each band self-calibrate against its own recent peak"
                 >
                     <DotToggle
@@ -395,7 +398,7 @@ const AnalysisControls: React.FC = () => {
                 </label>
                 <Hint text="Every band uses its full range regardless of how loud it is in absolute terms — hi-hats react as readily as a kick. Costs spectral contrast, though: off usually reads better." />
 
-                <div>
+                <div className="px-2">
                     <label className="text-[9px] text-fg-dim font-bold block mb-1">Detail</label>
                     <select
                         value={fftSize}
@@ -407,8 +410,9 @@ const AnalysisControls: React.FC = () => {
                         <option value={4096}>Balanced — 12 Hz bins</option>
                         <option value={8192}>Fine — 6 Hz bins, bass detail</option>
                     </select>
-                    <Hint text="Finer bins resolve a kick from its harmonics, but widen the analysis window — which softens how sharply Transient mode fires." />
                 </div>
+                <Hint text="Finer bins resolve a kick from its harmonics, but widen the analysis window — which softens how sharply Transient mode fires." />
+
                 <Slider
                     label="Floor"
                     value={dbFloor}
