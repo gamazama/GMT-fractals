@@ -23,7 +23,12 @@
 import { ShaderBuilder, RenderVariant } from './ShaderBuilder';
 import type { ShaderConfig } from './ShaderConfig';
 import * as THREE from 'three';
-import { UniformDefinition } from './UniformSchema';
+// `import type` is load-bearing, not style: UniformSchema imports
+// `featureRegistry` from this module and calls `registerFeatures()` at its top
+// level. A value-syntax import would make that cycle live and hit
+// `featureRegistry` in TDZ. See the import-side-effect @invariant on
+// engine/UniformSchema.ts.
+import type { UniformDefinition } from './UniformSchema';
 import type { RotationDescriptor } from './rotationDescriptor';
 
 export type ParamType = 'float' | 'int' | 'vec2' | 'vec3' | 'vec4' | 'color' | 'boolean' | 'gradient' | 'image' | 'complex';
