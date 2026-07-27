@@ -145,7 +145,7 @@ export interface AdaptiveResolutionInput {
     costSampleInteractingOnly?: boolean;
     /** Override the post-activity grace (ms) before adaptive disengages and
      *  the frame settles to full res. When omitted, the FPS-scaled
-     *  `getAdaptiveGrace(stillFps)` default applies (100..3000ms) — right for
+     *  `getAdaptiveGrace(stillFps)` default applies (100..2000ms) — right for
      *  apps that infer end-of-activity from the sparse accum-drop signal
      *  (fluid-toy). Apps with an EXPLICIT gesture-end signal (GMT's
      *  InteractionSession, which carries its own 200ms re-grab tail) pass a
@@ -192,7 +192,10 @@ export function createAdaptiveResolutionState(): AdaptiveResolutionState {
 const TICK_FLOOR_MS = 17.5;
 
 /** FPS-scaled grace period (ms): slow scenes get more time before
- *  restoring full res. 1fps → 2s, 30fps+ → 100ms minimum. */
+ *  restoring full res. Effective range is 100..2000ms — 1fps → 2000ms,
+ *  20fps and above → the 100ms floor. The `Math.min(3000, …)` ceiling is
+ *  defensive only and never binds: `2000 / max(1, stillFps)` peaks at
+ *  2000. Don't "correct" callers' docs back to 3000. */
 export function getAdaptiveGrace(stillFps: number): number {
     return Math.max(100, Math.min(3000, 2000 / Math.max(1, stillFps)));
 }
