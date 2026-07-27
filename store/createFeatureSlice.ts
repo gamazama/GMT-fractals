@@ -6,9 +6,17 @@
  *
  * @invariant Auto-setter name `set${FeatureId with capitalised first
  *   letter}` is a load-bearing STRING convention with NO type
- *   enforcement. Four downstream consumers derive the same name:
+ *   enforcement. It is re-derived independently at ~20 call sites
+ *   spanning engine-core, engine-gmt, app-gmt and palette — find them
+ *   all with `grep -rn 'set\${' --include=*.ts --include=*.tsx`. The
+ *   engine-core consumers a rename must not miss:
  *   PresetLogic.applyPresetState, AnimationEngine.getBinder (case 4),
- *   historySlice.beginParamTransaction, typedSlices.setSlice.
+ *   historySlice.applyStateRestore (NOT beginParamTransaction — that
+ *   one only snapshots slices and derives no setter name),
+ *   typedSlices.setSlice, features/setFeature.ts's `setterName`,
+ *   scalabilitySlice, and the five panel components that write params
+ *   (AutoFeaturePanel, FeatureSection, CompilableFeatureSection,
+ *   CompileDropdownSection, RuntimeSection).
  * @invariant Track-id convention `${featureId}.${paramKey}` (scalars)
  *   and `${featureId}.${paramKey}_<axis>` (UNDERSCORE axes) is the
  *   second load-bearing string contract. See engine/animation/
@@ -16,9 +24,14 @@
  * @invariant `image`-typed params are deliberately excluded from the
  *   `config` event payload (data URLs can be many MB). Restored via
  *   the `texture` event channel.
- * @invariant The setter has NO `oldValue !== newValue` guard. Every
- *   key in `updates` triggers the full sanitise + emit path; equality
- *   short-circuiting lives downstream in `ConfigManager.areValuesEqual`.
+ * @invariant The setter has NO `oldValue !== newValue` gate on
+ *   EMISSION. Every key in `updates` triggers the full sanitise +
+ *   CONFIG/uniform emit path; whether that warrants a recompile is
+ *   decided downstream in `ConfigManager.areValuesEqual`. It does
+ *   compare locally on the ACCUMULATION axis only: `paramChanged`
+ *   gates `shouldReset` and flips `noAccumReset` on the emitted
+ *   uniform event, so re-writing a param's existing value never
+ *   clears the path-trace buffer.
  * @invariant `onSet` extras only land for keys not present in the
  *   user-provided `updates` — preset loads override defaults the
  *   `onSet` would otherwise compute.
@@ -80,13 +93,13 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
     registerFeatures();
     // Register canonical non-feature preset fields (cameraRot, targetDistance,
     // savedCameras). A future @engine/camera plugin will own these; for now
-    // they live in the engine proper. See docs/20_Fragility_Audit.md F3.
+    // they live in the engine proper. See docs/history/engine/20_Fragility_Audit.md F3.
     registerDefaultPresetFields();
     // Freeze both registries: from this point on, new registrations fail loudly
     // (throw in dev, warn in prod). State slices are snapshotted below, so
     // late arrivals would be invisible to the store — this catches the bug
     // at the point of the late register() call instead of much later when
-    // a feature's setter is unexpectedly undefined. See docs/20_Fragility_Audit.md F1.
+    // a feature's setter is unexpectedly undefined. See docs/history/engine/20_Fragility_Audit.md F1.
     featureRegistry.freeze();
     presetFieldRegistry.freeze();
     const features = featureRegistry.getAll();
