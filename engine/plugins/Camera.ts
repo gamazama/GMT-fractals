@@ -1,5 +1,5 @@
 /**
- * @engine/camera — adapter-based camera slot + animation binding plugin.
+ * @engine/camera — adapter-based camera slot plugin.
  *
  * Apps register a CameraAdapter describing how to snapshot and restore
  * their camera state. The plugin provides operations that work on any
@@ -7,10 +7,14 @@
  *
  *   - Numbered slots 1-9: save current camera into a slot, recall later
  *   - Persistence: slots round-trip via the preset field registry
- *   - Hotkeys: Ctrl+1..9 save, 1..9 recall (opt-in via installCamera)
- *   - Animation tracks: the app's camera tracks register with the
- *     existing engine/animation/cameraKeyRegistry for TimelineToolbar's
- *     Key Cam button (already wired in phase 4b's timeline port)
+ *     (registered by the separate `./camera/presetField` side-effect
+ *     module — see the note below, NOT by this file)
+ *   - Hotkeys: Mod+1..9 save, 1..9 recall (opt-in via installCamera)
+ *
+ * NOT in scope: animation. This plugin registers no binders and no
+ * keyframe tracks. Apps declare their camera track list separately via
+ * `engine/animation/cameraKeyRegistry`'s `registerCameraKeyTracks()`,
+ * which is what TimelineToolbar's Key Cam button reads.
  *
  * Design rationale: the two toy apps have fundamentally different camera
  * shapes (fluid-toy's 2D {center, zoom} vs fractal-toy's 3D orbit
@@ -142,7 +146,10 @@ export const installCamera = (options: InstallCameraOptions = {}) => {
     if (_installed) return;
     _installed = true;
 
-    // Preset field was registered at module load (side effect above).
+    // NOTE: installCamera does NOT register the `cameraSlots` preset
+    // field — see the module-header note above. The app must import
+    // `engine/plugins/camera/presetField` itself, as an early side
+    // effect, or slots silently stop round-tripping through presets.
 
     // Expose the plugin on window for dev-mode smoke tests. Harmless
     // in prod; some apps might even use it for keyboard shortcuts.
