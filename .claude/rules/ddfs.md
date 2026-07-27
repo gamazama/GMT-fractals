@@ -1,7 +1,10 @@
 ---
 paths:
   - "engine/FeatureSystem.ts"
-  - "engine/store/createFeatureSlice.ts"
+  - "store/createFeatureSlice.ts"
+  - "engine/features/setFeature.ts"
+  - "engine/defineEnumParam.ts"
+  - "engine/typedSlices.ts"
   - "utils/PresetLogic.ts"
 ---
 
@@ -18,7 +21,12 @@ Decisions: ADRs 0007-0014, 0036-0037.
 - **The registry freezes at store construction.** Every `featureRegistry.register()`
   call must run before `createEngineStore()`. Late registration throws in dev,
   no-ops in prod.
-- **Duplicate feature IDs are forbidden** — the second registration throws immediately.
+- **Duplicate feature IDs are forbidden.** Re-registering the SAME def object is a
+  no-op (HMR / double import). A DIFFERENT def under an existing id throws
+  `DuplicateFeatureError` in prod but only `console.warn`s-and-replaces in dev,
+  because Vite HMR legitimately produces fresh def objects. Don't read a quiet dev
+  console as proof there is no collision — that path fails loudly only in a
+  production build.
 - **Features are isolated.** State lives at `store[featureId]`. Reading another
   feature's state requires `dependsOn: ['otherId']` in the feature def. Undeclared
   access throws in dev, warns in prod.
