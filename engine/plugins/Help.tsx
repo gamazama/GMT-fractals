@@ -21,7 +21,7 @@
  */
 
 import React, { Suspense, useState, useSyncExternalStore } from 'react';
-import { createPortal } from 'react-dom';
+import { Layer } from '../../components/ui';
 import { useEngineStore } from '../../store/engineStore';
 import { menu, MenuItem } from './Menu';
 import { shortcuts } from './Shortcuts';
@@ -160,8 +160,16 @@ const SupportModalHost: React.FC = () => {
     const m = React.useSyncExternalStore(_supportSubscribe, _supportSnapshot, _supportSnapshot);
     if (!m) return null;
     const close = () => _setSupportModal(null);
-    return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={close}>
+    // Was a hand-rolled `createPortal(…, document.body)` at a raw `z-50`. Because
+    // getLayerHost() is also document.body, that made this modal a SIBLING of every
+    // <Layer> surface in the root stacking context — and the `panel` tier starts at
+    // 100, so any open floating panel painted over the modal and stayed clickable
+    // through its bg-black/60 backdrop (measured: panel z=100 vs modal z=50, and
+    // elementFromPoint over the panel header returned the panel, not the backdrop).
+    // check:zindex cannot catch this class: its threshold is z >= 100, so a raw z
+    // that is too LOW is exactly its blind spot. Per ADR-0082, use the tier table.
+    return (
+        <Layer tier="modal" className="inset-0 flex items-center justify-center bg-black/60" onClick={close}>
             <div className="bg-surface-sunken border border-line/10 rounded-lg p-5 w-80 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-3">
                     <div className={`text-xs font-bold ${ACCENT_TEXT[m.accent]}`}>{m.modalTitle}</div>
@@ -172,8 +180,7 @@ const SupportModalHost: React.FC = () => {
                 )}
                 {renderBody(m.body)}
             </div>
-        </div>,
-        document.body,
+        </Layer>
     );
 };
 
