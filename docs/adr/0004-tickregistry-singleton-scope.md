@@ -6,6 +6,17 @@ F14 fix making engine-gmt's TickRegistry a re-export shim of engine-core's.)_
 **Status:** Accepted
 **Scope:** `engine/TickRegistry.ts`, `engine-gmt/engine/TickRegistry.ts`
 
+> **Update 2026-07-27 (line refs + moved policy doc; decision unchanged):** two
+> citations below no longer resolve.
+> (1) "`engine/TickRegistry.ts:38-46, 93`" — the module-scope bindings are now at
+> `_entries` **59**, `_needsSort` **60**, `_firstRegisterTime` **66**, `_lastTickTime`
+> **67**, `_warnedNoTicks` **68**, `_warnedDoubleRun` **122**.
+> (2) "`docs/modules/engine-fork-rules.md`" — the `docs/modules/` tree was collapsed in
+> the 2026-07-13 docs reorg; that policy now lives at
+> [`docs/policy/engine-fork-rules.md`](../policy/engine-fork-rules.md).
+> The shim itself is unchanged: `engine-gmt/engine/TickRegistry.ts` is still a bare
+> `export * from '../../engine/TickRegistry'`, so the single-singleton decision holds.
+
 ## Context
 
 The render loop needs a single point of truth for ordered per-frame work.

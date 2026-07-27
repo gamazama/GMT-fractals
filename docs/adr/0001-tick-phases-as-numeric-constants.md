@@ -4,6 +4,15 @@
 **Status:** Accepted
 **Scope:** `engine/TickRegistry.ts`
 
+> **Update 2026-07-27 (line refs refreshed; decision unchanged):** the JSDoc header of
+> `engine/TickRegistry.ts` has grown since this ADR was written, so the line citations
+> below no longer resolve. Current locations: the `TICK_PHASE` object literal and the
+> `TickPhase` type are at **lines 44-51** (was "23-28"); the `phaseNames` positional
+> lookup inside `getTickManifest` is at **line 158** (was "line 129"). The integer-compare
+> comparator `(a, b) => a.phase - b.phase` now appears twice — in `runTicks` (line 145)
+> and again in `getTickManifest` (line 160). Prefer grepping for the symbol names over
+> following the line numbers.
+
 ## Context
 
 Per-frame work on the main thread needs a deterministic execution order:

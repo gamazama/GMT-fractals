@@ -6,6 +6,15 @@ double-mount was observed in practice.)_
 **Status:** Accepted
 **Scope:** `engine/TickRegistry.ts`
 
+> **Update 2026-07-27 (line refs refreshed; decision unchanged):** the citations
+> "`engine/TickRegistry.ts:89-94`, `99-113`" in the Decision below no longer resolve —
+> those lines are now the *unrelated* dev-only "no ticks after 3s" `setTimeout` inside
+> `registerTick`, which makes the citation actively misleading. Current locations:
+> `_warnedDoubleRun` and `DOUBLE_RUN_WINDOW_MS` are declared at **lines 122-123**, and
+> the guard block (window check → one-shot `console.warn` → `return` without advancing
+> `_lastTickTime`) is **lines 129-142**. Grep for `DOUBLE_RUN_WINDOW_MS` rather than
+> following the line numbers.
+
 ## Context
 
 Two RAF-driven tick drivers mounted in the same app call `runTicks` twice per
