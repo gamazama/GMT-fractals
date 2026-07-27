@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:0%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:6%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,63 +73,260 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Cycle 0 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated now</p>
+  <p class="sub">Cycle 1 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-27T21:39:15.047Z</p>
 
   <div class="tiles">
-    <div class="tile"><div class="v">0/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">0</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">0</div><div class="k">applied &amp; verified</div></div>
-    <div class="tile"><div class="v" style="color:var(--warn)">0</div><div class="k">orchestrator-checked</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">0</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">0<span style="font-size:.6em;color:var(--dim)">/0</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v">2/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">15</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">7</div><div class="k">applied &amp; verified</div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">1</div><div class="k">orchestrator-checked</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">6</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">12<span style="font-size:.6em;color:var(--dim)">/12</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:100%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 2 cycles</p>
 
   
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">0</span></h2>
+    <h2>Applied — self-verified <span class="count">7</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
-    <p class="empty">Nothing in this tier.</p>
+    
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e01-feature-system</code>
+      <code class="file">engine/FeatureSystem.ts:623</code>
+    </header>
+    <p class="what">getDictionary() mints share-link aliases from `shortId` with no uniqueness validation, and two live collisions silently drop feature state from every share URL; the invariant said nothing about uniqueness and three doc citations in the file were dead.</p>
+    <p class="change"><strong>Changed:</strong> Extended the getDictionary() @invariant to require aliases be unique globally across features and within one feature's params, with the reason (UrlStateEncoder.applyDictionary writes result[alias]=value on encode and builds a single alias-&gt;longKey reverse map on decode, so a collision drops one side). Added a `@bug PRODUCTION:` block naming both live collisions with the reproduction. Repaired three dead doc citations (docs/02_Feature_Registry.md x2, docs/03_Plugin_Contract.md -&gt; docs/history/engine/...), two of which are inside runtime error messages.</p>
+    <p class="verify"><strong>How it was verified:</strong> Not inferred — reproduced. A Playwright probe loaded the booted app, imported the live FeatureSystem singleton and utils/Sharing.ts, set droste to {active:true, zoom:3.5, tiling:4} and materials to {emissionMode:2, envMapColorSpace:'linear'}, then round-tripped getPreset() through generateShareStringFromPreset -&gt; parseShareString. droste came back {} (all three values lost); envMapColorSpace came back undefined. The same probe enumerated getDictionary() over all 31 registered features and found exactly one feature-alias collision ('dr' -&gt; droste+drawing) and one param-alias collision (materials 'ec' -&gt; emissionMode+envMapColorSpace). Dead citations proved by ls. Guard: npm run typecheck (fails if the JSDoc block were malformed and broke the class body) plus npm run smoke:engine-demo (fails on any console.error/pageerror and exercises getDictionary via the save round-trip).</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>03040513</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e01-feature-system</code>
+      <code class="file">debug/smoke-engine-demo.mts:30</code>
+    </header>
+    <p class="what">smoke:engine-demo has been failing at step 1 since 2026-05-04 because it looks for a DOM &lt;div&gt; square that was rewritten as a &lt;canvas&gt; painter, so the five DDFS assertions after it have not run for ~3 months.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the dead div[class*=&quot;pointer-events-none&quot;] + childElementCount probe with the canvas pixel probe the sibling smoke already uses (querySelector('canvas.pointer-events-none'), read the middle row, count pixels brighter than background). Distinct negative return codes for absent / unsized / no-2d-context so the next rot is diagnosable from the log line.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before the change `npm run smoke:engine-demo` failed with 'overlay children: 0 / Demo overlay did not render'; after it all six steps run and it exits 0 (painted pixels 128, topbar present, param labels present, modulation tick advanced 31x in 500ms, colour reverted #ff00ff -&gt; #22d3ee on Ctrl+Z). Not passing-by-accident: the probe asserts painted pixels &gt; 0 so it still fails if DemoOverlay stops rendering, and steps 2-6 are hard throws on the DDFS panel/undo path. Rot confirmed pre-existing: `git show c2ebadf2 -- demo/DemoOverlay.tsx` shows the positioned div replaced by a &lt;canvas&gt; on 2026-05-04 and the smoke's selector was never updated.</p>
+    <p class="guard"><code>npm run smoke:engine-demo</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>52d8912f</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e01-feature-system</code>
+      <code class="file">store/createFeatureSlice.ts:7</code>
+    </header>
+    <p class="what">The header @invariant naming consumers of the `set${FeatureId}` string convention cites a symbol that does not derive the name, undercounts consumers ~5x, and its equality claim no longer matches the code.</p>
+    <p class="change"><strong>Changed:</strong> Three header corrections. (1) Repointed the setter-name invariant from historySlice.beginParamTransaction (which only snapshots slices via getParamSnapshot and derives no setter name) to historySlice.applyStateRestore, and replaced 'Four downstream consumers' with the real scope (~20 call sites across engine-core, engine-gmt, app-gmt, palette) plus the grep that enumerates them. (2) Split the 'NO oldValue !== newValue guard' claim into its two axes — emission (still ungated) and accumulation (locally gated by paramChanged at L184-190). (3) Repointed two docs/20_Fragility_Audit.md citations at docs/history/engine/.</p>
+    <p class="verify"><strong>How it was verified:</strong> Symbol drift proved by reading store/slices/historySlice.ts: beginParamTransaction (L218-221) only calls getParamSnapshot, which iterates featureRegistry.getAll() and JSON-clones slices — no 'set' prefix anywhere; the sole setter-name derivation is applyStateRestore L184. Count proved by grep: 24 occurrences across 21 files, minus the producer and two type-level mapped types = 21 runtime derivation sites. Equality claim checked against L184-192 and L272. Guards: smoke:undo and smoke:engine-demo both exercise the corrected path end to end — the Ctrl+Z round-trip only reverts because applyStateRestore derives setDemo and calls it, which is exactly what the corrected invariant now says.</p>
+    <p class="guard"><code>npm run smoke:undo</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>08c39d96</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e01-feature-system</code>
+      <code class="file">.claude/rules/ddfs.md:4</code>
+    </header>
+    <p class="what">The DDFS rule's paths: frontmatter points at engine/store/createFeatureSlice.ts, which does not exist, so the rule never auto-loads for the actual DDFS slice builder; its duplicate-id invariant is also wrong in dev.</p>
+    <p class="change"><strong>Changed:</strong> Corrected the dead path to store/createFeatureSlice.ts and added the three other DDFS-core files the rule body discusses but never scoped (engine/features/setFeature.ts, engine/defineEnumParam.ts, engine/typedSlices.ts). Rewrote the duplicate-id bullet: 'the second registration throws immediately' is only true in prod — in dev, register() replaces with a console.warn so Vite HMR keeps working, so a quiet dev console is not proof of no collision.</p>
+    <p class="verify"><strong>How it was verified:</strong> Dead path proved by grep: the string 'engine/store/createFeatureSlice' occurs exactly once in the whole repo — in this rule file — and ls engine/store/ lists only autosaveStore, colorSchemeStore, createStateLibrarySlice, installStateLibrary, toastStore. The four added paths were each confirmed to exist. The duplicate-id correction is read directly off FeatureRegistry.register() (engine/FeatureSystem.ts L518-540): same def returns early; different def under an existing id hits import.meta.env.DEV -&gt; console.warn + features.set + return, and only falls through to throw DuplicateFeatureError in prod — which the DuplicateFeatureError JSDoc (L489-495) already said, so the rule contradicted the source it points at.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>7a30227a</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e02-tick-registry</code>
+      <code class="file">engine/TickRegistry.ts:33</code>
+    </header>
+    <p class="what">TickRegistry's JSDoc header carried a stray @invariant copied from FeatureSystem (about getAll() and dependency cycles — neither exists in TickRegistry), plus three dead doc-path citations and one dead symbol citation (WorkerTickScene).</p>
+    <p class="change"><strong>Changed:</strong> Deleted the '@invariant Throws-on-cycle is NOT honored: getAll() returns registration order on cycle...' block — TickRegistry has no getAll export, no dependsOn graph and no cycle detection; that invariant belongs to (and is correctly stated at) engine/FeatureSystem.ts:16-17. Repointed four citations broken by the 2026-07-13 docs reorg (docs/01_Architecture.md, docs/04_Core_Plugins.md, docs/20_Fragility_Audit.md x2) at their docs/history/engine/ paths with exact heading anchors. Replaced the dead 'stays in WorkerTickScene' reference with the driver that owns DISPATCH today (engine-gmt/renderer/GmtRendererTickDriver.tsx), recording WorkerTickScene as the pre-extraction component it was ported from.</p>
+    <p class="verify"><strong>How it was verified:</strong> Grep proves each claim. `getAll` over all ts/tsx returns 40 hits, none in TickRegistry's implementation body — the only occurrence in that file was inside the removed JSDoc; the same invariant text exists verbatim at engine/FeatureSystem.ts:16-17, so no information is lost. Test-Path returns False for all three docs/*.md paths and True for the three docs/history/engine/ replacements; the new anchors were checked against real headings ('## The render-loop contract' at 01_Architecture.md:81, '### @engine/render-loop' at 04_Core_Plugins.md:140, '## F4 — Implicit render-loop contract' at 20_Fragility_Audit.md:89). `git ls-files | Select-String WorkerTickScene` returns nothing, while GmtRendererTickDriver.tsx:2 self-documents as 'direct port of GMT's WorkerTickScene.tsx' and calls proxy.sendRenderTick at :483. Guard: smoke:anim-play drives the real TickRegistry through RenderLoopDriver and asserts the timeline advanced 0 -&gt; 20.5 frames with a bound param moving — it fails if a botched block-comment edit broke either module, which is the realistic failure mode for a JSDoc change on runtime files. smoke:boot also passed with zero page errors.</p>
+    <p class="guard"><code>npm run typecheck &amp;&amp; npm run smoke:anim-play &amp;&amp; npm run smoke:boot</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>d840bb2b</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e02-tick-registry</code>
+      <code class="file">docs/adr/0003-single-driver-double-run-guard.md:28</code>
+    </header>
+    <p class="what">All three tick ADRs that cite line numbers in engine/TickRegistry.ts have drifted 35-130 lines; ADR-0003's citation now lands on a completely different mechanism, and ADR-0004 additionally points at docs/modules/engine-fork-rules.md, which the 2026-07-13 reorg removed. NOTE: applied before the owner ruled ADR edits Tier B — see PROPOSALS.md.</p>
+    <p class="change"><strong>Changed:</strong> Prepended a '&gt; **Update 2026-07-27 (...; decision unchanged):**' block to ADRs 0001, 0003 and 0004 (house style, matching ADRs 0024/0039/0059/0069/0072/0076). ADR-0001: TICK_PHASE is at 44-51 not '23-28'; phaseNames at 158 not '129'. ADR-0003: the cited '89-94, 99-113' is now the unrelated dev-only no-ticks setTimeout inside registerTick — flagged as actively misleading, real locations given (_warnedDoubleRun/DOUBLE_RUN_WINDOW_MS 122-123, guard block 129-142). ADR-0004: module-scope bindings enumerated at current lines; dead docs/modules/engine-fork-rules.md repointed to docs/policy/engine-fork-rules.md. All three blocks tell readers to grep the symbol rather than follow line numbers. ADR bodies untouched (append-only respected).</p>
+    <p class="verify"><strong>How it was verified:</strong> Every replacement line number was read out of the post-edit file, not inferred: TICK_PHASE 44-51, _entries 59, _needsSort 60, _firstRegisterTime 66, _lastTickTime 67, _warnedNoTicks 68, _warnedDoubleRun 122, DOUBLE_RUN_WINDOW_MS 123, guard block 129-142, comparator 145 and 160, phaseNames 158. The 'actively misleading' claim is checkable: lines 89-113 of the current file are the setTimeout(... 3000) no-ticks warning inside registerTick, a different mechanism from the double-run guard. Test-Path docs/modules/engine-fork-rules.md False, docs/policy/engine-fork-rules.md True; a grep of docs/adr for 'docs/modules/' returns exactly one hit (ADR-0004:43) so no other ADR needed the same fix. Guard is weak by construction for a markdown edit (typecheck only) — the substance is the grep/Test-Path evidence, all re-derivable in under a minute.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>652fb61c</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>e02-tick-registry</code>
+      <code class="file">.claude/rules/tick-and-animation.md:3</code>
+    </header>
+    <p class="what">The tick-and-animation rule's paths: frontmatter omitted engine/plugins/RenderLoop.tsx, so opening the engine's only render-loop driver loaded the engine-plugins rule (which never mentions it) instead of the rule that governs it.</p>
+    <p class="change"><strong>Changed:</strong> Added engine/plugins/RenderLoop.tsx to the paths: glob list, plus a short orientation paragraph recording who actually drives ticks: RenderLoop.tsx is the only file under engine/** that calls runTicks; it is mounted by App.tsx (the demo entry), fluid-toy and gradient-explorer; app-gmt does NOT mount it because engine-gmt/renderer/GmtRendererTickDriver.tsx is its canonical driver, and mounting both is the ADR-0003 double-run bug.</p>
+    <p class="verify"><strong>How it was verified:</strong> Coverage gap proved by dumping the paths: frontmatter of all 19 files in .claude/rules/: only engine-plugins.md matches RenderLoop.tsx (via engine/plugins/**), and its 'Read first' list names TopBar/Hud/Menu/SceneIO/RenderDialog/Shortcuts/Undo/AdaptiveResolution/Viewport/camera/Tutorial — not RenderLoop. Every claim added to the body is grep-checkable and was checked: `runTicks\s*\(` over ts/tsx/mts/js/mjs returns exactly three call sites (RenderLoop.tsx:44, GmtRendererTickDriver.tsx:323 and :328); RenderLoopDriver as a mounted element appears only in App.tsx:84, fluid-toy/FluidToyApp.tsx:185, gradient-explorer/GradientExplorerApp.tsx:314; `git grep RenderLoopDriver -- app-gmt` returns no source hits while app-gmt/AppGmt.tsx:338 mounts GmtRendererTickDriver; demo.html's script src is /index.tsx which imports ./App, which is what makes App.tsx the demo entry.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ee035150</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Applied — orchestrator-verified <span class="count">0</span></h2>
+    <h2>Applied — orchestrator-verified <span class="count">1</span></h2>
     <p class="note">No existing test covered these, so a second independent agent re-derived the claim before the change was allowed through. Each names how it was checked.</p>
-    <p class="empty">Nothing in this tier.</p>
+    
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">medium</span>
+      <code>e02-tick-registry</code>
+      <code class="file">docs/adr/0110-audio-analysis-in-a-worklet.md:19</code>
+    </header>
+    <p class="what">ADR-0110 and HANDOFF.md both state GmtRendererTickDriver throttles runTicks to 1 Hz when UI fps &lt; 20. It does not — runTicks is called on both sides of that branch, so only the worker dispatch is yielded. CONFIRMED by an independent verifier, which also recovered the real starvation mechanism.</p>
+    <p class="change"><strong>Changed:</strong> Prepended an append-only Update block under ADR-0110's ## Context heading correcting the mechanism, deriving the two effects that actually starved analysis, and flagging the '1 Hz' magnitude as not derivable from this path. ADR body untouched; the decision stands and is better motivated than before. HANDOFF.md carries the same error and was deliberately left for the owner.</p>
+    <p class="verify"><strong>How it was verified:</strong> An independent verifier that had not seen the auditor's reasoning re-derived it from source and was asked to refute it. Q1: the branch at GmtRendererTickDriver.tsx:321-325 is `if (t.fps &lt; 20 &amp;&amp; now - t.lastYield &gt;= 1000) { t.lastYield = now; runTicks(clampedDelta); return; }` with an unconditional `runTicks(clampedDelta);` at :328 — runTicks appears on BOTH sides, so the early return cannot skip it; what it skips is the optics merge, FOV sync, camera serialisation, renderState build, convergence gate and proxy.sendRenderTick. Dated to file creation (50547f46) via `git log -L 315,330` — not a regression. Q2, the harder half: the verifier reconstructed the pre-worklet path from 7ba897aa^ and found the real mechanism — analysis ran off a registered tick ('engine.animation' at TICK_PHASE.ANIMATE), so its rate WAS the frame rate, and two effects follow: AnalyserNode returns only the most recent fftSize samples (85ms at 4096/48kHz), so below ~12fps consecutive windows stop abutting and audio between reads enters no FFT frame at all; and FilterBank.computeFluxRate divides a [0,1]-bounded difference by dt, so with TRANSIENT_FULL_SCALE=20 the transient channel's ceiling is ~fps/20 and a 60fps-tuned thresholdMin becomes unreachable. Verifier confidence: high. It explicitly declined to assert a replacement magnitude, noting backgrounded-tab RAF throttling as the untested candidate that fits '1 Hz'.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>8842a839</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">0</span></h2>
+    <h2>Awaiting your judgement <span class="count">6</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
-    <p class="empty">Nothing in this tier.</p>
+    
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">high</span>
+      <code>e01-feature-system</code>
+      <code class="file">engine-gmt/features/droste/index.ts:27</code>
+    </header>
+    <p class="what">Two `shortId` alias collisions silently drop state from every generated share link: droste loses everything, materials.envMapColorSpace is lost.</p>
+    
+    
+    
+    
+    <p class="rationale">Reproduced on the live app (probe transcript in the FeatureSystem finding above). drawing/index.ts:42 and droste/index.ts:27 both declare shortId 'dr'; inside materials.ts, emissionMode and envMapColorSpace both declare param shortId 'ec'. UrlStateEncoder.applyDictionary writes result[alias]=value on encode (utils/UrlStateEncoder.ts:107) and getReverseDict builds one alias-&gt;longKey entry per alias (L84), so the later writer wins both directions. Measured: droste {active:true, zoom:3.5, tiling:4} round-trips to {}; envMapColorSpace:'linear' round-trips to undefined. The ?s=&lt;id&gt; share path is in production, so shared scenes using Droste have been arriving without it. GOOD NEWS FOR COMPAT: in both collisions the alias resolves to the SURVIVING side ('dr'=drawing, 'ec'=emissionMode), so existing links have never carried the lost data — the minimal fix is strictly additive: give the LOSING side a fresh alias (droste 'dr'-&gt;'ds' or 'do'; envMapColorSpace 'ec'-&gt;'ecs'). Old links decode exactly as now; new links gain the dropped state. Taken feature aliases: au cg dt mod pe wc ao at cl cm dr eng g l ls m n o q rf rg tx vol wp wv. RECOMMENDATION: rename the two losing aliases. Not applied because it changes the URL wire format (a product/compat call) and both files sit outside this subsystem. ALTERNATIVE: drop shortId from droste and envMapColorSpace entirely — getDictionary falls back to the full key, so they encode under long names: correct, slightly longer URLs, still no old-link breakage.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e01-feature-system</code>
+      <code class="file">engine/FeatureSystem.ts:626</code>
+    </header>
+    <p class="what">getDictionary() has no collision detection, so the next alias clash will also be found by a user reporting a lost scene rather than at boot. Demoted from Tier V — the right shape depends on a decision only the owner can make.</p>
+    
+    
+    
+    
+    <p class="rationale">Was raised as Tier V (add a dev-only console.warn detector: two passes, one over feature _alias values, one over each feature's paramMap). The orchestrator demoted it rather than spending a verifier, because the finding's own analysis shows it is not independently checkable: two collisions exist TODAY, so a detector that logs at error level (or a real regression guard asserting zero duplicates) fails immediately and turns every GMT smoke red — several smokes fail the run on any console.error. It therefore cannot land before the alias renames above, which makes it a consequence of that owner decision, not a separate fix. RECOMMENDATION: decide the alias renames first, then land the detector and a share-round-trip guard together in the same change. If you take the rename, the guard is the valuable half — nothing currently asserts share round-trip fidelity at all, which is why a production data-loss bug on the live share path went unnoticed. console.warn is the correct level for the runtime detector (validateComponentRefs in the same file already uses warn for exactly this reason); getDictionary is called on every share encode/decode (utils/Sharing.ts:44, :56) so memoise it or gate on import.meta.env.DEV.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e01-feature-system</code>
+      <code class="file">.claude/rules/ddfs.md:30</code>
+    </header>
+    <p class="what">The 'feature isolation' invariant claims undeclared cross-feature state access throws in dev and warns in prod; no such enforcement exists anywhere in the codebase.</p>
+    
+    
+    
+    
+    <p class="rationale">Both .claude/rules/ddfs.md (Invariants, 3rd bullet) and CLAUDE.md (Architecture Rules, 1st bullet) state: 'Reading another feature's state requires dependsOn: [otherId]. Undeclared access throws in dev, warns in prod.' Nothing implements it. dependsOn is read at exactly two places in engine/FeatureSystem.ts: register() L551-557 warns if a named dependency is not yet registered, and topologicalSort() L711-719 uses it for ordering. Feature slices are plain objects on one shared zustand store (store/createFeatureSlice.ts L115); there is no Proxy, no getter trap, no access check — grep -rn 'new Proxy' store/ engine/ returns nothing. This matters because it is stated as an ENFORCED invariant in the two documents an agent loads first, so an agent reasonably assumes the architecture is self-policing and does not check its own cross-feature reads. OPTIONS: (a) downgrade the wording in both docs to what is true — isolation is a CONVENTION; dependsOn declares init order and produces a register-time warning only. Cheap, honest, immediate. (b) Actually implement it: a dev-only Proxy in createFeatureSlice checking the accessing feature against its dependsOn — real work, and the 'accessing feature' is not knowable from a plain store read, so it needs a call-site convention (e.g. readFeature(from, id)) to be enforceable at all. (c) Leave as an aspiration and mark it explicitly as one. RECOMMENDATION: (a). Not applied because the CLAUDE.md half is off-limits to the run, and correcting only the rule file would leave the two steering documents contradicting each other — worse than the current state. Both edits should land together.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e02-tick-registry</code>
+      <code class="file">engine/TickRegistry.ts:19</code>
+    </header>
+    <p class="what">REFUTED, no action needed. An auditor claimed the JSDoc parenthetical &quot;Navigation's useFrame runs before this registry&quot; was backwards. Independent verification found the JSDoc is correct.</p>
+    
+    
+    
+    
+    <p class="rationale">Recorded so you can see the check happened rather than because anything needs doing. The auditor reasoned from JSX order — GmtRendererTickDriver is declared at AppGmt.tsx:338, GmtNavigation at :339, so the driver subscribes first — and from both callbacks appearing to be priority 0. The verifier found the driver's useFrame actually closes with `}, 1);` (GmtRendererTickDriver.tsx:486): explicit renderPriority 1, against Navigation's default 0. R3F 8.18.0 sorts subscribers ascending (`a.priority - b.priority`, 'sort layers from lowest to highest') and iterates ascending, so Navigation runs FIRST. Confirmed at runtime: a temporary two-line probe under Playwright on the booted app printed strictly alternating NAV, DRIVER for 20 consecutive frames with the driver's body actually executing; the probe was reverted and the tree verified clean. The follow-on stale-SNAPSHOT worry is moot twice over — SNAPSHOT's tick (GmtRendererTickDriver.tsx:48-51) calls getViewportCamera(), which returns the live THREE camera object by reference, and Navigation mutates that same object in place, so the snapshot reads current pose at dispatch time regardless of ordering. Worth knowing: the verifier also found the premise wrong — there are five useFrame call sites in app-gmt, not two (Navigation.tsx:1159, useInputController.ts:68 and :94, usePhysicsProbe.ts:111, GmtRendererTickDriver.tsx:276), all navigation-side ones at priority 0. Optional nit, below the bar for an unattended edit: the header could add 'despite being mounted after it in JSX' to pre-empt this exact misreading.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e02-tick-registry</code>
+      <code class="file">engine/TickRegistry.ts:148</code>
+    </header>
+    <p class="what">runTicks has no per-handler error isolation: one throwing tick aborts every later phase for that frame, and in app-gmt also aborts the worker dispatch that follows it.</p>
+    
+    
+    
+    
+    <p class="rationale">The dispatch loop is a bare `for (let i = 0; i &lt; _entries.length; i++) { _entries[i].fn(delta); }` (engine/TickRegistry.ts:148-150). A tick that throws — say an OVERLAY gizmo hitting a null ref — takes out every tick after it in phase order, and because GmtRendererTickDriver calls runTicks inline before serializing the camera and calling proxy.sendRenderTick (:483), the throw also stops the worker frame dispatch. Since a tick that throws once usually throws every frame, the realistic symptom is a permanently frozen image plus a dead timeline, presenting as 'the renderer hung' rather than 'a gizmo is broken'. This is a design fork, not a defect, which is why it was not acted on. OPTIONS: (a) leave as-is — fail-fast keeps bugs loud, and the current tick set is small and stable; (b) wrap each fn(delta) in try/catch that logs once per tick name and keeps going — the rest of the frame survives and the failing tick is named, at the cost of a try/catch per tick per frame (negligible: 4-8 entries) and the risk of a broken tick going unnoticed in production; (c) (b) plus auto-unregistering a tick after N consecutive throws, which self-heals but can silently drop functionality. RECOMMENDATION: (b), with the catch logging the tick's `name` (the registry already stores it) and warning once per name rather than per frame. It converts the worst failure mode — silent whole-renderer freeze — into a named console error while leaving the failure visible.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e02-tick-registry</code>
+      <code class="file">engine/TickRegistry.ts:129</code>
+    </header>
+    <p class="what">ADR-0003 promises that synthetic-tick and headless harnesses can drive runTicks from their own loop, but the 1 ms double-run guard would silently drop every call in such a loop after the first.</p>
+    
+    
+    
+    
+    <p class="rationale">ADR-0003's Context says outright: 'Apps that intentionally use a custom driver (worker-driven, headless test harness) must still be able to call runTicks from their own loop — so the solution can't reject a single legitimate driver, only the second one within a frame.' The implementation cannot distinguish the two cases: TickRegistry.ts:129 suppresses any call arriving less than DOUBLE_RUN_WINDOW_MS = 1 ms after the previous one, regardless of who made it. A frame-stepping harness (offline video export, a deterministic headless test rendering N frames back-to-back) runs each iteration in well under 1 ms and would get exactly one tick then silence — and silently, since the dev warning is one-shot and its text blames a driver double-mount, sending the reader to the wrong place. LATENT, NOT LIVE: only three runTicks call sites exist and none hits it today. It matters now because 4K/offline frame-sequence export is a known roadmap gap, and an exporter is precisely the shape that would trip this. OPTIONS: (a) do nothing and let whoever writes the exporter discover it — cheap now, confusing later; (b) add an opt-out, e.g. an exported setTickGuardEnabled(false) or runTicksUnguarded(delta) that a harness calls explicitly, keeping the guard on for the RAF path; (c) drop the time-window heuristic for driver identity — have drivers claim the registry via a token so a second claimant warns and no-ops while a single claimant can tick as fast as it likes. RECOMMENDATION: (b) now — a few lines, preserves the ADR-0003 guarantee verbatim, does not disturb the RAF path. (c) is the correct long-term shape but is not worth the churn until a second driver kind exists. Either way ADR-0003 wants an Update block noting the gap.</p>
+  </article>
   </section>
 
   <h2>Subsystems</h2>
   <div class="scroll"><table>
     <thead><tr><th>id</th><th>tier</th><th>area</th><th class="num">found</th><th class="num">applied</th><th class="num">checked</th><th class="num">queued</th><th>status</th></tr></thead>
     <tbody>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e01-feature-system</code></td>
     <td>engine-core</td>
     <td class="area">FeatureSystem + DDFS core</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">8</td>
+    <td class="num applied">4</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">3</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e02-tick-registry</code></td>
     <td>engine-core</td>
     <td class="area">Tick phases + render loop ownership</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">7</td>
+    <td class="num applied">3</td>
+    <td class="num esc">1</td>
+    <td class="num prop">3</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>e03-animation</code></td>

@@ -1,0 +1,96 @@
+{
+  "id": "e01-feature-system",
+  "cycle": 1,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e01-feature-system" },
+    { "script": "npm run smoke:interact", "pass": true, "subsystem": "e01-feature-system" },
+    { "script": "npm run smoke:engine-demo", "pass": true, "subsystem": "e01-feature-system" },
+    { "script": "npm run smoke:engine-demo-modulation", "pass": true, "subsystem": "e01-feature-system" },
+    { "script": "npm run smoke:undo", "pass": true, "subsystem": "e01-feature-system" },
+    { "script": "npm run test:partial-apply", "pass": true, "subsystem": "e01-feature-system" },
+    { "script": "npm run test:migrations", "pass": true, "subsystem": "e01-feature-system" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "engine/FeatureSystem.ts",
+      "line": 623,
+      "summary": "getDictionary() mints share-link aliases from `shortId` with no uniqueness validation, and two live collisions silently drop feature state from every share URL; the invariant said nothing about uniqueness and three doc citations in the file were dead.",
+      "change": "Extended the getDictionary() @invariant to require aliases be unique globally across features and within one feature's params, with the reason (UrlStateEncoder.applyDictionary writes result[alias]=value on encode and builds a single alias->longKey reverse map on decode, so a collision drops one side). Added a `@bug PRODUCTION:` block naming both live collisions with the reproduction. Repaired three dead doc citations (docs/02_Feature_Registry.md x2, docs/03_Plugin_Contract.md -> docs/history/engine/...), two of which are inside runtime error messages.",
+      "verification": "Not inferred — reproduced. A Playwright probe loaded the booted app, imported the live FeatureSystem singleton and utils/Sharing.ts, set droste to {active:true, zoom:3.5, tiling:4} and materials to {emissionMode:2, envMapColorSpace:'linear'}, then round-tripped getPreset() through generateShareStringFromPreset -> parseShareString. droste came back {} (all three values lost); envMapColorSpace came back undefined. The same probe enumerated getDictionary() over all 31 registered features and found exactly one feature-alias collision ('dr' -> droste+drawing) and one param-alias collision (materials 'ec' -> emissionMode+envMapColorSpace). Dead citations proved by ls. Guard: npm run typecheck (fails if the JSDoc block were malformed and broke the class body) plus npm run smoke:engine-demo (fails on any console.error/pageerror and exercises getDictionary via the save round-trip).",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "03040513"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/smoke-engine-demo.mts",
+      "line": 30,
+      "summary": "smoke:engine-demo has been failing at step 1 since 2026-05-04 because it looks for a DOM <div> square that was rewritten as a <canvas> painter, so the five DDFS assertions after it have not run for ~3 months.",
+      "change": "Replaced the dead div[class*=\"pointer-events-none\"] + childElementCount probe with the canvas pixel probe the sibling smoke already uses (querySelector('canvas.pointer-events-none'), read the middle row, count pixels brighter than background). Distinct negative return codes for absent / unsized / no-2d-context so the next rot is diagnosable from the log line.",
+      "verification": "Before the change `npm run smoke:engine-demo` failed with 'overlay children: 0 / Demo overlay did not render'; after it all six steps run and it exits 0 (painted pixels 128, topbar present, param labels present, modulation tick advanced 31x in 500ms, colour reverted #ff00ff -> #22d3ee on Ctrl+Z). Not passing-by-accident: the probe asserts painted pixels > 0 so it still fails if DemoOverlay stops rendering, and steps 2-6 are hard throws on the DDFS panel/undo path. Rot confirmed pre-existing: `git show c2ebadf2 -- demo/DemoOverlay.tsx` shows the positioned div replaced by a <canvas> on 2026-05-04 and the smoke's selector was never updated.",
+      "guard": "npm run smoke:engine-demo",
+      "guardPass": true,
+      "commit": "52d8912f"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "store/createFeatureSlice.ts",
+      "line": 7,
+      "summary": "The header @invariant naming consumers of the `set${FeatureId}` string convention cites a symbol that does not derive the name, undercounts consumers ~5x, and its equality claim no longer matches the code.",
+      "change": "Three header corrections. (1) Repointed the setter-name invariant from historySlice.beginParamTransaction (which only snapshots slices via getParamSnapshot and derives no setter name) to historySlice.applyStateRestore, and replaced 'Four downstream consumers' with the real scope (~20 call sites across engine-core, engine-gmt, app-gmt, palette) plus the grep that enumerates them. (2) Split the 'NO oldValue !== newValue guard' claim into its two axes — emission (still ungated) and accumulation (locally gated by paramChanged at L184-190). (3) Repointed two docs/20_Fragility_Audit.md citations at docs/history/engine/.",
+      "verification": "Symbol drift proved by reading store/slices/historySlice.ts: beginParamTransaction (L218-221) only calls getParamSnapshot, which iterates featureRegistry.getAll() and JSON-clones slices — no 'set' prefix anywhere; the sole setter-name derivation is applyStateRestore L184. Count proved by grep: 24 occurrences across 21 files, minus the producer and two type-level mapped types = 21 runtime derivation sites. Equality claim checked against L184-192 and L272. Guards: smoke:undo and smoke:engine-demo both exercise the corrected path end to end — the Ctrl+Z round-trip only reverts because applyStateRestore derives setDemo and calls it, which is exactly what the corrected invariant now says.",
+      "guard": "npm run smoke:undo",
+      "guardPass": true,
+      "commit": "08c39d96"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/ddfs.md",
+      "line": 4,
+      "summary": "The DDFS rule's paths: frontmatter points at engine/store/createFeatureSlice.ts, which does not exist, so the rule never auto-loads for the actual DDFS slice builder; its duplicate-id invariant is also wrong in dev.",
+      "change": "Corrected the dead path to store/createFeatureSlice.ts and added the three other DDFS-core files the rule body discusses but never scoped (engine/features/setFeature.ts, engine/defineEnumParam.ts, engine/typedSlices.ts). Rewrote the duplicate-id bullet: 'the second registration throws immediately' is only true in prod — in dev, register() replaces with a console.warn so Vite HMR keeps working, so a quiet dev console is not proof of no collision.",
+      "verification": "Dead path proved by grep: the string 'engine/store/createFeatureSlice' occurs exactly once in the whole repo — in this rule file — and ls engine/store/ lists only autosaveStore, colorSchemeStore, createStateLibrarySlice, installStateLibrary, toastStore. The four added paths were each confirmed to exist. The duplicate-id correction is read directly off FeatureRegistry.register() (engine/FeatureSystem.ts L518-540): same def returns early; different def under an existing id hits import.meta.env.DEV -> console.warn + features.set + return, and only falls through to throw DuplicateFeatureError in prod — which the DuplicateFeatureError JSDoc (L489-495) already said, so the rule contradicted the source it points at.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "7a30227a"
+    },
+    {
+      "tier": "B",
+      "severity": "high",
+      "file": "engine-gmt/features/droste/index.ts",
+      "line": 27,
+      "summary": "Two `shortId` alias collisions silently drop state from every generated share link: droste loses everything, materials.envMapColorSpace is lost.",
+      "rationale": "Reproduced on the live app (probe transcript in the FeatureSystem finding above). drawing/index.ts:42 and droste/index.ts:27 both declare shortId 'dr'; inside materials.ts, emissionMode and envMapColorSpace both declare param shortId 'ec'. UrlStateEncoder.applyDictionary writes result[alias]=value on encode (utils/UrlStateEncoder.ts:107) and getReverseDict builds one alias->longKey entry per alias (L84), so the later writer wins both directions. Measured: droste {active:true, zoom:3.5, tiling:4} round-trips to {}; envMapColorSpace:'linear' round-trips to undefined. The ?s=<id> share path is in production, so shared scenes using Droste have been arriving without it. GOOD NEWS FOR COMPAT: in both collisions the alias resolves to the SURVIVING side ('dr'=drawing, 'ec'=emissionMode), so existing links have never carried the lost data — the minimal fix is strictly additive: give the LOSING side a fresh alias (droste 'dr'->'ds' or 'do'; envMapColorSpace 'ec'->'ecs'). Old links decode exactly as now; new links gain the dropped state. Taken feature aliases: au cg dt mod pe wc ao at cl cm dr eng g l ls m n o q rf rg tx vol wp wv. RECOMMENDATION: rename the two losing aliases. Not applied because it changes the URL wire format (a product/compat call) and both files sit outside this subsystem. ALTERNATIVE: drop shortId from droste and envMapColorSpace entirely — getDictionary falls back to the full key, so they encode under long names: correct, slightly longer URLs, still no old-link breakage."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "engine/FeatureSystem.ts",
+      "line": 626,
+      "summary": "getDictionary() has no collision detection, so the next alias clash will also be found by a user reporting a lost scene rather than at boot. Demoted from Tier V — the right shape depends on a decision only the owner can make.",
+      "rationale": "Was raised as Tier V (add a dev-only console.warn detector: two passes, one over feature _alias values, one over each feature's paramMap). The orchestrator demoted it rather than spending a verifier, because the finding's own analysis shows it is not independently checkable: two collisions exist TODAY, so a detector that logs at error level (or a real regression guard asserting zero duplicates) fails immediately and turns every GMT smoke red — several smokes fail the run on any console.error. It therefore cannot land before the alias renames above, which makes it a consequence of that owner decision, not a separate fix. RECOMMENDATION: decide the alias renames first, then land the detector and a share-round-trip guard together in the same change. If you take the rename, the guard is the valuable half — nothing currently asserts share round-trip fidelity at all, which is why a production data-loss bug on the live share path went unnoticed. console.warn is the correct level for the runtime detector (validateComponentRefs in the same file already uses warn for exactly this reason); getDictionary is called on every share encode/decode (utils/Sharing.ts:44, :56) so memoise it or gate on import.meta.env.DEV."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": ".claude/rules/ddfs.md",
+      "line": 30,
+      "summary": "The 'feature isolation' invariant claims undeclared cross-feature state access throws in dev and warns in prod; no such enforcement exists anywhere in the codebase.",
+      "rationale": "Both .claude/rules/ddfs.md (Invariants, 3rd bullet) and CLAUDE.md (Architecture Rules, 1st bullet) state: 'Reading another feature's state requires dependsOn: [otherId]. Undeclared access throws in dev, warns in prod.' Nothing implements it. dependsOn is read at exactly two places in engine/FeatureSystem.ts: register() L551-557 warns if a named dependency is not yet registered, and topologicalSort() L711-719 uses it for ordering. Feature slices are plain objects on one shared zustand store (store/createFeatureSlice.ts L115); there is no Proxy, no getter trap, no access check — grep -rn 'new Proxy' store/ engine/ returns nothing. This matters because it is stated as an ENFORCED invariant in the two documents an agent loads first, so an agent reasonably assumes the architecture is self-policing and does not check its own cross-feature reads. OPTIONS: (a) downgrade the wording in both docs to what is true — isolation is a CONVENTION; dependsOn declares init order and produces a register-time warning only. Cheap, honest, immediate. (b) Actually implement it: a dev-only Proxy in createFeatureSlice checking the accessing feature against its dependsOn — real work, and the 'accessing feature' is not knowable from a plain store read, so it needs a call-site convention (e.g. readFeature(from, id)) to be enforceable at all. (c) Leave as an aspiration and mark it explicitly as one. RECOMMENDATION: (a). Not applied because the CLAUDE.md half is off-limits to the run, and correcting only the rule file would leave the two steering documents contradicting each other — worse than the current state. Both edits should land together."
+    },
+    {
+      "tier": "C",
+      "severity": "low",
+      "file": "docs/history/engine/02_Feature_Registry.md",
+      "line": 108,
+      "summary": "The archived registry doc says 'the registry computes the DAG at freeze time and rejects cycles'; the code does neither — the DAG is computed lazily in getAll(), and cycles log to console.error with a fallback to registration order, never rejected.",
+      "rationale": "Reported only, not fixed: docs/history/** is append-only and out of scope. The correct behaviour is already captured in the authoritative layer — engine/FeatureSystem.ts's file-header @invariant (L16-17) and getAll()'s JSDoc (L585-588) both state that cycles log and fall back without throwing, and topologicalSort() L741-746 confirms it. Worth knowing only because that doc is Layer 1 of the context-loading plan for this subsystem, so a reader who stops at the cheap path gets the wrong model of failure behaviour."
+    }
+  ],
+  "notes": "Every @invariant in the subsystem was checked against source. Verified as still TRUE and left alone: module-singleton registry (engine-gmt/engine/FeatureSystem.ts is a 12-line re-export shim, not a second instance); HMR-safe same-object re-register; freeze semantics + dev freeze-stack capture; cycles do not throw; validateComponentRefs opt-in and warn-only; GLSL type normalisation in getUniformDefinitions; image params excluded from the config event; onSet extras only landing for keys absent from `updates`; the track-id convention against engine/animation/trackBinding.ts; typedSlices' EMPTY_LIVE_MODS frozen singleton, applyLiveMod's scalar/vec axis rules, readLiveVec falling back to base rather than 0; defineEnumParam synthesising a float param with no string enum codepath; holdsLiveSession's 'must be FALSE when idle' contract. GUARD HEALTH BEYOND THE REPAIR: smoke:engine-demo step 3 counts input.precision-slider and logs it, but the count is 0 and nothing asserts on it — dead telemetry of the same kind that let step 1 rot for three months; someone should decide whether the demo panel should render precision sliders at all. npm run context:cost warns 'context-map.json predates the latest commit' — the map is from 2026-07-13. npm run orphans reports one unused file repo-wide, debug/render-harness.ts (deletion, so Tier B regardless). CITATION DRIFT FOUND BUT LEFT FOR THE OWNING SUBSYSTEMS: docs/04_Core_Plugins.md cited from utils/PresetLogic.ts:137, utils/PresetFieldRegistry.ts:45, utils/defaultPresetFields.ts:9; docs/01_Architecture.md from fractal-toy/main.tsx:9; docs/03_Plugin_Contract.md from fractal-toy/main.tsx:11; docs/07_Shortcuts.md from engine/plugins/Shortcuts.ts:25; docs/20_Fragility_Audit.md from utils/defaultPresetFields.ts:9; and docs/01_System_Architecture.md from engine-gmt/renderer/GmtRendererCanvas.tsx:22 — that last one resolves NOWHERE (looks like a pre-fork GMT doc never carried over). All others resolve under docs/history/engine/."
+}

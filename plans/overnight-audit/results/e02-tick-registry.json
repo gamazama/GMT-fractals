@@ -1,0 +1,86 @@
+{
+  "id": "e02-tick-registry",
+  "cycle": 1,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e02-tick-registry" },
+    { "script": "npm run smoke:anim-play", "pass": true, "subsystem": "e02-tick-registry" },
+    { "script": "npm run smoke:pause-controls", "pass": true, "subsystem": "e02-tick-registry" },
+    { "script": "npm run smoke:binder-registry", "pass": true, "subsystem": "e02-tick-registry" },
+    { "script": "npm run smoke:boot", "pass": true, "subsystem": "e02-tick-registry" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/TickRegistry.ts",
+      "line": 33,
+      "summary": "TickRegistry's JSDoc header carried a stray @invariant copied from FeatureSystem (about getAll() and dependency cycles — neither exists in TickRegistry), plus three dead doc-path citations and one dead symbol citation (WorkerTickScene).",
+      "change": "Deleted the '@invariant Throws-on-cycle is NOT honored: getAll() returns registration order on cycle...' block — TickRegistry has no getAll export, no dependsOn graph and no cycle detection; that invariant belongs to (and is correctly stated at) engine/FeatureSystem.ts:16-17. Repointed four citations broken by the 2026-07-13 docs reorg (docs/01_Architecture.md, docs/04_Core_Plugins.md, docs/20_Fragility_Audit.md x2) at their docs/history/engine/ paths with exact heading anchors. Replaced the dead 'stays in WorkerTickScene' reference with the driver that owns DISPATCH today (engine-gmt/renderer/GmtRendererTickDriver.tsx), recording WorkerTickScene as the pre-extraction component it was ported from.",
+      "verification": "Grep proves each claim. `getAll` over all ts/tsx returns 40 hits, none in TickRegistry's implementation body — the only occurrence in that file was inside the removed JSDoc; the same invariant text exists verbatim at engine/FeatureSystem.ts:16-17, so no information is lost. Test-Path returns False for all three docs/*.md paths and True for the three docs/history/engine/ replacements; the new anchors were checked against real headings ('## The render-loop contract' at 01_Architecture.md:81, '### @engine/render-loop' at 04_Core_Plugins.md:140, '## F4 — Implicit render-loop contract' at 20_Fragility_Audit.md:89). `git ls-files | Select-String WorkerTickScene` returns nothing, while GmtRendererTickDriver.tsx:2 self-documents as 'direct port of GMT's WorkerTickScene.tsx' and calls proxy.sendRenderTick at :483. Guard: smoke:anim-play drives the real TickRegistry through RenderLoopDriver and asserts the timeline advanced 0 -> 20.5 frames with a bound param moving — it fails if a botched block-comment edit broke either module, which is the realistic failure mode for a JSDoc change on runtime files. smoke:boot also passed with zero page errors.",
+      "guard": "npm run typecheck && npm run smoke:anim-play && npm run smoke:boot",
+      "guardPass": true,
+      "commit": "d840bb2b"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "docs/adr/0003-single-driver-double-run-guard.md",
+      "line": 28,
+      "summary": "All three tick ADRs that cite line numbers in engine/TickRegistry.ts have drifted 35-130 lines; ADR-0003's citation now lands on a completely different mechanism, and ADR-0004 additionally points at docs/modules/engine-fork-rules.md, which the 2026-07-13 reorg removed. NOTE: applied before the owner ruled ADR edits Tier B — see PROPOSALS.md.",
+      "change": "Prepended a '> **Update 2026-07-27 (...; decision unchanged):**' block to ADRs 0001, 0003 and 0004 (house style, matching ADRs 0024/0039/0059/0069/0072/0076). ADR-0001: TICK_PHASE is at 44-51 not '23-28'; phaseNames at 158 not '129'. ADR-0003: the cited '89-94, 99-113' is now the unrelated dev-only no-ticks setTimeout inside registerTick — flagged as actively misleading, real locations given (_warnedDoubleRun/DOUBLE_RUN_WINDOW_MS 122-123, guard block 129-142). ADR-0004: module-scope bindings enumerated at current lines; dead docs/modules/engine-fork-rules.md repointed to docs/policy/engine-fork-rules.md. All three blocks tell readers to grep the symbol rather than follow line numbers. ADR bodies untouched (append-only respected).",
+      "verification": "Every replacement line number was read out of the post-edit file, not inferred: TICK_PHASE 44-51, _entries 59, _needsSort 60, _firstRegisterTime 66, _lastTickTime 67, _warnedNoTicks 68, _warnedDoubleRun 122, DOUBLE_RUN_WINDOW_MS 123, guard block 129-142, comparator 145 and 160, phaseNames 158. The 'actively misleading' claim is checkable: lines 89-113 of the current file are the setTimeout(... 3000) no-ticks warning inside registerTick, a different mechanism from the double-run guard. Test-Path docs/modules/engine-fork-rules.md False, docs/policy/engine-fork-rules.md True; a grep of docs/adr for 'docs/modules/' returns exactly one hit (ADR-0004:43) so no other ADR needed the same fix. Guard is weak by construction for a markdown edit (typecheck only) — the substance is the grep/Test-Path evidence, all re-derivable in under a minute.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "652fb61c"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": ".claude/rules/tick-and-animation.md",
+      "line": 3,
+      "summary": "The tick-and-animation rule's paths: frontmatter omitted engine/plugins/RenderLoop.tsx, so opening the engine's only render-loop driver loaded the engine-plugins rule (which never mentions it) instead of the rule that governs it.",
+      "change": "Added engine/plugins/RenderLoop.tsx to the paths: glob list, plus a short orientation paragraph recording who actually drives ticks: RenderLoop.tsx is the only file under engine/** that calls runTicks; it is mounted by App.tsx (the demo entry), fluid-toy and gradient-explorer; app-gmt does NOT mount it because engine-gmt/renderer/GmtRendererTickDriver.tsx is its canonical driver, and mounting both is the ADR-0003 double-run bug.",
+      "verification": "Coverage gap proved by dumping the paths: frontmatter of all 19 files in .claude/rules/: only engine-plugins.md matches RenderLoop.tsx (via engine/plugins/**), and its 'Read first' list names TopBar/Hud/Menu/SceneIO/RenderDialog/Shortcuts/Undo/AdaptiveResolution/Viewport/camera/Tutorial — not RenderLoop. Every claim added to the body is grep-checkable and was checked: `runTicks\\s*\\(` over ts/tsx/mts/js/mjs returns exactly three call sites (RenderLoop.tsx:44, GmtRendererTickDriver.tsx:323 and :328); RenderLoopDriver as a mounted element appears only in App.tsx:84, fluid-toy/FluidToyApp.tsx:185, gradient-explorer/GradientExplorerApp.tsx:314; `git grep RenderLoopDriver -- app-gmt` returns no source hits while app-gmt/AppGmt.tsx:338 mounts GmtRendererTickDriver; demo.html's script src is /index.tsx which imports ./App, which is what makes App.tsx the demo entry.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "ee035150"
+    },
+    {
+      "tier": "V",
+      "severity": "medium",
+      "file": "docs/adr/0110-audio-analysis-in-a-worklet.md",
+      "line": 19,
+      "summary": "ADR-0110 and HANDOFF.md both state GmtRendererTickDriver throttles runTicks to 1 Hz when UI fps < 20. It does not — runTicks is called on both sides of that branch, so only the worker dispatch is yielded. CONFIRMED by an independent verifier, which also recovered the real starvation mechanism.",
+      "change": "Prepended an append-only Update block under ADR-0110's ## Context heading correcting the mechanism, deriving the two effects that actually starved analysis, and flagging the '1 Hz' magnitude as not derivable from this path. ADR body untouched; the decision stands and is better motivated than before. HANDOFF.md carries the same error and was deliberately left for the owner.",
+      "verification": "An independent verifier that had not seen the auditor's reasoning re-derived it from source and was asked to refute it. Q1: the branch at GmtRendererTickDriver.tsx:321-325 is `if (t.fps < 20 && now - t.lastYield >= 1000) { t.lastYield = now; runTicks(clampedDelta); return; }` with an unconditional `runTicks(clampedDelta);` at :328 — runTicks appears on BOTH sides, so the early return cannot skip it; what it skips is the optics merge, FOV sync, camera serialisation, renderState build, convergence gate and proxy.sendRenderTick. Dated to file creation (50547f46) via `git log -L 315,330` — not a regression. Q2, the harder half: the verifier reconstructed the pre-worklet path from 7ba897aa^ and found the real mechanism — analysis ran off a registered tick ('engine.animation' at TICK_PHASE.ANIMATE), so its rate WAS the frame rate, and two effects follow: AnalyserNode returns only the most recent fftSize samples (85ms at 4096/48kHz), so below ~12fps consecutive windows stop abutting and audio between reads enters no FFT frame at all; and FilterBank.computeFluxRate divides a [0,1]-bounded difference by dt, so with TRANSIENT_FULL_SCALE=20 the transient channel's ceiling is ~fps/20 and a 60fps-tuned thresholdMin becomes unreachable. Verifier confidence: high. It explicitly declined to assert a replacement magnitude, noting backgrounded-tab RAF throttling as the untested candidate that fits '1 Hz'.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "8842a839"
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "engine/TickRegistry.ts",
+      "line": 19,
+      "summary": "REFUTED, no action needed. An auditor claimed the JSDoc parenthetical \"Navigation's useFrame runs before this registry\" was backwards. Independent verification found the JSDoc is correct.",
+      "rationale": "Recorded so you can see the check happened rather than because anything needs doing. The auditor reasoned from JSX order — GmtRendererTickDriver is declared at AppGmt.tsx:338, GmtNavigation at :339, so the driver subscribes first — and from both callbacks appearing to be priority 0. The verifier found the driver's useFrame actually closes with `}, 1);` (GmtRendererTickDriver.tsx:486): explicit renderPriority 1, against Navigation's default 0. R3F 8.18.0 sorts subscribers ascending (`a.priority - b.priority`, 'sort layers from lowest to highest') and iterates ascending, so Navigation runs FIRST. Confirmed at runtime: a temporary two-line probe under Playwright on the booted app printed strictly alternating NAV, DRIVER for 20 consecutive frames with the driver's body actually executing; the probe was reverted and the tree verified clean. The follow-on stale-SNAPSHOT worry is moot twice over — SNAPSHOT's tick (GmtRendererTickDriver.tsx:48-51) calls getViewportCamera(), which returns the live THREE camera object by reference, and Navigation mutates that same object in place, so the snapshot reads current pose at dispatch time regardless of ordering. Worth knowing: the verifier also found the premise wrong — there are five useFrame call sites in app-gmt, not two (Navigation.tsx:1159, useInputController.ts:68 and :94, usePhysicsProbe.ts:111, GmtRendererTickDriver.tsx:276), all navigation-side ones at priority 0. Optional nit, below the bar for an unattended edit: the header could add 'despite being mounted after it in JSX' to pre-empt this exact misreading."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "engine/TickRegistry.ts",
+      "line": 148,
+      "summary": "runTicks has no per-handler error isolation: one throwing tick aborts every later phase for that frame, and in app-gmt also aborts the worker dispatch that follows it.",
+      "rationale": "The dispatch loop is a bare `for (let i = 0; i < _entries.length; i++) { _entries[i].fn(delta); }` (engine/TickRegistry.ts:148-150). A tick that throws — say an OVERLAY gizmo hitting a null ref — takes out every tick after it in phase order, and because GmtRendererTickDriver calls runTicks inline before serializing the camera and calling proxy.sendRenderTick (:483), the throw also stops the worker frame dispatch. Since a tick that throws once usually throws every frame, the realistic symptom is a permanently frozen image plus a dead timeline, presenting as 'the renderer hung' rather than 'a gizmo is broken'. This is a design fork, not a defect, which is why it was not acted on. OPTIONS: (a) leave as-is — fail-fast keeps bugs loud, and the current tick set is small and stable; (b) wrap each fn(delta) in try/catch that logs once per tick name and keeps going — the rest of the frame survives and the failing tick is named, at the cost of a try/catch per tick per frame (negligible: 4-8 entries) and the risk of a broken tick going unnoticed in production; (c) (b) plus auto-unregistering a tick after N consecutive throws, which self-heals but can silently drop functionality. RECOMMENDATION: (b), with the catch logging the tick's `name` (the registry already stores it) and warning once per name rather than per frame. It converts the worst failure mode — silent whole-renderer freeze — into a named console error while leaving the failure visible."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "engine/TickRegistry.ts",
+      "line": 129,
+      "summary": "ADR-0003 promises that synthetic-tick and headless harnesses can drive runTicks from their own loop, but the 1 ms double-run guard would silently drop every call in such a loop after the first.",
+      "rationale": "ADR-0003's Context says outright: 'Apps that intentionally use a custom driver (worker-driven, headless test harness) must still be able to call runTicks from their own loop — so the solution can't reject a single legitimate driver, only the second one within a frame.' The implementation cannot distinguish the two cases: TickRegistry.ts:129 suppresses any call arriving less than DOUBLE_RUN_WINDOW_MS = 1 ms after the previous one, regardless of who made it. A frame-stepping harness (offline video export, a deterministic headless test rendering N frames back-to-back) runs each iteration in well under 1 ms and would get exactly one tick then silence — and silently, since the dev warning is one-shot and its text blames a driver double-mount, sending the reader to the wrong place. LATENT, NOT LIVE: only three runTicks call sites exist and none hits it today. It matters now because 4K/offline frame-sequence export is a known roadmap gap, and an exporter is precisely the shape that would trip this. OPTIONS: (a) do nothing and let whoever writes the exporter discover it — cheap now, confusing later; (b) add an opt-out, e.g. an exported setTickGuardEnabled(false) or runTicksUnguarded(delta) that a harness calls explicitly, keeping the guard on for the RAF path; (c) drop the time-window heuristic for driver identity — have drivers claim the registry via a token so a second claimant warns and no-ops while a single claimant can tick as fast as it likes. RECOMMENDATION: (b) now — a few lines, preserves the ADR-0003 guarantee verbatim, does not disturb the RAF path. (c) is the correct long-term shape but is not worth the churn until a second driver kind exists. Either way ADR-0003 wants an Update block noting the gap."
+    }
+  ],
+  "notes": "Subsystem is small (engine/TickRegistry.ts, engine/plugins/RenderLoop.tsx) and is genuinely covered; the auditor stopped rather than wandering into neighbouring areas. POSITIVE RESULTS WORTH RECORDING: (1) The CLAUDE.md architecture rule 'the render loop is app-owned; the app or @engine/render-loop calls runTicks each frame' is TRUE today — an exhaustive grep finds exactly three runTicks call sites and the only one under engine/** is the @engine/render-loop plugin itself. (2) ADR-0002 (delta in seconds) holds at both drivers: RenderLoop.tsx:41 does dtMs/1000; GmtRendererTickDriver.tsx:276 takes R3F's already-seconds delta and clamps to 0.1. (3) ADR-0004's singleton shim holds: engine-gmt/engine/TickRegistry.ts is a bare re-export, no dual-state fork. (4) The stable-sort invariant holds — V8's Array.sort is stable, entries are appended then re-sorted, so within-phase registration order survives repeated sorts. (5) The double-run guard correctly does NOT advance _lastTickTime on a suppressed call. (6) Guard health is clean: all five smoke scripts named in .claude/rules/tick-and-animation.md, plus smoke:boot and smoke:pause-controls, resolve to debug/*.mts files that exist, and everything run passed. NOT COVERED: npm run orphans was not run for this subsystem — orphan removal is Tier B by protocol, both files are demonstrably live, and knip is slow. HOUSEKEEPING: running smoke:pause-controls rewrote the tracked binary debug/fluid-pause-hover.png as a side effect; the orchestrator restored it with git checkout and it is excluded from all commits. npm run context:cost warns that context-map.json predates the latest commit (map is from 2026-07-13)."
+}

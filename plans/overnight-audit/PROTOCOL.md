@@ -25,7 +25,22 @@ is dropped — never applied.
 - **Never touch** `node_modules/`, `dist/`, `.env*`, credentials, or anything under
   `docs/history/**` beyond appending (a hook enforces the last one).
 - **Never edit `gmt-rs/`** — explicitly out of scope for this run.
+- **Never edit anything under `docs/adr/`.** Owner decision, cycle 1. The
+  `guard.mjs` PreToolUse hook escalates every ADR write to an interactive
+  permission prompt (it cannot distinguish a sanctioned append-only Update block
+  from an illegal body rewrite), which stalls an unattended run. **Every ADR
+  correction — drifted line numbers, dead paths, superseded symbols — is Tier B
+  and goes to `PROPOSALS.md`** with the exact replacement text ready to paste, so
+  the morning pass is mechanical. This applies to auditors and verifiers too;
+  state it in every prompt you give them.
 - If a change would require any of the above to verify it, the finding is Tier B.
+
+> **Amendment, cycle 1 (2026-07-27):** two ADR commits landed before this rule
+> existed — `652fb61c` (ADRs 0001/0003/0004 line-citation refresh) and `8842a839`
+> (ADR-0110 low-fps mechanism correction). Both are verified, append-only Update
+> blocks and both are on the audit branch only. They are flagged at the top of
+> `PROPOSALS.md` so they can be dropped with a rebase if the owner would rather
+> apply ADR changes by hand.
 
 ## The four tiers
 
