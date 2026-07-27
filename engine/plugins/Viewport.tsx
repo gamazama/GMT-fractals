@@ -14,7 +14,8 @@
  * means in their engine — GMT lowers DPR, toy-fluid lowers sim grid,
  * fractal-toy lowers the internal render scale.
  *
- * See docs/10_Viewport.md for full design + integration patterns.
+ * See docs/history/engine/10_Viewport.md for full design + integration
+ * patterns, and engine/AdaptiveResolution.ts for the decision algorithm.
  */
 
 import { useEngineStore } from '../../store/engineStore';
@@ -130,13 +131,17 @@ export const viewport = {
     },
 
     /** Hold the adaptive loop at its current quality for the next
-     *  durationMs (defaults to adaptiveConfig.graceMs). Call after
-     *  events the user expects full quality for: loading a preset,
-     *  starting an accumulation, finishing a compile.
+     *  durationMs (defaults to `adaptiveConfig.activityGraceMs * 4` —
+     *  see viewportSlice's `holdAdaptive`). Call after events the user
+     *  expects full quality for: loading a preset, starting an
+     *  accumulation, finishing a compile.
      *
-     *  @note Default holdMs is `adaptiveConfig.activityGraceMs * 4`. The
-     *    inline comment that still says "graceMs" is a stale
-     *    source-comment, not the public API name (followup q-041). */
+     *  Holding blocks DOWNSCALE only; the loop may still upscale during
+     *  the window (engine/AdaptiveResolution.ts `holdUntilMs`). Note the
+     *  hold is checked in the sample-window branch ONLY — the idle→active
+     *  re-engagement SEED (`state.activeLast === 0`) assigns a downscale
+     *  without consulting it, so a hold started while adaptive is
+     *  disengaged does not survive the next engagement. */
     holdAdaptive(durationMs?: number): void {
         useEngineStore.getState().holdAdaptive(durationMs);
     },
