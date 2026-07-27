@@ -4,8 +4,9 @@
  * Right-clicks on the fluid-toy canvas; asserts:
  *   - native browser menu did NOT appear (preventDefault fired)
  *   - store.contextMenu.visible is true
- *   - items include labeled actions for Copy C, Pause, Recenter, Reset
- *     (the "Auto Orbit" item was removed when auto-orbit was retired)
+ *   - items include labeled actions for Copy Julia c, the sim pause/resume
+ *     toggle, Recenter and Reset (the "Auto Orbit" item was removed when
+ *     auto-orbit was retired)
  */
 import { chromium } from 'playwright';
 
@@ -28,6 +29,18 @@ async function main() {
     if (!canvas) throw new Error('no canvas element found');
     const box = await canvas.boundingBox();
     if (!box) throw new Error('canvas has no bounding box');
+    // Observe preventDefault: a BUBBLE-phase window listener runs after the
+    // canvas's own handler, so `defaultPrevented` here reflects whether the
+    // canvas suppressed the native menu. (Capture phase would run first and
+    // always read false.) Previously the docstring claimed this was checked
+    // and nothing checked it.
+    await page.evaluate(() => {
+        (window as any).__cmPrevented = null;
+        window.addEventListener('contextmenu', (e) => {
+            (window as any).__cmPrevented = e.defaultPrevented;
+        });
+    });
+
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down({ button: 'right' });
     await page.mouse.up({ button: 'right' });
@@ -43,9 +56,18 @@ async function main() {
     console.log('menu:', JSON.stringify(menu));
 
     if (!menu.visible) throw new Error('context menu did not open');
-    const needed = ['Copy Julia c', 'Pause', 'Recenter', 'Reset'];
+
+    const prevented = await page.evaluate(() => (window as any).__cmPrevented);
+    console.log('contextmenu defaultPrevented:', prevented);
+    if (prevented !== true) throw new Error('canvas did not preventDefault the native context menu');
+    // The sim-toggle row is state-dependent: fluid-toy ships
+    // `fluidSim.paused: true` (pure-fractal boot — see
+    // fluid-toy/features/fluidSim.ts), so at boot the label always reads
+    // "Resume Sim" and only reads "Pause Sim" once the sim is running.
+    // Matching the bare string 'Pause' could therefore never pass.
+    const needed: (string | RegExp)[] = ['Copy Julia c', /(Pause|Resume) Sim/, 'Recenter', 'Reset'];
     for (const n of needed) {
-        const hit = menu.itemLabels.find((l: string) => l.includes(n));
+        const hit = menu.itemLabels.find((l: string) => (typeof n === 'string' ? l.includes(n) : n.test(l)));
         if (!hit) throw new Error(`menu missing "${n}" (got: ${JSON.stringify(menu.itemLabels)})`);
     }
 
