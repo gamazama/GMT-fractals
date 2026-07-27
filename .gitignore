@@ -100,5 +100,9 @@ public/palette/softology.json.gz
 public/palette/cptcity.bin.gz
 public/palette/cptcity.json.gz
 
-# Claude Code personal config
-.claude/
+# Claude Code — personal config stays local, shared steering is tracked
+.claude/*
+!.claude/rules/
+!.claude/skills/
+!.claude/hooks/
+!.claude/settings.json

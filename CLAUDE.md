@@ -1,11 +1,11 @@
 # gmt-engine — Claude Code Instructions
 
 ## Project Overview
-**gmt-engine** — a generic application engine extracted from GMT (stable at `h:/GMT/workspace-gmt/stable/`). Lives at `h:/GMT/workspace-gmt/dev/`. Provides DDFS (Data-Driven Feature System), animation, UI, save/load, shortcuts, undo, and plugin seams. Apps (GMT, toy-fluid, future prototypes) install features and core plugins on top of it.
+**gmt-engine** — a generic application engine providing DDFS (Data-Driven Feature System), animation, UI, save/load, shortcuts, undo, and plugin seams. Apps (`app-gmt`, `fluid-toy`, `fractal-toy`, future prototypes) install features and core plugins on top of it.
 
 Stack: React 18 + TypeScript + Zustand + Vite + optional GLSL | Forked from GMT 0.9.2 | Status: pre-1.0 architecture stabilisation
 
-**Working directory.** Primary is `h:/GMT/workspace-gmt/dev/` (this tree). `h:/GMT/workspace-gmt/stable/` is the production checkout — investigate and edit there ONLY on explicit ask. Default investigations to `dev/`; if a memory file or env hint says otherwise, the user instruction wins.
+**Working directory.** This tree (`h:/GMT/workspace-gmt/stable/`) is THE working tree, on `main`. It is also the production checkout — it serves app.gmt-fractals.com via Cloudflare Pages, which auto-deploys on push. Work here directly. The old `h:/GMT/workspace-gmt/dev/` split was retired on 2026-06-17 and that directory no longer exists; the `dev` branch survives on GitHub for the `/dev` preview deploy only.
 
 Two companion docs at the repo root:
 - `HANDOFF.md` — session-by-session progress log, stage history, resume instructions.
@@ -17,7 +17,7 @@ This file (`CLAUDE.md`) is forward-looking rules. `docs/DOCS_INDEX.md` is the au
 
 ### Documentation Conventions (READ FIRST)
 
-**Navigation policy.** When investigating or modifying code, default to reading source files top-to-bottom and grepping for the annotation markers below. External docs (`docs/adr/`, `docs/policy/`, the table below) are reference-of-last-resort for context the code doesn't carry. **If you find yourself reading a doc that restates code, stop and read the code.** Empirically: two real test tasks (debugging a splash timeout, auditing the state-library factory) both completed via grep + source reading; external markdown contributed zero. The docs are sized for human onboarding/archaeology, not agent navigation.
+**Navigation policy.** When investigating or modifying code, default to reading source files top-to-bottom and grepping for the annotation markers below. External docs (`docs/adr/`, `docs/policy/`) are reference-of-last-resort for context the code doesn't carry. **If you find yourself reading a doc that restates code, stop and read the code.** Empirically: two real test tasks (debugging a splash timeout, auditing the state-library factory) both completed via grep + source reading; external markdown contributed zero. The docs are sized for human onboarding/archaeology, not agent navigation.
 
 **Greppable annotation markers** — these are the canonical doc layer agents consume. Add them at the source site, not in external markdown.
 
@@ -40,55 +40,18 @@ This file (`CLAUDE.md`) is forward-looking rules. `docs/DOCS_INDEX.md` is the au
 
 ### Read Docs Before Coding
 
-The three doc layers, in order of authority:
+The doc layers, in order of authority:
 
 1. **Source files with JSDoc + greppable markers** — freshest, most-trusted layer. Default consumption path for agents.
-2. **ADRs at [`docs/adr/`](./docs/adr/)** — decisions with rationale. Dated, append-only. Cited from source via `@see docs/adr/NNNN-*.md`. Best for "why was this chosen" questions.
-3. **Policy docs at [`docs/policy/`](./docs/policy/)** — cross-cutting rules (engine-fork-rules, ddfs-string-contract, etc.). Best for "what's the rule when X spans multiple files" questions.
+2. **Path-scoped rules at [`.claude/rules/`](./.claude/rules/)** — load automatically when you open a matching source file. Entry point, ADRs and guard script for that subsystem. See below.
+3. **ADRs at [`docs/adr/`](./docs/adr/)** — decisions with rationale. Dated, append-only. Cited from source via `@see docs/adr/NNNN-*.md`. Best for "why was this chosen" questions.
+4. **Policy docs at [`docs/policy/`](./docs/policy/)** — cross-cutting rules (engine-fork-rules, ddfs-string-contract, etc.). Best for "what's the rule when X spans multiple files" questions.
 
 Pre-audit narrative docs at `docs/history/engine/*` are pre-extraction reference. **Source JSDoc + ADRs take precedence** where they disagree — the audit on 2026-05-20 surfaced several drift cases (e.g. `runTicks(deltaMs)` in `01_Architecture.md` was wrong; correct is `runTicks(deltaSec)` per ADR-0002).
 
-The table below covers **domain topics** (specific subsystems). If your task is about cross-cutting infrastructure — saved-state libraries, registries, factories, generic primitives, hotkey/toast/undo machinery — the table likely won't have a row. Look under `engine/store/` (factories), `engine/plugins/` (slot hosts), `components/` (primitives) and grep for the relevant export name; the in-source JSDoc on factories should orient you.
+Per-subsystem guidance lives in **[`.claude/rules/`](./.claude/rules/)** — path-scoped rule files that load automatically when you open a matching source file. Each carries the JSDoc entry point, the governing ADRs, and the guard script (`npm run test:*` / `smoke:*`) for that area. You do not need to look them up: opening `engine/features/modulation/*` loads the modulation rule, opening `components/ui/*` loads the layers rule. To see the full set, `ls .claude/rules/`.
 
-| Working on... | Read first | Decisions |
-|---|---|---|
-| **Render loop, TickRegistry, phase ordering, delta units** | JSDoc at top of `engine/TickRegistry.ts` | ADRs 0001-0004 |
-| **DDFS feature system** — `defineFeature`, registry freeze, auto-setter contract | JSDoc at top of `engine/FeatureSystem.ts` + [`docs/policy/ddfs-string-contract.md`](./docs/policy/ddfs-string-contract.md) + [`docs/policy/ddfs-auto-wiring.md`](./docs/policy/ddfs-auto-wiring.md) | ADRs 0007-0014, 0036-0037 |
-| **Shared UI primitives** — Knob, Slider, AutoFeaturePanel, CompilableFeatureSection | JSDoc on `components/AutoFeaturePanel.tsx` + [`docs/policy/shared-ui-coupling-rules.md`](./docs/policy/shared-ui-coupling-rules.md) | ADRs 0008-0010 |
-| **Floating surfaces + z-index/stacking** — `<Layer tier=…>` (the un-trappable portal primitive), the domain-tagged tier table + `z(tier,rank)`/`Z` proxy (`components/ui/zIndex.ts`), `layerStack`/`layerHost`, Modal / FloatingPanel / AnchoredMenu, `useDismiss`, `stopNavKeys`. **New floating surface = `<Layer tier=…>`, never a raw `z-[N]`** (portal-vs-trap: an in-flow element under the shell can't beat a body portal regardless of z). Guards: `npm run test:zindex` / `check:zindex`. | JSDoc on `components/ui/*` + `hooks/useDismiss.ts` + `plans/z-index-system-design.md` | ADR-0060, 0081, **0082** |
-| **Animation engine** — binders, recording, log/camera-pair tracks | JSDoc on `engine/AnimationEngine.ts` | ADRs 0015-0017 |
-| **Audio modulation (VJ rig)** — WebAudio graph + live-input constraints, fractional-octave filterbank, rule pipeline, the live-session hold across scene loads, the THREE durable routing-string stores | JSDoc on `engine/features/audioMod/filterBank.ts` (start here) + `AudioAnalysisEngine.ts` + `freqScale.ts` + `engine/features/modulation/ModulationEngine.ts` + `engine-gmt/animation/retargetTracks.ts` | ADR-0103, 0104, 0106 |
-| **Slider display curves (`scale:`)** — the FOUR sinks' cousin: which curve a param's slider draws, and why modulation composes in slider space so a fixed Gain gives fixed travel. One resolver; do NOT add a widget-local `createXMapping`. `npm run test:param-mapping` guards it. | JSDoc on `engine/features/modulation/paramMapping.ts` | **ADR-0108** |
-| **Modulation dispatch** — the ONE branch chain (`planModulationTarget`) that both the live tick and render export run. Was triplicated and had drifted; `npm run test:modulation-parity` keeps it single. | JSDoc on `engine/features/modulation/applyTarget.ts` | **ADR-0109** |
-| **Modulation targets — "why doesn't param X modulate?"** The FOUR sinks an offset can reach (uniform / `engine.modulations` / renderState slice merge / display-only), what the picker offers, and the branch chain. Start at `targetRouting.ts`, then `AnimationSystem.tick`. Run `npm run test:modulation-coverage` to print the full matrix of every target and where it lands. | JSDoc on `engine/features/modulation/targetRouting.ts` + `engine/animation/AnimationSystem.tsx` | **ADR-0107** |
-| **Render pipeline** — writeIndex semantics, bloom, accumulation | JSDoc on `engine/RenderPipeline.ts` + `engine/BloomPass.ts` | ADR-0018 |
-| **Shader builder** — uniform schema, BASE vs feature merge, section escape hatch | JSDoc on `engine/ShaderBuilder.ts` + [`docs/policy/uniform-plugin-contract.md`](./docs/policy/uniform-plugin-contract.md) | ADRs 0019-0020 |
-| **Plugin host slots** — TopBar / Hud / Menu / SceneIO / RenderDialog | JSDoc on `engine/plugins/*.tsx` | ADR-0021 |
-| **Shortcuts + per-scope undo** | JSDoc on `engine/plugins/Shortcuts.ts` + `Undo.tsx` | ADRs 0022-0023 |
-| **Adaptive resolution** — viewport plugin, FPS probe, render-scale | JSDoc on `engine/AdaptiveResolution.ts` + `engine/plugins/Viewport.tsx` | ADRs 0024-0026 |
-| **Camera plugin / StateLibrary primitive** — savedCameras lifecycle, slot semantics | JSDoc on `engine/plugins/camera/*` + `engine/store/createStateLibrarySlice.ts` | ADRs 0027-0031 |
-| **Worker contract** — proxy stub, ViewportRefs, EngineRenderState | JSDoc on `engine/worker/WorkerProxy.ts` | ADRs 0034-0035, 0041-0042 |
-| **Mobile layout** — useMobileLayout, address-bar collapse, layout primitives | JSDoc on `hooks/useMobileLayout.ts` + `engine/components/{Landscape,Mobile}*` | ADRs 0038-0039 |
-| **App boot (app-gmt)** — main.tsx, useAppStartup, splash lifecycle, frozen-splash debugging | JSDoc on `app-gmt/main.tsx` + `hooks/useAppStartup.ts` + `app-gmt/LoadingScreen.tsx` + `engine-gmt/renderer/GmtRendererTickDriver.tsx` + `store/CompileProgressStore.ts` | ADRs 0005-0006 |
-| **Panel manifest + topbar slots** | JSDoc on `engine/PanelManifest.ts` + `app-gmt/panels.ts` | ADR-0011 |
-| **Tutorial / lessons** | JSDoc on `engine/plugins/Tutorial.tsx` + `app-gmt/tutorial/*` | ADR-0012 |
-| **Engine-gmt: GMT renderer** — FractalEngine + MaterialController + CompileScheduler | JSDoc on `engine-gmt/engine/FractalEngine.ts` + `engine-gmt/engine/CompileScheduler.ts` | ADRs 0036-0042 |
-| **Engine-gmt: shader pipeline** — 17-position assembly, UniformManager.syncFrame, ConfigManager.update diff | JSDoc on `engine-gmt/engine/ShaderBuilder.ts` + `managers/UniformManager.ts` | ADRs 0043-0044 |
-| **Shader compile time** — cold/cached model, measure→attribute→validate protocol, per-switch cost, optimization backlog | [`docs/policy/shader-compile-optimization.md`](./docs/policy/shader-compile-optimization.md) + JSDoc on `engine-gmt/engine/CompileScheduler.ts` | ADRs 0040, 0073 |
-| **Engine-gmt: bucket render + export** | JSDoc on `engine-gmt/engine/GmtBucketHost.ts` + `worker/WorkerExporter.ts` | ADR-0045 |
-| **Engine-gmt: navigation + cursor-anchored gestures** | JSDoc header `engine-gmt/navigation/Navigation.tsx:1-97` | ADRs 0046-0047 |
-| **Engine-gmt: formula registry** — FractalDefinition, alias drift, FormulaType union | JSDoc on `engine-gmt/engine/FractalRegistry.ts` + `formulas/index.ts` | ADRs 0048-0049 |
-| **Engine-gmt: modular graph** — GraphCompiler, DCE+topo-sort, uModularParams slots | JSDoc on `engine-gmt/utils/GraphCompiler.ts` | ADRs 0050-0051 |
-| **GMF save/load + scene serialisation** | JSDoc on `engine-gmt/utils/FormulaFormat.ts` + `utils/SceneFormat.ts` | ADRs 0052-0053 |
-| **DDFS feature catalog (engine-gmt)** — feature mounting, engine-core sharing | JSDoc on `engine-gmt/features/index.ts` + `features/core_math.ts` | ADRs 0054-0055 |
-| **Camera Manager (engine-gmt)** — savedCameras, slot hotkeys, installStateLibrary consumer | JSDoc on `engine-gmt/store/cameraSlice.ts` + `features/camera_manager/*` | ADRs 0056-0057 |
-| **Formula Workshop** — V3/V4 importer, importSource lifecycle | JSDoc on `engine-gmt/features/fragmentarium_import/FormulaWorkshop.tsx` | ADR-0058 |
-| **Mandelbulb3D importer** — `.m3p`/text parse, hybrid weave, x87 `[CODE]` decompiler + cross-check, fused FractalDefinition; hand-ported bit-hacking formulas via `mb3dFormulaLibrary.ts` overlay; 4D-coord (`wIsCoord`) DE radius + c.w julia seed | [`plans/mb3d/converter-design.md`](./plans/mb3d/converter-design.md) + `engine-gmt/utils/mb3d/*` | ADR-0083, 0101, 0102 |
-| **Anything spanning engine/ + engine-gmt/** (fork rules — when to shim vs fork) | [`docs/policy/engine-fork-rules.md`](./docs/policy/engine-fork-rules.md) | — |
-| **fluid-toy** — sibling app | `fluid-toy/README.md` + `docs/modules/fluid-toy/index.md` (overview) | — |
-| **fractal-toy** — sibling app | `docs/modules/fractal-toy/index.md` (overview) | — |
-| **mesh-export** — standalone tool | `docs/modules/mesh-export/index.md` (overview) | — |
-| **demo** — adding a tiny plugin proof | `demo/README.md` | — |
+If your task is cross-cutting infrastructure — saved-state libraries, registries, factories, generic primitives, hotkey/toast/undo machinery — there may be no rule for it. Look under `engine/store/` (factories), `engine/plugins/` (slot hosts), `components/` (primitives) and grep for the relevant export name; the in-source JSDoc on factories should orient you.
 
 **Legacy reference** (pre-extraction docs, may be stale where ADRs disagree):
 - `docs/history/engine/*` — narrative architecture docs from the engine extraction. Some still accurate; check JSDoc + ADRs first.
@@ -102,7 +65,7 @@ Architectural decisions live in [`docs/adr/`](./docs/adr/) as dated, append-only
 
 When making a load-bearing architectural decision (a contract, a fork pattern, an invariant that affects multiple subsystems), write an ADR before or alongside the implementation. Subsystem JSDoc references the relevant ADRs via `@see docs/adr/NNNN-*.md`.
 
-The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engine-gmt + app-gmt surface. The legacy `docs/modules/` tree from the same audit has been collapsed: 5 policy docs migrated to [`docs/policy/`](./docs/policy/), 28 subsystem state docs hoisted into source-file JSDoc + ADRs (originals archived at [`docs/history/audit-2026-05-20/archive/`](./docs/history/audit-2026-05-20/archive/) for traceability), and 3 sibling-app overviews kept at `docs/modules/{fluid-toy,fractal-toy,mesh-export}/index.md` as light entry points. The audit's harvest worksheets at `docs/history/doc-audit-state/harvest/` show what each archived doc contributed to which ADR.
+The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engine-gmt + app-gmt surface. The legacy `docs/modules/` tree from the same audit has been collapsed: 5 policy docs migrated to [`docs/policy/`](./docs/policy/), 28 subsystem state docs hoisted into source-file JSDoc + ADRs (originals archived at [`docs/history/audit-2026-05-20/archive/`](./docs/history/audit-2026-05-20/archive/) for traceability), and sibling-app overviews kept at `docs/modules/{fluid-toy,fractal-toy,gradient-explorer,mesh-export,palette}/index.md` as light entry points. The audit's harvest worksheets at `docs/history/doc-audit-state/harvest/` show what each archived doc contributed to which ADR.
 
 ### TypeScript
 - `tsconfig` has `isolatedModules: true` — type-only cross-module re-exports MUST use `export type { X }` and `import type { X }`. Otherwise Vite/esbuild leaves the export in JS output → runtime SyntaxError.
@@ -110,7 +73,7 @@ The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engin
 ### Architecture Rules
 - **Features are isolated.** A feature's state lives at `store[featureId]`. Reading another feature's state requires declaring `dependsOn: ['otherId']` in the feature def. Undeclared access throws in dev, warns in prod. See `docs/history/engine/02_Feature_Registry.md`.
 - **Intra-feature coordination uses bridges or derived values.** No ad-hoc store reach-through. See `docs/history/engine/09_Bridges_and_Derived.md`.
-- **UI primitives are pure.** No primitive imports the store. Animation / undo / shortcuts / context-menu capabilities are opt-in via React context. See `docs/history/engine/05_Shared_UI.md`.
+- **UI primitives are pure.** `components/ui/**` (Layer, Modal, FloatingPanel, AnchoredMenu and the stacking machinery) has zero store imports and a PreToolUse hook keeps it that way. Capabilities arrive via props or opt-in React context. Note this holds for `components/ui/**` specifically — the wider `components/` directory contains store-aware composed panels (AutoFeaturePanel, CompilableFeatureSection, and ~47 others) and that is not a violation. See `docs/history/engine/05_Shared_UI.md`.
 - **The render loop is app-owned.** Engine provides `TickRegistry` phases; the app (or `@engine/render-loop` core plugin) calls `runTicks(dt)` each frame. See `docs/history/engine/01_Architecture.md`.
 - **Feature registry is frozen at store construction.** Late registration throws in dev, no-ops in prod. All `featureRegistry.register()` calls must happen before `createEngineStore()` runs. See `docs/history/engine/03_Plugin_Contract.md`.
 - **Duplicate feature IDs are forbidden.** The second registration throws immediately.
@@ -122,7 +85,7 @@ The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engin
 - Don't reach from feature A's setter into feature B's state — use a bridge.
 - Don't depend on `set${Feature}` by name-inference in animation — the engine auto-binds via the registry. If you need a custom binder, `binderRegistry.register()` it explicitly.
 - Don't write architecture decisions in changelog form. Update the relevant doc's "Decisions" section and link commits from the doc, not the other way around.
-- Don't modify anything under `docs/history/gmt/` — those are pre-extraction GMT reference. Engine-scope changes go in `docs/history/engine/`.
+- Don't rewrite anything under `docs/history/**` — it is the pre-extraction attic. Appending is fine; a PreToolUse hook enforces this (`.claude/hooks/guard.mjs`) and will explain itself if you trip it.
 
 ## Engine Principles (Goals · Strategies · Anti-Patterns)
 
