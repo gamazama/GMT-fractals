@@ -24,6 +24,170 @@ arrive here as paste-ready text instead.
 
 ---
 
+## MEDIUM — Lowering the Auto-Stop slider throws away a converged render
+
+_(cycle 2 · `engine/RenderPipeline.ts:492`)_
+
+`setSampleCap(cap)` runs `if (cap > 0 && this.accumulationCount > cap) this.resetAccumulation();`.
+The generic binding that feeds it documents the **opposite** —
+`store/slices/installAccumulationBindings.ts:42-44`: *"changing the cap
+mid-render does NOT reset accumulation; if the new cap is below the current
+count, the controller stops adding samples but keeps the existing buffer."*
+
+The chain is proven end-to-end: store `sampleCap` → `installAccumulationBindings.ts:47`
+`controller.setPreviewSampleCap(n)` → `WorkerProxy.ts:670` posts `SET_SAMPLE_CAP`
+→ `renderWorker.ts:530` → `FractalEngine.ts:412` `pipeline.setSampleCap(n)`.
+
+The trigger is an ordinary continuous control: `engine/plugins/topbar/PauseControls.tsx:97-101`
+is a `Slider` (min 0, max 4096, step 32) wired `onChange={setSampleCap}`. So
+dragging **Auto-Stop (Samples)** downward past the current count throws away a
+converged buffer and restarts at sample 0 — **repeatedly, once per step, during
+the drag.** `RegionOverlay.tsx:71-76` cycles the same cap through
+[0, 64, …, 4096]; wrapping 4096 → 0 is safe (0 is uncapped) but 4096 → 64 after
+a long accumulation is not.
+
+**Options**
+
+1. **Fix the code** — drop the reset from `setSampleCap`. A converged 512-sample
+   image is strictly better than the 64 the user just asked to stop at, and
+   `render()` already no-ops once `accumulationCount >= sampleCap`, so the image
+   simply freezes where it is. Matches the documented contract, needs no doc
+   change, removes the drag-destroys-render behaviour.
+2. **Fix the doc** — keep the reset (reading the cap as "re-render with this
+   budget") and correct `installAccumulationBindings.ts:42-44`. Then debounce
+   PauseControls' slider to end-of-drag, or it still resets N times per drag.
+3. Leave both and add an `@invariant` recording the divergence.
+
+**Recommendation: option 1.** The reset destroys work the user already paid GPU
+time for, the contradiction resolves for free, and no guard covers the current
+behaviour so nothing depends on it. Not applied because which side is wrong is a
+product call, and the doc half lives in another subsystem's file.
+
+---
+
+## MEDIUM — Graph-editor curve tools write wrong tangents on log tracks
+
+_(cycle 2 · `utils/CurveFitting.ts:55` — confirmed live by independent verification)_
+
+A track registered via `registerLogTrack` is interpolated in `log(value)` space,
+so **its Bezier tangent y-values are log-units**. Every keyframe write path
+threads `isLogTrack(trackId)` into `AnimationMath.calculateTangents` — except
+`reTangentBezier`, which takes a `Keyframe[]` and no track id, so there is
+nothing to derive the flag from. It defaults to `false`.
+
+**Reachable today.** `reTangentBezier` is called by the Pencil tool
+(`hooks/usePencilTool.ts:127`, `:145`), the graph editor's Bias handle
+(`components/graph/GraphSelectionBBox.tsx:221`) and the palette channel-curve
+editor (harmless — palette tracks are never log). fluid-toy registers
+`julia.zoom` as a **visible** camera-key track, mounts `<TimelineHost/>`, and
+`components/GraphEditor.tsx` has four explicit `isLogTrack` branches precisely
+because that track is plotted and edited there. Nothing downstream re-tangents:
+`sequenceSlice.updateKeyframes` applies patches verbatim.
+
+**Measured** (probes against the real modules, on the clean Bias path): the same
+keys authored both ways diverge by up to **1.34 decades / 22×** on a 24-decade
+track, 1.20 decades on a 30-decade track, and **0.30 decades / 2×** on an
+everyday 6-decade zoom. Auto-tangent magnitudes collapse to 39% / 2.2% /
+1.1e-17% of correct, so curves degenerate toward a flat default ease regardless
+of what the user authored.
+
+**Two defects, and the second is larger on the Pencil path.**
+`components/GraphEditor.tsx:218` computes the Douglas-Peucker tolerance as
+`eps: Math.max(1e-6, range * 0.02)` in **linear value units**. On a 1→1e-30
+track that is `eps = 0.02`, which collapses a 101-sample stroke to **3
+keyframes**. Measured against what the user actually drew: shipped = 8.01
+decades off; with `isLog` fixed but the epsilon left alone = **5.13 decades off**.
+So fixing the flag alone leaves the Pencil unusable on `julia.zoom`.
+
+**Paste-ready spec for the flag half** (defaults keep every current caller
+behaviourally identical):
+
+1. `utils/CurveFitting.ts` — `reTangentBezier(keys, pred?, isLog = false)`
+   forwarding to `calculateTangents(k, prev, next, 'Auto', isLog)`; same for
+   `fitSamplesToKeys(samples, startFrame, eps, idPrefix, isLog = false)`.
+2. `hooks/usePencilTool.ts` — add `isLog?: boolean` to `PencilTarget`; pass
+   `st.target.isLog` at `:127` and `:145`. No registry import in the hook.
+3. `components/GraphEditor.tsx` — in the pencil `getTarget` object (`:216-226`)
+   add `isLog: isLogTrack(tid)`; `isLogTrack` is already imported at `:17`.
+4. `components/graph/GraphSelectionBBox.tsx` — add `isLog: boolean` to the
+   `biasTracks` entries built at `:160`, pass `bt.isLog` at `:221`. (This file
+   is under `components/graph/`, not `components/ui/`, so the UI-purity hook
+   does not apply, and `logTrackRegistry` is a store-free pure module.)
+
+Then the epsilon, as its own change: derive it in log space from the
+`trackRanges` log span, or feed `dpIndices` the `log(values)`.
+
+**Recommendation:** do both, in that order, when you can eyeball the graph
+editor. Not applied tonight because it is a five-file signature change across UI
+with thin guard coverage, and because fixing half of it silently leaves the
+Pencil broken — a worse state to wake up to than the current one.
+`engine-gmt/animation/cameraBinders.ts` had the identical omission and **was**
+fixed (`23239289`): it is behaviour-neutral today since no GMT camera track is
+log-registered. The `logTrackRegistry` `@invariant` now carries this as
+`@bug PRODUCTION:` so it is greppable.
+
+**Related, worth a glance while you are in there:** the Bias tool's own value
+redistribution (`GraphSelectionBBox.tsx:217`) works in linear value units, and
+`scale_top`/`scale_bottom` (`:277-279`) map pixels to values via raw `/v.scaleY`
+rather than the log-aware `p2v` the `move` branch uses.
+
+---
+
+## ADR corrections — paste-ready (the run is not permitted to edit `docs/adr/`)
+
+### ADR-0015 — says Bezier is unsupported on log tracks; it has been supported since the ADR's own subject commit
+
+_(cycle 2)_ ADR-0015 was captured retroactively on 2026-05-20 from
+`logTrackRegistry.ts`'s JSDoc — and that JSDoc was itself stale, written in
+commit `05eb7849` **alongside the very code that added Bezier-on-log**. The
+commit message says so outright. Proven by probe: endpoints 1.0 → 1e-6 over 100
+frames, eased Bezier vs Linear both with `isLog=true`, curves differ by up to
+1.28 log-units (coinciding only at the symmetric midpoint). Anyone reading
+ADR-0015 to answer *"why does my log-track Bezier curve look like that"* is told
+the feature does not exist. Insert under the `# ADR-0015: …` heading:
+
+> **Update 2026-07-28 (Bezier-on-log IS supported; decision unchanged):** The
+> Decision and Consequences below state that Bezier is not supported on log
+> tracks and that they evaluate as linear-in-log regardless of stored
+> interpolation type. That was already untrue when this ADR was written. Commit
+> `05eb7849` — the commit this ADR documents — added Bezier-in-log-space to
+> `AnimationMath.interpolate`: a `Bezier` key on a log track is solved in
+> `(frame, log(value))` and `exp()`ed back, so its tangent y-values are
+> LOG-UNITS rather than absolute value-units, and `AnimationMath.calculateTangents`
+> takes a matching `isLog` flag so auto-tangents are authored in the same space.
+> Only non-Bezier keys take the linear-in-log path. Both branches still fall
+> back to linear-in-value when either endpoint is non-positive. Measured:
+> endpoints 1.0 → 1e-6 over 100 frames, eased Bezier vs Linear, both with
+> `isLog=true` — the curves differ by up to 1.28 log-units. The core decision —
+> log-registered tracks interpolate in log-value space, camera pans evaluate
+> linear-in-zoom with DD precision — is unchanged.
+
+### ADR-0020 — describes collision handling replaced in `36ad672c`
+
+_(cycle 2)_ Matters because `.claude/rules/render-and-shaders-core.md` cites
+ADR-0020 as one of two shader-builder decisions, so an agent reading it concludes
+collisions are silent and may "helpfully" add the warning that already exists as
+a throw. Insert under the `# ADR-0020: …` heading:
+
+> **Update 2026-07-27 (implementation changed; base-vs-feature split unchanged):**
+> the Decision below describes collision handling that no longer exists. Commit
+> `36ad672c` (2026-05-21) replaced the silent base-vs-feature filter with two
+> boot-time `throw` checks — feature-vs-base and feature-vs-feature — at
+> `engine/UniformSchema.ts:113-131` (engine-gmt twin at
+> `engine-gmt/engine/UniformSchema.ts:117-136`). `UNIFORM_DEFAULTS`'s last-wins
+> reduce is therefore never reached with a duplicate name, and the "Future
+> cleanup: surface a dev-mode warning" consequence is closed — the implementation
+> went further than a warning. Note the checks live in `UniformSchema`, not in the
+> harvester: `featureRegistry.getUniformDefinitions()` still returns duplicates
+> unfiltered. The BASE-vs-feature partition and the three BASE sub-categories
+> described below are unchanged. See `docs/policy/uniform-plugin-contract.md` I3.
+
+### ADR-0003 — the double-run guard blocks the harness use case the ADR promises
+
+_(cycle 1, restated here now that ADRs are Tier B — see the LOW item further down)_
+
+---
+
 ## HIGH — Share links silently drop Droste (and one materials param)
 
 **Files:** `engine-gmt/features/droste/index.ts:27`,
@@ -273,3 +437,50 @@ not three independent observations.**
   from `engine-gmt/renderer/GmtRendererCanvas.tsx:22`, which **resolves nowhere** —
   it looks like a pre-fork GMT document that was never carried over. Later cycles
   will fix these as they reach the owning subsystems.
+
+---
+
+## Housekeeping surfaced in cycle 2
+
+- **`smoke:anim-orbit` is flaky under back-to-back sequencing** — failed once in
+  five runs with "Execution context was destroyed" at its *first* `page.evaluate`,
+  skipping all six real assertions. The fixed `waitForTimeout(2500)` after
+  `waitUntil: 'domcontentloaded'` races a reload. It fails loudly (exit 1), so
+  it is a flake, not a blind spot — but the same prologue is in
+  `smoke-anim-play.mts`, `smoke-anim-vec2.mts` and `smoke-binder-registry.mts`.
+  Recommended fix is a single retry around the first evaluate in all four; not
+  applied because it could not be reproduced on demand, and an unverifiable fix
+  to a guard is worse than a known flake. Repro lever: run the four browser
+  smokes back-to-back in one shell rather than individually.
+- **`_resetAudioClipSync` has zero callers** (`engine/animation/audioClipSync.ts:19`)
+  though the file's own `@invariant` says *"Tests must call
+  `_resetAudioClipSync()` between cases"*. The larger gap is that `syncAudioClips`
+  has genuinely testable transition logic (justResumed / justScrubbed /
+  justPaused, the `SCRUB_JUMP_SEC` threshold, deck ownership) and **no guard
+  covers any of it**. Recommend keeping the seam and writing that test if
+  audio-clip sync ever regresses; deletion is not worth a session.
+- **`targetRouting.ts`'s `@invariant` predates ADR-0109** — it says
+  `classifyModulationTarget` must mirror the branch order in
+  *`AnimationSystem.tick`'s per-target loop*, and its header lists
+  `AnimationSystem.tick` as a consumer. The branch chain now lives in
+  `applyTarget.ts`'s `planModulationTarget`. Same drift shape as the
+  `AnimationSystem` header fixed in `c02a4a42`, one module over. Left for
+  whoever owns the modulation subsystem (`e10-engine-features`).
+- **`smoke:tsaa` is weak but honest** — it logs a live probe and asserts only
+  `errors.length === 0`, so it would not catch an accumulation regression. Its
+  JSDoc states that narrow scope deliberately, so it was not raised as a
+  finding. Cheap strengthening: assert `probe.accumulation === true` and
+  `probe.canvasW > 0`.
+- **`.claude/rules/render-and-shaders-core.md` has no `## Guards` block** (unlike
+  `gmt-renderer.md` and `sibling-apps.md`) and names none of `ShaderFactory.ts`,
+  `ShaderConfig.ts` or `UniformNames.ts` in its read-first list. Cheap Tier A
+  rule-coverage win; skipped this cycle only because two auditors were editing
+  that file concurrently.
+- **`smoke:tsaa` rewrites tracked binaries** (`debug/fluid-tsaa-on.png`,
+  `debug/fluid-tsaa-off.png`) as a side effect, same as `smoke:pause-controls`
+  does with `debug/fluid-pause-hover.png`. The run restores them each cycle.
+- **A camera-pair gap remains in modulation recording.** The fix in `4d1bc158`
+  routes the clean base through `animationEngine.evaluateTrack`, but `scrub()`
+  tries `evaluatePairedTrack` *first* for camera-pair tracks, so `camera.*`
+  targets can still differ slightly between recording and playback. Noted at the
+  call site; worth a follow-up when someone is in that code.

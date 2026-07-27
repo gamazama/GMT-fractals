@@ -1,0 +1,98 @@
+{
+  "id": "e04-shader-builder",
+  "cycle": 2,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e04-shader-builder" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "e04-shader-builder" },
+    { "script": "npm run smoke:boot", "pass": true, "subsystem": "e04-shader-builder" },
+    { "script": "npm run smoke:engine-demo", "pass": true, "subsystem": "e04-shader-builder" },
+    { "script": "npm run smoke:formula-switch", "pass": true, "subsystem": "e04-shader-builder" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "engine/UniformSchema.ts",
+      "line": 1,
+      "summary": "The top-of-file @invariant was false in all three of its clauses: it claims a types-only import fires registerFeatures(), and that uniform-name collisions are silently filtered (base) / last-wins (feature-vs-feature) — the code 100 lines below throws on both.",
+      "change": "Replaced the 5-line @invariant with two accurate ones. (1) Only a value import fires registerFeatures(); a type-only import is elided, and that elision is load-bearing because it keeps the FeatureSystem <-> UniformSchema cycle benign. (2) Name collisions THROW at module load, both feature-vs-base and feature-vs-feature; UNIFORM_DEFAULTS is never reached with a duplicate.",
+      "verification": "The collision clause is proved by the same file: lines 113-131 build baseCollisions / featureCollisions and throw on either, and commit 36ad672c's own message says it 'replaced silent base-vs-feature collision filter with boot-time throw checks'. The import clause is proved by smoke:boot: FeatureSystem imports UniformDefinition from UniformSchema while UniformSchema imports featureRegistry from FeatureSystem — if that import were NOT elided, evaluating UniformSchema during FeatureSystem's own evaluation would read featureRegistry in TDZ and boot would throw. smoke:boot passes with '(none)' errors, so the elision is real. Independently confirmed with an esbuild transform+bundle probe on a 3-file fixture: both `import { T }` and `import type { T }` drop the statement entirely and the side-effect module is absent from the bundle.",
+      "guard": "npm run smoke:boot",
+      "guardPass": true,
+      "commit": "918250d7"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/smoke-engine-demo.mts",
+      "line": 64,
+      "summary": "smoke:engine-demo step 3 counts `input.precision-slider`, a selector that matches nothing anywhere in the repo, and never asserts on the count — so the guard's advertised 'panel + sliders mount' check has been dead while printing sliders:0 on every run.",
+      "change": "Swapped the selector to [data-role=\"thumb\"] (the stable marker ScalarInput puts on its draggable thumb) and added a live `if (panelInfo.sliders < 1) throw`. Rewrote the stale comment claiming 'the custom Slider component renders precision-slider inputs'.",
+      "verification": "Before the change the smoke printed sliders:0; after it prints sliders:6 and the new throw is live. A standalone Playwright probe against demo.html measured precisionSlider:0, inputRange:0, roleThumb:6, roleValue:10, helpId:9 — so the old selector could never have matched and the new one is the correct marker. The assertion would fail, not merely log, if the param panel stopped rendering ScalarInputs. This is the SECOND dead assertion found in this one smoke: cycle 1 repaired its step 1 for the same class of rot.",
+      "guard": "npm run smoke:engine-demo",
+      "guardPass": true,
+      "commit": "0f487699"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/ShaderBuilder.ts",
+      "line": 121,
+      "summary": "buildUniformsBlock's @invariant cites a `precision` field deleted in 36ad672c, omits `backingOnly` (the field whose silent drop actually matters), and points readers at engine/UniformSchema.ts as 'the consumer that DOES enforce backingOnly' — a file whose own @enforcement JSDoc explicitly disclaims that role.",
+      "change": "Rewrote the @invariant to drop the dead precision reference, name backingOnly as the dropped field that matters, and point at the real sole enforcement site (shaders/chunks/uniforms.ts + its engine-gmt mirror). Added an @invariant on addUniform documenting that it is keyed on name alone and last-wins across differing type/arraySize. Added a consumer-status note on addSection recording that the section escape hatch has no in-repo caller and that ADR-0019 accepted that deliberately, so it is not cleanup bait.",
+      "verification": "precision is dead: grep -rn 'precision?:' --include=*.ts returns zero hits in either tree, and commit 36ad672c's message records deleting it. The backingOnly redirect is proved by grep — the flag is read at shaders/chunks/uniforms.ts:8 and engine-gmt/shaders/chunks/uniforms.ts:8 only, never in UniformSchema.ts or ShaderBuilder.ts. The addUniform last-wins claim is the literal body `this.uniforms.set(name, { type, arraySize })`; it matters because inject()-time addUniform calls run AFTER the schema-layer collision throws, so that throw cannot catch them. The addSection claim is grep: addSection(/getSections( have no hits outside ShaderBuilder.ts and a comment in ShaderFactory.ts, and fractal-toy's shaderAssembler header records migrating off sections in 'Phase A'. smoke:formula-switch exercises the live shader-recompile path end to end.",
+      "guard": "npm run smoke:formula-switch",
+      "guardPass": true,
+      "commit": "891290df"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/FeatureSystem.ts",
+      "line": 26,
+      "summary": "`import { UniformDefinition } from './UniformSchema'` used value syntax for a type on the live half of an import cycle — correct only by accident of esbuild's elision, and one stray value usage (or enabling verbatimModuleSyntax) away from a boot-time TDZ crash.",
+      "change": "Changed to `import type` and added a comment explaining why the type-only form is load-bearing rather than stylistic.",
+      "verification": "grep shows both usages are type positions (`extraUniforms?: UniformDefinition[]`, `const defs: UniformDefinition[]`), so typecheck passing proves nothing needed the value binding — and typecheck would now fail loudly if a future edit introduced one. smoke:boot passes after the change, proving module init order is unaffected; it is a real guard here because a live (non-elided) cycle would read featureRegistry in TDZ and fail at boot with a page error, which smoke:boot fails on.",
+      "guard": "npm run smoke:boot",
+      "guardPass": true,
+      "commit": "43784d60"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "docs/policy/uniform-plugin-contract.md",
+      "line": 81,
+      "summary": "The policy doc that .claude/rules/render-and-shaders-core.md names as read-first for the uniform schema still teaches the pre-2026-05-21 contract: I3 states 'Uniform-name collisions are silent', R9 documents a deleted field, four docs/modules/** cross-links are dead, and essentially every line anchor into UniformSchema.ts and FeatureSystem.ts has drifted 40-180 lines.",
+      "change": "Rewrote I3 (collisions throw, with both check ranges and the note that the harvester itself still returns duplicates), I1 (the two BASE_SCHEMA copies are no longer byte-identical), I5 (value vs type-only import), R6, R9, R4/R10 and the merge-sequence paragraph. Refreshed every engine-core line anchor. Repointed the four dead docs/modules/** links. Marked q-026/q-028/q-029 RESOLVED and q-027 PARTLY RESOLVED, added a fork-drift row for the engine-gmt MB3D block, and added a dated Update banner scoping what was and was not re-verified.",
+      "verification": "Each corrected claim is grep- or read-provable. I3: UniformSchema.ts:113-131 contains the two throws (engine-gmt twin at :117-136). R9: grep -rn 'precision?:' is empty tree-wide. Dead links: a file-existence loop over the four docs/modules/** paths returned DEAD for all four; find docs/modules shows only the five sibling-app entry docs survive. I1's fork drift: engine GLSLType lacks 'mat4' while the engine-gmt twin has it, and the twin carries 14 uMb3dRot* entries absent from engine-core. Every refreshed line number was read back from the file after the code edits landed. ADR numbers newly cited (0012, 0019, 0020, 0036, 0043, 0044, 0059) were confirmed against ls docs/adr/; an earlier draft citing ADR-0004/0005 was corrected after that check showed they cover TickRegistry and boot triggers.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "7acc4665"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "docs/adr/0020-uniformschema-base-vs-feature.md",
+      "line": 18,
+      "summary": "ADR-0020's Decision and Consequences describe collision handling that commit 36ad672c replaced — it still says collisions are 'silently dropped' / 'last-wins' with 'no runtime guard', and lists the fix as future cleanup. The BASE-vs-feature decision itself still stands.",
+      "rationale": "See PROPOSALS.md for the paste-ready Update block. Matters because ADR-0020 is cited from .claude/rules/render-and-shaders-core.md as one of two shader-builder decisions, so an agent reading it will conclude collisions are silent and may 'helpfully' add the warning that already exists as a throw."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "engine-gmt/engine/UniformSchema.ts",
+      "line": 85,
+      "summary": "The engine-gmt BASE_SCHEMA has accumulated 14 GMT-only MB3D rotation uniforms plus a 'mat4' widening of GLSLType, breaking the byte-identical fork invariant and putting app-specific names in a schema whose stated contract reserves it for engine-core, no-op tool slots, and CPU-derived caches.",
+      "rationale": "This is the engine/engine-gmt fork boundary, so it is a design call, not a cleanup. EVIDENCE: engine/UniformSchema.ts GLSLType has no 'mat4'; the engine-gmt twin does, solely to type uMb3dRot4D0/1. The 14 entries at engine-gmt/engine/UniformSchema.ts:85-104 have no engine-core counterpart, so the two literals diverge after their shared prefix. OPTIONS: (a) leave as-is and accept that the byte-identity invariant now guards only the shared prefix — that is what was documented in docs/policy/uniform-plugin-contract.md, costs nothing, and matches the 'dual state is design' rule; (b) move the bank into a path-2 feature via extraUniforms, which is what the contract says should have happened and would restore byte-identity, but it is a real refactor of the rotation-descriptor sync path (ADR-0099) with recompile-surface risk; (c) hoist 'mat4' into engine-core's GLSLType so at least the type union stops diverging — cheap, low-risk, independent of (a)/(b). RECOMMENDATION: (a) now, (c) opportunistically, (b) only if the MB3D bank grows again. Flagging because the divergence is invisible from the engine-core side and the next person to 'sync the two copies' will delete working GMT uniforms."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "engine/ShaderFactory.ts",
+      "line": 19,
+      "summary": "The engine-core ShaderFactory class and ShaderBuilder.buildFragment() have no caller anywhere in the repo — every ShaderFactory.generateFragmentShader call site resolves to engine-gmt's own ShaderFactory, and fractal-toy drives its own assembler off the primitives.",
+      "rationale": "Not rot, but worth knowing. knip does not flag engine/ShaderFactory.ts because six modules import the re-exported ShaderConfig TYPE through it (ConfigDefaults, FractalEvents, ConfigManager, WorkerProxy, useAppStartup, engine-gmt/renderer/install) — so the file stays live while the class inside it is dead. Same for the addSection/getSections seam, which ADR-0019 explicitly retained for plugin authors after engine-gmt went typed and fractal-toy migrated off it. OPTIONS: (a) keep both as the documented reference implementation and plugin seam — recommended; ADR-0019 made that call on purpose and the source is now annotated so the next reader does not mistake it for dead code; (b) move ShaderConfig's re-export out of ShaderFactory.ts into ShaderConfig.ts so the six type importers stop depending on a module they otherwise do not use, which would let knip tell the truth about the class — a genuine tidy-up but it touches six files across three trees; (c) delete — not recommended, and a deletion regardless."
+    }
+  ],
+  "notes": "All four @invariant annotations in the subsystem were checked against source, plus the two supporting files the rule names. Two held and needed no change: ShaderBuilder.addSection's 'multi-valued, does NOT dedup' (addSection pushes unconditionally while addHeader/addPreamble/addFunction gate on includes(code)), and ShaderConfig's '[key: string]: any defeats typo detection'. Two were wrong and are Tier A above.\n\nNOT COVERED: engine-gmt/** line anchors inside docs/policy/uniform-plugin-contract.md (paths 2/3 producer examples and all of path 4's UniformManager citations) were left as-is and the doc's new Update banner says explicitly that they were NOT re-verified — they belong to g02-shader-pipeline's surface and several are likely drifted by the same magnitude the engine-core ones were.\n\nALSO NOT DONE: .claude/rules/render-and-shaders-core.md has no '## Guards' block (unlike gmt-renderer.md and sibling-apps.md) and names none of ShaderFactory.ts / ShaderConfig.ts / UniformNames.ts in its read-first list. Adding both would be a cheap Tier A rule-coverage improvement, but the e05 auditor was actively editing that file during this run and the merge-conflict risk was judged not worth it. Worth picking up in a later cycle.\n\nnpm run orphans reports one unused file, debug/render-harness.ts, unrelated to this subsystem and a deletion regardless."
+}

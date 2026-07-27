@@ -1,0 +1,69 @@
+{
+  "id": "e05-render-pipeline",
+  "cycle": 2,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e05-render-pipeline" },
+    { "script": "npm run test:bucket-convergence", "pass": true, "subsystem": "e05-render-pipeline" },
+    { "script": "npm run smoke:tsaa", "pass": true, "subsystem": "e05-render-pipeline" },
+    { "script": "npm run smoke:boot", "pass": true, "subsystem": "e05-render-pipeline" }
+  ],
+  "findings": [
+    {
+      "tier": "V",
+      "severity": "medium",
+      "file": "engine/RenderPipeline.ts",
+      "line": 189,
+      "summary": "getCompileTarget()'s @invariant ('the compile target MUST mirror MRT float type') was violable at runtime: _compileTarget was created once and never invalidated, while initTargets() re-allocates the MRT at a different texture type when bufferPrecision changes. CONFIRMED, and the invariant's stated rationale turned out to be wrong too.",
+      "change": "Widened the lazy-create guard in getCompileTarget() to dispose and rebuild when the cached target's texture type no longer matches the live MRT. Rewrote the @invariant to record the real trigger, the measured platform conditions, why the rebuild is done here rather than in initTargets/resize, and — importantly — that the original 'Three.js program param hashes diverge' rationale is not the mechanism.",
+      "verification": "An independent verifier accounted for ALL FOUR _compileTarget occurrences in the repo (declaration, lazy-create guard, construction, return) and confirmed no dispose, no null, no re-create, and no dispose() method on RenderPipeline at all. It traced the 13-hop reachability chain with file:line — Settings -> Hardware -> 'Buffer Precision' dropdown (HardwarePreferences.tsx:69-80) -> setHardwareProfile -> setQuality -> flushConfig -> FRACTAL_EVENTS.CONFIG -> tick driver -> WorkerProxy -> renderWorker -> FractalEngine.updateConfigInternal -> pipeline.updateQuality -> resize -> initTargets — and noted that bufferPrecision is onUpdate:'compile', so the compile that immediately follows the type flip is the one that binds the stale target. It then PROBED REAL HARDWARE rather than assuming: headed Chromium with --use-angle=d3d11 on an RTX 2070, in both the document realm and a Worker+OffscreenCanvas realm matching where glCaps() actually runs, measuring cbf/cbhf/floatLinear all true, so bufferPrecision 0 yields FloatType and 1 yields HalfFloatType — typesDiffer true. It derived the divergence window as exactly (cbf && floatLinear), which means this bites desktop and not mobile (where OES_texture_float_linear is often absent and mobile is force-set to bufferPrecision 1 at boot anyway). CRUCIALLY, it also argued against itself: reading three.js's WebGLPrograms.getParameters() showed the bound render target is consulted only for toneMapping and outputColorSpace, both gated on `=== null`, never its texture.type — so the invariant's stated reason is factually wrong for this three version, and any real cost sits at the ANGLE/D3D11 level and was NOT measured. Applied as a correctness fix (the code now honours its documented contract) with that caveat written into the source, not as a claimed perf win. Guards: test:bucket-convergence 7/7, smoke:boot 0 page errors, typecheck.",
+      "guard": "npm run test:bucket-convergence",
+      "guardPass": true,
+      "commit": "1a92ed9b"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": ".claude/rules/render-and-shaders-core.md",
+      "line": 27,
+      "summary": "The path-scoped rule told every agent opening this subsystem that 'Convergence invariants and reset semantics are ADR-0061 / ADR-0062' — 0061 is the InteractionSession primitive and 0062 is low-latency canvas present; neither governs convergence.",
+      "change": "Replaced the citation with ADR-0017 (async fence readback), ADR-0018 (gating on _convergenceNeeded) and ADR-0067 (fixed-spp bucket render + the resetAccumulation/convergencePending carry-over fix that test:bucket-convergence guards), and kept ADR-0061 with an accurate scope (its 'Scope boundary' section) alongside ADR-0078 (noAccumReset / preserveOnApply).",
+      "verification": "Read the cited files head-on rather than trusting the index. ADR-0061 is titled 'A single InteractionSession primitive as the source of truth for gesture activity'; ADR-0062 is 'Low-latency (desynchronized) present default-on for the worker WebGL context' and its own header says 'Present-path concern — distinct from ADR-0061'. Neither states a convergence or reset rule. Each replacement was opened and confirmed: 0017 'Render pipeline async convergence readback' (Scope: engine/RenderPipeline.ts), 0018 'Render pipeline convergence measurement gating', 0067 'Bucket render uses fixed sample count' (whose Context section 1 is verbatim the resetAccumulation/convergencePending carry-over bug), 0078 'Split the overloaded noReset flag'. Every filename in the new text was confirmed to exist. NOTE: this bad citation had already propagated — it was repeated verbatim in the orchestrator's own briefing for this subsystem, which is how it was caught.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "ff046c9f"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/RenderPipeline.ts",
+      "line": 55,
+      "summary": "Three JSDoc corrections in one file (committed together — file-level staging cannot split them): a backwards writeIndex field comment, a half-float probe wrongly credited with gating target allocation, and two blocks describing per-bucket convergence that ADR-0067 removed.",
+      "change": "(1) writeIndex: replaced 'Which target was written to last frame' with a comment stating it is the NEXT target to write, flipped at the END of render(), and that getOutputTexture()/getPrevious*() invert it. (2) _halfFloatAlphaSupport: rewrote to state that initTargets/resize take the type from accumFormat() (glCaps + bufferPrecision) and that the probe's only reader is checkHalfFloatAlphaSupport(), whose result the worker publishes in BOOTED; noted the unwired gate as an open gap and replaced `@see docs/adr` (a bare directory) with a resolvable pointer. (3) Changed the render() @invariant to samplesPerBucket alone with a note that per-bucket convergence was removed, added @see ADR-0067, and recorded in resetAccumulation() that the only live measurer is the viewport path.",
+      "verification": "(1) Derived from source: render() picks writeTarget = writeIndex === 0 ? A : B then flips as its LAST buffer op, so getOutputTexture() (documented 'the target we just wrote to') reads the inverse. Trace: start 0 -> writes A -> writeIndex 1 -> getOutputTexture returns A. A grep for writeIndex returns exactly 7 sites with one mutation, so no other flip could reconcile the old wording. (2) grep -n '_halfFloatAlphaSupport' returns lines 72, 284, 298, 300, 312, 315 — every one inside checkHalfFloatAlphaSupport(); initTargets() calls accumFormat(), whose entire input is glCaps() plus _qualityState.bufferPrecision. Repo-wide grep shows the only consumer chain is FractalEngine -> renderWorker -> BOOTED payload -> WorkerProxy (stored, no reader). The q-094 followup independently reached the same conclusion in 2026-05. (3) BucketRunner.ts:181 is `if (samplesAccumulated >= maxSamples)` with no convergence term, and its own comment says 'there is NO per-bucket convergence early-out'; repo-wide grep for the convergence entry points returns zero bucket-side callers. test:bucket-convergence 7/7 drives the real resetAccumulation/startAsyncConvergence/pollConvergenceResult path, so a semantic edit disturbing those methods would fail it.",
+      "guard": "npm run test:bucket-convergence",
+      "guardPass": true,
+      "commit": "ff4ed908"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine/AccumulationController.ts",
+      "line": 6,
+      "summary": "The interface JSDoc claimed renderControlSlice carries a convergenceValue readout; the slice has no such field — the value is polled straight off the controller by its single consumer.",
+      "change": "Split the claim: accumulationCount is in the slice (pushed by reportAccumulationToStore), convergenceValue is not mirrored there and is read directly off the controller by engine-gmt's RegionOverlay. Named store/slices/installAccumulationBindings.ts as the binding site.",
+      "verification": "Repo-wide grep (excluding docs/) for convergenceValue returns zero hits under store/ — the field exists only on the two WorkerProxy shadows, WorkerProtocol.ts:40, renderWorker.ts:68 and RegionOverlay.tsx:55. renderControlSlice's own key union is 'isPaused' | 'sampleCap' | 'accumulationCount' | 'samplesPerBucket'. Reading installAccumulationBindings.ts end-to-end confirms the only store-bound readout is reportAccumulation(controller.accumulationCount); convergence is never forwarded. The other claims in the same JSDoc were checked and left alone because they hold.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "32e86a54"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "engine/RenderPipeline.ts",
+      "line": 492,
+      "summary": "setSampleCap() discards the accumulation buffer whenever the new cap is below the current sample count — directly contradicting the documented contract of the generic binding that drives it, and losing a converged render when the user drags the Auto-Stop slider down.",
+      "rationale": "See PROPOSALS.md — the chain is proven end-to-end and the trigger is an ordinary continuous slider, so the reset fires repeatedly during a drag."
+    }
+  ],
+  "notes": "All three subsystem files fully read (RenderPipeline.ts 855 lines, BloomPass.ts, AccumulationController.ts). engine-gmt/engine/RenderPipeline.ts and BloomPass.ts are pure `export *` re-exports (5 and 2 lines) — no fork duplication to reconcile here.\n\nEvery @invariant in the three files was checked against code. HOLDS: the writeIndex inversion itself, the resetAccumulation/convergencePending clear, the bucket-scissor-after-setRenderTarget ordering, the sampleCap-not-during-bucket gate, and BloomPass.dispose() genuinely not touching the shared fullscreen geometry. VIOLABLE: only getCompileTarget, now fixed.\n\nBLOOMPASS IS CLEAN — no findings. Its header claim 'when bloom intensity is 0, no draws are issued' was checked at the caller and is true (handleRenderTick.ts:264-272 gates on uBloomIntensity > 0.001 before calling render()). The '~19 draw calls' figure is radius-dependent (12 at activeLevels=2, 27 at 7, ~18 mid-range) — the '~' makes it defensible, so it was left rather than manufacturing a finding.\n\nGUARD HEALTH: no silently-broken guard in this area. test:bucket-convergence genuinely bites — removing the `convergencePending = false` line would fail 3 of its 7 checks. smoke:tsaa is WEAK but not degraded: it logs a live probe and asserts only errors.length === 0, so it would not catch an accumulation regression — but the probe returns real values and the script's JSDoc states that narrow scope deliberately, so it was not raised as a finding. Cheap strengthening if wanted: assert probe.accumulation === true and probe.canvasW > 0.\n\nHOUSEKEEPING: smoke:tsaa rewrites the tracked binaries debug/fluid-tsaa-on.png and debug/fluid-tsaa-off.png as a side effect. Excluded from all commits; the orchestrator restored them.\n\nNOT RUN: npm run orphans (whole-repo knip, and removal would be Tier B regardless). All three files have live importers confirmed by grep."
+}

@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:6%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:15%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,25 +73,25 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Cycle 1 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-27T21:39:15.047Z</p>
+  <p class="sub">Cycle 2 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-27T22:21:44.281Z</p>
 
   <div class="tiles">
-    <div class="tile"><div class="v">2/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">15</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">7</div><div class="k">applied &amp; verified</div></div>
-    <div class="tile"><div class="v" style="color:var(--warn)">1</div><div class="k">orchestrator-checked</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">6</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">12<span style="font-size:.6em;color:var(--dim)">/12</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v">5/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">40</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">21</div><div class="k">applied &amp; verified</div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">4</div><div class="k">orchestrator-checked</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">14</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">33<span style="font-size:.6em;color:var(--dim)">/33</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:100%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 2 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:60%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:100%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 3 cycles</p>
 
   
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">7</span></h2>
+    <h2>Applied — self-verified <span class="count">21</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
   <article class="finding sev-high">
@@ -120,6 +120,76 @@
     <p class="verify"><strong>How it was verified:</strong> Before the change `npm run smoke:engine-demo` failed with 'overlay children: 0 / Demo overlay did not render'; after it all six steps run and it exits 0 (painted pixels 128, topbar present, param labels present, modulation tick advanced 31x in 500ms, colour reverted #ff00ff -&gt; #22d3ee on Ctrl+Z). Not passing-by-accident: the probe asserts painted pixels &gt; 0 so it still fails if DemoOverlay stops rendering, and steps 2-6 are hard throws on the DDFS panel/undo path. Rot confirmed pre-existing: `git show c2ebadf2 -- demo/DemoOverlay.tsx` shows the positioned div replaced by a &lt;canvas&gt; on 2026-05-04 and the smoke's selector was never updated.</p>
     <p class="guard"><code>npm run smoke:engine-demo</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>52d8912f</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e03-animation</code>
+      <code class="file">engine/AnimationEngine.ts:360</code>
+    </header>
+    <p class="what">The @invariant 'Bezier is NOT applied on log tracks' is false — AnimationMath.interpolate solves Bezier keys in (frame, log(v)) space, so tangent y-values on a log track are log-units; the same false claim was mirrored in two more source files.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote three doc sites to state the real contract (log tracks evaluate in log-value space, Bezier included; tangent y = log-units; calculateTangents takes the matching isLog). Added an @invariant on logTrackRegistry naming the tangent-authoring callers that do NOT thread isLogTrack, so the gap is greppable. Removed the dead solveBezierY import from AnimationEngine.ts.</p>
+    <p class="verify"><strong>How it was verified:</strong> Executed a tsx probe importing engine/math/AnimationMath.ts directly: endpoints 1.0 -&gt; 1e-6 over 100 frames, Bezier keys with flat (ease) tangents vs Linear keys, both isLog=true. Frame 10 linear-in-log 2.51e-1 vs bezier 6.76e-1 (dLog 0.989), frame 25 dLog 1.281, frame 75 dLog -1.281, frame 90 dLog -0.989. Equal ONLY at frame 50 — the auditor's first check used frame 50 and produced a false 'invariant holds', so the check was moved off-centre. Corroborated by commit 05eb7849's own message ('handles linear AND Bezier in log space (tangent y-values as log-units)') and by TrackUtils.ts:14 ('bezier-on-log evaluator'). The dead-import half is guarded by typecheck, which fails if the symbol were actually referenced.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>2427839d</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e03-animation</code>
+      <code class="file">debug/smoke-binder-registry.mts:79</code>
+    </header>
+    <p class="what">smoke:binder-registry collected storePowerAfterCustom and never asserted on it, so its headline claim ('explicit registered binder OVERRIDES the DDFS auto-path') was unproven, and AnimationEngine.getBinder's registry-before-cache @invariant had no coverage at all.</p>
+    <p class="change"><strong>Changed:</strong> Added three assertions: store value during the custom-binder scrub must differ from the auto-path value; the auto-path value must equal what the custom writer received; and a new phase that registers a binder AFTER the DDFS auto-path has cached a writer for that id, then scrubs — asserting the late binder fires and the store does not move.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsification, not just a green run. Ran the strengthened smoke on correct code: passes (lateWrites=1, lateValue=35, storePowerAfterLate=24.5). Then inverted getBinder's order so this.binders is checked before binderRegistry.lookup, re-ran, and it failed with the intended message ('binder registered AFTER the DDFS auto-path never fired (lateWrites=0)', store showing 35 — the cached DDFS writer won). Reverted; git diff confirms only the doc/import hunks remain; smoke green again.</p>
+    <p class="guard"><code>npm run smoke:binder-registry</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>cc30c0a2</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e04-shader-builder</code>
+      <code class="file">engine/UniformSchema.ts:1</code>
+    </header>
+    <p class="what">The top-of-file @invariant was false in all three of its clauses: it claims a types-only import fires registerFeatures(), and that uniform-name collisions are silently filtered (base) / last-wins (feature-vs-feature) — the code 100 lines below throws on both.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the 5-line @invariant with two accurate ones. (1) Only a value import fires registerFeatures(); a type-only import is elided, and that elision is load-bearing because it keeps the FeatureSystem &lt;-&gt; UniformSchema cycle benign. (2) Name collisions THROW at module load, both feature-vs-base and feature-vs-feature; UNIFORM_DEFAULTS is never reached with a duplicate.</p>
+    <p class="verify"><strong>How it was verified:</strong> The collision clause is proved by the same file: lines 113-131 build baseCollisions / featureCollisions and throw on either, and commit 36ad672c's own message says it 'replaced silent base-vs-feature collision filter with boot-time throw checks'. The import clause is proved by smoke:boot: FeatureSystem imports UniformDefinition from UniformSchema while UniformSchema imports featureRegistry from FeatureSystem — if that import were NOT elided, evaluating UniformSchema during FeatureSystem's own evaluation would read featureRegistry in TDZ and boot would throw. smoke:boot passes with '(none)' errors, so the elision is real. Independently confirmed with an esbuild transform+bundle probe on a 3-file fixture: both `import { T }` and `import type { T }` drop the statement entirely and the side-effect module is absent from the bundle.</p>
+    <p class="guard"><code>npm run smoke:boot</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>918250d7</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e04-shader-builder</code>
+      <code class="file">debug/smoke-engine-demo.mts:64</code>
+    </header>
+    <p class="what">smoke:engine-demo step 3 counts `input.precision-slider`, a selector that matches nothing anywhere in the repo, and never asserts on the count — so the guard's advertised 'panel + sliders mount' check has been dead while printing sliders:0 on every run.</p>
+    <p class="change"><strong>Changed:</strong> Swapped the selector to [data-role=&quot;thumb&quot;] (the stable marker ScalarInput puts on its draggable thumb) and added a live `if (panelInfo.sliders &lt; 1) throw`. Rewrote the stale comment claiming 'the custom Slider component renders precision-slider inputs'.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before the change the smoke printed sliders:0; after it prints sliders:6 and the new throw is live. A standalone Playwright probe against demo.html measured precisionSlider:0, inputRange:0, roleThumb:6, roleValue:10, helpId:9 — so the old selector could never have matched and the new one is the correct marker. The assertion would fail, not merely log, if the param panel stopped rendering ScalarInputs. This is the SECOND dead assertion found in this one smoke: cycle 1 repaired its step 1 for the same class of rot.</p>
+    <p class="guard"><code>npm run smoke:engine-demo</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>0f487699</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e05-render-pipeline</code>
+      <code class="file">.claude/rules/render-and-shaders-core.md:27</code>
+    </header>
+    <p class="what">The path-scoped rule told every agent opening this subsystem that 'Convergence invariants and reset semantics are ADR-0061 / ADR-0062' — 0061 is the InteractionSession primitive and 0062 is low-latency canvas present; neither governs convergence.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the citation with ADR-0017 (async fence readback), ADR-0018 (gating on _convergenceNeeded) and ADR-0067 (fixed-spp bucket render + the resetAccumulation/convergencePending carry-over fix that test:bucket-convergence guards), and kept ADR-0061 with an accurate scope (its 'Scope boundary' section) alongside ADR-0078 (noAccumReset / preserveOnApply).</p>
+    <p class="verify"><strong>How it was verified:</strong> Read the cited files head-on rather than trusting the index. ADR-0061 is titled 'A single InteractionSession primitive as the source of truth for gesture activity'; ADR-0062 is 'Low-latency (desynchronized) present default-on for the worker WebGL context' and its own header says 'Present-path concern — distinct from ADR-0061'. Neither states a convergence or reset rule. Each replacement was opened and confirmed: 0017 'Render pipeline async convergence readback' (Scope: engine/RenderPipeline.ts), 0018 'Render pipeline convergence measurement gating', 0067 'Bucket render uses fixed sample count' (whose Context section 1 is verbatim the resetAccumulation/convergencePending carry-over bug), 0078 'Split the overloaded noReset flag'. Every filename in the new text was confirmed to exist. NOTE: this bad citation had already propagated — it was repeated verbatim in the orchestrator's own briefing for this subsystem, which is how it was caught.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ff046c9f</code></p>
     
   </article>
   <article class="finding sev-medium">
@@ -178,6 +248,104 @@
     <p class="commit">commit <code>652fb61c</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e03-animation</code>
+      <code class="file">debug/smoke-track-binding.mts:61</code>
+    </header>
+    <p class="what">The assertion labelled 'absent axis fills with 0' contradicts readLiveVec's @invariant (absent axes fall back to base, NOT 0) and passed only because it never passed a base — the regression the invariant documents was uncovered.</p>
+    <p class="change"><strong>Changed:</strong> Relabelled the no-base case honestly, then added base-passing coverage: vec2 with base {x:-0.7,y:0.27} asserts the unmodulated axis keeps 0.27 rather than 0; vec3 with one modulated axis asserts the other two stay on base (the 'Y and Z jump to the origin' bug the invariant describes); plus additive-mode coverage.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsification. 18/18 assertions pass on correct code. Then changed trackBinding.ts:112 so absent axes map to 0 instead of baseAxis[i] — the exact regression the @invariant guards — and re-ran: failed with 'UNmodulated axis keeps the base value, NOT 0'. All pre-existing assertions still passed under that regression, confirming the gap was real. Reverted (git diff empty), re-ran green.</p>
+    <p class="guard"><code>npm run smoke:track-binding</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>01bac7fb</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e03-animation</code>
+      <code class="file">engine/animation/AnimationSystem.tsx:4</code>
+    </header>
+    <p class="what">The header and @invariant describe four GMT composite branch bodies gated on storeState.geometry/coloring/lighting and 'the chain below switches on routing.branch' — none of that is in this file any more; the branch bodies moved to engine/features/modulation/applyTarget.ts under ADR-0109.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the header and @invariant to match the code, named what this file actually owns (uniform emission via FRACTAL_EVENTS, ownership tracking, liveModulations publication, keyframe capture + back-fill, accumulation-reset diff) and where the slice-gated GMT branches now live. Dropped the 'FUTURE REFACTOR — branch registry' block, since that extraction has happened.</p>
+    <p class="verify"><strong>How it was verified:</strong> Grep proves the drift: storeState.(geometry|coloring|lighting) returns only the comment lines; routing.branch only the comment. The real dispatch is planModulationTarget with the switch in applyTarget.ts:120, where the slice gating survives. test:modulation-parity independently asserts the corrected claim ('AnimationSystem.tsx dispatches via planModulationTarget') and would fail if this file went back to carrying its own chain.</p>
+    <p class="guard"><code>npm run test:modulation-parity</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>c02a4a42</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e03-animation</code>
+      <code class="file">.claude/rules/tick-and-animation.md:21</code>
+    </header>
+    <p class="what">The rule cited 'ADRs 0015-0017 (binders, recording, log/camera-pair tracks)' — ADR-0017 is the render-pipeline async-convergence ADR, ADR-0016 is deterministic playback (not recording), and no binder ADR exists at all.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the range with per-ADR titles verified against docs/adr/ filenames, added ADR-0107/0109 for the modulation dispatch that hangs off the ANIMATE tick, stated explicitly that binderRegistry's contract is its JSDoc rather than an ADR, and added three grep-checkable invariants (registry-before-cache, Bezier-on-log, branch-bodies-not-here).</p>
+    <p class="verify"><strong>How it was verified:</strong> Every citation checked against the filesystem. ls docs/adr/ confirms 0001/0002/0003/0004/0015/0016/0107/0109 exist; head -6 on 0017 shows its Scope is engine/RenderPipeline.ts; ls docs/adr | grep -i binder returns nothing. Pre-existing citations re-verified too: engine/TickRegistry.ts, engine/plugins/RenderLoop.tsx, GmtRendererTickDriver.tsx, engine-gmt/animation/**, docs/policy/ddfs-string-contract.md all exist, and grep confirms RenderLoop.tsx:44 is still the only runTicks caller under engine/**. Each new invariant is proven by another finding in this cycle.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>74f021b5</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e04-shader-builder</code>
+      <code class="file">engine/ShaderBuilder.ts:121</code>
+    </header>
+    <p class="what">buildUniformsBlock's @invariant cites a `precision` field deleted in 36ad672c, omits `backingOnly` (the field whose silent drop actually matters), and points readers at engine/UniformSchema.ts as 'the consumer that DOES enforce backingOnly' — a file whose own @enforcement JSDoc explicitly disclaims that role.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the @invariant to drop the dead precision reference, name backingOnly as the dropped field that matters, and point at the real sole enforcement site (shaders/chunks/uniforms.ts + its engine-gmt mirror). Added an @invariant on addUniform documenting that it is keyed on name alone and last-wins across differing type/arraySize. Added a consumer-status note on addSection recording that the section escape hatch has no in-repo caller and that ADR-0019 accepted that deliberately, so it is not cleanup bait.</p>
+    <p class="verify"><strong>How it was verified:</strong> precision is dead: grep -rn 'precision?:' --include=*.ts returns zero hits in either tree, and commit 36ad672c's message records deleting it. The backingOnly redirect is proved by grep — the flag is read at shaders/chunks/uniforms.ts:8 and engine-gmt/shaders/chunks/uniforms.ts:8 only, never in UniformSchema.ts or ShaderBuilder.ts. The addUniform last-wins claim is the literal body `this.uniforms.set(name, { type, arraySize })`; it matters because inject()-time addUniform calls run AFTER the schema-layer collision throws, so that throw cannot catch them. The addSection claim is grep: addSection(/getSections( have no hits outside ShaderBuilder.ts and a comment in ShaderFactory.ts, and fractal-toy's shaderAssembler header records migrating off sections in 'Phase A'. smoke:formula-switch exercises the live shader-recompile path end to end.</p>
+    <p class="guard"><code>npm run smoke:formula-switch</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>891290df</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e04-shader-builder</code>
+      <code class="file">engine/FeatureSystem.ts:26</code>
+    </header>
+    <p class="what">`import { UniformDefinition } from './UniformSchema'` used value syntax for a type on the live half of an import cycle — correct only by accident of esbuild's elision, and one stray value usage (or enabling verbatimModuleSyntax) away from a boot-time TDZ crash.</p>
+    <p class="change"><strong>Changed:</strong> Changed to `import type` and added a comment explaining why the type-only form is load-bearing rather than stylistic.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep shows both usages are type positions (`extraUniforms?: UniformDefinition[]`, `const defs: UniformDefinition[]`), so typecheck passing proves nothing needed the value binding — and typecheck would now fail loudly if a future edit introduced one. smoke:boot passes after the change, proving module init order is unaffected; it is a real guard here because a live (non-elided) cycle would read featureRegistry in TDZ and fail at boot with a page error, which smoke:boot fails on.</p>
+    <p class="guard"><code>npm run smoke:boot</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>43784d60</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e04-shader-builder</code>
+      <code class="file">docs/policy/uniform-plugin-contract.md:81</code>
+    </header>
+    <p class="what">The policy doc that .claude/rules/render-and-shaders-core.md names as read-first for the uniform schema still teaches the pre-2026-05-21 contract: I3 states 'Uniform-name collisions are silent', R9 documents a deleted field, four docs/modules/** cross-links are dead, and essentially every line anchor into UniformSchema.ts and FeatureSystem.ts has drifted 40-180 lines.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote I3 (collisions throw, with both check ranges and the note that the harvester itself still returns duplicates), I1 (the two BASE_SCHEMA copies are no longer byte-identical), I5 (value vs type-only import), R6, R9, R4/R10 and the merge-sequence paragraph. Refreshed every engine-core line anchor. Repointed the four dead docs/modules/** links. Marked q-026/q-028/q-029 RESOLVED and q-027 PARTLY RESOLVED, added a fork-drift row for the engine-gmt MB3D block, and added a dated Update banner scoping what was and was not re-verified.</p>
+    <p class="verify"><strong>How it was verified:</strong> Each corrected claim is grep- or read-provable. I3: UniformSchema.ts:113-131 contains the two throws (engine-gmt twin at :117-136). R9: grep -rn 'precision?:' is empty tree-wide. Dead links: a file-existence loop over the four docs/modules/** paths returned DEAD for all four; find docs/modules shows only the five sibling-app entry docs survive. I1's fork drift: engine GLSLType lacks 'mat4' while the engine-gmt twin has it, and the twin carries 14 uMb3dRot* entries absent from engine-core. Every refreshed line number was read back from the file after the code edits landed. ADR numbers newly cited (0012, 0019, 0020, 0036, 0043, 0044, 0059) were confirmed against ls docs/adr/; an earlier draft citing ADR-0004/0005 was corrected after that check showed they cover TickRegistry and boot triggers.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>7acc4665</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e05-render-pipeline</code>
+      <code class="file">engine/RenderPipeline.ts:55</code>
+    </header>
+    <p class="what">Three JSDoc corrections in one file (committed together — file-level staging cannot split them): a backwards writeIndex field comment, a half-float probe wrongly credited with gating target allocation, and two blocks describing per-bucket convergence that ADR-0067 removed.</p>
+    <p class="change"><strong>Changed:</strong> (1) writeIndex: replaced 'Which target was written to last frame' with a comment stating it is the NEXT target to write, flipped at the END of render(), and that getOutputTexture()/getPrevious*() invert it. (2) _halfFloatAlphaSupport: rewrote to state that initTargets/resize take the type from accumFormat() (glCaps + bufferPrecision) and that the probe's only reader is checkHalfFloatAlphaSupport(), whose result the worker publishes in BOOTED; noted the unwired gate as an open gap and replaced `@see docs/adr` (a bare directory) with a resolvable pointer. (3) Changed the render() @invariant to samplesPerBucket alone with a note that per-bucket convergence was removed, added @see ADR-0067, and recorded in resetAccumulation() that the only live measurer is the viewport path.</p>
+    <p class="verify"><strong>How it was verified:</strong> (1) Derived from source: render() picks writeTarget = writeIndex === 0 ? A : B then flips as its LAST buffer op, so getOutputTexture() (documented 'the target we just wrote to') reads the inverse. Trace: start 0 -&gt; writes A -&gt; writeIndex 1 -&gt; getOutputTexture returns A. A grep for writeIndex returns exactly 7 sites with one mutation, so no other flip could reconcile the old wording. (2) grep -n '_halfFloatAlphaSupport' returns lines 72, 284, 298, 300, 312, 315 — every one inside checkHalfFloatAlphaSupport(); initTargets() calls accumFormat(), whose entire input is glCaps() plus _qualityState.bufferPrecision. Repo-wide grep shows the only consumer chain is FractalEngine -&gt; renderWorker -&gt; BOOTED payload -&gt; WorkerProxy (stored, no reader). The q-094 followup independently reached the same conclusion in 2026-05. (3) BucketRunner.ts:181 is `if (samplesAccumulated &gt;= maxSamples)` with no convergence term, and its own comment says 'there is NO per-bucket convergence early-out'; repo-wide grep for the convergence entry points returns zero bucket-side callers. test:bucket-convergence 7/7 drives the real resetAccumulation/startAsyncConvergence/pollConvergenceResult path, so a semantic edit disturbing those methods would fail it.</p>
+    <p class="guard"><code>npm run test:bucket-convergence</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ff4ed908</code></p>
+    
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tA">A</span>
@@ -192,12 +360,54 @@
     <p class="commit">commit <code>ee035150</code></p>
     
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>e03-animation</code>
+      <code class="file">engine/animation/audioClipSync.ts:46</code>
+    </header>
+    <p class="what">The @invariant 'Out-of-range during pause clears deck ownership' describes behaviour the code has never had — ownership is cleared by the playing→paused transition, unconditionally on range.</p>
+    <p class="change"><strong>Changed:</strong> Restated the invariant to match the `if (justPaused &amp;&amp; ownedDecks.has(deckIndex))` branch: the transition clears ownership regardless of range; steady-state pause and out-of-range alone never do.</p>
+    <p class="verify"><strong>How it was verified:</strong> The single ownedDecks.delete sits behind `justPaused &amp;&amp; ownedDecks.has(deckIndex)` — inRange is not consulted; the only other paused-branch statement is a justScrubbed/owned/inRange seek that clears nothing. git show f156dccc (the commit that added the branch, 2026-05-08) documents the intent as 'just paused (was playing) -&gt; pause owned deck; release ownership' with no range clause, while git log -S dates the wrong invariant to 778534b0, the 2026-05-20 doc audit. The code never matched the annotation.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>a109e2b2</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>e05-render-pipeline</code>
+      <code class="file">engine/AccumulationController.ts:6</code>
+    </header>
+    <p class="what">The interface JSDoc claimed renderControlSlice carries a convergenceValue readout; the slice has no such field — the value is polled straight off the controller by its single consumer.</p>
+    <p class="change"><strong>Changed:</strong> Split the claim: accumulationCount is in the slice (pushed by reportAccumulationToStore), convergenceValue is not mirrored there and is read directly off the controller by engine-gmt's RegionOverlay. Named store/slices/installAccumulationBindings.ts as the binding site.</p>
+    <p class="verify"><strong>How it was verified:</strong> Repo-wide grep (excluding docs/) for convergenceValue returns zero hits under store/ — the field exists only on the two WorkerProxy shadows, WorkerProtocol.ts:40, renderWorker.ts:68 and RegionOverlay.tsx:55. renderControlSlice's own key union is 'isPaused' | 'sampleCap' | 'accumulationCount' | 'samplesPerBucket'. Reading installAccumulationBindings.ts end-to-end confirms the only store-bound readout is reportAccumulation(controller.accumulationCount); convergence is never forwarded. The other claims in the same JSDoc were checked and left alone because they hold.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>32e86a54</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Applied — orchestrator-verified <span class="count">1</span></h2>
+    <h2>Applied — orchestrator-verified <span class="count">4</span></h2>
     <p class="note">No existing test covered these, so a second independent agent re-derived the claim before the change was allowed through. Each names how it was checked.</p>
     
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">high</span>
+      <code>e03-animation</code>
+      <code class="file">engine/animation/AnimationSystem.tsx:342</code>
+    </header>
+    <p class="what">Modulation recording computed its clean base with a weaker evaluator than playback — blind to postBehavior, defaulting isLog to false, and using a narrower rotation predicate — so recorded keyframes were baked against a base the timeline never plays.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the evaluateTrackValue(keys, frame, id.includes('rotation')) call with animationEngine.evaluateTrack(track, frame), the public side-effect-free evaluator documented as matching playback on all three axes. The call site already had the full Track in hand. Dropped the now-unused import; left a comment recording the one remaining gap (evaluateTrack skips the evaluatePairedTrack step scrub() tries first, so camera-pair tracks can still differ slightly).</p>
+    <p class="verify"><strong>How it was verified:</strong> An independent verifier that had not seen the auditor's reasoning re-derived all three divergences from source and measured each with a tsx probe against the real interpolators. ROTATION: the two predicates disagree on 33 of the 443 real modulation targets (from test:modulation-coverage's live list) — droste.rotate/rotateSpin/rotatePolar (DEGREES, -360..360), coloring.twist/twistArms/twist2/twistArms2, and lighting.light0-7_rot{X,Y,Z}. Measured on a 0.1 -&gt; 6.0 track at frame 50: recording 3.05 vs playback -0.0916 (playback applies the 2*pi shortest-path wrap; recording does not). coloring.phase/phase2 span &lt; pi so they are dead. POSTBEHAVIOR: evaluateTrackValue takes a Keyframe[] and so structurally cannot see it; it hard-clamps. Measured past a last key at frame 50, evaluated at 75: Hold agrees (10/10), Loop and PingPong play 5, Continue and OffsetLoop play 15 — recording bakes 10 for all four. Settable from a shipped right-click menu (Graph Editor -&gt; Extrapolation) on ANY track. ISLOG: real but inert — registerLogTrack has exactly one shipping call site (fluid-toy julia.zoom) and that target's modulation is display-only, so no log divergence is user-visible today. Verifier confidence high; it tried three refutations and failed on all three. Guards after the change: test:modulation-parity, test:modulation-coverage, test:modulated-setter, test:param-mapping, smoke:anim-play, smoke:anim-orbit, smoke:track-binding, typecheck — all pass.</p>
+    <p class="guard"><code>npm run test:modulation-parity</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>4d1bc158</code></p>
+    
+  </article>
   <article class="finding sev-medium">
     <header>
       <span class="badge tV">V</span>
@@ -212,10 +422,38 @@
     <p class="commit">commit <code>8842a839</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">medium</span>
+      <code>e03-animation</code>
+      <code class="file">engine-gmt/animation/cameraBinders.ts:194</code>
+    </header>
+    <p class="what">Tangent authoring omitted the isLog flag in two places despite having the track id in scope. CONFIRMED by an independent verifier, which also established the far larger live half of the problem in utils/CurveFitting.ts.</p>
+    <p class="change"><strong>Changed:</strong> Threaded isLogTrack(t.id) into both calculateTangents and TrackUtils.updateNeighbors. Behaviour-neutral today (no GMT camera track is log-registered) but closes the trap. Rewrote the logTrackRegistry @invariant, which named this as one of two unthreaded callers and would otherwise have become a ghost; promoted the remaining caller to @bug PRODUCTION: with the measured cost.</p>
+    <p class="verify"><strong>How it was verified:</strong> The verifier enumerated all six calculateTangents call sites: four thread the flag (timelineUtils x2, sequenceSlice, TrackUtils), two did not (CurveFitting.reTangentBezier, cameraBinders). It measured the cost with three tsx probes against the real modules: on the Bias path, authoring the same keys both ways and evaluating through interpolate(isLog=true) diverges by up to 1.34 decades (22x) on a 24-decade track, 1.20 decades on a 30-decade track, and 0.30 decades (2x) on an everyday 6-decade zoom; auto-tangent magnitudes collapse to 39%/2.2%/1.1e-17% of correct, so curves degenerate toward flat. It confirmed cameraBinders is latent (its six hardcoded ids are camera.unified.* and camera.rotation.*, none log-registered) and that CurveFitting is live (fluid-toy's julia.zoom is registered visible and IS plotted/editable in the graph editor, which has four isLogTrack branches precisely for it; nothing downstream re-tangents). Verifier confidence high. The CurveFitting half was NOT applied — see PROPOSALS.md.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>23239289</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">medium</span>
+      <code>e05-render-pipeline</code>
+      <code class="file">engine/RenderPipeline.ts:189</code>
+    </header>
+    <p class="what">getCompileTarget()'s @invariant ('the compile target MUST mirror MRT float type') was violable at runtime: _compileTarget was created once and never invalidated, while initTargets() re-allocates the MRT at a different texture type when bufferPrecision changes. CONFIRMED, and the invariant's stated rationale turned out to be wrong too.</p>
+    <p class="change"><strong>Changed:</strong> Widened the lazy-create guard in getCompileTarget() to dispose and rebuild when the cached target's texture type no longer matches the live MRT. Rewrote the @invariant to record the real trigger, the measured platform conditions, why the rebuild is done here rather than in initTargets/resize, and — importantly — that the original 'Three.js program param hashes diverge' rationale is not the mechanism.</p>
+    <p class="verify"><strong>How it was verified:</strong> An independent verifier accounted for ALL FOUR _compileTarget occurrences in the repo (declaration, lazy-create guard, construction, return) and confirmed no dispose, no null, no re-create, and no dispose() method on RenderPipeline at all. It traced the 13-hop reachability chain with file:line — Settings -&gt; Hardware -&gt; 'Buffer Precision' dropdown (HardwarePreferences.tsx:69-80) -&gt; setHardwareProfile -&gt; setQuality -&gt; flushConfig -&gt; FRACTAL_EVENTS.CONFIG -&gt; tick driver -&gt; WorkerProxy -&gt; renderWorker -&gt; FractalEngine.updateConfigInternal -&gt; pipeline.updateQuality -&gt; resize -&gt; initTargets — and noted that bufferPrecision is onUpdate:'compile', so the compile that immediately follows the type flip is the one that binds the stale target. It then PROBED REAL HARDWARE rather than assuming: headed Chromium with --use-angle=d3d11 on an RTX 2070, in both the document realm and a Worker+OffscreenCanvas realm matching where glCaps() actually runs, measuring cbf/cbhf/floatLinear all true, so bufferPrecision 0 yields FloatType and 1 yields HalfFloatType — typesDiffer true. It derived the divergence window as exactly (cbf &amp;&amp; floatLinear), which means this bites desktop and not mobile (where OES_texture_float_linear is often absent and mobile is force-set to bufferPrecision 1 at boot anyway). CRUCIALLY, it also argued against itself: reading three.js's WebGLPrograms.getParameters() showed the bound render target is consulted only for toneMapping and outputColorSpace, both gated on `=== null`, never its texture.type — so the invariant's stated reason is factually wrong for this three version, and any real cost sits at the ANGLE/D3D11 level and was NOT measured. Applied as a correctness fix (the code now honours its documented contract) with that caveat written into the source, not as a claimed perf win. Guards: test:bucket-convergence 7/7, smoke:boot 0 page errors, typecheck.</p>
+    <p class="guard"><code>npm run test:bucket-convergence</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>1a92ed9b</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">6</span></h2>
+    <h2>Awaiting your judgement <span class="count">14</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
   <article class="finding sev-high">
@@ -260,6 +498,62 @@
     
     <p class="rationale">Both .claude/rules/ddfs.md (Invariants, 3rd bullet) and CLAUDE.md (Architecture Rules, 1st bullet) state: 'Reading another feature's state requires dependsOn: [otherId]. Undeclared access throws in dev, warns in prod.' Nothing implements it. dependsOn is read at exactly two places in engine/FeatureSystem.ts: register() L551-557 warns if a named dependency is not yet registered, and topologicalSort() L711-719 uses it for ordering. Feature slices are plain objects on one shared zustand store (store/createFeatureSlice.ts L115); there is no Proxy, no getter trap, no access check — grep -rn 'new Proxy' store/ engine/ returns nothing. This matters because it is stated as an ENFORCED invariant in the two documents an agent loads first, so an agent reasonably assumes the architecture is self-policing and does not check its own cross-feature reads. OPTIONS: (a) downgrade the wording in both docs to what is true — isolation is a CONVENTION; dependsOn declares init order and produces a register-time warning only. Cheap, honest, immediate. (b) Actually implement it: a dev-only Proxy in createFeatureSlice checking the accessing feature against its dependsOn — real work, and the 'accessing feature' is not knowable from a plain store read, so it needs a call-site convention (e.g. readFeature(from, id)) to be enforceable at all. (c) Leave as an aspiration and mark it explicitly as one. RECOMMENDATION: (a). Not applied because the CLAUDE.md half is off-limits to the run, and correcting only the rule file would leave the two steering documents contradicting each other — worse than the current state. Both edits should land together.</p>
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e03-animation</code>
+      <code class="file">utils/CurveFitting.ts:55</code>
+    </header>
+    <p class="what">reTangentBezier authors tangents without isLog, so the Pencil tool and the graph editor's Bias handle write linear-space tangents onto log tracks that the evaluator reads as log-units. Confirmed live, but the fix is a five-file signature change entangled with a second, larger defect.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md for the full paste-ready spec and the second defect (GraphEditor's Douglas-Peucker epsilon in linear value units).</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e03-animation</code>
+      <code class="file">docs/adr/0015-animation-log-and-camera-pair-value-spaces.md:20</code>
+    </header>
+    <p class="what">ADR-0015's Decision and Consequences state Bezier is NOT supported on log tracks — the code has supported it since the ADR's own subject commit. Needs an append-only Update block; the run is not permitted to edit ADRs.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md for the paste-ready Update block.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e04-shader-builder</code>
+      <code class="file">docs/adr/0020-uniformschema-base-vs-feature.md:18</code>
+    </header>
+    <p class="what">ADR-0020's Decision and Consequences describe collision handling that commit 36ad672c replaced — it still says collisions are 'silently dropped' / 'last-wins' with 'no runtime guard', and lists the fix as future cleanup. The BASE-vs-feature decision itself still stands.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md for the paste-ready Update block. Matters because ADR-0020 is cited from .claude/rules/render-and-shaders-core.md as one of two shader-builder decisions, so an agent reading it will conclude collisions are silent and may 'helpfully' add the warning that already exists as a throw.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e05-render-pipeline</code>
+      <code class="file">engine/RenderPipeline.ts:492</code>
+    </header>
+    <p class="what">setSampleCap() discards the accumulation buffer whenever the new cap is below the current sample count — directly contradicting the documented contract of the generic binding that drives it, and losing a converged render when the user drags the Auto-Stop slider down.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md — the chain is proven end-to-end and the trigger is an ordinary continuous slider, so the reset fires repeatedly during a drag.</p>
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tB">B</span>
@@ -302,6 +596,62 @@
     
     <p class="rationale">ADR-0003's Context says outright: 'Apps that intentionally use a custom driver (worker-driven, headless test harness) must still be able to call runTicks from their own loop — so the solution can't reject a single legitimate driver, only the second one within a frame.' The implementation cannot distinguish the two cases: TickRegistry.ts:129 suppresses any call arriving less than DOUBLE_RUN_WINDOW_MS = 1 ms after the previous one, regardless of who made it. A frame-stepping harness (offline video export, a deterministic headless test rendering N frames back-to-back) runs each iteration in well under 1 ms and would get exactly one tick then silence — and silently, since the dev warning is one-shot and its text blames a driver double-mount, sending the reader to the wrong place. LATENT, NOT LIVE: only three runTicks call sites exist and none hits it today. It matters now because 4K/offline frame-sequence export is a known roadmap gap, and an exporter is precisely the shape that would trip this. OPTIONS: (a) do nothing and let whoever writes the exporter discover it — cheap now, confusing later; (b) add an opt-out, e.g. an exported setTickGuardEnabled(false) or runTicksUnguarded(delta) that a harness calls explicitly, keeping the guard on for the RAF path; (c) drop the time-window heuristic for driver identity — have drivers claim the registry via a token so a second claimant warns and no-ops while a single claimant can tick as fast as it likes. RECOMMENDATION: (b) now — a few lines, preserves the ADR-0003 guarantee verbatim, does not disturb the RAF path. (c) is the correct long-term shape but is not worth the churn until a second driver kind exists. Either way ADR-0003 wants an Update block noting the gap.</p>
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e03-animation</code>
+      <code class="file">debug/smoke-anim-orbit.mts:32</code>
+    </header>
+    <p class="what">smoke:anim-orbit failed once in five runs with 'Execution context was destroyed' at its first page.evaluate — the fixed waitForTimeout(2500) after waitUntil:'domcontentloaded' races a reload, and when it loses, all six real assertions are skipped.</p>
+    
+    
+    
+    
+    <p class="rationale">Observed once, when anim-orbit ran third in a back-to-back sequence; three solo runs and one later sequenced run passed. It fails loudly (exit 1) rather than silently, so it is a flake, not a blind spot. The same prologue appears in smoke-anim-play.mts, smoke-anim-vec2.mts and smoke-binder-registry.mts, so any of them can lose the same race. OPTIONS: (a) leave it — one-in-five under back-to-back sequencing, and it fails loudly; (b) replace the fixed sleep with a waitForFunction on window.__store / window.useAnimationStore in all four, which removes the arbitrary constant but does not close the window between the check and the next evaluate; (c) wrap the first evaluate in a single retry, which addresses the actual failure. RECOMMENDATION: (c) across all four. Not applied because the failure could not be reproduced on demand, so the fix could not be proven — and an unverifiable fix to a guard is worse than a known flake. The reproduction lever is running the four browser smokes back-to-back in one shell rather than individually.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e03-animation</code>
+      <code class="file">engine/animation/audioClipSync.ts:19</code>
+    </header>
+    <p class="what">_resetAudioClipSync is exported solely as a test seam and has zero callers, though the file's own @invariant says 'Tests must call _resetAudioClipSync() between cases'.</p>
+    
+    
+    
+    
+    <p class="rationale">grep finds the identifier only at its definition and in the comment referring to it. knip does not flag it (the config reports unused files, not unused exports). Deletion is off-limits to the run. OPTIONS: (a) keep it — three lines, documents the module's HMR-persistent-globals hazard, and is exactly what a future audioClipSync test would need; (b) delete it and the sentence referencing it; (c) write the test it was built for. RECOMMENDATION: (a) now, (c) if audio-clip sync ever regresses — syncAudioClips has genuinely testable transition logic (justResumed / justScrubbed / justPaused, the SCRUB_JUMP_SEC threshold, deck ownership) and no guard covers any of it today, which is the larger gap. Do not spend a session on (b).</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e04-shader-builder</code>
+      <code class="file">engine-gmt/engine/UniformSchema.ts:85</code>
+    </header>
+    <p class="what">The engine-gmt BASE_SCHEMA has accumulated 14 GMT-only MB3D rotation uniforms plus a 'mat4' widening of GLSLType, breaking the byte-identical fork invariant and putting app-specific names in a schema whose stated contract reserves it for engine-core, no-op tool slots, and CPU-derived caches.</p>
+    
+    
+    
+    
+    <p class="rationale">This is the engine/engine-gmt fork boundary, so it is a design call, not a cleanup. EVIDENCE: engine/UniformSchema.ts GLSLType has no 'mat4'; the engine-gmt twin does, solely to type uMb3dRot4D0/1. The 14 entries at engine-gmt/engine/UniformSchema.ts:85-104 have no engine-core counterpart, so the two literals diverge after their shared prefix. OPTIONS: (a) leave as-is and accept that the byte-identity invariant now guards only the shared prefix — that is what was documented in docs/policy/uniform-plugin-contract.md, costs nothing, and matches the 'dual state is design' rule; (b) move the bank into a path-2 feature via extraUniforms, which is what the contract says should have happened and would restore byte-identity, but it is a real refactor of the rotation-descriptor sync path (ADR-0099) with recompile-surface risk; (c) hoist 'mat4' into engine-core's GLSLType so at least the type union stops diverging — cheap, low-risk, independent of (a)/(b). RECOMMENDATION: (a) now, (c) opportunistically, (b) only if the MB3D bank grows again. Flagging because the divergence is invisible from the engine-core side and the next person to 'sync the two copies' will delete working GMT uniforms.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e04-shader-builder</code>
+      <code class="file">engine/ShaderFactory.ts:19</code>
+    </header>
+    <p class="what">The engine-core ShaderFactory class and ShaderBuilder.buildFragment() have no caller anywhere in the repo — every ShaderFactory.generateFragmentShader call site resolves to engine-gmt's own ShaderFactory, and fractal-toy drives its own assembler off the primitives.</p>
+    
+    
+    
+    
+    <p class="rationale">Not rot, but worth knowing. knip does not flag engine/ShaderFactory.ts because six modules import the re-exported ShaderConfig TYPE through it (ConfigDefaults, FractalEvents, ConfigManager, WorkerProxy, useAppStartup, engine-gmt/renderer/install) — so the file stays live while the class inside it is dead. Same for the addSection/getSections seam, which ADR-0019 explicitly retained for plugin authors after engine-gmt went typed and fractal-toy migrated off it. OPTIONS: (a) keep both as the documented reference implementation and plugin seam — recommended; ADR-0019 made that call on purpose and the source is now annotated so the next reader does not mistake it for dead code; (b) move ShaderConfig's re-export out of ShaderFactory.ts into ShaderConfig.ts so the six type importers stop depending on a module they otherwise do not use, which would let knip tell the truth about the class — a genuine tidy-up but it touches six files across three trees; (c) delete — not recommended, and a deletion regardless.</p>
+  </article>
   </section>
 
   <h2>Subsystems</h2>
@@ -328,35 +678,35 @@
     <td class="num prop">3</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e03-animation</code></td>
     <td>engine-core</td>
     <td class="area">AnimationEngine + binders + interpolators</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">12</td>
+    <td class="num applied">6</td>
+    <td class="num esc">2</td>
+    <td class="num prop">4</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e04-shader-builder</code></td>
     <td>engine-core</td>
     <td class="area">ShaderBuilder + ShaderFactory + UniformSchema</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">8</td>
+    <td class="num applied">5</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">3</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e05-render-pipeline</code></td>
     <td>engine-core</td>
     <td class="area">RenderPipeline + BloomPass + AccumulationController</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">5</td>
+    <td class="num applied">3</td>
+    <td class="num esc">1</td>
+    <td class="num prop">1</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>e06-adaptive-resolution</code></td>
