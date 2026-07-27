@@ -10,7 +10,7 @@
  * Registration API:
  *
  *   topbar.register({
- *     id: 'save-menu',              // unique per-slot; re-register replaces
+ *     id: 'save-menu',              // globally unique; re-register replaces
  *     slot: 'left' | 'center' | 'right',
  *     order: number,                // ascending; lower renders first
  *     component: React.FC,          // renderless in isolation is fine
@@ -47,7 +47,10 @@ export interface TopBarItem {
 
 // Module-level registry. Keep registration synchronous (no store) so item
 // availability matches module-load order. Backed by the shared id-keyed
-// `createListRegistry` primitive.
+// `createListRegistry` primitive — ONE `Map<id, item>` across every slot, so an
+// id reused against a different slot replaces the earlier entry instead of
+// adding a second one. To move an existing item, `unregister(id)` first (see
+// gradient-explorer/main.tsx re-slotting 'fps').
 const _registry = createListRegistry<TopBarItem>();
 
 export const topbar = {
