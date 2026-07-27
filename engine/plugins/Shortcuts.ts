@@ -302,6 +302,42 @@ export const installShortcuts = (options: InstallShortcutsOptions = {}) => {
     }
 };
 
+/**
+ * Tear down the global keydown listener and reset registry + scope stack.
+ *
+ * @bug PRODUCTION: this is NOT the inverse of `installShortcuts`, in two ways.
+ *   Both are LATENT today — `uninstallShortcuts` has zero callers repo-wide, and
+ *   all five `installShortcuts` call sites use the default `window` root — so
+ *   nothing can currently trigger either. They are contract defects waiting for
+ *   the first caller that uses the API as documented.
+ *
+ *   1. **The removal target is hardcoded.** `installShortcuts` attaches to
+ *      `options.domRoot ?? window` but stores neither the root nor the capture
+ *      flag (both are function-local `const`s). This function removes from
+ *      `window` literally. Install with a Document or HTMLElement `domRoot` — a
+ *      declared, typed, documented option — and the listener is never detached,
+ *      while `_listener = null` discards the only handle to it. Note the double
+ *      remove below (false AND true) already covers both capture phases, so the
+ *      capture axis is fine; only the root is unrecoverable.
+ *   2. **`_keyboardCaptureCount` is not reset.** A capturing surface live at
+ *      teardown leaves the counter above zero for the life of the page, and the
+ *      dispatcher's early-return for unmodified single-character keys sits above
+ *      the input-focus and `when()` checks — so every such shortcut is silently
+ *      swallowed. (Its one consumer, FormulaPicker, releases in an effect
+ *      cleanup, so React unmount always balances it; only this gap can strand
+ *      the count.)
+ *
+ *   Also un-reset, and deliberately excluded from the list above because they
+ *   may be intentional: `_scopeSubscribers` is never cleared, and
+ *   `window.__shortcuts` is never deleted — `debug/smoke-undo.mts` uses its
+ *   presence as the "installShortcuts ran" probe, so removing it would break
+ *   that guard.
+ *
+ *   Fix is ~6 lines (stash root at install, remove from it here, null it, reset
+ *   the counter) but changes behaviour in one exotic case: with two capturing
+ *   surfaces live, the reset un-captures the still-focused one. Queued rather
+ *   than applied — see PROPOSALS.md (overnight audit, cycle 3).
+ */
 export const uninstallShortcuts = () => {
     if (_listener) {
         window.removeEventListener('keydown', _listener, false);
