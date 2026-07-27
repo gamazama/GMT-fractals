@@ -459,7 +459,8 @@ export interface RuntimePanelConfig {
 
 /**
  * Thrown when `featureRegistry.register()` is called after the registry was
- * frozen (i.e. after `createEngineStore` ran). See docs/02_Feature_Registry.md.
+ * frozen (i.e. after `createEngineStore` ran). See
+ * docs/history/engine/02_Feature_Registry.md.
  * Thrown in dev; downgraded to a console warning in prod to avoid crashing
  * shipped apps on a late-arriving plugin.
  *
@@ -479,7 +480,7 @@ export class FeatureRegistryFrozenError extends Error {
             `Feature "${featureId}" registered after featureRegistry was frozen. ` +
             `All features must register BEFORE createEngineStore runs (i.e. before any ` +
             `module that touches useEngineStore / useEngineStore is imported). See ` +
-            `docs/03_Plugin_Contract.md § boot-timeline.` +
+            `docs/history/engine/03_Plugin_Contract.md § boot-timeline.` +
             diagnosis
         );
         this.name = 'FeatureRegistryFrozenError';
@@ -529,7 +530,7 @@ class FeatureRegistry {
                 console.warn(
                     `[FeatureRegistry] Replacing definition for "${def.id}". ` +
                     `If this is not HMR, it is a duplicate-id bug — see ` +
-                    `docs/02_Feature_Registry.md.`
+                    `docs/history/engine/02_Feature_Registry.md.`
                 );
                 this.features.set(def.id, def);
                 this.sortedCache = null;
@@ -622,6 +623,24 @@ class FeatureRegistry {
     /**
      * @invariant Per-feature dictionary entries are keyed by `shortId` ONLY.
      *   Params without `shortId` are absent from preset aliases.
+     * @invariant Aliases must be UNIQUE — globally across features, and
+     *   within one feature's params. `UrlStateEncoder.applyDictionary`
+     *   writes `result[alias] = value` on encode and builds a single
+     *   `alias -> longKey` reverse map on decode, so a collision silently
+     *   drops one side's entire state from every share link. Uniqueness
+     *   is NOT validated here (unlike duplicate feature *ids*, which throw).
+     *
+     * @bug PRODUCTION: two alias collisions exist today and each loses
+     *   state through the live `?s=<id>` share path. (1) `drawing` and
+     *   `droste` both declare feature `shortId: 'dr'` — `drawing` registers
+     *   later and wins, so ALL droste state is dropped from share links.
+     *   (2) inside `materials`, `emissionMode` and `envMapColorSpace` both
+     *   declare param `shortId: 'ec'` — `emissionMode` wins, `envMapColorSpace`
+     *   is dropped. Verified 2026-07-27 by round-tripping a live preset
+     *   through `generateShareStringFromPreset` + `parseShareString`:
+     *   droste `{active:true, zoom:3.5, tiling:4}` came back `{}`.
+     *   Fixing means picking a free alias for the losing side — a URL
+     *   wire-format decision, so it is deliberately not done here.
      */
     public getDictionary() {
         const dict: any = {
