@@ -93,6 +93,7 @@
     "smoke:particle-bounce": "tsx debug/smoke-particle-bounce.mts",
     "smoke:pause-controls": "tsx debug/smoke-pause-controls.mts",
     "smoke:share-link": "tsx debug/smoke-share-link.mts",
+    "smoke:statelibrary-drop": "tsx debug/smoke-statelibrary-drop.mts",
     "smoke:track-binding": "tsx debug/smoke-track-binding.mts",
     "smoke:tsaa": "tsx debug/smoke-tsaa.mts",
     "smoke:ui-primitives": "tsx debug/smoke-ui-primitives.mts",

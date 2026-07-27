@@ -97,6 +97,14 @@ export interface StateLibraryPanelProps<T> {
  *   NOT. Without this split, row click would race against the HTML5
  *   drag-start and frequently swallow the click. Drag handlers
  *   `stopPropagation` on `dragStart`.
+ * @invariant A row claims a drag (`preventDefault`) ONLY when `drag` is
+ *   non-null — i.e. only for a drag this list started. Foreign drags (OS
+ *   file drags above all) must fall through unclaimed, because window-level
+ *   handlers defer to any inner target that already called
+ *   `preventDefault()` — see `engine/components/SceneFileDropZone.tsx`
+ *   (`if (e.defaultPrevented) return`). Guarded by
+ *   `npm run smoke:statelibrary-drop`, which asserts reorder AND
+ *   file-drop passthrough so a fix for one can't silently break the other.
  * @invariant Slot-shortcut hint is hardcoded to the first 9 rows. Rows
  *   at index >= 9 render no `Ctrl+N` hint regardless of how many
  *   snapshots exist. Matches the slice's `count: 9` default.
@@ -104,8 +112,18 @@ export interface StateLibraryPanelProps<T> {
  *   non-active rows never render the modified marker even if dirty.
  *   The cyan highlight already identifies which row is "live"; the
  *   asterisk only adds value there.
- * @invariant Delete fires immediately — no confirmation dialog. UX
- *   safety is offloaded to the slice's undo hooks.
+ * @bug PRODUCTION: Delete fires immediately and is UNRECOVERABLE — no
+ *   confirmation dialog, and nothing behind `onDelete` restores the row.
+ *   The invariant here used to claim "UX safety is offloaded to the slice's
+ *   undo hooks"; there are no such hooks. `createStateLibrarySlice`'s
+ *   `[actions.delete]` is a bare `arr.filter(...)`, its only hook
+ *   (`onApplied`) fires on apply — never on delete — and its module JSDoc
+ *   states outright that "persistence and undo are deliberately app-side".
+ *   Neither consumer opts in: `deleteCamera` (engine-gmt/store/cameraSlice.ts)
+ *   and `deleteView` (fluid-toy/viewLibrary.ts) are the raw slice actions,
+ *   unwrapped. One mis-click on the hover-revealed trash icon destroys a
+ *   saved camera permanently. Fixing it is a product call (confirm-on-delete
+ *   vs. undo vs. accept) — see PROPOSALS.md (overnight audit, cycle 4).
  * @invariant Rename submits on Enter or blur; Escape clears `editId`
  *   without firing `onRename` — cancel semantics are key-driven, not
  *   button-driven.
@@ -156,17 +174,26 @@ export function StateLibraryPanel<T>({
         setDrag({ fromIndex: index, overIndex: index });
     };
 
+    // Both handlers bail BEFORE preventDefault when `drag` is null — i.e.
+    // when this drag did not start in this list. `preventDefault()` is how a
+    // drop target claims an event, and window-level handlers defer to any
+    // inner target that already claimed it (`SceneFileDropZone` does exactly
+    // that: `if (e.defaultPrevented) return`). Claiming unconditionally made
+    // a row silently eat OS scene-file drops that landed on it — no load, no
+    // warning toast, which reads to the user as "the drop broke".
     const handleDragOver = (e: React.DragEvent, index: number) => {
+        if (!drag) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        if (drag && drag.overIndex !== index) {
+        if (drag.overIndex !== index) {
             setDrag({ ...drag, overIndex: index });
         }
     };
 
     const handleDrop = (e: React.DragEvent, toIndex: number) => {
+        if (!drag) return;
         e.preventDefault();
-        if (drag && drag.fromIndex !== toIndex) {
+        if (drag.fromIndex !== toIndex) {
             onReorder(drag.fromIndex, toIndex);
         }
         setDrag(null);
