@@ -40,8 +40,8 @@
  *   - Hotkey slots are opt-in via SlotShortcutOptions. If two
  *     libraries both want slot shortcuts, pick distinct keys —
  *     GMT cameras own 1..9 and Mod+1..9.
- *   - Saved-state types live in BOTH dev/types/store.ts and
- *     dev/engine-gmt/types/store.ts (engine-split duplication).
+ *   - Saved-state types live in BOTH types/store.ts and
+ *     engine-gmt/types/store.ts (engine-split duplication).
  *     Add new SavedX types to both or the engine side breaks.
  *   - Provide a domain-correct captureThumbnail. The camera slice
  *     uses a viewport snapshot; non-spatial libraries should render
