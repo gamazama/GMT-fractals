@@ -135,10 +135,13 @@ never exceed 3.
    itself, in its own turn — not via another agent.
 7. **Write results** to `results/<id>.json` (schema below), update `worklist.json`,
    append a line to `journal.jsonl`.
-8. **Rebuild and republish the dashboard**:
-   `node plans/overnight-audit/scripts/build-dashboard.mjs`, then publish
-   `plans/overnight-audit/dashboard.html` via the Artifact tool passing
-   `url: state.dashboardUrl` so the URL stays stable.
+8. **Rebuild the dashboard** — `node plans/overnight-audit/scripts/build-dashboard.mjs`
+   — and commit it. **Do NOT publish it via the Artifact tool.** Owner decision,
+   cycle 1: publishing triggers an interactive permission prompt, which stalls an
+   unattended run. The dashboard is a self-contained local file; open
+   `plans/overnight-audit/dashboard.html` in a browser to read it. The artifact at
+   `state.dashboardUrl` is **frozen at cycle 1** and should be ignored — or
+   republished by hand in the morning, when a prompt costs nothing.
 9. **Schedule the next cycle.**
 
 If a cycle fails partway, the next cycle picks up from `worklist.json` — subsystems
