@@ -1,0 +1,14 @@
+{
+  "started": null,
+  "cycle": 0,
+  "maxCycles": 24,
+  "batchSize": 2,
+  "maxConcurrentAgents": 3,
+  "budgetUsd": 100,
+  "deadline": "2026-07-28T07:54:15.424Z",
+  "branch": "audit/overnight-2026-07-27",
+  "dashboardUrl": "https://claude.ai/code/artifact/d81d57c1-3384-4880-93e5-a89722063efe",
+  "dashboardFile": "plans/overnight-audit/dashboard.html",
+  "stopped": false,
+  "lastDashboard": null
+}

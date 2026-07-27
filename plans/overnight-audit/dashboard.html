@@ -1,0 +1,452 @@
+<title>GMT overnight audit</title>
+<style>
+  /* Neutrals carry a slight indigo bias so they sit with the accent rather than
+     under it; semantic ok/warn/critical stay independent of the accent hue. */
+  :root {
+    --bg:#fcfcfd; --fg:#15161c; --dim:#66677a; --line:#e3e3ec; --card:#f6f6fa;
+    --ok:#0a7d43; --bad:#bf3125; --warn:#9c5d00; --accent:#4a4fd0;
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#101118; --fg:#e8e8f0; --dim:#9394a8; --line:#272834; --card:#181922;
+            --ok:#4ec98a; --bad:#ff8078; --warn:#e0a44a; --accent:#9ea4ff; }
+  }
+  :root[data-theme="dark"] { --bg:#101118; --fg:#e8e8f0; --dim:#9394a8; --line:#272834; --card:#181922;
+            --ok:#4ec98a; --bad:#ff8078; --warn:#e0a44a; --accent:#9ea4ff; }
+  :root[data-theme="light"] { --bg:#fcfcfd; --fg:#15161c; --dim:#66677a; --line:#e3e3ec; --card:#f6f6fa;
+            --ok:#0a7d43; --bad:#bf3125; --warn:#9c5d00; --accent:#4a4fd0; }
+  * { box-sizing:border-box; }
+  body { background:var(--bg); color:var(--fg); margin:0; padding:2rem 1.25rem 5rem;
+         font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif;
+         font-variant-numeric:tabular-nums; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .wrap { max-width:1080px; margin:0 auto; }
+  h1 { font-size:1.6rem; margin:0 0 .2rem; letter-spacing:-.02em; }
+  .sub { color:var(--dim); margin:0 0 1.75rem; font-size:.9rem; }
+  code { font-family:var(--mono); font-size:.85em; }
+  h1 code, .sub code { font-size:.9em; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(136px,1fr)); gap:1px;
+           background:var(--line); border:1px solid var(--line); border-radius:4px; overflow:hidden; margin-bottom:1.25rem; }
+  .tile { background:var(--card); padding:.8rem .95rem; }
+  .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
+  .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
+  .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
+  .bar > i { display:block; height:100%; width:0%; background:var(--accent); }
+  /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
+  .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
+  .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
+  .cyc > i { display:block; width:100%; background:var(--accent); border-radius:1px; opacity:.55; }
+  .cyc:last-child > i { opacity:1; }
+  .cyc-label { color:var(--dim); font-family:var(--mono); font-size:.7rem; margin:-1.5rem 0 1.5rem; }
+  h2 { font-size:1.05rem; margin:2rem 0 .3rem; display:flex; align-items:center; gap:.5rem; }
+  h2 .count { background:var(--line); color:var(--dim); border-radius:99px; padding:.05rem .5rem; font-size:.75rem; font-weight:600; }
+  .note { color:var(--dim); font-size:.86rem; margin:0 0 .9rem; }
+  .empty { color:var(--dim); font-style:italic; font-size:.88rem; }
+  /* The stripe is state, not decoration: only severities that want attention get one. */
+  .finding { background:var(--card); border:1px solid var(--line); border-radius:4px;
+             padding:.75rem .9rem; margin-bottom:.5rem; }
+  .finding.sev-high { border-left:3px solid var(--bad); }
+  .finding.sev-medium { border-left:3px solid var(--warn); }
+  .finding header { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; margin-bottom:.35rem; }
+  .badge { font-family:var(--mono); font-size:.68rem; font-weight:700; border-radius:3px; padding:.1rem .38rem; }
+  .badge.tA { background:var(--ok); color:var(--bg); }
+  .badge.tV { background:var(--warn); color:var(--bg); }
+  .badge.tB { background:var(--accent); color:var(--bg); }
+  .sev { font-size:.72rem; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; }
+  .file { color:var(--dim); }
+  .what { margin:.15rem 0 .35rem; }
+  .change,.verify,.guard,.commit,.rationale { margin:.2rem 0; font-size:.87rem; color:var(--dim); }
+  .verify { color:var(--fg); }
+  .ok { color:var(--ok); font-weight:600; }
+  .bad { color:var(--bad); font-weight:600; }
+  .scroll { overflow-x:auto; border:1px solid var(--line); border-radius:4px; }
+  table { border-collapse:collapse; width:100%; font-size:.85rem; min-width:720px; }
+  th,td { text-align:left; padding:.42rem .7rem; border-bottom:1px solid var(--line); }
+  th { color:var(--dim); font-weight:600; font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; }
+  tr:last-child td { border-bottom:0; }
+  .num { text-align:right; font-family:var(--mono); }
+  .applied { color:var(--ok); } .esc { color:var(--warn); } .prop { color:var(--accent); }
+  .area { color:var(--dim); }
+  .st { font-size:.78rem; }
+  tr.s-done .st { color:var(--ok); } tr.s-failed .st { color:var(--bad); } tr.s-pending .st { color:var(--dim); }
+  footer { margin-top:3rem; color:var(--dim); font-size:.8rem; border-top:1px solid var(--line); padding-top:1rem; }
+</style>
+<div class="wrap">
+  <h1>GMT overnight audit</h1>
+  <p class="sub">Cycle 0 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated now</p>
+
+  <div class="tiles">
+    <div class="tile"><div class="v">0/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">0</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">0</div><div class="k">applied &amp; verified</div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">0</div><div class="k">orchestrator-checked</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">0</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">0<span style="font-size:.6em;color:var(--dim)">/0</span></div><div class="k">guards passing</div></div>
+  </div>
+  <div class="bar"><i></i></div>
+  
+
+  
+
+  
+  <section>
+    <h2>Applied — self-verified <span class="count">0</span></h2>
+    <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
+    <p class="empty">Nothing in this tier.</p>
+  </section>
+  
+  <section>
+    <h2>Applied — orchestrator-verified <span class="count">0</span></h2>
+    <p class="note">No existing test covered these, so a second independent agent re-derived the claim before the change was allowed through. Each names how it was checked.</p>
+    <p class="empty">Nothing in this tier.</p>
+  </section>
+  
+  <section>
+    <h2>Awaiting your judgement <span class="count">0</span></h2>
+    <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
+    <p class="empty">Nothing in this tier.</p>
+  </section>
+
+  <h2>Subsystems</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>id</th><th>tier</th><th>area</th><th class="num">found</th><th class="num">applied</th><th class="num">checked</th><th class="num">queued</th><th>status</th></tr></thead>
+    <tbody>
+  <tr class="s-pending">
+    <td><code>e01-feature-system</code></td>
+    <td>engine-core</td>
+    <td class="area">FeatureSystem + DDFS core</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e02-tick-registry</code></td>
+    <td>engine-core</td>
+    <td class="area">Tick phases + render loop ownership</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e03-animation</code></td>
+    <td>engine-core</td>
+    <td class="area">AnimationEngine + binders + interpolators</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e04-shader-builder</code></td>
+    <td>engine-core</td>
+    <td class="area">ShaderBuilder + ShaderFactory + UniformSchema</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e05-render-pipeline</code></td>
+    <td>engine-core</td>
+    <td class="area">RenderPipeline + BloomPass + AccumulationController</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e06-adaptive-resolution</code></td>
+    <td>engine-core</td>
+    <td class="area">AdaptiveResolution + HardwareDetection + viewport</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e07-plugins-host</code></td>
+    <td>engine-core</td>
+    <td class="area">Hud, TopBar, Menu, Help, SceneIO host plugins</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e08-shortcuts-undo</code></td>
+    <td>engine-core</td>
+    <td class="area">Keyboard + transaction stack</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e09-camera-plugin</code></td>
+    <td>engine-core</td>
+    <td class="area">Camera plugin + StateLibrary primitive</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e10-engine-features</code></td>
+    <td>engine-core</td>
+    <td class="area">Bundled engine features (audio, modulation, webcam, debug, post, color)</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e11-worker-contract</code></td>
+    <td>engine-core</td>
+    <td class="area">Worker proxy, ViewportRefs, RENDER_TICK protocol</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e12-mobile-layout</code></td>
+    <td>engine-core</td>
+    <td class="area">Mobile detection + layout primitives</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e13-shared-ui</code></td>
+    <td>engine-core</td>
+    <td class="area">components/ primitives + context providers</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g01-renderer</code></td>
+    <td>engine-gmt</td>
+    <td class="area">FractalEngine + MaterialController + SceneController + worker</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g02-shader-pipeline</code></td>
+    <td>engine-gmt</td>
+    <td class="area">SDFShaderBuilder + GMT ShaderFactory + UniformManager</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g03-formula-registry</code></td>
+    <td>engine-gmt</td>
+    <td class="area">FractalRegistry + 42 formulas + V3/V4 pipeline</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g04-navigation</code></td>
+    <td>engine-gmt</td>
+    <td class="area">Camera nav + physics probe + HUD</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g05-engine-gmt-features</code></td>
+    <td>engine-gmt</td>
+    <td class="area">GMT DDFS features (geometry, coloring, lighting, AO, atmosphere, drawing, droste, interlace, materials, navigation, optics, quality, reflections, texturing, volumetric, water_plane, fragmentarium_import, engine, camera_manager)</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g06-bucket-render</code></td>
+    <td>engine-gmt</td>
+    <td class="area">BucketRenderer + WorkerExporter + WorkerHistogram</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g07-mesh-export</code></td>
+    <td>engine-gmt</td>
+    <td class="area">Mesh export tool + VDB writer + preview canvas + pipeline</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g08-save-load-gmf</code></td>
+    <td>engine-gmt</td>
+    <td class="area">GMF format + scene serialization</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g09-modular-graph</code></td>
+    <td>engine-gmt</td>
+    <td class="area">GraphCompiler + ModularGraph</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g10-audio-fps-sync</code></td>
+    <td>engine-gmt</td>
+    <td class="area">Audio timeline + FPS sync</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>a01-boot-shell</code></td>
+    <td>app-gmt</td>
+    <td class="area">App entry + boot sequence + feature registration</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>a02-panels-layout</code></td>
+    <td>app-gmt</td>
+    <td class="area">Panel manifest + topbar + Dock + ViewportFrame</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>a03-tutorial</code></td>
+    <td>app-gmt</td>
+    <td class="area">Tutorial overlay</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>t01-fluid-toy</code></td>
+    <td>sibling-app</td>
+    <td class="area">fluid-toy sibling app</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>t02-fractal-toy</code></td>
+    <td>sibling-app</td>
+    <td class="area">fractal-toy sibling app</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>e09b-state-library-ui</code></td>
+    <td>engine-core</td>
+    <td class="area">StateLibrary UI primitives (panel, toast, active-snapshot features footer)</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g11-gmt-camera-manager</code></td>
+    <td>engine-gmt</td>
+    <td class="area">GMT CameraManager: cameraSlice consumer of installStateLibrary + CameraManagerPanel + getDirectionName helper</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>g12-formula-workshop</code></td>
+    <td>engine-gmt</td>
+    <td class="area">Formula Workshop UI + V3/V4 Fragmentarium .frag/.dec importer pipelines (analyze → preprocess → emit) and importSource lifecycle</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>p01-palette-suite</code></td>
+    <td>palette</td>
+    <td class="area">Palette/gradient suite — editors, generator, image→gradient, filters, stores, exporters</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr>
+  <tr class="s-pending">
+    <td><code>gx01-gradient-explorer</code></td>
+    <td>sibling-app</td>
+    <td class="area">Gradient Explorer app shell (boot, picker stage, top bar) — consumes palette suite</td>
+    <td class="num">0</td>
+    <td class="num applied">0</td>
+    <td class="num esc">0</td>
+    <td class="num prop">0</td>
+    <td class="st">pending</td>
+  </tr></tbody>
+  </table></div>
+
+  <footer>
+    
+    Branch <code>audit/overnight-2026-07-27</code> — nothing was pushed and <code>main</code> was not touched.
+    Review with <code>git log --oneline main..audit/overnight-2026-07-27</code>, then cherry-pick or merge.
+    Tier B items are in <code>plans/overnight-audit/PROPOSALS.md</code>.
+  </footer>
+</div>
