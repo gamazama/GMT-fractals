@@ -1,8 +1,19 @@
 /**
- * @invariant Importing this module triggers `registerFeatures()` at top
- *   level — even a types-only import. The merge filters feature-vs-base
- *   name collisions SILENTLY (no warning); feature-vs-feature collisions
- *   go last-feature-wins via `UNIFORM_DEFAULTS` reduce.
+ * @invariant Importing a *value* from this module (`UNIFORM_SCHEMA`,
+ *   `UNIFORM_DEFAULTS`, `createUniforms`) triggers `registerFeatures()` at
+ *   module top level. A type-only import — e.g. `UniformDefinition` — is
+ *   elided by tsc AND esbuild under this tsconfig (no `verbatimModuleSyntax`),
+ *   so it does NOT fire the side effect. That elision is load-bearing: it is
+ *   what keeps the `FeatureSystem` ↔ `UniformSchema` import cycle benign
+ *   (`engine/FeatureSystem.ts` takes `UniformDefinition` from here while this
+ *   module takes `featureRegistry` from there; evaluating this module during
+ *   FeatureSystem's own evaluation would hit `featureRegistry` in TDZ).
+ *
+ * @invariant Uniform-name collisions THROW at module load — both
+ *   feature-vs-base and feature-vs-feature. See the two checks below
+ *   `featureUniforms`. Nothing is silently filtered and `UNIFORM_DEFAULTS`
+ *   is never reached with a duplicate name. (Replaced a silent
+ *   base-collision filter in 36ad672c, 2026-05-21.)
  */
 
 import * as THREE from 'three';
