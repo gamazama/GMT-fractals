@@ -24,7 +24,13 @@ extend it *generically* so another app could use the same seam.
 
 ## Accumulation
 
-Convergence invariants and reset semantics are ADR-0061 / ADR-0062. Accumulation
+Convergence measurement + reset semantics: ADR-0017 (async fence readback),
+ADR-0018 (gating on `_convergenceNeeded`), ADR-0067 (bucket render is fixed-spp —
+no per-bucket convergence; also the `resetAccumulation` → `convergencePending`
+carry-over fix that `npm run test:bucket-convergence` guards). For *what counts as
+a visual change that may reset accumulation*, see ADR-0061's "Scope boundary"
+section (render invalidation stays in the accumulation-reset system, separate from
+gesture activity) and ADR-0078 (`noAccumReset` / `preserveOnApply`). Accumulation
 FPS readings lie — see the benchmarking note in
 [`docs/policy/shader-compile-optimization.md`](../../docs/policy/shader-compile-optimization.md);
 measure with timer queries over a full-frame region, dump once and measure many.
