@@ -2,13 +2,13 @@
  * ModulationEngine — LFO + rule-driven signal pipeline.
  *
  * @invariant LFO master switch (`lfosEnabled === false`) gates BOTH writes
- *   AND reads. `updateOscillators` returns early at line ~35 (no
- *   `lfoValues` refresh); the rule-side gate inside `update()` must also
- *   skip LFO-sourced rules, or they read stale cached `lfoValues` and
- *   hang at their final modulated value.
- * @invariant LFO phase is unit-period (0..1), NOT radians. See line ~40:
- *   `((time / period) + phase) % 1`. Noise samples at `time / period`
- *   (no phase added). Larger `period` = slower wiggle.
+ *   AND reads. `updateOscillators` returns early before refreshing any
+ *   `lfoValues`; the rule-side gate inside `update()` must also skip
+ *   LFO-sourced rules, or they read stale cached `lfoValues` and hang at
+ *   their final modulated value.
+ * @invariant LFO phase is unit-period (0..1), NOT radians — see the `t` in
+ *   `updateOscillators`: `((time / period) + phase) % 1`. Noise samples at
+ *   `time / period` (no phase added). Larger `period` = slower wiggle.
  * @invariant `offsets` buffer is APPENDED to inside `update()`, never
  *   cleared. Caller (AnimationSystem live path, `applyModulationsAt`
  *   export path) MUST call `resetOffsets()` before `update()`, or rules
@@ -321,10 +321,12 @@ class ModulationEngine {
 
         let raw: number;
         if (rule.mode === 'transient') {
-            // SuperFlux, computed per BAND inside the bank and averaged over
-            // this rule's range — see FilterBank.computeFluxRate. The max-filter
-            // along frequency is what stops a drifting or vibrato'd tone
-            // reading as a continuous onset, which plain flux could not
+            // SuperFlux, computed per BAND on the audio thread and averaged
+            // over this rule's range here — see `BandAnalyser.computeFlux`
+            // (engine/features/audioMod/dsp/bandAnalyser.ts) for the producer
+            // and `FilterBank.aggregateFlux` for this aggregation. The
+            // max-filter along frequency is what stops a drifting or vibrato'd
+            // tone reading as a continuous onset, which plain flux could not
             // distinguish from a real hit.
             //
             // Rate per SECOND, not per frame, so response doesn't change with
@@ -334,10 +336,11 @@ class ModulationEngine {
             // every rule differences the same pair of frames and switching a
             // rule into transient mode mid-set cannot spike off a stale value
             // it was never updating.
-            // The rate division moved INTO the bank (`computeFluxRate`), so
-            // both producers — the main-thread path and the worklet — emit the
-            // same per-second units and this constant is unaffected by which
-            // one is running.
+            // The rate division happens at the producer (`BandAnalyser.analyse`
+            // divides the rise by the hop duration), so what arrives here is
+            // already per-second and this constant needs no rate correction.
+            // ADR-0110's main-thread A/B arm has since been deleted; the
+            // worklet is the only producer.
             const rate = filterBank.aggregateFlux(bandLo, bandHi);
             raw = Math.min(1, rate / ModulationEngine.TRANSIENT_FULL_SCALE);
         } else {

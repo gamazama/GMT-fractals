@@ -206,5 +206,6 @@ export function buildTilt(bands: Band[], slopeDbPerOct: number): Float32Array {
     return out;
 }
 
-/** Max-filter width in BANDS for SuperFlux — see `FilterBank.computeFluxRate`. */
+/** Max-filter width in BANDS for SuperFlux — see `BandAnalyser.computeFlux`
+ *  in `dsp/bandAnalyser.ts`, which runs on the audio thread. */
 export const SUPERFLUX_WIDTH = 3;
