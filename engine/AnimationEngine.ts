@@ -7,7 +7,6 @@
  */
 
 import { Track, Keyframe } from '../types';
-import { solveBezierY } from './BezierMath';
 import { featureRegistry } from './FeatureSystem';
 import { AnimationMath } from './math/AnimationMath';
 import { binderRegistry } from './animation/binderRegistry';
@@ -358,11 +357,14 @@ export class AnimationEngine {
     }
 
     /**
-     * @invariant Bezier is NOT applied on log tracks. Tangent y-values
-     *   live in absolute value-space; reinterpreting under log would
-     *   silently change the curve shape. Log tracks evaluate as
-     *   linear-in-log regardless of stored interpolation type.
-     *   See engine/animation/logTrackRegistry.ts:22-26.
+     * @invariant Log tracks evaluate in log-value space, Bezier included.
+     *   A `Linear`/`Step` key lerps in `log(v)`; a `Bezier` key solves the
+     *   curve in `(frame, log(v))` and `exp()`s back, so tangent y-values on
+     *   a log track are LOG-UNITS, not absolute value-units. Auto-tangents
+     *   are authored in the same space — `AnimationMath.calculateTangents`
+     *   takes the matching `isLog` flag (callers pass `isLogTrack(id)`).
+     *   Both branches fall back to linear-in-value when either endpoint is
+     *   non-positive. See `engine/math/AnimationMath.ts` `interpolate()`.
      */
     private interpolate(track: Track, frame: number): number {
         const keys = track.keyframes;

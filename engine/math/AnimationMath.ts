@@ -14,14 +14,16 @@ export const AnimationMath = {
     /**
      * Calculates the interpolated value at a specific frame between two keyframes.
      *
-     * `isLog` — interpolate linearly in log(value) space. Used for
-     * log-scale params (e.g. fluid-toy's `julia.zoom`) so a flythrough
-     * spanning many decades progresses at a constant rate-of-change in
-     * scale rather than dumping 99.999% of the tween at one end. Bezier
-     * tangent semantics don't survive a log transform (tangent y-values
-     * are absolute), so log mode forces linear-in-log regardless of
-     * stored interpolation. Falls back to linear if either endpoint is
-     * non-positive.
+     * `isLog` — interpolate in log(value) space. Used for log-scale params
+     * (e.g. fluid-toy's `julia.zoom`) so a flythrough spanning many decades
+     * progresses at a constant rate-of-change in scale rather than dumping
+     * 99.999% of the tween at one end. Both interpolation modes are
+     * supported: non-Bezier keys lerp linearly in `log(v)`, and Bezier keys
+     * solve the curve in `(frame, log(v))` and `exp()` back — so on a log
+     * track tangent y-values are LOG-UNITS, not absolute value-units.
+     * `calculateTangents` takes the same `isLog` flag so auto-tangents are
+     * authored in the space this consumes. Falls back to linear-in-value if
+     * either endpoint is non-positive.
      */
     interpolate: (frame: number, k1: Keyframe, k2: Keyframe, isRotation: boolean = false, isLog: boolean = false): number => {
         if (k1.interpolation === 'Step') return k1.value;
