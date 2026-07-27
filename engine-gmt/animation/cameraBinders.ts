@@ -26,6 +26,7 @@ import { nanoid } from 'nanoid';
 import { animationEngine, type ScrubContext } from '../../engine/AnimationEngine';
 import { binderRegistry } from '../../engine/animation/binderRegistry';
 import { setCameraKeyCaptureFn, type CameraKeyCaptureOptions } from '../../engine/animation/cameraKeyRegistry';
+import { isLogTrack } from '../../engine/animation/logTrackRegistry';
 import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
@@ -188,15 +189,21 @@ const captureGmtCameraKeyFrame = (
             const sorted = [...others, newKey].sort((a, b) => a.frame - b.frame);
             const idx = sorted.findIndex((k) => k.id === newKey.id);
 
+            // Tangents on a log-registered track are LOG-UNITS — the flag must
+            // be threaded or authored and evaluated curves disagree. Behaviour-
+            // neutral today (none of the six camera track ids written here is
+            // log-registered, so isLogTrack returns false), but this is the
+            // trap that fires the moment one is.
+            const trackIsLog = isLogTrack(t.id);
             if (interpolation === 'Bezier') {
                 const prev = idx > 0 ? sorted[idx - 1] : undefined;
                 const next = idx < sorted.length - 1 ? sorted[idx + 1] : undefined;
-                const { l, r } = AnimationMath.calculateTangents(newKey, prev, next, 'Auto');
+                const { l, r } = AnimationMath.calculateTangents(newKey, prev, next, 'Auto', trackIsLog);
                 newKey.leftTangent = l;
                 newKey.rightTangent = r;
             }
 
-            TrackUtils.updateNeighbors(sorted, idx);
+            TrackUtils.updateNeighbors(sorted, idx, trackIsLog);
             newTracks[t.id] = { ...track, keyframes: sorted };
         });
 

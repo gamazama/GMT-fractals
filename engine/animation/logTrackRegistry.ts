@@ -30,14 +30,25 @@
  * @invariant Any NEW code that computes tangents for a track must pass
  *   `isLogTrack(trackId)` through to `AnimationMath.calculateTangents`.
  *   Handles authored in linear-value space and then evaluated as
- *   log-units give a curve nobody asked for. Two existing callers do not
- *   thread it: `utils/CurveFitting.ts` `reTangentBezier` (Pencil / Bias /
- *   graph-selection retangent), which takes no trackId at all, and
- *   `engine-gmt/animation/cameraBinders.ts`, which has `t.id` in scope but
- *   passes neither there nor to `TrackUtils.updateNeighbors`. The latter is
- *   latent — no GMT camera track is registered log — the former is live for
- *   any app that registers one (fluid-toy's `julia.zoom`). Don't copy the
- *   shape.
+ *   log-units give a curve nobody asked for.
+ *
+ * @bug PRODUCTION: one caller still does not thread it —
+ *   `utils/CurveFitting.ts` `reTangentBezier`, reached from the Pencil tool
+ *   (`hooks/usePencilTool.ts`), the graph editor's Bias handle
+ *   (`components/graph/GraphSelectionBBox.tsx`) and `fitSamplesToKeys`. It
+ *   takes a `Keyframe[]` and no trackId, so there is nothing to derive the
+ *   flag from. Live for any app registering a log track — today that is
+ *   fluid-toy's `julia.zoom`, which IS plotted and editable in the graph
+ *   editor. Measured on the Bias path: authoring the same keys both ways
+ *   diverges by up to 1.34 decades (22x) on a 24-decade track, 0.30 decades
+ *   (2x) on an everyday 6-decade zoom; auto-tangents collapse toward flat
+ *   because a linear-space slope is a rounding error in log-units. NOTE the
+ *   Pencil path has a second, larger defect that fixing this alone will not
+ *   cure: `components/GraphEditor.tsx`'s Douglas-Peucker epsilon
+ *   (`range * 0.02`) is in linear value units and collapses a log-track
+ *   stroke to 2-3 keys. See PROPOSALS.md (overnight audit, cycle 2).
+ *   `engine-gmt/animation/cameraBinders.ts` had the same omission and was
+ *   fixed 2026-07-28; it was latent (no GMT camera track is log-registered).
  *
  * @see docs/adr/0015-animation-log-and-camera-pair-value-spaces.md — its
  *   Decision section predates the Bezier-on-log support added in 05eb7849
