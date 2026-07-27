@@ -1,0 +1,76 @@
+{
+  "id": "e09b-state-library-ui",
+  "cycle": 4,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e09b-state-library-ui" },
+    { "script": "npm run smoke:statelibrary-drop", "pass": true, "subsystem": "e09b-state-library-ui", "error": "NEW guard, created by this finding — first guard to touch StateLibraryPanel at all" },
+    { "script": "npm run smoke:ui-primitives", "pass": true, "subsystem": "e09b-state-library-ui" },
+    { "script": "npm run test:zindex", "pass": true, "subsystem": "e09b-state-library-ui" },
+    { "script": "npm run check:zindex", "pass": true, "subsystem": "e09b-state-library-ui" },
+    { "script": "npm run smoke:boot", "pass": true, "subsystem": "e09b-state-library-ui" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "e09b-state-library-ui" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "components/StateLibraryPanel.tsx",
+      "line": 193,
+      "summary": "StateLibraryPanel rows called preventDefault() on every drop, so an OS scene-file dropped onto the Camera Manager list was silently swallowed — no scene load, no warning toast.",
+      "change": "handleDragOver and handleDrop now bail BEFORE preventDefault() when the drag did not start in this list, so foreign drags fall through unclaimed. Added a matching @invariant, and a new regression guard debug/smoke-statelibrary-drop.mts registered as npm run smoke:statelibrary-drop.",
+      "verification": "Falsification, both directions, against the live dev server. BEFORE the fix the new guard printed: reorder PASS, passthrough-control (file drop on <body>) PASS, passthrough (file drop on a row) FAIL — 'warned=false'. Control and row dispatch an identical synthetic file drop, so the only difference is the row's preventDefault. AFTER the one-line guard in each handler, all three PASS. The reorder assertion is what makes it non-vacuous: it passed BEFORE the fix too, so it would catch an over-reaching fix that killed drag-reorder to win the passthrough case. The mechanism is confirmed at the other end: SceneFileDropZone defers to any inner target that already claimed the event (`if (e.defaultPrevented) return`), which is exactly the 'the drop broke' failure its nudge toast exists to prevent.",
+      "guard": "npm run smoke:statelibrary-drop",
+      "guardPass": true,
+      "commit": "6bdf1934"
+    },
+    {
+      "tier": "V",
+      "severity": "medium",
+      "file": "components/StateLibraryPanel.tsx",
+      "line": 291,
+      "summary": "Submitting an empty inline rename was accepted, and the resulting blank label rendered as a zero-height span — so the double-click-to-rename affordance became unreachable and the row could never be renamed again through the UI. CONFIRMED and fixed at the render side.",
+      "change": "Render 'Untitled' when the label is empty (both the plain and the `*`-modified branches). Fixed at the render side rather than the input side deliberately: that repairs rows that are ALREADY blank — including any loaded from a saved scene, since savedCameras is a registered preset field so blanks round-trip into .gmt files and share links — and it covers every producer, because [actions.add] uses `??` which does not catch the empty string. Left a comment recording the measured mechanism.",
+      "verification": "An independent verifier measured the pre-fix state in app-gmt: blank span rect {w:149,h:0} with document.elementFromPoint at its centre returning the PARENT div, versus {w:175,h:16,hitIsLabel:true} for a normal label. It confirmed the lockout was total — Playwright's actionability-checked dblclick timed out after 3s, a raw mouse dblclick did nothing, and an exhaustive sweep of the entire 293x46 row (every 2px of height across 4 x-positions) never mounted the rename input. It tested the one apparent escape hatch and found it self-destructs: the `*` modified-marker does restore a 16px hit area, but the row's own onClick re-applies the snapshot and clears `modified` on the FIRST click of the double-click, so the target vanishes before the second click lands. Reachable by an ordinary gesture — clear the input and click away, since onBlur commits with no keypress at all. Whitespace-only is accepted verbatim and renders identically. The orchestrator RE-MEASURED after the fix on the same entry point: the blank row now reports {w:175,h:16,hitIsLabel:true}, identical to the non-blank row. SEVERITY REFINED by the verifier, and worth keeping: this is NOT lost work — Duplicate yields a state-identical copy labelled ' (copy)' which is renameable, so recovery is duplicate -> rename -> delete the blank. It separately CONFIRMED that delete is unrecoverable, by calling beginParamTransaction() and checking that savedCameras is absent from the snapshot.",
+      "guard": "npm run smoke:statelibrary-drop",
+      "guardPass": true,
+      "commit": "8a0a4b74"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "components/StateLibraryPanel.tsx",
+      "line": 115,
+      "summary": "An @invariant claimed delete's UX safety was 'offloaded to the slice's undo hooks' — no such hooks exist anywhere in the chain, so the annotation promised a safety net that isn't there.",
+      "change": "Replaced the false @invariant with an @bug PRODUCTION block recording that delete is immediate and unrecoverable, naming each place the claimed undo path is absent, and pointing the remedy at PROPOSALS.md. Kept the true half of the original claim (delete fires immediately, no confirmation). Committed together with the drop fix — same file.",
+      "verification": "Exhaustive grep over the whole chain, not a spot check. Searching onApplied/pushUndo/undoStack/beginTransaction across createStateLibrarySlice.ts, installStateLibrary.ts, cameraSlice.ts and viewLibrary.ts returns three hits, all the onApplied declaration/call — which the slice invokes only from applySnap(), reached by select and duplicate, never by [actions.delete] (a plain arr.filter). Searching deleteCamera/deleteView shows the only producers are the slice's actions.delete mapping and the two panel call sites that pass them straight through as onDelete, with no wrapper anywhere. Independently corroborated by the verifier, which measured that savedCameras is absent from getParamSnapshot, so Ctrl+Z cannot bring a deleted camera back.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "6bdf1934"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "components/StateLibraryPanel.tsx",
+      "line": 309,
+      "summary": "Deleting a saved camera or view is immediate and permanently unrecoverable — one mis-click on the hover-revealed trash icon destroys the snapshot with no confirmation and no undo path.",
+      "rationale": "See PROPOSALS.md. Now annotated @bug PRODUCTION at the source site so it is discoverable via grep until decided."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "components/StateLibraryPanel.tsx",
+      "line": 159,
+      "summary": "The input-side half of the blank-rename fix — reject blank/whitespace submits rather than only guarding at render.",
+      "rationale": "See PROPOSALS.md. Separated from the applied render-side fix because it implies trimming non-blank labels too, which is a behaviour change beyond 'treat blank as cancel'."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": ".claude/rules/mobile-layout.md",
+      "line": 4,
+      "summary": "mobile-layout.md's path glob claims all of engine/components/**, so opening StateLibraryToast.tsx loads mobile-viewport guidance and nothing about the state library.",
+      "rationale": "The glob over-captures by 6 of the directory's 9 files — the rule's own prose says it is about useMobileLayout.ts and engine/components/{Landscape,Mobile}*. Meanwhile the toast's real siblings are covered elsewhere: StateLibraryPanel.tsx and ActiveSnapshotFeatures.tsx match ui-and-panels.md's components/*.tsx, and the slice + installer match engine-plugins.md's engine/store/**. The toast is the one piece of this subsystem whose auto-loaded rule is unrelated to it. OPTIONS: (a) narrow mobile-layout.md's glob — precise, but silently drops coverage from 6 files that may want it; (b) add engine/components/StateLibraryToast.tsx to engine-plugins.md's paths, putting it next to the two files its contract is actually shared with; (c) leave it. RECOMMENDATION: (b) — additive, cannot remove coverage from anything, and matches where the toast's real contract lives (toastFieldKey is the entire interface between toast and slice). Not applied because two auditors were editing rules files concurrently this cycle."
+    }
+  ],
+  "notes": "Subsystem is small (3 files) and genuinely covered. Stayed off engine/store/createStateLibrarySlice.ts and installStateLibrary.ts as instructed — e09-camera-plugin's auditor had both modified in the working tree.\n\nVERIFIED-CLEAN (checked, no finding): StateLibraryToast's two @invariants both hold — the slice does own toast lifetime via setTimeout and the component has no timer, and a typo'd arrayKey at either call site does produce a dead toast with no runtime error. ActiveSnapshotFeatures' two @invariants hold exactly as written. Three of StateLibraryPanel's surviving @invariants hold: drag-handle-only-draggable, index<9 matching the slice's count:9 default, and isModified consulted only for the active row. The Escape-cancels-rename invariant also HOLDS — not trusted, tested in-browser: type into the rename input, press Escape, label unchanged and input closes; Enter commits as a control. React's unmount does not fire the onBlur submit path in Chromium.\n\nZ-INDEX, checked in BOTH directions per the cycle-3 blind-spot warning: the only raw z in the subsystem is z-[600] at StateLibraryToast.tsx:50, correctly allowlisted as shell-local — TopBarHost's header is `relative ... z-[500]`, a real stacking context, so the toast's 600 is trapped inside it and cannot leak into the portal domain. It is also not too LOW: it is above every sibling in that trap. ADR-0032 (scoping all three files) was read and is accurate — nothing for the ADR queue from this subsystem.\n\nGUARD HEALTH: smoke:ui-primitives is honest, not broken — its JSDoc says up front it only exercises clampToViewport, and all 7 values it computes feed assertions with a failure counter and exit 1. But it does NOT cover StateLibraryPanel or any React component, so ui-and-panels.md listing it as THE guard for shared UI primitives overstates its reach. The new smoke:statelibrary-drop narrows that gap.\n\nHOUSEKEEPING: gitignored throwaway probes remain at debug/_probe-drop-e09b.mts, debug/_probe-rename-e09b.mts, debug/_probe-blank-e09b.mts (plus the verifier's debug/_probe-rename-blank{,2,3}.mts). All match the debug/_* convention so they can never be committed. One optional follow-up NOT taken: smoke:statelibrary-drop is not wired into the smoke:all chain — that line is enormous and editing it during a concurrent run risked a conflict."
+}

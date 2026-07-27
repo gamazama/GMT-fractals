@@ -664,3 +664,225 @@ Insert under `## Consequences`:
   be committed). Remove at your leisure.
 - **A dev server is still running on :3400** from cycle 1 — it should be stopped
   at the end of the run.
+
+---
+
+# Cycle 4
+
+## MEDIUM — Deleting a saved camera or view is immediate and unrecoverable
+
+_(cycle 4 · `components/StateLibraryPanel.tsx:309`)_
+
+The trash button calls `onDelete(snap.id)` straight from `onClick`. Both consumers
+pass the **raw slice action** (`CameraManagerPanel.tsx:97` → `deleteCamera`,
+`ViewLibraryPanel.tsx:96` → `deleteView`), and `createStateLibrarySlice`'s
+`[actions.delete]` is `writeArray(arr.filter(...))` plus clearing the active id.
+
+The slice exposes exactly one lifecycle hook, `onApplied`, and it fires only from
+`applySnap()` — i.e. select and duplicate, **never delete**. Its module JSDoc says
+persistence and undo are deliberately app-side, and no app has opted in.
+Independently confirmed by measurement: `savedCameras` is absent from
+`getParamSnapshot`, so **Ctrl+Z cannot bring a deleted camera back.**
+
+The button is `opacity-0` until row hover and sits 4px from Duplicate, so
+mis-clicks are plausible, and a saved camera can represent real work.
+
+**Options**
+
+1. **Confirm-on-delete** — cheapest, but a modal per delete is friction on a list
+   users prune, and it cuts against the standing "prefer dockable panels over
+   modals" preference.
+2. **Soft undo** — the panel keeps the deleted snapshot plus its index in local
+   state and surfaces an "Undo" action in the existing toast for a few seconds
+   (`engine/store/toastStore.ts` + `ToastHost` are already mounted app-wide),
+   restoring via reinsertion.
+3. **Route delete through engine-core's unified `undoStack`** — architecturally
+   the right home, but the largest change, since the slice touches no history at all.
+
+**Recommendation: option 2.** It matches the app's existing toast affordance,
+needs no new modal surface, keeps the primitive generic (the panel already owns
+transient UI state), and costs one `setState` plus a toast action. Option 1 is the
+fallback if you want zero new state.
+
+The site is annotated `@bug PRODUCTION:` so it is discoverable via
+`grep -r '@bug'` until you decide.
+
+---
+
+## LOW — The input-side half of the blank-rename fix
+
+_(cycle 4 · `components/StateLibraryPanel.tsx:159`)_
+
+The **render side is already fixed** (`8a0a4b74`): a blank label now displays
+"Untitled", so the row keeps its hit area and stays renameable. That was the
+robust half — it repairs rows that are already blank, including any loaded from a
+saved scene, and covers every producer.
+
+Still open: `handleRenameSubmit` accepts an empty or whitespace-only value from
+both Enter and `onBlur`, so blank labels keep being *written*. The obvious guard
+is `const next = editName.trim(); if (next) onRename(editId, next); setEditId(null);`.
+
+**Why it wasn't applied:** `.trim()` also trims non-blank labels, so `" My Cam "`
+silently becomes `"My Cam"`. Probably desirable, but that is a behaviour change
+beyond "treat blank as cancel" and should be a deliberate choice rather than
+smuggled in. Verification also noted `[actions.add]` uses `??`, which does not
+catch `''`, so `addCamera('')` still yields a blank label regardless.
+
+Escape is already correct and stays correct either way — it never calls
+`handleRenameSubmit`, and unmounting the focused input does not fire a submitting
+blur in Chromium (measured). The guard would additionally make Escape robust in
+any engine that *does* fire blur-on-removal.
+
+**Recommendation:** apply it, and decide the trim question explicitly. Also worth
+knowing: blank labels degrade other surfaces too — the slot toast composes
+`` `${savedLabel} saved` ``, which becomes a pill reading " saved".
+
+---
+
+## MEDIUM — `takeMaxFlux` drops a full ring of onsets at an exact wrap
+
+_(cycle 4 · `engine/features/audioMod/WorkletAnalysis.ts:295` — confirmed by probe)_
+
+An auditor flagged `if (unread === 0 && this.latest) unread = 0;` as dead code.
+It is. But independent verification found a **real bug underneath it** and
+recommended explicitly **against** deleting the line.
+
+`(ringWrite - cursor + 512) % 512` **aliases**: it is 0 both when nothing is
+unread *and* when the writer has lapped the reader by exactly one full ring. So a
+whole ring of onsets drains as nothing. **Measured** against the real class: 512
+unread hops all carrying flux 30 produced a max `fluxRate` of **0**.
+
+The dead line's shape — *"we computed zero unread, yet we do have data"* — reads
+as a half-written fix for exactly that, with an intended body of
+`unread = this.ringCount`. Deleting it erases the only in-tree trace that the hole
+was ever noticed, which is why it is now annotated rather than removed.
+
+**Ruled out:** `unread = 1` is *not* the fix. When the cursor has caught up,
+`ring[ringWrite]` is the slot about to be **overwritten** — the oldest entry, not
+the newest (newest is `ring[ringWrite - 1]`, which is what `this.latest` points
+at). Measured: it would inject a value 2.84 s stale.
+
+**Also ruled out:** the routine no-new-snapshot tick is an **honest zero**, not a
+dropped transient. The onset was already delivered at full max on the tick its
+batch landed, and `ModulationEngine`'s per-rule attack/decay envelope carries the
+pulse forward. Batches arrive at ~53/s, so zero-drain ticks are routine (~12% of
+60 Hz ticks, ~63% at 144 Hz) — that is normal, not a smell.
+
+Reachability of the real bug is **narrow**: it needs a ~2.73 s main-thread stall
+landing on an exact multiple of 512 hops. At 600 unread it degrades gracefully,
+draining the newest 88. Narrow — but ADR-0110 documents long tick stalls as
+precisely the scenario this receiver exists to survive.
+
+**Options:** (a) `unread = this.ringCount` in that branch — the verifier's reading
+of the intent, making the wrap case drain the whole ring; (b) delete the dead line
+**and** keep the `@bug PRODUCTION:` note recording the aliasing.
+
+**The bigger gap either way:** `WorkletAnalysis.ts` has **no guard coverage at
+all**. No debug suite imports it — the three that mention it do so only in
+comments — and all five audio suites pass identically whether that line reads
+`= 0`, `= 1`, or is absent. `test:audio-signal` sets `filterBank.fluxRate`
+directly and hand-reimplements `update()`, deliberately omitting the drain. A
+guard would need to feed synthetic `AnalysisBatchMessage` payloads into `onBatch`
+and assert on `filterBank.fluxRate` after `update()`, pinning: max-not-last across
+a multi-hop batch, zero on a no-batch tick, and the exactly-512 wrap case.
+
+**Separately flagged, not bundled:** a real onset arrives as a one-tick impulse,
+and a leaky integrator's response to an impulse scales with `dt` — with attack 0.1
+(tau 36 ms), one tick at 60 Hz reaches ~0.37 of full scale but only ~0.18 at
+144 Hz. Whether transient *peaks* should be frame-rate-independent is a design
+question about the envelope, not about this line.
+
+---
+
+## MEDIUM — The "GLSL Debugger" menu item does nothing
+
+_(cycle 4 · `engine/features/debug_tools/index.ts:23`)_
+
+The Advanced-Mode menu item toggles `debugTools.shaderDebuggerOpen`, which **has
+no reader anywhere**. `grep` returns only the `DebugToolsState` field, the
+`menuItems` entry, the `params` declaration, and six `engine-gmt/formulas/*.ts`
+preset blobs that merely serialise the boolean.
+
+Its two siblings are both live — `StateDebugger.tsx:10` self-gates on
+`stateDebuggerOpen`, `InteractionSessionBadge.tsx:34` on `interactionSessionOpen`
+— so this is the odd one out, not a pattern. Reachability confirmed:
+`featureRegistry.getExtraMenuItems()` is consumed at `engine-gmt/topbar.tsx:479`,
+which registers each item as a real system-menu toggle gated on `advancedMode`.
+
+The cause is visible in `DebugToolsOverlay.tsx`: *"ShaderDebugger was
+fractal-specific (raymarching introspection). StateDebugger is generic and kept"*
+— the component was removed at extraction and the menu entry was not.
+
+**Options:** (1) delete the `menuItems` entry, keep the param so existing saved
+scenes carrying `shaderDebuggerOpen: false` still round-trip — smallest, no
+migration; (2) delete entry, param and `DebugToolsState` field, plus a migration
+for the six formula presets; (3) leave it as a placeholder if a GLSL debugger is
+planned, in which case it wants a `@stale` annotation naming what is missing.
+
+**Recommendation: (1).** One-line removal that closes a dead affordance without
+touching persisted data. Tier B because it is a user-facing UI removal and touches
+a param present in shipped scene JSON.
+
+---
+
+## LOW — `installStateLibrary` reads its slot count two different ways
+
+_(cycle 4 · `engine/store/installStateLibrary.ts:236` — demoted from Tier V, latent)_
+
+`registerSlotShortcuts` uses `cfg.count ?? 9`; `registerLibraryMenu` uses
+`(typeof opts.slotShortcuts === 'object' && opts.slotShortcuts?.count) || 9`.
+Because of `??` vs `||`, an explicit `count: 0` binds zero shortcuts but still
+renders **nine** menu items, each hardcoding `shortcut: N` and
+`title: 'Click to recall • Ctrl+N saves'` — advertising bindings that do not
+exist. `slotShortcuts: false` does the same, via the `typeof … === 'object'` test.
+Neither path consults `cfg.saveModifier`, which is configurable.
+
+**Latent — no current consumer hits it.** `cameraSlice.ts:433` passes `menu: null`
+so `registerLibraryMenu` never runs, and `fluid-toy/viewLibrary.ts:244` passes
+`count: 9` with a menu, so both agree on 9. It is a trap for the third library.
+
+**Options:** (a) leave it and add a JSDoc line on `SlotShortcutOptions.count`
+saying the menu mirrors the shortcut count; (b) hoist one
+`resolveSlotCount(opts.slotShortcuts)` used by both, returning 0 when shortcuts
+are off, and skip the slot section entirely when it returns 0; (c) additionally
+thread `saveModifier` into the menu title.
+
+Demoted rather than verified because the three remedies differ in public shape,
+which makes it a design call. **Read ADR-0031 first** — it governs this file's key
+surface.
+
+---
+
+## Housekeeping surfaced in cycle 4
+
+- **`FRACTAL_EVENTS` listeners can hide from grep.**
+  `engine-gmt/navigation/Navigation.tsx:487-488` subscribes with raw string
+  literals — `FractalEvents.on('camera_teleport', …)` /
+  `('camera_transition', …)` — instead of the `FRACTAL_EVENTS` constants. An
+  auditor nearly concluded `CAMERA_TRANSITION` had zero listeners because of it,
+  which would have made a camera invariant look unfalsifiable. Worth normalising
+  to the constants so listener discovery works; `navigation.md`'s scope.
+- **`utils/PresetLogic.ts:137`** cites `docs/04_Core_Plugins.md`, which does not
+  exist — it is at `docs/history/engine/04_Core_Plugins.md`. Left for the
+  preset-registry subsystem's cycle.
+- **`camera.getAllSlots` / `camera.setAllSlots` have zero callers** anywhere, and
+  `camera.clearSlot` is called only by the smoke. knip cannot see these because
+  they are object-literal members rather than module exports. The exported
+  `camera` object is a public plugin API, so pruning it is your call.
+- **`smoke:statelibrary-drop` is not wired into the `smoke:all` chain.** That line
+  is enormous and editing it mid-run risked a conflict, so it was left. One-line
+  addition when convenient.
+- **`test:audio-signal` [9] is near-tautological.** "Transient response does not
+  depend on the tick rate" holds trivially today because `processAudioSignal`'s
+  transient branch never reads `delta` — it would only catch a regression that
+  reintroduced a per-frame division, which is admittedly the regression it was
+  written for. Not changed; noting so nobody mistakes it for coverage of the
+  worklet drain path.
+- **ADR-0103 may already carry an update block.** Its decision was partially
+  reversed on 2026-07-25 (modulation no longer holds live session), and
+  `test-session-hold.mts:146` refers to "ADR-0103's 2026-07-25 update". The run
+  cannot open ADRs to check — worth a two-second confirmation.
+- **`smoke:ui-primitives` covers less than its billing.** It exercises only
+  `clampToViewport` (its own JSDoc says so, and every value it computes does feed
+  an assertion), but `ui-and-panels.md` lists it as *the* guard for shared UI
+  primitives. It covers no React component at all.

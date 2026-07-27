@@ -1,0 +1,99 @@
+{
+  "id": "e10-engine-features",
+  "cycle": 4,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run test:modulation-coverage", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run test:modulation-parity", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run test:modulated-setter", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run test:param-mapping", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run test:session-hold", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run test:audio-signal", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run test:band-analyser", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run test:band-math", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run test:filterbank", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run test:fft", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run smoke:audio-fps-remap", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run smoke:engine-demo-modulation", "pass": true, "subsystem": "e10-engine-features" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "e10-engine-features" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "engine/features/modulation/index.ts",
+      "line": 9,
+      "summary": "The modulation feature's top-of-file @invariant said 'Held across scene loads while the audio engine is running' — the exact opposite of what the code does since the 2026-07-25 reversal, and it contradicted a comment 87 lines below it in the same file.",
+      "change": "Rewrote the header @invariant to state the slice is NOT held (rules are scene content), pointing at the reasoning already on the feature def and at the guard that pins it. Also removed the now-false '(and modulation)' clause from engine/features/audioMod/index.ts's live-session @invariant, which made the same stale claim from the audio side.",
+      "verification": "Verified three ways before editing. (1) Code: ModulationFeature has no holdsLiveSession, and utils/PresetLogic.ts:89 skips a slice only when `feat.holdsLiveSession?.(...)` is truthy, so modulation is never skipped. (2) Guard: test:session-hold [4] asserts links are scene-driven regardless of whether audio is running, and [5] asserts the audio ENGINE alone declares holdsLiveSession. (3) Falsification: temporarily adding `holdsLiveSession: () => true` to ModulationFeature failed 5 assertions across all five sections of that guard; reverted with a targeted Edit and confirmed green. So the guard would fail if the corrected invariant were wrong.",
+      "guard": "npm run test:session-hold",
+      "guardPass": true,
+      "commit": "9d4d59ca"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/features/modulation/targetRouting.ts",
+      "line": 18,
+      "summary": "Confirmed the cycle-2 handoff: targetRouting.ts's @invariant and consumer list named AnimationSystem.tick as the branch chain that must be mirrored, but ADR-0109 moved that chain into planModulationTarget, and the export path is now a fourth consumer the header never mentioned.",
+      "change": "Re-pointed the @invariant at planModulationTarget (applyTarget.ts), replaced the AnimationSystem.tick entry in the consumer list, added a note that both appliers (live tick + export) classify here and delegate to the one dispatcher, and added @see ADR-0109. Also fixed two in-body comments that still described applyTarget's vecAxis case as 'the tick's return' / 'the branch body', and the two matching stale references in debug/test-modulation-coverage.mts.",
+      "verification": "Verified independently rather than on trust. grep shows four call sites; reading AnimationSystem.tsx's allTargetsToProcess.forEach body end-to-end confirms it contains no prefix tests at all — it calls classifyModulationTarget then planModulationTarget and only executes the returned plan. The branch chain (`switch (routing.branch)`) is in applyTarget.ts:120-260. exportModulations.ts:51-52 does the same. Guard: test:modulation-parity section [6] asserts literally the corrected statement — that both AnimationSystem.tsx and exportModulations.ts dispatch via planModulationTarget — so a chain still living in the tick is what fails it. WORTH RECORDING: neither guard would have caught this drift on its own. Parity only string-matches for planModulationTarget and never reads targetRouting's prose. That is exactly why the invariant pass finds things the test suite cannot.",
+      "guard": "npm run test:modulation-parity",
+      "guardPass": true,
+      "commit": "93e68233"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/features/modulation/ModulationEngine.ts",
+      "line": 325,
+      "summary": "Three live code comments cite FilterBank.computeFluxRate, a symbol that no longer exists anywhere in source, and one claims 'both producers — the main-thread path and the worklet' when the main-thread analysis arm was deleted with ADR-0110. Committed together with a stale-line-ref fix in the same file.",
+      "change": "Re-pointed the SuperFlux citations at BandAnalyser.computeFlux (the real producer, on the audio thread) and FilterBank.aggregateFlux for the main-thread aggregation, in ModulationEngine.ts (two sites) and bandMath.ts. Rewrote the 'both producers' sentence. Separately replaced numeric line refs ('line ~35'/'line ~40' for code at 119/124; setFeature.ts's 'line ~68' for a warn at 77) with symbol references so they cannot drift again, and swapped setFeature's q-013 attic pointer for docs/policy/ddfs-string-contract.md.",
+      "verification": "grep for computeFluxRate returns exactly five hits: two in ADR-0110's historical narrative (untouched) and the three code comments fixed here. filterBank.ts has no such method — its full public surface is matches/rebuild/syncFollowerToLevels/applyPeakFollower/bandRangeForHz/aggregateFlux/aggregate, and its own header states 'It no longer analyses anything... It has been deleted.' The replacement targets were confirmed by reading dsp/bandAnalyser.ts (computeFlux at 196, rate division rise/dtSec at 211). Line drift proved by grep: console.warn is at setFeature.ts:77, not 68. The replacement policy doc was verified to cover the claim — its line 37 is headed 'Contract 1: set${FeatureId} auto-setter naming' and it names setFeature.ts in additional_sources.",
+      "guard": "npm run test:band-analyser",
+      "guardPass": true,
+      "commit": "1cd3ad9d"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/audio-mod.md",
+      "line": 8,
+      "summary": "The path-scoped modulation/audio rule omits ADR-0110 (the decision that restructured the whole subsystem) and ADR-0105, and its 'read first' entry point sends agents to filterBank.ts — the one file whose own JSDoc says it no longer does any of what the rule implies.",
+      "change": "Rewrote the orientation block to list files in signal order (transport -> worklet+dsp -> receiver -> filterBank/freqScale -> facade), added ADR-0105 and ADR-0110 with one-line labels on every ADR, added load-bearing bullets for 'analysis runs on the audio thread' and 'no main-thread fallback by design', corrected the live-session bullet to name the 2026-07-25 modulation reversal, and added test:session-hold to the guard list.",
+      "verification": "Every citation added was checked to resolve: ls docs/adr/ confirms 0103, 0104, 0105, 0106 and 0110 all exist, and the source cites ADR-0110 from nine files. Every script named in the guard block was verified present in package.json and all seven were run green. The factual claims added were each independently source-verified: hop = hopSamplesFor(48000) = 256 = ~187.5Hz, POST_INTERVAL_SEC = 1/60, payload is 56 bands not raw bins (ceil(6*log2(16000/25)) = 56), fftSize 4096 = 2048 raw bins, and no fallback exists (WorkletAnalysis.load's catch sets `failed`; AudioAnalysisEngine.analysisFailed surfaces it). HONEST CAVEAT: no test executes rule files, so the proof is existence checks plus per-claim source verification, not a guard that would go red.",
+      "guard": "npm run test:session-hold",
+      "guardPass": true,
+      "commit": "7da130ee"
+    },
+    {
+      "tier": "V",
+      "severity": "medium",
+      "file": "engine/features/audioMod/WorkletAnalysis.ts",
+      "line": 296,
+      "summary": "takeMaxFlux contains a provably dead statement — `if (unread === 0 && this.latest) unread = 0;`. CONFIRMED, but verification found a REAL bug underneath it and recommended explicitly against deleting the line.",
+      "change": "Code unchanged. Documented the ring-wrap aliasing as @bug PRODUCTION, recorded why the dead line is deliberately left in place, recorded why `unread = 1` is NOT the fix, recorded that the routine no-new-snapshot tick is an honest zero, and added an @invariant that this file has no guard coverage at all.",
+      "verification": "The verifier confirmed the statement is dead by inspection (single assignment from a pure arithmetic expression, no intervening mutation, plain-field guard, RHS equals the value the guard proves). It then went further with a probe against the real class. (a) THE REAL BUG: the modulo ALIASES at exactly RING_SNAPSHOTS unread hops — `(ringWrite - cursor + 512) % 512` is 0 both when nothing is unread and when the writer has lapped the reader by exactly one ring. Measured: 512 unread hops all carrying flux 30 produced a max fluxRate of 0. The dead line's shape ('we computed zero unread, yet we do have data') fits a half-written fix for exactly that, intended body `unread = this.ringCount`. (b) REFUTED the obvious alternative: `unread = 1` would be wrong, because when the cursor has caught up `ring[ringWrite]` is the slot about to be overwritten — the OLDEST entry. Measured as 2.84s stale. (c) The routine case is fine: a no-new-snapshot tick is an honest zero, since the onset was already delivered at full max when its batch landed and ModulationEngine's attack/decay envelope carries it forward; batches arrive at ~53/s so zero-drain ticks are routine (~12% at 60Hz, ~63% at 144Hz). (d) COVERAGE GAP: no debug suite imports WorkletAnalysis — the three that mention it do so only in comments — and all five audio suites pass identically whether the line reads `= 0`, `= 1`, or is absent. test:audio-signal sets filterBank.fluxRate directly and hand-reimplements update(), deliberately omitting the drain.",
+      "guard": "npm run test:audio-signal",
+      "guardPass": true,
+      "commit": "18a9605a"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "engine/features/debug_tools/index.ts",
+      "line": 23,
+      "summary": "The 'GLSL Debugger' Advanced-Mode menu item toggles debugTools.shaderDebuggerOpen, which has no reader anywhere in the codebase — clicking it does nothing.",
+      "rationale": "See PROPOSALS.md."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "engine/features/audioMod/WorkletAnalysis.ts",
+      "line": 295,
+      "summary": "The ring-wrap aliasing fix itself, and the total absence of guard coverage for WorkletAnalysis.ts.",
+      "rationale": "See PROPOSALS.md. The verifier's recommendation was owner-decision, NOT 'delete one line'."
+    }
+  ],
+  "notes": "COVERAGE — depth over breadth, per the brief. FULLY COVERED: modulation/** (all 6 files end to end), audioMod/** non-UI (AudioAnalysisEngine, AudioTransport, WorkletAnalysis, filterBank, bandMath, freqScale, index, worklet/protocol, worklet/analysisProcessor, dsp/bandAnalyser, dsp/autoGain — every @invariant checked against code), features/{index,types,setFeature}.ts, debug_tools/**, webcam/index.ts. NOT REACHED, no invariant work done: audioMod/AudioPanel.tsx (736 lines), AudioSpectrum.tsx (479), AudioLinkControls.tsx (227), webcam/WebcamOverlay.tsx (408), features/ui.tsx, post_effects.ts, color_grading.ts, modulation/paramMapping.ts, dsp/fft.ts, dsp/spectrumFrame.ts. The UI files in particular are untouched and worth a later pass.\n\nINVARIANTS VERIFIED CORRECT (recorded so a later cycle need not redo them): AudioTransport's seven all hold — mic connects to inputGain only and never to destination, system audio connects to BOTH, captureConstraints sets echoCancellation/noiseSuppression/autoGainControl all false, inputGain sits between live source and analysisBus not on masterGain, init() short-circuits on this.audioContext. WorkletAnalysis's Response/Detail budget arithmetic is exact: at s=0.8, -(1/60)/ln(0.8) = 0.0747 = DEFAULT_SMOOTHING_TAU_SEC 0.074, and the '~118ms total / ~43ms centroid / 85ms window' figures all compute correctly at 48kHz; the audio/index.ts claim that 0.8->0.5 means '~118ms -> ~67ms' checks out (66.7ms). protocol.ts's '~56 levels + 56 flux' is exactly right and '2048 raw bins' matches fftSize 4096. holdsLiveSession: (live) => !!live.isEnabled correctly returns false when idle, and test:session-hold [3] pins the boot/share-link hydration path.\n\nGUARD HEALTH — three falsification probes, all reverted with targeted Edits and re-confirmed green. (1) holdsLiveSession: () => true on ModulationFeature -> test:session-hold failed 5 assertions across all five sections. (2) Emptying RENDER_STATE_MERGED_FEATURES -> test:modulation-coverage [2] failed, correctly naming optics.camFov and optics.orthoScale as newly display-only. Both guards bite hard. (3) Read every assertion in parity/coverage/session-hold/audio-signal/filterbank/band-analyser: every collected value feeds an assertion — no dead collection found, unlike cycles 1-3. One weak spot noted rather than fixed: test-audio-signal [9] ('transient response does not depend on the tick rate') is near-tautological today, because processAudioSignal's transient branch never reads delta — it would only catch a regression that reintroduced a per-frame division, which is admittedly the regression it was written for.\n\nHYGIENE: no @bug or @stale markers existed anywhere under engine/features/** before this pass. orphans is clean for the subsystem (engine/features/** has zero). No ADR was opened for writing.\n\nADR NOTE (no action, not a finding): ADR-0103's decision was partially reversed on 2026-07-25 (modulation no longer holds live session). test-session-hold.mts:146 refers to 'ADR-0103's 2026-07-25 update', so an update block may already be present — worth a two-second confirmation by whoever can read that ADR safely."
+}

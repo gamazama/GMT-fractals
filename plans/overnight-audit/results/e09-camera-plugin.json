@@ -1,0 +1,81 @@
+{
+  "id": "e09-camera-plugin",
+  "cycle": 4,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e09-camera-plugin" },
+    { "script": "npm run smoke:camera", "pass": true, "subsystem": "e09-camera-plugin" },
+    { "script": "npm run smoke:undo", "pass": true, "subsystem": "e09-camera-plugin" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "e09-camera-plugin" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/smoke-camera.mts",
+      "line": 99,
+      "summary": "smoke:camera's step-4 'preset round-trip' assertion was vacuous — it cleared slot 3, loaded the preset, then asserted slot 3 was populated, without ever verifying the clear took effect, so it could not distinguish 'loadPreset restored the slot' from 'the slot was never emptied'.",
+      "change": "Added an assertion that cameraSlots[3] is empty immediately after clearSlot(3), and a second asserting the restored snapshot's state payload (center.x, zoom) matches the original — previously only the label was checked. Also removed a dead page.addInitScript block that set window.__cameraPlugin = null after page.goto (applies only to later navigations, and that key is read nowhere; the test uses window.__camera).",
+      "verification": "Two-way falsification. (1) With an early return injected at the top of camera.clearSlot, the ORIGINAL smoke printed 'camera slot save -> recall -> preset roundtrip all exact' — green on a fully neutered clearSlot, proving the assertion was vacuous. (2) Camera.ts reverted, strengthened smoke: green. (3) Same neuter re-applied, strengthened smoke: FAILED with 'clearSlot(3) did not empty the slot ... the round-trip check below would be vacuous'. (4) Reverted (confirmed absent from git diff --stat), green. The new assertion is exactly what flips the guard from silent-pass to fail.",
+      "guard": "npm run smoke:camera",
+      "guardPass": true,
+      "commit": "2a6bd150"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/plugins/Camera.ts",
+      "line": 1,
+      "summary": "Two false claims in Camera.ts JSDoc: the header calls it an 'adapter-based camera slot + animation binding plugin' and lists 'Animation tracks' as a feature (the file registers no binders and no tracks), and the comment inside installCamera says the preset field 'was registered at module load (side effect above)' when there is no such import — the module header eleven lines earlier says outright that it CANNOT happen in this file.",
+      "change": "Header retitled to 'adapter-based camera slot plugin'; the 'Animation tracks' bullet replaced with an explicit 'NOT in scope: animation' paragraph still pointing at registerCameraKeyTracks(). Persistence bullet now names camera/presetField as the registrar. 'Ctrl+1..9' corrected to 'Mod+1..9' to match the registered key strings. The installCamera comment now states that installCamera does NOT register the preset field and that the app must import it itself or slots silently stop round-tripping.",
+      "verification": "The animation claim: reading Camera.ts end-to-end shows no import of or reference to cameraKeyRegistry or binderRegistry; grep shows registerCameraKeyTracks is called by app-gmt/main.tsx:57, fluid-toy/main.tsx:51 and fractal-toy/main.tsx:45 — the apps, never the plugin. The preset-field claim: Camera.ts imports exactly two modules (engineStore, ./Shortcuts); the side-effect import lives in all three app entry points. smoke:camera exercises the full slot -> preset -> loadPreset round-trip against fluid-toy, which relies on exactly that separate import, so it would fail if the corrected statement were wrong.",
+      "guard": "npm run smoke:camera",
+      "guardPass": true,
+      "commit": "3d6e6c1a"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/engine-plugins.md",
+      "line": 27,
+      "summary": "The rule pointed camera/StateLibrary readers at 'ADRs 0027-0031', but 0027 and 0028 are audio ADRs and the range omits 0032, which governs the StateLibraryToast that installStateLibrary.ts mounts.",
+      "change": "Changed the range to ADRs 0029-0032.",
+      "verification": "Read the Scope line of each ADR header. 0027 -> engine/animation/audioClipSync.ts; 0028 -> audioFileCache.ts + audioExportMix.ts; 0029 'Two parallel snapshot systems by design' -> Camera.ts + installStateLibrary.ts; 0030 -> Camera.ts; 0031 -> createStateLibrarySlice.ts + installStateLibrary.ts; 0032 -> StateLibraryPanel.tsx + StateLibraryToast.tsx + ActiveSnapshotFeatures.tsx. All four corrected files are in this rule's read-first list or imported by it.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "28028dc6"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine/store/createStateLibrarySlice.ts",
+      "line": 43,
+      "summary": "The gotchas block cites dev/types/store.ts and dev/engine-gmt/types/store.ts; the dev/ tree was deleted on 2026-06-17 and neither path resolves.",
+      "change": "Rewrote the two paths as types/store.ts and engine-gmt/types/store.ts.",
+      "verification": "`ls h:/GMT/workspace-gmt/dev` is ENOENT. Both replacement paths exist and both still declare `savedCameras: SavedCamera[]` (types/store.ts:127, engine-gmt/types/store.ts:108), confirming the duplication the gotcha describes is real and the new paths are correct.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "e5019b7f"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine-gmt/store/cameraSlice.ts",
+      "line": 354,
+      "summary": "Two drifted line references in installGmtCameraSlice's load-order invariants: app-gmt/main.tsx:107 (the call is at 148; 107 is inside the dev-mode service-worker cleanup) and engine-gmt/topbar.tsx:271-348 (the Camera menu block ends at 355, so the range truncates the entire Slot 1-9 loop it names).",
+      "change": "Updated the two refs to app-gmt/main.tsx:148 and engine-gmt/topbar.tsx:271-355.",
+      "verification": "grep puts the installGmtCameraSlice call at main.tsx:148, with registerGmtUi() at 128 and nothing store-reading in between, so 'immediately after registerGmtUi()' still holds. Reading topbar.tsx:336-358 shows the slot loop closing at 355 with the System menu starting at 357.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "1b212839"
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "engine/store/installStateLibrary.ts",
+      "line": 236,
+      "summary": "The slot count is read two different ways in the same file — `cfg.count ?? 9` in registerSlotShortcuts vs `(typeof opts.slotShortcuts === 'object' && opts.slotShortcuts?.count) || 9` in registerLibraryMenu — so `slotShortcuts: false` or `count: 0` yields zero key bindings but still renders nine menu items advertising shortcuts that do not exist. Demoted from Tier V: latent, and the remedy is a shape choice.",
+      "rationale": "See PROPOSALS.md. Demoted rather than verified because NO current consumer hits it — engine-gmt/store/cameraSlice.ts:433 passes `menu: null` so registerLibraryMenu never runs, and fluid-toy/viewLibrary.ts:244 passes `count: 9` with a menu, so both paths agree on 9. It is a latent trap for the third library, and the three remedies differ in public shape, which makes it an owner call. Note ADR-0031 governs this file's key surface and should be read before changing it."
+    }
+  ],
+  "notes": "INVARIANTS CHECKED AND FOUND CORRECT (no finding): all four in Camera.ts (SLOT_COUNT 1..9 bounds; silent-false with no adapter; the `as any` setState collision note; uninstallCamera not clearing cameraSlots); both in installStateLibrary.ts (toast auto-mount gated on opts.menu; action functions read at fire time); all four in createStateLibrarySlice.ts (arrayKey re-install warn-and-no-op; action-name clash throws in DEV; update-with-no-patch semantics and activeIdKey survival; saveToSlot's `> arr.length` reject / `<` overwrite / `===` append).\n\nSNAPSHOT-ALIASING PROBE — the priority-1 lead in the brief, investigated, NO finding raised. The generic primitive does NOT clone: captureSnap stores `opts.capture()` by reference and applySnap hands `snap.state` straight to `opts.apply`. GMT's applyCameraState then setStates `cameraRot: state.rotation, sceneOffset: state.sceneOffset`, so after recalling a saved camera the live store literally holds the snapshot's own objects. Every writer of sceneOffset/cameraRot was traced looking for an in-place mutation that would corrupt the stored snapshot: setSceneOffset builds a fresh `precise` object, flushCameraToStore builds a fresh normalizedOffset, Navigation.tsx:339 writes a fresh `absorbed`, and FractalEngine's OFFSET_SET handler assigns rather than mutates. No reachable corruption path found, so the aliasing is latent, not live — reporting it as a bug would have been unverified. Recorded here in case a later cycle wants a documented ownership contract on capture()/apply().\n\nNEAR-MISS WORTH RECORDING: the auditor initially concluded FRACTAL_EVENTS.CAMERA_TRANSITION had zero listeners (grep for the constant hits only FractalEvents.ts and cameraSlice.ts), which would have made the applyCameraState ordering invariant unfalsifiable. It IS subscribed — engine-gmt/navigation/Navigation.tsx:487-488 uses raw string literals `FractalEvents.on('camera_teleport', ...)` instead of the FRACTAL_EVENTS constants, which defeats grep discovery of listeners. A real maintainability hazard, but navigation.md's scope and a refactor, so no finding — routed to the orchestrator.\n\nOUT-OF-SCOPE dead citation left for its owner: utils/PresetLogic.ts:137 cites docs/04_Core_Plugins.md, which does not exist; the file is at docs/history/engine/04_Core_Plugins.md.\n\nORPHANS: clean for this subsystem. Note camera.getAllSlots / camera.setAllSlots have zero callers anywhere and camera.clearSlot is called only by the smoke; knip cannot see these because they are object-literal members. Removal would be a deletion, and the exported `camera` object is a public plugin API, so pruning it is an owner call — not raised as a finding.\n\nGUARD FLAKINESS: smoke:camera aborted three times with 'Execution context was destroyed' and once with window.__camera undefined mid-run — HMR reloads from concurrent auditors, per the brief. Every reported result is from a completed run. No debug/*.png binaries were rewritten."
+}
