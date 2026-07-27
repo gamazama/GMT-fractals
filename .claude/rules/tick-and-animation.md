@@ -18,8 +18,13 @@ Read first: JSDoc at the top of `engine/TickRegistry.ts` and `engine/AnimationEn
 `engine-gmt/renderer/GmtRendererTickDriver.tsx`, which runs the tick phases *and*
 dispatches the worker frame. Mounting both is the ADR-0003 double-run bug.
 
-Decisions: ADRs 0001-0004 (loop, phases, delta units), 0015-0017 (binders,
-recording, log/camera-pair tracks).
+Decisions: ADR-0001 (tick phases as numeric constants), ADR-0002 (delta in
+seconds), ADR-0003 (single-driver double-run guard), ADR-0004 (TickRegistry
+singleton scope), ADR-0015 (log-value-space + camera-pair linear-in-zoom),
+ADR-0016 (deterministic playback). Modulation dispatch off the ANIMATE tick:
+ADR-0107 (live-modulation transport), ADR-0109 (one modulation dispatcher).
+There is no binder-registry ADR — `engine/animation/binderRegistry.ts`'s
+top-of-file JSDoc is the contract.
 
 ## Invariants
 
@@ -30,6 +35,18 @@ recording, log/camera-pair tracks).
   Don't bypass it with an ad-hoc `useFrame`.
 - Track binding follows the DDFS string contract — see
   [`docs/policy/ddfs-string-contract.md`](../../docs/policy/ddfs-string-contract.md).
+- **`binderRegistry.lookup` is consulted BEFORE `AnimationEngine`'s per-id
+  binder cache**, so a binder registered after a DDFS-derived lookup still
+  takes effect. Don't "optimise" the registry hit behind the cache.
+- **Log tracks interpolate in log-value space, Bezier included.** Tangent
+  y-values on a track registered via `logTrackRegistry` are LOG-UNITS;
+  `AnimationMath.calculateTangents` takes the same `isLog` flag so authored
+  and evaluated curves agree. ADR-0015's Decision section predates this and
+  says Bezier is unsupported on log tracks — the code is the truth.
+- **Modulation branch bodies are NOT in `AnimationSystem.tsx`.** Routing lives
+  in `engine/features/modulation/targetRouting.ts`, the branch bodies in
+  `engine/features/modulation/applyTarget.ts` (shared with the export path,
+  ADR-0109). The tick only executes the returned plan.
 
 ## Guards
 
