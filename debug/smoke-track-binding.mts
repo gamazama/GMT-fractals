@@ -57,11 +57,40 @@ function main() {
     const absent = readLiveVec({}, vec2);
     assert(absent === undefined, 'readLiveVec returns undefined when no axis is modulated');
 
-    // ── readLiveVec: one axis present ─────────────────────────────────
+    // ── readLiveVec: one axis present, NO base ────────────────────────
     const partial = readLiveVec({ 'julia.juliaC_x': 0.5 }, vec2);
     assert(partial instanceof THREE.Vector2, 'readLiveVec returns Vector2 for 2-axis binding');
     if (partial instanceof THREE.Vector2) {
-        assert(partial.x === 0.5 && partial.y === 0, 'absent axis fills with 0');
+        assert(partial.x === 0.5 && partial.y === 0, 'absent axis falls back to base (0 when no base passed)');
+    }
+
+    // ── readLiveVec: absent axes fall back to BASE, not 0 ─────────────
+    // This is readLiveVec's @invariant and the reason `base` exists.
+    // Without a base the previous case can't tell the two apart, so the
+    // regression it guards against (Y/Z snapping to the origin the moment
+    // X is linked) slipped past a passing smoke.
+    const withBase = readLiveVec({ 'julia.juliaC_x': 0.5 }, vec2, { x: -0.7, y: 0.27 });
+    assert(withBase instanceof THREE.Vector2, 'readLiveVec with base returns Vector2');
+    if (withBase instanceof THREE.Vector2) {
+        assert(withBase.x === 0.5, 'modulated axis takes the live value');
+        assert(withBase.y === 0.27, 'UNmodulated axis keeps the base value, NOT 0');
+    }
+
+    const vec3Base = readLiveVec({ 'camera.target_x': 9 }, vec3, { x: 1, y: 2, z: 3 });
+    assert(vec3Base instanceof THREE.Vector3, 'readLiveVec vec3 with base returns Vector3');
+    if (vec3Base instanceof THREE.Vector3) {
+        assert(
+            vec3Base.x === 9 && vec3Base.y === 2 && vec3Base.z === 3,
+            'vec3: one modulated axis leaves the other two on their base values',
+        );
+    }
+
+    // ── readLiveVec: additive mode (camera branch stores raw OFFSETS) ──
+    const additive = readLiveVec({ 'julia.juliaC_x': 0.5 }, vec2, { x: -0.7, y: 0.27 }, true);
+    assert(additive instanceof THREE.Vector2, 'readLiveVec additive returns Vector2');
+    if (additive instanceof THREE.Vector2) {
+        assert(Math.abs(additive.x - (-0.2)) < 1e-9, 'additive: modulated axis is base + offset');
+        assert(additive.y === 0.27, 'additive: unmodulated axis is still the plain base, not doubled');
     }
 
     // ── readLiveVec: vec3, all present ────────────────────────────────
