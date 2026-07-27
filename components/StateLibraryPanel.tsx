@@ -299,7 +299,22 @@ export function StateLibraryPanel<T>({
                                         onDoubleClick={(e) => { e.stopPropagation(); handleRenameStart(snap); }}
                                         title="Double-click to rename"
                                     >
-                                        {modified ? `*${snap.label}` : snap.label}
+                                        {/* The `|| 'Untitled'` is load-bearing, not cosmetic. This span is
+                                            `display: block`, so an empty one generates no line box and
+                                            collapses to height 0 — measured rect {w:149,h:0}, with
+                                            elementFromPoint at its centre returning the PARENT div. Since
+                                            onDoubleClick lives on this span, a blank label made the row
+                                            permanently un-renameable: an exhaustive 2px sweep of the whole
+                                            row found no re-entry point, and the `*` modified-marker escape
+                                            hatch self-destructs (the row's onClick re-applies the snapshot,
+                                            clearing `modified` on the first click of the double-click).
+                                            Blanks are reachable — handleRenameSubmit accepts an empty value
+                                            from both Enter and onBlur — and they persist into saved scenes
+                                            via the `savedCameras` preset field. Guarding at render fixes
+                                            existing data and every producer at once; `[actions.add]` uses
+                                            `??`, which does not catch `''`. See PROPOSALS.md (cycle 4) for
+                                            the input-side guard, which is a separate product call. */}
+                                        {modified ? `*${snap.label || 'Untitled'}` : (snap.label || 'Untitled')}
                                     </span>
                                 )}
                                 {slotHintPrefix !== null && index < 9 && (
