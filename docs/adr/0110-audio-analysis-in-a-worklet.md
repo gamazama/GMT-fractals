@@ -6,6 +6,46 @@
 
 ## Context
 
+> **Update 2026-07-27 (mechanism corrected; decision unchanged):** The paragraph
+> beginning "The real exposure is main-thread **blocking**" mis-reads
+> `GmtRendererTickDriver.tsx:321`. That branch does not throttle `runTicks` —
+> `runTicks(clampedDelta)` is called on *both* sides of it, and the `return`
+> skips only what follows: the optics merge, the R3F FOV sync, camera/offset
+> serialisation, the `renderState` build, the convergence gate and
+> `proxy.sendRenderTick`. At UI fps < 20 the driver yields ONE worker dispatch
+> per second; every registered tick, analysis included, keeps running once per
+> frame. `runTicks` has no rate limit of its own (only a 1 ms double-run guard).
+> This has been the behaviour since the file was created in `50547f46` — it is
+> not a regression.
+>
+> The starvation is real; the cause is that analysis was simply
+> **frame-rate-bound** — it ran off a registered tick, so its rate *was* the UI
+> frame rate, degrading to whatever the blocked main thread managed rather than
+> to 1 Hz. Two effects follow mechanically from the old main-thread code, and
+> the decision removes both:
+>
+> 1. `AnalyserNode.getFloatFrequencyData` returns only the most recent
+>    `fftSize` samples — 85 ms at the default 4096/48 kHz. Once the read
+>    interval exceeds that window (below ~12 fps) the audio between reads
+>    enters no FFT frame at all, so transients there are lost outright rather
+>    than late.
+> 2. `FilterBank.computeFluxRate` differenced consecutive main-thread reads and
+>    divided by the frame delta. `normalized` is bounded to [0,1], so the flux
+>    rate is bounded by 1/dt = fps, and `ModulationEngine` maps it through
+>    `min(1, rate / TRANSIENT_FULL_SCALE)` with `TRANSIENT_FULL_SCALE = 20`.
+>    The transient channel's maximum attainable output is therefore ≈ fps/20 —
+>    below 20 fps it cannot reach full scale at all, and a `thresholdMin` tuned
+>    at 60 fps stops being reachable as the rate falls. A fixed ~187.5 Hz hop
+>    with max-since-last-read aggregation is exactly what removes this.
+>
+> The magnitude in the original text ("1 Hz", "whole seconds") is not derivable
+> from this path. The only thing in the system that would produce ~1 Hz is
+> browser RAF throttling of a hidden or occluded tab — not investigated, and
+> recorded here only as the untested candidate that fits the number. The
+> decision stands regardless: all of the above are fixed by taking analysis off
+> the main-thread tick. `HANDOFF.md` carries the same mis-statement, from the
+> same origin (the `7ba897aa` commit message).
+
 Analysis ran on the main thread: `AnalyserNode.getFloatFrequencyData` pulled
 once per tick, then `filterBank` turned bins into bands.
 
