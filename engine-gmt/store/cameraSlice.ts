@@ -351,11 +351,11 @@ const stepBackFromCurrent = (): void => {
  * @invariant Load-order critical. Must run BEFORE any component reads
  * `s.savedCameras.length`. `CameraManagerPanel` reads `s.savedCameras`
  * directly and would crash on `undefined.length` otherwise.
- * `app-gmt/main.tsx:107` satisfies this by calling `installGmtCameraSlice()`
+ * `app-gmt/main.tsx:148` satisfies this by calling `installGmtCameraSlice()`
  * immediately after `registerGmtUi()`; there is NO runtime guard.
  *
  * @invariant Opts out of the auto-generated topbar menu via `menu: null` —
- * `engine-gmt/topbar.tsx:271-348` wires the Camera menu by hand (Undo Move,
+ * `engine-gmt/topbar.tsx:271-355` wires the Camera menu by hand (Undo Move,
  * Redo Move, Reset Position, View Manager, Camera Slots 1-9). Slot 1-9 click
  * handlers route to the SAME `savedCameras[slotIndex]` + `selectCamera` /
  * `saveToSlot` actions the `Mod+1..9` / `1..9` slot shortcuts hit, so menu
