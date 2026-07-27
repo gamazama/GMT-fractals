@@ -96,10 +96,14 @@ const defaultFileStem = (): string => {
 
 /**
  * @invariant Captures option values into `_getCanvas` / `_parseScene` /
- *   `_serializeScene` / `_fileExtension` / `_snapshotAnchor` BEFORE the
- *   `_installed` short-circuit. Reinstall updates captured deps even
- *   though registration is skipped — this DELIBERATELY breaks
- *   "install* is idempotent" for the captured-deps half of state.
+ *   `_serializeScene` / `_fileExtension` / `_snapshotAnchor` /
+ *   `_onBeforeSerialize` BEFORE the `_installed` short-circuit. Reinstall
+ *   updates captured deps even though registration is skipped — this
+ *   DELIBERATELY breaks "install* is idempotent" for the captured-deps
+ *   half of state. Note the flip side: menu items built FROM a captured
+ *   value at install time (the `Save Scene (${_fileExtension})` label)
+ *   keep the first install's text, while items that read the module-level
+ *   value at render time (`LoadSceneMenuItem`) follow the reinstall.
  * @invariant PNG/JPG export menu items + SnapshotButton are gated on
  *   `_getCanvas` AT install time. Registering `getCanvas` AFTER install
  *   will not back-fill these items — apps must uninstall + reinstall,
