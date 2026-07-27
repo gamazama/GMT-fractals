@@ -22,7 +22,8 @@
  * dispatcher walks the scope stack newest-first, so nested scopes
  * override ancestors. Priority breaks ties within a scope.
  *
- * See docs/07_Shortcuts.md for the full design.
+ * @see docs/history/engine/07_Shortcuts.md for the full design.
+ * @see docs/adr/0022-shortcuts-scope-stack.md
  */
 
 export interface ShortcutDef {
@@ -201,14 +202,30 @@ const isInputFocused = (selector: string): boolean => {
 };
 
 /**
- * @invariant Tiebreak rule: most-recently-registered wins within the
- *   same scope-score + priority. Stable sort + Map insertion order
- *   means later registrations end up later in the matches array and
- *   win the head slot. (NB: docs/history/engine/06_Undo_Transactions.md:116
- *   still inverts this; that doc is pre-audit reference and append-only.)
+ * @invariant Tiebreak rule: FIRST-registered wins within the same
+ *   scope-score + priority. `matches` comes out of `shortcuts.list()` in
+ *   Map insertion order; `Array.prototype.sort` is stable (ES2019), so a
+ *   score tie leaves the earlier registration at index 0 — and `matches[0]`
+ *   is what gets returned. Later registrations sink to the TAIL, they do
+ *   not win the head slot.
+ *
+ *   Note `_registry.set(def.id, def)` on an existing id keeps the ORIGINAL
+ *   insertion position, so re-registering (e.g. `useShortcut` on a dep
+ *   change) does not move a shortcut to the back of the queue.
+ *
+ *   Consequence: to beat an already-registered binding you MUST raise
+ *   `priority` (or use a deeper scope) — registering later is not enough.
+ *   `app-gmt`'s `gmt.undoCameraMove` (`Ctrl+Shift+Z`, `priority: 10`)
+ *   depends on this: `installUndo()` runs first and registers
+ *   `redo.global.shift` (`Mod+Shift+Z` → `Ctrl+Shift+Z` on Win/Linux), so
+ *   dropping that `priority: 10` silently turns camera-undo into param-redo.
+ *   Guarded by `npm run smoke:undo` ("[shortcuts] resolver tiebreak").
+ *
+ * @see docs/history/engine/06_Undo_Transactions.md (§Hotkey routing — agrees)
+ * @see docs/adr/0022-shortcuts-scope-stack.md (states the inverse; stale)
  */
 const resolve = (normalized: string): ShortcutDef | null => {
-    // Highest-index scope wins; priority breaks ties; most-recently-registered
+    // Highest-index scope wins; priority breaks ties; first-registered
     // wins within same priority.
     const matches = shortcuts.list().filter((s) => {
         if (normalizeKey(s.key) !== normalized) return false;

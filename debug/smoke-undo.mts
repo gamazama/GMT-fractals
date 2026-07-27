@@ -207,6 +207,71 @@ async function main() {
     ok(scopeRes.canUndoCamera === false, 'camera stack is empty');
     ok(scopeRes.camUndoReturn === false, `undo("camera") no-ops when no camera entries (got ${scopeRes.camUndoReturn})`);
 
+    // ── Shortcut resolver tiebreak + the Ctrl+Shift+Z camera contract ──
+    // engine/plugins/Shortcuts.ts `resolve()` sorts matches by
+    // scopeIndex*10000 + priority and returns matches[0]. The sort is stable
+    // over Map insertion order, so at equal score the FIRST-registered wins.
+    // That is what makes app-gmt's `priority: 10` on gmt.undoCameraMove
+    // load-bearing: installUndo() registers `redo.global.shift`
+    // (Mod+Shift+Z → Ctrl+Shift+Z on Win/Linux) BEFORE main.tsx registers
+    // camera-undo, so without the priority bump Ctrl+Shift+Z would silently
+    // become param-redo instead of camera-undo.
+    console.log('\n[shortcuts] resolver tiebreak + Ctrl+Shift+Z camera contract:');
+    const tieRes = await page.evaluate(`(function(){
+        var sc = window.__shortcuts;
+        if (!sc) return { noRegistry: true };
+        var fired = [];
+        var mk = function(id){ return { id: id, key: 'Ctrl+Alt+F9', handler: function(){ fired.push(id); } }; };
+        var fireF9 = function(){
+            document.body.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'F9', code: 'F9', ctrlKey: true, altKey: true, bubbles: true, cancelable: true }));
+        };
+        // Same key + scope + priority, registered A then B.
+        sc.register(mk('A')); sc.register(mk('B'));
+        fired = []; fireF9();
+        var aFirst = fired.slice();
+        sc.unregister('A'); sc.unregister('B');
+        // Reverse the registration order; the winner must flip with it.
+        sc.register(mk('B')); sc.register(mk('A'));
+        fired = []; fireF9();
+        var bFirst = fired.slice();
+        sc.unregister('A'); sc.unregister('B');
+
+        // Real bindings: order of registration + which one Ctrl+Shift+Z reaches.
+        var ids = sc.list().map(function(s){ return s.id; });
+        var iRedo = ids.indexOf('redo.global.shift');
+        var iCam  = ids.indexOf('gmt.undoCameraMove');
+        var hits = [];
+        var orig = sc.list().filter(function(s){
+            return s.id === 'redo.global.shift' || s.id === 'gmt.undoCameraMove'; });
+        var winner = 'NOT_RUN';
+        if (orig.length === 2) {
+            orig.forEach(function(s){
+                sc.register(Object.assign({}, s, { handler: function(){ hits.push(s.id); } })); });
+            document.body.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'Z', code: 'KeyZ', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+            winner = hits.length === 1 ? hits[0] : ('AMBIGUOUS:' + hits.join(','));
+            orig.forEach(function(s){ sc.register(s); });   // restore real handlers
+        }
+        return { noRegistry: false, aFirst: aFirst, bFirst: bFirst,
+                 iRedo: iRedo, iCam: iCam, winner: winner };
+    })()`) as any;
+    if (tieRes.noRegistry) {
+        failures.push('shortcuts: window.__shortcuts missing — installShortcuts() did not run');
+        console.log('  ✗ window.__shortcuts missing');
+    } else {
+        ok(tieRes.aFirst.length === 1 && tieRes.aFirst[0] === 'A',
+            `A-then-B: first-registered wins the tie (fired ${JSON.stringify(tieRes.aFirst)})`);
+        ok(tieRes.bFirst.length === 1 && tieRes.bFirst[0] === 'B',
+            `B-then-A: winner flips with registration order (fired ${JSON.stringify(tieRes.bFirst)})`);
+        ok(tieRes.iRedo >= 0 && tieRes.iCam >= 0,
+            `both Ctrl+Shift+Z bindings present (redo.global.shift=${tieRes.iRedo}, gmt.undoCameraMove=${tieRes.iCam})`);
+        ok(tieRes.iRedo >= 0 && tieRes.iCam > tieRes.iRedo,
+            `camera-undo registers AFTER redo.global.shift, so it cannot win on order alone`);
+        ok(tieRes.winner === 'gmt.undoCameraMove',
+            `Ctrl+Shift+Z reaches camera-undo, not param-redo (got ${tieRes.winner})`);
+    }
+
     // ── No page errors throughout ──
     console.log('');
     ok(errors.length === 0, `no page errors (${errors.length})`);
@@ -218,7 +283,7 @@ async function main() {
         console.error(`\n✗ smoke:undo FAILED — ${failures.length} assertion(s):\n  - ${failures.join('\n  - ')}`);
         process.exit(1);
     }
-    console.log('\n✓ smoke:undo PASSED — all four undo bugs covered (1 LFO, 2 levels, 3 camera, 4 slider track).');
+    console.log('\n✓ smoke:undo PASSED — four undo bugs (1 LFO, 2 levels, 3 camera, 4 slider track) + shortcut tiebreak.');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
