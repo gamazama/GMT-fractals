@@ -1,27 +1,31 @@
 /**
  * AnimationSystem — modulation tick dispatcher.
  *
- * Ex-`legacy-gmt/AnimationSystem.tsx`. The tick runs the generic DDFS
- * modulation path (animationEngine.tick → modulationEngine oscillators /
- * rules → per-target base+offset resolution → liveModulations) AND four
- * GMT-specific composite branches (coloring repeats/phase, julia vector
- * composite, geometry pre/post/world rotation, lighting light-array).
- * Each GMT branch is GATED by slice existence (`storeState.geometry`,
- * `storeState.coloring`, `storeState.lighting`) so apps without those
- * slices fall through to the generic path untouched.
+ * Ex-`legacy-gmt/AnimationSystem.tsx`. The tick drives, in order:
+ * keyframe playback (`animationEngine.tick`), audio-clip deck sync,
+ * oscillators + modulation rules (`modulationEngine`), then one pass over
+ * every modulated target.
  *
- * @invariant Branch SELECTION is not decided here. Every target is classified
- *   by `classifyModulationTarget` (engine/features/modulation/targetRouting.ts)
- *   and the chain below switches on `routing.branch`. That module is also what
- *   `debug/test-modulation-coverage.mts` grades, so the gate cannot pass a
- *   routing this loop doesn't actually take. Adding a branch means teaching the
- *   resolver first — the predicates here are no longer the source of truth.
+ * @invariant Neither branch SELECTION nor branch BODIES live here. Every
+ *   target is classified by `classifyModulationTarget`
+ *   (engine/features/modulation/targetRouting.ts) and executed by
+ *   `planModulationTarget` (engine/features/modulation/applyTarget.ts) — the
+ *   same pure dispatcher the render-export path runs, so a render cannot
+ *   silently disagree with the preview (ADR-0109). Those two modules are what
+ *   `debug/test-modulation-coverage.mts` and `test-modulation-parity.mts`
+ *   grade. Adding or changing a branch means teaching the resolver and the
+ *   dispatcher; nothing in this file is a source of truth about routing.
  *
- * FUTURE REFACTOR — branch registry:
- *   The GMT-specific branch BODIES should still move into engine-gmt via a
- *   `registerModulationBranch()` extension point; extracting the classifier was
- *   the first half. Until that lands, the slice gating keeps cross-contamination
- *   out and this file is allowed to know about GMT slice names.
+ * What IS this file's own: the live-tick bookkeeping a pure plan cannot do —
+ * emitting `plan.uniforms` through `FRACTAL_EVENTS.UNIFORM`, tracking uniform
+ * ownership, publishing `liveModulations`, capturing `plan.records` as
+ * keyframes while modulation-recording (with the audio back-fill sub-pass),
+ * and the accumulation-reset diff.
+ *
+ * The GMT-specific slice knowledge (coloring / julia / geometry rotation /
+ * lighting) that used to be inlined here now sits behind those slice-gated
+ * branches in `applyTarget.ts`; apps without those slices fall through to the
+ * generic scalar / vecAxis path untouched.
  */
 
 import React from 'react';
