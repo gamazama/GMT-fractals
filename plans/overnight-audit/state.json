@@ -2,7 +2,7 @@
   "started": "2026-07-27T21:00:10Z",
   "cycle": 1,
   "maxCycles": 24,
-  "batchSize": 2,
+  "batchSize": 3,
   "maxConcurrentAgents": 3,
   "deadline": "2026-07-28T07:54:15.424Z",
   "branch": "audit/overnight-2026-07-27",
@@ -16,5 +16,5 @@
     "2026-07-28T01:50:00Z",
     "2026-07-28T06:50:00Z"
   ],
-  "note": "No dollar budget. Constraint is the rolling 5h window; ride the resets."
+  "note": "No dollar budget. Constraint is the rolling 5h window; ride the resets. Cycle 1 clean (12/12 guards) so batchSize raised 2->3 per protocol; 31 subsystems left against a 07:54Z deadline needs ~3/cycle. Dev server left running on :3400 for smokes."
 }
