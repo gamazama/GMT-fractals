@@ -1,12 +1,17 @@
 /**
  * Modulation target routing — what CAN be modulated, and where the offset goes.
  *
- * Two halves of one question, kept in one pure module so the three consumers
- * cannot drift apart:
+ * Two halves of one question, kept in one pure module so the consumers cannot
+ * drift apart:
  *
  *   - `ParameterSelector` (what the picker offers)      → `isModulatable`
- *   - `AnimationSystem.tick` (where an offset is sent)  → `classifyModulationTarget`
+ *   - `planModulationTarget` (where an offset is sent)  → `classifyModulationTarget`
  *   - `debug/test-modulation-coverage.mts` (the gate)   → both
+ *
+ * Both appliers — `AnimationSystem.tick` (live) and `exportModulations`
+ * (render export) — classify here and then hand the routing to the ONE
+ * dispatcher in `applyTarget.ts` (ADR-0109); neither carries a branch chain of
+ * its own any more.
  *
  * Before this module existed the picker's notion of "modulatable" and the
  * dispatcher's branch chain were independent code, and they disagreed: targets
@@ -16,12 +21,13 @@
  * tick asks.
  *
  * @invariant `classifyModulationTarget` must mirror the branch order in
- *   `AnimationSystem.tick`'s per-target loop EXACTLY — first match wins, and
+ *   `planModulationTarget` (applyTarget.ts) EXACTLY — first match wins, and
  *   several branches swallow their whole prefix (a `camera.` target never
- *   reaches the scalar fallback even when it resolves to nothing). The tick
- *   calls this function to pick its branch rather than re-testing the
- *   predicates, so the mirror is enforced by construction.
+ *   reaches the scalar fallback even when it resolves to nothing). The
+ *   dispatcher switches on the `branch` this function returns rather than
+ *   re-testing the predicates, so the mirror is enforced by construction.
  * @see docs/adr/0107-live-modulation-transport.md
+ * @see docs/adr/0109-one-modulation-dispatcher.md
  */
 
 import { featureRegistry } from '../../FeatureSystem';
@@ -237,10 +243,11 @@ export function classifyModulationTarget(
 
     // F. Vec axis on any feature.
     //
-    // The regex alone claims the target: the tick's `return` sits OUTSIDE its
-    // vec-object check, so an axis-shaped key whose slice holds no vector is
-    // swallowed here and never reaches the scalar fallback. Mirrored rather
-    // than corrected — see the quirk note below.
+    // The regex alone claims the target: the dispatcher's `vecAxis` case
+    // returns whether or not the vec-object check passes, so an axis-shaped key
+    // whose slice holds no vector is swallowed here and never reaches the
+    // scalar fallback. Mirrored rather than corrected — see the quirk note
+    // below.
     const vectorMatch = targetKey.match(/^(\w+)\.([\w]+)_(x|y|z|w)$/);
     if (vectorMatch) {
         const slice = storeState[vectorMatch[1]] as Slice;
@@ -248,8 +255,8 @@ export function classifyModulationTarget(
         const isVec = !!vec && typeof vec === 'object';
         return {
             branch: 'vecAxis',
-            // No vector behind the name → the branch body is skipped entirely
-            // and the target is dropped. A genuine scalar param named `foo_x`
+            // No vector behind the name → the dispatcher's branch body is
+            // skipped and the target is dropped. A genuine scalar param `foo_x`
             // would land here and silently never modulate. No shipped param
             // has that shape (the coverage gate asserts it), so this is a trap
             // for a future param name, not a live bug.

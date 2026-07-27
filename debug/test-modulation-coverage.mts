@@ -9,8 +9,9 @@
  * while working correctly in a render export.
  *
  * Both halves ask `engine/features/modulation/targetRouting.ts` — the same
- * module `AnimationSystem.tick` dispatches on — so this cannot grade a routing
- * the tick doesn't take.
+ * module both appliers (`AnimationSystem.tick` and `exportModulations`)
+ * classify with before handing the routing to `planModulationTarget` — so this
+ * cannot grade a routing the dispatcher doesn't take.
  *
  * Prints the full matrix, then asserts. Run it to SEE coverage:
  *   tsx debug/test-modulation-coverage.mts            # summary + failures
@@ -87,9 +88,9 @@ console.log('[2] uniform-backed params reach the shader, not just the UI');
 
 console.log('[3] the vec-axis trap is unoccupied');
 {
-  // AnimationSystem's vec branch claims ANY `feature.name_x` key and drops it
-  // when the slice holds no vector there. A scalar param literally named
-  // `foo_x` would land in that hole and never modulate.
+  // The dispatcher's vec branch (applyTarget.ts) claims ANY `feature.name_x`
+  // key and drops it when the slice holds no vector there. A scalar param
+  // literally named `foo_x` would land in that hole and never modulate.
   const trapped = rows.filter(r => r.routing.branch === 'vecAxis' && r.routing.sink === 'none');
   assert(trapped.length === 0,
     'no scalar param has an axis-shaped name that the vec branch would swallow',
