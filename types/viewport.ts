@@ -47,15 +47,16 @@ export interface ViewportAdaptiveConfig {
     activityGraceMs: number;
     /** When true, adaptive runs always — for apps with no idle state
      *  (live sims like fluid-toy). When false (default, GMT-style),
-     *  adaptive settles to full-res when the mouse is on the canvas
-     *  and the user hasn't interacted recently. */
+     *  adaptive settles to full-res once the user hasn't interacted for
+     *  the grace window. Engagement is activity-driven; pointer position
+     *  over the canvas is NOT consulted. */
     alwaysActive: boolean;
     /** When true, adaptive engages ONLY when the renderer's accumCount
      *  drops (= camera/param change actually invalidated the result).
-     *  isInteracting and mouseOverCanvas no longer trigger adaptive on
-     *  their own. Use for apps where the accumulator is the truth
-     *  signal (e.g. fluid-toy, where dragging the vorticity slider
-     *  shouldn't drop fractal resolution). */
+     *  `isInteracting` no longer triggers adaptive on its own. Use for
+     *  apps where the accumulator is the truth signal (e.g. fluid-toy,
+     *  where dragging the vorticity slider shouldn't drop fractal
+     *  resolution). Maps to the module's `gateOnAccumOnly`. */
     engageOnAccumOnly?: boolean;
 }
 
