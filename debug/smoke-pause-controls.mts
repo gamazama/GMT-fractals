@@ -38,15 +38,21 @@ console.log('isPaused after click:', after);
 
 if (before === after) { console.error('✗ click did not toggle isPaused'); process.exit(1); }
 
-// Hover to open the popover. The popover should contain the slider.
+// Hover to open the popover. It must expose the sample-cap slider.
+//
+// This used to read `document.querySelector('.text-[8px]')` — an unscoped,
+// document-wide match that landed on an unrelated menu OnOffBadge ("ON")
+// rather than the popover footer, and whose result was only logged, never
+// asserted. A completely broken popover still passed. Anchor on the
+// slider's own label text instead (PauseControls.tsx: `label="Auto-Stop
+// (Samples)"`), and assert on it.
 await button.first().hover({ force: true });
 await page.waitForTimeout(250);
 
-const popoverText = await page.evaluate(`(function() {
-    const el = document.querySelector('.text-\\\\[8px\\\\]');
-    return el ? el.textContent : null;
-})()`);
-console.log('popover footer text:', popoverText);
+const capSlider = page.locator('text=Auto-Stop (Samples)').first();
+const capVisible = await capSlider.isVisible({ timeout: 1000 }).catch(() => false);
+console.log('sample cap slider visible:', capVisible);
+if (!capVisible) { console.error('✗ hover popover did not expose the sample cap slider'); process.exit(1); }
 
 await page.screenshot({ path: 'debug/fluid-pause-hover.png' });
 console.log('[hover] screenshot → debug/fluid-pause-hover.png');
