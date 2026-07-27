@@ -37,6 +37,20 @@ export class ShaderBuilder {
         this.defines.set(name, value);
     }
 
+    /**
+     * @invariant Keyed on `name` alone, and `Map.set` is last-wins — NOT
+     *   idempotent on `(name, type)`. Two features that add the same uniform
+     *   name with different `type` or `arraySize` produce one declaration
+     *   carrying whichever was added last, silently, with no dev warning.
+     *   This is deliberately weaker than the schema layer: `UniformSchema`
+     *   THROWS on a name collision at module load, but that check only covers
+     *   `BASE_SCHEMA` + `featureRegistry.getUniformDefinitions()` — it cannot
+     *   see builder-time `addUniform` calls made from `inject()`. Re-adding an
+     *   identical `(name, type, arraySize)` triple is a genuine no-op, which
+     *   is what the `backingOnly` re-declaration pattern (R10 in
+     *   `docs/policy/uniform-plugin-contract.md`) and `fractal-toy`'s
+     *   assembler both rely on.
+     */
     addUniform(name: string, type: string, arraySize?: number) {
         this.uniforms.set(name, { type, arraySize });
     }
@@ -63,6 +77,16 @@ export class ShaderBuilder {
      * Example: a raymarching plugin defines sections 'postMapCode',
      * 'materialLogic', 'missHandler', 'volumeBody', 'integrator', etc., then
      * its assembler composes them into the full raymarching shader at build.
+     *
+     * Consumer status (checked 2026-07-27): this seam has NO in-repo caller — grep
+     *   `addSection(` / `getSections(` and the only hits are this file plus
+     *   `buildFragment`'s own `getSections('main')`. engine-gmt drives a typed
+     *   17-position assembler (ADR-0043) and `fractal-toy` migrated off
+     *   sections in its "Phase A" (see `fractal-toy/renderer/shaderAssembler.ts`
+     *   header); both now read the generic primitives instead. ADR-0019
+     *   accepted this knowingly — the API is retained for plugin authors — so
+     *   an unused-looking seam here is by design, not rot. Do not "clean it
+     *   up" without a superseding ADR.
      */
     /**
      * @invariant Multi-valued; does NOT dedup. Repeat `addSection(name, code)`
@@ -97,10 +121,17 @@ export class ShaderBuilder {
     /**
      * Render uniform declarations block.
      *
-     * @invariant Honors `UniformDefinition.arraySize` only — `precision`
-     *   and `comment` fields are silently dropped. (See
-     *   `engine/UniformSchema.ts` for the consumer that DOES enforce
-     *   `backingOnly`.)
+     * @invariant Emits from this builder's own `addUniform(name, type,
+     *   arraySize?)` entries, so `arraySize` is the only `UniformDefinition`-
+     *   shaped field that survives. `comment` is dropped, and — the one that
+     *   matters — so is `backingOnly`: this block ALWAYS emits the GLSL
+     *   declaration. `backingOnly` is honoured only by the schema walker in
+     *   `shaders/chunks/uniforms.ts` (and its `engine-gmt/` mirror), which is
+     *   the sole enforcement site; see the `@enforcement` note on
+     *   `UniformDefinition.backingOnly` in `engine/UniformSchema.ts`. That
+     *   asymmetry is the mechanism behind the `backingOnly` contract: the
+     *   schema skips the static declaration and the owning feature re-adds it
+     *   on demand from `inject()` via `addUniform`.
      */
     buildUniformsBlock(): string {
         const out: string[] = [];
