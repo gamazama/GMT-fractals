@@ -56,12 +56,15 @@ async function main() {
     const hasTopBar = await page.evaluate(() => !!document.querySelector('[data-topbar-host]') || !!document.querySelector('header'));
     console.log('topbar present:', hasTopBar);
 
-    // 3) Demo panel + AutoFeaturePanel param controls present. The
-    //    custom Slider component renders precision-slider inputs, not
-    //    <input type="range">. We also check the demo slice param
-    //    labels appear in the dock body.
+    // 3) Demo panel + AutoFeaturePanel param controls present. ScalarInput
+    //    is a custom track+thumb widget — there is no <input type="range">
+    //    and no `.precision-slider` class anywhere in the tree (the old
+    //    selector here matched 0 and was never asserted on, so this step
+    //    silently checked labels only). `[data-role="thumb"]` is the stable
+    //    marker ScalarInput puts on its draggable thumb. We also check the
+    //    demo slice param labels appear in the dock body.
     const panelInfo = await page.evaluate(() => {
-        const sliders = document.querySelectorAll('input.precision-slider').length;
+        const sliders = document.querySelectorAll('[data-role="thumb"]').length;
         const text = document.body.innerText;
         return {
             sliders,
@@ -74,6 +77,9 @@ async function main() {
     console.log('panel:', JSON.stringify(panelInfo));
     if (!panelInfo.hasSize || !panelInfo.hasOpacity) {
         throw new Error('Demo panel missing expected param labels (Size / Opacity)');
+    }
+    if (panelInfo.sliders < 1) {
+        throw new Error('Demo panel rendered no ScalarInput sliders ([data-role="thumb"] count 0)');
     }
 
     // 4) Modulation tick advances. installModulation() exposes
