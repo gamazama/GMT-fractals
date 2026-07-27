@@ -4,11 +4,11 @@
  * Mounts a requestAnimationFrame loop that calls TickRegistry.runTicks(dt)
  * each frame. Apps with a custom render loop (worker-driven, synthetic-tick,
  * headless test harness) skip this plugin and call runTicks themselves —
- * see docs/01_Architecture.md § render-loop and docs/04_Core_Plugins.md §
- * @engine/render-loop.
+ * see docs/history/engine/01_Architecture.md § The render-loop contract and
+ * docs/history/engine/04_Core_Plugins.md § `@engine/render-loop`.
  *
  * This is the engine's answer to audit finding F3-equivalent-for-ticks
- * (docs/20_Fragility_Audit.md F4): runTicks had no default caller, so an
+ * (docs/history/engine/20_Fragility_Audit.md § F4): runTicks had no default caller, so an
  * app that forgot to wire one would get silently broken animations. Now the
  * default caller ships with the engine and TickRegistry itself warns in
  * dev when 3s pass after first registerTick() without any runTicks().

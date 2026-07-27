@@ -9,8 +9,12 @@
  *   OVERLAY  → DOM overlays (gizmos) using snapshot + updated store
  *   UI       → Counters, monitors, timeline displays
  *
- * The DISPATCH step (sendRenderTick) stays in WorkerTickScene because
- * it needs R3F camera serialization and proxy access.
+ * The DISPATCH step (sendRenderTick) stays in the app's tick driver, not in
+ * a registered tick, because it needs R3F camera serialization and proxy
+ * access. In GMT that driver is engine-gmt/renderer/GmtRendererTickDriver.tsx
+ * (it calls runTicks, then serializes + dispatches). Older docs name
+ * `WorkerTickScene.tsx` here — that was the pre-extraction GMT component
+ * GmtRendererTickDriver was ported from; no such file exists any more.
  *
  * Navigation's useFrame stays separate at R3F priority 0 (runs before
  * this registry) because it handles camera physics tied to React hooks/refs.
@@ -30,9 +34,6 @@
  * @invariant Phases run in numeric order via stable Array.sort comparing
  *   `phase` only. Within a phase, registration order is preserved.
  *   See ADR-0001.
- * @invariant Throws-on-cycle is NOT honored: `getAll()` returns registration
- *   order on cycle and logs to console.error. JSDoc was corrected 2026-05-20
- *   (f-002).
  *
  * Usage:
  *   registerTick('myTick', TICK_PHASE.OVERLAY, (delta) => { ... });
@@ -64,7 +65,8 @@ let _needsSort = false;
 
 // Dev-only instrumentation: warn if registerTick is ever called but runTicks
 // isn't invoked within 3 seconds. Catches the fragility where an app forgets
-// to install @engine/render-loop and nothing ticks. See docs/20_Fragility_Audit.md F4.
+// to install @engine/render-loop and nothing ticks.
+// See docs/history/engine/20_Fragility_Audit.md § F4.
 let _firstRegisterTime = 0;
 let _lastTickTime = 0;
 let _warnedNoTicks = false;
