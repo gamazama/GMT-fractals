@@ -17,8 +17,10 @@
  *     │            bottom-center                 │
  *     └──────────────────────────────────────────┘
  *
- * Slots are always rendered. Widgets within a slot stack vertically
- * by ascending `order`.
+ * Every slot is available without setup — just register into it.
+ * A slot with no currently-visible widgets renders nothing at all (no
+ * placeholder box), and `region` can drop whole rows from a given host.
+ * Widgets within a slot stack vertically by ascending `order`.
  *
  * Visibility gating: each item can declare `when: () => boolean`. The
  * host re-reads the registry on every render (subscribed via
