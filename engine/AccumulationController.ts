@@ -4,9 +4,12 @@
  * particle systems, progressive raymarchers).
  *
  * Engine-core's `renderControlSlice` carries the user-facing control
- * state (`isPaused`, `sampleCap`) and the readout (`accumulationCount`,
- * `convergenceValue`). This interface is what the slice binds TO — any
- * renderer plugin that satisfies it becomes drivable by the generic
+ * state (`isPaused`, `sampleCap`) and the `accumulationCount` readout
+ * (pushed back by `reportAccumulationToStore`). `convergenceValue` is
+ * NOT mirrored into the slice — its only consumer, engine-gmt's
+ * `RegionOverlay`, polls it straight off the controller. This interface
+ * is what the slice binds TO (`store/slices/installAccumulationBindings.ts`)
+ * — any renderer plugin that satisfies it becomes drivable by the generic
  * UI / store / animation layers without bespoke wiring.
  *
  * Today this is implemented by:
