@@ -4,27 +4,42 @@
  * State fields: canvasPixelSize, dpr, resolutionMode, fixedResolution,
  * qualityFraction, fps, fpsSmoothed, adaptiveConfig.
  *
- * The adaptive loop in reportFps is a direct port of GMT's production
- * adaptive logic (engine/managers/UniformManager.ts syncFrame, lines
- * ~99-206). Key design:
+ * reportFps does NOT implement the adaptive loop — it delegates to
+ * `tickAdaptiveResolution` in engine/AdaptiveResolution.ts, the same
+ * module GMT's worker calls from
+ * engine-gmt/engine/managers/UniformManager.ts `syncFrame`. Read that
+ * module for the authoritative algorithm; the summary below only covers
+ * what a caller of this slice needs to know.
  *
  *   - Smart mode (targetFps > 0): scale = scale * sqrt(target/actual),
  *     smoothed 0.7/0.3 with the previous scale. Re-evaluates every
- *     500ms with ≥ 3 frames. Scale clamped to [1, 1/minQuality].
+ *     500ms with ≥ 3 frames (200ms and jump-to-ideal for the first
+ *     window after a seed). Scale clamped to [1, 1/minQuality].
  *   - Manual mode (targetFps === 0): scale = 1/interactionDownsample,
  *     fixed.
- *   - Seeding: on activity start, seed scale from still-FPS (tracked
- *     during idle) so the first frame under interaction is already at
- *     a predicted-good resolution instead of starting at 1x.
+ *   - Seeding: on the idle→active edge the module seeds scale from its
+ *     scale-normalized full-res frame-cost EMA (`fullResFrameMs`), NOT
+ *     from still-FPS — a raw FPS reading taken right after a downscaled
+ *     run reads high and under-seeds. still-FPS survives only as the
+ *     input to the grace window and the deep-accum threshold.
  *   - 5% delta threshold: qualityFraction only updates when the change
  *     is > 5% of current, to avoid constant resize churn.
- *   - needsAdaptive predicate:
+ *   - needsAdaptive predicate — ACTIVITY-driven, not pointer-position
+ *     driven. `mouseOverCanvas` is passed through but the module ignores
+ *     it in the decision path:
  *       · alwaysActive=true (fluid-toy, live sims): always adaptive
- *       · alwaysActive=false (GMT-style fractal explorer):
- *           adaptive OFF when (mouse on canvas AND idle beyond grace)
- *           adaptive ON when (mouse off canvas OR within activity grace)
- *   - Hold grace (holdAdaptive action): during grace, don't downscale
- *     further — apps call this around accumulation starts.
+ *       · otherwise: ON while isUserInteracting, or while the time since
+ *         the last activity (interaction OR an external accumulation
+ *         drop) is under the grace window; OFF once grace expires, so
+ *         the scene settles to full res and converges.
+ *       · deep full-res accumulation overrides both and forces OFF, so a
+ *         partially-accumulated high-quality frame isn't kicked back to
+ *         adaptive.
+ *   - Hold grace (holdAdaptive action): during the hold, don't downscale
+ *     further — intended for apps to call around accumulation starts (no
+ *     in-tree caller today, so `_holdUntilMs` stays 0). Upscale is still
+ *     allowed, and the idle→active re-engagement seed is NOT gated by the
+ *     hold — see engine/AdaptiveResolution.ts.
  *   - Suppression (adaptiveSuppressed): hard force to 1.0 — used by
  *     export flows.
  *
@@ -44,8 +59,11 @@ import {
 
 // Default DPR — mobile gets 1.0, desktop uses devicePixelRatio capped at 2.
 // This isMobile() heuristic belongs in a future @engine/environment plugin
-// so mobile detection is a shared concern across plugins (docs/10_Viewport.md
-// § Open questions → decided 2026-04-22). For now it's inlined.
+// so mobile detection is a shared concern across plugins
+// (docs/history/engine/10_Viewport.md § Open questions → decided
+// 2026-04-22). For now it's inlined — note it duplicates the breakpoint
+// that engine/HardwareDetection.ts `isMobileViewport()` calls the single
+// source of truth for; keep the two in step until the plugin lands.
 const isMobile = () => {
     if (typeof window === 'undefined') return false;
     return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
