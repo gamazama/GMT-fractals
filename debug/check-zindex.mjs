@@ -53,7 +53,11 @@ const ALLOWLIST = new Set([
 const Z_TAILWIND = /\bz-\[(\d+)\]/g;
 const Z_INLINE = /zIndex:\s*(\d+)\b/g;
 const Z_PROP = /zIndex=\{(\d+)\}/g;
-const PORTAL_BODY = /,\s*document\.body\s*\)/; // the `, document.body)` tail of a createPortal call
+// The `, document.body)` tail of a createPortal call. The optional `,?` matches
+// the multi-line/trailing-comma form (`document.body,\n)`) — without it the
+// detector silently missed roughly half the body portals in the tree
+// (engine/plugins/Help.tsx, the gallery overlays, the gradient-explorer layers …).
+const PORTAL_BODY = /,\s*document\.body\s*,?\s*\)/;
 
 function walk(dir, out) {
     for (const name of readdirSync(dir)) {
