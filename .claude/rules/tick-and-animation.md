@@ -1,6 +1,7 @@
 ---
 paths:
   - "engine/TickRegistry.ts"
+  - "engine/plugins/RenderLoop.tsx"
   - "engine/AnimationEngine.ts"
   - "engine/animation/**"
   - "engine-gmt/animation/**"
@@ -9,6 +10,13 @@ paths:
 # Tick loop + animation engine
 
 Read first: JSDoc at the top of `engine/TickRegistry.ts` and `engine/AnimationEngine.ts`.
+
+`engine/plugins/RenderLoop.tsx` (`@engine/render-loop`) is the *only* file under
+`engine/**` that calls `runTicks` — it is the default RAF driver. It is mounted by
+`App.tsx` (the demo entry, `demo.html` → `index.tsx` → `App.tsx`), `fluid-toy/` and
+`gradient-explorer/`. **app-gmt does NOT mount it**: its canonical driver is
+`engine-gmt/renderer/GmtRendererTickDriver.tsx`, which runs the tick phases *and*
+dispatches the worker frame. Mounting both is the ADR-0003 double-run bug.
 
 Decisions: ADRs 0001-0004 (loop, phases, delta units), 0015-0017 (binders,
 recording, log/camera-pair tracks).
