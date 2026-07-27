@@ -2,10 +2,14 @@
  * Smoke for engine/animation/binderRegistry.
  *
  * Verifies:
- *   1. An explicit registered binder OVERRIDES the DDFS auto-path.
+ *   1. An explicit registered binder OVERRIDES the DDFS auto-path — the
+ *      custom writer fires AND the store does not receive the auto write.
  *   2. The unregister function cleanly tears down so the auto-path
  *      is restored on the same track id.
- *   3. Re-registering the same id replaces the previous entry (idempotent).
+ *   3. Registering AFTER the DDFS auto-path has already run still wins.
+ *      That is `AnimationEngine.getBinder`'s @invariant: the registry is
+ *      consulted BEFORE the per-id `this.binders` cache, so a binder
+ *      registered late is not shadowed by a cached DDFS-derived writer.
  *
  * Runs in the browser via playwright — needs the app for real store
  * + feature registry. Uses julia.power as the test param because it's
@@ -66,10 +70,26 @@ async function main() {
             window.__animEngine.scrub(5);
             const storePowerAfterAuto = store.getState().julia.power;
 
+            // 3. LATE registration. The DDFS auto-path has now run for
+            //    julia.power, so AnimationEngine has cached a DDFS-derived
+            //    writer under that id. Registering now must still win.
+            let lateWrites = 0;
+            let lateValue = null;
+            const unregisterLate = binders.register({
+                id: 'julia.power',
+                write: (v) => { lateWrites++; lateValue = v; },
+            });
+            // Scrub a DIFFERENT frame so an auto write would be visible:
+            // keys are (0 → 42), (10 → 7) Linear, so frame 2 → 35.
+            window.__animEngine.scrub(2);
+            const storePowerAfterLate = store.getState().julia.power;
+            unregisterLate();
+
             return {
                 customWrites, customWritesBefore,
                 lastCustomValue,
                 storePowerAfterCustom, storePowerAfterAuto,
+                lateWrites, lateValue, storePowerAfterLate,
             };
         })()
     `);
@@ -86,9 +106,43 @@ async function main() {
     // After unregister, DDFS auto-path takes over — store should now
     // reflect the interpolated value.
     if (typeof r.storePowerAfterAuto !== 'number') throw new Error(`store.julia.power missing after auto scrub`);
+    // OVERRIDE, not merely "also ran": the store must NOT have received the
+    // interpolated value while the custom binder owned the track. Without
+    // this the smoke passes even if both paths fire.
+    if (r.storePowerAfterCustom === r.storePowerAfterAuto) {
+        throw new Error(
+            `registered binder did not suppress the DDFS store write ` +
+            `(store was ${r.storePowerAfterCustom} during custom scrub and ` +
+            `${r.storePowerAfterAuto} after auto scrub — expected them to differ)`,
+        );
+    }
+    // Both paths were fed the same interpolated value; only the destination
+    // differed. Pins the override to "same input, different sink".
+    if (Math.abs(r.storePowerAfterAuto - r.lastCustomValue) > 1e-9) {
+        throw new Error(
+            `auto-path value ${r.storePowerAfterAuto} != custom-path value ${r.lastCustomValue}`,
+        );
+    }
+
+    // 3. Late registration beats the per-id binder cache.
+    if (r.lateWrites < 1) {
+        throw new Error(
+            `binder registered AFTER the DDFS auto-path never fired (lateWrites=${r.lateWrites}) — ` +
+            `AnimationEngine.getBinder is consulting its per-id cache before binderRegistry.lookup`,
+        );
+    }
+    if (Math.abs(r.lateValue - 35) > 1e-6) {
+        throw new Error(`late binder got ${r.lateValue}, expected 35 (frame 2 of 0→42, 10→7 linear)`);
+    }
+    if (r.storePowerAfterLate !== r.storePowerAfterAuto) {
+        throw new Error(
+            `late-registered binder did not suppress the cached DDFS writer ` +
+            `(store moved ${r.storePowerAfterAuto} → ${r.storePowerAfterLate})`,
+        );
+    }
 
     if (errors.length > 0) throw new Error('page errors:\n  ' + errors.join('\n  '));
-    console.log(`\n✓ binderRegistry: explicit register wins over DDFS auto-path; unregister cleanly restores it`);
+    console.log(`\n✓ binderRegistry: explicit register wins over DDFS auto-path (store stayed ${r.storePowerAfterCustom}, auto wrote ${r.storePowerAfterAuto}); unregister restores it; late registration beats the per-id cache`);
     await browser.close();
 }
 
