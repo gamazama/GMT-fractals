@@ -178,15 +178,46 @@ export class RenderPipeline {
     private _compileTarget: THREE.WebGLRenderTarget | null = null;
 
     /**
-     * Get a render target for compile-time context (so Three.js generates
-     * matching program params).
+     * Get a render target for compile-time context (so the pre-warmed program
+     * matches the one the live render will use).
      *
-     * @invariant The compile target MUST mirror MRT float type. If live
-     *   target is HalfFloat and compile target is Float, Three.js program
-     *   param hashes diverge and async compile defeats its purpose. Lazy-
-     *   created after `mrtTargetA` exists — do not call before `initTargets()`.
+     * @invariant The compile target MUST mirror MRT float type — and is now
+     *   rebuilt when it does not, because `updateQuality` → `resize` →
+     *   `initTargets` re-allocates the MRT at a new type whenever
+     *   `bufferPrecision` crosses 0.5, while this 1x1 FBO used to be created
+     *   once and never invalidated. Reachable from the shipping Settings →
+     *   Hardware → "Buffer Precision" dropdown; measured on desktop
+     *   (ANGLE/D3D11, cbf + floatLinear both true) the two settings really do
+     *   yield FloatType vs HalfFloatType. Lazy-created after `mrtTargetA`
+     *   exists — do not call before `initTargets()`.
+     *
+     *   The rebuild is done HERE rather than in `initTargets()`/`resize()` on
+     *   purpose: `CompileScheduler` captures this target in a local, binds it,
+     *   and holds it across `await renderer.compileAsync(...)`. A CONFIG
+     *   message carrying a precision change is processed on the same worker
+     *   event loop and can land inside that await, so disposing from the
+     *   resize path could free a currently-bound FBO mid-compile. By the time
+     *   `getCompileTarget()` is called again the previous compile has resolved
+     *   and restored `setRenderTarget(null)`.
+     *
+     *   NOTE on the rationale: the original text claimed "Three.js program
+     *   param hashes diverge". That is not the mechanism — three.js's
+     *   `WebGLPrograms.getParameters()` reads the bound target only for
+     *   `toneMapping`/`outputColorSpace` (both gated on `=== null`), never its
+     *   `texture.type`. Any real cost is at the ANGLE/D3D11 level, where pixel
+     *   shaders are compiled per framebuffer output signature. RGBA32F and
+     *   RGBA16F may well share a variant, in which case the divergence costs
+     *   nothing — that has NOT been measured on d3d11. This is kept as a
+     *   correctness fix (the code now honours its documented contract), not as
+     *   a proven perf win.
      */
     public getCompileTarget(): THREE.WebGLRenderTarget | null {
+        // Drop a stale target whose type no longer matches the live MRT.
+        if (this._compileTarget && this.mrtTargetA
+            && this._compileTarget.texture.type !== this.mrtTargetA.texture.type) {
+            this._compileTarget.dispose();
+            this._compileTarget = null;
+        }
         if (!this._compileTarget && this.mrtTargetA) {
             this._compileTarget = new THREE.WebGLRenderTarget(1, 1, {
                 minFilter: THREE.NearestFilter,
