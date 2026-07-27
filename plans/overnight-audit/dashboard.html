@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:15%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:24%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,25 +73,25 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Cycle 2 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-27T22:21:44.281Z</p>
+  <p class="sub">Cycle 3 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-27T23:08:41.201Z</p>
 
   <div class="tiles">
-    <div class="tile"><div class="v">5/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">40</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">21</div><div class="k">applied &amp; verified</div></div>
-    <div class="tile"><div class="v" style="color:var(--warn)">4</div><div class="k">orchestrator-checked</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">14</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">33<span style="font-size:.6em;color:var(--dim)">/33</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v">8/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">66</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">38</div><div class="k">applied &amp; verified</div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">6</div><div class="k">orchestrator-checked</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">20</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">52<span style="font-size:.6em;color:var(--dim)">/52</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:60%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:100%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 3 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 4 cycles</p>
 
   
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">21</span></h2>
+    <h2>Applied — self-verified <span class="count">38</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
   <article class="finding sev-high">
@@ -190,6 +190,62 @@
     <p class="verify"><strong>How it was verified:</strong> Read the cited files head-on rather than trusting the index. ADR-0061 is titled 'A single InteractionSession primitive as the source of truth for gesture activity'; ADR-0062 is 'Low-latency (desynchronized) present default-on for the worker WebGL context' and its own header says 'Present-path concern — distinct from ADR-0061'. Neither states a convergence or reset rule. Each replacement was opened and confirmed: 0017 'Render pipeline async convergence readback' (Scope: engine/RenderPipeline.ts), 0018 'Render pipeline convergence measurement gating', 0067 'Bucket render uses fixed sample count' (whose Context section 1 is verbatim the resetAccumulation/convergencePending carry-over bug), 0078 'Split the overloaded noReset flag'. Every filename in the new text was confirmed to exist. NOTE: this bad citation had already propagated — it was repeated verbatim in the orchestrator's own briefing for this subsystem, which is how it was caught.</p>
     <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>ff046c9f</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e07-plugins-host</code>
+      <code class="file">debug/smoke-hud-hint.mts:28</code>
+    </header>
+    <p class="what">smoke:hud-hint was PERMANENTLY RED — its cheatsheet locator used text-cyan-300, a class that no longer exists anywhere in the tree after the runtime-theming rename (ADR-0080) to text-accent-300.</p>
+    <p class="change"><strong>Changed:</strong> Selector repointed to text-accent-300 (HotkeysCheatsheet.tsx:35). Also rewrote the docstring, which described 4 checks that did not match the 5 the file runs (it claimed to look for the Space pill; it looks for the uppercase 'Hotkeys' title), and added the missing assertion on flagAfterH, which was collected and logged but never asserted on.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep -rn text-cyan-300 returns zero hits tree-wide, so the locator provably matched nothing. The smoke failed at 'hotkeys cheatsheet should be visible by default' (cheatsheet visible at boot: false) before the change and passes all five steps after. It would fail again on a wrong class, because step 1 throws when the locator is empty — which is exactly how this surfaced.</p>
+    <p class="guard"><code>npm run smoke:hud-hint</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>2ba5b72b</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e07-plugins-host</code>
+      <code class="file">debug/smoke-canvas-menu.mts:46</code>
+    </header>
+    <p class="what">smoke:canvas-menu was PERMANENTLY RED — it asserted the canvas menu contains an item labelled 'Pause', but fluid-toy ships fluidSim.paused: true (pure-fractal boot) so the label always reads 'Resume Sim' at boot.</p>
+    <p class="change"><strong>Changed:</strong> Made the sim-toggle assertion state-independent (/(Pause|Resume) Sim/) with the reason recorded inline. Also implemented the preventDefault check the docstring already claimed: a bubble-phase window contextmenu listener records defaultPrevented (capture phase would run before the canvas handler and always read false), and the smoke now asserts it is true.</p>
+    <p class="verify"><strong>How it was verified:</strong> Failed before with `menu missing &quot;Pause&quot; (got: [&quot;Copy Julia c&quot;, &quot;Resume Sim&quot;, &quot;Recenter View&quot;, &quot;Reset Fluid Fields&quot;])`; passes after, printing `contextmenu defaultPrevented: true`. The root cause is in files no agent in this run has modified (fluid-toy/features/fluidSim.ts, fluid-toy/pointer/contextMenu.ts), so the failure is pre-existing, not a side effect. The new assertion would fail if contextMenu.ts stopped calling e.preventDefault(), because the window listener reads the flag after the canvas handler has run.</p>
+    <p class="guard"><code>npm run smoke:canvas-menu</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>34b45da6</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e07-plugins-host</code>
+      <code class="file">debug/smoke-pause-controls.mts:45</code>
+    </header>
+    <p class="what">smoke:pause-controls collected the popover text from an unscoped document.querySelector('.text-[8px]') that matched an unrelated menu OnOffBadge, and never asserted on it — so the docstring's claim that it verifies the hover popover exposes the sample-cap slider was entirely unbacked.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the document-wide probe with a locator on the slider's own label text ('Auto-Stop (Samples)') and asserted on it, so a broken or non-opening popover now fails the smoke.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before the change the smoke printed 'popover footer text: ON', proving the selector matched the wrong element (the real pause popover footer reads '&lt;n&gt; / &lt;cap&gt; samples' or '0 = never stop'), and the value fed no assertion — the smoke could not fail on popover breakage. After, it prints 'sample cap slider visible: true' and hard-fails when false. The label lives inside the showMenu-gated Popover, which is precisely the behaviour the docstring claims to cover. Confirmed across 3 consecutive passing runs. This is the THIRD guard in three cycles found asserting nothing where it claimed to assert something.</p>
+    <p class="guard"><code>npm run smoke:pause-controls</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>0b588b8e</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e08-shortcuts-undo</code>
+      <code class="file">engine/plugins/Shortcuts.ts:203</code>
+    </header>
+    <p class="what">The @invariant on resolve() states the tiebreak BACKWARDS — it claims most-recently-registered wins, but a stable sort over Map insertion order means FIRST-registered wins, which is what makes app-gmt's priority:10 on camera-undo load-bearing rather than 'defensive'.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the @invariant to state FIRST-registered wins, explained the mechanism, noted that _registry.set on an existing id keeps the ORIGINAL slot (so useShortcut re-registration does not re-queue), spelled out the consequence for gmt.undoCameraMove, and corrected the two @see pointers. Rewrote the matching comment at app-gmt/main.tsx:557 which called priority:10 'defensive' and cited a drifted line range. Added a durable [shortcuts] section to debug/smoke-undo.mts (5 assertions) and a matching bullet to .claude/rules/engine-plugins.md. Also fixed the dead 'See docs/07_Shortcuts.md' citation in the same header (the file is at docs/history/engine/07_Shortcuts.md) and added the ADR-0022 pointer.</p>
+    <p class="verify"><strong>How it was verified:</strong> Proved twice over, live, then falsified. SYNTHETIC: two shortcuts sharing key 'Ctrl+Alt+F9', scope and priority — A-then-B fires A, B-then-A fires B, so the FIRST registration wins and the winner tracks registration order. REAL: redo.global.shift sits at registry index 21 and gmt.undoCameraMove at index 29, so camera-undo cannot win on order, yet a dispatched Ctrl+Shift+Z reaches gmt.undoCameraMove — only priority can produce that. FALSIFICATION: with priority:10 temporarily removed from app-gmt/main.tsx the run failed on exactly one assertion — 'Ctrl+Shift+Z reaches camera-undo, not param-redo (got redo.global.shift)' — confirming both that the new assertion bites and that the corrected invariant is right. The line was restored by a targeted Edit rather than git checkout, deliberately, to avoid clobbering concurrent auditors. smoke:undo, smoke:engine-demo (step 6 Ctrl+Z round-trip) and typecheck all green; the orchestrator re-ran smoke:undo twice more on the quiescent tree.</p>
+    <p class="guard"><code>npm run smoke:undo</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>5b5de7f5</code></p>
     
   </article>
   <article class="finding sev-medium">
@@ -346,6 +402,104 @@
     <p class="commit">commit <code>ff4ed908</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">debug/smoke-viewport-fixed.mts:47</code>
+    </header>
+    <p class="what">smoke:viewport-fixed asserted only that the store round-tripped resolutionMode/fixedResolution — it never checked the layout ViewportFrame produced, leaving ViewportFrame's `boxSizing: content-box` @invariant with zero coverage.</p>
+    <p class="change"><strong>Changed:</strong> Added three assertions after the mode toggle: the Fixed-mode container (located by its inline 960x540, NOT by box-sizing, so a regression still finds the element) must have computed box-sizing content-box; its border box must be 962x542; and its canvas child must lay out at exactly 960x540. Removed two logged-but-unasserted computed-width values so nothing is telemetry-only.</p>
+    <p class="verify"><strong>How it was verified:</strong> Mutation-proved, not just run green. Flipping ViewportFrame's boxSizing to 'border-box' made the smoke exit 1 with `Fixed-mode container must be content-box ... got border-box`, and the logged layout showed the exact regression the invariant warns about: borderBoxW 960 (not 962) and canvas 958x538 (not 960x540). Mutation reverted and the smoke passes again. Worth noting for anyone extending this: getComputedStyle().width does NOT discriminate here — it echoes the specified 960px under either box-sizing — which is why the explicit box-sizing and offsetWidth checks are the teeth.</p>
+    <p class="guard"><code>npm run smoke:viewport-fixed</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>23ba0bbd</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">store/slices/viewportSlice.ts:7</code>
+    </header>
+    <p class="what">The viewportSlice header describes an adaptive algorithm that no longer exists — a pointer-position-driven needsAdaptive predicate and still-FPS seeding — and calls reportFps a 'direct port' when it delegates to the shared module.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the header: reportFps delegates to tickAdaptiveResolution (path corrected — it was cited under engine/managers/, the file is engine-gmt/engine/managers/UniformManager.ts); seeding comes from the scale-normalized fullResFrameMs EMA, with still-FPS surviving only as the grace/deep-accum input; needsAdaptive stated as activity-driven with mouseOverCanvas explicitly called out as passed-through-but-ignored; added the deep-accum override; noted the hold allows upscale and is not applied to the re-engagement seed. Fixed a dead docs/10_Viewport.md citation and flagged that the inlined isMobile() duplicates HardwareDetection's breakpoint.</p>
+    <p class="verify"><strong>How it was verified:</strong> Each replaced claim was checked against engine/AdaptiveResolution.ts before editing. (1) mouseOverCanvas is destructured nowhere in tickAdaptiveResolution; the only decision expression is `activitySignal = gateOnAccumOnly ? timeSinceActivity &lt; grace : (isInteracting || timeSinceActivity &lt; grace)` — read to the end, there is no pointer clause. (2) The `activeLast === 0` seed branch computes fullResFps from state.fullResFrameMs; state.stillFps is read only by getAdaptiveGrace and accumThreshold. (3) The cited engine/managers/UniformManager.ts does not exist. (4) docs/10_Viewport.md does not exist; docs/history/engine/10_Viewport.md does. Comment-only change; smoke:viewport drives the full reportFps chain (baseline 1.00 -&gt; drag 0.55 -&gt; release 1.00) and would fail on a corrupted module.</p>
+    <p class="guard"><code>npm run smoke:viewport</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>55865fb6</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">engine/plugins/viewport/ViewportFrame.tsx:189</code>
+    </header>
+    <p class="what">ViewportFrame's mouse-handler comment justifies the handlers by a `!mouseOnCanvas` branch in viewportSlice.reportFps that no longer exists, so the handlers read as removable dead wiring.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the rationale to name the actual live consumer (engine-gmt/topbar/AdaptiveResolution.tsx picks its Auto-vs-Always label from it) and state plainly that the adaptive decision ignores mouseOverCanvas. Qualified the canvasPixelSize sole-writer @invariant to ViewportFrame-based apps, naming components/ViewportArea.tsx as the demo shell's equivalent writer and that the two never co-mount. Fixed a dead docs path.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep for mouseOverCanvas across ts/tsx/mts returns exactly one reader outside the module's own unused input parameter: engine-gmt/topbar/AdaptiveResolution.tsx:30, feeding the Auto/Always label. viewportSlice only passes it in; AdaptiveResolutionBadge.tsx does not import it. engine-gmt/engine/worker/ViewportRefs.ts is an `export * from` shim, so both trees share one _mouseOverCanvas and the handlers really do reach that badge. For the sole-writer claim, setCanvasPixelSize has two call sites (ViewportFrame, ViewportArea) and ViewportArea is mounted only from the root App.tsx while ViewportFrame is mounted by app-gmt/fractal-toy/fluid-toy.</p>
+    <p class="guard"><code>npm run smoke:viewport-fixed</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>8bc77892</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e07-plugins-host</code>
+      <code class="file">debug/check-zindex.mjs:56</code>
+    </header>
+    <p class="what">check:zindex's body-portal detector missed every createPortal(..., document.body,) written in the multi-line/trailing-comma style, under-reporting by 11 files including engine/plugins/Help.tsx.</p>
+    <p class="change"><strong>Changed:</strong> PORTAL_BODY regex widened to allow the optional trailing comma, with a comment recording why it is load-bearing.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep for a line-ending 'document.body,' lists 12 files the old regex could not match. check:zindex reported 6 body-portal files before the change and 17 after, still exiting 0 (this report is informational, not failing). The added files are all genuine createPortal call sites, verified by reading the matched lines — no false positives. Notably Help.tsx is one of them, and that file turned out to carry this cycle's Tier V layering bug.</p>
+    <p class="guard"><code>npm run check:zindex</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>94287ed7</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e07-plugins-host</code>
+      <code class="file">.claude/rules/engine-plugins.md:11</code>
+    </header>
+    <p class="what">The rule governing engine/plugins/** omitted several files that live there — most importantly Help.tsx, a 559-line slot host no rule mentioned at all — and cited camera/* (one preset-field helper) where the camera plugin is Camera.ts.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the read-first list to name the slot hosts individually including Help.tsx and RenderDialog/index.tsx; added a paragraph covering engine/plugins/topbar/*, PwaUpdate.tsx and navigation/core/VirtualSpace.ts (navigation.md is scoped to engine-gmt/navigation/**, so that file was rule-orphaned); noted RenderLoop.tsx is deliberately covered by the tick rule; added an Invariants bullet for the global-id registry contract; added smoke:hud-hint + smoke:pause-controls to Guards. Committed together with e08's tiebreak bullet — both auditors edited this file.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep -rl across .claude/rules/ returns nothing for Help.tsx, PwaUpdate, BucketRender and PauseControls (so they were uncovered) and returns tick-and-animation.md for RenderLoop and navigation.md for navigation — whose frontmatter scopes it to engine-gmt/navigation/**, not this tree. ls engine/plugins/camera/ shows only presetField.ts while Camera.ts sits at the top level with 4 @invariant blocks. The global-id claim is proved by createListRegistry's single keyed Map, by gradient-explorer having to unregister 'fps' before re-slotting it, and by Menu.tsx namespacing anchors as menu:${id}.</p>
+    <p class="guard"><code>npm run smoke:hud-hint</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>f2ab60f5</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e07-plugins-host</code>
+      <code class="file">engine/plugins/TopBar.tsx:13</code>
+    </header>
+    <p class="what">TopBar's registration JSDoc tells authors ids need only be 'unique per-slot', but the backing registry is a single global Map&lt;id, item&gt; — the same id in a different slot silently replaces the earlier entry.</p>
+    <p class="change"><strong>Changed:</strong> Corrected the inline comment to 'globally unique; re-register replaces' and expanded the registry comment to state the one-Map-across-all-slots contract, with the unregister-then-re-register workaround and its real call site.</p>
+    <p class="verify"><strong>How it was verified:</strong> Comment-only, so the proof is grep: createListRegistry does items.set(item.id, item) on a Map created with no slot in the key, and topbar.register passes straight through. Enumerating every topbar.register call site turns up the exact collision the old wording permits — engine registers {id:'fps', slot:'right'} and engine-gmt/topbar.tsx:239 registers {id:'fps', slot:'left'}. No live breakage today, because app-gmt calls installTopBar({hideDefaults:true}) and gradient-explorer unregisters first; the doc was the hazard, not a current bug.</p>
+    <p class="guard"><code>npm run smoke:help-menu</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>71017055</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e07-plugins-host</code>
+      <code class="file">engine/plugins/Menu.tsx:456</code>
+    </header>
+    <p class="what">Menu's re-render machinery depends on _bumpRev being the first entry in the _subscribers Set — load-bearing and entirely undocumented.</p>
+    <p class="change"><strong>Changed:</strong> Added an @invariant explaining that _notify iterates in Set insertion order, that this add runs at module evaluation before any component can subscribe, and what breaks if that ordering is disturbed.</p>
+    <p class="verify"><strong>How it was verified:</strong> Read to the end of the chain rather than inferring: _notify is a forEach over a Set (insertion-ordered); _subscribers.add(_bumpRev) sits at module top level, executing on first import, strictly before any MenuAnchor/MobileMenuHost mount can call subscribe(). Both consumers use a getSnapshot returning _notifyRev, so a stale rev makes useSyncExternalStore bail out of the re-render and menu anchors would stop updating on registration / badge / toggle changes. _bumpRev is never removed — subscribe's teardown deletes only its own fn. smoke:help-menu exercises live menu re-render via the Show Hints toggle.</p>
+    <p class="guard"><code>npm run smoke:help-menu</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>2443ad27</code></p>
+    
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tA">A</span>
@@ -388,10 +542,94 @@
     <p class="commit">commit <code>32e86a54</code></p>
     
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">engine/AdaptiveResolution.ts:148</code>
+    </header>
+    <p class="what">The graceMs input JSDoc states the FPS-scaled default spans 100..3000ms, but getAdaptiveGrace can only ever return 100..2000 — its Math.min(3000, ...) ceiling is unreachable.</p>
+    <p class="change"><strong>Changed:</strong> Corrected the documented range to 100..2000ms, expanded getAdaptiveGrace's own JSDoc to state the effective range and that the 100ms floor is reached from 20fps up (not 30fps), and noted the clamp never binds — with an explicit note not to 'correct' callers' docs back to 3000. Left the clamp in the code untouched.</p>
+    <p class="verify"><strong>How it was verified:</strong> Arithmetic on the single expression: the inner term is `2000 / Math.max(1, stillFps)`, whose denominator is floored at 1, so the term is bounded above by 2000 and Math.min(3000, ·) is a no-op for every input. The 100ms floor is reached whenever 2000/stillFps &lt;= 100, i.e. stillFps &gt;= 20.</p>
+    <p class="guard"><code>npm run smoke:viewport</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>3eb8497b</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">engine/plugins/Viewport.tsx:134</code>
+    </header>
+    <p class="what">viewport.holdAdaptive's JSDoc says the default duration is adaptiveConfig.graceMs — a field that does not exist on ViewportAdaptiveConfig — with a self-referential @note admitting the prose is stale instead of fixing it.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the wrong default with the real one (activityGraceMs * 4) and deleted the redundant @note per the annotation-maintenance rule. Documented the hold's actual semantics: it blocks downscale only, upscale is still permitted, and the idle-&gt;active re-engagement seed is not gated by it. Fixed a dead docs path and added a pointer to the algorithm module.</p>
+    <p class="verify"><strong>How it was verified:</strong> ViewportAdaptiveConfig has activityGraceMs, no graceMs; viewportSlice computes `durationMs ?? adaptiveConfig.activityGraceMs * 4`. The downscale-only claim is the `withinHold &amp;&amp; nextScale &gt; state.scale` guard — strict &gt;, so upscale falls to the else and assigns. The seed-bypass claim is that the `activeLast === 0` block assigns state.scale with no withinHold reference, and on that same tick elapsed is 0 so the guarded window block cannot run.</p>
+    <p class="guard"><code>npm run smoke:viewport</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>38000a5d</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">types/viewport.ts:48</code>
+    </header>
+    <p class="what">ViewportAdaptiveConfig's alwaysActive doc says adaptive settles 'when the mouse is on the canvas', and engageOnAccumOnly says it stops mouseOverCanvas triggering adaptive — both describe a pointer-position rule the module no longer has.</p>
+    <p class="change"><strong>Changed:</strong> Restated alwaysActive as settling on the activity grace window with pointer position explicitly not consulted; dropped the mouseOverCanvas clause from engageOnAccumOnly and noted it maps to the module's gateOnAccumOnly input, which the field name does not otherwise reveal.</p>
+    <p class="verify"><strong>How it was verified:</strong> Same evidence as the viewportSlice finding: mouseOverCanvas appears in tickAdaptiveResolution only as an unread optional input, already documented there as unused, and the decision is the activitySignal expression. The mapping is viewportSlice's `gateOnAccumOnly: cfg.engageOnAccumOnly`.</p>
+    <p class="guard"><code>npm run smoke:viewport</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>7fecfb26</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">.claude/rules/mobile-layout.md:2</code>
+    </header>
+    <p class="what">engine/HardwareDetection.ts — which owns the 768px/(pointer:coarse) single-source-of-truth invariant and the Float32 probe — is matched by no path-scoped rule, so opening it loads no steering.</p>
+    <p class="change"><strong>Changed:</strong> Added engine/HardwareDetection.ts to mobile-layout.md's paths plus two 'Watch out' entries: that isMobileViewport() is the single source of truth for the breakpoint (with the one surviving inline copy in viewportSlice named so a future reader finds both), and that detectHardwareProfile(gl) is not cached and allocates a 1x1 RGBA32F FBO+texture per call.</p>
+    <p class="verify"><strong>How it was verified:</strong> Every added claim grep-checked. The new path resolves. hooks/useMobileLayout.ts:24 imports isMobileViewport from it. The surviving duplicate is store/slices/viewportSlice.ts:49-53, same (pointer: coarse) OR innerWidth &lt; 768 test, used only by defaultDpr(). The uncached claim matches detectHardwareProfile's createFramebuffer/createTexture/delete per call with no memo. The rule's pre-existing citations were re-checked too: ADRs 0038 and 0039 both exist, and both named guards exist and pass.</p>
+    <p class="guard"><code>npm run smoke:viewport-fixed</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>b7faa631</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>e07-plugins-host</code>
+      <code class="file">engine/plugins/SceneIO.tsx:98</code>
+    </header>
+    <p class="what">installSceneIO's capture invariant enumerated five of the six captured options, omitting _onBeforeSerialize, and did not mention that install-time-baked menu labels do not follow a reinstall the way render-time reads do.</p>
+    <p class="change"><strong>Changed:</strong> Added _onBeforeSerialize to the list and appended the asymmetry: the Save Scene label freezes at first install while LoadSceneMenuItem, which reads the module value at render time, follows a reinstall.</p>
+    <p class="verify"><strong>How it was verified:</strong> Grep-provable: all six module vars are assigned before the `if (_installed) return;` short-circuit, so _onBeforeSerialize belongs in the list. The asymmetry is read off two adjacent sites — the label interpolates _fileExtension once during registration, while LoadSceneMenuItem interpolates it inside its render body.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ee38871b</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>e07-plugins-host</code>
+      <code class="file">engine/plugins/Hud.tsx:20</code>
+    </header>
+    <p class="what">Hud's JSDoc says 'Slots are always rendered', which the host contradicts twice: an empty slot returns null, and the region prop documented eight lines below drops whole slot rows.</p>
+    <p class="change"><strong>Changed:</strong> Restated the intent accurately — every slot is available without setup, a slot with no visible widgets renders nothing, and region can drop whole rows from a given host.</p>
+    <p class="verify"><strong>How it was verified:</strong> Read to the end of HudHost: an `items.length === 0` early return inside the slot map, and slotsToRender narrowing to 4 or 3 of the 7 slots when region is 'top' or 'bottom'. smoke:hud-hint asserts on HUD widget presence and disappearance through the when predicate.</p>
+    <p class="guard"><code>npm run smoke:hud-hint</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>663d70d1</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Applied — orchestrator-verified <span class="count">4</span></h2>
+    <h2>Applied — orchestrator-verified <span class="count">6</span></h2>
     <p class="note">No existing test covered these, so a second independent agent re-derived the claim before the change was allowed through. Each names how it was checked.</p>
     
   <article class="finding sev-high">
@@ -450,10 +688,38 @@
     <p class="commit">commit <code>1a92ed9b</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">medium</span>
+      <code>e07-plugins-host</code>
+      <code class="file">engine/plugins/Help.tsx:163</code>
+    </header>
+    <p class="what">SupportModalHost hand-rolled a createPortal to document.body at raw z-50 — below the floating-panel band (100) — so a floating panel painted on top of the Support modal and stayed clickable through its full-screen backdrop. CONFIRMED and fixed.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the hand-rolled portal with &lt;Layer tier=&quot;modal&quot;&gt;, which owns the portal, position and zIndex; className, geometry and the backdrop-click handler carry over unchanged via ...rest. Left a comment recording why check:zindex could not catch this.</p>
+    <p class="verify"><strong>How it was verified:</strong> An independent verifier that had not seen the auditor's reasoning re-derived the tier table (panel base 100 span 99; modal base 1000), confirmed getLayerHost() returns document.body and setLayerHost() is never called by any app — so &lt;Layer&gt; surfaces and this portal were SIBLINGS in the root stacking context and the raw numbers competed directly — and confirmed Tailwind's z-50 is stock (tailwind.config.js extends only colors). It measured at runtime under Playwright: modal z=50, panel z=100, both parented to body, and document.elementFromPoint over the panel header returned the PANEL, not the backdrop, so the panel both painted above and stayed pointer-interactive. Reachable in all three shipping apps (app-gmt, fluid-toy, gradient-explorer each pass gmtSupportConfig() and mount HelpOverlay alongside DraggableWindow panels). The orchestrator RE-MEASURED after the fix on the same probe: modal z=1000, panel z=100, hit test over the panel header now returns MODAL. typecheck, test:zindex, check:zindex, smoke:help-menu all green. Note the verifier flagged that check:zindex structurally cannot catch this class — its threshold is z &gt;= 100 because it hunts surfaces that outrank the panel band, so a raw z that is too LOW is its blind spot.</p>
+    <p class="guard"><code>npm run test:zindex</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>cd3917f6</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">low</span>
+      <code>e08-shortcuts-undo</code>
+      <code class="file">engine/plugins/Shortcuts.ts:305</code>
+    </header>
+    <p class="what">uninstallShortcuts is not the inverse of installShortcuts — it hardcodes window as the removal target and leaves _keyboardCaptureCount un-reset. CONFIRMED, but latent: zero callers, and no install site passes a non-default domRoot.</p>
+    <p class="change"><strong>Changed:</strong> Documented at the source site as @bug PRODUCTION: with both defects, their latency, the two ADDITIONAL un-reset items the verifier found (_scopeSubscribers, window.__shortcuts), and why the fix was queued rather than applied. The code itself is unchanged.</p>
+    <p class="verify"><strong>How it was verified:</strong> An independent verifier read both functions end-to-end and traced every call site. CLAIM 1 confirmed: install computes `const root = options.domRoot ?? window` as a function-local const, stored nowhere, while uninstall names window literally — so the root is unrecoverable and a non-default domRoot leaks an unremovable listener. But the verifier CORRECTED the claim's framing: the double removeEventListener (false AND true) already covers both capture phases, so the capture axis is sound and this is a single-axis asymmetry, not two — that correction is reflected in the annotation. CLAIM 2 confirmed: the reset block clears the registry, scope stack and installed flag but not _keyboardCaptureCount, and the dispatcher's single-character early-return sits ABOVE the input-focus and when() checks, so a stranded count swallows every unmodified single-key shortcut permanently. REACHABILITY: latent and decisively so — uninstallShortcuts has zero callers repo-wide (only its definition and two JSDoc mentions in Undo.tsx), and the three plausible indirect routes are all closed: no barrel re-export, window.__shortcuts exposes only register/unregister/pushScope/popScope/list/lookup/clear, and no import.meta.hot block exists anywhere in the repo. All five install sites use the default window root. Verifier confidence high. NOT APPLIED because the ~6-line fix has one genuine behaviour change (with two capturing surfaces live, resetting the counter un-captures the still-focused one), no guard covers teardown, and the verifier's own conclusion was that this does not warrant an unattended change to inert code.</p>
+    <p class="guard"><code>npm run smoke:undo</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>37b90870</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">14</span></h2>
+    <h2>Awaiting your judgement <span class="count">20</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
   <article class="finding sev-high">
@@ -554,6 +820,34 @@
     
     <p class="rationale">See PROPOSALS.md — the chain is proven end-to-end and the trigger is an ordinary continuous slider, so the reset fires repeatedly during a drag.</p>
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">engine/AdaptiveResolution.ts:403</code>
+    </header>
+    <p class="what">holdAdaptive is a documented public plugin API with zero callers, and the mechanism it feeds has a gap: the idle-&gt;active re-engagement seed downscales without consulting the hold — precisely the moment the API is documented for. Demoted from Tier V: which behaviour is correct is a design call.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. Demoted rather than verified because the auditor's own framing makes it an owner decision, not a checkable claim — it documented current behaviour instead of changing it, and notes 'an interaction arguably SHOULD downscale regardless of a hold'.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e08-shortcuts-undo</code>
+      <code class="file">docs/adr/0022-shortcuts-scope-stack.md:19</code>
+    </header>
+    <p class="what">ADR-0022 asserts the shortcut tiebreak is most-recently-registered AND explicitly calls the correct 'first wins' reading wrong — it is the ADR that is wrong, and it cites a drifted line range.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md for the paste-ready Update block. Worth knowing: docs/history/engine/06_Undo_Transactions.md had this RIGHT all along, and the ADR's Consequences bullet was written to override a doc that was correct — then the old Shortcuts.ts @invariant cited the ADR's version back. That circular-wrong loop is now broken in code and in .claude/rules/.</p>
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tB">B</span>
@@ -652,6 +946,62 @@
     
     <p class="rationale">Not rot, but worth knowing. knip does not flag engine/ShaderFactory.ts because six modules import the re-exported ShaderConfig TYPE through it (ConfigDefaults, FractalEvents, ConfigManager, WorkerProxy, useAppStartup, engine-gmt/renderer/install) — so the file stays live while the class inside it is dead. Same for the addSection/getSections seam, which ADR-0019 explicitly retained for plugin authors after engine-gmt went typed and fractal-toy migrated off it. OPTIONS: (a) keep both as the documented reference implementation and plugin seam — recommended; ADR-0019 made that call on purpose and the source is now annotated so the next reader does not mistake it for dead code; (b) move ShaderConfig's re-export out of ShaderFactory.ts into ShaderConfig.ts so the six type importers stop depending on a module they otherwise do not use, which would let knip tell the truth about the class — a genuine tidy-up but it touches six files across three trees; (c) delete — not recommended, and a deletion regardless.</p>
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">docs/adr/0024-adaptive-resolution-pure-shared-module.md:39</code>
+    </header>
+    <p class="what">ADR-0024's Consequences cite the selfResized write as UniformManager.ts:137; it now lives at line 263, and a second (harness) writer has appeared since.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md for the paste-ready Update block.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">engine/worker/ViewportRefs.ts:143</code>
+    </header>
+    <p class="what">The _mouseOverCanvas block says it is 'Used by adaptive resolution to decide grace period behavior' (false) and its @invariant names AdaptiveResolutionBadge as the component affected (wrong component).</p>
+    
+    
+    
+    
+    <p class="rationale">Not applied because this file belongs to the pending e11-worker-contract subsystem. Evidence: tickAdaptiveResolution never reads its mouseOverCanvas input — the decision is the activitySignal expression, and grace comes from `input.graceMs ?? getAdaptiveGrace(state.stillFps)`. engine/plugins/viewport/AdaptiveResolutionBadge.tsx does not import isMouseOverCanvas; the only live reader is engine-gmt/topbar/AdaptiveResolution.tsx:30. OPTIONS: hand to e11's cycle, or apply now since it is comment-only. RECOMMENDATION: hand to e11 — the correct replacement text is in the auditor's report and the file's real invariant (ref-backed, not a Zustand selector, so the GMT topbar badge does NOT re-render on hover alone) should be preserved verbatim.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e06-adaptive-resolution</code>
+      <code class="file">types/store.ts:138</code>
+    </header>
+    <p class="what">The canvasPixelSize field comment says to read via getCanvasPhysicalPixelSize() in fractalStore.ts; that helper now lives in store/engineStore.ts:501 and no fractalStore.ts exists.</p>
+    
+    
+    
+    
+    <p class="rationale">Outside the subsystem's files and in a heavily shared type module, so not applied. The same stale text is duplicated at engine-gmt/types/store.ts:119. One-word fix in both: fractalStore.ts -&gt; store/engineStore.ts. Worth folding into whichever cycle owns types/store.ts rather than a standalone commit.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e08-shortcuts-undo</code>
+      <code class="file">engine/plugins/Shortcuts.ts:305</code>
+    </header>
+    <p class="what">The uninstallShortcuts code fix itself (stash root at install, remove from it, null it, reset the capture counter) — confirmed sound but queued for a decision.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md.</p>
+  </article>
   </section>
 
   <h2>Subsystems</h2>
@@ -708,35 +1058,35 @@
     <td class="num prop">1</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e06-adaptive-resolution</code></td>
     <td>engine-core</td>
     <td class="area">AdaptiveResolution + HardwareDetection + viewport</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">11</td>
+    <td class="num applied">7</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">4</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e07-plugins-host</code></td>
     <td>engine-core</td>
     <td class="area">Hud, TopBar, Menu, Help, SceneIO host plugins</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">11</td>
+    <td class="num applied">9</td>
+    <td class="num esc">1</td>
+    <td class="num prop">1</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e08-shortcuts-undo</code></td>
     <td>engine-core</td>
     <td class="area">Keyboard + transaction stack</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">4</td>
+    <td class="num applied">1</td>
+    <td class="num esc">1</td>
+    <td class="num prop">2</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>e09-camera-plugin</code></td>

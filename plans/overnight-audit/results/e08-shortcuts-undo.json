@@ -1,0 +1,53 @@
+{
+  "id": "e08-shortcuts-undo",
+  "cycle": 3,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e08-shortcuts-undo" },
+    { "script": "npm run smoke:undo", "pass": true, "subsystem": "e08-shortcuts-undo" },
+    { "script": "npm run smoke:engine-demo", "pass": true, "subsystem": "e08-shortcuts-undo" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "e08-shortcuts-undo" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "engine/plugins/Shortcuts.ts",
+      "line": 203,
+      "summary": "The @invariant on resolve() states the tiebreak BACKWARDS — it claims most-recently-registered wins, but a stable sort over Map insertion order means FIRST-registered wins, which is what makes app-gmt's priority:10 on camera-undo load-bearing rather than 'defensive'.",
+      "change": "Rewrote the @invariant to state FIRST-registered wins, explained the mechanism, noted that _registry.set on an existing id keeps the ORIGINAL slot (so useShortcut re-registration does not re-queue), spelled out the consequence for gmt.undoCameraMove, and corrected the two @see pointers. Rewrote the matching comment at app-gmt/main.tsx:557 which called priority:10 'defensive' and cited a drifted line range. Added a durable [shortcuts] section to debug/smoke-undo.mts (5 assertions) and a matching bullet to .claude/rules/engine-plugins.md. Also fixed the dead 'See docs/07_Shortcuts.md' citation in the same header (the file is at docs/history/engine/07_Shortcuts.md) and added the ADR-0022 pointer.",
+      "verification": "Proved twice over, live, then falsified. SYNTHETIC: two shortcuts sharing key 'Ctrl+Alt+F9', scope and priority — A-then-B fires A, B-then-A fires B, so the FIRST registration wins and the winner tracks registration order. REAL: redo.global.shift sits at registry index 21 and gmt.undoCameraMove at index 29, so camera-undo cannot win on order, yet a dispatched Ctrl+Shift+Z reaches gmt.undoCameraMove — only priority can produce that. FALSIFICATION: with priority:10 temporarily removed from app-gmt/main.tsx the run failed on exactly one assertion — 'Ctrl+Shift+Z reaches camera-undo, not param-redo (got redo.global.shift)' — confirming both that the new assertion bites and that the corrected invariant is right. The line was restored by a targeted Edit rather than git checkout, deliberately, to avoid clobbering concurrent auditors. smoke:undo, smoke:engine-demo (step 6 Ctrl+Z round-trip) and typecheck all green; the orchestrator re-ran smoke:undo twice more on the quiescent tree.",
+      "guard": "npm run smoke:undo",
+      "guardPass": true,
+      "commit": "5b5de7f5"
+    },
+    {
+      "tier": "V",
+      "severity": "low",
+      "file": "engine/plugins/Shortcuts.ts",
+      "line": 305,
+      "summary": "uninstallShortcuts is not the inverse of installShortcuts — it hardcodes window as the removal target and leaves _keyboardCaptureCount un-reset. CONFIRMED, but latent: zero callers, and no install site passes a non-default domRoot.",
+      "change": "Documented at the source site as @bug PRODUCTION: with both defects, their latency, the two ADDITIONAL un-reset items the verifier found (_scopeSubscribers, window.__shortcuts), and why the fix was queued rather than applied. The code itself is unchanged.",
+      "verification": "An independent verifier read both functions end-to-end and traced every call site. CLAIM 1 confirmed: install computes `const root = options.domRoot ?? window` as a function-local const, stored nowhere, while uninstall names window literally — so the root is unrecoverable and a non-default domRoot leaks an unremovable listener. But the verifier CORRECTED the claim's framing: the double removeEventListener (false AND true) already covers both capture phases, so the capture axis is sound and this is a single-axis asymmetry, not two — that correction is reflected in the annotation. CLAIM 2 confirmed: the reset block clears the registry, scope stack and installed flag but not _keyboardCaptureCount, and the dispatcher's single-character early-return sits ABOVE the input-focus and when() checks, so a stranded count swallows every unmodified single-key shortcut permanently. REACHABILITY: latent and decisively so — uninstallShortcuts has zero callers repo-wide (only its definition and two JSDoc mentions in Undo.tsx), and the three plausible indirect routes are all closed: no barrel re-export, window.__shortcuts exposes only register/unregister/pushScope/popScope/list/lookup/clear, and no import.meta.hot block exists anywhere in the repo. All five install sites use the default window root. Verifier confidence high. NOT APPLIED because the ~6-line fix has one genuine behaviour change (with two capturing surfaces live, resetting the counter un-captures the still-focused one), no guard covers teardown, and the verifier's own conclusion was that this does not warrant an unattended change to inert code.",
+      "guard": "npm run smoke:undo",
+      "guardPass": true,
+      "commit": "37b90870"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "docs/adr/0022-shortcuts-scope-stack.md",
+      "line": 19,
+      "summary": "ADR-0022 asserts the shortcut tiebreak is most-recently-registered AND explicitly calls the correct 'first wins' reading wrong — it is the ADR that is wrong, and it cites a drifted line range.",
+      "rationale": "See PROPOSALS.md for the paste-ready Update block. Worth knowing: docs/history/engine/06_Undo_Transactions.md had this RIGHT all along, and the ADR's Consequences bullet was written to override a doc that was correct — then the old Shortcuts.ts @invariant cited the ADR's version back. That circular-wrong loop is now broken in code and in .claude/rules/."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "engine/plugins/Shortcuts.ts",
+      "line": 305,
+      "summary": "The uninstallShortcuts code fix itself (stash root at install, remove from it, null it, reset the capture counter) — confirmed sound but queued for a decision.",
+      "rationale": "See PROPOSALS.md."
+    }
+  ],
+  "notes": "SUBSYSTEM GENUINELY COVERED and the auditor stopped there. Read engine/plugins/Shortcuts.ts and engine/plugins/Undo.tsx end-to-end; read store/slices/historySlice.ts and debug/smoke-undo.mts as far as needed to check Undo.tsx's claims.\n\nALL FIVE @invariant BLOCKS CHECKED, one wrong. Correct as written: (a) Shortcuts.ts ignoreInputs inverse-name — the dispatcher reads `if (!match.ignoreInputs && isInputFocused(...)) return`, so the name really is the inverse of its semantics; (b) installShortcuts idempotency — `if (_installed) return` does silently drop second-call options; (c) Undo.tsx's note that uninstallShortcuts() does not reset Undo's own _installed — the two flags are separate module-level variables, and the five ids listed match uninstallUndo exactly; (d) the Mod+Shift+Z / app-gmt shadowing at priority 10 — now positively proved by the new smoke assertion. Wrong: the resolve() tiebreak. One cosmetic nit left unfixed: that invariant says \"despite the 'Redo (Mac)' label\" but the registered description is plain 'Redo' — too trivial for a commit.\n\nGUARD HEALTH — no dead assertions in smoke:undo. Every value the harness collects (paramRes, onDown, changed, afterUndo, lfoRes, cgRes, camRes, scopeRes, errors) traces to an ok() call; the cgRes.skip branch is a legitimate feature-absent skip, not a silent pass. The gap was COVERAGE, not dead assertions: nothing exercised the shortcut layer at all, which is precisely where the wrong invariant was hiding. Now closed.\n\nNO ROGUE UNDO STACK. undoStack/redoStack appear only in store/slices/historySlice.ts (param + camera scopes) and store/animation/{sequenceSlice,playbackSlice,types}.ts (the animation stack, documented as intentional pending the deferred F2b unification), plus the one reference in Undo.tsx. The documented per-scope model holds.\n\nFLAKE RESOLVED: the auditor reported smoke:undo's pre-existing [bug 4] slider-track block failing twice in five runs (coreMath.paramA reading back as its registered default 8.0 instead of the written 5), and hypothesised HMR churn from concurrent auditors rather than a real defect. The orchestrator re-ran smoke:undo TWICE on the quiescent tree after all auditors returned — both passed clean. Hypothesis confirmed; no finding filed. If it ever recurs on a clean tree, the auditor's recommended hardening is to re-assert paramA === 5 immediately before page.mouse.down() with a distinct 'setup was stomped' message, so a real regression is never confused with setup loss.\n\nLEFTOVER SCRATCH: two throwaway probes at debug/_tiebreak-probe.mts and debug/_paramA-race-probe.mts. Both match the repo's debug/_* gitignore rule so they cannot be committed; left in place per the no-delete rule."
+}

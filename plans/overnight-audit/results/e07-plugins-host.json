@@ -1,0 +1,147 @@
+{
+  "id": "e07-plugins-host",
+  "cycle": 3,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e07-plugins-host" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "e07-plugins-host" },
+    { "script": "npm run check:zindex", "pass": true, "subsystem": "e07-plugins-host" },
+    { "script": "npm run test:zindex", "pass": true, "subsystem": "e07-plugins-host" },
+    { "script": "npm run smoke:boot", "pass": true, "subsystem": "e07-plugins-host" },
+    { "script": "npm run smoke:ui-primitives", "pass": true, "subsystem": "e07-plugins-host" },
+    { "script": "npm run smoke:help-menu", "pass": true, "subsystem": "e07-plugins-host" },
+    { "script": "npm run smoke:hud-hint", "pass": true, "subsystem": "e07-plugins-host", "error": "was RED before this cycle — stale class selector, now repaired" },
+    { "script": "npm run smoke:canvas-menu", "pass": true, "subsystem": "e07-plugins-host", "error": "was RED before this cycle — stale label expectation, now repaired" },
+    { "script": "npm run smoke:pause-controls", "pass": true, "subsystem": "e07-plugins-host" }
+  ],
+  "findings": [
+    {
+      "tier": "V",
+      "severity": "medium",
+      "file": "engine/plugins/Help.tsx",
+      "line": 163,
+      "summary": "SupportModalHost hand-rolled a createPortal to document.body at raw z-50 — below the floating-panel band (100) — so a floating panel painted on top of the Support modal and stayed clickable through its full-screen backdrop. CONFIRMED and fixed.",
+      "change": "Replaced the hand-rolled portal with <Layer tier=\"modal\">, which owns the portal, position and zIndex; className, geometry and the backdrop-click handler carry over unchanged via ...rest. Left a comment recording why check:zindex could not catch this.",
+      "verification": "An independent verifier that had not seen the auditor's reasoning re-derived the tier table (panel base 100 span 99; modal base 1000), confirmed getLayerHost() returns document.body and setLayerHost() is never called by any app — so <Layer> surfaces and this portal were SIBLINGS in the root stacking context and the raw numbers competed directly — and confirmed Tailwind's z-50 is stock (tailwind.config.js extends only colors). It measured at runtime under Playwright: modal z=50, panel z=100, both parented to body, and document.elementFromPoint over the panel header returned the PANEL, not the backdrop, so the panel both painted above and stayed pointer-interactive. Reachable in all three shipping apps (app-gmt, fluid-toy, gradient-explorer each pass gmtSupportConfig() and mount HelpOverlay alongside DraggableWindow panels). The orchestrator RE-MEASURED after the fix on the same probe: modal z=1000, panel z=100, hit test over the panel header now returns MODAL. typecheck, test:zindex, check:zindex, smoke:help-menu all green. Note the verifier flagged that check:zindex structurally cannot catch this class — its threshold is z >= 100 because it hunts surfaces that outrank the panel band, so a raw z that is too LOW is its blind spot.",
+      "guard": "npm run test:zindex",
+      "guardPass": true,
+      "commit": "cd3917f6"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/smoke-hud-hint.mts",
+      "line": 28,
+      "summary": "smoke:hud-hint was PERMANENTLY RED — its cheatsheet locator used text-cyan-300, a class that no longer exists anywhere in the tree after the runtime-theming rename (ADR-0080) to text-accent-300.",
+      "change": "Selector repointed to text-accent-300 (HotkeysCheatsheet.tsx:35). Also rewrote the docstring, which described 4 checks that did not match the 5 the file runs (it claimed to look for the Space pill; it looks for the uppercase 'Hotkeys' title), and added the missing assertion on flagAfterH, which was collected and logged but never asserted on.",
+      "verification": "grep -rn text-cyan-300 returns zero hits tree-wide, so the locator provably matched nothing. The smoke failed at 'hotkeys cheatsheet should be visible by default' (cheatsheet visible at boot: false) before the change and passes all five steps after. It would fail again on a wrong class, because step 1 throws when the locator is empty — which is exactly how this surfaced.",
+      "guard": "npm run smoke:hud-hint",
+      "guardPass": true,
+      "commit": "2ba5b72b"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/smoke-canvas-menu.mts",
+      "line": 46,
+      "summary": "smoke:canvas-menu was PERMANENTLY RED — it asserted the canvas menu contains an item labelled 'Pause', but fluid-toy ships fluidSim.paused: true (pure-fractal boot) so the label always reads 'Resume Sim' at boot.",
+      "change": "Made the sim-toggle assertion state-independent (/(Pause|Resume) Sim/) with the reason recorded inline. Also implemented the preventDefault check the docstring already claimed: a bubble-phase window contextmenu listener records defaultPrevented (capture phase would run before the canvas handler and always read false), and the smoke now asserts it is true.",
+      "verification": "Failed before with `menu missing \"Pause\" (got: [\"Copy Julia c\", \"Resume Sim\", \"Recenter View\", \"Reset Fluid Fields\"])`; passes after, printing `contextmenu defaultPrevented: true`. The root cause is in files no agent in this run has modified (fluid-toy/features/fluidSim.ts, fluid-toy/pointer/contextMenu.ts), so the failure is pre-existing, not a side effect. The new assertion would fail if contextMenu.ts stopped calling e.preventDefault(), because the window listener reads the flag after the canvas handler has run.",
+      "guard": "npm run smoke:canvas-menu",
+      "guardPass": true,
+      "commit": "34b45da6"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/smoke-pause-controls.mts",
+      "line": 45,
+      "summary": "smoke:pause-controls collected the popover text from an unscoped document.querySelector('.text-[8px]') that matched an unrelated menu OnOffBadge, and never asserted on it — so the docstring's claim that it verifies the hover popover exposes the sample-cap slider was entirely unbacked.",
+      "change": "Replaced the document-wide probe with a locator on the slider's own label text ('Auto-Stop (Samples)') and asserted on it, so a broken or non-opening popover now fails the smoke.",
+      "verification": "Before the change the smoke printed 'popover footer text: ON', proving the selector matched the wrong element (the real pause popover footer reads '<n> / <cap> samples' or '0 = never stop'), and the value fed no assertion — the smoke could not fail on popover breakage. After, it prints 'sample cap slider visible: true' and hard-fails when false. The label lives inside the showMenu-gated Popover, which is precisely the behaviour the docstring claims to cover. Confirmed across 3 consecutive passing runs. This is the THIRD guard in three cycles found asserting nothing where it claimed to assert something.",
+      "guard": "npm run smoke:pause-controls",
+      "guardPass": true,
+      "commit": "0b588b8e"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/check-zindex.mjs",
+      "line": 56,
+      "summary": "check:zindex's body-portal detector missed every createPortal(..., document.body,) written in the multi-line/trailing-comma style, under-reporting by 11 files including engine/plugins/Help.tsx.",
+      "change": "PORTAL_BODY regex widened to allow the optional trailing comma, with a comment recording why it is load-bearing.",
+      "verification": "grep for a line-ending 'document.body,' lists 12 files the old regex could not match. check:zindex reported 6 body-portal files before the change and 17 after, still exiting 0 (this report is informational, not failing). The added files are all genuine createPortal call sites, verified by reading the matched lines — no false positives. Notably Help.tsx is one of them, and that file turned out to carry this cycle's Tier V layering bug.",
+      "guard": "npm run check:zindex",
+      "guardPass": true,
+      "commit": "94287ed7"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/engine-plugins.md",
+      "line": 11,
+      "summary": "The rule governing engine/plugins/** omitted several files that live there — most importantly Help.tsx, a 559-line slot host no rule mentioned at all — and cited camera/* (one preset-field helper) where the camera plugin is Camera.ts.",
+      "change": "Rewrote the read-first list to name the slot hosts individually including Help.tsx and RenderDialog/index.tsx; added a paragraph covering engine/plugins/topbar/*, PwaUpdate.tsx and navigation/core/VirtualSpace.ts (navigation.md is scoped to engine-gmt/navigation/**, so that file was rule-orphaned); noted RenderLoop.tsx is deliberately covered by the tick rule; added an Invariants bullet for the global-id registry contract; added smoke:hud-hint + smoke:pause-controls to Guards. Committed together with e08's tiebreak bullet — both auditors edited this file.",
+      "verification": "grep -rl across .claude/rules/ returns nothing for Help.tsx, PwaUpdate, BucketRender and PauseControls (so they were uncovered) and returns tick-and-animation.md for RenderLoop and navigation.md for navigation — whose frontmatter scopes it to engine-gmt/navigation/**, not this tree. ls engine/plugins/camera/ shows only presetField.ts while Camera.ts sits at the top level with 4 @invariant blocks. The global-id claim is proved by createListRegistry's single keyed Map, by gradient-explorer having to unregister 'fps' before re-slotting it, and by Menu.tsx namespacing anchors as menu:${id}.",
+      "guard": "npm run smoke:hud-hint",
+      "guardPass": true,
+      "commit": "f2ab60f5"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/plugins/TopBar.tsx",
+      "line": 13,
+      "summary": "TopBar's registration JSDoc tells authors ids need only be 'unique per-slot', but the backing registry is a single global Map<id, item> — the same id in a different slot silently replaces the earlier entry.",
+      "change": "Corrected the inline comment to 'globally unique; re-register replaces' and expanded the registry comment to state the one-Map-across-all-slots contract, with the unregister-then-re-register workaround and its real call site.",
+      "verification": "Comment-only, so the proof is grep: createListRegistry does items.set(item.id, item) on a Map created with no slot in the key, and topbar.register passes straight through. Enumerating every topbar.register call site turns up the exact collision the old wording permits — engine registers {id:'fps', slot:'right'} and engine-gmt/topbar.tsx:239 registers {id:'fps', slot:'left'}. No live breakage today, because app-gmt calls installTopBar({hideDefaults:true}) and gradient-explorer unregisters first; the doc was the hazard, not a current bug.",
+      "guard": "npm run smoke:help-menu",
+      "guardPass": true,
+      "commit": "71017055"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/plugins/Menu.tsx",
+      "line": 456,
+      "summary": "Menu's re-render machinery depends on _bumpRev being the first entry in the _subscribers Set — load-bearing and entirely undocumented.",
+      "change": "Added an @invariant explaining that _notify iterates in Set insertion order, that this add runs at module evaluation before any component can subscribe, and what breaks if that ordering is disturbed.",
+      "verification": "Read to the end of the chain rather than inferring: _notify is a forEach over a Set (insertion-ordered); _subscribers.add(_bumpRev) sits at module top level, executing on first import, strictly before any MenuAnchor/MobileMenuHost mount can call subscribe(). Both consumers use a getSnapshot returning _notifyRev, so a stale rev makes useSyncExternalStore bail out of the re-render and menu anchors would stop updating on registration / badge / toggle changes. _bumpRev is never removed — subscribe's teardown deletes only its own fn. smoke:help-menu exercises live menu re-render via the Show Hints toggle.",
+      "guard": "npm run smoke:help-menu",
+      "guardPass": true,
+      "commit": "2443ad27"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine/plugins/SceneIO.tsx",
+      "line": 98,
+      "summary": "installSceneIO's capture invariant enumerated five of the six captured options, omitting _onBeforeSerialize, and did not mention that install-time-baked menu labels do not follow a reinstall the way render-time reads do.",
+      "change": "Added _onBeforeSerialize to the list and appended the asymmetry: the Save Scene label freezes at first install while LoadSceneMenuItem, which reads the module value at render time, follows a reinstall.",
+      "verification": "Grep-provable: all six module vars are assigned before the `if (_installed) return;` short-circuit, so _onBeforeSerialize belongs in the list. The asymmetry is read off two adjacent sites — the label interpolates _fileExtension once during registration, while LoadSceneMenuItem interpolates it inside its render body.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "ee38871b"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine/plugins/Hud.tsx",
+      "line": 20,
+      "summary": "Hud's JSDoc says 'Slots are always rendered', which the host contradicts twice: an empty slot returns null, and the region prop documented eight lines below drops whole slot rows.",
+      "change": "Restated the intent accurately — every slot is available without setup, a slot with no visible widgets renders nothing, and region can drop whole rows from a given host.",
+      "verification": "Read to the end of HudHost: an `items.length === 0` early return inside the slot map, and slotsToRender narrowing to 4 or 3 of the 7 slots when region is 'top' or 'bottom'. smoke:hud-hint asserts on HUD widget presence and disappearance through the when predicate.",
+      "guard": "npm run smoke:hud-hint",
+      "guardPass": true,
+      "commit": "663d70d1"
+    },
+    {
+      "tier": "C",
+      "severity": "low",
+      "file": "debug/render-harness.ts",
+      "line": 1,
+      "summary": "npm run orphans reports exactly one unused file tree-wide, debug/render-harness.ts. Deletion is out of bounds for this run; flagged only so the owner knows the opportunity exists.",
+      "rationale": "Third cycle in a row this has surfaced. Not in this subsystem — reported because the guard ran here."
+    }
+  ],
+  "notes": "TWO GUARDS IN THIS SUBSYSTEM WERE RED BEFORE THE AUDIT TOUCHED ANYTHING, both from stale expectations rather than broken product code: smoke:hud-hint (class renamed by the ADR-0080 theming pass) and smoke:canvas-menu (fluid-toy's pure-fractal boot default inverted a menu label). Both green now. smoke:pause-controls was green but vacuous — its only popover check read the wrong DOM node and asserted nothing.\n\nCONCURRENT-RUN INTERFERENCE: other auditors were editing app-gmt/main.tsx, engine/AdaptiveResolution.ts, engine/plugins/Shortcuts.ts, engine/plugins/Viewport.tsx, ViewportFrame.tsx, viewportSlice.ts and types/viewport.ts while this auditor ran browser smokes. Those edits trigger Vite HMR full reloads, which destroyed the Playwright execution context mid-run three times ('Execution context was destroyed'). Every failure of that shape re-ran clean and none was counted as a finding; each smoke was re-run to a stable pass at the end. The orchestrator additionally re-ran smoke:undo twice on the quiescent tree after all auditors returned — both passed, confirming the e08 flake was the same HMR artefact.\n\nONE SUSPICION CHASED AND DROPPED: the pause button's third title state ('Done — N samples') would evade the smoke's locator, but a runtime probe shows accumulationCount reaches only ~2 after the smoke's 3s boot wait against a sampleCap of 64, so it is unreachable there and not worth a change.\n\nSCOPE COVERED: all @invariant blocks in Hud/TopBar/Menu/Help/SceneIO/PwaUpdate/RenderDialog/topbar (the Menu, SceneIO and RenderDialog ones all hold as written apart from the SceneIO omission); citation drift across those files (they carry no @see citations at all, so nothing to break); five smokes plus zindex/orphans/typecheck. NOT COVERED, belongs to other subsystems: Shortcuts.ts, Undo.tsx, Viewport.tsx, Camera.ts, Tutorial.tsx and the tutorial/ + viewport/ subtrees."
+}

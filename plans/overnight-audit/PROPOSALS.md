@@ -484,3 +484,183 @@ not three independent observations.**
   tries `evaluatePairedTrack` *first* for camera-pair tracks, so `camera.*`
   targets can still differ slightly between recording and playback. Noted at the
   call site; worth a follow-up when someone is in that code.
+
+---
+
+# Cycle 3
+
+## MEDIUM — `holdAdaptive` is a public API with zero callers, and its one gap is at the moment it exists for
+
+_(cycle 3 · `engine/AdaptiveResolution.ts:403`, `engine/plugins/Viewport.tsx`)_
+
+`viewport.holdAdaptive(durationMs?)` is documented for "call after loading a
+preset / starting an accumulation" — hold the current resolution so a burst of
+activity doesn't downscale. Two facts, both verified:
+
+1. **It has no callers.** `holdAdaptive` appears only in the type declaration,
+   the config doc, the slice implementation and the plugin facade that forwards
+   to it. No app, feature, renderer or smoke calls it, and the only producer of a
+   non-zero `holdUntilMs` is `_holdUntilMs` in `viewportSlice`. The other
+   `tickAdaptiveResolution` caller (`engine-gmt`'s `UniformManager`) does not
+   pass `holdUntilMs` at all. So `now < 0` is always false and **the entire hold
+   mechanism is inert today.**
+2. **The seed bypasses it.** `tickAdaptiveResolution`'s smart-mode branch assigns
+   `state.scale` at two sites. The sample-window site computes
+   `withinHold = now < holdUntilMs` and skips when
+   `withinHold && nextScale > state.scale`. The idle→active **seed** site
+   (`if (state.activeLast === 0)`) assigns with no reference to `holdUntilMs` at
+   all — and it sets `state.activeLast = now`, so on that tick `elapsed` is 0 and
+   the guarded window block cannot run. The seed's downscale is genuinely
+   ungated.
+
+That matters because the seed fires on the idle→active edge, which is *exactly*
+the common case right after a preset load — the scenario the API is documented
+for. Whoever first adopts it gets a hold that appears to work for an
+already-engaged scene and silently does nothing on the edge.
+
+**Options**
+
+1. **Gate the seed on `withinHold` too** — makes the API do what its doc says.
+2. **Keep current behaviour deliberately and document it** — arguable: an
+   interaction *should* perhaps downscale regardless of a hold, since the user is
+   actively moving and wants frames.
+3. **Retire the API** — it has no callers and no guard.
+
+**No recommendation offered on purpose** — this is a product judgement about what
+"hold" should mean, and there is no usage to infer intent from. The current
+behaviour is now documented at both call sites either way, so nothing is silently
+wrong while you decide.
+
+---
+
+## LOW — `uninstallShortcuts` is not the inverse of `installShortcuts`
+
+_(cycle 3 · `engine/plugins/Shortcuts.ts:305` — confirmed by independent verification, **latent**)_
+
+Two asymmetries, both real, neither reachable today:
+
+1. **The removal target is hardcoded.** `installShortcuts` attaches to
+   `options.domRoot ?? window` but stores neither the root nor the capture flag
+   (both are function-local `const`s). `uninstallShortcuts` removes from `window`
+   literally. Install with a Document or HTMLElement `domRoot` — a declared,
+   typed, documented option — and the listener is never detached, while
+   `_listener = null` discards the only handle to it.
+2. **`_keyboardCaptureCount` is not reset.** The reset block clears the registry,
+   scope stack and installed flag but not the capture counter. The dispatcher's
+   early-return for unmodified single-character keys sits *above* the input-focus
+   and `when()` checks, so a stranded count silently swallows every such shortcut
+   for the life of the page.
+
+**Latent, decisively.** `uninstallShortcuts` has zero callers repo-wide, and the
+three plausible indirect routes are all closed: no barrel re-export;
+`window.__shortcuts` exposes only `register`/`unregister`/`pushScope`/`popScope`/
+`list`/`lookup`/`clear`; and no `import.meta.hot` block exists anywhere in the
+repo. All five `installShortcuts` sites use the default `window` root.
+
+**The verifier corrected the original claim in one respect worth keeping:** the
+double `removeEventListener` (`false` *and* `true`) already covers both capture
+phases, so the classic capture-flag footgun is *already defended* — this is a
+single-axis asymmetry, not two. It also found two further un-reset items:
+`_scopeSubscribers` is never cleared, and `window.__shortcuts` is never deleted
+(the latter is arguably correct — `debug/smoke-undo.mts` uses its presence as the
+"install ran" probe — but should be a documented choice, not an oversight).
+
+**Fix, ~6 lines:** stash `_root` at install, remove from it here, null it
+afterwards (or the module retains a strong ref to a detached node — a second,
+smaller leak introduced by the fix if omitted), and reset the counter. Keep both
+removals rather than storing and matching one flag; the double-remove is strictly
+more robust. **One genuine behaviour change:** with two capturing surfaces live,
+the reset un-captures the still-focused one — exotic and unreachable today.
+
+**Not applied.** No guard covers teardown, the change is unverifiable by any
+existing script, and the target is inert code. Documented as `@bug PRODUCTION:`
+at the source site instead, so it is greppable. The verifier's own suggestion for
+the highest-value adjacent work: add a dev warning when a second
+`installShortcuts` call silently drops its options — that silent drop is already
+an `@invariant` and is the failure mode a real multi-root caller would hit first.
+
+---
+
+## ADR corrections — cycle 3 (paste-ready)
+
+### ADR-0022 — states the shortcut tiebreak backwards, and calls the correct reading wrong
+
+`docs/adr/0022-shortcuts-scope-stack.md:19` (Decision) says *"Tiebreak is
+most-recently-registered (stable sort + insertion order)"*, and its final
+Consequences bullet says *"Registering AFTER another shortcut with the same key +
+scope + priority wins — legacy docs that claim 'first wins' are wrong; source
+comment at `Shortcuts.ts:184-185` is authoritative."* **Both are false**, and the
+cited line range is drifted (those lines are inside `lookup()`/`clear()`, not the
+resolver).
+
+Worth knowing: `docs/history/engine/06_Undo_Transactions.md` had this **right all
+along**. The ADR's bullet was written to override a doc that was correct, and the
+old `Shortcuts.ts` `@invariant` then cited the ADR's version back — a
+circular-wrong loop, now broken in code, in `.claude/rules/engine-plugins.md`,
+and pinned by `npm run smoke:undo`.
+
+Insert immediately after the `**Scope:**` line, before `## Context`:
+
+> **Update 2026-07-28 (tiebreak direction corrected; decision unchanged):** the
+> Decision's parenthetical and the last Consequences bullet state the tiebreak
+> backwards. `resolve()` sorts matches descending by
+> `scopeStack.lastIndexOf(scope) * 10000 + priority` and returns `matches[0]`.
+> `Array.prototype.sort` is stable (ES2019) and `matches` derives from
+> `shortcuts.list()`, i.e. registry **Map insertion order** — so on a score tie
+> the **FIRST-registered** shortcut stays at index 0 and wins; later
+> registrations sink to the tail. To beat an existing binding you must raise
+> `priority` or use a deeper scope. `docs/history/engine/06_Undo_Transactions.md`
+> (§Hotkey routing) was right all along; this ADR's "legacy docs that claim
+> 'first wins' are wrong" bullet, and its `Shortcuts.ts:184-185` line reference,
+> are both retracted. Practical consequence: `installUndo()` registers
+> `redo.global.shift` (`Mod+Shift+Z`, which expands to `Ctrl+Shift+Z` on
+> Win/Linux) *before* `app-gmt/main.tsx` registers `gmt.undoCameraMove`, so that
+> binding's `priority: 10` is **load-bearing** — removing it silently turns
+> Ctrl+Shift+Z from camera-undo into param-redo. The scope-stack design and the
+> `consume: true` default are unaffected. Pinned by `npm run smoke:undo`
+> ("[shortcuts] resolver tiebreak") and by the `@invariant` on `resolve` in
+> `engine/plugins/Shortcuts.ts`.
+
+### ADR-0024 — drifted line reference
+
+`docs/adr/0024-adaptive-resolution-pure-shared-module.md:39` cites the
+`selfResized` write as `UniformManager.ts:137`; line 137 is now `let targetH = h;`.
+Insert under `## Consequences`:
+
+> **Update 2026-07-28 (line-ref refresh; decision unchanged):** The `selfResized`
+> write cited below as `UniformManager.ts:137` now lives at
+> `engine-gmt/engine/managers/UniformManager.ts:263`, inside the
+> `currentW !== targetW || currentH !== targetH` resize branch of `syncFrame`. It
+> is still the only production writer — the second occurrence,
+> `debug/interaction-latency-harness.mts:114`, is a test harness. The main-thread
+> slice still does not need it, for the reason given below.
+
+---
+
+## Housekeeping surfaced in cycle 3
+
+- **`engine/worker/ViewportRefs.ts:143`** says `_mouseOverCanvas` is "Used by
+  adaptive resolution to decide grace period behavior" (false — the module
+  ignores that input) and its `@invariant` names `AdaptiveResolutionBadge` as the
+  affected component (wrong — the only live reader is
+  `engine-gmt/topbar/AdaptiveResolution.tsx:30`). Left for the pending
+  `e11-worker-contract` cycle. The file's *real* invariant — ref-backed rather
+  than a Zustand selector, so the GMT topbar badge does **not** re-render on
+  hover alone — is correct and should be preserved verbatim.
+- **`types/store.ts:138`** tells readers to use `getCanvasPhysicalPixelSize()` in
+  `fractalStore.ts`; that helper is at `store/engineStore.ts:501` and no
+  `fractalStore.ts` exists. Same stale text duplicated at
+  `engine-gmt/types/store.ts:119`. One-word fix in both; fold into whichever
+  cycle owns `types/store.ts`.
+- **`check:zindex` has a structural blind spot.** Its threshold is `z >= 100`
+  because it hunts surfaces that outrank the panel band — so a raw z that is too
+  **low** (like the Support modal's `z-50`) is invisible to it. Worth considering
+  a second, cheaper check: flag any `createPortal(_, document.body)` whose
+  className carries a raw `z-*` at all, in either direction.
+- **`debug/render-harness.ts`** is still the only file `npm run orphans` reports
+  tree-wide — third cycle running. Deletion is your call.
+- **Two gitignored scratch probes** were left at `debug/_tiebreak-probe.mts` and
+  `debug/_paramA-race-probe.mts` (the `debug/_*` convention means they can never
+  be committed). Remove at your leisure.
+- **A dev server is still running on :3400** from cycle 1 — it should be stopped
+  at the end of the run.

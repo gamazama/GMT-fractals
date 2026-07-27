@@ -1,0 +1,130 @@
+{
+  "id": "e06-adaptive-resolution",
+  "cycle": 3,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e06-adaptive-resolution" },
+    { "script": "npm run smoke:viewport", "pass": true, "subsystem": "e06-adaptive-resolution" },
+    { "script": "npm run smoke:viewport-fixed", "pass": true, "subsystem": "e06-adaptive-resolution" },
+    { "script": "npm run smoke:boot", "pass": true, "subsystem": "e06-adaptive-resolution" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "e06-adaptive-resolution" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/smoke-viewport-fixed.mts",
+      "line": 47,
+      "summary": "smoke:viewport-fixed asserted only that the store round-tripped resolutionMode/fixedResolution — it never checked the layout ViewportFrame produced, leaving ViewportFrame's `boxSizing: content-box` @invariant with zero coverage.",
+      "change": "Added three assertions after the mode toggle: the Fixed-mode container (located by its inline 960x540, NOT by box-sizing, so a regression still finds the element) must have computed box-sizing content-box; its border box must be 962x542; and its canvas child must lay out at exactly 960x540. Removed two logged-but-unasserted computed-width values so nothing is telemetry-only.",
+      "verification": "Mutation-proved, not just run green. Flipping ViewportFrame's boxSizing to 'border-box' made the smoke exit 1 with `Fixed-mode container must be content-box ... got border-box`, and the logged layout showed the exact regression the invariant warns about: borderBoxW 960 (not 962) and canvas 958x538 (not 960x540). Mutation reverted and the smoke passes again. Worth noting for anyone extending this: getComputedStyle().width does NOT discriminate here — it echoes the specified 960px under either box-sizing — which is why the explicit box-sizing and offsetWidth checks are the teeth.",
+      "guard": "npm run smoke:viewport-fixed",
+      "guardPass": true,
+      "commit": "23ba0bbd"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "store/slices/viewportSlice.ts",
+      "line": 7,
+      "summary": "The viewportSlice header describes an adaptive algorithm that no longer exists — a pointer-position-driven needsAdaptive predicate and still-FPS seeding — and calls reportFps a 'direct port' when it delegates to the shared module.",
+      "change": "Rewrote the header: reportFps delegates to tickAdaptiveResolution (path corrected — it was cited under engine/managers/, the file is engine-gmt/engine/managers/UniformManager.ts); seeding comes from the scale-normalized fullResFrameMs EMA, with still-FPS surviving only as the grace/deep-accum input; needsAdaptive stated as activity-driven with mouseOverCanvas explicitly called out as passed-through-but-ignored; added the deep-accum override; noted the hold allows upscale and is not applied to the re-engagement seed. Fixed a dead docs/10_Viewport.md citation and flagged that the inlined isMobile() duplicates HardwareDetection's breakpoint.",
+      "verification": "Each replaced claim was checked against engine/AdaptiveResolution.ts before editing. (1) mouseOverCanvas is destructured nowhere in tickAdaptiveResolution; the only decision expression is `activitySignal = gateOnAccumOnly ? timeSinceActivity < grace : (isInteracting || timeSinceActivity < grace)` — read to the end, there is no pointer clause. (2) The `activeLast === 0` seed branch computes fullResFps from state.fullResFrameMs; state.stillFps is read only by getAdaptiveGrace and accumThreshold. (3) The cited engine/managers/UniformManager.ts does not exist. (4) docs/10_Viewport.md does not exist; docs/history/engine/10_Viewport.md does. Comment-only change; smoke:viewport drives the full reportFps chain (baseline 1.00 -> drag 0.55 -> release 1.00) and would fail on a corrupted module.",
+      "guard": "npm run smoke:viewport",
+      "guardPass": true,
+      "commit": "55865fb6"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/plugins/viewport/ViewportFrame.tsx",
+      "line": 189,
+      "summary": "ViewportFrame's mouse-handler comment justifies the handlers by a `!mouseOnCanvas` branch in viewportSlice.reportFps that no longer exists, so the handlers read as removable dead wiring.",
+      "change": "Rewrote the rationale to name the actual live consumer (engine-gmt/topbar/AdaptiveResolution.tsx picks its Auto-vs-Always label from it) and state plainly that the adaptive decision ignores mouseOverCanvas. Qualified the canvasPixelSize sole-writer @invariant to ViewportFrame-based apps, naming components/ViewportArea.tsx as the demo shell's equivalent writer and that the two never co-mount. Fixed a dead docs path.",
+      "verification": "grep for mouseOverCanvas across ts/tsx/mts returns exactly one reader outside the module's own unused input parameter: engine-gmt/topbar/AdaptiveResolution.tsx:30, feeding the Auto/Always label. viewportSlice only passes it in; AdaptiveResolutionBadge.tsx does not import it. engine-gmt/engine/worker/ViewportRefs.ts is an `export * from` shim, so both trees share one _mouseOverCanvas and the handlers really do reach that badge. For the sole-writer claim, setCanvasPixelSize has two call sites (ViewportFrame, ViewportArea) and ViewportArea is mounted only from the root App.tsx while ViewportFrame is mounted by app-gmt/fractal-toy/fluid-toy.",
+      "guard": "npm run smoke:viewport-fixed",
+      "guardPass": true,
+      "commit": "8bc77892"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine/AdaptiveResolution.ts",
+      "line": 148,
+      "summary": "The graceMs input JSDoc states the FPS-scaled default spans 100..3000ms, but getAdaptiveGrace can only ever return 100..2000 — its Math.min(3000, ...) ceiling is unreachable.",
+      "change": "Corrected the documented range to 100..2000ms, expanded getAdaptiveGrace's own JSDoc to state the effective range and that the 100ms floor is reached from 20fps up (not 30fps), and noted the clamp never binds — with an explicit note not to 'correct' callers' docs back to 3000. Left the clamp in the code untouched.",
+      "verification": "Arithmetic on the single expression: the inner term is `2000 / Math.max(1, stillFps)`, whose denominator is floored at 1, so the term is bounded above by 2000 and Math.min(3000, ·) is a no-op for every input. The 100ms floor is reached whenever 2000/stillFps <= 100, i.e. stillFps >= 20.",
+      "guard": "npm run smoke:viewport",
+      "guardPass": true,
+      "commit": "3eb8497b"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine/plugins/Viewport.tsx",
+      "line": 134,
+      "summary": "viewport.holdAdaptive's JSDoc says the default duration is adaptiveConfig.graceMs — a field that does not exist on ViewportAdaptiveConfig — with a self-referential @note admitting the prose is stale instead of fixing it.",
+      "change": "Replaced the wrong default with the real one (activityGraceMs * 4) and deleted the redundant @note per the annotation-maintenance rule. Documented the hold's actual semantics: it blocks downscale only, upscale is still permitted, and the idle->active re-engagement seed is not gated by it. Fixed a dead docs path and added a pointer to the algorithm module.",
+      "verification": "ViewportAdaptiveConfig has activityGraceMs, no graceMs; viewportSlice computes `durationMs ?? adaptiveConfig.activityGraceMs * 4`. The downscale-only claim is the `withinHold && nextScale > state.scale` guard — strict >, so upscale falls to the else and assigns. The seed-bypass claim is that the `activeLast === 0` block assigns state.scale with no withinHold reference, and on that same tick elapsed is 0 so the guarded window block cannot run.",
+      "guard": "npm run smoke:viewport",
+      "guardPass": true,
+      "commit": "38000a5d"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "types/viewport.ts",
+      "line": 48,
+      "summary": "ViewportAdaptiveConfig's alwaysActive doc says adaptive settles 'when the mouse is on the canvas', and engageOnAccumOnly says it stops mouseOverCanvas triggering adaptive — both describe a pointer-position rule the module no longer has.",
+      "change": "Restated alwaysActive as settling on the activity grace window with pointer position explicitly not consulted; dropped the mouseOverCanvas clause from engageOnAccumOnly and noted it maps to the module's gateOnAccumOnly input, which the field name does not otherwise reveal.",
+      "verification": "Same evidence as the viewportSlice finding: mouseOverCanvas appears in tickAdaptiveResolution only as an unread optional input, already documented there as unused, and the decision is the activitySignal expression. The mapping is viewportSlice's `gateOnAccumOnly: cfg.engageOnAccumOnly`.",
+      "guard": "npm run smoke:viewport",
+      "guardPass": true,
+      "commit": "7fecfb26"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": ".claude/rules/mobile-layout.md",
+      "line": 2,
+      "summary": "engine/HardwareDetection.ts — which owns the 768px/(pointer:coarse) single-source-of-truth invariant and the Float32 probe — is matched by no path-scoped rule, so opening it loads no steering.",
+      "change": "Added engine/HardwareDetection.ts to mobile-layout.md's paths plus two 'Watch out' entries: that isMobileViewport() is the single source of truth for the breakpoint (with the one surviving inline copy in viewportSlice named so a future reader finds both), and that detectHardwareProfile(gl) is not cached and allocates a 1x1 RGBA32F FBO+texture per call.",
+      "verification": "Every added claim grep-checked. The new path resolves. hooks/useMobileLayout.ts:24 imports isMobileViewport from it. The surviving duplicate is store/slices/viewportSlice.ts:49-53, same (pointer: coarse) OR innerWidth < 768 test, used only by defaultDpr(). The uncached claim matches detectHardwareProfile's createFramebuffer/createTexture/delete per call with no memo. The rule's pre-existing citations were re-checked too: ADRs 0038 and 0039 both exist, and both named guards exist and pass.",
+      "guard": "npm run smoke:viewport-fixed",
+      "guardPass": true,
+      "commit": "b7faa631"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "engine/AdaptiveResolution.ts",
+      "line": 403,
+      "summary": "holdAdaptive is a documented public plugin API with zero callers, and the mechanism it feeds has a gap: the idle->active re-engagement seed downscales without consulting the hold — precisely the moment the API is documented for. Demoted from Tier V: which behaviour is correct is a design call.",
+      "rationale": "See PROPOSALS.md. Demoted rather than verified because the auditor's own framing makes it an owner decision, not a checkable claim — it documented current behaviour instead of changing it, and notes 'an interaction arguably SHOULD downscale regardless of a hold'."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "docs/adr/0024-adaptive-resolution-pure-shared-module.md",
+      "line": 39,
+      "summary": "ADR-0024's Consequences cite the selfResized write as UniformManager.ts:137; it now lives at line 263, and a second (harness) writer has appeared since.",
+      "rationale": "See PROPOSALS.md for the paste-ready Update block."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "engine/worker/ViewportRefs.ts",
+      "line": 143,
+      "summary": "The _mouseOverCanvas block says it is 'Used by adaptive resolution to decide grace period behavior' (false) and its @invariant names AdaptiveResolutionBadge as the component affected (wrong component).",
+      "rationale": "Not applied because this file belongs to the pending e11-worker-contract subsystem. Evidence: tickAdaptiveResolution never reads its mouseOverCanvas input — the decision is the activitySignal expression, and grace comes from `input.graceMs ?? getAdaptiveGrace(state.stillFps)`. engine/plugins/viewport/AdaptiveResolutionBadge.tsx does not import isMouseOverCanvas; the only live reader is engine-gmt/topbar/AdaptiveResolution.tsx:30. OPTIONS: hand to e11's cycle, or apply now since it is comment-only. RECOMMENDATION: hand to e11 — the correct replacement text is in the auditor's report and the file's real invariant (ref-backed, not a Zustand selector, so the GMT topbar badge does NOT re-render on hover alone) should be preserved verbatim."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "types/store.ts",
+      "line": 138,
+      "summary": "The canvasPixelSize field comment says to read via getCanvasPhysicalPixelSize() in fractalStore.ts; that helper now lives in store/engineStore.ts:501 and no fractalStore.ts exists.",
+      "rationale": "Outside the subsystem's files and in a heavily shared type module, so not applied. The same stale text is duplicated at engine-gmt/types/store.ts:119. One-word fix in both: fractalStore.ts -> store/engineStore.ts. Worth folding into whichever cycle owns types/store.ts rather than a standalone commit."
+    }
+  ],
+  "notes": "ALL FOUR @invariants in engine/AdaptiveResolution.ts were checked and ALL FOUR HOLD — scale bounding on every smart-mode assignment (seed and window paths both clamp to [1, maxScale]); the gateOnAccumOnly/ignoreAccumDrop mirror-image description including its 'neither affects deep-accum protection or full-res cost sampling' clause; the strict `nextScale > state.scale` hold comparison; and the fullResAccum reset at scale > 1.001. HardwareDetection's three @invariants also hold (DEFAULT_HARD_CAP=2000, MOBILE_HARD_CAP=256 confirmed in data/constants.ts). installViewport's idempotency invariant holds. The numbers in the header algorithm summary (200ms/500ms windows, 0.7/0.3 EMA, blend 1.0 on first window, 8..50 accum threshold) all match the code — the only numeric drift found was the grace range.\n\nONE SUSPICION INVESTIGATED AND REFUTED, recorded so nobody re-opens it: engine-gmt/topbar/AdaptiveResolution.tsx imports isMouseOverCanvas from engine-gmt/engine/worker/ViewportRefs while ViewportFrame writes to engine/worker/ViewportRefs — which would mean two module-level _mouseOverCanvas variables and a badge permanently stuck on 'Always'. The engine-gmt file is a re-export shim, so there is one variable and the wiring is correct.\n\nGUARD HEALTH: both viewport smokes were healthy before the change — no dead selectors, no logged-but-unasserted counts. smoke:viewport-fixed's weakness was a MISSING assertion rather than a rotted one, which is a different failure mode from the dead selectors found in cycles 1-3 elsewhere. No guard hung; none references a missing debug/*.mts.\n\nSCOPE: extended past the four listed files into store/slices/viewportSlice.ts and types/viewport.ts, since the adaptive loop's main-thread consumer and its config type carried the same stale claims and no other subsystem owns them. Deliberately did not touch engine/worker/ViewportRefs.ts (e11) or .claude/rules/engine-plugins.md (e08 was editing it concurrently).\n\nHOUSEKEEPING: smoke:viewport-fixed writes debug/scratch/fractal-toy-2f-fixed.png, which is gitignored — no tracked binary disturbed by anything this auditor ran."
+}
