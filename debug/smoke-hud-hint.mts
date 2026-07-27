@@ -2,11 +2,13 @@
  * Smoke test for @engine/hud + help.registerHudHint.
  *
  * Checks:
- *   1. HudHost renders; the quality badge widget is present.
- *   2. When showHints is true, the keyboard-shortcut hint line is
- *      visible on the HUD (we look for the `Space` pill text).
- *   3. Toggling showHints off removes the hint line.
- *   4. Toggling back on brings it back.
+ *   1. HudHost renders the fluid-toy hotkeys cheatsheet at boot (its
+ *      uppercase "Hotkeys" title), since showHints defaults to true.
+ *   2. The adaptive quality badge widget is present.
+ *   3. The cheatsheet's × collapses the panel to the "? hotkeys" pill.
+ *   4. Global showHints=false hides the pill too (the HUD item's `when`
+ *      predicate gates both states).
+ *   5. The H hotkey flips showHints back on and the panel returns.
  */
 import { chromium } from 'playwright';
 
@@ -24,8 +26,11 @@ async function main() {
 
     // 1. Hotkeys cheatsheet should render with its title when showHints=true.
     // Match the uppercase "Hotkeys" span inside the cheatsheet, not
-    // unrelated UI that may contain the word.
-    const hotkeysTitle = page.locator('div.uppercase.text-cyan-300', { hasText: /^Hotkeys$/ }).first();
+    // unrelated UI that may contain the word. The accent class must track
+    // HotkeysCheatsheet.tsx — the runtime theming pass (ADR-0080) renamed
+    // the literal palette classes (`text-cyan-300`) to semantic ones
+    // (`text-accent-300`), which silently emptied this selector.
+    const hotkeysTitle = page.locator('div.uppercase.text-accent-300', { hasText: /^Hotkeys$/ }).first();
     const title1 = await hotkeysTitle.isVisible({ timeout: 3000 }).catch(() => false);
     console.log(`cheatsheet visible at boot (showHints=true): ${title1}`);
     if (!title1) throw new Error('hotkeys cheatsheet should be visible by default');
@@ -60,6 +65,7 @@ async function main() {
     await page.waitForTimeout(200);
     const flagAfterH = await page.evaluate(() => (window as any).__store.getState().showHints);
     console.log(`showHints after H: ${flagAfterH}`);
+    if (!flagAfterH) throw new Error('H should set showHints back to true');
     const titleReturned = await hotkeysTitle.isVisible({ timeout: 1000 }).catch(() => false);
     console.log(`panel title visible after H re-enable: ${titleReturned}`);
     if (!titleReturned) throw new Error('H should re-enable the hint');
