@@ -6,7 +6,11 @@
  *   code that renames DDFS param ids — weave rebuilds are the live case — must
  *   update all three or links silently drive the wrong param.
  *   @see engine-gmt/animation/retargetTracks.ts
- * @invariant Held across scene loads while the audio engine is running.
+ * @invariant NOT held across scene loads. The rules are scene CONTENT — which
+ *   band drives which param IS the look — so a scene load applies its own,
+ *   while the audio INPUT (equipment) keeps running. This reverses the original
+ *   ADR-0103 pairing; the reasoning is on the feature def below, and
+ *   `npm run test:session-hold` [4]/[5] pins it.
  *   @see docs/adr/0103-live-session-state-survives-scene-load.md
  */
 import { FeatureDefinition } from '../../../engine/FeatureSystem';

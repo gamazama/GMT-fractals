@@ -2,8 +2,9 @@
  * Audio feature — the audio-modulation rig's DDFS state.
  *
  * @invariant While `isEnabled` is true this slice is LIVE SESSION state: a
- *   scene load / formula switch leaves it (and `modulation`) untouched. See
- *   `holdsLiveSession` below.
+ *   scene load / formula switch leaves it untouched. See `holdsLiveSession`
+ *   below. The `modulation` slice used to be held alongside it and no longer
+ *   is — the rules are scene content, the input is equipment.
  * @see docs/adr/0103-live-session-state-survives-scene-load.md
  */
 import { FeatureDefinition } from '../../../engine/FeatureSystem';
