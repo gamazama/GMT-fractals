@@ -453,6 +453,16 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
 
 // Monotonic revision bumped every _notify() so useSyncExternalStore has
 // a cheap, stable "has anything changed" snapshot.
+/**
+ * @invariant `_bumpRev` MUST be the FIRST entry in `_subscribers`. `_notify`
+ *   iterates the Set in insertion order, and this `add` runs at module
+ *   evaluation — before any component can mount and call `subscribe()`. So the
+ *   revision is already incremented by the time React's `handleStoreChange`
+ *   callbacks run and re-read `getSnapshot`. Register it any later (or clear
+ *   and re-add the set) and every subscriber would read the OLD `_notifyRev`,
+ *   `useSyncExternalStore` would see an unchanged snapshot, and menus would
+ *   silently stop re-rendering on registration / badge / toggle changes.
+ */
 let _notifyRev = 0;
 const _bumpRev = () => { _notifyRev++; };
 _subscribers.add(_bumpRev);
