@@ -8,8 +8,8 @@
  *      region. Writes canvasPixelSize (physical pixels, DPR-aware)
  *      to the viewport slice on every layout change. This is the ONE
  *      authoritative writer — apps should not observe their canvas
- *      separately (docs/20_Fragility_Audit.md notes the multiple-
- *      observer race that lived in GMT's pre-extraction code).
+ *      separately (docs/history/engine/20_Fragility_Audit.md notes the
+ *      multiple-observer race that lived in GMT's pre-extraction code).
  *
  *   2. Fixed vs Full layout. In Fixed mode, children are wrapped in
  *      a fixed-pixel container that's scaled to fit the available
@@ -85,9 +85,13 @@ const CONTROLS_OFFSET_Y = 40;
 const LAYOUT_PADDING = 12;
 
 /**
- * @invariant Sole authoritative writer of `canvasPixelSize`. Mount-time
- *   seed uses `getBoundingClientRect()` so consumers see non-zero size
- *   before the first ResizeObserver callback.
+ * @invariant Sole authoritative writer of `canvasPixelSize` in
+ *   ViewportFrame-based apps (app-gmt, fractal-toy, fluid-toy). The
+ *   legacy `components/ViewportArea.tsx` shell has its own equivalent
+ *   ResizeObserver writer, but it is mounted only by the root demo
+ *   `App.tsx`; the two shells never mount together. Mount-time seed uses
+ *   `getBoundingClientRect()` so consumers see non-zero size before the
+ *   first ResizeObserver callback.
  * @invariant Fixed-mode inner container forces `boxSizing: content-box`
  *   to defeat Tailwind preflight; without this the 1px outline shrinks
  *   saved images by 2px per axis.
@@ -185,13 +189,13 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
             ref={outerRef}
             className={`relative flex-1 flex items-center justify-center overflow-hidden bg-surface-viewport touch-none ${className}`}
             style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, rgb(var(--surface)) 0%, rgb(var(--surface-viewport)) 100%)' : 'none' }}
-            // Track mouse-over-canvas for the adaptive-resolution loop's
-            // settle-on-idle behaviour. The legacy ViewportArea wired
-            // these handlers; the modern ViewportFrame missed them, so
-            // _mouseOverCanvas stayed false forever in app-gmt and the
-            // !mouseOnCanvas branch in viewportSlice.reportFps kept
-            // adaptive engaged indefinitely (no auto-disengage when
-            // the user settles on the canvas).
+            // Track mouse-over-canvas in ViewportRefs. NOTE: this no
+            // longer feeds the adaptive-resolution decision — engagement
+            // is activity-driven and `tickAdaptiveResolution` ignores its
+            // `mouseOverCanvas` input (engine/AdaptiveResolution.ts). The
+            // live consumer is engine-gmt/topbar/AdaptiveResolution.tsx,
+            // which uses it to pick the badge's Auto-vs-Always label. Drop
+            // these handlers and that badge sticks on "Always".
             onMouseEnter={() => setMouseOverCanvas(true)}
             onMouseLeave={() => setMouseOverCanvas(false)}
         >
