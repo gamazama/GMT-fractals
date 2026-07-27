@@ -24,7 +24,7 @@ down in `engine/plugins/topbar/` (`ProjectName`, `FpsCounter`, `PauseControls`,
 `.claude/rules/tick-and-animation.md`.
 
 Decisions: ADR-0021 (slots), ADRs 0022-0023 (shortcuts + per-scope undo),
-ADRs 0024-0026 (adaptive resolution), ADRs 0027-0031 (camera / StateLibrary),
+ADRs 0024-0026 (adaptive resolution), ADRs 0029-0032 (camera / StateLibrary),
 ADR-0012 (tutorial).
 
 ## Invariants
