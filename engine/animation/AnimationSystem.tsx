@@ -70,7 +70,6 @@ import { classifyModulationTarget } from '../features/modulation/targetRouting';
 import { planModulationTarget, flushModulationComposites, newCompositeAccumulator } from '../features/modulation/applyTarget';
 import { AudioState } from '../features/audioMod';
 import { ModulationState } from '../features/modulation';
-import { evaluateTrackValue } from '../../utils/timelineUtils';
 
 // Global refs for animation system state
 const activeTargetsRef = { current: new Set<string>() };
@@ -342,10 +341,19 @@ export const tick = (delta: number) => {
                 cleanBase: shouldRecord ? (trackId, naturalBase) => {
                     const snapshotSeq = animStore.recordingSnapshot;
                     if (snapshotSeq && snapshotSeq.tracks[trackId]) {
-                        return evaluateTrackValue(
-                            snapshotSeq.tracks[trackId].keyframes,
+                        // MUST use the same evaluator as playback. This previously
+                        // called evaluateTrackValue(keys, frame, id.includes('rotation')),
+                        // which takes a Keyframe[] and so structurally cannot see
+                        // postBehavior, defaulted isLog to false, and used a rotation
+                        // predicate narrower than the engine's — so the recorded base
+                        // disagreed with the value the timeline actually plays.
+                        // evaluateTrack takes the Track and routes through the same
+                        // interpolate() playback uses. Known remaining gap: it skips
+                        // the evaluatePairedTrack step scrub() tries first, so
+                        // camera-pair tracks can still differ slightly.
+                        return animationEngine.evaluateTrack(
+                            snapshotSeq.tracks[trackId],
                             animStore.currentFrame,
-                            trackId.includes('rotation'),
                         );
                     }
                     if (initialStaticValues.current[trackId] === undefined) {
