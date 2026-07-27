@@ -22,10 +22,8 @@ async function main() {
     await page.goto(URL, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
 
-    // Expose camera plugin on window for smoke testing.
-    await page.addInitScript(`
-        window.__cameraPlugin = null;
-    `);
+    // `installCamera()` already exposes the plugin as `window.__camera`
+    // (engine/plugins/Camera.ts) — nothing to inject here.
 
     // Step 1: set an initial camera state and save to slot 3. The 2D
     // scene camera lives on the julia slice now (center + zoom); the
@@ -91,9 +89,19 @@ async function main() {
     }
 
     // Mutate slots, then load preset → slot 3 should restore.
+    //
+    // The clear MUST be asserted before the load: without it, a regressed
+    // clearSlot leaves slot 3 populated and the post-load assertion below
+    // passes without loadPreset having restored anything. (Verified by
+    // falsification — neutering clearSlot used to leave this smoke green.)
     await page.evaluate(() => {
         (window as any).__camera.clearSlot(3);
     });
+    const afterClear = await page.evaluate(() => (window as any).__store.getState().cameraSlots?.[3]);
+    if (afterClear) {
+        throw new Error(`clearSlot(3) did not empty the slot (got ${JSON.stringify(afterClear)}) — the round-trip check below would be vacuous`);
+    }
+
     await page.evaluate((json: string) => {
         (window as any).__store.getState().loadPreset(JSON.parse(json));
     }, preset);
@@ -102,6 +110,11 @@ async function main() {
     const afterLoad = await page.evaluate(() => (window as any).__store.getState().cameraSlots?.[3]);
     if (!afterLoad || afterLoad.label !== 'Test slot') {
         throw new Error(`loadPreset did not restore slot 3 (got ${JSON.stringify(afterLoad)})`);
+    }
+    // The payload must survive too, not just the label.
+    if (Math.abs(afterLoad.state?.zoom - initialCam.zoom) > 1e-6 ||
+        Math.abs(afterLoad.state?.center?.x - initialCam.center.x) > 1e-6) {
+        throw new Error(`loadPreset restored slot 3 with the wrong state (got ${JSON.stringify(afterLoad.state)}, expected ${JSON.stringify(initialCam)})`);
     }
 
     if (errors.length > 0) {
