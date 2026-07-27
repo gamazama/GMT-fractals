@@ -43,8 +43,10 @@ export function _resetAudioClipSync() {
  * @invariant Out-of-range during play only pauses an owned deck
  *   (`ownedDecks.has(deckIndex)`) — prevents pausing decks the timeline
  *   never claimed from the AudioMod UI.
- * @invariant Out-of-range during pause clears deck ownership — future
- *   plays from the AudioMod UI are not reclaimed.
+ * @invariant The playing→paused TRANSITION (`justPaused`) is what clears deck
+ *   ownership, and it does so regardless of range — after the timeline pauses,
+ *   a play started from the AudioMod UI is not reclaimed. Steady-state pause
+ *   never touches ownership; out-of-range on its own never clears it.
  */
 export function syncAudioClips(
     clips: (AudioClip | null)[],
