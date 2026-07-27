@@ -27,13 +27,30 @@ async function main() {
     await page.goto(URL, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
 
-    // 1) Demo square renders.
-    const overlayCount = await page.evaluate(() => {
-        const overlay = document.querySelector('div[class*="pointer-events-none"][class*="z-["]');
-        return overlay?.childElementCount ?? 0;
+    // 1) Demo square renders. DemoOverlay paints to a 2D <canvas>
+    //    (c2ebadf2) — it is NOT a positioned <div> with child elements,
+    //    so count PAINTED PIXELS, not DOM children. The demo app also
+    //    mounts the engine's WebGL canvas (no class); the DemoOverlay
+    //    canvas is the one carrying `pointer-events-none`. Same probe as
+    //    smoke:engine-demo-modulation step 6.
+    const paintedPx = await page.evaluate(() => {
+        const c = document.querySelector('canvas.pointer-events-none') as HTMLCanvasElement | null;
+        if (!c) return -1;                       // canvas absent entirely
+        if (!c.width || !c.height) return -2;    // mounted but never sized
+        const ctx = c.getContext('2d');
+        if (!ctx) return -3;
+        const row = Math.floor(c.height / 2);
+        const data = ctx.getImageData(0, row, c.width, 1).data;
+        let n = 0;
+        for (let x = 0; x < c.width; x++) {
+            const i = x * 4;
+            // unpainted is transparent/near-black; the square is bright.
+            if (data[i] + data[i + 1] + data[i + 2] > 90) n++;
+        }
+        return n;
     });
-    console.log('overlay children:', overlayCount);
-    if (overlayCount < 1) throw new Error('Demo overlay did not render');
+    console.log('overlay painted pixels (mid-row):', paintedPx);
+    if (paintedPx < 1) throw new Error(`Demo overlay did not render (probe=${paintedPx})`);
 
     // 2) TopBar mounted (TopBarHost emits a fixed-positioned bar).
     const hasTopBar = await page.evaluate(() => !!document.querySelector('[data-topbar-host]') || !!document.querySelector('header'));
