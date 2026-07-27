@@ -286,7 +286,47 @@ export class WorkletAnalysis {
         this.agc.update(agcEnabled, latest.peak, deltaSec);
     }
 
-    /** Drain unread snapshots into `out` as a per-band maximum. */
+    /**
+     * Drain unread snapshots into `out` as a per-band maximum.
+     *
+     * @bug PRODUCTION: the modulo below ALIASES at exactly `RING_SNAPSHOTS`
+     *   unread hops. `(ringWrite - cursor + 512) % 512` is 0 both when nothing
+     *   is unread and when the writer has lapped the reader by exactly one full
+     *   ring, so a whole ring of onsets drains as nothing. Measured with a probe
+     *   against this class: 512 unread hops all carrying flux 30 produced a max
+     *   `fluxRate` of 0. Reachability is narrow — it needs a ~2.73s main-thread
+     *   stall landing on an exact multiple of 512 hops; at 600 unread it degrades
+     *   gracefully, draining the newest 88 (the only ones still in the ring).
+     *   Narrow, but ADR-0110 documents long tick stalls as precisely the scenario
+     *   this receiver exists to survive.
+     *
+     *   The `if (unread === 0 && this.latest) unread = 0;` line below is
+     *   provably DEAD — the guard establishes `unread` is 0 and the body assigns
+     *   0 — but it is left in place deliberately, because its shape ("we
+     *   computed zero unread, yet we do have data") reads as a half-written fix
+     *   for exactly the aliasing above; the intended body was most likely
+     *   `unread = this.ringCount`. Deleting it would erase the only in-tree
+     *   trace that the hole was ever noticed. Do NOT "clean it up" without
+     *   resolving the aliasing — see PROPOSALS.md (overnight audit, cycle 4).
+     *
+     *   NOT the fix: `unread = 1`. When the cursor has caught up,
+     *   `ring[ringWrite]` is the slot about to be OVERWRITTEN — the OLDEST
+     *   entry, not the newest (newest is `ring[ringWrite - 1]`, which is what
+     *   `this.latest` points at). Measured: that would inject a value 2.84s
+     *   stale.
+     *
+     *   Note the routine no-new-snapshot tick is an HONEST zero, not a dropped
+     *   transient: the onset was already delivered at full max on the tick its
+     *   batch landed, and `ModulationEngine`'s per-rule attack/decay envelope
+     *   carries the pulse forward across ticks. Batches arrive at ~53/s, so
+     *   zero-drain ticks are routine (~12% at 60Hz, ~63% at 144Hz), not a smell.
+     *
+     * @invariant This whole file has NO guard coverage of any kind — no debug
+     *   suite imports `WorkletAnalysis`. All five audio suites pass identically
+     *   whether the dead line reads `= 0`, `= 1`, or is absent. A guard would
+     *   have to feed synthetic `AnalysisBatchMessage` payloads into `onBatch`
+     *   and assert on `filterBank.fluxRate` after `update()`.
+     */
     private takeMaxFlux(out: Float32Array) {
         const n = out.length;
         out.fill(0);
