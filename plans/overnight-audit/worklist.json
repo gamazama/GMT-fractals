@@ -9,7 +9,8 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 1
   },
   {
     "id": "e02-tick-registry",
@@ -21,7 +22,8 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 2
   },
   {
     "id": "e03-animation",
@@ -33,7 +35,8 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 3
   },
   {
     "id": "e04-shader-builder",
@@ -45,7 +48,8 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 4
   },
   {
     "id": "e05-render-pipeline",
@@ -57,7 +61,8 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 5
   },
   {
     "id": "e06-adaptive-resolution",
@@ -69,7 +74,8 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 6
   },
   {
     "id": "e07-plugins-host",
@@ -81,7 +87,8 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 7
   },
   {
     "id": "e08-shortcuts-undo",
@@ -93,7 +100,8 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 8
   },
   {
     "id": "e09-camera-plugin",
@@ -105,235 +113,8 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "e10-engine-features",
-    "tier": "engine-core",
-    "area": "Bundled engine features (audio, modulation, webcam, debug, post, color)",
-    "files": 10,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "e11-worker-contract",
-    "tier": "engine-core",
-    "area": "Worker proxy, ViewportRefs, RENDER_TICK protocol",
-    "files": 2,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "e12-mobile-layout",
-    "tier": "engine-core",
-    "area": "Mobile detection + layout primitives",
-    "files": 4,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "e13-shared-ui",
-    "tier": "engine-core",
-    "area": "components/ primitives + context providers",
-    "files": 15,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "g01-renderer",
-    "tier": "engine-gmt",
-    "area": "FractalEngine + MaterialController + SceneController + worker",
-    "files": 8,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "g02-shader-pipeline",
-    "tier": "engine-gmt",
-    "area": "SDFShaderBuilder + GMT ShaderFactory + UniformManager",
-    "files": 8,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "g03-formula-registry",
-    "tier": "engine-gmt",
-    "area": "FractalRegistry + 42 formulas + V3/V4 pipeline",
-    "files": 4,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "g04-navigation",
-    "tier": "engine-gmt",
-    "area": "Camera nav + physics probe + HUD",
-    "files": 6,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "g05-engine-gmt-features",
-    "tier": "engine-gmt",
-    "area": "GMT DDFS features (geometry, coloring, lighting, AO, atmosphere, drawing, droste, interlace, materials, navigation, optics, quality, reflections, texturing, volumetric, water_plane, fragmentarium_import, engine, camera_manager)",
-    "files": 23,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "g06-bucket-render",
-    "tier": "engine-gmt",
-    "area": "BucketRenderer + WorkerExporter + WorkerHistogram",
-    "files": 5,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "g07-mesh-export",
-    "tier": "engine-gmt",
-    "area": "Mesh export tool + VDB writer + preview canvas + pipeline",
-    "files": 7,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "g08-save-load-gmf",
-    "tier": "engine-gmt",
-    "area": "GMF format + scene serialization",
-    "files": 4,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "g09-modular-graph",
-    "tier": "engine-gmt",
-    "area": "GraphCompiler + ModularGraph",
-    "files": 2,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "g10-audio-fps-sync",
-    "tier": "engine-gmt",
-    "area": "Audio timeline + FPS sync",
-    "files": 4,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "a01-boot-shell",
-    "tier": "app-gmt",
-    "area": "App entry + boot sequence + feature registration",
-    "files": 6,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "a02-panels-layout",
-    "tier": "app-gmt",
-    "area": "Panel manifest + topbar + Dock + ViewportFrame",
-    "files": 5,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "a03-tutorial",
-    "tier": "app-gmt",
-    "area": "Tutorial overlay",
-    "files": 7,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "t01-fluid-toy",
-    "tier": "sibling-app",
-    "area": "fluid-toy sibling app",
-    "files": 1,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
-  },
-  {
-    "id": "t02-fractal-toy",
-    "tier": "sibling-app",
-    "area": "fractal-toy sibling app",
-    "files": 1,
-    "status": "pending",
-    "cycle": null,
-    "findings": 0,
-    "applied": 0,
-    "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 9
   },
   {
     "id": "e09b-state-library-ui",
@@ -345,7 +126,190 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 10
+  },
+  {
+    "id": "e10-engine-features",
+    "tier": "engine-core",
+    "area": "Bundled engine features (audio, modulation, webcam, debug, post, color)",
+    "files": 10,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 11
+  },
+  {
+    "id": "e11-worker-contract",
+    "tier": "engine-core",
+    "area": "Worker proxy, ViewportRefs, RENDER_TICK protocol",
+    "files": 2,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 12
+  },
+  {
+    "id": "e12-mobile-layout",
+    "tier": "engine-core",
+    "area": "Mobile detection + layout primitives",
+    "files": 4,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 13
+  },
+  {
+    "id": "e13-shared-ui",
+    "tier": "engine-core",
+    "area": "components/ primitives + context providers",
+    "files": 15,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 14
+  },
+  {
+    "id": "g01-renderer",
+    "tier": "engine-gmt",
+    "area": "FractalEngine + MaterialController + SceneController + worker",
+    "files": 8,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 15
+  },
+  {
+    "id": "g02-shader-pipeline",
+    "tier": "engine-gmt",
+    "area": "SDFShaderBuilder + GMT ShaderFactory + UniformManager",
+    "files": 8,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 16
+  },
+  {
+    "id": "g03-formula-registry",
+    "tier": "engine-gmt",
+    "area": "FractalRegistry + 42 formulas + V3/V4 pipeline",
+    "files": 4,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 17
+  },
+  {
+    "id": "g04-navigation",
+    "tier": "engine-gmt",
+    "area": "Camera nav + physics probe + HUD",
+    "files": 6,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 18
+  },
+  {
+    "id": "g05-engine-gmt-features",
+    "tier": "engine-gmt",
+    "area": "GMT DDFS features (geometry, coloring, lighting, AO, atmosphere, drawing, droste, interlace, materials, navigation, optics, quality, reflections, texturing, volumetric, water_plane, fragmentarium_import, engine, camera_manager)",
+    "files": 23,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 19
+  },
+  {
+    "id": "g06-bucket-render",
+    "tier": "engine-gmt",
+    "area": "BucketRenderer + WorkerExporter + WorkerHistogram",
+    "files": 5,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 20
+  },
+  {
+    "id": "g07-mesh-export",
+    "tier": "engine-gmt",
+    "area": "Mesh export tool + VDB writer + preview canvas + pipeline",
+    "files": 7,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 21
+  },
+  {
+    "id": "g08-save-load-gmf",
+    "tier": "engine-gmt",
+    "area": "GMF format + scene serialization",
+    "files": 4,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 22
+  },
+  {
+    "id": "g09-modular-graph",
+    "tier": "engine-gmt",
+    "area": "GraphCompiler + ModularGraph",
+    "files": 2,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 23
+  },
+  {
+    "id": "g10-audio-fps-sync",
+    "tier": "engine-gmt",
+    "area": "Audio timeline + FPS sync",
+    "files": 4,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 24
   },
   {
     "id": "g11-gmt-camera-manager",
@@ -357,7 +321,8 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 25
   },
   {
     "id": "g12-formula-workshop",
@@ -369,19 +334,47 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 26
   },
   {
-    "id": "p01-palette-suite",
-    "tier": "palette",
-    "area": "Palette/gradient suite — editors, generator, image→gradient, filters, stores, exporters",
-    "files": 61,
+    "id": "a01-boot-shell",
+    "tier": "app-gmt",
+    "area": "App entry + boot sequence + feature registration",
+    "files": 6,
     "status": "pending",
     "cycle": null,
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 27
+  },
+  {
+    "id": "a02-panels-layout",
+    "tier": "app-gmt",
+    "area": "Panel manifest + topbar + Dock + ViewportFrame",
+    "files": 5,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 28
+  },
+  {
+    "id": "a03-tutorial",
+    "tier": "app-gmt",
+    "area": "Tutorial overlay",
+    "files": 7,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 29
   },
   {
     "id": "gx01-gradient-explorer",
@@ -393,6 +386,46 @@
     "findings": 0,
     "applied": 0,
     "escalated": 0,
-    "proposed": 0
+    "proposed": 0,
+    "priority": 30
+  },
+  {
+    "id": "t01-fluid-toy",
+    "tier": "sibling-app",
+    "area": "fluid-toy sibling app",
+    "files": 1,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 31
+  },
+  {
+    "id": "t02-fractal-toy",
+    "tier": "sibling-app",
+    "area": "fractal-toy sibling app",
+    "files": 1,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 32
+  },
+  {
+    "id": "p01-palette-suite",
+    "tier": "palette",
+    "area": "Palette/gradient suite — editors, generator, image→gradient, filters, stores, exporters",
+    "files": 61,
+    "status": "pending",
+    "cycle": null,
+    "findings": 0,
+    "applied": 0,
+    "escalated": 0,
+    "proposed": 0,
+    "priority": 33
   }
 ]

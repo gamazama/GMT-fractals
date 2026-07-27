@@ -202,12 +202,28 @@ Verified: <guard or verifier method>
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ```
 
-## Budget
+## Throughput, not budget
 
-`state.budgetUsd` is the ceiling. Track spend per cycle in `journal.jsonl`. When
-projected spend for another cycle would exceed the ceiling, stop cleanly: write the
-final dashboard, summarise in `PROPOSALS.md`, and end the loop rather than
-starting work that cannot finish.
+This runs on a Max subscription. There is **no per-token cost and no dollar
+ceiling** — the only real constraint is the rolling 5-hour usage window. Do not
+ration work to save money; there is no money to save. Ration it to stay inside the
+window and to keep quality high.
 
-Rate limits are not failures. If the 5-hour window is exhausted, back off and wait
-for the reset rather than degrading the work.
+Windows reset every 5 hours. For this run: **22:50 → 03:50 → 08:50 SAST**, with the
+`state.deadline` of 09:54 SAST landing in the third. That is two full resets across
+the night, which is enough to reach the end of the worklist if cycles stay lean.
+
+The governors, in order:
+1. `plans/overnight-audit/STOP` exists → stop.
+2. `state.deadline` passed → stop.
+3. `state.cycle >= state.maxCycles` → stop.
+4. Worklist empty → stop, and say so prominently on the dashboard.
+
+**Rate limits are not failures and not a reason to degrade.** If the window is
+exhausted mid-cycle, finish writing whatever is already verified, update the
+dashboard so the owner sees real progress, and wait for the reset. Never respond to
+a rate limit by lowering the verification bar, skipping guards, or applying
+unverified findings to "get more done" — that inverts the whole point of the run.
+
+Log per-cycle wall time and whether the window was hit in `journal.jsonl`, so the
+morning read shows where the night actually went.
