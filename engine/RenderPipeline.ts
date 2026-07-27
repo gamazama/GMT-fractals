@@ -52,7 +52,10 @@ export class RenderPipeline {
     private mrtTargetA: THREE.WebGLRenderTarget | null = null;
     private mrtTargetB: THREE.WebGLRenderTarget | null = null;
     
-    // Which target was written to last frame (0 = A, 1 = B)
+    // The NEXT target to write (0 = A, 1 = B) — flipped at the END of
+    // render(), so at rest it is the OPPOSITE of the just-written target.
+    // See the class @invariant above; getOutputTexture() / getPrevious*()
+    // all invert it.
     private writeIndex: number = 0;
     
     public frameCount: number = 0;
@@ -61,7 +64,12 @@ export class RenderPipeline {
 
     // Cached half-float-alpha capability probe. Some mobile GPUs report
     // HALF_FLOAT support but fail framebuffer-completeness when alpha is
-    // attached. When false, initTargets/resize drop to FloatType.
+    // attached. NOTE: nothing in this class consults it — initTargets() /
+    // resize() take the target type from accumFormat(), which reads glCaps()
+    // + _qualityState.bufferPrecision only. Its sole reader is
+    // checkHalfFloatAlphaSupport(); the worker publishes that result in the
+    // BOOTED payload (engine-gmt/engine/worker/renderWorker.ts) for
+    // WorkerProxy to mirror. Gating accumFormat() on it is still an open gap.
     private _halfFloatAlphaSupport: boolean | null = null;
     
     public lastCompleteDuration: number = 0;
@@ -235,8 +243,8 @@ export class RenderPipeline {
         buffer.fill(0);
 
         // Match the actual target type, not the requested precision —
-        // initTargets may have dropped to FloatType when the half-float-alpha
-        // probe failed (checkHalfFloatAlphaSupport).
+        // accumFormat() can pick a type that differs from bufferPrecision
+        // (e.g. HalfFloat when full float isn't linearly filterable).
         const useHalfFloat = target.texture.type === THREE.HalfFloatType;
         
         try {
@@ -271,7 +279,9 @@ export class RenderPipeline {
      * context. Cached after first call. Worker-side: pipeline lives in the
      * render worker, so this runs in the worker's GL realm.
      *
-     * @see docs/adr — extends q-094 fix: half-float fallback for mobile GPUs.
+     * Informational only — see the `_halfFloatAlphaSupport` field comment for
+     * what does (and does not) read it. No ADR covers this probe; the original
+     * investigation is docs/history/doc-audit-state/survey/_followups/q-094.md.
      */
     public checkHalfFloatAlphaSupport(): boolean {
         if (this._halfFloatAlphaSupport !== null) return this._halfFloatAlphaSupport;
@@ -502,8 +512,12 @@ export class RenderPipeline {
         this.lastConvergenceResult = 1.0;
         this.isHolding = false;
         // Abandon any in-flight async convergence measurement. The fence/target
-        // are pipeline-global but convergence is measured per-accumulation-run
-        // (per GPU bucket during a bucket render, or per viewport accumulation).
+        // are pipeline-global but convergence is measured per-accumulation-run.
+        // The only live measurer today is the viewport path in render() (gated
+        // on `_convergenceNeeded`, and skipped while `_isBucketRendering`);
+        // bucket render stopped measuring convergence in ADR-0067. The bucket
+        // scenario below is the original bug this clear still guards against —
+        // test:bucket-convergence drives it directly.
         // Without this, a measurement started for the PREVIOUS run (e.g. a bucket
         // that hit its sample cap before its fence resolved) stays pending: the
         // next run can't start its own measurement (startAsyncConvergence early-
@@ -749,9 +763,11 @@ void main() { gl_FragColor = texture2D(tSrc, vUv); }`,
      * @invariant The `sampleCap` gate is the LIVE-VIEWPORT auto-stop only
      *   (topbar "Auto-Stop (Samples)"). It must NOT apply during a bucket /
      *   high-res render: there the BucketRunner is the sole authority on
-     *   per-bucket sample count (`samplesPerBucket` + convergence), so a low
-     *   viewport cap would otherwise stop each bucket early and starve the
-     *   render of its target samples.
+     *   per-bucket sample count (`samplesPerBucket` alone — per-bucket
+     *   convergence was removed, see ADR-0067), so a low viewport cap would
+     *   otherwise stop each bucket early and starve the render of its target
+     *   samples.
+     * @see docs/adr/0067-bucket-render-equal-spp-no-convergence.md
      */
     public render(renderer: THREE.WebGLRenderer, uniforms?: { [key: string]: THREE.IUniform }, scene?: THREE.Scene, camera?: THREE.Camera) {
         if (!this.mrtTargetA || !this.mrtTargetB) return;
