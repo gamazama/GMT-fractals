@@ -11,9 +11,11 @@
  *   4. loadPreset restores all three slices back to the captured
  *      state after a second mutation (true save → mutate → load test)
  *
- * Run with:  ENGINE_URL=http://localhost:3400/fractal-toy.html npm run smoke:fractal-toy
- * Default URL is the main engine (for CI convenience); set
- * ENGINE_URL to target fractal-toy explicitly.
+ * Run with:  npm run smoke:fractal-toy
+ * ENGINE_URL already defaults to http://localhost:3400/fractal-toy.html —
+ * override it only to point at another host or port. (It does NOT default
+ * to the main engine; that would make every assertion below unreachable,
+ * since `mandelbulb` / `camera` / `lighting` are fractal-toy slices.)
  */
 import { chromium } from 'playwright';
 

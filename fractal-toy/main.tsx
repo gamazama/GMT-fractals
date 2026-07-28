@@ -1,14 +1,21 @@
 /**
  * Fractal Toy — entry point.
  *
- * @invariant Entry point — see fractal-toy.html (mounts this module).
+ * @invariant `fractal-toy.html` mounts THIS module and nothing else does —
+ *   proven by: `npm run smoke:fractal-toy` ("mandelbulb slice missing").
+ *   Its ENGINE_URL defaults to `/fractal-toy.html`, and every assertion in
+ *   it reads `window.__store`, which only exists once this module's
+ *   `registerFeatures` → `createEngineStore` chain has run. Grep for
+ *   `fractal-toy/main.tsx` in `fractal-toy.html` for the single `<script
+ *   type="module">` tag that is the whole binding.
  *
  * Minimal raymarched-fractal add-on built on the engine. The nucleus
  * of the eventual full GMT port and the second live consumer of the
- * engine's plugin surface (alongside the Demo add-on and the future
- * toy-fluid port). See docs/01_Architecture.md and HANDOFF.md.
+ * engine's plugin surface (alongside the Demo add-on and fluid-toy).
+ * See docs/history/engine/01_Architecture.md and HANDOFF.md.
  *
- * The three-file add-on contract (see docs/03_Plugin_Contract.md):
+ * The three-file add-on contract
+ * (see docs/history/engine/03_Plugin_Contract.md):
  *   1. `fractal-toy/registerFeatures.ts` — side-effect: registers
  *      DDFS features + viewport overlay with the engine's registries.
  *      Imported FIRST so registrations land before createEngineStore.
