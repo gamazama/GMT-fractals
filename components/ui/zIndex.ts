@@ -138,6 +138,16 @@ export const Z = new Proxy({} as Record<Tier, number>, {
  * Shell tiers legitimately share values (different traps) and are exempt.
  * Used by `registerTiers` (throws) and the `test:zindex` gate (asserts).
  */
+/**
+ * The panel band's reserved headroom, enforced by `registerTiers`.
+ *
+ * `panel` is [100..199]; growing its span to 199 would make it exactly
+ * [100..299], which is why this range is kept free rather than merely unused.
+ * `popover` was moved 200 → 300 to clear it (ADR-0082).
+ */
+const RESERVED_PORTAL_LO = 200;
+const RESERVED_PORTAL_HI = 299;
+
 export function findPortalOverlaps(table: Record<string, TierDef> = TIER_TABLE): string[] {
     const portal = Object.entries(table).filter(([, d]) => d.domain === 'portal');
     const clashes: string[] = [];
@@ -171,6 +181,20 @@ export function registerTiers(tiers: Record<string, TierDef>): void {
         if (def.domain === 'portal') {
             const clashes = findPortalOverlaps(probe).filter((c) => c.includes(name));
             if (clashes.length) throw new Error(`registerTiers: "${name}" overlaps an existing portal band: ${clashes.join(', ')}`);
+            // findPortalOverlaps only compares DECLARED bands, so it cannot see a
+            // reservation that no TierDef occupies. 200–299 is exactly that: it was
+            // deliberately vacated when `popover` moved 200 → 300 (ADR-0082) to give
+            // the panel band real headroom, and plans/z-index-system-design.md calls
+            // it inviolate. Without this check a tier at 250 registered silently and
+            // resolved to a live z above every floating panel — proved by probe.
+            const hi = def.base + def.span;
+            if (def.base <= RESERVED_PORTAL_HI && hi >= RESERVED_PORTAL_LO) {
+                throw new Error(
+                    `registerTiers: "${name}" [${def.base}..${hi}] intersects the reserved panel headroom `
+                    + `(${RESERVED_PORTAL_LO}–${RESERVED_PORTAL_HI}). That range is kept free so the panel `
+                    + `band can grow its span; pick a gap above popover (300+) instead.`,
+                );
+            }
         }
         TIER_TABLE[name] = def;
     }

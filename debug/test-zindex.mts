@@ -53,6 +53,25 @@ try {
 } catch {
     ok('registerTiers rejects an overlapping portal tier');
 }
+// 5. The 200–299 panel headroom is reserved but occupied by no TierDef, so
+//    findPortalOverlaps cannot see it — it compares declared bands only. Before
+//    this case existed, a tier at 250 registered silently and resolved to a live
+//    z above every floating panel.
+for (const base of [200, 250, 299]) {
+    try {
+        registerTiers({ [`testReserved${base}`]: { base, span: 0, domain: 'portal' } });
+        fail(`registerTiers accepted a portal tier at ${base}, inside the reserved 200–299 headroom`);
+    } catch {
+        ok(`registerTiers rejects a portal tier at ${base} (reserved panel headroom)`);
+    }
+}
+try {
+    // A span that starts below the reservation but reaches into it must also fail.
+    registerTiers({ testReservedSpan: { base: 195, span: 20, domain: 'portal' } });
+    fail('registerTiers accepted a tier whose span reaches into 200–299');
+} catch {
+    ok('registerTiers rejects a tier whose span reaches into the reservation');
+}
 
 if (failures) { console.error(`\nFAILED: ${failures} assertion(s)`); process.exit(1); }
 console.log('\nPASS');
