@@ -134,7 +134,8 @@ export const applyPresetState = (
 
     // Non-feature scene fields (cameraRot, targetDistance, savedCameras, …).
     // Registered by utils/defaultPresetFields.ts at boot; future apps/plugins
-    // add their own via presetFieldRegistry.register(). See docs/04_Core_Plugins.md.
+    // add their own via presetFieldRegistry.register().
+    // See docs/history/engine/04_Core_Plugins.md.
     presetFieldRegistry.applyAll(p, set, get as () => Record<string, unknown>);
 
     if (p.duration) useAnimationStore.getState().setDuration(p.duration);

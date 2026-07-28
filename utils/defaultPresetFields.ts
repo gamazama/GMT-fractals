@@ -6,7 +6,8 @@
  * the @engine/camera core plugin is extracted, it will own these registrations
  * and this module goes away.
  *
- * See docs/04_Core_Plugins.md § scene-io and docs/20_Fragility_Audit.md F3.
+ * See docs/history/engine/04_Core_Plugins.md § scene-io and
+ * docs/history/engine/20_Fragility_Audit.md F3.
  */
 
 import { presetFieldRegistry } from './PresetFieldRegistry';

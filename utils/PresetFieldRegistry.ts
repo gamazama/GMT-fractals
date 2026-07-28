@@ -10,7 +10,8 @@
  *
  * This registry externalizes that surface. Each field declares its own
  * serialize/deserialize pair; PresetLogic and getPreset just iterate.
- * See docs/20_Fragility_Audit.md F3 for the audit finding this fix addresses.
+ * See docs/history/engine/20_Fragility_Audit.md F3 for the audit finding this
+ * fix addresses.
  *
  * Canonical fields (camera rot / target distance / saved cameras) are
  * registered by defaultPresetFields.ts at store construction; a future
@@ -42,7 +43,7 @@ export class PresetFieldFrozenError extends Error {
         super(
             `Preset field "${key}" registered after registry was frozen. ` +
             `All preset fields must register before createEngineStore runs. ` +
-            `See docs/04_Core_Plugins.md § scene-io.`
+            `See docs/history/engine/04_Core_Plugins.md § scene-io.`
         );
         this.name = 'PresetFieldFrozenError';
     }
