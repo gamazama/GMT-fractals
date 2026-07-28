@@ -6,9 +6,29 @@ import { DEFAULT_HARD_CAP, MOBILE_HARD_CAP } from '../data/constants';
  * Mobile-viewport heuristic shared by hardware detection and runtime
  * layout. Coarse pointer OR viewport < 768px CSS wide. SSR-safe.
  *
- * @invariant Single source of truth for the 768px breakpoint —
- *   `hooks/useMobileLayout.ts` and `detectHardwareProfile` both consume
- *   this. Changing the threshold or pointer media query happens here.
+ * Re-evaluated per call — it reads live `window.innerWidth`, so the result
+ * is NOT fixed for a session: shrinking a desktop window under 768px flips
+ * it to true and the resize listener in `hooks/useMobileLayout.ts` pushes
+ * that into the store.
+ *
+ * @invariant This is the INTENDED home of the 768px / `(pointer: coarse)`
+ *   predicate, but it is NOT yet the only copy — do not trust the threshold
+ *   here as globally authoritative. Exactly two call sites import it
+ *   (`hooks/useMobileLayout.ts` and `detectHardwareProfile` below); eight
+ *   inline re-implementations of the same test survive and must be changed
+ *   in lockstep:
+ *     - `store/slices/uiSlice.ts` `checkIsMobile` — dock left→right remap
+ *     - `store/slices/uiSlice.ts` slice initializer — seeds `isDeviceMobile`
+ *       at store construction. This is the BOOT value; changing the
+ *       threshold *here alone* leaves boot on the old one until the first
+ *       resize event (verified by mutation — see the rules file).
+ *     - `store/slices/viewportSlice.ts` `isMobile` — default DPR
+ *     - `components/layout/Dock.tsx` `checkIsMobile`
+ *     - `engine-gmt/renderer/GmtRendererCanvas.tsx`
+ *     - `engine-gmt/components/FormulaPicker/FormulaPicker.tsx` (x2)
+ *     - `palette/store/favientsPanelPersist.ts` `isMobileBoot`
+ *   `gradient-explorer`'s `MOBILE_BREAKPOINT` is deliberately NOT one of
+ *   these — it is a width-only layout-fit threshold, not device detection.
  */
 export function isMobileViewport(): boolean {
     return typeof window !== 'undefined' && (
@@ -18,15 +38,22 @@ export function isMobileViewport(): boolean {
 
 /**
  * Detect device hardware capabilities.
- * Called once at boot — the result is immutable for the session.
  *
- * When a WebGL2 context is available (worker-side), probes Float32
- * render target support. On the main thread (no GL context), falls
- * back to heuristics (pointer type, viewport width, user agent).
+ * NOT once-per-session and NOT immutable, despite the shape of the API.
+ * Three in-tree call sites, all through `detectHardwareProfileMainThread()`:
+ * `hooks/useAppStartup.ts` at boot, `engine-gmt/engine/FractalEngine.ts`
+ * when it seeds `isMobile`, and `engine-gmt/components/panels/
+ * HardwarePreferences.tsx` on the user's "reset to detected" click. Because
+ * `isMobileViewport()` reads live `innerWidth`, a resize across 768px
+ * changes what a later call returns.
  *
- * @invariant Not cached — each call allocates and deletes a 1x1 RGBA32F
- *   framebuffer + texture. Safe to call repeatedly but not free;
- *   detect once at boot.
+ * The `gl` branch probes Float32 render-target support and was written for
+ * worker-side use, but NO in-tree caller passes a context today — every
+ * caller lands in the no-GL heuristic fallback.
+ *
+ * @invariant Not cached — each call *with a GL context* allocates and
+ *   deletes a 1x1 RGBA32F framebuffer + texture. Safe to call repeatedly
+ *   but not free; detect once at boot.
  * @invariant `compilerHardCap` flattens both mobile tiers to
  *   `MOBILE_HARD_CAP` (256); desktop uses `DEFAULT_HARD_CAP` (2000).
  *   Units are raymarch/DE loop iteration count, not pixels.
