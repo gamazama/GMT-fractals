@@ -6,9 +6,10 @@ camera/views) lives in [engine/](../engine/) or its core plugins; this folder
 holds only fluid-toy's domain (FluidEngine, brush, gestures, presets).
 
 **Live at:** [http://localhost:3400/fluid-toy.html](http://localhost:3400/fluid-toy.html) (`npm run dev`).
-**Reference (frozen):** [stable/toy-fluid/](../../stable/toy-fluid/) is the original
-useState/RAF prototype, kept for sanity-checking visual parity. Don't port new
-work back to it.
+**Reference (frozen):** the original useState/RAF `toy-fluid/` prototype was
+deleted in `50547f46` ("Phase 6: GMT on engine + panel manifest unification").
+For visual-parity archaeology, read it out of history — `git show
+50547f46^:toy-fluid/<file>`.
 
 For a complete, line-by-line index of every file see [CODE_MAP.md](CODE_MAP.md).
 
@@ -34,7 +35,7 @@ fluid-toy/
 ├── panels.ts                   PanelManifest (which panels appear in which
 │                               dock).
 │
-├── FluidToyApp.tsx             ~210 line shell. Wires store callbacks, mounts
+├── FluidToyApp.tsx             ~256 line shell. Wires store callbacks, mounts
 │                               viewport, calls useEngineSync + useDeepZoomOrbit.
 ├── FluidPointerLayer.tsx       46 lines. Mounts the pointer/ hooks.
 ├── useFluidEngine.ts           Boots FluidEngine, owns the RAF loop, ticks
@@ -96,7 +97,16 @@ fluid-toy/
 │   ├── QualityBadge.tsx        adaptive q% pill
 │   ├── ViewLibraryPanel.tsx    saved-views panel (engine StateLibrary)
 │   ├── DeepZoomStatus.tsx      diag overlay (orbit length / LA stats / GPU ms)
-│   └── DeepZoomBench.tsx       A/B benchmark for deep-zoom perf knobs
+│   ├── DeepZoomBench.tsx       A/B benchmark for deep-zoom perf knobs
+│   ├── FluidToggleButton.tsx   topbar "start the fluid" toggle — unfreezes the
+│   │                           sim AND flips composite to Mixed (the boot
+│   │                           state is a PURE FRACTAL: paused + Fractal-only)
+│   ├── CoordsButton.tsx        copy view + colour state to clipboard as JSON
+│   ├── FitGradientButton.tsx   `palette-fit` widget — anchor the gradient onto
+│   │                           the current iteration range
+│   ├── IterationReadout.tsx    which iteration cap is actually live right now
+│   └── RenderDialog/
+│       └── exportRunner.ts     deterministic per-frame video export ratchet
 │
 ├── viewLibrary.ts              installStateLibrary call + JuliaViewState +
 │                               type augmentation (see Type Augmentation doc)
@@ -104,23 +114,27 @@ fluid-toy/
 ├── engineHandles.ts            cross-tree handles (engine ref, brush runtime,
 │                               cursor state) — typed, not globals
 │
-├── deepZoom/                   reference-orbit perturbation pipeline (worker-
-│                               built BigInt orbit + LA merge tree + AT)
-│   ├── HighPrecComplex.ts      fixed-point BigInt complex arithmetic
-│   ├── HDRFloat.ts             (mantissa, exp) packing for shader uniforms
-│   ├── dd.ts                   Dekker double-double primitives (sub-f64 pan)
-│   ├── referenceOrbit.ts       orbit builder (Mandelbrot + Julia, power 2..8)
-│   ├── laBuilder.ts            LA merge tree
-│   ├── LAInfoDeep.ts           LA node algebra
-│   ├── laParameters.ts         LA tuning
-│   ├── atBuilder.ts            AT (Approximation Terms) front-load
-│   ├── deepZoomWorker.ts       worker entry; transferable orbit + LA + AT
-│   ├── laRuntime.ts            main-thread proxy + singleton
-│   ├── diagnostics.ts          Zustand diag store consumed by DeepZoomStatus
-│   └── benchmark.ts            A/B perf bench for DeepZoomBench
+├── deepZoom/                   the reference-orbit PIPELINE itself now lives
+│                               in engine/fractal/deepZoom/ — carved out so the
+│                               Gradient Explorer shares the same DD / orbit /
+│                               LA math instead of forking it. HighPrecComplex,
+│                               HDRFloat, referenceOrbit, laBuilder, LAInfoDeep,
+│                               laParameters, atBuilder and deepZoomWorker are
+│                               all there now. What is left here:
+│   ├── dd.ts                   re-export shim → engine/fractal/deepZoom/dd
+│   ├── laRuntime.ts            re-export shim → engine/fractal/deepZoom/laRuntime
+│   ├── diagnostics.ts          fluid-toy only. Tiny pub/sub (deliberately NOT
+│   │                           a Zustand slice) consumed by DeepZoomStatus
+│   └── benchmark.ts            fluid-toy only. A/B bench for DeepZoomBench
+│
+├── bucket/
+│   └── FluidBucketController.ts
+│                               tiled high-res export. Image-tile loop (one PNG
+│                               per tile) + GPU sub-bucket loop inside each tile
+│                               via uRegionMin/uRegionMax discard.
 │
 └── fluid/
-    ├── FluidEngine.ts          ~1.8k lines. WebGL pipeline orchestrator.
+    ├── FluidEngine.ts          ~2.1k lines. WebGL pipeline orchestrator.
     │                           Owns the per-concern controllers below.
     ├── DeepZoomController.ts   refOrbit + LA + AT GPU state. App drives via
     │                           engine.deepZoom.xxx. bindUniforms() per frame.
@@ -146,7 +160,7 @@ fluid-toy/
 
 1. **`features/<name>.ts`** — export a `FeatureDefinition` and a
    `sync<Name>ToEngine(engine, slice, …)` function. Pattern: copy the
-   smallest existing feature ([composite.ts](features/composite.ts) at 78 lines).
+   smallest existing feature ([composite.ts](features/composite.ts) at 88 lines).
 
 2. **`registerFeatures.ts`** — `featureRegistry.register(YourFeature)`.
 
@@ -210,7 +224,7 @@ hides the sentinel.
 
 Adding a feature should be one file. The sync function is part of that
 contract — it's the authoritative mapping of the DDFS slice into the
-engine's setParams. Keeps FluidToyApp thin (~200 lines) and means the
+engine's setParams. Keeps FluidToyApp thin (~250 lines) and means the
 push logic is co-located with the param defaults that drive it.
 
 ### Store-key augmentation lives next to the install call
@@ -227,11 +241,18 @@ consumer knows what names it picked. See [docs/history/engine/16_Type_Augmentati
 ```bash
 npm run dev                          # vite at :3400
 npm run smoke:fluid-toy              # headless DDFS + preset round-trip
-npm run smoke:orbit                  # auto-orbit visual check
 npm run smoke:pause-controls         # topbar pause flow
-npm run smoke:fluid-brush            # brush splat + particle emitter (FLAKY — Chromium GPU watchdog)
-npm run smoke:fluid-presets          # preset apply (FLAKY — UI selector timing)
+npm run smoke:fluid-brush            # brush splat + particle emitter
+npm run smoke:fluid-presets          # preset apply (Coral Gyre → four slices)
+npm run smoke:migrations             # v1 tab-parity slice migration
 ```
+
+All five default to `ENGINE_URL=http://localhost:3400/fluid-toy.html`, so all
+five actually exercise this tree. **`npm run smoke:orbit` does not** — it
+defaults to `app-gmt.html` and was listed here in error.
+
+`smoke:pause-controls` rewrites the tracked `debug/fluid-pause-hover.png` as a
+side effect; `git checkout -- debug/fluid-pause-hover.png` after running it.
 
 Smokes that need a running browser fail-loudly hit `localhost:3400` directly.
 If you're not running `npm run dev` in another terminal, use the wrapper:
@@ -252,7 +273,7 @@ It boots vite on a free port, sets `ENGINE_URL`, runs the smoke, kills vite.
 | Type error on `setX` / `state.x` | [storeTypes.ts](storeTypes.ts) — slice missing from one of the two augmentation targets |
 | Brush colour wrong / no splats | [brush/](brush/) + [pointer/gestures/splat.ts](pointer/gestures/splat.ts) |
 | Pan / zoom snaps back / jitters | [pointer/handlers.ts](pointer/handlers.ts) dispatcher + the relevant gesture file ([pan.ts](pointer/gestures/pan.ts) / [zoom.ts](pointer/gestures/zoom.ts) / [wheel.ts](pointer/gestures/wheel.ts)) — pendingViewRef commit at onUp / wheel idle timer |
-| Deep-zoom quantizing past 1e-15 | [pointer/gestures/](pointer/gestures/) DD pan accumulator + [deepZoom/HighPrecComplex.ts](deepZoom/HighPrecComplex.ts) `fromNumber` extracts IEEE-754 mantissa/exp |
+| Deep-zoom quantizing past 1e-15 | [pointer/gestures/](pointer/gestures/) DD pan accumulator + [engine/fractal/deepZoom/HighPrecComplex.ts](../engine/fractal/deepZoom/HighPrecComplex.ts) `fromNumber` extracts IEEE-754 mantissa/exp |
 | Modulation not driving a target | Check `state.animations` has the LFO entry; `state.liveModulations[target]` should update each frame; sync function for that feature must read liveMod via `applyLiveMod` (see useEngineSync.ts) |
 | Preset load drops a field | Field is on a slice not in [presets/apply.ts](presets/apply.ts), or shape changed without a [migrations.ts](migrations.ts) entry |
 | Adaptive quality stuck low | engine — see [docs/history/engine/10_Viewport.md](../docs/history/engine/10_Viewport.md) and [docs/history/engine/11_TSAA.md](../docs/history/engine/11_TSAA.md) |
