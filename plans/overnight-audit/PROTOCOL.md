@@ -25,22 +25,32 @@ is dropped — never applied.
 - **Never touch** `node_modules/`, `dist/`, `.env*`, credentials, or anything under
   `docs/history/**` beyond appending (a hook enforces the last one).
 - **Never edit `gmt-rs/`** — explicitly out of scope for this run.
-- **Never edit anything under `docs/adr/`.** Owner decision, cycle 1. The
-  `guard.mjs` PreToolUse hook escalates every ADR write to an interactive
-  permission prompt (it cannot distinguish a sanctioned append-only Update block
-  from an illegal body rewrite), which stalls an unattended run. **Every ADR
-  correction — drifted line numbers, dead paths, superseded symbols — is Tier B
-  and goes to `PROPOSALS.md`** with the exact replacement text ready to paste, so
-  the morning pass is mechanical. This applies to auditors and verifiers too;
-  state it in every prompt you give them.
+- **ADRs: append-only, and now editable during the run.** See the amendment below
+  — the cycle-1 blanket ban is LIFTED.
 - If a change would require any of the above to verify it, the finding is Tier B.
 
-> **Amendment, cycle 1 (2026-07-27):** two ADR commits landed before this rule
-> existed — `652fb61c` (ADRs 0001/0003/0004 line-citation refresh) and `8842a839`
-> (ADR-0110 low-fps mechanism correction). Both are verified, append-only Update
-> blocks and both are on the audit branch only. They are flagged at the top of
-> `PROPOSALS.md` so they can be dropped with a rebase if the owner would rather
-> apply ADR changes by hand.
+> **Amendment, cycle 1 (2026-07-27):** two ADR commits landed before the ADR rule
+> existed — `652fb61c` and `8842a839`. Both are verified append-only Update blocks.
+> **Superseded by the amendment below: they are correct and stay.**
+
+> **Amendment, run 2 (2026-07-29) — ADRs are no longer Tier B.** The cycle-1 ban
+> existed because `guard.mjs` escalated *every* ADR write to an interactive
+> prompt, on the stated grounds that a sanctioned Update block could not be told
+> from a body rewrite. It can: both sanctioned edits only ADD lines, and a rewrite
+> necessarily drops some. The hook now classifies mechanically — additive edits
+> pass silently, anything that would delete existing text still asks. Falsified in
+> both directions before shipping.
+>
+> So an auditor MAY now prepend a dated
+> `> **Update YYYY-MM-DD (...; decision unchanged):**` block during the run, and
+> that is Tier A when a grep proves the drift. Still forbidden: rewriting a
+> Decision body, and stamping `Status: Superseded` (that deletes "Accepted", so it
+> asks — leave it Tier B). The 11 corrections queued from run 1 were all applied
+> by hand on 2026-07-28; do not re-derive them.
+>
+> **Cite grep targets, not line numbers.** Five of those eleven were pure
+> line-drift and one had rotted into pointing at unrelated code. `grep for
+> DOUBLE_RUN_WINDOW_MS` still resolves in a year; `TickRegistry.ts:89-94` does not.
 
 ## The four tiers
 
@@ -59,6 +69,18 @@ Requirements, all of them:
 5. Committed to the audit branch, one commit per finding, message naming the guard.
 
 Record `guard` and `guardPass` in the finding. This is the tier to aim for.
+
+> **A `pre-commit` hook now typechecks before every commit that stages TypeScript**
+> (added 2026-07-28, tracked at `scripts/git-hooks/`). A broken tree can no longer
+> be committed, so requirement 4 is enforced rather than trusted. Two consequences
+> for the run: a commit that stages `.ts`/`.tsx` costs ~9s more, and if a commit is
+> refused, READ THE ERRORS — do not reach for `--no-verify`.
+>
+> Why it exists is itself the lesson: a broken tree was committed on 2026-07-28
+> because the verification command was `npm run typecheck 2>&1 | tail -2 && git
+> commit`. **A pipeline's exit status is the last command's**, so `tail` returning
+> 0 masked tsc's failure. Never infer a command succeeded from its piped output —
+> check the exit code, and if you must pipe, check `${PIPESTATUS[0]}`.
 
 ### Tier V — orchestrator-verified
 The change is sound but no existing guard covers it. The agent **must not apply it
@@ -152,9 +174,31 @@ left `in-progress` are reset to `pending` at the start of each cycle.
 In priority order. Stop when the subsystem is genuinely covered, not when the list
 is exhausted.
 
+0. **Guard health FIRST, before anything else in the subsystem.** Run 1 found
+   TWELVE guards that could not do the job they were named for, and it found them
+   incidentally, one per subsystem, over ten cycles. Every Tier A finding rests on
+   "the guard is green", so a dead guard silently devalues everything downstream
+   of it. Four failure modes, all seen: **cannot fail at all** (`test:frag`
+   counted failures and exited 0; `test:frag:scan` has no assertion whatsoever),
+   **permanently red** (a guard that has never been green cannot distinguish a
+   regression from its baseline), **collects values but asserts nothing**, and
+   **healthy but cited for the wrong thing** (~9 instances — a rule citing a smoke
+   whose `ENGINE_URL` boots a sibling app that never imports the governed files).
+   `npm run check:rule-guards` now catches that last mode mechanically — run it
+   once per cycle and treat any output as a finding. For the others: read the
+   guard's `ENGINE_URL` default, confirm your files are in that entry's import
+   graph, and **falsify it** — break the code it governs, watch it go red, revert
+   with a targeted Edit. A guard you did not falsify is a guess about a guard.
+
 1. **`@invariant` verification.** 152 files carry one. Does the code still satisfy
    what the annotation claims? This is the highest-value pass and nothing else
    checks it. A broken invariant is usually Tier V (write a probe to prove it).
+   Roughly a THIRD of those checked in run 1 were false — and they were exactly
+   the ones with no guard behind them. Per CLAUDE.md, an `@invariant` now carries
+   the command that would go red if it were wrong; one that cannot name such a
+   command is an `@assumption`. **Downgrading an unprovable `@invariant` to
+   `@assumption` is a legitimate Tier A finding**, not a cop-out — it makes the
+   absence of proof greppable instead of invisible.
 2. **Citation drift.** Do paths, symbols and line refs in `.claude/rules/`, ADRs and
    JSDoc still resolve? Dead citations are Tier A when a grep proves it.
 3. **Doc-vs-code contradiction.** Claims that are simply false — the kind where a
@@ -245,3 +289,60 @@ unverified findings to "get more done" — that inverts the whole point of the r
 
 Log per-cycle wall time and whether the window was hit in `journal.jsonl`, so the
 morning read shows where the night actually went.
+
+---
+
+## Run 2 — 2026-07-29
+
+Run 1 covered 28 of 33 subsystems in 10 cycles. **Its findings are in `results/`
+and `PROPOSALS.md` — read before auditing, and do not re-derive them.**
+
+### Five subsystems remain
+
+`a03-tutorial` (7f) · `gx01-gradient-explorer` (6f) · `t01-fluid-toy` (1f) ·
+`t02-fractal-toy` (1f) · `p01-palette-suite` (61f)
+
+Take the four small ones first — they finish quickly and `p01` is 61 files that
+wants a cycle of its own rather than a third of one.
+
+### After those, the work is cross-cutting, not per-subsystem
+
+Run 1's remaining value is in sweeps that span the tree. In rough priority:
+
+1. **Guard sweep.** Falsify EVERY `npm run test:*` / `smoke:*` / `check:*` in
+   `package.json` — break what it governs, confirm it goes red, revert. Twelve
+   were found broken incidentally in run 1; a systematic pass would find the rest
+   in one go, and it raises the trustworthiness of every Tier A finding that cites
+   one. Highest value in the queue.
+2. **`@invariant` → `@assumption` sweep.** Any invariant that cannot name a
+   command which would fail if it were wrong is an assumption. Downgrading is
+   Tier A. ~152 files carry one; a third of those checked in run 1 were false.
+3. **`check:rule-guards` follow-through.** It reports 4 miscitations today
+   (3 deep-zoom smokes on `gmt-formulas-and-graph.md`, `test:bucket-convergence`
+   on `gmt-renderer.md`). Also note `engine/fractal/deepZoom/**` is scoped by NO
+   rule at all — that subsystem is rule-orphaned.
+4. **NUL-byte / unsearchable-file scan.** `components/CategoryPickerMenu.tsx`
+   carried a literal NUL inside a React key, which made grep classify it binary
+   and SKIP it — so it was invisible to the whole of run 1. One file today, but
+   the class is silent blindness and the check is cheap.
+
+### Open threads worth picking up
+
+- **`loadScene`'s post-boot branch is unreachable in app-gmt** (the module-scope
+  stub capture). The undo half was measured and is masked; this half was NOT
+  re-measured and may be user-visible. See the `@bug` on `setProxy`.
+- **ShaderFactory fork-back is blocked by a seam**, not by effort: engine-core
+  constructs the `ShaderBuilder` internally and never exposes it, so engine-gmt
+  cannot configure it before the feature loop and had to reimplement. An optional
+  `configure?: (b: ShaderBuilder) => void` on core would unblock it. Separately,
+  engine-gmt's ADR-0043 `@invariant` (inject() runs for every feature regardless
+  of enabled state) is a GENERIC contract that core relies on and does not state —
+  copying that comment across is the highest value-per-risk item in the area.
+- **`mesh-export/` has no runtime guard of any kind.** Per-axis export bounds is
+  a known live bug deferred to v2 integration; do not attempt it unattended.
+
+### Standing reminders
+
+Owner is asleep; the morning is spent disproving unverified claims, so pace over
+throughput still applies. Never push, never touch `main`, never delete a file.
+The dashboard is built every cycle but **never published** — publishing prompts.
