@@ -1,0 +1,36 @@
+{
+  "id": "g10-audio-fps-sync",
+  "cycle": 9,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g10-audio-fps-sync" },
+    { "script": "npm run smoke:audio-fps-remap", "pass": true, "subsystem": "g10-audio-fps-sync" },
+    { "script": "npm run smoke:anim-play", "pass": true, "subsystem": "g10-audio-fps-sync" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "store/animation/types.ts",
+      "line": 14,
+      "summary": "Undo of an fps 'match' change restored keyframes but NOT AudioClip.startFrame — the FPS history entry never snapshotted audioClips, so undo reintroduced exactly the (r-1)*startFrame audio drift that setFps('match')'s remap exists to prevent.",
+      "change": "Added audioClips to the FPS HistoryItem payload, captured it when pushing the entry (playbackSlice.setFps) and when building the inverse for redo (sequenceSlice.captureInverse), and restored it in applyHistory — guarded with a presence check so entries pushed before this change leave the live decks alone rather than blanking them. The undo stack is memory-only and never persisted, so that guard only matters within a session. Extended smoke:audio-fps-remap with undo + redo assertions on fps, keyframe frame and audio startFrame together.",
+      "verification": "Falsification-first. The new assertions were added to the smoke BEFORE any store change and it failed with exactly 'undo audio startFrame expected 120, got 60 — FPS history entry does not snapshot audioClips': the keyframe came back to 120 while the clip stayed at 60, i.e. a clip and its keyframe one second apart after a 60 -> 30 -> undo round trip. After the three store edits it passes. The guard bites in either direction: drop the capture in playbackSlice and the undo leg fails; drop the restore in applyHistory and the undo leg fails; capture post-change clips instead of pre-change ones in captureInverse and the redo leg fails. smoke:anim-play and typecheck also green.",
+      "guard": "npm run smoke:audio-fps-remap",
+      "guardPass": true,
+      "commit": "25bd548e"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "engine/animation/audioExportMix.ts",
+      "line": 20,
+      "summary": "mixAudioClipsForExport never receives frameStep, so any export with Step > 1 produces an audio track frameStep times longer than the video that drifts linearly from frame 0.",
+      "change": "Annotation only — a @bug PRODUCTION: block recording the mechanism, the reachability proof and four options, plus a qualification of the adjacent @invariant about the inclusive (endFrame+1)/fps end, which is only consistent with the pump's frame count at frameStep === 1. No behaviour change.",
+      "rationale": "See PROPOSALS.md. Queued rather than fixed because there is no purely technical right answer — time-compressing pitch-shifts, mixing only the covered sub-range drops the tail, and dropping audio entirely is safest but is a product decision.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "62dd95b1"
+    }
+  ],
+  "notes": "@INVARIANTS VERIFIED, all HOLDING: (1) audioClipSync's 'SCRUB_JUMP_SEC 0.5s is calibrated against a 25Hz RAF; false scrub-seeks appear below ~2Hz ANIMATE' — TRUE, and the reasoning is exact: AnimationEngine.tick sets deltaFrames = dt*fps, so frameDelta/safeFps is literally the wall-clock dt of the tick, making the threshold 0.5s of real time per tick, i.e. 2Hz. Holds under deterministicPlayback too (integer-frame stepping with a >0.25s backlog discard, so accumulated frames never masquerade as a scrub). Loop wrap does trip justScrubbed, which is the desired reseek. (2) All three ownedDecks invariants. (3) audioFileCache's 0|1 typing, and AudioClip.deckIndex is typed 0|1 so the mixer's getAudioFile call typechecks. (4) audioExportMix's inclusive (endFrame+1)/fps end — TRUE at frameStep 1, now qualified. The PCM write bounds were also checked: no overflow, because audibleEndSec is Math.min'd against exportEndSec using the identical expression durationSec is built from.\n\nALSO VERIFIED CORRECT (no finding): AudioStrip's trim_left handler — the one place a seconds<->frames conversion could go wrong. It sets startFrame = round(startStartFrame + trimDelta*fps) alongside the new trimStartSec, which algebraically keeps the source-time -> timeline-frame mapping invariant; widthPx/leftPx agree. setFps('keep') correctly leaves audioClips alone. cfg.fps in the render dialog defaults to animStore.fps and scales keys and audio together, so an fps-only mismatch is NOT a bug — only frameStep is unpropagated.\n\nGUARD SCOPE, checked as instructed: smoke:audio-fps-remap defaults ENGINE_URL to fluid-toy.html. It DOES exercise store/animation/playbackSlice.ts and audioClipsSlice.ts through window.useAnimationStore (fluid-toy imports that store), and every value it collects feeds an assertion — so it is not one of this run's collects-but-never-asserts guards. It does NOT exercise audioClipSync.ts, audioExportMix.ts or audioTick.ts. I INVESTIGATED whether its citation in .claude/rules/audio-mod.md is another 'healthy but cited for the wrong thing' case and DECIDED NOT TO REPORT IT: falsified by putting a module-scope throw at the top of AudioAnalysisEngine.ts and the smoke DID fail (the whole fluid-toy bundle failed to evaluate). Coverage is coarse — load-time only, not behavioural — but it is real, so the citation is defensible and manufacturing a finding out of it would have been wrong. Falsification reverted and re-verified absent by grep.\n\n_resetAudioClipSync has ZERO callers anywhere — there are no tests for audioClipSync at all. Not reported as a finding (aspirational, not false, and deletion is out of bounds) but knip will see it as an unused export.\n\nNOT REACHED: the frameStep desync end-to-end in a browser (proving audible drift needs a real encode and a waveform comparison, which is why it is Tier B); the image-sequence branch of exportRunner, which also builds a totalFrames with frameStep but never touches audio — unclear whether an image sequence is even supposed to carry audio; fluid-toy's own export path; AudioPanel/AudioSpectrum/AudioLinkControls, which cycle 4 also missed. Minor unchased nit: the fps DraggableNumber has step=1 min=1 max=120 but renders toFixed(0); if its text-entry override accepts 23.976 the store would hold it while the UI shows a rounded integer. All conversion sites handle non-integer fps correctly, so at worst a display inconsistency."
+}

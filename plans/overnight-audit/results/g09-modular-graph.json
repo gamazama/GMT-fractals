@@ -1,0 +1,65 @@
+{
+  "id": "g09-modular-graph",
+  "cycle": 9,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g09-modular-graph" },
+    { "script": "npm run test:compat", "pass": true, "subsystem": "g09-modular-graph" }
+  ],
+  "findings": [
+    {
+      "tier": "V",
+      "severity": "high",
+      "file": "engine-gmt/data/nodes/definitions.ts",
+      "line": 34,
+      "summary": "compileGraph's getParam allocates one uModularParams slot per CALL while updateModularUniforms writes one value per def.inputs ENTRY — so 5 of 26 node definitions that read a param twice desync themselves AND every node compiled after them. CONFIRMED by execution, NOT applied: the fix changes the rendered result of saved scenes.",
+      "verificationRequest": "Confirmed; see PROPOSALS.md for the fix shape and the product decision.",
+      "rationale": "An independent verifier reproduced every number by execution. A recording-getParam probe over nodeRegistry.getAll() printed exactly 5 of 26 offenders, precisely those claimed: Scale (scale x2), Twist (amount x2), Bend (amount x2), SmoothUnion (k x2), Mix (factor x3). The other 21 matched call-list to inputs in declaration order — and notably IFSScale and Mandelbulb read their params several times but HOIST each getParam into a local first, so they stay in sync; that is the fix pattern, already present in the same file. It confirmed the bound-param exemption: with bindings {scale:'ParamC'} the compiler emitted `uParamC` twice consuming zero slots, so the bug bites unbound params only. TWO CORRECTIONS TO THE CLAIM, both material: (1) MANDELBOX_PIPELINE, called 'the shipped preset', has ZERO importers — it is dead code and cannot be loaded. The two REACHABLE pipelines measured IN SYNC (JULIA_REPEATER maxSlot 9 / packed 10; TUTORIAL maxSlot 6 / packed 7), because neither contains an offender. The bug is reachable via the FlowEditor node picker, not via a preset. (2) The verifier constructed the realistic case instead and it is WORSE than the claimed one: dropping a Scale in front of a Mandelbulb packs [3,8,0.1,0.2,0.3,1,0] against emitted slots 0..6, so Mandelbulb's power reads 0.1 instead of 8, twist gets 1.0 instead of 0.3, and AddConstant gets 0.0. Power 0.1 with no Julia constant is a blank or formless render, and dragging the Power slider moves the phase instead. Crucially this CANNOT be fixed by pressing COMPILE — recompiling deterministically regenerates the same allocation.",
+      "guard": "npm run test:compat",
+      "guardPass": true
+    },
+    {
+      "tier": "V",
+      "severity": "high",
+      "file": "engine-gmt/utils/graphAlg.ts",
+      "line": 132,
+      "summary": "isStructureEqual is the sole recompile trigger but compares only PipelineNode fields, which carry no wiring — so an edge-only edit that preserves topological order silently produces a stale shader. CONFIRMED, NOT applied: the fix is a signature change on an exported function.",
+      "verificationRequest": "Confirmed; see PROPOSALS.md.",
+      "rationale": "The verifier reproduced both cases. EDGE REMOVAL: two nodes IFSScale->AddConstant, dropping only the b->root-end edge — topo order identical, isStructureEqual true, isPipelineEqual true, but compileGraph output DIFFERS (the cut graph's DCE finds nothing reachable and emits the identity body, discarding both nodes). Replaying setGraph's branch selection with both flags false lands in the final else for BOTH autoCompile values: no revision bump, no CONFIG emit. HANDLE SWAP: Sphere/Box into a Subtract, swapping only targetHandle a<->b — topo identical, both equality checks true, emitted body flips from `vec3 v_csg_p = v_p1_p;` to `v_p2_p`, i.e. A-minus-B becomes B-minus-A. ONE CORRECTION, and it is a third bug neither claim mentioned: `autoCompile` is NEVER INITIALIZED and `setAutoCompile` is NEVER IMPLEMENTED anywhere in the repo — an exhaustive grep finds only the type declarations, the two FlowEditor usages and the read in modularSlice. So s.autoCompile is permanently undefined, branch A of setGraph is DEAD CODE, nothing ever auto-compiles, the COMPILE button sits permanently in its purple animate-pulse state, and clicking the Auto checkbox calls an undefined setter and throws a TypeError. The honest reading is not 'stale shader with autoCompile ON' but 'nothing ever auto-compiles, and the always-pulsing button is the accidentally-correct signal to click it'. That makes B loud and recoverable, and A decisively worse.",
+      "guard": "npm run test:compat",
+      "guardPass": true
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/utils/GraphCompiler.ts",
+      "line": 66,
+      "summary": "Three false @invariants on the graph compiler: the synthetic-root rename checklist undercounts 8 sites across 3 files as 'THREE places' in one, the getParam-order invariant asserts a convention 5 of 26 definitions break, and the hasCycle invariant credits the store with a check only the UI performs.",
+      "change": "Corrected all three and recorded the two verified bugs as @bug PRODUCTION: annotations (CLAUDE.md's canonical bug surface). The root-count fix enumerates all 8 sites per file, calling out that graphAlg's pipelineToGraph MINTS the boundary edges — the omission that matters most, since a rename missing it yields a graph whose edges point at nothing and DCE eliminates every node.",
+      "verification": "Every corrected claim proven mechanically. Root-literal count by grep: 8 code sites (GraphCompiler x5 including the liveness filter and outputEdge.source guard that the old list omitted; graphAlg x2; FlowEditor x4) against the documented three. getParam order by the recording probe — exactly 5 mismatches of 26. hasCycle by grep — one call site, FlowEditor's onConnect; modularSlice does not even import it. isStructureEqual edge-blindness by a two-node probe showing it returns true while compileGraph output differs. typecheck and test:compat both green (test:compat imports the barrel that transitively pulls GraphCompiler, so a module that no longer parses turns it red). Stated plainly: no guard can assert the TRUTH of a comment — that half rests on the greps and probe output, each re-runnable in seconds.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "40a89843"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/gmt-formulas-and-graph.md",
+      "line": 33,
+      "summary": "The rule cites test:hybrid as the 'graph/hybrid half' guard, but that sweep filters Modular out of every mode — no guard in the block touches the modular graph at all — and the rule's path globs did not load it for four of the graph half's five files.",
+      "change": "Rewrote the test:hybrid annotation and appended a 'Nothing above guards the modular graph' section proving it guard-by-guard. Extended the frontmatter paths from 3 globs to 7 so the rule loads for graphAlg.ts, NodeRegistry.ts, data/nodes/** and store/modularSlice.ts — previously only utils/GraphCompiler.ts was scoped.",
+      "verification": "Falsification, executed: inserting `throw` as the first statement of compileGraph — which breaks every Modular render outright — left test:compat exiting 0 with '55 formulas OK'. That is the guard the rule listed first, and it did not notice the compiler being dead. Reverted with a targeted Edit, confirmed absent by grep, typecheck and test:compat green on the reverted tree. The test:hybrid/test:baseline half is proven by source rather than a multi-minute sweep: native-config-sweep documents 'Modular uses a separate shader pipeline not exercised by this sweep' and its eligibleFormulas() filters Modular out in one mode-independent function used by all three modes. EIGHTH instance this run of a guard cited for something it cannot cover.",
+      "guard": "npm run test:compat",
+      "guardPass": true,
+      "commit": "506a4031"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "docs/adr/0051-two-synthetic-roots-dce-walks-backward.md",
+      "line": 66,
+      "summary": "ADR-0050 and ADR-0051 each carry a Consequences bullet now disproven — 0050 asserts every NodeDefinition follows the getParam-order convention (5 of 26 do not), 0051 undercounts the synthetic-root rename sites as three in one file (8 across 3).",
+      "rationale": "See PROPOSALS.md for both paste-ready Update blocks. Both decisions still STAND — only the Consequences prose is wrong."
+    }
+  ],
+  "notes": "@INVARIANT VERDICTS (11 checked). VERIFIED CORRECT (7), recorded as proven so a later cycle need not redo them: DCE walks backward from root-end via stack.pop() (LIFO/DFS not BFS), unreachable nodes emit no GLSL and consume no slots, empty active set returns the identity body; disabled nodes still emit the propagation triple from in1 but skip def.glsl and consume no slots; the distOverride window is exactly (-1.0, 999.0) with v_start_d seeded to 1000.0; param overflow degrades silently with the compiler emitting the literal and setP dropping writes (minor nuance: condition slots fall back to '2.0'/'0.0', not just '0.0'); topologicalSort's tie-break is alphabetical via queue.sort() before each shift, so compile order is deterministic across runs; the nodes.find inside the loop is O(N^2); and isStructureEqual compares exactly id/type/enabled/JSON.stringify(bindings)/condition.active, deliberately excluding condition.mod, condition.rem and params so slider retuning does not recompile. hasCycle's algorithm itself is sound (the recStack.delete outside the visited guard is a harmless no-op). FALSIFIED (4): the getParam-order invariant, the 'THREE places' root count, the 'store calls hasCycle' claim, and by omission isStructureEqual's silence about edges.\n\nGUARD HEALTH — the headline. This subsystem has ZERO executable coverage. Not thin, zero. compileGraph, updateModularUniforms, topologicalSort, hasCycle and isStructureEqual are never invoked by any npm script, proven by falsification plus source. That is why both real bugs sat here undetected and why both came back as Tier V. The whole path is pure functions with no WebGL dependency, so a node-only harness would be cheap and is the single highest-value follow-up from this subsystem.\n\nNOT REACHED: (a) the `else if (contentChanged)` branch of setGraph emits CONFIG with {pipeline} only, no graph, while MaterialController.syncModularUniforms takes (pipeline, edges) and defaults edges to []. If ConfigManager does not retain the previous graph, that path could pack uniforms against an empty edge set — which changes DCE liveness and therefore slot layout. Not traced, not claimed; a concrete thread for whoever owns the renderer rule. (b) Node id uniqueness across save/load — NodeRegistry.register does a bare Map.set with no duplicate check. (c) The remaining ~21 node definitions were checked only for getParam/inputs parity, not GLSL correctness."
+}

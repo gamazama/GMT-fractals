@@ -1667,3 +1667,268 @@ handle un-allocated neighbour blocks), the GLB/STL writers, and the preview canv
 - **Possible DPR mis-scale in the mesh preview**, noticed but not chased:
   `PreviewCanvas.tsx`'s `resetPan` calls `meshPreviewSetMesh(…, CANVAS_SIZE)` while
   `meshPreviewRender` uses `cvs.width`.
+
+---
+
+# Cycle 9
+
+## HIGH — Adding a Scale, Twist, Bend, Smooth Union or Mix node corrupts every node after it
+
+_(cycle 9 · `engine-gmt/data/nodes/definitions.ts` — confirmed by execution, NOT applied)_
+
+`compileGraph`'s `getParam` closure allocates **one `uModularParams` slot per
+call**; `updateModularUniforms` writes **one value per `def.inputs` entry**. Any
+definition whose `glsl()` template reads a param more than once therefore
+allocates slots the packer never writes — shifting itself **and every node
+compiled after it**.
+
+**Measured: exactly 5 of 26 definitions.** `Scale` (scale ×2), `Twist` (amount
+×2), `Bend` (amount ×2), `SmoothUnion` (k ×2), `Mix` (factor ×3). The other 21 are
+in sync. Notably `IFSScale` and `Mandelbulb` read their params several times too,
+but **hoist each `getParam` into a local first** — that is the fix pattern,
+already present in the same file.
+
+**What a user actually sees**, from the verifier's realistic case (dropping a
+Scale in front of a Mandelbulb): packed `[3, 8, 0.1, 0.2, 0.3, 1, 0]` against
+emitted slots 0–6, so Mandelbulb's **power reads 0.1 instead of 8**, twist gets
+1.0 instead of 0.3, and AddConstant gets 0.0. Power 0.1 with no Julia constant is
+a blank or formless render — and **dragging the Power slider moves the phase
+instead**. Five of the node editor's most-used nodes are affected.
+
+**It cannot be worked around.** Pressing COMPILE regenerates the same allocation
+deterministically.
+
+**Two corrections to the original report, both material:**
+
+- `MANDELBOX_PIPELINE` — described as "the shipped preset" — has **zero
+  importers**. It is dead code and cannot be loaded. The two *reachable* pipelines
+  measured **in sync** (`JULIA_REPEATER` maxSlot 9 / packed 10; `TUTORIAL` maxSlot
+  6 / packed 7), because neither contains an offender. The bug is reachable via
+  the **FlowEditor node picker**, not via a preset.
+- **Bound params are exempt.** With `bindings: { scale: 'ParamC' }` the compiler
+  emits `uParamC` twice and consumes zero slots, so parity is restored. That is
+  why the default `JULIA_REPEATER` survives its `Rotate` node's binding. The bug
+  bites **unbound** params only.
+
+**Fix:** hoist each `ctx.getParam(...)` into a local const and interpolate the
+local — five one-line edits, matching what `IFSScale` already does. **No migration
+needed** (saved scenes store `node.params` keyed by input id, not slot index) —
+**but it changes the rendered result of any saved Modular scene containing these
+nodes.** Anyone who tuned a scene around the broken values will see it shift.
+That is the product call, and it is why this was not applied unattended.
+
+**Do this alongside the fix:** a node-only harness asserting
+`calls === def.inputs.map(i => i.id)` for every registered def is ~15 lines, needs
+no browser, and locks this shut permanently.
+
+---
+
+## HIGH — Pre-2026-04-25 scene files killed the app *(FIXED — read for the blast radius)*
+
+_(cycle 9 · fixed in `97099e7a`)_
+
+Recorded here because the **blast radius question is still open and is yours.**
+
+Commit `19e605a8` (2026-04-25) changed `savedCameras` from a flat shape to a
+wrapped `StateSnapshot`, reasoning that *"SavedCameras aren't currently persisted,
+so no migration is needed"*. Flat rows **were** already being written into `<Scene>`
+blocks — the file used to reproduce this is dated **2026-04-15**, ten days before.
+
+Loading one and opening the Camera Manager **unmounted the entire React root**:
+`rootChildren 1 → 0`, `canvases 27 → 0`, frames frozen. White screen, unrecoverable
+without a reload, unsaved work lost. There is **no ErrorBoundary anywhere in the
+codebase** — a grep for `componentDidCatch` / `getDerivedStateFromError` /
+`ErrorBoundary` returns **zero files** — which is why a render throw is fatal
+rather than contained.
+
+Now normalised on load, verified against the same real file.
+
+**Still open, and only you can answer it:**
+
+1. **Server-stored shares and gallery scenes.** `openSharedSceneById` (the
+   `?s=<id>` deep link) and `loadGalleryScene` both end in the same
+   `loadScene({ preset })`. They are fixed by the same normalisation going
+   forward — but if any stored scene predates 2026-04-25, **users hitting those
+   links have been getting a white screen.** Worth a query against Supabase.
+   Shipped content under `public/` is **clean** — nothing there carries
+   `savedCameras` at all.
+2. **No ErrorBoundary at all** is the deeper issue. Any render throw anywhere
+   takes the whole app down with no diagnostic. A single root-level boundary that
+   shows the error and offers a reload would have turned this from "app dead" into
+   "panel broken", and would cover every future instance of this class.
+3. `engine-gmt/animation/cameraBinders.ts` reads `savedCameras` and calls
+   `selectCamera`, so the crash likely reached the Active-Camera binder too. Worth
+   a look now that the normalisation is in.
+
+---
+
+## MEDIUM — The modular graph never auto-compiles, and its recompile trigger is blind to edges
+
+_(cycle 9 · `engine-gmt/utils/graphAlg.ts:132` and `engine-gmt/store/modularSlice.ts` — confirmed, NOT applied)_
+
+Two related facts, the second discovered by the verifier and **not in the original
+claim**:
+
+1. **`isStructureEqual` cannot see edges.** It compares only `PipelineNode` fields;
+   wiring lives on `FractalGraph.edges`, and `compileGraph` derives DCE liveness
+   and every node's `in1`/`in2` from them. Reproduced: removing one edge leaves
+   topological order identical and both equality checks `true`, while
+   `compileGraph` output **differs** (the cut graph emits the identity body,
+   discarding both nodes). Swapping which upstream feeds a CSG node's `a` vs `b`
+   handle likewise flips A-minus-B to B-minus-A with no node field changing.
+2. **`autoCompile` is never initialized and `setAutoCompile` is never
+   implemented.** An exhaustive grep finds only the type declarations, two
+   FlowEditor usages and one read in `modularSlice`. So `s.autoCompile` is
+   permanently `undefined`: branch A of `setGraph` is **dead code**, nothing ever
+   auto-compiles, the COMPILE button sits permanently in its purple
+   `animate-pulse` state, and **clicking the Auto checkbox throws a TypeError**
+   (it calls an undefined setter).
+
+**Net:** this is *loud and recoverable* — nothing auto-compiles anyway, the button
+pulses, and one click produces the correct shader. That makes it much less severe
+than the slot-parity bug above, which is silent and unfixable by recompiling.
+
+**Options:** (a) implement `autoCompile`/`setAutoCompile` properly *and* fold an
+edge fingerprint into `isStructureEqual` — the full fix; (b) fold in the edge
+fingerprint only, leaving auto-compile as the dead code it is, so `refreshPipeline`
+stays the one true path; (c) remove the Auto checkbox, since it currently throws
+when clicked, and keep COMPILE as the documented workflow.
+
+**Recommendation: (c) first — it removes a control that throws — then (b).** Note
+the edge fingerprint means a signature change on an exported function
+(`isStructureEqual` has exactly one caller today) plus a decision on whether an
+edge-only change should bump `pipelineRevision` (full recompile, correct) or take
+the cheaper `contentChanged` path (uniform-only, insufficient, since DCE changes
+the GLSL).
+
+---
+
+## MEDIUM — Export with Step > 1 desyncs audio from the first second
+
+_(cycle 9 · `engine/animation/audioExportMix.ts:20`)_
+
+The export pump renders `totalFrames = floor((end − start) / frameStep) + 1`
+frames encoded at `cfg.fps` — so `frameStep 2` is a 2× time-lapse. But
+`mixAudioClipsForExport` never receives `frameStep` and computes
+`durationSec = ((endFrame + 1) − startFrame) / fps` over the **full** timeline
+span. The audio handed to `startExport` is therefore `frameStep`× longer than the
+video, and output second *s* maps to timeline second `start + s` for audio but
+`start + s*frameStep` for video: **drift of `(frameStep − 1)·s` seconds, audible
+from the first second.**
+
+Reachable, confirmed rather than inferred: `RenderDialog` defaults
+`showFrameStep` to `true` and app-gmt does not override it, so the Step control is
+visible in the same Render Sequence dialog whose runner mixes the audio.
+`cfg.fps` is **not** the problem — it scales keys and audio together.
+
+**Options:** (a) time-compress the audio by `frameStep` — keeps sync but
+pitch-shifts, so a time-lapse gets chipmunk audio; (b) mix only the sub-range the
+video actually covers — natural pitch, sync'd from frame 0, but the tail is
+dropped; (c) drop audio entirely when `frameStep > 1` with a warning, matching the
+existing "exporting silent video" fallback; (d) hide the Step field while any
+audio clip is loaded.
+
+**Recommendation: (c) as the immediate correctness fix** — one guarded early
+return, and it converts a silent wrong-output bug into a visible, explained
+limitation. Then (d) as polish. (a) only if a stepped export is meant to be a
+speed-ramp deliverable.
+
+---
+
+## LOW — Loading a scene always force-selects camera 1
+
+_(cycle 9 · `utils/defaultPresetFields.ts:87`)_
+
+`deserialize` sets `activeCameraId: rows[0].id` unconditionally. The scene's own
+pose is restored separately and `selectCamera` is never called, so the pose is
+correct — but the panel now claims camera 1 is active, and since `isCameraModified`
+compares live pose to snapshot, the row renders as `*Camera 1`. Clicking anything
+then teleports the user away from the pose the scene was saved at.
+
+This is also what made the legacy-shape crash fire at render rather than lying
+dormant.
+
+**Options:** (a) leave it; (b) set `activeCameraId: null` on load, matching the
+"Free Camera" footer state the panel already renders for a null id, so a loaded
+scene reads as *"you are where the author left you, and here are their saved
+views"*; (c) persist `activeCameraId` — the existing comment calls it
+"intentionally ephemeral", so this would need an ADR-level reversal.
+
+**Recommendation: (b).** One word, removes a spurious modified marker on every
+scene load, changes no pose.
+
+---
+
+## ADR corrections — cycle 9 (paste-ready)
+
+### ADR-0050 — asserts a getParam-order convention that 5 of 26 definitions break
+
+Insert directly under the `# ADR-0050: …` heading:
+
+> **Update 2026-07-28 (audit g09-modular-graph; decision unchanged):** the
+> Decision section's closing claim — "The two only agree because every existing
+> `NodeDefinition` author has, by convention, written `def.glsl()` to call
+> `getParam('id')` in the SAME sequence as their `inputs:` array" — is FALSE as of
+> this date, and the Consequences section's "UNENFORCED invariant" warning has
+> already been realised. Five of the 26 registered definitions in
+> `engine-gmt/data/nodes/definitions.ts` interpolate the same `getParam(...)` more
+> than once, so the compiler allocates slots the packer never writes: `Scale`
+> (scale ×2), `Twist` (amount ×2), `Bend` (amount ×2), `SmoothUnion` (k ×2), `Mix`
+> (factor ×3). The failure mode is not only the misaligned slider this ADR
+> anticipated — each surplus call shifts EVERY node compiled after it. Measured:
+> dropping a `Scale` before a `Mandelbulb` makes Mandelbulb's power read 0.1
+> instead of 8. Bound params are exempt (both reads return the same uniform name
+> and consume no slot). The slot-parity DECISION is unchanged and still correct;
+> what this update records is that the convention it rests on was never true. The
+> DEV-assertion hardening recommended below remains the right fix. Live
+> annotation: `@bug PRODUCTION:` on `updateModularUniforms` in
+> `engine-gmt/utils/GraphCompiler.ts`.
+
+### ADR-0051 — undercounts the synthetic-root rename sites
+
+Insert directly under the `# ADR-0051: …` heading:
+
+> **Update 2026-07-28 (audit g09-modular-graph; decision unchanged):** the first
+> Consequences bullet is wrong in both count and scope. The synthetic root ids are
+> hard-coded at EIGHT sites across THREE files, not three sites in
+> `GraphCompiler.ts`, and its line numbers (20 / 65 / 132) have drifted. Current
+> sites — `grep -rn "root-start\|root-end" engine-gmt/`: `utils/GraphCompiler.ts`
+> ×5 (DCE seed; the `currentId !== 'root-end' && currentId !== 'root-start'`
+> liveness filter, omitted by the original bullet; `varMap` pre-seed; the
+> output-edge `target === 'root-end'` lookup; and the `outputEdge.source !==
+> 'root-start'` guard, also omitted); `utils/graphAlg.ts` ×2 — `pipelineToGraph`
+> MINTS both boundary edges with these ids, the most dangerous omission, because a
+> rename that misses it produces a graph whose edges point at nothing, so DCE
+> eliminates every node and the shader silently falls back to the identity body;
+> and `components/panels/flow/FlowEditor.tsx` ×4. Prefer the grep over any fixed
+> list. The two-synthetic-roots decision and the backward DFS walk are unchanged.
+
+---
+
+## Housekeeping surfaced in cycle 9
+
+- **The modular graph has ZERO executable coverage.** Not thin — zero.
+  `compileGraph`, `updateModularUniforms`, `topologicalSort`, `hasCycle` and
+  `isStructureEqual` are never invoked by any npm script. Proven by falsification:
+  a `throw` at the top of `compileGraph` left `test:compat` exiting 0 with
+  "55 formulas OK". The whole path is pure functions with no WebGL dependency, so
+  a node-only harness is cheap and is the single highest-value follow-up here.
+- **`smoke:statelibrary-drop` does not cover camera capture/apply.** It seeds rows
+  as `{id, label, state:{}, createdAt}` with `activeCameraId: null`, so it
+  exercises the panel wiring and drag/drop contract but **not**
+  `captureCameraState` / `applyCameraState` / `isCameraModified`. That is the gap
+  the legacy-shape crash fell through.
+- **The camera capture/apply aliasing is LIVE, not latent.** Cycle 4 called it
+  latent on the generic side; on the GMT side, after a recall
+  `store.sceneOffset === snap.state.sceneOffset` is literally true. It is safe
+  today only because nothing mutates those objects in place — a tree-wide regex
+  for in-place component writes returns zero hits. That rule is now an
+  `@invariant` at the site rather than an accident.
+- **`_resetAudioClipSync` has zero callers** — there are no tests for
+  `audioClipSync` at all, despite its own invariant instructing tests to call it.
+- **`setGraph`'s `contentChanged` branch emits CONFIG with `{pipeline}` only, no
+  `graph`**, while `MaterialController.syncModularUniforms` takes
+  `(pipeline, edges)` and defaults `edges` to `[]`. If `ConfigManager` does not
+  retain the previous graph, that path could pack uniforms against an empty edge
+  set — which changes DCE liveness and therefore slot layout. Not traced, not
+  claimed; a concrete thread for whoever owns the renderer rule.

@@ -1,0 +1,43 @@
+{
+  "id": "g11-gmt-camera-manager",
+  "cycle": 9,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g11-gmt-camera-manager" },
+    { "script": "npm run smoke:statelibrary-drop", "pass": true, "subsystem": "g11-gmt-camera-manager" }
+  ],
+  "findings": [
+    {
+      "tier": "V",
+      "severity": "high",
+      "file": "utils/defaultPresetFields.ts",
+      "line": 85,
+      "summary": "Scene files written before 2026-04-25 store savedCameras in the pre-state-library FLAT shape with no migration — loading one and opening the Camera Manager UNMOUNTS THE ENTIRE REACT ROOT. White screen, unrecoverable without a reload, unsaved work lost. CONFIRMED through the real load path and fixed.",
+      "change": "The savedCameras deserialize now wraps any row lacking `.state` into the StateSnapshot shape, carrying position/rotation/sceneOffset/targetDistance/optics and synthesising createdAt. Also corrected types/preset.ts and engine-gmt/types/fractal.ts, which still declared the FLAT shape — which is precisely why tsc could not catch this.",
+      "verification": "The original investigation reproduced the crash by simulating deserialize with setState. An independent verifier was asked to close that gap and did: it drove headless Chromium against the dev server, called the app's real exported loadSceneWithFilter (the same function the Load row's onClick calls), fed Playwright's filechooser the real file H:/GMT/GMT-saves/scenes/GMT_AmazingBox_v2.gmf (23006 bytes, mtime 2026-04-15), and let the production path run end to end. NOTHING normalised, clamped, rejected or swallowed: the store held row0Keys id,label,position,rotation,sceneOffset,targetDistance,optics with row0HasState false and activeCameraId set to that legacy row. The load itself was SILENT — zero pageerrors, app fully alive. Opening the Camera Manager through the real UI then produced three 'Cannot read properties of undefined (reading sceneOffset)' pageerrors and React's component-stack console.error, and measured rootChildren 1 -> 0, canvases 27 -> 0, bodyLen 984 -> 0, frameCount frozen at 12 and still 12 two seconds later. selectCamera separately threw on 'rotation'. A CONTROL run with a modern wrapped row through the identical panel-open sequence gave zero pageerrors, 27 canvases and 3 frames advanced — proving the row shape is responsible, not headless and not the panel. The verifier also confirmed no ErrorBoundary exists anywhere in the codebase (grep for componentDidCatch / getDerivedStateFromError / ErrorBoundary returns ZERO files), which is why a render throw is fatal rather than contained. AFTER the fix, a unit check over the same real rows shows the flat row wrapped with sceneOffset and rotation carried (the two fields the crash paths dereference), id/label preserved, createdAt synthesised, activeCameraId still row 0, and a modern row passing through BY IDENTITY rather than double-wrapped. typecheck and smoke:statelibrary-drop green.",
+      "guard": "npm run smoke:statelibrary-drop",
+      "guardPass": true,
+      "commit": "97099e7a"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/store/cameraSlice.ts",
+      "line": 139,
+      "summary": "The capture()/apply() ownership contract cycle 4 asked for was undocumented, and the aliasing it called 'latent' is in fact LIVE on the GMT side: after a recall the live store's sceneOffset and cameraRot ARE the saved camera's own objects.",
+      "change": "Three @invariants on cameraSlice — OWNERSHIP on captureCameraState (must return freshly-allocated objects, because captureSnap stores opts.capture() by reference; optics is a shallow spread only because OpticsState is flat scalars), CAPTURE/APPLY SYMMETRY (all five payload fields restored; position is pinned to the origin by the treadmill and travels via the CAMERA_TRANSITION payload; adding a field without a matching read in apply is silent data loss on recall), and PRECISION (x + xL reconstructs the captured double exactly, so storing only the f32 high part would cap saved cameras at f32 depth). A matching OWNERSHIP invariant on applyCameraState records that state IS snap.state and that a single in-place write would corrupt the last-recalled camera. Also an @invariant on getDirectionName recording it is the exact inverse of calculateDirectionalView, plus two dead line-citation refreshes.",
+      "verification": "Claims verified empirically first, then the doc change verified not to regress. Aliasing: a probe called addCamera(), moved the camera, then selectCamera(id) and compared object identity — store.sceneOffset === snap.state.sceneOffset and store.cameraRot === snap.state.rotation both TRUE. Safety: a tree-wide regex for in-place component writes to sceneOffset/cameraRot returns ZERO hits, and VirtualSpace.state's getter returns a spread while its setter copies — so the contract holds today. Symmetry: the same probe showed modified-right-after-save false (posDelta 1.3e-16) and, after a full recall plus 900ms settle, settledPosDelta 0 with the snapshot byte-identical to what capture wrote. smoke:statelibrary-drop was falsification-proven to reach these files: replacing onReorder with a no-op turned its reorder assertion red (before=Alpha,Beta after=Alpha,Beta), then a targeted revert turned it green. Documented rather than cloned deliberately — a clone in applyCameraState has no existing guard that would fail if it were wrong, and the doc names the rule every future writer must not break.",
+      "guard": "npm run smoke:statelibrary-drop",
+      "guardPass": true,
+      "commit": "641e9289"
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "utils/defaultPresetFields.ts",
+      "line": 87,
+      "summary": "Loading any scene with saved cameras force-selects camera 1 regardless of the pose the scene was actually saved at, so the Camera Manager opens showing row 1 active with the '*' modified marker lit.",
+      "rationale": "See PROPOSALS.md. This is also what made the legacy-shape crash fire at render rather than lying dormant."
+    }
+  ],
+  "notes": "@INVARIANTS VERIFIED (all cameraSlice unless noted), all HOLDING: applyCameraState emit-order (CAMERA_TRANSITION, then setState of the three camera fields, then setOptics probe, then resetAccumulation); isCameraModified tolerances (position L1 <= 0.0001 summing high+low, rotation L1 <= 0.001, camType +-0.1, orthoScale +-0.01, camFov +-0.1); the load-order requirement that installGmtCameraSlice run before anything reads savedCameras.length (satisfied at app-gmt/main.tsx:148 with NO runtime guard); `menu: null` opt-out with topbar wiring the Camera menu by hand to the same actions as the hotkeys; undoCamera/redoCamera wrapping (prev.undoCamera is non-undefined at install time because historySlice defines it at store construction, so the ?.() never silently swallows an undo); camera_manager/index.ts params:{} intentional and tabConfig.label matching the installStateLibrary panelId; and logic.ts's 0.98 threshold (~11.5 degrees), where all seven direction arms were hand-derived to confirm getDirectionName is the exact inverse of calculateDirectionalView.\n\nCAPTURE/APPLY ALIASING — ANSWERED, which was the open question cycle 4 handed over. Capture is provably safe (every returned object freshly allocated). Apply is NOT clone-safe and the aliasing is LIVE, not latent — but harmless today because nothing mutates those objects in place. Documented rather than fixed.\n\nGUARD HEALTH: smoke:statelibrary-drop is CORRECTLY cited for this subsystem and that was proven by falsification rather than reading. CAVEAT for future cycles: it seeds rows as {id,label,state:{},createdAt} with activeCameraId null, so it exercises the panel wiring and drag/drop contract but NOT captureCameraState / applyCameraState / isCameraModified. Nothing in the guard list covers those — which is the gap the legacy-shape crash fell through.\n\nNOT REACHED: engine-gmt/animation/cameraBinders.ts (it reads savedCameras and calls selectCamera, so the legacy crash likely reached the Active-Camera binder too — worth a follow-up now that the normalisation is in). Whether the anon share-link path can carry legacy-shape savedCameras server-side — the verifier confirmed the code path is structurally exposed but the stored population is unknown. Whether GMT's own bundled formula presets carry legacy savedCameras — the verifier checked and public/ is CLEAN, nothing there carries savedCameras at all."
+}

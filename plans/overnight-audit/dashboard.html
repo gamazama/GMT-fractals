@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:67%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:76%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,19 +73,19 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Cycle 8 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T05:04:47.298Z</p>
+  <p class="sub">Cycle 9 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T05:39:40.772Z</p>
 
   <div class="tiles">
-    <div class="tile"><div class="v">22/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">137</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">82</div><div class="k">applied &amp; verified</div></div>
-    <div class="tile"><div class="v" style="color:var(--warn)">12</div><div class="k">orchestrator-checked</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">41</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">125<span style="font-size:.6em;color:var(--dim)">/126</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v">25/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">147</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">86</div><div class="k">applied &amp; verified</div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">15</div><div class="k">orchestrator-checked</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">44</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">132<span style="font-size:.6em;color:var(--dim)">/133</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:35%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:54%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 9 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:35%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:54%"></i></div><div class="cyc" title="cycle 9: 10 findings"><i style="height:38%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 10 cycles</p>
 
   <section><h2>Guards failing <span class="count">1</span></h2>
     <p class="note">Run these yourself before trusting anything downstream of them.</p>
@@ -94,7 +94,7 @@
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">82</span></h2>
+    <h2>Applied — self-verified <span class="count">86</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
   <article class="finding sev-high">
@@ -417,6 +417,20 @@
     <p class="verify"><strong>How it was verified:</strong> Falsified three times against production code, each reverted with a targeted Edit and re-run green: disabling the derivedRotations stash gives 31/1 with exactly the shaderMeta assertion failing; disabling the three legacy-boolean promotions gives 28/4; making loadGMFScene drop an unknown top-level preset key gives 30/2 with both the byte-identity check (21764 vs 21676 bytes) and the unknown-field check failing. So the new assertions fail when the behaviour they describe is wrong. 32/32 green, typecheck exit 0.</p>
     <p class="guard"><code>npm run test:gmf</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>20bf70a8</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>g10-audio-fps-sync</code>
+      <code class="file">store/animation/types.ts:14</code>
+    </header>
+    <p class="what">Undo of an fps 'match' change restored keyframes but NOT AudioClip.startFrame — the FPS history entry never snapshotted audioClips, so undo reintroduced exactly the (r-1)*startFrame audio drift that setFps('match')'s remap exists to prevent.</p>
+    <p class="change"><strong>Changed:</strong> Added audioClips to the FPS HistoryItem payload, captured it when pushing the entry (playbackSlice.setFps) and when building the inverse for redo (sequenceSlice.captureInverse), and restored it in applyHistory — guarded with a presence check so entries pushed before this change leave the live decks alone rather than blanking them. The undo stack is memory-only and never persisted, so that guard only matters within a session. Extended smoke:audio-fps-remap with undo + redo assertions on fps, keyframe frame and audio startFrame together.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsification-first. The new assertions were added to the smoke BEFORE any store change and it failed with exactly 'undo audio startFrame expected 120, got 60 — FPS history entry does not snapshot audioClips': the keyframe came back to 120 while the clip stayed at 60, i.e. a clip and its keyframe one second apart after a 60 -&gt; 30 -&gt; undo round trip. After the three store edits it passes. The guard bites in either direction: drop the capture in playbackSlice and the undo leg fails; drop the restore in applyHistory and the undo leg fails; capture post-change clips instead of pre-change ones in captureInverse and the redo leg fails. smoke:anim-play and typecheck also green.</p>
+    <p class="guard"><code>npm run smoke:audio-fps-remap</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>25bd548e</code></p>
     
   </article>
   <article class="finding sev-medium">
@@ -979,6 +993,48 @@
     <p class="commit">commit <code>23587fa9</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g09-modular-graph</code>
+      <code class="file">engine-gmt/utils/GraphCompiler.ts:66</code>
+    </header>
+    <p class="what">Three false @invariants on the graph compiler: the synthetic-root rename checklist undercounts 8 sites across 3 files as 'THREE places' in one, the getParam-order invariant asserts a convention 5 of 26 definitions break, and the hasCycle invariant credits the store with a check only the UI performs.</p>
+    <p class="change"><strong>Changed:</strong> Corrected all three and recorded the two verified bugs as @bug PRODUCTION: annotations (CLAUDE.md's canonical bug surface). The root-count fix enumerates all 8 sites per file, calling out that graphAlg's pipelineToGraph MINTS the boundary edges — the omission that matters most, since a rename missing it yields a graph whose edges point at nothing and DCE eliminates every node.</p>
+    <p class="verify"><strong>How it was verified:</strong> Every corrected claim proven mechanically. Root-literal count by grep: 8 code sites (GraphCompiler x5 including the liveness filter and outputEdge.source guard that the old list omitted; graphAlg x2; FlowEditor x4) against the documented three. getParam order by the recording probe — exactly 5 mismatches of 26. hasCycle by grep — one call site, FlowEditor's onConnect; modularSlice does not even import it. isStructureEqual edge-blindness by a two-node probe showing it returns true while compileGraph output differs. typecheck and test:compat both green (test:compat imports the barrel that transitively pulls GraphCompiler, so a module that no longer parses turns it red). Stated plainly: no guard can assert the TRUTH of a comment — that half rests on the greps and probe output, each re-runnable in seconds.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>40a89843</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g09-modular-graph</code>
+      <code class="file">.claude/rules/gmt-formulas-and-graph.md:33</code>
+    </header>
+    <p class="what">The rule cites test:hybrid as the 'graph/hybrid half' guard, but that sweep filters Modular out of every mode — no guard in the block touches the modular graph at all — and the rule's path globs did not load it for four of the graph half's five files.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the test:hybrid annotation and appended a 'Nothing above guards the modular graph' section proving it guard-by-guard. Extended the frontmatter paths from 3 globs to 7 so the rule loads for graphAlg.ts, NodeRegistry.ts, data/nodes/** and store/modularSlice.ts — previously only utils/GraphCompiler.ts was scoped.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsification, executed: inserting `throw` as the first statement of compileGraph — which breaks every Modular render outright — left test:compat exiting 0 with '55 formulas OK'. That is the guard the rule listed first, and it did not notice the compiler being dead. Reverted with a targeted Edit, confirmed absent by grep, typecheck and test:compat green on the reverted tree. The test:hybrid/test:baseline half is proven by source rather than a multi-minute sweep: native-config-sweep documents 'Modular uses a separate shader pipeline not exercised by this sweep' and its eligibleFormulas() filters Modular out in one mode-independent function used by all three modes. EIGHTH instance this run of a guard cited for something it cannot cover.</p>
+    <p class="guard"><code>npm run test:compat</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>506a4031</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g11-gmt-camera-manager</code>
+      <code class="file">engine-gmt/store/cameraSlice.ts:139</code>
+    </header>
+    <p class="what">The capture()/apply() ownership contract cycle 4 asked for was undocumented, and the aliasing it called 'latent' is in fact LIVE on the GMT side: after a recall the live store's sceneOffset and cameraRot ARE the saved camera's own objects.</p>
+    <p class="change"><strong>Changed:</strong> Three @invariants on cameraSlice — OWNERSHIP on captureCameraState (must return freshly-allocated objects, because captureSnap stores opts.capture() by reference; optics is a shallow spread only because OpticsState is flat scalars), CAPTURE/APPLY SYMMETRY (all five payload fields restored; position is pinned to the origin by the treadmill and travels via the CAMERA_TRANSITION payload; adding a field without a matching read in apply is silent data loss on recall), and PRECISION (x + xL reconstructs the captured double exactly, so storing only the f32 high part would cap saved cameras at f32 depth). A matching OWNERSHIP invariant on applyCameraState records that state IS snap.state and that a single in-place write would corrupt the last-recalled camera. Also an @invariant on getDirectionName recording it is the exact inverse of calculateDirectionalView, plus two dead line-citation refreshes.</p>
+    <p class="verify"><strong>How it was verified:</strong> Claims verified empirically first, then the doc change verified not to regress. Aliasing: a probe called addCamera(), moved the camera, then selectCamera(id) and compared object identity — store.sceneOffset === snap.state.sceneOffset and store.cameraRot === snap.state.rotation both TRUE. Safety: a tree-wide regex for in-place component writes to sceneOffset/cameraRot returns ZERO hits, and VirtualSpace.state's getter returns a spread while its setter copies — so the contract holds today. Symmetry: the same probe showed modified-right-after-save false (posDelta 1.3e-16) and, after a full recall plus 900ms settle, settledPosDelta 0 with the snapshot byte-identical to what capture wrote. smoke:statelibrary-drop was falsification-proven to reach these files: replacing onReorder with a no-op turned its reorder assertion red (before=Alpha,Beta after=Alpha,Beta), then a targeted revert turned it green. Documented rather than cloned deliberately — a clone in applyCameraState has no existing guard that would fail if it were wrong, and the doc names the rule every future writer must not break.</p>
+    <p class="guard"><code>npm run smoke:statelibrary-drop</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>641e9289</code></p>
+    
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tA">A</span>
@@ -1248,7 +1304,7 @@
   </section>
   
   <section>
-    <h2>Applied — orchestrator-verified <span class="count">12</span></h2>
+    <h2>Applied — orchestrator-verified <span class="count">15</span></h2>
     <p class="note">No existing test covered these, so a second independent agent re-derived the claim before the change was allowed through. Each names how it was checked.</p>
     
   <article class="finding sev-high">
@@ -1292,6 +1348,48 @@
     <p class="guard"><code>npm run test:frag:scan</code> <span class="ok">passed</span></p>
     
     <p class="rationale">An independent verifier drove the actual Workshop under Playwright against the dev server. For BOTH affected library formulas the panel showed mode 'Auto (Solo)', previewDisabled:false, importDisabled:false, errorText:null. Clicking Preview and then Import each returned 'CLICKED' and after 2.5s left errorText null, the store formula unchanged, the full snapshot byte-identical, and ZERO console output. A control run with a V3-passing formula behaved correctly — params section present, Preview switched the store to frag_workshop_preview, Import switched it to the formula name — proving the harness would have detected a working path. It also corrected two details: the live count is TWO formulas, not the catalog's three (3DMandel's catalog row is stale, which the getRecommendedPipeline @invariant already warns about), and the custom-paste path is a milder variant that DOES show a V3 error (willUseV4 is false when entryId is null) unless the user explicitly picks Standalone. NOT APPLIED because the verifier found the proposed hoist would break the Kleinian import outright — handleImport's V4 branch calls setFormula(formulaName) with the UNSANITISED label while FractalRegistry keys on V4's sanitizeId output — plus four further gaps.</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">high</span>
+      <code>g09-modular-graph</code>
+      <code class="file">engine-gmt/data/nodes/definitions.ts:34</code>
+    </header>
+    <p class="what">compileGraph's getParam allocates one uModularParams slot per CALL while updateModularUniforms writes one value per def.inputs ENTRY — so 5 of 26 node definitions that read a param twice desync themselves AND every node compiled after them. CONFIRMED by execution, NOT applied: the fix changes the rendered result of saved scenes.</p>
+    
+    
+    <p class="guard"><code>npm run test:compat</code> <span class="ok">passed</span></p>
+    
+    <p class="rationale">An independent verifier reproduced every number by execution. A recording-getParam probe over nodeRegistry.getAll() printed exactly 5 of 26 offenders, precisely those claimed: Scale (scale x2), Twist (amount x2), Bend (amount x2), SmoothUnion (k x2), Mix (factor x3). The other 21 matched call-list to inputs in declaration order — and notably IFSScale and Mandelbulb read their params several times but HOIST each getParam into a local first, so they stay in sync; that is the fix pattern, already present in the same file. It confirmed the bound-param exemption: with bindings {scale:'ParamC'} the compiler emitted `uParamC` twice consuming zero slots, so the bug bites unbound params only. TWO CORRECTIONS TO THE CLAIM, both material: (1) MANDELBOX_PIPELINE, called 'the shipped preset', has ZERO importers — it is dead code and cannot be loaded. The two REACHABLE pipelines measured IN SYNC (JULIA_REPEATER maxSlot 9 / packed 10; TUTORIAL maxSlot 6 / packed 7), because neither contains an offender. The bug is reachable via the FlowEditor node picker, not via a preset. (2) The verifier constructed the realistic case instead and it is WORSE than the claimed one: dropping a Scale in front of a Mandelbulb packs [3,8,0.1,0.2,0.3,1,0] against emitted slots 0..6, so Mandelbulb's power reads 0.1 instead of 8, twist gets 1.0 instead of 0.3, and AddConstant gets 0.0. Power 0.1 with no Julia constant is a blank or formless render, and dragging the Power slider moves the phase instead. Crucially this CANNOT be fixed by pressing COMPILE — recompiling deterministically regenerates the same allocation.</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">high</span>
+      <code>g09-modular-graph</code>
+      <code class="file">engine-gmt/utils/graphAlg.ts:132</code>
+    </header>
+    <p class="what">isStructureEqual is the sole recompile trigger but compares only PipelineNode fields, which carry no wiring — so an edge-only edit that preserves topological order silently produces a stale shader. CONFIRMED, NOT applied: the fix is a signature change on an exported function.</p>
+    
+    
+    <p class="guard"><code>npm run test:compat</code> <span class="ok">passed</span></p>
+    
+    <p class="rationale">The verifier reproduced both cases. EDGE REMOVAL: two nodes IFSScale-&gt;AddConstant, dropping only the b-&gt;root-end edge — topo order identical, isStructureEqual true, isPipelineEqual true, but compileGraph output DIFFERS (the cut graph's DCE finds nothing reachable and emits the identity body, discarding both nodes). Replaying setGraph's branch selection with both flags false lands in the final else for BOTH autoCompile values: no revision bump, no CONFIG emit. HANDLE SWAP: Sphere/Box into a Subtract, swapping only targetHandle a&lt;-&gt;b — topo identical, both equality checks true, emitted body flips from `vec3 v_csg_p = v_p1_p;` to `v_p2_p`, i.e. A-minus-B becomes B-minus-A. ONE CORRECTION, and it is a third bug neither claim mentioned: `autoCompile` is NEVER INITIALIZED and `setAutoCompile` is NEVER IMPLEMENTED anywhere in the repo — an exhaustive grep finds only the type declarations, the two FlowEditor usages and the read in modularSlice. So s.autoCompile is permanently undefined, branch A of setGraph is DEAD CODE, nothing ever auto-compiles, the COMPILE button sits permanently in its purple animate-pulse state, and clicking the Auto checkbox calls an undefined setter and throws a TypeError. The honest reading is not 'stale shader with autoCompile ON' but 'nothing ever auto-compiles, and the always-pulsing button is the accidentally-correct signal to click it'. That makes B loud and recoverable, and A decisively worse.</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">high</span>
+      <code>g11-gmt-camera-manager</code>
+      <code class="file">utils/defaultPresetFields.ts:85</code>
+    </header>
+    <p class="what">Scene files written before 2026-04-25 store savedCameras in the pre-state-library FLAT shape with no migration — loading one and opening the Camera Manager UNMOUNTS THE ENTIRE REACT ROOT. White screen, unrecoverable without a reload, unsaved work lost. CONFIRMED through the real load path and fixed.</p>
+    <p class="change"><strong>Changed:</strong> The savedCameras deserialize now wraps any row lacking `.state` into the StateSnapshot shape, carrying position/rotation/sceneOffset/targetDistance/optics and synthesising createdAt. Also corrected types/preset.ts and engine-gmt/types/fractal.ts, which still declared the FLAT shape — which is precisely why tsc could not catch this.</p>
+    <p class="verify"><strong>How it was verified:</strong> The original investigation reproduced the crash by simulating deserialize with setState. An independent verifier was asked to close that gap and did: it drove headless Chromium against the dev server, called the app's real exported loadSceneWithFilter (the same function the Load row's onClick calls), fed Playwright's filechooser the real file H:/GMT/GMT-saves/scenes/GMT_AmazingBox_v2.gmf (23006 bytes, mtime 2026-04-15), and let the production path run end to end. NOTHING normalised, clamped, rejected or swallowed: the store held row0Keys id,label,position,rotation,sceneOffset,targetDistance,optics with row0HasState false and activeCameraId set to that legacy row. The load itself was SILENT — zero pageerrors, app fully alive. Opening the Camera Manager through the real UI then produced three 'Cannot read properties of undefined (reading sceneOffset)' pageerrors and React's component-stack console.error, and measured rootChildren 1 -&gt; 0, canvases 27 -&gt; 0, bodyLen 984 -&gt; 0, frameCount frozen at 12 and still 12 two seconds later. selectCamera separately threw on 'rotation'. A CONTROL run with a modern wrapped row through the identical panel-open sequence gave zero pageerrors, 27 canvases and 3 frames advanced — proving the row shape is responsible, not headless and not the panel. The verifier also confirmed no ErrorBoundary exists anywhere in the codebase (grep for componentDidCatch / getDerivedStateFromError / ErrorBoundary returns ZERO files), which is why a render throw is fatal rather than contained. AFTER the fix, a unit check over the same real rows shows the flat row wrapped with sceneOffset and rotation carried (the two fields the crash paths dereference), id/label preserved, createdAt synthesised, activeCameraId still row 0, and a modern row passing through BY IDENTITY rather than double-wrapped. typecheck and smoke:statelibrary-drop green.</p>
+    <p class="guard"><code>npm run smoke:statelibrary-drop</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>97099e7a</code></p>
+    
   </article>
   <article class="finding sev-medium">
     <header>
@@ -1422,7 +1520,7 @@
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">41</span></h2>
+    <h2>Awaiting your judgement <span class="count">44</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
   <article class="finding sev-high">
@@ -1733,6 +1831,34 @@
     
     <p class="rationale">See PROPOSALS.md. The new test:mesh-grid guard PINS the current wrong behaviour deliberately, with assertions written so that fixing dc-core fails loudly with instructions rather than silently changing exports.</p>
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>g09-modular-graph</code>
+      <code class="file">docs/adr/0051-two-synthetic-roots-dce-walks-backward.md:66</code>
+    </header>
+    <p class="what">ADR-0050 and ADR-0051 each carry a Consequences bullet now disproven — 0050 asserts every NodeDefinition follows the getParam-order convention (5 of 26 do not), 0051 undercounts the synthetic-root rename sites as three in one file (8 across 3).</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md for both paste-ready Update blocks. Both decisions still STAND — only the Consequences prose is wrong.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>g10-audio-fps-sync</code>
+      <code class="file">engine/animation/audioExportMix.ts:20</code>
+    </header>
+    <p class="what">mixAudioClipsForExport never receives frameStep, so any export with Step &gt; 1 produces an audio track frameStep times longer than the video that drifts linearly from frame 0.</p>
+    <p class="change"><strong>Changed:</strong> Annotation only — a @bug PRODUCTION: block recording the mechanism, the reachability proof and four options, plus a qualification of the adjacent @invariant about the inclusive (endFrame+1)/fps end, which is only consistent with the pump's frame count at frameStep === 1. No behaviour change.</p>
+    
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>62dd95b1</code></p>
+    <p class="rationale">See PROPOSALS.md. Queued rather than fixed because there is no purely technical right answer — time-compressing pitch-shifts, mixing only the covered sub-range drops the tail, and dropping audio entirely is safest but is a product decision.</p>
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tB">B</span>
@@ -1999,6 +2125,20 @@
     
     <p class="rationale">The asymmetry is already recorded as a NOTE in the isGMFFormat JSDoc, and the auditor's own recommendation is that leaving the code alone may be the whole fix. app-gmt is unaffected — it installs loadGMFScene as its parseScene, and SceneIO only falls back to parseSceneJson when no parser is registered. The open question is whether any OTHER live entry point can reach parseSceneJson with GMF bytes: the drag-drop overlay, the deep-link/share-stash paths (which use loadGMFScene directly), gallery remix, PNG iTXt extraction via extractScenePng's default parser argument, and the other apps that call installSceneIO. If none can, leave it. If one can, align parseSceneJson's sniff with isGMFFormat rather than duplicating the predicate a third time. Not applied: no guard exercises parseSceneJson with a header-less GMF, and widening the sniff is a load-path behaviour change on a file shared by every app.</p>
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>g11-gmt-camera-manager</code>
+      <code class="file">utils/defaultPresetFields.ts:87</code>
+    </header>
+    <p class="what">Loading any scene with saved cameras force-selects camera 1 regardless of the pose the scene was actually saved at, so the Camera Manager opens showing row 1 active with the '*' modified marker lit.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. This is also what made the legacy-shape crash fire at render rather than lying dormant.</p>
+  </article>
   </section>
 
   <h2>Subsystems</h2>
@@ -2225,35 +2365,35 @@
     <td class="num prop">1</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g09-modular-graph</code></td>
     <td>engine-gmt</td>
     <td class="area">GraphCompiler + ModularGraph</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">5</td>
+    <td class="num applied">2</td>
+    <td class="num esc">2</td>
+    <td class="num prop">1</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g10-audio-fps-sync</code></td>
     <td>engine-gmt</td>
     <td class="area">Audio timeline + FPS sync</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">2</td>
+    <td class="num applied">1</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">1</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g11-gmt-camera-manager</code></td>
     <td>engine-gmt</td>
     <td class="area">GMT CameraManager: cameraSlice consumer of installStateLibrary + CameraManagerPanel + getDirectionName helper</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">3</td>
+    <td class="num applied">1</td>
+    <td class="num esc">1</td>
+    <td class="num prop">1</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>g12-formula-workshop</code></td>
