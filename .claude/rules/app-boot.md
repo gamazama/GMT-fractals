@@ -30,6 +30,15 @@ the event entirely.
 ## Guards
 
 ```
-npm run smoke:boot
-npm run smoke:interact
+npm run smoke:engine-gmt   # app-gmt.html — asserts isBooted + hasCompiledShader + frameCount > 0
+npm run smoke:boot         # `/` — index.html serves app-gmt/main.tsx; pageerror/console.error gate only
 ```
+
+`smoke:engine-gmt` is the real guard for this rule: it is the only one that
+asserts the app-gmt boot chain actually completed. `smoke:boot` covers the same
+entry point (`/` and `/app-gmt.html` serve the identical app) but only gates on
+page/console errors.
+
+Do NOT reach for `smoke:interact` here — it targets `demo.html` → `index.tsx`,
+the engine demo shell, whose import graph contains no `app-gmt/**` or
+`engine-gmt/renderer/**` file. It cannot fail on a change to this rule's paths.
