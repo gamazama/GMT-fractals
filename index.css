@@ -187,8 +187,14 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
    cannot express. Splitting six into config and one into CSS would be worse.
    ───────────────────────────────────────────────────────────────────────── */
 @layer utilities {
-  @keyframes slider-entry { from { max-height: 0; opacity: 0; transform: translateY(-4px); } to { max-height: 1000px; opacity: 1; transform: translateY(0); } }
-  .animate-slider-entry { animation: slider-entry 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards; overflow: hidden; }
+  /* `slider-entry` (0.35s max-height reveal) deliberately does NOT live here.
+     It was applied to ScalarInput, VectorInput, BaseVectorInput,
+     GenericToggleSwitch, AdvancedGradientEditor and DrawingPanel — i.e. it fired
+     on every conditional param reveal — and the product call on 2026-07-28 was
+     that inputs should not animate in. Removed from all six rather than defined
+     and left unused. GlobalContextMenu had already been carrying a
+     `[&_.animate-slider-entry]:!animate-none` override to cancel it locally,
+     which went with it. Do not reintroduce without the same call being revisited. */
 
   @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
   .animate-fade-in { animation: fade-in 16ms linear forwards; }

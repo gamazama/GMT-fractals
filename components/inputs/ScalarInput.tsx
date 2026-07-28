@@ -233,7 +233,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     
     return (
         <div 
-            className={`mt-px animate-slider-entry ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`}
+            className={`mt-px ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`}
             data-help-id={dataHelpId}
             onContextMenu={onContextMenu}
         >

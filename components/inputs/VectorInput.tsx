@@ -196,7 +196,7 @@ export const VectorInput: React.FC<VectorInputProps> = ({
     
     return (
         <div 
-            className="mb-px animate-slider-entry"
+            className="mb-px"
             data-help-id={dataHelpId}
             onContextMenu={onContextMenu}
         >

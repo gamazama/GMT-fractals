@@ -103,7 +103,7 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
     if (options) {
         return (
             <div
-                className={`mb-px animate-slider-entry ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
+                className={`mb-px ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
                 data-help-id={rest['data-help-id']}
                 onContextMenu={onContextMenu}
             >
@@ -148,7 +148,7 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
     // --- BOOLEAN toggle ---
     return (
         <div
-            className={`mb-px animate-slider-entry ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
+            className={`mb-px ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
             data-help-id={rest['data-help-id']}
             onContextMenu={onContextMenu}
         >

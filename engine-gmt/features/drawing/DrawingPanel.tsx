@@ -237,7 +237,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
 
                                              {/* Inline colour editor (expand-in-place, mirrors the cube-slider block) */}
                                              {colorEditId === shape.id && (
-                                                <div className="px-2 pb-2 pt-0 animate-slider-entry bg-surface-section mt-1 rounded border border-line/5 mx-1">
+                                                <div className="px-2 pb-2 pt-0 bg-surface-section mt-1 rounded border border-line/5 mx-1">
                                                     <EmbeddedColorPicker
                                                         color={shape.color}
                                                         onColorChange={(c) => updateDrawnShape({ id: shape.id, updates: { color: c } })}
@@ -247,7 +247,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
 
                                              {/* Sliders for Cubes */}
                                              {isCube && (
-                                                <div className="px-2 pb-2 pt-0 space-y-1 animate-slider-entry bg-surface-section mt-1 rounded border border-line/5 mx-1">
+                                                <div className="px-2 pb-2 pt-0 space-y-1 bg-surface-section mt-1 rounded border border-line/5 mx-1">
                                                     <Slider 
                                                         label="Depth" 
                                                         value={shape.size.z || 0}

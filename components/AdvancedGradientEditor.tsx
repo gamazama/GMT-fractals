@@ -804,7 +804,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             </div>
 
             {isExpanded && (
-                <div className="flex flex-col animate-slider-entry gradient-interactive-element overflow-hidden">
+                <div className="flex flex-col gradient-interactive-element overflow-hidden">
                     {selectedNodes.length > 0 ? (
                         <>
                              <div className="mb-px mt-2">

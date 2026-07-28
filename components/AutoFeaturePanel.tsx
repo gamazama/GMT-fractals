@@ -830,7 +830,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             {outerHint}
             {renderItems}
             {confirming && (
-                <div className="absolute inset-0 z-50 animate-pop-in">
+                <div className="absolute inset-0 z-50">
                     <div className="bg-surface border border-line/20 rounded shadow-2xl overflow-hidden h-full flex flex-col">
                         <div className="flex items-center gap-2 p-2 border-b border-line/10 bg-line/5">
                             <AlertIcon />
