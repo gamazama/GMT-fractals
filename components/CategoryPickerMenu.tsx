@@ -293,7 +293,7 @@ export const CategoryPickerMenu: React.FC<CategoryPickerMenuProps> = ({
             )}
             {matches.map((m, i) => (
                 <button
-                    key={`${m.categoryId} ${m.key}`}
+                    key={`${m.categoryId}::${m.key}`}
                     ref={i === activeIndex ? activeItemRef : undefined}
                     onClick={m.disabled ? undefined : () => { onSelect(m.key); onClose(); }}
                     onMouseEnter={() => setActiveIndex(i)}
