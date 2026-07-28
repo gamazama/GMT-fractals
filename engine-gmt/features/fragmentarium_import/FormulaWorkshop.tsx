@@ -263,7 +263,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
      *             weaving / hybrid fold / burning ship).
      *    'v4'   — force V4 processFormula (self-contained SDE; simpler but no
      *             engine-feature composition).
-     *  See docs/26_Formula_Workshop_V4_Plan.md §0.1 + docs/research/hybrid-formula-architecture-comparison.md */
+     *  See docs/history/gmt/26_Formula_Workshop_V4_Plan.md §0.1 + docs/research/hybrid-formula-architecture-comparison.md */
     const [pipelineMode, setPipelineMode]                 = useState<'auto' | 'v3' | 'v4'>('auto');
     /** ID of the formula loaded from the library, used for auto-pick lookup.
      *  null when the user pasted custom source. */
