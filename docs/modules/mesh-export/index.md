@@ -31,7 +31,22 @@ Standalone tool: extracts 3D meshes (GLB / STL / VDB) from the GMT fractal SDF v
 
 ## Architecture (1-line summary)
 
-`main.tsx` mounts the React UI → user picks formula → `pipeline/mesh-pipeline.ts` runs the 5-phase pipeline (init → sample SDF on GPU → dual-contour → post-process → export GLB/STL/VDB) → writes the result to disk. The pipeline is entirely separate from the worker bucket-render path (ADR-0045).
+`main.tsx` mounts the React UI → user picks formula → `runMeshPipeline()` in `pipeline/mesh-pipeline.ts` produces an in-memory mesh → the user then picks a format and `runExportMesh()` encodes + downloads it. Generate and export are two separate calls from `components/ExportPanel.tsx`, not one pass; the mesh is held in the store between them (`lastMesh`).
+
+`runMeshPipeline` phases, as labelled by its own `ui.setPhase` / `[Phase n]` logs:
+
+| Phase | What |
+|---|---|
+| 1 | GPU SDF sampling — dense below N≤256, coarse 128³ + narrow-band sparse above |
+| 1b | SDF filtering — cavity fill, min-feature clamp, morphological closing (only if any is enabled) |
+| 2 | Dual contouring — `dualContour` (dense) or `dualContourSparse` |
+| 3 | Newton projection on GPU (optional; failure is non-fatal) |
+| 4 | Post-processing — degenerate-face removal, Taubin smoothing, vertex normals |
+| 5 | Vertex colouring on GPU (optional; failure is non-fatal, mesh ships uncoloured) |
+
+Export (`runExportMesh`) is *not* a pipeline phase. GLB and STL encode the mesh from phase 4/5; **VDB does not use the mesh at all** — it re-samples the SDF from scratch via `generateVDB()` and writes a voxel grid, so VDB export ignores smoothing, Newton projection and every other mesh-stage setting.
+
+The pipeline is entirely separate from the worker bucket-render path (ADR-0045).
 
 ## Historical context
 
