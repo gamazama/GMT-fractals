@@ -27,13 +27,28 @@ Guard coverage is **per app, and uneven** — this list is not interchangeable. 
 smoke boots exactly one entry point (see its `ENGINE_URL` default), so running a
 fluid-toy smoke proves nothing about mesh-export.
 
+**`npm run check:rule-guards` cannot police this table.** It matches guards
+against the rule's whole `paths:` set, and this rule scopes five apps — so a
+fluid-toy smoke listed in the mesh-export row still "reaches scoped files" and
+passes. Falsified 2026-07-29 by moving `smoke:fluid-toy` into the
+`gradient-explorer/` row: the checker's output did not change. Per-row
+citations here are only as good as the last person who checked one by hand.
+
 | App | Guards |
 |---|---|
 | `fluid-toy/` | `npm run smoke:fluid-toy`, `npm run smoke:fluid-brush`, `npm run smoke:fluid-presets` |
 | `fractal-toy/` | `npm run smoke:fractal-toy` |
 | `demo/` | `npm run smoke:engine-demo`, `npm run smoke:engine-demo-modulation` |
-| `gradient-explorer/` | `npm run smoke:liquify`, `npm run smoke:gx-handles`, `npm run smoke:gx-fractal-glitch` (all boot `gradient-explorer.html`) |
+| `gradient-explorer/` | `npm run smoke:liquify`, `npm run smoke:gx-handles`, `npm run smoke:gx-fractal-glitch` (all boot `gradient-explorer.html`) — plus `npm run test:palette`, which is not a browser smoke: it runs `debug/test-liquify-mesh.mts` against `gradient-explorer/fullscreen/modes/liquify/{LiquifyMesh,catmullRom}.ts` on plain node. Fastest real guard in this row; reach for it first when touching the liquify soft body. |
 | `mesh-export/` | **none** — see below |
+
+⚠ **`npm run smoke:liquify` is flaky.** Measured 2026-07-29 on an unmodified
+tree: **3 failures in 13 consecutive runs (~23%)**, at three *different*
+assertions — `[1] liquify canvas missing`, `[3] grab handle did not change the
+render`, `[4] physics frame went blank`. A red run is therefore not evidence of
+a regression on its own; re-run before believing it. The sibling
+`smoke:gx-handles` (13/13 green, and it goes red on a real break — verified)
+carries the retry loop and dual-instance detection that this one lacks.
 
 `mesh-export/` has no smoke, no unit test and no runtime guard of any kind. No
 `debug/smoke-*.mts` loads `mesh-export.html`; `smoke:boot` defaults to `/`
