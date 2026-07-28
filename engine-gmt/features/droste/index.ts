@@ -24,7 +24,13 @@ export interface DrosteState {
 
 export const DrosteFeature: FeatureDefinition = {
     id: 'droste',
-    shortId: 'dr',
+    // 'dr' until 2026-07-28, when it was found to collide with the `drawing`
+    // feature's identical shortId. Feature shortIds are GLOBAL keys in the
+    // share-link dictionary, so the two aliased onto one entry and the later
+    // registration won — droste was silently absent from every generated share
+    // link. `drawing` keeps 'dr' deliberately: it is the side that was winning,
+    // so existing links decode exactly as they did before and only gain droste.
+    shortId: 'ds',
     name: 'Droste Effect',
     category: 'Effects',
     params: {

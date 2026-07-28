@@ -239,7 +239,13 @@ export const MaterialFeature: FeatureDefinition = {
             type: 'float',
             default: 0.0,
             label: 'Env Profile',
-            shortId: 'ec',
+            // 'ec' until 2026-07-28, when it was found to collide with
+            // `emissionMode` below. Param shortIds need only be unique WITHIN a
+            // feature, and these two are both in materials, so they aliased onto
+            // one dictionary entry and this one lost. `emissionMode` keeps 'ec'
+            // because it is the side that was surviving — existing share links
+            // therefore decode unchanged and merely gain this value.
+            shortId: 'ev',
             uniform: 'uEnvMapColorSpace',
             group: 'env',
             hidden: true

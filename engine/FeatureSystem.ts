@@ -632,20 +632,21 @@ class FeatureRegistry {
      *   within one feature's params. `UrlStateEncoder.applyDictionary`
      *   writes `result[alias] = value` on encode and builds a single
      *   `alias -> longKey` reverse map on decode, so a collision silently
-     *   drops one side's entire state from every share link. Uniqueness
-     *   is NOT validated here (unlike duplicate feature *ids*, which throw).
+     *   drops one side's entire state from every share link. ENFORCED: this
+     *   method throws on either kind of duplicate.
+     *   — proven by: npm run smoke:share-link, whose feature-parity check
+     *   round-trips droste through `generateShareStringFromPreset` +
+     *   `parseShareString` and compares every value.
      *
-     * @bug PRODUCTION: two alias collisions exist today and each loses
-     *   state through the live `?s=<id>` share path. (1) `drawing` and
-     *   `droste` both declare feature `shortId: 'dr'` — `drawing` registers
-     *   later and wins, so ALL droste state is dropped from share links.
-     *   (2) inside `materials`, `emissionMode` and `envMapColorSpace` both
-     *   declare param `shortId: 'ec'` — `emissionMode` wins, `envMapColorSpace`
-     *   is dropped. Verified 2026-07-27 by round-tripping a live preset
-     *   through `generateShareStringFromPreset` + `parseShareString`:
-     *   droste `{active:true, zoom:3.5, tiling:4}` came back `{}`.
-     *   Fixing means picking a free alias for the losing side — a URL
-     *   wire-format decision, so it is deliberately not done here.
+     *   History, because the failure mode is worth remembering: two collisions
+     *   shipped undetected. `drawing` and `droste` both claimed feature
+     *   `shortId: 'dr'`, so ALL droste state was dropped from every share link;
+     *   and inside `materials`, `emissionMode` and `envMapColorSpace` both
+     *   claimed param `shortId: 'ec'`, dropping the latter. Neither produced any
+     *   error — they were found on 2026-07-27 by round-tripping a live preset
+     *   and noticing droste came back `{}`. The losing side was renamed in each
+     *   case ('ds' and 'ev'), so links generated before the fix still decode
+     *   exactly as they did and merely gain the missing values.
      */
     public getDictionary() {
         const dict: any = {
@@ -662,12 +663,47 @@ class FeatureRegistry {
             }
         };
 
+        // Collision detection. Aliases are a wire format: two features sharing a
+        // shortId, or two params sharing one inside the same feature, silently
+        // collapse onto a single dictionary entry and the loser's state vanishes
+        // from every share link — a failure that surfaces as a user reporting a
+        // lost scene, months later, with no error anywhere. Both cases had
+        // actually shipped (droste/drawing on 'dr'; materials emissionMode and
+        // envMapColorSpace on 'ec'). Throwing here mirrors UniformSchema, which
+        // took the same boot-time-throw approach to duplicate uniform names in
+        // 36ad672c; see the ADR-0020 Update block.
+        const seenFeatureAliases = new Map<string, string>();
+
         this.features.forEach(feat => {
             const featAlias = feat.shortId || feat.id;
+            const clash = seenFeatureAliases.get(featAlias);
+            if (clash) {
+                throw new Error(
+                    `[FeatureSystem] duplicate share-link alias '${featAlias}': features ` +
+                    `'${clash}' and '${feat.id}' both claim it. Feature shortIds are global ` +
+                    `keys in the share-link dictionary, so one would silently overwrite the ` +
+                    `other and its state would be dropped from every generated link. Give ` +
+                    `one of them a free shortId.`,
+                );
+            }
+            seenFeatureAliases.set(featAlias, feat.id);
+
             const paramMap: any = {};
-            
+            const seenParamAliases = new Map<string, string>();
+
             Object.entries(feat.params).forEach(([key, config]) => {
                 if (config.shortId) {
+                    const pClash = seenParamAliases.get(config.shortId);
+                    if (pClash) {
+                        throw new Error(
+                            `[FeatureSystem] duplicate share-link alias '${config.shortId}' ` +
+                            `within feature '${feat.id}': params '${pClash}' and '${key}' both ` +
+                            `claim it, so one would be dropped from every share link. Param ` +
+                            `shortIds need only be unique within their own feature — pick ` +
+                            `another free one.`,
+                        );
+                    }
+                    seenParamAliases.set(config.shortId, key);
                     paramMap[key] = config.shortId;
                 }
             });
