@@ -27,7 +27,7 @@ Guard coverage is **per app, and uneven** — this list is not interchangeable. 
 smoke boots exactly one entry point (see its `ENGINE_URL` default), so running a
 fluid-toy smoke proves nothing about mesh-export.
 
-**`npm run check:rule-guards` cannot police this table.** It matches guards
+**`check:rule-guards` cannot police this table.** It matches guards
 against the rule's whole `paths:` set, and this rule scopes five apps — so a
 fluid-toy smoke listed in the mesh-export row still "reaches scoped files" and
 passes. Falsified 2026-07-29 by moving `smoke:fluid-toy` into the
@@ -39,7 +39,7 @@ citations here are only as good as the last person who checked one by hand.
 | `fluid-toy/` | `npm run smoke:fluid-toy`, `npm run smoke:fluid-brush`, `npm run smoke:fluid-presets` |
 | `fractal-toy/` | `npm run smoke:fractal-toy` |
 | `demo/` | `npm run smoke:engine-demo`, `npm run smoke:engine-demo-modulation` |
-| `gradient-explorer/` | `npm run smoke:liquify`, `npm run smoke:gx-handles`, `npm run smoke:gx-fractal-glitch` (all boot `gradient-explorer.html`) — plus `npm run test:palette`, which is not a browser smoke: it runs `debug/test-liquify-mesh.mts` against `gradient-explorer/fullscreen/modes/liquify/{LiquifyMesh,catmullRom}.ts` on plain node. Fastest real guard in this row; reach for it first when touching the liquify soft body. |
+| `gradient-explorer/` | `npm run smoke:liquify`, `npm run smoke:gx-handles`, `npm run smoke:gx-fractal-glitch` (all boot `gradient-explorer.html`) — plus `npx tsx debug/test-liquify-mesh.mts`, which is not a browser smoke: it exercises `gradient-explorer/fullscreen/modes/liquify/{LiquifyMesh,catmullRom}.ts` on plain node, and is also the last link in the `test:palette` chain. Fastest real guard in this row; reach for it first when touching the liquify soft body. |
 | `mesh-export/` | **none** — see below |
 
 ⚠ **`npm run smoke:liquify` is flaky.** Measured 2026-07-29 on an unmodified
