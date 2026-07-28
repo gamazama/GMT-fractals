@@ -8,7 +8,7 @@
   "branch": "audit/overnight-2026-07-27",
   "dashboardUrl": "https://claude.ai/code/artifact/d81d57c1-3384-4880-93e5-a89722063efe",
   "dashboardFile": "plans/overnight-audit/dashboard.html",
-  "stopped": false,
+  "stopped": true,
   "lastDashboard": "2026-07-28T06:19:39.023Z",
   "plan": "max-subscription",
   "windowResets": [
@@ -17,8 +17,7 @@
     "2026-07-28T06:50:00Z"
   ],
   "note": "No dollar budget. Constraint is the rolling 5h window; ride the resets. Cycle 1 clean (12/12 guards) so batchSize raised 2->3 per protocol; 31 subsystems left against a 07:54Z deadline needs ~3/cycle. Dev server left running on :3400 for smokes.",
-  "dashboardPublish": false,
-  "dashboardUrlNote": "Frozen at cycle 1 — publishing prompts for permission, which stalls the run. Read plans/overnight-audit/dashboard.html locally; republish by hand in the morning if wanted.",
+  "dashboardPublish": true,
   "finishedUtc": "2026-07-28T06:19:39.023Z",
   "stoppedReason": "owner ended the run (morning); 5 subsystems left unaudited"
 }

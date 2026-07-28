@@ -30,6 +30,11 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const all = results.flatMap((r) => (r.findings || []).map((f) => ({ ...f, subsystem: r.id })));
 const byTier = (t) => all.filter((f) => f.tier === t);
 const applied = byTier('A'), escalated = byTier('V'), proposed = byTier('B');
+// A Tier V finding is only APPLIED if its verifier confirmed it — refuted ones are
+// demoted and left in the tree untouched. So the honest "changed the code" count is
+// every Tier A plus the confirmed subset of V, not Tier A alone.
+const escalatedApplied = escalated.filter((f) => f.commit || f.change);
+const changedCount = applied.length + escalatedApplied.length;
 const done = worklist.filter((w) => w.status === 'done').length;
 const failed = worklist.filter((w) => w.status === 'failed').length;
 const pct = worklist.length ? Math.round((done / worklist.length) * 100) : 0;
@@ -166,13 +171,18 @@ const html = `<title>GMT overnight audit</title>
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Cycle ${state.cycle ?? 0} of ${state.maxCycles ?? '—'} &middot; branch <code>${esc(state.branch || 'n/a')}</code> &middot; ${state.stopped ? 'STOPPED' : 'running'} &middot; generated ${esc(state.lastDashboard || 'now')}</p>
+  <p class="sub">${state.stopped
+      ? `Complete &middot; ${state.cycle ?? 0} cycles`
+      : `Running &middot; cycle ${state.cycle ?? 0} of ${state.maxCycles ?? '—'}`
+    } &middot; branch <code>${esc(state.branch || 'n/a')}</code> &middot; ${esc(state.lastDashboard || 'now')}</p>
+  ${state.stopped && state.stoppedReason
+      ? `<p class="note" style="margin-top:-.4rem">${esc(state.stoppedReason)}</p>` : ''}
 
   <div class="tiles">
     <div class="tile"><div class="v">${done}/${worklist.length}</div><div class="k">subsystems audited</div></div>
     <div class="tile"><div class="v">${all.length}</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">${applied.length}</div><div class="k">applied &amp; verified</div></div>
-    <div class="tile"><div class="v" style="color:var(--warn)">${escalated.length}</div><div class="k">orchestrator-checked</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">${changedCount}</div><div class="k">changes applied<br><span style="font-size:.85em;opacity:.75">${applied.length} self-verified &middot; ${escalatedApplied.length} verifier-confirmed</span></div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">${escalated.length}</div><div class="k">sent to a verifier</div></div>
     <div class="tile"><div class="v" style="color:var(--accent)">${proposed.length}</div><div class="k">awaiting you</div></div>
     <div class="tile"><div class="v">${guardsPass}<span style="font-size:.6em;color:var(--dim)">/${guardRuns.length}</span></div><div class="k">guards passing</div></div>
   </div>
