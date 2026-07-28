@@ -31,17 +31,27 @@
  *          its display shader if it bands).
  *   (c) CONTROLS — `Controls`: a self-contained React panel (reads the store + registry).
  *
- * ── Invariants (FROZEN — parallel sessions rely on these) ───────────────────────────────
- *   • `id` is the stable mode key persisted in `fullscreenStore.geom` and used in export
- *     filenames (`{stem}-{id}.png`). Don't rename a shipped id.
- *   • cpuField `field` / cpuRaster `raster` MUST stay pure + deterministic. The cpuField
- *     half is pinned for real: `debug/test-palette-rampgeometry.mts` (last link of the
- *     `test:palette` chain) renders every geometry twice and asserts byte-identical output
- *     — grep `identical inputs → byte-identical output`. Nothing pins cpuRaster, because
- *     nothing uses it. Side effects / RAF / DOM belong in 'ownCanvas'.
- *   • A mode reads gradient data ONLY from `ctx` (never the store directly) so the same mode
- *     renders correctly for the snapshot (fullscreen) AND the live hero (split) source.
- *   • `setUniforms` must not touch the reserved preamble uniforms (see ditherTail.ts).
+ * ── Contracts (FROZEN — parallel sessions rely on these) ────────────────────────────────
+ * All four are `@assumption`, not `@invariant`: no command in the repo goes red if a new
+ * mode breaks one. Read that as a standing worklist, not as reassurance.
+ *
+ * @assumption `id` is the stable mode key persisted in `fullscreenStore.geom` and used in
+ *   export filenames (`{stem}-{id}.png`). Renaming a shipped id silently orphans saved
+ *   state; nothing detects it.
+ * @assumption cpuField `field` / cpuRaster `raster` stay pure + deterministic; side
+ *   effects / RAF / DOM belong in 'ownCanvas'. Note what IS pinned and what is not:
+ *   `debug/test-palette-rampgeometry.mts` (in the `test:palette` chain) renders every
+ *   geometry twice and asserts byte-identical output — grep
+ *   `identical inputs → byte-identical output`. But it calls `renderGeometry` in
+ *   palette/core DIRECTLY, never through a registered mode, so it pins `sampleGeometry`
+ *   and only covers today's geometry modes because their `field` is a bare delegation to
+ *   it. A mode whose own `field` body pulled in Math.random or a frame counter would pass
+ *   that harness untouched. Nothing pins cpuRaster at all — nothing uses it.
+ * @assumption A mode reads gradient data ONLY from `ctx` (never the store directly) so the
+ *   same mode renders correctly for the snapshot (fullscreen) AND the live hero (split)
+ *   source. Reaching into the store instead still renders in fullscreen, which is why this
+ *   one breaks quietly — in split only.
+ * @assumption `setUniforms` does not touch the reserved preamble uniforms (see ditherTail.ts).
  *
  * @see gradient-explorer/fullscreen/modes/index.ts  (which modes are registered, in order)
  * @see gradient-explorer/fullscreen/ditherTail.ts   (the wrapper + shared dither tail)
