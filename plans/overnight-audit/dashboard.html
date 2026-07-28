@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:33%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:42%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,25 +73,25 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Cycle 4 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-27T23:47:42.037Z</p>
+  <p class="sub">Cycle 5 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T00:28:36.770Z</p>
 
   <div class="tiles">
-    <div class="tile"><div class="v">11/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">85</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">49</div><div class="k">applied &amp; verified</div></div>
-    <div class="tile"><div class="v" style="color:var(--warn)">8</div><div class="k">orchestrator-checked</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">26</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">77<span style="font-size:.6em;color:var(--dim)">/77</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v">14/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">103</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">57</div><div class="k">applied &amp; verified</div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">9</div><div class="k">orchestrator-checked</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">35</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">96<span style="font-size:.6em;color:var(--dim)">/96</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 5 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 6 cycles</p>
 
   
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">49</span></h2>
+    <h2>Applied — self-verified <span class="count">57</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
   <article class="finding sev-high">
@@ -288,6 +288,62 @@
     <p class="verify"><strong>How it was verified:</strong> Verified three ways before editing. (1) Code: ModulationFeature has no holdsLiveSession, and utils/PresetLogic.ts:89 skips a slice only when `feat.holdsLiveSession?.(...)` is truthy, so modulation is never skipped. (2) Guard: test:session-hold [4] asserts links are scene-driven regardless of whether audio is running, and [5] asserts the audio ENGINE alone declares holdsLiveSession. (3) Falsification: temporarily adding `holdsLiveSession: () =&gt; true` to ModulationFeature failed 5 assertions across all five sections of that guard; reverted with a targeted Edit and confirmed green. So the guard would fail if the corrected invariant were wrong.</p>
     <p class="guard"><code>npm run test:session-hold</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>9d4d59ca</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e11-worker-contract</code>
+      <code class="file">engine/worker/WorkerProxy.ts:345</code>
+    </header>
+    <p class="what">The setProxy @invariant ('must run before any caller has captured a reference from getProxy()') is violated structurally in app-gmt — store/engineStore.ts:29 and store/slices/historySlice.ts:43 are permanently bound to the no-op stub — and the surrounding comment overstated the registry as making 'all getProxy() calls return the SAME instance'.</p>
+    <p class="change"><strong>Changed:</strong> Corrected the singleton comment to say the registry only redirects calls made AFTER install, and added a @bug PRODUCTION: block on setProxy recording the proven violation, its structural cause, the runtime evidence, the two known consequences and the fix direction. Committed together with the pendingTeleport correction (same file). Also added a 'never capture getProxy() at module scope' invariant to .claude/rules/worker-contract.md and fixed that rule's Read-first line, which credited WorkerProxy.ts's JSDoc with covering ViewportRefs (a separate file).</p>
+    <p class="verify"><strong>How it was verified:</strong> Proven by runtime falsification, not inference. A temporary probe exposed store/engineStore.ts's captured `engine` on window; a Playwright run against the live dev server on app-gmt.html returned captured {identicalToRealProxy: false, gpuInfo: 'Stub (no worker)', isBooted: false, bootSent: false} while window.__gmtProxy reported {isBooted: true, gpuInfo: 'ANGLE (...)'} and a fresh getProxy() from the engine-core module returned the real proxy — isolating the defect to the module-scope capture rather than the registry. The probe edit was reverted with a targeted Edit (git diff on engineStore.ts empty). A second independent behavioural discriminator agreed: compileGate.queue emits IS_COMPILING synchronously, and calling loadScene post-boot produced no synchronous IS_COMPILING, i.e. the stub branch was taken. The root cause is ESM ordering — engine-gmt/renderer/install.ts:32 imports store/engineStore, so engineStore's body (and transitively historySlice's) runs before installGmtRenderer() can call setProxy(). Guards: typecheck, and smoke:engine-gmt which boots app-gmt with 0 page errors and BOOTED logged.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>861724d2</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e12-mobile-layout</code>
+      <code class="file">engine/HardwareDetection.ts:9</code>
+    </header>
+    <p class="what">Two false JSDoc claims: `@invariant Single source of truth for the 768px breakpoint` (there are EIGHT surviving inline copies, one of which supplies the boot value), and `Called once at boot — the result is immutable for the session` on detectHardwareProfile (three call sites, one a user-clicked button, and the predicate reads live innerWidth).</p>
+    <p class="change"><strong>Changed:</strong> Rewrote both blocks truthfully. isMobileViewport() is now stated as the INTENDED home but not the only copy, with all eight enumerated by role, the store/slices/uiSlice.ts slice initializer singled out as the one that supplies the BOOT value of isDeviceMobile, and gradient-explorer's width-only MOBILE_BREAKPOINT explicitly exempted so nobody 'consolidates' it by mistake. detectHardwareProfile's header names its three real call sites, states the result is not session-stable, and records that no in-tree caller passes a gl context — so the FBO-allocating Float32 probe branch is dead in-tree today. Code untouched.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsified, not assumed. Grep proved isMobileViewport has exactly two importers while eight sites re-implement the same predicate inline. Then MUTATED the threshold in isMobileViewport() from 768 to 2000 and booted headless Chromium at 1400x900: __store.getState().isDeviceMobile was still false, because uiSlice seeds it from its own inline copy — direct proof the 'single source of truth' claim is false in a way that changes observable BOOT state. Reverted with a targeted Edit and re-ran: desktop 1400x900 back to isDeviceMobile:false/shellPos:fixed, Pixel-5 context isDeviceMobile:true/shellPos:sticky. Call-site claim from exhaustive grep across the whole tree. NOTE: this corrects a claim THIS AUDIT introduced in cycle 3 (b7faa631), which said 'one un-migrated copy survives' and cited a line range that had already drifted.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>1ae80a27</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e13-shared-ui</code>
+      <code class="file">components/timeline/TimelineToolbar.tsx:419</code>
+    </header>
+    <p class="what">The timeline toolbar's hamburger menu is body-portalled at a raw z-[100] — exactly the base of the RESERVED floating-panel band (100-199) — so any raised floating panel paints over it; check:zindex was blind to it because the file was allowlisted under the wrong category.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the raw z-[100] with `zIndex: z('popover')` in the inline style, routed the portal through getLayerHost() instead of document.body, and added a comment explaining the portal-domain reasoning. Removed the file from check-zindex.mjs's ALLOWLIST — it was listed under '(a) shell-local chrome (value is local to its own trap)', but the same script's own body-portal detector reports it, so the value is NOT trap-local. Net z change 100 -&gt; 300; nothing occupies 200-299.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsification-first. Step 1: removed the ALLOWLIST entry with the raw literal still in place -&gt; check:zindex exited 1 with `components/timeline/TimelineToolbar.tsx:417  z-[100]`, proving the guard bites on exactly this file/line. Step 2: applied the fix -&gt; check:zindex green, and the informational body-portal list dropped from 17 to 16 files, confirming the getLayerHost() reroute took. The guard caught the first attempt too, where the explanatory comment itself contained the literal `z-[100]` and tripped the regex. Confirmed setLayerHost is never called anywhere in the tree, so getLayerHost() still returns document.body — the host swap is behaviourally a no-op and the only live change is 100 -&gt; 300. typecheck, test:zindex and smoke:boot (0 pageerrors) all green. NOTE this is the mirror image of cycle 3's Support modal: that one sat too LOW at z-50 and was invisible to check:zindex's &gt;= 100 threshold; this one sat exactly AT the threshold and was hidden by a mis-categorised allowlist entry.</p>
+    <p class="guard"><code>npm run check:zindex</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>b106118a</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>e13-shared-ui</code>
+      <code class="file">.claude/rules/ui-and-panels.md:13</code>
+    </header>
+    <p class="what">The rule that auto-loads for components/ states an invariant false for 29 of the 68 files it governs, cites four ADR numbers that all point at unrelated decisions, bills a guard that covers nothing in its scope, and leaves 60 files in components/ subdirectories rule-orphaned.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the rule. (1) ADR citations replaced — 0008 is activeLightPopup, 0009 tutorial actionBus, 0010 tutorial anchors, 0011 enum params; now cites 0007, 0021, 0057, 0013, 0014, 0032 plus a pointer to layers-zindex.md and ADR-0060/0081/0082. (2) Purity invariant rescoped to the components/ui/ subtree only, citing ADR-0014's own words that the blanket rule is 'aspirational, not enforced'. (3) paths widened components/*.tsx -&gt; components/** so 60 files stop being rule-orphaned. (4) Guards section now lists guards that cover the scope and carries an explicit coverage-gap note about smoke:ui-primitives.</p>
+    <p class="verify"><strong>How it was verified:</strong> No npm guard covers rule-file markdown — that absence is itself part of the finding — so every claim is backed by a deterministic, re-runnable command. Citations: grepping each ADR's first heading prints the four unrelated titles for the old numbers, and titles matching the replacement text verbatim for the six new ones; all replacement files exist. Purity scope: 29 of 68 top-level components/*.tsx import useEngineStore, while components/ui/ contains only zustand's own `create` in layerStack.ts (not the app store), and .claude/hooks/guard.mjs gates on inDir('components/ui') alone. ADR-0014's Consequences literally reads &quot;The 'primitives must not import the store' rule ... is aspirational, not enforced&quot;. Rule-orphaning: 60 files counted by ls across eleven subdirectories, matched by no rule's globs — a single-star glob does not cross a directory separator, which is also why layers-zindex.md had to spell out components/ui/** separately.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>7f14b3a9</code></p>
     
   </article>
   <article class="finding sev-medium">
@@ -626,6 +682,48 @@
     <p class="commit">commit <code>7da130ee</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e11-worker-contract</code>
+      <code class="file">engine/worker/ViewportRefs.ts:143</code>
+    </header>
+    <p class="what">The _mouseOverCanvas block claimed it is 'Used by adaptive resolution to decide grace period behavior' (false — the module ignores the input) and its @invariant named AdaptiveResolutionBadge as the affected component (wrong component). Cycle-3 handoff, re-derived independently.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the comment and @invariant with the verified picture: setters are ViewportFrame.tsx / ViewportArea.tsx; viewportSlice.reportFps still evaluates it every frame but engine/AdaptiveResolution.ts never reads it (activity-driven since ADR-0061 P5); the sole live reader is engine-gmt/topbar/AdaptiveResolution.tsx choosing the Auto-vs-Always label. Preserved the real invariant verbatim in substance and added the @see to ADR-0035.</p>
+    <p class="verify"><strong>How it was verified:</strong> Re-derived rather than taken on trust. grep of engine/AdaptiveResolution.ts returns only the type declaration and comments — no read of input.mouseOverCanvas anywhere in the decision path. AdaptiveResolutionBadge.tsx imports only React, useEngineStore and AdaptiveIcon. The sole reader is engine-gmt/topbar/AdaptiveResolution.tsx:30, whose `onCanvas` selects 'Auto' vs 'Always'. The per-frame-poll half was confirmed live: viewportSlice.ts:196 calls isMouseOverCanvas() inside reportFps, which GmtRendererTickDriver.tsx:302 drives every frame. Two sibling sites (ViewportFrame.tsx:190-197, viewportSlice.ts:28) already carry the corrected description, so ViewportRefs.ts was the lone straggler. smoke:viewport exercises the adaptive chain end to end (1.00 -&gt; 0.55 -&gt; 1.00).</p>
+    <p class="guard"><code>npm run smoke:viewport</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>86669f56</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e12-mobile-layout</code>
+      <code class="file">.claude/rules/mobile-layout.md:18</code>
+    </header>
+    <p class="what">Three defects: cycle 3's 'one un-migrated copy survives' understates the duplication eightfold and cites a drifted line range; the Guards section names two smokes that assert nothing whatsoever about mobile layout; and the engine/components/** glob over-captures six unrelated files.</p>
+    <p class="change"><strong>Changed:</strong> (1) Replaced the single-source bullet with the true picture — eight copies listed by file, uiSlice's initializer called out, the mutation result quoted, gradient-explorer exempted, drifted line ref dropped for symbol names. (2) Replaced the Guards section with an explicit statement that NO mobile-layout guard exists, why the two previously-listed smokes don't count, and typecheck + smoke:boot as generic no-regression cover. (3) Narrowed engine/components/** to the three Landscape/Mobile files. (4) Added the ADR-0038 asymmetric-gating contract as a watch-out — the most breakable thing in the subsystem, previously unmentioned.</p>
+    <p class="verify"><strong>How it was verified:</strong> Guard blindness proved by mutation, not by reading: with the threshold deliberately set to 2000, `npm run smoke:viewport` exited 0 ('adaptive chain verified') and `npm run smoke:viewport-fixed` exited 0 ('content-box invariant holds'). A guard that stays green while the invariant it is listed under is broken is not a guard for that invariant. Duplicate count from exhaustive grep for 'pointer: coarse' and 768 across ts/tsx. viewportSlice.ts line range read directly (67-71, not 49-53). Over-capture measured by ls engine/components/ (9 entries) then grep -l for isMobile|isDeviceMobile|useMobileLayout|dvh|svh, which matched exactly the three Landscape/Mobile files.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>dbc09c95</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>e12-mobile-layout</code>
+      <code class="file">hooks/useMobileLayout.ts:5</code>
+    </header>
+    <p class="what">All four line references in the file's own @invariant block point at the wrong code — they are 13 to 18 lines short, so each lands inside the JSDoc block rather than on the code it describes.</p>
+    <p class="change"><strong>Changed:</strong> Replaced every line reference with a symbol reference that cannot drift. Also named store/slices/uiSlice.ts as the initializer that seeds the flags, and added the cross-reference that the BOOT value does not come through isMobileViewport() at all.</p>
+    <p class="verify"><strong>How it was verified:</strong> Each cited range read directly against the file to establish the drift (the resize listener is at 43-55, not ~25-37). The invariants themselves were then confirmed AT RUNTIME rather than assumed: a 700x700 square viewport reports isPortrait:false (confirming 'square counts as LANDSCAPE, will NOT trigger LandscapeGate'); resizing 1400x900 -&gt; 600x900 flips isDeviceMobile false-&gt;true (confirming the module-level resize listener is live and the store tracks it); a Pixel 5 context boots isDeviceMobile:true/isPortrait:true with MobileViewportShell resolving to position:sticky with height tracking the viewport, vs position:fixed on desktop (confirming ADR-0038 asymmetric gating end to end).</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>de69c730</code></p>
+    
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tA">A</span>
@@ -780,10 +878,24 @@
     <p class="commit">commit <code>1b212839</code></p>
     
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>e11-worker-contract</code>
+      <code class="file">engine/worker/WorkerProxy.ts:82</code>
+    </header>
+    <p class="what">The pendingTeleport @invariant said 'The real worker reads it at boot' — the field never rides a postMessage; it is drained on the main thread.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the reader claim with the traced path: engine-gmt/store/cameraSlice.ts stashes every CAMERA_TELEPORT into it, engine-gmt/renderer/GmtRendererTickDriver.tsx drains it on boot-ready and re-emits CAMERA_TELEPORT, and FractalEngine._pendingTeleport is a separate worker-local field fed by the in-worker event bus. Kept the load-bearing half (direct writes are the supported API, not action dispatch).</p>
+    <p class="verify"><strong>How it was verified:</strong> grep for pendingTeleport across the tree yields exactly: the two field declarations, the write at cameraSlice.ts:379, the read+clear at GmtRendererTickDriver.tsx:135-137, and FractalEngine's separate private _pendingTeleport. It never crosses a postMessage. Cross-checked that the drain does not reach the worker: GmtRendererTickDriver:138 re-emits on the MAIN-thread bus, and the only other CAMERA_TELEPORT reference in that file is a wake-up subscription list, so FractalEngine's listener is the worker's own bus instance.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>861724d2</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Applied — orchestrator-verified <span class="count">8</span></h2>
+    <h2>Applied — orchestrator-verified <span class="count">9</span></h2>
     <p class="note">No existing test covered these, so a second independent agent re-derived the claim before the change was allowed through. Each names how it was checked.</p>
     
   <article class="finding sev-high">
@@ -898,10 +1010,24 @@
     <p class="commit">commit <code>37b90870</code></p>
     
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">low</span>
+      <code>e13-shared-ui</code>
+      <code class="file">components/ui/zIndex.ts:40</code>
+    </header>
+    <p class="what">zIndex.ts documents that 'nothing else may land in 100-299', but registerTiers only rejects tiers that OVERLAP an existing band — a portal tier registered at 200-299 was silently accepted, squatting in the reservation. CONFIRMED by execution, and the intended reading was settled from the design doc.</p>
+    <p class="change"><strong>Changed:</strong> Added a reservation check to registerTiers (with named RESERVED_PORTAL_LO/HI constants and a comment explaining why findPortalOverlaps cannot see it), and extended debug/test-zindex.mts with four new cases: portal tiers at 200, 250 and 299 must be rejected, plus a span case (base 195, span 20) that starts below the reservation and reaches into it.</p>
+    <p class="verify"><strong>How it was verified:</strong> The verifier proved the gap BY EXECUTION rather than inference: a tsx probe registered portal tiers at 200, 250 and 299 and all three were accepted, with the 250 one landing in the live table at z=250 — above every floating panel. Control cases behaved correctly (199 and 300 rejected as band overlaps). It then settled WHICH READING was intended, since the fix depended on it, and found (i) real headroom on three independent lines: plans/z-index-system-design.md:59 states under 'Reserved ranges (inviolate)' that 'nothing may squat in 100-299 except panel ranks'; ADR-0082 records the popover 200 -&gt; 300 move as being FOR panel's benefit; and `git show 67c54853^` proves the pre-ADR-0082 table had popover at 200, i.e. the range was deliberately VACATED rather than merely never used. Structurally it fits — growing panel's span to 199 makes the band exactly [100..299]. It also established this is a LATENT authoring trap (registerTiers has zero production callers) and that check:zindex catches the raw-literal route into that range but not the registerTiers route. The orchestrator then falsified its own fix: disabling the new clause makes the three new test cases fail with 'registerTiers accepted a portal tier at N, inside the reserved 200-299 headroom'; restored, all four pass. Runtime-neutral — no app registers tiers, so nothing changes at boot.</p>
+    <p class="guard"><code>npm run test:zindex</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>c8fb940d</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">26</span></h2>
+    <h2>Awaiting your judgement <span class="count">35</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
   <article class="finding sev-high">
@@ -917,6 +1043,20 @@
     
     
     <p class="rationale">Reproduced on the live app (probe transcript in the FeatureSystem finding above). drawing/index.ts:42 and droste/index.ts:27 both declare shortId 'dr'; inside materials.ts, emissionMode and envMapColorSpace both declare param shortId 'ec'. UrlStateEncoder.applyDictionary writes result[alias]=value on encode (utils/UrlStateEncoder.ts:107) and getReverseDict builds one alias-&gt;longKey entry per alias (L84), so the later writer wins both directions. Measured: droste {active:true, zoom:3.5, tiling:4} round-trips to {}; envMapColorSpace:'linear' round-trips to undefined. The ?s=&lt;id&gt; share path is in production, so shared scenes using Droste have been arriving without it. GOOD NEWS FOR COMPAT: in both collisions the alias resolves to the SURVIVING side ('dr'=drawing, 'ec'=emissionMode), so existing links have never carried the lost data — the minimal fix is strictly additive: give the LOSING side a fresh alias (droste 'dr'-&gt;'ds' or 'do'; envMapColorSpace 'ec'-&gt;'ecs'). Old links decode exactly as now; new links gain the dropped state. Taken feature aliases: au cg dt mod pe wc ao at cl cm dr eng g l ls m n o q rf rg tx vol wp wv. RECOMMENDATION: rename the two losing aliases. Not applied because it changes the URL wire format (a product/compat call) and both files sit outside this subsystem. ALTERNATIVE: drop shortId from droste and envMapColorSpace entirely — getDictionary falls back to the full key, so they encode under long names: correct, slightly longer URLs, still no old-link breakage.</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">high</span>
+      <code>e11-worker-contract</code>
+      <code class="file">store/engineStore.ts:29</code>
+    </header>
+    <p class="what">Five engine-core modules capture getProxy() at module scope and are therefore bound to the no-op stub forever in app-gmt; the fix is a cross-subsystem behaviour change, so it needs the owner.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. Proven, with an explicitly stated caveat: the dead branch is proven unreachable, NOT that a user-visible defect follows.</p>
   </article>
   <article class="finding sev-medium">
     <header>
@@ -1071,6 +1211,76 @@
     
     
     <p class="rationale">See PROPOSALS.md. The verifier's recommendation was owner-decision, NOT 'delete one line'.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e12-mobile-layout</code>
+      <code class="file">.claude/rules/mobile-layout.md:55</code>
+    </header>
+    <p class="what">No automated guard covers mobile layout at all. A ready-to-promote probe exists and is verified; promoting it needs a package.json edit and a tracked debug script.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. The probe is left at debug/_mobile-layout-probe.mts (gitignored) for whoever picks it up.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e12-mobile-layout</code>
+      <code class="file">engine/HardwareDetection.ts:9</code>
+    </header>
+    <p class="what">The obvious follow-up — collapse the eight inline breakpoint copies onto isMobileViewport() — is NOT a safe blanket swap: one of the eight is not equivalent.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. Recorded specifically so a future cleanup pass does not do it mechanically.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e12-mobile-layout</code>
+      <code class="file">docs/adr/0038-asymmetric-mobile-gating.md:44</code>
+    </header>
+    <p class="what">ADR-0038 cites 'the header comment at hooks/useMobileLayout.ts:50-65' — those lines are the module-level resize listener, not the contract. The flag contract is the JSDoc on `export const useMobileLayout` (currently 81-95).</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md for the paste-ready Update block. The decision itself is intact and was verified end-to-end: all three primitives (Gate/Intro/Shell) still consume raw isDeviceMobile.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e13-shared-ui</code>
+      <code class="file">index.css:16</code>
+    </header>
+    <p class="what">Every custom animate-* utility the UI uses (53 usages across 36 files) is undefined in production — the keyframes live only in demo.html's inline &lt;style&gt;, so animation-name resolves to `none` in app-gmt and every sibling app. CONFIRMED, with the claimed cause corrected.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. Independently confirmed on three lines (static, dynamic, build artifact), but the verifier CORRECTED the causal story: the Tailwind CDN migration is a red herring.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>e13-shared-ui</code>
+      <code class="file">components/ui/Modal.tsx:41</code>
+    </header>
+    <p class="what">Modal defaults dismissOnBackdrop to true, the opposite of the convention recorded in .claude/rules/layers-zindex.md — 9 of the 13 call sites already have to remember to opt out.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. The primitive defaults to the work-destroying behaviour, so a future author who forgets ships a data-loss footgun no guard catches.</p>
   </article>
   <article class="finding sev-low">
     <header>
@@ -1268,6 +1478,48 @@
     
     <p class="rationale">The glob over-captures by 6 of the directory's 9 files — the rule's own prose says it is about useMobileLayout.ts and engine/components/{Landscape,Mobile}*. Meanwhile the toast's real siblings are covered elsewhere: StateLibraryPanel.tsx and ActiveSnapshotFeatures.tsx match ui-and-panels.md's components/*.tsx, and the slice + installer match engine-plugins.md's engine/store/**. The toast is the one piece of this subsystem whose auto-loaded rule is unrelated to it. OPTIONS: (a) narrow mobile-layout.md's glob — precise, but silently drops coverage from 6 files that may want it; (b) add engine/components/StateLibraryToast.tsx to engine-plugins.md's paths, putting it next to the two files its contract is actually shared with; (c) leave it. RECOMMENDATION: (b) — additive, cannot remove coverage from anything, and matches where the toast's real contract lives (toastFieldKey is the entire interface between toast and slice). Not applied because two auditors were editing rules files concurrently this cycle.</p>
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e11-worker-contract</code>
+      <code class="file">docs/adr/0035-mouseovercanvas-as-ref-not-store-state.md:5</code>
+    </header>
+    <p class="what">ADR-0035 names the wrong component throughout and cites collapsed module docs; the decision itself still stands.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md for the paste-ready Update block.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e12-mobile-layout</code>
+      <code class="file">gradient-explorer/GradientExplorerApp.tsx:306</code>
+    </header>
+    <p class="what">gradient-explorer mounts MobileViewportShell without MobileScrollIntro — half of the ADR-0039 pair — while its comment claims parity with app-gmt on address-bar collapse.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. May well be intentional for a palette tool, which is why it is a comment-accuracy question rather than a fix.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>e13-shared-ui</code>
+      <code class="file">docs/adr/0014-shared-ui-mid-migration-store-context-vs-direct-store.md:1</code>
+    </header>
+    <p class="what">ADR-0014's status snapshot ('today only Slider consumes the context') is well out of date, and the precondition it gated the migration on is now satisfied.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md for the paste-ready Update block. Matters because the rewritten ui-and-panels.md now cites ADR-0014 as the authority for the purity scoping.</p>
+  </article>
   </section>
 
   <h2>Subsystems</h2>
@@ -1384,35 +1636,35 @@
     <td class="num prop">2</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e11-worker-contract</code></td>
     <td>engine-core</td>
     <td class="area">Worker proxy, ViewportRefs, RENDER_TICK protocol</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">5</td>
+    <td class="num applied">3</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">2</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e12-mobile-layout</code></td>
     <td>engine-core</td>
     <td class="area">Mobile detection + layout primitives</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">7</td>
+    <td class="num applied">3</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">4</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>e13-shared-ui</code></td>
     <td>engine-core</td>
     <td class="area">components/ primitives + context providers</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">6</td>
+    <td class="num applied">2</td>
+    <td class="num esc">1</td>
+    <td class="num prop">3</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>g01-renderer</code></td>

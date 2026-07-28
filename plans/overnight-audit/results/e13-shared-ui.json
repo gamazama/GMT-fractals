@@ -1,0 +1,76 @@
+{
+  "id": "e13-shared-ui",
+  "cycle": 5,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e13-shared-ui" },
+    { "script": "npm run test:zindex", "pass": true, "subsystem": "e13-shared-ui" },
+    { "script": "npm run check:zindex", "pass": true, "subsystem": "e13-shared-ui" },
+    { "script": "npm run smoke:ui-primitives", "pass": true, "subsystem": "e13-shared-ui" },
+    { "script": "npm run smoke:boot", "pass": true, "subsystem": "e13-shared-ui" },
+    { "script": "npm run smoke:help-menu", "pass": true, "subsystem": "e13-shared-ui" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "e13-shared-ui" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "components/timeline/TimelineToolbar.tsx",
+      "line": 419,
+      "summary": "The timeline toolbar's hamburger menu is body-portalled at a raw z-[100] — exactly the base of the RESERVED floating-panel band (100-199) — so any raised floating panel paints over it; check:zindex was blind to it because the file was allowlisted under the wrong category.",
+      "change": "Replaced the raw z-[100] with `zIndex: z('popover')` in the inline style, routed the portal through getLayerHost() instead of document.body, and added a comment explaining the portal-domain reasoning. Removed the file from check-zindex.mjs's ALLOWLIST — it was listed under '(a) shell-local chrome (value is local to its own trap)', but the same script's own body-portal detector reports it, so the value is NOT trap-local. Net z change 100 -> 300; nothing occupies 200-299.",
+      "verification": "Falsification-first. Step 1: removed the ALLOWLIST entry with the raw literal still in place -> check:zindex exited 1 with `components/timeline/TimelineToolbar.tsx:417  z-[100]`, proving the guard bites on exactly this file/line. Step 2: applied the fix -> check:zindex green, and the informational body-portal list dropped from 17 to 16 files, confirming the getLayerHost() reroute took. The guard caught the first attempt too, where the explanatory comment itself contained the literal `z-[100]` and tripped the regex. Confirmed setLayerHost is never called anywhere in the tree, so getLayerHost() still returns document.body — the host swap is behaviourally a no-op and the only live change is 100 -> 300. typecheck, test:zindex and smoke:boot (0 pageerrors) all green. NOTE this is the mirror image of cycle 3's Support modal: that one sat too LOW at z-50 and was invisible to check:zindex's >= 100 threshold; this one sat exactly AT the threshold and was hidden by a mis-categorised allowlist entry.",
+      "guard": "npm run check:zindex",
+      "guardPass": true,
+      "commit": "b106118a"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": ".claude/rules/ui-and-panels.md",
+      "line": 13,
+      "summary": "The rule that auto-loads for components/ states an invariant false for 29 of the 68 files it governs, cites four ADR numbers that all point at unrelated decisions, bills a guard that covers nothing in its scope, and leaves 60 files in components/ subdirectories rule-orphaned.",
+      "change": "Rewrote the rule. (1) ADR citations replaced — 0008 is activeLightPopup, 0009 tutorial actionBus, 0010 tutorial anchors, 0011 enum params; now cites 0007, 0021, 0057, 0013, 0014, 0032 plus a pointer to layers-zindex.md and ADR-0060/0081/0082. (2) Purity invariant rescoped to the components/ui/ subtree only, citing ADR-0014's own words that the blanket rule is 'aspirational, not enforced'. (3) paths widened components/*.tsx -> components/** so 60 files stop being rule-orphaned. (4) Guards section now lists guards that cover the scope and carries an explicit coverage-gap note about smoke:ui-primitives.",
+      "verification": "No npm guard covers rule-file markdown — that absence is itself part of the finding — so every claim is backed by a deterministic, re-runnable command. Citations: grepping each ADR's first heading prints the four unrelated titles for the old numbers, and titles matching the replacement text verbatim for the six new ones; all replacement files exist. Purity scope: 29 of 68 top-level components/*.tsx import useEngineStore, while components/ui/ contains only zustand's own `create` in layerStack.ts (not the app store), and .claude/hooks/guard.mjs gates on inDir('components/ui') alone. ADR-0014's Consequences literally reads \"The 'primitives must not import the store' rule ... is aspirational, not enforced\". Rule-orphaning: 60 files counted by ls across eleven subdirectories, matched by no rule's globs — a single-star glob does not cross a directory separator, which is also why layers-zindex.md had to spell out components/ui/** separately.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "7f14b3a9"
+    },
+    {
+      "tier": "V",
+      "severity": "low",
+      "file": "components/ui/zIndex.ts",
+      "line": 40,
+      "summary": "zIndex.ts documents that 'nothing else may land in 100-299', but registerTiers only rejects tiers that OVERLAP an existing band — a portal tier registered at 200-299 was silently accepted, squatting in the reservation. CONFIRMED by execution, and the intended reading was settled from the design doc.",
+      "change": "Added a reservation check to registerTiers (with named RESERVED_PORTAL_LO/HI constants and a comment explaining why findPortalOverlaps cannot see it), and extended debug/test-zindex.mts with four new cases: portal tiers at 200, 250 and 299 must be rejected, plus a span case (base 195, span 20) that starts below the reservation and reaches into it.",
+      "verification": "The verifier proved the gap BY EXECUTION rather than inference: a tsx probe registered portal tiers at 200, 250 and 299 and all three were accepted, with the 250 one landing in the live table at z=250 — above every floating panel. Control cases behaved correctly (199 and 300 rejected as band overlaps). It then settled WHICH READING was intended, since the fix depended on it, and found (i) real headroom on three independent lines: plans/z-index-system-design.md:59 states under 'Reserved ranges (inviolate)' that 'nothing may squat in 100-299 except panel ranks'; ADR-0082 records the popover 200 -> 300 move as being FOR panel's benefit; and `git show 67c54853^` proves the pre-ADR-0082 table had popover at 200, i.e. the range was deliberately VACATED rather than merely never used. Structurally it fits — growing panel's span to 199 makes the band exactly [100..299]. It also established this is a LATENT authoring trap (registerTiers has zero production callers) and that check:zindex catches the raw-literal route into that range but not the registerTiers route. The orchestrator then falsified its own fix: disabling the new clause makes the three new test cases fail with 'registerTiers accepted a portal tier at N, inside the reserved 200-299 headroom'; restored, all four pass. Runtime-neutral — no app registers tiers, so nothing changes at boot.",
+      "guard": "npm run test:zindex",
+      "guardPass": true,
+      "commit": "c8fb940d"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "index.css",
+      "line": 16,
+      "summary": "Every custom animate-* utility the UI uses (53 usages across 36 files) is undefined in production — the keyframes live only in demo.html's inline <style>, so animation-name resolves to `none` in app-gmt and every sibling app. CONFIRMED, with the claimed cause corrected.",
+      "rationale": "See PROPOSALS.md. Independently confirmed on three lines (static, dynamic, build artifact), but the verifier CORRECTED the causal story: the Tailwind CDN migration is a red herring."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "components/ui/Modal.tsx",
+      "line": 41,
+      "summary": "Modal defaults dismissOnBackdrop to true, the opposite of the convention recorded in .claude/rules/layers-zindex.md — 9 of the 13 call sites already have to remember to opt out.",
+      "rationale": "See PROPOSALS.md. The primitive defaults to the work-destroying behaviour, so a future author who forgets ships a data-loss footgun no guard catches."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "docs/adr/0014-shared-ui-mid-migration-store-context-vs-direct-store.md",
+      "line": 1,
+      "summary": "ADR-0014's status snapshot ('today only Slider consumes the context') is well out of date, and the precondition it gated the migration on is now satisfied.",
+      "rationale": "See PROPOSALS.md for the paste-ready Update block. Matters because the rewritten ui-and-panels.md now cites ADR-0014 as the authority for the purity scoping."
+    }
+  ],
+  "notes": "WHAT WAS NOT REACHED — this subsystem is much bigger than its 15-file estimate (68 top-level components/*.tsx plus ~60 more in subdirectories) and the auditor chose depth over sweep, per the brief. COVERED PROPERLY: all of components/ui/** (Layer, Modal, AnchoredMenu, FloatingPanel, layerStack, layerHost, panelStack, zIndex, viewportClamp, stopNavKeys, index), components/contexts/StoreCallbacksContext.tsx, hooks/useDismiss.ts, both z-index guards, debug/smoke-ui-primitives.mts, and both governing rule files. NOT AUDITED: components/AutoFeaturePanel.tsx and components/CompilableFeatureSection.tsx beyond their store-import pattern — between them they carry 5 @invariant claims (composed-vec decomposition, the hardcoded onUpdate:'compile' route, forcedState prop-only flow, data-help-id coverage, the atomic compile flip) that were read but NOT verified against code. Also untouched: components/registry/, gradient/, graph/, topbar/, viewport/, panels/**, layout/. StateLibraryPanel.tsx skipped deliberately per brief (cycle 4 owns it).\n\nVERIFIED-CLEAN (recorded so a later cycle need not redo it): (1) components/ui/** really is store-free — the only zustand reference is layerStack.ts's own `create` for its ephemeral per-tier band store, which is not the app store and does not trip the hook. (2) StoreCallbacksContext's '@invariant Missing provider is SILENT' is accurate AND currently unreachable — all five hosts mount the provider and all five memoise the value; mesh-export is the only entry that skips it and it imports none of the 7 consumers. (3) The 11 per-file 'no app/store imports' @invariants in components/ all hold against their actual import lists. (4) FormatUtils.ts:174's reserving invariant holds; the adjacent risk that fromDisplay can emit below `min` is a non-issue — both call sites clamp to hardMin/hardMax in RAW space after the mapping. (5) AnchoredMenu's zero-size-first-measure trap is real in code but unreachable today — both call sites mount/unmount rather than toggling `open`, and render synchronous content. It WOULD become live-adjacent if the animate-* proposal is applied; that interaction is written into the proposal.\n\nGUARD HEALTH: test:zindex is honest — falsified by setting popover.base to 250, it correctly printed the failure, then reverted green. check:zindex is honest within its stated threshold and caught the fix's own comment text. Its documented low-z blind spot surfaced two sub-threshold raw values judged not worth a finding: components/PerformanceMonitor.tsx:263 z-[50] and components/viewport/CompositionOverlay.tsx:45 z-[15], both shell-domain in-flow surfaces with no sibling to collide with. smoke:ui-primitives passes and is honestly self-documented but covers only clampToViewport — now recorded in the rule file rather than left as folklore."
+}

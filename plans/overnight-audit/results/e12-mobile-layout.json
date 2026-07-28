@@ -1,0 +1,84 @@
+{
+  "id": "e12-mobile-layout",
+  "cycle": 5,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e12-mobile-layout" },
+    { "script": "npm run smoke:boot", "pass": true, "subsystem": "e12-mobile-layout" },
+    { "script": "npm run smoke:viewport", "pass": true, "subsystem": "e12-mobile-layout" },
+    { "script": "npm run smoke:viewport-fixed", "pass": true, "subsystem": "e12-mobile-layout" },
+    { "script": "npm run test:zindex", "pass": true, "subsystem": "e12-mobile-layout" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "e12-mobile-layout" },
+    { "script": "npm run check:zindex", "pass": true, "subsystem": "e12-mobile-layout", "error": "was RED mid-cycle on components/timeline/TimelineToolbar.tsx:421 — out of e12's scope, fixed by the e13 auditor in the same cycle (commit b106118a). Green at cycle end." }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "engine/HardwareDetection.ts",
+      "line": 9,
+      "summary": "Two false JSDoc claims: `@invariant Single source of truth for the 768px breakpoint` (there are EIGHT surviving inline copies, one of which supplies the boot value), and `Called once at boot — the result is immutable for the session` on detectHardwareProfile (three call sites, one a user-clicked button, and the predicate reads live innerWidth).",
+      "change": "Rewrote both blocks truthfully. isMobileViewport() is now stated as the INTENDED home but not the only copy, with all eight enumerated by role, the store/slices/uiSlice.ts slice initializer singled out as the one that supplies the BOOT value of isDeviceMobile, and gradient-explorer's width-only MOBILE_BREAKPOINT explicitly exempted so nobody 'consolidates' it by mistake. detectHardwareProfile's header names its three real call sites, states the result is not session-stable, and records that no in-tree caller passes a gl context — so the FBO-allocating Float32 probe branch is dead in-tree today. Code untouched.",
+      "verification": "Falsified, not assumed. Grep proved isMobileViewport has exactly two importers while eight sites re-implement the same predicate inline. Then MUTATED the threshold in isMobileViewport() from 768 to 2000 and booted headless Chromium at 1400x900: __store.getState().isDeviceMobile was still false, because uiSlice seeds it from its own inline copy — direct proof the 'single source of truth' claim is false in a way that changes observable BOOT state. Reverted with a targeted Edit and re-ran: desktop 1400x900 back to isDeviceMobile:false/shellPos:fixed, Pixel-5 context isDeviceMobile:true/shellPos:sticky. Call-site claim from exhaustive grep across the whole tree. NOTE: this corrects a claim THIS AUDIT introduced in cycle 3 (b7faa631), which said 'one un-migrated copy survives' and cited a line range that had already drifted.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "1ae80a27"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/mobile-layout.md",
+      "line": 18,
+      "summary": "Three defects: cycle 3's 'one un-migrated copy survives' understates the duplication eightfold and cites a drifted line range; the Guards section names two smokes that assert nothing whatsoever about mobile layout; and the engine/components/** glob over-captures six unrelated files.",
+      "change": "(1) Replaced the single-source bullet with the true picture — eight copies listed by file, uiSlice's initializer called out, the mutation result quoted, gradient-explorer exempted, drifted line ref dropped for symbol names. (2) Replaced the Guards section with an explicit statement that NO mobile-layout guard exists, why the two previously-listed smokes don't count, and typecheck + smoke:boot as generic no-regression cover. (3) Narrowed engine/components/** to the three Landscape/Mobile files. (4) Added the ADR-0038 asymmetric-gating contract as a watch-out — the most breakable thing in the subsystem, previously unmentioned.",
+      "verification": "Guard blindness proved by mutation, not by reading: with the threshold deliberately set to 2000, `npm run smoke:viewport` exited 0 ('adaptive chain verified') and `npm run smoke:viewport-fixed` exited 0 ('content-box invariant holds'). A guard that stays green while the invariant it is listed under is broken is not a guard for that invariant. Duplicate count from exhaustive grep for 'pointer: coarse' and 768 across ts/tsx. viewportSlice.ts line range read directly (67-71, not 49-53). Over-capture measured by ls engine/components/ (9 entries) then grep -l for isMobile|isDeviceMobile|useMobileLayout|dvh|svh, which matched exactly the three Landscape/Mobile files.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "dbc09c95"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "hooks/useMobileLayout.ts",
+      "line": 5,
+      "summary": "All four line references in the file's own @invariant block point at the wrong code — they are 13 to 18 lines short, so each lands inside the JSDoc block rather than on the code it describes.",
+      "change": "Replaced every line reference with a symbol reference that cannot drift. Also named store/slices/uiSlice.ts as the initializer that seeds the flags, and added the cross-reference that the BOOT value does not come through isMobileViewport() at all.",
+      "verification": "Each cited range read directly against the file to establish the drift (the resize listener is at 43-55, not ~25-37). The invariants themselves were then confirmed AT RUNTIME rather than assumed: a 700x700 square viewport reports isPortrait:false (confirming 'square counts as LANDSCAPE, will NOT trigger LandscapeGate'); resizing 1400x900 -> 600x900 flips isDeviceMobile false->true (confirming the module-level resize listener is live and the store tracks it); a Pixel 5 context boots isDeviceMobile:true/isPortrait:true with MobileViewportShell resolving to position:sticky with height tracking the viewport, vs position:fixed on desktop (confirming ADR-0038 asymmetric gating end to end).",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "de69c730"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": ".claude/rules/mobile-layout.md",
+      "line": 55,
+      "summary": "No automated guard covers mobile layout at all. A ready-to-promote probe exists and is verified; promoting it needs a package.json edit and a tracked debug script.",
+      "rationale": "See PROPOSALS.md. The probe is left at debug/_mobile-layout-probe.mts (gitignored) for whoever picks it up."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "engine/HardwareDetection.ts",
+      "line": 9,
+      "summary": "The obvious follow-up — collapse the eight inline breakpoint copies onto isMobileViewport() — is NOT a safe blanket swap: one of the eight is not equivalent.",
+      "rationale": "See PROPOSALS.md. Recorded specifically so a future cleanup pass does not do it mechanically."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "docs/adr/0038-asymmetric-mobile-gating.md",
+      "line": 44,
+      "summary": "ADR-0038 cites 'the header comment at hooks/useMobileLayout.ts:50-65' — those lines are the module-level resize listener, not the contract. The flag contract is the JSDoc on `export const useMobileLayout` (currently 81-95).",
+      "rationale": "See PROPOSALS.md for the paste-ready Update block. The decision itself is intact and was verified end-to-end: all three primitives (Gate/Intro/Shell) still consume raw isDeviceMobile."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "gradient-explorer/GradientExplorerApp.tsx",
+      "line": 306,
+      "summary": "gradient-explorer mounts MobileViewportShell without MobileScrollIntro — half of the ADR-0039 pair — while its comment claims parity with app-gmt on address-bar collapse.",
+      "rationale": "See PROPOSALS.md. May well be intentional for a palette tool, which is why it is a comment-accuracy question rather than a fix."
+    }
+  ],
+  "notes": "Scope covered fully: all four in-scope files read top to bottom, every @invariant checked against code, all citations resolved, all listed guards run, orphans clean.\n\nCYCLE-3 CLAIMS RE-CHECKED AS INSTRUCTED — one accurate, one materially wrong. The detectHardwareProfile not-cached claim is accurate (no memo; FBO+texture created and deleted per call), with the added caveat that no in-tree caller passes a gl context so that branch never runs today. The single-source-of-truth claim was WRONG: not one surviving duplicate but eight, and the cited line range had already drifted. Both corrected. This is the audit catching its own earlier error, which is worth noting as evidence the re-check instruction earns its place.\n\nCYCLE-4 GLOB QUESTION ANSWERED: narrowing is right. engine/components/** holds 9 entries; grepping all of them for mobile markers matched exactly the three Landscape/Mobile files. WORTH FLAGGING ONWARD: engine/components/modulation/** and engine/components/gizmo/** now match NO rule at all — modulation.md scopes engine/features/modulation/**, not the components dir. A coverage gap for whoever owns the modulation rule; not widened here, since that is another subsystem's glob.\n\nGUARD HEALTH — add one to the tally, of a NEW kind. smoke:viewport and smoke:viewport-fixed are not broken and not vacuous; they are real guards for the adaptive-quality chain and ViewportFrame respectively. They were simply never guards for mobile layout, despite being listed as such. That is a fourth failure mode alongside 'permanently red', 'dead selector' and 'logged but never asserted': a healthy guard cited for the wrong thing.\n\nFALSIFICATION LEDGER: mutated engine/HardwareDetection.ts 768 -> 2000, ran the probe and both listed guards, then reverted with a targeted Edit (never git checkout --) and re-ran everything green. git diff on all three files confirms comment-only changes with `innerWidth < 768` and all exported symbols intact.\n\nHOUSEKEEPING: smoke:viewport-fixed rewrote debug/scratch/fractal-toy-2f-fixed.png (gitignored). Scratch probe left at debug/_mobile-layout-probe.mts — it is the promotable guard referenced in the Tier B finding.\n\nNOT PURSUED, deliberately: the HMR listener-leak clause in useMobileLayout's fourth invariant. Verifying it means counting live listeners across a dev-server module re-evaluation, and the invariant already scopes itself to dev with no production impact — low value for the cost."
+}

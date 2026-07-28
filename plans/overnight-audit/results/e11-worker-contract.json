@@ -1,0 +1,66 @@
+{
+  "id": "e11-worker-contract",
+  "cycle": 5,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "e11-worker-contract" },
+    { "script": "npm run smoke:boot", "pass": true, "subsystem": "e11-worker-contract" },
+    { "script": "npm run smoke:engine-gmt", "pass": true, "subsystem": "e11-worker-contract" },
+    { "script": "npm run smoke:viewport", "pass": true, "subsystem": "e11-worker-contract" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "e11-worker-contract" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "engine/worker/WorkerProxy.ts",
+      "line": 345,
+      "summary": "The setProxy @invariant ('must run before any caller has captured a reference from getProxy()') is violated structurally in app-gmt — store/engineStore.ts:29 and store/slices/historySlice.ts:43 are permanently bound to the no-op stub — and the surrounding comment overstated the registry as making 'all getProxy() calls return the SAME instance'.",
+      "change": "Corrected the singleton comment to say the registry only redirects calls made AFTER install, and added a @bug PRODUCTION: block on setProxy recording the proven violation, its structural cause, the runtime evidence, the two known consequences and the fix direction. Committed together with the pendingTeleport correction (same file). Also added a 'never capture getProxy() at module scope' invariant to .claude/rules/worker-contract.md and fixed that rule's Read-first line, which credited WorkerProxy.ts's JSDoc with covering ViewportRefs (a separate file).",
+      "verification": "Proven by runtime falsification, not inference. A temporary probe exposed store/engineStore.ts's captured `engine` on window; a Playwright run against the live dev server on app-gmt.html returned captured {identicalToRealProxy: false, gpuInfo: 'Stub (no worker)', isBooted: false, bootSent: false} while window.__gmtProxy reported {isBooted: true, gpuInfo: 'ANGLE (...)'} and a fresh getProxy() from the engine-core module returned the real proxy — isolating the defect to the module-scope capture rather than the registry. The probe edit was reverted with a targeted Edit (git diff on engineStore.ts empty). A second independent behavioural discriminator agreed: compileGate.queue emits IS_COMPILING synchronously, and calling loadScene post-boot produced no synchronous IS_COMPILING, i.e. the stub branch was taken. The root cause is ESM ordering — engine-gmt/renderer/install.ts:32 imports store/engineStore, so engineStore's body (and transitively historySlice's) runs before installGmtRenderer() can call setProxy(). Guards: typecheck, and smoke:engine-gmt which boots app-gmt with 0 page errors and BOOTED logged.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "861724d2"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/worker/ViewportRefs.ts",
+      "line": 143,
+      "summary": "The _mouseOverCanvas block claimed it is 'Used by adaptive resolution to decide grace period behavior' (false — the module ignores the input) and its @invariant named AdaptiveResolutionBadge as the affected component (wrong component). Cycle-3 handoff, re-derived independently.",
+      "change": "Replaced the comment and @invariant with the verified picture: setters are ViewportFrame.tsx / ViewportArea.tsx; viewportSlice.reportFps still evaluates it every frame but engine/AdaptiveResolution.ts never reads it (activity-driven since ADR-0061 P5); the sole live reader is engine-gmt/topbar/AdaptiveResolution.tsx choosing the Auto-vs-Always label. Preserved the real invariant verbatim in substance and added the @see to ADR-0035.",
+      "verification": "Re-derived rather than taken on trust. grep of engine/AdaptiveResolution.ts returns only the type declaration and comments — no read of input.mouseOverCanvas anywhere in the decision path. AdaptiveResolutionBadge.tsx imports only React, useEngineStore and AdaptiveIcon. The sole reader is engine-gmt/topbar/AdaptiveResolution.tsx:30, whose `onCanvas` selects 'Auto' vs 'Always'. The per-frame-poll half was confirmed live: viewportSlice.ts:196 calls isMouseOverCanvas() inside reportFps, which GmtRendererTickDriver.tsx:302 drives every frame. Two sibling sites (ViewportFrame.tsx:190-197, viewportSlice.ts:28) already carry the corrected description, so ViewportRefs.ts was the lone straggler. smoke:viewport exercises the adaptive chain end to end (1.00 -> 0.55 -> 1.00).",
+      "guard": "npm run smoke:viewport",
+      "guardPass": true,
+      "commit": "86669f56"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine/worker/WorkerProxy.ts",
+      "line": 82,
+      "summary": "The pendingTeleport @invariant said 'The real worker reads it at boot' — the field never rides a postMessage; it is drained on the main thread.",
+      "change": "Replaced the reader claim with the traced path: engine-gmt/store/cameraSlice.ts stashes every CAMERA_TELEPORT into it, engine-gmt/renderer/GmtRendererTickDriver.tsx drains it on boot-ready and re-emits CAMERA_TELEPORT, and FractalEngine._pendingTeleport is a separate worker-local field fed by the in-worker event bus. Kept the load-bearing half (direct writes are the supported API, not action dispatch).",
+      "verification": "grep for pendingTeleport across the tree yields exactly: the two field declarations, the write at cameraSlice.ts:379, the read+clear at GmtRendererTickDriver.tsx:135-137, and FractalEngine's separate private _pendingTeleport. It never crosses a postMessage. Cross-checked that the drain does not reach the worker: GmtRendererTickDriver:138 re-emits on the MAIN-thread bus, and the only other CAMERA_TELEPORT reference in that file is a wake-up subscription list, so FractalEngine's listener is the worker's own bus instance.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "861724d2"
+    },
+    {
+      "tier": "B",
+      "severity": "high",
+      "file": "store/engineStore.ts",
+      "line": 29,
+      "summary": "Five engine-core modules capture getProxy() at module scope and are therefore bound to the no-op stub forever in app-gmt; the fix is a cross-subsystem behaviour change, so it needs the owner.",
+      "rationale": "See PROPOSALS.md. Proven, with an explicitly stated caveat: the dead branch is proven unreachable, NOT that a user-visible defect follows."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "docs/adr/0035-mouseovercanvas-as-ref-not-store-state.md",
+      "line": 5,
+      "summary": "ADR-0035 names the wrong component throughout and cites collapsed module docs; the decision itself still stands.",
+      "rationale": "See PROPOSALS.md for the paste-ready Update block."
+    }
+  ],
+  "notes": "Subsystem small and genuinely covered; the auditor stopped rather than padding. Every @invariant in both files was checked against source. VERIFIED CORRECT, no finding: the ViewportRefs singleton-clobber invariant; snapshotDisplayCamera's three claims (optics `as any` read, the camType 0.5..1.5 window, lazy-never-freed display cameras); getDisplayCamera fallback; and on the stub — bootWithConfig synchronous-onBooted, shouldSnapCamera/cameraInUse silently-dropped-setter, startExport reject-vs-no-op + cancelExport, getProxy lazy-fallback, and modulations replace-every-frame. The checkHalfFloatAlphaSupport @see resolves, the @see docs/adr/0107 resolves, and every ADR the rule file cites (0034-0035, 0041-0042, 0045) exists.\n\nCONFIRMED AS BRIEFED: engine-gmt/engine/worker/ViewportRefs.ts is a bare `export *` shim, so both trees share one module-level state — no dual-state reasoning needed. The opposite is true one file over: engine-gmt/engine/worker/WorkerProxy.ts:1126 has its OWN _proxy singleton with no setProxy, which is exactly why the capture-ordering bug bites.\n\nPROCESS NOTE WORTH KEEPING: the auditor initially believed setProxy() was never called anywhere — `grep 'setProxy('` misses it because install.ts imports it aliased as `setEngineProxy`. Caught before reporting, but other agents grepping for call sites may hit the same trap.\n\nHOUSEKEEPING: the runtime proof used a temporary one-line probe in store/engineStore.ts, reverted with a targeted Edit; git diff on that file is empty and it is NOT in any finding's files. The probe harness lives at debug/_proxy-probe.mts (gitignored) and was left in place — it re-runs in ~30s to re-confirm the stale capture after any fix. smoke:engine-gmt wrote an untracked debug/engine-gmt-smoke.png; excluded from all commits. No HMR-destroyed-context artefacts occurred; all five guard runs were clean first time."
+}

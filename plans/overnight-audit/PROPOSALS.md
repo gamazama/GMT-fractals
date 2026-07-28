@@ -886,3 +886,364 @@ surface.
   `clampToViewport` (its own JSDoc says so, and every value it computes does feed
   an assertion), but `ui-and-panels.md` lists it as *the* guard for shared UI
   primitives. It covers no React component at all.
+
+---
+
+# Cycle 5
+
+## HIGH — Five engine-core modules are permanently bound to the no-op worker stub
+
+_(cycle 5 · `store/engineStore.ts:29` — proven at runtime)_
+
+`engine-gmt/renderer/install.ts:32` imports `store/engineStore`, so ESM guarantees
+engineStore's module body — and everything it imports — runs **before**
+`installGmtRenderer()` can call `setProxy()`. Every module-scope
+`const engine = getProxy()` reached along that chain freezes the stub forever.
+
+**Measured**, not inferred. A temporary probe exposed engineStore's captured
+`engine` on `window`; against `app-gmt.html` it reported
+`{identicalToRealProxy: false, gpuInfo: 'Stub (no worker)', isBooted: false}`
+while `window.__gmtProxy` reported `{isBooted: true, gpuInfo: 'ANGLE (…)'}` and a
+fresh `getProxy()` returned the real proxy. A second, independent discriminator
+agreed: `compileGate.queue` emits `IS_COMPILING` synchronously, and calling
+`loadScene` post-boot produced none — i.e. the stub branch ran.
+
+**Affected** (module-scope captures importing from `engine/worker/WorkerProxy`):
+`store/engineStore.ts:29`, `store/slices/historySlice.ts:43`,
+`components/PerformanceMonitor.tsx:6`, `components/HistogramProbe.tsx:4`,
+`utils/timelineUtils.ts:4`. The first two are provably stale (engineStore imports
+historySlice); the other three depend on import-graph position and should be
+re-checked individually. The ~20 captures under `engine-gmt/` import
+engine-gmt's *own* `getProxy()` and are fine.
+
+**Proven consequences**
+
+- `store/engineStore.ts:341` — `if (!engine.isBooted && !engine.bootSent)` is
+  always true, so `loadScene` always takes the "initial startup" branch and the
+  post-boot branch (compileGate spinner, full-config flush, OFFSET_SET push,
+  CONFIG_DONE) is **unreachable**. Every scene load hits it, and
+  `NewSceneModal.tsx:376`'s comment "loadScene routes through the existing compile
+  gate" is now false.
+- `store/slices/historySlice.ts:190` — the `engine.resetAccumulation()` on
+  undo/redo restore is a no-op against the stub. Ctrl+Z reaches it.
+
+**Honest caveat, and please respect it.** What is proven is that the branch is
+unreachable — **not** that a user-visible defect follows. Scene loading
+demonstrably works today, so the early path plus the CONFIG events `loadPreset`
+emits may already be sufficient, and accumulation may be reset by the
+setter-driven CONFIG emits in the undo path. **Decide whether the dead branch is
+dead weight or a latent bug before touching it** — do not chase a phantom.
+
+**Options**
+
+1. **Mechanical sweep** — move the five captures inside the functions that use
+   them. Smallest diff, no perf cost (`getProxy` is a null-check and a return),
+   but only fixes captures that exist today.
+2. **Stable forwarding Proxy** — have engine-core's `getProxy()` return a Proxy
+   that always delegates to `_proxy`. Fixes every capture, present and future, at
+   the cost of a trap on hot getters (`accumulationCount` is read per frame in
+   PerformanceMonitor).
+3. **Leave it** and rely on the new `@bug PRODUCTION:` plus the rule entry to stop
+   new instances.
+
+**Recommendation: (1).** The capture set is small and enumerable, the invariant is
+now documented at the source site and in `.claude/rules/worker-contract.md`, and
+(2) pays a per-frame cost for something a lint-style rule already covers. **Pair
+the sweep with a decision on engineStore's post-boot `loadScene` branch** — making
+the capture live will re-activate it, which is a behaviour change and wants a
+visual check.
+
+**Grep trap worth knowing:** `grep 'setProxy('` finds no call site, because
+`install.ts` imports it aliased as `setEngineProxy`. An auditor nearly concluded
+it was never called at all.
+
+---
+
+## MEDIUM — Every custom `animate-*` utility is undefined in production
+
+_(cycle 5 · `index.css` — confirmed on three independent lines)_
+
+`animate-fade-in`, `animate-slider-entry`, `animate-pop-in`, `animate-fade-in-up`
+/`-down`/`-left`/`-right` are defined **only** in `demo.html`'s inline `<style>`.
+`index.css` is the single tracked stylesheet in the repo and has zero
+`@keyframes`; `tailwind.config.js` extends only `colors`, with no
+`theme.extend.keyframes` or `animation`.
+
+**Measured** across seven entry points with `animate-pulse` as a control:
+app-gmt, gradient-explorer, fluid-toy, fractal-toy, mesh-export and index all
+return `animationName: 'none'` for all seven classes while `animate-pulse`
+correctly returns `'pulse'`. Only `demo.html` resolves them. The production
+`dist/assets/*.css` corroborates: only Tailwind's four built-ins plus reactflow's
+`dashdraw`. Usage outside demo.html: **53 occurrences across 36 files** (fade-in
+34, slider-entry 9, pop-in 3, fade-in-up 3, fade-in-left 3, fade-in-down 2,
+fade-in-right 1).
+
+**The causal story in the original finding was wrong, and the correction matters.**
+It blamed the Tailwind Play-CDN → build-time migration (`80c39444`, 2026-06-17).
+That is a red herring: at `80c39444^`, `app-gmt.html` already had no keyframes and
+no inline `tailwind.config` override, so the CDN could not have generated them
+either. These keyframes were **never in a shared stylesheet** — always a per-entry
+inline block in exactly one file. The real history:
+
+- `fd38bb76` (2026-02-01) — full set lands in `index.html`.
+- `1bf03516` (2026-03-25) — gradient-explorer / fluid-toy / fractal-toy /
+  mesh-export created; `git log -S` on each path returns **empty**. They never had them.
+- **`50547f46` (2026-04-24)** — `app-gmt.html` created without them. **This is the
+  commit that broke it for the GMT app.**
+- `a1e63b06` (2026-05-04) — keyframe-carrying `index.html` renamed to `demo.html`,
+  which is the only reason demo still works.
+- `095810f2` (2026-06-17) — `index.html` rewritten as the app entry, so `/` lost them.
+
+So: ~3 months without them for app-gmt, ~4 for the sibling apps (never had them),
+~6 weeks for the root `/`.
+
+**Restoring is not purely cosmetic.** Measured on the *real* in-app elements (8
+`.animate-slider-entry` rows in each app): demo.html gives
+`overflow:hidden, max-height:1000px, transform:matrix(…)`; app-gmt gives
+`overflow:visible, max-height:none, transform:none`. Because fill-mode is
+`forwards`, restoring leaves a **permanent non-`none` transform** — a new stacking
+context and a containing block for `position:fixed` descendants — plus a
+`max-height:1000px` clip. `ScalarInput.tsx:236` carries it, so this is *every DDFS
+scalar slider in every panel of every app*.
+
+**Two code sites document dead guards that would re-arm:**
+
+- `components/AutoFeaturePanel.tsx:483` — `'!animate-none !overflow-visible'` with
+  the comment *"Conditional params: skip entry animation to prevent grey-box on
+  re-mount (CSS animation restart issue)"*. That is a **previously observed visual
+  bug**. The guard covers only condition-bearing *scalar* params in AutoFeaturePanel
+  — the vec2/3/4 branches, AdvancedGradientEditor's `isExpanded &&`, DrawingPanel's
+  collapsibles and GenericToggleSwitch are all unguarded, so the artifact would
+  likely return there.
+- `components/GlobalContextMenu.tsx:104` — `[&_.animate-slider-entry]:!animate-none`
+  kills the animation for context-menu-hosted widgets but **not** the
+  `overflow:hidden`, so those rows would still gain clipping.
+- `components/ui/AnchoredMenu.tsx:56` measures `getBoundingClientRect()` at mount;
+  any anchored surface hosting widget rows would measure them at `max-height:0` for
+  the first 0.35 s — exactly the failure GlobalContextMenu's override exists to
+  prevent, and AnchoredMenu has no equivalent guard.
+
+**Options:** (a) paste the block into `index.css` for full parity with demo;
+(b) restore only the harmless ones (the 34 `fade-in` uses are 16 ms and effectively
+invisible; the directionals and `pop-in` are 0.15–0.3 s opacity+transform) and
+leave `slider-entry` out until you have looked at the accordions; (c) move them
+into `tailwind.config.js` `theme.extend` — more idiomatic and purgeable, more
+churn; (d) decide the app is better without them and strip the 53 dead class
+references.
+
+**Recommendation: (b), then eyeball the accordions before adding `slider-entry`.**
+Paste-ready CSS is in the cycle-5 auditor's report; it is `demo.html:37-57` verbatim.
+
+---
+
+## MEDIUM — `Modal`'s backdrop-dismiss default is backwards
+
+_(cycle 5 · `components/ui/Modal.tsx:41`)_
+
+`.claude/rules/layers-zindex.md` states: *"No backdrop-click-to-close on complex
+modals — it destroys work."* `Modal` defaults `dismissOnBackdrop = true`, and its
+JSDoc justifies it historically ("mirrors the hand-rolled modals it replaces").
+
+Of the 13 `<Modal>` call sites, **9 explicitly pass `dismissOnBackdrop={false}`**:
+PalettePickerOverlay, NewSceneModal:617, AccountPanel, AuthOverlay,
+ModifyWithAIModal, AfxExportDialog, FbxExportDialog, BucketRenderResultModal,
+SubmitGalleryModal. Only 4 take the default, and all four are surfaces where
+backdrop-close is harmless (a nested confirm-discard, FormulaPicker browse, the
+Lightbox image viewer).
+
+So the primitive defaults to the work-destroying behaviour and every real dialog
+has to remember the opt-out. A future modal author who forgets ships a data-loss
+footgun that no guard catches.
+
+**Options:** (a) flip the default to `false` and pass `dismissOnBackdrop` at the 3
+sites that genuinely want it (NewSceneModal:748, FormulaPicker:960, Lightbox:113)
+— **behaviour-preserving at every existing site**, safe-by-default for every future
+one; (b) leave the default and delete the convention line from the rule, accepting
+backdrop-close as house style; (c) add a lint/guard — a lot of machinery for a
+one-line default.
+
+**Recommendation: (a).** A 4-file change, provably behaviour-neutral today (every
+call site was enumerated), and it makes the primitive agree with the rule that
+governs it. Not applied because it changes a shipped interaction default on three
+user-facing surfaces and no guard exercises backdrop dismissal.
+
+---
+
+## MEDIUM — Nothing guards mobile layout, and a ready-to-promote probe exists
+
+_(cycle 5 · `.claude/rules/mobile-layout.md`)_
+
+With the 768 px threshold deliberately set to 2000, **both guards the rule
+listed passed green** — `smoke:viewport` (adaptive-quality chain) and
+`smoke:viewport-fixed` (ViewportFrame content-box). `smoke:boot` also passes; it
+boots desktop. So every mobile invariant — breakpoint, orientation, the
+sticky-vs-fixed shell branch, ADR-0038 asymmetric gating — is **unguarded**, and
+ADR-0038's "Tested under followups q-008 and q-083" has no standing counterpart.
+
+This is a fourth guard-failure mode, distinct from the three earlier cycles found:
+not permanently red, not a dead selector, not logged-but-unasserted — a **healthy
+guard cited for the wrong thing**.
+
+A working probe is left at `debug/_mobile-layout-probe.mts` (gitignored). It boots
+`gradient-explorer.html` in a Pixel 5 context and a desktop context and reads
+`isDeviceMobile` / `isPortrait` plus the computed `position` and `height` of the
+`MobileViewportShell` div. It already demonstrated it can discriminate — it is what
+caught the boot-seed divergence under mutation.
+
+**Options:** (a) promote as-is — rename to `debug/smoke-mobile-layout.mts`, add
+assertions (it currently logs rather than throws), add the npm script, list it in
+the rule; (b) point it at `app-gmt.html` instead, which also mounts `LandscapeGate`
+and `MobileScrollIntro`, so it could assert the rotate prompt fires in portrait and
+the intro renders at `100svh` — better coverage, slower boot; (c) leave uncovered
+and rely on your device testing, which is the current de facto state.
+
+**Recommendation: (a) now, (b) if someone is already touching app-gmt smokes.**
+Not done here because it means editing `package.json` while other auditors hold the
+tree, and because a new guard script is itself unreviewed code.
+
+---
+
+## MEDIUM — Do NOT mechanically collapse the eight breakpoint copies
+
+_(cycle 5 · `engine/HardwareDetection.ts`)_
+
+Recorded specifically so a future cleanup pass does not do this blindly. Six of the
+eight inline `(pointer: coarse) || innerWidth < 768` copies are literally identical
+to `isMobileViewport()` and could be swapped safely (`uiSlice` ×2, `viewportSlice`,
+`Dock.tsx`, `GmtRendererCanvas.tsx`, `favientsPanelPersist.ts`).
+
+But **`engine-gmt/components/FormulaPicker/FormulaPicker.tsx:832` is not
+equivalent** — it tests `winW < 768` where `winW` is a *locally measured* width,
+not `window.innerWidth`. Swapping it changes which width is tested, and it drives
+whether the picker renders as an anchored popover or a viewport-fitted sheet.
+(`FormulaPicker.tsx:927` *does* use `window.innerWidth` and is safe.)
+
+The highest-value single swap is **`store/slices/uiSlice.ts`'s slice initializer** —
+it alone produces observable boot-state divergence (demonstrated by mutation). It is
+also the trickiest: it runs at store construction, so importing
+`engine/HardwareDetection.ts` there adds a module-init edge — check for a cycle first.
+
+**Options:** (a) swap the six safe ones, leave FormulaPicker:832 with a comment
+explaining why it differs; (b) swap only the uiSlice initializer, the one that
+matters; (c) leave it all and rely on the now-accurate JSDoc list.
+**Recommendation: (b) first**, then (a) as tidy-up — and get the guard above in
+place first, since nothing currently catches a mistake here.
+
+---
+
+## LOW — gradient-explorer mounts half of the ADR-0039 pair
+
+_(cycle 5 · `gradient-explorer/GradientExplorerApp.tsx:306`)_
+
+ADR-0039's mechanism is the `100svh` intro **plus** the `100dvh` sticky shell:
+their combined height is what gives the body scroll capacity to retract the iOS
+address bar. GE mounts only the shell, so on a real phone there is nothing to
+swipe past and the collapse cannot fire. The comment reads "…tracks the iOS
+address-bar collapse (engine-standard, matches app-gmt)". "Tracks" is defensible —
+`100dvh` re-fits whenever the bar retracts for any reason — but "matches app-gmt"
+is not, since app-gmt mounts both halves.
+
+This may well be intentional (a palette tool arguably does not want a
+swipe-to-enter splash). **Options:** (a) mount `MobileScrollIntro` in GE for
+parity; (b) soften the comment to "sizes to the dynamic viewport and clears the
+notch; no address-bar collapse (no MobileScrollIntro mounted)"; (c) leave both.
+**Recommendation: (b)** — one line, no behaviour risk.
+
+---
+
+## ADR corrections — cycle 5 (paste-ready)
+
+### ADR-0035 — names the wrong component throughout
+
+Insert immediately after the `# ADR-0035: mouseOverCanvas is a ref, not store state` heading:
+
+> **Update 2026-07-28 (component + input-path drift; decision unchanged):** the
+> `Scope` line and the Context / Consequences sections name
+> `engine/plugins/viewport/AdaptiveResolutionBadge.tsx` as the component that
+> would re-render on hover. That component does not import `isMouseOverCanvas` —
+> the only live reader is `engine-gmt/topbar/AdaptiveResolution.tsx:30`, which
+> uses it to choose the badge's "Auto" (pointer on canvas) vs "Always" (pointer
+> off canvas) label. Separately, `engine/AdaptiveResolution.ts` no longer reads
+> its `mouseOverCanvas` input at all (optional since ADR-0061 P5 — engagement is
+> activity-driven, not pointer-position-driven), though
+> `store/slices/viewportSlice.ts:196` still evaluates `isMouseOverCanvas()` once
+> per frame inside `reportFps`, driven by
+> `engine-gmt/renderer/GmtRendererTickDriver.tsx:302`. The per-frame-poll
+> rationale for keeping the value ref-backed therefore still holds and the
+> decision stands. The closing "documented in both the worker-contract and
+> adaptive-resolution module docs" now resolves to
+> `docs/history/audit-2026-05-20/archive/engine/{worker-contract,adaptive-resolution}.md`;
+> the live documentation is the JSDoc on `engine/worker/ViewportRefs.ts`.
+
+### ADR-0038 — drifted line reference
+
+Insert under the `# ADR-0038: Asymmetric mobile-detection gating policy` heading:
+
+> **Update 2026-07-28 (line-reference drift; decision unchanged):** The contract
+> cited below as "the header comment at `hooks/useMobileLayout.ts:50-65`" now
+> lives in the JSDoc block on `export const useMobileLayout` (currently lines
+> 81-95); lines 50-65 are the module-level resize listener. Grep for the
+> `isMobile` / `isDeviceMobile` / `isPortrait` bullet list rather than a line
+> range. The asymmetry itself is unchanged and verified: `LandscapeGate`,
+> `MobileScrollIntro` and `MobileViewportShell` all still consume raw
+> `isDeviceMobile`.
+
+Note also that ADR-0038's "Tested under followups q-008 and q-083" implies
+automated coverage that does not exist — see the mobile-guard proposal above.
+
+### ADR-0014 — status snapshot well out of date
+
+Matters because the rewritten `.claude/rules/ui-and-panels.md` now cites ADR-0014
+as the authority for "purity in `components/` is aspirational, not enforced" (that
+part is still exactly right). A reader who follows the citation lands on a file
+claiming only `Slider` uses the context, and will re-migrate things already done.
+Insert immediately after the `# ADR-0014: …` heading:
+
+> **Update 2026-07-28 (migration progressed; decision unchanged):** The status
+> snapshot in *Decision* is stale. `useStoreCallbacks()` is now consumed by
+> `components/Slider.tsx:163,206`, `components/AutoFeaturePanel.tsx:116`,
+> `components/Dropdown.tsx:27`, `components/EmbeddedColorPicker.tsx:255`,
+> `components/KeyframeButton.tsx:52`, `components/AdvancedGradientEditor.tsx:131`
+> and `hooks/useHelpContextMenu.ts:13` — not "only `Slider`". Still on direct
+> store access: `components/Knob.tsx:177-178`,
+> `components/vector-input/index.tsx:55-56,196-197,352-353`,
+> `components/layout/Dock.tsx:33ff`, `components/layout/DropZones.tsx:9ff`.
+> `AutoFeaturePanel` is now **mixed**: it takes
+> `handleInteractionStart`/`handleInteractionEnd` from the context (`:116`) but
+> still reads the third callback directly as
+> `useEngineStore(s => s.openContextMenu)` (`:181`) even though the same context
+> supplies it — a one-line cleanup. The precondition this ADR gated the migration
+> on ("each host's callbacks are memoised") now holds for **all five** hosts:
+> `App.tsx:74`, `app-gmt/AppGmt.tsx:188`, `fluid-toy/FluidToyApp.tsx:86`,
+> `fractal-toy/FractalToyApp.tsx:55`, `gradient-explorer/GradientExplorerApp.tsx:268`
+> — the last being a host that did not exist when this ADR was written. All five
+> wire `openContextMenu: state.openContextMenu` verbatim, so the context value and
+> the direct store read are the same function today and the remaining migrations
+> are behaviour-neutral. The incremental-migration decision stands.
+
+---
+
+## Housekeeping surfaced in cycle 5
+
+- **`engine/components/modulation/**` and `engine/components/gizmo/**` now match
+  NO rule at all.** `modulation.md` scopes `engine/features/modulation/**`, not
+  the components dir, and cycle 5 narrowed `mobile-layout.md`'s over-broad
+  `engine/components/**` glob (correctly — those files have zero mobile content).
+  A coverage gap for whoever owns the modulation rule.
+- **Two sub-threshold raw z values**, below `check:zindex`'s `>= 100` blind spot
+  and judged not worth a finding: `components/PerformanceMonitor.tsx:263` `z-[50]`
+  and `components/viewport/CompositionOverlay.tsx:45` `z-[15]`. Both shell-domain
+  in-flow surfaces that contradict their tier-table entry (`shellViewportOverlay`,
+  base 20) but have no sibling to collide with.
+- **`AutoFeaturePanel.tsx:181`** reads `openContextMenu` directly from the store
+  while taking its two sibling callbacks from `useStoreCallbacks()` at `:116`. The
+  context supplies all three; one-line cleanup.
+- **An untracked `debug/engine-gmt-smoke.png`** was produced by `smoke:engine-gmt`
+  and left in the tree. Not committed. Worth adding to `.gitignore` alongside the
+  other smoke artefacts.
+- **Gitignored scratch probes** left in place for reuse: `debug/_proxy-probe.mts`
+  (re-confirms the stale worker capture in ~30 s),
+  `debug/_mobile-layout-probe.mts` (the promotable mobile guard),
+  `debug/_animate-probe.mts` (the animate-* measurement),
+  `debug/_probe-zindex-gap.mts` (the tier-reservation probe).
+- **A dev server is still running on :3400** from cycle 1 — stop it at end of run.
