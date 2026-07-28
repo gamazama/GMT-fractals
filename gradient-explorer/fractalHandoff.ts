@@ -12,7 +12,7 @@
  * enable. fluid-toy fills every other feature from defaults on load — so it opens as a pure
  * fractal at this view with the sim off (the user can then switch the fluid on).
  *
- * @see gradient-explorer/fullscreen/modes/fractalMode.ts (getActiveFractalCoords)
+ * @see gradient-explorer/fullscreen/modes/fractalMode.tsx (getActiveFractalCoords)
  * @see fluid-toy/main.tsx (the boot-time handoff read)
  */
 
