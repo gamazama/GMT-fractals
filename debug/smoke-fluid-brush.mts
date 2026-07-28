@@ -12,6 +12,16 @@
  *      `particles.length` after release — it's timing-sensitive and
  *      hard to make reliable without flake; the pixel-delta test is
  *      a much stronger signal that the emitter is alive.)
+ *
+ * Boot-state prerequisite for steps 2 and 3: fluid-toy boots as a PURE
+ * FRACTAL explorer — `fluidSim.paused` defaults true and `composite.show`
+ * defaults to index 1 ('julia', fractal-only). Neither pixel assertion can
+ * pass in that state because the dye buffer is never composited, so step 2
+ * unfreezes the sim and switches to Mixed first (what
+ * `fluid-toy/components/FluidToggleButton.tsx` does on click). Grep for
+ * `defaultIndex` in `fluid-toy/features/composite.ts` and `paused` in
+ * `fluid-toy/features/fluidSim.ts` before changing those defaults again —
+ * this smoke went red when they last changed.
  */
 import { launchWebglTestPage, dragPath } from './helpers/webglHarness';
 
@@ -70,7 +80,17 @@ async function main() {
         (globalThis as any).__appHandles?.['fluid-toy.engine']?.ref?.current?.resetFluid?.();
     });
     await page.evaluate(() => {
-        (window as any).__store.getState().setBrush({
+        const s = (window as any).__store.getState();
+        // fluid-toy boots as a PURE FRACTAL explorer — `fluidSim.paused`
+        // defaults true and `composite.show` defaults to 1 ('julia',
+        // fractal-only). In that state the dye buffer the brush writes into
+        // is never composited, so a drag cannot change a single pixel. Do
+        // what <FluidToggleButton/> does: unfreeze the sim and switch to
+        // Mixed (index 0), otherwise steps 2 and 3 assert on a canvas that
+        // is structurally incapable of showing brush output.
+        s.setFluidSim({ paused: false });
+        s.setComposite({ show: 0 });
+        s.setBrush({
             mode: 0, colorMode: 0, size: 0.08, hardness: 0,
             strength: 2, flow: 60, spacing: 0.003, jitter: 0,
             particleEmitter: false,
