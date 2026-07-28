@@ -63,10 +63,20 @@ const buildLiveNodeIds = (inputsByTarget: Map<string, GraphEdge[]>): Set<string>
  * DO NOT call `def.glsl` and DO NOT consume `uModularParams` slots. The
  * packer mirrors this skip predicate — see `updateModularUniforms`.
  *
- * @invariant The two synthetic roots are hard-coded string literals in THREE
- * places: the DCE seed, the `varMap` pre-seed `varMap.set('root-start',
- * 'v_start')`, and the output-edge `target === 'root-end'` lookup. Renaming
- * requires touching all three (ADR-0051).
+ * @invariant The two synthetic roots are hard-coded string literals at EIGHT
+ * sites across THREE files — `grep -rn "root-start\|root-end" engine-gmt/`
+ * before renaming (ADR-0051 says "three places"; that counts only the three
+ * in `compileGraph` and misses the rest):
+ *   - `GraphCompiler.ts` ×5 — the DCE seed `['root-end']`, the
+ *     `currentId !== 'root-end' && currentId !== 'root-start'` liveness
+ *     filter, the `varMap` pre-seed `varMap.set('root-start', 'v_start')`,
+ *     the output-edge `target === 'root-end'` lookup, and the
+ *     `outputEdge.source !== 'root-start'` guard.
+ *   - `graphAlg.ts` ×2 — `pipelineToGraph` MINTS the two boundary edges with
+ *     these ids; a rename that misses this produces a graph whose edges point
+ *     at nothing and DCE eliminates every node.
+ *   - `components/panels/flow/FlowEditor.tsx` ×4 — the two ReactFlow root
+ *     nodes and the persisted-root-position lookup.
  *
  * @invariant `distOverride` window is `(-1.0, 999.0)`; `v_start_d` is seeded
  * to `1000.0` so non-SDF graphs naturally fall outside and never override
@@ -212,13 +222,26 @@ ${body}
  * sliders (ADR-0050).
  *
  * @invariant `getParam`-call order in each `NodeDefinition.glsl()` template
- * MUST equal `def.inputs` declaration order. The compiler's `getParam`
- * closure ignores the `key` argument when allocating slots — it just
- * increments a counter on each unbound call. The packer iterates
- * `def.inputs` in declaration order. The two only agree because every
- * existing NodeDefinition author has, by convention, written `def.glsl()` to
- * call `getParam('id')` in the same sequence as their `inputs:` array. NO
- * assertion enforces this. See followup q-117.
+ * MUST equal `def.inputs` declaration order, ONE call per declared input.
+ * The compiler's `getParam` closure ignores the `key` argument when
+ * allocating slots — it just increments a counter on each unbound call, so a
+ * template that reads the same param twice burns two slots. The packer
+ * iterates `def.inputs` in declaration order and writes one value per input.
+ * NO assertion enforces this. See followup q-117.
+ *
+ * @bug PRODUCTION: the invariant above is VIOLATED by 5 of the 26 registered
+ * node definitions in `engine-gmt/data/nodes/definitions.ts`, each of which
+ * interpolates the same `getParam(...)` more than once into its template:
+ * `Scale` (scale ×2), `Twist` (amount ×2), `Bend` (amount ×2),
+ * `SmoothUnion` (k ×2) and `Mix` (factor ×3). Each surplus call allocates a
+ * slot the packer never writes, so the node reads a neighbour's value (or 0)
+ * AND every node compiled after it is shifted. Shipped example:
+ * `MANDELBOX_PIPELINE` (BoxFold, SphereFold, Scale, AddConstant) compiles
+ * `v_3_dr *= abs(uModularParams[4])` and `v_4_p += c.xyz * uModularParams[5]`
+ * while the packer only fills slots 0-4 — AddConstant multiplies `c` by 0.0,
+ * so the preset never adds its constant. Fix: hoist each `ctx.getParam(...)`
+ * into a local const and interpolate the local. Reproduce with
+ * `compileGraph` + `updateModularUniforms` on `MANDELBOX_PIPELINE`.
  *
  * @invariant Param overflow degrades silently — compiler returns the GLSL
  * literal `"0.0"`; packer's `setP` drops writes past `MAX_MODULAR_PARAMS`.

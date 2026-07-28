@@ -41,8 +41,14 @@ export const hasCycle = (nodes: GraphNode[], edges: {source: string, target: str
  *
  * @invariant Does NOT detect cycles — passing a cyclic graph yields a partial
  * pipeline (nodes inside the cycle drop out because their in-degree never
- * reaches 0). The store is expected to call `hasCycle()` before `addEdge`
- * commits.
+ * reaches 0).
+ * @invariant The `hasCycle()` guard is applied by the UI, NOT the store:
+ * `hasCycle` has exactly one caller, `FlowEditor`'s `onConnect`
+ * (`components/panels/flow/FlowEditor.tsx`), which rejects the connection and
+ * logs "Cycle detected!". `modularSlice.setGraph` / `refreshPipeline` never
+ * call it, so any non-`onConnect` path into the store — scene load,
+ * `setPipeline`, programmatic `setGraph` — can seat a cyclic graph, and the
+ * only symptom is silently missing nodes.
  * @invariant Tie-break is alphabetical (`queue.sort()` each pop), so compile
  * order is deterministic across runs.
  * @invariant `nodes.find(n => n.id === u)` inside the loop is O(N²);
@@ -128,6 +134,22 @@ export const pipelineToGraph = (pipeline: PipelineNode[]): FractalGraph => {
  * @invariant Two semantically equivalent `bindings` objects whose keys were
  * inserted in different orders compare unequal and spuriously recompile
  * (`JSON.stringify` is order-sensitive).
+ *
+ * @bug PRODUCTION: this diff is EDGE-BLIND, but the emitted GLSL is not.
+ * `PipelineNode` carries no wiring (`types/graph.ts`), so any edge-only edit
+ * that leaves the topological order intact compares equal here — and
+ * `modularSlice.setGraph` uses `isStructureEqual` as its sole recompile
+ * trigger, so it falls through to the bare `set({ graph: g })` branch: no
+ * `pipelineRevision` bump, no `FRACTAL_EVENTS.CONFIG` emit, stale shader.
+ * Verified on a two-node chain (IFSScale → AddConstant → root-end): deleting
+ * the `root-end` edge leaves `isStructureEqual` AND `isPipelineEqual` both
+ * true while `compileGraph` output flips to the empty-active-set identity
+ * body. Same class: swapping which upstream node feeds a CSG node's `a` vs
+ * `b` handle. The user has to press COMPILE (`refreshPipeline`) by hand;
+ * with autoCompile ON the edit looks like it did nothing. Fixing it means
+ * folding an edge fingerprint (id/source/target/targetHandle, sorted) into
+ * the structural diff — which needs the edges passed in, so it is a
+ * signature change on this function and its `setGraph` caller.
  */
 export const isStructureEqual = (a: PipelineNode[], b: PipelineNode[]) => {
     if (a.length !== b.length) return false;
