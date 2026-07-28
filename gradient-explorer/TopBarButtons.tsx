@@ -1,13 +1,19 @@
 /**
  * Gradient Explorer topbar buttons.
  *
- * Two left-slot affordances unique to the standalone Explorer:
- *   - BackToGmtButton — returns to the main GMT fractal studio (sibling
- *     `app-gmt.html` entry point; relative href works in dev + prod).
- *   - FavientsTopBarButton — shows/hides the saved-gradient shelf. Here the
- *     shelf is DOCKED LEFT (not floating like app-gmt), so the toggle drives
- *     the left dock's collapsed state rather than the panel's open flag — that
- *     is what actually hides/reveals the shelf when it's the sole left panel.
+ * Three exports — two left-slot affordances unique to the standalone Explorer,
+ * plus a replacement for the engine's default right-slot FPS widget:
+ *   - BackToGmtButton (slot left) — returns to the main GMT fractal studio
+ *     (sibling `app-gmt.html` entry point; relative href works in dev + prod).
+ *   - FavientsTopBarButton (slot left) — shows/hides the saved-gradient shelf.
+ *     Here the shelf is DOCKED LEFT (not floating like app-gmt), so the toggle
+ *     drives the left dock's collapsed state rather than the panel's open flag —
+ *     that is what actually hides/reveals the shelf when it's the sole left panel.
+ *   - FpsCounterDesktopOnly (slot RIGHT) — main.tsx `topbar.unregister('fps')`s
+ *     the engine default and re-registers this in its place. The unregister is
+ *     load-bearing: the slot registry keys by id globally, not per slot, so
+ *     re-registering the same id would silently replace rather than add. See
+ *     `.claude/rules/engine-plugins.md`, which cites this file for that rule.
  */
 
 import React from 'react';
