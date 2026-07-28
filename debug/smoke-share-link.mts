@@ -46,15 +46,25 @@ const near = (a: number, b: number, eps = 1e-2) => Math.abs(a - b) < eps;
 
 // Distinctive authored values — chosen to differ from the Mandelbulb
 // default template so they encode as real diffs in the share payload.
-const AUTHORED = { paramA: 0.37, roughness: 0.81 };
+//
+// Three DIFFERENT features on purpose. The share payload is keyed by
+// per-feature/per-param `shortId`s (see UrlStateEncoder + FeatureSystem):
+// a feature whose slice never reaches the recipient fails silently — the
+// scene just renders with defaults, no error, no console warning. Asserting
+// only one feature would leave that whole failure mode uncovered, so each
+// added feature here widens the net. `coloring.repeats` is also a NON-default
+// float on a hidden param, i.e. a value that only survives if the encoder
+// walks the full param table rather than the visible UI surface.
+const AUTHORED = { paramA: 0.37, roughness: 0.81, repeats: 3.7 };
 
 // Truthy once the store is instantiated AND fully hydrated by boot.
 const STORE_READY = `(function(){
     var s = window.__store && window.__store.getState && window.__store.getState();
-    return !!(s && s.coreMath && s.materials && s.formula
+    return !!(s && s.coreMath && s.materials && s.coloring && s.formula
         && typeof s.getShareString === 'function'
         && typeof s.setCoreMath === 'function'
-        && typeof s.setMaterials === 'function');
+        && typeof s.setMaterials === 'function'
+        && typeof s.setColoring === 'function');
 })()`;
 
 /**
@@ -100,6 +110,7 @@ async function main() {
         var s = window.__store.getState();
         s.setCoreMath({ paramA: ${AUTHORED.paramA} });
         s.setMaterials({ roughness: ${AUTHORED.roughness} });
+        s.setColoring({ repeats: ${AUTHORED.repeats} });
         return s.getShareString({ includeAnimations: true });
     })()`) as string;
 
@@ -150,11 +161,13 @@ async function main() {
     console.log('\n[roundtrip] authored values survived the share roundtrip:');
     const restored = await recip.evaluate(`(function(){
         var s = window.__store.getState();
-        return { formula: s.formula, paramA: s.coreMath.paramA, roughness: s.materials.roughness };
+        return { formula: s.formula, paramA: s.coreMath.paramA, roughness: s.materials.roughness,
+                 repeats: s.coloring.repeats };
     })()`) as any;
     ok(restored.formula === 'Mandelbulb', `formula round-tripped (got ${restored.formula})`);
     ok(near(restored.paramA, AUTHORED.paramA), `coreMath.paramA round-tripped ${AUTHORED.paramA} (got ${restored.paramA})`);
     ok(near(restored.roughness, AUTHORED.roughness), `materials.roughness round-tripped ${AUTHORED.roughness} (got ${restored.roughness})`);
+    ok(near(restored.repeats, AUTHORED.repeats), `coloring.repeats round-tripped ${AUTHORED.repeats} (got ${restored.repeats})`);
 
     await browser.close();
 
