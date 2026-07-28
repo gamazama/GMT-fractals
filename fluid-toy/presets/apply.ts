@@ -2,10 +2,13 @@
  * Preset applier — translates a reference toy-fluid Preset into our
  * slice-separated DDFS store and dispatches the setters.
  *
- * The reference `toy-fluid/presets.ts` still ships in the engine repo
- * as the authoring source. We import its `Preset` data directly and
- * map every field onto the correct slice at apply time. This lets us
- * reuse the 7 curated presets without duplicating 500 lines of data.
+ * The reference `toy-fluid/` fork was DELETED in `50547f46`; it has not
+ * shipped in this repo since. The preset data now lives locally in
+ * `./data.ts` (grep `PRESETS`), which is what the import below reads —
+ * see that file's header for the copy-when-retired story. What survives
+ * from the reference is the *shape*: the params use string enums, and
+ * this file maps every field onto the correct slice at apply time,
+ * translating each string to the numeric index DDFS expects.
  *
  * Each slice is updated with one setter call so DDFS only flushes once
  * per slice. After the dispatch, FluidToyApp's effects pick up the

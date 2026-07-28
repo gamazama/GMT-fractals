@@ -2,7 +2,8 @@
  * MandelbrotPicker — bottom-right preview canvas for picking the Julia
  * constant `c` by clicking points on the Mandelbrot set.
  *
- * Ported from `toy-fluid/components/MandelbrotPicker.tsx` with the
+ * Ported from the reference fork's `toy-fluid/components/MandelbrotPicker.tsx`
+ * (deleted in `50547f46`; `git show 50547f46^:<path>` to read it) with the
  * color-mapping enum stripped (the engine-port's fluid display doesn't
  * have GMT's full ColorMapping variants yet). Picker always renders
  * with smooth iterations; the actual fluid display uses the user's

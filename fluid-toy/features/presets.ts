@@ -2,7 +2,8 @@
  * PresetsFeature — the Presets tab.
  *
  * Carries no DDFS params of its own — the tab is a chip grid backed
- * by the 7 curated presets in `toy-fluid/presets.ts`. A customUI
+ * by the curated presets in `presets/data.ts` (grep `PRESETS`; 10 of
+ * them today, one of which is the benchmarking isolation preset). A customUI
  * component (`preset-grid`, registered in registerFeatures.ts) takes
  * the whole tab area. Applying a preset dispatches every affected
  * slice setter via `presets/apply.ts` and resets the fluid fields.

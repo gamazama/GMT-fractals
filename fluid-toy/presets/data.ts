@@ -3,7 +3,9 @@
  *
  * Originally authored in the reference toy-fluid/ fork as
  * `toy-fluid/presets.ts`. Copied here when the reference fork was
- * retired (the engine-native fluid-toy has full feature parity).
+ * retired (the engine-native fluid-toy has full feature parity). That
+ * fork no longer exists — it was deleted in `50547f46`; read the
+ * original with `git show 50547f46^:toy-fluid/presets.ts`.
  *
  * The params shape uses STRING enums (e.g. `forceMode: 'curl'`,
  * `kind: 'julia'`) because these presets were exported from the

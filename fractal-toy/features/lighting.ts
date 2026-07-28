@@ -3,7 +3,7 @@
  *
  * Minimal by design: one directional light, Lambertian diffuse,
  * ambient floor, step-count AO strength. The shader's shading block
- * in fractal-toy/shaderAssembler.ts is the only consumer.
+ * in fractal-toy/renderer/shaderAssembler.ts is the only consumer.
  *
  * GMT's full lighting feature has multiple lights, shadows, specular,
  * environment maps, etc. That complexity lives in a future GMT lighting

@@ -675,7 +675,7 @@ export class FluidEngine {
 
   /** Called after each frame's draw. Use to report a frame tick to
    *  @engine/viewport's adaptive loop without coupling this class to
-   *  plugin imports. Mirror of fractal-toy/FractalEngine.ts pattern. */
+   *  plugin imports. Mirror of fractal-toy/renderer/FractalEngine.ts pattern. */
   public onFrameEnd?: () => void;
 
   constructor(canvas: HTMLCanvasElement, options: { onFrameEnd?: () => void } = {}) {

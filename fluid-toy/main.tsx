@@ -156,7 +156,7 @@ installBucketRender({
 // mid-render — the panel's unmount cleanup calls stopBucketRender(), cancelling
 // the run before it saves. This is why tiled renders (which run long enough for
 // the user to click away) silently produced no file. engine-gmt does the same
-// two-flip bridge in renderer/bindings.ts.
+// two-flip bridge in engine-gmt/renderer/bindings.ts.
 FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, (data) => {
     const s = useEngineStore.getState() as {
         setIsBucketRendering?: (v: boolean) => void;

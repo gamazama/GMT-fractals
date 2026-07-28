@@ -1,5 +1,5 @@
 /**
- * Mandelbulb — verbatim port of GMT's `formulas/Mandelbulb.ts`.
+ * Mandelbulb — verbatim port of GMT's `engine-gmt/formulas/Mandelbulb.ts`.
  *
  * The classic 3D Mandelbrot extension by Daniel White / Paul Nylander,
  * with Tom Beddard's Radiolaria mutation.

@@ -12,7 +12,7 @@
  * What this is NOT (for now): the full GMT FractalEngine. No MRT, no
  * accumulation, no ping-pong, no convergence, no path tracing, no
  * history buffers. All of that lands when the minimal rendering is
- * proven and we tackle the full GMT port. See docs/10_Viewport.md for
+ * proven and we tackle the full GMT port. See docs/history/engine/10_Viewport.md for
  * the viewport-plugin integration plan.
  */
 

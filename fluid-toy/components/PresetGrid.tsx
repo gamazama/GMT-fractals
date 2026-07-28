@@ -1,8 +1,9 @@
 /**
  * PresetGrid — chip grid for the Presets tab.
  *
- * Each chip corresponds to one of the 7 curated reference presets in
- * `toy-fluid/presets.ts`. Clicking applies the preset by dispatching
+ * One chip per entry in `PRESETS` (`fluid-toy/presets/data.ts`) — the grid
+ * renders the array unfiltered, so the count is whatever that file holds
+ * (10 today). Clicking applies the preset by dispatching
  * every affected slice setter (see `presets/apply.ts`), then resets
  * the fluid fields so the new parameters start from a clean grid.
  *

@@ -9,7 +9,7 @@
  * @engine/camera plugin will eventually standardise.
  *
  * inject() declares uniforms only. The actual pinhole-camera ray
- * construction lives in fractal-toy/shaderAssembler.ts; this feature
+ * construction lives in fractal-toy/renderer/shaderAssembler.ts; this feature
  * doesn't register GLSL sections because camera math is pipeline-level
  * (not a per-formula concern).
  */
