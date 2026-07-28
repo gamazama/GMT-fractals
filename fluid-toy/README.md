@@ -247,9 +247,11 @@ npm run smoke:fluid-presets          # preset apply (Coral Gyre → four slices)
 npm run smoke:migrations             # v1 tab-parity slice migration
 ```
 
-All five default to `ENGINE_URL=http://localhost:3400/fluid-toy.html`, so all
-five actually exercise this tree. **`npm run smoke:orbit` does not** — it
-defaults to `app-gmt.html` and was listed here in error.
+All five default to `ENGINE_URL=http://localhost:3400/fluid-toy.html`.
+**`npm run smoke:orbit` does not** — it defaults to `app-gmt.html` and was
+listed here in error. Note `smoke:pause-controls` asserts on
+`@engine/topbar/PauseControls` rather than on anything in this folder: it is a
+fluid-toy **boot canary**, not a fluid-toy guard.
 
 `smoke:pause-controls` rewrites the tracked `debug/fluid-pause-hover.png` as a
 side effect; `git checkout -- debug/fluid-pause-hover.png` after running it.

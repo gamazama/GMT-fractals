@@ -36,8 +36,8 @@ citations here are only as good as the last person who checked one by hand.
 
 | App | Guards |
 |---|---|
-| `fluid-toy/` | `npm run smoke:fluid-toy`, `npm run smoke:fluid-brush`, `npm run smoke:fluid-presets` |
-| `fractal-toy/` | `npm run smoke:fractal-toy` |
+| `fluid-toy/` | `npm run smoke:fluid-toy`, `npm run smoke:fluid-brush`, `npm run smoke:fluid-presets`, `npm run smoke:migrations` (the last one covers `fluid-toy/migrations.ts` — falsified 2026-07-29 by dropping one `moveField`, went red). All four falsified green→red→green that day. **Not** `npm run smoke:orbit`: it defaults to `app-gmt.html`. `npm run smoke:pause-controls` does default here, but it asserts on `@engine/topbar/PauseControls`, so treat it as a fluid-toy **boot canary**, not a fluid-toy guard — and note it rewrites the tracked `debug/fluid-pause-hover.png` as a side effect. |
+| `fractal-toy/` | `npm run smoke:fractal-toy` (falsified 2026-07-29 by no-op'ing `featureRegistry.register(LightingFeature)`, went red) |
 | `demo/` | `npm run smoke:engine-demo`, `npm run smoke:engine-demo-modulation` |
 | `gradient-explorer/` | `npm run smoke:liquify`, `npm run smoke:gx-handles`, `npm run smoke:gx-fractal-glitch` (all boot `gradient-explorer.html`) — plus `npx tsx debug/test-liquify-mesh.mts`, which is not a browser smoke: it exercises `gradient-explorer/fullscreen/modes/liquify/{LiquifyMesh,catmullRom}.ts` on plain node, and is also the last link in the `test:palette` chain. Fastest real guard in this row; reach for it first when touching the liquify soft body. |
 | `mesh-export/` | **none** — see below |
@@ -49,6 +49,17 @@ render`, `[4] physics frame went blank`. A red run is therefore not evidence of
 a regression on its own; re-run before believing it. The sibling
 `smoke:gx-handles` (13/13 green, and it goes red on a real break — verified)
 carries the retry loop and dual-instance detection that this one lacks.
+
+⚠ **fluid-toy boots as a PURE FRACTAL — any pixel assertion must undo that
+first.** `fluidSim.paused` defaults `true` and `composite.show` defaults to
+index 1 (`'julia'`, fractal-only); grep `defaultIndex` in
+`fluid-toy/features/composite.ts` and `paused` in `features/fluidSim.ts`. In
+that state the dye buffer is never composited, so nothing the brush or the sim
+writes can change a single pixel. `smoke:fluid-brush` was **red for exactly
+this reason** and had been mislabelled "FLAKY — Chromium GPU watchdog" in the
+README; it now does what `<FluidToggleButton/>` does (unfreeze + switch to
+Mixed) before it drags. A new pixel smoke here must do the same, and a red one
+should be checked against these two defaults before it is called flake.
 
 `mesh-export/` has no smoke, no unit test and no runtime guard of any kind. No
 `debug/smoke-*.mts` loads `mesh-export.html`; `smoke:boot` defaults to `/`
