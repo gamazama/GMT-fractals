@@ -10,10 +10,18 @@
  */
 
 // Side-effect registrations — MUST be imported FIRST. ES module imports
-// hoist, so any top-level statement here runs AFTER every import in the
-// file has resolved. Some of those imports (AppGmt → engineStore) touch
-// and freeze the feature registry, so registration HAS to be a
-// side-effect import, not a plain function call below.
+// hoist, so any top-level statement in this file runs AFTER every import
+// below has resolved; registration therefore HAS to be a side-effect
+// import, not a plain function call further down.
+//
+// The freeze trigger is store ACCESS, not module load: `store/engineStore`
+// keeps `_store` lazy behind `ensureStore()`, and only the first hook call /
+// getState / setState / subscribe runs `createFeatureSlice`, which calls
+// `featureRegistry.freeze()`. Merely importing engineStore is safe (several
+// modules below do exactly that) — but any module reached from these imports
+// may make that first access during module eval, so every
+// `featureRegistry.register()` has to have run by then.
+// @see docs/adr/0006-registerfeatures-as-side-effect-import.md
 import './registerFeatures';
 
 // Global Tailwind styles (build-time; replaces the cdn.tailwindcss.com Play CDN).
@@ -34,15 +42,15 @@ import ReactDOM from 'react-dom/client';
 import { usePaletteOverlayStore } from './paletteOverlayStore';
 import { favientsPanelEntry, mountFavientsPanel } from '../palette/installFavients';
 import { isMobileSnapshot } from '../hooks/useMobileLayout';
-import { topbar } from '../engine/plugins/TopBar';
 import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
 import { registerGmtUi } from '../engine-gmt/features/ui';
 import { installGmtCameraSlice, flushCameraToStore } from '../engine-gmt/store/cameraSlice';
 import { installGmtModularSlice } from '../engine-gmt/store/modularSlice';
-import { installViewport, viewport, setRenderScaleSource } from '../engine/plugins/Viewport';
+import { installViewport, setRenderScaleSource } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
-import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
+// NOTE: `installPauseControls` is deliberately NOT imported — engine-gmt/topbar.tsx
+// registers the pause button itself in the LEFT slot (see the installTopBar call below).
 import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { copyShareLink } from '../engine-gmt/topbar/ShareLinkButton';
@@ -98,7 +106,6 @@ import type { Preset } from '../types';
 
 import {
     installGmtRenderer,
-    gmtRenderer,
     getProxy,
 } from '../engine-gmt';
 import { registry } from '../engine-gmt/engine/FractalRegistry';

@@ -3,8 +3,19 @@
  *
  * Imported FIRST in `main.tsx`. Runs feature + formula registration at
  * module-load time so the shared `featureRegistry` is fully populated
- * BEFORE any subsequent import transitively loads `engineStore`
- * (which freezes the registry via `createFeatureSlice`).
+ * before the first STORE ACCESS anywhere in the app.
+ *
+ * @invariant The freeze trigger is store *access*, not module load.
+ *   `store/engineStore.ts` keeps `_store` lazy behind `ensureStore()`;
+ *   `createFeatureSlice` (which calls `featureRegistry.freeze()`) is
+ *   reachable only from `storeFactory` → `_makeStore()` → `ensureStore()`,
+ *   i.e. from the first hook call / `getState()` / `setState()` /
+ *   `subscribe()`. Importing `engineStore` is therefore harmless — this
+ *   file imports it below (for `revealGradientSection`), and ES import
+ *   hoisting puts that import ABOVE the `registerGmtFeatures()` call in
+ *   the body. If loading engineStore froze the registry, app-gmt would
+ *   throw `FeatureRegistryFrozenError` on every boot.
+ * @see docs/adr/0006-registerfeatures-as-side-effect-import.md
  *
  * Mirrors `fluid-toy/registerFeatures.ts` — same pattern, different
  * feature set.
