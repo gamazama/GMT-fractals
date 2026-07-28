@@ -21,16 +21,30 @@ Standalone sibling app: the **GMT Gradient Explorer** (formerly "Palette Studio"
 palette / gradient authoring tool built on `gmt-engine`, mounted as its own page
 (`gradient-explorer.html`). It reuses the engine's UI chrome (TopBar, Dock,
 AutoFeaturePanel, context menu, floating panels, timeline, toasts) but has **no
-raymarcher / fractal viewport** — the `bootEngine` / `RenderLoop` / `EngineBridge`
-heavy path is intentionally absent. The whole domain (gradient picking, generating,
+raymarcher / fractal viewport** — the `bootEngine` heavy path is intentionally
+absent. (`EngineBridge` + `RenderLoopDriver` *are* mounted in the app frame, but
+only to drive the animation TickRegistry — see "Deliberately NOT installed" below.)
+The whole domain (gradient picking, generating,
 image-extraction, favourites) lives in the host-agnostic [`palette/`](../palette/palette-suite.md)
 suite; this folder is just the *shell* that wires that suite onto the engine and lays
 it out as a mode-tabbed studio.
 
-Six files: boot (`main.tsx`), registration (`registerFeatures.ts`), panel manifest
-(`setup.ts`), the app frame (`GradientExplorerApp.tsx`), the Picker centre stage
-(`PickerStage.tsx`), and two top-bar buttons (`TopBarButtons.tsx`). The Generator and
-Image stages are imported straight from `palette/components/`.
+The **shell** is six files: boot (`main.tsx`), registration
+(`registerFeatures.ts`), panel manifest (`setup.ts`), the app frame
+(`GradientExplorerApp.tsx`), the Picker centre stage (`PickerStage.tsx`), and the
+top-bar affordances (`TopBarButtons.tsx` — two left-slot buttons plus a
+desktop-only FPS readout). The Generator and Image stages are imported straight
+from `palette/components/`.
+
+The directory holds **29 files**, though: since this doc was last verified the
+shell grew a *fullscreen* surface that is not described below —
+`FullscreenGradientOverlay.tsx` plus `gradient-explorer/fullscreen/**` (the
+`modeRegistry` mode-plug-in seam, the compositor + dither tail, the on-screen
+`GeometryHandleLayer`, and the geometry / fractal / liquify / parallax / spline
+modes), the select→reveal→place drop layers (`GradientDropLayer.tsx`,
+`GradientLandingLayer.tsx`, `gradientTargets.ts`) and the fluid-toy handoff
+(`fractalHandoff.ts`). Read those files' own JSDoc — `modeRegistry.ts` carries
+the seam contract.
 
 ## Where to start
 
@@ -67,10 +81,16 @@ first store access).
    [`registerPaletteUI()`](../palette/palette-suite.md) which registers the three DDFS
    features (`paletteFilters`, `paletteGenerator`, `paletteImage`), all the palette
    custom-UI components, the Favients panel, and the generator undo/history provider —
-   all **before** the store is constructed. It also registers the two studio-specific
-   **Favient apply targets** (`gen-a` / `gen-b` → `sendRampToSlot`) and the Favients
-   "Palettes" browse action (→ toggle the Picker tab). None of these import
-   `useEngineStore` at module scope, so registering pre-freeze is safe.
+   all **before** the store is constructed. It then calls `registerGradientTargets()`
+   (`gradientTargets.ts`) — every gradient destination, including `gen-a` / `gen-b`
+   → `sendRampToSlot`, registered into the engine send-target registry, from which
+   the select→reveal→place dropbox topology is computed — and
+   `setFavientSelectMode(true)`, which flips a Favients swatch click to SELECT and
+   **drops** the legacy "Applying to ▾" Favient apply targets. The Favients header
+   "Palettes" browse action is deliberately **not** registered here (leaving it
+   unset hides the button; the Picker is already a top-level mode tab — app-gmt
+   registers its own). None of these import `useEngineStore` at module scope, so
+   registering pre-freeze is safe.
 2. **`registerUI()`** — boots the engine UI registry (AutoFeaturePanel + built-in
    widgets).
 3. **UI plugins installed** (order matters — see below):
@@ -118,11 +138,15 @@ TickRegistry (timeline playback + keyframe application), not a GPU render.
 - plus the shared `feedbackPanelEntry()`.
 
 After the manifest, it force-orders the right tabs, opens Picker as the active tab, and
-**restores persisted UI state**: `restoreFavientsPanel(...)` /
-`watchFavientsPanel(...)` under an Explorer-specific localStorage key
-(`gmt.gradientExplorer.favients.panel`, so app-gmt and the Explorer don't inherit each
-other's docking state via same-origin storage), and `restorePaletteFilters()` /
-`watchPaletteFilters()` for the picker's swatch-size / padding / arrangement prefs.
+**restores persisted UI state** through the one shared entry point
+`mountFavientsPanel({ storageKey, location, order, float })` (in
+`palette/installFavients.ts` — app-gmt calls the same function with no args to get
+the floating default). That call wraps `restoreFavientsPanel` / `watchFavientsPanel`
+under an Explorer-specific localStorage key (`gmt.gradientExplorer.favients.panel`,
+so app-gmt and the Explorer don't inherit each other's docking state via same-origin
+storage) *and* `restorePaletteFilters()` / `watchPaletteFilters()` for the picker's
+swatch-size / padding / arrangement prefs — `setup.ts` no longer calls those four
+directly.
 
 ## Shell components
 

@@ -10,7 +10,21 @@
  *   6. Subscribes to the engine store; on every change, runs `evaluate(state)`
  *      and advances if true
  *
- * On step exit / unmount it cleans up timers + listeners and runs `step.onExit`.
+ * `step.onExit` runs on ONE path only: a step -> step transition, from the
+ * entry effect below. It does NOT run when the lesson ends (the entry effect
+ * bails at `if (!step) return` once stepIndex passes the last step), nor on
+ * `skipTutorial`, nor on unmount. The deactivation effect fires `cleanupRef`
+ * (trigger timers + listeners) but never `onExit`, so a lesson whose last
+ * step needs teardown cannot get it. No lesson in app-gmt/tutorial/lessons.ts
+ * declares `onExit` today, so this is latent rather than live — `grep -n
+ * onExit app-gmt/tutorial/lessons.ts` returning empty is what keeps it that
+ * way.
+ *
+ * Unmount is a second gap: the step-entry effect's own React cleanup is a
+ * deliberate no-op and the deactivation effect has no cleanup at all, so
+ * unmounting <TutorialRunner /> mid-lesson leaks the active trigger's
+ * keydown listeners and timers. app-gmt mounts it unconditionally at the
+ * root of AppGmt.tsx for the app's lifetime, so it never unmounts there.
  */
 
 import React, { useEffect, useRef } from 'react';
