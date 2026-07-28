@@ -9,6 +9,8 @@ import { animationEngine } from '../../engine/AnimationEngine';
 import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
 import { CloseIcon, MenuIcon, KeyStatus, LoopIcon, WaveRecordIcon } from '../Icons';
 import { KeyframeButton } from '../KeyframeButton';
+import { z } from '../ui/zIndex';
+import { getLayerHost } from '../ui/layerHost';
 import { getLiveValue, evaluateTrackValue } from '../../utils/timelineUtils';
 import {
     PlayIcon, PauseIcon, StopIcon, RecordIcon,
@@ -414,8 +416,13 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                 {showMenu && menuPos && createPortal((
                     <div
                         ref={menuPanelRef}
-                        className="fixed w-48 bg-surface-raised border border-line/20 rounded shadow-xl z-[100] p-1 flex flex-col gap-1"
-                        style={{ top: menuPos.top, right: menuPos.right }}
+                        className="fixed w-48 bg-surface-raised border border-line/20 rounded shadow-xl p-1 flex flex-col gap-1"
+                        // Body-portalled, so it competes on the GLOBAL portal axis. The old raw
+                        // literal tied the floating-panel band base (100–199, reserved for
+                        // click-to-front ranks — see components/ui/zIndex.ts), so any raised
+                        // floating panel painted over this menu. `popover` is the tier for
+                        // anchored dropdowns and clears the panel band.
+                        style={{ top: menuPos.top, right: menuPos.right, zIndex: z('popover') }}
                     >
 
                         <div className="flex items-center justify-between px-3 py-2 text-xs text-fg-tertiary">
@@ -497,7 +504,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                             Delete All Tracks
                         </button>
                     </div>
-                ), document.body)}
+                ), getLayerHost())}
             </div>
 
             <button onClick={onClose} className="ml-1 icon-btn" title="Close Timeline">

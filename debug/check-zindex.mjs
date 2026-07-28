@@ -39,7 +39,6 @@ const ALLOWLIST = new Set([
     'components/LoadingScreen.tsx',
     'components/MobileControls.tsx',
     'components/Timeline.tsx',
-    'components/timeline/TimelineToolbar.tsx',
     'components/layout/DropZones.tsx',
     'engine/components/ToastHost.tsx',
     'engine/components/StateLibraryToast.tsx',
