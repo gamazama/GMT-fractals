@@ -8,9 +8,15 @@ const engine = getProxy();
  * Helper to determine direction name from a camera rotation quaternion.
  *
  * @invariant Threshold 0.98 on `dot(forward, ±cardinal-axis)` — used by
- * `suggestCameraLabel` in `cameraSlice.ts:129` to auto-suggest "Front View" /
- * "Top View" etc. when the camera is within ~11° of a cardinal axis. Returns
- * `null` when no axis is dominant.
+ * `suggestCameraLabel` in `engine-gmt/store/cameraSlice.ts` to auto-suggest
+ * "Front View" / "Top View" etc. when the camera is within ~11° of a cardinal
+ * axis. Returns `null` when no axis is dominant.
+ *
+ * @invariant The label mapping is the inverse of `calculateDirectionalView`
+ * below: a camera placed by `calculateDirectionalView('Front')` must round-trip
+ * back to `'Front View'` here. Both sides use "camera looks down local -Z", so
+ * e.g. `'Left'` yields forward `+X` and is reported as `'Left View'`. Change one
+ * switch arm and you must change the matching comparison here.
  */
 export const getDirectionName = (rot: { x: number, y: number, z: number, w: number }): string | null => {
     const q = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);

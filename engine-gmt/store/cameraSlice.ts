@@ -52,14 +52,61 @@ export interface SavedCameraPayload extends CameraState {
 }
 
 /** Public alias: a saved camera is a state-library snapshot whose
- *  payload is a SavedCameraPayload. */
+ *  payload is a SavedCameraPayload.
+ *
+ * @bug PRODUCTION: Scene/formula files written before the state-library
+ * extraction (19e605a8, 2026-04-25) store `savedCameras` in the pre-extraction
+ * FLAT shape — `SavedCamera extends CameraState`, i.e.
+ * `{ id, label, position, rotation, sceneOffset, targetDistance, optics }`
+ * with no `state` wrapper. That is still what `types/preset.ts` and
+ * `engine-gmt/types/fractal.ts` declare, and `utils/defaultPresetFields.ts`
+ * deserialises it with `set({ savedCameras: p.savedCameras as any })` — no
+ * shape check, no migration registered in `engine/migrations.ts`. Loading such
+ * a file therefore puts flat rows in the store with `activeCameraId` pointed at
+ * row 0, and `snap.state` is `undefined`:
+ *   - render → `isCameraModified(cam.state)` throws
+ *     "Cannot read properties of undefined (reading 'sceneOffset')";
+ *   - recall → `applyCameraState(snap.state)` throws
+ *     "Cannot read properties of undefined (reading 'rotation')".
+ * Reproduced against a real file on disk (`GMT_AmazingBox_v2.gmf`, `<Scene>`
+ * block). Fix belongs at the load boundary — normalise flat → `{ id, label,
+ * thumbnail, createdAt, state: {...} }` in the `savedCameras` preset field's
+ * `deserialize`, and correct the two `Preset` type declarations — so render,
+ * recall, the modified marker and re-save are all fixed at once. */
 export type SavedCamera = StateSnapshot<SavedCameraPayload>;
 
 const getSetOptics = (s: any): ((update: Partial<OpticsState>) => void) | null => {
     return typeof s.setOptics === 'function' ? s.setOptics : null;
 };
 
-/** Capture: read GMT's live camera state into a snapshot payload. */
+/**
+ * Capture: read GMT's live camera state into a snapshot payload.
+ *
+ * @invariant OWNERSHIP — every object this returns must be freshly
+ * allocated. The generic factory does NOT clone: `captureSnap` in
+ * `engine/store/createStateLibrarySlice.ts` stores `opts.capture()` by
+ * reference as `snap.state`. Handing back a live store object (e.g.
+ * `live.optics` instead of `{ ...live.optics }`, or `engine.sceneOffset`,
+ * which `WorkerProxy` returns by reference) would make the saved camera an
+ * alias of live state and silently rewrite itself as the user navigates.
+ * `optics` is a shallow spread because `OpticsState` is flat scalars — if a
+ * nested field is ever added, deep-copy it here.
+ *
+ * @invariant CAPTURE/APPLY SYMMETRY — the payload is
+ * `{ position, rotation, sceneOffset, targetDistance, optics }` and
+ * `applyCameraState` restores all five: the first is pinned to the origin by
+ * the VirtualSpace treadmill (the whole world position lives in the
+ * split-precision `sceneOffset`) and reaches the R3F camera via the
+ * `CAMERA_TRANSITION` payload; the rest go to the store + `setOptics`. Adding
+ * a field here without a matching read in `applyCameraState` is silent data
+ * loss on recall.
+ *
+ * @invariant PRECISION — the world position is summed to a double by
+ * `CameraUtils.getUnifiedFromEngine()` and re-split via `VirtualSpace.split`
+ * (`high = Math.fround(v)`, `low = v - high`), so `x + xL` reconstructs the
+ * captured value exactly at double precision. Storing only `x` (the f32 high
+ * part) would cap saved cameras at f32 depth.
+ */
 const captureCameraState = (): SavedCameraPayload => {
     const unifiedPos = CameraUtils.getUnifiedFromEngine();
     const rot = CameraUtils.getRotationFromEngine();
@@ -88,6 +135,20 @@ const captureCameraState = (): SavedCameraPayload => {
  * @invariant Emits `CAMERA_TRANSITION` FIRST, then `setStates` the three
  * camera fields, then probes for `setOptics`, then `engine.resetAccumulation()`.
  * Order matters — event listeners may pre-warm shaders before the store flip.
+ *
+ * @invariant OWNERSHIP — `state` IS the saved camera's own payload
+ * (`snap.state`), not a copy: `applySnap` in
+ * `engine/store/createStateLibrarySlice.ts` passes it straight through. The
+ * `setState` below therefore installs the snapshot's own `rotation` and
+ * `sceneOffset` objects as live store state — verified live: right after
+ * `selectCamera(id)`, `useEngineStore.getState().sceneOffset ===
+ * savedCameras[i].state.sceneOffset`. That is safe ONLY because no writer
+ * mutates `sceneOffset` / `cameraRot` in place — `setSceneOffset`,
+ * `flushCameraToStore`, `teleportToOffset`, Navigation's teleport/transition
+ * paths and `VirtualSpace`'s `state` accessors (getter returns `{...offset}`,
+ * setter copies) all allocate fresh objects. A single `store.sceneOffset.xL +=
+ * d` anywhere would corrupt the saved camera the user last recalled. Either
+ * keep that rule or clone here.
  */
 const applyCameraState = (state: SavedCameraPayload): void => {
     FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TRANSITION, state as CameraState);
@@ -355,7 +416,7 @@ const stepBackFromCurrent = (): void => {
  * immediately after `registerGmtUi()`; there is NO runtime guard.
  *
  * @invariant Opts out of the auto-generated topbar menu via `menu: null` —
- * `engine-gmt/topbar.tsx:271-355` wires the Camera menu by hand (Undo Move,
+ * `engine-gmt/topbar.tsx:278-355` wires the Camera menu by hand (Undo Move,
  * Redo Move, Reset Position, View Manager, Camera Slots 1-9). Slot 1-9 click
  * handlers route to the SAME `savedCameras[slotIndex]` + `selectCamera` /
  * `saveToSlot` actions the `Mod+1..9` / `1..9` slot shortcuts hit, so menu
