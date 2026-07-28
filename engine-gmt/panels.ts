@@ -25,8 +25,11 @@ import { registry } from './engine/FractalRegistry';
  *   groupFilter / whitelistParams / compilable / accordion / conditional.
  *   Sibling apps (fluid-toy, fractal-toy) DO use the shorthand.
  * @invariant Camera Manager: `id: 'Camera Manager'` is the canonical
- *   PanelId used by cameraSlice; `label: 'View Manager'` is the
- *   user-visible string. The two diverge intentionally.
+ *   PanelId used by cameraSlice; `label: 'View Camera Manager'` is the
+ *   user-visible string. The two diverge intentionally — the label was
+ *   renamed from 'View Manager' in 8d6d11d0 (2026-05-31, "Naming
+ *   clarity") alongside the Camera menu's "Undo/Redo Camera Move";
+ *   the id stayed put because it is serialized into saved scenes.
  */
 export const GmtPanels: PanelManifest = [
     // Graph (Modular-only) lives on the left dock — same pattern as the
@@ -318,6 +321,24 @@ export const GmtPanels: PanelManifest = [
         items: [
             { type: 'feature', id: 'materials',   groupFilter: 'surface'   },
             // (Environment group moved to the Scene panel, beside Fog — ADR-0097 ties them.)
+            // @bug PRODUCTION: this entry renders NO controls. `reflections`
+            //   declares a `groups.shading` groupConfig (label 'Reflections',
+            //   description 'Screen-space reflection tracing…') but not one of
+            //   its params carries `group: 'shading'` — reflectionMode /
+            //   bounceShadows / mixStrength / roughnessThreshold / steps /
+            //   accurateColors are all `group: 'engine_settings'` and `enabled`
+            //   is `group: 'main', hidden: true`. AutoFeaturePanel's filter is
+            //   `p.group === groupFilter`, so the block emits only the group
+            //   description <Hint> (and with hints off, an empty <div>).
+            //   Verified in-browser 2026-07-28: the Shader panel shows
+            //   "Screen-space reflection tracing for glossy surfaces." between
+            //   Rim Light and Glow Strength with zero widgets. The only
+            //   manifest home for `engine_settings` is the ShaderCompiler
+            //   panel, which is `showIf: 'shaderCompiler.showEngineTab'` and
+            //   that param defaults to false — so reflection settings have no
+            //   default-visible surface at all. Fix is a product call (make
+            //   this a `compilable` section like Shadows / Volumetric, or
+            //   repoint the groupFilter); left as-is pending owner review.
             { type: 'feature', id: 'reflections', groupFilter: 'shading'   },
             { type: 'feature', id: 'atmosphere',  groupFilter: 'glow'      },
             { type: 'feature', id: 'materials',   groupFilter: 'emission'  },
