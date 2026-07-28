@@ -18,6 +18,7 @@
     "build": "vite build",
     "check:mb3d-decompiler": "node plans/mb3d/decompiler/check-sync.mjs",
     "check:zindex": "node debug/check-zindex.mjs",
+    "check:rule-guards": "node debug/check-rule-guards.mjs",
     "context:check": "node plans/context-protocol/scripts/context-check.mjs",
     "context:cost": "node plans/context-protocol/scripts/context-cost.mjs",
     "context:dependents": "node plans/context-protocol/scripts/context-cost.mjs dependents",

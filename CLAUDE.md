@@ -21,11 +21,16 @@ This file (`CLAUDE.md`) is forward-looking rules. `docs/DOCS_INDEX.md` is the au
 
 **Greppable annotation markers** — these are the canonical doc layer agents consume. Add them at the source site, not in external markdown.
 
-- `@invariant <text>` — load-bearing contract on a file or export. Future readers must not break it without writing a superseding ADR.
+- `@invariant <text> — proven by: <command> ("<the assertion>")` — load-bearing contract on a file or export, **plus the thing that would go red if it were broken.** Future readers must not break it without writing a superseding ADR.
+- `@assumption <text>` — a contract you believe holds but cannot prove today. Same content as an `@invariant`, minus the proof. Greppable, so `grep -r '@assumption'` is a standing worklist.
 - `@bug PRODUCTION: <text>` — known production issue at this site. Discoverable by `grep -r '@bug'` — the canonical (and only) bug-tracking surface.
 - `@see docs/adr/NNNN-*.md` — link from code to a decision rationale.
 - `@stale <text>` — content known wrong, awaiting refresh. Greppable so cleanup passes can find them.
 - `@deprecated <text>` — file or symbol on the way out, with replacement noted.
+
+**Why `@invariant` carries its proof.** The overnight audit on 2026-07-27 falsified roughly a third of the `@invariant`s it checked — in the layer this file calls freshest and most-trusted. The cause was structural, not carelessness: nothing distinguished a claim proven by falsification from one written from belief, because both render as the same annotation. Naming the guard closes that gap at authoring time, and the ones that turned out false were exactly the ones with nothing behind them.
+
+So: before writing `@invariant`, name the command that would fail if the claim were wrong — then **run it against a deliberately broken version and watch it go red.** A guard you did not falsify is a guess about a guard. If nothing would fail, that is not a lesser invariant, it is an `@assumption`; write that instead and the claim stays honest and greppable. Downgrading an existing `@invariant` you could not prove is a correction, not a defeat.
 
 **Where to put what:**
 - New invariants, contracts, or "watch out for X" notes → top-of-file or per-export JSDoc on the source file. Do NOT write a new external markdown file.
@@ -36,7 +41,9 @@ This file (`CLAUDE.md`) is forward-looking rules. `docs/DOCS_INDEX.md` is the au
 **Annotation maintenance (cleanup hygiene):**
 - **`@stale` removal.** When you touch a file carrying a `@stale` annotation AND your work resolves what the annotation points at, REMOVE the `@stale`. Leaving them in place after the fix produces ghost worklist entries.
 - **No new self-annotation drift.** If you write `@stale`, `@bug PRODUCTION:`, or `@invariant`, that's a commitment to keep it current. Removing the annotation when the underlying issue resolves is part of the work.
-- **ADR drift from renames / refactors.** ADRs are append-only — don't rewrite the body. When a rename, file move, or refactor invalidates a symbol name, file path, or line reference cited in an existing ADR (but the underlying decision still stands), prepend a `> **Update YYYY-MM-DD (...; decision unchanged):** ...` block under the heading that names the changed symbols and notes why the decision still applies. If the decision itself is superseded, write a new ADR and mark the old one `Status: Superseded by ADR-NNNN`.
+- **ADR drift from renames / refactors.** ADRs are append-only — don't rewrite the body. When a rename, file move, or refactor invalidates a symbol name, file path, or line reference cited in an existing ADR (but the underlying decision still stands), prepend a `> **Update YYYY-MM-DD (...; decision unchanged):** ...` block under the heading that names the changed symbols and notes why the decision still applies. If the decision itself is superseded, write a new ADR and mark the old one `Status: Superseded by ADR-NNNN`. A PreToolUse hook enforces the append-only half mechanically: additive edits pass silently, anything that would delete existing text asks first.
+- **Cite grep targets, not line numbers.** In ADRs and in JSDoc, `grep for DOUBLE_RUN_WINDOW_MS` still resolves in a year; `engine/TickRegistry.ts:89-94` does not. Five of the eleven ADR corrections the 2026-07-27 audit produced were pure line-drift, and the worst of them had rotted into pointing at unrelated code — actively misleading rather than merely stale. Name the symbol; add a line number only as a hint alongside it, never as the sole locator.
+- **Rule guard citations are checked.** `npm run check:rule-guards` walks the import graph from each guard a `.claude/rules/` file cites and reports any that cannot reach the files that rule scopes. That miscitation was the single most common defect the audit found (~10 instances), and it is invisible by inspection because a healthy guard passing looks identical to one that cannot see the code. Run it after editing any rule's `paths:` or Guards block.
 
 ### Read Docs Before Coding
 
@@ -118,6 +125,7 @@ The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engin
 
 ### Automated Checks
 - `npm run typecheck` — tsc, should exit 0.
+- `npm run check:rule-guards` — verifies every guard a `.claude/rules/` file cites can actually reach the files that rule scopes. Reports rather than gates; static analysers are listed separately because they read files as text and have no import edges to check.
 - `npm run orphans` — knip; lists unused files (real import-graph walk, not grep). Run before deleting "looks unused" code — grep gives false positives because the engine-core / engine-gmt trees both expose siblings with the same name. Config: [knip.json](knip.json).
 - `npm run smoke:boot` — headless Chromium boot, fails on pageerrors.
 - `npm run smoke:interact` — state-flow + preset round-trip (demo feature).
