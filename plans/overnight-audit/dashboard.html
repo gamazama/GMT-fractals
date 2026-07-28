@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:76%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:85%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,19 +73,19 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Cycle 9 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T05:39:40.772Z</p>
+  <p class="sub">Cycle 10 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T06:19:39.023Z</p>
 
   <div class="tiles">
-    <div class="tile"><div class="v">25/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">147</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">86</div><div class="k">applied &amp; verified</div></div>
-    <div class="tile"><div class="v" style="color:var(--warn)">15</div><div class="k">orchestrator-checked</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">44</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">132<span style="font-size:.6em;color:var(--dim)">/133</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v">28/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">158</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">91</div><div class="k">applied &amp; verified</div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">16</div><div class="k">orchestrator-checked</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">49</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">140<span style="font-size:.6em;color:var(--dim)">/141</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:35%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:54%"></i></div><div class="cyc" title="cycle 9: 10 findings"><i style="height:38%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 10 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:35%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:54%"></i></div><div class="cyc" title="cycle 9: 10 findings"><i style="height:38%"></i></div><div class="cyc" title="cycle 10: 11 findings"><i style="height:42%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 11 cycles</p>
 
   <section><h2>Guards failing <span class="count">1</span></h2>
     <p class="note">Run these yourself before trusting anything downstream of them.</p>
@@ -94,9 +94,23 @@
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">86</span></h2>
+    <h2>Applied — self-verified <span class="count">91</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>a01-boot-shell</code>
+      <code class="file">app-gmt/registerFeatures.ts:5</code>
+    </header>
+    <p class="what">The boot shell's two registry-freeze comments state a mechanism that is provably false — they say importing store/engineStore freezes the feature registry, when the freeze is triggered only by the first store ACCESS. registerFeatures.ts imports engineStore itself, hoisted above its own registration calls, so if the documented mechanism were true app-gmt could not boot at all.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the header JSDoc on registerFeatures.ts with an @invariant naming the real trigger and the exact chain ensureStore() -&gt; _makeStore() -&gt; storeFactory -&gt; createFeatureSlice -&gt; featureRegistry.freeze(), and rewrote the matching comment above `import './registerFeatures'` in main.tsx. Both now cite ADR-0006 via @see. No code changed. Also removed four dead imports from main.tsx — topbar, viewport, gmtRenderer and installPauseControls, the last of which existed solely so a comment 80 lines later could say it is intentionally never called.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsified against the running dev server. engine/FeatureSystem.ts:549 makes featureRegistry.register() on a frozen registry THROW in dev. smoke:engine-gmt boots app-gmt.html with DEV=true and gates on zero pageerrors — so if importing engineStore froze the registry, the first registration would throw at module eval and the smoke would fail. It reports errors (0) and asserts isBooted + hasCompiledShader + frameCount &gt; 0 + all 26 DDFS slices, which proves registration completed unfrozen. Proved statically too: createFeatureSlice is spread only inside storeFactory, storeFactory is passed only to _makeStore(), _makeStore() is called only from ensureStore(). engineStore's own comment says the same thing in the opposite direction. For the dead imports, typecheck is the discriminating guard — tsc resolves every identifier, so removing one that was in fact used fails the build; and grep confirmed PauseControls is still registered by engine-gmt/topbar.tsx, so no side-effect import was lost.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>00bc032b</code></p>
+    
+  </article>
   <article class="finding sev-high">
     <header>
       <span class="badge tA">A</span>
@@ -431,6 +445,48 @@
     <p class="verify"><strong>How it was verified:</strong> Falsification-first. The new assertions were added to the smoke BEFORE any store change and it failed with exactly 'undo audio startFrame expected 120, got 60 — FPS history entry does not snapshot audioClips': the keyframe came back to 120 while the clip stayed at 60, i.e. a clip and its keyframe one second apart after a 60 -&gt; 30 -&gt; undo round trip. After the three store edits it passes. The guard bites in either direction: drop the capture in playbackSlice and the undo leg fails; drop the restore in applyHistory and the undo leg fails; capture post-change clips instead of pre-change ones in captureInverse and the redo leg fails. smoke:anim-play and typecheck also green.</p>
     <p class="guard"><code>npm run smoke:audio-fps-remap</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>25bd548e</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>g12-formula-workshop</code>
+      <code class="file">debug/test-frag-importer.mts:299</code>
+    </header>
+    <p class="what">npm run test:frag counted failures and printed them but never set a non-zero exit code — a dead guard wearing a test:* name, cited in .claude/rules/scene-and-formula-format.md and used by prior audit cycles as proof of correctness.</p>
+    <p class="change"><strong>Changed:</strong> Added process.exit(failed &gt; 0 ? 1 : 0) after the summary block, with a comment recording that glslIssues deliberately stays advisory rather than gating.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsification, both directions. Baseline 60 passed / 0 failed / exit 0. Injected failed++ before the summary: output read '60 passed 1 failed' and the exit code was still 0 — proving the guard asserted nothing. Applied the fix with the injection still present: exit 1. Removed the injection: 60 passed / exit 0. typecheck green.</p>
+    <p class="guard"><code>npm run test:frag</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>3e1ed847</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>g12-formula-workshop</code>
+      <code class="file">package.json:87</code>
+    </header>
+    <p class="what">npm run test:frag:integration was permanently red — 236 passed / 307 failed / exit 1 — from two independent causes: the script hardcoded --discover over the whole 580-file reference/Examples tree, and four known-not-importable formulas were registered as ordinary tests.</p>
+    <p class="change"><strong>Changed:</strong> Dropped --discover from test:frag:integration (now the curated matrix, 64 passed / 1 warn / 0 failed); preserved the sweep as test:frag:integration:discover; added an expectFail field and set it on the four no-DE entries so rejecting them scores as a pass and accepting one scores as a failure. Documented the cost in .claude/rules/scene-and-formula-format.md.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsification both directions plus an independent verifier pass. Exit wiring was already proven live by two red runs. After the fix, exit 0. To prove expectFail cannot mask a regression, marking the passing Mandelbox entry expectFail turned the guard red with 'expected rejection ... but the importer accepted it'; reverting the flag returned it to green. The VERIFIER then re-ran the 307-failure sweep itself and reproduced the numbers exactly, so the narrowing is characterised by measurement rather than by assertion — see notes.</p>
+    <p class="guard"><code>npm run test:frag:integration</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>fb866b0d</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>a01-boot-shell</code>
+      <code class="file">.claude/rules/app-boot.md:33</code>
+    </header>
+    <p class="what">The rule that auto-loads for app-gmt/main.tsx and engine-gmt/renderer/** cited npm run smoke:interact as a guard, but that smoke targets demo.html -&gt; index.tsx, whose import graph contains no file the rule governs — and it omitted smoke:engine-gmt, the only guard that actually asserts app-gmt's boot chain.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the Guards block: smoke:engine-gmt first with what it asserts, smoke:boot second annotated that it only gates on page/console errors, plus an explicit note that smoke:interact targets the demo shell and cannot fail on a change to this rule's paths.</p>
+    <p class="verify"><strong>How it was verified:</strong> Grep-proved dead, then the replacement proved live. smoke-interact.mts:9 defaults to localhost:3400/demo.html; demo.html:69 loads /index.tsx; grep for app-gmt|engine-gmt in index.tsx returns nothing. smoke-engine-gmt.mts:19 defaults to app-gmt.html which loads /app-gmt/main.tsx, and it was run and passed. NOTE — the brief's own premise that smoke:boot points at the engine demo was checked and is now STALE: index.html at the repo root loads /app-gmt/main.tsx ('Canonical root = the GMT app'), so smoke:boot does cover app-gmt and was retained rather than dropped.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>df6d52fb</code></p>
     
   </article>
   <article class="finding sev-medium">
@@ -1039,6 +1095,20 @@
     <header>
       <span class="badge tA">A</span>
       <span class="sev">low</span>
+      <code>a02-panels-layout</code>
+      <code class="file">engine-gmt/panels.ts:27</code>
+    </header>
+    <p class="what">The file-level @invariant quoted label: 'View Manager' but the code has read 'View Camera Manager' since a deliberate 2026-05-31 rename, and the reflections dead-end carried no @bug marker.</p>
+    <p class="change"><strong>Changed:</strong> Corrected the @invariant to quote the real label and recorded why the serialized id diverges (renamed in 8d6d11d0 'Naming clarity'; the id stayed because saved scenes carry it and it is the panelId cameraSlice.ts:495 and main.tsx:477 pass to togglePanel). Added a @bug PRODUCTION: block above the reflections item recording the dead groupFilter, the AutoFeaturePanel filter line that causes it, the in-browser observation, and the default-hidden fallback panel.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep for 'View Camera Manager' returns the live definition at line 560 while the annotation quoted 'View Manager'; git show 8d6d11d0 shows the exact -/+ hunk with the commit body headed 'Naming clarity'. The reflections claim rests on AutoFeaturePanel.tsx:669-671 plus the DOM dump. typecheck and smoke:engine-gmt both green — the right guard to name for a panels.ts edit since engine-gmt/panels.ts is in app-gmt.html's import graph and the manifest is applied during that boot, so a malformed edit surfaces as a parse error or pageerror. Stated plainly: it would NOT catch a wrong comment, which is why the drift itself is proven by grep plus git.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>162e7f0d</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
       <code>e02-tick-registry</code>
       <code class="file">.claude/rules/tick-and-animation.md:3</code>
     </header>
@@ -1304,7 +1374,7 @@
   </section>
   
   <section>
-    <h2>Applied — orchestrator-verified <span class="count">15</span></h2>
+    <h2>Applied — orchestrator-verified <span class="count">16</span></h2>
     <p class="note">No existing test covered these, so a second independent agent re-derived the claim before the change was allowed through. Each names how it was checked.</p>
     
   <article class="finding sev-high">
@@ -1390,6 +1460,20 @@
     <p class="guard"><code>npm run smoke:statelibrary-drop</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>97099e7a</code></p>
     
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">medium</span>
+      <code>a02-panels-layout</code>
+      <code class="file">engine/PanelManifest.ts:383</code>
+    </header>
+    <p class="what">The documented coverage gap — no guard mounts a manifest-composed panel and asserts its structure — is cheaply closable: a manifest-integrity sweep resolving every component/widget/feature/param/group reference against the live registries catches the whole dangling-reference class in one pass, and would have caught the reflections dead-end.</p>
+    
+    
+    
+    
+    <p class="rationale">Second requirement before building it: a validator MUST union param groups with customUI groups or it emits false positives — see the navigation/'controls' case in notes.</p>
   </article>
   <article class="finding sev-medium">
     <header>
@@ -1520,9 +1604,23 @@
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">44</span></h2>
+    <h2>Awaiting your judgement <span class="count">49</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">high</span>
+      <code>a02-panels-layout</code>
+      <code class="file">engine-gmt/panels.ts:337</code>
+    </header>
+    <p class="what">The Shader panel's Reflections entry (groupFilter: 'shading') matches zero params so it renders no controls — and because every reflections param sits in engine_settings, whose only manifest home is the default-hidden Shader Compiler panel, reflection settings have no default-visible surface anywhere in the app.</p>
+    
+    
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    
+    <p class="rationale">See PROPOSALS.md for the four options and the recommendation. Observed in-browser, not inferred.</p>
+  </article>
   <article class="finding sev-high">
     <header>
       <span class="badge tB">B</span>
@@ -1578,6 +1676,20 @@
     
     
     <p class="rationale">See PROPOSALS.md. Independently corroborated by the verifier, which confirmed the scalar comes from X alone and that BaseVectorInput is linked-by-default but user-unlinkable. Mitigating: DEFAULT_BBOX_SIZE is [3,3,3] and autoFitBounds forces a cube, so the default and auto-fit paths never trip it.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>a01-boot-shell</code>
+      <code class="file">docs/adr/0006-registerfeatures-as-side-effect-import.md:20</code>
+    </header>
+    <p class="what">ADR-0006 encodes the same false freeze mechanism the source comments carried, and its Consequences paragraph describes the wrong failure mode for a hypothetical refactor.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md for the paste-ready Update block. The decision — register via a side-effect import at the top of main.tsx — is unchanged and still correct; only the mechanism prose is wrong.</p>
   </article>
   <article class="finding sev-medium">
     <header>
@@ -1859,6 +1971,34 @@
     <p class="commit">commit <code>62dd95b1</code></p>
     <p class="rationale">See PROPOSALS.md. Queued rather than fixed because there is no purely technical right answer — time-compressing pitch-shifts, mixing only the covered sub-range drops the tail, and dropping audio entirely is safest but is a product decision.</p>
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>g12-formula-workshop</code>
+      <code class="file">engine-gmt/features/fragmentarium_import/formula-library.ts:270</code>
+    </header>
+    <p class="what">The frozen public/formulas/v3-v4-catalog.json (generated 2026-04-18) disagrees with the pipelines' behaviour today on 87 of 511 library entries; 2 rows are provably wrong and 21 shipped formulas are hidden behind the show-broken toggle on the strength of stale data.</p>
+    
+    
+    <p class="guard"><code>npm run test:frag:integration</code> <span class="ok">passed</span></p>
+    
+    <p class="rationale">See PROPOSALS.md. Spot-checked by an independent verifier, which confirmed both hard-stale rows by hand (Experimental/Knot.frag now errors provides_color; kosalos/KIFS.frag now errors no_de_function — both error KINDS matching), enumerated all 21 hidden ids and confirmed every one parses today, and confirmed the picker filter at FormulaWorkshop.tsx:450 and :511. It judged the probe's methodology sound, specifically its asymmetry: only the catalog-says-pass-but-errors-now direction is called 'hard', the reverse is 'candidate'. One correction: the 21 are hidden BY DEFAULT, not unreachable — a showIncompatible toggle reveals them.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>a01-boot-shell</code>
+      <code class="file">app-gmt/tutorial/lessons.ts:17</code>
+    </header>
+    <p class="what">The @invariant on seedMandelbulb ends with a bare pointer 'Followup q-011' to a worklist scheme retired in the 2026-07-13 docs reorg, leaving an unresolvable reference inside a load-bearing annotation.</p>
+    
+    
+    
+    
+    <p class="rationale">The invariant body itself is CORRECT and was verified: seedMandelbulb reads registry, populated by the eager top-level statements in engine-gmt/formulas/index, pulled in by registerFeatures.ts:92, and `import './registerFeatures'` is main.tsx's FIRST import — so the whole formula subtree evaluates before lessons.ts is reached at line 82. Only the trailing pointer is stale. Deciding whether an audit follow-up id is closed or merely orphaned is an owner call and no guard distinguishes the two, which is why this was not silently erased. Options: delete the sentence, or convert to @stale &lt;what q-011 asked&gt; if the question is still open.</p>
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tB">B</span>
@@ -2139,6 +2279,20 @@
     
     <p class="rationale">See PROPOSALS.md. This is also what made the legacy-shape crash fire at render rather than lying dormant.</p>
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>g12-formula-workshop</code>
+      <code class="file">debug/scan-frag-parse.mts:102</code>
+    </header>
+    <p class="what">npm run test:frag:scan is a report, not a test — no process.exit, no throw, no assertion, so it exits 0 while printing 124 failure lines — yet it is named test:* and was cited by cycle 6 as a passing guard for a Tier A finding.</p>
+    <p class="change"><strong>Changed:</strong> Documented in .claude/rules/scene-and-formula-format.md as part of the guard-block rewrite ('a report, not a guard ... do not cite it as passing evidence'). The rename itself is queued.</p>
+    
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>fb866b0d</code></p>
+    <p class="rationale">See PROPOSALS.md. TENTH instance of the miscited-guard pattern this run, and a stricter variant: not merely scoped wrong but structurally incapable of failing. The cycle-6 g03 result that lists guard: test:frag:scan / guardPass: true should be read as having no guard.</p>
+  </article>
   </section>
 
   <h2>Subsystems</h2>
@@ -2395,35 +2549,35 @@
     <td class="num prop">1</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g12-formula-workshop</code></td>
     <td>engine-gmt</td>
     <td class="area">Formula Workshop UI + V3/V4 Fragmentarium .frag/.dec importer pipelines (analyze → preprocess → emit) and importSource lifecycle</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">4</td>
+    <td class="num applied">2</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">2</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>a01-boot-shell</code></td>
     <td>app-gmt</td>
     <td class="area">App entry + boot sequence + feature registration</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">4</td>
+    <td class="num applied">2</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">2</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>a02-panels-layout</code></td>
     <td>app-gmt</td>
     <td class="area">Panel manifest + topbar + Dock + ViewportFrame</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">3</td>
+    <td class="num applied">1</td>
+    <td class="num esc">1</td>
+    <td class="num prop">1</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>a03-tutorial</code></td>

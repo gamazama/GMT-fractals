@@ -1932,3 +1932,248 @@ Insert directly under the `# ADR-0051: …` heading:
   retain the previous graph, that path could pack uniforms against an empty edge
   set — which changes DCE liveness and therefore slot layout. Not traced, not
   claimed; a concrete thread for whoever owns the renderer rule.
+
+---
+
+# Cycle 10 — final cycle
+
+## HIGH — Reflection settings have no visible home in the app
+
+_(cycle 10 · `engine-gmt/panels.ts:337` — observed in the browser, marked with `@bug PRODUCTION:`, fix is yours)_
+
+The Shader panel's Reflections entry is `groupFilter: 'shading'`. The reflections
+feature declares a `groups.shading` config with a label and description — but
+**not one of its params carries `group: 'shading'`**. `reflectionMode`,
+`bounceShadows`, `mixStrength`, `roughnessThreshold`, `steps` and
+`accurateColors` are all `group: 'engine_settings'`; `enabled` is `group: 'main',
+hidden: true`. `AutoFeaturePanel`'s filter is `return p.group === groupFilter`, so
+the block matches nothing.
+
+**Observed, not inferred.** Opening the Shader tab and dumping the DOM gives:
+`… Rim Light 0 | Screen-space reflection tracing for glossy surfaces. | Glow
+Strength 0 …` — the Reflections block contributes one sentence and zero widgets,
+while every sibling (materials, atmosphere, emission, AO) renders controls
+normally.
+
+**The part that makes it high rather than cosmetic:** `engine_settings` is
+consumed only by the Shader Compiler panel, which is `showIf:
+'shaderCompiler.showEngineTab'` with `default: false`. So on a default boot there
+is **no reachable UI for Reflection Method or its raymarch quality knobs at all**.
+This looks like a leftover from the ADR-0079 Shader Compiler consolidation — same
+class as the dead `shadow_quality` groupFilter this file already comments out a
+hundred lines below.
+
+**Options:** (a) make it a compilable section, mirroring how Shadows and
+Volumetric Scatter are handled in this same manifest — `{ type: 'compilable', id:
+'reflections', compileParam: 'enabled', compileSettingsParams: ['reflectionMode',
+'bounceShadows', 'accurateColors'], runtimeGroup: 'engine_settings' }`; note
+`enabled` is currently `hidden: true` and would need lifting; (b) repoint the
+entry to `groupFilter: 'engine_settings'` — cheapest, but the compile-flagged
+dropdowns then render with no CompileBar, exactly what the Burning Mode and
+Volumetric comments in this file warn against; (c) move the user-facing params to
+`group: 'shading'` and leave only dev-only ones in `engine_settings`; (d) delete
+the dead entry and accept Shader-Compiler-only reflections.
+
+**Recommendation: (a).** It matches the established pattern in this manifest,
+keeps the compile gate honest, and restores a default-visible home. Which
+reflection knobs belong in the Shader tab is a product call, which is why it was
+marked rather than fixed.
+
+**Two questions only you can answer:** open the app at defaults and click the
+Shader tab — between **Rim Light** and **Glow Strength**, is there a Reflections
+heading with controls, or just the sentence? And with the Shader Compiler tab not
+enabled, is there anywhere at all to switch Reflection Method between Off /
+Environment Map / Raymarched?
+
+---
+
+## MEDIUM — 18 real importer failures just became invisible *(and were already invisible in practice)*
+
+_(cycle 10 · `package.json` + `.claude/rules/scene-and-formula-format.md` — fixed, but the gap it exposes is yours)_
+
+`test:frag:integration` was **permanently red** — 236 passed / 307 failed / exit 1
+— because it swept the whole 580-file `reference/Examples` tree. A guard that has
+never been green cannot distinguish a regression from its own baseline, so it was
+narrowed to the curated matrix and is now green.
+
+**Narrowing a red guard to make it green is how coverage silently dies**, so a
+verifier was pointed at it as a hostile question. It re-ran the sweep, bucketed
+all 307 failures, and **re-read every failing file from disk**. The result
+corrected the auditor's framing:
+
+- **289 of 307 are by-design rejections** — Fragmentarium raytracer headers,
+  `Progressive2D` 2D shaders, DE-less brute-raytracer files. Fine to drop.
+- **18 are standalone 3D fractals with a real `float DE(vec3)` body** that die on
+  GLSL parse errors. Unsupported `samplerCube`/texture uniform syntax
+  (`Burningbulb.frag`, `SkyboxTest.frag`, `TriPlanarTexturing.frag`), **two parser
+  null-derefs** (`Benesi/MengersmoothPolyhedra.frag`, `Kashaders/…/Simple_Kleinian-Slow-DE-02----l.frag`),
+  and a cluster of Knighty / Kashaders / neozhaoliang algebraic and Kleinian
+  formulas. ~5 more are probable.
+
+That is a **genuine importer gap in the parser, not a scope question**. Every one
+was already red before the change, so nothing regressed — the verdict was keep —
+but the commit message and the rule doc now state the 289/18 split and tell
+readers to run `npm run test:frag:integration:discover` by hand.
+
+**Worth knowing:** two of those 18 (`MengersmoothPolyhedra`, `Simple_Kleinian…`)
+are the *same files* that hit the queued V3-detector dead-end from cycle 6. They
+fail in both pipelines for the same underlying reason — the parser, not the
+detector.
+
+---
+
+## MEDIUM — The Fragmentarium catalog has drifted 17% in three months
+
+_(cycle 10 · `public/formulas/v3-v4-catalog.json`, generated 2026-04-18)_
+
+Re-running both pipelines over all 511 manifest entries: **87 rows (17%) disagree
+with today's behaviour** in at least one column.
+
+- **2 are hard-stale** — catalog says `pass`, pipeline hard-errors today.
+  `Experimental/Knot.frag` → `provides_color` (deferred from V4);
+  `kosalos/KIFS.frag` → `no_de_function`. Both confirmed by hand by a second
+  agent, error *kinds* matching.
+- **105 are soft** — catalog not-`pass`, parses today. Candidates only: parse
+  success does not imply GPU render success, and the catalog was built from honest
+  GPU snapshots.
+- **21 shipped formulas are hidden behind the show-broken toggle** on
+  `recommended: 'none'` rows, and **all 21 parse today**: `fractal_de44`,
+  `fractal_de113`, `fractal_de114`, `fractal_de245`, `snowflake`, `prisnm`,
+  `tokamak`, `rincut`, `torii`, `schwarz`, `rifs`, `swizz`, `swizz2`, `kalic`,
+  `spicy`, `blocktree`, `ballFlake`, `greenDragon`, `shreddissimo`, `ripplecube`,
+  `kaleidomecha`.
+- **34 rows the catalog routes to V4 now parse under V3**, so auto mode imports
+  them standalone — no weaving, no hybrid fold, no burning ship.
+
+The `@invariant` on `getRecommendedPipeline` **predicted exactly this** and is
+accurate. It was a warning nobody acted on for three months; this quantifies it.
+
+**Options:** (1) regenerate the catalog — correct, but `catalog:build` was
+stripped in `77f6d66a` and it needs real-GPU snapshots; (2) keep the GPU-derived
+`pass` data but recompute the *parse gate* in Node and demote rows the parse
+contradicts — fixes the 2 hard rows with no GPU run; (3) change the picker so
+`recommended: 'none'` greys out rather than hides; (4) add a
+`test:frag:catalog-drift` guard that fails when the hard-stale count exceeds 0.
+
+**Recommendation: (4) now** — cheap, purely additive, turns a three-month silent
+drift into a visible signal — **plus (3)**, since hiding 21 shipped formulas on
+three-month-old data is the actual user harm. Reserve (1) for the next time a GPU
+box is free. A reusable probe is at the gitignored
+`debug/_g12-catalog-drift.mts` (`--list` dumps the ids); promote it to
+`debug/check-catalog-drift.mts` if you take (4).
+
+**Also measured, so you can size the cycle-6 dead-end:** exactly **3 of 511**
+library entries have V3 detect failing today, all 3 catalog-recommended V4 or
+none, so all 3 hit the silent dead-end in auto mode. Forcing the toggle to V4 adds
+none. That bounds it.
+
+---
+
+## LOW — `test:frag:scan` is a report wearing a test's name
+
+_(cycle 10 · `debug/scan-frag-parse.mts`)_
+
+No `process.exit`, no `throw`, no assertion. It prints 124 failure lines and exits
+0, unconditionally. It is nonetheless named `test:*` and **cycle 6 cited it as a
+passing guard for a Tier A finding** — that finding should be read as having no
+guard.
+
+This is the **tenth** instance of the miscited-guard pattern this run, and a
+stricter variant: not merely scoped wrong, but structurally incapable of failing.
+
+**Options:** (1) rename it `report:frag:scan`; (2) add a checked-in baseline of
+its three counts and exit 1 when any worsens; (3) leave it and add a
+`REPORT ONLY — always exits 0, never cite as a guard` banner.
+
+**Recommendation: (1) plus (3).** Renaming is the honest fix; the banner covers
+the interim. Not applied because renaming an npm script touches every doc and
+result file naming it — a cross-file rename is your call, not a mid-run edit. The
+rule doc now carries the warning either way. Option (2) pairs naturally with the
+catalog-drift guard above.
+
+---
+
+## The manifest sweep came back clean — worth saying plainly
+
+_(cycle 10 · `engine-gmt/panels.ts`)_
+
+A full integrity sweep resolved every string reference in the GMT panel manifest
+against the live registries: **7 component ids, 11 widget/headerWidget ids, 49
+feature ids, 35 param references, 40 group references, and every dotted `showIf` /
+`activePredicate` path**. All resolve except the one reflections `groupFilter`
+above. `getPanelManifest()` ids and `store.panels` keys match 13/13, so
+`applyPanelManifest`'s merge does what its JSDoc claims.
+
+For a declarative surface this size with no type safety on any of those strings,
+one dangling reference is a good result. Recording it so a future cycle doesn't
+re-derive it.
+
+**One false positive recorded to save the next reader:** `{ feature: 'navigation',
+groupFilter: 'controls' }` looks dead — no navigation *param* has that group — but
+is correct. `AutoFeaturePanel` filters `customUI` entries by group too, and
+navigation declares `customUI: [{ componentId: 'navigation-controls', group:
+'controls' }]`. Any future validator **must union param groups with customUI
+groups** or it will emit false positives.
+
+---
+
+## ADR correction — cycle 10 (paste-ready)
+
+### ADR-0006 — states the wrong registry-freeze mechanism
+
+Insert directly under the `# ADR-0006: registerFeatures as a side-effect import`
+heading:
+
+> **Update 2026-07-28 (freeze trigger corrected; decision unchanged):** The
+> Decision section below says subsequent imports "trigger store construction,
+> which freezes the registry". That is not the mechanism. `store/engineStore.ts`
+> keeps the store lazy — `let _store: EngineStore | null = null` behind
+> `ensureStore()` — and `createFeatureSlice` (the only caller of
+> `featureRegistry.freeze()`) is reachable solely from `storeFactory` →
+> `_makeStore()` → `ensureStore()`. So the freeze fires on the first store
+> ACCESS (hook call / `getState` / `setState` / `subscribe`), not on module
+> load. Importing `engineStore` is harmless: `app-gmt/registerFeatures.ts`
+> imports it itself, hoisted above its own `registerGmtFeatures()` call, and
+> app-gmt boots clean — if the documented mechanism were real, every boot would
+> throw. Correspondingly, the first Consequences bullet describes the wrong
+> failure: a direct `registerGmtFeatures()` call below the imports would not
+> freeze the registry empty — it would run after some other module's first store
+> access and throw `FeatureRegistryFrozenError` in dev (warn-and-no-op in prod).
+> The decision — register via a side-effect import at the top of `main.tsx` — is
+> unchanged and still correct: it is the only ordering that guarantees
+> registration precedes any first access.
+
+---
+
+## Housekeeping surfaced in cycle 10
+
+- **There is no `app-gmt/panels.ts`** — app-gmt's manifest *is*
+  `engine-gmt/panels.ts`. Worth knowing before someone goes looking.
+- **6 of 13 panels use the `component:` escape hatch** (graph, audio, drawing,
+  shader-compiler, feedback, cameramanager) — one *more* than the "five escape
+  hatches become five forks" figure the documented anti-pattern warns about. Each
+  is individually justified in an adjacent comment, so no finding was filed, but
+  the `items:`-is-universal invariant reads as if this weren't so.
+- **Graph is `order: 1`** while every other panel is 10/20/30…, which is why it
+  wins `pickActive`'s lowest-order fallback and boots as `activeLeftTab` even
+  though its `showIf` is false on a default Mandelbulb boot. Harmless today
+  because `Dock` clamps `activeTabId` to a visible panel; a trap if that clamp
+  goes.
+- **`test:frag:integration:discover` is referenced nowhere outside
+  `package.json`.** The rule doc now names it, but nothing runs it. If the 18
+  parser failures matter, that needs to change.
+- **The registered matrix ships with one live GLSL issue** — `RecFold: undeclared
+  identifier "OrbitStrength"`. Warnings don't affect the exit code.
+- **`public/formulas/frag/` holds 200 `.frag` files but `manifest.json` lists
+  196**, so 4 shipped frags are unreachable from the browser:
+  `Claude/Mandelbulb.frag`, `Claude/Quaternion.frag`, and two neozhaoliang
+  Hyperbolic-Honeycombs files.
+- **The ErrorBoundary from cycle 9 has a catch.** The natural home is around
+  `<AppGmt />` at the bottom of `main.tsx` — but `loadScene({ preset: bootPreset })`
+  runs on the line *above* that render, so a boundary wrapping `<AppGmt />` would
+  **not** catch a throw from a bad legacy preset. That pre-mount throw needs its
+  own try/catch. Know this before assuming one wrapper covers it.
+- **Nothing under `app-gmt/` adds to cycle 5's stub-capture blast radius** —
+  checked specifically. Every app-gmt `getProxy` import resolves to the *real*
+  engine-gmt proxy (a lazy singleton with no `setProxy`, so capture is safe), and
+  `main.tsx`'s only module-scope call sits after `installGmtRenderer()` anyway.

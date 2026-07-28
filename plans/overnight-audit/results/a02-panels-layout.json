@@ -1,0 +1,42 @@
+{
+  "id": "a02-panels-layout",
+  "cycle": 10,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "a02-panels-layout" },
+    { "script": "npm run smoke:engine-gmt", "pass": true, "subsystem": "a02-panels-layout" }
+  ],
+  "findings": [
+    {
+      "tier": "B",
+      "severity": "high",
+      "file": "engine-gmt/panels.ts",
+      "line": 337,
+      "summary": "The Shader panel's Reflections entry (groupFilter: 'shading') matches zero params so it renders no controls — and because every reflections param sits in engine_settings, whose only manifest home is the default-hidden Shader Compiler panel, reflection settings have no default-visible surface anywhere in the app.",
+      "rationale": "See PROPOSALS.md for the four options and the recommendation. Observed in-browser, not inferred.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine-gmt/panels.ts",
+      "line": 27,
+      "summary": "The file-level @invariant quoted label: 'View Manager' but the code has read 'View Camera Manager' since a deliberate 2026-05-31 rename, and the reflections dead-end carried no @bug marker.",
+      "change": "Corrected the @invariant to quote the real label and recorded why the serialized id diverges (renamed in 8d6d11d0 'Naming clarity'; the id stayed because saved scenes carry it and it is the panelId cameraSlice.ts:495 and main.tsx:477 pass to togglePanel). Added a @bug PRODUCTION: block above the reflections item recording the dead groupFilter, the AutoFeaturePanel filter line that causes it, the in-browser observation, and the default-hidden fallback panel.",
+      "verification": "grep for 'View Camera Manager' returns the live definition at line 560 while the annotation quoted 'View Manager'; git show 8d6d11d0 shows the exact -/+ hunk with the commit body headed 'Naming clarity'. The reflections claim rests on AutoFeaturePanel.tsx:669-671 plus the DOM dump. typecheck and smoke:engine-gmt both green — the right guard to name for a panels.ts edit since engine-gmt/panels.ts is in app-gmt.html's import graph and the manifest is applied during that boot, so a malformed edit surfaces as a parse error or pageerror. Stated plainly: it would NOT catch a wrong comment, which is why the drift itself is proven by grep plus git.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "162e7f0d"
+    },
+    {
+      "tier": "V",
+      "severity": "medium",
+      "file": "engine/PanelManifest.ts",
+      "line": 383,
+      "summary": "The documented coverage gap — no guard mounts a manifest-composed panel and asserts its structure — is cheaply closable: a manifest-integrity sweep resolving every component/widget/feature/param/group reference against the live registries catches the whole dangling-reference class in one pass, and would have caught the reflections dead-end.",
+      "verificationRequest": "NOT APPLIED, deliberately, and the reason is itself the finding: the guard would go RED on day one because of the reflections dead-end above. Shipping a permanently-red guard is precisely the failure mode cycles 1-10 kept finding — so it must land AFTER the Tier B decision, not before. A working implementation is left at the gitignored debug/_a02-sweep.mts. CRITICAL GOTCHA for whoever picks it up: under the vite dev server, `await import('/engine/FeatureSystem.ts')` from inside page.evaluate returns a FRESH, EMPTY module instance — featureRegistry.getAll().length === 0 — and every feature id then reports missing (this produced 49 false positives before it was caught). Importing the SAME singleton via '/engine-gmt/engine/FeatureSystem.ts' (a pure re-export shim) returns the live registry with 31 features. A production build, or importing in-node with the vite alias resolver, avoids the hazard entirely and is the better long-term shape.",
+      "rationale": "Second requirement before building it: a validator MUST union param groups with customUI groups or it emits false positives — see the navigation/'controls' case in notes."
+    }
+  ],
+  "notes": "MANIFEST INTEGRITY SWEEP — the headline result, and it is mostly a clean bill. Method: booted app-gmt.html against the dev server with playwright, pulled the LIVE getPanelManifest(), componentRegistry and featureRegistry out of the page, and walked every panel recursively including collapsible.items, accordion.sections[].items and the features:/widgets: shorthand paths. Note there is no app-gmt/panels.ts — app-gmt's manifest IS engine-gmt/panels.ts, the same file cycle 7 swept, but swept deeper: cycle 7 covered the ~15 component/widget refs, this pass added feature ids, groups and param names.\n\nCOVERAGE: 13 panels. 7 component: refs, 11 widget/headerWidget refs, 49 feature refs, 40 group refs, 35 param refs (whitelistParams / excludeParams / liftChildrenOf / labelOverrides keys / compileParam / runtimeToggleParam / compileSettingsParams).\n\nRESULTS: all 7 component ids resolve (43 registered). All 11 widget and headerWidget ids resolve. All 49 feature ids resolve (31 registered). All 35 param references name real params on the named feature. Every dotted showIf / activePredicate path resolves against the live store (0 bad). getPanelManifest() ids and store.panels keys match exactly 13/13, so applyPanelManifest's merge does what its JSDoc claims. 0 pageerrors throughout. ONE of 40 group references is dangling: the reflections entry. That is a genuinely reassuring result for a declarative surface this size.\n\nONE FALSE POSITIVE RECORDED so the next auditor does not re-report it: { feature: 'navigation', groupFilter: 'controls' } looks dead (no navigation PARAM has group 'controls') but is CORRECT — AutoFeaturePanel filters customUI entries by group too (lines 594, 723) and navigation.ts:16 declares customUI: [{ componentId: 'navigation-controls', group: 'controls' }]. A groupFilter may legitimately match customUI only.\n\nOTHER @INVARIANTS on panels.ts: 'Dock sorts by order within a dock' — TRUE (Dock.tsx ends its filter chain with .sort by order). 'order is logical (10/20/30) with deliberate gaps' — MOSTLY true; the exception is Graph at order 1. Too small for a finding but it is why Graph wins pickActive's lowest-order fallback and boots as activeLeftTab even though its showIf (formula === 'Modular') is false on a default Mandelbulb boot — harmless today because Dock clamps activeTabId to a visible panel, latent if that clamp is ever removed. 'items: [...] is used everywhere — GMT does not use the features: shorthand' — the features: half is TRUE (zero uses), but 6 of 13 panels use the component: escape hatch (panel-graph, panel-audio, panel-drawing, panel-shader-compiler, panel-feedback, panel-cameramanager), one MORE than the 'five escape hatches become five forks' figure the anti-pattern warns about. Each is individually justified in an adjacent comment, so no finding was filed — but the invariant's wording reads as if items is universal and it is not.\n\nCYCLE-5 RULE CLAIMS ABOUT THE MANIFEST (the half cycle 5 did not deeply verify): all six ADR citations in .claude/rules/ui-and-panels.md resolve to files whose names match what the rule says they are (0007, 0013, 0014, 0021, 0032, 0057). docs/policy/shared-ui-coupling-rules.md exists. The componentRegistry ComponentType<any> claim is confirmed in source. The rule's coverage-gap paragraph is accurate and was confirmed independently. The rule's 'layout lives in the manifest' invariant holds for the 7 items: panels and is contradicted by the 6 component: panels.\n\nWHAT WAS NOT REACHED: ViewportFrame — both @invariants were read (sole canvasPixelSize writer; fixed-mode boxSizing content-box) but NEITHER was falsified, and it was not confirmed that smoke:viewport-fixed's ENGINE_URL default points at an entry that mounts ViewportFrame. engine-gmt/topbar.tsx (~8.2k tokens) and engine-gmt/topbar/* untouched; the cycle-3 global-id slot-registry handoff was taken as given. engine-gmt/index.ts and storeTypes.ts untouched. fluid-toy and fractal-toy manifests NOT swept — the harness is generic and only needs a different ENGINE_URL, so this is a cheap follow-up. No guard was falsified this cycle in this subsystem; the browser probes were observational only, so nothing needed reverting."
+}

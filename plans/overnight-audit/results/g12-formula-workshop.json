@@ -1,0 +1,59 @@
+{
+  "id": "g12-formula-workshop",
+  "cycle": 10,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g12-formula-workshop" },
+    { "script": "npm run test:frag", "pass": true, "subsystem": "g12-formula-workshop" },
+    { "script": "npm run test:frag:integration", "pass": true, "subsystem": "g12-formula-workshop" },
+    { "script": "npm run test:compat", "pass": true, "subsystem": "g12-formula-workshop" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-frag-importer.mts",
+      "line": 299,
+      "summary": "npm run test:frag counted failures and printed them but never set a non-zero exit code — a dead guard wearing a test:* name, cited in .claude/rules/scene-and-formula-format.md and used by prior audit cycles as proof of correctness.",
+      "change": "Added process.exit(failed > 0 ? 1 : 0) after the summary block, with a comment recording that glslIssues deliberately stays advisory rather than gating.",
+      "verification": "Falsification, both directions. Baseline 60 passed / 0 failed / exit 0. Injected failed++ before the summary: output read '60 passed 1 failed' and the exit code was still 0 — proving the guard asserted nothing. Applied the fix with the injection still present: exit 1. Removed the injection: 60 passed / exit 0. typecheck green.",
+      "guard": "npm run test:frag",
+      "guardPass": true,
+      "commit": "3e1ed847"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "package.json",
+      "line": 87,
+      "summary": "npm run test:frag:integration was permanently red — 236 passed / 307 failed / exit 1 — from two independent causes: the script hardcoded --discover over the whole 580-file reference/Examples tree, and four known-not-importable formulas were registered as ordinary tests.",
+      "change": "Dropped --discover from test:frag:integration (now the curated matrix, 64 passed / 1 warn / 0 failed); preserved the sweep as test:frag:integration:discover; added an expectFail field and set it on the four no-DE entries so rejecting them scores as a pass and accepting one scores as a failure. Documented the cost in .claude/rules/scene-and-formula-format.md.",
+      "verification": "Falsification both directions plus an independent verifier pass. Exit wiring was already proven live by two red runs. After the fix, exit 0. To prove expectFail cannot mask a regression, marking the passing Mandelbox entry expectFail turned the guard red with 'expected rejection ... but the importer accepted it'; reverting the flag returned it to green. The VERIFIER then re-ran the 307-failure sweep itself and reproduced the numbers exactly, so the narrowing is characterised by measurement rather than by assertion — see notes.",
+      "guard": "npm run test:frag:integration",
+      "guardPass": true,
+      "commit": "fb866b0d"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "engine-gmt/features/fragmentarium_import/formula-library.ts",
+      "line": 270,
+      "summary": "The frozen public/formulas/v3-v4-catalog.json (generated 2026-04-18) disagrees with the pipelines' behaviour today on 87 of 511 library entries; 2 rows are provably wrong and 21 shipped formulas are hidden behind the show-broken toggle on the strength of stale data.",
+      "rationale": "See PROPOSALS.md. Spot-checked by an independent verifier, which confirmed both hard-stale rows by hand (Experimental/Knot.frag now errors provides_color; kosalos/KIFS.frag now errors no_de_function — both error KINDS matching), enumerated all 21 hidden ids and confirmed every one parses today, and confirmed the picker filter at FormulaWorkshop.tsx:450 and :511. It judged the probe's methodology sound, specifically its asymmetry: only the catalog-says-pass-but-errors-now direction is called 'hard', the reverse is 'candidate'. One correction: the 21 are hidden BY DEFAULT, not unreachable — a showIncompatible toggle reveals them.",
+      "guard": "npm run test:frag:integration",
+      "guardPass": true
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "debug/scan-frag-parse.mts",
+      "line": 102,
+      "summary": "npm run test:frag:scan is a report, not a test — no process.exit, no throw, no assertion, so it exits 0 while printing 124 failure lines — yet it is named test:* and was cited by cycle 6 as a passing guard for a Tier A finding.",
+      "change": "Documented in .claude/rules/scene-and-formula-format.md as part of the guard-block rewrite ('a report, not a guard ... do not cite it as passing evidence'). The rename itself is queued.",
+      "rationale": "See PROPOSALS.md. TENTH instance of the miscited-guard pattern this run, and a stricter variant: not merely scoped wrong but structurally incapable of failing. The cycle-6 g03 result that lists guard: test:frag:scan / guardPass: true should be read as having no guard.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "fb866b0d"
+    }
+  ],
+  "notes": "VERIFIER OUTCOME — the reason this subsystem's headline is trustworthy. The auditor made a red guard green partly by REDUCING ITS SCOPE, which is exactly how coverage silently dies, so it was sent to an independent verifier framed as a hostile question: did dropping --discover hide real failures? Verdict CONFIRMED_WITH_CORRECTIONS, and the correction is material. The verifier re-ran the sweep itself (581 total / 236 passed / 38 warned / 307 failed, reproducing the numbers exactly), bucketed all 307 by error string, then RE-READ EVERY FAILING FILE FROM DISK and classified by whether it defines float DE(vec3). Result: 289 of 307 are by-design rejections (Fragmentarium raytracer headers, Progressive2D 2D shaders, DE-less brute-raytracer files) — but 18 are standalone 3D fractals with a real DE body failing on GLSL parse errors: unsupported samplerCube/texture uniform syntax (Burningbulb.frag, SkyboxTest.frag, TriPlanarTexturing.frag), plus parser null-derefs on Benesi/MengersmoothPolyhedra.frag and Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02----l.frag, and a cluster of Knighty/Kashaders/neozhaoliang algebraic and Kleinian formulas. ~5 more are probable (the eiffieGI2 family, Tutorials/24). So 'mostly non-importable by design' was NOT an honest characterisation. The verdict was still KEEP — every one of the 18 was already red before the change, so nothing regressed — but the commit message and the rule doc now state the 289/18 split explicitly and tell readers to run the :discover sweep by hand. That is a genuine importer gap nothing gates on.\n\nFOUR MORE VERIFIER CORRECTIONS, all applied: (1) RotJulia is NOT 2D — it is a Mandelbulb variant whose only entry point is bool inside(vec3) under Brute-Raytracer, i.e. no distance estimator rather than no third dimension. The comment and the failure string were both fixed; note debug/test-frag-importer.mts inherits the same mislabel, so this is pre-existing wording being corrected rather than invented. The other three expectFail entries were each verified genuinely 2D by reading their sources (#include Progressive2D.frag, entry point vec3 color(vec2 c)). (2) The green result is 64 passed + 1 WARNED, not 64/0/64 — the registered matrix ships with one live GLSL issue (RecFold: undeclared identifier OrbitStrength). (3) test:frag:integration:discover runs end-to-end but is referenced NOWHERE outside package.json, so 'coverage moved' was only defensible if the rule doc named it — which is why it now does. (4) The 21 catalog-hidden formulas are hidden by default, not unreachable.\n\nVERIFIER FALSIFICATION OF THE expectFail BRANCH, independent of the auditor's: marked the normally-passing Tetrahedron entry expectFail and got '1 passed 1 failed' with the unexpected-acceptance message and exit 1, then reverted and confirmed byte-identical to HEAD. It also traced the object identity — test() returns the same object it pushed into results, and the summary recomputes counters AFTER the loop — so the post-hoc mutation genuinely moves the exit code rather than only the printout. One sharp edge it recorded: status 'warn' also takes the else branch and scores as fail, which is correct but means an expectFail entry can never be 'warn'.\n\nCATALOG DRIFT, measured: 87 of 511 rows (17%) disagree with today's pipelines in at least one column. 2 hard (catalog pass, hard error today). 105 soft (catalog not-pass, parses today; v3=54, v4=51) — candidates only, since parse success does not imply GPU render success and the catalog was built from honest GPU snapshots. 34 rows the catalog routes to V4 now parse under V3, so auto mode imports them standalone with no weaving or hybrid fold. The @invariant on getRecommendedPipeline is ACCURATE — it predicts exactly this drift. It was a warning nobody acted on for three months; this quantifies it.\n\nBLAST RADIUS OF THE QUEUED CYCLE-6 DEAD-END, measured so severity can be set: exactly 3 of 511 library entries have V3 detect failing today (Benesi/MengersmoothPolyhedra.frag, Kashaders Simple_Kleinian-Slow-DE-02----l.frag, fractal_de44), all 3 catalog-recommended V4 or none, so all 3 hit the silent dead-end in auto mode. Forcing the toggle to V4 adds none. Consistent with cycle 6's 'two shipped library formulas' and bounds the bug at 3.\n\nCOVERAGE — WHAT WAS NOT OPENED. This is a ~48-file subsystem and two slices were taken deep. Read: scan-frag-parse.mts, test-frag-importer.mts, test-frag-integration.mts (harness/matrix/runner, not the 550-line GLSL validation body), formula-library.ts, and only ~130 lines of FormulaWorkshop.tsx. NOT OPENED AT ALL: v3/analyze/**, v3/generate/**, v4/analyze/**, v4/ingest/**, v4/preprocess/**, v4/emit/** (sanitizeId located by grep, body never read), parsers/** (angle-detection, builtins, dec-detector, dec-preprocessor, preprocessor, uniform-annotation), transform/**, workshop/param-builder.ts, workshop/variable-detector.ts, import-capabilities.ts, passing-formulas.ts, random-formulas.ts, pickFragFile.ts, types.ts. No @invariant in the emit/analyze core was verified beyond getRecommendedPipeline. The importSource lifecycle was not audited at all.\n\nINCIDENTAL: public/formulas/frag/ holds 200 .frag files but manifest.json lists 196, so 4 shipped frags are unreachable from the browser — Claude/Mandelbulb.frag, Claude/Quaternion.frag, and two neozhaoliang Hyperbolic-Honeycombs files. Not chased. Also public/formulas/v3-v4-catalog.json and debug/v3-v4-catalog.json have different shapes (only the public one has byId); whether the debug copy is live was not investigated.\n\nREUSABLE ARTIFACT: the drift probe is at the gitignored debug/_g12-catalog-drift.mts (run with --list to dump stale ids). Worth promoting to debug/check-catalog-drift.mts if the guard option is taken."
+}

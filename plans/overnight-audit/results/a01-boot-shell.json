@@ -1,0 +1,51 @@
+{
+  "id": "a01-boot-shell",
+  "cycle": 10,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "a01-boot-shell" },
+    { "script": "npm run smoke:engine-gmt", "pass": true, "subsystem": "a01-boot-shell" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "app-gmt/registerFeatures.ts",
+      "line": 5,
+      "summary": "The boot shell's two registry-freeze comments state a mechanism that is provably false — they say importing store/engineStore freezes the feature registry, when the freeze is triggered only by the first store ACCESS. registerFeatures.ts imports engineStore itself, hoisted above its own registration calls, so if the documented mechanism were true app-gmt could not boot at all.",
+      "change": "Rewrote the header JSDoc on registerFeatures.ts with an @invariant naming the real trigger and the exact chain ensureStore() -> _makeStore() -> storeFactory -> createFeatureSlice -> featureRegistry.freeze(), and rewrote the matching comment above `import './registerFeatures'` in main.tsx. Both now cite ADR-0006 via @see. No code changed. Also removed four dead imports from main.tsx — topbar, viewport, gmtRenderer and installPauseControls, the last of which existed solely so a comment 80 lines later could say it is intentionally never called.",
+      "verification": "Falsified against the running dev server. engine/FeatureSystem.ts:549 makes featureRegistry.register() on a frozen registry THROW in dev. smoke:engine-gmt boots app-gmt.html with DEV=true and gates on zero pageerrors — so if importing engineStore froze the registry, the first registration would throw at module eval and the smoke would fail. It reports errors (0) and asserts isBooted + hasCompiledShader + frameCount > 0 + all 26 DDFS slices, which proves registration completed unfrozen. Proved statically too: createFeatureSlice is spread only inside storeFactory, storeFactory is passed only to _makeStore(), _makeStore() is called only from ensureStore(). engineStore's own comment says the same thing in the opposite direction. For the dead imports, typecheck is the discriminating guard — tsc resolves every identifier, so removing one that was in fact used fails the build; and grep confirmed PauseControls is still registered by engine-gmt/topbar.tsx, so no side-effect import was lost.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "00bc032b"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/app-boot.md",
+      "line": 33,
+      "summary": "The rule that auto-loads for app-gmt/main.tsx and engine-gmt/renderer/** cited npm run smoke:interact as a guard, but that smoke targets demo.html -> index.tsx, whose import graph contains no file the rule governs — and it omitted smoke:engine-gmt, the only guard that actually asserts app-gmt's boot chain.",
+      "change": "Replaced the Guards block: smoke:engine-gmt first with what it asserts, smoke:boot second annotated that it only gates on page/console errors, plus an explicit note that smoke:interact targets the demo shell and cannot fail on a change to this rule's paths.",
+      "verification": "Grep-proved dead, then the replacement proved live. smoke-interact.mts:9 defaults to localhost:3400/demo.html; demo.html:69 loads /index.tsx; grep for app-gmt|engine-gmt in index.tsx returns nothing. smoke-engine-gmt.mts:19 defaults to app-gmt.html which loads /app-gmt/main.tsx, and it was run and passed. NOTE — the brief's own premise that smoke:boot points at the engine demo was checked and is now STALE: index.html at the repo root loads /app-gmt/main.tsx ('Canonical root = the GMT app'), so smoke:boot does cover app-gmt and was retained rather than dropped.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "df6d52fb"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "docs/adr/0006-registerfeatures-as-side-effect-import.md",
+      "line": 20,
+      "summary": "ADR-0006 encodes the same false freeze mechanism the source comments carried, and its Consequences paragraph describes the wrong failure mode for a hypothetical refactor.",
+      "rationale": "See PROPOSALS.md for the paste-ready Update block. The decision — register via a side-effect import at the top of main.tsx — is unchanged and still correct; only the mechanism prose is wrong."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "app-gmt/tutorial/lessons.ts",
+      "line": 17,
+      "summary": "The @invariant on seedMandelbulb ends with a bare pointer 'Followup q-011' to a worklist scheme retired in the 2026-07-13 docs reorg, leaving an unresolvable reference inside a load-bearing annotation.",
+      "rationale": "The invariant body itself is CORRECT and was verified: seedMandelbulb reads registry, populated by the eager top-level statements in engine-gmt/formulas/index, pulled in by registerFeatures.ts:92, and `import './registerFeatures'` is main.tsx's FIRST import — so the whole formula subtree evaluates before lessons.ts is reached at line 82. Only the trailing pointer is stale. Deciding whether an audit follow-up id is closed or merely orphaned is an owner call and no guard distinguishes the two, which is why this was not silently erased. Options: delete the sentence, or convert to @stale <what q-011 asked> if the question is still open."
+    }
+  ],
+  "notes": "@INVARIANTS VERIFIED (6 sites, all app-gmt/): registerFeatures.ts header and main.tsx:12-16 — both FALSE as written, corrected (finding 1). LoadingScreen.tsx:139 hasBootedRef one-way latch — HOLDS; triggerBoot guards on !hasBootedRef.current and the two forced-reboot paths both gate on it, and no path clears it. LoadingScreen.tsx:211 fade-on-isReady plus grace window — HOLDS, matches the guard expression exactly. AppGmt.tsx:218 setSceneOffset delegates to the store action — HOLDS, the body is a single delegation with no inline cameraSlice mutation. lessons.ts:14 seedMandelbulb registry-populated-first — HOLDS (chain traced); only its worklist pointer is stale.\n\nMODULE-SCOPE SIDE-EFFECT INVENTORY, and a NEGATIVE RESULT worth recording. Two distinct WorkerProxy modules exist and the distinction decides whether a capture is a bug. engine/worker/WorkerProxy.ts is the engine-core STUB and HAS setProxy (called from installGmtRenderer), so a module-scope `const engine = getProxy()` against it is cycle 5's bug — the full list is store/engineStore.ts:28-29, store/slices/historySlice.ts:42, components/HistogramProbe.tsx:3, components/PerformanceMonitor.tsx:5, already recorded and untouched. engine-gmt/engine/worker/WorkerProxy.ts is the REAL proxy: its getProxy() is a lazy singleton with NO setProxy, so it is never swapped and module-scope capture is SAFE — the ~20 sites across engine-gmt/** resolve here. NOTHING UNDER app-gmt/ ADDS TO CYCLE 5'S BLAST RADIUS: every app-gmt getProxy import resolves to the real proxy, and main.tsx's only module-scope call (window.__gmtProxy = getProxy()) sits AFTER installGmtRenderer() anyway. This auditor looked specifically for a second capture of that shape and did not find one.\n\nOther module-scope side effects in main.tsx, all order-correct: registerUI -> registerGmtUi -> applyPanelManifest (the stated contract holds, lines 130/136/~668); installGmtCameraSlice at ~156, cycle 4's contract, still unguarded at runtime; the two pre-boot FractalEvents listeners (TEXTURE, REGISTER_FORMULA) registered before any loadScene as their comments require; installCamera after the state-library bindings; registerGmtTopbar after installMenu + installCamera.\n\nGUARD CITATION CHECKED AND FOUND HEALTHY, no finding filed: main.tsx's comment claiming `priority: 10` on gmt.undoCameraMove is load-bearing and 'guarded by npm run smoke:undo' is GENUINE — smoke-undo.mts targets app-gmt.html and lines 210-272 assert both Ctrl+Shift+Z bindings exist and that the resolver winner is gmt.undoCameraMove, not redo.global.shift. Correct guard, correct claim.\n\nERRORBOUNDARY (cycle 9 handoff) — a concrete and non-obvious finding, left to the owner as instructed. The natural home is the ReactDOM.createRoot(...).render(<StrictMode><AppGmt /></StrictMode>) at the bottom of main.tsx, inside resolveBootPreset().then(). BUT loadScene({ preset: bootPreset }) runs on the line ABOVE that render — so a boundary wrapping <AppGmt /> would NOT catch a throw from a bad legacy preset. That pre-mount throw needs its own try/catch. Anyone implementing the boundary should know this before assuming one wrapper covers cycle 9's crash.\n\nWHAT WAS NOT REACHED: hooks/useAppStartup.ts and store/CompileProgressStore.ts — in this rule's paths and where the actual boot trigger lives (LoadingScreen -> useAppStartup.bootEngine); only their call sites were read, not their internals or their @invariants. This is the largest uncovered piece. AppGmt.tsx beyond one invariant (28 KB, not read end-to-end). app-gmt/migrations.ts and its two ADR citations (0079, 0106), assumed owned by another subsystem."
+}
