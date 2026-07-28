@@ -468,14 +468,26 @@ function _writeVec3Tree(w: VDBWriter, tree: Vec3VDBTree): void {
   }
 }
 
-/** Write grid transform (shared by scalar and vec3 grids). */
+/**
+ * Write grid transform (shared by scalar and vec3 grids).
+ *
+ * @invariant The translation row is `boundsMin + s/2`, NOT bare `boundsMin`.
+ *   OpenVDB's AffineMap maps index space to world, and voxel (i,j,k) occupies
+ *   index-space point (i,j,k) — so `indexToWorld(Coord(i,j,k))` returns that
+ *   voxel's CENTRE. The density value stored at index i was sampled by the GPU
+ *   at `boundsMin + (i + 0.5) * s` (`gpu-pipeline.ts` samples cell-centred:
+ *   `gl_FragCoord + uTileOffset === i + 0.5`, and Z via
+ *   `sampleOneZ((gz + 0.5) / N, …)`). Writing bare `boundsMin` therefore
+ *   announced every voxel half a voxel toward -X/-Y/-Z of where its data
+ *   actually came from. Pinned by `npm run test:mesh-grid`.
+ */
 function _writeTransform(w: VDBWriter, N: number, boundsMin: [number, number, number], boundsRange: number): void {
   const s = boundsRange / N;
   w.name('AffineMap');
   w.f64(s); w.f64(0); w.f64(0); w.f64(0);
   w.f64(0); w.f64(s); w.f64(0); w.f64(0);
   w.f64(0); w.f64(0); w.f64(s); w.f64(0);
-  w.f64(boundsMin[0]); w.f64(boundsMin[1]); w.f64(boundsMin[2]); w.f64(1);
+  w.f64(boundsMin[0] + 0.5 * s); w.f64(boundsMin[1] + 0.5 * s); w.f64(boundsMin[2] + 0.5 * s); w.f64(1);
 }
 
 /**
@@ -561,13 +573,9 @@ export function serializeVDB(
   _metaB(w, 'is_saved_as_half_float', true);
   _metaS(w, 'name', 'density');
 
-  // Transform
-  const s = boundsRange / N;
-  w.name('AffineMap');
-  w.f64(s); w.f64(0); w.f64(0); w.f64(0);
-  w.f64(0); w.f64(s); w.f64(0); w.f64(0);
-  w.f64(0); w.f64(0); w.f64(s); w.f64(0);
-  w.f64(boundsMin[0]); w.f64(boundsMin[1]); w.f64(boundsMin[2]); w.f64(1);
+  // Transform. Was a byte-identical copy of _writeTransform's body — which is
+  // exactly how one copy gets fixed and the other does not. Call the shared one.
+  _writeTransform(w, N, boundsMin, boundsRange);
 
   // Tree
   _writeTree(w, tree);
