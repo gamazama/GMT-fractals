@@ -3,10 +3,27 @@
  *
  * Singleton FractalRegistry mapping formula id → FractalDefinition.
  *
- * Registration is side-effectful at `engine-gmt/formulas/index.ts` module-import
- * time (42 formulas + 5 legacy aliases). Importers MUST import
- * `engine-gmt/formulas/index.ts` (directly or transitively) BEFORE calling
- * `registry.get` / `getAll` / `getIds`, or they will see an empty registry.
+ * There is NO single registration site. In boot order:
+ *  1. `engine-gmt/formulas/index.ts` registers one def per entry in its
+ *     `formulas` array (47 at time of writing) + 5 legacy aliases, as a
+ *     module-import side effect.
+ *  2. `registerBoxFoldFormulas()` (`engine-gmt/formulas/boxFolds.ts`, called
+ *     from `registerFeatures()`, NOT from the barrel) adds one `BoxFold*` def
+ *     per `FOLD_LIST` entry — 7 today.
+ *  3. Runtime registrations keep arriving after boot: Workshop V3/V4 import
+ *     (`features/fragmentarium_import/FormulaWorkshop.tsx`), pasted formula
+ *     (`components/panels/formula/loadPastedFormula.ts`), MB3D scene load
+ *     (`utils/mb3d/loadMB3DScene.ts`), weave migration
+ *     (`utils/weaveMigration.ts`), shared-scene open (`gallery/openSharedScene.ts`)
+ *     and the worker's `REGISTER_FORMULA` handler (`engine/worker/renderWorker.ts`).
+ *
+ * Do not hard-code a total here — `npm run test:compat` iterates the live
+ * registry and prints it ("structural checks: N formulas OK").
+ *
+ * Importers MUST import `engine-gmt/formulas/index.ts` (directly or
+ * transitively) BEFORE calling `registry.get` / `getAll` / `getIds`, or they
+ * will see an empty registry; node harnesses that need the BoxFold defs must
+ * also call `registerFeatures()` (or `registerBoxFoldFormulas()` directly).
  *
  * See ADR-0048 (FormulaType vs registry drift), ADR-0049 (two independent
  * registries: FractalRegistry + NodeRegistry).
@@ -78,10 +95,18 @@ class FractalRegistry {
 
     /**
      * @invariant Widens `Map.keys()` to `FormulaType[]` via cast — NO runtime
-     * check. The 5 alias IDs (`UberMenger`, `FoldingBrot`, `HyperTorus`,
-     * `HyperbolicMandelbrot`, `RhombicIcosahedron`) are registered but missing
-     * from the `FormulaType` union; the cast hides the drift. See ADR-0048
-     * and followup q-102.
+     * check, and the returned array routinely contains strings that are NOT
+     * members of `FormulaType`:
+     *  - the 5 alias IDs (`UberMenger`, `FoldingBrot`, `HyperTorus`,
+     *    `HyperbolicMandelbrot`, `RhombicIcosahedron`);
+     *  - the 7 `BoxFold*` IDs registered by `registerBoxFoldFormulas()`
+     *    (`BoxFoldStandard`, `BoxFoldMirror`, `BoxFoldKali`, `BoxFoldTetra`,
+     *    `BoxFoldOcta`, `BoxFoldIcosa`, `BoxFoldMenger`) — these are weave-slot
+     *    defs, deliberately absent from the user-facing union;
+     *  - every id registered at runtime (Workshop imports, `frag_workshop_preview`,
+     *    MB3D-loaded scenes, pasted formulas).
+     * The cast hides all of it. Callers that need only the built-in native
+     * formulas must filter, not trust the type. See ADR-0048 and followup q-102.
      */
     public getIds(): FormulaType[] {
         return Array.from(this.definitions.keys()) as FormulaType[];
