@@ -297,3 +297,9 @@ test('Mandelbox DualNumbers',    `${REF}/Theory/Mandelbox - Dual Numbers DE.frag
 console.log(`\n${'─'.repeat(60)}`);
 console.log(`  ${passed} passed  ${failed} failed  (${passed + failed} total)`);
 if (glslIssues > 0) console.log(`  ${glslIssues} GLSL issue${glslIssues > 1 ? 's' : ''} (⚡) — pipeline passed but generated code may not compile in GMT`);
+
+// Exit non-zero on any failure so `npm run test:frag` is a real gate. Without
+// this the script printed "N failed" and still exited 0, so CI / agents reading
+// only the exit code saw green. `glslIssues` stays advisory (⚡ = generated GLSL
+// may not compile in GMT) — it is a warning channel, not a pass/fail signal.
+process.exit(failed > 0 ? 1 : 0);
