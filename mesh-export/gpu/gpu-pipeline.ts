@@ -274,13 +274,13 @@ uniform vec2  uTileOffset;
 uniform vec3  uBoundsMin;
 // @bug PRODUCTION: scalar range applied to all three axes, so a NON-CUBIC export
 //   box silently produces anisotropic (stretched) geometry. Callers compute it as
-//   `gridMax[0] - gridMin[0]` — the X extent only — and the shader reuses it for
+//   'gridMax[0] - gridMin[0]' — the X extent only — and the shader reuses it for
 //   Y and Z below. Correct output requires a vec3.
 //
-//   NOT a one-line type change, which is why it is still here: `voxelSize` is
+//   NOT a one-line type change, which is why it is still here: 'voxelSize' is
 //   derived from this uniform and then used as a SCALAR in a dozen places —
-//   SDF magnitude (`sdf = -voxelSize * …`), contour thresholds
-//   (`absDist < voxelSize * 2`), the Newton solve's `uVoxelSize`. Making the
+//   SDF magnitude ('sdf = -voxelSize * …'), contour thresholds
+//   ('absDist < voxelSize * 2'), the Newton solve's 'uVoxelSize'. Making the
 //   uniform a vec3 makes voxelSize a vec3 and breaks all of them. There is also
 //   a real question underneath: with non-cubic voxels an SDF distance is still
 //   isotropic in world space, so the threshold needs a defensible scalar (min?
