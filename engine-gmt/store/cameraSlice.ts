@@ -37,6 +37,7 @@ import { registry } from '../engine/FractalRegistry';
 import { VirtualSpace } from '../engine/PrecisionMath';
 import { CameraUtils } from '../utils/CameraUtils';
 import { useEngineStore } from '../../store/engineStore';
+import { registerHistoryProvider } from '../../store/slices/historySlice';
 import { type StateSnapshot } from '../../engine/store/createStateLibrarySlice';
 import { installStateLibrary } from '../../engine/store/installStateLibrary';
 import { getDirectionName } from '../features/camera_manager/logic';
@@ -529,6 +530,55 @@ export const installGmtCameraSlice = (): void => {
             });
         },
     });
+
+    // Make the saved-cameras library ride the NORMAL param-undo stack.
+    //
+    // Deliberately NOT the camera-undo stack: that one is for camera NAVIGATION
+    // only (undoCamera/redoCamera below warp the pose). Adding or deleting a
+    // saved camera is a state edit like any other param, so it belongs in
+    // Ctrl+Z alongside them.
+    //
+    // createStateLibrarySlice deliberately owns no undo ("persistence and undo
+    // are deliberately app-side… apps wrap the actions if they need that
+    // behavior"), so the wiring lives here rather than in the generic slice.
+    // Same two-part shape the palette uses (palette/store/paramUndoBracket.ts):
+    // a registered provider supplies capture/restore, and a param transaction
+    // brackets the mutation so the end-of-transaction diff pushes one entry.
+    //
+    // @invariant Thumbnails ride along inside the snapshot. That is an accepted
+    //   cost, not an oversight — they are icon-sized data URLs and MAX_STACK is
+    //   50, so the worst case is bounded and small. Owner call 2026-07-28. If
+    //   thumbnails ever grow to full-size captures, revisit this before the
+    //   stack does.
+    registerHistoryProvider('savedCameras', {
+        capture: () => {
+            const s = get();
+            return { savedCameras: s.savedCameras ?? [], activeCameraId: s.activeCameraId ?? null };
+        },
+        restore: (snap: any) => {
+            if (!snap) return;
+            set({
+                savedCameras: snap.savedCameras ?? [],
+                activeCameraId: snap.activeCameraId ?? null,
+            });
+        },
+    });
+
+    // Bracket delete so one click = one undo entry. Without this the provider
+    // would still be snapshotted on OTHER transactions, but a delete on its own
+    // opens none, so there would be nothing to undo.
+    const beforeDelete = get();
+    const origDeleteCamera = beforeDelete.deleteCamera;
+    if (typeof origDeleteCamera === 'function') {
+        set({
+            deleteCamera: (id: string) => {
+                const st = get();
+                st.beginParamTransaction?.();
+                try { origDeleteCamera(id); }
+                finally { st.endParamTransaction?.(); }
+            },
+        });
+    }
 
     // Wrap engine-core's undoCamera / redoCamera so the R3F camera warps
     // to the restored pose after the diff applies. Engine-core's history
