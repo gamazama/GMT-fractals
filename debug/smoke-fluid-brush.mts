@@ -27,6 +27,19 @@ import { launchWebglTestPage, dragPath } from './helpers/webglHarness';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/fluid-toy.html';
 
+/**
+ * Minimum mean-brightness rise (0-255) that counts as "the brush painted".
+ *
+ * Not a nominal small number — it is calibrated against a measured
+ * regression. Removing only the `paintSplat` call from `emitStrokeSplat`
+ * (fluid-toy/brush/emitter.ts) leaves the pointer-down `emitPressSplat`
+ * mark alive, and that single blob plus advection scores Δ 5.2 — which a
+ * threshold of 5 waved through. Healthy runs score Δ 162-206 on both
+ * steps, so 40 sits ~4x under the observed floor and ~8x over the
+ * one-splat floor.
+ */
+const MIN_PAINT_DELTA = 40;
+
 // Mean brightness of a centred rect in the canvas. Sample via a 2d
 // scratch canvas so we avoid getImageData-on-WebGL issues.
 const meanBrightness = (page: any, rect: { x: number; y: number; w: number; h: number }) =>
@@ -112,7 +125,7 @@ async function main() {
     await dragPath(page, { x: cx - 40, y: cy, steps: 12, dx: 6, dy: 0, oscY: 10 });
     const b2 = await meanBrightness(page, sampleRect);
     console.log(`rainbow drag brightness: ${b1.toFixed(1)} → ${b2.toFixed(1)}  (Δ ${(b2 - b1).toFixed(1)})`);
-    if (b2 - b1 < 5) throw new Error(`rainbow drag produced no visible pixels (Δ = ${(b2 - b1).toFixed(2)})`);
+    if (b2 - b1 < MIN_PAINT_DELTA) throw new Error(`rainbow drag produced no visible pixels (Δ = ${(b2 - b1).toFixed(2)})`);
     console.log('✓ rainbow drag brightens the canvas');
 
     // ── 3. Particle emitter produces visible output ──────────────────
@@ -130,7 +143,7 @@ async function main() {
     await page.waitForTimeout(150);  // let particles paint a couple more frames post-release
     const b4 = await meanBrightness(page, sampleRect);
     console.log(`emitter drag brightness: ${b3.toFixed(1)} → ${b4.toFixed(1)}  (Δ ${(b4 - b3).toFixed(1)})`);
-    if (b4 - b3 < 5) throw new Error(`particle emitter painted nothing (Δ = ${(b4 - b3).toFixed(2)})`);
+    if (b4 - b3 < MIN_PAINT_DELTA) throw new Error(`particle emitter painted nothing (Δ = ${(b4 - b3).toFixed(2)})`);
     console.log('✓ particle emitter paints visibly');
 
     assertNoFatalErrors();
