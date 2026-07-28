@@ -262,13 +262,15 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
  * ship with empty `Shader_Function` / `Shader_Loop`; their GLSL is rebuilt
  * from the preset's pipeline at load time.
  *
- * @invariant `shaderMeta` is the survival path for non-GLSL shader fields:
- * `preambleVars` and `capabilities` are stashed/restored. A future field added
- * to the runtime shader object will be silently dropped on save unless added
- * to both the stash (generateGMF) and the restore paths — OR derivable from
- * the shader body (like the cp_* and g_difsDE auto-detects below, which
+ * @invariant `shaderMeta` is the survival path for non-GLSL shader fields.
+ * The complete stashed/restored set is `preambleVars`, `capabilities` and
+ * `derivedRotations` (the MB3D CPU-derived angle lanes) — keep this list in
+ * sync with the stash in `generateGMF` and the restore below. A future field
+ * added to the runtime shader object will be silently dropped on save unless
+ * added to both the stash (generateGMF) and the restore paths — OR derivable
+ * from the shader body (like the cp_* and g_difsDE auto-detects below, which
  * self-heal legacy files retroactively). Prefer a Capability token over a
- * new field.
+ * new field. Guarded by the "shaderMeta:" block in `npm run test:gmf`.
  *
  * @invariant This parse boundary is where the RETIRED legacy booleans
  * (`selfContainedSDE`, `usesSharedRotation`, `supportsCuttingPlane`) remain
@@ -390,9 +392,19 @@ export const parseGMF = (content: string): FractalDefinition => {
 /**
  * Detect whether a string is GMF format (vs plain JSON).
  *
- * @invariant Strict prefix check on `trimStart()` — content must start with
- * `'<!--'` or `'<Metadata>'`. A leading UTF-8 BOM or stray container tag
- * will misclassify as JSON. Used as the dispatch predicate by `loadGMFScene`.
+ * @invariant Strict prefix check on `trimStart()` — the first non-whitespace
+ * bytes must be `'<!--'` or `'<Metadata>'`, else the content is treated as
+ * JSON. A leading UTF-8 BOM is NOT a problem: ECMAScript `WhiteSpace`
+ * includes U+FEFF (`<ZWNBSP>`), so `trimStart()` eats it and a BOM-prefixed
+ * GMF still dispatches (and parses) correctly — pinned by `npm run test:gmf`.
+ * A stray leading container tag (e.g. an HTML wrapper) DOES misclassify.
+ * Used as the dispatch predicate by `loadGMFScene`.
+ *
+ * NOTE: engine-core's `parseSceneJson` (`utils/SceneFormat.ts`) sniffs
+ * `'<!--'` ONLY — it does not accept the bare `'<Metadata>'` opening this
+ * predicate allows. Apps that route loads through engine-core's default
+ * parser instead of a GMF-aware one will reject header-less GMF. app-gmt
+ * installs `loadGMFScene` as its `parseScene`, so it is unaffected.
  */
 export const isGMFFormat = (content: string): boolean => {
     const trimmed = content.trimStart();
