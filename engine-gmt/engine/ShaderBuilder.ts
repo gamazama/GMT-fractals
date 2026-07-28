@@ -21,8 +21,22 @@
 // 16. Post Processing    — addPostProcessLogic()  [inside applyPostProcessing(), fully feature-injected]
 // 17. Main Fragment      — addCompositeLogic()         [inside renderPixel(), after integrator]
 //
-// Physics variant: 1-10 only (simplified trace, no lighting/post)
-// Histogram variant: 1-10 + trace + ray (no lighting/material/post)
+// Physics variant:   1-9 + a simplified inline trace. Position 10 (post-DE
+//                    functions) is NOT emitted — nothing above 9 survives.
+// Histogram variant: 1-10 + trace + ray (no lighting/material/post).
+//
+// CAVEAT — the numbered list above is the MAIN variant's emit order verbatim.
+// The Physics and Histogram templates in buildFragment() emit addHeader() output
+// (position 3) AFTER Coloring (position 6) rather than before Math, so headers
+// and the Math/BlueNoise/Coloring chunks see each other in OPPOSITE orders
+// depending on variant: a header that references anything those chunks declare
+// compiles in Physics/Histogram but not Main, and a chunk-visible declaration
+// made in a header works in Main but not the other two. Today's sole addHeader
+// caller (engine-gmt/features/materials.ts → MAIN_HEADER, injected for every
+// non-Mesh variant) is preprocessor-only (#define uEnvStrength …), which is
+// order-independent, so the divergence is latent rather than live. Anything
+// richer than a #define added via addHeader must be checked against BOTH
+// orderings — or the three emit sites in buildFragment() aligned first.
 
 import { UNIFORMS } from '../shaders/chunks/uniforms';
 import { getMathGLSL, MESH_GLSL_UNIFORMS, GLSL_MATH_CONSTANTS, GLSL_SPHERE_FOLD, GLSL_BOX_FOLD, getSnoiseFunctions } from '../shaders/chunks/math';
@@ -175,6 +189,33 @@ export class ShaderBuilder {
         this.defines.set(name, value);
     }
 
+    /**
+     * @invariant Keyed on `name` alone and `Map.set` is last-wins — NOT
+     *   idempotent on `(name, type)`. Two features adding the same name with
+     *   different `type`/`arraySize` yield ONE declaration carrying whichever
+     *   was added last, silently. Deliberately weaker than the schema layer:
+     *   `UniformSchema` THROWS on a name collision at module load, but that
+     *   check only spans `BASE_SCHEMA` + `getUniformDefinitions()` — it cannot
+     *   see builder-time `addUniform` calls made from `inject()`. Mirrors
+     *   `engine/ShaderBuilder.ts`'s `addUniform`.
+     * @invariant GMT-SPECIFIC: this builder APPENDS to an already-complete
+     *   declaration block — `buildUniformsString()` starts from the static
+     *   `UNIFORMS` chunk (every non-`backingOnly` schema entry) and
+     *   `buildMeshSDFLibrary()` starts from `MESH_GLSL_UNIFORMS` plus its
+     *   hardcoded DE_MASTER stub list. Re-adding a name that block already
+     *   declares emits a DUPLICATE `uniform …;` line, which is a GLSL
+     *   redefinition error, not a silent overwrite. Engine-core cannot hit
+     *   this — its `buildUniformsBlock()` has no static prefix. The legitimate
+     *   uses are therefore exactly (a) the `backingOnly` pattern — R10 in
+     *   `docs/policy/uniform-plugin-contract.md`, worked example
+     *   `engine-gmt/features/core_math.ts` (`uModularParams`) — and (b) the
+     *   Mesh variant, whose prefix is the much smaller `MESH_GLSL_UNIFORMS`;
+     *   `engine-gmt/features/weave.ts:142-155` gates its whole `addUniform`
+     *   loop on `variant === 'Mesh'` for precisely this reason.
+     * @invariant Neither emit site checks `backingOnly` — like engine-core, an
+     *   `addUniform` entry ALWAYS produces a GLSL declaration. The flag is
+     *   honoured only by `engine-gmt/shaders/chunks/uniforms.ts`.
+     */
     addUniform(name: string, type: string, arraySize?: number) {
         this.uniforms.set(name, { type, arraySize });
     }
