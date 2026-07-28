@@ -1401,3 +1401,117 @@ actually needs to post before `initWorkerMode`.
   parses it today. The catalog was frozen 2026-04-18 and V3's preprocessor has
   improved since; `getRecommendedPipeline`'s own `@invariant` flags the staleness
   risk. Worth regenerating the catalog.
+
+---
+
+# Cycle 7
+
+## HIGH — `smoke:orbit` is permanently red, so camera navigation has no working guard
+
+_(cycle 7 · `debug/smoke-orbit.mts:87`)_
+
+`smoke:orbit` is the **only** browser guard that drives a real camera gesture
+through `Navigation.tsx`. It is red on unmodified `main`:
+
+```
+sceneOffset BEFORE {x:0, y:0, z:3}
+sceneOffset AFTER  {x:-0.918, y:1.690, z:-0.651}   delta 4.127
+accumulationCount: 1 -> 1 (advanced within 8s: false)
+✗ accumulation did not advance after orbit settled (1 -> 1) - render loop stalled?
+```
+
+**Proven pre-existing**, not audit-induced: reverting `Navigation.tsx` to pristine
+(`git diff --stat` empty) and re-running gives a byte-identical failure, same
+delta, same assertion. ADR-0063:81 records this smoke as green at the time of that
+decision, so it has regressed at some point since.
+
+**Note the split — this is the useful part.** The guard's *earlier* assertions
+PASS: the orbit drag really does move `sceneOffset` by the expected magnitude, so
+the Navigation gesture path is demonstrably alive. Only the final **post-settle
+accumulation** assertion fails.
+
+**Options**
+
+1. **The assertion is stale.** Cycle 5 established that adaptive engagement is now
+   activity-driven and `engine/AdaptiveResolution.ts` no longer reads
+   `mouseOverCanvas` at all, so a smoke that settles without further activity may
+   now correctly sit at `accumulationCount 1`. Cheap to fix — but silences a real
+   signal if wrong.
+2. **It is a genuine render-loop stall after gesture end.** This matches the known
+   "main-thread gates must mirror worker reality" theme, and would be a real
+   user-visible bug: the image never converges after you stop orbiting.
+3. **Split the guard** so the `sceneOffset` half stays enforceable while the
+   accumulation half is quarantined.
+
+**Recommendation: do not touch the assertion until (2) is ruled out.** The
+distinguishing test is a manual orbit-and-release at `localhost:3400/app-gmt.html`,
+watching whether the image converges after the drag ends. That is a visual check
+and you do the visual testing, which is why this is yours rather than something
+the run resolved. If it converges by hand, the smoke's settle/wait model is stale
+and option 1 applies; if it does not, this is a shipped convergence bug and the
+guard is correctly red.
+
+The red state is already documented in `.claude/rules/navigation.md` so the next
+agent does not mistake it for their own breakage — that mitigation is applied and
+is independent of which option you pick.
+
+---
+
+## The guard-citation problem is now systemic — worth one deliberate sweep
+
+Six instances across seven cycles, and cycle 7 produced the worst case yet:
+**every one of the seven guards** `.claude/rules/navigation.md` listed is
+incapable of failing on a `Navigation.tsx` regression.
+
+The full tally so far:
+
+| Rule | Bad citation | Why it cannot fail |
+|---|---|---|
+| `gmt-renderer.md` | `smoke:tsaa` | boots fluid-toy.html; fluid-toy has zero `RenderPipeline` references |
+| `gmt-formulas-and-graph.md` | `smoke:formula-switch`, `smoke:fractal-kind` | boot fractal-toy.html / fluid-toy.html; neither imports `engine-gmt/` |
+| `gmt-features.md` | `smoke:camera` | boots fluid-toy.html; asserts fluid-toy's own 2D camera slice |
+| `navigation.md` | all seven | 3 boot fluid-toy.html, 3 are node-only, 1 is red |
+| `mobile-layout.md` | `smoke:viewport`, `smoke:viewport-fixed` | healthy guards, but blind to the breakpoint (proven by mutation) |
+| `ui-and-panels.md` | `smoke:ui-primitives` | covers only `clampToViewport`; renders no React component |
+
+**The check is mechanical:** for each `.claude/rules/*.md` Guards block, read the
+`ENGINE_URL` default out of each `debug/smoke-*.mts` and confirm the rule's scoped
+paths are actually in that entry point's import graph. Node-only `test:*` scripts
+need the same treatment — several self-document as "Node-only, no WebGL".
+
+Worth doing once, properly, rather than one rule per cycle. A small script could
+even keep it honest: parse each rule's `paths:` frontmatter and Guards block, and
+fail if a cited smoke's entry point cannot reach any scoped path.
+
+---
+
+## Housekeeping surfaced in cycle 7
+
+- **`fluid-toy/README.md:230`** lists `npm run smoke:orbit  # auto-orbit visual
+  check` as a fluid-toy check. That smoke boots `app-gmt.html`. Belongs to
+  whoever owns the sibling-apps rule.
+- **The two known `shortId` collisions are the ONLY ones.** A registry-wide sweep
+  over all 27 registered features confirmed exactly one feature-level collision
+  (`dr` ← droste, drawing) and exactly one param-level collision (materials `ec` ←
+  envMapColorSpace, emissionMode). So the `@bug PRODUCTION:` note in
+  `engine/FeatureSystem.ts` is **complete rather than a sample** — useful before
+  you pick a wire-format fix, since it means the fix is bounded at two renames.
+- **Nine further registry-wide sweeps came back clean** and are recorded in
+  `results/g05-engine-gmt-features.json` so a later cycle need not redo them:
+  uniform-name uniqueness across the whole GLSL namespace (zero collisions),
+  `dependsOn` integrity including topological order, params with no default
+  (zero), the CLAUDE.md vestigial-field anti-patterns (zero — fully cleaned up),
+  dangling `condition.param`/`parentId` (zero after two false positives were
+  dismissed), params lacking a `shortId` (five, all correct), the panel-manifest
+  cross-check (all 15 compile-gate references resolve), rule coverage (no gap),
+  and `holdsLiveSession` (only `audio`, as expected).
+- **`engine-gmt/features/index.ts`'s section comments were actively misleading**
+  about which side of the engine/engine-gmt fork several features live on —
+  including Droste. Since module identity is what decides whether a
+  re-registration short-circuits, a reader who trusted those headers drew the
+  opposite conclusion from the truth. Fixed, and flagged here because it is a
+  plausible reason the droste/drawing collision went unnoticed for so long.
+- **The `fragmentarium_import` subtree is entirely unaudited** — FormulaWorkshop,
+  `parsers/`, `v3/`, `v4/`, `transform/`. It is by far the largest feature
+  directory and cycle 6 already found a live dead-end in it (the V4 escape hatch).
+  Worth its own worklist entry rather than riding along with `g05`.

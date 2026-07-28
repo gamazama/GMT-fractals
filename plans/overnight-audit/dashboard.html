@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:48%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:58%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,25 +73,28 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Cycle 6 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T01:14:31.598Z</p>
+  <p class="sub">Cycle 7 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T04:31:42.877Z</p>
 
   <div class="tiles">
-    <div class="tile"><div class="v">16/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">114</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">64</div><div class="k">applied &amp; verified</div></div>
+    <div class="tile"><div class="v">19/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">123</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">72</div><div class="k">applied &amp; verified</div></div>
     <div class="tile"><div class="v" style="color:var(--warn)">11</div><div class="k">orchestrator-checked</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">37</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">107<span style="font-size:.6em;color:var(--dim)">/107</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">38</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">116<span style="font-size:.6em;color:var(--dim)">/117</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 7 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:35%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 8 cycles</p>
 
-  
+  <section><h2>Guards failing <span class="count">1</span></h2>
+    <p class="note">Run these yourself before trusting anything downstream of them.</p>
+    <article class="finding sev-high"><header><code>npm run smoke:orbit</code><span class="sev">g04-navigation</span></header><p class="what">PRE-EXISTING RED, not caused by this audit. 'accumulation did not advance after orbit settled (1 -&gt; 1)' at debug/smoke-orbit.mts:87. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure, same sceneOffset delta 4.127, same assertion.</p></article>
+  </section>
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">64</span></h2>
+    <h2>Applied — self-verified <span class="count">72</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
   <article class="finding sev-high">
@@ -364,6 +367,20 @@
     <header>
       <span class="badge tA">A</span>
       <span class="sev">high</span>
+      <code>g02-shader-pipeline</code>
+      <code class="file">docs/policy/uniform-plugin-contract.md:38</code>
+    </header>
+    <p class="what">The cycle-2 handoff's open half: every engine-gmt line anchor in the uniform-plugin contract was stale — the path-4 UniformManager citations by 150-190 lines, and the path-3 producer example pointed at engine-gmt/features/interlace/index.ts, a file that no longer exists.</p>
+    <p class="change"><strong>Changed:</strong> Re-read every engine-gmt anchor against source and refreshed the drifted ones (UniformManager syncFrame 64-395 -&gt; 112-525 and eight further ranges, plus a new citation of the separate syncDerivedRotations entry point; lighting/index.ts three sites, with '15 light/CDF uniforms' corrected to 19 slots; core_math.ts four sites; materials.ts; atmosphere/index.ts). Replaced the dead interlace producer example with weave.ts:96-100 (uWeaveEnabled) in both the path-3 row and the frontmatter, retired the uInterlace entry in R6's prefix list, and closed the 'structure' known-issue row — the hardcoded SDFShaderBuilder reserved-name list it warned about no longer exists, because buildWeaveUniforms now derives mesh declarations by regex over the def's own GLSL. Rewrote the Update banner so it no longer claims the engine-gmt refs are unverified. Also noted in R10 that engine-gmt's buildUniformsString ignores backingOnly alongside engine-core's buildUniformsBlock.</p>
+    <p class="verify"><strong>How it was verified:</strong> Each anchor re-derived by reading the cited source directly (grep for extraUniforms/uniform:/addUniform, sed over the exact line ranges) rather than by trusting the salvaged diff. The engine-gmt UniformSchema.ts anchors (path 1, I1-I5) were re-checked and were ALREADY correct — recorded so the next agent does not redo them; engine-gmt/shaders/chunks/uniforms.ts:8 (the sole backingOnly enforcement site, I4) likewise. Interlace deadness proved by `test -e engine-gmt/features/interlace` (absent) plus a repo-wide grep for uInterlace over engine-gmt/** hitting only two prose comments. Docs-only, so no guard can fail on it mechanically; typecheck is recorded only as proof nothing else regressed, and the substantive proof is the cited source lines, each reproducible with a single sed.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>6f6bdba2</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
       <code>g03-formula-registry</code>
       <code class="file">.claude/rules/gmt-formulas-and-graph.md:28</code>
     </header>
@@ -372,6 +389,20 @@
     <p class="verify"><strong>How it was verified:</strong> Decisive, because the wrong guards cannot even reach the module: smoke-formula-switch.mts pins fractal-toy.html, smoke-fractal-kind.mts pins fluid-toy.html, and `grep -rn engine-gmt fractal-toy/` returns ZERO hits (fluid-toy's only engine-gmt imports are support and feedback). Both were run and pass — proving they stay green regardless. The replacements were run: test:compat imports the barrel plus registerFeatures() and iterates registry.getAll() ('structural checks: 55 formulas OK'), and a scratch probe confirmed registry.register() THROWS on a def with no shader.capabilities — so test:compat genuinely fails if a formula regresses, which is the property the old citations lacked. Third instance this run of a healthy guard cited for the wrong thing, and the second in this cycle — the g01 auditor independently found the same trap in gmt-renderer.md.</p>
     <p class="guard"><code>npm run test:compat</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>98e21c99</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>g04-navigation</code>
+      <code class="file">.claude/rules/navigation.md:29</code>
+    </header>
+    <p class="what">The navigation rule's Guards block listed seven guards, and NOT ONE can go red on a Navigation.tsx regression — three boot a sibling app that never imports the file, three are node-only tests, and the only correctly-targeted one is permanently red.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the Guards section with mechanically-verified facts: promoted typecheck and smoke:engine-gmt (the only currently-green guards that actually cover this file), kept smoke:orbit with an explicit RED warning, and added a 'Not guards for this file, despite once being listed here' paragraph naming smoke:canvas-pan-zoom / smoke:canvas-menu / smoke:bc-drag (fluid-toy.html) and test:interaction / :wiring / :coverage (node-only), plus a note that smoke:deep-zoom-orbit's 'orbit' means the deep-zoom reference orbit, not the camera. Also fixed the 'Read first' citation: the JSDoc header is lines 1-115, not 1-97, and the cited range excluded the file's load-bearing @invariant at 101-114.</p>
+    <p class="verify"><strong>How it was verified:</strong> Every claim mechanically established. Entry points read directly out of each guard script: smoke-canvas-pan-zoom.mts:12, smoke-bc-drag.mts:8, smoke-canvas-menu.mts:13 all default to fluid-toy.html; smoke-orbit.mts:17 and smoke-engine-gmt.mts:19 default to app-gmt.html. Reachability proved by import graph: the ONLY importer of engine-gmt/navigation is app-gmt/AppGmt.tsx:61 (via navigation/index.ts:22), and fluid-toy's entire engine-gmt surface is support + feedback — so no fluid-toy smoke can load Navigation.tsx at all. test-interaction-session.mts and test-interaction-wiring.mts self-document as 'Node-only, no WebGL / no Chromium'; test-interaction-coverage.mts is a static source scan and grep for 'Navigation' in it returns zero hits (it was run: green, 36 assertions, slider/scrub/drawing only). smoke-deep-zoom-orbit.mts self-documents as a pure-CPU computeReferenceOrbit test. Both promoted guards were run green. This is the fifth instance this run of a healthy guard cited for the wrong thing, and the first where EVERY guard in a rule's block was blind.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>c0860feb</code></p>
     
   </article>
   <article class="finding sev-medium">
@@ -784,6 +815,34 @@
     <header>
       <span class="badge tA">A</span>
       <span class="sev">medium</span>
+      <code>g02-shader-pipeline</code>
+      <code class="file">engine-gmt/engine/ShaderBuilder.ts:28</code>
+    </header>
+    <p class="what">The 17-position assembly-order comment presents itself as the order for all variants, but Physics and Histogram emit addHeader() output (position 3) AFTER Coloring (position 6) instead of before Math — and Physics is documented as '1-10' when it never emits position 10 at all.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the variant footnote. Physics is now stated as 1-9 plus a simplified inline trace, with position 10 explicitly called out as absent, and a CAVEAT paragraph records that the numbered list is the MAIN template's order verbatim: headers and the Math/BlueNoise/Coloring chunks see each other in opposite orders depending on variant, so anything richer than a #define added via addHeader must be checked against both orderings. Notes that today's sole caller, materials.ts MAIN_HEADER, is preprocessor-only and injected for every non-Mesh variant, which is why the divergence is latent rather than live.</p>
+    <p class="verify"><strong>How it was verified:</strong> Read the three return templates in buildFragment() directly. Main emits `${defines} ${uniforms} ${headers} ${math} ${BLUE_NOISE} ${COLORING} ${preambles}`; Physics and Histogram both emit `${defines} ${uniforms} ${math} ${BLUE_NOISE} ${COLORING} ${headers} ${preambles}` — headers move from position 3 to position 7. The Physics template's chunk list stops at ${de} followed by simplifiedTraceGLSL with no ${postDEFunctions}, while Histogram does emit it — so 'Physics variant: 1-10' was off by one. MAIN_HEADER contains only #ifdef/#define, confirming latency; its inject gates only on variant === 'Mesh', so it reaches all three affected templates. smoke:engine-gmt is the behavioural guard — it boots app-gmt.html and compiles a real Mandelbulb (54ms) through this exact builder — but it cannot fail on a comment change, which is the honest limit here; the claim is proved by the template text.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>fae90b17</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g02-shader-pipeline</code>
+      <code class="file">engine-gmt/engine/ShaderBuilder.ts:193</code>
+    </header>
+    <p class="what">ShaderBuilder.addUniform carried no contract at all, despite being the one API where a stray call is a hard GL compile failure rather than a silent overwrite — this builder appends to an already-complete declaration block, so re-adding an existing name emits a duplicate `uniform …;` line.</p>
+    <p class="change"><strong>Changed:</strong> Added a three-clause @invariant: (1) keyed on name alone with Map.set last-wins, deliberately weaker than UniformSchema's module-load throw, which cannot see builder-time calls from inject(); (2) the GMT-specific duplicate-declaration hazard, naming both static prefixes and the two legitimate uses (the backingOnly R10 pattern and the Mesh variant); (3) neither emit site checks backingOnly, which is honoured only by engine-gmt/shaders/chunks/uniforms.ts. Committed with the addHeader finding — same file.</p>
+    <p class="verify"><strong>How it was verified:</strong> Read both emit sites: buildUniformsString() starts `let out = UNIFORMS + '\n'` then appends the map; buildMeshSDFLibrary() interpolates ${injectedUniforms} after ${MESH_GLSL_UNIFORMS} plus a hardcoded stub list. Neither reads backingOnly. The duplicate-declaration consequence needed NO probe — engine-gmt/features/weave.ts:142-155 already gates its entire addUniform loop on `variant === 'Mesh'` and states the consequence in the codebase's own words ('declaring here too would be a GLSL redefinition error, hence the gate'). The only two addUniform callers repo-wide are that one and core_math.ts:109 (the backingOnly uModularParams case), matching the documented legitimate uses exactly. That in-source corroboration is stronger than the probe the salvaged diff claimed to have run, and cost nothing.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>fae90b17</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
       <code>g03-formula-registry</code>
       <code class="file">engine-gmt/engine/FractalRegistry.ts:6</code>
     </header>
@@ -792,6 +851,34 @@
     <p class="verify"><strong>How it was verified:</strong> Every number measured, not read. A probe imported the barrel plus registerFeatures() and printed the live keyspace: 7 BoxFold ids present (one per FOLD_LIST entry), all 5 aliases present, getIds().length - getAll().length === 5 (alias dedupe holds), HyperTorus === Mandelorus by identity, register() throws on missing capabilities, duplicate id overwrites silently, alias-to-unknown-target no-ops with a warn — all four @invariants falsified and confirmed live. A second probe cross-checked the barrel against the FormulaType union: 48 registered ids in the working tree, 48 union members, zero ids outside the union, zero union members unregistered, zero duplicates, and `grep -c BoxFold engine-gmt/types/common.ts` = 0 confirming the drift. test:compat's '55 formulas OK' = 48 + 7, matching the new text; it also asserts capabilities plus exactly one shape token per def, so a wrong claim shows up as a changed count there.</p>
     <p class="guard"><code>npm run test:compat</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>381692f9</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g04-navigation</code>
+      <code class="file">engine-gmt/navigation/Navigation.tsx:487</code>
+    </header>
+    <p class="what">Six FractalEvents subscriptions/emits used raw string literals instead of the exported FRACTAL_EVENTS constants, defeating grep-based listener discovery and making camera event invariants look unfalsifiable.</p>
+    <p class="change"><strong>Changed:</strong> Imported FRACTAL_EVENTS alongside FractalEvents and replaced all six raw strings: 'camera_teleport' (lines 487, 1226), 'camera_transition' (488), 'camera_snap' (1135, 1141, 1164). No other raw-string FractalEvents call remains under engine-gmt/navigation/.</p>
+    <p class="verify"><strong>How it was verified:</strong> Constants proved identical first: engine/FractalEvents.ts:15-17 declares CAMERA_SNAP:'camera_snap', CAMERA_TELEPORT:'camera_teleport', CAMERA_TRANSITION:'camera_transition' inside an `as const` object, and engine-gmt/engine/FractalEvents.ts is a bare re-export of that module — the same one Navigation already imports FractalEvents from, so no new dependency and no cycle. typecheck was then proven to be a real guard by FALSIFICATION rather than asserted: temporarily substituting the WRONG constant (CAMERA_SNAP for the teleport listener) failed with exit 2 and 'TS2345: Argument of type (newState: CameraState) =&gt; void is not assignable to parameter of type (data: void) =&gt; void' at Navigation.tsx(487,67) — because EventMap is keyed by the `as const` literal types, so any wrong or typo'd constant is a compile error. Restored; typecheck exit 0; smoke:engine-gmt green.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>724e49fe</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g05-engine-gmt-features</code>
+      <code class="file">.claude/rules/gmt-features.md:26</code>
+    </header>
+    <p class="what">The rule scoped to engine-gmt/features/** + engine-gmt/store/** — titled 'engine-gmt feature catalog + camera manager' — cites npm run smoke:camera as its guard, but that smoke boots fluid-toy.html, which never imports either path, so no change in the rule's scope can make it fail.</p>
+    <p class="change"><strong>Changed:</strong> Replaced smoke:camera with smoke:statelibrary-drop in the Guards block, and added a paragraph naming the entry point each boots so the mis-citation cannot be re-introduced by someone matching on the word 'camera'.</p>
+    <p class="verify"><strong>How it was verified:</strong> Two-sided. (1) The replacement is real and green: smoke:statelibrary-drop passed all three assertions, and its assertions are on app-gmt's Camera Manager savedCameras list — exactly the camera_manager + installStateLibrary surface the rule names. It would fail if row reorder or the state-library slice regressed. (2) The removed citation is provably blind: smoke:camera was ALSO run and passed, but its entry point is fluid-toy.html (smoke-camera.mts:11) and every assertion reads s.julia / s.setJulia plus window.__camera from engine/plugins/Camera.ts. `grep -rn 'engine-gmt' fluid-toy/` returns 7 hits, all engine-gmt/support or engine-gmt/feedback — none under features/ or store/. Since those modules are not in fluid-toy's import graph, no edit within the rule's scope can be observed by that smoke. Sixth instance this run of the 'healthy but cited for the wrong thing' mode.</p>
+    <p class="guard"><code>npm run smoke:statelibrary-drop</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>46ca9373</code></p>
     
   </article>
   <article class="finding sev-low">
@@ -966,6 +1053,20 @@
     <header>
       <span class="badge tA">A</span>
       <span class="sev">low</span>
+      <code>g02-shader-pipeline</code>
+      <code class="file">engine-gmt/engine/managers/UniformManager.ts:102</code>
+    </header>
+    <p class="what">The syncFrame step-ordering @invariant claimed 'lights need uCameraPosition zeroed first' — an ordering dependency that does not exist, since the light block never reads that uniform.</p>
+    <p class="change"><strong>Changed:</strong> Removed the clause and replaced it with an explicit negative note: the light block packs positions camera-relative itself via VirtualSpace.getLightShaderVector, which subtracts camera.position and the scene offset directly, so the set(0,0,0) may sit anywhere in the method. Also recorded that FractalEngine.syncCameraFromMatrix writes a NON-zero uCameraPosition on the worker's boot camera sync. The two genuine ordering constraints are left intact.</p>
+    <p class="verify"><strong>How it was verified:</strong> Grepped uCameraPosition across the whole method: within UniformManager.ts it appears only in the invariant text and at the set(0,0,0) write; the light block reads lighting.lights, modulations, cam and virtualSpace and nothing else. Read VirtualSpace.getLightShaderVector to close the indirection — it uses camera.quaternion / camera.position and this.offset, never a uniform. This also REFUTES the reason the dying cycle-6 agent gave ('one writer repo-wide, unconditionally zero'): there are THREE writers — UniformManager.ts:335 (zero), WorkerHistogram.ts:73 (zero), and FractalEngine.ts:461 (a real camera translation, called from renderWorker on initialCamera). The clause is still wrong, but for a different reason than it believed — which is exactly why the salvaged diff was treated as a lead rather than committed.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>dfaed8ff</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
       <code>g03-formula-registry</code>
       <code class="file">engine-gmt/types/capabilities.ts:13</code>
     </header>
@@ -988,6 +1089,20 @@
     <p class="verify"><strong>How it was verified:</strong> `find docs -iname '*Formula_Workshop*'` returns that path as the only match. The sibling citations on the same and adjacent lines were checked at the same time and are live, as is the v3/compat.ts:125 line reference in the slot-uniqueness @invariant.</p>
     <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>c2289657</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>g05-engine-gmt-features</code>
+      <code class="file">engine-gmt/features/index.ts:46</code>
+    </header>
+    <p class="what">The @invariant on registerFeatures miscounts the registry (says 20 GMT-local, actual 21 / 27 total) and two section comments label GMT-local features as 'engine-core-shared — same module identity', including Droste — the exact def whose shortId collision with Drawing is the queued live share-link bug.</p>
+    <p class="change"><strong>Changed:</strong> Corrected the count to 21 GMT-local + 6 engine-core = 27, enumerated the engine-core six by name, and rewrote the two misleading block comments so 'Post &amp; Effects' no longer implies DrosteFeature is shared and 'Systems' no longer implies DrawingFeature / RotationGizmoFeature / ShaderCompilerFeature are. Added a one-line instruction to read the import path rather than the section comment. Comments only.</p>
+    <p class="verify"><strong>How it was verified:</strong> The counts are a runtime measurement, not a reading. A probe calls registerFeatures() then featureRegistry.getAll() and prints 'registered features: 27' plus the full id list; six of those resolve to ../../engine/features/* imports and the other 21 to ./-relative engine-gmt paths, which is the grep that proves the section labels wrong. test:param-mapping was run AFTER the edit and passes — it imports and executes this exact file's registerFeatures() then walks every feature's params, so it would fail loudly if registration were disturbed. The registry sweep was re-run after the edit and still reports 27 with only the two pre-existing owner-queued collisions. Worth noting the causal link recorded in the commit: a reader who trusts those headers draws the opposite conclusion from the truth about module identity, which is a plausible reason the droste/drawing collision went unnoticed — nobody cross-checks an alias against a def they believe lives in engine-core.</p>
+    <p class="guard"><code>npm run test:param-mapping</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ce711da2</code></p>
     
   </article>
   </section>
@@ -1153,7 +1268,7 @@
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">37</span></h2>
+    <h2>Awaiting your judgement <span class="count">38</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
   <article class="finding sev-high">
@@ -1183,6 +1298,20 @@
     
     
     <p class="rationale">See PROPOSALS.md. Proven, with an explicitly stated caveat: the dead branch is proven unreachable, NOT that a user-visible defect follows.</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">high</span>
+      <code>g04-navigation</code>
+      <code class="file">debug/smoke-orbit.mts:87</code>
+    </header>
+    <p class="what">smoke:orbit — the only browser guard that drives a real camera gesture through Navigation.tsx — is permanently RED on unmodified main, so the entire camera-navigation subsystem currently has no working end-to-end regression guard.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure. Note the SPLIT — the guard's earlier assertions PASS (the orbit drag moves sceneOffset by the expected magnitude, so the Navigation gesture path is demonstrably alive); only the final post-settle accumulation assertion fails.</p>
   </article>
   <article class="finding sev-medium">
     <header>
@@ -1830,15 +1959,15 @@
     <td class="num prop">2</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g02-shader-pipeline</code></td>
     <td>engine-gmt</td>
     <td class="area">SDFShaderBuilder + GMT ShaderFactory + UniformManager</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">4</td>
+    <td class="num applied">4</td>
     <td class="num esc">0</td>
     <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-done">
     <td><code>g03-formula-registry</code></td>
@@ -1850,25 +1979,25 @@
     <td class="num prop">0</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g04-navigation</code></td>
     <td>engine-gmt</td>
     <td class="area">Camera nav + physics probe + HUD</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">3</td>
+    <td class="num applied">2</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">1</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g05-engine-gmt-features</code></td>
     <td>engine-gmt</td>
     <td class="area">GMT DDFS features (geometry, coloring, lighting, AO, atmosphere, drawing, droste, interlace, materials, navigation, optics, quality, reflections, texturing, volumetric, water_plane, fragmentarium_import, engine, camera_manager)</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">2</td>
+    <td class="num applied">2</td>
     <td class="num esc">0</td>
     <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>g06-bucket-render</code></td>

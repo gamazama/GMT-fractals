@@ -1,0 +1,59 @@
+{
+  "id": "g02-shader-pipeline",
+  "cycle": 7,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g02-shader-pipeline" },
+    { "script": "npm run smoke:engine-gmt", "pass": true, "subsystem": "g02-shader-pipeline" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "docs/policy/uniform-plugin-contract.md",
+      "line": 38,
+      "summary": "The cycle-2 handoff's open half: every engine-gmt line anchor in the uniform-plugin contract was stale — the path-4 UniformManager citations by 150-190 lines, and the path-3 producer example pointed at engine-gmt/features/interlace/index.ts, a file that no longer exists.",
+      "change": "Re-read every engine-gmt anchor against source and refreshed the drifted ones (UniformManager syncFrame 64-395 -> 112-525 and eight further ranges, plus a new citation of the separate syncDerivedRotations entry point; lighting/index.ts three sites, with '15 light/CDF uniforms' corrected to 19 slots; core_math.ts four sites; materials.ts; atmosphere/index.ts). Replaced the dead interlace producer example with weave.ts:96-100 (uWeaveEnabled) in both the path-3 row and the frontmatter, retired the uInterlace entry in R6's prefix list, and closed the 'structure' known-issue row — the hardcoded SDFShaderBuilder reserved-name list it warned about no longer exists, because buildWeaveUniforms now derives mesh declarations by regex over the def's own GLSL. Rewrote the Update banner so it no longer claims the engine-gmt refs are unverified. Also noted in R10 that engine-gmt's buildUniformsString ignores backingOnly alongside engine-core's buildUniformsBlock.",
+      "verification": "Each anchor re-derived by reading the cited source directly (grep for extraUniforms/uniform:/addUniform, sed over the exact line ranges) rather than by trusting the salvaged diff. The engine-gmt UniformSchema.ts anchors (path 1, I1-I5) were re-checked and were ALREADY correct — recorded so the next agent does not redo them; engine-gmt/shaders/chunks/uniforms.ts:8 (the sole backingOnly enforcement site, I4) likewise. Interlace deadness proved by `test -e engine-gmt/features/interlace` (absent) plus a repo-wide grep for uInterlace over engine-gmt/** hitting only two prose comments. Docs-only, so no guard can fail on it mechanically; typecheck is recorded only as proof nothing else regressed, and the substantive proof is the cited source lines, each reproducible with a single sed.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "6f6bdba2"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/engine/ShaderBuilder.ts",
+      "line": 28,
+      "summary": "The 17-position assembly-order comment presents itself as the order for all variants, but Physics and Histogram emit addHeader() output (position 3) AFTER Coloring (position 6) instead of before Math — and Physics is documented as '1-10' when it never emits position 10 at all.",
+      "change": "Rewrote the variant footnote. Physics is now stated as 1-9 plus a simplified inline trace, with position 10 explicitly called out as absent, and a CAVEAT paragraph records that the numbered list is the MAIN template's order verbatim: headers and the Math/BlueNoise/Coloring chunks see each other in opposite orders depending on variant, so anything richer than a #define added via addHeader must be checked against both orderings. Notes that today's sole caller, materials.ts MAIN_HEADER, is preprocessor-only and injected for every non-Mesh variant, which is why the divergence is latent rather than live.",
+      "verification": "Read the three return templates in buildFragment() directly. Main emits `${defines} ${uniforms} ${headers} ${math} ${BLUE_NOISE} ${COLORING} ${preambles}`; Physics and Histogram both emit `${defines} ${uniforms} ${math} ${BLUE_NOISE} ${COLORING} ${headers} ${preambles}` — headers move from position 3 to position 7. The Physics template's chunk list stops at ${de} followed by simplifiedTraceGLSL with no ${postDEFunctions}, while Histogram does emit it — so 'Physics variant: 1-10' was off by one. MAIN_HEADER contains only #ifdef/#define, confirming latency; its inject gates only on variant === 'Mesh', so it reaches all three affected templates. smoke:engine-gmt is the behavioural guard — it boots app-gmt.html and compiles a real Mandelbulb (54ms) through this exact builder — but it cannot fail on a comment change, which is the honest limit here; the claim is proved by the template text.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "fae90b17"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/engine/ShaderBuilder.ts",
+      "line": 193,
+      "summary": "ShaderBuilder.addUniform carried no contract at all, despite being the one API where a stray call is a hard GL compile failure rather than a silent overwrite — this builder appends to an already-complete declaration block, so re-adding an existing name emits a duplicate `uniform …;` line.",
+      "change": "Added a three-clause @invariant: (1) keyed on name alone with Map.set last-wins, deliberately weaker than UniformSchema's module-load throw, which cannot see builder-time calls from inject(); (2) the GMT-specific duplicate-declaration hazard, naming both static prefixes and the two legitimate uses (the backingOnly R10 pattern and the Mesh variant); (3) neither emit site checks backingOnly, which is honoured only by engine-gmt/shaders/chunks/uniforms.ts. Committed with the addHeader finding — same file.",
+      "verification": "Read both emit sites: buildUniformsString() starts `let out = UNIFORMS + '\\n'` then appends the map; buildMeshSDFLibrary() interpolates ${injectedUniforms} after ${MESH_GLSL_UNIFORMS} plus a hardcoded stub list. Neither reads backingOnly. The duplicate-declaration consequence needed NO probe — engine-gmt/features/weave.ts:142-155 already gates its entire addUniform loop on `variant === 'Mesh'` and states the consequence in the codebase's own words ('declaring here too would be a GLSL redefinition error, hence the gate'). The only two addUniform callers repo-wide are that one and core_math.ts:109 (the backingOnly uModularParams case), matching the documented legitimate uses exactly. That in-source corroboration is stronger than the probe the salvaged diff claimed to have run, and cost nothing.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "fae90b17"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine-gmt/engine/managers/UniformManager.ts",
+      "line": 102,
+      "summary": "The syncFrame step-ordering @invariant claimed 'lights need uCameraPosition zeroed first' — an ordering dependency that does not exist, since the light block never reads that uniform.",
+      "change": "Removed the clause and replaced it with an explicit negative note: the light block packs positions camera-relative itself via VirtualSpace.getLightShaderVector, which subtracts camera.position and the scene offset directly, so the set(0,0,0) may sit anywhere in the method. Also recorded that FractalEngine.syncCameraFromMatrix writes a NON-zero uCameraPosition on the worker's boot camera sync. The two genuine ordering constraints are left intact.",
+      "verification": "Grepped uCameraPosition across the whole method: within UniformManager.ts it appears only in the invariant text and at the set(0,0,0) write; the light block reads lighting.lights, modulations, cam and virtualSpace and nothing else. Read VirtualSpace.getLightShaderVector to close the indirection — it uses camera.quaternion / camera.position and this.offset, never a uniform. This also REFUTES the reason the dying cycle-6 agent gave ('one writer repo-wide, unconditionally zero'): there are THREE writers — UniformManager.ts:335 (zero), WorkerHistogram.ts:73 (zero), and FractalEngine.ts:461 (a real camera translation, called from renderWorker on initialCamera). The clause is still wrong, but for a different reason than it believed — which is exactly why the salvaged diff was treated as a lead rather than committed.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "dfaed8ff"
+    }
+  ],
+  "notes": "SALVAGE-DIFF VERDICT (this subsystem was a re-run after the cycle-6 auditor died mid-edit; its reverted diff was supplied as a lead).\n- Claim 1 (Physics/Histogram emit addHeader after Coloring; latent because MAIN_HEADER is #define-only): CONFIRMED, and an additional error it had also caught was verified — 'Physics variant: 1-10' is off by one.\n- Claim 2 (addUniform name-keyed last-wins; this builder appends to a complete block so a re-add is a GLSL redefinition error): CONFIRMED, but NOT by the route the diff claimed. Its assertion that it had probed addUniform('uTime','float') through test:baseline is unverified and was NOT reproduced; the conclusion was instead established from the two emit sites plus weave.ts's in-source corroboration.\n- Claim 3 (doc anchors): CONFIRMED — every number checked out, each re-derived independently rather than copied, plus several the diff did not cover (R2's core_math cite, R8's lighting cite, I7's sampler cite, the R6 uInterlace prefix entry, the R10 backingOnly note).\n- REFUTED: the dying agent's last claim that uCameraPosition has 'one writer repo-wide, unconditionally zero'.\n\nGUARD HEALTH — no bad citation found in this area, which is worth recording after six cycles of finding them elsewhere. test:shader fans out to test:baseline/test:hybrid/test:hybrid-adv/test:weave-sweep, all of which run debug/native-config-sweep.mts; that file imports ShaderFactory and ConfigDefaults from engine-gmt/engine/ directly and gates on webglCompile, so it genuinely covers this subsystem. test:frag and test:frag:scan do NOT — pure Node parser tests over fragmentarium_import with no browser and no shader-pipeline import — but nothing miscites them: scene-and-formula-format.md is their only citer and that is the correct scope.\n\nNOT REACHED: the Tier B UniformSchema.ts:85-104 MB3D item was left alone per instructions. The full test:shader sweep was not run — all three source changes are comment-only, so it could not fail differently from smoke:engine-gmt, which already proved a real Mandelbulb compile through this exact ShaderBuilder."
+}

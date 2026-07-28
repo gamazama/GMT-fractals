@@ -1,0 +1,45 @@
+{
+  "id": "g04-navigation",
+  "cycle": 7,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g04-navigation" },
+    { "script": "npm run smoke:engine-gmt", "pass": true, "subsystem": "g04-navigation" },
+    { "script": "npm run test:interaction:coverage", "pass": true, "subsystem": "g04-navigation" },
+    { "script": "npm run smoke:orbit", "pass": false, "subsystem": "g04-navigation", "error": "PRE-EXISTING RED, not caused by this audit. 'accumulation did not advance after orbit settled (1 -> 1)' at debug/smoke-orbit.mts:87. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure, same sceneOffset delta 4.127, same assertion." }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": ".claude/rules/navigation.md",
+      "line": 29,
+      "summary": "The navigation rule's Guards block listed seven guards, and NOT ONE can go red on a Navigation.tsx regression — three boot a sibling app that never imports the file, three are node-only tests, and the only correctly-targeted one is permanently red.",
+      "change": "Rewrote the Guards section with mechanically-verified facts: promoted typecheck and smoke:engine-gmt (the only currently-green guards that actually cover this file), kept smoke:orbit with an explicit RED warning, and added a 'Not guards for this file, despite once being listed here' paragraph naming smoke:canvas-pan-zoom / smoke:canvas-menu / smoke:bc-drag (fluid-toy.html) and test:interaction / :wiring / :coverage (node-only), plus a note that smoke:deep-zoom-orbit's 'orbit' means the deep-zoom reference orbit, not the camera. Also fixed the 'Read first' citation: the JSDoc header is lines 1-115, not 1-97, and the cited range excluded the file's load-bearing @invariant at 101-114.",
+      "verification": "Every claim mechanically established. Entry points read directly out of each guard script: smoke-canvas-pan-zoom.mts:12, smoke-bc-drag.mts:8, smoke-canvas-menu.mts:13 all default to fluid-toy.html; smoke-orbit.mts:17 and smoke-engine-gmt.mts:19 default to app-gmt.html. Reachability proved by import graph: the ONLY importer of engine-gmt/navigation is app-gmt/AppGmt.tsx:61 (via navigation/index.ts:22), and fluid-toy's entire engine-gmt surface is support + feedback — so no fluid-toy smoke can load Navigation.tsx at all. test-interaction-session.mts and test-interaction-wiring.mts self-document as 'Node-only, no WebGL / no Chromium'; test-interaction-coverage.mts is a static source scan and grep for 'Navigation' in it returns zero hits (it was run: green, 36 assertions, slider/scrub/drawing only). smoke-deep-zoom-orbit.mts self-documents as a pure-CPU computeReferenceOrbit test. Both promoted guards were run green. This is the fifth instance this run of a healthy guard cited for the wrong thing, and the first where EVERY guard in a rule's block was blind.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "c0860feb"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/navigation/Navigation.tsx",
+      "line": 487,
+      "summary": "Six FractalEvents subscriptions/emits used raw string literals instead of the exported FRACTAL_EVENTS constants, defeating grep-based listener discovery and making camera event invariants look unfalsifiable.",
+      "change": "Imported FRACTAL_EVENTS alongside FractalEvents and replaced all six raw strings: 'camera_teleport' (lines 487, 1226), 'camera_transition' (488), 'camera_snap' (1135, 1141, 1164). No other raw-string FractalEvents call remains under engine-gmt/navigation/.",
+      "verification": "Constants proved identical first: engine/FractalEvents.ts:15-17 declares CAMERA_SNAP:'camera_snap', CAMERA_TELEPORT:'camera_teleport', CAMERA_TRANSITION:'camera_transition' inside an `as const` object, and engine-gmt/engine/FractalEvents.ts is a bare re-export of that module — the same one Navigation already imports FractalEvents from, so no new dependency and no cycle. typecheck was then proven to be a real guard by FALSIFICATION rather than asserted: temporarily substituting the WRONG constant (CAMERA_SNAP for the teleport listener) failed with exit 2 and 'TS2345: Argument of type (newState: CameraState) => void is not assignable to parameter of type (data: void) => void' at Navigation.tsx(487,67) — because EventMap is keyed by the `as const` literal types, so any wrong or typo'd constant is a compile error. Restored; typecheck exit 0; smoke:engine-gmt green.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "724e49fe"
+    },
+    {
+      "tier": "B",
+      "severity": "high",
+      "file": "debug/smoke-orbit.mts",
+      "line": 87,
+      "summary": "smoke:orbit — the only browser guard that drives a real camera gesture through Navigation.tsx — is permanently RED on unmodified main, so the entire camera-navigation subsystem currently has no working end-to-end regression guard.",
+      "rationale": "See PROPOSALS.md. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure. Note the SPLIT — the guard's earlier assertions PASS (the orbit drag moves sceneOffset by the expected magnitude, so the Navigation gesture path is demonstrably alive); only the final post-settle accumulation assertion fails."
+    }
+  ],
+  "notes": "COVERED: all six files under engine-gmt/navigation/ grepped for annotation markers — the tree carries exactly one @invariant (Navigation.tsx:101), one @bug PRODUCTION (Navigation.tsx:595), zero @stale, zero @deprecated.\n\nCHECKED CLEAN, no finding needed: (a) the @invariant's own @see citations are accurate — FractalEngine.ts ~L708 and UniformManager.ts ~L190 both land inside the correct tiling-gate and adaptive-gate comment blocks; (b) selectMovementLock's blockCamera predicate is NOT silently dead — engine-gmt/features/drawing/index.ts:58-60 declares both blockCamera:true and activeParam:'active', and 'active' is a real boolean param in that feature's params block, so store/engineStore.ts:527's two-condition test does match; it has exactly one consumer, which is correct but worth knowing; (c) no pointer-capture leak hazard — Navigation deliberately never calls setPointerCapture, documented at lines 938 and 1040 as an ADR-0061 mitigation.\n\nDID NOT REACH: npm run orphans (skipped — removal would be Tier B regardless and the run is near deadline); HudOverlay.tsx's adaptive badge vs the cycle-5 AdaptiveResolution/mouseOverCanvas note; ADRs 0046-0047 not read (no ADR-drift candidate surfaced).\n\nPER HANDOFF, NOT RE-OPENED: the useFrame priority-0-vs-1 ordering question (cycle 1 refuted it).\n\nOUT-OF-SCOPE MISATTRIBUTION spotted, not fixed: fluid-toy/README.md:230 lists `npm run smoke:orbit  # auto-orbit visual check` as a fluid-toy check, but that smoke boots app-gmt.html. Belongs to whoever owns the sibling-apps rule."
+}
