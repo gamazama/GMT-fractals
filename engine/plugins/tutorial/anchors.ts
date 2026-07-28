@@ -57,7 +57,7 @@ export const tutorAnchors = {
     /**
      * First-found entry for an id, preferring elements with non-zero rect.
      *
-     * @invariant Prefers a visible (non-zero-rect) entry; falls back to
+     * @assumption Prefers a visible (non-zero-rect) entry; falls back to
      *   the first registered entry if all are zero-sized. Consumers
      *   needing visibility-only must filter the result themselves.
      */

@@ -62,7 +62,7 @@ export function resolveStorePath(state: any, path: string): any {
 }
 
 /**
- * @invariant Shallow-keyed deep-equal for plain objects only. Walks
+ * @assumption Shallow-keyed deep-equal for plain objects only. Walks
  *   arrays via length + index-keyed recursion, so sparse arrays or
  *   non-plain objects may misbehave. Used by `delta` triggers.
  */
@@ -152,7 +152,7 @@ const deltaTrigger: TriggerEvaluator<DeltaSpec> = {
     kind: 'delta',
     setup(spec, ctx) {
         let timer: ReturnType<typeof setTimeout> | null = null;
-        // @invariant Snapshots use `JSON.parse(JSON.stringify(v ?? null))`.
+        // @assumption Snapshots use `JSON.parse(JSON.stringify(v ?? null))`.
         //   Functions, undefined, cycles, and typed arrays cannot be tracked.
         const capture = () => {
             const v = ctx.resolvePath(ctx.getState(), spec.path);

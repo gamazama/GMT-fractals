@@ -11,7 +11,7 @@
  */
 
 /**
- * @invariant `seedMandelbulb` reads from `registry`, which must already be
+ * @assumption `seedMandelbulb` reads from `registry`, which must already be
  *   populated. Two paths populate it before tutorials are reachable (eager
  *   top-level statement in engine-gmt/formulas/index + the app-gmt boot).
  *   Followup q-011.
@@ -168,7 +168,7 @@ const lesson2: TutorialLesson = {
     title: "It's Time to Fly",
     subtitle: 'Navigation & camera controls',
     onStart: (store: Store) => asOneEdit(store, () => {
-        // @invariant Detects "chained from lesson 1" by checking
+        // @assumption Detects "chained from lesson 1" by checking
         //   `formula === 'Mandelbulb' && geometry?.juliaMode` rather than an
         //   explicit chain token. Refactoring lesson 1's terminal state could
         //   silently break the no-reseed-on-chain behaviour.
