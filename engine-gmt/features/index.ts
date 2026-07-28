@@ -43,8 +43,12 @@ import { DebugToolsFeature }   from '../../engine/features/debug_tools';
 
 // --- REGISTER FEATURES ---
 /**
- * Boot-time registration entry — populates `featureRegistry` with 20 GMT-local
- * features + 6 engine-core features (imported by module identity).
+ * Boot-time registration entry — populates `featureRegistry` with 21 GMT-local
+ * features + 6 engine-core features (imported by module identity), 27 total.
+ * The engine-core six are exactly: postEffects, colorGrading, audio,
+ * modulation, webcam, debugTools. Everything else registered below is
+ * GMT-local — read the import path, not the section comment, before assuming
+ * a def is shared.
  *
  * @invariant Registration ORDER matters. `LightSpheresFeature` MUST register
  * after `LightingFeature` (lighting declares the uniform arrays light_spheres
@@ -77,7 +81,8 @@ export const registerFeatures = () => {
     featureRegistry.register(TexturingFeature);
     featureRegistry.register(QualityFeature);
 
-    // Post & Effects (engine-core-shared — same module identity).
+    // Post & Effects. DrosteFeature is GMT-local (./droste); only the two
+    // below are engine-core-shared by module identity.
     featureRegistry.register(DrosteFeature);
     featureRegistry.register(PostEffectsFeature);
     featureRegistry.register(ColorGradingFeature);
@@ -87,7 +92,9 @@ export const registerFeatures = () => {
     featureRegistry.register(NavigationFeature);
     featureRegistry.register(CameraManagerFeature);
 
-    // Systems (engine-core-shared — same module identity).
+    // Systems. Mixed: audio/modulation/webcam/debugTools are engine-core-shared
+    // by module identity; drawing, rotationGizmo and shaderCompiler are
+    // GMT-local (./drawing, ./rotation_gizmo, ./engine).
     featureRegistry.register(AudioFeature);
     featureRegistry.register(DrawingFeature);
     featureRegistry.register(RotationGizmoFeature);
