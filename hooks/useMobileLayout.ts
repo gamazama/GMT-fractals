@@ -3,21 +3,27 @@
  *
  * @invariant Importing this module IS the install step — no
  *   `installMobile()` plugin exists. The module-level resize listener
- *   at lines ~25-37 is installed at first import inside
- *   `if (typeof window !== 'undefined')`. If no module ever imports
- *   this file, the engine store's `isDeviceMobile` / `isPortrait` flags
- *   stay at whatever the slice initializer seeded.
- * @invariant The 768px breakpoint lives in `engine/HardwareDetection.ts`
- *   (`isMobileViewport`); this module imports it. q-083 fixed.
+ *   (the `if (typeof window !== 'undefined')` block below) is installed
+ *   at first import. If no module ever imports this file, the engine
+ *   store's `isDeviceMobile` / `isPortrait` flags stay at whatever the
+ *   `store/slices/uiSlice.ts` initializer seeded.
+ * @invariant The 768px breakpoint this module consumes lives in
+ *   `engine/HardwareDetection.ts` (`isMobileViewport`); this module
+ *   imports it rather than re-implementing it. q-083 fixed. NOTE that
+ *   the *boot* value of `isDeviceMobile` does NOT come through here — the
+ *   uiSlice initializer inlines its own copy of the same test, so the two
+ *   must stay in step. `isMobileViewport`'s JSDoc lists every surviving
+ *   copy.
  * @invariant Orientation uses strict `innerHeight > innerWidth`
- *   (line ~10). A square viewport counts as LANDSCAPE and will NOT
- *   trigger `LandscapeGate`.
+ *   (`detectIsPortrait`). A square viewport counts as LANDSCAPE and will
+ *   NOT trigger `LandscapeGate` — confirmed by driving a headless 700x700
+ *   viewport, which reports `isPortrait: false`.
  * @invariant Resize listener is never removed (intentional — module-
- *   level singleton lives for app lifetime, see the inline comment at
- *   lines ~35-37). Under Vite HMR each module re-evaluation leaks one
- *   extra listener for the dev session; bounded by the inequality
- *   guard at line ~30, wiped on full reload. No production impact.
- *   See q-086.
+ *   level singleton lives for app lifetime, see the inline comment on the
+ *   `addEventListener` call). Under Vite HMR each module re-evaluation
+ *   leaks one extra listener for the dev session; bounded by the
+ *   change-detection guard inside `sync`, wiped on full reload. No
+ *   production impact. See q-086.
  */
 
 import { useEngineStore } from '../store/engineStore';
