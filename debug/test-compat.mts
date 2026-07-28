@@ -21,7 +21,7 @@
  * coverage requires the full harness port (test:baseline / test:hybrid /
  * test:interlace) which is queued as separate work.
  *
- * @see dev/plans/capability-protocol.md (Phase 0)
+ * @see plans/capability-protocol.md (Phase 0)
  * @see docs/history/gmt/35_Capability_Protocol.md
  */
 

@@ -8,7 +8,7 @@
  * pass pre-built groups with per-item `onSelect` callbacks. The picker
  * just surfaces them in the sidebar + grid and invokes onSelect on click.
  *
- * @see dev/plans/formula-picker-design.md (Scenes — caller-driven)
+ * @see plans/formula-picker-design.md (Scenes — caller-driven)
  */
 
 import type React from 'react';

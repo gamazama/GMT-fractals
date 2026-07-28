@@ -8,7 +8,7 @@
  * booleans were deleted from FractalDefinition; parseGMF promotes them to
  * tokens at the parse boundary, so every registered def carries a set.
  *
- * @see dev/plans/capability-protocol.md (Phase 7)
+ * @see plans/capability-protocol.md (Phase 7)
  * @see docs/adr/0059-feature-capability-protocol.md (update block: flag retirement)
  */
 

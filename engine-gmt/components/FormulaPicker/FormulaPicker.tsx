@@ -23,7 +23,7 @@
  *     popover width.
  *   - Hover preview floater renders alongside the popover (not over the grid).
  *
- * @see dev/plans/formula-picker-design.md (locked spec)
+ * @see plans/formula-picker-design.md (locked spec)
  */
 
 import React, {

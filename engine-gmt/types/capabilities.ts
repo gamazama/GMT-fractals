@@ -10,7 +10,7 @@
  * Adding a new token requires an ADR amendment (see ADR-0059).
  *
  * @see docs/history/gmt/35_Capability_Protocol.md
- * @see dev/plans/capability-protocol.md
+ * @see plans/capability-protocol.md
  */
 
 export type Capability =

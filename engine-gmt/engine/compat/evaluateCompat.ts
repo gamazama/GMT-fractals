@@ -5,7 +5,7 @@
  * panel feature list, and the forthcoming New Scene wizard. Single
  * source of truth for "is this feature available given current
  * formula(s)?" — replaces six ad-hoc visibility patterns (see audit
- * in dev/plans/capability-protocol.md).
+ * in plans/capability-protocol.md).
  *
  * @invariant Pure function. No store imports. No memoization. Callers
  *   handle memo if they want it. No side effects.

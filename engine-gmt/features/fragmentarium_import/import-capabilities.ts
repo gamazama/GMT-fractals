@@ -16,7 +16,7 @@
  *
  * See:
  * - docs/history/gmt/35_Capability_Protocol.md
- * - dev/plans/capability-protocol.md (Phases 5 + 6)
+ * - plans/capability-protocol.md (Phases 5 + 6)
  */
 
 import type { Capability } from '../../types/capabilities';
