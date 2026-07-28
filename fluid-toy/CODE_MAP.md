@@ -18,6 +18,10 @@ overview lives in [README.md](README.md); this doc is purely the index.
   the engine via per-feature `sync<X>ToEngine` functions.
 - **[useDeepZoomOrbit.ts](useDeepZoomOrbit.ts)** — orbit/LA/AT rebuild
   loop + GPU-time poll for the diagnostics overlay.
+- **[FluidPointerLayer.tsx](FluidPointerLayer.tsx)** — 46 lines. Mounts the
+  `pointer/` hooks onto the canvas.
+- **[setup.ts](setup.ts)** — one-call panel-manifest install, run after
+  React mounts.
 
 ## State & registry
 
@@ -97,34 +101,54 @@ overview lives in [README.md](README.md); this doc is purely the index.
 Reference-orbit perturbation pipeline. Worker-side does the heavy
 BigInt math; main thread drives uploads via `engine.deepZoom.xxx`.
 
-- **[deepZoom/HighPrecComplex.ts](deepZoom/HighPrecComplex.ts)** —
-  fixed-point BigInt complex arithmetic; `HPReal.fromNumber` extracts
-  IEEE-754 (mantissa, exp) directly so DD lo words survive.
-- **[deepZoom/dd.ts](deepZoom/dd.ts)** — Dekker double-double primitives
-  (`twoSum`, `ddAddF64`, `ddSub`).
-- **[deepZoom/HDRFloat.ts](deepZoom/HDRFloat.ts)** — `(mantissa, exp)`
-  pair for shader uniforms past 1e-38.
-- **[deepZoom/referenceOrbit.ts](deepZoom/referenceOrbit.ts)** — orbit
-  builder (Mandelbrot + Julia, power 2..8).
-- **[deepZoom/laBuilder.ts](deepZoom/laBuilder.ts)** — LA merge tree.
-- **[deepZoom/LAInfoDeep.ts](deepZoom/LAInfoDeep.ts)** — LA node algebra.
-- **[deepZoom/laParameters.ts](deepZoom/laParameters.ts)** — LA tuning.
-- **[deepZoom/atBuilder.ts](deepZoom/atBuilder.ts)** — AT (Approximation
-  Terms) front-load.
-- **[deepZoom/deepZoomWorker.ts](deepZoom/deepZoomWorker.ts)** — worker
-  entry; serialises orbit + LA + AT for transferable upload.
-- **[deepZoom/laRuntime.ts](deepZoom/laRuntime.ts)** — main-thread
-  worker proxy + singleton.
-- **[deepZoom/diagnostics.ts](deepZoom/diagnostics.ts)** — Zustand
-  diag store consumed by `DeepZoomStatus`.
-- **[deepZoom/benchmark.ts](deepZoom/benchmark.ts)** — A/B perf bench
-  for the diagnostics panel.
+**The pipeline itself is no longer here.** It was carved into
+[`engine/fractal/deepZoom/`](../engine/fractal/deepZoom/) so the Gradient
+Explorer's live-fractal path shares the same DD/orbit/LA math instead of
+forking it. `fluid-toy/deepZoom/` now holds two re-export shims plus the two
+fluid-toy-only pieces:
+
+- **[deepZoom/dd.ts](deepZoom/dd.ts)** — shim; re-exports the Dekker
+  double-double primitives (`twoSum`, `ddAddF64`, `ddSub`) from
+  `engine/fractal/deepZoom/dd.ts`.
+- **[deepZoom/laRuntime.ts](deepZoom/laRuntime.ts)** — shim; re-exports
+  `DeepZoomRuntime` / `getDeepZoomRuntime` (main-thread worker proxy +
+  singleton) from `engine/fractal/deepZoom/laRuntime.ts`.
+- **[deepZoom/diagnostics.ts](deepZoom/diagnostics.ts)** — fluid-toy only.
+  Tiny pub/sub (deliberately NOT a Zustand slice) consumed by
+  `DeepZoomStatus`.
+- **[deepZoom/benchmark.ts](deepZoom/benchmark.ts)** — fluid-toy only. A/B
+  perf bench for the diagnostics panel.
+
+In the shared library at `engine/fractal/deepZoom/`: `HighPrecComplex.ts`
+(fixed-point BigInt complex; `HPReal.fromNumber` extracts IEEE-754
+mantissa/exp so DD lo words survive), `HDRFloat.ts` (`(mantissa, exp)` pair
+for uniforms past 1e-38), `referenceOrbit.ts` (orbit builder, Mandelbrot +
+Julia, power 2..8), `laBuilder.ts` (LA merge tree), `LAInfoDeep.ts` (LA node
+algebra), `laParameters.ts` (LA tuning), `atBuilder.ts` (AT front-load) and
+`deepZoomWorker.ts` (worker entry; serialises orbit + LA + AT for
+transferable upload).
+
+## Bucket render (`bucket/`)
+
+- **[bucket/FluidBucketController.ts](bucket/FluidBucketController.ts)** —
+  fluid-toy adapter for the generic bucket-render panel. Two nested loops:
+  an image-tile loop (one PNG per tile) and a GPU sub-bucket loop inside
+  each tile (`uRegionMin`/`uRegionMax` discard, canvas held at tile size).
 
 ## UI components (`components/`)
 
 - `DomOverlays.tsx`, `JuliaCPicker.tsx`, `MandelbrotPicker.tsx`,
   `ViewLibraryPanel.tsx`, `PresetGrid.tsx`, `HotkeysCheatsheet.tsx`,
   `QualityBadge.tsx`, `DeepZoomStatus.tsx`, `DeepZoomBench.tsx`.
+- Topbar / panel widgets: `FluidToggleButton.tsx` (the one-click
+  "start the fluid" toggle — unfreezes the sim AND switches composite to
+  Mixed), `CoordsButton.tsx` (copy view+colour state as JSON),
+  `FitGradientButton.tsx` (`palette-fit` widget — anchor the gradient onto
+  the current iteration range), `IterationReadout.tsx` (which iteration cap
+  is actually live right now).
+- `RenderDialog/exportRunner.ts` — deterministic per-frame video export
+  ratchet (scrub → modulate → converge TSAA → step sim by exactly 1/fps →
+  encode).
 
 ## Brush (`brush/`)
 
