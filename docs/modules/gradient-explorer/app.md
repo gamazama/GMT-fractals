@@ -42,7 +42,7 @@ Image stages are imported straight from `palette/components/`.
 | App frame, mode → stage routing, responsive/mobile layout | [`gradient-explorer/GradientExplorerApp.tsx`](../../../gradient-explorer/GradientExplorerApp.tsx) |
 | The Picker mode's centre stage (wall + carve + hero preview) | [`gradient-explorer/PickerStage.tsx`](../../../gradient-explorer/PickerStage.tsx) |
 | The palette domain itself (picker/generator/image/favients/export) | [palette-suite.md](../palette/palette-suite.md) |
-| Engine concepts these reference | [Architecture](../../engine/01_Architecture.md), [Feature Registry](../../engine/02_Feature_Registry.md), [Plugin Contract](../../engine/03_Plugin_Contract.md), [Core Plugins](../../engine/04_Core_Plugins.md) |
+| Engine concepts these reference | [Architecture](../../history/engine/01_Architecture.md), [Feature Registry](../../history/engine/02_Feature_Registry.md), [Plugin Contract](../../history/engine/03_Plugin_Contract.md), [Core Plugins](../../history/engine/04_Core_Plugins.md) |
 
 ## What the app is
 
@@ -59,7 +59,7 @@ export.
 ## Boot sequence (`main.tsx`)
 
 The boot mirrors the `demo` app's three-step plugin contract
-([03_Plugin_Contract.md](../../engine/03_Plugin_Contract.md)): **registration →
+([03_Plugin_Contract.md](../../history/engine/03_Plugin_Contract.md)): **registration →
 store-touch → setup**, in this exact order (the feature/component registries freeze on
 first store access).
 
@@ -91,16 +91,16 @@ first store access).
 
 | Plugin / tool | Install call | Why this app needs it | Engine doc |
 |---|---|---|---|
-| TopBar | `installTopBar()` | Slot host for the app name, Back-to-GMT link, Favients toggle, FPS readout | [04_Core_Plugins.md § topbar](../../engine/04_Core_Plugins.md) |
-| Menu | `installMenu()` | Dropdown host; installed **before** Help/SceneIO since both register into it | [04_Core_Plugins.md](../../engine/04_Core_Plugins.md) |
-| Shortcuts | `installShortcuts()` | Ctrl+Z/Y undo, Ctrl+S/O save-load hotkeys, Esc handling | [07_Shortcuts.md](../../engine/07_Shortcuts.md) |
-| Undo | `installUndo()` | Param-scope undo for every DDFS dial + the generator curve/slot history provider | [06_Undo_Transactions.md](../../engine/06_Undo_Transactions.md) |
-| SceneIO | `installSceneIO({ fileExtension: 'json' })` | Save/Load the palette config. Generator/picker/image dials are DDFS feature slices, so the engine-standard preset round-trips them. **No canvas → JSON download only, no PNG export.** | [04_Core_Plugins.md § scene-io](../../engine/04_Core_Plugins.md) |
-| Help + Feedback | `installHelp(...)` + `registerFeedbackUI()` | Help menu + shared GMT Support / Send-Feedback entries (same as every engine app) | [05_Shared_UI.md](../../engine/05_Shared_UI.md) |
-| Hud | `installHud()` | HUD host (toasts/badges surface) | [04_Core_Plugins.md](../../engine/04_Core_Plugins.md) |
-| Animation (modulation) | `installModulation()` + `installModulationUI()` | Param sliders show the keyframe diamond and key onto the timeline; LFO widget. `TimelineHost` is mounted in the app frame. | [08_Animation.md](../../engine/08_Animation.md) |
-| PwaUpdate | `installPwaUpdate()` | Service-worker update prompt (shared affordance) | [04_Core_Plugins.md](../../engine/04_Core_Plugins.md) |
-| Feature system / AutoFeaturePanel | `registerUI()` + the panel manifest | Renders the three palette features' dock panels from their `params` metadata | [02_Feature_Registry.md](../../engine/02_Feature_Registry.md) |
+| TopBar | `installTopBar()` | Slot host for the app name, Back-to-GMT link, Favients toggle, FPS readout | [04_Core_Plugins.md § topbar](../../history/engine/04_Core_Plugins.md) |
+| Menu | `installMenu()` | Dropdown host; installed **before** Help/SceneIO since both register into it | [04_Core_Plugins.md](../../history/engine/04_Core_Plugins.md) |
+| Shortcuts | `installShortcuts()` | Ctrl+Z/Y undo, Ctrl+S/O save-load hotkeys, Esc handling | [07_Shortcuts.md](../../history/engine/07_Shortcuts.md) |
+| Undo | `installUndo()` | Param-scope undo for every DDFS dial + the generator curve/slot history provider | [06_Undo_Transactions.md](../../history/engine/06_Undo_Transactions.md) |
+| SceneIO | `installSceneIO({ fileExtension: 'json' })` | Save/Load the palette config. Generator/picker/image dials are DDFS feature slices, so the engine-standard preset round-trips them. **No canvas → JSON download only, no PNG export.** | [04_Core_Plugins.md § scene-io](../../history/engine/04_Core_Plugins.md) |
+| Help + Feedback | `installHelp(...)` + `registerFeedbackUI()` | Help menu + shared GMT Support / Send-Feedback entries (same as every engine app) | [05_Shared_UI.md](../../history/engine/05_Shared_UI.md) |
+| Hud | `installHud()` | HUD host (toasts/badges surface) | [04_Core_Plugins.md](../../history/engine/04_Core_Plugins.md) |
+| Animation (modulation) | `installModulation()` + `installModulationUI()` | Param sliders show the keyframe diamond and key onto the timeline; LFO widget. `TimelineHost` is mounted in the app frame. | [08_Animation.md](../../history/engine/08_Animation.md) |
+| PwaUpdate | `installPwaUpdate()` | Service-worker update prompt (shared affordance) | [04_Core_Plugins.md](../../history/engine/04_Core_Plugins.md) |
+| Feature system / AutoFeaturePanel | `registerUI()` + the panel manifest | Renders the three palette features' dock panels from their `params` metadata | [02_Feature_Registry.md](../../history/engine/02_Feature_Registry.md) |
 
 **Deliberately NOT installed:** `installViewport()`, `installCamera()`, a real render
 loop driving a raymarcher — there's no fractal surface. `EngineBridge` +
@@ -109,7 +109,7 @@ TickRegistry (timeline playback + keyframe application), not a GPU render.
 
 ## Panel manifest (`setup.ts` → `wireGradientExplorer`)
 
-`applyPanelManifest([...])` declares four panels (see [14_Panel_Manifest.md](../../engine/14_Panel_Manifest.md)):
+`applyPanelManifest([...])` declares four panels (see [14_Panel_Manifest.md](../../history/engine/14_Panel_Manifest.md)):
 
 - **Picker** — right dock, order 0, `active: true` (default mode), feature `paletteFilters`.
 - **Generator** — right dock, order 1, feature `paletteGenerator`.
@@ -145,7 +145,7 @@ panel), plus `HudHost`, `HelpOverlay`, `GlobalContextMenu`, `TimelineHost`,
   controls, and an accordion `MobilePickerControls` that splits the Picker's long
   control scroll into Sources / Arrange / Quality sections (tagged via `groupFilter` on
   the `paletteFilters` feature; desktop dock is unaffected). See
-  [17_Mobile_Layout.md](../../engine/17_Mobile_Layout.md).
+  [17_Mobile_Layout.md](../../history/engine/17_Mobile_Layout.md).
 
 ### `PickerStage.tsx`
 The Picker mode's centre stage (the other two stages live in `palette/`). It:
