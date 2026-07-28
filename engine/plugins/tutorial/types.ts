@@ -5,10 +5,13 @@
  * Apps narrow them to their typed store (e.g. `TutorialStep<GmtState>`) so
  * `onEnter` / `onExit` receive a typed parameter — no `(store as any)`.
  *
- * Trigger kinds are open-ended: the engine ships generic ones (value, delta,
- * keypress, …) and apps register more (tab, mode, action) via
- * `tutor.registerTrigger(...)`. A `TriggerSpec` is an object with a `kind`
- * string and arbitrary other fields the corresponding evaluator reads.
+ * Trigger kinds are open-ended: the engine ships ten generic ones (value,
+ * bool, delta, compound, or, keypress, keypress_all, delay, action, manual)
+ * and apps register more (app-gmt adds tab + mode) via
+ * `tutorTriggers.register(...)` — the registry exported from
+ * `engine/plugins/Tutorial`. There is no `tutor` facade object.
+ * A `TriggerSpec` is an object with a `kind` string and arbitrary other
+ * fields the corresponding evaluator reads.
  */
 
 export interface TriggerSpec {

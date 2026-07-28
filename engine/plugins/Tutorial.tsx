@@ -27,9 +27,11 @@ import { useEngineStore } from '../../store/engineStore';
 let _installed = false;
 
 export interface InstallTutorialOptions {
-    /** localStorage namespace for completion persistence. Default
-     *  `'gmt-tutorials'` (suffix appended by setTutorialStorageKey).
-     *  Change for non-GMT apps. */
+    /** localStorage namespace for completion persistence. Omit it and the
+     *  key stays uiSlice's `'gmt-tutorials'` default — `setTutorialStorageKey`
+     *  is only called when this option is present, and it stores the key
+     *  VERBATIM. The `-tutorials` suffix is appended here, at the call site
+     *  below, not by setTutorialStorageKey. Change for non-GMT apps. */
     storageKey?: string;
 }
 

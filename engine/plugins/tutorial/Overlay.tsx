@@ -1,8 +1,11 @@
 /**
  * Tutorial overlay — chrome (lesson title, step counter, advance buttons)
  * + custom-renderer dispatch. Card placement is computed from anchor
- * bounds (highlightTargets[0] for vertical center, optional positionTarget
- * for horizontal). Apps register custom step kinds via `stepRenderers`.
+ * bounds: the first `highlightTargets` entry with a non-zero rect gives the
+ * vertical center, and the optional `position.target` (a `PositionConfig`
+ * field — the old flat `positionTarget` step field no longer exists) is
+ * preferred for horizontal placement. Apps register custom step kinds via
+ * `stepRenderers`.
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';

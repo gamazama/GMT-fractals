@@ -1,5 +1,7 @@
 /**
- * Lesson registry — apps register their lessons via `tutor.registerLessons`.
+ * Lesson registry — apps register their lessons via the free functions
+ * `registerLesson` / `registerLessons`, re-exported from
+ * `engine/plugins/Tutorial`. There is no `tutor` facade object.
  * The Help plugin's `tutorials` option reads from here to surface menu
  * entries with completion checkmarks.
  */

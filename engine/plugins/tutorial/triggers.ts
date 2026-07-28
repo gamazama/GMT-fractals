@@ -1,7 +1,11 @@
 /**
  * Trigger registry — open set of evaluators keyed by `kind`. The engine
- * ships nine generic kinds (below); apps register UI-coupled kinds (`tab`,
- * `mode`, `action`, …) via `tutorTriggers.register(...)`.
+ * ships TEN generic kinds — value, bool, delta, compound, or, keypress,
+ * keypress_all, delay, action, manual — all wired in
+ * `registerBuiltinTriggers()` below. Apps register UI-coupled kinds on top
+ * (app-gmt adds `tab` + `mode`) via `tutorTriggers.register(...)`.
+ * Note `action` is a BUILT-IN, not an app kind: the engine ships the
+ * evaluator and apps only fire names on `actionBus`.
  *
  * An evaluator's `setup` runs at step entry. It returns one or both of:
  *   - `evaluate(state)`: passive predicate run on every store change
