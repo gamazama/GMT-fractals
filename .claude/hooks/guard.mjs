@@ -3,7 +3,7 @@
  * PreToolUse guard — turns three prose rules into enforced ones.
  *
  *   docs/history/**   append-only  (rewrites denied, appends allowed)
- *   docs/adr/*.md     ask          (write-once, with two documented carve-outs)
+ *   docs/adr/*.md     append-only  (additive edits pass silently; text loss asks)
  *   components/ui/**  no store     (the pure-primitive layer, currently 0 imports)
  *
  * Reads the PreToolUse JSON payload on stdin. Exits 0 always; prints a
@@ -62,16 +62,46 @@ if (inDir('docs/history')) {
 }
 
 // -------------------------------------------------------------------- docs/adr
-// Write-once, with two carve-outs CLAUDE.md documents explicitly. Too nuanced to
-// auto-classify, so escalate to the user rather than deny.
+// Write-once in the sense that actually matters: no existing text may be DESTROYED.
+// This branch used to ask on every ADR write, on the grounds that a sanctioned
+// Update block could not be told from a body rewrite. It can: both sanctioned edits
+// (inserting a dated "> **Update ...**" block, stamping "Status: Superseded by
+// ADR-NNNN") only add lines, and a rewrite necessarily drops some. Asking
+// unconditionally cost more than it caught — it made ADRs untouchable by any
+// unattended run, so the 2026-07-27 audit had to queue 11 corrections to morning.
+// Now the prompt fires only when text would be lost. Note the Superseded stamp
+// replaces "Status: Accepted", so it does still ask — that is a deliberate,
+// once-per-ADR act and worth confirming.
+const survivesIntact = (before, after) => {
+  const oldLines = before.replace(/\r\n/g, '\n').split('\n');
+  const newLines = after.replace(/\r\n/g, '\n').split('\n');
+  let i = 0;
+  for (const line of newLines) if (i < oldLines.length && line === oldLines[i]) i++;
+  return i === oldLines.length;
+};
+
 if (inDir('docs/adr') && p.endsWith('.md')) {
-  const isNew = tool === 'Write' && !existsSync(filePath);
-  if (isNew) defer();
-  decide('ask',
-    'ADRs are write-once historical records (CLAUDE.md). Only two edits are sanctioned: ' +
-    'prepending a "> **Update YYYY-MM-DD (...; decision unchanged):**" block when a rename ' +
-    'or refactor invalidates a cited symbol, and stamping "Status: Superseded by ADR-NNNN". ' +
-    'Anything else should be a NEW ADR that supersedes this one. Confirm which this is.');
+  const reason =
+    'ADRs are append-only historical records (CLAUDE.md): a decision is overturned by a NEW ' +
+    'ADR that supersedes it, never by rewriting the original. This change removes or alters ' +
+    'existing text rather than only adding to it. Sanctioned exceptions: stamping ' +
+    '"Status: Superseded by ADR-NNNN". If you meant to record drift, insert a ' +
+    '"> **Update YYYY-MM-DD (...; decision unchanged):**" block instead and leave the body intact.';
+
+  if (tool === 'Edit') {
+    const { old_string = '', new_string = '' } = input;
+    // The old text surviving verbatim inside the new means this is an insertion
+    // around it — the shape every Update block takes.
+    if (new_string.includes(old_string)) defer();
+    decide('ask', reason);
+  }
+  if (tool === 'Write') {
+    if (!existsSync(filePath)) defer();   // a brand-new ADR is always fine
+    let prev = '';
+    try { prev = readFileSync(filePath, 'utf8'); } catch { defer(); }
+    if (survivesIntact(prev, input.content || '')) defer();
+    decide('ask', reason);
+  }
 }
 
 // ------------------------------------------------------------- components/ui/**
