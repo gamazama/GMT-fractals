@@ -3,6 +3,10 @@ paths:
   - "engine-gmt/formulas/**"
   - "engine-gmt/engine/FractalRegistry.ts"
   - "engine-gmt/utils/GraphCompiler.ts"
+  - "engine-gmt/utils/graphAlg.ts"
+  - "engine-gmt/engine/NodeRegistry.ts"
+  - "engine-gmt/data/nodes/**"
+  - "engine-gmt/store/modularSlice.ts"
 ---
 
 # Formula registry + modular graph
@@ -32,7 +36,7 @@ npm run test:compat        # iterates the LIVE registry (barrel + registerFeatur
                            # capabilities present, exactly one shape: token, params array
 npm run smoke:engine-gmt   # boots app-gmt.html end-to-end; asserts a lit Mandelbulb pixel
 npm run test:baseline      # native config sweep — real shader compiles per formula
-npm run test:hybrid        # graph/hybrid half of this rule
+npm run test:hybrid        # hybrid BOX-FOLD config, not the node graph (see below)
 npm run test:weave-sweep
 npm run smoke:deep-zoom-orbit
 npm run smoke:deep-zoom-la
@@ -50,3 +54,20 @@ only round-trips fluid-toy's `julia.kind` DDFS param. Neither one loads
 The deep-zoom smokes are CPU-only tests of `engine/fractal/deepZoom/*`
 (`computeReferenceOrbit` and friends) — they cover the "Watch out" precision
 notes above, not the registry.
+
+**Nothing above guards the modular graph.** `test:hybrid` / `test:hybrid-adv` are
+`debug/native-config-sweep.mts --mode=hybrid`, where "hybrid" means the hybrid
+box-fold geometry config — and that sweep's `eligibleFormulas()` does
+`.filter(def => def.id !== 'Modular')` for EVERY mode, so `test:baseline` skips
+Modular too; `native-weave-sweep` likewise ("Modular — no GLSL to rewrite").
+`test:compat` is node-only and explicitly exempts Modular from its shader checks.
+`smoke:engine-gmt` boots app-gmt at the default Mandelbulb and asserts
+`store.formula === 'Mandelbulb'`, and `core_math`'s `inject` only calls
+`compileGraph` when `formula === 'Modular'` — so it proves the module parses,
+never that it compiles a graph correctly.
+
+So `compileGraph` / `updateModularUniforms` / `topologicalSort` /
+`isStructureEqual` have ZERO executable coverage. Two live `@bug PRODUCTION:`
+annotations in `utils/GraphCompiler.ts` and `utils/graphAlg.ts` are the direct
+consequence. Verify changes here by hand, or add a node-only harness — the whole
+path is pure functions with no WebGL dependency, so one is cheap.
