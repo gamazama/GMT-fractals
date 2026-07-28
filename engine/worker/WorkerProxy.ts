@@ -371,9 +371,28 @@ let _proxy: WorkerProxy | null = null;
  *       OFFSET_SET push, CONFIG_DONE) is unreachable in app-gmt.
  *     · `store/slices/historySlice.ts:190` — the `engine.resetAccumulation()`
  *       on undo/redo restore is a no-op against the stub.
+ *
+ *   SEVERITY, MEASURED 2026-07-28 — the second consequence is MASKED, so this
+ *   is latent rather than user-visible today. Probed on the running app:
+ *   bracketed a `setCoreMath({paramA})` in a param transaction, let
+ *   accumulation build to 3, then called `undo()`. The value reverted (8 →
+ *   0.42 → 8) AND `accumulationCount` dropped 3 → 1 — i.e. the reset happens
+ *   regardless, via the ordinary param-change path (the setter's own reset /
+ *   CompileScheduler), not via this dead call. So undo does NOT leave a stale
+ *   accumulation buffer, which is what the raw finding implies.
+ *   Do not read that as "harmless": the call site is dead code that LOOKS
+ *   load-bearing, so anyone reasoning about undo's reset semantics from source
+ *   will conclude the wrong mechanism is responsible — and if the redundant
+ *   path is ever removed as an optimisation, the bug becomes live with no test
+ *   to catch it. The first consequence (loadScene's post-boot branch being
+ *   unreachable) was NOT re-measured and may still be user-visible.
+ *
  *   The fix is to call `getProxy()` at use time rather than capture it at
  *   module scope; other module-scope captures under `components/` and
- *   `utils/` should be swept at the same time.
+ *   `utils/` should be swept at the same time. Note the engine-gmt twin
+ *   (`engine-gmt/engine/worker/WorkerProxy.ts`) has NO `setProxy` and its
+ *   `getProxy()` is a lazy singleton, so module-scope capture against THAT
+ *   module is safe — the ~20 sites across `engine-gmt/**` are not part of this.
  */
 export function setProxy(proxy: WorkerProxy): void {
     _proxy = proxy;
