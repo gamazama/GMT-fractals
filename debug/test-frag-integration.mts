@@ -746,7 +746,15 @@ const REGISTERED_TESTS: { label: string; relPath: string }[] = [
     { label: 'Treebroccoli',              relPath: `${REF}/Kali's Creations/Treebroccoli.frag` },
     { label: 'KboxExpSmooth',             relPath: `${REF}/Kali's Creations/KboxExpSmooth.frag` },
     { label: 'LivingKIFS',                relPath: `${REF}/Kali's Creations/LivingKIFS.frag` },
-    { label: 'RotJulia',                  relPath: `${REF}/Kali's Creations/RotJulia.frag` },
+    // No-DE formulas: the importer is *supposed* to reject these. Marked
+    // expectFail so a rejection counts as a pass — see the loop below.
+    // Two distinct shapes here, and the distinction matters if you ever
+    // revisit them: BioMorph / sinhJulia / HiddenBrotCos are genuinely 2D
+    // (`#include "Progressive2D.frag"`, entry point `vec3 color(vec2 c)`),
+    // whereas RotJulia is 3D — a Mandelbulb variant whose only entry point is
+    // `bool inside(vec3)` under `#include "Brute-Raytracer.frag"`, i.e. it has
+    // no distance estimator rather than no third dimension.
+    { label: 'RotJulia',                  relPath: `${REF}/Kali's Creations/RotJulia.frag`, expectFail: true },
     { label: 'Tutorial 12 (Mandelbulb)',  relPath: `${REF}/Tutorials/12 - Faster raytracing of 3D fractals.frag` },
     { label: 'AmazingSurface',            relPath: `${REF}/Kali's Creations/amazingsurface.frag` },
     { label: 'Mandelbulb (Historical)',   relPath: `${REF}/Historical 3D Fractals/Mandelbulb.frag` },
@@ -756,10 +764,10 @@ const REGISTERED_TESTS: { label: string; relPath: string }[] = [
     { label: 'PseudoKleinianMenger',      relPath: `${REF}/Knighty Collection/PseudoKleinianMenger.frag` },
     { label: 'BuffaloBulb',               relPath: `${REF}/3DickUlus/BuffaloBulb.frag` },
     { label: 'PetraBox',                  relPath: `${REF}/3DickUlus/PetraBox.frag` },
-    { label: 'BioMorph',                  relPath: `${REF}/3DickUlus/BioMorph.frag` },
+    { label: 'BioMorph',                  relPath: `${REF}/3DickUlus/BioMorph.frag`, expectFail: true },
     { label: 'Pengbulb',                  relPath: `${REF}/3DickUlus/Pengbulb.frag` },
     { label: 'LionBulb',                  relPath: `${REF}/3DickUlus/LionBulb.frag` },
-    { label: 'sinhJulia',                 relPath: `${REF}/3DickUlus/sinhJulia.frag` },
+    { label: 'sinhJulia',                 relPath: `${REF}/3DickUlus/sinhJulia.frag`, expectFail: true },
     { label: 'BioCube',                   relPath: `${REF}/DarkBeam/BioCube.frag` },
     { label: 'FoldcutToy',               relPath: `${REF}/DarkBeam/FoldcutToy.frag` },
     { label: 'RecFold',                   relPath: `${REF}/DarkBeam/RecFold.frag` },
@@ -791,7 +799,7 @@ const REGISTERED_TESTS: { label: string; relPath: string }[] = [
     { label: 'MengerSmooth',            relPath: `${REF}/Benesi/MengerSmooth.frag` },
     { label: 'MMM (3Dickulus)',         relPath: `${REF}/3DickUlus/MMM.frag` },
     { label: 'BurtsBisectorBulb',       relPath: `${REF}/3DickUlus/BurtsBisectorBulb.frag` },
-    { label: 'HiddenBrotCos',           relPath: `${REF}/3DickUlus/HiddenBrotCos.frag` },
+    { label: 'HiddenBrotCos',           relPath: `${REF}/3DickUlus/HiddenBrotCos.frag`, expectFail: true },
     { label: 'Menger11 (Kashaders)',    relPath: `${REF}/Kashaders/Fractals/KIFSandCO/Menger11.frag` },
     { label: 'CrossMenger (Kashaders)', relPath: `${REF}/Kashaders/Fractals/KIFSandCO/Cross-menger.frag` },
     { label: 'AnotherKoch3D',           relPath: `${REF}/Kashaders/Fractals/KIFSandCO/AnotherKoch3D.frag` },
@@ -837,7 +845,7 @@ test('DEFAULT_SCRIPT (Mandelbox)', DEFAULT_MANDELBOX, { inline: true });
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-let testList: { label: string; relPath: string }[];
+let testList: { label: string; relPath: string; expectFail?: boolean }[];
 
 // Auto-discover when --discover, --random, or a path-like filter is given
 if (DISCOVER || RANDOM_N > 0 || (FILTER && (FILTER.includes('/') || FILTER.includes('\\')))) {
@@ -865,7 +873,21 @@ if (!JSON_OUT) {
 }
 
 for (const t of testList) {
-    test(t.label, t.relPath);
+    const r = test(t.label, t.relPath);
+    // Expected-rejection entries (no DE function): the importer refusing
+    // them IS the correct behaviour, so a rejection scores as a pass and an
+    // unexpected acceptance scores as a failure. Without this the registered
+    // matrix could never reach 0 failures and the exit code below was noise.
+    if (t.expectFail) {
+        if (r.status === 'fail') {
+            r.status = 'pass';
+            r.warnings.push(`expected rejection: ${r.error ?? 'importer refused the formula'}`);
+            r.error = undefined;
+        } else {
+            r.status = 'fail';
+            r.error = 'expected rejection (no DE function — 2D shader or brute-raytracer) but the importer accepted it';
+        }
+    }
 }
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

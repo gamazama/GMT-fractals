@@ -33,3 +33,26 @@ npm run test:frag:integration
 npm run smoke:share-link
 npm run smoke:gallery-link
 ```
+
+**Two of these were not real gates until 2026-07-28.** `test:frag` printed
+`N failed` and then exited 0, so nothing that read its exit code could ever see a
+regression; it now exits 1 on failure. `test:frag:integration` passed `--discover`
+and swept the whole ~580-file `reference/Examples` tree, sitting permanently at
+236 passed / 307 failed / exit 1 — a guard that has never been green cannot
+distinguish a regression from its own baseline. It now runs the curated
+registered matrix and is green.
+
+**The full sweep still exists as `npm run test:frag:integration:discover`, and it
+is worth running by hand.** It is diagnostic-only and permanently red — but of
+its 307 failures, 289 are by-design rejections (Fragmentarium raytracer headers,
+`Progressive2D` 2D shaders, DE-less brute-raytracer files) and **18 are standalone
+3D fractals with a real `float DE(vec3)` body that fail on GLSL parse errors** —
+unsupported `samplerCube`/texture uniform syntax, plus at least two parser
+null-derefs (`Benesi/MengersmoothPolyhedra.frag`,
+`Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02----l.frag`). Those 18 are a
+genuine importer gap, not noise. Nothing gates on them, so run the sweep before
+you conclude the importer handles a given family of formulas.
+
+`npm run test:frag:scan` is **a report, not a guard** — it has no assertion and no
+`process.exit`, so it prints its failures and exits 0 regardless. Do not cite it
+as passing evidence.
