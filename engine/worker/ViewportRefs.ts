@@ -141,13 +141,25 @@ export function getDisplayCamera(): THREE.Camera | null {
 }
 
 // Track whether the mouse is over the viewport canvas (vs UI panels/menus).
-// Used by adaptive resolution to decide grace period behavior.
+// Written by `engine/plugins/viewport/ViewportFrame.tsx` and
+// `components/ViewportArea.tsx` on mouseenter/mouseleave.
 //
-// @invariant Ref-backed, NOT a Zustand selector — adaptive-resolution
-//   hot path polls every frame and must not trigger React reconciliation
-//   on hover. `AdaptiveResolutionBadge` therefore does NOT re-render on
-//   mouse-over alone; only on the next adaptive state change (followup
-//   q-043).
+// NOT an adaptive-resolution input. `store/slices/viewportSlice.ts`
+// (`reportFps`) still passes `mouseOverCanvas: isMouseOverCanvas()` into
+// `tickAdaptiveResolution` on every frame, but `engine/AdaptiveResolution.ts`
+// never reads it — engagement is activity-driven, not pointer-position-driven
+// (ADR-0061 P5). The only live READER of the value is
+// `engine-gmt/topbar/AdaptiveResolution.tsx`, which uses it to choose the
+// badge's "Auto" (pointer on canvas) vs "Always" (pointer off canvas) label.
+// `engine/plugins/viewport/AdaptiveResolutionBadge.tsx` does not consume it.
+//
+// @invariant Ref-backed, NOT a Zustand selector — it is still read from a
+//   per-frame hot path (`reportFps`, driven in GMT by
+//   `engine-gmt/renderer/GmtRendererTickDriver.tsx`) and must not trigger
+//   React reconciliation on hover. Consequence: the engine-gmt topbar badge
+//   does NOT re-render on mouse-over alone, so its Auto/Always label only
+//   flips on the next unrelated re-render (followup q-043).
+//   @see docs/adr/0035-mouseovercanvas-as-ref-not-store-state.md
 let _mouseOverCanvas = false;
 export function setMouseOverCanvas(over: boolean) { _mouseOverCanvas = over; }
 export function isMouseOverCanvas(): boolean { return _mouseOverCanvas; }
