@@ -97,9 +97,17 @@ export class UniformManager {
      *   image-tile sync → camera basis → uPixelSizeBase → virtual-space
      *   → time + env rotation → fog → lights → rotations.
      *   `uPixelSizeBase` derivation needs the POST-adaptive viewportY
-     *   value; lights need `uCameraPosition` zeroed first; virtual-
-     *   space update needs `uSceneOffsetHigh/Low` value handles wired
-     *   before `updateShaderUniforms` runs.
+     *   value; virtual-space update needs `uSceneOffsetHigh/Low` value
+     *   handles wired before `updateShaderUniforms` runs.
+     *   NOT an ordering constraint (audited 2026-07-28): the light block
+     *   does not read `uCameraPosition`. It packs positions camera-
+     *   relative itself via `VirtualSpace.getLightShaderVector`, which
+     *   subtracts `camera.position` + the scene offset directly. The
+     *   `uCameraPosition.set(0,0,0)` above may sit anywhere in this
+     *   method. It is a viewport-path pin — ray space is camera-origin —
+     *   and note `FractalEngine.syncCameraFromMatrix` writes a NON-zero
+     *   `uCameraPosition` on the worker's boot camera sync, so "always
+     *   zero" is not repo-wide either; per-frame `syncFrame` re-pins it.
      * @invariant `runtimeState.adaptiveSuppressed` (bucket dialog or
      *   export in flight) hard-forces full res. Without it, the FBO
      *   resizes mid-export and briefly displays the cleared buffer.
