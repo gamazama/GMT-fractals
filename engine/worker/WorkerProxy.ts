@@ -77,7 +77,13 @@ export class WorkerProxy implements AccumulationController {
 
     /**
      * @invariant Public mutable field — direct writes are the supported
-     *   API, not action dispatch. The real worker reads it at boot.
+     *   API, not action dispatch. It is consumed on the MAIN thread, not by
+     *   the worker: in GMT, `engine-gmt/store/cameraSlice.ts` stashes every
+     *   CAMERA_TELEPORT here, and `engine-gmt/renderer/GmtRendererTickDriver.tsx`
+     *   drains it once the worker reports boot-ready, re-emitting
+     *   CAMERA_TELEPORT. The field is never transported over postMessage —
+     *   `FractalEngine._pendingTeleport` is a separate, worker-local field fed
+     *   by the in-worker event bus.
      */
     pendingTeleport: CameraState | null = null;
 
@@ -328,10 +334,15 @@ export class WorkerProxy implements AccumulationController {
 // The engine extraction left this stub in place so generic dev/ code
 // (engineStore, components, hooks) compiles without a runtime engine.
 // Apps that have a real Worker-backed engine (engine-gmt) install over
-// the stub at boot via `setProxy()`, so all `getProxy()` calls — both
-// from generic dev/ code and from engine-gmt code — return the SAME
-// instance. Without this, the two singletons diverged: dev/ saw a
-// perpetually-unbooted stub while engine-gmt operated the real worker.
+// the stub at boot via `setProxy()` (from `engine-gmt/renderer/install.ts`),
+// so every `getProxy()` call made AFTER install — from generic dev/ code
+// and from engine-gmt code alike — returns the SAME instance. Without
+// this, the two singletons diverged: dev/ saw a perpetually-unbooted stub
+// while engine-gmt operated the real worker.
+//
+// The registry only fixes late CALLS. A `const engine = getProxy()` at
+// module scope still freezes whatever instance existed at module-eval
+// time — see the @bug on `setProxy` below.
 //
 // Apps that don't install (fluid-toy, fractal-toy, test harnesses) get
 // the no-op fallback — same behavior as before the registry.
@@ -341,6 +352,28 @@ let _proxy: WorkerProxy | null = null;
  * @invariant Must run before any caller has captured a reference from
  *   `getProxy()` — otherwise different consumers can capture different
  *   references (stub vs real). Install at host-app boot.
+ *
+ * @bug PRODUCTION: that invariant is VIOLATED in app-gmt today, and the
+ *   violation is structural rather than an ordering accident.
+ *   `engine-gmt/renderer/install.ts` imports `store/engineStore` (line 32),
+ *   so ESM evaluates `engineStore`'s body — including its module-scope
+ *   `const engine = getProxy()` (`store/engineStore.ts:29`) and, via its own
+ *   import of `./slices/historySlice`, `store/slices/historySlice.ts:43` —
+ *   BEFORE `installGmtRenderer()` can ever run `setProxy()`. Both consts are
+ *   therefore permanently bound to the no-op stub. Verified at runtime on
+ *   `app-gmt.html`: the captured instance reports `gpuInfo === 'Stub (no
+ *   worker)'`, `isBooted === false`, while `getProxy()` and `window.__gmtProxy`
+ *   both return the booted real proxy.
+ *   Known consequences:
+ *     · `store/engineStore.ts:341` — `if (!engine.isBooted && !engine.bootSent)`
+ *       is always true, so `loadScene` always takes the "initial startup"
+ *       branch. The post-boot branch (compileGate spinner, full-config flush,
+ *       OFFSET_SET push, CONFIG_DONE) is unreachable in app-gmt.
+ *     · `store/slices/historySlice.ts:190` — the `engine.resetAccumulation()`
+ *       on undo/redo restore is a no-op against the stub.
+ *   The fix is to call `getProxy()` at use time rather than capture it at
+ *   module scope; other module-scope captures under `components/` and
+ *   `utils/` should be swept at the same time.
  */
 export function setProxy(proxy: WorkerProxy): void {
     _proxy = proxy;
