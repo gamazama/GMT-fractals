@@ -142,7 +142,7 @@ export const Popover: React.FC<PopoverProps> = ({
                     // mobile (the Light Studio popup has unbounded internal layout).
                     className={`${width} max-h-[80dvh] overflow-y-auto mobile-scroll bg-surface border border-line/20 rounded-xl ${
                         padding === 'none' ? 'py-3' : 'p-3'
-                    } shadow-2xl animate-fade-in ${className}`}
+                    } shadow-2xl ${className}`}
                     onClick={(e) => e.stopPropagation()}
                     onMouseEnter={onMouseEnter}
                     onMouseLeave={onMouseLeave}

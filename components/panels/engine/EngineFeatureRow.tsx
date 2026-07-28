@@ -179,7 +179,7 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
             {/* Portal Tooltip */}
             {showTooltip && createPortal(
                 <div
-                    className="fixed pointer-events-none flex items-center animate-fade-in"
+                    className="fixed pointer-events-none flex items-center"
                     style={{
                         top: tooltipPos.top,
                         [tooltipPos.side === 'left' ? 'left' : 'right']: tooltipPos.x,

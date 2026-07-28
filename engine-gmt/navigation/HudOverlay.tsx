@@ -229,7 +229,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                                     if (navigator.vibrate) navigator.vibrate(30);
                                 }}
                                 title={isStepBack ? 'Step the camera back one unit (already at default view)' : 'Reset camera to default view'}
-                                className="flex-1 pointer-events-auto px-2 py-1.5 bg-surface/80 hover:bg-accent-900/80 text-accent-400 hover:text-fg text-[9px] font-bold rounded-tl-lg border-l border-t border-line/10 backdrop-blur-md hidden animate-fade-in shadow-xl whitespace-nowrap"
+                                className="flex-1 pointer-events-auto px-2 py-1.5 bg-surface/80 hover:bg-accent-900/80 text-accent-400 hover:text-fg text-[9px] font-bold rounded-tl-lg border-l border-t border-line/10 backdrop-blur-md hidden shadow-xl whitespace-nowrap"
                             >
                                 {isStepBack ? 'Step Back' : 'Reset'}
                             </button>
@@ -238,7 +238,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                                 onClick={() => { undoCamera?.(); actionBus.fire('camera.undo'); if (navigator.vibrate) navigator.vibrate(30); }}
                                 disabled={!canUndoCamera}
                                 title="Revert the last camera movement (Ctrl+Shift+Z)"
-                                className="flex-1 pointer-events-auto px-2 py-1.5 bg-surface/80 hover:bg-accent-900/80 text-accent-400 hover:text-fg text-[9px] font-bold rounded-tr-lg border-r border-t border-line/10 backdrop-blur-md hidden animate-fade-in shadow-xl whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-surface/80 disabled:hover:text-accent-400"
+                                className="flex-1 pointer-events-auto px-2 py-1.5 bg-surface/80 hover:bg-accent-900/80 text-accent-400 hover:text-fg text-[9px] font-bold rounded-tr-lg border-r border-t border-line/10 backdrop-blur-md hidden shadow-xl whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-surface/80 disabled:hover:text-accent-400"
                             >
                                 Undo Cam
                             </button>

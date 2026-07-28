@@ -319,7 +319,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             <div className={`${surface.panelHeader} border-b ${themeBorder.subtle} p-4 pb-3`} data-help-id="formula.active">
                 <div className="flex justify-between items-baseline mb-1">
                     <SectionLabel color={themeText.dimLabel}>Active Formula</SectionLabel>
-                    {loadTime && <span className={`text-[9px] ${themeText.dimLabel} animate-fade-in`}>{loadTime}</span>}
+                    {loadTime && <span className={`text-[9px] ${themeText.dimLabel}`}>{loadTime}</span>}
                 </div>
                 <FormulaSelect value={state.formula} onChange={switchFormula} />
             </div>

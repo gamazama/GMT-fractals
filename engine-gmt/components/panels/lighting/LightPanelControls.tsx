@@ -226,7 +226,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
       : undefined;
 
   return (
- <div className="animate-fade-in" onContextMenu={handleLightStudioMenu}>
+ <div className="" onContextMenu={handleLightStudioMenu}>
    <div className="mb-4">
       <TabStrip
           items={lighting.lights.map((l, i) => ({

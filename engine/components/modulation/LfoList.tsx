@@ -172,7 +172,7 @@ export const LfoList: React.FC = () => {
                             controls effect, not visibility. A disabled
                             LFO can still be edited; it just doesn't
                             drive liveModulations. */}
-                        <div className="animate-fade-in">
+                        <div className="">
                             <WaveformPreview
                                 shape={anim.shape}
                                 period={anim.period}

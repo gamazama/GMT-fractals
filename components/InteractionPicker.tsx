@@ -37,7 +37,7 @@ export const InteractionPicker: React.FC<InteractionPickerProps> = ({
     };
 
     return (
-        <div className="flex flex-col animate-fade-in" ref={anchorRef}>
+        <div className="flex flex-col" ref={anchorRef}>
              {isActive && helpText && (
                  <div className="mb-px p-2 bg-ok/15 border border-ok/30 rounded text-[9px] text-ok animate-pulse text-center leading-tight">
                      {helpText}

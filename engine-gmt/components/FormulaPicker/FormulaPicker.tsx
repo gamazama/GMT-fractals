@@ -1784,7 +1784,7 @@ function FormulaRow({
 function HoverPreviewCard({ id }: { id: string }) {
     const def = registry.get(id as FormulaType);
     return (
-        <div className="w-full h-full bg-surface-viewport border border-accent-500/50 rounded-lg shadow-[0_0_40px_rgba(0,0,0,1),0_0_20px_rgb(var(--accent-glow)/0.25)] overflow-hidden animate-fade-in">
+        <div className="w-full h-full bg-surface-viewport border border-accent-500/50 rounded-lg shadow-[0_0_40px_rgba(0,0,0,1),0_0_20px_rgb(var(--accent-glow)/0.25)] overflow-hidden">
             <img
                 src={`thumbnails/fractal_${id}.jpg`}
                 className="w-full h-full object-cover"

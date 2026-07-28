@@ -98,7 +98,7 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
                         fullWidth
                     />
                 ) : (
-                    <div className="grid grid-cols-3 gap-2 animate-fade-in">
+                    <div className="grid grid-cols-3 gap-2">
                         <Button onClick={onResume}        label="Resume"  variant="primary" icon={<PlayIcon />} />
                         <Button onClick={onConfirmStitch} label="Finish"  variant="success" icon={<CheckIcon />} />
                         <Button onClick={onDiscard}       label="Discard" variant="danger"  icon={<TrashIcon />} />

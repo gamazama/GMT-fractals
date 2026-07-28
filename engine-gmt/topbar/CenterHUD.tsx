@@ -421,7 +421,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                     <div
                         ref={expandRef}
                         // Positioning: left/top at -20px offsets the p-5 padding, aligning Grid Slot 0 with Collapsed Slot 0
-                        className="absolute top-[-20px] left-[-20px] bg-surface border border-line/20 p-5 rounded-2xl shadow-2xl animate-fade-in z-[80]"
+                        className="absolute top-[-20px] left-[-20px] bg-surface border border-line/20 p-5 rounded-2xl shadow-2xl z-[80]"
                     >
                         <div className="grid grid-cols-3 gap-6">
                              {/* 8 Light Slots */}

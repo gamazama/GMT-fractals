@@ -116,7 +116,7 @@ export const ShareLinkButton: React.FC = () => {
                 <LinkIcon active={status === 'copied'} />
             </button>
             {status !== 'idle' && (
-                <div className={`absolute top-full mt-1 left-1/2 -translate-x-1/2 px-2 py-0.5 ${color[status]} text-fg text-[9px] font-bold rounded whitespace-nowrap animate-fade-in pointer-events-none z-50`}>
+                <div className={`absolute top-full mt-1 left-1/2 -translate-x-1/2 px-2 py-0.5 ${color[status]} text-fg text-[9px] font-bold rounded whitespace-nowrap pointer-events-none z-50`}>
                     {label[status]}
                 </div>
             )}

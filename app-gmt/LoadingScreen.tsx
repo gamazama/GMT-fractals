@@ -349,10 +349,10 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
                         </button>
 
                         {isMenuOpen && (
-                            <div className="absolute bottom-full mb-4 w-[340px] bg-surface border border-line/20 rounded-xl shadow-[0_10px_60px_rgba(0,0,0,0.9)] backdrop-blur-xl animate-fade-in text-xs z-[110]"
+                            <div className="absolute bottom-full mb-4 w-[340px] bg-surface border border-line/20 rounded-xl shadow-[0_10px_60px_rgba(0,0,0,0.9)] backdrop-blur-xl text-xs z-[110]"
                                 onMouseLeave={() => setHoveredId(null)}>
                                 {hoveredId && hoveredId !== 'Modular' && (
-                                    <div className="absolute left-[350px] bottom-0 w-[256px] h-[256px] bg-black border border-accent-500/50 rounded-lg shadow-[0_0_50px_rgba(0,0,0,1)] overflow-hidden animate-fade-in pointer-events-none">
+                                    <div className="absolute left-[350px] bottom-0 w-[256px] h-[256px] bg-black border border-accent-500/50 rounded-lg shadow-[0_0_50px_rgba(0,0,0,1)] overflow-hidden pointer-events-none">
                                         <img src={getThumbPath(hoveredId)} className="w-full h-full object-cover" alt="Preview"
                                             onError={e => { e.currentTarget.style.display = 'none'; }} />
                                         <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03))] bg-[length:100%_4px,4px_100%] pointer-events-none" />

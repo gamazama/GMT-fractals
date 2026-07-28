@@ -33,7 +33,7 @@ export const ToastHost: React.FC = () => {
                         type="button"
                         onClick={() => dismiss(t.id)}
                         title="Dismiss"
-                        className={`pointer-events-auto flex items-center gap-2 px-3.5 py-2 bg-surface-sunken/95 border ${c.border} rounded-lg shadow-xl backdrop-blur-md animate-fade-in max-w-[90vw]`}
+                        className={`pointer-events-auto flex items-center gap-2 px-3.5 py-2 bg-surface-sunken/95 border ${c.border} rounded-lg shadow-xl backdrop-blur-md max-w-[90vw]`}
                     >
                         <span className={`w-1.5 h-1.5 rounded-full ${c.dot} shrink-0`} />
                         <span className={`text-[11px] font-semibold ${c.text} whitespace-pre-wrap text-left`}>{t.message}</span>

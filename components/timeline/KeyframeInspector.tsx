@@ -378,7 +378,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
                             <div className={`w-2 h-2 rounded-full ${softSelectionEnabled ? 'bg-secondary shadow-[0_0_5px_rgb(var(--secondary)/0.8)]' : 'bg-fg-ghost'}`} />
                         </div>
                         {softSelectionEnabled && (
-                            <div className="px-3 pb-2 pt-1 animate-fade-in space-y-2">
+                            <div className="px-3 pb-2 pt-1 space-y-2">
                                 {canSoftType && (
                                 <div className="flex items-center justify-between">
                                     <label className="text-[9px] text-fg-muted font-medium">Falloff</label>

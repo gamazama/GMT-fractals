@@ -102,7 +102,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                      />
                 </div>
                 {colorEditId === '__default' && (
-                    <div className="mb-1 animate-fade-in">
+                    <div className="mb-1">
                         <EmbeddedColorPicker
                             color={'#' + color.getHexString()}
                             onColorChange={(c) => setDrawing({ color: new THREE.Color(c) })}
@@ -111,7 +111,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                 )}
                 
                 {active && (
-                    <div className="mt-2 px-2 py-1.5 bg-accent-900/20 border border-accent-500/20 rounded flex flex-col items-center gap-1 text-[9px] text-cyan-200 animate-fade-in text-center font-mono">
+                    <div className="mt-2 px-2 py-1.5 bg-accent-900/20 border border-accent-500/20 rounded flex flex-col items-center gap-1 text-[9px] text-cyan-200 text-center font-mono">
                         <div>Hold <strong>X</strong> to snap to World Axis</div>
                         <div>Hold <strong>SHIFT</strong> for 1:1 Ratio</div>
                         <div>Hold <strong>ALT</strong> for Center Draw</div>
@@ -136,7 +136,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                     />
                     
                     {originMode === 1.0 && (
-                        <div className="flex items-center justify-between bg-surface-section rounded border border-line/10 p-1.5 mt-1 animate-fade-in">
+                        <div className="flex items-center justify-between bg-surface-section rounded border border-line/10 p-1.5 mt-1">
                             <span className="text-[9px] text-fg-muted font-mono pl-1">Depth: <span className="text-accent-400 font-bold">{currentDepth.toFixed(4)}</span></span>
                             <button 
                                 onClick={handleReProbe}
@@ -187,7 +187,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                              No measurements drawn.
                          </div>
                      ) : (
-                         <div className="space-y-1 animate-fade-in">
+                         <div className="space-y-1">
                              {(shapes || []).map((shape: any, i: number) => {
                                      const isCube = shape.type === 'rect' && (shape.size.z || 0) > 0.001;
                                      return (

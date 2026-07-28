@@ -182,7 +182,7 @@ export const Accordion: React.FC<AccordionProps> = ({ sections, className = '' }
                             <ChevronDown open={open} />
                         </div>
                         {open && (
-                            <div className="flex flex-col animate-fade-in">{section.children}</div>
+                            <div className="flex flex-col">{section.children}</div>
                         )}
                         {!isLast && <div className="h-px bg-line/10" />}
                     </div>

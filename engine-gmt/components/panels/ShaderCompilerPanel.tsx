@@ -230,7 +230,7 @@ export const ShaderCompilerPanel: React.FC<ShaderCompilerPanelProps> = ({ classN
                              <span className={`text-[9px] ${themeText.faint} font-mono`}>~{estCompileSec}s</span>
                          </div>
                          {compileFeedback && (
-                             <div className="text-[10px] text-ok font-bold animate-fade-in flex items-center gap-1">
+                             <div className="text-[10px] text-ok font-bold flex items-center gap-1">
                                  <CheckIcon /> {compileFeedback}
                              </div>
                          )}

@@ -122,7 +122,7 @@ export const QualityRenderControls: React.FC = () => {
 
                 {/* PT global controls — visible while in Path Tracer mode */}
                 {state.renderMode === 'PathTracing' && lighting && (
-                    <div className="animate-fade-in" data-help-id="pt.global">
+                    <div className="" data-help-id="pt.global">
                         <Slider
                             label="Max Bounces"
                             value={lighting.ptBounces}
@@ -156,7 +156,7 @@ export const QualityRenderControls: React.FC = () => {
                 />
 
                 {state.resolutionMode === 'Fixed' && (
-                    <div className="animate-fade-in flex flex-col gap-2 px-3 py-2 bg-surface-raised/50">
+                    <div className="flex flex-col gap-2 px-3 py-2 bg-surface-raised/50">
                         <Dropdown
                             label="Preset"
                             value={currentPreset}

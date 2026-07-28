@@ -363,7 +363,7 @@ export const WebcamOverlay: React.FC<FeatureComponentProps> = ({ sliceState, act
                 </div>
                 
                 {showSettings && (
-                    <div className="settings-panel absolute top-10 right-2 w-48 bg-surface-raised border border-line/20 rounded p-2 shadow-2xl z-50 animate-fade-in" onMouseDown={(e) => e.stopPropagation()}>
+                    <div className="settings-panel absolute top-10 right-2 w-48 bg-surface-raised border border-line/20 rounded p-2 shadow-2xl z-50" onMouseDown={(e) => e.stopPropagation()}>
                          <div className="space-y-2 text-[10px]">
                             <div>
                                 <SectionLabel className="block mb-1">Blend Mode</SectionLabel>

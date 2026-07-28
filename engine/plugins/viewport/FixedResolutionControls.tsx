@@ -146,7 +146,7 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
             {showResMenu && (
                 <div
                     ref={presetMenuRef}
-                    className="absolute top-8 left-0 w-48 bg-surface border border-line/20 rounded shadow-xl z-50 overflow-hidden flex flex-col py-1 animate-fade-in"
+                    className="absolute top-8 left-0 w-48 bg-surface border border-line/20 rounded shadow-xl z-50 overflow-hidden flex flex-col py-1"
                 >
                     {/* Custom sits at the top — it's an explicit W×H entry, not a
                         fit-to-window preset, so it's separated from the list below. */}
@@ -255,7 +255,7 @@ const CustomResolutionPopover: React.FC<CustomResolutionPopoverProps> = ({
     return (
         <div
             ref={rootRef}
-            className="absolute top-8 left-0 w-52 bg-surface border border-line/20 rounded shadow-xl z-[60] p-3 animate-fade-in"
+            className="absolute top-8 left-0 w-52 bg-surface border border-line/20 rounded shadow-xl z-[60] p-3"
             onMouseDown={e => e.stopPropagation()}
         >
             <div className="text-[10px] font-bold text-fg-dim mb-2">Custom Resolution</div>

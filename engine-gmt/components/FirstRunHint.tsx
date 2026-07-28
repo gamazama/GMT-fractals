@@ -22,7 +22,7 @@ export const FirstRunHint: React.FC = () => {
 
     return (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[800] pointer-events-none">
-            <div className="pointer-events-auto flex items-center gap-3 px-3.5 py-1.5 bg-surface-sunken/95 border border-accent-500/30 rounded-full shadow-xl backdrop-blur-md animate-fade-in">
+            <div className="pointer-events-auto flex items-center gap-3 px-3.5 py-1.5 bg-surface-sunken/95 border border-accent-500/30 rounded-full shadow-xl backdrop-blur-md">
                 <span className="text-[11px] text-cyan-100">
                     👋 New here? Open the <span className="font-bold text-accent-300">?</span> menu for help &amp; tutorials, or pick a formula to start.
                 </span>

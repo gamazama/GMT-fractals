@@ -159,7 +159,7 @@ export const DynamicListItem: React.FC<DynamicListItemProps> = ({
     const bgClass = selected ? colors.selectedBg : 'bg-surface-section';
 
     return (
-        <div className={`${bgClass} rounded border ${borderClass} animate-fade-in transition-colors ${className}`}>
+        <div className={`${bgClass} rounded border ${borderClass} transition-colors ${className}`}>
             {/* Item header */}
             {(title || actions || onRemove || expandable) && (
                 <div
@@ -202,7 +202,7 @@ export const DynamicListItem: React.FC<DynamicListItemProps> = ({
                 slider rows extend to the dock side. */}
             {expandable ? (
                 isExpanded && (
-                    <div className="animate-fade-in pb-2">
+                    <div className="pb-2">
                         {children}
                     </div>
                 )
