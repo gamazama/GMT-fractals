@@ -1612,20 +1612,6 @@
     <header>
       <span class="badge tB">B</span>
       <span class="sev">high</span>
-      <code>a02-panels-layout</code>
-      <code class="file">engine-gmt/panels.ts:337</code>
-    </header>
-    <p class="what">The Shader panel's Reflections entry (groupFilter: 'shading') matches zero params so it renders no controls — and because every reflections param sits in engine_settings, whose only manifest home is the default-hidden Shader Compiler panel, reflection settings have no default-visible surface anywhere in the app.</p>
-    
-    
-    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
-    
-    <p class="rationale">See PROPOSALS.md for the four options and the recommendation. Observed in-browser, not inferred.</p>
-  </article>
-  <article class="finding sev-high">
-    <header>
-      <span class="badge tB">B</span>
-      <span class="sev">high</span>
       <code>e01-feature-system</code>
       <code class="file">engine-gmt/features/droste/index.ts:27</code>
     </header>
@@ -1999,6 +1985,26 @@
     
     
     <p class="rationale">The invariant body itself is CORRECT and was verified: seedMandelbulb reads registry, populated by the eager top-level statements in engine-gmt/formulas/index, pulled in by registerFeatures.ts:92, and `import './registerFeatures'` is main.tsx's FIRST import — so the whole formula subtree evaluates before lessons.ts is reached at line 82. Only the trailing pointer is stale. Deciding whether an audit follow-up id is closed or merely orphaned is an owner call and no guard distinguishes the two, which is why this was not silently erased. Options: delete the sentence, or convert to @stale &lt;what q-011 asked&gt; if the question is still open.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>a02-panels-layout</code>
+      <code class="file">engine-gmt/panels.ts:337</code>
+    </header>
+    <p class="what">The Shader panel's Reflections entry (groupFilter: 'shading') matches zero params so it renders a description sentence with no controls under it. CORRECTED 2026-07-28 — see rationale; the original 'no default-visible surface anywhere' claim was OVERSTATED.</p>
+    
+    
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    
+    <p class="rationale">RESOLVED — no param move needed. Reviewed with the owner 2026-07-28 and the finding's premise was wrong in the part that made it look high-severity. It claimed reflections have no default-visible surface anywhere in the app. Two of the six params DO: engine-gmt/types/viewport.ts declares SUBSYSTEM_REFLECTIONS with controlledParams ['reflections.reflectionMode', 'reflections.bounceShadows'], driving both through four Quality-dropdown tiers (Off / Env Map / Raymarched / Full). Exposing them again in a panel would let a user desync them from their tier, which is likely why they sit in engine_settings to begin with. The 'Full' tier comment also records the measured cost of bounceShadows: '~free compile, +39% reflection frame cost on mirror scenes'.
+
+Of the remaining four: mixStrength (Raymarch Mix) blends back toward the env map you already chose not to use — niche; roughnessThreshold is self-described as 'skip raymarching to save performance', i.e. internal tuning; steps (Trace Steps) and accurateColors are genuinely user-facing but are ALREADY reachable in the Shader Compiler panel, which the owner considers an appropriate home for advanced knobs. accurateColors is more useful than it sounds — per ADR-0096 it makes reflected hits sample true trap colour instead of the gradient default, ~600ms compile, opt-in — but it is still niche.
+
+ALSO WORTH RECORDING, because it invalidated the fix proposed in PROPOSALS.md: moving only the three RUNTIME params would have been broken. All five non-mode params carry condition: { param: 'reflectionMode', eq: RAYMARCH }, and reflectionMode is one of the compile-gated ones — so they would have landed in a panel with no way to reveal them from there.
+
+WHAT REMAINS is small and cosmetic: the dead groupFilter entry still renders a stray group-description sentence with no controls beneath it. A one-line deletion of the manifest item, not a param migration.</p>
   </article>
   <article class="finding sev-low">
     <header>

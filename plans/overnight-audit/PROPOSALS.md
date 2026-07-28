@@ -2177,3 +2177,78 @@ heading:
   checked specifically. Every app-gmt `getProxy` import resolves to the *real*
   engine-gmt proxy (a lazy singleton with no `setProxy`, so capture is safe), and
   `main.tsx`'s only module-scope call sits after `installGmtRenderer()` anyway.
+
+---
+
+# Owner review — 2026-07-28 (post-run)
+
+Worked through the queue with the owner the morning after the run. Two entries
+above are **corrected** rather than merely resolved — in both cases the audit's
+own framing was wrong, and that matters more than the outcome.
+
+## CORRECTED — Reflections: "no visible home" was overstated
+
+_(closes the HIGH item in cycle 10 · `engine-gmt/panels.ts`)_
+
+The finding claimed reflection settings have **no default-visible surface
+anywhere in the app**. That is false for two of the six params.
+`engine-gmt/types/viewport.ts` declares `SUBSYSTEM_REFLECTIONS` with
+`controlledParams: ['reflections.reflectionMode', 'reflections.bounceShadows']`,
+driving both through four **Quality-dropdown** tiers (Off / Env Map / Raymarched /
+Full). Re-exposing them in a panel would let someone desync them from their tier,
+which is very likely *why* they sit in `engine_settings`.
+
+The audit only looked at the panel manifest and the feature's `group:` fields. It
+never checked whether another surface already drove them. **A param can be
+reachable without appearing in any panel** — that's the generalisable lesson, and
+it applies to anything else `engine_settings` holds.
+
+Of the other four, checked against source and ADR-0096 rather than memory:
+
+- `mixStrength` (Raymarch Mix) — blends back toward the env map you already chose
+  not to use. Niche.
+- `roughnessThreshold` (Roughness Cutoff) — self-described as *"skip raymarching
+  to save performance"*. Internal tuning.
+- `steps` (Trace Steps) and `accurateColors` — genuinely user-facing, and both
+  **already reachable in the Shader Compiler panel**, which the owner considers a
+  fine home for advanced knobs. Worth noting `accurateColors` is more than a
+  nicety: per ADR-0096 it makes reflected hits sample true trap colour instead of
+  the gradient default (~600ms compile, opt-in), so reflections are *miscoloured*
+  without it. Still niche enough to leave where it is.
+
+**The proposed fix would also have been broken.** Moving only the three runtime
+params fails, because all five non-mode params carry
+`condition: { param: 'reflectionMode', eq: RAYMARCH }` and `reflectionMode` is one
+of the compile-gated ones — they'd have landed in a panel with no way to reveal
+them from there.
+
+**Outcome: closed, no param move.** What remains is cosmetic — the dead
+`groupFilter: 'shading'` entry still renders a stray group-description sentence
+with nothing beneath it. A one-line deletion of the manifest item whenever
+someone is passing.
+
+## DEFERRED — Per-axis export bounds, to the v2 mesh-export integration
+
+_(the HIGH item in cycle 8 · `mesh-export/gpu/gpu-pipeline.ts`)_
+
+Confirmed real: `uBoundsRange` is a scalar applied to all three axes, computed as
+`gridMax[0] - gridMin[0]`, so a non-cubic export box silently produces stretched
+geometry.
+
+**Not applied, and the reason is worth keeping.** It is not the one-line `float`
+→ `vec3` change the finding implies. `voxelSize` derives from this uniform and is
+then consumed as a **scalar** in a dozen places — SDF magnitude
+(`sdf = -voxelSize * …`), contour thresholds (`absDist < voxelSize * 2`), the
+Newton solve's `uVoxelSize`. Widening the uniform breaks all of them. And there is
+a genuine design question underneath: with non-cubic voxels an SDF distance is
+still isotropic in world space, so the threshold needs a defensible scalar (min?
+mean?), not a per-axis one.
+
+Combined with `mesh-export/` having **no runtime guard of any kind** — nothing
+would catch a wrong fix — the owner's call is to handle it when the exporter is
+integrated properly, since it is still a v2 prototype. Recorded as
+`@bug PRODUCTION:` at the uniform declaration with the full reasoning, so whoever
+picks it up does not re-derive the scope from scratch.
+
+Verify any eventual fix by exporting a deliberately non-cubic box and measuring it
+in a DCC tool — that is the only check available in this tree.

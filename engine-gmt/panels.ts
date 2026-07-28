@@ -335,10 +335,24 @@ export const GmtPanels: PanelManifest = [
             //   Rim Light and Glow Strength with zero widgets. The only
             //   manifest home for `engine_settings` is the ShaderCompiler
             //   panel, which is `showIf: 'shaderCompiler.showEngineTab'` and
-            //   that param defaults to false — so reflection settings have no
-            //   default-visible surface at all. Fix is a product call (make
-            //   this a `compilable` section like Shadows / Volumetric, or
-            //   repoint the groupFilter); left as-is pending owner review.
+            //   that param defaults to false.
+            //
+            //   REVIEWED 2026-07-28 — the severity above is OVERSTATED and the
+            //   remaining defect is cosmetic. "No default-visible surface at
+            //   all" is wrong for two of the six params: reflectionMode and
+            //   bounceShadows are `controlledParams` of SUBSYSTEM_REFLECTIONS
+            //   (engine-gmt/types/viewport.ts) and are driven by the QUALITY
+            //   dropdown's four tiers. Re-exposing them here would let a user
+            //   desync them from their tier. A param can be reachable without
+            //   appearing in any panel — check the quality subsystems before
+            //   concluding otherwise. Of the rest, mixStrength and
+            //   roughnessThreshold are internal tuning, and steps /
+            //   accurateColors are already reachable in the ShaderCompiler
+            //   panel, which the owner accepts as the home for advanced knobs.
+            //   Owner decision: no param move. What is left is this entry
+            //   rendering a stray group-description sentence with no controls
+            //   under it — delete the item when passing. See PROPOSALS.md
+            //   "Owner review — 2026-07-28".
             { type: 'feature', id: 'reflections', groupFilter: 'shading'   },
             { type: 'feature', id: 'atmosphere',  groupFilter: 'glow'      },
             { type: 'feature', id: 'materials',   groupFilter: 'emission'  },

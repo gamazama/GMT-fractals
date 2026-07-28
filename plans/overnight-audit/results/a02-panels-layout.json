@@ -2,19 +2,28 @@
   "id": "a02-panels-layout",
   "cycle": 10,
   "guards": [
-    { "script": "npm run typecheck", "pass": true, "subsystem": "a02-panels-layout" },
-    { "script": "npm run smoke:engine-gmt", "pass": true, "subsystem": "a02-panels-layout" }
+    {
+      "script": "npm run typecheck",
+      "pass": true,
+      "subsystem": "a02-panels-layout"
+    },
+    {
+      "script": "npm run smoke:engine-gmt",
+      "pass": true,
+      "subsystem": "a02-panels-layout"
+    }
   ],
   "findings": [
     {
       "tier": "B",
-      "severity": "high",
+      "severity": "low",
       "file": "engine-gmt/panels.ts",
       "line": 337,
-      "summary": "The Shader panel's Reflections entry (groupFilter: 'shading') matches zero params so it renders no controls — and because every reflections param sits in engine_settings, whose only manifest home is the default-hidden Shader Compiler panel, reflection settings have no default-visible surface anywhere in the app.",
-      "rationale": "See PROPOSALS.md for the four options and the recommendation. Observed in-browser, not inferred.",
+      "summary": "The Shader panel's Reflections entry (groupFilter: 'shading') matches zero params so it renders a description sentence with no controls under it. CORRECTED 2026-07-28 — see rationale; the original 'no default-visible surface anywhere' claim was OVERSTATED.",
+      "rationale": "RESOLVED — no param move needed. Reviewed with the owner 2026-07-28 and the finding's premise was wrong in the part that made it look high-severity. It claimed reflections have no default-visible surface anywhere in the app. Two of the six params DO: engine-gmt/types/viewport.ts declares SUBSYSTEM_REFLECTIONS with controlledParams ['reflections.reflectionMode', 'reflections.bounceShadows'], driving both through four Quality-dropdown tiers (Off / Env Map / Raymarched / Full). Exposing them again in a panel would let a user desync them from their tier, which is likely why they sit in engine_settings to begin with. The 'Full' tier comment also records the measured cost of bounceShadows: '~free compile, +39% reflection frame cost on mirror scenes'.\n\nOf the remaining four: mixStrength (Raymarch Mix) blends back toward the env map you already chose not to use — niche; roughnessThreshold is self-described as 'skip raymarching to save performance', i.e. internal tuning; steps (Trace Steps) and accurateColors are genuinely user-facing but are ALREADY reachable in the Shader Compiler panel, which the owner considers an appropriate home for advanced knobs. accurateColors is more useful than it sounds — per ADR-0096 it makes reflected hits sample true trap colour instead of the gradient default, ~600ms compile, opt-in — but it is still niche.\n\nALSO WORTH RECORDING, because it invalidated the fix proposed in PROPOSALS.md: moving only the three RUNTIME params would have been broken. All five non-mode params carry condition: { param: 'reflectionMode', eq: RAYMARCH }, and reflectionMode is one of the compile-gated ones — so they would have landed in a panel with no way to reveal them from there.\n\nWHAT REMAINS is small and cosmetic: the dead groupFilter entry still renders a stray group-description sentence with no controls beneath it. A one-line deletion of the manifest item, not a param migration.",
       "guard": "npm run smoke:engine-gmt",
-      "guardPass": true
+      "guardPass": true,
+      "ownerDecision": "closed 2026-07-28 — no param move; optional one-line removal of the dead manifest entry"
     },
     {
       "tier": "A",
