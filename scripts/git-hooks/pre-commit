@@ -1,0 +1,43 @@
+#!/bin/sh
+# Refuse commits that don't typecheck.
+#
+# Cause this exists: on 2026-07-28 a comment containing backticks was added INSIDE
+# a GLSL template literal (mesh-export/gpu/gpu-pipeline.ts). A backtick terminates
+# a template literal, so the file stopped parsing — TS1005. It was committed
+# anyway, because the verification command was:
+#
+#     npm run typecheck 2>&1 | tail -2 && git commit ...
+#
+# A pipeline's exit status is the LAST command's, so `tail` returning 0 masked
+# tsc's failure and the `&&` ran regardless. tsc printed its errors; nothing acted
+# on them. Reading piped output is not the same as checking an exit code, and a
+# habit is not a mechanism — hence this hook.
+#
+# Skips itself when no TypeScript is staged, so doc-only and audit-state commits
+# stay instant. ~9s otherwise.
+#
+# NOTE: .git/hooks is not version-controlled, so this protects THIS checkout only.
+# To share it, move it to a tracked dir and set core.hooksPath (which would also
+# need the existing commit-msg hook moved alongside it).
+
+staged=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$')
+[ -z "$staged" ] && exit 0
+
+printf 'pre-commit: typechecking (%s staged TS file(s))... ' "$(printf '%s\n' "$staged" | wc -l | tr -d ' ')"
+
+# Capture output AND status separately — never through a pipe, which is the exact
+# mistake this hook exists to catch.
+out=$(npm run typecheck 2>&1)
+status=$?
+
+if [ $status -ne 0 ]; then
+    printf 'FAILED\n\n'
+    printf '%s\n' "$out" | grep -E 'error TS' | head -20
+    printf '\nCommit refused: the tree does not compile.\n'
+    printf 'Fix the errors above, or re-run with --no-verify if you genuinely intend\n'
+    printf 'to commit a broken tree (you almost never do).\n'
+    exit 1
+fi
+
+printf 'ok\n'
+exit 0

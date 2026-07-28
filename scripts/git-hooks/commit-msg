@@ -1,0 +1,26 @@
+#!/bin/sh
+# Strip stray PowerShell here-string wrappers from commit messages.
+#
+# Cause: a `@'...'@` here-string (PowerShell syntax) run in a POSIX/bash shell is
+# not a here-string there — the `@'` and `'@` become literal text, so the subject
+# turns into "@ feat: ..." and a lone "@" trails the body. This hook removes that
+# artifact deterministically. A lone "@" / "'@" line and a leading "@ " / "@'" on
+# the subject are never legitimate commit content, so stripping them is safe.
+msg="$1"
+tmp="$msg.strip.$$"
+
+awk '
+  NR==1 {
+    if ($0 == "@" || $0 == "@'\''") { skip1=1; next }   # whole-line opener -> drop
+    sub(/^@'\''[[:space:]]?/, "")                        # @'"'"' glued to subject
+    sub(/^@[[:space:]]/, "")                             # "@ subject" -> "subject"
+  }
+  { line[++n] = $0 }
+  END {
+    while (n > 0 && (line[n] == "@" || line[n] == "'\''@")) n--   # trailing closers
+    for (i = 1; i <= n; i++) print line[i]
+  }
+' "$msg" > "$tmp" && mv "$tmp" "$msg"
+
+if [ -n "$STRIP_DEBUG" ]; then echo "commit-msg: stripped here-string wrappers" >&2; fi
+exit 0
