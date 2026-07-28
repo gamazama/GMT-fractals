@@ -44,8 +44,12 @@ export interface Preset {
       [key: string]: any;
   };
 
-  // Camera Manager — saved camera library
-  savedCameras?: Array<CameraState & { id: string; label: string; optics?: any; thumbnail?: string }>;
+  // Camera Manager — saved camera library.
+  // StateSnapshot shape (id/label/state/createdAt), NOT the flat pre-2026-04-25
+  // `SavedCamera extends CameraState`. Legacy flat rows are normalised on load by
+  // the `savedCameras` field in utils/defaultPresetFields.ts — see the @invariant
+  // there; declaring the flat shape here is what let that crash go untyped.
+  savedCameras?: Array<{ id: string; label: string; thumbnail?: string; createdAt?: number; state: Record<string, any> }>;
 
   // --- GENERIC FEATURE STORAGE (Primary) ---
   // All module state lives here.

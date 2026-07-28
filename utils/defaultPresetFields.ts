@@ -85,9 +85,42 @@ export const registerDefaultPresetFields = () => {
         },
         deserialize: (p, set) => {
             if (p.savedCameras && Array.isArray(p.savedCameras) && p.savedCameras.length > 0) {
+                // @invariant Rows MUST be normalised to the StateSnapshot shape
+                //   (`{ id, label, state, createdAt }`) before they reach the store.
+                //
+                //   Commit 19e605a8 (2026-04-25, "Camera Manager: extract
+                //   state-library primitive") changed the runtime shape from a FLAT
+                //   `SavedCamera extends CameraState` to a wrapped snapshot, on the
+                //   stated grounds that "SavedCameras aren't currently persisted, so
+                //   no migration is needed". That was already untrue — flat rows were
+                //   being written into the `<Scene>` block of .gmf files before that
+                //   date — and `beeb90d9` later re-enabled the serialize side without
+                //   adding one either.
+                //
+                //   Without this normalisation, loading such a file KILLS THE APP.
+                //   Verified end to end against a real 2026-04-15 file through the
+                //   real load path: the load itself is silent, but because we
+                //   force-select row 0 below, StateLibraryPanel then calls
+                //   `isModified` on it, `isCameraModified` dereferences `snap.state`,
+                //   and the resulting throw unmounts the entire React root — there is
+                //   no ErrorBoundary anywhere in this codebase. Measured: rootChildren
+                //   1 -> 0, canvases 27 -> 0, frames frozen. Recall throws too.
+                //
+                //   `types/preset.ts` and `engine-gmt/types/fractal.ts` still declared
+                //   the flat shape, so tsc could not catch any of this; both are
+                //   corrected alongside this change.
+                const rows = (p.savedCameras as any[]).map((row) => {
+                    if (row && typeof row === 'object' && row.state) return row;
+                    const { id, label, thumbnail, position, rotation, sceneOffset, targetDistance, optics } = row ?? {};
+                    return {
+                        id, label, thumbnail,
+                        createdAt: Date.now(),
+                        state: { position, rotation, sceneOffset, targetDistance, optics },
+                    };
+                });
                 set({
-                    savedCameras: p.savedCameras as any,
-                    activeCameraId: (p.savedCameras[0] as any).id || null,
+                    savedCameras: rows as any,
+                    activeCameraId: rows[0]?.id || null,
                 });
             }
         },
