@@ -123,7 +123,7 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
-import { FractalEvents } from '../engine/FractalEvents';
+import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { CameraState, CameraMode, PreciseVector3 } from '../types';
 import { useInputController } from './useInputController';
 import { usePhysicsProbe } from './usePhysicsProbe';
@@ -484,8 +484,8 @@ const Navigation: React.FC<NavigationProps> = ({
           };
       };
 
-      const unsub1 = FractalEvents.on('camera_teleport', onTeleport);
-      const unsub3 = FractalEvents.on('camera_transition', onTransition);
+      const unsub1 = FractalEvents.on(FRACTAL_EVENTS.CAMERA_TELEPORT, onTeleport);
+      const unsub3 = FractalEvents.on(FRACTAL_EVENTS.CAMERA_TRANSITION, onTransition);
       return () => { unsub1(); unsub3(); };
   }, [mode, camera]);
 
@@ -1132,13 +1132,13 @@ const Navigation: React.FC<NavigationProps> = ({
   // Mode Switching Logic
   useLayoutEffect(() => {
     if (prevMode.current !== mode) {
-        FractalEvents.emit('camera_snap', undefined);
+        FractalEvents.emit(FRACTAL_EVENTS.CAMERA_SNAP, undefined);
 
         // Safety: absorb any residual orbit position (e.g. mid-scroll switch)
         absorbOrbitPosition();
 
         if (mode === 'Fly') {
-            FractalEvents.emit('camera_snap', undefined);
+            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_SNAP, undefined);
             lastPos.current.set(0, 0, 0);
             currentFrameVelocity.current.set(0, 0, 0);
             currentRotVelocity.current.set(0, 0, 0);
@@ -1161,7 +1161,7 @@ const Navigation: React.FC<NavigationProps> = ({
       const stoppedScrubbing = wasScrubbingRef.current && !isScrubbing;
       
       if (stoppedPlaying || stoppedScrubbing) {
-          FractalEvents.emit('camera_snap', undefined);
+          FractalEvents.emit(FRACTAL_EVENTS.CAMERA_SNAP, undefined);
           // Animation commits with position=(0,0,0) via teleport — seed orbit pivot
           if (mode === 'Orbit') {
               const d = distAverageRef.current || engine.lastMeasuredDistance || 3.5;
@@ -1223,7 +1223,7 @@ const Navigation: React.FC<NavigationProps> = ({
               // Transition complete — finalize with exact target state
               transitionRef.current = null;
               // Emit a teleport with exact final state to ensure precision
-              FractalEvents.emit('camera_teleport', t.endState);
+              FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, t.endState);
           }
           return; // Skip normal camera logic during transition
       }
