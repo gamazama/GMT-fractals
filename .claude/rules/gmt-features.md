@@ -23,8 +23,16 @@ Decisions: ADRs 0054-0055 (catalog), ADRs 0056-0057 (camera manager).
 ## Guards
 
 ```
-npm run smoke:camera
+npm run smoke:statelibrary-drop
 npm run smoke:orbit
 npm run test:partial-apply
 npm run test:session-hold
 ```
+
+`smoke:statelibrary-drop` is the camera-manager guard: it boots app-gmt at
+`localhost:3400/` and drives the Camera Manager's `savedCameras` list directly.
+Do NOT reach for `smoke:camera` here — that one boots `fluid-toy.html` and
+asserts fluid-toy's own `julia` camera slice through `engine/plugins/Camera.ts`.
+fluid-toy imports engine-gmt only for `support` and `feedback`, so nothing under
+`engine-gmt/features/**` or `engine-gmt/store/**` is in its bundle and no change
+to this rule's scope can make it fail.
