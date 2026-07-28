@@ -1,0 +1,75 @@
+{
+  "id": "g03-formula-registry",
+  "cycle": 6,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g03-formula-registry" },
+    { "script": "npm run test:compat", "pass": true, "subsystem": "g03-formula-registry" },
+    { "script": "npm run smoke:engine-gmt", "pass": true, "subsystem": "g03-formula-registry" },
+    { "script": "npm run smoke:formula-switch", "pass": true, "subsystem": "g03-formula-registry" },
+    { "script": "npm run smoke:fractal-kind", "pass": true, "subsystem": "g03-formula-registry" },
+    { "script": "npm run test:frag:scan", "pass": true, "subsystem": "g03-formula-registry" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "g03-formula-registry", "error": "knip exits 1 whenever it finds anything: 'Unused files (1) debug/render-harness.ts' — the same pre-existing file every cycle has reported. Nothing in the formula-registry / fragmentarium_import / capability trees is orphaned." }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": ".claude/rules/gmt-formulas-and-graph.md",
+      "line": 28,
+      "summary": "The rule for the engine-gmt formula registry cited two guards that cannot fail on any change to it — smoke:formula-switch drives fractal-toy.html and smoke:fractal-kind drives fluid-toy.html; neither page loads engine-gmt/engine/FractalRegistry.",
+      "change": "Replaced the Guards block with guards that actually load the registry (test:compat, smoke:engine-gmt, test:baseline, test:hybrid, test:weave-sweep, plus the deep-zoom trio), and added an explicit 'Do NOT use' paragraph naming what the two sibling-app smokes really cover, so the next reader does not re-cite them.",
+      "verification": "Decisive, because the wrong guards cannot even reach the module: smoke-formula-switch.mts pins fractal-toy.html, smoke-fractal-kind.mts pins fluid-toy.html, and `grep -rn engine-gmt fractal-toy/` returns ZERO hits (fluid-toy's only engine-gmt imports are support and feedback). Both were run and pass — proving they stay green regardless. The replacements were run: test:compat imports the barrel plus registerFeatures() and iterates registry.getAll() ('structural checks: 55 formulas OK'), and a scratch probe confirmed registry.register() THROWS on a def with no shader.capabilities — so test:compat genuinely fails if a formula regresses, which is the property the old citations lacked. Third instance this run of a healthy guard cited for the wrong thing, and the second in this cycle — the g01 auditor independently found the same trap in gmt-renderer.md.",
+      "guard": "npm run test:compat",
+      "guardPass": true,
+      "commit": "98e21c99"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/engine/FractalRegistry.ts",
+      "line": 6,
+      "summary": "The registry's module JSDoc claimed a single registration site with '42 formulas + 5 legacy aliases' — the count is stale (47 in the barrel) and it omits the second boot-time site (registerBoxFoldFormulas(), 7 BoxFold defs) plus six runtime sites; the getIds() @invariant likewise named only the 5 aliases as non-FormulaType keys.",
+      "change": "Rewrote the module JSDoc to enumerate registration in boot order (barrel -> registerBoxFoldFormulas() from registerFeatures() -> six runtime sites: Workshop import, pasted formula, MB3D scene load, weave migration, shared-scene open, worker REGISTER_FORMULA), replaced the hard-coded total with a pointer to test:compat which prints the live count, and noted that node harnesses needing BoxFold defs must call registerFeatures(). Extended the getIds() @invariant to list the 7 BoxFold ids and runtime-registered ids alongside the 5 aliases, with the consequence spelled out.",
+      "verification": "Every number measured, not read. A probe imported the barrel plus registerFeatures() and printed the live keyspace: 7 BoxFold ids present (one per FOLD_LIST entry), all 5 aliases present, getIds().length - getAll().length === 5 (alias dedupe holds), HyperTorus === Mandelorus by identity, register() throws on missing capabilities, duplicate id overwrites silently, alias-to-unknown-target no-ops with a warn — all four @invariants falsified and confirmed live. A second probe cross-checked the barrel against the FormulaType union: 48 registered ids in the working tree, 48 union members, zero ids outside the union, zero union members unregistered, zero duplicates, and `grep -c BoxFold engine-gmt/types/common.ts` = 0 confirming the drift. test:compat's '55 formulas OK' = 48 + 7, matching the new text; it also asserts capabilities plus exactly one shape token per def, so a wrong claim shows up as a changed count there.",
+      "guard": "npm run test:compat",
+      "guardPass": true,
+      "commit": "381692f9"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine-gmt/types/capabilities.ts",
+      "line": 13,
+      "summary": "Seven `@see dev/plans/...` citations across the capability-protocol / FormulaPicker surface point into the dev/ tree deleted 2026-06-17; the targets live at plans/.",
+      "change": "Rewrote dev/plans/ -> plans/ across capabilities.ts, evaluateCompat.ts (2 refs), pairHasCapability.ts, import-capabilities.ts, FormulaPicker.tsx, sceneGroups.ts and debug/test-compat.mts.",
+      "verification": "Filesystem test: dev/plans/capability-protocol.md absent, plans/capability-protocol.md present; same pair for formula-picker-design.md. `grep -rn 'dev/plans/'` over engine-gmt/, debug/ and .claude/rules/ enumerated ten hits in nine files before the edit and now returns only the three out-of-scope ones. test:compat passes — test-compat.mts is executable TypeScript, so a malformed header edit would fail to parse.",
+      "guard": "npm run test:compat",
+      "guardPass": true,
+      "commit": "62b21bba"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine-gmt/features/fragmentarium_import/FormulaWorkshop.tsx",
+      "line": 266,
+      "summary": "The pipeline-selector JSDoc cited docs/26_Formula_Workshop_V4_Plan.md, which does not exist; the doc is at docs/history/gmt/26_Formula_Workshop_V4_Plan.md.",
+      "change": "Corrected the path.",
+      "verification": "`find docs -iname '*Formula_Workshop*'` returns that path as the only match. The sibling citations on the same and adjacent lines were checked at the same time and are live, as is the v3/compat.ts:125 line reference in the slot-uniqueness @invariant.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "c2289657"
+    },
+    {
+      "tier": "V",
+      "severity": "high",
+      "file": "engine-gmt/features/fragmentarium_import/FormulaWorkshop.tsx",
+      "line": 721,
+      "summary": "The documented V4 escape hatch is dead: when V3 detect fails and V4 is the effective pipeline, Preview and Import are deliberately left enabled but both handlers bail on a V3-only `detected` guard placed above the V4 branch, returning with NO error. CONFIRMED by driving the real UI — but the proposed fix would ship a second bug, so it is queued rather than applied.",
+      "verificationRequest": "Confirmed; see PROPOSALS.md for the full analysis and the corrected fix shape.",
+      "rationale": "An independent verifier drove the actual Workshop under Playwright against the dev server. For BOTH affected library formulas the panel showed mode 'Auto (Solo)', previewDisabled:false, importDisabled:false, errorText:null. Clicking Preview and then Import each returned 'CLICKED' and after 2.5s left errorText null, the store formula unchanged, the full snapshot byte-identical, and ZERO console output. A control run with a V3-passing formula behaved correctly — params section present, Preview switched the store to frag_workshop_preview, Import switched it to the formula name — proving the harness would have detected a working path. It also corrected two details: the live count is TWO formulas, not the catalog's three (3DMandel's catalog row is stale, which the getRecommendedPipeline @invariant already warns about), and the custom-paste path is a milder variant that DOES show a V3 error (willUseV4 is false when entryId is null) unless the user explicitly picks Standalone. NOT APPLIED because the verifier found the proposed hoist would break the Kleinian import outright — handleImport's V4 branch calls setFormula(formulaName) with the UNSANITISED label while FractalRegistry keys on V4's sanitizeId output — plus four further gaps.",
+      "guard": "npm run test:frag:scan",
+      "guardPass": true
+    }
+  ],
+  "notes": "REGISTRY IS OTHERWISE CLEAN. All four @invariants on FractalRegistry.ts were falsified rather than read: register() throws on missing capabilities, duplicate id overwrites silently with no key growth, registerAlias to an unknown target no-ops + warns, getAll() dedupes aliases exactly (53 keys -> 48 defs), alias identity is shared. The registry-wide contracts hold for every entry: all 48 formula files declare `capabilities: new Set`, zero duplicate ids, and the FormulaType union matches the barrel exactly once the 5 aliases and 7 BoxFold ids are accounted for. Catalog coverage is exactly 100% (511 manifest entries, 511 catalog records, 0 either way); the 4 .frag files on disk but not in the manifest are the deliberate #donotrun / providesColor exclusions the scan reports.\n\nWHAT WAS NOT REACHED: no formula BODY was audited — only registry-wide declarations across all 48, per the pace instruction. test:shader / test:baseline / test:hybrid / test:weave-sweep / test:mb3d (long native config sweeps) and test:frag / test:frag:integration were NOT executed; the ones newly cited in the rule were verified to exist in package.json and to be the native-config-sweep harnesses, but not run. GraphCompiler.ts (the modular-graph half of that rule) belongs to g09.\n\nSKIP-WORKTREE TRAP worth carrying forward: engine-gmt/formulas/index.ts, engine-gmt/types/common.ts and engine-gmt/components/FormulaPicker/pickerCategories.ts are `git update-index --skip-worktree` (local-only Julia3DLattes wiring), so edits to them cannot be committed and none were made. pickerCategories.ts:14 still carries a dead `@see dev/plans/formula-picker-design.md` for that reason. engine-gmt/utils/applyPartialPreset.ts:15 and debug/test-partial-apply.mts:10 carry the same dead dev/plans/ prefix but belong to the state-library subsystem.\n\nCONCURRENCY: another auditor independently landed the same sibling-app-guard warning in .claude/rules/gmt-renderer.md — complementary edits, different files. smoke:engine-gmt rewrote the untracked debug/engine-gmt-smoke.png. Scratch probes at debug/_g03_probe.mjs and debug/_g03_invariants.mts (gitignored)."
+}

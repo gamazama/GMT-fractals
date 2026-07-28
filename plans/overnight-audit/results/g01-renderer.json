@@ -1,0 +1,77 @@
+{
+  "id": "g01-renderer",
+  "cycle": 6,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g01-renderer" },
+    { "script": "npm run smoke:engine-gmt", "pass": true, "subsystem": "g01-renderer" },
+    { "script": "npm run test:bucket-convergence", "pass": true, "subsystem": "g01-renderer" },
+    { "script": "npm run test:gate", "pass": true, "subsystem": "g01-renderer" }
+  ],
+  "findings": [
+    {
+      "tier": "V",
+      "severity": "high",
+      "file": "engine-gmt/engine/worker/WorkerProxy.ts",
+      "line": 574,
+      "summary": "`_handleWorkerCrash`'s block commented 'Reject pending export promises' only NULLED the callbacks, and the timers were already cleared — so an export left startExport/finishExport/renderExportFrame pending FOREVER. CONFIRMED, and verification found a more reachable variant needing no crash at all.",
+      "change": "renderExportFrame gains a reject route (_exportFrameFail) so a frame failure has a rejecter of its own — the pump runs between start and finish, so _exportError never belonged to it. EXPORT_ERROR routes to the frame pump first when a frame is in flight. The crash handler now invokes the failure callbacks and resets _isExporting. startExport's resolve closure also clears _exportError so it cannot dangle.",
+      "verification": "An independent verifier confirmed every link and then went further. It demonstrated the hang with a Playwright probe importing the real class through Vite and constructing fresh proxies (so the live render worker was untouched), racing each promise against a timeout: startExport-then-crash PENDING with every timer disarmed and isExporting stuck true; renderExportFrame-then-crash PENDING; finishExport-then-crash PENDING; and a control proving startExport DOES reject at 10s without the crash, i.e. the timer was the sole remaining path. TWO CORRECTIONS TO THE CLAIM, both material: (1) terminateWorker() is NOT a trigger — `gmtRenderer.terminate()` has zero callers repo-wide and GmtRendererCanvas documents that the worker lives for the app's lifetime; that half of the claim is dead code. (2) It found a MORE reachable path with no crash: after startExport resolves, `_exportError` still held the settled start rejecter, so the worker's own 'Frame render failed' EXPORT_ERROR was a silent no-op and renderExportFrame — which has no timeout — hung on an ordinary GL hiccup. It also proved the onerror route is genuinely reachable rather than assuming it: renderWorker's `_tickChannel.port1.onmessage` is try/FINALLY with no catch and runs handleRenderTick (whose own comment concedes it can throw), and ticks are forced on throughout export by the driver's `busy` term; a blob-worker probe measured that this shape does reach worker.onerror in Chromium while a throw inside self.onmessage's try/catch does not. Fix safety was independently checked: all five call sites are in exportRunner.ts, all inside try/catch/finally, named by line. The orchestrator then RE-RAN the same probe shape after the fix: A/C/E all 'SETTLED-rejected:Worker crashed: …', isExporting false, `_exportError` no longer dangling, and the frame error now 'SETTLED-rejected:Frame render failed: synthetic'. typecheck, smoke:engine-gmt and test:bucket-convergence green.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "f57e88b4"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/smoke-engine-gmt.mts",
+      "line": 108,
+      "summary": "smoke:engine-gmt collected a full boot probe (isBooted, hasCompiledShader, accumulationCount, store slices) and printed it without a single assertion — it gated ONLY on pageerrors, so a worker that never booted, a shader that never compiled, or a dead FRAME_READY loop all exited 0.",
+      "change": "Added a frameCount probe (the FRAME_READY-mirrored worker tick count — the only value that proves frames are being delivered, since isBooted and hasCompiledShader both latch before the first frame) and an assertion block covering canvas presence, __gmtProxy, isBooted, hasCompiledShader, frameCount > 0, __store, the booted formula, and every expected DDFS feature slice. Rewrote the docstring, which promised a non-black-centre-pixel assertion and an end-to-end RENDER_TICK -> FRAME_READY proof that the file never checked; it now states what is asserted and says explicitly that pixel content is NOT asserted.",
+      "verification": "Falsification. Temporarily stubbed the FRAME_READY shadow-state refresh in WorkerProxy so it never runs: the app produced zero page errors — i.e. the OLD smoke passed — while the new version failed with 'proxy.frameCount 0 — no RENDER_TICK -> FRAME_READY round-trip'. Reverted with a targeted Edit and re-ran green. The guard now fails on a plausible regression it previously waved through.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "4c68c9a3"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/gmt-renderer.md",
+      "line": 40,
+      "summary": "The rule's guard list cites smoke:tsaa, which boots fluid-toy.html and cannot fail on any engine-gmt renderer regression; its ADR range 0036-0042 also sweeps in four non-renderer ADRs.",
+      "change": "Replaced the smoke:tsaa guard line with a note explaining why it is not a guard for this area, and added the same warning for smoke:formula-switch (fractal-toy.html) and smoke:fractal-kind (fluid-toy.html) — both of which the orchestrator's own briefing named as 'most relevant', so the trap is live and spreading. Annotated the remaining guards with what they cover. Narrowed the ADR range to 0040-0042.",
+      "verification": "Grep-proven. smoke-tsaa.mts pins fluid-toy.html and its only failure condition is a pageerror check — its probe and screenshots feed nothing. `grep -rn RenderPipeline fluid-toy/` returns zero hits; `grep -rn \"from '.*engine/RenderPipeline'\"` returns exactly one hit tree-wide, the engine-gmt re-export shim. `grep -rn engine-gmt fractal-toy/` returns zero. ADR filenames confirm 0036 is defineFeature identity, 0037 two registration manifolds, 0038 asymmetric mobile gating, 0039 address-bar svh/dvh — none renderer decisions. Every other citation in the rule was re-checked and does resolve.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "b1742d70"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/engine/worker/WorkerProxy.ts",
+      "line": 430,
+      "summary": "The _outbox JSDoc advertises a 'GENERAL safety net for arbitrary messages posted before the worker exists … QUEUED here (rather than dropped)', but flushing before INIT guarantees the messages land while the worker's `engine` is still null, so all but REGISTER_FORMULA and RESIZE are silently discarded.",
+      "change": "Rewrote the _outbox JSDoc to say it only prevents a MAIN-side drop, name the two message types the worker can service before BOOT, list the ones delivered-then-discarded, point at the four bespoke replays that exist because of this, and instruct future readers to add a replay rather than rely on the outbox. Also corrected install.ts's companion comment, which called its onBooted push a 're-push' over values 'pushed via installAccumulationBindings' — that helper subscribes without fireImmediately, so it never sends the boot values at all.",
+      "verification": "Empirical. Temporarily instrumented _flushOutbox and renderWorker's dispatcher to log any message arriving while `engine` is null, then loaded app-gmt.html under Playwright for 12s: the outbox-flush line NEVER printed (outbox empty at both creation sites) while '[audit-drop] pre-engine message: MARK_INTERACTION' printed from both worker and page — proving the pre-BOOT drop is live. Source side: initWorkerMode/restart both call _flushOutbox() immediately before postMessage(initMsg); renderWorker's handleInit only stashes _deferredInit and setupEngine runs under case 'BOOT'; reading the whole dispatcher, only REGISTER_FORMULA and RESIZE do work without `engine`. install.ts claim falsified by reading installAccumulationBindings — both store.subscribe calls take (selector, listener) with no options arg. Both instrumentations reverted with targeted Edits.",
+      "guard": "npm run smoke:engine-gmt",
+      "guardPass": true,
+      "commit": "50d9a102"
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "engine-gmt/engine/worker/WorkerProxy.ts",
+      "line": 466,
+      "summary": "Structural follow-on: the outbox flushes before INIT, the one moment its payload cannot be applied. Moving the flush after setupEngine() would make it do what its name implies.",
+      "rationale": "See PROPOSALS.md. Recommendation is to leave it — the corrected JSDoc now warns the next reader off, and moving the flush changes worker message ordering, the highest-risk surface in this subsystem, with no guard that would catch a mistake."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "engine-gmt/engine/worker/WorkerProxy.ts",
+      "line": 1002,
+      "summary": "renderExportFrame still has no timeout of its own — the applied fix gives it a reject route, but only a crash or an explicit EXPORT_ERROR can settle it. A silently dropped EXPORT_FRAME_DONE still hangs the pump.",
+      "rationale": "See PROPOSALS.md. Picking a duration is a product call — a legitimate 4K path-traced frame can take minutes."
+    }
+  ],
+  "notes": "COVERAGE. Covered properly: WorkerProxy.ts (all 1131 lines, both worker-creation sites, the full main-thread message handler, outbox/replay/pending-request machinery, export + bucket surfaces), renderWorker.ts's dispatcher and boot/deferred-INIT path, WorkerProtocol.ts, all five files under engine-gmt/renderer/, CompileScheduler.ts, SceneController.ts, FractalEngine.ts around its five @invariant sites and the config->recompile branch, MaterialController.ts around its four @invariant sites. NOT REACHED: the remaining ~700 lines of FractalEngine.ts (per-frame compute/tiling/band-scheduler), most of MaterialController.ts's shader-config/checksum paths, WorkerExporter.ts (918 lines, five @invariant), WorkerDepthReadback.ts (four @invariant incl. the PBO-size-vs-float-format and focus-pick state machine), WorkerHistogram.ts (three @invariant), handleRenderTick.ts, and BucketRenderer/GmtBucketHost. Depth on the boot/message-ordering surface was chosen over skimming all eight files.\n\nINVARIANTS CHECKED AND SOUND (so a later cycle can skip them): FractalEngine.ts:131 (syncConfigUniforms skips modulatedUniforms — note CompileScheduler calls it WITHOUT the skip list, but that is a one-shot compile-time write the per-frame tick re-asserts, not the drag flicker the invariant guards), :142, :152, :400, :1226. MaterialController.ts:261, :352, :395, :402. CompileScheduler.ts:68/73/76. renderInteractionState.ts:55 — hasLiveModulationSource's four store paths were traced against ModulationEngine.update's real gates and AnimationSystem's reads; they match exactly, including the 2026-07-25 audio clause. WorkerProxy.ts:879/885.\n\nGUARD HEALTH: test:bucket-convergence is genuinely healthy — every value it collects feeds a check(), it drives the real RenderPipeline (the engine-gmt file is a 343-byte re-export shim), and it carries its own vacuity sanity check.\n\nNON-FINDING RULED OUT: startExport transfers audio.pcm.buffer, detaching the main-thread Float32Array — harmless, because exportRunner builds a fresh mix per pass and never reads it back.\n\nHOUSEKEEPING: smoke:engine-gmt rewrites the untracked debug/engine-gmt-smoke.png on every run. Scratch probes left at debug/_outbox-probe.mts, debug/_export-hang-probe.mts and debug/_worker-onerror-probe.mts (all gitignored). All temporary instrumentation was reverted with targeted Edits."
+}

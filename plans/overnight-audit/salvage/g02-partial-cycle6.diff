@@ -1,0 +1,177 @@
+diff --git a/docs/policy/uniform-plugin-contract.md b/docs/policy/uniform-plugin-contract.md
+index 9daf77b2..6045ded9 100644
+--- a/docs/policy/uniform-plugin-contract.md
++++ b/docs/policy/uniform-plugin-contract.md
+@@ -10,7 +10,7 @@ additional_sources:
+   - engine-gmt/features/lighting/index.ts
+   - engine-gmt/features/core_math.ts
+   - engine-gmt/features/optics.ts
+-  - engine-gmt/features/interlace/index.ts
++  - engine-gmt/features/weave.ts
+   - engine-gmt/features/materials.ts
+   - engine-gmt/features/atmosphere/index.ts
+   - shaders/chunks/uniforms.ts
+@@ -35,10 +35,19 @@ depends_on: []
+ 
+ # Uniform plugin contract — when and how to contribute uniforms
+ 
++> **Update 2026-07-28 (engine-gmt half re-verified; all four paths now current).**
++> Every `engine-gmt/**` line anchor below has been re-read against source and
++> refreshed — the path-4 `UniformManager` citations were the worst drifted (150-190
++> lines: `syncFrame` is `112-525`, not `64-395`), and the path-3 producer example
++> `engine-gmt/features/interlace/index.ts` is a **dead file** — the interlace
++> feature was retired by ADR-0089 P4.4 and replaced by weave, taking the
++> `SDFShaderBuilder` reserved-name list with it (the "structure" known-issue row
++> below is closed accordingly). No claim about *behaviour* changed in this pass;
++> the four paths, R1-R10 and I1-I8 all still hold as written.
++>
+ > **Update 2026-07-27 (engine-core sites re-verified against `engine/UniformSchema.ts`,
+-> `engine/FeatureSystem.ts`, `engine/UniformNames.ts`, `shaders/chunks/uniforms.ts`; the
+-> `engine-gmt/**` line references below were NOT re-verified in this pass and may still
+-> be drifted).** Two substantive claims from the 2026-05-20 audit no longer hold:
++> `engine/FeatureSystem.ts`, `engine/UniformNames.ts`, `shaders/chunks/uniforms.ts`).**
++> Two substantive claims from the 2026-05-20 audit no longer hold:
+ > **uniform-name collisions now throw at module load** (commit `36ad672c`, 2026-05-21 —
+ > I3 and the q-029 known-issue row are rewritten below), and **`UniformDefinition.precision`
+ > was deleted** in the same commit (R9 and the q-027 row are rewritten). All
+@@ -51,14 +60,14 @@ This document is the canonical reference for contributors who need to add or cha
+ 
+ ## Existing contribution paths (catalog)
+ 
+-Four paths contribute a uniform to the final GLSL `uniform …;` declarations and the Three.js `material.uniforms` map. All four feed the same downstream consumers (the static preamble producer at `shaders/chunks/uniforms.ts:7-14`, the schema-driven Three.js backing factory at `engine/UniformSchema.ts:141-155`, and the engine-gmt per-frame writer at `engine-gmt/engine/managers/UniformManager.ts:64-395`).
++Four paths contribute a uniform to the final GLSL `uniform …;` declarations and the Three.js `material.uniforms` map. All four feed the same downstream consumers (the static preamble producer at `shaders/chunks/uniforms.ts:7-14`, the schema-driven Three.js backing factory at `engine/UniformSchema.ts:141-155`, and the engine-gmt per-frame writer `UniformManager.syncFrame` at `engine-gmt/engine/managers/UniformManager.ts:112-525`).
+ 
+ | # | Path | Where declared | When to use | Footguns |
+ |---|------|----------------|-------------|----------|
+ | 1 | **`BASE_SCHEMA` entry** | `engine/UniformSchema.ts:53-102` (engine-core) and the parametrisation-hook twin at `engine-gmt/engine/UniformSchema.ts:35-105` | A uniform that must always be declarable in GLSL regardless of which features are compiled. Three legitimate sub-categories: true engine core (camera, time, resolution, pipeline state); tool/export slots that no-op at their defaults (image-tile, histogram, multi-pass); CPU-derived caches of feature uniforms that multiple consumer features read unconditionally (`uEnvRotationMatrix` at `engine/UniformSchema.ts:100`, `uFogColorLinear` at `engine/UniformSchema.ts:101`). | The two `BASE_SCHEMA` copies are **no longer byte-identical**: the engine-gmt twin carries an extra MB3D derived-rotation bank (`uMb3dRotM0-5`, `uMb3dRotSC0-5`, `uMb3dRot4D0-1` at `engine-gmt/engine/UniformSchema.ts:85-104`) and a `'mat4'` member on `GLSLType` that engine-core does not have. I1's byte-identical rule now applies to the shared prefix only. |
+-| 2 | **`FeatureDefinition.extraUniforms: UniformDefinition[]`** | Field on the feature literal at `engine/FeatureSystem.ts:344-345`; harvested by `getUniformDefinitions()` at `engine/FeatureSystem.ts:711-712`. Producer example: `engine-gmt/features/lighting/index.ts:124-143` (15 light/CDF uniforms). | Array-typed slots (`arraySize`), sampler/texture slots whose Three.js default needs control (`null` for `sampler2D`), and `backingOnly: true` slots whose GLSL declaration is feature-injected on demand. Anything where the param-to-uniform 1:1 binding of path 3 does not fit. | Two features that both declare the same `name` in `extraUniforms` (or one in `extraUniforms` and one in `params.*.uniform`) BOTH appear in the registry's output — `getUniformDefinitions()` at `engine/FeatureSystem.ts:689-716` does no feature-vs-feature collision check. The check lives one layer down: `engine/UniformSchema.ts:121-131` throws on the duplicate at module load, so the failure is loud rather than a silent last-wins. |
+-| 3 | **`params.<key>.uniform: string`** on a `ParamConfig` | Optional `uniform?: string` field at `engine/FeatureSystem.ts:113`; harvested by `getUniformDefinitions()` at `engine/FeatureSystem.ts:691-710`. Producer examples: `engine-gmt/features/optics.ts:23` (`uCamType`), `engine-gmt/features/core_math.ts:134-150` (scalar + vec parameters), `engine-gmt/features/interlace/index.ts:169-180` (`uInterlaceEnabled` and friends), `engine-gmt/features/materials.ts:211` (`uEnvMapTexture` via an `image`-typed param), `engine-gmt/features/atmosphere/index.ts:99-123` (fog params). | Single-param 1:1 bindings that change from React/Zustand state. This is the **preferred path** for any uniform that already has a corresponding DDFS param — it gets free CONFIG-event routing, `composeFrom` support, animation track auto-derivation, undo snapshotting, and preset round-trip. | The harvester normalises types: `color` → `vec3`, `boolean` → `float` (1.0 / 0.0), `image`/`gradient` → `sampler2D` with `null` default (`engine/FeatureSystem.ts:697-704`). A feature that declares `type: 'gradient'` and expects a `sampler2D` GLSL slot will get one — but the param's runtime value is a `GradientConfig`, not a texture; the texture is built by the gradient-buffer pipeline in `store/createFeatureSlice.ts` and routed via the `texture` event channel, NOT via the schema. |
+-| 4 | **Direct write into `material.uniforms` via `UniformManager`** | The engine-gmt-only writer at `engine-gmt/engine/managers/UniformManager.ts:18`. Examples: `uEnvRotationMatrix` derivation at `engine-gmt/engine/managers/UniformManager.ts:233-239`, `uFogColorLinear` derivation at `engine-gmt/engine/managers/UniformManager.ts:242-258`, light-array packing at `engine-gmt/engine/managers/UniformManager.ts:260-358`, 3-stage rotation matrices at `engine-gmt/engine/managers/UniformManager.ts:360-394`. | CPU-derived caches that compute once per frame from another uniform's source value (e.g. `mat2(cos,sin,-sin,cos)` from a scalar radians input), packed array writes from a Zustand state shape that does not map 1:1 to a `params.*.uniform` (the light array), and per-frame derived values like `uPixelSizeBase` and `uCamBasisX/Y` (`engine-gmt/engine/managers/UniformManager.ts:202-214`). | Direct `UniformManager` registration ONLY makes sense in engine-gmt — the engine-core sibling `engine/managers/` has only `ConfigManager.ts`; there is no `engine/managers/UniformManager.ts` (verified at `docs/history/doc-audit-state/survey/_followups/q-099.md:23-25`). A new non-GMT app would write its own per-frame writer module rather than reuse this one. Also: the GLSL slot must still come from one of paths 1-3 (the writer touches `material.uniforms` keyed by name, but the GLSL `uniform …;` line is produced by the schema walker at `shaders/chunks/uniforms.ts:7-14`, which has no idea this writer exists). |
++| 2 | **`FeatureDefinition.extraUniforms: UniformDefinition[]`** | Field on the feature literal at `engine/FeatureSystem.ts:344-345`; harvested by `getUniformDefinitions()` at `engine/FeatureSystem.ts:711-712`. Producer example: `engine-gmt/features/lighting/index.ts:128-158` (19 light + env-CDF uniforms). | Array-typed slots (`arraySize`), sampler/texture slots whose Three.js default needs control (`null` for `sampler2D`), and `backingOnly: true` slots whose GLSL declaration is feature-injected on demand. Anything where the param-to-uniform 1:1 binding of path 3 does not fit. | Two features that both declare the same `name` in `extraUniforms` (or one in `extraUniforms` and one in `params.*.uniform`) BOTH appear in the registry's output — `getUniformDefinitions()` at `engine/FeatureSystem.ts:689-716` does no feature-vs-feature collision check. The check lives one layer down: `engine/UniformSchema.ts:121-131` throws on the duplicate at module load, so the failure is loud rather than a silent last-wins. |
++| 3 | **`params.<key>.uniform: string`** on a `ParamConfig` | Optional `uniform?: string` field at `engine/FeatureSystem.ts:113`; harvested by `getUniformDefinitions()` at `engine/FeatureSystem.ts:691-710`. Producer examples: `engine-gmt/features/optics.ts:23` (`uCamType`), `engine-gmt/features/core_math.ts:68-84` (scalar + vec parameters), `engine-gmt/features/weave.ts:96-100` (`uWeaveEnabled` — a `boolean`-typed param normalised to `float`), `engine-gmt/features/materials.ts:225` (`uEnvMapTexture` via an `image`-typed param), `engine-gmt/features/atmosphere/index.ts:108-172` (fog params). | Single-param 1:1 bindings that change from React/Zustand state. This is the **preferred path** for any uniform that already has a corresponding DDFS param — it gets free CONFIG-event routing, `composeFrom` support, animation track auto-derivation, undo snapshotting, and preset round-trip. | The harvester normalises types: `color` → `vec3`, `boolean` → `float` (1.0 / 0.0), `image`/`gradient` → `sampler2D` with `null` default (`engine/FeatureSystem.ts:697-704`). A feature that declares `type: 'gradient'` and expects a `sampler2D` GLSL slot will get one — but the param's runtime value is a `GradientConfig`, not a texture; the texture is built by the gradient-buffer pipeline in `store/createFeatureSlice.ts` and routed via the `texture` event channel, NOT via the schema. |
++| 4 | **Direct write into `material.uniforms` via `UniformManager`** | The engine-gmt-only writer at `engine-gmt/engine/managers/UniformManager.ts:28`. Examples: `uEnvRotationMatrix` derivation at `engine-gmt/engine/managers/UniformManager.ts:363-369`, `uFogColorLinear` derivation at `engine-gmt/engine/managers/UniformManager.ts:371-388`, light-array packing at `engine-gmt/engine/managers/UniformManager.ts:390-488`, 3-stage rotation matrices at `engine-gmt/engine/managers/UniformManager.ts:490-524`, and the MB3D derived-rotation bank in the separate `syncDerivedRotations` entry point at `engine-gmt/engine/managers/UniformManager.ts:563-594`. | CPU-derived caches that compute once per frame from another uniform's source value (e.g. `mat2(cos,sin,-sin,cos)` from a scalar radians input), packed array writes from a Zustand state shape that does not map 1:1 to a `params.*.uniform` (the light array), and per-frame derived values like `uPixelSizeBase` and `uCamBasisX/Y` (`engine-gmt/engine/managers/UniformManager.ts:332-344`). | Direct `UniformManager` registration ONLY makes sense in engine-gmt — the engine-core sibling `engine/managers/` has only `ConfigManager.ts`; there is no `engine/managers/UniformManager.ts` (verified at `docs/history/doc-audit-state/survey/_followups/q-099.md:23-25`). A new non-GMT app would write its own per-frame writer module rather than reuse this one. Also: the GLSL slot must still come from one of paths 1-3 (the writer touches `material.uniforms` keyed by name, but the GLSL `uniform …;` line is produced by the schema walker at `shaders/chunks/uniforms.ts:7-14`, which has no idea this writer exists). |
+ 
+ The downstream merge sequence: `BASE_SCHEMA` + (feature `params.*.uniform` harvested via the path-3 mechanism, then feature `extraUniforms` appended via the path-2 mechanism) → two collision checks that **throw** at module load, feature-vs-base at `engine/UniformSchema.ts:113-120` and feature-vs-feature at `engine/UniformSchema.ts:121-131` → `UNIFORM_SCHEMA` (`engine/UniformSchema.ts:134`) → `createUniforms()` walk at `engine/UniformSchema.ts:141-155` produces the Three.js `material.uniforms` map → `shaders/chunks/uniforms.ts:7-14` walks the same schema to emit the static GLSL preamble (skipping `backingOnly` entries).
+ 
+@@ -66,23 +75,23 @@ The downstream merge sequence: `BASE_SCHEMA` + (feature `params.*.uniform` harve
+ 
+ R1. **If the uniform is tied to a feature's params and changes per-frame from store state, use `params.<key>.uniform` (path 3).** Do NOT add it to `extraUniforms` and do NOT add it to `BASE_SCHEMA`. The DDFS routing in `store/createFeatureSlice.ts` already handles uniform emit, CONFIG-event diff, gradient-buffer texture path, and animation/undo/preset round-trip for path-3 uniforms; the other paths do not. Cite: `engine/FeatureSystem.ts:108-219` (ParamConfig), `engine/FeatureSystem.ts:691-710` (harvester branch).
+ 
+-R2. **If the uniform is an array, a sampler the feature owns, or needs `backingOnly: true`, use `extraUniforms` (path 2).** Path 3's auto-derivation does not carry `arraySize`; it never sets `backingOnly`; and `image`/`gradient` types route through dedicated texture channels rather than schema. Cite: `engine/FeatureSystem.ts:344-345`, `engine-gmt/features/lighting/index.ts:124-143`, `engine-gmt/features/core_math.ts:128-132`.
++R2. **If the uniform is an array, a sampler the feature owns, or needs `backingOnly: true`, use `extraUniforms` (path 2).** Path 3's auto-derivation does not carry `arraySize`; it never sets `backingOnly`; and `image`/`gradient` types route through dedicated texture channels rather than schema. Cite: `engine/FeatureSystem.ts:344-345`, `engine-gmt/features/lighting/index.ts:128-158`, `engine-gmt/features/core_math.ts:59-63`.
+ 
+ R3. **`BASE_SCHEMA` (path 1) is reserved for three sub-categories only:** true engine-core uniforms (camera/time/resolution); tool/export slots whose defaults are a no-op identity (bucket-render tile, histogram layer, multi-pass output); and CPU-derived caches of feature uniforms that multiple consumer features read with safe identity defaults (the two examples at `engine/UniformSchema.ts:100-101` are the precedent). Adding anything else to `BASE_SCHEMA` is a contract violation — see q-028 for the full rationale (`docs/history/doc-audit-state/survey/_followups/q-028.md`).
+ 
+ R4. **Engine-core uniforms with no GMT coupling go in `engine/UniformSchema.ts` BASE_SCHEMA; GMT-specific uniforms go via a feature in the engine-gmt tree.** The engine-core and engine-gmt copies of `UniformSchema.ts` are a Pattern C parametrisation-hook fork (see [`docs/policy/engine-fork-rules.md`](./engine-fork-rules.md)): the designed divergence is the import path of `registerFeatures()` (`engine/UniformSchema.ts:22` vs `engine-gmt/engine/UniformSchema.ts:5`), which composes a different sibling `features/` set per tree. Editing only one copy of the *shared* `BASE_SCHEMA` prefix will silently desync the two engines — keep that prefix identical or move the change into a path-2/path-3 feature. (GMT-only BASE entries have in fact accumulated in the engine-gmt copy; see I1.)
+ 
+-R5. **Avoid direct `UniformManager.update()` writes (path 4) for new uniforms unless the value is a CPU-derived per-frame cache of another uniform's value.** Direct writes bypass the schema-driven validation, the CONFIG-event diff in `engine-gmt/engine/managers/ConfigManager.ts`, and the animation/undo/preset round-trip. The legitimate uses are precisely the per-frame derivations enumerated in path-4 above (`engine-gmt/engine/managers/UniformManager.ts:202-258` for camera basis + env rotation + fog linearisation, `engine-gmt/engine/managers/UniformManager.ts:260-358` for light packing). Cite the source feature uniform (paths 1-3) and have `UniformManager` derive into a BASE slot — the `if (sourceUniform) { … }` guard pattern at `engine-gmt/engine/managers/UniformManager.ts:233-239` is the canonical defensive shape.
++R5. **Avoid direct `UniformManager.update()` writes (path 4) for new uniforms unless the value is a CPU-derived per-frame cache of another uniform's value.** Direct writes bypass the schema-driven validation, the CONFIG-event diff in `engine-gmt/engine/managers/ConfigManager.ts`, and the animation/undo/preset round-trip. The legitimate uses are precisely the per-frame derivations enumerated in path-4 above (`engine-gmt/engine/managers/UniformManager.ts:332-388` for camera basis + `uPixelSizeBase` + env rotation + fog linearisation, `engine-gmt/engine/managers/UniformManager.ts:390-488` for light packing). Cite the source feature uniform (paths 1-3) and have `UniformManager` derive into a BASE slot — the `if (sourceUniform) { … }` guard pattern at `engine-gmt/engine/managers/UniformManager.ts:363-369` is the canonical defensive shape.
+ 
+ R6. **Names MUST follow the prefix convention.** `BASE_SCHEMA` uses short generic names (`uTime`, `uResolution`, `uCameraPosition`, `uPixelSizeBase`); features use themed prefixes (`uPT…` for pathtracer, `uLight…` for lighting, `uModular…` for the modular pipeline, `uInterlace…` for interlace, `uEnv…` for materials env, `uFog…` for atmosphere). The *convention* itself is still review-enforced only, but an actual name **collision** now throws at module load — see Invariant I3 below.
+ 
+ R7. **Always add the canonical identifier to `engine/UniformNames.ts` (`Uniforms.X = 'uX'`) and reference it by `Uniforms.X` in the schema entry, NOT a string literal.** Cite: `engine/UniformNames.ts:2-91`. The `UniformName` string-literal union derived at `engine/UniformNames.ts:93` is the typed "valid uniform identifier" check downstream code uses; bypassing it with a raw string defeats it. Note that the section-header comments in `UniformNames.ts` (e.g. `// Environment`) are organisational only — they do NOT correlate with the BASE-vs-feature partition; `EnvRotationMatrix` sits under `// Environment` but is in `BASE_SCHEMA` (see q-031 in `docs/history/doc-audit-state/survey/_followups/q-031.md`).
+ 
+-R8. **For an array-typed slot, default to a typed array (`Float32Array(N)`) or `new Array(N).fill(new THREE.Vector3())`** — `createUniforms` deep-clones `Float32Array` (`new Float32Array(val)` at `engine/UniformSchema.ts:149`) and array-of-Three (`.map(v => v.clone ? v.clone() : v)` at `engine/UniformSchema.ts:148`). A bare-object default like `{ x: 0 }` will pass through as a primitive at `engine/UniformSchema.ts:151` and break array indexing on the shader side. Producer example: `engine-gmt/features/lighting/index.ts:126-136`.
++R8. **For an array-typed slot, default to a typed array (`Float32Array(N)`) or `new Array(N).fill(new THREE.Vector3())`** — `createUniforms` deep-clones `Float32Array` (`new Float32Array(val)` at `engine/UniformSchema.ts:149`) and array-of-Three (`.map(v => v.clone ? v.clone() : v)` at `engine/UniformSchema.ts:148`). A bare-object default like `{ x: 0 }` will pass through as a primitive at `engine/UniformSchema.ts:151` and break array indexing on the shader side. Producer example: `engine-gmt/features/lighting/index.ts:130-140`.
+ 
+ R9. **Do not set `UniformDefinition.comment` expecting any runtime effect.** It is interface-declared at `engine/UniformSchema.ts:34` but has zero consumers: the chunk emitter at `shaders/chunks/uniforms.ts:7-14` reads only `name`, `type`, `arraySize`, `backingOnly`, and the Three.js factory at `engine/UniformSchema.ts:141-155` reads only `name` and `default`. `comment` survives as an inline-doc convention on three `BASE_SCHEMA` entries. The `precision` field this rule also used to cover was **deleted** in `36ad672c` (zero producers, zero consumers); the precision preamble is hard-coded to `precision highp float; precision highp int;` at `shaders/chunks/uniforms.ts:5`. See q-027 in `docs/history/doc-audit-state/survey/_followups/q-027.md`.
+ 
+-R10. **`backingOnly: true` requires a paired feature `inject()` call to `builder.addUniform(name, type, arraySize?)`.** The flag tells the schema walker at `shaders/chunks/uniforms.ts:8` to skip emitting the static GLSL `uniform …;` declaration (the Three.js backing is still created by `createUniforms` at `engine/UniformSchema.ts:141-155`, which does NOT check the flag, and `ShaderBuilder.buildUniformsBlock` does not check it either). To actually use the uniform in GLSL, the feature must add the declaration on demand from its own `inject()` — see `engine-gmt/features/core_math.ts:157-161` for the canonical `'Modular'`-only emission of `uModularParams`. Without the paired `addUniform`, `backingOnly` produces a Three.js slot that no shader can read.
++R10. **`backingOnly: true` requires a paired feature `inject()` call to `builder.addUniform(name, type, arraySize?)`.** The flag tells the schema walker at `shaders/chunks/uniforms.ts:8` to skip emitting the static GLSL `uniform …;` declaration (the Three.js backing is still created by `createUniforms` at `engine/UniformSchema.ts:141-155`, which does NOT check the flag, and `ShaderBuilder.buildUniformsBlock` does not check it either). To actually use the uniform in GLSL, the feature must add the declaration on demand from its own `inject()` — see `engine-gmt/features/core_math.ts:106-110` for the canonical `'Modular'`-only emission of `uModularParams`. Without the paired `addUniform`, `backingOnly` produces a Three.js slot that no shader can read.
+ 
+ ## Invariants
+ 
+@@ -98,7 +107,7 @@ I5. **`UniformSchema.ts` triggers `registerFeatures()` at import time** (`engine
+ 
+ I6. **`UniformManager` is engine-gmt-only.** The engine-core `engine/managers/` directory contains only `ConfigManager.ts`. A new non-GMT app contributing uniforms via path 4 MUST write its own per-frame writer; there is no shared substrate to reuse. Verified at `docs/history/doc-audit-state/survey/_followups/q-099.md:23-25`.
+ 
+-I7. **Sampler defaults are `null`.** Producers using path 1 or path 2 with `type: 'sampler2D'` MUST default `value` to `null` (see `engine/UniformSchema.ts:78,81` for BASE precedent and `engine-gmt/features/lighting/index.ts:139-140` for the env-CDF samplers). Consumers MUST bind a real texture before the first draw or accept undefined-sampler GL behaviour.
++I7. **Sampler defaults are `null`.** Producers using path 1 or path 2 with `type: 'sampler2D'` MUST default `value` to `null` (see `engine/UniformSchema.ts:78,81` for BASE precedent and `engine-gmt/features/lighting/index.ts:143-144` for the env-CDF samplers). Consumers MUST bind a real texture before the first draw or accept undefined-sampler GL behaviour.
+ 
+ I8. **`UniformNames.ts` section headers are non-binding.** The `// Environment`, `// Lighting`, `// Modular` comments at `engine/UniformNames.ts` group identifiers logically but do NOT correlate with the BASE-vs-feature contribution path. `EnvRotationMatrix` and `FogColorLinear` sit under `// Environment` (`engine/UniformNames.ts:53,61`) but are in `BASE_SCHEMA` (`engine/UniformSchema.ts:100-101`), not feature-contributed. See q-031.
+ 
+@@ -115,13 +124,13 @@ I8. **`UniformNames.ts` section headers are non-binding.** The `// Environment`,
+ | Kind | Item | Site | Source |
+ |------|------|------|--------|
+ | ~~design-gap~~ **RESOLVED 2026-05-21 (`36ad672c`)** | ~~Silent uniform-name collision has no runtime guard.~~ Both feature-vs-base and feature-vs-feature collisions now throw at module load. Went further than the proposed dev-only `console.warn`. The check sits in `UniformSchema`, not in the harvester — `getUniformDefinitions()` still returns duplicates unfiltered, which is fine because nothing downstream consumes it except the schema. | `engine/UniformSchema.ts:113-131` | q-029 |
+-| drift | Two contribution paths for feature uniforms (`extraUniforms` and `params.*.uniform`) are not jointly documented anywhere besides this file. q-030 missed the `extraUniforms` path entirely; q-031 corrected it. | `engine/FeatureSystem.ts:344-345,691-712`, `engine-gmt/features/lighting/index.ts:124-143` | q-030, q-031 |
++| drift | Two contribution paths for feature uniforms (`extraUniforms` and `params.*.uniform`) are not jointly documented anywhere besides this file. q-030 missed the `extraUniforms` path entirely; q-031 corrected it. | `engine/FeatureSystem.ts:344-345,691-712`, `engine-gmt/features/lighting/index.ts:128-158` | q-030, q-031 |
+ | ~~drift~~ **PARTLY RESOLVED 2026-05-21 (`36ad672c`)** | `UniformDefinition.precision` was deleted (zero producers, zero consumers). `.comment` remains vestigial — no consumer reads it; three `BASE_SCHEMA` producers (`engine/UniformSchema.ts:89,92,101`) use it as an inline doc. Converting those to plain `//` lines and dropping the field is still open. Until then, R9 is the contract. | `engine/UniformSchema.ts:34` | q-027 |
+ | ~~drift~~ **RESOLVED 2026-05-21 (`36ad672c`)** | ~~`// Base Schema (Pure Core)` header comment is stale.~~ Rewritten to name the three legitimate categories; matches R3. | `engine/UniformSchema.ts:45-52` | q-028 |
+ | ~~drift~~ **RESOLVED 2026-05-21 (`36ad672c`)** | ~~`UniformDefinition.backingOnly` JSDoc does not name the enforcement site.~~ It now carries an `@enforcement` tag naming `shaders/chunks/uniforms.ts` as the sole site and stating that `ShaderBuilder.buildUniformsBlock` / `createUniforms` ignore the flag. | `engine/UniformSchema.ts:35-42` | q-026 |
+ | fork-drift | The two `BASE_SCHEMA` copies are no longer byte-identical — the engine-gmt twin appends a GMT-only MB3D derived-rotation bank and widens `GLSLType` with `'mat4'`. I1 was rewritten to cover the shared prefix only, but the 14 MB3D entries arguably belong in a path-2 feature rather than in a "BASE" schema (R3 violation). | `engine-gmt/engine/UniformSchema.ts:10,85-104` | audit 2026-07-27 |
+ | drift | `UniformManager` is engine-gmt-only but `docs/history/gmt/02_Rendering_Internals.md` (three sites), `docs/history/gmt/43_Bucket_Render_Overhaul.md` (one), and `docs/specs/10_Shaped_Emission.md` (two) reference the file without the `engine-gmt/` prefix; relative links from `docs/history/gmt/` would 404. Fix when a doc-refresh window opens. | (out of scope — read-only docs) | q-099 |
+-| structure | Interlace uniforms have a duplicate-declaration risk: the `params.*.uniform` descriptors at `engine-gmt/features/interlace/index.ts:169-180` are the source of truth for the Three.js binding, but the GLSL declaration ordering is pinned by a hardcoded reserved-name list in `engine-gmt/engine/SDFShaderBuilder.ts` (`'uInterlaceEnabled'`, `'uInterlaceInterval'`, `'uInterlaceStartIter'`) that must stay in sync. If a new interlace uniform is added at path 3 without also touching the SDFShaderBuilder list, mesh export will silently miss the declaration. | `engine-gmt/features/interlace/index.ts:169-180` | q-031 |
++| ~~structure~~ **RESOLVED (ADR-0089 P4.4)** | ~~Interlace uniforms have a duplicate-declaration risk: the `params.*.uniform` descriptors are the source of truth for the Three.js binding, but the GLSL declaration ordering is pinned by a hardcoded reserved-name list in `engine-gmt/engine/SDFShaderBuilder.ts` (`'uInterlaceEnabled'`, `'uInterlaceInterval'`, `'uInterlaceStartIter'`) that must stay in sync.~~ The interlace feature was retired and replaced by weave; `engine-gmt/features/interlace/` no longer exists, and the `SDFShaderBuilder` reserved-name list went with it (grep `uInterlace` over `engine-gmt/**` now hits only two prose comments in `engine-gmt/engine/weave/`). The weave successor contributes `uWeaveEnabled` through plain path 3 with no parallel splice path — see the `engine-gmt/engine/SDFShaderBuilder.ts:161-166` note. | (site removed) | q-031, audit 2026-07-28 |
+ 
+ ## Historical context
+ 
+@@ -133,6 +142,6 @@ No existing module doc covered the uniform contribution contract — the surveyo
+ - `engine/UniformSchema.ts:96` — `// Optimizations (Shared by Geometry & Lighting)`. The accurate category label for the CPU-derived caches at `engine/UniformSchema.ts:97-101`.
+ - `engine/UniformSchema.ts:105-112` — the collision-detection rationale comment (`// Collision detection at module-load time. Two failure modes the naming convention alone can't catch…`). This replaced the old `// Deduplicate in case a feature defines a uniform that's also in base` line and is the in-source statement of I3.
+ - `engine/FeatureSystem.ts:344` — `// extraUniforms: complex uniforms (arrays, structs) that aren't 1:1 with a param entry`. The one-line in-source description of path 2.
+-- `engine-gmt/features/core_math.ts:129-131` — `// backingOnly: Three.js uniform object always exists for syncModularUniforms(), but GLSL declaration is injected conditionally in inject() only for Modular formula`. The canonical worked example of R10's paired-`addUniform` pattern.
++- `engine-gmt/features/core_math.ts:60-61` — `// backingOnly: Three.js uniform object always exists for syncModularUniforms(), but GLSL declaration is injected conditionally in inject() only for Modular formula`. The canonical worked example of R10's paired-`addUniform` pattern.
+ 
+ The four-path contract emerged organically across the lifetime of the codebase. Path 1 (BASE_SCHEMA) is the oldest; path 2 (extraUniforms) was added when the lighting feature outgrew the 1:1 binding; path 3 (params.*.uniform) is the DDFS-era preferred path that subsumed most new uniforms; path 4 (UniformManager direct writes) is a render-loop concern that predates the DDFS framing and persists for legitimate per-frame CPU-derivation cases. Future shader-extension work (cf. `plans/mesh-export-unification.md` for one downstream consumer) should pick path 3 by default and treat paths 1-2 as escape hatches gated by the rules above.
+diff --git a/engine-gmt/engine/ShaderBuilder.ts b/engine-gmt/engine/ShaderBuilder.ts
+index 0016fb2d..a41b5f8a 100644
+--- a/engine-gmt/engine/ShaderBuilder.ts
++++ b/engine-gmt/engine/ShaderBuilder.ts
+@@ -21,8 +21,20 @@
+ // 16. Post Processing    — addPostProcessLogic()  [inside applyPostProcessing(), fully feature-injected]
+ // 17. Main Fragment      — addCompositeLogic()         [inside renderPixel(), after integrator]
+ //
+-// Physics variant: 1-10 only (simplified trace, no lighting/post)
+-// Histogram variant: 1-10 + trace + ray (no lighting/material/post)
++// Physics variant:   1-9 + a simplified inline trace (no post-DE functions,
++//                    no lighting/material/post).
++// Histogram variant: 1-10 + trace + ray (no lighting/material/post).
++//
++// CAVEAT — the list above is the MAIN variant's order verbatim. In the Physics
++// and Histogram variants `addHeader()` output (position 3) is emitted AFTER
++// Coloring (position 6) instead of before Math, so a header that references
++// anything from Math/BlueNoise/Coloring compiles in those two variants but NOT
++// in Main, and vice versa. Today's sole `addHeader` caller
++// (`engine-gmt/features/materials.ts` → MAIN_HEADER) is preprocessor-only
++// (`#define uEnvStrength …`), so it is order-independent and the divergence is
++// latent, not live. Anything richer than a #define added via addHeader must be
++// checked against all three orderings — or the emit sites in buildFragment()
++// aligned first.
+ 
+ import { UNIFORMS } from '../shaders/chunks/uniforms';
+ import { getMathGLSL, MESH_GLSL_UNIFORMS, GLSL_MATH_CONSTANTS, GLSL_SPHERE_FOLD, GLSL_BOX_FOLD, getSnoiseFunctions } from '../shaders/chunks/math';
+@@ -175,6 +187,33 @@ export class ShaderBuilder {
+         this.defines.set(name, value);
+     }
+ 
++    /**
++     * @invariant Keyed on `name` alone and `Map.set` is last-wins — NOT
++     *   idempotent on `(name, type)`. Two features adding the same name with
++     *   different `type`/`arraySize` yield ONE declaration carrying whichever
++     *   was added last, silently. This is deliberately weaker than the schema
++     *   layer: `UniformSchema` THROWS on a name collision at module load, but
++     *   that check only spans `BASE_SCHEMA` + `getUniformDefinitions()` — it
++     *   cannot see builder-time `addUniform` calls made from `inject()`.
++     *   Mirrors `engine/ShaderBuilder.ts:addUniform`.
++     * @invariant GMT-SPECIFIC, and the reason a stray `addUniform` is not a
++     *   silent-corruption risk here the way a type mismatch is: this builder's
++     *   entries are APPENDED to an already-complete declaration block —
++     *   `buildUniformsString()` starts from the static `UNIFORMS` chunk, and
++     *   `buildMeshSDFLibrary()` starts from `MESH_GLSL_UNIFORMS` plus its
++     *   hardcoded DE_MASTER stub list. Re-adding any name that block already
++     *   declares emits a DUPLICATE `uniform …;` line and hard-fails GL
++     *   compilation (verified 2026-07-28 by probing `addUniform('uTime',
++     *   'float')` through `npm run test:baseline` → webglCompile). Engine-core
++     *   cannot hit this — its `buildUniformsBlock()` has no static prefix.
++     *   The legitimate use is therefore exactly the `backingOnly` pattern
++     *   (R10 in `docs/policy/uniform-plugin-contract.md`): the schema walker
++     *   skipped the declaration, so the feature owes it. See
++     *   `engine-gmt/features/core_math.ts` (`uModularParams`).
++     * @invariant Neither emit site checks `backingOnly` — like engine-core,
++     *   an `addUniform` entry ALWAYS produces a GLSL declaration. The flag is
++     *   honoured only by `engine-gmt/shaders/chunks/uniforms.ts`.
++     */
+     addUniform(name: string, type: string, arraySize?: number) {
+         this.uniforms.set(name, { type, arraySize });
+     }

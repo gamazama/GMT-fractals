@@ -1247,3 +1247,157 @@ Insert immediately after the `# ADR-0014: …` heading:
   `debug/_animate-probe.mts` (the animate-* measurement),
   `debug/_probe-zindex-gap.mts` (the tier-reservation probe).
 - **A dev server is still running on :3400** from cycle 1 — stop it at end of run.
+
+---
+
+# Cycle 6
+
+## HIGH — The Formula Workshop's V4 escape hatch is dead, and the obvious fix ships a second bug
+
+_(cycle 6 · `engine-gmt/features/fragmentarium_import/FormulaWorkshop.tsx:721` — confirmed by driving the real UI)_
+
+When V3's detector fails and V4 is the effective pipeline, `runDetect`
+**deliberately skips `setError`** so the user can still Preview/Import via V4 —
+and the buttons are correspondingly left enabled (`disabled={!canImport && !useV4Pipeline}`
+collapses to `false`). But both handlers open with a V3-only guard,
+`if (!detected || !selectedFunctionName) return;`, placed **above** both
+`setError(null)` and the `if (useV4Pipeline)` branch. So the click is a pure
+no-op: no import, no preview, no message, no console output.
+
+**Demonstrated, not inferred.** A verifier drove the Workshop under Playwright.
+For both affected library formulas: mode read "Auto (Solo)", `previewDisabled:false`,
+`importDisabled:false`, `errorText:null`. Clicking Preview and Import each
+returned CLICKED and after 2.5 s left `errorText` null, the store formula
+unchanged, the snapshot byte-identical, and **zero console output**. A control run
+with a V3-passing formula behaved correctly (params section present, Preview
+switched to `frag_workshop_preview`, Import switched to the formula name), proving
+the harness would have caught a working path.
+
+**Reachability: two shipped library formulas**, in default auto mode —
+`Benesi/MengersmoothPolyhedra.frag` and
+`Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02----l.frag`. Both are in
+`public/formulas/manifest.json` and pass the picker filter, so they are browsable
+by default. `npm run test:frag:scan` names the same two: *"V3 fails, V4 ok: 2
+(Workshop shows error on select but V4 would work — needs Fix 2)"*.
+
+Two corrections to the original report, both worth keeping:
+
+- The catalog lists **three** entries with `{v3:'skip', v4:'pass', recommended:'v4'}`,
+  but only **two** fail V3 today — `Experimental/3DMandel.frag`'s catalog row is
+  stale because V3's preprocessor improved since the catalog was frozen. The
+  `@invariant` on `getRecommendedPipeline` already warns about exactly this.
+- The **custom-paste path is a milder variant**: pasting GLSL that V3 rejects
+  leaves `entryId` null, so `willUseV4` is false and `setError` *does* fire — the
+  user sees a V3 parse error while the selector reads "Auto (Solo)", a
+  mode/message mismatch. It becomes fully silent only if they explicitly pick
+  "Standalone".
+
+**The proposed fix — hoist the `if (useV4Pipeline)` blocks above the guards — is
+necessary but NOT sufficient.** V4's `processFormula(source, filename, id?, name?)`
+genuinely needs neither `detected` nor `selectedFunctionName`, and `formulaName`
+*is* populated (`runDetect` sets `uniqueName(fileBaseName || 'imported')`). But:
+
+1. **ID mismatch would break the import outright.** V4's `sanitizeId` rewrites
+   `Simple_Kleinian-Slow-DE-02----l` to `Simple_Kleinian_Slow_DE_02_l`, and
+   `FractalRegistry.register` keys on `def.id`. `handleImport`'s V4 branch calls
+   `setFormula(formulaName)` — the **unsanitised** string. The import would
+   "succeed" and then switch to an id that is not in the registry. Use `r.def.id`.
+2. `setError(null)` sits *below* the guard, so hoisting the V4 block above it
+   would let a stale error survive a successful V4 preview. Move it up too.
+3. The whole detected-gated UI stays hidden (sections gated on
+   `{detected && selectedFunctionName && …}`) — no name field, no param table, no
+   transformed-output view. A blind import with no rename ability.
+4. `buildAndRegisterV4` records no `importSource`, so the re-edit flow silently
+   no-ops for anything imported this way.
+5. Dropping the guard also drops the `!formulaName.trim()` check for V4; only the
+   button's `disabled` expression still guards it.
+
+**Recommendation:** fix it, but as a small deliberate change rather than a hoist —
+move the V4 branch up, move `setError(null)` with it, use `r.def.id` for
+`setFormula`, and decide whether to un-gate the name field so the user can rename
+before importing. Blast radius is 2 of 196 shipped frags, so this is not urgent —
+but it is a documented feature that silently does nothing, which is worse than an
+error message. No guard mounts `FormulaWorkshop`, so this needs a manual pass.
+
+---
+
+## MEDIUM — `renderExportFrame` still has no timeout
+
+_(cycle 6 · `engine-gmt/engine/worker/WorkerProxy.ts:1002`)_
+
+The export-hang fix (`f57e88b4`) gave `renderExportFrame` a reject route, so a
+worker crash or an explicit `EXPORT_ERROR` now settles it. But it still has **no
+timer of its own**, unlike `startExport` (10 s) and `finishExport` (60 s). A
+silently dropped `EXPORT_FRAME_DONE` — e.g. `renderWorker`'s
+`EXPORT_RENDER_FRAME` arriving while `exporter?.active` is false, which posts
+nothing at all — still hangs the pump forever.
+
+**Why it wasn't applied:** picking the duration is a product call. A legitimate 4K
+path-traced frame at high sample counts can take minutes, so a naive 60 s timeout
+would abort real work. Options: (a) derive it from the configured sample count and
+resolution; (b) a generous fixed ceiling (5–10 min) purely as a deadlock breaker;
+(c) a watchdog that only fires if *no* progress message has arrived for N seconds,
+which distinguishes "slow frame" from "dropped frame" properly.
+**Recommendation: (c)** — it is the only one that cannot abort legitimate work.
+
+---
+
+## LOW — The pre-boot outbox flushes at the one moment it cannot be applied
+
+_(cycle 6 · `engine-gmt/engine/worker/WorkerProxy.ts:466`)_
+
+`_flushOutbox()` runs immediately *before* `postMessage(initMsg)`, and
+`renderWorker` defers all engine construction to `BOOT` — so everything flushed
+arrives while `engine` is null, and every handler except `REGISTER_FORMULA` and
+`RESIZE` is an `engine?.` no-op. The outbox converts a main-side drop into a
+worker-side drop.
+
+**No live bug:** an instrumented boot showed the outbox is empty at both creation
+sites, and every real pre-boot payload already has a bespoke replay
+(`_registeredFormulas`, `pendingTextures`, `pendingTeleport`, install.ts's
+`onBooted` push). The JSDoc has been corrected to say so.
+
+**Options:** (1) leave it — recommended; (2) move the drain to the end of
+`case 'BOOT'` after `setupEngine()`, keeping `_replayFormulas()` before INIT since
+it must precede the boot compile; (3) delete the outbox and make `post()` throw in
+dev when `_worker` is null, forcing every caller to declare a replay.
+
+**Recommendation: (1).** Option 2 changes worker message ordering — the highest-risk
+surface in this subsystem, where the `_pendingTick` / `syncOffset` /
+OFFSET_SET-discards-buffered-tick dance all depends on it — and no export or
+boot-ordering guard would catch a mistake. Revisit only if a future feature
+actually needs to post before `initWorkerMode`.
+
+---
+
+## Housekeeping surfaced in cycle 6
+
+- **`g02-shader-pipeline` did not complete.** Its auditor died mid-edit with an
+  API error and returned no report. It had already written two files —
+  `engine-gmt/engine/ShaderBuilder.ts` (a caveat about the Physics/Histogram
+  variants emitting `addHeader` output in a different position than Main, plus
+  `@invariant`s on `addUniform`) and the engine-gmt half of
+  `docs/policy/uniform-plugin-contract.md`. **Those edits were reverted, not
+  committed**, because there is no verification behind them and the protocol
+  forbids applying unverified findings. The diff is preserved at
+  `plans/overnight-audit/salvage/g02-partial-cycle6.diff` as a starting
+  hypothesis for the re-run — treat it as a lead, not as truth. `g02` is back to
+  `pending` and will be re-audited.
+- **The sibling-app-guard trap keeps recurring.** Three rules have now been found
+  citing `smoke:formula-switch` / `smoke:fractal-kind` / `smoke:tsaa` as guards
+  for engine-gmt code. All three boot `fractal-toy.html` or `fluid-toy.html`,
+  neither of which imports `engine-gmt/` at all. Worth a one-off sweep of every
+  `.claude/rules/*.md` Guards block against which entry point each smoke actually
+  loads — it is a mechanical check and this run has found it three times.
+- **`engine-gmt/formulas/index.ts`, `engine-gmt/types/common.ts` and
+  `engine-gmt/components/FormulaPicker/pickerCategories.ts` are
+  `git update-index --skip-worktree`** (local-only Julia3DLattes wiring). Edits to
+  them cannot be committed. `pickerCategories.ts:14` still carries a dead
+  `@see dev/plans/formula-picker-design.md` for that reason.
+- **Two more dead `dev/plans/` citations** outside this cycle's scope, for the
+  state-library subsystem: `engine-gmt/utils/applyPartialPreset.ts:15` and
+  `debug/test-partial-apply.mts:10`.
+- **`Experimental/3DMandel.frag`'s catalog row is stale** — `v3:'skip'` but V3
+  parses it today. The catalog was frozen 2026-04-18 and V3's preprocessor has
+  improved since; `getRecommendedPipeline`'s own `@invariant` flags the staleness
+  risk. Worth regenerating the catalog.

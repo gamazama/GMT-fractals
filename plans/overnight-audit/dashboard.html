@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:42%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:48%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,25 +73,25 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Cycle 5 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T00:28:36.770Z</p>
+  <p class="sub">Cycle 6 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T01:14:31.598Z</p>
 
   <div class="tiles">
-    <div class="tile"><div class="v">14/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">103</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">57</div><div class="k">applied &amp; verified</div></div>
-    <div class="tile"><div class="v" style="color:var(--warn)">9</div><div class="k">orchestrator-checked</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">35</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">96<span style="font-size:.6em;color:var(--dim)">/96</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v">16/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">114</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">64</div><div class="k">applied &amp; verified</div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">11</div><div class="k">orchestrator-checked</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">37</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">107<span style="font-size:.6em;color:var(--dim)">/107</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 6 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 7 cycles</p>
 
   
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">57</span></h2>
+    <h2>Applied — self-verified <span class="count">64</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
   <article class="finding sev-high">
@@ -344,6 +344,34 @@
     <p class="verify"><strong>How it was verified:</strong> No npm guard covers rule-file markdown — that absence is itself part of the finding — so every claim is backed by a deterministic, re-runnable command. Citations: grepping each ADR's first heading prints the four unrelated titles for the old numbers, and titles matching the replacement text verbatim for the six new ones; all replacement files exist. Purity scope: 29 of 68 top-level components/*.tsx import useEngineStore, while components/ui/ contains only zustand's own `create` in layerStack.ts (not the app store), and .claude/hooks/guard.mjs gates on inDir('components/ui') alone. ADR-0014's Consequences literally reads &quot;The 'primitives must not import the store' rule ... is aspirational, not enforced&quot;. Rule-orphaning: 60 files counted by ls across eleven subdirectories, matched by no rule's globs — a single-star glob does not cross a directory separator, which is also why layers-zindex.md had to spell out components/ui/** separately.</p>
     <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>7f14b3a9</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>g01-renderer</code>
+      <code class="file">debug/smoke-engine-gmt.mts:108</code>
+    </header>
+    <p class="what">smoke:engine-gmt collected a full boot probe (isBooted, hasCompiledShader, accumulationCount, store slices) and printed it without a single assertion — it gated ONLY on pageerrors, so a worker that never booted, a shader that never compiled, or a dead FRAME_READY loop all exited 0.</p>
+    <p class="change"><strong>Changed:</strong> Added a frameCount probe (the FRAME_READY-mirrored worker tick count — the only value that proves frames are being delivered, since isBooted and hasCompiledShader both latch before the first frame) and an assertion block covering canvas presence, __gmtProxy, isBooted, hasCompiledShader, frameCount &gt; 0, __store, the booted formula, and every expected DDFS feature slice. Rewrote the docstring, which promised a non-black-centre-pixel assertion and an end-to-end RENDER_TICK -&gt; FRAME_READY proof that the file never checked; it now states what is asserted and says explicitly that pixel content is NOT asserted.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsification. Temporarily stubbed the FRAME_READY shadow-state refresh in WorkerProxy so it never runs: the app produced zero page errors — i.e. the OLD smoke passed — while the new version failed with 'proxy.frameCount 0 — no RENDER_TICK -&gt; FRAME_READY round-trip'. Reverted with a targeted Edit and re-ran green. The guard now fails on a plausible regression it previously waved through.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>4c68c9a3</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>g03-formula-registry</code>
+      <code class="file">.claude/rules/gmt-formulas-and-graph.md:28</code>
+    </header>
+    <p class="what">The rule for the engine-gmt formula registry cited two guards that cannot fail on any change to it — smoke:formula-switch drives fractal-toy.html and smoke:fractal-kind drives fluid-toy.html; neither page loads engine-gmt/engine/FractalRegistry.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the Guards block with guards that actually load the registry (test:compat, smoke:engine-gmt, test:baseline, test:hybrid, test:weave-sweep, plus the deep-zoom trio), and added an explicit 'Do NOT use' paragraph naming what the two sibling-app smokes really cover, so the next reader does not re-cite them.</p>
+    <p class="verify"><strong>How it was verified:</strong> Decisive, because the wrong guards cannot even reach the module: smoke-formula-switch.mts pins fractal-toy.html, smoke-fractal-kind.mts pins fluid-toy.html, and `grep -rn engine-gmt fractal-toy/` returns ZERO hits (fluid-toy's only engine-gmt imports are support and feedback). Both were run and pass — proving they stay green regardless. The replacements were run: test:compat imports the barrel plus registerFeatures() and iterates registry.getAll() ('structural checks: 55 formulas OK'), and a scratch probe confirmed registry.register() THROWS on a def with no shader.capabilities — so test:compat genuinely fails if a formula regresses, which is the property the old citations lacked. Third instance this run of a healthy guard cited for the wrong thing, and the second in this cycle — the g01 auditor independently found the same trap in gmt-renderer.md.</p>
+    <p class="guard"><code>npm run test:compat</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>98e21c99</code></p>
     
   </article>
   <article class="finding sev-medium">
@@ -724,6 +752,48 @@
     <p class="commit">commit <code>de69c730</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g01-renderer</code>
+      <code class="file">.claude/rules/gmt-renderer.md:40</code>
+    </header>
+    <p class="what">The rule's guard list cites smoke:tsaa, which boots fluid-toy.html and cannot fail on any engine-gmt renderer regression; its ADR range 0036-0042 also sweeps in four non-renderer ADRs.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the smoke:tsaa guard line with a note explaining why it is not a guard for this area, and added the same warning for smoke:formula-switch (fractal-toy.html) and smoke:fractal-kind (fluid-toy.html) — both of which the orchestrator's own briefing named as 'most relevant', so the trap is live and spreading. Annotated the remaining guards with what they cover. Narrowed the ADR range to 0040-0042.</p>
+    <p class="verify"><strong>How it was verified:</strong> Grep-proven. smoke-tsaa.mts pins fluid-toy.html and its only failure condition is a pageerror check — its probe and screenshots feed nothing. `grep -rn RenderPipeline fluid-toy/` returns zero hits; `grep -rn &quot;from '.*engine/RenderPipeline'&quot;` returns exactly one hit tree-wide, the engine-gmt re-export shim. `grep -rn engine-gmt fractal-toy/` returns zero. ADR filenames confirm 0036 is defineFeature identity, 0037 two registration manifolds, 0038 asymmetric mobile gating, 0039 address-bar svh/dvh — none renderer decisions. Every other citation in the rule was re-checked and does resolve.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>b1742d70</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g01-renderer</code>
+      <code class="file">engine-gmt/engine/worker/WorkerProxy.ts:430</code>
+    </header>
+    <p class="what">The _outbox JSDoc advertises a 'GENERAL safety net for arbitrary messages posted before the worker exists … QUEUED here (rather than dropped)', but flushing before INIT guarantees the messages land while the worker's `engine` is still null, so all but REGISTER_FORMULA and RESIZE are silently discarded.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the _outbox JSDoc to say it only prevents a MAIN-side drop, name the two message types the worker can service before BOOT, list the ones delivered-then-discarded, point at the four bespoke replays that exist because of this, and instruct future readers to add a replay rather than rely on the outbox. Also corrected install.ts's companion comment, which called its onBooted push a 're-push' over values 'pushed via installAccumulationBindings' — that helper subscribes without fireImmediately, so it never sends the boot values at all.</p>
+    <p class="verify"><strong>How it was verified:</strong> Empirical. Temporarily instrumented _flushOutbox and renderWorker's dispatcher to log any message arriving while `engine` is null, then loaded app-gmt.html under Playwright for 12s: the outbox-flush line NEVER printed (outbox empty at both creation sites) while '[audit-drop] pre-engine message: MARK_INTERACTION' printed from both worker and page — proving the pre-BOOT drop is live. Source side: initWorkerMode/restart both call _flushOutbox() immediately before postMessage(initMsg); renderWorker's handleInit only stashes _deferredInit and setupEngine runs under case 'BOOT'; reading the whole dispatcher, only REGISTER_FORMULA and RESIZE do work without `engine`. install.ts claim falsified by reading installAccumulationBindings — both store.subscribe calls take (selector, listener) with no options arg. Both instrumentations reverted with targeted Edits.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>50d9a102</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g03-formula-registry</code>
+      <code class="file">engine-gmt/engine/FractalRegistry.ts:6</code>
+    </header>
+    <p class="what">The registry's module JSDoc claimed a single registration site with '42 formulas + 5 legacy aliases' — the count is stale (47 in the barrel) and it omits the second boot-time site (registerBoxFoldFormulas(), 7 BoxFold defs) plus six runtime sites; the getIds() @invariant likewise named only the 5 aliases as non-FormulaType keys.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the module JSDoc to enumerate registration in boot order (barrel -&gt; registerBoxFoldFormulas() from registerFeatures() -&gt; six runtime sites: Workshop import, pasted formula, MB3D scene load, weave migration, shared-scene open, worker REGISTER_FORMULA), replaced the hard-coded total with a pointer to test:compat which prints the live count, and noted that node harnesses needing BoxFold defs must call registerFeatures(). Extended the getIds() @invariant to list the 7 BoxFold ids and runtime-registered ids alongside the 5 aliases, with the consequence spelled out.</p>
+    <p class="verify"><strong>How it was verified:</strong> Every number measured, not read. A probe imported the barrel plus registerFeatures() and printed the live keyspace: 7 BoxFold ids present (one per FOLD_LIST entry), all 5 aliases present, getIds().length - getAll().length === 5 (alias dedupe holds), HyperTorus === Mandelorus by identity, register() throws on missing capabilities, duplicate id overwrites silently, alias-to-unknown-target no-ops with a warn — all four @invariants falsified and confirmed live. A second probe cross-checked the barrel against the FormulaType union: 48 registered ids in the working tree, 48 union members, zero ids outside the union, zero union members unregistered, zero duplicates, and `grep -c BoxFold engine-gmt/types/common.ts` = 0 confirming the drift. test:compat's '55 formulas OK' = 48 + 7, matching the new text; it also asserts capabilities plus exactly one shape token per def, so a wrong claim shows up as a changed count there.</p>
+    <p class="guard"><code>npm run test:compat</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>381692f9</code></p>
+    
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tA">A</span>
@@ -892,10 +962,38 @@
     <p class="commit">commit <code>861724d2</code></p>
     
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>g03-formula-registry</code>
+      <code class="file">engine-gmt/types/capabilities.ts:13</code>
+    </header>
+    <p class="what">Seven `@see dev/plans/...` citations across the capability-protocol / FormulaPicker surface point into the dev/ tree deleted 2026-06-17; the targets live at plans/.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote dev/plans/ -&gt; plans/ across capabilities.ts, evaluateCompat.ts (2 refs), pairHasCapability.ts, import-capabilities.ts, FormulaPicker.tsx, sceneGroups.ts and debug/test-compat.mts.</p>
+    <p class="verify"><strong>How it was verified:</strong> Filesystem test: dev/plans/capability-protocol.md absent, plans/capability-protocol.md present; same pair for formula-picker-design.md. `grep -rn 'dev/plans/'` over engine-gmt/, debug/ and .claude/rules/ enumerated ten hits in nine files before the edit and now returns only the three out-of-scope ones. test:compat passes — test-compat.mts is executable TypeScript, so a malformed header edit would fail to parse.</p>
+    <p class="guard"><code>npm run test:compat</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>62b21bba</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>g03-formula-registry</code>
+      <code class="file">engine-gmt/features/fragmentarium_import/FormulaWorkshop.tsx:266</code>
+    </header>
+    <p class="what">The pipeline-selector JSDoc cited docs/26_Formula_Workshop_V4_Plan.md, which does not exist; the doc is at docs/history/gmt/26_Formula_Workshop_V4_Plan.md.</p>
+    <p class="change"><strong>Changed:</strong> Corrected the path.</p>
+    <p class="verify"><strong>How it was verified:</strong> `find docs -iname '*Formula_Workshop*'` returns that path as the only match. The sibling citations on the same and adjacent lines were checked at the same time and are live, as is the v3/compat.ts:125 line reference in the slot-uniqueness @invariant.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>c2289657</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Applied — orchestrator-verified <span class="count">9</span></h2>
+    <h2>Applied — orchestrator-verified <span class="count">11</span></h2>
     <p class="note">No existing test covered these, so a second independent agent re-derived the claim before the change was allowed through. Each names how it was checked.</p>
     
   <article class="finding sev-high">
@@ -911,6 +1009,34 @@
     <p class="guard"><code>npm run test:modulation-parity</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>4d1bc158</code></p>
     
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">high</span>
+      <code>g01-renderer</code>
+      <code class="file">engine-gmt/engine/worker/WorkerProxy.ts:574</code>
+    </header>
+    <p class="what">`_handleWorkerCrash`'s block commented 'Reject pending export promises' only NULLED the callbacks, and the timers were already cleared — so an export left startExport/finishExport/renderExportFrame pending FOREVER. CONFIRMED, and verification found a more reachable variant needing no crash at all.</p>
+    <p class="change"><strong>Changed:</strong> renderExportFrame gains a reject route (_exportFrameFail) so a frame failure has a rejecter of its own — the pump runs between start and finish, so _exportError never belonged to it. EXPORT_ERROR routes to the frame pump first when a frame is in flight. The crash handler now invokes the failure callbacks and resets _isExporting. startExport's resolve closure also clears _exportError so it cannot dangle.</p>
+    <p class="verify"><strong>How it was verified:</strong> An independent verifier confirmed every link and then went further. It demonstrated the hang with a Playwright probe importing the real class through Vite and constructing fresh proxies (so the live render worker was untouched), racing each promise against a timeout: startExport-then-crash PENDING with every timer disarmed and isExporting stuck true; renderExportFrame-then-crash PENDING; finishExport-then-crash PENDING; and a control proving startExport DOES reject at 10s without the crash, i.e. the timer was the sole remaining path. TWO CORRECTIONS TO THE CLAIM, both material: (1) terminateWorker() is NOT a trigger — `gmtRenderer.terminate()` has zero callers repo-wide and GmtRendererCanvas documents that the worker lives for the app's lifetime; that half of the claim is dead code. (2) It found a MORE reachable path with no crash: after startExport resolves, `_exportError` still held the settled start rejecter, so the worker's own 'Frame render failed' EXPORT_ERROR was a silent no-op and renderExportFrame — which has no timeout — hung on an ordinary GL hiccup. It also proved the onerror route is genuinely reachable rather than assuming it: renderWorker's `_tickChannel.port1.onmessage` is try/FINALLY with no catch and runs handleRenderTick (whose own comment concedes it can throw), and ticks are forced on throughout export by the driver's `busy` term; a blob-worker probe measured that this shape does reach worker.onerror in Chromium while a throw inside self.onmessage's try/catch does not. Fix safety was independently checked: all five call sites are in exportRunner.ts, all inside try/catch/finally, named by line. The orchestrator then RE-RAN the same probe shape after the fix: A/C/E all 'SETTLED-rejected:Worker crashed: …', isExporting false, `_exportError` no longer dangling, and the frame error now 'SETTLED-rejected:Frame render failed: synthetic'. typecheck, smoke:engine-gmt and test:bucket-convergence green.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>f57e88b4</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">high</span>
+      <code>g03-formula-registry</code>
+      <code class="file">engine-gmt/features/fragmentarium_import/FormulaWorkshop.tsx:721</code>
+    </header>
+    <p class="what">The documented V4 escape hatch is dead: when V3 detect fails and V4 is the effective pipeline, Preview and Import are deliberately left enabled but both handlers bail on a V3-only `detected` guard placed above the V4 branch, returning with NO error. CONFIRMED by driving the real UI — but the proposed fix would ship a second bug, so it is queued rather than applied.</p>
+    
+    
+    <p class="guard"><code>npm run test:frag:scan</code> <span class="ok">passed</span></p>
+    
+    <p class="rationale">An independent verifier drove the actual Workshop under Playwright against the dev server. For BOTH affected library formulas the panel showed mode 'Auto (Solo)', previewDisabled:false, importDisabled:false, errorText:null. Clicking Preview and then Import each returned 'CLICKED' and after 2.5s left errorText null, the store formula unchanged, the full snapshot byte-identical, and ZERO console output. A control run with a V3-passing formula behaved correctly — params section present, Preview switched the store to frag_workshop_preview, Import switched it to the formula name — proving the harness would have detected a working path. It also corrected two details: the live count is TWO formulas, not the catalog's three (3DMandel's catalog row is stale, which the getRecommendedPipeline @invariant already warns about), and the custom-paste path is a milder variant that DOES show a V3 error (willUseV4 is false when entryId is null) unless the user explicitly picks Standalone. NOT APPLIED because the verifier found the proposed hoist would break the Kleinian import outright — handleImport's V4 branch calls setFormula(formulaName) with the UNSANITISED label while FractalRegistry keys on V4's sanitizeId output — plus four further gaps.</p>
   </article>
   <article class="finding sev-medium">
     <header>
@@ -1027,7 +1153,7 @@
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">35</span></h2>
+    <h2>Awaiting your judgement <span class="count">37</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
   <article class="finding sev-high">
@@ -1282,6 +1408,20 @@
     
     <p class="rationale">See PROPOSALS.md. The primitive defaults to the work-destroying behaviour, so a future author who forgets ships a data-loss footgun no guard catches.</p>
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>g01-renderer</code>
+      <code class="file">engine-gmt/engine/worker/WorkerProxy.ts:1002</code>
+    </header>
+    <p class="what">renderExportFrame still has no timeout of its own — the applied fix gives it a reject route, but only a crash or an explicit EXPORT_ERROR can settle it. A silently dropped EXPORT_FRAME_DONE still hangs the pump.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. Picking a duration is a product call — a legitimate 4K path-traced frame can take minutes.</p>
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tB">B</span>
@@ -1520,6 +1660,20 @@
     
     <p class="rationale">See PROPOSALS.md for the paste-ready Update block. Matters because the rewritten ui-and-panels.md now cites ADR-0014 as the authority for the purity scoping.</p>
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>g01-renderer</code>
+      <code class="file">engine-gmt/engine/worker/WorkerProxy.ts:466</code>
+    </header>
+    <p class="what">Structural follow-on: the outbox flushes before INIT, the one moment its payload cannot be applied. Moving the flush after setupEngine() would make it do what its name implies.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. Recommendation is to leave it — the corrected JSDoc now warns the next reader off, and moving the flush changes worker message ordering, the highest-risk surface in this subsystem, with no guard that would catch a mistake.</p>
+  </article>
   </section>
 
   <h2>Subsystems</h2>
@@ -1666,15 +1820,15 @@
     <td class="num prop">3</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g01-renderer</code></td>
     <td>engine-gmt</td>
     <td class="area">FractalEngine + MaterialController + SceneController + worker</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">6</td>
+    <td class="num applied">3</td>
+    <td class="num esc">1</td>
+    <td class="num prop">2</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>g02-shader-pipeline</code></td>
@@ -1686,15 +1840,15 @@
     <td class="num prop">0</td>
     <td class="st">pending</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g03-formula-registry</code></td>
     <td>engine-gmt</td>
     <td class="area">FractalRegistry + 42 formulas + V3/V4 pipeline</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
+    <td class="num">5</td>
+    <td class="num applied">4</td>
+    <td class="num esc">1</td>
     <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>g04-navigation</code></td>
