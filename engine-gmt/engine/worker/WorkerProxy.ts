@@ -427,11 +427,26 @@ export class WorkerProxy implements AccumulationController {
     }
 
     /**
-     * Pre-boot outbox — a GENERAL safety net for arbitrary messages posted before
-     * the worker exists: they are QUEUED here (rather than dropped) and flushed to
-     * the worker at creation, before INIT, by {@link _flushOutbox}. NOTE: custom
-     * formula registration does NOT ride the outbox — it's PERSISTENT state that
-     * must survive worker RESTARTS, so it lives in {@link _registeredFormulas}.
+     * Pre-worker outbox — messages posted while `_worker` is null (before
+     * {@link initWorkerMode}, or after a crash / terminate) are queued here and
+     * flushed at the next worker creation, before INIT, by {@link _flushOutbox}.
+     *
+     * DO NOT TREAT THIS AS A GENERAL PRE-BOOT SAFETY NET. It only stops the
+     * message being dropped on the MAIN side; it does not get it applied. The
+     * worker defers all engine construction to BOOT (see `handleInit` /
+     * `setupEngine` in `renderWorker.ts`), so anything flushed before INIT lands
+     * while `engine` is still null, and every handler except `REGISTER_FORMULA`
+     * (writes the registry directly) and `RESIZE` (stashes `_pendingResize`) is
+     * an `engine?.` no-op. UNIFORM / CONFIG / TEXTURE / PAUSE / SET_SAMPLE_CAP /
+     * RESET_ACCUM / OFFSET_* queued here are delivered and then silently
+     * discarded. That is why every real pre-boot payload has its own replay:
+     * {@link _registeredFormulas}, {@link pendingTextures},
+     * {@link pendingTeleport}, and the `onBooted` re-push in
+     * `engine-gmt/renderer/install.ts`. Add a replay, don't rely on this.
+     *
+     * Measured 2026-07-27 on an app-gmt boot: the outbox is EMPTY at both
+     * creation sites — nothing posts before `initWorkerMode` today.
+     *
      * @invariant Flushed exactly once per worker, at creation, before INIT.
      */
     private _outbox: Array<{ msg: MainToWorkerMessage; transfer?: Transferable[] }> = [];

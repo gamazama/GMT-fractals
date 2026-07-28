@@ -60,13 +60,15 @@ export const installGmtRenderer = (options: InstallGmtRendererOptions = {}): voi
     // code saw `isBooted = false` forever while the GMT worker was live.
     setEngineProxy(proxy as any);
 
-    // Wrap the app's onBooted with a re-push of accumulation state.
-    // The store's initial sampleCap / isPaused values are pushed via
-    // `installAccumulationBindings`, but those messages can arrive at
-    // the worker before its FractalEngine has been created (in which
-    // case `engine?.setPreviewSampleCap()` is a silent no-op). Re-push
-    // here once the worker reports BOOTED so accumulation respects the
-    // store's initial cap from the very first frame.
+    // Wrap the app's onBooted with a push of accumulation state.
+    // This is the ONLY thing that delivers the store's initial sampleCap /
+    // isPaused to the worker — `installAccumulationBindings` subscribes
+    // without `fireImmediately`, so it fires on CHANGE only and never sends
+    // the boot values. And a message sent earlier wouldn't help: the worker
+    // defers engine construction to BOOT, so anything arriving before that is
+    // an `engine?.` no-op (see the outbox JSDoc in
+    // engine-gmt/engine/worker/WorkerProxy.ts). Pushing on BOOTED is what makes
+    // accumulation respect the store's initial cap from the very first frame.
     proxy.onBooted = () => {
         const s = useEngineStore.getState();
         proxy.isPaused = s.isPaused;
