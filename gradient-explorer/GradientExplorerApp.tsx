@@ -6,11 +6,17 @@
  * palette tools each own their own surface, so the centre is a mode-tabbed stage
  * (Generator / Picker / Image) instead of a single fractal canvas. The decision
  * to feed GMT's gradient system (rather than render fractals here) is why the
- * heavy bootEngine / RenderLoop / EngineBridge path is intentionally absent.
+ * heavy `bootEngine` path is intentionally absent.
  *
- * This first cut proves the shell + the DDFS custom-UI path: the Quality-Filters
- * panel docks left and renders the QualityRangePad pads with native GMT chrome.
- * Mode content is placeholder until the generator/picker/img2grad UIs land.
+ * `EngineBridge` + `RenderLoopDriver` ARE mounted (grep for them below) — but only
+ * to drive the animation TickRegistry so the timeline plays and keyframes apply, not
+ * to render anything. `.claude/rules/tick-and-animation.md` lists this app as one of
+ * the three `RenderLoopDriver` hosts for exactly that reason.
+ *
+ * Layout: the three mode panels (Picker / Generator / Image) dock RIGHT and their tab
+ * strip is the mode selector; the Favients shelf docks LEFT. Below MOBILE_BREAKPOINT
+ * the side docks are dropped for a single-column phone layout (MobileModeTabs +
+ * MobilePickerControls). See gradient-explorer/setup.ts for the manifest.
  */
 
 import React, { useMemo, useEffect, useRef, useState, Suspense } from 'react';
