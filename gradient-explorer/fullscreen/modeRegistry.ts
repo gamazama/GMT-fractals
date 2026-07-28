@@ -1,37 +1,49 @@
 /**
  * modeRegistry — the FROZEN mode plug-in seam for the fullscreen gradient overlay.
  *
- * A "fullscreen mode" is a self-contained way to render the active gradient full-bleed
- * (Linear / Radial / … / live Fractal / future Splitscreen-wipe / Spline / Liquify /
- * Parallax). The overlay dispatches PURELY on this registry: it never hard-codes a mode.
+ * A "fullscreen mode" is a self-contained way to render the active gradient full-bleed.
+ * Shipped today, in selector order (grep `registerFullscreenMode` in `modes/index.ts` —
+ * that file is the ground truth, not this list): Linear / Radial / Conic / Arched
+ * (cpuField) · Spline (glQuad) · Fractal / Liquify / Parallax (ownCanvas).
+ * The overlay dispatches PURELY on this registry: it never hard-codes a mode.
  * A new mode is added by calling {@link registerFullscreenMode} from its own module — no
  * edit to the overlay core — so the parallel mode streams don't collide.
  *
  * ── A mode declares three things (the seam's three faces) ───────────────────────────────
  *   (a) PARAMS  — `paramFields`: which flat-optional `GeometryParams` fields it reads, with
  *                 UI metadata. Threads through the GATE shape (palette/core/rampGeometry).
- *   (b) RENDER  — ONE of three `kind`s:
- *        • 'cpuRaster' — a pure `raster(ctx) → RGBA` producer. The harness uploads it and
- *          presents through the shared dither tail. (The 6 geometry modes.)
+ *   (b) RENDER  — ONE of the four `FullscreenModeKind`s:
+ *        • 'cpuField'  — a pure `field(ctx) → {pos, cov}` producer (see GeometryField). The
+ *          harness samples the LUT at the FLOAT position and error-diffusion-dithers before
+ *          the 8-bit write. THIS is what the four geometry modes use, and it is the right
+ *          kind for anything that maps a 1D gradient across a 2D field.
+ *        • 'cpuRaster' — a pure `raster(ctx) → RGBA` producer, uploaded and presented
+ *          through the shared dither tail. Pre-quantises to 8-bit, so the dither cannot
+ *          recover banding — only for modes that genuinely own their pixels (an imported
+ *          image). **No mode in the tree uses this today**; prefer 'cpuField'.
  *        • 'glQuad'    — a fragment `fragBody` defining `vec3 modeColor(vec2 uv)`. The
  *          harness wraps it (standard preamble + `sampleLut` + dither tail), compiles once,
  *          and renders a fullscreen quad. Reads the gradient via `uLut`. Extra uniforms via
- *          `fragUniforms` + `uniformNames` + `setUniforms`. (Spline / splitscreen-wipe.)
+ *          `fragUniforms` + `uniformNames` + `setUniforms`. (Spline.)
  *        • 'ownCanvas' — the escape hatch: the mode mounts + drives its OWN canvas/renderer/
- *          RAF (the live Fractal; a future Liquify/Parallax that needs custom GL or a CPU
- *          sim). It bypasses the compositor and bakes its own dither (include
- *          `DITHER_TAIL_GLSL` in its display shader if it bands).
+ *          RAF (Fractal, Liquify, Parallax — all three need custom GL or a CPU sim). It
+ *          bypasses the compositor and bakes its own dither (include `DITHER_TAIL_GLSL` in
+ *          its display shader if it bands).
  *   (c) CONTROLS — `Controls`: a self-contained React panel (reads the store + registry).
  *
  * ── Invariants (FROZEN — parallel sessions rely on these) ───────────────────────────────
  *   • `id` is the stable mode key persisted in `fullscreenStore.geom` and used in export
  *     filenames (`{stem}-{id}.png`). Don't rename a shipped id.
- *   • cpuRaster `raster` MUST stay pure + deterministic (it's pinned by the determinism
- *     harness via `renderGeometry`). Side effects / RAF / DOM belong in 'ownCanvas'.
+ *   • cpuField `field` / cpuRaster `raster` MUST stay pure + deterministic. The cpuField
+ *     half is pinned for real: `debug/test-palette-rampgeometry.mts` (last link of the
+ *     `test:palette` chain) renders every geometry twice and asserts byte-identical output
+ *     — grep `identical inputs → byte-identical output`. Nothing pins cpuRaster, because
+ *     nothing uses it. Side effects / RAF / DOM belong in 'ownCanvas'.
  *   • A mode reads gradient data ONLY from `ctx` (never the store directly) so the same mode
  *     renders correctly for the snapshot (fullscreen) AND the live hero (split) source.
  *   • `setUniforms` must not touch the reserved preamble uniforms (see ditherTail.ts).
  *
+ * @see gradient-explorer/fullscreen/modes/index.ts  (which modes are registered, in order)
  * @see gradient-explorer/fullscreen/ditherTail.ts   (the wrapper + shared dither tail)
  * @see gradient-explorer/fullscreen/FullscreenCompositor.ts (compiles + presents)
  * @see palette/core/rampGeometry.ts                  (the flat-optional GeometryParams gate)
