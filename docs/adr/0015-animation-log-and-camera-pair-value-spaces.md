@@ -4,6 +4,22 @@
 **Status:** Accepted
 **Scope:** `engine/animation/logTrackRegistry.ts`, `engine/animation/cameraPairRegistry.ts`, `engine/AnimationEngine.ts`
 
+> **Update 2026-07-28 (Bezier-on-log IS supported; decision unchanged):** The
+> Decision and Consequences below state that Bezier is not supported on log
+> tracks and that they evaluate as linear-in-log regardless of stored
+> interpolation type. That was already untrue when this ADR was written. Commit
+> `05eb7849` — the commit this ADR documents — added Bezier-in-log-space to
+> `AnimationMath.interpolate`: a `Bezier` key on a log track is solved in
+> `(frame, log(value))` and `exp()`ed back, so its tangent y-values are
+> LOG-UNITS rather than absolute value-units, and `AnimationMath.calculateTangents`
+> takes a matching `isLog` flag so auto-tangents are authored in the same space.
+> Only non-Bezier keys take the linear-in-log path. Both branches still fall
+> back to linear-in-value when either endpoint is non-positive. Measured:
+> endpoints 1.0 → 1e-6 over 100 frames, eased Bezier vs Linear, both with
+> `isLog=true` — the curves differ by up to 1.28 log-units. The core decision —
+> log-registered tracks interpolate in log-value space, camera pans evaluate
+> linear-in-zoom with DD precision — is unchanged.
+
 ## Context
 
 Two related precision problems in animation:

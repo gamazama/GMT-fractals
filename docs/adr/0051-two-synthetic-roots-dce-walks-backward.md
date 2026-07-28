@@ -4,6 +4,21 @@
 **Status:** Accepted
 **Scope:** `engine-gmt/utils/GraphCompiler.ts`
 
+> **Update 2026-07-28 (audit g09-modular-graph; decision unchanged):** the first
+> Consequences bullet is wrong in both count and scope. The synthetic root ids are
+> hard-coded at EIGHT sites across THREE files, not three sites in
+> `GraphCompiler.ts`, and its line numbers (20 / 65 / 132) have drifted. Current
+> sites — `grep -rn "root-start\|root-end" engine-gmt/`: `utils/GraphCompiler.ts`
+> ×5 (DCE seed; the `currentId !== 'root-end' && currentId !== 'root-start'`
+> liveness filter, omitted by the original bullet; `varMap` pre-seed; the
+> output-edge `target === 'root-end'` lookup; and the `outputEdge.source !==
+> 'root-start'` guard, also omitted); `utils/graphAlg.ts` ×2 — `pipelineToGraph`
+> MINTS both boundary edges with these ids, the most dangerous omission, because a
+> rename that misses it produces a graph whose edges point at nothing, so DCE
+> eliminates every node and the shader silently falls back to the identity body;
+> and `components/panels/flow/FlowEditor.tsx` ×4. Prefer the grep over any fixed
+> list. The two-synthetic-roots decision and the backward DFS walk are unchanged.
+
 ## Context
 
 The Modular graph editor needs explicit start/end anchors so the compiler

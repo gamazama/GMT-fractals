@@ -15,6 +15,25 @@ double-mount was observed in practice.)_
 > `_lastTickTime`) is **lines 129-142**. Grep for `DOUBLE_RUN_WINDOW_MS` rather than
 > following the line numbers.
 
+> **Update 2026-07-28 (implementation gap recorded; decision unchanged):** the
+> Context below promises that an app "which intentionally uses a custom driver
+> (worker-driven, headless test harness) must still be able to call `runTicks`
+> from their own loop — so the solution can't reject a single legitimate driver,
+> only the second one within a frame." The implementation cannot tell the two
+> apart. `DOUBLE_RUN_WINDOW_MS = 1` suppresses ANY call arriving less than 1 ms
+> after the previous one, regardless of caller identity, so a frame-stepping
+> harness — offline video export, or a deterministic headless test rendering N
+> frames back-to-back, both of which iterate in well under 1 ms — receives exactly
+> one tick and then silence. Silently, too: the dev warning is one-shot and its
+> text blames a driver double-mount, sending the reader to the wrong place. This
+> is LATENT, not live — only three `runTicks` call sites exist and none trips it
+> today — but 4K/offline frame-sequence export is a known roadmap gap and an
+> exporter is precisely the shape that trips it. The decision (exactly one driver
+> per realm) stands; what is unresolved is how a legitimate single driver opts out
+> of the heuristic. Options are recorded in `plans/overnight-audit/PROPOSALS.md`;
+> the shape most likely to be adopted is an explicit `runTicksUnguarded(delta)`
+> for harnesses, leaving the guard on for the RAF path.
+
 ## Context
 
 Two RAF-driven tick drivers mounted in the same app call `runTicks` twice per

@@ -5,6 +5,17 @@
 **Scope:** `hooks/useMobileLayout.ts`, `engine/components/LandscapeGate.tsx`,
 `engine/components/MobileScrollIntro.tsx`, `engine/components/MobileViewportShell.tsx`
 
+> **Update 2026-07-28 (line-reference drift; decision unchanged):** The contract
+> cited below as "the header comment at `hooks/useMobileLayout.ts:50-65`" now
+> lives in the JSDoc block on `export const useMobileLayout` (currently lines
+> 81-95); lines 50-65 are the module-level resize listener. Grep for the
+> `isMobile` / `isDeviceMobile` / `isPortrait` bullet list rather than a line
+> range. The asymmetry itself is unchanged and verified: `LandscapeGate`,
+> `MobileScrollIntro` and `MobileViewportShell` all still consume raw
+> `isDeviceMobile`. Note also that the "Tested under followups q-008 and q-083"
+> claim implies automated coverage that does not exist — no guard exercises the
+> mobile gating policy.
+
 ## Context
 
 Three categories of mobile-aware UI exist in GMT:

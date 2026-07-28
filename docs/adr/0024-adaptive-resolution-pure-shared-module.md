@@ -17,6 +17,14 @@
 > `interactionDownsample` is independent. The base DPR was deliberately NOT
 > capped (a separate option) so idle frames stay full-retina sharp.
 
+> **Update 2026-07-28 (line-ref refresh; decision unchanged):** The `selfResized`
+> write cited below as `UniformManager.ts:137` now lives at
+> `engine-gmt/engine/managers/UniformManager.ts:263`, inside the
+> `currentW !== targetW || currentH !== targetH` resize branch of `syncFrame`. It
+> is still the only production writer — the second occurrence,
+> `debug/interaction-latency-harness.mts:114`, is a test harness. The main-thread
+> slice still does not need it, for the reason given below.
+
 ## Context
 
 GMT's worker had a downsample feedback loop in

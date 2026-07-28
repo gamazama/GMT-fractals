@@ -4,6 +4,25 @@
 **Status:** Accepted
 **Scope:** `engine-gmt/utils/GraphCompiler.ts` (`compileGraph` + `updateModularUniforms`)
 
+> **Update 2026-07-28 (audit g09-modular-graph; decision unchanged):** the
+> Decision section's closing claim — "The two only agree because every existing
+> `NodeDefinition` author has, by convention, written `def.glsl()` to call
+> `getParam('id')` in the SAME sequence as their `inputs:` array" — is FALSE as of
+> this date, and the Consequences section's "UNENFORCED invariant" warning has
+> already been realised. Five of the 26 registered definitions in
+> `engine-gmt/data/nodes/definitions.ts` interpolate the same `getParam(...)` more
+> than once, so the compiler allocates slots the packer never writes: `Scale`
+> (scale ×2), `Twist` (amount ×2), `Bend` (amount ×2), `SmoothUnion` (k ×2), `Mix`
+> (factor ×3). The failure mode is not only the misaligned slider this ADR
+> anticipated — each surplus call shifts EVERY node compiled after it. Measured:
+> dropping a `Scale` before a `Mandelbulb` makes Mandelbulb's power read 0.1
+> instead of 8. Bound params are exempt (both reads return the same uniform name
+> and consume no slot). The slot-parity DECISION is unchanged and still correct;
+> what this update records is that the convention it rests on was never true. The
+> DEV-assertion hardening recommended below remains the right fix. Live
+> annotation: `@bug PRODUCTION:` on `updateModularUniforms` in
+> `engine-gmt/utils/GraphCompiler.ts`.
+
 ## Context
 
 Modular formulas (the `'Modular'` formula id with a runtime-defined node
