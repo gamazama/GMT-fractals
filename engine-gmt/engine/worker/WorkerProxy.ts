@@ -113,6 +113,15 @@ export class WorkerProxy implements AccumulationController {
     private _exportFrameDone: ((data: { frameIndex: number; progress: number; measuredDistance: number }) => void) | null = null;
     private _exportComplete: ((blob: ArrayBuffer | null) => void) | null = null;
     private _exportError: ((msg: string) => void) | null = null;
+    /**
+     * Reject route for the in-flight `renderExportFrame` promise.
+     *
+     * Separate from `_exportError` on purpose: `_exportError` is owned by
+     * whichever of startExport/finishExport is currently awaiting, and the frame
+     * pump runs *between* those two, so a frame failure has no rejecter of its
+     * own without this. See `_handleWorkerCrash`.
+     */
+    private _exportFrameFail: ((msg: string) => void) | null = null;
 
     // ─── Worker Init ─────────────────────────────────────────────────────
 
@@ -407,7 +416,14 @@ export class WorkerProxy implements AccumulationController {
                 if (this._exportStartTimer) { clearTimeout(this._exportStartTimer); this._exportStartTimer = null; }
                 if (this._exportFinishTimer) { clearTimeout(this._exportFinishTimer); this._exportFinishTimer = null; }
                 console.error('[WorkerProxy] Export error:', msg.message);
-                if (this._exportError) this._exportError(msg.message);
+                // Route to the frame pump FIRST when a frame is in flight. The
+                // worker posts EXPORT_ERROR for a failed frame render
+                // ('Frame render failed: …'), but by then `_exportError` belongs
+                // to startExport's already-settled promise, so calling it is a
+                // silent no-op and `renderExportFrame` — which has no timeout —
+                // hung forever. Probe-confirmed against this class.
+                if (this._exportFrameFail) { const f = this._exportFrameFail; this._exportFrameFail = null; f(msg.message); }
+                else if (this._exportError) { const f = this._exportError; this._exportError = null; f(msg.message); }
                 break;
 
             // ─── Bucket Render ───
@@ -571,11 +587,31 @@ export class WorkerProxy implements AccumulationController {
         this._pendingUniformsSnapshot.clear();
         this._pendingRenderInfo.forEach(resolve => resolve(null));
         this._pendingRenderInfo.clear();
-        // Reject pending export promises
-        if (this._exportReady) { this._exportReady = null; }
-        if (this._exportComplete) { this._exportComplete = null; }
-        if (this._exportFrameDone) { this._exportFrameDone = null; }
-        if (this._exportError) { this._exportError = null; }
+        // Reject pending export promises.
+        //
+        // This block used to null the callbacks WITHOUT invoking them, under
+        // this same comment. Because `_clearAllTimers()` above has already
+        // killed `_exportStartTimer` and `_exportFinishTimer` — the only other
+        // settlement paths — and `_worker` is now null so no message can ever
+        // arrive, that left startExport/finishExport/renderExportFrame pending
+        // FOREVER. Demonstrated with a probe against this class: the promise
+        // stays PENDING with every timer disarmed. The user-visible result is a
+        // render dialog frozen mid-export whose Stop and Discard buttons are
+        // both inert (the pump only reads their refs at the top of its loop,
+        // which it never reaches again) and whose close button is disabled by
+        // `disableClose={isRendering}`; `isExporting` also stayed true, keeping
+        // the movement lock on.
+        //
+        // Rejecting is safe: all five call sites are in exportRunner.ts and all
+        // five sit inside try/catch/finally, so the runner surfaces the error
+        // and its `finally` clears isRendering and emits BUCKET_STATUS.
+        this._isExporting = false;
+        const err = `Worker crashed: ${reason}`;
+        if (this._exportError) { const f = this._exportError; this._exportError = null; f(err); }
+        if (this._exportFrameFail) { const f = this._exportFrameFail; this._exportFrameFail = null; f(err); }
+        this._exportReady = null;
+        this._exportComplete = null;
+        this._exportFrameDone = null;
         if (this._onCrash) this._onCrash(reason);
         // If the worker died before it ever booted, this is a boot
         // failure — splash subscribes to surface it as an error panel
@@ -952,7 +988,10 @@ export class WorkerProxy implements AccumulationController {
     ): Promise<void> {
         this._isExporting = true;
         return new Promise((resolve, reject) => {
-            this._exportReady = () => { this._exportReady = null; resolve(); };
+            // Clearing _exportError alongside _exportReady is load-bearing: leaving
+            // this settled promise's rejecter in place is what made a later frame
+            // error unreachable (see the EXPORT_ERROR handler).
+            this._exportReady = () => { this._exportReady = null; this._exportError = null; resolve(); };
             this._exportError = (msg) => { this._exportError = null; reject(new Error(msg)); };
 
             // FileSystemWritableFileStream (from File System Access API) is NOT
@@ -998,8 +1037,13 @@ export class WorkerProxy implements AccumulationController {
         renderState: Partial<EngineRenderState>,
         modulations: Record<string, number>
     ): Promise<{ frameIndex: number; progress: number; measuredDistance: number }> {
-        return new Promise((resolve) => {
-            this._exportFrameDone = (data) => { this._exportFrameDone = null; resolve(data); };
+        return new Promise((resolve, reject) => {
+            this._exportFrameDone = (data) => {
+                this._exportFrameDone = null; this._exportFrameFail = null; resolve(data);
+            };
+            this._exportFrameFail = (msg) => {
+                this._exportFrameDone = null; this._exportFrameFail = null; reject(new Error(msg));
+            };
             this.post({
                 type: 'EXPORT_RENDER_FRAME',
                 frameIndex, time, camera, offset, renderState, modulations
