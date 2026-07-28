@@ -11,11 +11,24 @@ export type ExportPass = 'beauty' | 'alpha' | 'depth';
 export interface VideoExportConfig {
     width: number;
     height: number;
+    /**
+     * OUTPUT framerate — what the encoded file plays back at. This is NOT the
+     * timeline's fps whenever `frameStep > 1`: callers pass `timelineFps / frameStep`
+     * so a stepped export keeps its real-world duration instead of becoming a
+     * time-lapse. Every consumer here wants the output rate (container framerate,
+     * per-frame timestamp and duration), so the division belongs at the caller.
+     *
+     * @invariant Sample the TIMELINE at `timelineFps` and encode at
+     *   `timelineFps / frameStep`. Getting this wrong desyncs audio: the mixer is
+     *   given the full timeline span, so if the video is compressed N-fold the
+     *   audio track is N× longer and drifts linearly from frame 0.
+     */
     fps: number;
     bitrate: number;
     samples: number;
     startFrame: number;
     endFrame: number;
+    /** Render every Nth timeline frame. A cost reduction for previews, not a speed ramp. */
     frameStep: number;
     formatIndex: number;
     internalScale?: number;

@@ -258,7 +258,12 @@ const runImageSequenceExport = async (
         const config: VideoExportConfig = {
             width:                 cfg.vidRes.w,
             height:                cfg.vidRes.h,
-            fps:                   cfg.fps,
+            // Output framerate, NOT the timeline's. A stepped export renders every
+            // Nth frame, so playing it back at the timeline rate would compress it
+            // N-fold into a time-lapse — and desync the full-length audio track from
+            // frame 0. Dividing keeps real-world duration, which is what Step is for:
+            // cheaper previews, not a speed ramp. See VideoExportConfig.fps.
+            fps:                   cfg.fps / Math.max(1, cfg.frameStep),
             samples:               cfg.vidSamples,
             bitrate:               cfg.vidBitrate,
             startFrame:            cfg.startFrame,
@@ -413,7 +418,8 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
             const config: VideoExportConfig = {
                 width:         cfg.vidRes.w,
                 height:        cfg.vidRes.h,
-                fps:           cfg.fps,
+                // See the note on the single-pass config above — output rate, not timeline rate.
+                fps:           cfg.fps / Math.max(1, cfg.frameStep),
                 samples:       cfg.vidSamples,
                 bitrate:       cfg.vidBitrate,
                 startFrame:    cfg.startFrame,

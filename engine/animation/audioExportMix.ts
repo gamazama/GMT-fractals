@@ -15,21 +15,21 @@ export interface MixedAudio {
  * the export's frame range. Returns null when no clips have a cached file.
  *
  * @invariant The export window uses INCLUSIVE end (`(endFrame+1)/fps`) —
- *   without the +1 the audio mix is one frame short (~40ms at 25fps). This
- *   matches the pump's `floor((endFrame-startFrame)/frameStep)+1` frame count
- *   ONLY at `frameStep === 1`; see the @bug below.
+ *   without the +1 the audio mix is one frame short (~40ms at 25fps).
  *
- * @bug PRODUCTION: `frameStep` is not a parameter here, so a stepped export
- *   desyncs. The pump renders `floor((endFrame-startFrame)/frameStep)+1`
- *   frames at `cfg.fps` (`exportRunner.ts` — `timelineFrame = startFrame +
- *   i*frameStep`), i.e. a `frameStep`× time-lapse, while this mix always
- *   covers the full `(endFrame-startFrame+1)/fps` of timeline. At
- *   `frameStep = 2` the audio is 2× the video's duration and drifts linearly
- *   from the first frame. Reachable: RenderDialog's "Step" field is shown by
- *   default (`showFrameStep ?? true`) and app-gmt does not opt out, and the
- *   same dialog is the one that mixes audio. Fix needs an owner call —
- *   time-compress (pitch shift), drop audio when `frameStep > 1`, or hide
- *   "Step" while clips are loaded.
+ * @invariant This mix covers the FULL timeline span and is deliberately
+ *   `frameStep`-agnostic. That is correct because the encoder runs at
+ *   `timelineFps / frameStep` (see `VideoExportConfig.fps`), so a stepped export
+ *   keeps its real-world duration and the full-length audio lines up by
+ *   construction — no time-compression, no pitch shift, no dropped tail.
+ *
+ *   Until 2026-07-28 the encoder ran at the timeline rate, making a stepped
+ *   export a `frameStep`× time-lapse while this mix still covered the whole
+ *   span: the audio came out `frameStep`× longer than the video and drifted
+ *   linearly from the first frame. The fix was to change what Step MEANS —
+ *   a cheaper preview rather than a speed ramp — which removes the mismatch
+ *   at its source rather than compensating for it here. If anyone ever wants
+ *   Step to mean time-lapse again, this function needs the parameter back.
  */
 export async function mixAudioClipsForExport(
     clips: (AudioClip | null)[],

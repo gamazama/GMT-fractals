@@ -137,7 +137,13 @@ export const runVideoExport: RenderDialogRunner = async (deps) => {
         await encoder.start({
             width:       safeWidth,
             height:      safeHeight,
-            fps:         cfg.fps,
+            // Output rate, not the timeline's — a stepped export renders every Nth
+            // frame, so encoding at the timeline rate would compress it into a
+            // time-lapse. Step is a cost reduction for previews, so the preview
+            // should run at the speed the animation actually plays.
+            // fluid-toy carries no audio, so unlike app-gmt there was no desync
+            // here — this keeps the two apps' definition of Step the same.
+            fps:         cfg.fps / Math.max(1, cfg.frameStep),
             bitrate:     cfg.bitrate,
             formatIndex: cfg.formatIndex,
         }, stream);
