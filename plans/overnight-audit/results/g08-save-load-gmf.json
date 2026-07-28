@@ -1,0 +1,80 @@
+{
+  "id": "g08-save-load-gmf",
+  "cycle": 8,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g08-save-load-gmf" },
+    { "script": "npm run test:gmf", "pass": true, "subsystem": "g08-save-load-gmf" },
+    { "script": "npm run smoke:share-link", "pass": true, "subsystem": "g08-save-load-gmf" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-gmf-roundtrip.mts",
+      "line": 65,
+      "summary": "test:gmf is the guard named by the scene-and-formula-format rule and by FormulaFormat's own JSDoc for three load-bearing @invariants, but asserted none of them — no shaderMeta survival, no legacy-boolean promotion, and no save->load->save stability. It checked that a save reloads, never that it reloads to the SAME thing.",
+      "change": "Added four assertion blocks, 16 -> 32 checks: shaderMeta survival (preambleVars + a non-derivable capability token + derivedRotations round-trip, capabilities restored as a Set, shaderMeta stripped off the returned def); a hand-written legacy GMF fixture in a shape the current generator can no longer produce, asserting the three retired booleans still promote to capability tokens; save->load->save byte identity plus survival of a field written by a hypothetical newer build and of projectSettings; and isGMFFormat dispatch including the BOM and negative cases.",
+      "verification": "Falsified three times against production code, each reverted with a targeted Edit and re-run green: disabling the derivedRotations stash gives 31/1 with exactly the shaderMeta assertion failing; disabling the three legacy-boolean promotions gives 28/4; making loadGMFScene drop an unknown top-level preset key gives 30/2 with both the byte-identity check (21764 vs 21676 bytes) and the unknown-field check failing. So the new assertions fail when the behaviour they describe is wrong. 32/32 green, typecheck exit 0.",
+      "guard": "npm run test:gmf",
+      "guardPass": true,
+      "commit": "20bf70a8"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/utils/FormulaFormat.ts",
+      "line": 395,
+      "summary": "The @invariant on isGMFFormat states a leading UTF-8 BOM 'will misclassify as JSON'. That is false — ECMAScript WhiteSpace includes U+FEFF, so trimStart() strips the BOM and a BOM-prefixed GMF dispatches and parses correctly. A future reader would have hardened a non-bug.",
+      "change": "Rewrote the @invariant: BOM is explicitly NOT a problem, with the ECMAScript reason; the stray-leading-container-tag half of the original claim is kept because it IS true. Committed with the shaderMeta correction — same file.",
+      "verification": "Direct execution: `('\\uFEFF<!-- x').trimStart().startsWith('<!--')` is true. Then end-to-end through the real code: isGMFFormat on a BOM-prefixed generated GMF returns true, and parseGMF on the same bytes returns id 'Mandelbulb' without throwing. Now pinned by two new test:gmf assertions, which would fail if trimStart ever stopped eating U+FEFF or if a defensive BOM-strip were added on the assumption the old text was right.",
+      "guard": "npm run test:gmf",
+      "guardPass": true,
+      "commit": "a61ff7d8"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/utils/FormulaFormat.ts",
+      "line": 265,
+      "summary": "The @invariant naming the complete shaderMeta stash/restore field list — the file's own stated defence against silent field loss on save — had itself fallen a field behind the code it governs: it listed preambleVars and capabilities but omitted derivedRotations.",
+      "change": "Added derivedRotations with a note on what it is (MB3D CPU-derived angle lanes), an explicit keep-in-sync instruction, and a pointer to the guard block that now pins it.",
+      "verification": "Read against code: generateGMF stashes preambleVars, capabilities and derivedRotations; parseGMF restores all three. grep confirms derivedRotations is live and load-bearing rather than vestigial — FractalEngine, UniformSchema, WorkerProtocol, WorkerProxy and the MB3D importer (constPacker, emitFusedHybrid, slotTranspiler) all reference it. Pinned by the new assertion, proven by falsification: disabling the stash gives 31/1 with exactly that assertion failing. An incomplete list is worse than none here — without derivedRotations a reloaded MB3D body reads identity uMb3dRot* forever.",
+      "guard": "npm run test:gmf",
+      "guardPass": true,
+      "commit": "a61ff7d8"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/smoke-share-link.mts",
+      "line": 49,
+      "summary": "smoke:share-link's round-trip fidelity block sampled only two feature slices, so the failure mode that actually shipped — a whole feature's state silently absent from the share payload, no error, scene just renders with defaults — was covered by a two-feature sample.",
+      "change": "Added coloring.repeats = 3.7 as a third feature: a non-default float on a hidden param, so it also exercises the encoder walking the full param table rather than the visible UI surface. Extended STORE_READY accordingly and documented in-file why each added feature widens the net.",
+      "verification": "7/7 including the new assertion. Load-bearing rather than tautological, proven by a separate Playwright probe: decoding the share payload before and after setColoring({repeats:3.7}) shows the value appearing at dictionary path '.p.cl.r1' only after the set, with the payload growing 2820 -> 2822 chars. The recipient is a fresh page whose only input is '#s=<payload>' and repeats defaults to 1.0, so a drop anywhere in encode/decode surfaces as 1.0. Baseline captured before the change (6/6 green) so the new assertion is the only delta. SEE THE OPEN ANOMALY IN NOTES — the falsification did not behave as expected and that is recorded rather than papered over.",
+      "guard": "npm run smoke:share-link",
+      "guardPass": true,
+      "commit": "23587fa9"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "utils/PresetFieldRegistry.ts",
+      "line": 45,
+      "summary": "Four dead doc citations in the preset-field serialization layer — docs/04_Core_Plugins.md and docs/20_Fragility_Audit.md do not exist at those paths — and one is inside a runtime error message developers are told to go read.",
+      "change": "Repointed all four to docs/history/engine/: PresetFieldRegistry.ts:13 and :45 (the PresetFieldFrozenError message text), defaultPresetFields.ts:9 (both docs), PresetLogic.ts:137. These were spotted and left by the cycle-1 auditor as belonging to another subsystem.",
+      "verification": "`ls docs/04_Core_Plugins.md` and `ls docs/20_Fragility_Audit.md` both fail; `find docs -name` resolves each under docs/history/engine/. New paths verified present. typecheck exit 0 — PresetFieldRegistry.ts:45 is a template literal in shipped code, so a broken edit there is a compile error rather than just a comment change.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "4d982fff"
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "utils/SceneFormat.ts",
+      "line": 60,
+      "summary": "engine-core's parseSceneJson sniffs '<!--' only, while engine-gmt's isGMFFormat also accepts a bare '<Metadata>' opening — so a header-less GMF loaded by an app that has not installed a GMF-aware parseScene is JSON.parse'd and returns null. Demoted from Tier V: the remedy is a reachability question the owner can answer faster than a verifier.",
+      "rationale": "The asymmetry is already recorded as a NOTE in the isGMFFormat JSDoc, and the auditor's own recommendation is that leaving the code alone may be the whole fix. app-gmt is unaffected — it installs loadGMFScene as its parseScene, and SceneIO only falls back to parseSceneJson when no parser is registered. The open question is whether any OTHER live entry point can reach parseSceneJson with GMF bytes: the drag-drop overlay, the deep-link/share-stash paths (which use loadGMFScene directly), gallery remix, PNG iTXt extraction via extractScenePng's default parser argument, and the other apps that call installSceneIO. If none can, leave it. If one can, align parseSceneJson's sniff with isGMFFormat rather than duplicating the predicate a third time. Not applied: no guard exercises parseSceneJson with a header-less GMF, and widening the sniff is a load-path behaviour change on a file shared by every app."
+    }
+  ],
+  "notes": "THE HANDOFF PREMISE WAS PARTLY WRONG, and the correction matters. (1) SHARE: smoke:share-link ALREADY asserted round-trip fidelity before this cycle — formula, coreMath.paramA and materials.roughness, all three green on a clean baseline. It is NOT true that 'nothing asserts share round-trip fidelity at all'. The reason the shortId collision escaped is narrower and more useful: the sample was two feature slices, and neither droste nor the colliding materials params was among them. Widened to three. (2) SAVE: there was genuinely NO fidelity assertion — test:gmf checked only that a save reloads, never that it reloads to the same thing. Now asserts byte identity and unknown-field survival.\n\nGUARD REACHABILITY, checked as instructed: smoke:share-link and smoke:gallery-link both default ENGINE_URL to app-gmt.html and engine-gmt/utils/FormulaFormat.ts is in that import graph, so both citations are sound. smoke:gallery-link is in fact the only guard that loads a REAL on-disk .gmf through loadGMFScene, though it needs VITE_SUPABASE_* in .env.local or it dies before the mock. smoke:migrations defaults to fluid-toy.html; utils/SceneFormat.ts is in that graph but engine-gmt/utils/FormulaFormat.ts is NOT, and its assertions are entirely about fluid-toy feature-slice migrations — do NOT cite it for GMF format work. All seven guard names in .claude/rules/scene-and-formula-format.md resolve to real package.json scripts; no dead citations there. Every value collected by test:gmf and smoke:share-link feeds an assertion — no print-without-assert cases in either.\n\nOPEN ANOMALY — please hand on. The falsification of the new smoke:share-link assertion did NOT fail as expected. Adding `key === 'repeats'` to the getDiff skip-list at utils/UrlStateEncoder.ts:194 left the assertion green and the payload length unchanged (2820 both runs). A stale dev server was ruled out (curl of the module reflected a marker edit immediately) and so was the value never entering the payload (a Playwright+pako probe shows repeats=3.7 lands at dictionary path '.p.cl.r1' and grows the payload 2820->2822). localStorage leakage between author and recipient pages was also ruled out — the only scene persistence is UnsavedWorkGuard autosave, opt-in and off by default with no boot-time hydrate. utils/UrlStateEncoder.ts was reverted with a targeted Edit and `git diff` on it is empty. The finding is reported on the strength of the direct payload evidence rather than the falsification, and the getDiff skip-list may not be on the path assumed. Worth 20 minutes from whoever owns the share encoder.\n\nNOT REACHED: smoke:gallery-link, test:partial-apply, test:compat, npm run orphans. engine-gmt/utils/CameraUtils.ts and BenchProfiler.tsx were read in full but carry no @invariant markers and their JSDoc matches the code — no findings. Did not re-sweep shortId collisions and did not touch the Droste share-link bug, per the handoff."
+}

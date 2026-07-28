@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:58%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:67%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,19 +73,19 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Cycle 7 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T04:31:42.877Z</p>
+  <p class="sub">Cycle 8 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; running &middot; generated 2026-07-28T05:04:47.298Z</p>
 
   <div class="tiles">
-    <div class="tile"><div class="v">19/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">123</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">72</div><div class="k">applied &amp; verified</div></div>
-    <div class="tile"><div class="v" style="color:var(--warn)">11</div><div class="k">orchestrator-checked</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">38</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">116<span style="font-size:.6em;color:var(--dim)">/117</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v">22/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">137</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">82</div><div class="k">applied &amp; verified</div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">12</div><div class="k">orchestrator-checked</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">41</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">125<span style="font-size:.6em;color:var(--dim)">/126</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:35%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 8 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:35%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:54%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 9 cycles</p>
 
   <section><h2>Guards failing <span class="count">1</span></h2>
     <p class="note">Run these yourself before trusting anything downstream of them.</p>
@@ -94,7 +94,7 @@
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">72</span></h2>
+    <h2>Applied — self-verified <span class="count">82</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
   <article class="finding sev-high">
@@ -403,6 +403,20 @@
     <p class="verify"><strong>How it was verified:</strong> Every claim mechanically established. Entry points read directly out of each guard script: smoke-canvas-pan-zoom.mts:12, smoke-bc-drag.mts:8, smoke-canvas-menu.mts:13 all default to fluid-toy.html; smoke-orbit.mts:17 and smoke-engine-gmt.mts:19 default to app-gmt.html. Reachability proved by import graph: the ONLY importer of engine-gmt/navigation is app-gmt/AppGmt.tsx:61 (via navigation/index.ts:22), and fluid-toy's entire engine-gmt surface is support + feedback — so no fluid-toy smoke can load Navigation.tsx at all. test-interaction-session.mts and test-interaction-wiring.mts self-document as 'Node-only, no WebGL / no Chromium'; test-interaction-coverage.mts is a static source scan and grep for 'Navigation' in it returns zero hits (it was run: green, 36 assertions, slider/scrub/drawing only). smoke-deep-zoom-orbit.mts self-documents as a pure-CPU computeReferenceOrbit test. Both promoted guards were run green. This is the fifth instance this run of a healthy guard cited for the wrong thing, and the first where EVERY guard in a rule's block was blind.</p>
     <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>c0860feb</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>g08-save-load-gmf</code>
+      <code class="file">debug/test-gmf-roundtrip.mts:65</code>
+    </header>
+    <p class="what">test:gmf is the guard named by the scene-and-formula-format rule and by FormulaFormat's own JSDoc for three load-bearing @invariants, but asserted none of them — no shaderMeta survival, no legacy-boolean promotion, and no save-&gt;load-&gt;save stability. It checked that a save reloads, never that it reloads to the SAME thing.</p>
+    <p class="change"><strong>Changed:</strong> Added four assertion blocks, 16 -&gt; 32 checks: shaderMeta survival (preambleVars + a non-derivable capability token + derivedRotations round-trip, capabilities restored as a Set, shaderMeta stripped off the returned def); a hand-written legacy GMF fixture in a shape the current generator can no longer produce, asserting the three retired booleans still promote to capability tokens; save-&gt;load-&gt;save byte identity plus survival of a field written by a hypothetical newer build and of projectSettings; and isGMFFormat dispatch including the BOM and negative cases.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsified three times against production code, each reverted with a targeted Edit and re-run green: disabling the derivedRotations stash gives 31/1 with exactly the shaderMeta assertion failing; disabling the three legacy-boolean promotions gives 28/4; making loadGMFScene drop an unknown top-level preset key gives 30/2 with both the byte-identity check (21764 vs 21676 bytes) and the unknown-field check failing. So the new assertions fail when the behaviour they describe is wrong. 32/32 green, typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:gmf</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>20bf70a8</code></p>
     
   </article>
   <article class="finding sev-medium">
@@ -881,6 +895,90 @@
     <p class="commit">commit <code>46ca9373</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g06-bucket-render</code>
+      <code class="file">engine-gmt/engine/worker/WorkerDepthReadback.ts:140</code>
+    </header>
+    <p class="what">The async PBO depth readback picked its GL read type from the REQUESTED quality.bufferPrecision instead of the accumulation target's actual texture.type, which RenderPipeline.accumFormat() can and does resolve differently.</p>
+    <p class="change"><strong>Changed:</strong> _issueReadback now derives useHalfFloat from `rt.texture.type === HalfFloatType` (value-imported from three) rather than the bufferPrecision proxy. The @invariant above tick() was rewritten to state the actual determinant and warn against the proxy. Committed with two sibling findings — same file.</p>
+    <p class="verify"><strong>How it was verified:</strong> typecheck is a real guard here, proven by falsification: using `THREE.HalfFloatType` instead of the value import fails TS1361 at exactly this line (the file imports THREE type-only). Reverted with a targeted Edit and re-ran green. smoke:engine-gmt passes with 0 pageerrors and frames delivered, and handleRenderTick.ts:343 calls depthReadback.tick() every render tick, so the changed line executes in the booted worker. HONEST LIMIT: the mismatch only materialises where OES_texture_float_linear is absent while bufferPrecision asks for Float32, which headless d3d11 does not reproduce. The change is strictly non-regressive — where the two agree (all desktop paths including the smoke) the expression is identical, and where they disagree the new value is the one three.js itself uses for every other readback in this codebase. The sync fallback in the same class already derived it from target.texture.type and carried a comment saying why.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ba0c91d1</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g06-bucket-render</code>
+      <code class="file">engine-gmt/engine/worker/WorkerDepthReadback.ts:79</code>
+    </header>
+    <p class="what">_checkFence had no WAIT_FAILED branch, so a failed fence permanently latched _depthPBOPending = true, gating off all further depth readbacks for the session and freezing lastMeasuredDistance / centerIsSky, with the WebGLSync leaked.</p>
+    <p class="change"><strong>Changed:</strong> Added the WAIT_FAILED branch (deleteSync, clear _depthFence, clear _depthPBOPending, return) so the next tick issues a fresh readback. Mirrors the existing recovery in RenderPipeline.pollConvergenceResult.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsification: renaming the constant to gl.WAIT_FAILED_TYPO fails tsc with TS2551, proving typecheck gates the new branch's contact with the GL API rather than passing vacuously; reverted and re-ran green. The added branch is purely additive error recovery — clientWaitSync returns exactly one of ALREADY_SIGNALED / CONDITION_SATISFIED (existing branch), WAIT_FAILED (new), TIMEOUT_EXPIRED (unchanged early return), so the happy path is provably untouched. Not provable by any guard here: reproducing a real WAIT_FAILED needs GPU context loss.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ba0c91d1</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g07-mesh-export</code>
+      <code class="file">.claude/rules/sibling-apps.md:24</code>
+    </header>
+    <p class="what">The sibling-apps rule listed six smoke scripts under one flat Guards heading covering all five apps, but none touch mesh-export (which has NO runtime guard at all) and gradient-explorer's three actual smokes were missing.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the flat list with a per-app table, added smoke:liquify / smoke:gx-handles / smoke:gx-fractal-glitch, and stated explicitly that mesh-export/ is reached only by typecheck and orphans. Also flagged debug/dump-mesh-cp.mts as a decoy — it looks like a mesh-export guard but exercises engine-gmt/engine/SDFShaderBuilder.ts and is not wired to any npm script.</p>
+    <p class="verify"><strong>How it was verified:</strong> Enumerated every smoke's entry point: `grep -h 'ENGINE_URL ||' debug/smoke-*.mts | sort -u` yields exactly seven distinct URLs — /, /app-gmt.html, /demo.html, /fluid-toy.html, /fractal-toy.html, /gradient-explorer.html and a stale :5173/app-gmt.html — and mesh-export.html is not among them. `grep -rln 'mesh-export' debug/*.mts` returns only dump-mesh-cp.mts, and `grep -n 'dump-mesh' package.json` returns nothing. tsconfig include is **/*.ts(x) and knip.json has entry mesh-export/main.tsx, confirming the two static checks named. Seventh instance this run of a guard cited for something it cannot cover.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ff659079</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g08-save-load-gmf</code>
+      <code class="file">engine-gmt/utils/FormulaFormat.ts:395</code>
+    </header>
+    <p class="what">The @invariant on isGMFFormat states a leading UTF-8 BOM 'will misclassify as JSON'. That is false — ECMAScript WhiteSpace includes U+FEFF, so trimStart() strips the BOM and a BOM-prefixed GMF dispatches and parses correctly. A future reader would have hardened a non-bug.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the @invariant: BOM is explicitly NOT a problem, with the ECMAScript reason; the stray-leading-container-tag half of the original claim is kept because it IS true. Committed with the shaderMeta correction — same file.</p>
+    <p class="verify"><strong>How it was verified:</strong> Direct execution: `('\uFEFF&lt;!-- x').trimStart().startsWith('&lt;!--')` is true. Then end-to-end through the real code: isGMFFormat on a BOM-prefixed generated GMF returns true, and parseGMF on the same bytes returns id 'Mandelbulb' without throwing. Now pinned by two new test:gmf assertions, which would fail if trimStart ever stopped eating U+FEFF or if a defensive BOM-strip were added on the assumption the old text was right.</p>
+    <p class="guard"><code>npm run test:gmf</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>a61ff7d8</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g08-save-load-gmf</code>
+      <code class="file">engine-gmt/utils/FormulaFormat.ts:265</code>
+    </header>
+    <p class="what">The @invariant naming the complete shaderMeta stash/restore field list — the file's own stated defence against silent field loss on save — had itself fallen a field behind the code it governs: it listed preambleVars and capabilities but omitted derivedRotations.</p>
+    <p class="change"><strong>Changed:</strong> Added derivedRotations with a note on what it is (MB3D CPU-derived angle lanes), an explicit keep-in-sync instruction, and a pointer to the guard block that now pins it.</p>
+    <p class="verify"><strong>How it was verified:</strong> Read against code: generateGMF stashes preambleVars, capabilities and derivedRotations; parseGMF restores all three. grep confirms derivedRotations is live and load-bearing rather than vestigial — FractalEngine, UniformSchema, WorkerProtocol, WorkerProxy and the MB3D importer (constPacker, emitFusedHybrid, slotTranspiler) all reference it. Pinned by the new assertion, proven by falsification: disabling the stash gives 31/1 with exactly that assertion failing. An incomplete list is worse than none here — without derivedRotations a reloaded MB3D body reads identity uMb3dRot* forever.</p>
+    <p class="guard"><code>npm run test:gmf</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>a61ff7d8</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>g08-save-load-gmf</code>
+      <code class="file">debug/smoke-share-link.mts:49</code>
+    </header>
+    <p class="what">smoke:share-link's round-trip fidelity block sampled only two feature slices, so the failure mode that actually shipped — a whole feature's state silently absent from the share payload, no error, scene just renders with defaults — was covered by a two-feature sample.</p>
+    <p class="change"><strong>Changed:</strong> Added coloring.repeats = 3.7 as a third feature: a non-default float on a hidden param, so it also exercises the encoder walking the full param table rather than the visible UI surface. Extended STORE_READY accordingly and documented in-file why each added feature widens the net.</p>
+    <p class="verify"><strong>How it was verified:</strong> 7/7 including the new assertion. Load-bearing rather than tautological, proven by a separate Playwright probe: decoding the share payload before and after setColoring({repeats:3.7}) shows the value appearing at dictionary path '.p.cl.r1' only after the set, with the payload growing 2820 -&gt; 2822 chars. The recipient is a fresh page whose only input is '#s=&lt;payload&gt;' and repeats defaults to 1.0, so a drop anywhere in encode/decode surfaces as 1.0. Baseline captured before the change (6/6 green) so the new assertion is the only delta. SEE THE OPEN ANOMALY IN NOTES — the falsification did not behave as expected and that is recorded rather than papered over.</p>
+    <p class="guard"><code>npm run smoke:share-link</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>23587fa9</code></p>
+    
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tA">A</span>
@@ -1105,10 +1203,52 @@
     <p class="commit">commit <code>ce711da2</code></p>
     
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>g06-bucket-render</code>
+      <code class="file">engine-gmt/engine/worker/WorkerDepthReadback.ts:202</code>
+    </header>
+    <p class="what">The focus-pick @invariant claimed the state machine 'has THREE phases', but FocusPickState is a two-member union (pending | ready) — there is no third state to grep for.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote to say exactly TWO states, naming the union members and identifying the snapshot as the pending -&gt; ready transition rather than a state. Also recorded that a sampleFocusPick arriving while pending answers -1 immediately rather than queueing.</p>
+    <p class="verify"><strong>How it was verified:</strong> Proved from source: the FocusPickState type has exactly two members, and grep for 'phase' over the file returns only 'pending' and 'ready'. Comment-only; typecheck is what catches a malformed JSDoc block breaking the following declaration.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ba0c91d1</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>g07-mesh-export</code>
+      <code class="file">docs/modules/mesh-export/index.md:34</code>
+    </header>
+    <p class="what">The module overview described the pipeline as 'init -&gt; sample SDF -&gt; dual-contour -&gt; post-process -&gt; export', which omits two whole phases, invents an 'init' phase, and presents export as a pipeline phase.</p>
+    <p class="change"><strong>Changed:</strong> Replaced with the actual phase table from the pipeline's own [Phase n] labels (1 SDF sampling, 1b SDF filtering, 2 dual contouring, 3 Newton projection, 4 post-processing, 5 vertex colouring), noted that generate and export are two separate calls with the mesh held in the store between them, and recorded that VDB export bypasses the mesh entirely — it re-samples via generateVDB and therefore ignores smoothing, Newton and every other mesh-stage setting.</p>
+    <p class="verify"><strong>How it was verified:</strong> Phase labels grepped out of mesh-pipeline.ts (lines 210, 400, 483, 554, 588, 624); the two-call structure read off ExportPanel.tsx:99 and :128 with the result held as s.lastMesh; the VDB bypass read off the format === 'vdb' branch, which never reads lastMesh. typecheck does not parse markdown, so the falsifier is the grep set — each would contradict the new text if it were wrong.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>dff5c302</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>g08-save-load-gmf</code>
+      <code class="file">utils/PresetFieldRegistry.ts:45</code>
+    </header>
+    <p class="what">Four dead doc citations in the preset-field serialization layer — docs/04_Core_Plugins.md and docs/20_Fragility_Audit.md do not exist at those paths — and one is inside a runtime error message developers are told to go read.</p>
+    <p class="change"><strong>Changed:</strong> Repointed all four to docs/history/engine/: PresetFieldRegistry.ts:13 and :45 (the PresetFieldFrozenError message text), defaultPresetFields.ts:9 (both docs), PresetLogic.ts:137. These were spotted and left by the cycle-1 auditor as belonging to another subsystem.</p>
+    <p class="verify"><strong>How it was verified:</strong> `ls docs/04_Core_Plugins.md` and `ls docs/20_Fragility_Audit.md` both fail; `find docs -name` resolves each under docs/history/engine/. New paths verified present. typecheck exit 0 — PresetFieldRegistry.ts:45 is a template literal in shipped code, so a broken edit there is a compile error rather than just a comment change.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>4d982fff</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Applied — orchestrator-verified <span class="count">11</span></h2>
+    <h2>Applied — orchestrator-verified <span class="count">12</span></h2>
     <p class="note">No existing test covered these, so a second independent agent re-derived the claim before the change was allowed through. Each names how it was checked.</p>
     
   <article class="finding sev-high">
@@ -1237,6 +1377,20 @@
     <p class="commit">commit <code>18a9605a</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">medium</span>
+      <code>g07-mesh-export</code>
+      <code class="file">mesh-export/algorithms/vdb-writer.ts:472</code>
+    </header>
+    <p class="what">Every exported .vdb was translated half a voxel toward -X/-Y/-Z of where its data actually came from: the AffineMap translation row was bare boundsMin, but OpenVDB index space puts voxel (i,j,k)'s CENTRE at index-space point (i,j,k), while the value stored there was sampled at boundsMin + (i+0.5)*s. CONFIRMED and fixed.</p>
+    <p class="change"><strong>Changed:</strong> Translation row is now boundsMin + 0.5*s on all three axes, with an @invariant recording why. Also collapsed a byte-identical duplicate of the whole transform block inside serializeVDB into a call to _writeTransform — both copies were live, one per colour mode. Added debug/test-mesh-grid-convention.mts (npm run test:mesh-grid) pinning the convention.</p>
+    <p class="verify"><strong>How it was verified:</strong> Guard-first. The new guard was written BEFORE the fix and failed on both translation rows with the exact diagnosis; after the fix it passes and finds ONE row instead of two, which independently confirms the de-duplication. An independent verifier had already established the convention by tsx probe against the real imports: it derived the GPU sample position from the shader (uInvRes = 1/N, and the tile-offset/readback pairing makes gl_FragCoord + uTileOffset === i + 0.5 exactly, with Z via sampleOneZ((gz + 0.5)/N)), then printed an offset of exactly -0.5*s at every N and a GLB-vs-VDB disagreement of exactly 1.0 voxels at i=N-1. It also checked the container statically and found no other defect (magic, version 224, library 8.1, UUID, the 5-4-3 node indexing, grid descriptors and stream positions all correct). Verifier confidence high; it noted the density and Cd grids share the transform, so the file is internally consistent and will never look broken on its own — only against the GLB, or against the bounds the user typed. typecheck green.</p>
+    <p class="guard"><code>npm run test:mesh-grid</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>0a29e490</code></p>
+    
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tV">V</span>
@@ -1268,7 +1422,7 @@
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">38</span></h2>
+    <h2>Awaiting your judgement <span class="count">41</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
   <article class="finding sev-high">
@@ -1312,6 +1466,20 @@
     
     
     <p class="rationale">See PROPOSALS.md. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure. Note the SPLIT — the guard's earlier assertions PASS (the orbit drag moves sceneOffset by the expected magnitude, so the Navigation gesture path is demonstrably alive); only the final post-settle accumulation assertion fails.</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">high</span>
+      <code>g07-mesh-export</code>
+      <code class="file">mesh-export/gpu/gpu-pipeline.ts:275</code>
+    </header>
+    <p class="what">The GPU SDF sampler uses a single scalar uBoundsRange for all three axes while the bounds UI allows per-axis sizes, so any non-cubic export box silently produces anisotropically distorted geometry — and the GLB and VDB of the same scene disagree.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. Independently corroborated by the verifier, which confirmed the scalar comes from X alone and that BaseVectorInput is linked-by-default but user-unlinkable. Mitigating: DEFAULT_BBOX_SIZE is [3,3,3] and autoFitBounds forces a cube, so the default and auto-fit paths never trip it.</p>
   </article>
   <article class="finding sev-medium">
     <header>
@@ -1550,6 +1718,20 @@
     
     
     <p class="rationale">See PROPOSALS.md. Picking a duration is a product call — a legitimate 4K path-traced frame can take minutes.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>g07-mesh-export</code>
+      <code class="file">mesh-export/algorithms/dc-core.ts:120</code>
+    </header>
+    <p class="what">Dual contouring maps grid to world with g/(N-1) (corner-sampled) while the GPU samples at (i+0.5)/N (cell-centred), so every GLB/STL is uniformly oversized by exactly N/(N-1) about the grid centre — +1.6% at N=64, +0.20% at the default N=512. CONFIRMED but not applied: the fix changes visible geometry.</p>
+    
+    
+    
+    
+    <p class="rationale">See PROPOSALS.md. The new test:mesh-grid guard PINS the current wrong behaviour deliberately, with assertions written so that fixing dc-core fails loudly with instructions rather than silently changing exports.</p>
   </article>
   <article class="finding sev-low">
     <header>
@@ -1803,6 +1985,20 @@
     
     <p class="rationale">See PROPOSALS.md. Recommendation is to leave it — the corrected JSDoc now warns the next reader off, and moving the flush changes worker message ordering, the highest-risk surface in this subsystem, with no guard that would catch a mistake.</p>
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>g08-save-load-gmf</code>
+      <code class="file">utils/SceneFormat.ts:60</code>
+    </header>
+    <p class="what">engine-core's parseSceneJson sniffs '&lt;!--' only, while engine-gmt's isGMFFormat also accepts a bare '&lt;Metadata&gt;' opening — so a header-less GMF loaded by an app that has not installed a GMF-aware parseScene is JSON.parse'd and returns null. Demoted from Tier V: the remedy is a reachability question the owner can answer faster than a verifier.</p>
+    
+    
+    
+    
+    <p class="rationale">The asymmetry is already recorded as a NOTE in the isGMFFormat JSDoc, and the auditor's own recommendation is that leaving the code alone may be the whole fix. app-gmt is unaffected — it installs loadGMFScene as its parseScene, and SceneIO only falls back to parseSceneJson when no parser is registered. The open question is whether any OTHER live entry point can reach parseSceneJson with GMF bytes: the drag-drop overlay, the deep-link/share-stash paths (which use loadGMFScene directly), gallery remix, PNG iTXt extraction via extractScenePng's default parser argument, and the other apps that call installSceneIO. If none can, leave it. If one can, align parseSceneJson's sniff with isGMFFormat rather than duplicating the predicate a third time. Not applied: no guard exercises parseSceneJson with a header-less GMF, and widening the sniff is a load-path behaviour change on a file shared by every app.</p>
+  </article>
   </section>
 
   <h2>Subsystems</h2>
@@ -1999,35 +2195,35 @@
     <td class="num prop">0</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g06-bucket-render</code></td>
     <td>engine-gmt</td>
     <td class="area">BucketRenderer + WorkerExporter + WorkerHistogram</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">3</td>
+    <td class="num applied">3</td>
     <td class="num esc">0</td>
     <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g07-mesh-export</code></td>
     <td>engine-gmt</td>
     <td class="area">Mesh export tool + VDB writer + preview canvas + pipeline</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">5</td>
+    <td class="num applied">2</td>
+    <td class="num esc">1</td>
+    <td class="num prop">2</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>g08-save-load-gmf</code></td>
     <td>engine-gmt</td>
     <td class="area">GMF format + scene serialization</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">6</td>
+    <td class="num applied">5</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">1</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>g09-modular-graph</code></td>

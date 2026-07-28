@@ -1515,3 +1515,155 @@ fail if a cited smoke's entry point cannot reach any scoped path.
   `parsers/`, `v3/`, `v4/`, `transform/`. It is by far the largest feature
   directory and cycle 6 already found a live dead-end in it (the V4 escape hatch).
   Worth its own worklist entry rather than riding along with `g05`.
+
+---
+
+# Cycle 8
+
+## HIGH — A non-cubic export box silently produces distorted geometry
+
+_(cycle 8 · `mesh-export/gpu/gpu-pipeline.ts:275`)_
+
+The GPU SDF sampler has a **single scalar** `uBoundsRange` used for all three
+axes — `ExportPanel.tsx:63` passes `gridMax[0] - gridMin[0]`, i.e. the X extent
+only — but the bounds UI lets the user set X/Y/Z independently. The shader then
+samples a **cube of side = the X extent** anchored at `gridMin`, while dual
+contouring maps back with the true per-axis `gridMax[a] - gridMin[a]`.
+
+**Worked example.** size `[3, 6, 3]`, centre `[0,0,0]` → `gridMin = [-1.5,-3,-1.5]`,
+`boundsRange = 3`. The shader samples Y over `[-3, 0]` — only the **bottom half**
+of the intended box. DC then stretches grid row *j* across the full `[-3, 3]`. The
+mesh is the bottom half of the fractal, stretched 2× vertically.
+
+Worse, VDB export is different again: `serializeVDB` writes a single uniform voxel
+scale, so **the .vdb is a correct cube while the GLB/STL is a stretched half-box**
+— two exports of the same scene that do not match.
+
+**Reachable, and the UI invites it.** `BoundsPanel.tsx:74-82` renders Size as a
+per-axis `BaseVectorInput` with `linkable`; it starts linked but `:362-372` renders
+an explicit "Link axes" toggle. The panel prints `size[0] × size[1] × size[2]` as
+three independent numbers, so the UI advertises anisotropy.
+
+**Mitigating:** `DEFAULT_BBOX_SIZE` is `[3,3,3]` and `autoFitBounds` forces a cube
+(`Math.max(sx,sy,sz)`), so the default and auto-fit paths never trip it. Only a
+user who deliberately unlinks the axes is affected — which is exactly what the
+control invites.
+
+**Options**
+
+1. **Make the sampler anisotropy-aware** — `uBoundsRange` → `uniform vec3 uBoundsSize`,
+   update the three world-position lines, `bindPipelineUniforms` (two sites), every
+   `voxelSize = boundsRange / N` derivation (the pipeline uses one scalar voxelSize
+   for min-feature/closing/jitter radii, which become per-axis or need a policy),
+   and the VDB `_writeTransform` (currently a uniform scale matrix; would need
+   s.x/s.y/s.z on the diagonal). Largest change, and it makes "voxel" non-cubic,
+   which affects the morphological filters and the QEF cell-clamp margins.
+2. **Constrain the product to cubic bounds** — drop `linkable` from BoundsPanel's
+   Size input, or clamp all three to `max()`. Near-one-line, no silent wrong output,
+   but removes a capability the UI currently offers.
+3. **Keep the maths and warn** — detect non-uniform size and surface it.
+
+**Recommendation: (2) now, (1) later if artists actually want non-cubic crops.**
+Mesh export is a premium surface and the current behaviour is *silently wrong*
+rather than degraded — a user who unlinks the axes gets a plausible-looking but
+geometrically false mesh with no diagnostic. (2) removes the wrong output
+immediately at near-zero risk; (1) touches the SDF filters and the VDB transform
+and should not be attempted unattended. Either way this deserves an `@invariant`
+on the shader block stating that the sampled region is a cube of side
+`uBoundsRange`, because nothing in the code says so today.
+
+---
+
+## MEDIUM — Dual contouring is corner-sampled; the GPU is cell-centred
+
+_(cycle 8 · `mesh-export/algorithms/dc-core.ts:120` — confirmed by probe, deliberately NOT fixed)_
+
+`gridToWorld`/`worldToGrid` use `g / (N-1)`; the GPU samples at `(i + 0.5) / N`.
+The difference is provably a **uniform scale of `N/(N-1)` about the grid centre** —
+verified symbolically and numerically at three resolutions: **+1.59% at N=64,
++0.196% at the default N=512**, with the fitted fixed point matching the grid
+centre to 1e-12.
+
+**dc-core is the outlier, not the sampler.** Five independent sites use `/N`, four
+of them with `+0.5`: the SDF sampler itself, the VDB colour pass
+(`gridMin[a] + (block + l + 0.5) * voxelSize`), `autoFitBounds`, and every
+`voxelSize` derivation in the tree. The sampler cannot be "wrong" — it is where
+the data physically is.
+
+**A mitigation the original report missed.** Newton projection is **on by default**
+(`newton: true`, 6 steps) and runs after DC, iterating against the *analytic*
+formula DE with a displacement clamp of **2 voxels** — four times the 0.5-voxel
+maximum DC error. So on the default path most vertices are re-projected onto the
+true isosurface and the mesh is geometrically right, with only tangential drift.
+The full error ships when Newton is toggled off, on the CPU/no-gl path, and for
+vertices where Newton bails early (common in thin/chaotic regions). **A naive
+caliper test on a default-settings export might well come back clean.**
+
+**Why it was not fixed tonight:** the fix is two lines
+(`gridToWorld => gridMin + ((gx + 0.5)/N)*range`, `worldToGrid` inverse; `sparse-grid.ts`
+imports both so it follows for free) — but it **changes visible geometry**. The
+mesh will now stop half a voxel inside the drawn wireframe on every face. That is
+*correct*, but if it reads as a regression the right response is to adjust the
+wireframe or expand the sampled bounds by one voxel — **not** to re-break the
+sampler to make the picture match. That is a call for someone who can look at it.
+
+`npm run test:mesh-grid` **pins the current wrong behaviour on purpose**, with
+assertions written so that fixing dc-core fails loudly and tells you to flip them,
+rather than silently changing every export.
+
+---
+
+## The mesh-export subsystem had zero guard coverage — now partly closed
+
+`mesh-export/` is a premium/monetised surface and **no smoke boots
+`mesh-export.html`**. The seven distinct entry points across all `debug/smoke-*.mts`
+are `/`, `/app-gmt.html`, `/demo.html`, `/fluid-toy.html`, `/fractal-toy.html`,
+`/gradient-explorer.html` and one stale `:5173/app-gmt.html`. The only automated
+checks reaching this tree were static: `typecheck` and `orphans`.
+`debug/dump-mesh-cp.mts` looks like a mesh-export guard but exercises
+`engine-gmt/engine/SDFShaderBuilder.ts` and is not wired to any npm script.
+
+That is why two coordinate conventions coexisted unnoticed. This cycle added
+`npm run test:mesh-grid` (no browser, no GPU) which now pins the cell-centre
+contract, caught the VDB bug before the fix, and confirmed the de-duplication
+after it.
+
+**Still unguarded and worth a follow-up:** SDF filtering (`sdf-filter.ts`, 532
+lines — cavity fill, min-feature clamp, morphological closing, entirely unreviewed
+and the most likely home for further boundary bugs, since the sparse variants must
+handle un-allocated neighbour blocks), the GLB/STL writers, and the preview canvas.
+
+---
+
+## Housekeeping surfaced in cycle 8
+
+- **Open anomaly on the share encoder, worth ~20 minutes.** The falsification of
+  the new `smoke:share-link` assertion did **not** fail as expected: adding
+  `key === 'repeats'` to the `getDiff` skip-list at `utils/UrlStateEncoder.ts:194`
+  left the assertion green *and* the payload length unchanged. A stale dev server
+  was ruled out (a marker edit was reflected immediately), as was the value never
+  entering the payload (a probe shows `repeats=3.7` lands at dictionary path
+  `.p.cl.r1` and grows the payload 2820→2822). localStorage leakage between author
+  and recipient was also ruled out. The finding rests on the direct payload
+  evidence; **the `getDiff` skip-list may not be on the path assumed.**
+- **Cycle 1's premise was partly wrong and is now corrected:** `smoke:share-link`
+  *did* already assert share round-trip fidelity (formula, `coreMath.paramA`,
+  `materials.roughness`). The real gap was that the sample was two feature slices,
+  neither of them droste or the colliding materials params. Save-side fidelity
+  *was* genuinely unasserted, and now is.
+- **`smoke:migrations` must not be cited for GMF format work.** It defaults to
+  fluid-toy.html; `utils/SceneFormat.ts` is in that graph but
+  `engine-gmt/utils/FormulaFormat.ts` is not, and its assertions are entirely about
+  fluid-toy feature-slice migrations.
+- **`smoke:gallery-link` needs `VITE_SUPABASE_*` in `.env.local`** or it dies
+  before reaching its mock. It is the only guard that loads a real on-disk `.gmf`
+  through `loadGMFScene`, so that is worth knowing.
+- **`GmtBucketHost`'s `uFullOutputResolution` invariant is looser than the code.**
+  It says the value is seeded once and only reset in `endRender`, but
+  `UniformManager.syncFrame` re-copies `uResolution → uFullOutputResolution`
+  whenever `uImageTileSize ≈ (1,1)` — which a single-tile bucket render *does* hit.
+  Value-identical there, so nothing is broken, but the invariant holds by
+  coincidence rather than by the gate.
+- **Possible DPR mis-scale in the mesh preview**, noticed but not chased:
+  `PreviewCanvas.tsx`'s `resetPan` calls `meshPreviewSetMesh(…, CANVAS_SIZE)` while
+  `meshPreviewRender` uses `cvs.width`.

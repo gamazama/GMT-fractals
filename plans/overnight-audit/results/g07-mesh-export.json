@@ -1,0 +1,64 @@
+{
+  "id": "g07-mesh-export",
+  "cycle": 8,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g07-mesh-export" },
+    { "script": "npm run test:mesh-grid", "pass": true, "subsystem": "g07-mesh-export", "error": "NEW guard, created by this cycle — the first automated check of any kind to reach mesh-export/" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "g07-mesh-export", "error": "knip exits 1 on the pre-existing debug/render-harness.ts; no mesh-export file is flagged" }
+  ],
+  "findings": [
+    {
+      "tier": "V",
+      "severity": "medium",
+      "file": "mesh-export/algorithms/vdb-writer.ts",
+      "line": 472,
+      "summary": "Every exported .vdb was translated half a voxel toward -X/-Y/-Z of where its data actually came from: the AffineMap translation row was bare boundsMin, but OpenVDB index space puts voxel (i,j,k)'s CENTRE at index-space point (i,j,k), while the value stored there was sampled at boundsMin + (i+0.5)*s. CONFIRMED and fixed.",
+      "change": "Translation row is now boundsMin + 0.5*s on all three axes, with an @invariant recording why. Also collapsed a byte-identical duplicate of the whole transform block inside serializeVDB into a call to _writeTransform — both copies were live, one per colour mode. Added debug/test-mesh-grid-convention.mts (npm run test:mesh-grid) pinning the convention.",
+      "verification": "Guard-first. The new guard was written BEFORE the fix and failed on both translation rows with the exact diagnosis; after the fix it passes and finds ONE row instead of two, which independently confirms the de-duplication. An independent verifier had already established the convention by tsx probe against the real imports: it derived the GPU sample position from the shader (uInvRes = 1/N, and the tile-offset/readback pairing makes gl_FragCoord + uTileOffset === i + 0.5 exactly, with Z via sampleOneZ((gz + 0.5)/N)), then printed an offset of exactly -0.5*s at every N and a GLB-vs-VDB disagreement of exactly 1.0 voxels at i=N-1. It also checked the container statically and found no other defect (magic, version 224, library 8.1, UUID, the 5-4-3 node indexing, grid descriptors and stream positions all correct). Verifier confidence high; it noted the density and Cd grids share the transform, so the file is internally consistent and will never look broken on its own — only against the GLB, or against the bounds the user typed. typecheck green.",
+      "guard": "npm run test:mesh-grid",
+      "guardPass": true,
+      "commit": "0a29e490"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/sibling-apps.md",
+      "line": 24,
+      "summary": "The sibling-apps rule listed six smoke scripts under one flat Guards heading covering all five apps, but none touch mesh-export (which has NO runtime guard at all) and gradient-explorer's three actual smokes were missing.",
+      "change": "Replaced the flat list with a per-app table, added smoke:liquify / smoke:gx-handles / smoke:gx-fractal-glitch, and stated explicitly that mesh-export/ is reached only by typecheck and orphans. Also flagged debug/dump-mesh-cp.mts as a decoy — it looks like a mesh-export guard but exercises engine-gmt/engine/SDFShaderBuilder.ts and is not wired to any npm script.",
+      "verification": "Enumerated every smoke's entry point: `grep -h 'ENGINE_URL ||' debug/smoke-*.mts | sort -u` yields exactly seven distinct URLs — /, /app-gmt.html, /demo.html, /fluid-toy.html, /fractal-toy.html, /gradient-explorer.html and a stale :5173/app-gmt.html — and mesh-export.html is not among them. `grep -rln 'mesh-export' debug/*.mts` returns only dump-mesh-cp.mts, and `grep -n 'dump-mesh' package.json` returns nothing. tsconfig include is **/*.ts(x) and knip.json has entry mesh-export/main.tsx, confirming the two static checks named. Seventh instance this run of a guard cited for something it cannot cover.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "ff659079"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "docs/modules/mesh-export/index.md",
+      "line": 34,
+      "summary": "The module overview described the pipeline as 'init -> sample SDF -> dual-contour -> post-process -> export', which omits two whole phases, invents an 'init' phase, and presents export as a pipeline phase.",
+      "change": "Replaced with the actual phase table from the pipeline's own [Phase n] labels (1 SDF sampling, 1b SDF filtering, 2 dual contouring, 3 Newton projection, 4 post-processing, 5 vertex colouring), noted that generate and export are two separate calls with the mesh held in the store between them, and recorded that VDB export bypasses the mesh entirely — it re-samples via generateVDB and therefore ignores smoothing, Newton and every other mesh-stage setting.",
+      "verification": "Phase labels grepped out of mesh-pipeline.ts (lines 210, 400, 483, 554, 588, 624); the two-call structure read off ExportPanel.tsx:99 and :128 with the result held as s.lastMesh; the VDB bypass read off the format === 'vdb' branch, which never reads lastMesh. typecheck does not parse markdown, so the falsifier is the grep set — each would contradict the new text if it were wrong.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "dff5c302"
+    },
+    {
+      "tier": "B",
+      "severity": "high",
+      "file": "mesh-export/gpu/gpu-pipeline.ts",
+      "line": 275,
+      "summary": "The GPU SDF sampler uses a single scalar uBoundsRange for all three axes while the bounds UI allows per-axis sizes, so any non-cubic export box silently produces anisotropically distorted geometry — and the GLB and VDB of the same scene disagree.",
+      "rationale": "See PROPOSALS.md. Independently corroborated by the verifier, which confirmed the scalar comes from X alone and that BaseVectorInput is linked-by-default but user-unlinkable. Mitigating: DEFAULT_BBOX_SIZE is [3,3,3] and autoFitBounds forces a cube, so the default and auto-fit paths never trip it."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "mesh-export/algorithms/dc-core.ts",
+      "line": 120,
+      "summary": "Dual contouring maps grid to world with g/(N-1) (corner-sampled) while the GPU samples at (i+0.5)/N (cell-centred), so every GLB/STL is uniformly oversized by exactly N/(N-1) about the grid centre — +1.6% at N=64, +0.20% at the default N=512. CONFIRMED but not applied: the fix changes visible geometry.",
+      "rationale": "See PROPOSALS.md. The new test:mesh-grid guard PINS the current wrong behaviour deliberately, with assertions written so that fixing dc-core fails loudly with instructions rather than silently changing exports."
+    }
+  ],
+  "notes": "GUARD COVERAGE was effectively NONE — that was the most reportable structural finding, and it is now partly closed. No debug/smoke-*.mts boots mesh-export.html; the only automated checks reaching this tree were static (typecheck via tsconfig's **/*.ts(x), and knip via the mesh-export/main.tsx entry). debug/dump-mesh-cp.mts is a decoy. Consequence: nothing exercised SDF sampling, dual contouring, post-processing or the GLB/STL/VDB writers, which is why the correctness findings arrived as Tier B/V rather than Tier A — no falsification probe was possible without writing a new harness. This cycle wrote that harness (npm run test:mesh-grid), which needs no browser and no GPU.\n\nVERIFIED CLEAN (so it is not re-audited): dual-contouring winding is consistent between the dense and sparse paths — same quad fan (0,1,3)+(0,3,2), same flip predicate on the edge's low corner, and EDGE_TABLE matches the stated bit0=x/bit1=y/bit2=z convention including the s[] build order. The dense edge-dedup key is algebraically identical to the intended form and does not overflow at N=2048. The GLB container is correct: magic/JSON/BIN chunk tags, 4-byte chunk alignment, buffer byteLength within 3 of the padded chunk, all offsets multiples of 4, colours consistently RGBA everywhere. Binary STL header is 80+4 with a correct triangle count. The VDB container is structurally sound apart from the transform. postProcessMesh really does guard smoothing at >5M vertices internally, so the pipeline's smoothingSkipped flag is not lying.\n\nA MITIGATION THE CLAIM MISSED, found by the verifier and worth knowing before prioritising the dc-core fix: Newton projection is ON by default (newton: true, 6 steps) and runs after DC, iterating against the ANALYTIC formulaDE with a displacement clamp of 2 voxels — four times the 0.5-voxel maximum DC error. So on the default path most vertices are re-projected onto the true isosurface and the mesh is geometrically right, with only tangential drift. The full +1.59%/+0.196% ships when Newton is toggled off, on the CPU/no-gl path, and for vertices where Newton bails early. The defect is real and the arithmetic exact, but the blast radius is smaller than first reported.\n\nNOT REACHED: mesh-export/algorithms/sdf-filter.ts (532 lines — cavity fill, min-feature clamp, morphological closing) got no review at all, and the morphological ops are the most likely home for further off-by-one/boundary bugs since the sparse variants must handle un-allocated neighbour blocks. gpu-pipeline.ts is 1729 lines and roughly 40% was read — the tiled dense sampler, coarsePrePass z-range skipping, sampleSparseGrid, sampleEscapeTest and the batched VDB colour pass were only skimmed. PreviewCanvas.tsx (895 lines) was not audited beyond its imports, though a possible DPR mis-scale was noticed (resetPan calls meshPreviewSetMesh with CANVAS_SIZE while meshPreviewRender uses cvs.width) and not chased. No exported file was opened in OpenVDB/Blender/C4D — the correctness findings are static derivations plus arithmetic probes. No .claude/rules/mesh-export.md was written; the coverage gap is recorded in the existing sibling-apps rule instead."
+}

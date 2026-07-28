@@ -1,0 +1,48 @@
+{
+  "id": "g06-bucket-render",
+  "cycle": 8,
+  "guards": [
+    { "script": "npm run typecheck", "pass": true, "subsystem": "g06-bucket-render" },
+    { "script": "npm run test:bucket-convergence", "pass": true, "subsystem": "g06-bucket-render" },
+    { "script": "npm run smoke:engine-gmt", "pass": true, "subsystem": "g06-bucket-render" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/engine/worker/WorkerDepthReadback.ts",
+      "line": 140,
+      "summary": "The async PBO depth readback picked its GL read type from the REQUESTED quality.bufferPrecision instead of the accumulation target's actual texture.type, which RenderPipeline.accumFormat() can and does resolve differently.",
+      "change": "_issueReadback now derives useHalfFloat from `rt.texture.type === HalfFloatType` (value-imported from three) rather than the bufferPrecision proxy. The @invariant above tick() was rewritten to state the actual determinant and warn against the proxy. Committed with two sibling findings — same file.",
+      "verification": "typecheck is a real guard here, proven by falsification: using `THREE.HalfFloatType` instead of the value import fails TS1361 at exactly this line (the file imports THREE type-only). Reverted with a targeted Edit and re-ran green. smoke:engine-gmt passes with 0 pageerrors and frames delivered, and handleRenderTick.ts:343 calls depthReadback.tick() every render tick, so the changed line executes in the booted worker. HONEST LIMIT: the mismatch only materialises where OES_texture_float_linear is absent while bufferPrecision asks for Float32, which headless d3d11 does not reproduce. The change is strictly non-regressive — where the two agree (all desktop paths including the smoke) the expression is identical, and where they disagree the new value is the one three.js itself uses for every other readback in this codebase. The sync fallback in the same class already derived it from target.texture.type and carried a comment saying why.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "ba0c91d1"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine-gmt/engine/worker/WorkerDepthReadback.ts",
+      "line": 79,
+      "summary": "_checkFence had no WAIT_FAILED branch, so a failed fence permanently latched _depthPBOPending = true, gating off all further depth readbacks for the session and freezing lastMeasuredDistance / centerIsSky, with the WebGLSync leaked.",
+      "change": "Added the WAIT_FAILED branch (deleteSync, clear _depthFence, clear _depthPBOPending, return) so the next tick issues a fresh readback. Mirrors the existing recovery in RenderPipeline.pollConvergenceResult.",
+      "verification": "Falsification: renaming the constant to gl.WAIT_FAILED_TYPO fails tsc with TS2551, proving typecheck gates the new branch's contact with the GL API rather than passing vacuously; reverted and re-ran green. The added branch is purely additive error recovery — clientWaitSync returns exactly one of ALREADY_SIGNALED / CONDITION_SATISFIED (existing branch), WAIT_FAILED (new), TIMEOUT_EXPIRED (unchanged early return), so the happy path is provably untouched. Not provable by any guard here: reproducing a real WAIT_FAILED needs GPU context loss.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "ba0c91d1"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "engine-gmt/engine/worker/WorkerDepthReadback.ts",
+      "line": 202,
+      "summary": "The focus-pick @invariant claimed the state machine 'has THREE phases', but FocusPickState is a two-member union (pending | ready) — there is no third state to grep for.",
+      "change": "Rewrote to say exactly TWO states, naming the union members and identifying the snapshot as the pending -> ready transition rather than a state. Also recorded that a sampleFocusPick arriving while pending answers -1 immediately rather than queueing.",
+      "verification": "Proved from source: the FocusPickState type has exactly two members, and grep for 'phase' over the file returns only 'pending' and 'ready'. Comment-only; typecheck is what catches a malformed JSDoc block breaking the following declaration.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "ba0c91d1"
+    }
+  ],
+  "notes": "TWELVE @invariant VERDICTS — the cycle-6 handoff target, all now settled.\n\nWorkerExporter.ts (5) — ALL FIVE CONFIRMED CORRECT: the samples>=1 / clears-accum / bloom-on-beauty-only claim (with N=0 lastWrite resolves to a cleared black buffer, so the requirement is real); the in-place Y-flip with halfH = floor(h/2) (odd-height middle row is its own mirror); uOutputPass reset to 0 before the preview blit; per-track first-chunk PTS normalisation (firstChunkOffsetMicros and audioFirstChunkOffsetMicros are independent fields, video duration hardcoded 1/fps while audio uses chunk.duration, exactly as claimed); and one-shot idempotent teardown (this.session = null precedes the rest, so re-entry early-returns; both cancel() and finish() are safe). Sole imprecision left alone: the code clears accumA AND accumB, prose names only accumA.\n\nWorkerDepthReadback.ts (4) — two confirmed, two wrong (both fixed above): reads getPreviousRenderTarget() CONFIRMED; PBO size/format — the 8/16-byte NUMBERS right but the SELECTOR wrong; depth-from-alpha with the tick path not gating on uOutputPass CONFIRMED (no uOutputPass reference exists in the file, and the export path does gate); 'THREE phases' FALSE.\n\nWorkerHistogram.ts (3) — ALL THREE CONFIRMED: the colour path posts Float32Array(0) on a null output texture (WorkerProxy has the receiving case, though the trace to the UI consumer was only partial); per-call mesh.material swap; geometry path zeroes uCameraPosition after virtualSpace.updateShaderUniforms.\n\nBONUS — the 7 annotations in GmtBucketHost.ts / BucketRenderer.ts that cycle 6 also listed as unreached, ALL CONFIRMED: aspect override plus the syncFrame gate, RegionMin/Max plus pipeline scissor, bloom branching and uEncodeOutput (note the export material already defaults to 1.0, so this is a defensive re-assert rather than state another path must undo), the flush() (present, though the 'removing it leaves the canvas blank' claim is historical and was NOT falsified — it needs a GPU visual test), endRender's scissor/region/savedPixelSizeBase reset, and BucketRenderer ignoring _gl.\n\nONE CAVEAT for the owner, not a finding: GmtBucketHost's 'uFullOutputResolution seeded ONCE, only reset in endRender' is looser than the code — UniformManager.syncFrame re-copies uResolution -> uFullOutputResolution whenever uImageTileSize is approximately (1,1), which a SINGLE-tile bucket render does hit because beginImageTile sets the tile size to exactly (1,1). It is value-identical there so nothing is broken today, but the invariant's 'held constant' is guaranteed by coincidence rather than by the gate.\n\nALSO VERIFIED: BucketRunner's off-by-one comment holds (engine.update() precedes engine.compute() in handleRenderTick). ADR-0067's fixed-spp / no-early-out is correctly reflected — no convergence language reintroduced. Adjacent to cycle 6's export-hang fix: a dropped or superseded focus-pick does NOT hang the main thread, because WorkerProxy uses a request-with-timeout helper (fallback -1 at 5000ms/2000ms).\n\nNOT REACHED: WorkerExporter's writeFrameFiles / JPG-per-pass / directory-handle I/O chain and the audio encode pump beyond the PTS invariant; handleRenderTick's present-path and pacing logic apart from the bucket branches; the UI layer above the runner (GmtBucketController, installBucketRender, BucketRenderPanel, BucketRenderResultModal); fluid-toy's FluidBucketController; the 4K+ export roadmap gap."
+}
