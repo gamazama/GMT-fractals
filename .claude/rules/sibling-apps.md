@@ -18,7 +18,7 @@ too GMT-specific.
 | `fluid-toy/` | [`fluid-toy/README.md`](../../fluid-toy/README.md) + [`docs/modules/fluid-toy/index.md`](../../docs/modules/fluid-toy/index.md) |
 | `fractal-toy/` | [`docs/modules/fractal-toy/index.md`](../../docs/modules/fractal-toy/index.md) |
 | `mesh-export/` | [`docs/modules/mesh-export/index.md`](../../docs/modules/mesh-export/index.md) |
-| `gradient-explorer/` | [`docs/modules/gradient-explorer/index.md`](../../docs/modules/gradient-explorer/index.md) |
+| `gradient-explorer/` | [`docs/modules/gradient-explorer/app.md`](../../docs/modules/gradient-explorer/app.md) |
 | `demo/` | [`demo/README.md`](../../demo/README.md) — minimal three-file add-on contract |
 
 ## Guards
