@@ -10,6 +10,7 @@
  */
 
 import type * as THREE from 'three';
+import { HalfFloatType } from 'three';
 import type { FractalEngine } from '../FractalEngine';
 import type { WorkerToMainMessage } from './WorkerProtocol';
 
@@ -41,9 +42,13 @@ export class WorkerDepthReadback {
      * @invariant Async readback reads from `pipeline.getPreviousRenderTarget()`,
      *   NOT the current one — reading the in-flight render target would
      *   race the active render.
-     * @invariant PBO size depends on float format — 8 bytes for half-
-     *   float (RGBA + HALF_FLOAT), 16 bytes for float (RGBA + FLOAT).
-     *   Mismatched sizes silently corrupt the readback.
+     * @invariant PBO size and read type follow the render target's ACTUAL
+     *   `texture.type` — 8 bytes for half-float (RGBA + HALF_FLOAT), 16
+     *   bytes for float (RGBA + FLOAT). Do NOT derive them from
+     *   `quality.bufferPrecision`: `RenderPipeline.accumFormat()` picks
+     *   HalfFloatType whenever full float isn't linearly filterable, so the
+     *   requested precision and the allocated type can disagree. Mismatched
+     *   sizes/types silently corrupt the readback.
      * @invariant Depth is read from the alpha channel of the
      *   accumulation RT. Anything else in alpha (e.g. coverage during
      *   alpha-pass export) would clobber `engine.lastMeasuredDistance`.
@@ -70,6 +75,21 @@ export class WorkerDepthReadback {
 
         const gl = this._depthGL;
         const status = gl.clientWaitSync(this._depthFence, 0, 0); // non-blocking
+
+        if (status === gl.WAIT_FAILED) {
+            // Fence failed (e.g. context loss) — drop it and let the next tick
+            // issue a fresh readback. Without this the `_depthPBOPending` latch
+            // never clears, `_issueReadback` is gated off forever, and
+            // `lastMeasuredDistance` / `centerIsSky` freeze at their last values
+            // for the rest of the session. Mirrors the WAIT_FAILED branch in
+            // `RenderPipeline.pollConvergenceResult`.
+            gl.deleteSync(this._depthFence);
+            this._depthFence = null;
+            this._depthPBOPending = false;
+            return;
+        }
+
+        // TIMEOUT_EXPIRED — GPU not done yet, try again next tick.
         if (status !== gl.ALREADY_SIGNALED && status !== gl.CONDITION_SATISFIED) return;
 
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this._depthPBO);
@@ -110,7 +130,14 @@ export class WorkerDepthReadback {
         const gl2 = renderer.getContext() as WebGL2RenderingContext;
         if (gl2.fenceSync) {
             this._depthGL = gl2;
-            const useHalfFloat = (engine as any).pipeline?._qualityState?.bufferPrecision > 0.5;
+            // The read format follows the target's ACTUAL texture type, never the
+            // REQUESTED `quality.bufferPrecision`: `RenderPipeline.accumFormat()`
+            // falls back to HalfFloatType whenever full float isn't linearly
+            // filterable, so a device can hold a HALF_FLOAT accumulation RT while
+            // `bufferPrecision` says Float32. The sync fallback below (and every
+            // other readback in the app, via three.js `readRenderTargetPixels`)
+            // already derives it this way — see `RenderPipeline.readPixels`.
+            const useHalfFloat = rt.texture.type === HalfFloatType;
             this._depthPBOHalfFloat = useHalfFloat;
 
             if (!this._depthPBO) {
@@ -172,11 +199,15 @@ export class WorkerDepthReadback {
     }
 
     /**
-     * @invariant Focus-pick state machine has THREE phases: `pending`
-     *   (set here) → on the next tick the entire depth buffer is
-     *   snapshotted, the clicked pixel is read, `FOCUS_RESULT` is
+     * @invariant Focus-pick state machine has exactly TWO states —
+     *   `FocusPickState` is `pending | ready`; there is no `snapshot`
+     *   state, the snapshot is the `pending → ready` transition.
+     *   `pending` (set here) → on the next tick the entire depth buffer
+     *   is snapshotted, the clicked pixel is read, `FOCUS_RESULT` is
      *   posted, state → `ready` → subsequent `sampleFocusPick` calls
      *   read from the cached snapshot until `endFocusPick` clears it.
+     *   A `sampleFocusPick` that arrives while still `pending` does NOT
+     *   queue — it answers -1 immediately.
      */
     startFocusPick(id: string, x: number, y: number): void {
         this._focusPickState = { phase: 'pending', id, x, y };
