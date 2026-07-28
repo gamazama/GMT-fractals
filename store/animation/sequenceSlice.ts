@@ -27,6 +27,7 @@ const captureInverse = (state: AnimationStore, item: HistoryItem): HistoryItem =
                 fps: state.fps,
                 durationFrames: state.durationFrames,
                 currentFrame: state.currentFrame,
+                audioClips: state.audioClips.map(c => c ? { ...c } : null),
             },
         };
     }
@@ -40,6 +41,10 @@ const applyHistory = (set: (partial: Partial<AnimationStore>) => void, item: His
             fps: item.data.fps,
             durationFrames: item.data.durationFrames,
             currentFrame: item.data.currentFrame,
+            // Entries pushed before audioClips joined the FPS snapshot have
+            // no `audioClips` key — leave the live clips alone rather than
+            // blanking the decks.
+            ...(item.data.audioClips ? { audioClips: item.data.audioClips } : {}),
         });
     } else {
         set({ sequence: item.data });

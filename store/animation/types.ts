@@ -12,7 +12,11 @@ export interface CopiedKeyframe {
 
 export type HistoryItem =
     | { type: 'SEQUENCE', data: AnimationSequence }
-    | { type: 'FPS', data: { sequence: AnimationSequence; fps: number; durationFrames: number; currentFrame: number } };
+    // `audioClips` rides along because `setFps('match')` remaps
+    // `AudioClip.startFrame` by the same `r = newFps/oldFps` it applies to
+    // keyframes. Without it, undo restores the keys and leaves the clip at
+    // the remapped frame — the `(r-1)*startFrame` drift, via the undo path.
+    | { type: 'FPS', data: { sequence: AnimationSequence; fps: number; durationFrames: number; currentFrame: number; audioClips: (AudioClip | null)[] } };
 
 export type FpsChangeMode = 'keep' | 'match';
 

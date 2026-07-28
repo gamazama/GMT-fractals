@@ -101,6 +101,10 @@ export const createPlaybackSlice: StateCreator<AnimationStore, [["zustand/subscr
                     fps: state.fps,
                     durationFrames: state.durationFrames,
                     currentFrame: state.currentFrame,
+                    // 'match' rescales AudioClip.startFrame below, so the
+                    // entry has to carry the pre-change clips or undo would
+                    // put the keys back and leave the audio remapped.
+                    audioClips: state.audioClips.map(c => c ? { ...c } : null),
                 },
             };
             const newUndo = [...state.undoStack, undoItem];

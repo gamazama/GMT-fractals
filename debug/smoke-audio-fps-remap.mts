@@ -67,6 +67,38 @@ async function main() {
     if (after.keyFrame !== 60)             failures.push(`keyframe expected 60, got ${after.keyFrame}`);
     if (after.audioStartFrame !== 60)      failures.push(`audio startFrame expected 60, got ${after.audioStartFrame} — regression of 22_AUDIO_TIMELINE_SYNC_REPORT.md`);
 
+    // Undo of a 'match' fps change must restore the audio clip too. The FPS
+    // history entry remaps keyframes AND audioClips, so it has to snapshot
+    // both — otherwise undo puts the keys back at frame 120 while the clip
+    // stays at 60, which is exactly the `(r-1)*startFrame` drift this smoke
+    // exists to catch, reintroduced via the undo path.
+    const undone = await page.evaluate(() => {
+        (window as any).useAnimationStore.getState().undo();
+        const s = (window as any).useAnimationStore.getState();
+        return {
+            fps: s.fps,
+            keyFrame: s.sequence.tracks['julia.power'].keyframes[0].frame,
+            audioStartFrame: s.audioClips[0]?.startFrame ?? null,
+        };
+    });
+    if (undone.fps !== 60)             failures.push(`undo fps expected 60, got ${undone.fps}`);
+    if (undone.keyFrame !== 120)       failures.push(`undo keyframe expected 120, got ${undone.keyFrame}`);
+    if (undone.audioStartFrame !== 120) failures.push(`undo audio startFrame expected 120, got ${undone.audioStartFrame} — FPS history entry does not snapshot audioClips`);
+
+    // Redo must re-apply the remap to both.
+    const redone = await page.evaluate(() => {
+        (window as any).useAnimationStore.getState().redo();
+        const s = (window as any).useAnimationStore.getState();
+        return {
+            fps: s.fps,
+            keyFrame: s.sequence.tracks['julia.power'].keyframes[0].frame,
+            audioStartFrame: s.audioClips[0]?.startFrame ?? null,
+        };
+    });
+    if (redone.fps !== 30)             failures.push(`redo fps expected 30, got ${redone.fps}`);
+    if (redone.keyFrame !== 60)        failures.push(`redo keyframe expected 60, got ${redone.keyFrame}`);
+    if (redone.audioStartFrame !== 60) failures.push(`redo audio startFrame expected 60, got ${redone.audioStartFrame}`);
+
     // Round-trip: setFps(60, 'match') must restore the original wall-clock placement.
     const restored = await page.evaluate(() => {
         (window as any).useAnimationStore.getState().setFps(60, 'match');
