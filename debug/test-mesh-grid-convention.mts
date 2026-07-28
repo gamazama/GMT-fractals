@@ -56,27 +56,33 @@ for (const N of [8, 64, 512]) {
     else fail(`N=${N}: gridToWorld/worldToGrid are not inverses (worst ${worst})`);
 }
 
-console.log('\n[mesh-grid] 3. KNOWN DIVERGENCE — dual contouring is corner-sampled, not cell-centred');
-console.log('    dc-core uses g/(N-1); the sampler uses (g+0.5)/N. The result is a uniform');
-console.log('    scale of N/(N-1) about the grid centre, i.e. the mesh is slightly oversized.');
-console.log('    These assertions PIN the current wrong behaviour. When dc-core is fixed to');
-console.log('    `min + (g + 0.5) * range / N`, they will fail — that is the signal to flip');
-console.log('    them to `near(dc, gpu)`. Do not "fix" this file to make them pass.');
+console.log('\n[mesh-grid] 3. Dual contouring must agree with the sampler, sample for sample');
+console.log('    Until 2026-07-28 dc-core used the corner-sampled g/(N-1) while the sampler');
+console.log('    used (g+0.5)/N — a uniform N/(N-1) scale about the grid centre, so every');
+console.log('    exported mesh was oversized (~1.6% at N=64). These assertions previously');
+console.log('    PINNED that divergence; they now require agreement, in both directions.');
 for (const N of [8, 64, 512]) {
+    // Every sample index must land exactly where the GPU read it, not just the ends.
+    let worst = 0, worstAt = -1;
+    for (const i of [0, 1, 2, N >> 1, N - 2, N - 1]) {
+        const d = Math.abs(gridToWorld(i, N, MIN, MAX) - gpuSample(i, N, MIN, RANGE));
+        if (d > worst) { worst = d; worstAt = i; }
+    }
+    if (worst < 1e-9) ok(`N=${N}: dc-core matches the sampler at every probed index (worst ${worst.toExponential(1)})`);
+    else fail(`N=${N}: dc-core diverges from the sampler by ${worst} at index ${worstAt} — the two MUST use the same convention`);
+
+    // Guard the specific regression: reverting to g/(N-1) would put sample 0 exactly
+    // on MIN and sample N-1 exactly on MAX. Cell-centred keeps half a voxel at each end.
+    const s = RANGE / N;
     const dc0 = gridToWorld(0, N, MIN, MAX);
     const dcLast = gridToWorld(N - 1, N, MIN, MAX);
-    const s = RANGE / N;
-    // Corner-sampled: spans the full box exactly, so it is half a voxel wide at each end.
-    if (near(dc0, MIN) && near(dcLast, MAX)) {
-        ok(`N=${N}: dc-core still spans [min, max] (off by ±s/2 = ±${(s / 2).toExponential(2)} vs the sampler)`);
+    if (near(dc0, MIN + 0.5 * s) && near(dcLast, MAX - 0.5 * s)) {
+        ok(`N=${N}: inset by half a voxel at both ends (±${(s / 2).toExponential(2)}), as cell-centring requires`);
+    } else if (near(dc0, MIN) && near(dcLast, MAX)) {
+        fail(`N=${N}: dc-core is corner-sampled again (spans [min,max]) — the N/(N-1) oversize bug is back`);
     } else {
-        fail(`N=${N}: dc-core convention CHANGED — if this was the cell-centre fix, flip assertions 3-4 to near(dc, gpu)`);
+        fail(`N=${N}: dc-core end samples are at neither convention (${dc0}, ${dcLast})`);
     }
-    // The divergence is a pure uniform scale about the centre.
-    const centre = (MIN + MAX) / 2;
-    const scale = (dcLast - centre) / (gpuSample(N - 1, N, MIN, RANGE) - centre);
-    if (near(scale, N / (N - 1), 1e-9)) ok(`N=${N}: divergence is exactly a ${(N / (N - 1)).toFixed(6)}x scale about the grid centre`);
-    else fail(`N=${N}: divergence is no longer a clean N/(N-1) scale (got ${scale})`);
 }
 
 console.log('\n[mesh-grid] 4. VDB AffineMap translation must announce the cell centre');

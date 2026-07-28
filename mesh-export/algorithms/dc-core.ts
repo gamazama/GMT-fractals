@@ -116,14 +116,30 @@ export function sdfGradient(grid: Float32Array, N: number, fx: number, fy: numbe
   return [gx * inv, gy * inv, gz * inv];
 }
 
-/** Convert a grid-space coordinate (fractional) to world-space. */
+/**
+ * Convert a grid-space coordinate (fractional) to world-space.
+ *
+ * @invariant CELL-CENTRED: sample `i` lives at `min + (i + 0.5) * range / N`.
+ *   This is not a style choice — it is where the GPU sampler actually reads.
+ *   `gpu-pipeline.ts` evaluates the SDF at
+ *   `(gl_FragCoord.xy + uTileOffset) * uInvRes * range + min`, and because
+ *   `gl_FragCoord` is pixel-CENTRE based, `gl_FragCoord + uTileOffset === i + 0.5`
+ *   exactly; Z matches via `sampleOneZ((gz + 0.5) / N, …)`.
+ *   — proven by: npm run test:mesh-grid, which fails if this drifts from the
+ *   sampler in either direction.
+ *
+ *   Until 2026-07-28 this used the corner-sampled `gx / (N - 1)`, which
+ *   disagreed with the sampler by a uniform scale of N/(N-1) about the grid
+ *   centre — every exported GLB/STL was oversized by that factor (~1.6% at
+ *   N=64, ~0.4% at N=256, and worse the coarser the grid).
+ */
 export function gridToWorld(gx: number, N: number, gridMin: number, gridMax: number): number {
-  return gridMin + (gx / (N - 1)) * (gridMax - gridMin);
+  return gridMin + ((gx + 0.5) / N) * (gridMax - gridMin);
 }
 
-/** Convert a world-space coordinate to fractional grid-space. */
+/** Convert a world-space coordinate to fractional grid-space. Exact inverse of `gridToWorld`. */
 export function worldToGrid(wx: number, N: number, gridMin: number, gridMax: number): number {
-  return ((wx - gridMin) / (gridMax - gridMin)) * (N - 1);
+  return ((wx - gridMin) / (gridMax - gridMin)) * N - 0.5;
 }
 
 // ============================================================================
