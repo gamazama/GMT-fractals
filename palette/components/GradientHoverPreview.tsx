@@ -1,12 +1,16 @@
 /**
- * GradientHoverPreview — the shared "hover a swatch → grow it + show its name" overlay,
- * used by both the Picker wall and the Favients shelf. A zoomed copy of the gradient
- * plus a name/details tooltip, positioned at screen coords.
+ * GradientHoverPreview — the shared "hover a thumbnail → grow it + show its name" overlay.
+ * A zoomed copy plus a name/details tooltip, positioned at screen coords.
  *
- * Portaled to <body> with a high z so it escapes the clipping + transform of a floating
- * DraggableWindow (the Favients panel) — a plain fixed child would be clipped to the
- * panel. The caller supplies a `paint` callback so the source can be anything (a sprite
- * row for the Picker, a config ramp for Favients).
+ * THREE consumers, not two — grep `GradientHoverPreview`: PickerWall, FavientsPanel and
+ * EasingPicker. Portaled to <body> with a high z so it escapes the clipping + transform
+ * of a floating DraggableWindow (the Favients panel) — a plain fixed child would be
+ * clipped to the panel.
+ *
+ * The caller supplies a `paint` callback, so the source need not be a gradient at all:
+ * a sprite row for the Picker, a config ramp for Favients, and an easing CURVE for
+ * EasingPicker (via `drawEasingCurve` in easingThumb.ts). Keep new callers on the paint
+ * seam rather than widening this component — that third case is what proves it general.
  */
 
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
