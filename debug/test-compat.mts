@@ -21,6 +21,28 @@
  * coverage requires the full harness port (test:baseline / test:hybrid /
  * test:interlace) which is queued as separate work.
  *
+ * READ BEFORE TRUSTING A GREEN RUN — the two halves have very different
+ * reach, and the snapshot half is much thinner than "55 formulas" suggests.
+ * The structural half really does cover all 55. The snapshot half's entire
+ * input surface is ONE `requires:` declaration: grep `rejects: { primary:`
+ * in engine-gmt/panels.ts. No feature declares a feature-level `requires`
+ * anywhere in the tree, which is why every line in compat-snapshot.jsonl
+ * carries a `sectionKey` and why there are only two of them. So
+ * evaluateCompat's `requires.primary` / `.secondary` / `.pair` /
+ * `rejects.secondary` branches are never exercised here, and nor is any
+ * secondary-formula path (this harness passes no secondary at all).
+ * A capability-protocol regression confined to those branches passes green.
+ *
+ * What it DOES catch, falsified 2026-07-29, each break reverted:
+ *   - a second shape:* token on a formula → exit 1, "Mandelbulb:
+ *     [shape-token-count] expected exactly 1 shape:* token, got 2";
+ *   - editing that one panels.ts `requires` → exit 1, "snapshot DRIFT
+ *     detected" with the changed row diffed;
+ *   - flipping a formula's shape token → exit 1, same drift report.
+ * Note the `!caps` structural branch is unreachable in practice —
+ * FractalRegistry throws at register() when capabilities are missing, so
+ * a formula without them never reaches this harness.
+ *
  * @see plans/capability-protocol.md (Phase 0)
  * @see docs/history/gmt/35_Capability_Protocol.md
  */
