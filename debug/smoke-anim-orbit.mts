@@ -89,6 +89,65 @@ async function main() {
         throw new Error(`liveMod looks like bare offset (juliaC_x=${running.liveMod_juliaC_x}) when base was ${baseline.juliaC_x}; the relative-add vec path may be broken`);
     }
 
+    // ── Is it actually ORBITING? ──────────────────────────────────────────────
+    // Everything above is one-sided: an offset of exactly ZERO is trivially
+    // within the radius, and the relative-add check only fires when the live
+    // value lands near 0. The guard sweep on 2026-07-29 replaced the Sine case
+    // in ModulationEngine with `rawWave = 0` — a completely frozen LFO — and
+    // this smoke printed "✓ two-LFO orbit writes liveModulations (relative add)"
+    // and exited 0, with live juliaC identical to base to every decimal.
+    //
+    // The two LFOs are a QUADRATURE PAIR: same amplitude and period, phases 0
+    // and 0.25. So dx = R·sin(θ) and dy = R·sin(θ + π/2) = R·cos(θ), and
+    // hypot(dx, dy) = R for EVERY θ — a sample-time-independent invariant, which
+    // is what makes it assertable in a smoke with nondeterministic timing.
+    // Measured 0.2000 and 0.19999 on two unmodified runs against RADIUS = 0.2.
+    //
+    // Several samples, not one: with a single sample a dead Y axis still reads
+    // hypot = R whenever |sin θ| = 1, and a stalled clock reads hypot = R
+    // forever at whatever θ it froze on. SAMPLES points spread over more than
+    // one LFO period pin both axes AND prove the phase is advancing (the max
+    // pairwise separation approaches the diameter once the point has gone round).
+    //
+    // MIN_ORBIT_SPREAD is deliberately far below what a healthy run produces.
+    // Two samples 170ms apart were tried first and rejected: measured 0.3792,
+    // 0.0777, 0.3639, 0.3583 over four clean runs — the headless tick clock is
+    // jittery enough that one pair advanced only ~22° instead of ~122°, leaving
+    // 1.5x of margin. The 6-sample spread below measured 0.3826-0.4000 over five
+    // clean runs, i.e. essentially the full diameter every time.
+    const ORBIT_RADIUS_TOL = 0.02;   // 10% of RADIUS
+    const SAMPLES = 6;
+    const SAMPLE_GAP_MS = 120;       // 6 x 120ms = 720ms > the 0.5s LFO period
+    const MIN_ORBIT_SPREAD = 0.08;   // 0.4 diameter measured; ~5x margin
+    const sampleOffset = () => page.evaluate((b) => {
+        const s = (window as any).__store.getState();
+        return {
+            dx: (s.liveModulations?.['julia.juliaC_x'] ?? NaN) - b.x,
+            dy: (s.liveModulations?.['julia.juliaC_y'] ?? NaN) - b.y,
+        };
+    }, { x: baseline.juliaC_x, y: baseline.juliaC_y });
+
+    const samples: { dx: number; dy: number }[] = [];
+    for (let i = 0; i < SAMPLES; i++) {
+        if (i > 0) await page.waitForTimeout(SAMPLE_GAP_MS);
+        samples.push(await sampleOffset());
+    }
+    const radii = samples.map(s => Math.hypot(s.dx, s.dy));
+    let spread = 0;
+    for (let i = 0; i < samples.length; i++)
+        for (let j = i + 1; j < samples.length; j++)
+            spread = Math.max(spread, Math.hypot(samples[j].dx - samples[i].dx, samples[j].dy - samples[i].dy));
+    console.log(`orbit:    radii=[${radii.map(r => r.toFixed(4)).join(', ')}] (expect ${RADIUS}) spread=${spread.toFixed(4)}`);
+
+    radii.forEach((r, i) => {
+        if (!(Math.abs(r - RADIUS) <= ORBIT_RADIUS_TOL)) {
+            throw new Error(`sample ${i}: orbit offset magnitude ${r.toFixed(4)} is not the LFO amplitude ${RADIUS} (±${ORBIT_RADIUS_TOL}) — the quadrature pair is not driving both juliaC axes (a frozen LFO reads 0; one dead axis reads below R)`);
+        }
+    });
+    if (spread < MIN_ORBIT_SPREAD) {
+        throw new Error(`orbit never moved across ${SAMPLES} samples over ${(SAMPLES - 1) * SAMPLE_GAP_MS}ms (max separation ${spread.toFixed(4)}, need >${MIN_ORBIT_SPREAD}) — the offsets are pinned, so the LFO phase is not advancing`);
+    }
+
     if (errors.length > 0) {
         throw new Error('page errors during smoke:\n  ' + errors.join('\n  '));
     }
