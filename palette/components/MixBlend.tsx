@@ -10,6 +10,13 @@
  * Shift-fast/Alt-slow feel and 0..1 SOFT bounds (drag/type PAST to extrapolate beyond A
  * or B, no hard clamp). The thumb is a visual signifier; the DraggableNumber beneath it
  * captures the drag.
+ *
+ * It is not only the sliders: this component also renders the A/B end markers and the
+ * stage's ⇅ Swap button (required `onSwap`) plus an optional ↺ Reset — so "swap the two
+ * sources" lives here, not in GeneratorStage, which only supplies the handlers. And
+ * `dimmed` locks the WHOLE block (opacity + pointer-events:none + aria-disabled), Swap
+ * included; GeneratorStage passes `dimmed={curvesOn}`, i.e. turning the channel curves on
+ * disables swapping, which is what the "sources are locked" banner above it is telling you.
  */
 
 import React from 'react';
