@@ -15,6 +15,42 @@
  * snapshot — no analysis in between.
  *
  *   tsx debug/test-filterbank.mts
+ *
+ * BLIND SPOTS CLOSED (2026-07-29 guard sweep). Three, all found by breaking the
+ * source and watching this file stay green at exit 0:
+ *
+ *  - FLAT FIXTURES CANNOT TELL AN RMS FROM A MEAN. Block [2] filled every band
+ *    with the same number, and for a constant array the RMS, the mean and the
+ *    max are all the same value — so `aggregate` returning a plain mean passed
+ *    all 18 assertions. The block's own title says "aggregate is RMS over the
+ *    range, flux is the mean" and it could not distinguish the two. It now also
+ *    runs an alternating 0.2 / 0.8 pattern (rms 0.570714 vs mean 0.485714 over
+ *    the 21 bands of 100-1000Hz) and an alternating 3 / 21 flux pattern (mean
+ *    11.571429 vs max 21 vs sum 243), with an explicit assertion that the
+ *    fixture is non-uniform enough for the two statistics to differ — so the
+ *    tautology cannot come back silently.
+ *
+ *  - `matches()` DID NOT COVER `bandsPerOctave`. Block [9] varied fftSize and
+ *    sampleRate only, so deleting the bandsPerOctave comparison passed. That is
+ *    the one of the three a user changes at runtime, and `matches()` is what
+ *    gates the rebuild in `WorkletAnalysis` (grep `filterBank.matches`) — a
+ *    false match there leaves the band table stale after a resolution change.
+ *
+ *  - THE REBUILD RESET WAS PROVED BY THE ARRAY LENGTH, NOT BY THE RESET. Block
+ *    [8] rebuilds at a different bandsPerOctave, so `peaks` is reallocated
+ *    merely because its length changed; a rebuild that preserved same-length
+ *    follower state passed. A same-settings rebuild is now asserted separately
+ *    (56 bands before and after; normalized reads 1.0 for reset, 0.33 if the
+ *    peak were carried).
+ *
+ * MARGINS, measured: [4] runs at 1.0000 against >0.9 (the ceiling, which is the
+ * point); [5] at 0.3333 against <0.4, and 0.3333 is exactly 0.05/MIN_PEAK, so
+ * that assertion is pinned to the constant rather than to a fudge; [6] at 0.5146
+ * against <0.75, where removing the silence gate reads 1.000; [7] moves 0.5146
+ * -> 1.0000.
+ *
+ * Vanishing-input check: the corpus is inline; the one external input is
+ * `filterBank.ts`, whose loss fails at ESM link time before any assertion runs.
  */
 
 import { FilterBank } from '../engine/features/audioMod/filterBank';
@@ -68,6 +104,35 @@ console.log('\n[2] aggregate is RMS over the range, flux is the mean');
     b.aggregateFlux(lo, hi));
   assert(b.aggregate(5, 5) === 0 && b.aggregateFlux(5, 5) === 0,
     'an empty range is 0, not NaN');
+
+  // NON-UNIFORM. Everything above this line is flat, and for a constant array
+  // the RMS, the mean and the max are the same number — see the header. The
+  // alternating pattern is what makes the next two assertions arithmetic.
+  b.levels.fill(0);
+  for (let i = lo; i < hi; i++) b.levels[i] = (i - lo) % 2 === 0 ? 0.2 : 0.8;
+  runFollower(b, false);
+
+  const count = hi - lo;
+  const nLow = Math.ceil(count / 2);          // even offsets carry 0.2
+  const nHigh = count - nLow;
+  const rms = Math.sqrt((nLow * 0.2 * 0.2 + nHigh * 0.8 * 0.8) / count);
+  const mean = (nLow * 0.2 + nHigh * 0.8) / count;
+
+  // Guard the guard: if the fixture ever degenerates back to flat, this fails
+  // first and says why, instead of the next assertion quietly becoming a
+  // tautology again.
+  assert(Math.abs(rms - mean) > 0.05,
+    'the fixture is non-uniform enough for RMS and mean to differ',
+    { rms: rms.toFixed(6), mean: mean.toFixed(6), bands: count });
+  assert(near(b.aggregate(lo, hi), rms, 1e-6),
+    'aggregate is the RMS of the range, not its mean',
+    { got: b.aggregate(lo, hi).toFixed(6), rms: rms.toFixed(6), mean: mean.toFixed(6) });
+
+  for (let i = lo; i < hi; i++) b.fluxRate[i] = (i - lo) % 2 === 0 ? 3 : 21;
+  const fluxMean = (nLow * 3 + nHigh * 21) / count;
+  assert(near(b.aggregateFlux(lo, hi), fluxMean, 1e-6),
+    'aggregateFlux is the mean of the range — not its max (21) and not its sum',
+    { got: b.aggregateFlux(lo, hi).toFixed(6), mean: fluxMean.toFixed(6) });
 }
 
 // ── Per-band adaptive gain ──────────────────────────────────────────────────
@@ -158,6 +223,23 @@ console.log('\n[8] a rebuild drops stale per-band state');
   assert(b.normalized[mid] > 0.9,
     'band k means a different frequency at a new width, so peaks reset',
     b.normalized[mid]);
+
+  // Same settings, so the band count is UNCHANGED (56 -> 56). Asserted
+  // separately because the case above only proves the array was reallocated
+  // when its length changed — a rebuild that preserved same-length follower
+  // state passed it. 1.0 here means the peak was reset; 0.33 would mean carried.
+  const c = mk(4096, 6);
+  setLevels(c, 0.9);
+  for (let i = 0; i < 10; i++) runFollower(c, true);
+  const sameN = c.bands.length;
+  c.rebuild({ sampleRate: SR, fftSize: 4096, bandsPerOctave: 6 });
+  assert(c.bands.length === sameN, 'a same-settings rebuild keeps the band count', { sameN, after: c.bands.length });
+  setLevels(c, 0.30);
+  runFollower(c, true);
+  const cmid = c.bands.findIndex(x => x.centerHz > 1000);
+  assert(c.normalized[cmid] > 0.9,
+    'and a same-SIZE rebuild resets the follower too, not only one that changes the band count',
+    c.normalized[cmid]);
 }
 
 console.log('\n[9] matches() gates rebuilds');
@@ -169,6 +251,10 @@ console.log('\n[9] matches() gates rebuilds');
     'a changed fftSize does not');
   assert(!b.matches({ sampleRate: 44100, fftSize: 4096, bandsPerOctave: 6 }),
     'nor a changed sample rate');
+  // The third setting, and the only one a user changes at runtime. Untested
+  // until 2026-07-29: deleting its comparison from matches() passed this block.
+  assert(!b.matches({ sampleRate: SR, fftSize: 4096, bandsPerOctave: 12 }),
+    'nor a changed bandsPerOctave — a false match here leaves the band table stale');
 }
 
 console.log(`\n${failures === 0 ? '✓ all assertions passed' : `✗ ${failures} assertion(s) failed`}`);
