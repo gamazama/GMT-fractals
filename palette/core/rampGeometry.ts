@@ -8,10 +8,17 @@
  * those geometries over the SAME ramp. They are DISPLAY-ONLY: nothing here mutates gradient
  * data — a mapping samples the existing ramp through a geometry and produces pixels.
  *
- * Contract (mirrors the rest of `palette/core/`):
- *  • Pure + DOM-free + dependency-light (no canvas, no React) so `core/` stays a
- *    portable library — the actual canvas paint lives in the overlay component, which
- *    only calls `renderGeometry` and `ctx.putImageData`.
+ * Contract for THIS module — NOT for `palette/core/` as a whole:
+ *  • Pure + DOM-free + dependency-light (no canvas, no React) — the actual canvas paint
+ *    lives in the overlay component, which only calls `renderGeometry` and
+ *    `ctx.putImageData`.
+ *
+ *    `palette/core/` is NOT uniformly DOM-free and never has been, so do not read this
+ *    header as a directory-wide guarantee. `rampCanvas.ts` declares itself "DOM-only";
+ *    `favientsExport.ts`, `img2grad/decode.ts` and `favientDnd.ts` call
+ *    `document.createElement`; `storage.ts` is a localStorage wrapper; `catalogLoader.ts`
+ *    calls `fetch`. Grep the directory for `document.createElement` before assuming a
+ *    core module runs under node or in a worker.
  *  • Deterministic. Every mapping is a pure function of `(geom, params, w, h)`, and the
  *    flat-optional params are ADDITIVE — an omitted field reproduces its `GEOM_DEFAULT`
  *    byte-for-byte (pinned by `debug/test-palette-rampgeometry.mts`).

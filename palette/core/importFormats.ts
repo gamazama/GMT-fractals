@@ -8,7 +8,9 @@
  *   palette table) · .css (linear-gradient) · .json.
  * Photoshop .grd is binary (8BGR) — deferred (parse it from bytes in a later pass).
  *
- * CONTRACT (mirrors `palette/core/` rules):
+ * CONTRACT for THIS module (`palette/core/` as a whole does NOT hold to it — `rampCanvas.ts`
+ * is "DOM-only", and `favientsExport.ts` / `img2grad/decode.ts` / `favientDnd.ts` /
+ * `storage.ts` / `catalogLoader.ts` reach for `document` / `localStorage` / `fetch`):
  *   - PURE + deterministic: input text → ramp, no DOM, no `File`, no Date/random.
  *     The `File` read happens in the UI layer; these functions only see a string.
  *   - FAIL-SAFE on untrusted input: malformed / truncated / hostile text returns
