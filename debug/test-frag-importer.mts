@@ -25,7 +25,7 @@ const err = (s: string) => `\x1b[31m✗\x1b[0m  ${s}`;
 const wrn = (s: string) => `\x1b[33m⚠\x1b[0m  ${s}`;
 const glsl = (s: string) => `\x1b[35m⚡\x1b[0m  ${s}`;
 
-let passed = 0, failed = 0, glslIssues = 0;
+let passed = 0, failed = 0, glslIssues = 0, missing = 0;
 
 // ─── GLSL built-ins and GMT scope names valid in getDist ─────────────────────
 
@@ -125,6 +125,7 @@ function test(label: string, relPath: string) {
     if (!fs.existsSync(absPath)) {
         console.log(`\n─── ${label}`);
         console.log(wrn(`File not found: ${relPath}`));
+        missing++;   // counted, and gated below — see the exit contract
         return;
     }
 
@@ -297,9 +298,29 @@ test('Mandelbox DualNumbers',    `${REF}/Theory/Mandelbox - Dual Numbers DE.frag
 console.log(`\n${'─'.repeat(60)}`);
 console.log(`  ${passed} passed  ${failed} failed  (${passed + failed} total)`);
 if (glslIssues > 0) console.log(`  ${glslIssues} GLSL issue${glslIssues > 1 ? 's' : ''} (⚡) — pipeline passed but generated code may not compile in GMT`);
+if (missing > 0)    console.log(err(`${missing} reference file(s) not found — the matrix silently shrank`));
+if (passed + failed === 0) console.log(err(`no formulas ran${FILTER ? ` (filter "${FILTER}" matched nothing)` : ''} — this is zero coverage, not a pass`));
 
+// ─── Exit contract ───────────────────────────────────────────────────────────
 // Exit non-zero on any failure so `npm run test:frag` is a real gate. Without
 // this the script printed "N failed" and still exited 0, so CI / agents reading
-// only the exit code saw green. `glslIssues` stays advisory (⚡ = generated GLSL
-// may not compile in GMT) — it is a warning channel, not a pass/fail signal.
-process.exit(failed > 0 ? 1 : 0);
+// only the exit code saw green.
+//
+// Also gates on `missing` and on an empty matrix. Falsified 2026-07-29 (guard
+// sweep, batch 3): repointing REF at a directory that does not exist printed 60
+// "File not found" warnings and then `0 passed  0 failed  (0 total)` and EXIT 0.
+// The reference corpus is 580-odd vendored files under
+// engine-gmt/features/fragmentarium_import/reference/ — move or rename that tree
+// (plausible during the engine extraction, or via an orphan sweep) and this guard
+// reports green with zero coverage. Baseline is 60/60 present, so the gate costs
+// nothing today. Verified after the repair: same REF break -> exit 1.
+//
+// `glslIssues` stays advisory (⚡ = generated GLSL may not compile in GMT) — it is
+// a warning channel, not a pass/fail signal. That is a real, MEASURED blind spot,
+// left alone deliberately rather than overlooked: prefixing every generated
+// function with `void @@@ ((( ;;; ###` gives 60 GLSL parse errors, 60 passed,
+// 0 failed, EXIT 0. Baseline is 0 issues so gating the parse-error subset would
+// be free — but the sibling checks in validateGLSL are heuristics that hedge
+// ("may be out of scope"), so which subset to gate is a judgement call. Queued as
+// a Tier B proposal rather than decided here.
+process.exit(failed > 0 || missing > 0 || passed + failed === 0 ? 1 : 0);
