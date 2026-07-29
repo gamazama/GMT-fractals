@@ -126,18 +126,32 @@ console.log('\n[4] a julia axis modulated to exactly zero survives the composite
 {
   // The export fallback was `if (!juliaX) juliaX = base` — a falsy test, so a
   // legitimate 0 was overwritten by the store value.
-  const s = store();
-  const g = s.geometry;
-  if (!g) { assert(false, 'geometry slice present'); }
+  //
+  // THE BASE MUST BE SEEDED NON-ZERO OR THIS CHECK CANNOT FAIL. juliaX's DDFS
+  // default is 0.0 (grep `juliaX: { type: 'float', default: 0.0` in
+  // engine-gmt/features/geometry/index.ts). With base 0 the offset that lands
+  // the axis on 0 is itself 0, so `comp.julia.x ?? base` and the buggy
+  // `comp.julia.x || base` BOTH yield 0 and the assertion passes either way —
+  // and the sibling "untouched axes keep their base" assertion degenerates to
+  // 0 === 0 the same way. Measured 2026-07-29: reverting flushModulationComposites
+  // to the falsy `||` left this block fully green until these two seeds existed.
+  const original = store().geometry;
+  if (!original) { assert(false, 'geometry slice present'); }
   else {
-    // Choose the offset that lands juliaX exactly on 0.
-    const { uniforms } = run([['geometry.juliaX', -(g.juliaX ?? 0)]]);
-    const uJulia: any = uniforms.get('uJulia');
-    assert(!!uJulia, 'uJulia emitted', uJulia);
-    assert(!!uJulia && uJulia.x === 0,
-      'an axis driven to 0 stays 0 instead of snapping back to base', uJulia?.x);
-    assert(!!uJulia && uJulia.y === (g.juliaY ?? 0),
-      'while untouched axes keep their base', uJulia?.y);
+    useEngineStore.setState({ geometry: { ...original, juliaX: 0.7, juliaY: -0.3 } } as any);
+    try {
+      const g = store().geometry;
+      // Choose the offset that lands juliaX exactly on 0.
+      const { uniforms } = run([['geometry.juliaX', -(g.juliaX ?? 0)]]);
+      const uJulia: any = uniforms.get('uJulia');
+      assert(!!uJulia, 'uJulia emitted', uJulia);
+      assert(!!uJulia && uJulia.x === 0,
+        'an axis driven to 0 stays 0 instead of snapping back to base (base 0.7)', uJulia?.x);
+      assert(!!uJulia && uJulia.y === (g.juliaY ?? 0),
+        'while untouched axes keep their base (-0.3)', uJulia?.y);
+    } finally {
+      useEngineStore.setState({ geometry: original } as any);
+    }
   }
 }
 
