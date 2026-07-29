@@ -223,20 +223,72 @@ console.log('[8] vector widgets that are keyframeable are also modulation-aware'
     "trackKeys={['camera.rotation.x', 'camera.rotation.y', 'camera.rotation.z']}",
   ]);
 
+  // The `(?=[\s/>])` lookahead is load-bearing: without it this also matches the
+  // TYPE annotation `React.FC<Vector2InputProps>` in components/vector-input/index.tsx
+  // and then runs on to the first `/>` inside the component body, reporting the
+  // widget's own definition file as a consumer. Found 2026-07-29 by the discovery
+  // cross-check below, which is a fair advertisement for adding one.
+  const ELEMENT_RE = /<Vector[234]Input(?=[\s/>])[\s\S]*?\/>/g;
   const offenders: string[] = [];
+  let scanned = 0;
   for (const f of files) {
+    // A path that has moved throws here rather than silently scanning nothing —
+    // verified 2026-07-29 by adding a non-existent sixth path (ENOENT, exit 1).
     const src = await fs.readFile(new URL(`../${f}`, import.meta.url), 'utf8');
     // Each JSX element opens at `<Vector{2,3,4}Input` and ends at the first `/>`.
-    for (const m of src.matchAll(/<Vector[234]Input[\s\S]*?\/>/g)) {
+    for (const m of src.matchAll(ELEMENT_RE)) {
       const el = m[0];
       if (!el.includes('trackKeys')) continue;
+      scanned++;
       if (el.includes('liveValue')) continue;
       if ([...EXEMPT].some(x => el.includes(x))) continue;
       offenders.push(`${f}: ${el.slice(0, 90).replace(/\s+/g, ' ')}…`);
     }
   }
+  console.log(`  (scanned ${scanned} keyframeable Vector*Input elements across ${files.length} files)`);
   assert(offenders.length === 0,
     'every Vector*Input with trackKeys also receives liveValue', offenders);
+
+  // The list above is an ALLOWLIST, and an allowlist is where the next offender
+  // hides: a NEW panel with a keyframeable vector widget is simply not scanned,
+  // and the check stays green having never looked at it. (Batch 2's check:zindex
+  // allowlisted the two files that DEFINED the z-index scale.) A path that MOVES
+  // already throws at readFile above; this covers the other direction — discover
+  // the real consumer set and require the list to still cover it.
+  {
+    const path = await import('node:path');
+    const ROOT = new URL('../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+    const SKIP = new Set(['node_modules', 'dist', '.git', 'debug', 'docs', 'plans', 'public']);
+    const found: string[] = [];
+    const walk = async (dir: string): Promise<void> => {
+      for (const e of await fs.readdir(dir, { withFileTypes: true })) {
+        if (e.name.startsWith('.') || SKIP.has(e.name)) continue;
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) { await walk(full); continue; }
+        if (!e.name.endsWith('.tsx')) continue;
+        const src = await fs.readFile(full, 'utf8');
+        for (const m of src.matchAll(ELEMENT_RE)) {
+          if (!m[0].includes('trackKeys')) continue;
+          found.push(path.relative(ROOT, full).replace(/\\/g, '/'));
+          break;
+        }
+      }
+    };
+    await walk(ROOT);
+    const unscanned = found.filter(f => !files.includes(f));
+    assert(unscanned.length === 0,
+      'no file outside the scanned list holds a keyframeable Vector*Input', unscanned);
+    // And the scan must not have quietly SHRUNK. `scanned > 0` is not enough:
+    // renaming only the `<Vector3Input ` (space-delimited) usages and leaving the
+    // `<Vector3Input\n` ones took this from 10 elements to 3 with every assertion
+    // still green — measured 2026-07-29. A partial shrink is the realistic form of
+    // this failure, so record a floor. Raise it when you add widgets; if you have
+    // deliberately REMOVED one, lower it in the same commit that removes it.
+    const SCAN_FLOOR = 10; // measured 2026-07-29 across the five files above
+    assert(scanned >= SCAN_FLOOR,
+      `the Vector*Input scan did not shrink (expected >= ${SCAN_FLOOR})`,
+      { scanned, floor: SCAN_FLOOR, discoveredFiles: found });
+  }
 }
 
 console.log(failures === 0 ? '\n✓ all assertions passed' : `\n✗ ${failures} assertion(s) failed`);
