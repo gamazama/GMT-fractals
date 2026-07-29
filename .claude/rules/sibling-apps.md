@@ -40,7 +40,7 @@ citations here are only as good as the last person who checked one by hand.
 | `fractal-toy/` | `npm run smoke:fractal-toy` (falsified 2026-07-29 by no-op'ing `featureRegistry.register(LightingFeature)`, went red) |
 | `demo/` | `npm run smoke:engine-demo`, `npm run smoke:engine-demo-modulation` |
 | `gradient-explorer/` | `npm run smoke:liquify`, `npm run smoke:gx-handles`, `npm run smoke:gx-fractal-glitch` (all boot `gradient-explorer.html`) — plus `npx tsx debug/test-liquify-mesh.mts`, which is not a browser smoke: it exercises `gradient-explorer/fullscreen/modes/liquify/{LiquifyMesh,catmullRom}.ts` on plain node, and is also the last link in the `test:palette` chain. Fastest real guard in this row; reach for it first when touching the liquify soft body. |
-| `mesh-export/` | **none** — see below |
+| `mesh-export/` | `npm run test:mesh-grid` only (node-level, no browser smoke) — see below |
 
 ⚠ **`npm run smoke:liquify` is flaky.** Measured 2026-07-29 on an unmodified
 tree: **3 failures in 13 consecutive runs (~23%)**, at three *different*
@@ -61,19 +61,37 @@ README; it now does what `<FluidToggleButton/>` does (unfreeze + switch to
 Mixed) before it drags. A new pixel smoke here must do the same, and a red one
 should be checked against these two defaults before it is called flake.
 
-`mesh-export/` has no smoke, no unit test and no runtime guard of any kind. No
-`debug/smoke-*.mts` loads `mesh-export.html`; `smoke:boot` defaults to `/`
-(the engine demo) and `smoke:engine-gmt` to `/app-gmt.html`, neither of which
-pulls `mesh-export/main.tsx` into its import graph. The only automated checks that
-reach this tree at all are static:
+`mesh-export/` has no browser smoke. No `debug/smoke-*.mts` loads
+`mesh-export.html`; `smoke:boot` defaults to `/` (the engine demo) and
+`smoke:engine-gmt` to `/app-gmt.html`, neither of which pulls
+`mesh-export/main.tsx` into its import graph.
+
+It does have **one** node-level runtime guard, and this row said "none" until
+2026-07-29 — the guard was written in the overnight audit's cycle 8 and never
+cited anywhere, so a reader changing `dc-core.ts` had no reason to run it:
+
+- `test:mesh-grid` (`debug/test-mesh-grid-convention.mts`) — pins the CELL-CENTRED
+  voxel convention, `min + (i + 0.5) * range / N`, across `dc-core.ts`'s
+  `gridToWorld`/`worldToGrid` and `vdb-writer.ts`'s AffineMap translation row. It
+  imports `mesh-export/algorithms/dc-core` directly and reads `vdb-writer.ts` as
+  text, so it reaches exactly those two files and nothing else in the tree.
+  Falsified 2026-07-29 three ways, each reverted: reverting `gridToWorld` to the
+  corner-sampled `gx / (N - 1)` → exit 1 with 9 failures naming "the N/(N-1)
+  oversize bug is back"; dropping the `- 0.5` from `worldToGrid` alone → exit 1
+  with 3 failures, block 2 only; reverting the VDB translation row to bare
+  `boundsMin` → exit 1 with 1 failure, block 4 only. Runs in under a second.
+
+Everything else that reaches this tree is static:
 
 - `npm run typecheck` — `tsconfig.json` `include` is `**/*.ts(x)`, so mesh-export is compiled.
 - `npm run orphans` — `knip.json` lists `mesh-export/main.tsx` as an entry, so the
   import graph is walked (note `mesh-export/algorithms/sdf-eval.ts` is in knip's
   `ignore` list and is marked `@deprecated` in source).
 
-Nothing exercises the SDF sampling, dual contouring, post-processing, or the
-GLB/STL/VDB writers at runtime. Treat changes to `mesh-export/algorithms/**`,
+Beyond `test:mesh-grid`'s two files, nothing exercises the SDF sampling, dual
+contouring, post-processing, or the GLB/STL/VDB writers at runtime — in
+particular the `gpu/` tree, the pipeline, and the GLB/STL writers are still
+completely unguarded. Treat changes to `mesh-export/algorithms/**`,
 `mesh-export/gpu/**` and `mesh-export/pipeline/**` as unguarded: verify by
 generating a mesh in the running app and importing the result into a DCC tool.
 `debug/dump-mesh-cp.mts` looks related but is not — it exercises

@@ -17,9 +17,34 @@
  *
  * @invariant Sample i lives at `min + (i + 0.5) * range / N`. Any new code that
  *   maps between grid index and world space must use this, and must be pinned
- *   here. Assertions 3-4 deliberately pin a KNOWN-WRONG behaviour so a fix
- *   fails loudly rather than silently changing exports — see PROPOSALS.md
- *   (overnight audit, cycle 8).
+ *   here.
+ *   — proven by: npm run test:mesh-grid ("dc-core matches the sampler at every
+ *   probed index" and "translation row N offsets by half a voxel").
+ *
+ *   The second half of this annotation used to read "assertions 3-4 deliberately
+ *   pin a KNOWN-WRONG behaviour so a fix fails loudly". That was true when it was
+ *   written and became false on 2026-07-28, when the divergence was actually
+ *   fixed; block 3's own inline text has said so since, but the @invariant did
+ *   not. Corrected 2026-07-29 by falsification — blocks 3 and 4 pin the CORRECT
+ *   convention now, in both directions.
+ *
+ * ── FALSIFIED 2026-07-29 (guard sweep, batch 3) ──────────────────────────
+ * Three breaks, three mechanisms, each applied and reverted independently:
+ *   A. dc-core gridToWorld reverted to the corner-sampled `gx / (N - 1)` — the
+ *      exact pre-2026-07-28 bug.
+ *      → exit 1, 9 failures. Block 3 named it: "dc-core is corner-sampled again
+ *        (spans [min,max]) — the N/(N-1) oversize bug is back", with the measured
+ *        divergence 0.1875 / 0.0234375 / 0.0029296875 at N = 8 / 64 / 512.
+ *        Block 2 fell over too, since worldToGrid stopped being its inverse.
+ *   B. dc-core worldToGrid only — dropped the `- 0.5`.
+ *      → exit 1, 3 failures, ALL in block 2 ("not inverses (worst 0.5)"); block 3
+ *        stayed green, so the two blocks isolate cleanly.
+ *   C. vdb-writer's AffineMap translation row reverted to bare `boundsMin[...]`.
+ *      → exit 1, 1 failure, block 4 only.
+ * Count-based, so every assertion runs on every invocation.
+ *
+ * Not cited by any `.claude/rules/` file until 2026-07-29 — sibling-apps.md
+ * listed mesh-export's guards as "none". Corrected there in the same pass.
  */
 import { gridToWorld, worldToGrid } from '../mesh-export/algorithms/dc-core';
 
