@@ -9,6 +9,11 @@ import { chromium } from 'playwright';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/fluid-toy.html';
 
+/** The seeded track's keyframe values — the closed interval every playback
+ *  sample must fall inside. Keep in sync with the addKeyframe calls below. */
+const TRACK_MIN = 2;
+const TRACK_MAX = 6;
+
 async function main() {
     const browser = await chromium.launch();
     const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
@@ -26,8 +31,8 @@ async function main() {
     await page.evaluate(() => {
         const anim = (window as any).useAnimationStore.getState();
         anim.addTrack('julia.power', 'Julia Power');
-        anim.addKeyframe('julia.power', 0, 2);
-        anim.addKeyframe('julia.power', 30, 6);
+        anim.addKeyframe('julia.power', 0, 2);   // TRACK_MIN
+        anim.addKeyframe('julia.power', 30, 6);  // TRACK_MAX
         anim.seek(0);
     });
     await page.waitForTimeout(100);
@@ -61,6 +66,18 @@ async function main() {
     // julia.power should have been driven by the animated track.
     if (played.juliaPower === 2) {
         throw new Error(`playback not applying track values to store (julia.power still ${played.juliaPower})`);
+    }
+    // ...and driven to a value the track can actually produce. `!== 2` alone is
+    // satisfied by any wrong number: the guard sweep on 2026-07-29 multiplied the
+    // scalar binder's write by 100, landing julia.power at 593.32 on a 2 → 6
+    // track, and this smoke still exited 0. The track has exactly two keyframes
+    // (frame 0 = 2, frame 30 = 6) and playback runs past frame 30 in the 700ms
+    // window, so the value is either interpolated between the endpoints or
+    // clamped to one of them — never outside [2, 6]. Which of the two the run
+    // lands on is timing-dependent (observed currentFrame 22 → 4.93 and 30.5 → 6
+    // on the same tree), so the range is the assertion, not an exact value.
+    if (played.juliaPower < TRACK_MIN || played.juliaPower > TRACK_MAX) {
+        throw new Error(`playback drove julia.power to ${played.juliaPower}, outside the track's [${TRACK_MIN}, ${TRACK_MAX}] keyframe range — the binder or the interpolator is writing a value the track cannot produce`);
     }
 
     if (errors.length > 0) {
