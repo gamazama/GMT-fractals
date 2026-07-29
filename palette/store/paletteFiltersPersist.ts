@@ -1,7 +1,16 @@
 /**
  * paletteFiltersPersist — remembers the picker's DISPLAY/ARRANGEMENT controls across
- * sessions (same-origin localStorage, shared by every GMT app). The Favients shelf
- * follows the same swatch-size + padding, so these need to survive a reload too.
+ * sessions. The Favients shelf follows the same swatch-size + padding, so these need to
+ * survive a reload too.
+ *
+ * ONE storage key (`gmt.paletteFilters`), deliberately NOT split per host — unlike the
+ * Favients PANEL state, which is (see favientsPanelPersist). So swatch size / padding /
+ * arrangement carry across apps on the same origin. But only the hosts that opt IN read
+ * or write it: `restorePaletteFilters` + `watchPaletteFilters` have exactly one call site
+ * each — `mountFavientsPanel()` in `palette/installFavients.ts`, behind
+ * `cfg.paletteFilters !== false`. app-gmt and the Gradient Explorer take the default (on);
+ * fluid-toy passes `paletteFilters: false` and never touches the key. A host that wants
+ * these prefs but NOT the Favients shelf has no entry point today.
  *
  * Only layout fields are persisted (swatch size, padding, group/sort/rows, reverse) —
  * NOT the quality-filter windows or theme/bundle selections, so a reload doesn't
