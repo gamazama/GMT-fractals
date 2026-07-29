@@ -4,8 +4,9 @@
  * gradients; a 24-option <select> doesn't scale, so this is a search box + a
  * scrollable, SECTIONED list of name + swatch rows.
  *
- * The list is the UNIFIED catalog the rest of the suite uses, not just the 24
- * built-in presets:
+ * The list is the UNIFIED catalog the rest of the suite uses, not just the built-in
+ * presets (25 of them — `GRADIENT_PRESETS.length` in data/gradientPresets.ts; don't
+ * hardcode the number here, it drifts):
  *   • Built-in   — buildPresetCatalog()'s `preset-*` entries (GMT's GRADIENT_PRESETS).
  *   • Sent / custom — ad-hoc entries already registered in the catalog (img2grad
  *                     distills, generator sends, slot bakes) — i.e. `adhoc-*`.
