@@ -67,6 +67,26 @@ The first three are node-only and pure CPU — no browser, no dev server, ~0.7 s
 each. There is no reason not to run all three on any change in this directory.
 
 All three were falsified in the cycle-13 guard sweep (each one broken, watched go
-red, reverted); `smoke:gx-fractal-glitch` had its reach to this directory proven
-the same way but its assertions were falsified under `sibling-apps.md`, which is
-where it is primarily cited.
+red, reverted).
+
+**`smoke:gx-fractal-glitch` is the slow one and the only one that renders.**
+~17 minutes, needs `npm run dev` on :3400 and a QUIET tree — a Vite full reload
+mid-run kills it with "Execution context was destroyed", which is what blocked
+it from ever completing in cycles 11 and 12. Its reach to this directory was
+proven in batch 5, but a sentence here used to claim its assertions had been
+falsified under `sibling-apps.md`. **That was not true of either rule** — it had
+never had a green baseline at all. Batch 8 got the first one on 2026-07-29 and
+then falsified it properly, which immediately found a defect:
+
+- Its Δ comparison is RELATIVE (LA-on dominant vs LA-off dominant), so anything
+  that affects both captures cancels. Forcing the display shader to a constant
+  colour — a blank render — gave Δ 0.000 on all three views and **exit 0 with
+  the full "glitch-free" banner**. And reproducing bug 1 exactly (invert the
+  auto-reference gate, grep `disableAutoReference`; orbitLen falls to 588) drove
+  the escaping-square dominant from 0.019 to 0.500 while Δ reached only 0.099 —
+  under the 0.18 bound. Only the `relocated` assertion caught that one.
+- Repaired additively with a per-view absolute `maxDominant` ceiling checked
+  before the negative assertions. Both breaks now red at view 1 inside a minute.
+
+So when reading a green run here: `relocated`, `period` and `maxDominant` are
+what carry it. A green Δ on its own proves very little.
