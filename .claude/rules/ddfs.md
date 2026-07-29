@@ -46,3 +46,31 @@ Decisions: ADRs 0007-0014, 0036-0037.
 ## Multi-axis params
 
 Scalar-state + `composeFrom` is the pattern for params with more than one axis.
+
+## Guards
+
+This rule carried NO guard block until 2026-07-29, which read as "nothing covers
+DDFS at runtime". Something does:
+
+```
+npm run typecheck
+npm run smoke:interact
+```
+
+`smoke:interact` boots `demo.html` and is the only end-to-end proof that the
+auto-generated `set${Feature}` setter, `createFeatureSlice`'s type sanitiser and
+the preset round-trip through `PresetLogic.sanitizeFeatureState` all still work.
+It exercises four param types on the Demo feature — float, vec2, color and the
+save/load path for each. Falsified 2026-07-29 five ways, each reverted: making
+the float branch swallow writes reds "state mutation did not persist"; making the
+vec2 branch write `Vector2(0, 0)` reds "vec2 param did not persist"; hard-coding
+the color branch reds "color param did not persist"; and breaking only
+`sanitizeFeatureState` (grep `getHexString`) reds the round-trip half alone,
+proving the store-side and serialisation-side assertions isolate.
+
+Two things it does NOT cover, so do not read a green run as more than it is. The
+registry-freeze and duplicate-id invariants above have no runtime guard — the
+`DuplicateFeatureError` path in particular only throws in a **production** build,
+so a quiet dev console proves nothing. And the Demo feature exercises four param
+types out of the full `defineFeature` set; `int`, `bool`, `enum`, `gradient` and
+`image` params round-trip unguarded.
