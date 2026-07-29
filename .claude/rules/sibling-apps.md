@@ -42,13 +42,25 @@ citations here are only as good as the last person who checked one by hand.
 | `gradient-explorer/` | `npm run smoke:liquify`, `npm run smoke:gx-handles`, `npm run smoke:gx-fractal-glitch` (all boot `gradient-explorer.html`) — plus `npx tsx debug/test-liquify-mesh.mts`, which is not a browser smoke: it exercises `gradient-explorer/fullscreen/modes/liquify/{LiquifyMesh,catmullRom}.ts` on plain node, and is also the last link in the `test:palette` chain. Fastest real guard in this row; reach for it first when touching the liquify soft body. |
 | `mesh-export/` | `npm run test:mesh-grid` only (node-level, no browser smoke) — see below |
 
-⚠ **`npm run smoke:liquify` is flaky.** Measured 2026-07-29 on an unmodified
-tree: **3 failures in 13 consecutive runs (~23%)**, at three *different*
+**`npm run smoke:liquify` was flaky and was hardened on 2026-07-29.** It had
+measured **3 failures in 13 consecutive runs (~23%)** at three *different*
 assertions — `[1] liquify canvas missing`, `[3] grab handle did not change the
-render`, `[4] physics frame went blank`. A red run is therefore not evidence of
-a regression on its own; re-run before believing it. The sibling
-`smoke:gx-handles` (13/13 green, and it goes red on a real break — verified)
-carries the retry loop and dual-instance detection that this one lacks.
+render`, `[4] physics frame went blank`. It now carries the same two mechanisms
+as its healthy sibling `smoke:gx-handles` (a dep-optimize retry loop and a
+dual-instance detector that names the cause and the fix), and its one-shot fixed
+waits are replaced by polling — wait for the render to change, then for it to
+settle, then assert. **10/10 consecutive clean runs after the change**, all
+reporting the same 3.77 / 21.03 / 51. Falsified with three breaks in
+`gradient-explorer/fullscreen/modes/liquify/`, one per assertion, all red.
+
+One caveat, stated because it changes how you should read a future red: the
+flake was **not reproduced on a quiet tree** beforehand (3/3 green before any
+change), and the original measurement ran while other auditors were editing
+tracked source — which is exactly what HMR-invalidates the store module into the
+dual-instance state whose symptom is `[1] liquify canvas missing`. So **if this
+goes red on a quiet tree now, treat it as a real liquify regression**, not as
+noise. If it goes red while something else is editing the tree, restart
+`npm run dev` first.
 
 ⚠ **fluid-toy boots as a PURE FRACTAL — any pixel assertion must undo that
 first.** `fluidSim.paused` defaults `true` and `composite.show` defaults to
