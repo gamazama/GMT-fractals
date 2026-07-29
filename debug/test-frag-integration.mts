@@ -1,8 +1,43 @@
 /**
  * Fragmentarium Importer — Integration Test Suite
  *
- * Full pipeline test: detect → transform → parameter build → shader assembly → GLSL validation.
- * Tests the entire import chain including simulated shader compilation context.
+ * Runs the full pipeline — detect → transform → parameter build → shader assembly
+ * → GLSL validation — but READ THE EXIT CONTRACT BELOW BEFORE TRUSTING A GREEN
+ * RUN: only the first two stages can fail it. Everything validateFormula produces
+ * is reported and then classified `warn`, which does not affect the exit code.
+ *
+ * ── WHAT A GREEN RUN ACTUALLY PROVES (falsified 2026-07-29, guard sweep batch 3)
+ * Gated (status `fail` → exit 1):
+ *   · a reference file is missing
+ *   · detectFormulaV3 returns an error on a formula NOT marked expectFail
+ *   · transformFormulaV3 throws or returns null
+ *   · an `expectFail` entry is ACCEPTED instead of rejected
+ * Both directions of that last one are live, and cycle 10's expectFail addition is
+ * not a rubber stamp — proven by two breaks in detectFormulaV3's `hasDE`:
+ *   `hasDE = true`  → exit 1, 60 passed / 4 failed, the four expectFail entries
+ *                     each reporting "expected rejection ... but the importer
+ *                     accepted it".
+ *   `hasDE = false` → exit 1, 4 passed / 61 failed (only the expectFail entries
+ *                     survive, which is the correct scoring).
+ *
+ * NOT gated — reported only:
+ *   · GLSL parse errors, including the full-shader strict parse (`glslIssues`)
+ *   · getDist scope issues
+ *   · every `paramIssues` category, RENAME_FAIL and DEAD_PARAM included, which
+ *     this file's own section 5 labels "importer bug"
+ * Measured, not assumed. Neutering the AST renamer — one line in
+ * v3/generate/rename.ts, i.e. NO imported formula's uniforms get renamed and every
+ * generated shader references undeclared Fragmentarium names — gives 61 GLSL
+ * issues ("Encountered undefined variable: \"Scale\"", "\"MinRad2\"", "\"pos\"" …)
+ * and EXIT 0. `npm run test:frag` is green on that same break too, so nothing in
+ * the repo catches it. Prefixing every generated function with a hard syntax error
+ * likewise gives 61 issues and exit 0.
+ *
+ * The baseline is not clean either: RecFold has carried
+ * `Full-shader: Undeclared identifiers: Encountered undefined variable:
+ * "OrbitStrength"` since before this sweep. That is why the gate was not simply
+ * widened here — doing so makes the guard red on arrival, which is the state
+ * cycle 10 narrowed it OUT of. Queued as a Tier B proposal instead.
  *
  * Run:
  *   npx tsx debug/test-frag-integration.mts                    # All registered tests
@@ -962,5 +997,9 @@ if (JSON_OUT) {
     }
 }
 
-// Exit code: non-zero if any failures
+// Exit code: non-zero if any failures.
+//
+// `warn` deliberately does NOT reach here — see the WHAT A GREEN RUN ACTUALLY
+// PROVES block at the top of this file for exactly which regressions that hides
+// and for the falsification numbers behind the claim.
 process.exit(failed > 0 ? 1 : 0);
