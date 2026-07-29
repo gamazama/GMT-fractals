@@ -7,8 +7,32 @@
  *      the middle of the canvas (centre band in t-space, stepped).
  *   2. Spawn particles at a known location with velocity pointing at
  *      the wall. Step a few frames.
- *   3. Assert that at least one particle's vx has flipped sign (bounced)
- *      AND that no particle's final position is inside the wall mask.
+ *   3. Assert that no particle penetrated past the wall, that none ended
+ *      inside the wall mask, and that the bounce shed speed.
+ *
+ * ⚠ **Until 2026-07-29 this smoke passed 5 runs out of 6 with the wall-bounce
+ * path completely disabled** (`if (false && ...)` on the WALL_THRESHOLD branch
+ * in fluid-toy/brush/particles.ts). Two causes, both measured:
+ *
+ *   - `slowed` was measuring DRAG, not bouncing. particleDrag defaults to 0.6/s
+ *     and the settle window is 1200 ms, so exp(-0.72) ≈ 0.49 of the speed is
+ *     gone before the wall is involved at all. Measured final/initial ratios:
+ *     healthy 0.35-0.51, bounce disabled 0.58-0.66. Both sit under the 0.75
+ *     bar, so the counter reads 16/16 either way and cannot separate them.
+ *   - `insideWall` only fires if particles happen to still be inside the band
+ *     at the capture instant. With no bounce they sail straight through and out
+ *     the far side within the window; it caught that in 1 run of 6.
+ *
+ * The discriminating quantity is PENETRATION — how far past the spawn point,
+ * along the incoming direction, the deepest particle got. Measured over 5+5
+ * runs with no overlap: healthy 0.0023-0.0041, bounce disabled 0.0971-0.1144,
+ * against a spawn-to-wall gap of 0.0300. That is what the new assertion uses,
+ * and it is scaled by the measured gap rather than a tuned constant.
+ *
+ * A second, quieter bug: `initial` was snapshotted in a separate page.evaluate
+ * AFTER the injecting one, so the RAF loop had already dragged the particles
+ * and the "initial" speed read 0.086-0.114 instead of the injected 0.15,
+ * varying run to run. It is now captured inside the inject call.
  */
 import { chromium } from 'playwright';
 
@@ -92,8 +116,11 @@ async function main() {
     if (!anchor) throw new Error('could not find a wall/free pair in the mask');
     console.log(`wall at ${anchor.wall.map((n: number) => n.toFixed(3))}, free at ${anchor.free.map((n: number) => n.toFixed(3))}`);
 
-    // Inject test particles directly into the runtime, aimed at the wall.
-    await page.evaluate(({ free, wall }: any) => {
+    // Inject test particles directly into the runtime, aimed at the wall, and
+    // return the injected velocities in the SAME evaluate. Snapshotting them in
+    // a second round-trip let the RAF loop drag them first, so the "initial"
+    // speed read 0.086-0.114 instead of 0.15 and drifted run to run.
+    const initial = await page.evaluate(({ free, wall }: any) => {
         const rt = (globalThis as any).__appHandles?.['fluid-toy.brush']?.ref?.current?.runtime;
         rt.particles.length = 0;
         const dx = wall[0] - free[0];
@@ -116,13 +143,8 @@ async function main() {
                 size: 0.02,
             });
         }
-    }, anchor);
-
-    // Snapshot initial velocity signs.
-    const initial = await page.evaluate(() => {
-        const rt = (globalThis as any).__appHandles?.['fluid-toy.brush']?.ref?.current?.runtime;
         return rt.particles.map((p: any) => ({ vx: p.vx, vy: p.vy }));
-    });
+    }, anchor);
 
     // Let the sim run — the RAF loop in FluidToyApp steps particles every
     // frame and calls stepBrush → stepParticles → bounce. 1200ms gives the
@@ -158,9 +180,39 @@ async function main() {
         if (finSpeed < initSpeed * 0.75) slowed++;
         if (final[i].maskAtPos > 0.5) insideWall++;
     }
+    const meanInit = initial.reduce((s: number, p: any) => s + Math.hypot(p.vx, p.vy), 0) / initial.length;
+    const meanFin = final.reduce((s: number, p: any) => s + Math.hypot(p.vx, p.vy), 0) / final.length;
+    // ── Penetration: the assertion that actually discriminates ───────
+    // How far past the spawn point, along the spawn→wall direction, did the
+    // deepest particle get? Bounced particles are turned around before they
+    // close the gap; unbounced ones sail through it. Bound is the MEASURED gap
+    // (x1.5, to absorb the ND = 0.01 normal-out nudge in stepParticles), not a
+    // tuned constant — it rescales with whatever wall/free pair the anchor
+    // search found. Measured over 5+5 runs, no overlap: healthy 0.0023-0.0041,
+    // bounce path disabled 0.0971-0.1144, gap 0.0300.
+    const gapX = anchor.wall[0] - anchor.free[0];
+    const gapY = anchor.wall[1] - anchor.free[1];
+    const gap = Math.hypot(gapX, gapY);
+    const dirX = gapX / gap, dirY = gapY / gap;
+    const penetration = final.map((p: any) => (p.x - anchor.free[0]) * dirX + (p.y - anchor.free[1]) * dirY);
+    const maxPenetration = Math.max(...penetration);
+    const maxPenetrationAllowed = gap * 1.5;
+    console.log(`speed: mean ${meanInit.toFixed(4)} → ${meanFin.toFixed(4)} (ratio ${(meanFin / meanInit).toFixed(3)})`);
+    console.log(`penetration: max ${maxPenetration.toFixed(4)} of an allowed ${maxPenetrationAllowed.toFixed(4)} (gap ${gap.toFixed(4)})`);
+    // `slowed` measures DRAG as much as restitution — see the header. Kept
+    // because a total stop or a runaway would still show up here, but it does
+    // NOT prove the bounce fired; the penetration bound above is what does.
     console.log(`slowed (speed < 75% of initial): ${slowed}/${final.length}`);
     console.log(`ended inside wall:                 ${insideWall}/${final.length}`);
 
+    if (maxPenetration > maxPenetrationAllowed) {
+        throw new Error(
+            `a particle got ${maxPenetration.toFixed(4)} past the spawn point toward the wall, past the allowed ` +
+            `${maxPenetrationAllowed.toFixed(4)} (1.5x the measured ${gap.toFixed(4)} gap) — the wall did not stop it, ` +
+            `so the bounce path never fired. Note the 'slowed' counter below cannot see this: particleDrag alone ` +
+            `takes the speed ratio under 0.75 within the settle window.`,
+        );
+    }
     if (slowed === 0) {
         throw new Error('no particles slowed — bounce path never fired');
     }
