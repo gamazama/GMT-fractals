@@ -4,10 +4,11 @@
  *
  * The editor is engine-core and must not import `palette/`, so this palette-side
  * component is injected through the engine `gradientEditorEntrance` seam in
- * `registerPaletteUI`, which also hands it the editor's CURRENT gradient. Hosts that
- * mount the palette suite (app-gmt, the Gradient Explorer) get the entrance; hosts that
- * don't (fluid-toy) leave the slot empty — exactly the old `hasFavients` gating, now
- * without the cross-layer import.
+ * `registerPaletteUI`, which also hands it the editor's CURRENT gradient. All three
+ * palette hosts call `registerPaletteUI` and therefore get the entrance — app-gmt,
+ * the Gradient Explorer and fluid-toy (grep `registerPaletteUI(` for the call sites).
+ * A host that skipped it would leave the slot empty — the old `hasFavients` gating,
+ * now without the cross-layer import — but no in-tree host does that today.
  *
  * Two-state button: when the shelf is CLOSED it opens it; when the shelf is already OPEN
  * it ADDS the current gradient (dedup + auto-name, the same as the menu's "Send to
