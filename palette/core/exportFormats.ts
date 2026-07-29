@@ -78,7 +78,11 @@ const rdpIdx = (ramp: RGB[], tol: number): number[] => {
 };
 
 /** Reduce a 256-step ramp to ≤`max` representative stop indices (Douglas-Peucker,
- *  escalating tolerance until the budget is met). Shared by .grd, .ai and .idml. */
+ *  escalating tolerance until the budget is met). Every reduced format calls this, each
+ *  with its own budget: .grd (`GRD_MAX` 40), .ai (`AI_MAX` 40, re-exported as
+ *  `AI_STOP_LIMIT` and reused by `indesignIdml.ts` for .idml), .svg (`SVG_MAX` 32) and
+ *  .ugr (`UGR_MAX_STOPS` 64). Grep `reduceStopIndices` for the current call sites rather
+ *  than trusting a list here — this one has already gone stale twice. */
 export const reduceStopIndices = (ramp: RGB[], max: number): number[] => {
   let tol = 1.5;
   let idx = rdpIdx(ramp, tol);

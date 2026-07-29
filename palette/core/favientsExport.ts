@@ -55,8 +55,16 @@ export const buildCollectionFile = (
 
 /**
  * Quality warnings for a collection export: favourites that lose visible detail
- * under the format's stop limit (currently only the Illustrator `.ai` reduction).
- * Empty for lossless / non-collection formats.
+ * under the format's stop limit. Empty for lossless / non-collection formats.
+ *
+ * Covers `.ai` and `.idml` only — both reduce at `AI_STOP_LIMIT`, so one `aiLossyGradients`
+ * measurement is valid for both. `.ugr` is the THIRD collection format (added later) and is
+ * also lossy — `exportFormats.ts` reduces it at `UGR_MAX_STOPS` (64) through the same
+ * `reduceStopIndices` — but it returns no warnings here, because `aiLossyGradients` measures
+ * error at the 40-stop budget and would over-report at 64. Warning on `.ugr` needs a
+ * per-format budget threaded through, which is a product call, not a rename.
+ * @assumption a silent `.ugr` collection export is acceptable because 64 RDP nodes are
+ *   near-lossless for the smooth ramps fractal palettes usually are. Nothing measures this.
  */
 export const collectionQualityWarnings = (
   favients: Favient[],
