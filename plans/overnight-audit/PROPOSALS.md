@@ -2752,3 +2752,137 @@ your call.
   record — that `smoke:viewport` and `smoke:viewport-fixed` do not cover mobile
   detection. Confirmed still accurate. No finding; a previous auditor got there
   first and did it properly.
+
+---
+
+# Guard sweep — batch 3 (cycle 13, 2026-07-29)
+
+Eight guards. The first three were assigned because each had had its health
+questioned before and never settled. All three are now settled; two of them
+turned out fine, and the third was fine in the half everyone worried about and
+hollow in a half nobody had checked. Full detail in
+`results/gs01-guard-sweep-batch3.json`.
+
+Applied and committed (Tier A): `7634a8ee` `71d5d4c1` `1dc61d24` `01982cc6`
+`6228fce3`. Two are real repairs; three are corrections to claims that had gone
+false. Two items need you.
+
+## B1 — Nothing in the repo fails when the Fragmentarium importer emits shaders that cannot compile
+
+**The claim.** Gut the AST renamer in
+`engine-gmt/features/fragmentarium_import/v3/generate/rename.ts` — one line, so
+no imported formula's uniforms get renamed and every generated shader
+references undeclared Fragmentarium names — and both guards
+`.claude/rules/scene-and-formula-format.md` cites for the importer stay green.
+
+**Evidence, measured.** `test:frag:integration` exits 0 with 61 GLSL issues
+(`Encountered undefined variable: "Scale"`, `"MinRad2"`, `"pos"`,
+`"Iterations"` …). Its `validateFormula` finds all of them and classifies the
+result `warn`, and `process.exit(failed > 0 ? 1 : 0)` never sees a `warn`. That
+covers GLSL parse errors, getDist scope issues, and every `paramIssues`
+category — `RENAME_FAIL` and `DEAD_PARAM` included, which that file's own
+section 5 labels "importer bug". `test:frag` is green on the same break too, at
+60 passed / 0 failed and **zero** GLSL issues reported: its parse check is
+syntax-only, and an unrenamed identifier is still syntactically valid.
+
+**The good news first.** Cycle 10's narrowing is sound and is not the problem.
+Both directions of the `expectFail` scoring are live: forcing `detectFormulaV3`'s
+`hasDE` true gives exit 1 with 60 passed / 4 failed, each expectFail entry
+reporting "expected rejection … but the importer accepted it"; forcing it false
+gives exit 1 with 4 passed / 61 failed. The registered matrix still fails on a
+real detect/transform regression. The GLSL half never gated — before the
+narrowing or after.
+
+**The catch, and why this is yours rather than mine.** The baseline is not
+clean. `RecFold` has carried
+`Full-shader: Undeclared identifiers: Encountered undefined variable: "OrbitStrength"`
+since before this sweep. Flip `warn` to `fail` and the guard is **red on
+arrival** — the exact permanently-red state cycle 10 narrowed it out of, and a
+guard that has never been green cannot tell a regression from its baseline.
+
+**Options.**
+
+1. Leave it. The header now states plainly what a green run does and does not
+   prove (`1dc61d24`), so nothing rests on a false premise. Cheapest; hole stays
+   open.
+2. Gate on `paramIssues` only — baseline genuinely 0, so free today, and it
+   covers the categories the file calls importer bugs. **But it would not have
+   caught the renamer break**, which produced 0 param issues. Poor on its own.
+3. Gate on GLSL issues against a recorded baseline count of 1, so any NEW parse
+   error fails. Catches the renamer break outright. It is an allowlist, and
+   batch 2's `check:zindex` finding is precisely about an allowlist exempting the
+   files that mattered.
+4. Fix RecFold's `OrbitStrength` gap first, then gate on `glslTotal > 0` with no
+   allowance at all.
+
+**Recommendation.** (4) if RecFold turns out to be a real importer gap worth
+closing — it is one formula, and it makes the gate honest with no exemption
+machinery to rot. Otherwise (3), with the single baseline entry named and dated
+in the source. Not applied: it changes the exit semantics of a guard a rule
+cites, and which subset to gate is a judgement call.
+
+## B2 — `test:frag`'s GLSL channel is advisory, and gating it is nearly free
+
+**The claim.** Prefixing every generated function with a hard GLSL syntax error
+gives 60 parse errors, 60 passed, 0 failed, **exit 0**.
+
+**Why it is only a proposal.** Unlike B1 this is a *stated* choice, not a false
+claim — the harness footer already said `glslIssues` is "a warning channel, not
+a pass/fail signal". Nothing was misleading; the measurement is now recorded
+there too (`71d5d4c1`). The catch is that `validateGLSL` mixes one objective
+check with heuristic ones: the parse check either parses or it does not, but its
+siblings hedge in their own wording (`getDist references 'X' which **may** be out
+of scope`). Gating a heuristic is how a guard gets weakened later, which is worse
+than not gating.
+
+**Options.** (1) leave it advisory; (2) gate only on issues whose string starts
+`GLSL parse error:`, leaving the scope and naming heuristics advisory — narrow,
+objective, baseline 0, no allowlist; (3) gate on everything `validateGLSL`
+returns, which adopts the heuristics as contract.
+
+**Recommendation.** (2) — and note it interacts with B1. The integration suite's
+full-shader strict parse is strictly stronger than this syntax-only one (it
+catches undeclared identifiers, which is exactly what the renamer break
+produced), so if B1 lands this becomes cheap belt-and-braces rather than the main
+defence.
+
+## Housekeeping (gs01 batch 3)
+
+- **The cycle-8 `smoke:share-link` OPEN ANOMALY is closed.** The guard was never
+  at fault. `UrlStateEncoder.getDiff` returns a subtree verbatim when the base
+  side has no counterpart, and the base is `getFullDefaultPreset(formula)`, whose
+  `features` is `{}` — so recursion stops at the feature-id level and a *param*
+  name in that skip-list is never visited. Adding `key === 'repeats'` was a
+  no-op; adding `key === 'coloring'` goes red (payload 2895 → 2668, assertion
+  fails). Two corollaries recorded at the source: feature state is not diffed
+  against defaults at all — every slice ships in full on every share — and the
+  four named skip-list entries are unreachable because `getPreset` never copies
+  them into a Preset. Cycle 8's leftover probe, `debug/_g08c.mts`, shows why it
+  was missed: its fixture base had `features.coloring` populated, so its
+  recursion behaved nothing like the real one. **No 20 minutes needed from
+  whoever owns the share encoder.**
+- **The Vite dev server on :3400 was not running** at the start. This auditor
+  started one, used it for the two browser smokes, and **stopped it** — :3400
+  confirmed clear.
+- **No tracked artifact was written by any of the eight guards.**
+  `debug/engine-gmt-smoke.png` is the pre-existing untracked file the task said
+  to leave alone; untouched.
+- **Two gitignored scratch files are on disk**, both matched by the `debug/_*`
+  rule so neither can be committed: `debug/_g08c.mts` (cycle 8's) and
+  `debug/_gs01b3-probe.mts` (this batch's, used to measure block [5]'s margin
+  before repairing it). Left rather than removed, per the never-delete rule. Bin
+  both by hand if you want the tree tidy.
+- `npm run check:rule-guards` run twice. 3 miscitations before and after — the
+  pre-existing deep-zoom ones already in `PROTOCOL.md`, not re-derived. Adding
+  `test:mesh-grid` to `sibling-apps.md` took resolved citations 69 → 70 with
+  issues unchanged, so the new citation is sound.
+- **A near-miss worth recording.** The first falsification of
+  `test:band-analyser`'s block [3] stayed green, which looked like a second dead
+  block. It was not — the *break* was mis-shaped (a coefficient of 0.926 is
+  effectively no smoothing, so both hop rates converge inside the window and the
+  comparison has nothing left to separate). Re-shaped to the literal AnalyserNode
+  bug, a fixed per-call coefficient, it goes red at 0.2 and at 0.05. The block is
+  healthy. This is the same trap that cost cycle 8 a night on share-link, hit
+  twice in one batch: **a green run under your break is a claim about your break
+  first, and about the guard second.** Both times the way out was to measure the
+  mechanism directly rather than to trust the guard's silence.
