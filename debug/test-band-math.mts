@@ -9,11 +9,37 @@
  * actually call.
  *
  *   tsx debug/test-band-math.mts
+ *
+ * BLIND SPOTS CLOSED (2026-07-29 guard sweep). Two, both found by breaking
+ * bandMath.ts and watching this file stay green at exit 0:
+ *
+ *  - `resolutionLimited` COULD BE FALSE ON EVERY BAND. Block [3]'s check was
+ *    one-sided — it took the highest flagged centre with a `flagged.length ? …
+ *    : 0` fallback, so an EMPTY flagged set produced `highest = 0` and
+ *    `0 < limit × 1.2` was trivially true. Hardcoding `resolutionLimited:
+ *    false` passed while the message printed "(0 of 56)". The counts the block
+ *    already prints are now asserted instead: at 1/6 octave, 48 kHz, they are
+ *    19 at fft 2048, 13 at 4096, 7 at 8192 (1 at 16384), and the 25 Hz band is
+ *    narrower than one bin at every one of them. Asserting the count is
+ *    non-zero AND strictly falling as the transform grows closes both
+ *    directions: all-false gives 0/0/0, all-true gives 56/56/56.
+ *
+ *  - `BANK_MAX_HZ` WAS NOT ENFORCED. Block [1] compared the top band against
+ *    nyquist (24 kHz at 48 kHz), which is 9.6 kHz above the declared ceiling —
+ *    so replacing `Math.min(BANK_MAX_HZ, nyquist * 0.95)` with plain `nyquist`
+ *    passed, and the bank silently ran to 22.8 kHz. Both halves of that
+ *    `Math.min` are now pinned: the ceiling directly, and the nyquist guard at
+ *    a sample rate where it is the binding term.
+ *
+ * Controls that were already healthy, confirmed by breaking them: dropping the
+ * kernel's unit-sum normalisation -> exit 1 (worst 140.76); a rectangular
+ * kernel instead of Hann -> exit 1 on the edge-to-centre shape; moving
+ * `TILT_REF_HZ` from BANK_MIN_HZ to 1000 -> exit 1 on two assertions.
  */
 
 import {
     buildBandTable, buildTilt, clampTilt, dbToUnit,
-    BANK_MIN_HZ, TILT_MAX_DB_PER_OCT,
+    BANK_MIN_HZ, BANK_MAX_HZ, TILT_MAX_DB_PER_OCT,
 } from '../engine/features/audioMod/bandMath';
 
 let failures = 0;
@@ -37,8 +63,22 @@ console.log('\n[1] bands are equal musical width');
     'every adjacent pair is one sixth-octave apart', ratios.slice(0, 3));
   assert(near(bands[0].centerHz, BANK_MIN_HZ, 1e-9),
     'the bank starts at the declared minimum', bands[0].centerHz);
-  assert(bands[bands.length - 1].centerHz <= SR / 2,
-    'and never exceeds nyquist', bands[bands.length - 1].centerHz);
+  // Against BANK_MAX_HZ, not nyquist. Nyquist is 24kHz here — 9.6kHz of slack
+  // above the declared ceiling — so the loose form passed a bank that ran to
+  // 22.8kHz. Measured healthy top: 14367.5Hz, the last 1/6-octave step at or
+  // below 16000.
+  assert(bands[bands.length - 1].centerHz <= BANK_MAX_HZ,
+    'and never exceeds the declared band ceiling', bands[bands.length - 1].centerHz);
+
+  // The OTHER half of `Math.min(BANK_MAX_HZ, nyquist * 0.95)`, which the 48kHz
+  // case cannot reach because BANK_MAX_HZ binds first. 24kHz is chosen because
+  // it is a rate where the two candidate ceilings actually produce different
+  // tables — measured, top band 10159.4Hz with the guard against 11403.5Hz
+  // without, so this discriminates where 44.1/48/32kHz do not.
+  const low = buildBandTable(24000, 4096, 6);
+  assert(low.bands[low.bands.length - 1].centerHz <= 12000 * 0.95,
+    'a low sample rate keeps the top band inside the nyquist guard band',
+    low.bands[low.bands.length - 1].centerHz);
 }
 
 console.log('\n[2] bass gets as many bands as treble (the linear-FFT complaint)');
@@ -56,6 +96,7 @@ console.log('\n[2] bass gets as many bands as treble (the linear-FFT complaint)'
 
 console.log('\n[3] resolution limit is reported, not hidden');
 {
+  const flaggedCounts: number[] = [];
   for (const [fft, expectAbout] of [[2048, 203], [4096, 101], [8192, 51]] as const) {
     const { bands, resolutionLimitHz } = mk(fft, 6);
     assert(Math.abs(resolutionLimitHz - expectAbout) < expectAbout * 0.05,
@@ -65,7 +106,23 @@ console.log('\n[3] resolution limit is reported, not hidden');
     assert(highest < resolutionLimitHz * 1.2,
       `  and only bands under that limit are flagged (${flagged.length} of ${bands.length})`,
       highest);
+
+    // The assertion above is satisfied by an EMPTY flagged set — `highest`
+    // falls back to 0 and 0 is under any limit. See the header: that is how
+    // `resolutionLimited: false` on every band passed. The 25Hz band is
+    // narrower than one bin at every size tested here, measured.
+    assert(bands[0].resolutionLimited,
+      `  and the ${bands[0].centerHz.toFixed(0)}Hz band IS flagged, so the set is not empty`,
+      `${flagged.length} of ${bands.length}`);
+    flaggedCounts.push(flagged.length);
   }
+
+  // Direction, not just presence. A constant `true` would keep every count at
+  // the band total; a constant `false` would keep them all at zero. Measured
+  // healthy: 19, 13, 7.
+  assert(flaggedCounts[0] > flaggedCounts[1] && flaggedCounts[1] > flaggedCounts[2],
+    'a longer transform strictly shrinks the resolution-limited region',
+    flaggedCounts);
 }
 
 console.log('\n[4] every band covers at least one bin, none run past the array');
