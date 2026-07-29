@@ -1,0 +1,281 @@
+{
+  "id": "gs01-guard-sweep-batch5",
+  "cycle": 13,
+  "phase": "guard sweep — batch 5 of several",
+  "note": "Eight guards. Items 1-3 are the last three check:rule-guards miscitations in the repo; item 4 is the second of the two static analysers the checker cannot import-check. The tree was quiet and this auditor's alone. No dev server was needed — contrary to the batch brief, all three deep-zoom smokes are node-only pure-CPU and run in ~0.7s each, not browser-based and slow.",
+  "guards": [
+    {
+      "script": "npm run smoke:deep-zoom-la",
+      "source": "debug/smoke-deep-zoom-la.mts",
+      "engineUrl": null,
+      "engineUrlCorrect": null,
+      "kind": "node-only, pure CPU. Imports engine/fractal/deepZoom/{referenceOrbit,laBuilder,LAInfoDeep} directly and validates the LA (linear-approximation) construction pipeline against direct perturbed iteration.",
+      "citedBy": [
+        ".claude/rules/deep-zoom.md (moved here this batch from gmt-formulas-and-graph.md)"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "3 cases, 9 assertions, exit 0, 0.70s. stages=4 LAs=381 (250,84,42,1) @ maxIter 1000; case B nodes=100 max rel err 7.46e-4; stage-1 avg skip 12.",
+      "wallSeconds": 1,
+      "exitContractOk": true,
+      "exitContractNote": "Correct and count-based: process.exit(1) when failed > 0, implicit 0 otherwise.",
+      "falsified": true,
+      "break": "Five falsifications, each applied and reverted independently. (A) stepLA drops the +1 on CCoeff.re — the classic double-counting bug. (B) stepLA's ZCoeff.re uses + instead of - on the imaginary cross-term (conjugation error). (C) MAX_LA_STAGES=1 in laBuilder — the entire higher-stage tree never builds. (D) every stage-0 LA finalised with StepLength=0. (E) compositeLA's own ZCoeff conjugation, same shape as (B) but on the stage-1+ path.",
+      "result": "BEFORE REPAIR only (A) was red (exit 1, rel err 7.12e-1 vs 1e-3 bound). (B), (C) and (D) were ALL GREEN, exit 0. (C) printed 'stages=1' and the silent else-branch 'only 1 stage (orbit too short or trivial)'. (D) printed 'nodes=0 max relative error=0.00e+0' and the central assertion passed because maxRelErr initialises to 0. AFTER REPAIR all five red with distinct assertions: (B) 'stepLA 2 ZCoeff = (-20, 40): (44, 40)'; (E) 'compositeLA ZCoeff = (-10, 10): (-2, 18)'; (C) two failures on the stage floors; (D) three failures including the imaginary-Ref floor.",
+      "verdict": "cannot-fail on a destroyed LA table + real-axis-blind fixtures (repaired)",
+      "note": "Two distinct diseases in one guard. The vanishing-input pair ((C) and (D)) is the fifth failure mode exactly: the LA acceleration structure — the whole point of the file — could be reduced to nothing and the guard still said yes. The third ((B)) is the batch-4 degenerate-fixture lesson transposed to complex arithmetic: all three cases used centerY: 0, and a real-axis reference orbit makes z2im identically zero, so every imaginary-part sign error in stepLA and compositeLA was unreachable. Measured: 0 of 500 iters have nonzero Z.im at c=(-0.75,0) vs 499 of 500 at the period-3 complex nucleus. Worth recording that the tolerance alone was NOT sufficient even with the complex fixture added — break (B) moved max rel err 2.49e-4 -> 6.83e-4, a genuine 2.7x signal that the 1e-3 bound still absorbed. That is why case D asserts exact equality on hand-computed values instead. Separately measured and documented, not changed: the 1e-3 bound sits only ~1.34x above the real-axis measurement of 7.46e-4, while the header comment claims the error should be at the LA threshold scale of 2^-24 ~ 6e-8 — four orders out. Deterministic, so sensitivity rather than flake risk.",
+      "repaired": true,
+      "commit": "68ea7ca6",
+      "trackedArtifacts": "none written"
+    },
+    {
+      "script": "npm run smoke:deep-zoom-nucleus",
+      "source": "debug/smoke-deep-zoom-nucleus.mts",
+      "engineUrl": null,
+      "engineUrlCorrect": null,
+      "kind": "node-only, pure CPU. Checks detectPeriod / newtonNucleus against four published minibrot nuclei, plus the computeReferenceOrbit integration that adopts a one-period reference (ADR-0066).",
+      "citedBy": [
+        ".claude/rules/deep-zoom.md (moved here this batch from gmt-formulas-and-graph.md)"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "7 cases, 23 assertions, exit 0, 0.69s. All four nuclei refined to <1e-12; deep-zoom integration adopts period 3, orbit length 3, relocated true.",
+      "wallSeconds": 1,
+      "exitContractOk": true,
+      "exitContractNote": "Correct and count-based: process.exit(1) when failed > 0. Does NOT stop at the first failure, so breaks isolate well.",
+      "falsified": true,
+      "break": "Three falsifications, each applied and reverted independently. (F) newtonNucleus steps the wrong way — c = c.add(delta) instead of c.sub(delta). (G) detectPeriod updates the derivative AFTER z instead of before, so d_n uses z_n rather than z_{n-1}. (H) NUCLEUS_MIN_ZOOM raised 1e-6 -> 1e6 in referenceOrbit.ts, opening the gate at every zoom.",
+      "result": "ALL THREE RED. (F) exit 1, 12 failures across all four nuclei — Newton lands 1.1e-1 to 1.5e-1 away and z_P(c*) no longer ~0. (G) exit 1, \"period detected: got 14\" on the period-1 cardioid. (H) exit 1, 2 failures — \"no period (shallow gated out): period=1\" and \"full-length orbit kept: length=1\", i.e. exactly the two assertions that exist to pin the gate. (H) also went red on smoke:deep-zoom-orbit (2 failures), so the gate is doubly covered.",
+      "verdict": "healthy",
+      "note": "No vanishing-input hole: the four nucleus CASES are a const literal in the file, there is no external corpus to go missing, and the null-Newton path counts a failure rather than skipping (if (!cStar) { check(false); continue; }). Both halves of the zoom gate are pinned — one case asserts it engages at depth, one asserts it does NOT at zoom 1 — which is why break (H) produced a two-sided failure instead of a silent behaviour change. The fixtures are published constants to 16 digits, so none of them is arithmetically degenerate. No change made.",
+      "repaired": false,
+      "trackedArtifacts": "none written"
+    },
+    {
+      "script": "npm run smoke:deep-zoom-orbit",
+      "source": "debug/smoke-deep-zoom-orbit.mts",
+      "engineUrl": null,
+      "engineUrlCorrect": null,
+      "kind": "node-only, pure CPU. Runs computeReferenceOrbit on nine known-good cases — zero orbit, fast escape, bounded boundary point, precision selection at 1e-30, power=3, and two Julia configurations.",
+      "citedBy": [
+        ".claude/rules/deep-zoom.md (moved here this batch)",
+        ".claude/rules/navigation.md mentions it only to say it is unrelated to camera orbit"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "9 cases, 27 assertions, exit 0, 0.71s. 64 bits at zoom 1, 146 bits at 1e-30; 10000 iters built in 34ms.",
+      "wallSeconds": 1,
+      "exitContractOk": true,
+      "exitContractNote": "Correct and count-based: process.exit(1) when failed > 0.",
+      "falsified": true,
+      "break": "Three falsifications, each applied and reverted independently. (I) HPComplex.sqr returns a2.add(b2) instead of a2.sub(b2) — the core complex-squaring identity. (J) choosePrecisionBits drops the fromZoom term, so precision no longer tracks depth. (H) the NUCLEUS_MIN_ZOOM gate flip, shared with the nucleus guard.",
+      "result": "ALL THREE RED. (I) exit 1, but on exactly ONE assertion — \"Z[1] = z0^2 + c ~ (-0.35, 0.72)\" in case I. (J) exit 1, isolating cleanly on \"precision bits >= 100: got 64\". (H) exit 1, 2 failures — \"all 50 iters\" and \"all 1000 iters computed\", because the gate relocated the reference to a one-period orbit.",
+      "verdict": "healthy, with a measured thinness on complex arithmetic",
+      "note": "Detects all three breaks, so not blind — but worth recording exactly how narrow one of those margins is. Cases A through H are all real-axis or start from z=0, where a2-b2 and a2+b2 agree because b=0. The ONLY assertion in the file that can see a complex-squaring error is case I Z[1], one iteration deep, and it exists precisely because a prior author added a Julia case with a nonzero z0 imaginary part. Same disease as smoke:deep-zoom-la had, caught here by a single line rather than missed. Not repaired: the guard does go red, and unlike the la smoke there was no green break to justify surgery. Flagged so a future session does not delete case I as redundant with case H — case H starts at z0=(0,0) and proves nothing about squaring.",
+      "repaired": false,
+      "trackedArtifacts": "none written"
+    },
+    {
+      "script": "npm run check:mb3d-decompiler",
+      "source": "plans/mb3d/decompiler/check-sync.mjs",
+      "engineUrl": null,
+      "engineUrlCorrect": null,
+      "kind": "STATIC ANALYSER — reads files as text, so check:rule-guards cannot import-check it and explicitly asks for the scan paths to be verified by hand. Compares the repo snapshot of the MB3D decompiler against a canonical copy OUTSIDE the repo at H:/GMT/stuff/mb3d-decomp/.",
+      "citedBy": [
+        ".claude/rules/mb3d.md"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "4 files, all IN SYNC, exit 0. Canonical dir present on this box (31 files); repo snapshot has 12.",
+      "wallSeconds": 1,
+      "exitContractOk": true,
+      "exitContractNote": "Correct: exit 1 on any drift or missing-in-canonical. But exit 0 when the canonical dir is absent — documented as the other-box case, and confirmed by pointing MB3D_DECOMP_CANONICAL at a nonexistent path (warning printed, exit 0).",
+      "falsified": true,
+      "break": "Five falsifications. (K) append a line to a GUARDED repo file (decompile.mjs). (M) append a line to an UNGUARDED shared file (detect-loops.mjs). (M2) same, to gen-sample-scenes.mjs, after adding it to FILES. (N) convert a guarded file to CRLF. (O) move a guarded repo file aside. Plus a by-hand diff of every file present in both trees.",
+      "result": "(K) RED exit 1 naming decompile.mjs, before and after repair. (M) GREEN exit 0 — the allowlist gap. (M2) RED exit 1 after repair. (N) before repair would have been a false DRIFTED; after repair reports \"IN SYNC (line endings differ only)\" exit 0. (O) before repair an unhandled readFileSync ENOENT; after, a clean \"MISSING in repo\" exit 1. The by-hand diff found gen-sample-scenes.mjs differing today — repo 3566 bytes CRLF vs canonical 3511 LF, i.e. exactly its 55 line endings and no content change.",
+      "verdict": "allowlist blind spot + latent false-red (both repaired)",
+      "note": "The check:zindex precedent held exactly: an allowlist that omits the files that matter. gen-sample-scenes.mjs regenerates the COMMITTED engine-gmt/utils/mb3d/sampleScenes.ts (verified tracked with git ls-files), so it is the same class as generate-library.mjs and its omission meant drift there would silently revert shipped output — the precise regression this guard was written after, twice. The second defect is subtler and was why the first could not be fixed alone: core.autocrlf=true is set and nothing in .gitattributes covered this directory, so a plain git checkout rewrites these files CRLF against an LF canonical and a byte-exact compare would call all five DRIFTED with identical content, while the remedy it prints would not survive the next checkout. gen-sample-scenes.mjs was already in that state. The repo had already solved this exact problem once — debug/compat-snapshot.jsonl carries a text eol=lf pin with a comment naming the same failure for test:compat — so the fix is the established pattern, not an invention. Left unchanged deliberately: exit 0 when the canonical dir is missing. It is the documented cross-machine contract and narrowing it is a judgement call; the header now says a skip warning means NOT CHECKED, never in sync.",
+      "repaired": true,
+      "commit": "cfd69dac",
+      "trackedArtifacts": "none written"
+    },
+    {
+      "script": "npm run test:mb3d",
+      "source": "debug/test-mb3d-parse.mts",
+      "engineUrl": null,
+      "engineUrlCorrect": null,
+      "kind": "node-only. Byte-exact decode gate for the MB3D parameter-block parser: a 100k synthetic codec round-trip, two gold blocks with externally-published values, and a 5-fixture structural sweep.",
+      "citedBy": [
+        ".claude/rules/mb3d.md"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "24 passed, 0 failed, exit 0, 0.74s.",
+      "wallSeconds": 1,
+      "exitContractOk": true,
+      "exitContractNote": "Correct and count-based: process.exit(1) when fails.length > 0.",
+      "falsified": true,
+      "break": "Four falsifications of engine-gmt/utils/mb3d/parseMB3D.ts. (P) width reads header offset 8 (height’s slot) instead of 4. (P3) the mirror — height reads offset 4. (Q) codec quad packing shift 12 -> 11. (R) addon formulaCount reads a+5 instead of a+4.",
+      "result": "BEFORE REPAIR (P) was GREEN, 24 passed / 0 failed, exit 0. (Q) RED, 11 passed / 18 failed including 98436 codec round-trip mismatches. (R) RED, 22 passed / 6 failed. AFTER REPAIR both (P) and (P3) RED at exit 1 with the dims printed — [840x840 x5] and [1400x1400 x5] respectively.",
+      "verdict": "degenerate fixtures on width/height (repaired)",
+      "note": "Both gold blocks are SQUARE — arcimboldo 5680x5680, asymmetric 5000x5000 — so the only assertions that check dimensions exactly cannot distinguish the width and height offsets. The five digitalstew fixtures are non-square at 1400x840, but the sweep predicate only tested h.width > 0 && h.height > 0. Same class as the freqStart: 0 tautology in test:migrations, with two equal fields standing in for the zero. No vanishing-input hole: fixtures are read by hardcoded filename through readFileSync, so a missing one throws rather than yielding an empty green run.",
+      "repaired": true,
+      "commit": "389975f6",
+      "trackedArtifacts": "none written"
+    },
+    {
+      "script": "npm run test:mb3d:weave",
+      "source": "debug/test-mb3d-weave.mts",
+      "engineUrl": null,
+      "engineUrlCorrect": null,
+      "kind": "node-only, 1667 lines. Covers the MB3D weave path end to end: weaveSequencer, the modulo/block/counts schedulers, rhythm conversion, emitWeave assembly, emitFusedHybrid, the native slot catalog and resolver, and legacy-scene migration.",
+      "citedBy": [
+        ".claude/rules/mb3d.md"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "324 passed, 0 failed, exit 0, 1.3s.",
+      "wallSeconds": 2,
+      "exitContractOk": true,
+      "exitContractNote": "Correct and count-based: process.exit(1) when fails.length > 0.",
+      "falsified": true,
+      "break": "Three falsifications, each applied and reverted independently. (S) buildBlockPlan in schedule.ts drops the silent-step marker on negative counts (seq.push(r) instead of c < 0 ? ~r : r). (T) emitFusedHybrid drops the last slot from the ledger. (U) getNativeSlotCatalog truncated to one entry per category.",
+      "result": "ALL THREE RED. (S) exit 1, 323 passed / 1 failed. (T) exit 1, 321 passed / 3 failed — and test:mb3d stayed green under the same break, correctly, since the parser harness does not touch the emitter. (U) exit 1, 323 passed / 1 failed on \"P4.3: catalog greys self-contained with reason\".",
+      "verdict": "healthy",
+      "note": "Strongest guard of the batch and the only one that already did the anti-vanishing-input thing unprompted: it carries ck(\"catalog non-empty\", all.length >= 70) — an explicit floor on the size of a scanned collection, which is exactly the repair batch 4 had to add by hand to test:shader and test:modulation-coverage. Constructs every fixture in code from directly imported formula defs rather than reading a corpus, so there is nothing to go missing. No change made.",
+      "repaired": false,
+      "trackedArtifacts": "none written"
+    },
+    {
+      "script": "npm run smoke:pause-controls",
+      "source": "debug/smoke-pause-controls.mts",
+      "engineUrl": "http://localhost:3400/fluid-toy.html (module default; no ENGINE_URL in the npm script)",
+      "engineUrlCorrect": true,
+      "kind": "browser smoke (playwright/chromium). Boots fluid-toy, finds the pause button registered by installPauseControls, clicks it, and hovers to open the popover.",
+      "citedBy": [
+        ".claude/rules/engine-plugins.md",
+        ".claude/rules/sibling-apps.md"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "exit 0. 1 pause button; isPaused false -> true; sample cap slider visible. 33.6s wall, inflated by the concurrent test:weave-sweep baseline sharing the CPU (both drive chromium).",
+      "wallSeconds": 34,
+      "exitContractOk": true,
+      "exitContractNote": "Correct: an explicit process.exit(1) at each of the four failure points. Success path exits implicitly 0. pageerror is collected and checked, though only after the UI assertions.",
+      "falsified": true,
+      "break": "Three falsifications of engine/plugins/topbar/PauseControls.tsx, each applied and reverted independently. (V) onClick no longer calls setIsPaused. (W) the Slider label renamed from \"Auto-Stop (Samples)\" to \"Sample Limit\" — the exact anchor the popover assertion locates. (X) the popover never renders ({false && showMenu && ...}).",
+      "result": "ALL THREE RED at exit 1. (V) \"isPaused after click: false\" then \"click did not toggle isPaused\". (W) and (X) both \"sample cap slider visible: false\" then \"hover popover did not expose the sample cap slider\" — (W) proving the anchor is load-bearing, (X) proving the hover mechanism itself is covered.",
+      "verdict": "healthy",
+      "note": "Reach is genuine despite being a sibling-app boot: engine/plugins/topbar/PauseControls.tsx is reachable from the fluid-toy entry graph (confirmed with the checker own reachability module), which is why check:rule-guards does not flag it under engine-plugins.md. Both citing rules already carry accurate context — sibling-apps.md explicitly frames it as a fluid-toy BOOT CANARY rather than a fluid-toy guard, and already documents the tracked-PNG side effect. The popover assertion is only meaningful because a previous auditor fixed it: the header records that it used to read an unscoped document-wide .text-[8px] selector that landed on an unrelated menu badge and was logged rather than asserted, so a completely broken popover passed. Break (W) is the direct regression test for that fix. No change made.",
+      "repaired": false,
+      "trackedArtifacts": "REWRITES the tracked debug/fluid-pause-hover.png on every run (including every falsification). Restored with git checkout -- debug/fluid-pause-hover.png after the final green run; git status clean."
+    },
+    {
+      "script": "npm run test:weave-sweep",
+      "source": "debug/native-weave-sweep.mts (--fresh)",
+      "engineUrl": "none — drives chromium against the local debug/validator.html, not a dev-server URL",
+      "engineUrlCorrect": null,
+      "kind": "browser-backed compile sweep. For every pair of eligible native formulas builds a 2-slot native weave via emitFusedHybrid, compiles the fused def through the real engine ShaderFactory, and runs webglCompile as the SINGLE hard gate (ADR-0089 P4.4).",
+      "citedBy": [
+        ".claude/rules/gmt-formulas-and-graph.md",
+        ".claude/rules/mb3d.md"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "2704 pass, 0 fail, 817.2s (13.6 min), exit 0. 52 eligible formulas. Slowest guard in this batch by two orders of magnitude.",
+      "wallSeconds": 817,
+      "exitContractOk": true,
+      "exitContractNote": "Correct and count-based: process.exit(fail > 0 ? 1 : 0). Output jsonl is gitignored, thumbnails untracked — no tracked artifact written.",
+      "falsified": true,
+      "break": "Three falsifications, each applied and reverted independently. (Z) drop the side-effect import of engine-gmt/formulas/index.ts so the formula registry shrinks. (Y) emitFusedHybrid emits the same GLSL function name for every slot (dropping the per-slot index suffix) — a namespace collision. (AA) append malformed GLSL to each emitted slot body. (Y) and (AA) run with --pair for speed against the full-matrix baseline.",
+      "result": "ALL THREE RED. (Z) exit 1 with \"only 7 eligible formulas — expected at least 52\", firing BEFORE any browser work. (Y) exit 1, 0 pass / 1 fail, failing gate webglCompile. (AA) exit 1, 0 pass / 1 fail, same gate.",
+      "verdict": "healthy — and already carries the shrunk-matrix gate the fifth failure mode calls for",
+      "note": "The only guard in this batch that already had the anti-vanishing-input protection AND had measured it: FORMULA_FLOOR = 52, with a comment dated 2026-07-29 recording that dropping the formulas barrel import took the sweep from 2704 pairs to 49 while still printing \"49 pass 0 fail\" and exiting 0. It also names why this matters more here than elsewhere — the matrix is QUADRATIC in the formula count, so losing 5% of formulas loses ~10% of pairs. Falsified that gate directly (break Z); it fires correctly. One footgun found and NOT repaired because the shipped contract is unaffected — see the Tier B finding on the resume path.",
+      "repaired": false,
+      "trackedArtifacts": "none — debug/native-weave-sweep.jsonl is gitignored, thumbnails untracked"
+    }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/smoke-deep-zoom-la.mts",
+      "summary": "smoke:deep-zoom-la passed on an LA table that had been structurally destroyed — three independent ways — and was blind to every imaginary-part sign error in the LA math because all of its fixtures sat on the real axis.",
+      "change": "Additive only; no assertion removed, narrowed or loosened. Added MIN_NODES_CHECKED and MIN_LA_STAGES floors with the observed values recorded in source (100/167 nodes, 4 stages @ 1000 iters, 6 @ 5000); ran case B a second time on the period-3 complex nucleus c=(-0.1225611668766536, 0.7448617666197442) plus an assertion that the fixture really does carry nonzero Ref.im; converted case C's silent else-branch into a failing check; added case D, exact-equality unit checks on stepLA and compositeLA using hand-computed distinctive values (no component 0, 1 or repeated). Header records all three coverage floors, the falsification results and the measured margin.",
+      "verification": "Five breaks applied and reverted independently against pristine main. Before: (A) RED, (B)/(C)/(D) GREEN at exit 0. After: all five RED with distinct failing assertions, quoted in the guard entry. Every hardcoded expectation in case D was pre-verified against the live source with a throwaway probe before being written, so the guard cannot be permanently red on a value I got wrong. git diff clean after revert, AUDIT_GS01B5 grep empty, npm run typecheck exit 0, repaired guard green in 0.8s.",
+      "guard": "npm run smoke:deep-zoom-la",
+      "guardPass": true,
+      "commit": "68ea7ca6"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": ".claude/rules/deep-zoom.md",
+      "summary": "The last three check:rule-guards miscitations in the repo: gmt-formulas-and-graph.md cited all three deep-zoom smokes, none of which imports any of that rule engine-gmt scope, while engine/fractal/deepZoom/** was scoped by no rule at all.",
+      "change": "Moved, not dropped. New .claude/rules/deep-zoom.md scopes engine/fractal/deepZoom/** and carries the three smokes plus smoke:gx-fractal-glitch (reach proven 12/12; the only guard asserting ADR-0065/0066 glitch-freedom end to end). gmt-formulas-and-graph.md keeps a pointer to the new rule in place of the old paragraph. The new rule records three facts measured during this sweep rather than restating code: app-gmt reaches 0 of the 12 files while gradient-explorer and fluid-toy reach all 12; fluid-toy carries partial sibling forks a fix here does not reach; and a real-axis reference orbit makes imaginary-part sign errors unreachable.",
+      "verification": "check:rule-guards went from 3 issues / exit 1 to \"All rule guard citations reach the files their rule scopes.\" / exit 0 — zero for the first time in this audit. --verbose confirms the four new citations resolve at 4/12, 7/12, 4/12 and 12/12, and that the five guards remaining on gmt-formulas-and-graph.md still reach 53-55/55. Reach figures produced with the checker own reachability module. All three smokes were independently falsified in this batch first, so the citations point at guards proven to work. Prose names the smokes without the npm run prefix so no new citations were minted.",
+      "guard": "npm run check:rule-guards",
+      "guardPass": true,
+      "commit": "6b3f0601"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "plans/mb3d/decompiler/check-sync.mjs",
+      "summary": "check:mb3d-decompiler — one of the two static analysers check:rule-guards cannot import-check — guarded 4 of the 11 files shared with its canonical copy, omitting a generator of committed output, and its byte-exact compare was one git checkout away from false-redding every file it does guard.",
+      "change": "Added gen-sample-scenes.mjs to FILES (it regenerates the committed engine-gmt/utils/mb3d/sampleScenes.ts, same class as generate-library.mjs); made the comparison EOL-insensitive while REPORTING line-ending-only differences rather than hiding them; added a clean MISSING-in-repo branch in place of an unhandled readFileSync ENOENT; pinned plans/mb3d/decompiler/*.mjs to LF in .gitattributes, the same fix already present there for debug/compat-snapshot.jsonl. Header records the hand-verification and states that a skip warning means NOT CHECKED.",
+      "verification": "Every file present in both trees diffed by hand — 12 repo files against 31 canonical, 11 shared — which found gen-sample-scenes.mjs already drifted (repo 3566 bytes CRLF vs canonical 3511 LF, exactly its 55 line endings, no content change). Five breaks, each applied and reverted: editing a guarded file RED before and after; editing an unguarded shared file GREEN (the gap); editing gen-sample-scenes.mjs RED after the repair; CRLF conversion now IN SYNC with a caveat instead of a false DRIFTED; a moved repo file now a clean MISSING message at exit 1. Guard green, typecheck exit 0.",
+      "guard": "npm run check:mb3d-decompiler",
+      "guardPass": true,
+      "commit": "cfd69dac"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/test-mb3d-parse.mts",
+      "summary": "test:mb3d could not distinguish the MB3D header width offset from the height offset, because both gold fixtures are square.",
+      "change": "One additive assertion pinning the five digitalstew fixtures at exactly 1400x840 (they are non-square, unlike the gold blocks), with the falsification recorded beside it. No existing assertion touched.",
+      "verification": "Reading width from height offset (dv.getInt32(8) instead of (4)) left the harness 24 passed / 0 failed at exit 0. After the repair both that and the mirror swap are RED at exit 1 with the wrong dims printed. Two further breaks confirmed the rest was sound (codec shift 12->11: 11 passed / 18 failed; addon offset a+4->a+5: 22 passed / 6 failed). typecheck exit 0.",
+      "guard": "npm run test:mb3d",
+      "guardPass": true,
+      "commit": "389975f6"
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "debug/native-weave-sweep.mts",
+      "summary": "Without --fresh, test:weave-sweep exits 0 with \"Nothing to do\" when every requested pair is already in the results jsonl — a manual --pair run can report success while testing nothing.",
+      "rationale": "Hit live during this sweep: running the harness with --pair=Mandelbulb,AmazingBox printed \"--resume: skipping 1 already-tested pairs\" then \"Nothing to do (use --fresh to re-run)\" and exited 0, having compiled nothing. The npm script passes --fresh, so test:weave-sweep as cited in the rules is NOT affected — the jsonl is wiped every run and FORMULA_FLOOR covers the shrunk-matrix case properly. The exposure is a human or agent running the harness directly with --pair or --primary to check one cell, reading exit 0, and concluding it compiles. Options: (a) leave it — resume is deliberate and the guard as shipped is sound; (b) exit 1 when a resume skips everything, which makes the no-op loud but breaks anyone scripting resume as idempotent; (c) keep exit 0 but print the total-skip as a warning to stderr. Recommend (c) — it removes the silent-success reading without changing any exit contract. Not applied: it is a behaviour change to a documented workflow."
+    }
+  ],
+  "summary": {
+    "status": "complete",
+    "guardsPlanned": 8,
+    "guardsAudited": 8,
+    "healthy": 4,
+    "cannotFail": 1,
+    "degenerateFixtures": 1,
+    "allowlistBlindSpot": 1,
+    "alreadyHardened": 1,
+    "brokenScripts": [
+      "npm run smoke:deep-zoom-la",
+      "npm run check:mb3d-decompiler",
+      "npm run test:mb3d"
+    ],
+    "repairsApplied": 4,
+    "falsificationsRun": 20,
+    "commits": [
+      "68ea7ca6",
+      "6b3f0601",
+      "cfd69dac",
+      "389975f6"
+    ],
+    "checkRuleGuardsIssues": 0,
+    "checkRuleGuardsNote": "ZERO for the first time in this audit. Was 3 at batch start (all three deep-zoom smokes on gmt-formulas-and-graph.md). Now exit 0, 20 rules, 71 citations resolved. The 2 remaining lines are static-analyser notices, not issues — and one of those two, check:mb3d-decompiler, was hand-verified in this batch.",
+    "perGuardVerdict": {
+      "smoke:deep-zoom-la": "cannot-fail three ways — a destroyed LA table (all StepLength 0, or the whole stage tree collapsed) passed, and real-axis-only fixtures hid every imaginary sign error (repaired)",
+      "smoke:deep-zoom-nucleus": "healthy — 3 breaks / 3 mechanisms all red; both halves of the zoom gate pinned",
+      "smoke:deep-zoom-orbit": "healthy, but its only assertion that can see a complex-squaring error is one line in case I (measured, documented, not changed)",
+      "check:mb3d-decompiler": "guarded 4 of 11 shared files, omitting a generator of committed output; byte-exact compare was one checkout from false-redding all of them (both repaired)",
+      "test:mb3d": "could not tell width from height — both gold fixtures are square (repaired)",
+      "test:mb3d:weave": "healthy — 3 breaks / 3 mechanisms all red; already carries a catalog size floor",
+      "test:weave-sweep": "healthy — the only guard that already had the shrunk-matrix gate AND had measured it (FORMULA_FLOOR = 52). One manual-use footgun, Tier B.",
+      "smoke:pause-controls": "healthy — 3 breaks all red; rewrites the tracked debug/fluid-pause-hover.png, restored"
+    },
+    "headline": "Items 1-3 took check:rule-guards to ZERO for the first time in this audit, and the fix added coverage rather than removing it: the three deep-zoom smokes were healthy but cited on a rule scoping none of the code they touch, while engine/fractal/deepZoom/** was scoped by no rule at all — so they moved to a new deep-zoom.md that closes the orphan. Four of eight guards needed repair. The sharpest finding is smoke:deep-zoom-la, which passed three separate ways on a wrecked LA table, including with every stage-0 node at StepLength 0 while printing \"nodes=0 max relative error=0.00e+0\" and calling it a match. Second theme, twice over: a fixture whose values make its own assertion degenerate — test:mb3d cannot distinguish the width and height header offsets because both gold blocks are square, and the deep-zoom fixtures were all real-axis, which makes the imaginary term in the LA math unreachable. Third: check:mb3d-decompiler, one of the two analysers the checker cannot import-check, guarded 4 of the 11 files it shares with its canonical copy and was one git checkout from false-redding the four it did. The encouraging half: test:weave-sweep and test:mb3d:weave already carry explicit size floors on their scanned collections, so the fifth failure mode is starting to be designed against rather than only found.",
+    "trackedArtifactsTouched": "debug/fluid-pause-hover.png rewritten by smoke:pause-controls on every run (baseline + 3 falsifications + final); restored with git checkout, final git status clean. debug/engine-gmt-smoke.png left untouched as instructed.",
+    "devServer": "Vite on :3400 started for smoke:pause-controls only, then stopped; port confirmed clear (no LISTENING socket)."
+  }
+}
