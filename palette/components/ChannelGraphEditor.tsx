@@ -9,8 +9,17 @@
  *
  * The interaction + tools + selection-bbox are the SHARED engine hooks
  * (useGraphInteraction / useGraphTools / GraphSelectionBBox), driven through a
- * local `GraphDataSource` built below — no scrub/playhead, no track selection,
- * no undo snapshot, no engine side-effect. See utils/GraphDataSource.ts.
+ * local `GraphDataSource` built below. That DATA SOURCE omits the timeline-only
+ * paths — no scrub/playhead, no track-selection sync, and none of the sequence
+ * store's undo. See utils/GraphDataSource.ts.
+ *
+ * Edits here ARE undoable, and the editor DOES touch the engine store — it just
+ * brackets them itself instead of going through the data source. Grep `genEdit`
+ * (== `paramEdit` from `palette/store/paramUndoBracket`): discrete gestures
+ * self-bracket to one entry each, and a pointerdown/window-pointerup pair wraps a
+ * whole drag in one engine param transaction (grep `genEditStart`). The snapshot
+ * is `captureGeneratorHistory`, registered as a param-undo history provider in
+ * `registerPaletteUI` — so curves ride Ctrl+Z alongside the DDFS dials.
  *
  * Channel ranges: t∈[0,1] maps to frame 0..CURVE_FRAMES (1:1 with 256 samples);
  * the vertical axis is normalized per-channel (L, C, h have very different value

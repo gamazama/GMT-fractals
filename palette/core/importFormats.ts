@@ -21,7 +21,18 @@
  *     this module introduces no second ramp path.
  *
  * @invariant every exported parser returns a 256-length `RGB[]` or `null`; it must
- *   never throw on arbitrary input.
+ *   never throw on arbitrary input — proven by:
+ *   `npx tsx debug/test-palette-importformats.mts`, both halves falsified 2026-07-29.
+ *   Length: shrinking `rampFromAnchors`'s output to 255 turned 36 assertions red
+ *   ("<fmt>: \"<preset>\" parses"), because `parseGradientText` gates on
+ *   `ramp.length === 256`. No-throw: making `parseCss` throw on non-gradient text turned
+ *   section [5]'s "parseCss no throw on nonsense" red. Both exit 1.
+ *
+ *   NOTE the two halves are guarded at different strengths. `parseGradientText` is
+ *   trivially no-throw — it wraps everything in try/catch. The six exported parsers are
+ *   NOT wrapped, and section [5] feeds each of them exactly ONE nonsense string
+ *   (`'### nonsense ###\n!!!\n'`), so their no-throw claim rests on a single sample per
+ *   parser rather than on a fuzz sweep.
  */
 
 import type { RGB } from './oklab';
