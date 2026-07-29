@@ -285,6 +285,16 @@ Verified: <guard or verifier method>
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ```
 
+**Stage explicit paths. Never `git add -A`, `git add .`, or `git commit -a`.**
+Auditors run in parallel against ONE shared working tree, so a broad stage sweeps
+up whatever the other agents happen to have unsaved at that instant. On 2026-07-29
+it did: the a03-tutorial auditor staged broadly and carried 54 lines of the gx01
+auditor's `docs/modules/gradient-explorer/app.md` work into commit `50d18282`,
+whose message is about the tutorial runner. No content was lost and history was not
+rewritten, but the finding is mis-attributed in the log permanently — the audit's
+own record of who proved what is now wrong at that commit. Use
+`git add <path> [<path>…]` and check `git status --porcelain` before committing.
+
 ## Throughput, not budget
 
 This runs on a Max subscription. There is **no per-token cost and no dollar
