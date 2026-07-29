@@ -7,6 +7,42 @@
  * previous output only proves it is stable.
  *
  *   tsx debug/test-fft.mts
+ *
+ * BLIND SPOTS CLOSED (2026-07-29 guard sweep), both of the same shape: a
+ * fixture whose values made an assertion arithmetic-free.
+ *
+ *  - REAL PART WAS DEAD WEIGHT. Blocks [3]-[6] drove `SpectrumFrame` with
+ *    `Math.sin(2πbi/N)`, which is odd about i=0, and the periodic Hann window is
+ *    even about it — so the windowed frame is odd and its DFT is purely
+ *    imaginary. Measured over the analysed half at N=2048: max|Re| = 9.2e-6
+ *    against max|Im| = 5.1e+2, a ratio of 1.8e-8. Replacing the whole magnitude
+ *    with `Math.abs(im[k])` therefore passed all ten assertions at exit 0.
+ *    Block [4] now repeats the level assertion with a 0.7 rad phase offset,
+ *    which puts both halves at the same order (measured ratio 0.84) and leaves
+ *    the on-bin level bit-identical, so the expected value is unchanged.
+ *    Falsified after adding: `Math.abs(im[k])` -> exit 1 (-2.3 dB), and
+ *    `Math.abs(re[k])` -> exit 1 (-3.8 dB).
+ *
+ *  - `binCount` WAS UNASSERTED. `binCount = fftSize` — the whole mirrored upper
+ *    half exposed as if it were real frequency content — passed here at exit 0,
+ *    and so did test:band-analyser, test:audio-signal, test:filterbank and
+ *    test:band-math. Nothing in the audio cluster held the frequencyBinCount
+ *    convention that `bandMath.ts` independently recomputes as `fftSize / 2`
+ *    (grep `const binCount` there) and `bandAnalyser.ts` sizes `power` from.
+ *    Block [3] now asserts it directly.
+ *
+ * MARGINS, measured rather than assumed: block [4]'s level assertion runs at
+ * 3.7e-7 dB against a 0.15 dB tolerance — very tight. Block [3]'s concentration
+ * assertion runs at 166 dB against a >30 threshold, which is loose, but the
+ * threshold is deliberately not tightened: 166 dB is the float32 noise floor,
+ * not a signal property, and it is the WINDOW's absence that block [4] catches
+ * (a rectangular window leaks nothing at all for an exactly-on-bin tone, so
+ * removing the window would leave this difference infinite; the 6 dB coherent
+ * gain shift is what goes red, in [4]).
+ *
+ * Vanishing-input check: the corpus is inline and the only external inputs are
+ * the two modules under test, which fail at ESM link time — falsified by
+ * renaming `WINDOW_CAL_DB`, SyntaxError before any assertion runs, exit 1.
  */
 
 import { FFT } from '../engine/features/audioMod/dsp/fft';
@@ -81,6 +117,13 @@ console.log('\n[3] a pure tone lands in its own bin');
   for (let i = 0; i < N; i++) x[i] = Math.sin((2 * Math.PI * bin * i) / N);
   sf.analyse(x);
 
+  // frequencyBinCount convention: HALF the transform, because the upper half is
+  // the conjugate mirror of the lower one. Asserted since 2026-07-29 — nothing
+  // in the audio guard cluster held it, and `bandMath.ts` recomputes the same
+  // quantity independently (grep `const binCount` there), so the two can drift.
+  assert(sf.binCount === N >> 1, `binCount is fftSize/2, not fftSize`, sf.binCount);
+  assert(sf.db.length === N >> 1, 'db is exactly binCount long', sf.db.length);
+
   let peak = 0;
   for (let k = 1; k < sf.binCount; k++) if (sf.db[k] > sf.db[peak]) peak = k;
   assert(peak === bin, `a bin-${bin} tone peaks at bin ${bin}`, peak);
@@ -111,6 +154,19 @@ console.log('\n[4] level calibration matches the AnalyserNode convention');
 
   assert(near(WINDOW_CAL_DB, -1.51, 0.01),
     'the Hann→Blackman offset is ≈ −1.51 dB', WINDOW_CAL_DB.toFixed(3));
+
+  // Same tone, same expected level, phase offset by 0.7 rad. An on-bin tone's
+  // level is phase-invariant, so this is the SAME number — but it is now
+  // reached through a spectrum with both parts live rather than one whose real
+  // half is numerically zero. See the header: without it, discarding `re`
+  // entirely from the magnitude passed every assertion in this file.
+  const xp = new Float32Array(N);
+  for (let i = 0; i < N; i++) xp[i] = Math.sin((2 * Math.PI * bin * i) / N + 0.7);
+  const sfp = new SpectrumFrame(N);
+  sfp.analyse(xp);
+  assert(near(sfp.db[bin], expected, 0.15),
+    'the same tone phase-shifted reads the same level — real AND imaginary parts are load-bearing',
+    { got: sfp.db[bin].toFixed(2), expected: expected.toFixed(2) });
 }
 
 console.log('\n[5] silence reads as -Infinity, which dbToUnit maps to 0');
