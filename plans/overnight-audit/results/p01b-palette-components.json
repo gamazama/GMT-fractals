@@ -1,0 +1,145 @@
+{
+  "id": "p01b-palette-components",
+  "cycle": 12,
+  "guards": [
+    {
+      "script": "npm run test:palette",
+      "pass": true,
+      "subsystem": "p01b-palette-components",
+      "note": "Green at HEAD before and after this cycle's ten commits (exit 0 both times). 16 chained tsx invocations. Read every one's import list: NONE imports any file under palette/components/**. FALSIFIED: broke GradientStrip so every gradient strip in the suite renders blank -> still exit 0. Healthy guard, but it covers palette/core/**, not this subsystem."
+    },
+    { "script": "npm run typecheck", "pass": true, "subsystem": "p01b-palette-components", "note": "Run after every applied change; exit 0 each time. Also the pre-commit hook's gate." },
+    { "script": "npm run check:rule-guards", "pass": false, "subsystem": "p01b-palette-components", "note": "Exit 1 with exactly the 4 known pre-existing miscitations (3 deep-zoom smokes on gmt-formulas-and-graph.md, test:bucket-convergence on gmt-renderer.md). None in palette. No new issues introduced. Not re-derived." },
+    { "script": "npm run orphans", "pass": true, "subsystem": "p01b-palette-components", "note": "knip reports no unused file under palette/components/**." }
+  ],
+  "findings": [
+    {
+      "tier": "B",
+      "severity": "high",
+      "file": "palette/components/",
+      "summary": "The whole 30-file / 6,257-line palette component layer has ZERO automated coverage — no guard imports it, no rule scopes it, and a total render failure leaves every guard green.",
+      "verification": "Structural: for each of the 16 tsx invocations chained into `npm run test:palette`, read its import list — every one resolves into palette/core/**, palette/features/**, store/**, utils/** or gradient-explorer/**; not one imports palette/components/**. `grep -rln 'PickerWall|FavientsPanel|ChannelGraphEditor|GeneratorStage|ImageStage|CanonicalHero|StopsDockPanel|SelectionOverlay|GradientSourcePicker' debug/ .claude/rules/` returns EMPTY. Empirical falsification: changed GradientStrip.tsx's paint guard from `ramp.length !== 256` to `!== 255`, which makes the canvas routine return early always, so EVERY gradient strip in the suite (Generator A/B sources, result hero, Favients previews, Picker hero) renders blank. `npm run test:palette` exit 0; `npm run typecheck` exit 0. Reverted with a targeted Edit; `git diff --stat` clean afterwards.",
+      "rationale": "CLAIM: the component layer is unguarded, and the guard named for this subsystem cannot detect even a total rendering failure in it. EVIDENCE: above — structural and empirical. This is NOT a criticism of test:palette, which is healthy and does exactly what it claims: it covers the DOM-free core math (stopFit, channelCurve, facets, easings, generatorPipeline, img2grad, selectionGeometry, wallLayout, rampGeometry, editorConfig). The gap is that nothing was written for the layer above it, and the name `test:palette` implies otherwise — the run's 'healthy but cited for the wrong thing' mode, compounded by plain absence.\n\nCONSEQUENCE, concretely. PickerWall.tsx (1077 lines) holds the column-major index math, the chunk split at MAX_CANVAS_CSS_H, the zoom/pan transform and the lasso/rect/paint carve commit. FavientsPanel.tsx (1147) holds the drop-index computation against the VISIBLE list (dragged item spliced out), the new-group split on the empty tail's lower half, and the trash zone. ChannelGraphEditor.tsx (811) holds the rampToTrack/trackToRamp driver and the CURVE_FRAMES<->256-sample mapping. All pure, all trivially testable, all unguarded. A regression in any of them is invisible to CI and reaches production, which auto-deploys from main.\n\nOPTIONS:\n(a) Extract PickerWall's pure index math (k->(col,row), its inverse, and the chunk split) into palette/core/wallLayout.ts and assert it in debug/test-palette-walllayout.mts. Both already exist; that guard currently asserts only shouldSquare/squareCols/STRIP_ROWS_MAX. Adds assertions, not infrastructure.\n(b) Same treatment for FavientsPanel's drop-index computation — extract `dropIndexFor(visibleList, y)` into palette/core/favientDnd.ts (already imported by the panel) and assert reorder / insert / new-group / trash.\n(c) A browser smoke booting gradient-explorer.html that asserts a non-blank strip — the only thing that would have caught the GradientStrip break above. The owner does visual testing personally and screenshot smokes are explicitly unwanted, so this must be a PIXEL-VARIANCE assertion (the canvas is not uniform), never a baseline image.\n(d) Do nothing to the code; just record the gap in a palette rule so a green test:palette is not misread as component coverage.\n\nRECOMMENDATION: (a) then (b). Both are pure-function extractions into modules that already have guards, and they cover the two highest-risk index computations in the subsystem. Do (d) regardless — it costs nothing and prevents the exact misreading that produced this finding. (c) only if a blank-render regression actually ships. NOT APPLIED: new guards are unreviewed code, and refactoring PickerWall/FavientsPanel to extract functions is a real code change with no guard to catch a mistake — precisely the situation the tiering exists for."
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/components/PickerWall.tsx",
+      "summary": "Header said each chunk canvas is \"drawn ONCE\" and never mentioned virtualization; the code deliberately unmounts and repaints chunks on scroll, zoom and selection.",
+      "change": "Replaced the render-model bullet with the actual model: IntersectionObserver-virtualized chunks, the three repaint triggers, and the half of the old claim that still holds (no per-frame redraw, no repaint on plain DOM scroll). Flags the paint effect as a hot path.",
+      "verification": "The paint effect returns early on !visible, and `visible` is driven by an IntersectionObserver with rootMargin 500px whose own comment says \"Toggling (not latching) is what keeps zooming cheap — otherwise every chunk ever seen stays mounted and redraws on each zoom step\" — i.e. the code documents repainting while the header denies it. Three triggers confirmed from the dep array [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId]: viewport re-entry (visible), zoom commit (grep ewWStart — zoom multiplies swatchW and the scaled value is passed down through GroupRow to the chunk), and selection change (selectedId, because the selected swatch is redrawn enlarged in place).",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "f279198d"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/components/ChannelGraphEditor.tsx",
+      "summary": "Header said \"no undo snapshot, no engine side-effect\" — the editor brackets the engine's param undo stack at seven sites, so the header states the opposite of the truth.",
+      "change": "Scoped the omissions to the local GraphDataSource (where they are true) and added the editor's own undo path, by grep target.",
+      "verification": "grep genEdit in the file: five self-bracketed discrete gestures (key delete, key add, right-click remove, inspector setTangents, setGlobalInterpolation), plus genEditStart on onPointerDownCapture and a window pointerup/pointercancel genEditEnd wrapping each drag as one entry. generatorStore exports genEdit/genEditStart/genEditEnd as straight aliases of paramEdit/paramEditStart/paramEditEnd from palette/store/paramUndoBracket, which calls the engine store's beginParamTransaction/endParamTransaction — an engine side-effect on every pointerdown in the editor. The snapshot is captureGeneratorHistory, registered as a param-undo history provider in registerPaletteUI, whose own comment reads \"curves + slots now ride Ctrl+Z alongside the DDFS dials\". The inline comment above `const dataSource` was already accurate; only the header was wrong. Also re-verified and left alone: \"t in [0,1] maps to frame 0..CURVE_FRAMES (1:1 with 256 samples)\" is correct — CURVE_FRAMES is 255, so 0..255 inclusive is 256 values.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "a2f1ec49",
+      "commitNote": "MIS-ATTRIBUTED. This change is in commit a2f1ec49, whose subject line reads 'audit(p01a-palette-core): importFormats' @invariant carried no proof clause'. Lost a shared-index race — see notes. Content landed intact and was verified after the fact."
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/components/FavientsPanel.tsx",
+      "summary": "The addName JSDoc asserted \"Drag-to-Favients is the sole add-path now (starring is gone)\"; four add-paths exist and one of them is in this same file.",
+      "change": "Kept the auto-naming contract the comment was actually documenting, dropped the false premise, and named all four add-paths by grep target.",
+      "verification": "grep for `store.add` / `useFavientsStore.getState()` across palette/, app-gmt/, gradient-explorer/, fluid-toy/ returns exactly four: this file's drop handler; CanonicalHero.tsx's toggleSave -> st.add(); registerPaletteUI.ts's setGradientFavientsBridge -> store.add(config, configToName(config), 'Stops') (reached from the Stops editor menu and FavientsEditorEntrance's second click); and this file's own System-menu file import. `git log -S \"starring is gone\"` -> c9da3793 (2026-06-09), which also deleted palette/components/FavStar.tsx per `git log --diff-filter=D`; `git log -S \"the only add path on touch\"` -> 3ceb5592 (2026-06-14) put a star back. Stale by four months, and the two sibling headers directly contradicted each other — CanonicalHero.tsx calls its star \"the only add path on TOUCH\" while this file said starring was gone.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "e708f578"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/components/FavientsToggleButton.tsx",
+      "summary": "Header claimed \"One component for every host\" and that it replaced three per-app copies including app-gmt's; app-gmt does not mount it and has no topbar Favients toggle at all.",
+      "change": "Header now names the two real hosts by grep target and records that app-gmt's copy was deleted rather than migrated, plus the entrance app-gmt actually uses.",
+      "verification": "`grep -rn FavientsToggleButton --include=*.tsx --include=*.ts .` returns importers in exactly two places — fluid-toy/main.tsx (topbar registry) and gradient-explorer/TopBarButtons.tsx (desktopOnly). app-gmt/main.tsx states inline \"No topbar toggle in app-gmt\". `git log --oneline --diff-filter=D --name-only -- 'app-gmt/**'` shows afcfafde deleted app-gmt/FavientsToggleButton.tsx. app-gmt reaches the shelf via openFavientsPanel in app-gmt/PalettePickerOverlay.tsx and the System menu.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "dfed1597"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/components/GeneratorExtrasPanel.tsx",
+      "summary": "Header listed a \"Reseed noise\" action the component does not have — it lives in a different custom-UI registration.",
+      "change": "Dropped the claim; header now points at GeneratorModifierActions.tsx (registered palette-modifier-actions) by grep target.",
+      "verification": "`grep -rn 'reseedNoise|resetAll' --include=*.tsx palette/components/` returns reseedNoise ONLY in GeneratorModifierActions.tsx (store selector + its onClick). GeneratorExtrasPanel subscribes to resetAll alone and renders one reset button. The two are separate customUI registrations landing at different points in the Generator dock, so a reader following the header lands in the wrong component. GeneratorModifierActions' own header correctly lists Reseed as one of its three actions.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "974a2f90"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "palette/components/GradientHoverPreview.tsx",
+      "summary": "Header named two consumers; there are three, and the missing one is the only evidence the `paint` seam is source-agnostic.",
+      "change": "Names all three consumers and re-points the paint-callback rationale at the non-gradient case, so a future caller extends via paint rather than widening the component.",
+      "verification": "`grep -rn GradientHoverPreview --include=*.tsx --include=*.ts .` returns PickerWall, FavientsPanel and EasingPicker (which imports it and renders <GradientHoverPreview hover={hover} />, and whose own header already named it), plus a reference from palette/core/rampCanvas.ts. Both examples the old header gave for the paint callback were gradients; the omitted consumer paints an easing CURVE via drawEasingCurve in easingThumb.ts.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "0047c03a"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "palette/components/HeroSlot.tsx",
+      "summary": "useInHeroRail's docstring described it as a gate for rail-only affordances, citing the one affordance that stopped being rail-only; it is now used purely for sizing.",
+      "change": "Docstring now says what the hook actually does and redirects to HeroSlot's `railOnly` prop for genuine rail-only children.",
+      "verification": "`grep -n inRail palette/components/CanonicalHero.tsx` returns the declaration plus three uses, all sizing/labelling: the star's padding and font size, its \"Save\"/\"Saved\" text, and the enlarge toggle's padding. Neither button is conditional on it. CanonicalHero's own comment says \"Originally rail-only ... now shown on every surface\"; 3ceb5592 made it universal — the same commit as the FavientsPanel \"starring is gone\" staleness, so this is that cluster's third file. The real rail-only mechanism is HeroSlot's railOnly prop (one consumer: ImageStage), documented correctly ten lines below.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "bafab97d"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "palette/components/MixBlend.tsx",
+      "summary": "Header covered only the sliders, omitting the Swap button the component owns and the undocumented `dimmed` prop that disables the whole block.",
+      "change": "Header now records that Swap/Reset and the A/B markers live here (GeneratorStage only supplies handlers) and that `dimmed={curvesOn}` locks Swap along with the sliders.",
+      "verification": "Read MixBlend's JSX: A/B end markers, three VerticalMixSliders, a required-onSwap '⇅ Swap' button and an optional '↺ Reset'; the wrapper applies opacity + pointer-events-none + aria-disabled when `dimmed`. GeneratorStage's call site is `<MixBlend onSwap={swap} onReset={resetMix} dimmed={curvesOn} />`, adjacent to a banner reading \"Curves drive the output — sources are locked\". GeneratorStage's own header says \"a swap button sits between them\" without naming the owner, so before this neither file told a reader where Swap lives.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "91e1fe99"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "palette/components/useFlash.ts",
+      "summary": "Header justified the hook being palette-local with \"(palette/ must not import app/engine code)\"; the engine half is false and its own directory disproves it, and it mislocated useClipboardCopy in engine-core.",
+      "change": "Replaced the parenthetical with the boundary that actually holds — palette imports engine freely, never an app (the rule installFavients.ts states) — quantified from the directory itself, and corrected useClipboardCopy's path.",
+      "verification": "`grep -rho \"from '\\.\\./\\.\\./[a-zA-Z-]*\" palette/components/ | sort | uniq -c` -> ../../components 26, ../../hooks 8, ../../utils 7, ../../types 5, ../../store 3, ../../engine 1 (showToast in GeneratorStage.tsx), ../../data 1 — 51 engine/shared imports in the very directory the rule is written in. The APP half DOES hold: grep for imports of app-gmt/, fluid-toy/ or gradient-explorer/ anywhere under palette/ returns 0. `ls hooks/useClipboardCopy.ts` — repo-root shared hooks, not under engine/. A reader taking the stated rule at face value would refuse a legitimate engine import.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "147aa234"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "palette/components/GradientSourcePicker.tsx",
+      "summary": "Header contrasted the unified catalog with \"just the 24 built-in presets\"; GRADIENT_PRESETS.length is 25.",
+      "change": "Header now cites GRADIENT_PRESETS.length as the source of truth and says not to re-hardcode the number, since it has already drifted once.",
+      "verification": "Counted by importing the module rather than by eye: `npx tsx` over data/gradientPresets.ts prints length 25 and the 25 names (Greyscale ... Aurora Strata). The off-by-one sat in a sentence whose whole job is to say the list is bigger than the built-ins, so it undercut its own point and would send a catalog auditor looking for an entry that is not missing.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "5d0cd6f2"
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "plans/context-protocol/subsystems.json",
+      "summary": "`npm run context:cost -- p01-palette-suite` lists two palette/components files that do not exist, each costed at 0 tokens.",
+      "verification": "The Layer 2 table's first two rows are `palette/components/FavStar.tsx` and `palette/components/QualityRangePad.tsx`, both 0 tokens. Neither exists: `find . -name 'FavStar*' -o -name 'QualityRangePad*'` returns only ./components/QualityRangePad.tsx (moved out of palette by 03d60aa8, 'consolidate range control — QualityRangePad is THE dual-range master') and nothing at all for FavStar (deleted by c9da3793). palette/components/QualityRangePadConnected.tsx correctly imports from '../../components/QualityRangePad', so only the cost map is stale. The tool also prints 'context-map.json predates the latest commit'.",
+      "rationale": "CLAIM: the load-planner invents two files and prices them at zero. EVIDENCE above. This is the same class cycle 11 recorded for t01/t02 (a Layer 2 costed at 0 tokens is indistinguishable from a correct answer), but a distinct instance: there the glob matched nothing, here concrete paths outlived their files. Low severity because it wastes a read attempt rather than misleading about behaviour — but it is silent, and the two entries sort FIRST (cheapest-first ordering puts 0-token rows at the top), so they are the first thing an agent scoping this subsystem sees. OPTIONS: (a) rebuild with `npm run context:map` — but that is a tree-wide rebuild and the cycle-11 finding explicitly says not to run it unattended; (b) implement cycle 11's recommendation (b) and make context-cost.mjs fail loudly on any 0-token Layer 2 row, which catches both instances and any future one; (c) hand-remove the two dead rows. RECOMMENDATION: (b), which is already queued from cycle 11 — this finding is corroborating evidence for it from a second subsystem, not a new ask. NOT APPLIED: context-protocol tooling is outside this slice and the rebuild must not run unattended."
+    }
+  ],
+  "notes": "SCOPE. palette/components/** only (30 files, 6,257 lines). Read every file's header; read the bodies of CanonicalHero, HeroSlot, MixBlend, StopsDockPanel, SelectionOverlay, GradientStrip, useFlash, GeneratorExtrasPanel, GeneratorModifierActions in full, and PickerWall / FavientsPanel / ChannelGraphEditor / GeneratorStage / ImageStage / GradientSourcePicker in sections. Ten Tier A commits, all doc-vs-code corrections proved by grep or by running code; one high-severity Tier B (coverage) and one low Tier B (context map).\n\nANNOTATION MARKERS: there are NONE in this subsystem. `grep -rn '@invariant|@assumption|@bug|@stale|@see docs/adr|@deprecated' palette/components/` returns EMPTY across all 30 files. So step 1 of the protocol (invariant verification) had nothing to check here and nothing to downgrade — the drift instead lives in prose headers, which is why every finding this cycle is a header claim. Worth knowing for the tree-wide @invariant sweep: palette/components contributes zero to the 152-file count, and the ten corrections below would all have been @invariant-shaped claims had anyone written them as annotations.\n\nCOMMIT MIS-ATTRIBUTION — A NEW FAILURE MODE, NOT THE ONE PROTOCOL.MD RECORDS. My ChannelGraphEditor.tsx change is committed inside a2f1ec49, whose subject is 'audit(p01a-palette-core): importFormats' @invariant carried no proof clause'. I did NOT stage broadly — I ran `git add palette/components/ChannelGraphEditor.tsx` for exactly one path, as required. The cause is different: parallel auditors share one working tree AND therefore one git INDEX. The p01a auditor already had palette/core/importFormats.ts staged; my add joined it in the same index; their `git commit` then took both. The pre-commit hook even announced it — 'typechecking (2 staged TS file(s))' — and my own commit returned exit 1 with 'no changes added to commit'. PROTOCOL.md's fix (stage explicit paths) does not prevent this and cannot: `git add` + `git commit` is not atomic across processes. Real fixes, for the orchestrator: (a) give each auditor its own worktree (`git worktree add`), which gives it its own index — the clean answer; (b) failing that, have auditors verify `git log -1 --name-only` lists exactly their paths after every commit and report when it does not. I adopted (b) for the rest of the session; no later commit was affected. Content landed intact and I verified it after the fact. History was NOT rewritten — rebasing a shared branch under two live auditors is far more dangerous than a wrong subject line.\n\nSEAM HANDOFFS.\n(1) TO p01a — palette/core/presetCatalog.ts's top-of-file JSDoc says '24 GRADIENT_PRESETS'; the real length is 25 (verified by importing data/gradientPresets.ts). I fixed the identical stale count in my GradientSourcePicker.tsx but did not touch theirs.\n(2) FROM gx01 (cycle 11), now refined: mountFavientsPanel() is indeed the single entry point, but it is THREE hosts and TWO of them pass a storageKey, not one. app-gmt/main.tsx calls `mountFavientsPanel()` bare (default key); gradient-explorer/setup.ts passes one; fluid-toy/main.tsx passes `{ storageKey: 'fluid-toy.favients.panel', paletteFilters: false }`. So app-gmt is the only host on the default key, and any future host that also omits storageKey silently inherits app-gmt's dock state via same-origin localStorage.\n(3) The FavientsPanel/CanonicalHero/HeroSlot staleness is ONE cluster from ONE commit pair — c9da3793 (2026-06-09) removed starring, 3ceb5592 (2026-06-14) brought it back, and three files still describe the world between those dates. If any fourth file describes the favourites add-model, check it against 3ceb5592.\n(4) VERIFIED CLEAN, so nobody re-derives it: StopsDockPanel's undo claim holds. components/Dropdown.tsx wraps onChange in handleInteractionStart('param') / handleInteractionEnd, store/slices/historySlice.ts documents 'handleInteractionStart(mode?) — routes to beginParamTransaction', and ALL five hosts mount StoreCallbacksProvider (App.tsx, app-gmt, fluid-toy, fractal-toy, gradient-explorer) — so the bracket is never the no-op default. Only the symbol name in the header is shorthand; the mechanism is right, and I left it alone.\n(5) Also verified accurate and left alone: PickerWall's column-major formula (code matches k -> col=floor(k/nrows), row=k%nrows exactly), its 3x/2x hover-zoom factors, MAX_CANVAS_CSS_H=2200, SelectionOverlay's pointer-events:none, ChannelGraphEditor's CURVE_FRAMES/256-sample mapping, HeroSlot's railOnly documentation, and all ten componentRegistry ids (panel-favients, palette-generator-extras, palette-modifier-actions, palette-modify-toggles, palette-noise-targets, palette-image-extras, palette-editor-dock, palette-quality-pad, palette-theme-chips, palette-bundle-toggles) — every one resolves to a real registration.\n\nPROPOSED palette RULE — COMPONENT-LAYER SECTION (I did NOT create .claude/rules/palette.md; all three auditors would have collided writing it). Whoever writes it should include: (i) GUARDS — `npm run test:palette` is 16 chained tsx scripts and covers palette/core/** ONLY; it reaches no file under palette/components/**, proven by falsification (blanking GradientStrip left it green). State that plainly so a green run is never read as component coverage. Note also that check:rule-guards resolves a chained npm script by its FIRST command only, so citing test:palette from a rule only ever resolves debug/test-palette-stopfit.mts — cite the specific link you mean. (ii) THE ARCHITECTURE CARVE-OUT — palette/components/** are store-aware composed panels by design and are NOT under the components/ui/** purity rule; do not 'fix' a store import here. The boundary that IS real: palette/ may import engine and shared code freely but must never import app-gmt/, fluid-toy/ or gradient-explorer/ (currently 0 violations — a cheap grep to keep green). (iii) HOST-AGNOSTICISM — components reach hosts only through registries and seams: componentRegistry ids, store/sendTargetRegistry, palette/core/favientTargets' capability flags (select-mode / browse / studio), and the gradientEditorEntrance seam. A component must not branch on which app it is in. (iv) UNDO — palette gestures ride the ENGINE param undo stack via palette/store/paramUndoBracket (aliased as genEdit/editorEdit/favEdit); discrete gestures self-bracket, drags open on pointerdown and close on window pointerup. Snapshots come from registered history providers (captureGeneratorHistory, captureFavientsHistory) in registerPaletteUI. (v) ANNOTATIONS — this directory has zero @invariant/@assumption markers today; new load-bearing claims should be written as annotations with a named proof command, not as prose in the header, which is exactly how the ten drifts fixed this cycle became invisible.\n\nDELIBERATELY NOT DONE. Did not create .claude/rules/palette.md (collision risk with two concurrent auditors — contents proposed above instead). Did not touch docs/modules/palette/palette-suite.md (p01a's). Did not modify anything under palette/core/** or palette/store/** — read them only to check seams. Did not fix presetCatalog.ts's identical '24' (p01a's file). Did not re-derive the 4 known check:rule-guards miscitations, nor cycle 11's gradient-explorer items. Did not touch gradient-explorer/** (audited cycle 11). Did not claim the NUL-byte finding in debug/test-palette-importformats.mts: I found it independently early on (1 raw NUL at offset 3945, grep classifying the file binary) but the p01a auditor fixed it concurrently in 37345901 — verified 0 NULs now. Did not propose screenshot smokes (owner does visual testing). Did not extract functions out of PickerWall/FavientsPanel to make them testable — that is real code change with no guard behind it, so it is the Tier B recommendation instead. Left debug/engine-gmt-smoke.png alone. Left plans/overnight-audit/state.json and worklist.json alone (orchestrator's).\n\nONE SCRATCH FILE, gitignored: debug/_tmp_count_presets.mts, which I wrote to count GRADIENT_PRESETS exactly. It matches the repo's existing `debug/_*` ignore rule (`git check-ignore -v` confirms), imports nothing but data/gradientPresets.ts, and is part of no npm script. I did not delete it because the protocol forbids an unattended agent deleting any file; it carries a header saying it is scratch and safe to remove."
+}
