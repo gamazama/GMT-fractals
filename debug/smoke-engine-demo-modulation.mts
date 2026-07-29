@@ -160,10 +160,37 @@ async function main() {
         ]);
     });
     await page.waitForTimeout(400);
-    const sizeMod = await page.evaluate(() => (window as any).__store?.getState?.()?.liveModulations?.['demo.size'] ?? null);
-    console.log('liveModulations[demo.size] (relative min/max):', sizeMod);
-    if (typeof sizeMod !== 'number' || sizeMod < 75 || sizeMod > 205) {
-        throw new Error(`relative min/max LFO output out of [80, 200]: ${sizeMod}`);
+    // Sample across more than a full period (0.5 s) instead of once. A single
+    // read cannot distinguish the relative min/max path from a dead offset:
+    // baseValue itself is 120, which sits inside the [75, 205] bound below, so
+    // disabling the min/max branch in ModulationEngine (falling back to the
+    // legacy `rawWave * amplitude`, and this LFO sets amplitude 0) printed
+    // exactly 120 and passed. Measured 2026-07-29.
+    const sizeSamples: number[] = [];
+    for (let i = 0; i < 9; i++) {
+        await page.waitForTimeout(80);
+        const v = await page.evaluate(() => (window as any).__store?.getState?.()?.liveModulations?.['demo.size'] ?? null);
+        if (typeof v === 'number') sizeSamples.push(v);
+    }
+    const sizeMod = sizeSamples[sizeSamples.length - 1] ?? null;
+    console.log('liveModulations[demo.size] (relative min/max):', sizeSamples.map((v) => v.toFixed(1)).join(' '));
+    if (typeof sizeMod !== 'number' || sizeSamples.length < 5) {
+        throw new Error(`relative min/max LFO produced ${sizeSamples.length} numeric samples: ${JSON.stringify(sizeSamples)}`);
+    }
+    for (const v of sizeSamples) {
+        if (v < 75 || v > 205) throw new Error(`relative min/max LFO output out of [80, 200]: ${v}`);
+    }
+    const sizeMin = Math.min(...sizeSamples), sizeMax = Math.max(...sizeSamples);
+    console.log(`  size swing: ${sizeMin.toFixed(1)} .. ${sizeMax.toFixed(1)} (base 120, min -40, max +80 → [80, 200])`);
+    // Both sides of base must actually be reached, or the offset is dead and we
+    // are just reading baseValue back. Measured over 3 runs: 80.0-81.3 low,
+    // 197.6-198.7 high, against the theoretical [80, 200] — these bounds sit
+    // well inside that, and a parked-at-120 output fails both.
+    if (sizeMax < 170) {
+        throw new Error(`relative min/max LFO never reached the +max side: highest sample ${sizeMax.toFixed(1)}, expected ≥170 on the way to base+max=200. An output parked at baseValue (120) looks like this — grep anim.min in engine/features/modulation/ModulationEngine.ts.`);
+    }
+    if (sizeMin > 105) {
+        throw new Error(`relative min/max LFO never reached the -min side: lowest sample ${sizeMin.toFixed(1)}, expected ≤105 on the way to base+min=80. min is deliberately NOT -max here, so a symmetric ±amplitude fallback fails this.`);
     }
 
     // 8) Noise path — base=0.6, min=-0.3, max=+0.4 → output in [0.3, 1.0].
