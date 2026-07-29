@@ -12,7 +12,7 @@
  * Pure composition of existing primitives — featureRegistry + auto-generated
  * `set${FeatureId}` setters + paramTransaction. No new store schema.
  *
- * @see dev/plans/partial-apply-utility.md
+ * @see plans/partial-apply-utility.md
  */
 
 import { featureRegistry } from '../../engine/FeatureSystem';

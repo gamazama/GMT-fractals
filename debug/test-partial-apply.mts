@@ -6,8 +6,25 @@
  *
  *   tsx debug/test-partial-apply.mts
  *
- * @see dev/engine-gmt/utils/applyPartialPreset.ts
- * @see dev/plans/partial-apply-utility.md
+ * @see engine-gmt/utils/applyPartialPreset.ts
+ * @see plans/partial-apply-utility.md
+ *
+ * FALSIFIED 2026-07-29 (guard sweep), against engine-gmt/utils/applyPartialPreset.ts.
+ * Blocks [1]-[3] and [6] are live and isolate cleanly: dropping the
+ * `userScoped || preserveOnApply` skip reds [3] alone; dropping the
+ * `onUpdate === 'compile'` skip reds [6] alone; dropping the
+ * `?? config.default` fallback reds three assertions across [1] and [2].
+ * Block [4] was a tautology and was repaired — see the note on `_txCount` below.
+ *
+ * MEASURED LOOSENESS in block [5] ("unknown featureId silently skipped"). The
+ * function carries TWO guards that each independently swallow an unknown id —
+ * `if (!feat) continue;` and `if (typeof setter !== 'function') continue;` — and
+ * they MASK each other. Removing either one alone leaves the whole harness green;
+ * only removing BOTH reds it ("no exception thrown on unknown id"). So [5] pins
+ * the behaviour but proves nothing about which guard delivers it, and cannot
+ * catch one of them being dropped. Left as-is deliberately: the redundancy is
+ * legitimate defence-in-depth, not a defect, and the useful fact is simply that
+ * this block's margin is "both, not either".
  */
 
 import '../engine-gmt/formulas/index';
@@ -18,9 +35,16 @@ registerFeatures();
 
 // Synthetic store to exercise applyPartialPreset without booting React/Zustand.
 // Mirrors the real store's surface: per-feature slice + auto-setter + transaction stubs.
+// `_txCount` is load-bearing and `_txOpen` alone is not: applyPartialPreset closes
+// its transaction in a `finally`, so `_txOpen` is false on return WHETHER OR NOT one
+// was opened. Test [4] below read only that boolean and was therefore a tautology —
+// measured 2026-07-29 by deleting the `if (featureIds.length === 0) return;` early
+// exit from engine-gmt/utils/applyPartialPreset.ts, which left the whole harness
+// green. Counting begins catches it; keep both.
 const fakeStore: any = {
   _txOpen: false,
-  beginParamTransaction: () => { fakeStore._txOpen = true; },
+  _txCount: 0,
+  beginParamTransaction: () => { fakeStore._txOpen = true; fakeStore._txCount++; },
   endParamTransaction: () => { fakeStore._txOpen = false; },
 };
 
@@ -122,8 +146,18 @@ if (preserveKeys.length === 0) {
 // --- Test 4: empty featureIds is no-op ---
 console.log('\n[4] empty featureIds — no-op (no transaction)');
 fakeStore._txOpen = false;
+const txBefore = fakeStore._txCount;
 applyPartialPreset({ source: {}, featureIds: [] });
-assert(fakeStore._txOpen === false, 'no transaction opened for empty selection');
+assert(fakeStore._txCount === txBefore,
+  `no transaction OPENED for empty selection (begins: ${txBefore} → ${fakeStore._txCount})`);
+assert(fakeStore._txOpen === false, 'and none left open');
+
+// Anti-vacuity: the counter must actually move on a real apply, or the assertion
+// above passes because nothing is being counted at all.
+const txBeforeReal = fakeStore._txCount;
+applyPartialPreset({ source: {}, featureIds: ['lighting'] });
+assert(fakeStore._txCount === txBeforeReal + 1,
+  `a non-empty selection DOES open exactly one transaction (begins: ${txBeforeReal} → ${fakeStore._txCount})`);
 
 // --- Test 5: unknown featureId silently skipped ---
 console.log('\n[5] unknown featureId — silently skipped without error');
