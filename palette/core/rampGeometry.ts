@@ -77,8 +77,20 @@ export const isFractal = (geom: string): boolean => geom === 'fractal';
  * pinned in {@link GEOM_DEFAULTS} so omitting a field reproduces the legacy constant exactly
  * (the determinism harness pins this — see `debug/test-palette-rampgeometry.mts`).
  *
- * @invariant Adding a field is additive: it MUST default such that existing modes render
- *   byte-identically when the field is absent.
+ * @invariant For every field listed in the harness, an omitted value renders
+ *   byte-identically to passing its {@link GEOM_DEFAULTS} entry — proven by:
+ *   `npx tsx debug/test-palette-rampgeometry.mts` section [5](a)
+ *   ("<geom>: omitted fields == explicit GEOM_DEFAULTS (additive)"). Giving `radialScale`
+ *   a fallback other than `GEOM_DEFAULTS.radialScale` turns that assertion red, exit 1
+ *   (falsified 2026-07-29).
+ *
+ *   LIMIT — READ THIS BEFORE ADDING A FIELD. That check walks a HAND-MAINTAINED `cases`
+ *   list inside the harness, so it pins only the fields already named there. A NEW field
+ *   whose `sampleGeometry` fallback disagrees with its `GEOM_DEFAULTS` entry — exactly the
+ *   violation this contract exists to catch — leaves the harness fully green, exit 0
+ *   (verified 2026-07-29 by adding one). Adding a field here is therefore NOT covered
+ *   until you also add it to the harness's `cases` list. `splineSpread` / `splineDepth`
+ *   are outside the gate today, benignly: `sampleGeometry` never reads them.
  */
 export interface GeometryParams {
   // ── linear (rotatable, eased — absorbed the old scurve mode) ────────────
