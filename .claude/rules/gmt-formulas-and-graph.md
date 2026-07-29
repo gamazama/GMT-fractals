@@ -38,9 +38,6 @@ npm run smoke:engine-gmt   # boots app-gmt.html end-to-end; asserts a lit Mandel
 npm run test:baseline      # native config sweep — real shader compiles per formula
 npm run test:hybrid        # hybrid BOX-FOLD config, not the node graph (see below)
 npm run test:weave-sweep
-npm run smoke:deep-zoom-orbit
-npm run smoke:deep-zoom-la
-npm run smoke:deep-zoom-nucleus
 ```
 
 **Do NOT use `smoke:formula-switch` or `smoke:fractal-kind` here.** They are
@@ -51,9 +48,14 @@ nothing from `engine-gmt/`), and `smoke:fractal-kind` drives `fluid-toy.html` an
 only round-trips fluid-toy's `julia.kind` DDFS param. Neither one loads
 `engine-gmt/engine/FractalRegistry`, so neither can fail on a change here.
 
-The deep-zoom smokes are CPU-only tests of `engine/fractal/deepZoom/*`
-(`computeReferenceOrbit` and friends) — they cover the "Watch out" precision
-notes above, not the registry.
+**The three deep-zoom smokes moved out of this block** (cycle 13). They are
+CPU-only tests of `engine/fractal/deepZoom/*` (`computeReferenceOrbit` and
+friends) and import nothing this rule scopes, so they could not fail on a change
+here — `check:rule-guards` flagged all three. They now live in
+[`deep-zoom.md`](./deep-zoom.md), which scopes that directory; nothing was
+dropped. Run `deep-zoom-orbit` / `deep-zoom-la` / `deep-zoom-nucleus` from there
+when touching precision code, not from here. The "Watch out" bullet above still
+points at the right ADRs (0065/0066) for context.
 
 **Nothing above guards the modular graph.** `test:hybrid` / `test:hybrid-adv` are
 `debug/native-config-sweep.mts --mode=hybrid`, where "hybrid" means the hybrid
