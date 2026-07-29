@@ -364,6 +364,22 @@ async function main() {
 
     // Build pair list
     const ids = eligibleFormulas();
+
+    // Zero/shrunk-coverage gate — see the identical note in native-config-sweep.mts.
+    // Measured 2026-07-29: dropping this file's `import '../engine-gmt/formulas/index.ts'`
+    // took the sweep from 2704 pairs to 49 and it still printed "49 pass  0 fail"
+    // and exited 0. Because the matrix is QUADRATIC in the formula count, a shrink
+    // here is far more destructive than it looks: losing 5% of formulas loses ~10%
+    // of pairs. Raise the floor when formulas are added; if you have deliberately
+    // REMOVED one, lower it in the same commit.
+    const FORMULA_FLOOR = 52; // measured 2026-07-29 → 2704 pairs
+    if (ids.length < FORMULA_FLOOR) {
+        console.error(`\n  ✗ only ${ids.length} eligible formulas — expected at least ${FORMULA_FLOOR}.`);
+        console.error(`    The matrix shrank rather than failing. Did formula registration break,`);
+        console.error(`    or were formulas removed on purpose? (If on purpose, lower FORMULA_FLOOR.)\n`);
+        process.exit(1);
+    }
+
     let pairs: Array<[string, string]> = [];
 
     if (PAIR) {

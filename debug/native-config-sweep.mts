@@ -23,6 +23,21 @@
  * Output:
  *   debug/native-config-sweep.jsonl   — one row per formula per run
  *   debug/thumbnails/config/<hash>.png
+ *
+ * FALSIFIED 2026-07-29 (guard sweep). The webglCompile gate is live: appending a
+ * hard GLSL syntax error to the `de` block in engine-gmt/engine/ShaderBuilder.ts
+ * (grep `DE_MASTER(this.formulaLoopBody`) gives 0 pass / 54 fail, exit 1, all on
+ * the webglCompile gate.
+ *
+ * WHAT IT DOES NOT COMPILE, measured rather than assumed. `stripEngineMain` below
+ * deletes from the first `void main(` to the last `}` and substitutes PREVIEW_MAIN,
+ * so anything the builder emits at or after main is never compiled — appending the
+ * same syntax error AFTER main leaves the sweep 54/54 green. The boundary is
+ * narrow in practice: for Mandelbulb the engine's Main shader is 106834 chars, the
+ * first `void main(` is 98.6% of the way in, and `main` is the ONLY function-like
+ * definition at or after it. Positions 1-16 of the assembly order — including the
+ * integrators, post-processing and renderPixel — are all upstream of it and ARE
+ * compiled. Do not read a green run as covering main's own body.
  */
 
 import * as fs from 'fs';
@@ -310,6 +325,23 @@ async function main() {
     if (!fs.existsSync(OUT_THUMBS)) fs.mkdirSync(OUT_THUMBS, { recursive: true });
 
     const ids = eligibleFormulas();
+
+    // Zero/shrunk-coverage gate. `pass` and `fail` are the only things the exit
+    // code reads, and a matrix that never ran scores 0 fail — so an empty or
+    // shrunken registry reports a clean sweep. Measured 2026-07-29: dropping this
+    // file's `import '../engine-gmt/formulas/index.ts'` (the registration side
+    // effect) took the sweep from 54 formulas to 7 and it still printed
+    // "7 pass  0 fail" and exited 0. Same defect class as the one found in
+    // test:frag. Raise the floor when formulas are added; if you have deliberately
+    // REMOVED one, lower it in the same commit.
+    const FORMULA_FLOOR = 54; // measured 2026-07-29 from registry.getAll() minus 'Modular'
+    if (ids.length < FORMULA_FLOOR) {
+        console.error(`\n  ✗ only ${ids.length} eligible formulas — expected at least ${FORMULA_FLOOR}.`);
+        console.error(`    The matrix shrank rather than failing. Did formula registration break,`);
+        console.error(`    or were formulas removed on purpose? (If on purpose, lower FORMULA_FLOOR.)\n`);
+        process.exit(1);
+    }
+
     let cases: string[] = FORMULA ? [FORMULA] : ids;
     if (FORMULA && !ids.includes(FORMULA)) {
         console.error(`Unknown --formula=${FORMULA}. Eligible: ${ids.join(', ')}`);
