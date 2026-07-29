@@ -5,10 +5,21 @@
  * `restoreFavientsPanel()` after its manifest is applied and `watchFavientsPanel()` once
  * to mirror later changes back to storage.
  *
- * The storage key is per-host (`opts.storageKey`): app-gmt floats the shelf and persists
- * under the default `gmt.favients.panel`, while the standalone Gradient Explorer docks it
- * right by default and persists under its OWN key — so the two apps don't read each
- * other's docking state through same-origin `localStorage`.
+ * The storage key is per-host (`opts.storageKey`), so no two apps read each other's
+ * docking state through same-origin `localStorage`. THREE hosts, three keys — grep
+ * `mountFavientsPanel(`:
+ *   • app-gmt        — no `storageKey`, so the default `gmt.favients.panel`; floats.
+ *   • fluid-toy      — `fluid-toy.favients.panel`; floats.
+ *   • Gradient Explorer — `gmt.gradientExplorer.favients.panel`; docks LEFT
+ *     (`favientsPanelEntry({ dock: 'left', order: 0 })` + `location: 'left'` in
+ *     `gradient-explorer/setup.ts`).
+ *
+ * The only place a `'right'` default is chosen is the mobile first-run branch in
+ * `restoreFavientsPanel` below (a floating shelf on a phone is easily lost, and the left
+ * dock is hidden on mobile) — it overrides whatever the host asked for, on first run only.
+ *
+ * The favourite COLLECTION itself is deliberately NOT per-host: `favientsStore` keys it
+ * `gmt.favients`, shared across every app on the origin. Only window state is split.
  */
 
 import { useEngineStore } from '../../store/engineStore';
