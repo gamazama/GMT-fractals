@@ -1,0 +1,410 @@
+{
+  "id": "gs01-guard-sweep-batch7",
+  "cycle": 13,
+  "phase": "guard sweep — batch 7 of several (ui-primitives + the audio DSP / numeric cluster)",
+  "note": "Eight guards, 39 falsifications, SIX defective and repaired, 4 citations added (one NEW rule, one rule widened, one citation moved). The brief's orphan premise is wrong for items 2-6: audio-mod.md already cites all five. The genuinely uncited ones were test:dither and test:refine, and neither had a rule to be cited from. Two of the eight could not fail on product code at all. Tree was quiet and this auditor's alone; a vite server ran on :3400 for smoke:audio-fps-remap and was killed (port confirmed CLOSED). check:rule-guards was at ZERO on entry and exit - and can now check one class of citation it previously waved through.",
+  "guards": [
+    {
+      "script": "npm run smoke:ui-primitives",
+      "source": "debug/smoke-ui-primitives.mts",
+      "engineUrl": null,
+      "kind": "node-only, pure arithmetic. Imports components/ui/viewportClamp.ts and nothing else; 7 inline fixtures (9 after this batch).",
+      "citedBy": [
+        "ui-and-panels.md at entry — via the PROSE of the 'Known coverage gap' block, which writes the name WITH the `npm run` prefix and so mints a real citation from a sentence explaining that it covers nothing",
+        ".claude/rules/layers-zindex.md (MOVED here this batch)"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "7 cases, all PASS, exit 0, ~0.8s",
+      "wallSeconds": 1,
+      "exitContractOk": true,
+      "exitContractNote": "Counter-based and correct: `failures` incremented per mismatch, `process.exit(1)` when non-zero, and every case prints got= and want= so a red run is self-diagnosing.",
+      "falsified": true,
+      "break": "Four breaks in components/ui/viewportClamp.ts, applied and reverted independently with targeted Edits. (A) the x flip disabled (`&& false`). (B) default padding 8 -> 0. (C) the y hard clamp's `size.height` swapped to `size.width` — the plausible copy-paste slip from the x branch three lines above. (D) vanishing-input probe: the exported `clampToViewport` renamed so the guard's own import cannot resolve.",
+      "result": "(A) RED, exit 1, 2 failed: 'flip horizontal' got 792 want 700, 'flip both' got 792 want 750. (B) RED, exit 1, 1 failed: 'no-flip clamps to far edge' got 800 want 792 — only ONE case is sensitive to the default, because the other padding case passes padding:8 explicitly. (C) **GREEN, exit 0, all 7 PASS** — the blind spot. (D) RED, exit 1, ESM SyntaxError at link time before any assertion runs.",
+      "verdict": "healthy on 11 of 12 mutation classes; one measured blind spot on the bottom hard clamp (repaired)",
+      "note": "Blind spot characterised exhaustively rather than by hunch: a 13-way mutation enumeration over the same fixture set (scratchpad, no tracked file touched) caught 11 of 12 real mutations and missed exactly y-clamp-uses-width. Root cause: every fixture's final y landed inside `viewport.height - size.height - padding`, so `Math.min` on y never bound anything. The x axis had cover for the same term only via the single `flip:false` case; there was no vertical analogue. Fifth-failure-mode check: the corpus is inline so it cannot vanish, and the one external input fails at ESM link time (break D) — no floor added, following batch 6's precedent for inline corpora.",
+      "repaired": true
+    },
+    {
+      "script": "npm run test:fft",
+      "source": "debug/test-fft.mts",
+      "engineUrl": null,
+      "kind": "node-only, pure DSP. Imports engine/features/audioMod/dsp/fft.ts and dsp/spectrumFrame.ts. Six numbered blocks; block [1] compares against a naive O(N^2) DFT written from the definition, which is the right shape — a golden file would only prove stability.",
+      "citedBy": [
+        "audio-mod.md - ALREADY cited at entry. That rule scopes engine/features/audioMod/** and cites test:filterbank, test:band-math, test:band-analyser, test:audio-signal, test:fft, test:session-hold and smoke:audio-fps-remap, so the brief's orphan premise is wrong for the whole cluster."
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "10 assertions (13 after this batch), exit 0, ~1.5s",
+      "wallSeconds": 2,
+      "exitContractOk": true,
+      "exitContractNote": "Counter-based, correct: `process.exit(failures === 0 ? 0 : 1)`, and each FAIL prints the offending value.",
+      "falsified": true,
+      "break": "Five breaks in engine/features/audioMod/dsp/, applied and reverted independently. (A) fft.ts sinTable sign flipped (-2pi -> +2pi), i.e. the inverse transform's twiddle. (C) spectrumFrame's `Math.hypot(re[k], im[k])` -> `Math.abs(im[k])`, discarding the real half of the magnitude. (C2) the same -> `Math.abs(re[k])`. (D) `binCount = fftSize >> 1` -> `fftSize`, exposing the conjugate-mirrored upper half as if it were real frequency content. (E) vanishing-input probe: `WINDOW_CAL_DB` renamed.",
+      "result": "(A) RED, exit 1, 3 FAIL — and notably blocks [3]-[6] ALL stayed green, because magnitude is sign-invariant; that is exactly what makes block [1]'s naive-DFT comparison load-bearing rather than decorative. (C) **GREEN, exit 0, all 10 PASS** — blind spot 1. (D) **GREEN, exit 0, all 10 PASS** — blind spot 2, and test:band-analyser, test:audio-signal, test:filterbank and test:band-math were all green on it too. (E) RED, exit 1, ESM SyntaxError before any assertion. After repair: (C) exit 1 (-15.88 vs -13.56), (C2) exit 1 with 4 FAIL, (D) exit 1 with 2 FAIL.",
+      "verdict": "healthy on the FFT itself; two measured blind spots on the SpectrumFrame half (both repaired)",
+      "note": "Blind spot 1 is lesson 2, and the mirror image of batch 5's deep-zoom-la: there every fixture sat on the real axis so imaginary errors were unreachable; here every fixture is a phase-0 sine, odd about i=0, and the periodic Hann window is even about it - so the windowed frame is odd and its transform purely imaginary (measured max|Re| 9.2e-6 vs max|Im| 5.1e+2 at N=2048). Blind spot 2 is an unasserted public contract two other modules depend on. Margins: block [4] runs at 3.7e-7 dB against a 0.15 dB tolerance; block [3] at 166 dB against >30, loose and deliberately NOT tightened - 166 dB is the float32 noise floor, and its comment's claim that it catches a missing window is wrong (a rectangular window leaks nothing for an on-bin tone). Block [4]'s 6 dB shift catches that.",
+      "repaired": true
+    },
+    {
+      "script": "npm run test:filterbank",
+      "source": "debug/test-filterbank.mts",
+      "engineUrl": null,
+      "kind": "node-only, pure logic. Imports engine/features/audioMod/filterBank.ts only. Nine numbered blocks; scope was deliberately narrowed by ADR-0110 when the DSP moved to the worklet, so what is left is the follower, the range queries and rebuild bookkeeping.",
+      "citedBy": [
+        "audio-mod.md — ALREADY cited at entry, in the Guards block."
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "18 assertions (24 after this batch), exit 0, ~1.2s",
+      "wallSeconds": 2,
+      "exitContractOk": true,
+      "exitContractNote": "Counter-based, correct.",
+      "falsified": true,
+      "break": "Seven breaks in engine/features/audioMod/filterBank.ts, each reverted with `git checkout --`. Controls: aggregateFlux summing instead of averaging; the silence gate forced true; the MIN_PEAK floor removed. Blind-spot probes: (A) `aggregate` computing the arithmetic mean instead of the RMS; (B) `matches()` with the bandsPerOctave comparison deleted; (F) `rebuild` preserving `peaks` when the length is unchanged; (C2) `aggregateFlux` returning the max.",
+      "result": "Controls RED: flux-sum exit 1 (252), silence gate exit 1 (1.000), MIN_PEAK exit 1 (1). Blind spots BEFORE repair: (A) **GREEN, all 18 PASS**; (B) **GREEN**; (F) **GREEN**. AFTER repair all four RED: (A) got 0.485714 vs rms 0.570714; (C2) got 21.000000 vs mean 11.571429; (B) 'nor a changed bandsPerOctave'; (F) 0.346 against >0.9.",
+      "verdict": "healthy on the follower; three measured blind spots on the aggregates, matches() and rebuild (all repaired)",
+      "note": "(A) is lesson 2 in its purest form: the block is TITLED 'aggregate is RMS over the range, flux is the mean' and its fixture - every band filled with one value - makes RMS, mean and max numerically identical. (B) has a live consequence: WorkletAnalysis gates its rebuild on `if (!filterBank.matches(opts))`, so a matches() blind to bandsPerOctave leaves the band table stale after a resolution change. (F) is lesson 8 in reverse - the first attempt looked healthy because block [8] rebuilds at a DIFFERENT bandsPerOctave, so the array is reallocated for its length regardless.",
+      "repaired": true
+    },
+    {
+      "script": "npm run test:band-math",
+      "source": "debug/test-band-math.mts",
+      "engineUrl": null,
+      "kind": "node-only, pure geometry. Imports engine/features/audioMod/bandMath.ts only — the module BOTH threads build the band table from independently, so a defect here desynchronises the worklet and the main thread. Seven numbered blocks.",
+      "citedBy": [
+        "audio-mod.md — ALREADY cited at entry, in the Guards block."
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "34 assertions (40 after this batch), exit 0, ~1.2s",
+      "wallSeconds": 2,
+      "exitContractOk": true,
+      "exitContractNote": "Counter-based, correct.",
+      "falsified": true,
+      "break": "Six breaks in engine/features/audioMod/bandMath.ts, each reverted. Controls: unit-sum kernel normalisation removed; the Hann weight replaced by a rectangular 1; TILT_REF_HZ moved to 1000. Probes: (P) `resolutionLimited` -> `false`; (P3) -> `true`; (Q) `fMax` -> `nyquist`; (Q3) -> `Math.min(BANK_MAX_HZ, nyquist)`.",
+      "result": "Controls RED: no normalisation exit 1 (worst 140.76); rectangular kernel exit 1 on the edge-to-centre shape; TILT_REF_HZ exit 1 on two assertions. BEFORE repair: (P) **GREEN** - every band unflagged, message printing '(0 of 56)' while passing; (Q) **GREEN** - the bank ran to 22807 Hz, 6.8 kHz above the declared ceiling. AFTER: (P) 4 FAIL, (P3) 4 FAIL, (Q) 2 FAIL, (Q3) 1 FAIL - so the 0.95 nyquist guard is now covered separately from BANK_MAX_HZ.",
+      "verdict": "healthy on kernels and tilt; two measured blind spots on the resolution flag and the band ceiling (both repaired)",
+      "note": "(P) is the fifth failure mode one level down - not a vanished INPUT but a vanished RESULT SET. `flagged.length ? Math.max(...) : 0` means 'no bands flagged' scores 0, and 0 is under every limit, so the emptier the answer the safer it looks. (Q) is lesson 4: the assertion existed but its threshold was 9.6 kHz slacker than the contract it stood in for. The nyquist half needed a second sample rate to be testable at all - measured across nine rates, 32/44.1/48 kHz cannot discriminate `nyquist` from `nyquist * 0.95` because BANK_MAX_HZ binds first; 24000 and 12000 are the only two that can.",
+      "repaired": true
+    },
+    {
+      "script": "npm run test:gate",
+      "source": "package.json composite — test:interaction && test:interaction:wiring && test:interaction:coverage && test:modulation-coverage && test:param-mapping && test:modulation-parity",
+      "engineUrl": null,
+      "kind": "meta-guard. Owns no source; a && chain of six node harnesses, every one already swept - three in batch 6 (test:interaction, :wiring healthy, :coverage repaired), test:modulation-coverage in batch 4 (repaired), test:param-mapping in batch 2 (healthy), test:modulation-parity in batch 1 (cannot-fail, repaired at bdfa246f).",
+      "citedBy": [
+        "none, and deliberately so — see citationsConsidered below."
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "6 members, 37 + 30 + 42 assertions plus three counted harnesses, exit 0, 6.1s",
+      "wallSeconds": 6,
+      "exitContractOk": true,
+      "exitContractNote": "The && chain is correct in both positions, which is the thing worth checking about a composite: a failing FIRST member short-circuits (1 of 6 members ran, exit 1) and a failing LAST member still propagates (all 6 ran, exit 1). Neither is swallowed.",
+      "falsified": true,
+      "break": "Three breaks. (1) FIRST member — engine/InteractionSessionMachine.ts's `if (count <= 0)` -> `if (false)`. (2) LAST member — applyTarget.ts's vecAxis branch forced to re-clone the scratch vec per axis (`let scratch = comp.vecEmits.get(baseUniform)` -> `let scratch = undefined`), the historical bug the block was written for. (3) vanishing member — `test:param-mapping` renamed in package.json.",
+      "result": "(1) exit 1, '3 FAILED, 34 passed', and only 2 of the 6 `> gmt-engine` banners printed, so the chain stopped where it should. (2) exit 1, all 6 members ran, 'BOTH axes moved - the later axis did not reset the earlier'. (3) exit 1, 'npm error Missing script: test:param-mapping' - a vanished member fails the gate loudly rather than being skipped. All reverted.",
+      "verdict": "healthy",
+      "note": "The finding here is not in test:gate but in what could SEE it. `check:rule-guards`'s entryFor resolves a script by finding the first filename in its command; a composite has none, so it was classified 'opaque', accepted unconditionally, and printed in neither normal nor --verbose mode — indistinguishable from a verified citation, which is the exact failure the checker exists to end. Repaired (b574d315) and falsified in both directions.",
+      "repaired": false
+    },
+    {
+      "script": "npm run smoke:audio-fps-remap",
+      "source": "debug/smoke-audio-fps-remap.mts",
+      "engineUrl": "http://localhost:3400/fluid-toy.html (module default; no override in the npm script)",
+      "kind": "Playwright browser smoke. Drives useAnimationStore.setFps through match / undo / redo / round-trip / keep and checks keyframe and AudioClip.startFrame at each step. Collects pageerror and console.error and gates on them.",
+      "citedBy": [
+        "audio-mod.md - ALREADY cited at entry. --verbose: 16/16 scoped files reachable, the highest ratio in that rule, but that is reach-by-app-boot - fluid-toy.html's graph contains all of engine/features/audioMod/** and the smoke asserts nothing about the DSP. Its real subject is store/animation/playbackSlice.ts. Not a miscitation (batch 6 lesson 9), but the pageerror gate is all it contributes to audio-mod's own scope."
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "6 evaluate steps, 14 checks (20 after this batch), exit 0, 10.5s",
+      "wallSeconds": 11,
+      "exitContractOk": true,
+      "exitContractNote": "Correct and layered: the seed is verified before anything is measured and exits 1 if it did not take; page errors exit 1; each collected failure prints with FAIL: and exits 1; the success line prints only at the end. A rejected page.evaluate reaches main().catch and exits 1.",
+      "falsified": true,
+      "break": "Five breaks in store/animation/playbackSlice.ts, each reverted with `git checkout --`. Controls: (A) the audioClips remap removed from the 'match' branch; (B) audioClips dropped from the FPS undo entry. Blind-spot probes: (C) `Math.round` -> `Math.floor` in remap; (C3) -> `Math.ceil`; (D) the FPS undo snapshot narrowed to deck 0 only.",
+      "result": "Controls RED: (A) exit 1, 'audio startFrame expected 60, got 120 - regression of 22_AUDIO_TIMELINE_SYNC_REPORT.md' plus redo; (B) exit 1 on undo. BEFORE repair: (C) **GREEN**; (D) **GREEN**. AFTER: (C) exit 1 on four assertions; (D) exit 1, 'undo deck-1 startFrame expected 91, got null'. (C3) ceil still green - see the residual.",
+      "verdict": "healthy on both regressions it was written for; the fixture around them was degenerate (repaired)",
+      "note": "Lesson 2 twice in one fixture. Every frame index was 120 and the only ratio was 0.5, so (i) the keyframe and the deck-0 clip carried the same number with the same expectation at all six steps, and (ii) 120 x 0.5 = 60 exactly, so rounding never bound. A deck-1 clip at 91 is distinct from every keyframe and odd, fixing both; it deliberately does NOT round-trip (46 x 2 = 92) and is asserted at 92 rather than dropped. All six new expected values were derived from the contract before running and held first time. RESIDUAL: Math.ceil is still inseparable from Math.round and cannot be separated without a new fps ratio - 0.5 and 2 cannot produce a fraction in (0, 0.5), the only region where they differ.",
+      "repaired": true
+    },
+    {
+      "script": "npm run test:dither",
+      "source": "debug/test-dither.mts",
+      "engineUrl": null,
+      "kind": "A metrics LAB, not a test. Prints a banding/noise sweep, a plateau/wiggle table and a resolution comparison, and writes a tracked montage at debug/dither-lab.png. Reads public/blueNoiseRGBA.png. Imports palette/core/rampGeometry.ts and - since this batch - engine/fractal/shaders/ditherTail.ts.",
+      "citedBy": [
+        "none at entry",
+        ".claude/rules/render-and-shaders-core.md (added this batch, after widening its paths to cover engine/fractal/shaders/**)"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "1 assertion at entry (the flat gate), 14 after this batch. exit 0, ~5s",
+      "wallSeconds": 5,
+      "exitContractOk": false,
+      "exitContractNote": "Mechanically correct — `process.exit(gateFail === 0 ? 0 : 1)` — but only one loop could ever move `gateFail`, and that loop ran against the harness's own TS mirror of the shader. Everything else was printed and dropped.",
+      "falsified": true,
+      "break": "Five breaks, all in real product code, each reverted. (A) `DITHER_FLAT_HI` 0.004 -> 0.5 in engine/fractal/shaders/ditherTail.ts. (B) the flat gate deleted from the same file (`float gate = 1.0`). (C) error diffusion disabled inside palette/core/rampGeometry.ts's renderFieldDithered. (D) `DITHER_MAX_DARK` 8 -> 2. (E) the three tpdf channels collapsed onto one shared blue-noise pair.",
+      "result": "BEFORE repair: (A) **GREEN**, (B) **GREEN**, (C) **GREEN** — the guard could not fail on any product code at all. AFTER repair, all five RED: (A) exit 1 on the constant, (B) exit 1 on the gate expression, (C) exit 1 on both WIGGLE assertions at 0.287, (D) exit 1, (E) exit 1.",
+      "verdict": "cannot-fail (repaired)",
+      "note": "The most defective guard in the batch, and defective in a way that reads as thorough: it prints more numbers than any other harness in the repo. Two compounding causes. Its one assertion ran against `ditherPixel`, a hand-written TS copy of DITHER_TAIL_GLSL, with nothing checking the copy still matched - so its verdicts were about the copy. And that assertion was satisfied by the dither being ENTIRELY DEAD: `ampLSB = 0` gives a flat-region delta of 0, exactly what it asks for. Break (B) is the sharpest illustration - the assertion is 'the island must be untouched', and deleting the island gate from the shipping shader did not move it.",
+      "repaired": true
+    },
+    {
+      "script": "npm run test:refine",
+      "source": "debug/test-trace-refine.mts",
+      "engineUrl": null,
+      "kind": "node-only, text assertions over emitted GLSL. Imports engine-gmt/shaders/chunks/{trace,de}.ts, engine-gmt/utils/mb3d/emitFusedHybrid.ts, engine-gmt/engine/FractalRegistry.ts, engine-gmt/formulas/AmazingBox.ts, data/constants.ts. Six blocks: A (off byte-identity), B (on emission), B2 (lean never refines), B3 (ADR-0092 marcher), C (map/mapDist twin), D (importer opt-in), E (numeric DE).",
+      "citedBy": [
+        "none at entry",
+        ".claude/rules/gmt-shader-chunks.md (NEW rule, added this batch)"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "71 checks (83 after this batch), exit 0, 0.77s — the fastest guard in the batch",
+      "wallSeconds": 1,
+      "exitContractOk": true,
+      "exitContractNote": "Correct, and better than most: on failure it prints every failing check name with the observed value, not just a count.",
+      "falsified": true,
+      "break": "Four breaks, each reverted. (A) `enableRefine = !!kernel.refine` -> `true` in trace.ts. (E) `numericDE = !!kernel.numericDE` -> `true` in de.ts. (F) `REFINE_HARD_CAP` 8 -> 6 in data/constants.ts. (D) emitFusedHybrid's supported return path changed to `{ def: null, supported: false }`.",
+      "result": "(A) RED, exit 1, 8 failed — every OFF marker and all three collapsed-source checks. (E) RED, exit 1, 8 failed. (F) RED, exit 1, 1 failed. (D) **GREEN, exit 0, all 71 passed** — the blind spot. After repair (D) gives exit 1 with 12 failed.",
+      "verdict": "healthy on five of six blocks; block D was satisfied by the importer producing nothing (repaired)",
+      "note": "Block D asserted `refineSteps === undefined`, and undefined is equally what you get when there is no preset — so the emptier the importer's answer, the more certainly it passed. Same family as batch 5's smoke:deep-zoom-la reporting 'nodes=0, max relative error=0.00e+0' and calling it a match, but one level in: not a vanished input, a vanished RESULT satisfying a negative assertion. The general rule worth carrying: a negative assertion has to prove its subject exists first.",
+      "repaired": true
+    }
+  ],
+  "citationsConsidered": [
+    {
+      "guard": "npm run test:gate",
+      "decision": "NOT cited, deliberately.",
+      "why": "All six members are already cited individually - the three test:interaction* in interaction-session.md (batch 6) and test:modulation-coverage / -parity / test:param-mapping in modulation.md. Adding the composite repeats that coverage, and until this batch it would also have been UNCHECKABLE. Checked empirically that it would have passed: appending it to gmt-renderer.md and to layers-zindex.md both came back clean, because a six-member union reaches almost everything - which is precisely why it is a poor citation. A rule wants the narrowest guard that can fail on its files."
+    }
+  ],
+  "citationsAdded": [
+    {
+      "rule": ".claude/rules/layers-zindex.md",
+      "action": "Guards block += `npm run smoke:ui-primitives`, with a reach note recording that it covers 1 of the 11 modules in components/ui/ and naming the eight that have no runtime guard at all. Correspondingly REMOVED from ui-and-panels.md's prose (see below) — a move, not a deletion.",
+      "why": "ui-and-panels.md scopes components/** (129 files) and the guard reached 1. layers-zindex.md scopes components/ui/** - exactly where viewportClamp.ts lives, and it already names AnchoredMenu, whose flip-then-clamp helper this is. 1/12 is an honest ratio; 1/129 is a rounding error.",
+      "checkRuleGuardsAfter": "0 issues — 21 rules, 77 citations, UNCHANGED count because this is a move. --verbose: layers-zindex.md :: smoke:ui-primitives -> 1/12 scoped files reachable.",
+      "falsifiedTheCitation": "Added `npm run test:fft` to the same Guards block: 'cannot fail on these files (1) — layers-zindex.md :: test:fft — debug/test-fft.mts imports none of this rule's 12 scoped files', exit 1. Removed it, back to 0 issues exit 0. The checker is live on this rule.",
+      "commit": "dd9965c3"
+    },
+    {
+      "rule": ".claude/rules/gmt-shader-chunks.md",
+      "action": "NEW RULE — scopes engine-gmt/shaders/** (21 files). Guards block cites test:refine and test:shader. Carries the entry points (trace.ts / de.ts / lighting), ADR-0084/0085/0092/0093/0076/0070, and the two contracts easy to break silently: a compile gate must collapse to byte-identical source when off, and map()/mapDist() are twins emitted from one DE_MASTER body.",
+      "why": "The GLSL chunk library ShaderFactory assembles every GMT fragment shader from was scoped ONLY by fork-rules.md, which covers all of engine-gmt/** and cites no guards whatsoever — so editing the raymarcher auto-loaded a rule about forking policy that named nothing capable of catching a mistake. Same situation as batch 5's deep-zoom.md and batch 6's interaction-session.md, and a fresh rule is the honest answer rather than hanging the citation off a rule that does not describe the code.",
+      "checkRuleGuardsAfter": "0 issues — 22 rules (was 21), 81 citations (was 78: +2 here, +1 from the render-and-shaders-core widening below). --verbose: test:refine -> 9/21 scoped files reachable, test:shader -> 19/21.",
+      "falsifiedTheCitation": "Appended `npm run test:fft`: 'cannot fail on these files (1) — gmt-shader-chunks.md :: test:fft — debug/test-fft.mts imports none of this rule's 21 scoped files', exit 1. Removed, back to 0.",
+      "commit": "69c970c4"
+    },
+    {
+      "rule": ".claude/rules/render-and-shaders-core.md",
+      "action": "paths widened with engine/fractal/shaders/** (4 -> 9 scoped files) and a Guards block added citing test:dither, plus a section on what the five newly-scoped files are and ditherTail's cross-tree constant sharing.",
+      "why": "ditherTail.ts, fractalDisplay.ts, fractalKernel.ts, gradientSample.ts and tsaaBlend.ts were scoped by NO rule at all — opening any of them loaded nothing. They are engine-core shader source, which is this rule's stated remit, so widening an existing rule is a smaller and more honest change than minting a second one. test:dither now imports ditherTail.ts (that import was added as part of its repair), which is what makes the citation resolve.",
+      "checkRuleGuardsAfter": "0 issues. --verbose: render-and-shaders-core.md :: test:dither -> 2/9 scoped files reachable, test:bucket-convergence -> 1/9 (that one was already a live citation, in prose).",
+      "falsifiedTheCitation": "Appended `npm run test:band-math`: 'cannot fail on these files (1) — imports none of this rule's 9 scoped files', exit 1. Removed, back to 0.",
+      "commit": "69c970c4"
+    }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/smoke-ui-primitives.mts",
+      "summary": "The y-axis hard clamp in clampToViewport was untested: swapping its `size.height` term to `size.width` — a menu that stops in the wrong place near the bottom edge — passed all 7 cases at exit 0.",
+      "change": "Two BOTTOM-CLAMP fixtures added. 'no-flip clamps to bottom edge' is the missing vertical twin of the existing x case (flip:false, y=700 -> 492). 'flip past bottom still clamps' covers the subtler path where flipping alone is not enough: an anchor at y=795 flips to 495, still past the gutter, so the hard clamp pulls it to 492.",
+      "verification": "Before: `size.height` -> `size.width` in the y clamp, guard exit 0, all 7 PASS. After: same break, exit 1, 2 FAIL with got=(100,592) want=(100,492) and got=(100,495) want=(100,492). Reverted with a targeted Edit; `git status --porcelain` shows only the guard file, `grep -rn AUDITMARK components/ debug/` empty. typecheck exit 0.",
+      "guard": "npm run smoke:ui-primitives",
+      "guardPass": true,
+      "commit": "dd9965c3"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/ui-and-panels.md",
+      "line": 63,
+      "summary": "The rule's 'Known coverage gap' block was wrong in both directions — it understated the guard ('guards nothing in this rule's scope' when it guards 1 of 129 scoped files) and it overstated the manifest gap, claiming no guard asserts a manifest-composed panel's structure when batch 2 of this same sweep made two of them do exactly that.",
+      "change": "Block rewritten. (1) 'guards nothing in this rule's scope' -> 'reaches 1 of the 129 files this rule scopes', with the command that prints the ratio named.",
+      "verification": "Reach measured, not asserted: `check:rule-guards --verbose` printed `ui-and-panels.md :: smoke:ui-primitives -> 1/129 scoped files reachable` before the move.",
+      "guard": "npm run check:rule-guards",
+      "guardPass": true,
+      "commit": "dd9965c3"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-fft.mts",
+      "summary": "Every SpectrumFrame fixture was a phase-0 sine, whose windowed transform is purely imaginary, so discarding the real half of the magnitude entirely (`Math.hypot(re,im)` -> `Math.abs(im)`) passed all ten assertions at exit 0.",
+      "change": "Block [4] now repeats the level assertion with the same tone phase-shifted by 0.7 rad. An on-bin tone's level is phase-invariant so the expected value is unchanged, but the measured max|Re|/max|Im| ratio moves from 1.8e-8 to 0.84 and both halves of the magnitude become load-bearing. Header records the measurement, the mutation results and the block-[3]/[4] margins.",
+      "verification": "Measured with a gitignored probe (debug/_probe-fft-margins.mts) before touching anything: at N=2048 bin 100, max|Re| = 9.244e-6 vs max|Im| = 5.120e+2 for the phase-0 tone, and 3.298e+2 vs 3.916e+2 with a 0.7 rad offset, with the reported level identical at -13.5556 in both. Before: `mag = Math.abs(im[k])` -> exit 0, all 10 ok.",
+      "guard": "npm run test:fft",
+      "guardPass": true,
+      "commit": "ff0d8d00"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/test-fft.mts",
+      "summary": "SpectrumFrame's binCount contract — half the transform, the AnalyserNode frequencyBinCount convention — was asserted by nothing in the repo, and doubling it passed all five audio guards.",
+      "change": "Two assertions added in block [3]: `sf.binCount === N >> 1` and `sf.db.length === N >> 1`, with a comment naming bandMath.ts's independent `const binCount = fftSize / 2` as the thing that can drift out of step.",
+      "verification": "Before: `this.binCount = fftSize` in spectrumFrame.ts -> test:fft exit 0, and test:band-analyser, test:audio-signal, test:filterbank, test:band-math ALL exit 0 as well. After: test:fft exit 1, 2 FAIL, both printing 1024 where 512 was wanted. Reverted with a targeted revert; git diff clean.",
+      "guard": "npm run test:fft",
+      "guardPass": true,
+      "commit": "ff0d8d00"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-filterbank.mts",
+      "summary": "Block [2] filled every band with one value, and for a constant array the RMS, the mean and the max are the same number — so `aggregate` returning a plain mean passed all 18 assertions, in the block titled 'aggregate is RMS over the range, flux is the mean'.",
+      "change": "Block [2] now also runs an alternating 0.2/0.8 level pattern and an alternating 3/21 flux pattern over the 21 bands of 100-1000Hz, asserting aggregate == 0.570714 (RMS) rather than 0.485714 (mean) and aggregateFlux == 11.571429 (mean) rather than 21 (max) or 243 (sum). Both are preceded by an explicit `Math.abs(rms - mean) > 0.05` assertion so the fixture cannot silently degenerate back to flat.",
+      "verification": "Before: `aggregate` rewritten to sum levels and divide by count -> exit 0, all 18 ok, confirmed applied by `git diff --stat` showing 2 insertions 2 deletions. After: exit 1, 'aggregate is the RMS of the range, not its mean' with got 0.485714, rms 0.570714, mean 0.485714.",
+      "guard": "npm run test:filterbank",
+      "guardPass": true,
+      "commit": "f23184ec"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-filterbank.mts",
+      "summary": "matches() gates the FilterBank rebuild in WorkletAnalysis, and its bandsPerOctave comparison — the only one of the three settings a user changes at runtime — was covered by nothing; deleting it left the guard green.",
+      "change": "Block [9] gains `assert(!b.matches({ sampleRate: SR, fftSize: 4096, bandsPerOctave: 12 }))`, with a comment naming the consequence: a false match leaves the band table stale after a resolution change.",
+      "verification": "Before: the `&& this.bandsPerOctave === o.bandsPerOctave` clause deleted from filterBank.ts -> test:filterbank exit 0, all 18 ok (diff confirmed applied). After: exit 1, 'nor a changed bandsPerOctave — a false match here leaves the band table stale'.",
+      "guard": "npm run test:filterbank",
+      "guardPass": true,
+      "commit": "f23184ec"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/test-filterbank.mts",
+      "summary": "Block [8]'s 'peaks reset' proved only that the follower array was reallocated when its LENGTH changed — it rebuilds at a different bandsPerOctave — so a rebuild that preserved same-length follower state passed.",
+      "change": "A same-settings rebuild is now asserted separately: band count unchanged (56 -> 56) and normalized still reads 1.0 (reset) rather than 0.33 (carried).",
+      "verification": "Before: `this.peaks = new Float32Array(n)` -> `if (this.peaks.length !== n) this.peaks = new Float32Array(n)` passed at exit 0. After: exit 1, 'a same-SIZE rebuild resets the follower too', 0.3464.",
+      "guard": "npm run test:filterbank",
+      "guardPass": true,
+      "commit": "f23184ec"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-band-math.mts",
+      "summary": "Block [3]'s resolution-limited check was satisfied by an EMPTY result set — `flagged.length ? Math.max(...) : 0` scores 0 when nothing is flagged, and 0 is under every limit — so hardcoding `resolutionLimited: false` on every band passed at exit 0 while the message printed '(0 of 56)'.",
+      "change": "Two properties added that close both directions: the 25 Hz band must be flagged at every tested fftSize (all-false gives 0/0/0 and fails), and the flagged count must strictly fall as the transform grows (all-true gives 56/56/56 and fails). Measured healthy counts 19 / 13 / 7 recorded in source.",
+      "verification": "Before: `resolutionLimited: false` -> exit 0, all 34 ok. After: exit 1, 4 FAIL. Control in the other direction: `resolutionLimited: true` -> exit 1, 4 FAIL, which the original also missed for two of the four. Counts measured first with a gitignored probe (19/13/7/1 at 2048/4096/8192/16384, lowest band flagged at all four).",
+      "guard": "npm run test:band-math",
+      "guardPass": true,
+      "commit": "d862ea98"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/test-band-math.mts",
+      "summary": "The band ceiling was asserted against nyquist rather than BANK_MAX_HZ — 9.6 kHz of slack at 48 kHz — so dropping the ceiling clamp entirely let the bank run to 22.8 kHz and still pass.",
+      "change": "The assertion now compares against BANK_MAX_HZ, and a second table at a 24 kHz sample rate pins the other half of `Math.min(BANK_MAX_HZ, nyquist * 0.95)`.",
+      "verification": "Before: `const fMax = nyquist` -> exit 0. After: exit 1, 2 FAIL, printing top centres 22807.0 and 11403.5. The weaker break `Math.min(BANK_MAX_HZ, nyquist)` -> exit 1 with exactly 1 FAIL, proving the 0.95 guard is now covered on its own.",
+      "guard": "npm run test:band-math",
+      "guardPass": true,
+      "commit": "d862ea98"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/check-rule-guards.mjs",
+      "summary": "The rule-guard checker could not import-check a COMPOSITE npm script — `npm run a && npm run b` contains no filename, so it resolved to 'opaque', was accepted unconditionally, and was printed in neither normal nor --verbose output. gmt-renderer.md cites test:shader and had been passing that way since the checker landed.",
+      "change": "`entryFor` now expands `npm run` members recursively (guarded by a `seen` set against self-reference) and takes the union of their entries; one whole-tree member short-circuits the composite to whole-tree. Header JSDoc gains the composite case and the story of why it was missing.",
+      "verification": "Falsified in BOTH directions on one citation. Appended `npm run test:shader` to layers-zindex.md: repaired checker -> 'cannot fail on these files (1) — test:shader (4 members) imports none of this rule's 12 scoped files', exit 1; the original checker restored from git, same citation -> exit 0 with no output whatsoever.",
+      "guard": "npm run check:rule-guards",
+      "guardPass": true,
+      "commit": "b574d315"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/smoke-audio-fps-remap.mts",
+      "summary": "Every frame index in the fixture was 120 and the only ratio was 0.5, so the remap's rounding was never load-bearing (Math.round -> Math.floor passed the whole file) and the keyframe could not be told apart from the audio clip at any step.",
+      "change": "A deck-1 clip seeded at frame 91 — distinct from every keyframe, and odd, so 91 x 0.5 = 45.5 and the rounding modes disagree. Asserted through all six steps (46 after match, 91 after undo, 46 after redo, 92 after the round-trip, 92 unchanged in keep mode), which also widens the undo check from 'the FPS snapshot exists' to 'it covers every deck'.",
+      "verification": "Before: `Math.round` -> `Math.floor` -> exit 0, PASS. After: exit 1 on four assertions, 'odd-frame clip expected 46 (round(45.5)), got 45'. New break for the widened undo check: the FPS snapshot narrowed to index 0 -> exit 1, 'undo deck-1 startFrame expected 91, got null'.",
+      "guard": "npm run smoke:audio-fps-remap",
+      "guardPass": true,
+      "commit": "7260f9eb"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-dither.mts",
+      "summary": "test:dither could not fail on ANY product code: its single assertion ran against the harness's own TS mirror of the shader, and that assertion was additionally satisfied by the dither being entirely dead.",
+      "change": "Five assertion groups over values the file already computed: the flat gate in BOTH directions (island untouched AND the gradient beside it dithered, delta 7); the four calibrated constants plus the gate and tpdf expressions read back out of DITHER_TAIL_GLSL; a >4x banding drop at cap2 on the three shallow ramps (21.6x / 9.7x / 10.3x); a >4x plateau reduction at cap8 on a 1440px ramp (57 -> 6); and renderFieldDithered's WIGGLE under 0.10 and >2x below the blue-noise tail (0.040 vs 0.238).",
+      "verification": "Three breaks were GREEN before and RED after: DITHER_FLAT_HI 0.004 -> 0.5 (exit 1 on the constant); the flat gate deleted from ditherTail.ts (exit 1 on the gate expression - the very contract the only assertion was named for); error diffusion disabled in renderFieldDithered (exit 1 on both WIGGLE assertions, 0.287).",
+      "guard": "npm run test:dither",
+      "guardPass": true,
+      "commit": "d8137ccb"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/test-trace-refine.mts",
+      "summary": "Block D asserted the MB3D importer does not auto-enable refineSteps by checking it is undefined — which is equally true when the importer emits nothing at all, so a total failure passed all three checks.",
+      "change": "Each of the three authored bStepsafterDEStop values now first asserts that a def was emitted, that the ledger reports the scene supported, and that the quality block is populated (measured 8 keys; floor 4) — and then that refineSteps is ABSENT from it rather than merely undefined, since an explicitly-set undefined would still round-trip as a preset key.",
+      "verification": "Before: emitFusedHybrid's supported return path changed to `{ def: null, supported: false }` -> exit 0, all 71 checks passed. After: exit 1, 12 failed. The quality block's actual contents were measured first with a gitignored probe rather than assumed.",
+      "guard": "npm run test:refine",
+      "guardPass": true,
+      "commit": "5796a5cd"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/gmt-shader-chunks.md",
+      "summary": "engine-gmt/shaders/** — the 21 GLSL chunks every GMT fragment shader is assembled from — was scoped only by fork-rules.md, a rule about forking policy that cites no guards at all, so editing the raymarcher named nothing that could catch a mistake.",
+      "change": "New rule scoping engine-gmt/shaders/**, citing test:refine and test:shader, with entry points, six ADRs and the two silently-breakable contracts (compile gates must collapse to byte-identical source; map/mapDist are twins from one DE_MASTER body).",
+      "verification": "check:rule-guards 0 issues before and after; 21 rules/78 citations -> 22 rules/81. --verbose confirms test:refine 9/21 and test:shader 19/21 scoped files reachable. Falsified by appending npm run test:fft: 'imports none of this rule's 21 scoped files', exit 1; removed, back to 0.",
+      "guard": "npm run check:rule-guards",
+      "guardPass": true,
+      "commit": "69c970c4"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/render-and-shaders-core.md",
+      "summary": "The five engine-core GLSL files under engine/fractal/shaders/ — including ditherTail.ts, which both the fractal display pass and the Gradient Explorer compositor include — were scoped by no rule whatsoever.",
+      "change": "paths widened with engine/fractal/shaders/** (4 -> 9 scoped files); a Guards block added citing test:dither; a section recording what those five files are and ditherTail's shared-constant contract across the two trees.",
+      "verification": "check:rule-guards 0 issues after; --verbose shows test:dither -> 2/9 and the pre-existing prose citation test:bucket-convergence -> 1/9, so widening did not orphan it. Falsified by appending npm run test:band-math: 'imports none of this rule's 9 scoped files', exit 1; removed, back to 0.",
+      "guard": "npm run check:rule-guards",
+      "guardPass": true,
+      "commit": "69c970c4"
+    }
+  ],
+  "summary": {
+    "guardsSwept": 8,
+    "falsifications": 39,
+    "healthy": 2,
+    "defectiveAndRepaired": 6,
+    "commits": [
+      "dd9965c3 smoke:ui-primitives fixtures + the rule that called it useless",
+      "ff0d8d00 test:fft phase-offset tone + binCount",
+      "f23184ec test:filterbank non-uniform aggregates, bandsPerOctave, same-size rebuild",
+      "d862ea98 test:band-math flagged-set floor + BANK_MAX_HZ",
+      "b574d315 check:rule-guards can now resolve composite scripts",
+      "7260f9eb smoke:audio-fps-remap odd-frame deck-1 clip",
+      "d8137ccb test:dither five assertion groups over metrics it already printed",
+      "5796a5cd test:refine block D proves its subject exists first",
+      "69c970c4 new rule gmt-shader-chunks.md + render-and-shaders-core widened"
+    ],
+    "checkRuleGuards": {
+      "onEntry": "0 issues, 21 rules, 77 citations",
+      "onExit": "0 issues, 22 rules, 81 citations"
+    },
+    "finalGuardRun": "All eight green at exit 0, plus check:rule-guards exit 0 and typecheck exit 0. Working tree carries only debug/engine-gmt-smoke.png (untracked, pre-existing, left alone) and this result file.",
+    "portState": "vite dev server started for smoke:audio-fps-remap and killed; netstat confirms :3400 CLOSED.",
+    "trackedArtifacts": "debug/dither-lab.png is rewritten by test:dither and IS tracked. It is byte-deterministic, so a clean run leaves it unmodified; it was restored with `git checkout --` after every break that changed it, and the tree is clean.",
+    "gitignoredProbesLeftBehind": [
+      "debug/_probe-fft-margins.mts",
+      "debug/_probe-filterbank-margins.mts",
+      "debug/_probe-bandmath.mts",
+      "debug/_probe-refine-def.mts"
+    ],
+    "lessonsForTheNextBatch": [
+      "A NEGATIVE assertion must prove its subject exists first. Two of six defects were only that: test:refine block D ('refineSteps is undefined' - also true with no preset at all) and test:band-math block [3] ('no band above the limit is flagged' - trivially true when nothing is flagged). Vanished RESULTS satisfying an absence check; the emptier the answer the more certainly it passes.",
+      "CRLF WILL SILENTLY VOID A BREAK. Working files here are CRLF, so `perl -0pi` patterns containing \\n and `perl -pi` patterns anchored with ^ or $ match nothing and exit 0 - the guard appears to pass a break that was never applied. Two false blind-spot readings came from this. Confirm every break with `git diff --stat`, or use the Edit tool.",
+      "A COMPOSITE npm script was invisible to check:rule-guards until b574d315. Any composite citation greenlit before that commit was never import-checked - re-verify rather than trusting the historical green.",
+      "THE MOST DEFECTIVE GUARD LOOKED LIKE THE MOST THOROUGH. test:dither prints more numbers than any other harness here and could not fail on one line of product code. Printed output is not coverage; count the assertions that can move the exit status.",
+      "MEASURE THE FIXTURE, NOT JUST THE CODE. Three of six defects were degenerate fixtures - a flat array where RMS equals mean, a phase-0 sine whose spectrum has no real part, an fps ratio of exactly 0.5 with every frame index at 120. A scratch probe printing the discriminating quantity settles it in one run."
+    ],
+    "verdictsSeeGuardsArray": "one per entry in .guards[].verdict"
+  }
+}
