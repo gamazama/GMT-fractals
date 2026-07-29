@@ -27,7 +27,16 @@
  * on a pure `sampleGeometry` that yields a per-pixel ramp-position + coverage field
  * (testable without a ramp or a canvas).
  *
- * @invariant Host-agnostic + DOM-free — do not import React/THREE/canvas here.
+ * @invariant DOM-free — no `document` / `window` reference at module scope or on any path
+ *   `renderGeometry` / `sampleGeometry` reach — proven by:
+ *   `npx tsx debug/test-palette-rampgeometry.mts`, which runs on bare node where
+ *   `typeof document === 'undefined'`; a module-scope `document.createElement('canvas')`
+ *   here makes it exit 1 with a ReferenceError before the first assertion (falsified
+ *   2026-07-29).
+ * @assumption Host-agnostic — no `react` / `three` import. NOTHING enforces this half:
+ *   adding `import * as React from 'react'` to this file leaves the harness fully green,
+ *   exit 0 (verified 2026-07-29), because those packages resolve under node exactly as
+ *   they do in the browser. It was an `@invariant` until the run that could not prove it.
  * @see palette/core/gmtGradient.ts (renderStopsToRamp — produces the RGB[256] input)
  */
 
