@@ -1,6 +1,6 @@
 {
   "started": "2026-07-28T22:34:48.988Z",
-  "cycle": 11,
+  "cycle": 12,
   "maxCycles": 24,
   "batchSize": 3,
   "maxConcurrentAgents": 3,
@@ -9,14 +9,15 @@
   "dashboardUrl": "https://claude.ai/code/artifact/d81d57c1-3384-4880-93e5-a89722063efe",
   "dashboardFile": "plans/overnight-audit/dashboard.html",
   "stopped": false,
-  "lastDashboard": "2026-07-29T06:25:00.000Z",
+  "lastDashboard": "2026-07-29T08:30:00.000Z",
   "plan": "max-subscription",
   "windowResets": [
     "2026-07-27T20:50:00Z",
     "2026-07-28T01:50:00Z",
     "2026-07-28T06:50:00Z"
   ],
-  "note": "RUN 2. Cycle 11 closed 4 of the 5 remaining subsystems (a03-tutorial, gx01-gradient-explorer, t01-fluid-toy, t02-fractal-toy). Only p01-palette-suite (61 files) remains on the worklist and wants a cycle of its own. After that the work is the cross-cutting sweeps listed at the bottom of PROTOCOL.md, in priority order: the full guard falsification sweep, the @invariant -> @assumption sweep, check:rule-guards follow-through, and the NUL-byte scan. Cycle 11 raised the priority of the first two: three separate falsifications this cycle found guards that could not fail, including the checker meant to catch that.",
+  "note": "RUN 2 COMPLETE ON THE WORKLIST. Cycle 12 closed p01-palette-suite, the last of 33 subsystems. Nothing is pending. Remaining work is cross-cutting and listed at the bottom of PROTOCOL.md, in priority order: (1) the full guard falsification sweep - every test:*/smoke:*/check:* in package.json, break what it governs and confirm red; runs 1 and 2 have now found FIFTEEN guards that could not do the job they were named for, every one of them incidentally, so a systematic pass is the highest-value item left; (2) the @invariant -> @assumption sweep across ~152 files; (3) check:rule-guards follow-through on its 4 known miscitations, plus its two proven structural blind spots; (4) the NUL-byte scan, of which cycle 12 found a third instance. Also open: .claude/rules/palette.md has never existed and cycle 12 produced a merged draft for it across three result files.",
   "dashboardPublish": false,
-  "run": 2
+  "run": 2,
+  "worklistEmpty": true
 }

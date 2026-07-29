@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:97%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:100%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,29 +73,29 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Running &middot; cycle 11 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; 2026-07-29T06:25:00.000Z</p>
+  <p class="sub">Running &middot; cycle 12 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; 2026-07-29T08:30:00.000Z</p>
   
 
   <div class="tiles">
-    <div class="tile"><div class="v">32/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">183</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">123</div><div class="k">changes applied<br><span style="font-size:.85em;opacity:.75">111 self-verified &middot; 12 verifier-confirmed</span></div></div>
-    <div class="tile"><div class="v" style="color:var(--warn)">16</div><div class="k">sent to a verifier</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">54</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">158<span style="font-size:.6em;color:var(--dim)">/162</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v">33/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">221</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">149</div><div class="k">changes applied<br><span style="font-size:.85em;opacity:.75">137 self-verified &middot; 12 verifier-confirmed</span></div></div>
+    <div class="tile"><div class="v" style="color:var(--warn)">17</div><div class="k">sent to a verifier</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">64</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">172<span style="font-size:.6em;color:var(--dim)">/177</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:35%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:54%"></i></div><div class="cyc" title="cycle 9: 10 findings"><i style="height:38%"></i></div><div class="cyc" title="cycle 10: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 11: 25 findings"><i style="height:96%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 12 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:39%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:66%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:68%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:50%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:47%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:29%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:24%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:37%"></i></div><div class="cyc" title="cycle 9: 10 findings"><i style="height:26%"></i></div><div class="cyc" title="cycle 10: 11 findings"><i style="height:29%"></i></div><div class="cyc" title="cycle 11: 25 findings"><i style="height:66%"></i></div><div class="cyc" title="cycle 12: 38 findings"><i style="height:100%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 13 cycles</p>
 
-  <section><h2>Guards failing <span class="count">4</span></h2>
+  <section><h2>Guards failing <span class="count">5</span></h2>
     <p class="note">Run these yourself before trusting anything downstream of them.</p>
-    <article class="finding sev-high"><header><code>npm run smoke:orbit</code><span class="sev">g04-navigation</span></header><p class="what">PRE-EXISTING RED, not caused by this audit. 'accumulation did not advance after orbit settled (1 -&gt; 1)' at debug/smoke-orbit.mts:87. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure, same sceneOffset delta 4.127, same assertion.</p></article><article class="finding sev-high"><header><code>npm run smoke:liquify</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:gx-fractal-glitch</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run check:rule-guards</code><span class="sev"></span></header><p class="what">failed</p></article>
+    <article class="finding sev-high"><header><code>npm run smoke:orbit</code><span class="sev">g04-navigation</span></header><p class="what">PRE-EXISTING RED, not caused by this audit. 'accumulation did not advance after orbit settled (1 -&gt; 1)' at debug/smoke-orbit.mts:87. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure, same sceneOffset delta 4.127, same assertion.</p></article><article class="finding sev-high"><header><code>npm run smoke:liquify</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:gx-fractal-glitch</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run check:rule-guards</code><span class="sev">p01b-palette-components</span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run check:rule-guards</code><span class="sev"></span></header><p class="what">failed</p></article>
   </section>
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">111</span></h2>
+    <h2>Applied — self-verified <span class="count">137</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
   <article class="finding sev-high">
@@ -516,6 +516,62 @@
     <p class="verify"><strong>How it was verified:</strong> Guard citation falsified before writing it (see the test-liquify-mesh guard entry). Flake rate measured over 13 consecutive clean runs. Checker blind spot falsified by injecting smoke:fluid-toy into the GX row — output unchanged. Self-correction recorded: the first form of this commit cited npm run test:palette and pushed the shared check:rule-guards baseline from 4 issues to 5, because the checker walks only a chained script's first command; 32dfd7fd re-cites the test module directly and the baseline was re-verified back at exactly 4.</p>
     <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>d3e6ef2f, 32dfd7fd</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>p01a-palette-core</code>
+      <code class="file">debug/test-palette-stopops.mts</code>
+    </header>
+    <p class="what">The assertion labelled 'oklab drift pin' compares a function against itself and can never fail; the OKLab maths it was written to pin is unguarded, and a 0.024% coefficient drift passes the entire test:palette chain.</p>
+    <p class="change"><strong>Changed:</strong> Documented the gap at both sites. palette/core/oklab.ts's 'so the two can never diverge / a regression harness asserts the mirror' is now an @assumption naming exactly what was measured; the guard block carries a header explaining why it is tautological. The assertion itself was left in place and green — deleting it would remove the only marker that the gap exists, and replacing it means writing a polar-oklab equivalent inside the guard, which is a reviewed change, not a rename.</p>
+    <p class="verify"><strong>How it was verified:</strong> palette/core/oklab.ts does not define lerpOklab — it is `export { lerpOklab } from '../../utils/colorUtils'`, so both sides of the 448-sample loop are the same function object. colorUtils' export list contains lerpOklab and no other oklab primitive, so the four genuinely duplicated functions (srgbToLinear01, linear01ToSrgb, rgbToOklab, oklabToRgb) cannot even be imported for comparison. Measured by perturbation: +0.0001 on rgbToOklab's first M-matrix coefficient leaves the whole chain green exit 0 (44 passed, 0 failed), the pin included; +0.01 goes red exit 1 but at test-palette-generator.mts's 'reproduces slot A within 2 levels' (got 4.43), never at the pin. Both perturbations reverted, git diff clean.</p>
+    <p class="guard"><code>npm run test:palette</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>1e7802cf</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>p01a-palette-core</code>
+      <code class="file">debug/test-palette-importformats.mts</code>
+    </header>
+    <p class="what">The only guard covering palette/core/importFormats.ts held a raw NUL byte, so ripgrep classified it binary and skipped it — the guard was invisible to every grep-based pass, including run 1 of this audit.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the literal 0x00 0x01 0x02 bytes in the fail-safe fuzz array (grep for 'garbage =') with \x00\x01\x02 escapes. Runtime string unchanged.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: `rg -l importFormats debug/` returned nothing, exit 1, despite the file importing palette/core/importFormats.ts directly. After: returns the file, exit 0. Guard output byte-identical across the change (108 lines, diff clean, exit 0); escaped string verified length 3, char codes [0,1,2]. Tree-wide NUL scan over palette/ debug/ engine/ components/ app-gmt/ gradient-explorer/ store/ now reports zero files — this was the last one.</p>
+    <p class="guard"><code>tsx debug/test-palette-importformats.mts (link 13 of npm run test:palette)</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>37345901</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>p01c-palette-stores</code>
+      <code class="file">palette/store/fullscreenStore.ts:1</code>
+    </header>
+    <p class="what">The test seam for an entire OTHER app was undocumented, and the header's stated open path (a hero toolbar button) does not exist.</p>
+    <p class="change"><strong>Changed:</strong> Added an @invariant naming the five exports the Gradient Explorer smokes drive by name, with smoke:gx-handles as its proof and the two falsified assertions quoted. Replaced the dead 'hero toolbar button / two unrelated surfaces' rationale with the single real open path and the real reason for a module-level holder. Flagged that the file has ZERO palette/ consumers, and documented the HMR dual-instance trap that makes the first post-edit smoke run lie.</p>
+    <p class="verify"><strong>How it was verified:</strong> Claim 1 (dead open path): grep openFullscreen across the tree returns exactly one production caller — gradient-explorer/gradientTargets.ts, the 'fullscreen' send-target's apply — and palette/components/CanonicalHero.tsx's own header says 'this hero carries no Apply / Send-to / Fullscreen buttons', with GeneratorStage.tsx corroborating ('Apply / Fullscreen / Send-to are the lower-centre bin dock now'). Claim 2 (no palette consumers): grep fullscreenStore returns 5 gradient-explorer files, 14 debug/*.mts harnesses, and nothing under palette/. Claim 3 (the seam): all three GX smokes call `await import('/palette/store/fullscreenStore.ts')` then `(s as any).openFullscreen` / `.setFullscreenGeom` — an untyped string path, so there is no static edge for tsc to check. Falsified by breaking THIS file twice and watching smoke:gx-handles go red at the predicted assertions (see the guard entry), then green on revert.</p>
+    <p class="guard"><code>npm run smoke:gx-handles</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>bf981def</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>p01c-palette-stores</code>
+      <code class="file">palette/registerPaletteUI.ts:5</code>
+    </header>
+    <p class="what">The palette suite's registration seam said it has two hosts and named fluid-toy as a host that does NOT mount it — both false, and the file contradicts itself ten lines apart.</p>
+    <p class="change"><strong>Changed:</strong> Header now names all three call sites with the options each passes, and corrects the setGradientEditorEntrance comment: every host that calls registerPaletteUI gets the entrance, all three do, and the empty-slot path is marked untested rather than attributed to fluid-toy.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep 'registerPaletteUI(' outside the file returns THREE call sites: app-gmt/registerFeatures.ts:38, gradient-explorer/registerFeatures.ts:17 ({ standaloneStopsMode: false }), fluid-toy/registerFeatures.ts:100. The same file's NEXT comment block already stated the truth ('Every host that mounts the palette suite registers it (incl. fluid-toy, which has a shelf)'), and fluid-toy/main.tsx corroborates independently — it imports FavientsToggleButton and calls mountFavientsPanel({ storageKey: 'fluid-toy.favients.panel', paletteFilters: false }). What fluid-toy actually opts out of is the picker-filter prefs, not the suite.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>297f2d62</code></p>
     
   </article>
   <article class="finding sev-high">
@@ -1250,6 +1306,202 @@
     <header>
       <span class="badge tA">A</span>
       <span class="sev">medium</span>
+      <code>p01a-palette-core</code>
+      <code class="file">palette/core/rampGeometry.ts</code>
+    </header>
+    <p class="what">The @invariant 'Host-agnostic + DOM-free — do not import React/THREE/canvas here' bundled a proven claim with an unprovable one under a single marker.</p>
+    <p class="change"><strong>Changed:</strong> Split it: DOM-free stays an @invariant and now names the command that goes red; the host-agnostic (no react/three import) half is downgraded to @assumption per CLAUDE.md.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsified in both directions. A module-scope document.createElement('canvas') makes debug/test-palette-rampgeometry.mts exit 1 with a ReferenceError before the first assertion (it runs on bare node, typeof document === 'undefined'). Adding `import * as React from 'react'` to the same file leaves it fully green, exit 0, '✓ ALL PASS' — react resolves under node exactly as in the browser, so no node-hosted harness can ever see that violation. Both reverted, git diff clean.</p>
+    <p class="guard"><code>tsx debug/test-palette-rampgeometry.mts</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>f2732d9b</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01a-palette-core</code>
+      <code class="file">palette/core/rampGeometry.ts</code>
+    </header>
+    <p class="what">The GeometryParams @invariant claimed 'Adding a field is additive' as an enforced contract; the harness pins only a hand-maintained list, so a new field escapes the gate entirely.</p>
+    <p class="change"><strong>Changed:</strong> Restated the invariant as what the harness actually proves, named the command and the assertion string, and added the actionable limit: a new field must be added to the harness's `cases` list or it is outside the gate. Recorded that splineSpread/splineDepth sit outside it benignly (sampleGeometry never reads them; only gradient-explorer/fullscreen/modes/splineMode.tsx does, and its fallbacks agree with GEOM_DEFAULTS).</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsified in both directions. Giving radialScale a fallback other than GEOM_DEFAULTS.radialScale turns exactly the named assertion red — '✗ radial: omitted fields == explicit GEOM_DEFAULTS (additive)', exit 1. Adding a hypothetical linearGamma field to GeometryParams and GEOM_DEFAULTS and reading it in sampleGeometry with a deliberately mismatched fallback (defaults say 1, the read says 0.7) — the precise violation the contract forbids — leaves the harness at '✓ ALL PASS', exit 0. Nothing else in test:palette caught it either. Both reverted, git diff clean.</p>
+    <p class="guard"><code>tsx debug/test-palette-rampgeometry.mts</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>963f05c9</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01a-palette-core</code>
+      <code class="file">palette/core/rampGeometry.ts</code>
+    </header>
+    <p class="what">rampGeometry.ts and importFormats.ts both asserted their pure/DOM-free contract 'mirrors palette/core/' as a directory-wide guarantee; six of the 36 files there are host-bound and always have been.</p>
+    <p class="change"><strong>Changed:</strong> Scoped both headers to their own module and named the exceptions, pointing readers at the grep instead of a guarantee that does not hold.</p>
+    <p class="verify"><strong>How it was verified:</strong> Per-file scan of palette/core/ for document / window / localStorage / HTMLCanvasElement / Image( / fetch, with every hit read in context to drop six prose false positives (editorConfig 'document provider', exportFormats 'Illustrator document', facets and generatorPipeline 'filter window', indesignIdml 'new document', importFormats 'no `File`'). Real: rampCanvas.ts (declares itself 'DOM-only' in its own header — a direct contradiction inside the same directory), favientsExport.ts, img2grad/decode.ts and favientDnd.ts (document.createElement), storage.ts (localStorage), catalogLoader.ts (fetch). typecheck exit 0, test:palette exit 0.</p>
+    <p class="guard"><code>npm run typecheck + npm run test:palette</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>a1e4ff4d</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01a-palette-core</code>
+      <code class="file">docs/modules/palette/palette-suite.md</code>
+    </header>
+    <p class="what">The palette entry doc claimed vitest coverage (there is no vitest in the repo), 15 export formats (there are 16), that only .ai and .idml implement collection() (three do), and a DOM-free core.</p>
+    <p class="change"><strong>Changed:</strong> Corrected all three, documented the missing Ultra Fractal .ugr format and its wire contract, replaced '~40 stops' with the four real budgets, and recorded that collectionQualityWarnings() exempts .ugr while reducing it.</p>
+    <p class="verify"><strong>How it was verified:</strong> package.json dependency and script scan for vitest/jest returns NONE; no vitest.config; find for *.test.* / *.spec.* under palette/ is empty. EXPORT_FORMATS.length === 16 and .filter(f =&gt; f.collection) === [ai, idml, ugr], both evaluated under tsx. Budget constants read from source: GRD_MAX 40, AI_MAX 40 (re-exported as AI_STOP_LIMIT, reused by indesignIdml.ts), SVG_MAX 32, UGR_MAX_STOPS 64. All 11 markdown hrefs re-stat'ed and resolve.</p>
+    <p class="guard"><code>stat of every extracted href + tsx evaluation of EXPORT_FORMATS</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>0dff198c</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01a-palette-core</code>
+      <code class="file">docs/modules/palette/palette-suite.md</code>
+    </header>
+    <p class="what">Three ../../engine/NN_*.md links were dead — the class the cycle-11 gradient-explorer auditor handed off — and the file count was ~48% low.</p>
+    <p class="change"><strong>Changed:</strong> Repointed all three at ../../history/engine/ and corrected '~60 files' to 89.</p>
+    <p class="verify"><strong>How it was verified:</strong> Stat'ed all 11 extracted hrefs from inside docs/modules/palette/ before and after. Before: 8 OK, 3 DEAD. After: 11 OK, 0 DEAD. `grep -rlo '\.\./\.\./engine/' docs/modules/` now returns empty, so the class is closed tree-wide. File count from `find palette -name '*.ts' -o -name '*.tsx' | wc -l` = 89.</p>
+    <p class="guard"><code>stat of every extracted href</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>93a0071c</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01a-palette-core</code>
+      <code class="file">docs/modules/palette/palette-suite.md</code>
+    </header>
+    <p class="what">The doc described a gmtGradient.ts byte-exact mirror that was collapsed in P0a, and called oklab.ts's hand copies drift-free when nothing pins them.</p>
+    <p class="change"><strong>Changed:</strong> Corrected both entries to match their source files, and pointed the oklab entry at the new @assumption.</p>
+    <p class="verify"><strong>How it was verified:</strong> gmtGradient.ts is 21 lines and is a pure re-export; its own header records the P0a collapse and that 'there is exactly ONE sampler and it can no longer drift'. oklab.ts defines srgbToLinear01 / linear01ToSrgb / rgbToOklab / oklabToRgb itself and re-exports only lerpOklab; colorUtils' export list confirms no other oklab primitive is public. Drift measurement recorded in commit 1e7802cf. All hrefs re-stat'ed and resolve.</p>
+    <p class="guard"><code>source read + grep of colorUtils' export list</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>545d5bcc</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/PickerWall.tsx</code>
+    </header>
+    <p class="what">Header said each chunk canvas is &quot;drawn ONCE&quot; and never mentioned virtualization; the code deliberately unmounts and repaints chunks on scroll, zoom and selection.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the render-model bullet with the actual model: IntersectionObserver-virtualized chunks, the three repaint triggers, and the half of the old claim that still holds (no per-frame redraw, no repaint on plain DOM scroll). Flags the paint effect as a hot path.</p>
+    <p class="verify"><strong>How it was verified:</strong> The paint effect returns early on !visible, and `visible` is driven by an IntersectionObserver with rootMargin 500px whose own comment says &quot;Toggling (not latching) is what keeps zooming cheap — otherwise every chunk ever seen stays mounted and redraws on each zoom step&quot; — i.e. the code documents repainting while the header denies it. Three triggers confirmed from the dep array [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId]: viewport re-entry (visible), zoom commit (grep ewWStart — zoom multiplies swatchW and the scaled value is passed down through GroupRow to the chunk), and selection change (selectedId, because the selected swatch is redrawn enlarged in place).</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>f279198d</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/ChannelGraphEditor.tsx</code>
+    </header>
+    <p class="what">Header said &quot;no undo snapshot, no engine side-effect&quot; — the editor brackets the engine's param undo stack at seven sites, so the header states the opposite of the truth.</p>
+    <p class="change"><strong>Changed:</strong> Scoped the omissions to the local GraphDataSource (where they are true) and added the editor's own undo path, by grep target.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep genEdit in the file: five self-bracketed discrete gestures (key delete, key add, right-click remove, inspector setTangents, setGlobalInterpolation), plus genEditStart on onPointerDownCapture and a window pointerup/pointercancel genEditEnd wrapping each drag as one entry. generatorStore exports genEdit/genEditStart/genEditEnd as straight aliases of paramEdit/paramEditStart/paramEditEnd from palette/store/paramUndoBracket, which calls the engine store's beginParamTransaction/endParamTransaction — an engine side-effect on every pointerdown in the editor. The snapshot is captureGeneratorHistory, registered as a param-undo history provider in registerPaletteUI, whose own comment reads &quot;curves + slots now ride Ctrl+Z alongside the DDFS dials&quot;. The inline comment above `const dataSource` was already accurate; only the header was wrong. Also re-verified and left alone: &quot;t in [0,1] maps to frame 0..CURVE_FRAMES (1:1 with 256 samples)&quot; is correct — CURVE_FRAMES is 255, so 0..255 inclusive is 256 values.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>a2f1ec49</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/FavientsPanel.tsx</code>
+    </header>
+    <p class="what">The addName JSDoc asserted &quot;Drag-to-Favients is the sole add-path now (starring is gone)&quot;; four add-paths exist and one of them is in this same file.</p>
+    <p class="change"><strong>Changed:</strong> Kept the auto-naming contract the comment was actually documenting, dropped the false premise, and named all four add-paths by grep target.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep for `store.add` / `useFavientsStore.getState()` across palette/, app-gmt/, gradient-explorer/, fluid-toy/ returns exactly four: this file's drop handler; CanonicalHero.tsx's toggleSave -&gt; st.add(); registerPaletteUI.ts's setGradientFavientsBridge -&gt; store.add(config, configToName(config), 'Stops') (reached from the Stops editor menu and FavientsEditorEntrance's second click); and this file's own System-menu file import. `git log -S &quot;starring is gone&quot;` -&gt; c9da3793 (2026-06-09), which also deleted palette/components/FavStar.tsx per `git log --diff-filter=D`; `git log -S &quot;the only add path on touch&quot;` -&gt; 3ceb5592 (2026-06-14) put a star back. Stale by four months, and the two sibling headers directly contradicted each other — CanonicalHero.tsx calls its star &quot;the only add path on TOUCH&quot; while this file said starring was gone.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>e708f578</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/FavientsToggleButton.tsx</code>
+    </header>
+    <p class="what">Header claimed &quot;One component for every host&quot; and that it replaced three per-app copies including app-gmt's; app-gmt does not mount it and has no topbar Favients toggle at all.</p>
+    <p class="change"><strong>Changed:</strong> Header now names the two real hosts by grep target and records that app-gmt's copy was deleted rather than migrated, plus the entrance app-gmt actually uses.</p>
+    <p class="verify"><strong>How it was verified:</strong> `grep -rn FavientsToggleButton --include=*.tsx --include=*.ts .` returns importers in exactly two places — fluid-toy/main.tsx (topbar registry) and gradient-explorer/TopBarButtons.tsx (desktopOnly). app-gmt/main.tsx states inline &quot;No topbar toggle in app-gmt&quot;. `git log --oneline --diff-filter=D --name-only -- 'app-gmt/**'` shows afcfafde deleted app-gmt/FavientsToggleButton.tsx. app-gmt reaches the shelf via openFavientsPanel in app-gmt/PalettePickerOverlay.tsx and the System menu.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>dfed1597</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/GeneratorExtrasPanel.tsx</code>
+    </header>
+    <p class="what">Header listed a &quot;Reseed noise&quot; action the component does not have — it lives in a different custom-UI registration.</p>
+    <p class="change"><strong>Changed:</strong> Dropped the claim; header now points at GeneratorModifierActions.tsx (registered palette-modifier-actions) by grep target.</p>
+    <p class="verify"><strong>How it was verified:</strong> `grep -rn 'reseedNoise|resetAll' --include=*.tsx palette/components/` returns reseedNoise ONLY in GeneratorModifierActions.tsx (store selector + its onClick). GeneratorExtrasPanel subscribes to resetAll alone and renders one reset button. The two are separate customUI registrations landing at different points in the Generator dock, so a reader following the header lands in the wrong component. GeneratorModifierActions' own header correctly lists Reseed as one of its three actions.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>974a2f90</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01c-palette-stores</code>
+      <code class="file">palette/store/favientsPanelPersist.ts:8</code>
+    </header>
+    <p class="what">The per-host storage-key contract described two hosts and put the Gradient Explorer's shelf on the wrong side of the screen.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the two-host sentence with the three real hosts and their three keys, corrected the Explorer to dock LEFT, named the mobile first-run branch as the only place a 'right' default is chosen, and recorded that the favourite COLLECTION is deliberately NOT split per host.</p>
+    <p class="verify"><strong>How it was verified:</strong> gradient-explorer/setup.ts registers favientsPanelEntry({ dock: 'left', order: 0 }) and calls mountFavientsPanel({ storageKey: 'gmt.gradientExplorer.favients.panel', location: 'left', order: 0 }), with its own comment saying 'docked into the left tab strip by default here'. grep mountFavientsPanel( returns three call sites with three distinct keys (app-gmt: none, so the gmt.favients.panel default; fluid-toy: fluid-toy.favients.panel). The only 'right' in the module is restoreFavientsPanel's isMobileBoot branch, which overrides the host's requested location on first run only — plausibly the source of the error, so it is now named. Collection-not-split verified against favientsStore.ts's LS_KEY = 'gmt.favients'.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>0d9514fe</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01c-palette-stores</code>
+      <code class="file">palette/store/heroSelection.ts:17</code>
+    </header>
+    <p class="what">The only @invariant in all 24 files of this slice had no command behind it — true of the code, but unprovable, so it rendered as proof where there was none.</p>
+    <p class="change"><strong>Changed:</strong> Downgraded to @assumption in place, with the reason it cannot be proven and the exact assertion a future harness would need to make to promote it back.</p>
+    <p class="verify"><strong>How it was verified:</strong> The claim itself re-derived from source and it IS true: sameItem compares only (mode, key), and both setHeroPick and setHeroDrag skip the payload write when it matches, so a same-key different-payload re-pick silently keeps the old payload and the dock acts on a stale gradient. But nothing can go red: grep -il hero debug/*.mts returns 0 files, no debug harness imports the module, and no browser smoke drives a hero. Per CLAUDE.md that makes it an @assumption. The module is plain TS with a single useSyncExternalStore import, so a node harness IS feasible — recorded in the annotation as a proposal, not written.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>a48cb5bd</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>p01c-palette-stores</code>
+      <code class="file">palette/installFavients.ts:14</code>
+    </header>
+    <p class="what">The single mount entry point both hosts share carried no guard citation, and its one stated ordering rule turns out to be unenforced and to fail silently.</p>
+    <p class="change"><strong>Changed:</strong> Added the three-host storageKey table at the entry point (it was stated as a principle on the field, never as which-host-passes-what). Added an @invariant that mountFavientsPanel runs at app-gmt module scope so a throw takes the app down, proven by smoke:boot. Added an @assumption recording that 'Call AFTER applyPanelManifest' is unenforced.</p>
+    <p class="verify"><strong>How it was verified:</strong> Invariant falsified positively: a throw planted at the top of mountFavientsPanel gave 'pageerror: FALSIFY: mountFavientsPanel', smoke:boot exit 1; reverted, exit 0 '(none)'. Ordering falsified NEGATIVELY: moving mountFavientsPanel() above applyPanelManifest([...]) in app-gmt/main.tsx left smoke:boot GREEN, exit 0, zero console errors — because restoreFavientsPanel's store actions are all optional-chained, so a too-early call is a no-op that silently costs the user their remembered panel position. app-gmt/main.tsx was reverted with a targeted Edit and git diff --stat confirmed empty. Three-host table verified by grep mountFavientsPanel(.</p>
+    <p class="guard"><code>npm run smoke:boot</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>55661556</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
       <code>t01-fluid-toy</code>
       <code class="file">debug/smoke-fluid-brush.mts:20</code>
     </header>
@@ -1652,10 +1904,122 @@
     <p class="commit">commit <code>b653a3ab</code></p>
     
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>p01a-palette-core</code>
+      <code class="file">palette/core/importFormats.ts</code>
+    </header>
+    <p class="what">The @invariant carried no proof clause, so a proven claim was indistinguishable from a believed one — and its two halves are guarded at very different strengths.</p>
+    <p class="change"><strong>Changed:</strong> Named the command and the assertion strings for both halves, and recorded the strength gap.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsified both directions. Shrinking rampFromAnchors' output to 255 turned 36 assertions red (parseGradientText gates on ramp.length === 256), exit 1. Making parseCss throw on non-gradient text turned section [5]'s 'parseCss no throw on nonsense' red, exit 1. The gap: parseGradientText is trivially no-throw (it wraps everything in try/catch), whereas the six exported parsers are unwrapped and are fed exactly ONE nonsense string each — a single sample per parser, not a fuzz sweep. Both reverted, git diff clean.</p>
+    <p class="guard"><code>tsx debug/test-palette-importformats.mts</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>a2f1ec49</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>p01a-palette-core</code>
+      <code class="file">palette/core/exportFormats.ts</code>
+    </header>
+    <p class="what">Both exporter JSDoc lists of which formats reduce stops were stale — reduceStopIndices names three of its six call sites, and collectionQualityWarnings' header names one of the two formats it covers while giving no hint that .ugr is lossy and exempt.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the lists with the budgets named alongside their constants plus a note to grep the symbol; documented the real warning coverage and marked the '64 RDP nodes are near-lossless' belief as an @assumption.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep reduceStopIndices across palette/ enumerates all six call sites and four budgets (GRD_MAX 40, AI_MAX 40, SVG_MAX 32, UGR_MAX_STOPS 64); indesignIdml.ts reaches it by importing AI_STOP_LIMIT. EXPORT_FORMATS.filter(f =&gt; f.collection) === [ai, idml, ugr] under tsx, while favientsExport.ts gates on `fmtKey !== 'ai' &amp;&amp; fmtKey !== 'idml'`. typecheck exit 0, importformats harness exit 0.</p>
+    <p class="guard"><code>npm run typecheck + tsx debug/test-palette-importformats.mts</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>2576fab1</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/GradientHoverPreview.tsx</code>
+    </header>
+    <p class="what">Header named two consumers; there are three, and the missing one is the only evidence the `paint` seam is source-agnostic.</p>
+    <p class="change"><strong>Changed:</strong> Names all three consumers and re-points the paint-callback rationale at the non-gradient case, so a future caller extends via paint rather than widening the component.</p>
+    <p class="verify"><strong>How it was verified:</strong> `grep -rn GradientHoverPreview --include=*.tsx --include=*.ts .` returns PickerWall, FavientsPanel and EasingPicker (which imports it and renders &lt;GradientHoverPreview hover={hover} /&gt;, and whose own header already named it), plus a reference from palette/core/rampCanvas.ts. Both examples the old header gave for the paint callback were gradients; the omitted consumer paints an easing CURVE via drawEasingCurve in easingThumb.ts.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>0047c03a</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/HeroSlot.tsx</code>
+    </header>
+    <p class="what">useInHeroRail's docstring described it as a gate for rail-only affordances, citing the one affordance that stopped being rail-only; it is now used purely for sizing.</p>
+    <p class="change"><strong>Changed:</strong> Docstring now says what the hook actually does and redirects to HeroSlot's `railOnly` prop for genuine rail-only children.</p>
+    <p class="verify"><strong>How it was verified:</strong> `grep -n inRail palette/components/CanonicalHero.tsx` returns the declaration plus three uses, all sizing/labelling: the star's padding and font size, its &quot;Save&quot;/&quot;Saved&quot; text, and the enlarge toggle's padding. Neither button is conditional on it. CanonicalHero's own comment says &quot;Originally rail-only ... now shown on every surface&quot;; 3ceb5592 made it universal — the same commit as the FavientsPanel &quot;starring is gone&quot; staleness, so this is that cluster's third file. The real rail-only mechanism is HeroSlot's railOnly prop (one consumer: ImageStage), documented correctly ten lines below.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>bafab97d</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/MixBlend.tsx</code>
+    </header>
+    <p class="what">Header covered only the sliders, omitting the Swap button the component owns and the undocumented `dimmed` prop that disables the whole block.</p>
+    <p class="change"><strong>Changed:</strong> Header now records that Swap/Reset and the A/B markers live here (GeneratorStage only supplies handlers) and that `dimmed={curvesOn}` locks Swap along with the sliders.</p>
+    <p class="verify"><strong>How it was verified:</strong> Read MixBlend's JSX: A/B end markers, three VerticalMixSliders, a required-onSwap '⇅ Swap' button and an optional '↺ Reset'; the wrapper applies opacity + pointer-events-none + aria-disabled when `dimmed`. GeneratorStage's call site is `&lt;MixBlend onSwap={swap} onReset={resetMix} dimmed={curvesOn} /&gt;`, adjacent to a banner reading &quot;Curves drive the output — sources are locked&quot;. GeneratorStage's own header says &quot;a swap button sits between them&quot; without naming the owner, so before this neither file told a reader where Swap lives.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>91e1fe99</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/useFlash.ts</code>
+    </header>
+    <p class="what">Header justified the hook being palette-local with &quot;(palette/ must not import app/engine code)&quot;; the engine half is false and its own directory disproves it, and it mislocated useClipboardCopy in engine-core.</p>
+    <p class="change"><strong>Changed:</strong> Replaced the parenthetical with the boundary that actually holds — palette imports engine freely, never an app (the rule installFavients.ts states) — quantified from the directory itself, and corrected useClipboardCopy's path.</p>
+    <p class="verify"><strong>How it was verified:</strong> `grep -rho &quot;from '\.\./\.\./[a-zA-Z-]*&quot; palette/components/ | sort | uniq -c` -&gt; ../../components 26, ../../hooks 8, ../../utils 7, ../../types 5, ../../store 3, ../../engine 1 (showToast in GeneratorStage.tsx), ../../data 1 — 51 engine/shared imports in the very directory the rule is written in. The APP half DOES hold: grep for imports of app-gmt/, fluid-toy/ or gradient-explorer/ anywhere under palette/ returns 0. `ls hooks/useClipboardCopy.ts` — repo-root shared hooks, not under engine/. A reader taking the stated rule at face value would refuse a legitimate engine import.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>147aa234</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/GradientSourcePicker.tsx</code>
+    </header>
+    <p class="what">Header contrasted the unified catalog with &quot;just the 24 built-in presets&quot;; GRADIENT_PRESETS.length is 25.</p>
+    <p class="change"><strong>Changed:</strong> Header now cites GRADIENT_PRESETS.length as the source of truth and says not to re-hardcode the number, since it has already drifted once.</p>
+    <p class="verify"><strong>How it was verified:</strong> Counted by importing the module rather than by eye: `npx tsx` over data/gradientPresets.ts prints length 25 and the 25 names (Greyscale ... Aurora Strata). The off-by-one sat in a sentence whose whole job is to say the list is bigger than the built-ins, so it undercut its own point and would send a catalog auditor looking for an entry that is not missing.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>5d0cd6f2</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>p01c-palette-stores</code>
+      <code class="file">palette/store/paletteFiltersPersist.ts:3</code>
+    </header>
+    <p class="what">Header claimed the picker layout prefs are 'shared by every GMT app'; one of the three hosts never reads or writes them.</p>
+    <p class="change"><strong>Changed:</strong> Separated the two ideas — the KEY is genuinely not split per host (unlike the Favients panel state next door), but only opted-in hosts touch it. Named the single call site of each function and the coupling it creates.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep restorePaletteFilters\|watchPaletteFilters across the tree returns their definitions plus exactly one caller each: mountFavientsPanel() in palette/installFavients.ts, behind cfg.paletteFilters !== false. fluid-toy/main.tsx:367 passes paletteFilters: false. So there is also no path today for a host that wants these prefs without the Favients shelf — recorded as a seam limit.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>8cbc4514</code></p>
+    
+  </article>
   </section>
   
   <section>
-    <h2>Applied — orchestrator-verified <span class="count">16</span></h2>
+    <h2>Applied — orchestrator-verified <span class="count">17</span></h2>
     <p class="note">No existing test covered these, so a second independent agent re-derived the claim before the change was allowed through. Each names how it was checked.</p>
     
   <article class="finding sev-high">
@@ -1854,6 +2218,20 @@
     <p class="commit">commit <code>0a29e490</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tV">V</span>
+      <span class="sev">medium</span>
+      <code>p01c-palette-stores</code>
+      <code class="file">components/gradient/gradientEditorEntrance.ts:17</code>
+    </header>
+    <p class="what">An @invariant in engine-core states fluid-toy has no Favients shelf and leaves the editor-header slot empty. It is false, and the same false claim is duplicated in palette/components/FavientsEditorEntrance.tsx.</p>
+    
+    
+    
+    
+    
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tV">V</span>
@@ -1885,7 +2263,7 @@
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">54</span></h2>
+    <h2>Awaiting your judgement <span class="count">64</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
   <article class="finding sev-high">
@@ -1957,6 +2335,56 @@
     
     
     <p class="rationale">CLAIM: 3 failures in 13 consecutive clean runs at HEAD — '[1] liquify canvas missing', '[3] grab handle did not change the render', '[4] physics frame went blank'. EVIDENCE: every green run produces byte-identical numbers (push delta 3.77, grab delta 21.03, physics variety 51), so the underlying render is deterministic and the variance is in timing, not math. The smoke uses one-shot waitForTimeouts before every readback and has NEITHER the dep-optimize retry loop NOR the Vite dual-instance detector that its sibling smoke-gx-geom-handles.mts carries — and gx-handles was 13/13 clean here and goes red on a real break. preserveDrawingBuffer is true on both the liquify and compositor contexts, so this is not the classic WebGL readback race. OPTIONS: (a) port the retry loop + dual-instance guard from smoke-gx-geom-handles.mts and replace fixed waits with polling until the signature stabilises — cheap, and the sibling is a proven template; (b) treat '[4] physics frame went blank' as a possible real liquify divergence and instrument it before touching the smoke — the LiquifyMesh unit test asserts finiteness and boundedness over 600 frames and passes, which argues against a blowup but does not cover the GL display path; (c) leave it and rely on re-running. RECOMMENDATION: (a), escalating to (b) only if a hardened smoke still goes blank. Not applied because a guard rewrite is unreviewed code and there was no way to run enough post-change trials on a tree two other auditors were editing to beat a 23% baseline statistically. The flakiness IS now documented in .claude/rules/sibling-apps.md so nobody reads a red run as a regression in the meantime.</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">high</span>
+      <code>p01a-palette-core</code>
+      <code class="file">palette/core/oklab.ts</code>
+    </header>
+    <p class="what">The duplicated OKLab primitives in palette/core/oklab.ts have no working pin, and the durable fix is a collapse rather than a better test — but which shape to take is a design call.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM. srgbToLinear01 / linear01ToSrgb / rgbToOklab / oklabToRgb are hand copies of module-private functions in utils/colorUtils.ts. The stop-fitter measures error against GMT's real gradient pipeline, so if the two ever disagree the fitter optimises against maths the renderer does not use, and every fitted gradient is subtly wrong in a way no harness reports.
+
+EVIDENCE. Measured 2026-07-29: perturbing rgbToOklab's first M-matrix coefficient by +0.0001 (0.024%) leaves the entire npm run test:palette chain green, exit 0, 44 passed 0 failed. +0.01 goes red but only at test-palette-generator.mts's tolerance round-trip ('reproduces slot A within 2 levels', got 4.43) — a tolerance small drift slips under. The assertion explicitly labelled 'oklab drift pin' reports 0 mismatches in both cases because it compares palette's re-exported lerpOklab against colorUtils' own, i.e. a function against itself.
+
+OPTIONS.
+(a) COLLAPSE — export srgbToLinear01 / linear01ToSrgb / rgbToOklab / oklabToRgb from utils/colorUtils.ts and re-export them from palette/core/oklab.ts, exactly the change already applied to gmtGradient.ts in P0a. Drift becomes structurally impossible instead of undetected, and the dead pin can then be deleted honestly rather than left as a marker. Widens colorUtils' public surface by four pure functions.
+(b) REAL PIN — keep the duplication and rewrite section [4] to compare colorUtils.lerpOklab against a lerp composed from palette's own rgbToOklab/oklabToRgb. Requires reimplementing the polar (LCh) interpolation inside the guard; if the reimplementation is not faithful the pin fails for the wrong reason, and if it is faithful it is a third copy of the maths.
+(c) TIGHTEN THE TOLERANCE on test-palette-generator.mts's round-trip so small drift is caught incidentally. Cheapest, but it makes an unrelated guard load-bearing for a contract it does not name, and it will go red for legitimate pipeline changes.
+(d) Leave it; the risk is only realised if someone edits one copy.
+
+RECOMMENDATION: (a). It is the change this codebase already chose once for the same problem, it removes the failure mode rather than detecting it, and it is the only option that lets the dead assertion be removed without losing coverage. Not applied here because it edits utils/colorUtils.ts, which is engine-core and outside this slice, and because deciding what belongs in colorUtils' public API is an architecture call.
+
+The gap is documented in place either way — see the @assumption in palette/core/oklab.ts's header and the comment on section [4] of debug/test-palette-stopops.mts (commit 1e7802cf).</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">high</span>
+      <code>p01b-palette-components</code>
+      <code class="file">palette/components/</code>
+    </header>
+    <p class="what">The whole 30-file / 6,257-line palette component layer has ZERO automated coverage — no guard imports it, no rule scopes it, and a total render failure leaves every guard green.</p>
+    
+    <p class="verify"><strong>How it was verified:</strong> Structural: for each of the 16 tsx invocations chained into `npm run test:palette`, read its import list — every one resolves into palette/core/**, palette/features/**, store/**, utils/** or gradient-explorer/**; not one imports palette/components/**. `grep -rln 'PickerWall|FavientsPanel|ChannelGraphEditor|GeneratorStage|ImageStage|CanonicalHero|StopsDockPanel|SelectionOverlay|GradientSourcePicker' debug/ .claude/rules/` returns EMPTY. Empirical falsification: changed GradientStrip.tsx's paint guard from `ramp.length !== 256` to `!== 255`, which makes the canvas routine return early always, so EVERY gradient strip in the suite (Generator A/B sources, result hero, Favients previews, Picker hero) renders blank. `npm run test:palette` exit 0; `npm run typecheck` exit 0. Reverted with a targeted Edit; `git diff --stat` clean afterwards.</p>
+    
+    
+    <p class="rationale">CLAIM: the component layer is unguarded, and the guard named for this subsystem cannot detect even a total rendering failure in it. EVIDENCE: above — structural and empirical. This is NOT a criticism of test:palette, which is healthy and does exactly what it claims: it covers the DOM-free core math (stopFit, channelCurve, facets, easings, generatorPipeline, img2grad, selectionGeometry, wallLayout, rampGeometry, editorConfig). The gap is that nothing was written for the layer above it, and the name `test:palette` implies otherwise — the run's 'healthy but cited for the wrong thing' mode, compounded by plain absence.
+
+CONSEQUENCE, concretely. PickerWall.tsx (1077 lines) holds the column-major index math, the chunk split at MAX_CANVAS_CSS_H, the zoom/pan transform and the lasso/rect/paint carve commit. FavientsPanel.tsx (1147) holds the drop-index computation against the VISIBLE list (dragged item spliced out), the new-group split on the empty tail's lower half, and the trash zone. ChannelGraphEditor.tsx (811) holds the rampToTrack/trackToRamp driver and the CURVE_FRAMES&lt;-&gt;256-sample mapping. All pure, all trivially testable, all unguarded. A regression in any of them is invisible to CI and reaches production, which auto-deploys from main.
+
+OPTIONS:
+(a) Extract PickerWall's pure index math (k-&gt;(col,row), its inverse, and the chunk split) into palette/core/wallLayout.ts and assert it in debug/test-palette-walllayout.mts. Both already exist; that guard currently asserts only shouldSquare/squareCols/STRIP_ROWS_MAX. Adds assertions, not infrastructure.
+(b) Same treatment for FavientsPanel's drop-index computation — extract `dropIndexFor(visibleList, y)` into palette/core/favientDnd.ts (already imported by the panel) and assert reorder / insert / new-group / trash.
+(c) A browser smoke booting gradient-explorer.html that asserts a non-blank strip — the only thing that would have caught the GradientStrip break above. The owner does visual testing personally and screenshot smokes are explicitly unwanted, so this must be a PIXEL-VARIANCE assertion (the canvas is not uniform), never a baseline image.
+(d) Do nothing to the code; just record the gap in a palette rule so a green test:palette is not misread as component coverage.
+
+RECOMMENDATION: (a) then (b). Both are pure-function extractions into modules that already have guards, and they cover the two highest-risk index computations in the subsystem. Do (d) regardless — it costs nothing and prevents the exact misreading that produced this finding. (c) only if a blank-render regression actually ships. NOT APPLIED: new guards are unreviewed code, and refactoring PickerWall/FavientsPanel to extract functions is a real code change with no guard to catch a mistake — precisely the situation the tiering exists for.</p>
   </article>
   <article class="finding sev-medium">
     <header>
@@ -2294,6 +2722,76 @@
     
     <p class="rationale">CLAIM: grep -rn gx-fractal-glitch .claude/rules/ returns exactly one hit — sibling-apps.md's gradient-explorer row. It genuinely reaches gradient-explorer code (boots gradient-explorer.html, mounts the fullscreen overlay, drives fullscreen/modes/fractalMode.tsx as an ownCanvas mode), so the citation is defensible. But its ASSERTIONS are entirely deep-zoom contracts — LA-on vs LA-off central colour distribution, auto-reference relocation, ADR-0066 periodic-nucleus adoption — and gmt-formulas-and-graph.md, which owns that area, does not cite it, while the three deep-zoom smokes it does cite are 3 of the 4 miscitations check:rule-guards reports. EVIDENCE on health: two attempts, both killed at the third view by a Vite full-reload from concurrent auditors; every assertion reached passed. OPTIONS: (a) also cite it from gmt-formulas-and-graph.md so a deep-zoom change surfaces the one guard that tests deep zoom — additive, no risk; (b) leave it and let the deep-zoom rule's citations get fixed independently. RECOMMENDATION: (a), and give this smoke a quiet tree in the guard sweep — it needs ~8 uninterrupted minutes and is the only ADR-0065/0066 coverage in the repo. Not applied because gmt-formulas-and-graph.md belongs to another subsystem and its four known miscitations were explicitly out of remit.</p>
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>p01a-palette-core</code>
+      <code class="file">palette/core/gradientSeam.ts</code>
+    </header>
+    <p class="what">Eight of the 35 files in palette/core/ cannot be reached by any link in the test:palette chain, and the most consequential of them is gradientSeam.ts — the doc's own 'single conversion point' to GMT.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM. A transitive import walk from all 16 test:palette harnesses reaches 27 of the 35 .ts files under palette/core/. Unreachable: gradientSeam.ts, catalogLoader.ts, presetCatalog.ts, favientsExport.ts, favientDnd.ts, favientTargets.ts, rampCanvas.ts, storage.ts.
+
+EVIDENCE. Reachability was computed by resolving every relative `from '...'` specifier from each harness (script kept out of the repo). Reachability is also an upper bound, not coverage: indesignIdml.ts and indesignIdmlTemplate.ts are reachable only because exportFormats.ts imports them, and the importformats harness never calls buildIdmlSwatchLibrary; img2grad/decode.ts is reachable but is the DOM decoder and is never invoked under node. Of the 16 export formats, only 6 (map, gpl, ggr, cpt, json, css) are exercised, by round-trip.
+
+WHY gradientSeam.ts MATTERS MOST. palette-suite.md calls it the single conversion point from a 256-step ramp to a GMT GradientConfig and says 'Don't add a second ramp-&gt;stops path'. entryToGradientConfig / applyGradientConfig / applyEnvGradient encode real contracts — presets pass through as colorSpace 'linear' because that is what the fractal shader expects, applyEnvGradient forces 'srgb' because sky colour is displayed not radiance, SEAM_MAX_STOPS caps at 128 — and nothing checks any of them. A swapped colour space here miscolours every applied gradient and would not show up in any guard.
+
+OPTIONS. (a) Add a debug/test-palette-gradientseam.mts pinning the colour-space contracts and the SEAM_MAX_STOPS cap against a stubbed store, and append it to the test:palette chain. (b) Extend the importformats harness to build and re-parse the remaining text formats, closing the exporter half. (c) Accept the gap for the DOM-bound files (rampCanvas, favientsExport, favientDnd, catalogLoader) which need a browser smoke, and cover only the pure ones. (d) Leave it.
+
+RECOMMENDATION: (a) then (b). Both are new guard code, which is why neither was written unattended — a new harness that passes on first run has not been falsified, and falsifying it properly needs a quiet tree.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>p01a-palette-core</code>
+      <code class="file">palette/core/favientsExport.ts</code>
+    </header>
+    <p class="what">A .ugr collection export reduces to 64 RDP nodes but is silently exempt from the lossy-quality warning that .ai and .idml get.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM. collectionQualityWarnings() gates on `if (fmtKey !== 'ai' &amp;&amp; fmtKey !== 'idml') return []`, so exporting favourites as .ugr never warns — even though exportFormats.ts reduces it through the same reduceStopIndices at UGR_MAX_STOPS 64.
+
+EVIDENCE. EXPORT_FORMATS.filter(f =&gt; f.collection) evaluates to [ai, idml, ugr]. reduceStopIndices is called at line 345 with UGR_MAX_STOPS. aiLossyGradients measures reconstruction error at the 40-stop AI budget, so reusing it verbatim for .ugr would over-report; that is presumably why .ugr was excluded rather than an oversight, but nothing records the reasoning and nothing measures whether 64 nodes is actually safe.
+
+OPTIONS. (a) Thread the per-format budget into aiLossyGradients and warn for .ugr at its own budget — correct, and turns a guess into a measurement. (b) Measure once offline whether 64 RDP nodes stays under AI_LOSSY_DELTA for the catalog, and if so keep the exemption but say so with a number. (c) Leave it — .ugr consumers are fractal tools that resample anyway, and Ultra Fractal's editor arguably prefers few draggable nodes to fidelity.
+
+RECOMMENDATION: (b) first — it is a measurement, not a change, and it either justifies the current behaviour or turns this into (a). This is an export-fidelity product call, which is why it was not applied. The behaviour is now documented at the call site as an @assumption (commit 2576fab1).</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>p01c-palette-stores</code>
+      <code class="file">palette/store/fullscreenStore.ts:1</code>
+    </header>
+    <p class="what">A Gradient-Explorer-only store lives in palette/, and the 14 harnesses that reach it hardcode its path as a URL string — so the obvious tidy-up is far more expensive than it looks.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM: palette/store/fullscreenStore.ts has zero consumers under palette/. Its production importers are five files in gradient-explorer/ (GradientExplorerApp, FullscreenGradientOverlay, GeometryHandleLayer, modes/fractalMode, modes/splineMode) plus gradient-explorer/gradientTargets.ts, and 14 debug/*.mts harnesses. EVIDENCE: grep -rn fullscreenStore across the tree; every debug hit is the literal string '/palette/store/fullscreenStore.ts' inside a page.evaluate dynamic import. OPTIONS: (a) move it to gradient-explorer/fullscreen/ where its consumers are — clean on paper, but it silently breaks 14 harnesses INCLUDING all three GX smokes, and nothing in tsc or knip would flag it because the references are untyped strings inside browser callbacks; (b) leave it and rely on the @invariant just added to the file, which names smoke:gx-handles and states the rename hazard explicitly; (c) move it AND sweep the 14 harnesses in the same commit, running all three GX smokes afterwards (smoke:gx-fractal-glitch needs a quiet tree and ~8 min, and smoke:liquify is ~23% flaky per cycle 11, so 'afterwards' means several runs). RECOMMENDATION: (b) for now — the annotation converts an invisible trap into a greppable one at zero risk, and the physical move buys tidiness rather than correctness. If it is ever done, do it as (c) in ONE commit, never as a rename-and-fix-callers-later. Not applied: a file move plus edits to 14 harnesses is well past what an unattended auditor should do to the load-bearing test seam of an app it is not auditing.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>p01c-palette-stores</code>
+      <code class="file">palette/store/generatorStore.ts:1</code>
+    </header>
+    <p class="what">23 of this slice's 24 files have no node-side guard at all; the 16-link test:palette chain reaches exactly one of them.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM: mapping every debug/*.mts import against the 24 files gives exactly one edge — test-palette-generator.mts -&gt; palette/features/paletteGenerator.ts. Everything else is covered only by browser boot (smoke:boot exercises registerPaletteUI, installFavients, favientsPanelPersist, paletteFiltersPersist, favientsStore.seedPresets and all four feature registrations, but only to the extent that a THROW would surface as a pageerror) or, for fullscreenStore, by the three GX smokes. Nothing asserts behaviour for favientsStore (dedupe signature, group model, import/export round-trip), generatorStore (sliceToColorBox, slot snapshot/restore), the three document bridges (untrusted-scene coercion), heroSelection, heroPrefs, pickerStore, imageStore, dragVisual or coerceJson. EVIDENCE: the per-file import map is in this audit's transcript; test:palette's 16 links are all pure-core (stopfit, stopops, channelcurve, facets, facetname, easings, generator, img2grad x2, selection, walllayout, dnd-kernels, importformats, rampgeometry, editorstore, liquify-mesh). Note debug/test-palette-editorstore.mts is NAMED for paletteEditorStore but imports palette/core/editorConfig — honest in its header, misleading from the filename, and it means a reader grepping for that store's coverage finds a file that cannot fail on it. OPTIONS: (a) add node harnesses for the three highest-risk pure-ish seams — favientsStore's isWellFormedFavient/favientSig/importCollection (it already guards against a malformed favourite bricking the shelf across sessions, and that defence is untested), the three document-bridge restore paths (they parse UNTRUSTED scene files), and heroSelection's payload-staleness assumption; (b) rename test-palette-editorstore.mts to test-palette-editorconfig.mts so the name matches what it tests; (c) accept boot-only coverage. RECOMMENDATION: (a), favientsStore first — it is the only store here that ingests untrusted input AND persists it, so a bad entry survives reloads, and its own JSDoc says exactly that. (b) is a one-line package.json + git mv but is a rename in the guard layer, which this run should not do unattended. Not applied: writing new harnesses is unreviewed code, which is Tier B by definition.</p>
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tB">B</span>
@@ -2621,6 +3119,74 @@ WHAT REMAINS is small and cosmetic: the dead groupFilter entry still renders a s
     <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>fb866b0d</code></p>
     <p class="rationale">See PROPOSALS.md. TENTH instance of the miscited-guard pattern this run, and a stricter variant: not merely scoped wrong but structurally incapable of failing. The cycle-6 g03 result that lists guard: test:frag:scan / guardPass: true should be read as having no guard.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>p01a-palette-core</code>
+      <code class="file">debug/test-palette-img2grad.mts</code>
+    </header>
+    <p class="what">The main img2grad harness stays fully green when a real crash bug is reintroduced into resample.ts; only the dedicated overshoot sweep catches it.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM. Removing the `if (i &gt; n - 2) i = n - 2;` clamp from palette/core/img2grad/resample.ts reintroduces exactly the bug that clamp exists to fix. debug/test-palette-img2grad-overshoot.mts goes red immediately with the original error ('THREW: ... Cannot read properties of undefined (reading L)'). debug/test-palette-img2grad.mts — the main harness, 20 assertions — stays at '✓ ALL PASS', exit 0.
+
+WHY IT MATTERS. The two harnesses sit next to each other in the chain and are named as though the second is a subset of the first. Anyone consolidating them, or dropping the '-overshoot' link as redundant, silently reopens a crash that reaches the user as a TypeError in the stop fitter. The overshoot sweep is 44 checks x 4 images x 11 colour counts x ~200 golden-hour steps x 3 spacings; the main harness uses a handful of fixed parameter sets, which is why it never lands on the overshooting combination.
+
+OPTIONS. (a) Add a one-line note to both harness headers saying the overshoot sweep is not redundant and which regression it pins. (b) Fold a few overshooting parameter combinations into the main harness so it fails too. (c) Leave it.
+
+RECOMMENDATION: (a), and it is nearly free. Not applied because both files are shared debug infrastructure and two other auditors were committing into this tree; a header edit there is better batched with the guard sweep.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>p01a-palette-core</code>
+      <code class="file">package.json</code>
+    </header>
+    <p class="what">npm run test:palette's twelfth link, test-engine-dnd-kernels.mts, imports nothing from palette/ at all.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM. Its only imports are ../store/dragFlight and ../store/sendTargetRegistry. It is an engine drag-and-drop kernel test living inside the palette chain, presumably because palette/core/favientDnd.ts is the main consumer — but favientDnd.ts is itself one of the eight core files no link reaches, so the association is conceptual rather than actual.
+
+WHY IT MATTERS. Citing 'npm run test:palette' as the guard for a palette change is already coarse (16 links, most irrelevant to any one change); a link that touches no palette file at all makes it coarser and mildly misleading in commit messages. It also inflates the apparent coverage of the palette suite.
+
+OPTIONS. (a) Leave it and name the specific link in guard citations instead of the chain — which the proposed palette rule below already does. (b) Move it to a test:engine-dnd script and cite that from a store-scoped rule. (c) Leave it and note the association in the chain.
+
+RECOMMENDATION: (a). Splitting the chain is churn; the real fix is citing links, not chains. Worth pairing with the known check:rule-guards limitation that a chained npm script resolves by its FIRST command only, so a rule citing test:palette only ever resolves debug/test-palette-stopfit.mts.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>p01b-palette-components</code>
+      <code class="file">plans/context-protocol/subsystems.json</code>
+    </header>
+    <p class="what">`npm run context:cost -- p01-palette-suite` lists two palette/components files that do not exist, each costed at 0 tokens.</p>
+    
+    <p class="verify"><strong>How it was verified:</strong> The Layer 2 table's first two rows are `palette/components/FavStar.tsx` and `palette/components/QualityRangePad.tsx`, both 0 tokens. Neither exists: `find . -name 'FavStar*' -o -name 'QualityRangePad*'` returns only ./components/QualityRangePad.tsx (moved out of palette by 03d60aa8, 'consolidate range control — QualityRangePad is THE dual-range master') and nothing at all for FavStar (deleted by c9da3793). palette/components/QualityRangePadConnected.tsx correctly imports from '../../components/QualityRangePad', so only the cost map is stale. The tool also prints 'context-map.json predates the latest commit'.</p>
+    
+    
+    <p class="rationale">CLAIM: the load-planner invents two files and prices them at zero. EVIDENCE above. This is the same class cycle 11 recorded for t01/t02 (a Layer 2 costed at 0 tokens is indistinguishable from a correct answer), but a distinct instance: there the glob matched nothing, here concrete paths outlived their files. Low severity because it wastes a read attempt rather than misleading about behaviour — but it is silent, and the two entries sort FIRST (cheapest-first ordering puts 0-token rows at the top), so they are the first thing an agent scoping this subsystem sees. OPTIONS: (a) rebuild with `npm run context:map` — but that is a tree-wide rebuild and the cycle-11 finding explicitly says not to run it unattended; (b) implement cycle 11's recommendation (b) and make context-cost.mjs fail loudly on any 0-token Layer 2 row, which catches both instances and any future one; (c) hand-remove the two dead rows. RECOMMENDATION: (b), which is already queued from cycle 11 — this finding is corroborating evidence for it from a second subsystem, not a new ask. NOT APPLIED: context-protocol tooling is outside this slice and the rebuild must not run unattended.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>p01c-palette-stores</code>
+      <code class="file">.claude/rules/mobile-layout.md:27</code>
+    </header>
+    <p class="what">A rule correctly cites palette/store/favientsPanelPersist.ts in its prose but cannot load when you open that file, because its paths: front-matter has no palette entry.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM: mobile-layout.md lists palette/store/favientsPanelPersist.ts as one of the eight inline re-implementations of the 768px / (pointer: coarse) test — and that citation is ACCURATE (restoreFavientsPanel does window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth &lt; 768). But its paths: block is five engine/hooks files only, so opening favientsPanelPersist.ts never loads the rule that knows about it. The pointer is one-directional. EVIDENCE: sed the front-matter of .claude/rules/mobile-layout.md; grep -rn palette .claude/rules/ returns only mobile-layout.md and sibling-apps.md. Note check:rule-guards cannot see this class — it checks whether a cited GUARD reaches a rule's paths, not whether a file a rule DISCUSSES is in its paths. OPTIONS: (a) add palette/store/favientsPanelPersist.ts to mobile-layout.md's paths:; (b) cover it from the palette rule that does not exist yet (see notes); (c) leave it. RECOMMENDATION: (b) when the palette rule is written, cross-referencing mobile-layout.md — (a) would pull a whole mobile rule into every palette-persistence edit for one line. Not applied: editing another subsystem's rule paths and creating palette rules were both explicitly out of remit, and all three palette auditors would have collided on a new rule file this cycle.</p>
   </article>
   <article class="finding sev-low">
     <header>
@@ -2976,15 +3542,15 @@ WHAT REMAINS is small and cosmetic: the dead groupFilter entry still renders a s
     <td class="num prop">0</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>p01-palette-suite</code></td>
     <td>palette</td>
     <td class="area">Palette/gradient suite — editors, generator, image→gradient, filters, stores, exporters</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
-    <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num">38</td>
+    <td class="num applied">27</td>
+    <td class="num esc">1</td>
+    <td class="num prop">10</td>
+    <td class="st">done</td>
   </tr></tbody>
   </table></div>
 

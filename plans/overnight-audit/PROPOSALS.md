@@ -2417,3 +2417,263 @@ JSON was lost. Its three Tier A findings were re-derived from commit messages th
 carry their verification inline, so the *applied* work is fully documented — but any
 **Tier B or Tier V findings it returned are gone.** Treat a03's non-applied surface
 as uncovered. `results/a03-tutorial.json` says so in a `provenance` field.
+
+---
+
+# Cycle 12 — p01-palette-suite (the last subsystem)
+
+89 files, 14,019 lines, split across three auditors: `p01a` core (35), `p01b`
+components (30), `p01c` stores + features (24). **27 applied, 1 Tier V confirmed
+and applied, 10 Tier B below, 1 Tier C.** Full rationales live in
+`results/p01a-palette-core.json`, `results/p01b-palette-components.json` and
+`results/p01c-palette-stores.json` — the entries here are the decision summaries.
+
+**The worklist is now empty.** Every subsystem is done.
+
+## Two guards that cannot fail — a theme, not a coincidence
+
+Cycle 12 found two more instances of the class that has now dominated this run.
+
+**1. The "oklab drift pin" compares a function against itself.**
+`debug/test-palette-stopops.mts` carries an assertion named as a drift pin over a
+448-sample loop. `palette/core/oklab.ts` re-exports `lerpOklab` from
+`utils/colorUtils`, so **both sides of the comparison are the same function
+object**. It reports 0 mismatches unconditionally. Measured: a `+0.0001`
+(0.024%) perturbation of `rgbToOklab`'s M-matrix leaves the whole 16-link
+`test:palette` chain green, 44 passed. `+0.01` goes red only at
+`test-palette-generator.mts`'s tolerance round-trip — an unrelated guard.
+
+**2. Breaking every gradient strip in the suite leaves every guard green.**
+`p01b` changed `GradientStrip.tsx`'s paint guard from `ramp.length !== 256` to
+`!== 255`, so the canvas routine always returns early and **every gradient strip
+renders blank**. `npm run test:palette` exit 0. `npm run typecheck` exit 0.
+
+Both were falsified and reverted. Neither is a criticism of `test:palette`, which
+is healthy for what it covers — the point is that the name implies coverage the
+chain does not have.
+
+## HIGH — the OKLab primitives are hand copies with no working pin
+
+_(cycle 12 · `palette/core/oklab.ts`)_
+
+`srgbToLinear01` / `linear01ToSrgb` / `rgbToOklab` / `oklabToRgb` are hand copies
+of module-private functions in `utils/colorUtils.ts`. The stop-fitter measures
+error against GMT's real pipeline, so if the copies drift, **every fitted gradient
+is subtly wrong and no harness reports it**. The named pin is the tautology above.
+
+- **(a) Collapse.** Export the four primitives from `utils/colorUtils.ts` and
+  re-export them here. Drift becomes impossible and the dead pin can be removed
+  honestly. **This is the change the codebase already made for the same problem** —
+  `gmtGradient.ts` was collapsed to a pure re-export in P0a.
+- **(b) Real pin.** Reimplement polar LCh interpolation inside the guard. A third
+  copy of the maths; a wrong reimplementation fails for the wrong reason.
+- **(c)** Tighten the generator round-trip tolerance — makes an unrelated guard
+  load-bearing for a contract it does not name.
+- **(d)** Leave it.
+
+**Recommendation: (a).** Not applied because it edits `utils/colorUtils.ts`
+(engine-core, outside the slice) and widening its public API is an architecture
+call. The gap is documented at both sites either way (`1e7802cf`).
+
+## HIGH — the palette component layer has zero automated coverage
+
+_(cycle 12 · `palette/components/**`, 30 files / 6,257 lines)_
+
+Not one of the 16 `test:palette` links imports anything under
+`palette/components/**` — verified by reading every link's import list, and by the
+blank-strip falsification above. `grep -rln 'PickerWall|FavientsPanel|ChannelGraphEditor|…' debug/ .claude/rules/`
+returns **empty**.
+
+What is unguarded matters: `PickerWall.tsx` (1077 lines) holds the column-major
+index math, chunk split, zoom/pan transform and carve commit; `FavientsPanel.tsx`
+(1147) holds drop-index computation against the visible list, the new-group split
+and the trash zone; `ChannelGraphEditor.tsx` (811) holds the `rampToTrack` /
+`trackToRamp` driver. All pure, all testable, all uncovered — and `main`
+auto-deploys.
+
+- **(a)** Extract `PickerWall`'s pure index math into `palette/core/wallLayout.ts`
+  and assert it in the existing `debug/test-palette-walllayout.mts`.
+- **(b)** Same for `FavientsPanel`'s drop-index into `palette/core/favientDnd.ts`.
+- **(c)** A browser smoke asserting pixel *variance* — not a baseline image, since
+  you do visual testing yourself.
+- **(d)** Record the gap in a palette rule so a green `test:palette` is never
+  misread as component coverage.
+
+**Recommendation: (a) then (b)** — pure-function extractions into modules that
+already have guards, covering the two highest-risk index computations. **Do (d)
+regardless.** Not applied: new guards are unreviewed code, and the extraction is a
+real code change with no guard to catch a mistake in it.
+
+## MEDIUM — eight core files are unreachable from any guard, and the worst is the GMT seam
+
+_(cycle 12 · `palette/core/gradientSeam.ts`)_
+
+A transitive import walk from all 16 harnesses reaches 27 of 35 core files.
+Unreachable: `gradientSeam`, `catalogLoader`, `presetCatalog`, `favientsExport`,
+`favientDnd`, `favientTargets`, `rampCanvas`, `storage`. Reachability is an upper
+bound on coverage, not coverage — `buildIdmlSwatchLibrary` is never called,
+`img2grad/decode.ts` never runs under node, and only 6 of 16 export formats are
+exercised.
+
+`gradientSeam.ts` is the doc's own "single conversion point" to GMT and encodes
+real contracts: presets pass through as `colorSpace: 'linear'` because that is what
+the fractal shader expects; `applyEnvGradient` forces `'srgb'` because sky colour
+is displayed, not radiance; `SEAM_MAX_STOPS` caps at 128. **A swapped colour space
+miscolours every applied gradient invisibly.**
+
+- **(a)** New `debug/test-palette-gradientseam.mts` pinning the colour-space
+  contracts and the cap against a stubbed store.
+- **(b)** Extend `importformats` to round-trip the remaining text formats.
+- **(c)** Accept the gap for the DOM-bound files, cover only the pure ones.
+
+**Recommendation: (a) then (b).** Neither written unattended — a new harness green
+on its first run has not been falsified, and falsifying it needs a quiet tree.
+
+## MEDIUM — 23 of 24 store/feature files have no node-side guard
+
+_(cycle 12 · `palette/store/generatorStore.ts`)_
+
+Exactly one of the 16 `test:palette` links reaches this slice
+(`test-palette-generator.mts`). **Recommendation: start with `favientsStore` —
+it is the only store here that ingests untrusted input AND persists it**, so a
+malformed favourite survives reloads, and its own JSDoc says the defence exists
+precisely for that. Also rename `debug/test-palette-editorstore.mts`, which tests
+`palette/core/editorConfig`, not any store — honest in its header, misleading from
+its filename.
+
+## MEDIUM — a .ugr collection export is silently exempt from the lossy warning
+
+_(cycle 12 · `palette/core/favientsExport.ts`)_
+
+`collectionQualityWarnings` gates on `fmtKey !== 'ai' && fmtKey !== 'idml'`, so
+`.ugr` never warns — despite reducing through the same `reduceStopIndices` at
+`UGR_MAX_STOPS` 64. `aiLossyGradients` measures at the 40-stop budget, so reusing
+it verbatim would over-report, which is presumably why it was excluded — but
+nothing records that reasoning and nothing measures whether 64 is safe.
+
+**Recommendation: measure once offline whether 64 nodes stays under
+`AI_LOSSY_DELTA`, then either justify the exemption with a number or thread the
+per-format budget into `aiLossyGradients`.** That first step is a measurement, not
+a change. Documented at the call site as an `@assumption` (`2576fab1`).
+
+## MEDIUM — a Gradient-Explorer-only store lives in palette/, and moving it is a trap
+
+_(cycle 12 · `palette/store/fullscreenStore.ts`)_
+
+Fourteen harnesses reach it by **hardcoded URL string** —
+`await import('/palette/store/…')` with `(s as any)` — so neither `tsc` nor `knip`
+can see the edge. **Recommendation: leave it**, and rely on the `@invariant` added
+this cycle (`bf981def`) naming the five exports and `smoke:gx-handles` as proof. If
+it is ever moved, move it **and** sweep all 14 harnesses in ONE commit. Never
+rename-then-fix-later.
+
+## MEDIUM — an unenforced ordering directive that fails silently
+
+_(cycle 12 · `palette/installFavients.ts`)_
+
+The header says "Call AFTER `applyPanelManifest`". Falsified **negatively**: moving
+`mountFavientsPanel()` above `applyPanelManifest()` in `app-gmt/main.tsx` left
+`smoke:boot` green with zero errors — the store actions are optional-chained, so a
+too-early call silently costs the user their remembered panel position. Recorded as
+an `@assumption` (`55661556`); enforcing it is a behaviour decision.
+
+## LOW — the img2grad overshoot sweep is not redundant, and nothing says so
+
+_(cycle 12 · `debug/test-palette-img2grad.mts`)_
+
+Removing `if (i > n - 2) i = n - 2;` from `img2grad/resample.ts` reintroduces a
+real user-facing `TypeError` in the stop fitter. The dedicated overshoot sweep goes
+red with the original error; **the main harness stays fully green.** The two sit
+adjacent in the chain and are named as though the second is a subset of the first,
+so anyone consolidating them silently reopens the bug. **Recommendation: a one-line
+note in both headers.** Nearly free; batch it with the guard sweep.
+
+## LOW — `test:palette`'s twelfth link touches no palette file
+
+_(cycle 12 · `package.json`)_
+
+`test-engine-dnd-kernels.mts` imports only `store/dragFlight` and
+`store/sendTargetRegistry`. **Recommendation: cite specific links rather than the
+chain** — which the proposed palette rule does. Pairs with the known limitation
+that `check:rule-guards` resolves a chained script by its first command only.
+
+## LOW — `mobile-layout.md` cites a palette file it cannot load for
+
+_(cycle 12 · `.claude/rules/mobile-layout.md`)_
+
+It correctly names `palette/store/favientsPanelPersist.ts` in prose, but its
+`paths:` front-matter has no palette entry, so the rule never loads when you open
+that file. `check:rule-guards` structurally cannot see this class. **Cover it from
+the palette rule that does not exist yet**, cross-referencing `mobile-layout.md`.
+
+## LOW — `context:cost` lists two palette files that no longer exist
+
+_(cycle 12 · `plans/context-protocol/subsystems.json`)_
+
+`palette/components/FavStar.tsx` (deleted `c9da3793`) and
+`palette/components/QualityRangePad.tsx` (moved out `03d60aa8`), both costed at 0
+tokens — and **0-token rows sort FIRST** under cheapest-first ordering, so they are
+the first thing an agent scoping this subsystem sees. This is corroborating
+evidence for cycle 11's recommendation, not a new ask: **make `context-cost.mjs`
+fail loudly on any 0-token Layer 2 row.** That fix catches both instances.
+
+## The palette rule does not exist — three auditors drafted it, none wrote it
+
+`.claude/rules/palette.md` has never existed; only `sibling-apps.md` and
+`mobile-layout.md` mention palette in passing. All three auditors were told not to
+create it (they would have collided) and each returned a proposed section. The
+merged draft is in their three result files' `notes`. Key contents:
+
+- **Guards, cited as specific LINKS not the chain** — with the explicit statement
+  that `test:palette` covers `palette/core/**` only and reaches **no** component
+  file, so a green run is never component coverage. `smoke:boot` belongs in the
+  Guards block: it is the palette tree's only app-gmt runtime coverage and was
+  cited nowhere.
+- **Governing ADRs: NONE.** `grep -rln 'palette/core' docs/adr/ docs/policy/`
+  returns nothing and no ADR filename mentions palette or gradient. The rule should
+  say so, so nobody hunts.
+- **Architecture carve-out** — `palette/components/**` are store-aware composed
+  panels by design, NOT under the `components/ui/**` purity rule. Don't "fix" a
+  store import here. The boundary that does hold: palette may import engine and
+  shared code freely but must never import `app-gmt/`, `fluid-toy/` or
+  `gradient-explorer/` — currently 0 violations, a cheap grep to keep green.
+- **Unguarded files, listed explicitly** — the eight core files above, plus 23 of
+  24 store files.
+
+**Recommendation: write it.** It is the only subsystem-sized area of the tree with
+no rule, and this cycle produced the material.
+
+## Process — the staging rule was necessary but not sufficient
+
+`PROTOCOL.md` gained an explicit-path staging rule this morning after cycle 11.
+**Cycle 12 broke through it the same day.** Two auditors did exactly as
+instructed — `git add` on one explicit path, `git status --porcelain` checked
+immediately before committing — and `p01b`'s `ChannelGraphEditor.tsx` change still
+landed inside `a2f1ec49`, a commit titled `audit(p01a-palette-core): …`.
+
+The cause is one level deeper than staging discipline: **parallel auditors share
+one working tree and therefore one git index**, and `add` + `commit` is not atomic
+across processes. `p01a` diagnosed it and switched to `git commit -F <msg> -- <paths>`,
+the pathspec form, which commits only the named paths whatever else is in the
+index. `p01b` independently adopted a post-commit `git log -1 --name-only` check.
+Both are now in `PROTOCOL.md`, along with the note that one `git worktree` per
+auditor is the clean structural answer if a future run can afford it.
+
+Content is intact and history was not rewritten — rebasing a shared branch under
+live auditors is far more dangerous than a wrong subject line.
+
+## Housekeeping
+
+- A **Vite dev server is still running on :3400** — `p01c` restarted it four times
+  (every `fullscreenStore.ts` edit forces one, because editing that file
+  HMR-invalidates the GX smokes and the first run after any edit fails with a
+  dual-instance message regardless of what changed). Harmless, but kill the
+  listener when you want a genuinely quiet tree — the guard sweep will need one.
+- `debug/_tmp_count_presets.mts` — a gitignored scratch file `p01b` wrote to count
+  `GRADIENT_PRESETS` exactly. Left in place because the protocol forbids an
+  unattended agent deleting any file. It carries a header saying it is scratch.
+- **`CLAUDE.md` is wrong about the palette overview path**, confirmed independently
+  from this slice: it names `docs/modules/palette/index.md`; the file is
+  `palette-suite.md`. Same class as the gradient-explorer path reported in cycle
+  11 — 2 of the 5 named sibling-app paths do not exist. Still untouched, still
+  yours: it is steering configuration.
