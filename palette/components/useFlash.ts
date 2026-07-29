@@ -13,7 +13,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * so it stays the caller's — this hook only owns the message lifecycle. `flash` is a stable
  * callback (safe to pass to children), and a pending timeout is cancelled on re-flash/unmount.
  *
- * Palette-local (palette/ must not import app/engine code); mirrors engine-core's useClipboardCopy.
+ * Palette-local because the shared tree has no equivalent — NOT because palette/ may not
+ * import engine code. The real boundary (stated on `palette/installFavients.ts`) is
+ * "imports only palette + engine, never an app": palette/ has zero imports from app-gmt/,
+ * fluid-toy/ or gradient-explorer/, but palette/components/ alone imports ../../components,
+ * ../../hooks, ../../utils, ../../store, ../../data and ../../engine in ~50 places.
+ * Modelled on `hooks/useClipboardCopy.ts` (repo-root shared hooks, not under engine/).
  */
 export function useFlash(durationMs = 1400) {
   const [toast, setToast] = useState<string | null>(null);
