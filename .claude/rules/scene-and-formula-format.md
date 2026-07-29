@@ -53,6 +53,17 @@ null-derefs (`Benesi/MengersmoothPolyhedra.frag`,
 genuine importer gap, not noise. Nothing gates on them, so run the sweep before
 you conclude the importer handles a given family of formulas.
 
-`npm run test:frag:scan` is **a report, not a guard** — it has no assertion and no
-`process.exit`, so it prints its failures and exits 0 regardless. Do not cite it
-as passing evidence.
+`npm run test:frag:scan` is **a report, not a guard** — it has no assertion on
+its own results, so it prints its failures and exits 0 regardless. Do not cite it
+as passing evidence. **Confirmed by falsification 2026-07-29**: forcing
+`hasDE = false` in `engine-gmt/features/fragmentarium_import/v3/compat.ts`, so V3
+detect rejects every formula in the library, moved its counts from 2 / 42 / 2 to
+156 / 0 / 44 and still exited 0. Total importer breakage is invisible to it.
+
+It does now exit 1 on **one** thing, added the same day: finding zero `.frag`
+files. Its `walk()` swallows a missing directory, so pointing `PUB_DIR` at a path
+that does not exist used to print "Scanning 0 frags", three zero counts and
+exit 0 — a vacuous report indistinguishable from a clean one (the same defect
+batch 3 found in `test:frag`). Baseline is 200 files, so the gate costs nothing.
+Its failure counts are still ungated; see PROPOSALS.md for the `both fail` gate,
+which has a nameable baseline of two `#donotrun` library files.
