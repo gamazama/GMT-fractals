@@ -46,6 +46,21 @@ npm run smoke:engine-gmt          # app-gmt boot: BOOTED, compile, FRAME_READY, 
 npm run test:shader               # long — full native config sweep
 ```
 
+**`test:shader` is four links but only two distinct tests.** It chains
+`test:baseline && test:hybrid && test:hybrid-adv && test:weave-sweep`, and the
+first three are the same script under `--mode=`. Measured 2026-07-29: the mode
+overrides set `geometry.hybridCompiled` / `hybridComplex` / `hybridMode`, none of
+which any shader-emitting code still reads — the interleaved emission was retired
+in P4.5 and the compiled box fold in P4.7, both superseded by weave (grep
+`hybridComplex` in `engine-gmt/utils/weaveMigration.ts`, which deletes the field).
+Hashing `ShaderFactory.generateFragmentShader` across all 54 eligible formulas
+gives 54/54 byte-identical output in all three modes, and a `#error` appended to
+the `de` block reds all three at exactly `0 pass / 54 fail`. So the compile gate
+is live and worth running, but the hybrid coverage the names promise is gone —
+`test:weave-sweep` is what actually exercises that area now. If you are short of
+time, `npm run test:baseline` alone gives you everything the first three links do
+in ~4s instead of ~11s.
+
 `smoke:tsaa` is NOT a guard for this area despite the name — it boots
 `fluid-toy.html`, whose TSAA is its own shader path (`fluid-toy/fluid/
 FluidEngine.ts`, `FRAG_TSAA_BLEND`). fluid-toy never imports `RenderPipeline`;

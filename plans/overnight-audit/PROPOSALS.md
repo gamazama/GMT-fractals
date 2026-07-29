@@ -2886,3 +2886,48 @@ defence.
   twice in one batch: **a green run under your break is a claim about your break
   first, and about the guard second.** Both times the way out was to measure the
   mechanism directly rather than to trust the guard's silence.
+
+## MEDIUM — `test:hybrid` and `test:hybrid-adv` are byte-identical duplicates of `test:baseline`
+
+_(cycle 13 · guard sweep batch 9 · `debug/native-config-sweep.mts`, `package.json`)_
+
+`test:shader` — the long shader gate `.claude/rules/gmt-renderer.md` names — chains
+`test:baseline && test:hybrid && test:hybrid-adv && test:weave-sweep`. The first
+three are one script under `--mode=`, and **all three now compile exactly the same
+54 shaders.**
+
+`applyModeOverrides` writes `geometry.hybridCompiled`, `geometry.hybridComplex` and
+`geometry.hybridMode`. Nothing that emits GLSL reads any of the three any more: the
+interleaved (`hybridComplex`) emission was retired in P4.5 and the compiled box fold
+(`hybridCompiled`) in P4.7, both superseded by the weave system. Grep `hybridComplex`
+in `engine-gmt/utils/weaveMigration.ts` — the migration now `delete`s the field and
+forces `hybridCompiled = false`. Outside that migration and one `NewSceneModal`
+write, the only surviving mentions are per-formula preset defaults.
+
+Measured, not inferred. Hashing `ShaderFactory.generateFragmentShader` over all 54
+eligible formulas under each mode: **54/54 byte-identical**, and hybrid vs hybrid-adv
+0/54 differing. Confirmed at runtime too — a `#error` appended to the `de` block in
+`ShaderBuilder.ts` reds all three at exactly `0 pass / 54 fail`, exit 1.
+
+Nothing is broken: the compile gate underneath is live and batch 4 already proved it.
+The cost is ~7s of the ~14min chain, which is nothing. **The real cost is that the
+names promise hybrid/box-fold coverage that no longer exists** — a reader who has
+just touched the fold path and sees `test:hybrid` green has learned nothing about it.
+`test:weave-sweep` is the successor coverage.
+
+- **(a)** Remove `test:hybrid` and `test:hybrid-adv` from `package.json` and from the
+  `test:shader` chain, and drop the `--mode=` machinery down to `baseline`. Honest,
+  but it is deletion and it discards the scaffolding if hybrid ever returns.
+- **(b)** Keep the scripts, repoint the two modes at flags that DO still change
+  emission (the weave/interlace config) so the names mean something again. More
+  coverage, but choosing which weave configurations deserve a named mode is a
+  product judgement and `test:weave-sweep` may already cover them.
+- **(c)** Keep them as-is and rely on the documentation.
+
+**Recommendation: (a)**, with (b) as a follow-up only if someone wants a named
+fast-path config sweep. Not applied: (a) is deletion, which this run never does, and
+(b) is a judgement call about what to test. What *was* applied is (c)'s honest
+version — the measurement is now recorded in the sweep's header and in
+`gmt-renderer.md`, so the duplication is visible rather than implied. Deliberately
+NOT applied: an assertion that the modes differ. It would be true to the intent and
+**permanently red**, which is its own failure mode.

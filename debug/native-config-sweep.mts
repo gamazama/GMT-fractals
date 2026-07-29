@@ -13,6 +13,31 @@
  *   hybrid     — hybridCompiled=true, hybridComplex=false (standard box fold)
  *   hybrid-adv — hybridCompiled=true, hybridComplex=true (interleaved mode)
  *
+ * ⚠ THE TWO HYBRID MODES NO LONGER DIFFER FROM `baseline` — measured 2026-07-29
+ * (guard sweep, batch 9). `applyModeOverrides` writes `geometry.hybridCompiled`,
+ * `geometry.hybridComplex` and `geometry.hybridMode`, and **no shader-emitting
+ * code reads any of the three any more**: the interleaved (`hybridComplex`)
+ * emission was retired in P4.5 and the compiled box fold (`hybridCompiled`) in
+ * P4.7, both replaced by the weave system (grep `hybridComplex` in
+ * `engine-gmt/utils/weaveMigration.ts`, which now DELETES the field and forces
+ * `hybridCompiled = false`). Outside migration and one NewSceneModal write, the
+ * only remaining mentions are per-formula preset defaults.
+ *
+ * Measured directly rather than inferred: hashing `ShaderFactory
+ * .generateFragmentShader` output for all 54 eligible formulas under all three
+ * modes gives **54/54 byte-identical**, and hybrid vs hybrid-adv likewise 0/54
+ * differing. Confirmed at runtime too — a `#error` appended to the `de` block
+ * reds all three at exactly `0 pass / 54 fail`, exit 1.
+ *
+ * So `npm run test:hybrid` and `npm run test:hybrid-adv` are **exact duplicates
+ * of `npm run test:baseline`**, and `test:shader` spends three of its four links
+ * running the same 54 compiles. They are not broken — the gate underneath them
+ * is live — but do not read them as covering a hybrid/box-fold path, because
+ * there is no longer a hybrid/box-fold path for them to cover. The real
+ * successor coverage is `npm run test:weave-sweep`, the fourth link.
+ * Retiring or repointing the two modes is the owner's call and is queued in
+ * plans/overnight-audit/PROPOSALS.md; nothing was removed here.
+ *
  * Usage:
  *   npx tsx debug/native-config-sweep.mts --mode=baseline --fresh
  *   npx tsx debug/native-config-sweep.mts --mode=hybrid --fresh
