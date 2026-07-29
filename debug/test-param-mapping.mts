@@ -283,8 +283,17 @@ console.log('\n[9] every applier composes identically');
     if (!src.includes('composeModulatedValue')) missing.push(f);
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
     // A bare `<something> + offset` in an applier is a site that skipped the
-    // compose — the exact shape this change replaced.
-    if (/\w\s*\+\s*offset\b/.test(code)) rawAdds.push(f);
+    // compose — the exact shape this change replaced. BOTH operand orders are
+    // checked: the pattern used to be `\w\s*\+\s*offset` only, and swapping the
+    // operands to `offset + b` walked straight through it. Falsified
+    // 2026-07-29: replacing applyTarget's `composeModulatedValue(b, offset,
+    // routing.curve)` with `offset + b` left this block green AND
+    // test:modulation-parity green, even though it defeats slider-space compose
+    // for every curved param — the thing block [6] exists to protect. (Block [6]
+    // calls composeModulatedValue directly, so it cannot see an applier that
+    // stopped calling it.) The `missing` check above does not cover this either:
+    // it is satisfied by the surviving import line alone.
+    if (/(\w\s*\+\s*offset\b|\boffset\s*\+\s*\w)/.test(code)) rawAdds.push(f);
   }
   assert(missing.length === 0, 'every applier calls the shared compose', missing);
   assert(rawAdds.length === 0, 'and none still adds an offset raw', rawAdds);
