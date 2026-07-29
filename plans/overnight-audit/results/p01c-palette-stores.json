@@ -1,0 +1,141 @@
+{
+  "id": "p01c-palette-stores",
+  "cycle": 12,
+  "guards": [
+    {
+      "script": "npm run smoke:gx-handles",
+      "pass": true,
+      "falsified": true,
+      "note": "HEALTHY and it is THE guard for this slice's most load-bearing file. Falsified TWICE against palette/store/fullscreenStore.ts itself (cycle 11 only falsified it against gradient-explorer code): (1) early-returning from resetFullscreenGeomParams -> red at '✗ double-click did not reset archCy', exit 1; (2) suppressing the emit in setFullscreenGeomParams -> red at '✗ handle layer did not mount', exit 1. Both reverted, green again (13/13 assertions). IMPORTANT OPERATIONAL NOTE, measured: editing fullscreenStore.ts HMR-invalidates it, and the FIRST run after any edit fails with '✗ overlay did not open after openFullscreen — likely the Vite dual-instance hazard' regardless of what you changed. The dev server MUST be restarted between the edit and the run or the red is meaningless. This cost two runs to discover and is now written into the file's header."
+    },
+    {
+      "script": "npm run smoke:boot",
+      "pass": true,
+      "falsified": true,
+      "note": "HEALTHY, and was UNCITED anywhere in the palette tree despite being its only runtime coverage inside app-gmt. index.html loads /app-gmt/main.tsx, which calls registerPaletteUI() (via registerFeatures) and mountFavientsPanel() at module scope, so the whole palette registration + persistence bring-up is in its import graph. Exit contract is sound: process.exit(ok ? 0 : 1) where ok = zero pageerrors AND zero console.errors. Falsified by planting a throw at the top of mountFavientsPanel: 'pageerror: FALSIFY: mountFavientsPanel', exit 1. Reverted, exit 0 '(none)'. Falsified NEGATIVELY too: moving mountFavientsPanel() ABOVE applyPanelManifest() in app-gmt/main.tsx — a violation of the file's own stated ordering rule — left it GREEN, so that directive is unenforced. app-gmt/main.tsx reverted, git diff confirmed clean."
+    },
+    {
+      "script": "npm run test:palette (link: tsx debug/test-palette-generator.mts)",
+      "pass": true,
+      "falsified": true,
+      "note": "HEALTHY. Of the 16 &&-joined links, exactly ONE imports a file in this slice: test-palette-generator.mts imports PaletteGeneratorFeature from palette/features/paletteGenerator.ts and asserts 'every cb* param is registered with the key the store reads' (it rebuilds the ColorBox params from the live feature defaults and mirrors generatorStore.sliceToColorBox). Falsified by renaming the cb${key}Start param key to cb${key}Strt: red at that exact assertion, exit 1, 2 failures. Reverted, ALL PASS. Exit contract verified: process.exit(failures === 0 ? 0 : 1) — no count-failures-exit-0 defect. Full chain exit 0, 15 ALL PASS blocks, before and after all six applied changes."
+    },
+    {
+      "script": "npx tsx debug/test-palette-editorstore.mts",
+      "pass": true,
+      "falsified": false,
+      "note": "MISNAMED, not broken. Called the 'paletteEditorStore harness' but it does NOT import palette/store/paletteEditorStore.ts — it imports palette/core/editorConfig and tests the pure core the store wraps. Its own header says so honestly, so this is a naming trap rather than a dead guard: a reader grepping for coverage of paletteEditorStore.ts finds a file named for it that cannot fail on it. Not falsified against my slice because there is no edge to falsify. Counted in the coverage-gap finding below."
+    },
+    { "script": "npm run typecheck", "pass": true, "falsified": false, "note": "Green before and after every applied change; enforced by the pre-commit hook on all 6 commits. Every change was comment-only, so this is a compile gate rather than a behaviour gate — and note the fullscreenStore finding is precisely about tsc being STRUCTURALLY unable to see the seam it governs (the smokes reach it via an untyped dynamic-import string plus `as any`)." },
+    { "script": "npm run check:rule-guards", "pass": true, "falsified": false, "note": "Re-run at the end: still exactly the 4 known pre-existing issues (3 deep-zoom smokes on gmt-formulas-and-graph.md, test:bucket-convergence on gmt-renderer.md). None in this area, and nothing I did moved the baseline. No rule scopes palette/** at all, so there was nothing here for it to check — see the rule-coverage note." },
+    { "script": "npm run orphans", "pass": true, "falsified": false, "note": "One unused file repo-wide (debug/render-harness.ts), unchanged from cycle 11 and not in this subsystem. Zero dead files in palette/store/ or palette/features/ — nothing to propose." },
+    { "script": "NUL-byte scan (grep -qP '\\x00' over all 24 files)", "pass": true, "falsified": false, "note": "Clean. No file in this slice is misclassified as binary by grep, so none of them was invisible to this audit the way components/CategoryPickerMenu.tsx was to run 1." }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "palette/store/fullscreenStore.ts",
+      "line": 1,
+      "summary": "The test seam for an entire OTHER app was undocumented, and the header's stated open path (a hero toolbar button) does not exist.",
+      "change": "Added an @invariant naming the five exports the Gradient Explorer smokes drive by name, with smoke:gx-handles as its proof and the two falsified assertions quoted. Replaced the dead 'hero toolbar button / two unrelated surfaces' rationale with the single real open path and the real reason for a module-level holder. Flagged that the file has ZERO palette/ consumers, and documented the HMR dual-instance trap that makes the first post-edit smoke run lie.",
+      "verification": "Claim 1 (dead open path): grep openFullscreen across the tree returns exactly one production caller — gradient-explorer/gradientTargets.ts, the 'fullscreen' send-target's apply — and palette/components/CanonicalHero.tsx's own header says 'this hero carries no Apply / Send-to / Fullscreen buttons', with GeneratorStage.tsx corroborating ('Apply / Fullscreen / Send-to are the lower-centre bin dock now'). Claim 2 (no palette consumers): grep fullscreenStore returns 5 gradient-explorer files, 14 debug/*.mts harnesses, and nothing under palette/. Claim 3 (the seam): all three GX smokes call `await import('/palette/store/fullscreenStore.ts')` then `(s as any).openFullscreen` / `.setFullscreenGeom` — an untyped string path, so there is no static edge for tsc to check. Falsified by breaking THIS file twice and watching smoke:gx-handles go red at the predicted assertions (see the guard entry), then green on revert.",
+      "guard": "npm run smoke:gx-handles",
+      "guardPass": true,
+      "commit": "bf981def"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "palette/registerPaletteUI.ts",
+      "line": 5,
+      "summary": "The palette suite's registration seam said it has two hosts and named fluid-toy as a host that does NOT mount it — both false, and the file contradicts itself ten lines apart.",
+      "change": "Header now names all three call sites with the options each passes, and corrects the setGradientEditorEntrance comment: every host that calls registerPaletteUI gets the entrance, all three do, and the empty-slot path is marked untested rather than attributed to fluid-toy.",
+      "verification": "grep 'registerPaletteUI(' outside the file returns THREE call sites: app-gmt/registerFeatures.ts:38, gradient-explorer/registerFeatures.ts:17 ({ standaloneStopsMode: false }), fluid-toy/registerFeatures.ts:100. The same file's NEXT comment block already stated the truth ('Every host that mounts the palette suite registers it (incl. fluid-toy, which has a shelf)'), and fluid-toy/main.tsx corroborates independently — it imports FavientsToggleButton and calls mountFavientsPanel({ storageKey: 'fluid-toy.favients.panel', paletteFilters: false }). What fluid-toy actually opts out of is the picker-filter prefs, not the suite.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "297f2d62"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/store/favientsPanelPersist.ts",
+      "line": 8,
+      "summary": "The per-host storage-key contract described two hosts and put the Gradient Explorer's shelf on the wrong side of the screen.",
+      "change": "Replaced the two-host sentence with the three real hosts and their three keys, corrected the Explorer to dock LEFT, named the mobile first-run branch as the only place a 'right' default is chosen, and recorded that the favourite COLLECTION is deliberately NOT split per host.",
+      "verification": "gradient-explorer/setup.ts registers favientsPanelEntry({ dock: 'left', order: 0 }) and calls mountFavientsPanel({ storageKey: 'gmt.gradientExplorer.favients.panel', location: 'left', order: 0 }), with its own comment saying 'docked into the left tab strip by default here'. grep mountFavientsPanel( returns three call sites with three distinct keys (app-gmt: none, so the gmt.favients.panel default; fluid-toy: fluid-toy.favients.panel). The only 'right' in the module is restoreFavientsPanel's isMobileBoot branch, which overrides the host's requested location on first run only — plausibly the source of the error, so it is now named. Collection-not-split verified against favientsStore.ts's LS_KEY = 'gmt.favients'.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "0d9514fe"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/store/heroSelection.ts",
+      "line": 17,
+      "summary": "The only @invariant in all 24 files of this slice had no command behind it — true of the code, but unprovable, so it rendered as proof where there was none.",
+      "change": "Downgraded to @assumption in place, with the reason it cannot be proven and the exact assertion a future harness would need to make to promote it back.",
+      "verification": "The claim itself re-derived from source and it IS true: sameItem compares only (mode, key), and both setHeroPick and setHeroDrag skip the payload write when it matches, so a same-key different-payload re-pick silently keeps the old payload and the dock acts on a stale gradient. But nothing can go red: grep -il hero debug/*.mts returns 0 files, no debug harness imports the module, and no browser smoke drives a hero. Per CLAUDE.md that makes it an @assumption. The module is plain TS with a single useSyncExternalStore import, so a node harness IS feasible — recorded in the annotation as a proposal, not written.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "a48cb5bd"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/installFavients.ts",
+      "line": 14,
+      "summary": "The single mount entry point both hosts share carried no guard citation, and its one stated ordering rule turns out to be unenforced and to fail silently.",
+      "change": "Added the three-host storageKey table at the entry point (it was stated as a principle on the field, never as which-host-passes-what). Added an @invariant that mountFavientsPanel runs at app-gmt module scope so a throw takes the app down, proven by smoke:boot. Added an @assumption recording that 'Call AFTER applyPanelManifest' is unenforced.",
+      "verification": "Invariant falsified positively: a throw planted at the top of mountFavientsPanel gave 'pageerror: FALSIFY: mountFavientsPanel', smoke:boot exit 1; reverted, exit 0 '(none)'. Ordering falsified NEGATIVELY: moving mountFavientsPanel() above applyPanelManifest([...]) in app-gmt/main.tsx left smoke:boot GREEN, exit 0, zero console errors — because restoreFavientsPanel's store actions are all optional-chained, so a too-early call is a no-op that silently costs the user their remembered panel position. app-gmt/main.tsx was reverted with a targeted Edit and git diff --stat confirmed empty. Three-host table verified by grep mountFavientsPanel(.",
+      "guard": "npm run smoke:boot",
+      "guardPass": true,
+      "commit": "55661556"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "palette/store/paletteFiltersPersist.ts",
+      "line": 3,
+      "summary": "Header claimed the picker layout prefs are 'shared by every GMT app'; one of the three hosts never reads or writes them.",
+      "change": "Separated the two ideas — the KEY is genuinely not split per host (unlike the Favients panel state next door), but only opted-in hosts touch it. Named the single call site of each function and the coupling it creates.",
+      "verification": "grep restorePaletteFilters\\|watchPaletteFilters across the tree returns their definitions plus exactly one caller each: mountFavientsPanel() in palette/installFavients.ts, behind cfg.paletteFilters !== false. fluid-toy/main.tsx:367 passes paletteFilters: false. So there is also no path today for a host that wants these prefs without the Favients shelf — recorded as a seam limit.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "8cbc4514"
+    },
+    {
+      "tier": "V",
+      "severity": "medium",
+      "file": "components/gradient/gradientEditorEntrance.ts",
+      "line": 17,
+      "summary": "An @invariant in engine-core states fluid-toy has no Favients shelf and leaves the editor-header slot empty. It is false, and the same false claim is duplicated in palette/components/FavientsEditorEntrance.tsx.",
+      "verificationRequest": "Verify, WITHOUT relying on my reasoning, that this @invariant's parenthetical example is false: '@invariant One slot, last-writer-wins. A host that never registers leaves the editor header clean (e.g. fluid-toy, which has no Favients shelf).' The generic half (one slot, last-writer-wins; a non-registering host gets a clean header) is fine — only the fluid-toy example is at issue. Re-derive from source: (a) does fluid-toy call registerPaletteUI, and does registerPaletteUI call setGradientEditorEntrance unconditionally? (b) does fluid-toy mount a Favients shelf at all? Suggested probes: grep -rn 'registerPaletteUI(' fluid-toy/ ; grep -n 'setGradientEditorEntrance' palette/registerPaletteUI.ts and check it is not inside any conditional; grep -rn 'mountFavientsPanel\\|favientsPanelEntry\\|FavientsToggleButton' fluid-toy/. If confirmed, the fix is to drop or replace the parenthetical in components/gradient/gradientEditorEntrance.ts AND in palette/components/FavientsEditorEntrance.tsx ('hosts that don't (fluid-toy) leave the slot empty'), leaving the generic contract intact. NOT APPLIED HERE: both files are outside this auditor's 24-file slice — FavientsEditorEntrance.tsx belongs to the concurrent p01b auditor and gradientEditorEntrance.ts belongs to no palette slice at all. Note this is the SAME false claim already corrected in palette/registerPaletteUI.ts under commit 297f2d62, so the third copy is the last one standing."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "palette/store/fullscreenStore.ts",
+      "line": 1,
+      "summary": "A Gradient-Explorer-only store lives in palette/, and the 14 harnesses that reach it hardcode its path as a URL string — so the obvious tidy-up is far more expensive than it looks.",
+      "rationale": "CLAIM: palette/store/fullscreenStore.ts has zero consumers under palette/. Its production importers are five files in gradient-explorer/ (GradientExplorerApp, FullscreenGradientOverlay, GeometryHandleLayer, modes/fractalMode, modes/splineMode) plus gradient-explorer/gradientTargets.ts, and 14 debug/*.mts harnesses. EVIDENCE: grep -rn fullscreenStore across the tree; every debug hit is the literal string '/palette/store/fullscreenStore.ts' inside a page.evaluate dynamic import. OPTIONS: (a) move it to gradient-explorer/fullscreen/ where its consumers are — clean on paper, but it silently breaks 14 harnesses INCLUDING all three GX smokes, and nothing in tsc or knip would flag it because the references are untyped strings inside browser callbacks; (b) leave it and rely on the @invariant just added to the file, which names smoke:gx-handles and states the rename hazard explicitly; (c) move it AND sweep the 14 harnesses in the same commit, running all three GX smokes afterwards (smoke:gx-fractal-glitch needs a quiet tree and ~8 min, and smoke:liquify is ~23% flaky per cycle 11, so 'afterwards' means several runs). RECOMMENDATION: (b) for now — the annotation converts an invisible trap into a greppable one at zero risk, and the physical move buys tidiness rather than correctness. If it is ever done, do it as (c) in ONE commit, never as a rename-and-fix-callers-later. Not applied: a file move plus edits to 14 harnesses is well past what an unattended auditor should do to the load-bearing test seam of an app it is not auditing."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "palette/store/generatorStore.ts",
+      "line": 1,
+      "summary": "23 of this slice's 24 files have no node-side guard at all; the 16-link test:palette chain reaches exactly one of them.",
+      "rationale": "CLAIM: mapping every debug/*.mts import against the 24 files gives exactly one edge — test-palette-generator.mts -> palette/features/paletteGenerator.ts. Everything else is covered only by browser boot (smoke:boot exercises registerPaletteUI, installFavients, favientsPanelPersist, paletteFiltersPersist, favientsStore.seedPresets and all four feature registrations, but only to the extent that a THROW would surface as a pageerror) or, for fullscreenStore, by the three GX smokes. Nothing asserts behaviour for favientsStore (dedupe signature, group model, import/export round-trip), generatorStore (sliceToColorBox, slot snapshot/restore), the three document bridges (untrusted-scene coercion), heroSelection, heroPrefs, pickerStore, imageStore, dragVisual or coerceJson. EVIDENCE: the per-file import map is in this audit's transcript; test:palette's 16 links are all pure-core (stopfit, stopops, channelcurve, facets, facetname, easings, generator, img2grad x2, selection, walllayout, dnd-kernels, importformats, rampgeometry, editorstore, liquify-mesh). Note debug/test-palette-editorstore.mts is NAMED for paletteEditorStore but imports palette/core/editorConfig — honest in its header, misleading from the filename, and it means a reader grepping for that store's coverage finds a file that cannot fail on it. OPTIONS: (a) add node harnesses for the three highest-risk pure-ish seams — favientsStore's isWellFormedFavient/favientSig/importCollection (it already guards against a malformed favourite bricking the shelf across sessions, and that defence is untested), the three document-bridge restore paths (they parse UNTRUSTED scene files), and heroSelection's payload-staleness assumption; (b) rename test-palette-editorstore.mts to test-palette-editorconfig.mts so the name matches what it tests; (c) accept boot-only coverage. RECOMMENDATION: (a), favientsStore first — it is the only store here that ingests untrusted input AND persists it, so a bad entry survives reloads, and its own JSDoc says exactly that. (b) is a one-line package.json + git mv but is a rename in the guard layer, which this run should not do unattended. Not applied: writing new harnesses is unreviewed code, which is Tier B by definition."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": ".claude/rules/mobile-layout.md",
+      "line": 27,
+      "summary": "A rule correctly cites palette/store/favientsPanelPersist.ts in its prose but cannot load when you open that file, because its paths: front-matter has no palette entry.",
+      "rationale": "CLAIM: mobile-layout.md lists palette/store/favientsPanelPersist.ts as one of the eight inline re-implementations of the 768px / (pointer: coarse) test — and that citation is ACCURATE (restoreFavientsPanel does window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth < 768). But its paths: block is five engine/hooks files only, so opening favientsPanelPersist.ts never loads the rule that knows about it. The pointer is one-directional. EVIDENCE: sed the front-matter of .claude/rules/mobile-layout.md; grep -rn palette .claude/rules/ returns only mobile-layout.md and sibling-apps.md. Note check:rule-guards cannot see this class — it checks whether a cited GUARD reaches a rule's paths, not whether a file a rule DISCUSSES is in its paths. OPTIONS: (a) add palette/store/favientsPanelPersist.ts to mobile-layout.md's paths:; (b) cover it from the palette rule that does not exist yet (see notes); (c) leave it. RECOMMENDATION: (b) when the palette rule is written, cross-referencing mobile-layout.md — (a) would pull a whole mobile rule into every palette-persistence edit for one line. Not applied: editing another subsystem's rule paths and creating palette rules were both explicitly out of remit, and all three palette auditors would have collided on a new rule file this cycle."
+    }
+  ],
+  "notes": "SEAM HANDOFFS.\n\n(1) The fluid-toy-has-no-Favients-shelf falsehood exists in THREE places and I could only fix one. Corrected: palette/registerPaletteUI.ts (commit 297f2d62). Still wrong: palette/components/FavientsEditorEntrance.tsx ('hosts that mount the palette suite (app-gmt, the Gradient Explorer) get the entrance; hosts that don't (fluid-toy) leave the slot empty') — that is the concurrent p01b auditor's file; and components/gradient/gradientEditorEntrance.ts, whose @invariant carries the same parenthetical and which belongs to NO palette slice. The second is the more serious of the two because it is an @invariant in engine-core — filed as the Tier V finding above with probes.\n\n(2) fullscreenStore.ts is now annotated as the GX test seam, per the cycle-11 handoff, and the annotation names smoke:gx-handles with the two assertions I falsified. One thing cycle 11 did not know: editing that file makes the NEXT smoke run fail with the dual-instance message no matter what you changed. Anyone verifying a fullscreenStore change must restart `npm run dev` first. This is now in the file header and it should go into any future palette rule.\n\n(3) mountFavientsPanel()'s cross-app storageKey contract WAS documented at the field level but not at the entry point, and it is now a three-row table in the header. The genuinely new information is the negative result: the file's own 'Call AFTER applyPanelManifest' rule is unenforced and violating it is silent (smoke:boot stays green), so it is annotated @assumption, not @invariant.\n\n(4) smoke:boot was uncited anywhere in the palette tree. It boots index.html -> /app-gmt/main.tsx and therefore covers registerPaletteUI + installFavients + both persisters + favientsStore.seedPresets + all four feature registrations, to throw-depth. It is the single most useful guard citation for this slice after the GX smokes and should be the first line of any palette rule's Guards block.\n\nPROPOSED CONTENTS FOR A palette.md RULE — store/feature layer only (NOT created; all three palette auditors would have collided on the file this cycle).\n  paths: palette/store/**, palette/features/**, palette/registerPaletteUI.ts, palette/installFavients.ts (plus whatever p01a/p01b propose for core/ and components/).\n  Read first: palette/registerPaletteUI.ts (the single registration seam — what gets registered, in what order, and why it must run before createEngineStore) and palette/installFavients.ts (the per-host mount + storageKey contract).\n  Guards: `npm run smoke:boot` — the only runtime coverage of the registration path, falsified 2026-07-29 with a planted throw in mountFavientsPanel; `npx tsx debug/test-palette-generator.mts` — the only test:palette link that reaches this layer, and it pins palette/features/paletteGenerator.ts's cb* param keys against generatorStore.sliceToColorBox; `npm run smoke:gx-handles` — required for ANY change to palette/store/fullscreenStore.ts, and restart the dev server first. Do NOT cite `npm run test:palette` as a whole: check:rule-guards resolves a chained npm script by its FIRST command only, so citing it produces a false issue naming debug/test-palette-stopfit.mts (cycle 11 proved this and had to self-correct).\n  Watch out: (a) fullscreenStore.ts lives here but belongs to gradient-explorer — five exports are named by string in three browser smokes, tsc cannot see the edge, do not rename or move casually; (b) the Favients COLLECTION is shared across apps (gmt.favients) while the PANEL window state is split per host by storageKey — a new host without its own key silently inherits app-gmt's; (c) mounting before applyPanelManifest fails silently, no guard catches it; (d) favientsPanelPersist.ts is one of the eight inline re-implementations of the 768px mobile test — cross-reference .claude/rules/mobile-layout.md, which names it but does not scope it; (e) DDFS discipline in this tree is currently clean, keep it that way — see below.\n\nDDFS ARCHITECTURE CHECK — CLEAN, recorded as a negative result so the next auditor does not redo it. The four features (paletteGenerator, paletteFilters, paletteImage, paletteEditor) declare no cross-feature reads and need no dependsOn: grep for dependsOn across palette/ returns nothing, and grep for engine-slice property access shows each store touching ONLY its own feature's slice — generatorStore -> .paletteGenerator (4 sites), imageStore -> .paletteImage (2), paletteFiltersPersist -> .paletteFilters (2). No latent undeclared-access violation. dynamicVisible predicates (isMixed, isDistill, isTone, notTrace) read their own slice only. Cross-store coupling exists but is between plain zustand stores (generatorStore imports usePaletteEditorStore), which the isolation rule does not govern.\n\nCITATION CHECK — CLEAN. All 16 @see targets across the 24 files resolve on disk (stat'd individually): components/AdvancedGradientEditor.tsx, gradient-explorer/GradientDropLayer.tsx, palette/core/{editorConfig,presetCatalog,rampGeometry,storage,img2grad/decode}.ts, palette/store/{favientsPanelPersist,favientsStore,generatorStore,imageStore,pickerSearch}.ts, store/documentRegistry.ts, store/slices/historySlice.ts. No ADR is cited from anywhere in this slice, so there was no ADR drift to correct and I prepended no Update blocks.\n\nDELIBERATELY NOT DONE: did not create .claude/rules/palette.md (explicitly out of remit — collision risk with two concurrent auditors); did not touch docs/modules/palette/palette-suite.md (p01a's); did not modify palette/core/** or palette/components/** (read several to check seams — CanonicalHero.tsx, GeneratorStage.tsx, FavientsEditorEntrance.tsx, FavientsPanel.tsx — modified none); did not modify gradient-explorer/** (read the smokes and GeometryHandleLayer/gradientTargets/setup to establish the seam); did not move fullscreenStore.ts or rename anything; did not write new debug harnesses; did not attempt smoke:liquify or smoke:gx-fractal-glitch (cycle 11 measured the first at ~23% flaky and could not baseline the second under concurrent auditing — re-deriving that would have burned ~20 min for a known answer, and smoke:gx-handles proves the same seam deterministically); did not touch the 4 known check:rule-guards miscitations; did not fix the two out-of-slice copies of the fluid-toy falsehood; did not edit CLAUDE.md, .claude/hooks/**, or any ADR; left debug/engine-gmt-smoke.png alone.\n\nOPERATIONAL: I started a Vite dev server on :3400 for the browser smokes and restarted it four times (each edit to fullscreenStore.ts forces a restart, see above). It is still running at the end of this audit — harmless, but if the orchestrator wants a clean tree, kill the listener on port 3400. All 6 commits staged exactly one explicit path each; git status --porcelain was checked before every commit and the other two auditors' in-flight edits (palette/components/GradientStrip.tsx, palette/components/GeneratorExtrasPanel.tsx, palette/core/rampGeometry.ts, docs/modules/palette/palette-suite.md) were never staged."
+}
