@@ -24,6 +24,20 @@
  * pure-machine test (test-interaction-session.mts) + the wiring/read-path test
  * (test-interaction-wiring.mts).
  *
+ * SCAN SCOPE — read before narrowing it. The (B)/(C) regression walks are only
+ * as wide as SCAN_DIRS, and a producer in an unwalked directory is invisible to
+ * this gate even when the gate's own producer list names a file from that
+ * directory. That is not hypothetical: `utils/GraphDataSource.ts` was a listed
+ * SCRUB_PRODUCER while `utils` was not in SCAN_DIRS, and the guard sweep on
+ * 2026-07-29 stubbed out `hooks/useDopeSheetInteraction.ts`'s
+ * `useInteractionGesture(INTERACTION_SOURCES.scrub)` — a live dope-sheet key-drag
+ * producer — and all three interaction guards stayed green, exit 0.
+ * Sibling-app trees (fluid-toy / fractal-toy / gradient-explorer / mesh-export /
+ * palette) are deliberately NOT scanned: they inherit the session from the
+ * connected wrappers in `components/` and have no producers of their own by
+ * design — see test-interaction-wiring.mts's inertness cases. Adding them would
+ * flag legitimate consumers as uncovered producers.
+ *
  * @see engine-gmt/interaction/interactionSources.ts
  * @see engine/hooks/useInteractionDrag.ts   (useInteractionGesture core)
  * @see docs/adr/0061-interaction-session-single-source-of-truth.md  (P3b)
@@ -35,7 +49,21 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SCAN_DIRS = ['components', 'engine', 'engine-gmt', 'app-gmt'];
+const SCAN_DIRS = ['components', 'engine', 'engine-gmt', 'app-gmt', 'hooks', 'utils', 'store'];
+
+/** Floors for the fifth guard failure mode — GREEN BECAUSE THE INPUT VANISHED.
+ *  `walk()` skips a SCAN_DIR that does not exist, so a rename or a directory
+ *  move would shrink the (B)/(C) regression walks toward zero while every
+ *  assertion below kept passing. Measured 2026-07-29: 762 files (components 125,
+ *  engine 164, engine-gmt 377, app-gmt 21, hooks 15, utils 32, store 28), 5
+ *  `setIsScrubbing(true)` writers, 1 direct `useDragValue` importer. The file
+ *  floor is set so that losing ANY of the four large dirs goes red; losing one
+ *  of the three small ones is caught by SCRUB_WRITER_FLOOR instead (hooks and
+ *  utils each hold scrub writers). A legitimate consolidation must update these
+ *  consciously, which is the point. */
+const SCAN_FILE_FLOOR = 700;
+const SCRUB_WRITER_FLOOR = 5;
+const DRAGVALUE_IMPORTER_FLOOR = 1;
 
 let passed = 0;
 const failures: string[] = [];
@@ -84,6 +112,10 @@ const SCRUB_PRODUCERS = [
     // useInteractionGesture(INTERACTION_SOURCES.scrub) call. The BBox now delegates via
     // ds.scrub.begin(); see SCRUB_EXCEPTION below.
     'utils/GraphDataSource.ts',
+    // Dope-sheet key drag + selection transform. Owns its own scrubGesture (it is
+    // not a GraphDataSource consumer) and calls scrubGesture.begin() alongside each
+    // setIsScrubbing(true). Was invisible to this gate until `hooks` joined SCAN_DIRS.
+    'hooks/useDopeSheetInteraction.ts',
 ];
 const DRAWING_PRODUCERS = [
     'engine-gmt/features/drawing/DrawingOverlay.tsx',
@@ -120,6 +152,8 @@ for (const f of [...SLIDER_ALL, ...SCRUB_PRODUCERS, ...DRAWING_PRODUCERS]) {
 }
 
 const allFiles = walk();
+check(allFiles.length >= SCAN_FILE_FLOOR,
+    `scan matrix shrank: walked ${allFiles.length} files, floor is ${SCAN_FILE_FLOOR} — a SCAN_DIR was renamed/moved and the (B)/(C) regression walks below are running near-empty`);
 
 // ── (B) useDragValue regression guard ────────────────────────────────────────
 // Store-agnostic primitives/barrels: their onDragStart/onDragEnd are supplied by
@@ -135,7 +169,8 @@ const USEDRAGVALUE_ALLOW = new Set([
 ]);
 const importsUseDragValue = (src: string) => /import[^;]*\buseDragValue\b/.test(src);
 const dragValueConsumers = allFiles.filter(f => importsUseDragValue(read(f)));
-check(dragValueConsumers.length > 0, 'sanity: found at least one useDragValue importer');
+check(dragValueConsumers.length >= DRAGVALUE_IMPORTER_FLOOR,
+    `useDragValue importer matrix shrank: ${dragValueConsumers.length} found, floor is ${DRAGVALUE_IMPORTER_FLOOR} — the import regex or the hook's name moved and (B) is scanning nothing`);
 for (const f of dragValueConsumers) {
     const covered = USEDRAGVALUE_ALLOW.has(f) || SLIDER_ALL.includes(f);
     check(covered,
@@ -152,10 +187,18 @@ const SCRUB_EXCEPTION = new Set([
     // to the GraphDataSource provider (the wired scrub producer above) via ds.scrub.begin();
     // tagging 'scrub' here too would double-token the one BBox gesture.
     'components/graph/GraphSelectionBBox.tsx',
+    // Graph-editor canvas drags: same delegation shape — the live-frame-mutating
+    // modes ('scrub' | 'key' | 'handle') call ds.scrub?.begin() into the
+    // GraphDataSource gesture. The one mode that sets isScrubbing WITHOUT
+    // beginning ('scrub_passive', middle-click ruler) deliberately skips
+    // ds.onAfterMutate, so it never drives animationEngine.scrub and is not a
+    // render-affecting gesture. Verified 2026-07-29.
+    'hooks/useGraphInteraction.ts',
 ]);
 const writesScrubStart = (src: string) => /setIsScrubbing\(\s*true\s*\)/.test(src);
 const scrubWriters = allFiles.filter(f => writesScrubStart(read(f)));
-check(scrubWriters.length > 0, 'sanity: found at least one setIsScrubbing(true) writer');
+check(scrubWriters.length >= SCRUB_WRITER_FLOOR,
+    `setIsScrubbing(true) writer matrix shrank: ${scrubWriters.length} found, floor is ${SCRUB_WRITER_FLOOR} — the regex or the setter's name moved and (C) is scanning nothing`);
 for (const f of scrubWriters) {
     const covered = SCRUB_PRODUCERS.includes(f) || SCRUB_EXCEPTION.has(f);
     check(covered,
@@ -166,6 +209,7 @@ for (const f of scrubWriters) {
 if (failures.length === 0) {
     console.log(`✓ interaction-session P3b producer coverage: ${passed} assertions passed`);
     console.log(`  slider: ${SLIDER_ALL.length} producers + ${dragValueConsumers.length} useDragValue paths · scrub: ${SCRUB_PRODUCERS.length} · drawing: ${DRAWING_PRODUCERS.length}`);
+    console.log(`  regression walk: ${allFiles.length} files over ${SCAN_DIRS.length} dirs (floor ${SCAN_FILE_FLOOR}) · ${scrubWriters.length} scrub writers (floor ${SCRUB_WRITER_FLOOR})`);
     process.exit(0);
 } else {
     console.error(`✗ interaction-session P3b coverage: ${failures.length} FAILED, ${passed} passed`);
