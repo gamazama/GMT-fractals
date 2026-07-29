@@ -6,8 +6,20 @@
  * snapshots the disabled CompatReport rows to debug/compat-snapshot.jsonl.
  *
  * Modes:
- *   tsx debug/test-compat.mts           — diff mode: exit non-zero on drift
- *   tsx debug/test-compat.mts --write   — regenerate snapshot
+ *   tsx debug/test-compat.mts           — diff mode: exit non-zero on drift  (npm run test:compat)
+ *   tsx debug/test-compat.mts --write   — regenerate snapshot                (npm run test:compat:write)
+ *
+ * `--write` IS NOT A GATE — it is the baseline writer, and it always exited 0 once the
+ * structural checks passed. That is by design, but it made the workflow this file's own
+ * error message recommends ("run with --write to update the baseline if the drift is
+ * intentional") the fastest way to destroy the guard. Measured 2026-07-29 (guard sweep,
+ * batch 9): with the formula barrel import dropped — registry 55 -> 7 — diff mode
+ * correctly went RED, and then `--write` **truncated the tracked baseline to zero bytes,
+ * printed "snapshot: 0 disabled compat rows", and exited 0**; diff mode was green forever
+ * afterwards on an empty file. Two recorded floors now stand in front of the write (see
+ * FORMULA_FLOOR / SNAPSHOT_ROW_FLOOR), so a vanished input fails in BOTH modes instead of
+ * being persisted by one of them. Reach for `--write` only when you have read the drift
+ * the diff mode printed and decided it is correct.
  *
  * Structural checks (per formula, plus snapshot of disabled compat rows):
  *   - shader.function and shader.loopBody are present + non-empty
@@ -215,8 +227,28 @@ function serialize(lines: SnapshotLine[]): string {
   return lines.map(l => JSON.stringify(l)).join('\n') + (lines.length ? '\n' : '');
 }
 
+/** Recorded floors. Both halves of this harness derive their entire workload from live
+ *  registries, and a workload that never ran produces zero issues and zero rows — so
+ *  without these, a vanished input reads as a clean bill of health. Measured 2026-07-29
+ *  (guard sweep, batch 9): dropping this file's `import '../engine-gmt/formulas/index'`
+ *  side effect took the registry from 55 formulas to 7, and **`--write` truncated the
+ *  tracked baseline to zero bytes and exited 0**, after which the diff mode reported
+ *  "snapshot matches" forever. Raise a floor when formulas or `requires:` declarations
+ *  are added; if you have deliberately REMOVED one, lower it in the same commit — which
+ *  is the point, because that edit is where a human looks at the loss on purpose. */
+const FORMULA_FLOOR = 55;      // registry.getAll().length, measured 2026-07-29
+const SNAPSHOT_ROW_FLOOR = 2;  // disabled compat rows, measured 2026-07-29
+
 function main() {
   const writeMode = process.argv.includes('--write');
+
+  const formulaCount = registry.getAll().length;
+  if (formulaCount < FORMULA_FLOOR) {
+    console.error(`[test:compat] only ${formulaCount} formulas registered — expected at least ${FORMULA_FLOOR}.`);
+    console.error('[test:compat] the matrix shrank rather than failing. Did formula registration break,');
+    console.error('[test:compat] or were formulas removed on purpose? (If on purpose, lower FORMULA_FLOOR.)');
+    process.exit(1);
+  }
 
   const issues = structuralCheck();
   if (issues.length) {
@@ -230,8 +262,18 @@ function main() {
   const lines = buildSnapshot();
   const serialized = serialize(lines);
 
-  console.log(`[test:compat] structural checks: ${registry.getAll().length} formulas OK`);
+  console.log(`[test:compat] structural checks: ${formulaCount} formulas OK`);
   console.log(`[test:compat] snapshot: ${lines.length} disabled compat rows`);
+
+  // The snapshot half's entire input surface is the `requires:` declarations reachable from
+  // GmtPanels (grep `rejects: { primary:` in engine-gmt/panels.ts). Losing the last one takes
+  // this half to zero rows, which an empty-vs-empty comparison then calls a match.
+  if (lines.length < SNAPSHOT_ROW_FLOOR) {
+    console.error(`[test:compat] only ${lines.length} disabled compat rows — expected at least ${SNAPSHOT_ROW_FLOOR}.`);
+    console.error('[test:compat] the snapshot half has no input left to compare. Did a `requires:`');
+    console.error('[test:compat] declaration disappear? (If removed on purpose, lower SNAPSHOT_ROW_FLOOR.)');
+    process.exit(1);
+  }
 
   if (writeMode) {
     writeFileSync(SNAPSHOT_PATH, serialized);

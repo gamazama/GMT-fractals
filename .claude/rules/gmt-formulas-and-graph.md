@@ -57,6 +57,26 @@ dropped. Run `deep-zoom-orbit` / `deep-zoom-la` / `deep-zoom-nucleus` from there
 when touching precision code, not from here. The "Watch out" bullet above still
 points at the right ADRs (0065/0066) for context.
 
+**`test:hybrid` no longer differs from `test:baseline`** — measured 2026-07-29, so
+treat the line above as one gate with two aliases. Its `--mode=` overrides write
+`geometry.hybridCompiled` / `hybridComplex` / `hybridMode`, none of which any
+shader-emitting code still reads (interleaved emission retired P4.5, compiled box
+fold P4.7, both superseded by weave — grep `hybridComplex` in
+`engine-gmt/utils/weaveMigration.ts`, which deletes the field). All 54 eligible
+formulas emit byte-identical shaders in all three modes. See
+[`gmt-renderer.md`](./gmt-renderer.md) for the full measurement; `test:weave-sweep`
+is the successor coverage and is already in the block.
+
+**`test:compat:write` is the baseline WRITER, not a gate — do not reach for it to
+make a red `test:compat` go green.** It regenerates `debug/compat-snapshot.jsonl`,
+which is tracked, and it always exits 0 on a successful write. Two recorded floors
+were added on 2026-07-29 (`FORMULA_FLOOR`, `SNAPSHOT_ROW_FLOOR`) after the writer
+was measured truncating that baseline to **zero bytes at exit 0** when the formula
+registry shrank 55 → 7, leaving diff mode permanently green on an empty file. Both
+floors now fail in both modes, so a vanished input can no longer be persisted —
+but a genuine drift still can, which is the tool's job. Read the diff mode's output
+first and decide the drift is correct.
+
 **Nothing above guards the modular graph.** `test:hybrid` / `test:hybrid-adv` are
 `debug/native-config-sweep.mts --mode=hybrid`, where "hybrid" means the hybrid
 box-fold geometry config — and that sweep's `eligibleFormulas()` does
